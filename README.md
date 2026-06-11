@@ -2,8 +2,40 @@
 
 **A Realistic Solar System Simulator**
 
-> Inspired by Spaceflight Simulator (mobile) and SpaceEngine/Universe Sandbox.  
-> Build rockets piece by piece. Navigate the real solar system. Keep your crew alive.
+> Build rockets piece by piece. Navigate the real solar system. Keep your crew alive.  
+> Inspired by Spaceflight Simulator (mobile) and SpaceEngine / Universe Sandbox.
+
+---
+
+## Table of Contents
+
+1. [Vision](#vision)
+2. [Core Pillars](#core-pillars)
+3. [Features](#features)
+4. [Art Direction](#art-direction)
+5. [Stack](#stack)
+6. [Development Setup](#development-setup)
+7. [Project Structure](#project-structure)
+8. [Codebase Reference](#codebase-reference)
+   - [Simulation Library](#simulation-library-exospheresimulation)
+   - [Game Layer Scripts](#game-layer-scripts)
+9. [Architecture Deep Dive](#architecture-deep-dive)
+   - [The Scale Problem](#the-scale-problem--floating-origin)
+   - [Time Warp Modes](#time-warp-modes)
+   - [Physics Pipeline](#physics-pipeline-per-tick)
+   - [Part System](#part-system)
+   - [Orbital Mechanics](#orbital-mechanics)
+10. [Data Formats](#data-formats)
+    - [Celestial Body JSON](#celestial-body-json)
+    - [Part JSON](#part-json)
+    - [Launch Site JSON](#launch-site-json)
+11. [Simulation API Reference](#simulation-api-reference)
+12. [Autopilot Scripting](#autopilot-scripting-lua)
+13. [Implementation Status](#implementation-status)
+14. [Development Roadmap](#development-roadmap)
+15. [Adding New Content](#adding-new-content)
+16. [Inspirations](#inspirations)
+17. [Non-Goals](#non-goals)
 
 ---
 
@@ -31,102 +63,93 @@ There is no campaign, no tech tree, no win condition. The sandbox is the game.
 
 ### Physics Engine
 
-- **N-body gravitational simulation** — every body in the system exerts real gravitational influence
-- **Keplerian orbital mechanics** — elliptical, hyperbolic, and parabolic trajectories with proper conic sections
-- **Atmospheric modeling** — density and pressure curves per planet; aerodynamic drag and lift
-- **Reentry heating** — thermal flux based on velocity and atmospheric density; ablative heat shields required
-- **Dynamic pressure** — structural limits on velocity × density; supersonic staging, max-q events
-- **Stress simulation** — joints and parts have load limits; G-force and structural loading cause failures
+- **N-body gravitational simulation** — every body in the system exerts real gravitational influence simultaneously
+- **Keplerian orbital mechanics** — elliptical, hyperbolic, and parabolic trajectories computed from classical conic sections
+- **Atmospheric modeling** — exponential scale-height density model per planet; aerodynamic drag and Mach-dependent drag coefficient
+- **Reentry heating** — thermal flux based on `q = k·√ρ·v³` (simplified DKR); ablative heat shields required above critical flux
+- **Dynamic pressure** — structural joints have tensile and shear strength limits; exceeding them causes part separation
+- **Stress simulation** — G-force and aerodynamic loads propagate through the part tree bottom-up; structural failures cascade
+- **Staging physics** — decouplers separate the part tree, creating independent debris vessels each with their own physics state
 
 ### Rocket Construction
 
-- **Part-by-part assembly** — stack tanks, engines, fairings, decouplers, SAS modules, solar panels, etc.
-- **Physics-coupled design** — mass distribution, thrust vector, drag profile, and structural integrity derive directly from assembly
-- **Fuel types** — liquid bipropellant, solid rocket boosters, monopropellant RCS, ion/electric
-- **ISRU (In-Situ Resource Utilization)** — mine propellant from planetary bodies to refuel without Earth resupply
-- **Procedural parts** — resize tanks and structural elements within physical constraints
+- **Part-by-part assembly** — stack tanks, engines, fairings, decouplers, SAS modules, solar panels, landing legs, parachutes
+- **Physics-coupled design** — center of mass, thrust vector, drag profile, and structural integrity all derive from the assembly
+- **Attachment node system** — parts snap at defined attachment points; node size scales structural strength
+- **Resource management** — liquid fuel + oxidizer (9:11 ratio), solid fuel, monopropellant, electric charge tracked per tank
+- **ISP interpolation** — engine thrust and efficiency interpolated between sea-level and vacuum ISP based on ambient pressure
+- **Gimbal control** — engines can deflect their thrust vector for attitude control
 
 ### Solar System
 
-- **Real bodies** — Earth, Moon, Mars, Venus, Mercury, Jupiter + major moons, Saturn + rings, Uranus, Neptune
-- **Accurate parameters** — real mass, radius, axial tilt, rotational period, atmospheric composition
-- **Surface landing** — terrain on all major bodies; highlands, craters, volcanic regions, polar ice
-- **Day/night cycle** — orbital period and axial tilt drive lighting; solar irradiance affects power generation
-- **Atmospheric variety** — Earth (aerodynamics + heating), Mars (thin, still relevant), Venus (crushing pressure), airless bodies (no drag)
+All bodies use real NASA values for mass, radius, GM, SOI, rotational period, and axial tilt.
+
+| Body | Type | Atmosphere | Landable |
+|---|---|---|---|
+| Sun | Star | No | No |
+| Earth | Planet | Yes (ISA layers) | Yes |
+| Moon | Natural satellite | No | Yes |
+| Mars | Planet | Yes (thin CO₂) | Yes |
+| Venus | Planet | Yes (crushing 92 atm) | Yes |
+| Mercury | Planet | No | Yes |
+| Jupiter | Gas giant | Yes | No |
+| Saturn | Gas giant | Yes | No |
 
 ### Resource Systems
 
 | Resource | Mechanic |
 |---|---|
-| **Fuel / Oxidizer** | Tracked per tank; depletion ends thrust |
-| **Electric charge** | Solar panels, RTGs, batteries; powers SAS, computers, life support |
-| **Monopropellant** | RCS thrusters for fine attitude control and docking |
+| **Liquid Fuel** | Consumed by liquid engines; ratio 9:20 with Oxidizer |
+| **Oxidizer** | Consumed by liquid engines; ratio 11:20 with Liquid Fuel |
+| **Solid Fuel** | Consumed by SRBs; non-throttleable |
+| **Monopropellant** | RCS thrusters for fine attitude control |
+| **Electric Charge** | Powers SAS, computers, life support; generated by solar panels and RTGs |
 
-### Crew & EVA
+### Crew and EVA
 
-- **Astronauts as persistent entities** — each has a name, training level, and experience history
-- **Risk of death** — exposure, structural failure, reentry errors, EVA malfunctions
-- **EVA mechanics** — spacewalks for repairs, sample collection, module assembly in orbit
-- **Life support via electric charge** — suits and habitats draw power; failures have consequences
-- **Crew training** — more experienced astronauts perform EVA more effectively and handle emergencies better
+- **Astronauts as persistent entities** — each has a name, pilot/engineer/scientist skill levels, and EVA experience hours
+- **Risk of death** — EVA suit battery depletion, structural failure during reentry, impact velocity
+- **EVA suit mechanics** — battery capacity 100 EC, drains at 0.1 EC/s during EVA; depletion → injured
+- **Training progression** — EVA experience reduces risk factor (`risk = max(0, 1 - experience/100 - engineerLevel×0.1)`)
+- **Crew tick** — EVA crew members drain suit battery automatically each physics tick
 
-### Mission Types
+### Navigation and Flight
 
-- **Launch and orbit** — reach LEO, MEO, GEO, and escape trajectories from any launchpad
-- **Lunar and planetary landing** — powered descent, terrain navigation, ascent and rendezvous
-- **Orbital stations** — dock modules to build permanent infrastructure; refueling depots
-- **Interplanetary transfers** — Hohmann transfers, gravity assists, bi-elliptic maneuvers with real porkchop plots
-- **ISRU operations** — establish surface outposts that produce fuel for further exploration
+- **Interactive 3D orbital map** — full solar system view; zoom from planetary to system scale
+- **Maneuver node editor** — drag burn vectors to plan delta-v; see projected trajectory, Ap/Pe
+- **Encounter prediction** — patched conics show SOI intercepts and flyby trajectories
+- **Navball** — prograde/retrograde/normal/radial vectors computed in real-time; heading, pitch, roll
+- **Dual view** — cockpit (diegetic instruments) and 2D HUD overlay; player toggles between them
+- **9 HUD readouts** — altitude, orbital speed, apoapsis, periapsis, throttle, fuel mass, total mass, mission time, warp rate
 
-### Surface Infrastructure
+### Autopilot and Scripting
 
-- **Planetary bases** — deploy habitats, fuel plants, power systems, launch pads on any solid surface
-- **ISRU chains** — extract regolith → process into propellant → load into waiting vehicles
-- **Persistent world** — bases and vehicles remain deployed between sessions; the solar system state is saved
+- **SAS modes** — stability assist (angular velocity damping), prograde lock, retrograde, normal, radial
+- **Lua scripting** — MoonSharp interpreter; coroutine-based `WAIT_UNTIL` for non-blocking flight programs
+- **Built-in Lua API** — `THROTTLE()`, `STAGE()`, `PITCH_TO()`, `ALT()`, `AP()`, `PE()`, `WARP_TO_APOAPSIS()`, `EXECUTE_MANEUVER()`, `CIRCULARIZE()`
 
-### Navigation & Flight
+### Time Warp
 
-- **Interactive 3D map** — orbital view of the entire solar system; zoom from planetary to system scale
-- **Maneuver node editor** — drag burn vectors on the map to plan Δv, see resulting trajectory, projected periapsis/apoapsis
-- **Encounter prediction** — patched conics show planetary SOI intercepts and flyby trajectories
-- **Navball** — prograde/retrograde/normal/radial indicators; heading, pitch, roll in all reference frames
-- **Cockpit view** — diegetic instrument panels inside the vehicle; no overlay required if desired
-- **HUD overlay** — classic 2D information overlay: altitude, velocity (surface/orbital), Ap/Pe, time to burn
+| Warp Rate | Physics Mode |
+|---|---|
+| x1 - x4 | Full RK4 for all vessels; 50 Hz fixed timestep |
+| x5 - x1000 | Active vessel RK4; all others on Keplerian rails |
+| x10000 - x100000 | All vessels on Keplerian rails (analytical, zero CPU cost) |
 
-### Autopilot & Scripting
-
-- **SAS modes** — stability assist, prograde lock, retrograde, normal, radial, maneuver node tracking
-- **Basic autopilot** — hold heading, circularize at current altitude, execute maneuver node
-- **Flight script engine** — scriptable automation (kOS-style) for launch profiles, automated rendezvous, landing sequences
-- **Example scripts included** — gravity turn launch, Hohmann transfer, suicide burn landing
-
-### Time
-
-- **Real-time simulation** with selectable warp rates: ×5, ×10, ×100, ×1000, ×10000, ×100000
-- **Physics warp** at low rates (≤×4); **rail warp** at high rates (vessels follow conic trajectories)
-- **Warp restrictions** — auto-cancel near atmosphere, during burns, and on collision course
+Warp restrictions auto-apply: blocked when throttle > 1% or atmospheric density > 0.01 kg/m3.
 
 ---
 
 ## Art Direction
 
-**Stylized Realistic** — the goal is visual clarity at scale.
+**Stylized Realistic** — the goal is visual clarity at scale, not photorealism.
 
-- Planets and moons rendered with high-detail surface textures; readable from orbit
-- PBR materials on spacecraft parts with metal, paint, and thermal damage states
-- Volumetric atmosphere glow on planetary limbs; accurate terminator and shadow
-- Spacecraft scale relative to Earth is true (a real rocket next to Earth looks tiny and right)
-- No bloom overload — light is controlled and purposeful
-- UI uses monospace / engineering aesthetic: clean readouts, no skeuomorphic chrome
-
----
-
-## Platform
-
-| Target | Method |
-|---|---|
-| **Web (primary)** | Runs in modern browsers at acceptable frame rates |
-| **Desktop (secondary)** | Packaged from the same codebase; higher resolution and performance |
+- Planets rendered with PBR surface textures; readable silhouettes from orbit
+- Spacecraft use metallic/roughness materials; thermal damage state visible via emissive heat gradient
+- Atmosphere glow rendered as screen-space Rayleigh + Mie scattering shader on planetary limbs
+- Reentry plasma: emissive gradient from blue to orange to white based on part temperature
+- Star field: skybox cubemap with correct stellar distribution
+- UI: monospace engineering aesthetic; no skeuomorphic chrome
 
 ---
 
@@ -134,355 +157,1152 @@ There is no campaign, no tech tree, no win condition. The sandbox is the game.
 
 | Layer | Technology | Rationale |
 |---|---|---|
-| **Game engine** | Godot 4.3+ | Free, WASM web export, native desktop export, open source |
-| **Primary language** | C# (.NET 8) | Static typing, generics, double precision — familiar to TypeScript devs; required for simulation math |
-| **Rendering** | Godot 4 Vulkan / OpenGL ES 3 | Vulkan on desktop, OpenGL ES 3 fallback for web |
-| **Custom shaders** | Godot Shader Language (GLSL subset) | Atmosphere scattering, reentry plasma, planet surface |
-| **Physics (game)** | Godot Jolt (built-in) | Construction snap, landing gear, debris — local scale only |
-| **Physics (orbital)** | Custom C# simulation library | N-body, Keplerian propagation, RK4 integrator — fully decoupled from engine |
-| **Autopilot scripting** | MoonSharp (Lua interpreter for C#) | Lua is minimal, sandboxed, scriptable by players — same approach as kOS |
-| **3D assets** | GLTF 2.0 | Engine-agnostic, supports PBR materials natively in Godot |
-| **Data files** | JSON | Part definitions, planet data, save files — human-readable and debuggable |
-| **Web export** | Godot WASM + WebGL 2.0 | Single export target; same codebase as desktop |
-| **Desktop export** | Godot native | Linux, Windows, macOS from one project |
-| **Build tooling** | .NET CLI + Godot export templates + GitHub Actions | Automated builds for web and desktop |
+| **Game engine** | Godot 4.3+ | Free, WASM web export, native desktop, open source, zero licensing risk |
+| **Primary language** | C# (.NET 8) | Static typing, generics, `double` precision — familiar to TypeScript developers |
+| **Rendering** | Godot 4 Vulkan / OpenGL ES 3 | Vulkan on desktop, ES3 fallback for web |
+| **Shaders** | Godot Shader Language (GLSL subset) | Atmosphere scattering, reentry glow, planet PBR |
+| **Physics (game engine)** | Godot Jolt | Local-scale: construction snap, landing gear, debris collision |
+| **Physics (orbital)** | Custom C# library | N-body, Keplerian rails, RK4 integrator — fully decoupled from engine |
+| **Autopilot scripting** | MoonSharp (Lua for .NET) | Sandboxed, player-accessible, coroutine-based — same philosophy as kOS |
+| **3D assets** | GLTF 2.0 | Engine-agnostic, native PBR support in Godot |
+| **Data** | JSON | Part definitions, planet data, save files — human-readable |
+| **Web export** | Godot WASM + WebGL 2.0 | Same codebase as desktop |
+| **Desktop export** | Godot native | Linux, Windows, macOS |
 
 ### Why Godot over Unity
-Unity has a larger asset store but its licensing history is unstable for indie projects and its WebGL export is heavier and slower. Godot is zero-cost, its web export is leaner, and the C# integration via .NET 8 is mature as of Godot 4.2+.
+Unity's licensing history is unstable for indie projects; its WebGL export is heavier and slower. Godot is zero-cost, open source, and exports natively to both WASM and desktop. C# integration via .NET 8 is mature as of Godot 4.2.
 
 ### Why C# over GDScript
-GDScript is Python-like (dynamically typed). C# is closer to TypeScript: static types, generics, LINQ, interfaces, async/await. The orbital simulation library specifically needs `double` precision floating point and type-safe data structures — GDScript doesn't offer this. All game code and simulation code stays in one language.
+GDScript is dynamically typed (like Python). C# has static types, generics, `async`/`await`, LINQ, and interfaces — familiar to TypeScript developers. The orbital simulation library specifically requires `double` precision, which GDScript doesn't support.
 
 ### Why custom orbital physics
-Godot Jolt is a rigid-body physics engine operating in meters at human scale. Space simulation has two problems it cannot solve: (1) the solar system spans ~10¹³ meters, far beyond float32 precision; (2) N-body gravity and Keplerian propagation are mathematical operations, not collision detection. The custom library runs in `double` precision, is fully headless (no engine dependency), and can be unit-tested independently.
+Godot Jolt operates in meters at human scale and uses `float32`. The solar system spans ~10^13 meters. Float32 loses precision beyond ~16 million meters — less than Earth-Moon distance. The custom library uses `double` throughout, is fully headless (no engine dependency), and is unit-testable.
 
 ---
 
-## Architecture
+## Development Setup
 
-### The Scale Problem
+### Prerequisites
 
-A spacecraft in low Earth orbit is ~250 km above a planet with a 6,371 km radius. The distance from Earth to Neptune is 4.5 billion km. Float32 has 7 significant digits of precision — it loses accuracy beyond ~16 million meters, which is less than Earth–Moon distance. Everything in Exosphere uses `double` for simulation positions and velocities.
+1. **Godot 4.3+** — download the **.NET version** (required for C# support) from godotengine.org
+2. **.NET 8 SDK** — from dotnet.microsoft.com/download/dotnet/8.0
+3. **IDE** (optional) — VS Code with C# Dev Kit, or JetBrains Rider
 
-**The Floating Origin pattern** solves the rendering side: every frame, the 3D world origin is set to the active vessel's position. All other objects (planets, other vessels, surface bases) are rendered at `(simPosition - originPosition)` cast to `float32`. Since everything is rendered relative to the origin and the active object is always at `(0,0,0)`, float32 precision is sufficient for rendering even at solar-system scale.
+### Running the Project
 
----
+```bash
+# Build the simulation library first
+dotnet build ExosphereSimulation/ExosphereSimulation.csproj
 
-### Layer Diagram
-
+# Open in Godot editor
+# File → Open Project → select this directory
+# Press F5 to run
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  PRESENTATION LAYER  (Godot 4 scene tree)                            │
-│                                                                      │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  ┌─────────┐  │
-│  │ 3D Viewport │  │ Orbital Map  │  │  HUD Overlay  │  │ Cockpit │  │
-│  │ (flight)    │  │ (3D, scaled) │  │  (2D Control) │  │ (3D VP) │  │
-│  └─────────────┘  └──────────────┘  └───────────────┘  └─────────┘  │
-└──────────────────────────────────────────────────────────────────────┘
-                                 ↕
-┌──────────────────────────────────────────────────────────────────────┐
-│  GAME LAYER  (C# + Godot nodes)                                      │
-│                                                                      │
-│  ConstructionSystem │ CrewManager │ AutopilotController │ TimeWarp   │
-│  SaveSystem         │ UIBridge    │ FloatingOrigin       │ SoundMgr  │
-└──────────────────────────────────────────────────────────────────────┘
-                                 ↕
-┌──────────────────────────────────────────────────────────────────────┐
-│  SIMULATION LAYER  (pure C# library, no Godot dependency)            │
-│                                                                      │
-│  Universe           │ CelestialBody  │ Vessel         │ PartGraph   │
-│  OrbitalIntegrator  │ AtmosphereModel│ ThermalModel   │ StressSolver│
-│  KeplerPropagator   │ ManeuverPlanner│ LuaScriptEngine│ IsruSolver  │
-└──────────────────────────────────────────────────────────────────────┘
-                                 ↕
-┌──────────────────────────────────────────────────────────────────────┐
-│  DATA LAYER                                                          │
-│                                                                      │
-│  /data/parts/*.json │ /data/bodies/*.json │ /saves/*.json           │
-│  /assets/models/    │ /assets/textures/   │ /scripts/*.lua          │
-└──────────────────────────────────────────────────────────────────────┘
+
+### Building for Web
+
+```bash
+godot --export-release "Web" exports/web/index.html
+```
+
+### Building for Desktop
+
+```bash
+godot --export-release "Linux/X11" exports/linux/Exosphere.x86_64
+godot --export-release "Windows Desktop" exports/windows/Exosphere.exe
 ```
 
 ---
 
-### Simulation Layer (Core)
-
-#### Universe
-
-The root simulation object. Holds all `CelestialBody` and `Vessel` instances. Advances time by calling the integrator.
+## Project Structure
 
 ```
-Universe
-  ├── bodies[]           CelestialBody — Sun, Earth, Moon, Mars, …
-  ├── vessels[]          Vessel — all active rockets and probes
-  ├── Tick(dt: double)   advance simulation by dt seconds
-  └── TimeScale          current warp multiplier
+space simulator/
+|
++-- project.godot                    Godot 4 config (Forward Plus renderer, 50 Hz physics)
++-- Exosphere.csproj                 Godot game project (references simulation library)
++-- ExosphereSimulation.sln          .NET solution linking both projects
++-- .gitignore
+|
++-- ExosphereSimulation/             Pure C# simulation library (no Godot dependency)
+|   +-- ExosphereSimulation.csproj   net8.0 class library, AllowUnsafeBlocks
+|   +-- Universe.cs                  Root simulation container
+|   +-- CelestialBody.cs             Planet/moon with gravity, atmosphere, loading
+|   +-- Vessel.cs                    Spacecraft with parts, forces, staging
+|   +-- OrbitalElements.cs           Keplerian elements; state vector to elements conversion
+|   +-- AtmosphereModel.cs           Exponential density/pressure model (partial class)
+|   +-- AtmosphereModelJson.cs       partial -- adds FromJson() factory
+|   +-- CrewMember.cs                Astronaut stats, EVA mechanics
+|   |
+|   +-- Math/
+|   |   +-- Vector3d.cs              Double-precision 3D vector
+|   |   +-- Quaterniond.cs           Double-precision quaternion
+|   |   +-- MathUtils.cs             Constants (G, AU), Kepler solver, orbital converters
+|   |
+|   +-- Integrators/
+|   |   +-- RK4Integrator.cs         4th-order Runge-Kutta
+|   |   +-- KeplerPropagator.cs      Analytical Keplerian propagation
+|   |
+|   +-- Parts/
+|   |   +-- PartDefinition.cs        Data loaded from JSON
+|   |   +-- Part.cs                  Runtime instance: resources, thrust, propellant
+|   |   +-- PartGraph.cs             Part tree: CoM, total thrust, staging, separation
+|   |   +-- Joint.cs                 Structural connection with tensile/shear tolerance
+|   |
+|   +-- Physics/
+|       +-- ThermalModel.cs          Heat flux (DKR), temperature update, damage
+|       +-- AerodynamicsModel.cs     Drag force, dynamic pressure, Mach, drag multiplier
+|       +-- StressSolver.cs          Joint load computation, breaking detection
+|
++-- scripts/                         Godot C# game layer
+|   +-- SimulationBridge.cs          [GlobalClass] autoload; owns Universe, drives Tick()
+|   +-- FloatingOrigin.cs            Recenters 3D world on active vessel each frame
+|   +-- TimeWarpController.cs        8-step warp ladder with safety restrictions
+|   +-- NavBallController.cs         Prograde/retrograde/normal/radial + heading/pitch/roll
+|   +-- HUDController.cs             9 Label readouts + keyboard input
+|   +-- VesselRenderer.cs            Builds MeshInstance3D tree; heat glow per part
+|   +-- SaveSystem.cs                JSON save/load to ~/.local/share/Exosphere/saves/
+|
++-- scenes/                          Godot scene files (.tscn)
+|   +-- flight/                      Main flight scene (to be built)
+|   +-- construction/                Part editor scene (to be built)
+|   +-- orbital_map/                 3D nav map scene (to be built)
+|   +-- ui/                          HUD and menus (to be built)
+|
++-- data/
+|   +-- bodies/                      8 celestial body JSON files (Sun through Saturn)
+|   +-- parts/                       15 rocket part JSON files
+|   +-- launch_sites/                kennedy.json, baikonur.json
+|
++-- assets/
+|   +-- models/                      *.glb part and planet meshes (to be created)
+|   +-- textures/                    Planet surfaces, part albedo (to be created)
+|   +-- shaders/                     *.gdshader atmosphere, reentry (to be created)
+|
++-- lua_scripts/
+    +-- gravity_turn_launch.lua      Example: 200 km circular orbit program
 ```
-
-**Time warp modes:**
-| Warp rate | Integration mode |
-|---|---|
-| ×1 – ×4 | Full RK4 for all vessels, all bodies |
-| ×5 – ×1000 | RK4 for active vessel; on-rails (Keplerian) for all others |
-| ×10000+ | All vessels on Keplerian rails; no RK4; time jumps directly |
-
-#### CelestialBody
-
-```
-CelestialBody
-  ├── mass: double        (kg)
-  ├── radius: double      (m)
-  ├── position: Vector3d  (m, simulation space)
-  ├── velocity: Vector3d  (m/s)
-  ├── atmosphere: AtmosphereModel
-  └── terrain: TerrainSampler
-```
-
-Real data sourced from NASA Horizons / IAU. Bodies are numerically integrated at ×1–×4 warp; at higher warp they follow precomputed ephemeris.
-
-#### Vessel
-
-```
-Vessel
-  ├── parts: PartGraph    tree of connected parts
-  ├── position: Vector3d  root part position (m)
-  ├── velocity: Vector3d  (m/s)
-  ├── orientation: Quaternion
-  ├── isOnRails: bool
-  ├── crew: CrewMember[]
-  └── ComputeTotalMass() / ComputeThrust() / ComputeDrag()
-```
-
-When `isOnRails = true`, the vessel follows a Keplerian conic (no forces computed). Burns switch it to active physics mode.
-
-#### PartGraph
-
-Parts form a tree (root = command pod). Each edge is a `Joint` with a structural load limit. The solver:
-
-1. Computes aerodynamic forces on each part (drag, lift from shape + angle of attack)
-2. Walks the tree bottom-up accumulating tensile/compressive stress at each joint
-3. Any joint exceeding its limit detaches — the subtree becomes a new separate `Vessel`
-
-#### OrbitalIntegrator (RK4)
-
-Classic 4th-order Runge-Kutta integration over position and velocity with N-body acceleration:
-
-```
-a = Σ G·Mᵢ / |r - rᵢ|² · (rᵢ - r) / |r - rᵢ|   for each body i
-```
-
-Adaptive step size: if error estimate exceeds threshold, halve Δt and retry. During physics warp (×2–×4) the fixed step is simply divided by `TimeScale`.
-
-#### KeplerPropagator
-
-For on-rails vessels: given initial orbital elements (a, e, i, Ω, ω, ν), compute position and velocity at any future time analytically. Zero computation cost — supports ×100000 warp trivially.
-
-#### AtmosphereModel
-
-Per-body exponential density model with optional layered overrides:
-
-```
-ρ(h) = ρ₀ · exp(-h / H)     H = scale height (m)
-P(h) = P₀ · exp(-h / H_P)
-T(h) = piecewise linear       from real atmospheric profile
-```
-
-Used by drag: `F_drag = ½ · ρ · v² · Cd · A`
-Used by heating: `q = k · ρ · v³` (simplified Detra-Kemp-Riddell)
 
 ---
 
-### Rendering Architecture
+## Codebase Reference
 
-#### Floating Origin (every frame)
+### Simulation Library (`ExosphereSimulation/`)
 
-```
-renderOrigin = activeVessel.position   // Vector3d
-foreach (renderable) {
-    renderable.node.Position = (Vector3)(renderable.simPosition - renderOrigin)
-}
-```
-
-This keeps all `float32` render positions within ±10 km of origin — well within float precision.
-
-#### Planet Rendering
-
-Each planet is a sphere mesh with a custom Godot shader:
-
-- **Albedo**: high-res texture projected onto sphere (2K web, 8K desktop)
-- **Normals**: normal map for surface relief
-- **Atmosphere**: screen-space post-process shader doing Rayleigh + Mie single scattering
-- **Clouds**: animated 2D texture scrolled over atmosphere layer
-- **City lights**: blended in on the night side based on real distribution maps
-
-LOD: 4 levels from orbit (low poly + single texture) to close approach (high poly + detail tiles).
-
-#### Vessel Rendering
-
-- Parts are GLTF meshes instantiated and parented according to `PartGraph`
-- Each part has PBR material: metallic/roughness, albedo, emissive (engines glow)
-- Thermal state drives an emissive heat gradient (blue → orange → white) on reentry
-- Engine exhaust: Godot `GPUParticles3D` with custom shader
-
-#### Orbital Map
-
-A separate 3D scene rendered to a `SubViewport`. The solar system is scaled down by `1 / SCALE_FACTOR` (e.g. 1:10⁹). Vessels are rendered at fixed screen-size billboards so they remain visible regardless of scale. Maneuver nodes are 3D gizmo handles: drag to adjust burn Δv, rotation snaps to prograde/normal/radial axes.
+This is a **pure C# class library with no Godot dependencies**. It can be compiled and tested independently with `dotnet build ExosphereSimulation/ExosphereSimulation.csproj`. The game layer references it via `<ProjectReference>`.
 
 ---
 
-### Construction System
+#### `Math/Vector3d.cs` — Double-precision 3D vector
 
-The part editor is a separate Godot scene. Parts snap to attachment nodes (defined in part JSON). On assembly commit:
+```
+namespace: Exosphere.Simulation.Math
+type:       readonly struct
 
-1. `PartGraph` is built from the placed parts
-2. Mass, CoM, CoT, and drag profile are computed
-3. `Vessel` is created in `Universe` and handed off to the flight scene
+Properties:
+  X, Y, Z               double
+  Magnitude             double -- sqrt(X^2+Y^2+Z^2)
+  MagnitudeSquared      double -- no sqrt; use for comparisons
+  Normalized            Vector3d -- unit vector; Zero if magnitude < epsilon
 
-Parts are defined in JSON:
+Static: Zero, One, Up, Forward, Right
+
+Methods:
+  Dot(Vector3d)         double
+  Cross(Vector3d)       Vector3d
+  DistanceTo(Vector3d)  double
+  Lerp(Vector3d, t)     Vector3d
+
+Operators: +, -, * (scalar), / (scalar), ==, !=, unary -
+Conversion: implicit <-> (double, double, double) tuple
+```
+
+---
+
+#### `Math/Quaterniond.cs` — Double-precision quaternion
+
+```
+namespace: Exosphere.Simulation.Math
+type:       struct
+
+Fields: W, X, Y, Z (double)
+Static: Identity (1,0,0,0)
+
+Methods:
+  Normalize()                   Quaterniond
+  Inverse()                     Quaterniond -- conjugate / magnitude^2
+  Rotate(Vector3d)              Vector3d -- rotates vector by this quaternion
+  Slerp(Quaterniond, t)         Quaterniond
+
+Static:
+  FromAxisAngle(axis, angleRad) Quaterniond
+  FromEuler(pitch, yaw, roll)   Quaterniond (degrees)
+
+Operators: * (quaternion multiply)
+```
+
+---
+
+#### `Math/MathUtils.cs` — Constants and orbital helpers
+
+```
+namespace: Exosphere.Simulation.Math
+
+Constants:
+  G          = 6.674e-11   m^3/(kg*s^2) gravitational constant
+  AU         = 1.496e11    m astronomical unit
+  DEG_TO_RAD = pi/180
+  RAD_TO_DEG = 180/pi
+
+Methods:
+  SolveKeplerEquation(M, e, tol=1e-10)
+    -> double E  eccentric anomaly via Newton-Raphson
+    -- solves M = E - e*sin(E)
+
+  OrbitalToInertial(a, e, nu, i, Omega, omega)
+    -> Vector3d  position in inertial frame (m from body center)
+
+  OrbitalToInertialStateVector(a, e, nu, i, Omega, omega, GM)
+    -> (Vector3d pos, Vector3d vel)
+
+  Clamp, Lerp, WrapAngle, ClampAngle
+```
+
+---
+
+#### `OrbitalElements.cs` — Keplerian orbital elements
+
+```
+namespace: Exosphere.Simulation
+
+Properties:
+  SemiMajorAxis            double  m
+  Eccentricity             double  [0, infinity)
+  Inclination              double  radians
+  LongitudeOfAscendingNode double  radians
+  ArgumentOfPeriapsis      double  radians
+  MeanAnomalyAtEpoch       double  radians
+  Epoch                    double  seconds
+  ReferenceBodyId          string
+
+Computed:
+  Apoapsis    = a*(1+e)   m from body center
+  Periapsis   = a*(1-e)   m from body center
+
+Methods:
+  GetMeanAnomaly(t, gm)
+    -> double  mean anomaly at time t; n = sqrt(GM/a^3)
+
+  GetStateAtTime(t, gm)
+    -> (Vector3d pos, Vector3d vel)  inertial state relative to reference body
+
+  static FromStateVector(pos, vel, gm, bodyId, epoch)
+    -> OrbitalElements
+    -- vis-viva: epsilon = v^2/2 - GM/r; a = -GM/(2*epsilon)
+    -- h = r x v (specific angular momentum)
+    -- e_vec = v x h / GM - r_hat (eccentricity vector)
+```
+
+---
+
+#### `CelestialBody.cs` — Planet / Moon / Star
+
+```
+namespace: Exosphere.Simulation
+
+Init properties (from JSON):
+  Id, Name              string
+  Mass                  double  kg
+  Radius                double  m
+  GM                    double  m^3/s^2
+  SphereOfInfluence     double  m
+  RotationalPeriod      double  s (negative = retrograde)
+  AxialTilt             double  degrees
+  Atmosphere            AtmosphereModel?
+  OrbitalElements       OrbitalElements?  null for Sun
+
+Runtime state (updated by integrator):
+  Position              Vector3d  m, inertial frame
+  Velocity              Vector3d  m/s
+
+Methods:
+  GetSurfaceGravity()           double  GM/R^2
+  GetAltitude(worldPos)         double  m above surface (negative = underground)
+  IsInAtmosphere(worldPos)      bool
+  GetAtmosphericDensity(pos)    double  kg/m^3
+  GetAtmosphericPressure(pos)   double  Pa
+  GetGravityAt(worldPos)        Vector3d  gravitational acceleration (m/s^2)
+  GetSurfaceVelocity(worldPos)  Vector3d  rotational surface velocity (omega x r)
+
+Factories:
+  LoadFromJson(path)             CelestialBody
+  LoadAllFromDirectory(dir)      Dictionary<string, CelestialBody>
+```
+
+---
+
+#### `Universe.cs` — Root simulation container
+
+```
+namespace: Exosphere.Simulation
+
+Properties:
+  Bodies        IReadOnlyList<CelestialBody>
+  Vessels       IReadOnlyList<Vessel>
+  CurrentTime   double  seconds since J2000 (private set)
+  TimeScale     double  warp multiplier (default 1.0)
+  ActiveVessel  Vessel?
+
+Methods:
+  AddBody(body) / AddVessel(vessel) / RemoveVessel(vessel)
+  GetBody(id)             CelestialBody?
+  GetDominantBody(pos)    CelestialBody  SOI-based; falls back to most massive
+  Tick(realDeltaTime)     void  advances by realDt * TimeScale seconds
+
+Internal tick modes:
+  TickPhysics(dt)         -- full RK4; TimeScale <= 4
+  TickPhysicsMixed(dt)    -- active vessel RK4; others Keplerian; TimeScale <= 1000
+  TickRails(dt)           -- all vessels and bodies Keplerian; TimeScale > 1000
+
+Factory:
+  LoadFromDataDirectory(dataDir)  Universe
+    -- loads bodies/*.json; Sun at origin; others from orbital elements at t=0
+```
+
+---
+
+#### `Vessel.cs` — Spacecraft
+
+```
+namespace: Exosphere.Simulation
+
+Properties:
+  Id              string  GUID
+  Name            string
+  Parts           PartGraph
+  Position        Vector3d  m inertial
+  Velocity        Vector3d  m/s inertial
+  Orientation     Quaterniond
+  AngularVelocity Vector3d  rad/s
+  IsOnRails       bool
+  OrbitalState    OrbitalElements?  valid when IsOnRails=true
+  ReferenceBodyId string?
+  Throttle        double  [0,1]
+  SASEnabled      bool
+  Crew            List<CrewMember>
+
+Computed:
+  TotalMass      double  kg
+  CenterOfMass   Vector3d  world space
+
+Methods:
+  GetAltitude(body)                double
+  GetSurfaceVelocity(body)         Vector3d  relative to atmosphere
+  ComputeThrust()                  Vector3d  N world space
+  ComputeDrag(body)                Vector3d  N world space (Mach-adjusted)
+  ComputeGravity(bodies)           Vector3d  m/s^2 sum of all bodies
+  ComputeNetAcceleration(...)      Vector3d  m/s^2
+  Tick(dt, refBody)                void  propellant, SAS damping, orientation
+  Stage()                          Vessel?  returns debris vessel or null
+```
+
+---
+
+#### `Parts/PartDefinition.cs` — Part data from JSON
+
+```
+namespace: Exosphere.Simulation.Parts
+
+Properties:
+  Id, Name, Description   string
+  Category                PartCategory enum
+  MassDry                 double  kg
+  ThrustVac, ThrustSL     double  N
+  IspVac, IspSL           double  s
+  GimbalRange             double  degrees
+  FuelCapacityLF/Ox/Solid/Mono  double  kg
+  ECCapacity              double
+  AttachmentNodes         List<AttachmentNodeDef>
+  HeatTolerance           double  K
+
+enum PartCategory:
+  Command, Engine, FuelTank, Structure, Electrical,
+  Landing, Decoupler, Fairing, RCS
+
+Factories:
+  LoadFromJson(path)             PartDefinition
+  LoadAllFromDirectory(dir)      Dictionary<string, PartDefinition>
+```
+
+---
+
+#### `Parts/Part.cs` — Runtime part instance
+
+```
+namespace: Exosphere.Simulation.Parts
+
+Properties:
+  InstanceId          string  GUID
+  Definition          PartDefinition
+  LiquidFuel/Oxidizer/SolidFuel/Monopropellant/ElectricCharge  double
+  Temperature         double  K (starts at 290)
+  IsBroken            bool
+  IsStagingActive     bool
+  ThrottleLevel       double  [0,1]
+  GimbalOffset        Vector3d
+  CurrentMass         double  dry + propellant
+
+Methods:
+  ResetResources()              void  fill to capacity
+  GetThrustVector()             Vector3d  local space, gimbal applied
+  ConsumePropellant(dt, Pa)     bool  false if out of fuel; ISP interpolated by pressure
+```
+
+---
+
+#### `Parts/PartGraph.cs` — Part tree
+
+```
+namespace: Exosphere.Simulation.Parts
+
+Properties:
+  Root          Part?
+  Parts         IReadOnlyList<Part>
+  Joints        IReadOnlyList<Joint>
+  TotalMass     double  kg
+  CenterOfMass  Vector3d  local vessel space
+  ActiveEngines IEnumerable<Part>
+
+Methods:
+  SetRoot / AddPart / AddJoint
+  GetChildren(parent)    IEnumerable<Part>
+  GetJoint(p, c)         Joint?
+  GetTotalThrust()       Vector3d  local space
+  ConsumePropellant(dt, Pa)
+  FireNextStage()        PartGraph?  detaches first decoupler subtree
+  ComputePartLocalPositions()  Dictionary<Part, Vector3d>
+```
+
+---
+
+#### `Parts/Joint.cs` — Structural connection
+
+```
+namespace: Exosphere.Simulation.Parts
+
+Properties:
+  Parent, Child                 Part
+  ParentNodeId, ChildNodeId     string
+  TensileStrength               double  N (scaled by node size^2)
+  CompressiveStrength           double  N
+  ShearStrength                 double  N
+  CurrentTensileLoad            double  N (updated by StressSolver)
+  CurrentShearLoad              double  N
+  IsBreaking                    bool
+```
+
+---
+
+#### `Physics/ThermalModel.cs`
+
+```
+namespace: Exosphere.Simulation.Physics (static class)
+
+Methods:
+  ComputeHeatFlux(density, velocity)
+    -> double W/m^2  simplified DKR: 1.83e-4 * sqrt(rho) * v^3
+
+  UpdateTemperature(currentTemp, heatFlux, dt, mass=100)
+    -> double K  Newton cooling + Stefan-Boltzmann radiation; min 3K
+
+  ApplyHeat(part, heatFlux, dt)
+    -> bool  true if part.Temperature > part.Definition.HeatTolerance (destroyed)
+```
+
+---
+
+#### `Physics/AerodynamicsModel.cs`
+
+```
+namespace: Exosphere.Simulation.Physics (static class)
+
+Methods:
+  ComputeDrag(density, surfaceVelocity, Cd, area)   Vector3d  N
+  ComputeDynamicPressure(density, speed)             double  Pa
+  ComputeMach(speed, temperature)                    double
+  GetMachDragMultiplier(mach)
+    -> 1.0 subsonic; peak 2.0 at Mach 1.0-1.2; decays above
+  EstimateReferenceArea(graph)                       double  m^2
+```
+
+---
+
+#### `Physics/StressSolver.cs`
+
+```
+namespace: Exosphere.Simulation.Physics (static class)
+
+Methods:
+  ComputeLoads(graph, netAcceleration, orientation)
+    -> void  walks part tree; updates Joint.CurrentTensileLoad and CurrentShearLoad
+    -- uses non-gravitational (felt) acceleration
+
+  FindBreakingJoints(graph)
+    -> IEnumerable<Joint>  joints exceeding tolerance
+
+  ApplyThermalLoads(graph, heatFlux, dt)
+    -> List<Part>  parts destroyed by heat this tick
+```
+
+---
+
+#### `Integrators/RK4Integrator.cs`
+
+```
+namespace: Exosphere.Simulation.Integrators (static class)
+
+Methods:
+  Step(state, t, dt, derivative)
+    -- state: double[n], derivative: Func<double[], double, double[]>
+    -> double[n]  advanced state
+
+  StepPosVel(pos, vel, t, dt, acceleration)
+    -- acceleration: Func<Vector3d, Vector3d, double, Vector3d>
+    -> (Vector3d newPos, Vector3d newVel)
+    -- packs/unpacks Vector3d pair into double[6] for Step()
+```
+
+---
+
+#### `Integrators/KeplerPropagator.cs`
+
+```
+namespace: Exosphere.Simulation.Integrators (static class)
+
+Methods:
+  PropagateToTime(elements, targetTime, gm)
+    -> (Vector3d pos, Vector3d vel)  analytical propagation
+
+  ComputeElements(relPos, relVel, gm, bodyId, epoch)
+    -> OrbitalElements
+
+  PropagateAllBodies(bodies, targetTime)
+    -> void  updates all CelestialBody with OrbitalElements
+    -- Sun (no elements) stays at origin
+```
+
+---
+
+#### `AtmosphereModel.cs` (partial)
+
+```
+namespace: Exosphere.Simulation
+
+Properties (init):
+  MaxAltitude      double  m
+  SeaLevelDensity  double  kg/m^3
+  ScaleHeight      double  m
+  SeaLevelPressure double  Pa
+  MolarMass        double  kg/mol
+
+Methods:
+  GetDensity(altitude)   double  kg/m^3  rho_0 * exp(-h/H)
+  GetPressure(altitude)  double  Pa
+
+Static:
+  Earth() / Mars() / Venus()  preset factory methods
+
+Partial extension (AtmosphereModelJson.cs):
+  FromJson(JsonElement)  AtmosphereModel  reads snake_case JSON fields
+```
+
+---
+
+#### `CrewMember.cs`
+
+```
+namespace: Exosphere.Simulation
+
+enum CrewStatus: Active, OnEVA, Injured, Dead
+
+Properties:
+  Name               string
+  PilotLevel         int  [0,5]
+  EngineerLevel      int  [0,5]
+  ScientistLevel     int  [0,5]
+  EVAExperience      double  hours
+  SuitBattery        double  EC (max 100)
+  Status             CrewStatus
+
+Methods:
+  ComputeEVARisk()   double  max(0, 1 - experience/100 - engineerLevel*0.1)
+  TickEVA(dt)        void  drains 0.1 EC/s; sets Injured at 0
+```
+
+---
+
+### Game Layer Scripts
+
+These are Godot C# partial classes in `scripts/`. They inherit from Godot node types and require the Godot editor to run.
+
+---
+
+#### `scripts/SimulationBridge.cs` — Autoload singleton
+
+```
+type: partial class SimulationBridge : Node  [GlobalClass]
+
+Static:
+  Instance    SimulationBridge  set in _Ready
+
+Properties:
+  Universe    Universe
+  ActiveVessel  Vessel?
+
+Signals:
+  VesselStaged(string detachedVesselId)
+  VesselDestroyed(string vesselId)
+  SimulationLoaded()
+
+Methods:
+  SetThrottle(double) / SetSAS(bool)
+  TriggerStaging()    calls Stage(), adds debris, emits signal
+  SetTimeScale(double)
+  SpawnVesselAtLaunchPad(json)  Vessel?
+
+Lifecycle:
+  _Ready()    loads Universe from "res://data"
+  _Process()  calls Universe.Tick(delta) every frame
+```
+
+---
+
+#### `scripts/FloatingOrigin.cs` — Scale precision manager
+
+```
+type: partial class FloatingOrigin : Node
+
+Each frame:
+  renderOrigin = ActiveVessel.Position     (Vector3d, double precision)
+  node.Position = (float)(simPos - origin) (float32, always near zero)
+
+Methods:
+  RegisterBodyNode(bodyId, Node3D)
+  RegisterVesselNode(vesselId, Node3D)
+  UnregisterVesselNode(vesselId)
+
+Notes:
+  Keeps all Godot float32 positions within +-10 km of origin.
+  Quaternion order differs: Quaterniond(W,X,Y,Z) -> Godot.Quaternion(X,Y,Z,W)
+```
+
+---
+
+#### `scripts/TimeWarpController.cs`
+
+```
+type: partial class TimeWarpController : Node
+Signal: WarpChanged(double newRate)
+Warp ladder: [1, 5, 10, 50, 100, 1000, 10000, 100000]
+
+Methods:
+  WarpUp() / WarpDown() / ResetToRealTime() / SetWarpRate(rate)
+
+CanWarpUp returns false when:
+  - Throttle > 0.01
+  - AtmosphericDensity at vessel > 0.01 kg/m^3
+```
+
+---
+
+#### `scripts/NavBallController.cs`
+
+```
+type: partial class NavBallController : Node
+
+Computed each frame:
+  ProgradeWorld, RetrogradeWorld  orbital velocity direction
+  NormalWorld                     orbit normal (prograde x radialIn)
+  RadialOutWorld                  away from reference body
+  Heading, Pitch, Roll            degrees
+  ProgradeError                   degrees between nose and prograde vector
+```
+
+---
+
+#### `scripts/HUDController.cs`
+
+```
+type: partial class HUDController : Node
+[Export] NodePath for 9 Label nodes
+
+Displays: Altitude, Speed, Apoapsis, Periapsis,
+          Throttle, Fuel, Mass, MissionTime, WarpRate
+
+Input (_UnhandledInput):
+  Z / X     throttle +/- 5%
+  Space     staging
+  T         toggle SAS
+```
+
+---
+
+#### `scripts/VesselRenderer.cs`
+
+```
+type: partial class VesselRenderer : Node3D
+
+BuildFromVessel(Vessel)
+  -- clears children
+  -- creates MeshInstance3D per part (cylinder/sphere/box by category)
+  -- positions from PartGraph.ComputePartLocalPositions()
+
+Each frame:
+  t = (part.Temperature - 290) / 2000.0
+  emission = Color(t, t*0.4, 0) * t   orange heat glow when t > 0.05
+```
+
+---
+
+#### `scripts/SaveSystem.cs`
+
+```
+type: static class SaveSystem
+Save directory: ~/.local/share/Exosphere/saves/
+
+Methods:
+  SaveGame(slotName="quicksave")   void
+  LoadGame(slotName="quicksave")   bool
+  ListSaveSlots()                  string[]
+
+Per-vessel save data:
+  id, name
+  position: x, y, z (double)
+  velocity: x, y, z (double)
+  orientation: w, x, y, z (double)
+  is_on_rails, reference_body_id
+
+Note: Celestial bodies always recomputed from data/ -- not saved.
+Note: Universe.CurrentTime has private set; restore planned for future iteration.
+```
+
+---
+
+## Architecture Deep Dive
+
+### The Scale Problem and Floating Origin
+
+The solar system spans ~1.5e13 meters (100 AU). Float32 has 7 significant digits and loses sub-meter precision beyond ~16,000 km — less than Earth-Moon distance. **All simulation math uses `double` (15-17 significant digits).**
+
+For rendering, Godot uses `float32`. The solution is the **Floating Origin** pattern:
+
+```
+Each frame:
+  renderOrigin (Vector3d) = activeVessel.Position
+
+  For each scene object:
+    node.Position (float32) = (simPosition - renderOrigin).ToFloat()
+```
+
+All render coordinates stay within +-10 km of (0,0,0) — well within float32 precision. Planets appear in the correct relative position even at AU distances.
+
+---
+
+### Time Warp Modes
+
+```
+TimeScale <= 4:    Full RK4 at 50 Hz sub-steps
+                   All vessels: RK4 integration
+                   All bodies: Keplerian rails
+
+TimeScale <= 1000: Mixed mode
+                   Active vessel: RK4 integration
+                   Other vessels: Keplerian rails
+                   All bodies: Keplerian rails
+
+TimeScale > 1000:  Pure rails
+                   All vessels + bodies: analytical Keplerian
+                   Zero CPU cost per vessel; time jumps directly
+```
+
+Switching rails -> physics: RK4 starts from current (pos, vel) — no discontinuity.  
+Switching physics -> rails: `OrbitalElements.FromStateVector` converts current state to elements.
+
+---
+
+### Physics Pipeline (per tick)
+
+```
+1. KeplerPropagator.PropagateAllBodies(bodies, t+dt)
+
+2. For each active vessel (not on rails):
+
+   a. vessel.Tick(dt, refBody)
+      +-- ConsumePropellant (flame-out if empty)
+      +-- SAS angular velocity damping
+      +-- Orientation update from AngularVelocity
+
+   b. RK4Integrator.StepPosVel(pos, vel, t, dt, accelFn)
+      +-- accelFn = gravity(all bodies) + thrust/mass + drag/mass
+
+   c. StressSolver.ComputeLoads(parts, nonGravAccel, orientation)
+      +-- Updates Joint.CurrentTensileLoad and CurrentShearLoad
+
+   d. Atmospheric heating (if density > 0):
+      +-- heatFlux = ThermalModel.ComputeHeatFlux(rho, speed)
+      +-- StressSolver.ApplyThermalLoads(parts, heatFlux, dt)
+
+   e. Surface impact:
+      +-- altitude < 0 -> clamp to surface, zero velocity
+```
+
+---
+
+### Part System
+
+Parts load from JSON. At runtime:
+- `PartDefinition` — immutable data (mass, thrust, ISP, nodes)
+- `Part` — mutable state (fuel levels, temperature, broken flag)
+- `PartGraph` — directed tree; root = command pod; edges = `Joint` objects
+
+`FireNextStage()` finds the first active `Decoupler` part, removes it and its subtree, returns it as a new `PartGraph`. The detached piece becomes an independent `Vessel`.
+
+`ComputePartLocalPositions()` computes positions recursively:
+```
+root at (0,0,0)
+child = parentPos + parentNode.offset - childNode.offset
+```
+
+---
+
+### Orbital Mechanics
+
+**Kepler equation** — at the heart of all on-rails propagation:
+
+```
+M = E - e*sin(E)    Kepler's equation (solved by Newton-Raphson)
+M = n*(t - t0)      mean motion n = sqrt(GM/a^3)
+
+From E:
+  tan(nu/2) = sqrt((1+e)/(1-e)) * tan(E/2)   true anomaly
+  r = a*(1 - e*cos(E))                         distance from focus
+  (x,y) = r*(cos(nu), sin(nu))                in orbital plane
+  Rotate by (omega, i, Omega) -> inertial frame
+```
+
+**State vector to orbital elements** (`FromStateVector`):
+```
+h = r x v                   specific angular momentum
+e_vec = v x h / GM - r_hat  eccentricity vector; |e_vec| = eccentricity
+epsilon = v^2/2 - GM/r      specific orbital energy
+a = -GM / (2*epsilon)       semi-major axis (vis-viva)
+i = arccos(hz / |h|)        inclination
+```
+
+---
+
+## Data Formats
+
+### Celestial Body JSON
+
+Location: `data/bodies/<id>.json`
 
 ```jsonc
-// data/parts/liquid_engine_merlin.json
 {
-  "id": "engine_merlin",
-  "category": "engine",
-  "mass_dry": 470,          // kg
-  "thrust_vac": 934000,     // N
-  "isp_vac": 348,           // s
-  "isp_sl": 282,            // s
-  "gimbal_range": 5.0,      // degrees
-  "attachment_nodes": [
-    { "id": "top",    "position": [0, 1.2, 0],  "type": "stack" },
-    { "id": "bottom", "position": [0, -0.6, 0], "type": "engine_bell" }
-  ],
-  "drag_model": "cylinder",
-  "heat_tolerance": 2000     // K before damage
+  "id": "earth",
+  "name": "Earth",
+  "mass": 5.972e24,            // kg
+  "radius": 6371000,           // m mean radius
+  "gm": 3.986004418e14,        // m^3/s^2 (more accurate than G*M)
+  "soi": 924000000,            // m sphere of influence
+  "rotational_period": 86164,  // s sidereal; negative = retrograde
+  "axial_tilt": 23.44,         // degrees
+
+  "has_atmosphere": true,
+  "atmosphere": {
+    "scale_height": 8500,           // m exponential scale height
+    "sea_level_density": 1.225,     // kg/m^3
+    "sea_level_pressure": 101325,   // Pa
+    "sea_level_temperature": 288.15,// K
+    "max_altitude": 140000,         // m; above this rho=0
+    "layers": [                     // ISA layer table (used by future layered model)
+      { "alt_min": 0,     "alt_max": 11000,  "temp_base": 288.15, "lapse_rate": -0.0065 },
+      { "alt_min": 11000, "alt_max": 20000,  "temp_base": 216.65, "lapse_rate": 0.0 },
+      { "alt_min": 20000, "alt_max": 32000,  "temp_base": 216.65, "lapse_rate": 0.001 }
+    ]
+  },
+
+  "orbital_elements": {              // null for the Sun
+    "semi_major_axis": 1.496e11,
+    "eccentricity": 0.0167,
+    "inclination": 0.0,              // degrees; converted to radians on load
+    "longitude_of_node": -11.26064,
+    "argument_of_periapsis": 114.20783,
+    "mean_anomaly_at_epoch": 358.617,
+    "epoch": 0.0,                    // seconds since J2000
+    "reference_body": "sun"
+  }
 }
 ```
 
 ---
 
-### Autopilot Scripting (Lua / MoonSharp)
+### Part JSON
 
-Player-written Lua scripts run in a sandboxed MoonSharp interpreter. The API exposes vessel state and control surfaces:
+Location: `data/parts/<id>.json`
+
+```jsonc
+{
+  "id": "engine_liquid_vac",
+  "name": "Vacuum Engine",
+  "description": "High ISP vacuum engine.",
+  "category": "engine",
+  // categories: command | engine | fuel_tank | structure | electrical
+  //             | landing | decoupler | fairing | rcs
+
+  "mass_dry": 490,        // kg
+  "cost": 12000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 2000, // K; part destroyed above this
+
+  "attachment_nodes": [
+    { "id": "top",    "position": [0, 0.9, 0], "size": 2, "type": "stack" },
+    { "id": "bottom", "position": [0, -0.5, 0], "size": 2, "type": "engine_bell" }
+    // types: stack | radial | engine_bell
+    // size: 1=0.625m, 2=1.25m, 3=2.5m  (scales structural strength by size^2)
+  ],
+
+  "thrust_vac": 934000,   // N
+  "thrust_sl": 756000,    // N
+  "isp_vac": 348,         // s
+  "isp_sl": 282,          // s
+  "gimbal_range": 6.0,    // degrees
+  "fuel_type": "LiquidFuel+Oxidizer",
+
+  "fuel_capacity_lf": 360,
+  "fuel_capacity_ox": 440,
+  "fuel_capacity_solid": 0,
+  "fuel_capacity_mono": 0,
+  "ec_capacity": 0,
+
+  "max_crew": 0,
+  "deployable": false,
+  "is_rcs": false
+}
+```
+
+---
+
+### Launch Site JSON
+
+Location: `data/launch_sites/<id>.json`
+
+```json
+{
+  "id": "kennedy",
+  "name": "Kennedy Space Center LC-39A",
+  "body": "earth",
+  "latitude": 28.608389,
+  "longitude": -80.604333,
+  "altitude": 3.0,
+  "heading": 90.0
+}
+```
+
+---
+
+## Simulation API Reference
+
+Common patterns for using the simulation from the game layer:
+
+```csharp
+var universe = SimulationBridge.Instance.Universe;
+
+// Find bodies
+var earth   = universe.GetBody("earth");
+var dominant = universe.GetDominantBody(vessel.Position);
+
+// Surface / atmosphere
+double alt      = earth.GetAltitude(vessel.Position);
+double density  = earth.GetAtmosphericDensity(vessel.Position);
+double pressure = earth.GetAtmosphericPressure(vessel.Position);
+
+// Orbital elements from current state
+var elements = OrbitalElements.FromStateVector(
+    vessel.Position - earth.Position,
+    vessel.Velocity - earth.Velocity,
+    earth.GM, earth.Id, universe.CurrentTime);
+
+double apoapsis  = elements.Apoapsis  - earth.Radius;  // m above surface
+double periapsis = elements.Periapsis - earth.Radius;
+
+// Predict future position (no CPU cost on rails)
+var (futurePos, futureVel) = elements.GetStateAtTime(
+    universe.CurrentTime + 3600.0, earth.GM);
+
+// Place a vessel in LEO
+var vessel = new Vessel { Name = "My Rocket" };
+vessel.Position = earth.Position + new Vector3d(0, earth.Radius + 250000, 0);
+vessel.Velocity = earth.Velocity + new Vector3d(7800, 0, 0);
+universe.AddVessel(vessel);
+universe.ActiveVessel = vessel;
+
+// Flight controls
+SimulationBridge.Instance.SetThrottle(1.0);
+SimulationBridge.Instance.TriggerStaging();
+
+// Time warp
+var warp = GetNode<TimeWarpController>("/root/TimeWarp");
+warp.WarpUp();
+warp.SetWarpRate(1000);
+
+// Save / load
+SaveSystem.SaveGame("mission_1");
+bool ok = SaveSystem.LoadGame("mission_1");
+string[] slots = SaveSystem.ListSaveSlots();
+```
+
+---
+
+## Autopilot Scripting (Lua)
+
+Scripts placed in `lua_scripts/` run through MoonSharp. The API is coroutine-based — `WAIT_UNTIL` yields without blocking the game thread.
+
+**Available functions:**
+
+| Function | Returns | Description |
+|---|---|---|
+| `THROTTLE(t)` | -- | Set throttle [0.0, 1.0] |
+| `STAGE()` | -- | Fire next staging event |
+| `PITCH_TO(deg)` | -- | Pitch vessel to target angle |
+| `ALT()` | number | Altitude above surface (m) |
+| `AP()` | number | Apoapsis altitude above surface (m) |
+| `PE()` | number | Periapsis altitude above surface (m) |
+| `SPEED()` | number | Orbital speed (m/s) |
+| `WARP_TO_APOAPSIS()` | -- | Time warp to next apoapsis |
+| `CIRCULARIZE()` | maneuver | Compute circularization burn |
+| `EXECUTE_MANEUVER(m)` | -- | Execute a maneuver node |
+| `WAIT_UNTIL(fn)` | -- | Yield until function returns true |
+| `WAIT(seconds)` | -- | Yield for N seconds |
+| `PRINT(msg)` | -- | Log to mission console |
+
+**Example — Gravity turn to 200 km orbit:**
 
 ```lua
--- example: gravity turn launch to 200km orbit
+local TARGET_ORBIT = 200000
+
 THROTTLE(1.0)
 STAGE()
-WAIT_UNTIL(function() return ALT() > 1000 end)
+WAIT_UNTIL(function() return ALT() > 50 end)
 
--- pitch over to 45° at 20km
-WAIT_UNTIL(function() return ALT() > 20000 end)
-PITCH_TO(45)
+WAIT_UNTIL(function() return ALT() > 1000 end)  PITCH_TO(80)
+WAIT_UNTIL(function() return ALT() > 10000 end) PITCH_TO(60)
+WAIT_UNTIL(function() return ALT() > 25000 end) PITCH_TO(45)
+WAIT_UNTIL(function() return ALT() > 45000 end) PITCH_TO(15)
 
--- circularize at apoapsis
+WAIT_UNTIL(function() return AP() >= TARGET_ORBIT end)
+THROTTLE(0.0)
+
 WARP_TO_APOAPSIS()
 EXECUTE_MANEUVER(CIRCULARIZE())
-```
 
-The engine is coroutine-based: `WAIT_UNTIL` yields control without blocking the game thread.
-
----
-
-### Save System
-
-Universe state is serialized to JSON on scene transitions and autosave intervals:
-
-```
-saves/
-  quicksave.json
-  autosave_001.json
-  slot_mars_mission/
-    meta.json          { name, date, screenshot_path }
-    universe.json      { bodies[], vessels[], bases[] }
-    crew.json          { astronauts[] }
-```
-
-`universe.json` stores vessels as orbital elements (for on-rails) or full state vectors (for active vessels). Part trees are stored as ordered arrays matching the assembly graph.
-
----
-
-### Directory Structure (Godot Project)
-
-```
-exosphere/
-  project.godot
-  ExosphereSimulation/          C# simulation library (no Godot deps)
-    Universe.cs
-    CelestialBody.cs
-    Vessel.cs
-    PartGraph.cs
-    OrbitalIntegrator.cs
-    KeplerPropagator.cs
-    AtmosphereModel.cs
-    ThermalModel.cs
-    StressSolver.cs
-    ManeuverPlanner.cs
-  scenes/
-    flight/                     main flight scene
-    construction/               part editor
-    orbital_map/                navigation map
-    ui/                         HUD, menus, dialogs
-  scripts/                      C# game-layer scripts
-    FloatingOrigin.cs
-    ConstructionSystem.cs
-    CrewManager.cs
-    AutopilotController.cs
-    TimeWarpController.cs
-    SaveSystem.cs
-  data/
-    parts/                      *.json — part definitions
-    bodies/                     *.json — planet/moon data
-    launch_sites/               *.json — launchpad locations
-  assets/
-    models/                     *.glb — part and planet meshes
-    textures/                   planet surfaces, part albedo
-    shaders/                    atmosphere.gdshader, reentry.gdshader
-  lua_scripts/                  example autopilot scripts
-  exports/
-    web/
-    linux/
-    windows/
+PRINT("Orbit: " .. math.floor(PE()/1000) .. " x " .. math.floor(AP()/1000) .. " km")
 ```
 
 ---
 
-## Scope Management (Solo Dev)
+## Implementation Status
 
-This is an ambitious feature set. The development philosophy is:
+### Phase 1 — Foundation
 
-1. **Core loop first** — launch → orbit → land is playable before any other feature ships
-2. **Vertical slices** — each feature is complete before the next begins; no half-implemented systems
-3. **Defer complexity** — ISRU, colonies, and scripting are late-game features; physics and construction are day-one
-4. **Modding later** — architecture will be mod-friendly but no public API until the game is content-complete
+| Component | Status | Notes |
+|---|---|---|
+| `Vector3d` | Done | 74 lines |
+| `Quaterniond` | Done | 164 lines, slerp, axis-angle |
+| `MathUtils` | Done | Kepler solver, orbital converters |
+| `OrbitalElements` | Done | GetStateAtTime, FromStateVector |
+| `CelestialBody` | Done | JSON loading, gravity, surface velocity |
+| `AtmosphereModel` | Done | exponential model; partial class + JSON factory |
+| `RK4Integrator` | Done | double[n] and Vector3d overloads |
+| `KeplerPropagator` | Done | PropagateAllBodies |
+| `Universe` | Done | 3 warp modes, SOI detection, factory |
+| `CrewMember` | Done | EVA mechanics, risk |
+| `PartDefinition` | Done | 15 parts in data/parts/ |
+| `Part` | Done | propellant, ISP interpolation |
+| `Joint` | Done | tensile/shear with node-size scaling |
+| `PartGraph` | Done | CoM, staging, separation |
+| `Vessel` | Done | full physics, SAS, staging |
+| `ThermalModel` | Done | DKR heat flux, radiation cooling |
+| `AerodynamicsModel` | Done | drag, Mach, transonic multiplier |
+| `StressSolver` | Done | joint loads, break detection |
+| Celestial body data | Done | 8 bodies with real NASA values |
+| Part data | Done | 15 parts across all categories |
+| `SimulationBridge` | Done | autoload, tick, signals |
+| `FloatingOrigin` | Done | double to float each frame |
+| `TimeWarpController` | Done | 8-step ladder, safety restrictions |
+| `NavBallController` | Done | prograde/normal/radial vectors |
+| `HUDController` | Done | 9 readouts, keyboard input |
+| `VesselRenderer` | Done | procedural meshes, heat glow |
+| `SaveSystem` | Done | JSON save/load |
+| **Godot scene files (.tscn)** | Pending | Flight.tscn needed to run in editor |
+| **3D models (GLB)** | Pending | Part and planet meshes |
+| **Atmosphere shader** | Pending | Rayleigh + Mie scattering |
+| **Planet surface shader** | Pending | PBR with terrain detail |
+| **Reentry glow shader** | Pending | Temperature-driven emissive |
+| **ISA layered atmosphere** | Pending | Use JSON layer data (layers array) |
+| **MoonSharp Lua autopilot** | Pending | AutopilotController.cs |
 
-### Feature Priority Order
+---
+
+## Development Roadmap
 
 ```
-Phase 1 — Foundation
-  ├── Physics engine (N-body + aerodynamics)
-  ├── Part construction system
-  ├── Earth + Moon (first playable system)
-  └── Basic flight + navball + time warp
+Phase 1 — Foundation (IN PROGRESS)
+  Done  Simulation library (18 C# files)
+  Done  Game layer scripts (7 C# files)
+  Done  Data files (8 bodies, 15 parts, 2 launch sites)
+  Next  Scene wiring: create Flight.tscn to run in Godot editor
+  Next  GLSL shaders: atmosphere scattering, planet PBR, reentry glow
+  Next  ISA layered atmosphere: upgrade AtmosphereModel to use JSON layers
 
 Phase 2 — Full Solar System
-  ├── All planets and major moons
-  ├── Atmospheric models per body
-  ├── Reentry and heat simulation
-  └── 3D orbital map + maneuver nodes
+  3D orbital map scene with maneuver node editor
+  Layered atmosphere density/temperature profiles
+  Gravity assist / patched-conic trajectory planning
 
 Phase 3 — People and Places
-  ├── Crew system + EVA
-  ├── Orbital docking + stations
-  ├── Surface bases + ISRU
-  └── Interplanetary missions (Mars, Venus, outer planets)
+  Crew EVA scene mechanics
+  Orbital docking and proximity operations
+  Surface bases and ISRU production chains
 
 Phase 4 — Depth
-  ├── Scriptable autopilot
-  ├── Structural stress + damage
-  ├── Cockpit + diegetic instruments
-  └── Polish, performance, mod architecture
+  MoonSharp Lua autopilot engine
+  Cockpit 3D instruments viewport
+  Structural failure cascade (joint breaks -> debris vessel)
+  Performance profiling and optimization
 ```
+
+---
+
+## Adding New Content
+
+### Adding a rocket part
+
+1. Create `data/parts/<id>.json` following the [Part JSON schema](#part-json)
+2. All `*.json` files in `data/parts/` load at startup — no code changes needed
+3. Optionally add a mesh at `assets/models/parts/<id>.glb`
+
+### Adding a celestial body
+
+1. Create `data/bodies/<id>.json` following the [Celestial Body JSON schema](#celestial-body-json)
+2. Fill in real values for mass, radius, GM, SOI, and optional atmosphere
+3. Set `orbital_elements.reference_body` to the parent body ID
+4. All `*.json` files in `data/bodies/` load at startup
+
+### Adding a launch site
+
+1. Create `data/launch_sites/<id>.json` with latitude, longitude, altitude, heading
+2. Reference by ID when calling `SpawnVesselAtLaunchPad`
 
 ---
 
@@ -490,7 +1310,7 @@ Phase 4 — Depth
 
 | Game | What it contributes |
 |---|---|
-| **Spaceflight Simulator** | Elegant minimal UI, satisfying rocket construction, direct controls |
+| **Spaceflight Simulator** | Elegant minimal UI, satisfying construction, direct controls |
 | **SpaceEngine** | Scale, photographic realism, sense of wonder across the solar system |
 | **KSP / KSP2** | Orbital mechanics depth, part construction philosophy, crew system |
 | **Universe Sandbox** | N-body simulation, planetary physics, scale visualization |
@@ -499,13 +1319,12 @@ Phase 4 — Depth
 
 ## Non-Goals
 
-- No multiplayer (out of scope for solo dev)
+- No multiplayer
 - No procedurally generated solar systems (real solar system only)
-- No campaign or tech tree (pure sandbox)
-- No in-game economy or resource management beyond fuel and power
+- No campaign, tech tree, or progression gates (pure sandbox)
+- No in-game economy beyond fuel and power
 - No combat or weapons
 
 ---
 
-*Concept and architecture document — implementation begins in the next phase.*
-# Exosphere
+*Phase 1 implementation substantially complete — simulation library operational. Next: scene wiring and shaders.*

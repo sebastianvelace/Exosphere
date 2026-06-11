@@ -86,7 +86,7 @@ public static class SaveSystem
                 OrientationY    = vessel.Orientation.Y,
                 OrientationZ    = vessel.Orientation.Z,
                 IsOnRails       = vessel.IsOnRails,
-                ReferenceBodyId = vessel.ReferenceBodyId
+                ReferenceBodyId = vessel.ReferenceBodyId ?? ""
             });
         }
 

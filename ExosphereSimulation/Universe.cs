@@ -60,20 +60,18 @@ public class Universe
     /// </summary>
     public CelestialBody GetDominantBody(Vector3d position)
     {
-        CelestialBody? best         = null;
-        double         bestSoiRatio = double.MaxValue;
+        // Pick the body with the smallest SOI that still contains the position.
+        // This correctly resolves the hierarchy: Moon < Earth < Sun.
+        CelestialBody? best    = null;
+        double         bestSoi = double.MaxValue;
 
         foreach (var body in _bodies)
         {
-            double dist  = (position - body.Position).Magnitude;
-            if (dist < body.SphereOfInfluence)
+            double dist = (position - body.Position).Magnitude;
+            if (dist < body.SphereOfInfluence && body.SphereOfInfluence < bestSoi)
             {
-                double ratio = dist / body.SphereOfInfluence;
-                if (ratio < bestSoiRatio)
-                {
-                    bestSoiRatio = ratio;
-                    best         = body;
-                }
+                bestSoi = body.SphereOfInfluence;
+                best    = body;
             }
         }
 

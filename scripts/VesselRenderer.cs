@@ -16,13 +16,14 @@ public partial class VesselRenderer : Node3D
     // Diccionario instanciaId → Node3D en escena
     private readonly Dictionary<string, Node3D> _partNodes = new();
 
-    // Material por defecto (cubo rojo) para partes sin modelo asignado
-    private static StandardMaterial3D _fallbackMaterial = null!;
+    private static StandardMaterial3D? _fallbackMaterial;
 
-    public override void _Ready()
+    private static StandardMaterial3D GetFallback()
     {
+        if (_fallbackMaterial != null) return _fallbackMaterial;
         _fallbackMaterial = new StandardMaterial3D();
         _fallbackMaterial.AlbedoColor = new Color(0.8f, 0.2f, 0.2f);
+        return _fallbackMaterial;
     }
 
     // Construir el árbol de nodos según el PartGraph actual
@@ -66,16 +67,16 @@ public partial class VesselRenderer : Node3D
         node.Name = part.Definition.Name.Replace(" ", "_");
 
         // Mesh por defecto basado en categoría
-        var mesh = part.Definition.Category switch
+        Mesh mesh = part.Definition.Category switch
         {
             PartCategory.Engine   => CreateCylinderMesh(0.4f, 0.8f),
             PartCategory.FuelTank => CreateCylinderMesh(0.625f, 1.875f),
             PartCategory.Command  => CreateSphereMesh(0.625f),
-            _                     => CreateBoxMesh(0.5f, 0.5f, 0.5f)
+            _                     => (Mesh)CreateBoxMesh(0.5f, 0.5f, 0.5f)
         };
         node.Mesh = mesh;
 
-        var mat = (StandardMaterial3D)_fallbackMaterial.Duplicate();
+        var mat = (StandardMaterial3D)GetFallback().Duplicate();
         mat.AlbedoColor = GetCategoryColor(part.Definition.Category);
         node.SetSurfaceOverrideMaterial(0, mat);
 

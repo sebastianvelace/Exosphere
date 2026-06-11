@@ -1,4 +1,4 @@
-<Project Sdk="Godot.NET.Sdk/4.6.3">
+<Project Sdk="Godot.NET.Sdk/4.3.0">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
@@ -8,8 +8,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="ExosphereSimulation/ExosphereSimulation.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Remove="ExosphereSimulation/**/*.cs" />
   </ItemGroup>
 </Project>

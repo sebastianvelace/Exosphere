@@ -16,6 +16,25 @@ public partial class TimeWarpController : Node
         ApplyWarp();
     }
 
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is InputEventKey key && key.Pressed)
+        {
+            switch (key.Keycode)
+            {
+                case Key.Period:
+                    WarpUp();
+                    break;
+                case Key.Comma:
+                    WarpDown();
+                    break;
+                case Key.Backspace:
+                    ResetToRealTime();
+                    break;
+            }
+        }
+    }
+
     public void WarpUp()
     {
         if (_warpIndex >= WarpRates.Length - 1) return;

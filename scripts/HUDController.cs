@@ -29,6 +29,14 @@ public partial class HUDController : Node
         _timeLabel     = GetNodeOrNull<Label>(TimeLabelPath);
         _warpLabel     = GetNodeOrNull<Label>(WarpLabelPath);
         _massLabel     = GetNodeOrNull<Label>(MassLabelPath);
+
+        // Add warp hint label (static, created once at startup)
+        var hint = new Label();
+        hint.Text = "[,] warp-   [.] warp+   [Backspace] x1";
+        hint.Position = new Vector2(10, 900);
+        hint.AddThemeColorOverride("font_color", new Color(0.6f, 0.6f, 0.6f));
+        hint.AddThemeFontSizeOverride("font_size", 14);
+        AddChild(hint);
     }
 
     public override void _Process(double delta)
@@ -48,15 +56,19 @@ public partial class HUDController : Node
         // Speed (orbital)
         SetLabel(_speedLabel, $"{speed:F1} m/s");
 
-        // Apoapsis / Periapsis
-        if (vessel.OrbitalState != null)
+        // Apoapsis / Periapsis — compute live from state vector
+        try
         {
-            double ap = vessel.OrbitalState.Apoapsis - refBody.Radius;
-            double pe = vessel.OrbitalState.Periapsis - refBody.Radius;
+            var relPos = vessel.Position - refBody.Position;
+            var relVel = vessel.Velocity - refBody.Velocity;
+            var elements = Exosphere.Simulation.OrbitalElements.FromStateVector(
+                relPos, relVel, refBody.GM, refBody.Id, universe.CurrentTime);
+            double ap = elements.Apoapsis  - refBody.Radius;
+            double pe = elements.Periapsis - refBody.Radius;
             SetLabel(_apLabel, FormatDistance(ap));
             SetLabel(_peLabel, FormatDistance(pe));
         }
-        else
+        catch
         {
             SetLabel(_apLabel, "---");
             SetLabel(_peLabel, "---");
@@ -75,8 +87,18 @@ public partial class HUDController : Node
         // Simulation time (formato misión: días, horas, minutos, segundos)
         SetLabel(_timeLabel, FormatMissionTime(universe.CurrentTime));
 
-        // Time warp
-        SetLabel(_warpLabel, $"×{universe.TimeScale:G4}");
+        // Time warp — show "Real Time" at x1, otherwise "× N" with no decimals
+        if (_warpLabel != null)
+        {
+            double timeScale = universe.TimeScale;
+            _warpLabel.Text = timeScale <= 1.0
+                ? "Real Time"
+                : $"× {(int)timeScale}";
+
+            _warpLabel.Modulate = timeScale > 1.0
+                ? new Color(0.4f, 1.0f, 1.0f)   // cyan when warping
+                : new Color(1.0f, 1.0f, 1.0f);   // white at real time
+        }
     }
 
     // ── Controles de teclado básicos ──────────────────────────────────────

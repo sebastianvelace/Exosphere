@@ -1,24 +1,33 @@
 ; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
 config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
 config/name="Exosphere"
 config/description="A Realistic Solar System Simulator"
 run/main_scene="res://scenes/flight/Flight.tscn"
-config/features=PackedStringArray("4.3", "C#", "Forward Plus")
+config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 
 [display]
 
 window/size/viewport_width=1920
 window/size/viewport_height=1080
-window/size/resizable=true
 
-[rendering]
+[dotnet]
 
-renderer/rendering_method="forward_plus"
-renderer/rendering_method.mobile="mobile"
+project/assembly_name="Exosphere"
 
 [physics]
 
