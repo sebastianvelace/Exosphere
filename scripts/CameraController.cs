@@ -5,15 +5,15 @@ using Godot;
 public partial class CameraController : Node3D
 {
     // Orbit state
-    private float _yaw      = 0f;   // horizontal angle (degrees)
-    private float _pitch    = 15f;  // vertical angle (degrees), clamped
-    private float _distance = 12f;  // zoom distance
+    private float _yaw      = 25f;  // slight side angle to show the flaps
+    private float _pitch    = 12f;  // vertical angle (degrees), clamped
+    private float _distance = 40f;  // zoom distance (Starship is ~22m tall)
 
     // Mouse sensitivity
     [Export] public float OrbitSensitivity { get; set; } = 0.3f;
     [Export] public float ZoomSensitivity  { get; set; } = 1.2f;
-    [Export] public float MinDistance      { get; set; } = 3f;
-    [Export] public float MaxDistance      { get; set; } = 800f;
+    [Export] public float MinDistance      { get; set; } = 5f;
+    [Export] public float MaxDistance      { get; set; } = 2000f;
 
     private bool _dragging = false;
 

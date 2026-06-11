@@ -1,72 +1,179 @@
 namespace Exosphere.Game;
 
 using Godot;
+using System.Linq;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 
 public partial class VesselRenderer : Node3D
 {
-    // El vessel que este renderer visualiza
     public Vessel? TargetVessel { get; set; }
 
-    // Prefab path para un mesh genérico de cápsula, tanque y motor
-    [Export] public string DefaultPartMeshPath { get; set; } = "res://assets/models/default_part.glb";
-
-    // Diccionario instanciaId → Node3D en escena
     private readonly Dictionary<string, Node3D> _partNodes = new();
+    private MeshInstance3D? _hullMesh; // for reentry heat glow
 
     private static StandardMaterial3D? _fallbackMaterial;
-
     private static StandardMaterial3D GetFallback()
     {
         if (_fallbackMaterial != null) return _fallbackMaterial;
-        _fallbackMaterial = new StandardMaterial3D();
-        _fallbackMaterial.AlbedoColor = new Color(0.8f, 0.2f, 0.2f);
+        _fallbackMaterial = new StandardMaterial3D { AlbedoColor = new Color(0.8f, 0.2f, 0.2f) };
         return _fallbackMaterial;
     }
 
-    // Construir el árbol de nodos según el PartGraph actual
     public void BuildFromVessel(Vessel vessel)
     {
         TargetVessel = vessel;
         ClearNodes();
 
+        bool hasEngine = vessel.Parts.Parts.Any(p => p.Definition.Category == PartCategory.Engine);
+        if (hasEngine)
+            BuildStarship(vessel);
+        else
+            BuildGenericVessel(vessel);
+    }
+
+    // ── SpaceX Starship visual ────────────────────────────────────────────
+    // Y-up, nose at top:
+    //   y=+12  nose tip
+    //   y=+7   nose base / body top
+    //   y= 0   body centre (CoM)
+    //   y=-7   body bottom / skirt top
+    //   y=-9   skirt bottom / engine bay
+    //   y=-11  vacuum Raptor nozzle exits
+
+    private void BuildStarship(Vessel vessel)
+    {
+        var steelMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.86f, 0.86f, 0.88f),
+            Metallic    = 0.92f,
+            Roughness   = 0.18f,
+        };
+        var tileMat = new StandardMaterial3D   // heat-shield belly tiles
+        {
+            AlbedoColor = new Color(0.09f, 0.09f, 0.11f),
+            Metallic    = 0.04f,
+            Roughness   = 0.94f,
+        };
+        var darkSteelMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.50f, 0.50f, 0.53f),
+            Metallic    = 0.88f,
+            Roughness   = 0.32f,
+        };
+        var engineMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.18f, 0.18f, 0.20f),
+            Metallic    = 0.82f,
+            Roughness   = 0.38f,
+        };
+
+        // Body — two halves with different materials
+        _hullMesh = AddMesh("BodyUpper",
+            new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 7f, RadialSegments = 48 },
+            steelMat, new Vector3(0, 3.5f, 0));
+
+        AddMesh("BodyLower",
+            new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 7f, RadialSegments = 48 },
+            tileMat, new Vector3(0, -3.5f, 0));
+
+        // Nose cone
+        AddMesh("Nose",
+            new CylinderMesh { TopRadius = 0.04f, BottomRadius = 1.15f, Height = 5f, RadialSegments = 48 },
+            steelMat, new Vector3(0, 9.5f, 0));
+
+        // Forward canards (two small delta wings near the top)
+        var canardMesh = new BoxMesh { Size = new Vector3(0.12f, 1.6f, 2.6f) };
+        AddMesh("CanardL", canardMesh, darkSteelMat, new Vector3(-1.23f, 5.5f, 0));
+        AddMesh("CanardR", canardMesh, darkSteelMat, new Vector3( 1.23f, 5.5f, 0));
+        var canardRoot = new BoxMesh { Size = new Vector3(0.18f, 2.0f, 1.0f) };
+        AddMesh("CanardRootL", canardRoot, steelMat, new Vector3(-1.16f, 5.5f, 0));
+        AddMesh("CanardRootR", canardRoot, steelMat, new Vector3( 1.16f, 5.5f, 0));
+
+        // Aft body flaps (two large control surfaces at the base)
+        var flapMesh = new BoxMesh { Size = new Vector3(0.14f, 5.5f, 4.6f) };
+        AddMesh("FlapL", flapMesh, tileMat, new Vector3(-1.23f, -4.5f, 0));
+        AddMesh("FlapR", flapMesh, tileMat, new Vector3( 1.23f, -4.5f, 0));
+        var flapRoot = new BoxMesh { Size = new Vector3(0.20f, 5.5f, 1.2f) };
+        AddMesh("FlapRootL", flapRoot, tileMat, new Vector3(-1.16f, -4.5f, 0));
+        AddMesh("FlapRootR", flapRoot, tileMat, new Vector3( 1.16f, -4.5f, 0));
+
+        // Engine skirt
+        AddMesh("Skirt",
+            new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.08f, Height = 2f, RadialSegments = 48 },
+            darkSteelMat, new Vector3(0, -8f, 0));
+
+        // 3 center vacuum Raptors — longer bell, inner ring
+        const float vacRingR = 0.38f;
+        for (int i = 0; i < 3; i++)
+        {
+            float a = i * 2.094395f;
+            AddMesh($"RapVac{i}",
+                new CylinderMesh { TopRadius = 0.19f, BottomRadius = 0.44f, Height = 2.1f, RadialSegments = 20 },
+                engineMat, new Vector3(vacRingR * Mathf.Cos(a), -10.05f, vacRingR * Mathf.Sin(a)));
+        }
+
+        // 3 outer sea-level Raptors — shorter, wider bell, 60° offset from vacuum
+        const float slRingR = 0.72f;
+        for (int i = 0; i < 3; i++)
+        {
+            float a = i * 2.094395f + 1.047198f;
+            AddMesh($"RapSL{i}",
+                new CylinderMesh { TopRadius = 0.21f, BottomRadius = 0.33f, Height = 1.4f, RadialSegments = 20 },
+                engineMat, new Vector3(slRingR * Mathf.Cos(a), -9.7f, slRingR * Mathf.Sin(a)));
+        }
+
+        foreach (var part in vessel.Parts.Parts)
+            _partNodes[part.InstanceId] = _hullMesh;
+    }
+
+    private MeshInstance3D AddMesh(string name, Mesh mesh, StandardMaterial3D mat, Vector3 pos)
+    {
+        var node = new MeshInstance3D { Name = name, Mesh = mesh, Position = pos };
+        node.SetSurfaceOverrideMaterial(0, mat);
+        AddChild(node);
+        return node;
+    }
+
+    // ── Reentry heat glow ─────────────────────────────────────────────────
+
+    public override void _Process(double delta)
+    {
+        if (TargetVessel == null) return;
+
+        foreach (var part in TargetVessel.Parts.Parts)
+        {
+            if (!_partNodes.TryGetValue(part.InstanceId, out var node)) continue;
+            if (node is MeshInstance3D mesh && mesh.GetSurfaceOverrideMaterial(0) is StandardMaterial3D mat)
+            {
+                float t = (float)System.Math.Clamp((part.Temperature - 290.0) / 2000.0, 0.0, 1.0);
+                mat.EmissionEnabled = t > 0.05f;
+                if (t > 0.05f)
+                    mat.Emission = new Color(t, t * 0.35f, 0f) * t;
+            }
+        }
+    }
+
+    // ── Generic vessel fallback ───────────────────────────────────────────
+
+    private void BuildGenericVessel(Vessel vessel)
+    {
         var positions = vessel.Parts.ComputePartLocalPositions();
         foreach (var (part, localPos) in positions)
         {
-            var node = CreatePartNode(part);
+            var node = CreateGenericPartNode(part);
             node.Position = ToV3(localPos);
             AddChild(node);
             _partNodes[part.InstanceId] = node;
         }
     }
 
-    public override void _Process(double delta)
-    {
-        if (TargetVessel == null) return;
-
-        // Actualizar temperatura visual (color de calor)
-        foreach (var part in TargetVessel.Parts.Parts)
-        {
-            if (!_partNodes.TryGetValue(part.InstanceId, out var node)) continue;
-            if (node is MeshInstance3D mesh && mesh.GetSurfaceOverrideMaterial(0) is StandardMaterial3D mat)
-            {
-                // Temperatura → color: azul (fría) → naranja → blanco (caliente)
-                float t = (float)System.Math.Clamp((part.Temperature - 290.0) / 2000.0, 0.0, 1.0);
-                mat.EmissionEnabled = t > 0.05f;
-                if (t > 0.05f)
-                    mat.Emission = new Color(t, t * 0.4f, 0f) * t;
-            }
-        }
-    }
-
-    private Node3D CreatePartNode(Part part)
+    private Node3D CreateGenericPartNode(Part part)
     {
         var node = new MeshInstance3D();
         node.Name = part.Definition.Name.Replace(" ", "_");
 
-        // Mesh por defecto basado en categoría
         Mesh mesh = part.Definition.Category switch
         {
             PartCategory.Engine   => CreateCylinderMesh(0.4f, 0.8f),
@@ -79,18 +186,15 @@ public partial class VesselRenderer : Node3D
         var mat = (StandardMaterial3D)GetFallback().Duplicate();
         mat.AlbedoColor = GetCategoryColor(part.Definition.Category);
         node.SetSurfaceOverrideMaterial(0, mat);
-
         return node;
     }
 
-    private static CylinderMesh CreateCylinderMesh(float radius, float height)
-        => new() { TopRadius = radius, BottomRadius = radius, Height = height };
-
-    private static SphereMesh CreateSphereMesh(float radius)
-        => new() { Radius = radius, Height = radius * 2 };
-
-    private static BoxMesh CreateBoxMesh(float w, float h, float d)
-        => new() { Size = new Godot.Vector3(w, h, d) };
+    private static CylinderMesh CreateCylinderMesh(float r, float h) =>
+        new() { TopRadius = r, BottomRadius = r, Height = h };
+    private static SphereMesh   CreateSphereMesh(float r) =>
+        new() { Radius = r, Height = r * 2 };
+    private static BoxMesh      CreateBoxMesh(float w, float h, float d) =>
+        new() { Size = new Godot.Vector3(w, h, d) };
 
     private static Color GetCategoryColor(PartCategory cat) => cat switch
     {
@@ -105,6 +209,7 @@ public partial class VesselRenderer : Node3D
     {
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
+        _hullMesh = null;
     }
 
     private static Godot.Vector3 ToV3(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);

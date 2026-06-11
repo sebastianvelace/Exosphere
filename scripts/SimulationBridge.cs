@@ -36,12 +36,10 @@ public partial class SimulationBridge : Node
         SpawnPlanets();
         EmitSignal(SignalName.SimulationLoaded);
 
+        // CameraController maneja la posición; solo ajustamos Far para ver los planetas
         _camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
         if (_camera != null)
-        {
-            _camera.Position = new Godot.Vector3(0f, 3f, 12f);
             _camera.Far = 2000.0f;
-        }
 
         // Apuntar la luz direccional para iluminar los planetas
         var light = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
@@ -93,10 +91,11 @@ public partial class SimulationBridge : Node
         vessel.Parts.AddJoint(new Joint(tank, engine, "bottom", "top"));
 
         // Órbita circular a 250 km sobre la Tierra
+        // Vessel en +Z para que Earth aparezca de frente a la cámara (que mira hacia -Z)
         double r = earth.Radius + 250_000.0;
         double v = System.Math.Sqrt(earth.GM / r);
-        vessel.Position = earth.Position + new Vector3d(r, 0.0, 0.0);
-        vessel.Velocity = earth.Velocity + new Vector3d(0.0, v, 0.0);
+        vessel.Position = earth.Position + new Vector3d(0.0, 0.0, r);
+        vessel.Velocity = earth.Velocity + new Vector3d(v, 0.0, 0.0);
         vessel.SASEnabled = true;
 
         Universe.AddVessel(vessel);
@@ -129,15 +128,20 @@ public partial class SimulationBridge : Node
         {
             float renderRadius = (float)(body.Radius * renderScale);
 
-            var sphere = new SphereMesh();
-            sphere.Radius         = renderRadius;
-            sphere.Height         = renderRadius * 2.0f;
-            sphere.RadialSegments = 64;
-            sphere.Rings          = 32;
+            // Surface sphere
+            var sphere = new SphereMesh
+            {
+                Radius         = renderRadius,
+                Height         = renderRadius * 2.0f,
+                RadialSegments = 64,
+                Rings          = 32,
+            };
 
             var mat = new StandardMaterial3D();
-            mat.AlbedoColor = GetPlanetColor(body.Id);
-            mat.Roughness   = 0.8f;
+            mat.AlbedoColor     = GetPlanetColor(body.Id);
+            mat.Roughness       = 0.88f;
+            mat.EmissionEnabled = true;
+            mat.Emission        = GetPlanetColor(body.Id) * 0.28f;
 
             var mesh = new MeshInstance3D();
             mesh.Name = body.Name + "_mesh";
@@ -146,7 +150,40 @@ public partial class SimulationBridge : Node
 
             planetsNode.AddChild(mesh);
             fo.RegisterPlanetNode(body.Id, mesh);
+
+            // Atmosphere glow layer (Earth only) — child of Earth mesh so it follows automatically
+            if (body.Id == "earth")
+                SpawnAtmosphereGlow(mesh, renderRadius);
         }
+    }
+
+    private static void SpawnAtmosphereGlow(MeshInstance3D earthMesh, float surfaceRadius)
+    {
+        // Slightly larger sphere rendered from inside (cull front) → limb glow around Earth
+        float atmRadius = surfaceRadius * 1.028f;
+        var atmSphere = new SphereMesh
+        {
+            Radius         = atmRadius,
+            Height         = atmRadius * 2.0f,
+            RadialSegments = 64,
+            Rings          = 32,
+        };
+
+        var atmMat = new StandardMaterial3D();
+        atmMat.AlbedoColor              = new Color(0.25f, 0.55f, 1.0f, 0.0f);
+        atmMat.Transparency             = BaseMaterial3D.TransparencyEnum.Alpha;
+        atmMat.CullMode                 = BaseMaterial3D.CullModeEnum.Front;
+        atmMat.EmissionEnabled          = true;
+        atmMat.Emission                 = new Color(0.10f, 0.42f, 0.96f);
+        atmMat.EmissionEnergyMultiplier = 0.60f;
+
+        var atmMesh = new MeshInstance3D();
+        atmMesh.Name = "atmosphere_glow";
+        atmMesh.Mesh = atmSphere;
+        atmMesh.SetSurfaceOverrideMaterial(0, atmMat);
+
+        // Position is (0,0,0) in Earth's local space — follows Earth automatically
+        earthMesh.AddChild(atmMesh);
     }
 
     private static Color GetPlanetColor(string id) => id switch
