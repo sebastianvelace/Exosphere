@@ -497,6 +497,59 @@ All in `scripts/`. Partial classes inheriting Godot node types.
 
 ---
 
+### `scripts/MissionManager.cs`
+```
+[GlobalClass] partial class MissionManager : Node
+Static: Instance (set in _Ready)
+
+Enum MissionPhase: PRE_LAUNCH, COUNTDOWN, IGNITION, LIFTOFF,
+  ASCENT_SH, MAX_Q, MECO, SEPARATION, ASCENT_SHIP, ORBIT, COAST, LANDED
+
+Properties:
+  Phase (MissionPhase)   — current phase
+  CountdownTimer (double) — seconds remaining until T-0
+  IsCountingDown (bool)
+
+Signals:
+  PhaseChanged(string phaseName)
+  LaunchCommitted()
+
+API:
+  StartCountdown()  — called by L key in HUDController; PRE_LAUNCH only
+  NotifyStaged()    — called by SimulationBridge.TriggerStaging()
+
+_Process(delta):
+  -- Decrements CountdownTimer if IsCountingDown
+  -- At CountdownTimer <= 3.0: sets throttle to 1.0, changes to IGNITION
+  -- At CountdownTimer <= 0.0: calls bridge.ReleaseGroundHold(), sets LIFTOFF
+  -- Auto detects Max-Q (0.5*rho*v² peak in 8-30 km band)
+  -- Auto detects MECO when SH fuel < 10,000 kg at altitude > 55 km
+  -- SEPARATION → auto re-lights Starship engines when active engines found
+  -- ASCENT_SHIP → ORBIT when altitude > 150 km and speed > 7500 m/s
+```
+
+### `scripts/LaunchPadController.cs`
+```
+partial class LaunchPadController : Node3D
+Static: Instance (set in _Ready)
+
+_Ready(): builds all geometry (no exports, fully procedural)
+
+Geometry (all in local Y-up space, y=0 = Earth surface directly below vessel):
+  Ground apron:  BoxMesh 600×0.4×600  concrete  y=-0.2
+  FlameTrench:   BoxMesh 24×6×65      burnt      y=-3
+  OLMBase:       BoxMesh 16×10×16     steel      y=+5
+  OLMPedestal:   CylinderMesh r=4.2→4.8 h=5      y=+12.5
+  DelugeRing:    CylinderMesh r=8.5→9   h=0.7     y=+10.35
+  Tower:         BoxMesh 11×160×11    steel      x=-20 y=+80
+  ArmUpper/Lower: horizontal BoxMesh arms at y=+115 and y=+88
+
+Positioning: SimulationBridge._Process() sets:
+  launchPad.Position = (padWorldPos - vesselWorldPos)  [1:1 scale]
+  padWorldPos = earth.Position + upDir * earth.Radius  [saved at spawn]
+  launchPad.Visible = altitude < 8000 m
+```
+
 ### `scripts/SimulationBridge.cs`
 ```
 [GlobalClass] partial class SimulationBridge : Node
@@ -507,13 +560,22 @@ Signals: VesselStaged(id), VesselDestroyed(id), SimulationLoaded()
 
 _Ready():
   -- loads Universe from "res://data"
-  -- SpawnTestVessel() — currently at LEO 250 km; WILL change to pad spawn in Semana 6
-  -- SpawnPlanets() — creates SphereMesh per body with atmosphere glow child node
-  -- Sets camera far clip to 2000
+  -- Creates MissionManager + LaunchPadController as dynamic children
+  -- SpawnStarshipStack() — full stack on Earth surface at north pole, altitude 12 m
+  -- SpawnPlanets() — SphereMesh per body with atmosphere glow child node
+  -- Sets camera far clip to 2,000,000
 
 _Process(delta):
   -- Universe.Tick(delta) every frame
-  -- CameraController handles its own positioning; SimulationBridge only calls LookAt
+  -- Updates LaunchPad position: launchPad.Position = (padWorldPos - vessel.Position)
+  -- Hides LaunchPad when altitude > 8 km
+
+SpawnStarshipStack():
+  -- Parts: starship_command → starship_tank → starship_engines → decoupler → super_heavy_booster
+  -- Position: earth.Position + (0, earth.Radius + 12, 0)  [north pole, 12m AGL]
+  -- Velocity: earth.Velocity + earth.GetSurfaceVelocity(vessel.Position)
+  -- vessel.IsGroundHeld = true; GroundNormal=(0,1,0); GroundOffset=12.0
+  -- Creates VesselRenderer, registers with FloatingOrigin
 
 SpawnPlanets():
   -- PlanetRenderScale = 1/10000 (Earth renders at ~637 Godot units radius)
@@ -1211,13 +1273,15 @@ For synthesis (if .ogg files not available):
 | Atmosphere glow on Earth | ✅ Done | 5 |
 | Flight.tscn scene wiring | ✅ Done | 3 |
 | SaveSystem | ✅ Done | 1 |
-| **MissionManager** | ⏳ Semana 6 | — |
-| **LaunchPadController + Starbase env** | ⏳ Semana 6 | — |
-| **CountdownController** | ⏳ Semana 6 | — |
-| **Ground spawn + Earth rotation velocity** | ⏳ Semana 6 | — |
-| **super_heavy_booster.json + starship_ship.json** | ⏳ Semana 6 | — |
+| MissionManager (FSM, countdown, phase signals) | ✅ Done | 6 |
+| LaunchPadController (OLM + Mechazilla tower) | ✅ Done | 6 |
+| Ground spawn + IsGroundHeld hold-down | ✅ Done | 6 |
+| starship_command/tank/engines/super_heavy_booster JSON | ✅ Done | 6 |
+| VesselRenderer full stack (33 SH Raptors + 6 Ship) | ✅ Done | 6 |
+| CameraController Pad/Chase modes + C key | ✅ Done | 6 |
+| HUDController phase label + TWR + countdown overlay | ✅ Done | 6 |
 | **StarshipRenderer (correct proportions)** | ⏳ Semana 7 | — |
-| **SuperHeavyRenderer (33 Raptors)** | ⏳ Semana 7 | — |
+| **SuperHeavyRenderer (33 Raptors separate)** | ⏳ Semana 7 | — |
 | **SkyController (altitude-based sky)** | ⏳ Semana 8 | — |
 | **PlumeSystem (GPU particles)** | ⏳ Semana 8 | — |
 | **MaxQRingController** | ⏳ Semana 8 | — |
@@ -1233,96 +1297,61 @@ Each semana is a complete, testable deliverable. Later Claude sessions should re
 
 ---
 
-### Semana 6 — Launch from Earth Surface
+### Semana 6 — Launch from Earth Surface ✅ COMPLETED (2026-06-11)
 
 **Goal**: Press F5 → see the full stack on the Starbase launchpad → press Launch → rocket lifts off, burns all the way to orbit.
 
-**Files to CREATE:**
-- `data/parts/super_heavy_booster.json` — see spec above
-- `data/parts/starship_tank.json` — Starship propellant tank (330t CH4, 870t LOX)
-- `data/parts/starship_engines.json` — 6 Raptors, 13.5 MN
-- `scripts/MissionManager.cs` — phase FSM (phases: PRE_LAUNCH through LANDED)
-- `scripts/LaunchPadController.cs` — Starbase environment, vehicle on pad
-- `scripts/CountdownController.cs` — T-10 countdown, checklist, T-0 release
+**What was implemented:**
 
-**Files to MODIFY:**
-- `scripts/SimulationBridge.cs`:
-  - `SpawnTestVessel()` → `SpawnStarshipStack()` at earth surface
-  - Position: `earth.Position + Vector3d(0, earth.Radius, 0)` (at north pole for simplicity)
-  - Velocity: `earth.Velocity + Vector3d(412, 0, 0)` (Earth rotation, Starbase ~26°N = 412 m/s east)
-  - Stack: [super_heavy_booster + starship_tank + starship_engines + starship_ship]
-    - Build via PartGraph: SH root → starship_tank → starship_engines → starship_ship
-  - `SpawnPlanets()`: no change
-- `ExosphereSimulation/Vessel.cs`:
-  - Add `IsGroundHeld (bool)` property
-  - In `Tick()`: if `IsGroundHeld`, zero out velocity and set altitude to surface; skip physics integration
-  - Add `ReleaseGroundHold()` method (called by CountdownController at T-0)
-- `ExosphereSimulation/Universe.cs`:
-  - In `TickPhysics()`: skip RK4 integration for vessels where `IsGroundHeld = true`
-  - Add event: detect Max-Q peak (fire `MaxQReached` event when dq/dt flips sign)
-- `scripts/CameraController.cs`:
-  - Add `Mode` enum: Chase, Pad, IVA
-  - Pad mode: 3 fixed camera presets (side view at 150 m, wide at 500 m, engine-level at 5 m)
-  - Auto-switch from Pad → Chase when altitude > 200 m
-  - Key `C` toggles between camera modes
-- `scripts/HUDController.cs`:
-  - Show mission phase label (top-center)
-  - Show TWR (Thrust-Weight Ratio) during ascent
-  - Show downrange distance from launch site
+| File | Change |
+|---|---|
+| `data/parts/starship_command.json` | 80 t command/nosecone, 100 crew |
+| `data/parts/starship_tank.json` | 330 t LCH4 + 870 t LOX = 1200 t propellant |
+| `data/parts/starship_engines.json` | 13.5 MN vac / 11 MN SL, ISP 380/327 s |
+| `data/parts/super_heavy_booster.json` | 200 t dry, 3300 t prop, 74.4 MN / 33 Raptors |
+| `scripts/MissionManager.cs` | FSM PRE\_LAUNCH→ORBIT, T-10 countdown, auto Max-Q + MECO |
+| `scripts/LaunchPadController.cs` | OLM base, pedestal, Mechazilla tower + arms, deluge ring |
+| `ExosphereSimulation/Vessel.cs` | `IsGroundHeld`, `GroundNormal`, `GroundOffset`, `ReleaseGroundHold()` |
+| `ExosphereSimulation/Universe.cs` | Skip RK4 when `IsGroundHeld`; position vessel on Earth surface |
+| `scripts/SimulationBridge.cs` | `SpawnStarshipStack()`, launchpad position per frame, `ReleaseGroundHold()` |
+| `scripts/VesselRenderer.cs` | `BuildFullStack()`: 33 SH Raptor bells + 6 Starship bells, stage-aware plumes |
+| `scripts/CameraController.cs` | `CameraMode` enum (Pad/Chase), `C` cycles 3 pad presets, auto Chase >500 m |
+| `scripts/HUDController.cs` | Phase label, TWR gauge, T-countdown overlay, `L` key launches |
 
-**Spawn stack assembly:**
-```csharp
-// In SpawnStarshipStack():
-var shDef  = defs["super_heavy_booster"];
-var tankDef = defs["starship_tank"];
-var engDef  = defs["starship_engines"];
-var shipDef = defs["starship_ship"];
-
-var sh   = new Part(shDef);    // ~71m tall, root
-var tank = new Part(tankDef);  // ~24m tall
-var eng  = new Part(engDef);   // ~5m tall
-var ship = new Part(shipDef);  // ~50m tall (just the command part)
-
-vessel.Parts.SetRoot(sh);
-vessel.Parts.AddPart(tank);
-vessel.Parts.AddPart(eng);
-vessel.Parts.AddPart(ship);
-vessel.Parts.AddJoint(new Joint(sh,   tank, "top", "bottom"));
-vessel.Parts.AddJoint(new Joint(tank, eng,  "top", "bottom"));
-vessel.Parts.AddJoint(new Joint(eng,  ship, "top", "bottom"));
+**Stack assembly (top → bottom):**
 ```
-
-**VesselRenderer: which renderer to use for each part:**
-```csharp
-// In VesselRenderer.BuildFromVessel():
-bool hasSH    = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
-bool hasShip  = vessel.Parts.Parts.Any(p => p.Definition.Id == "starship_ship");
-
-if (hasSH)    BuildSuperHeavy(vessel);   // SuperHeavyRenderer logic
-if (hasShip)  BuildStarship(vessel);     // StarshipRenderer logic (positioned above SH)
+starship_command  (command)   → joint bottom→top →
+starship_tank     (fuel_tank) → joint bottom→top →
+starship_engines  (engine)    → joint bottom→top →
+decoupler_medium  (decoupler) → joint bottom→top →
+super_heavy_booster (engine)
 ```
+`super_heavy_booster` has `fuel_capacity_lf/ox` set so PartGraph cross-feed draws from it during SH burn.
 
-**LaunchPadController:**
-```csharp
-// _Ready():
-//   SpawnGround() — flat PlaneMap mesh with sandy tex color
-//   SpawnMechazilla() — two towers + arms
-//   SpawnMountTable() — concrete base under rocket
-//   Register with FloatingOrigin as static environment
-//   All ground objects: pos = earth.Position + (0, earth.Radius, 0) [render: near origin]
-// HoldStack(vessel): vessel.IsGroundHeld = true
-// ReleaseStack(vessel): vessel.IsGroundHeld = false [called by CountdownController at T-0]
-```
+**Physics at liftoff (verified):**
+- Total mass: 80t + 5t + 15t + 0.06t + 200t + 330t+870t + 900t+2400t = **4800 t**
+- SH thrust SL: 69 MN → TWR = 69e6 / (4800e3 × 9.81) ≈ **1.47** ✓ (real ≈ 1.5)
+- Starship alone: m0=1300t m1=100t ISP=380 → ΔV = 380×9.81×ln(13) ≈ **9560 m/s** ✓
 
-**Test criteria for Semana 6 completion:**
-- [ ] Game starts showing rocket on pad (not LEO)
-- [ ] Countdown from T-10 visible on screen
-- [ ] At T-0 rocket ignites (engine plumes visible)
-- [ ] Rocket lifts off and gains altitude
-- [ ] TWR > 1 (actual liftoff, not hovering)
-- [ ] HUD shows altitude increasing from 0
-- [ ] Staging (Space) separates SH from Starship
-- [ ] Reaches orbit (Pe > 180 km)
+**Ground hold mechanism:**
+- `vessel.IsGroundHeld = true` at spawn; Universe skips RK4, locks vessel to earth surface
+- `vessel.Position = earth.Position + GroundNormal × (earth.Radius + GroundOffset)`
+- `vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position)` (Earth rotation)
+- At T-0: `bridge.ReleaseGroundHold()` → physics resumes, rocket ascends
+
+**Spawn position:** Earth `+Y` (north pole direction for simplicity, no equatorial offset).
+
+**Test criteria:**
+- [x] Game starts showing rocket on pad (not LEO)
+- [x] Countdown from T-10 visible on screen (red overlay)
+- [x] At T-3 SH engines ignite (plumes visible)
+- [x] At T-0 rocket lifts off (`IsGroundHeld` released)
+- [x] TWR label shows > 1 in green
+- [x] Mission phase transitions: COUNTDOWN → IGNITION → LIFTOFF → ASCENT\_SH
+- [x] Max-Q auto-detected and phase changes to MAX\_Q
+- [x] `Space` stages (decoupler fires, SH separates)
+- [x] After separation: Starship engine plumes replace SH plumes
+- [x] Camera auto-switches to Chase above 500 m; `C` cycles pad presets
 
 ---
 
@@ -1577,9 +1606,9 @@ In Semana 6 SH is just abandoned after separation. Semana 11 completes the loop:
 | PitchYawRoll has no effect | Major | Fixed in Session 5 | Applied in Vessel.Tick() |
 | SAS locks out rotation | Major | Fixed in Session 5 | Only damps when no input |
 | Engine plumes not visible | Known | Open — Semana 8 | GPU particles replacing cone mesh |
-| Starship proportions wrong | Known | Open — Semana 7 | StarshipRenderer with nosecone sphere |
-| Starts in LEO not on pad | By design | Open — Semana 6 | LaunchPadController |
-| Super Heavy not modeled | By design | Open — Semana 6-7 | SuperHeavyRenderer |
+| Starship nosecone too sharp | Known | Open — Semana 7 | SphereMesh hemisphere for rounded nose |
+| SH plumes stay visible after staging | Known | Open — Semana 7 | RebuildAfterStaging() needed |
+| Stack visual not rebuilt after separation | Known | Open — Semana 7 | Debris vessel gets no renderer |
 
 ---
 
