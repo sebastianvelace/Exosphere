@@ -26,6 +26,13 @@ public class Vessel
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
+    // ── Ground hold (pre-launch hold-down) ────────────────────────────────
+    public bool     IsGroundHeld          { get; set; }
+    public Vector3d GroundNormal          { get; set; }  // unit vector from body centre → spawn point
+    public double   GroundOffset          { get; set; }  // height above body surface at spawn (m)
+
+    public void ReleaseGroundHold() => IsGroundHeld = false;
+
     // ── Tripulación ───────────────────────────────────────────────────────
     public List<CrewMember> Crew { get; } = new();
 

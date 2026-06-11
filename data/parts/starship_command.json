@@ -1,0 +1,14 @@
+{
+  "id": "starship_command",
+  "name": "Starship Command Section",
+  "description": "Starship upper stage command, nosecone, crew quarters, and payload bay. Dry mass includes structure, ECLSS, avionics, and heat shield tiles on the windward side.",
+  "category": "command",
+  "mass_dry": 80000,
+  "cost": 50000,
+  "drag_coefficient": 0.25,
+  "heat_tolerance": 2800,
+  "max_crew": 100,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -1.0, 0], "size": 3, "type": "stack"}
+  ]
+}

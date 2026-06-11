@@ -126,6 +126,16 @@ public class Universe
         // 2. Integrate each active vessel with RK4
         foreach (var vessel in _vessels)
         {
+            if (vessel.IsGroundHeld)
+            {
+                // Vessel is clamped to the body surface — follow the body's orbit
+                var heldBody = GetDominantBody(vessel.Position);
+                vessel.Position = heldBody.Position + vessel.GroundNormal * (heldBody.Radius + vessel.GroundOffset);
+                vessel.Velocity = heldBody.Velocity + heldBody.GetSurfaceVelocity(vessel.Position);
+                vessel.Tick(dt, heldBody);  // still drain fuel during ignition sequence
+                continue;
+            }
+
             if (vessel.IsOnRails)
             {
                 PropagateVesselOnRails(vessel, dt);

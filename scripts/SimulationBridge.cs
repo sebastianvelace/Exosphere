@@ -19,9 +19,11 @@ public partial class SimulationBridge : Node
     [Signal] public delegate void VesselDestroyedEventHandler(string vesselId);
     [Signal] public delegate void SimulationLoadedEventHandler();
 
-    private bool            _running      = false;
-    private VesselRenderer? _testRenderer = null;
-    private Camera3D?       _camera       = null;
+    private bool                 _running          = false;
+    private VesselRenderer?      _vesselRenderer   = null;
+    private Camera3D?            _camera           = null;
+    private LaunchPadController? _launchPad        = null;
+    private Vector3d             _padWorldPos;   // Earth surface point directly below spawn
 
     public override void _Ready()
     {
@@ -32,22 +34,31 @@ public partial class SimulationBridge : Node
         Universe.TimeScale = 1.0;
         _running = true;
 
-        SpawnTestVessel(dataPath);
+        // Create MissionManager as sibling
+        var mm = new MissionManager();
+        mm.Name = "MissionManager";
+        GetParent()?.AddChild(mm);
+
+        // Create LaunchPadController in the World node
+        var worldNode = GetTree().Root.FindChild("World", true, false) as Node3D;
+        if (worldNode != null)
+        {
+            _launchPad = new LaunchPadController();
+            _launchPad.Name = "LaunchPadController";
+            worldNode.AddChild(_launchPad);
+        }
+
+        SpawnStarshipStack(dataPath);
         SpawnPlanets();
         EmitSignal(SignalName.SimulationLoaded);
 
-        // CameraController maneja la posición; solo ajustamos Far para ver los planetas
         _camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
         if (_camera != null)
-            _camera.Far = 2000.0f;
+            _camera.Far = 2_000_000.0f;
 
-        // Apuntar la luz direccional para iluminar los planetas
         var light = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
         if (light != null)
-        {
-            // Luz desde arriba-izquierda, apuntando hacia la escena
             light.RotationDegrees = new Godot.Vector3(-45f, -30f, 0f);
-        }
     }
 
     public override void _Process(double delta)
@@ -55,67 +66,89 @@ public partial class SimulationBridge : Node
         if (!_running || Universe == null) return;
         Universe.Tick(delta);
 
-        // Mantener la cámara apuntando al vessel activo (siempre en origen por FloatingOrigin)
-        if (_camera != null && ActiveVessel != null)
-            _camera.LookAt(Godot.Vector3.Zero, Godot.Vector3.Up);
+        // Update LaunchPad position: anchored to Earth surface, offset from active vessel
+        if (_launchPad != null && ActiveVessel != null && _padWorldPos != Vector3d.Zero)
+        {
+            var offset = _padWorldPos - ActiveVessel.Position;
+            _launchPad.Position = new Godot.Vector3((float)offset.X, (float)offset.Y, (float)offset.Z);
+            var earth = Universe.GetBody("earth");
+            double alt = earth != null ? ActiveVessel.GetAltitude(earth) : 1e6;
+            _launchPad.Visible = alt < 8_000;   // hide above 8 km
+        }
     }
 
-    // ── Vessel de prueba ───────────────────────────────────────────────────
+    // ── Starship + Super Heavy stack on Starbase launchpad ────────────────
 
-    private void SpawnTestVessel(string dataPath)
+    private void SpawnStarshipStack(string dataPath)
     {
         var earth = Universe.GetBody("earth");
         if (earth == null) return;
 
-        var partsDir = System.IO.Path.Combine(dataPath, "parts");
-        var defs     = PartDefinition.LoadAllFromDirectory(partsDir);
+        var defs = PartDefinition.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "parts"));
 
-        // Construir cohete: cápsula + tanque pequeño + motor SL
-        var vessel = new Vessel { Name = "Testship-1 (LEO)" };
+        if (!defs.TryGetValue("starship_command",  out var cmdDef))  return;
+        if (!defs.TryGetValue("starship_tank",      out var tankDef)) return;
+        if (!defs.TryGetValue("starship_engines",   out var engDef))  return;
+        if (!defs.TryGetValue("decoupler_medium",   out var decDef))  return;
+        if (!defs.TryGetValue("super_heavy_booster",out var shDef))   return;
 
-        if (!defs.TryGetValue("command_pod_mk1", out var podDef))    return;
-        if (!defs.TryGetValue("fuel_tank_small",  out var tankDef))   return;
-        if (!defs.TryGetValue("engine_liquid_sl", out var engineDef)) return;
+        var vessel = new Vessel { Name = "Starship IFT-7" };
 
-        var pod    = new Part(podDef);
-        var tank   = new Part(tankDef);
-        var engine = new Part(engineDef);
+        var command  = new Part(cmdDef);
+        var tank     = new Part(tankDef);
+        var engines  = new Part(engDef);
+        var decoupler= new Part(decDef);
+        var sh       = new Part(shDef);
 
-        vessel.Parts.SetRoot(pod);
-        vessel.Parts.AddPart(pod);
+        vessel.Parts.SetRoot(command);
+        vessel.Parts.AddPart(command);
         vessel.Parts.AddPart(tank);
-        vessel.Parts.AddPart(engine);
+        vessel.Parts.AddPart(engines);
+        vessel.Parts.AddPart(decoupler);
+        vessel.Parts.AddPart(sh);
 
-        // pod.bottom → tank.top → tank.bottom → engine.top
-        vessel.Parts.AddJoint(new Joint(pod,  tank,   "bottom", "top"));
-        vessel.Parts.AddJoint(new Joint(tank, engine, "bottom", "top"));
+        // Stack (top → bottom): command → tank → engines → decoupler → super_heavy
+        vessel.Parts.AddJoint(new Joint(command,   tank,      "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(tank,      engines,   "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(engines,   decoupler, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(decoupler, sh,        "bottom", "top"));
 
-        // Órbita circular a 250 km sobre la Tierra
-        // Vessel en +Z para que Earth aparezca de frente a la cámara (que mira hacia -Z)
-        double r = earth.Radius + 250_000.0;
-        double v = System.Math.Sqrt(earth.GM / r);
-        vessel.Position = earth.Position + new Vector3d(0.0, 0.0, r);
-        vessel.Velocity = earth.Velocity + new Vector3d(v, 0.0, 0.0);
+        // Place on Earth surface at +Y from Earth centre (north pole, simple & clean)
+        // Visual model has stack bottom at y=0, so spawn altitude = 0 → launch mount height
+        const double mountHeightM = 12.0;  // OLM height in metres
+        var upDir = new Vector3d(0, 1, 0); // +Y from Earth centre
+
+        vessel.Position = earth.Position + upDir * (earth.Radius + mountHeightM);
+        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
+        vessel.Orientation = Quaterniond.Identity;  // +Y up = radial up at spawn point
         vessel.SASEnabled = true;
+
+        // Ground hold: keeps vessel locked to surface until T-0
+        vessel.IsGroundHeld  = true;
+        vessel.GroundNormal  = upDir;
+        vessel.GroundOffset  = mountHeightM;
+
+        // Save pad surface position for LaunchPad visual anchoring
+        _padWorldPos = earth.Position + upDir * earth.Radius;
 
         Universe.AddVessel(vessel);
         Universe.ActiveVessel = vessel;
 
-        // Crear renderer visual y registrarlo en FloatingOrigin
+        // Build renderer
         var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
         if (vesselsNode != null)
         {
-            _testRenderer = new VesselRenderer();
-            _testRenderer.Name = "TestVesselRenderer";
-            vesselsNode.AddChild(_testRenderer);
-            _testRenderer.BuildFromVessel(vessel);
+            _vesselRenderer = new VesselRenderer();
+            _vesselRenderer.Name = "StarshipRenderer";
+            vesselsNode.AddChild(_vesselRenderer);
+            _vesselRenderer.BuildFromVessel(vessel);
 
             var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
-            fo?.RegisterVesselNode(vessel.Id, _testRenderer);
+            fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
         }
     }
 
-    // ── Planetas ───────────────────────────────────────────────────────────
+    // ── Planets ───────────────────────────────────────────────────────────
 
     private void SpawnPlanets()
     {
@@ -126,83 +159,60 @@ public partial class SimulationBridge : Node
 
         foreach (var body in Universe.Bodies)
         {
-            float renderRadius = (float)(body.Radius * renderScale);
+            float r = (float)(body.Radius * renderScale);
 
-            // Surface sphere
-            var sphere = new SphereMesh
-            {
-                Radius         = renderRadius,
-                Height         = renderRadius * 2.0f,
-                RadialSegments = 64,
-                Rings          = 32,
-            };
-
-            var mat = new StandardMaterial3D();
+            var sphere = new SphereMesh { Radius = r, Height = r * 2f, RadialSegments = 64, Rings = 32 };
+            var mat    = new StandardMaterial3D();
             mat.AlbedoColor     = GetPlanetColor(body.Id);
             mat.Roughness       = 0.88f;
             mat.EmissionEnabled = true;
             mat.Emission        = GetPlanetColor(body.Id) * 0.28f;
 
-            var mesh = new MeshInstance3D();
-            mesh.Name = body.Name + "_mesh";
-            mesh.Mesh = sphere;
+            var mesh = new MeshInstance3D { Name = body.Name + "_mesh", Mesh = sphere };
             mesh.SetSurfaceOverrideMaterial(0, mat);
-
             planetsNode.AddChild(mesh);
             fo.RegisterPlanetNode(body.Id, mesh);
 
-            // Atmosphere glow layer (Earth only) — child of Earth mesh so it follows automatically
-            if (body.Id == "earth")
-                SpawnAtmosphereGlow(mesh, renderRadius);
+            if (body.Id == "earth") SpawnAtmosphereGlow(mesh, r);
         }
     }
 
     private static void SpawnAtmosphereGlow(MeshInstance3D earthMesh, float surfaceRadius)
     {
-        // Slightly larger sphere rendered from inside (cull front) → limb glow around Earth
-        float atmRadius = surfaceRadius * 1.028f;
-        var atmSphere = new SphereMesh
+        float r = surfaceRadius * 1.028f;
+        var atm = new SphereMesh { Radius = r, Height = r * 2f, RadialSegments = 64, Rings = 32 };
+        var mat = new StandardMaterial3D
         {
-            Radius         = atmRadius,
-            Height         = atmRadius * 2.0f,
-            RadialSegments = 64,
-            Rings          = 32,
+            AlbedoColor              = new Color(0.25f, 0.55f, 1.0f, 0.0f),
+            Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
+            CullMode                 = BaseMaterial3D.CullModeEnum.Front,
+            EmissionEnabled          = true,
+            Emission                 = new Color(0.10f, 0.42f, 0.96f),
+            EmissionEnergyMultiplier = 0.60f,
         };
-
-        var atmMat = new StandardMaterial3D();
-        atmMat.AlbedoColor              = new Color(0.25f, 0.55f, 1.0f, 0.0f);
-        atmMat.Transparency             = BaseMaterial3D.TransparencyEnum.Alpha;
-        atmMat.CullMode                 = BaseMaterial3D.CullModeEnum.Front;
-        atmMat.EmissionEnabled          = true;
-        atmMat.Emission                 = new Color(0.10f, 0.42f, 0.96f);
-        atmMat.EmissionEnergyMultiplier = 0.60f;
-
-        var atmMesh = new MeshInstance3D();
-        atmMesh.Name = "atmosphere_glow";
-        atmMesh.Mesh = atmSphere;
-        atmMesh.SetSurfaceOverrideMaterial(0, atmMat);
-
-        // Position is (0,0,0) in Earth's local space — follows Earth automatically
-        earthMesh.AddChild(atmMesh);
+        var node = new MeshInstance3D { Name = "atmosphere_glow", Mesh = atm };
+        node.SetSurfaceOverrideMaterial(0, mat);
+        earthMesh.AddChild(node);
     }
 
     private static Color GetPlanetColor(string id) => id switch
     {
-        "earth"   => new Color(0.2f, 0.45f, 0.8f),
-        "moon"    => new Color(0.6f, 0.6f, 0.6f),
-        "mars"    => new Color(0.7f, 0.3f, 0.15f),
-        "venus"   => new Color(0.85f, 0.75f, 0.4f),
-        "mercury" => new Color(0.5f, 0.48f, 0.46f),
-        "jupiter" => new Color(0.8f, 0.65f, 0.45f),
-        "saturn"  => new Color(0.9f, 0.8f, 0.55f),
-        "sun"     => new Color(1.0f, 0.9f, 0.3f),
-        _         => new Color(0.7f, 0.7f, 0.7f)
+        "earth"   => new Color(0.20f, 0.45f, 0.80f),
+        "moon"    => new Color(0.60f, 0.60f, 0.60f),
+        "mars"    => new Color(0.70f, 0.30f, 0.15f),
+        "venus"   => new Color(0.85f, 0.75f, 0.40f),
+        "mercury" => new Color(0.50f, 0.48f, 0.46f),
+        "jupiter" => new Color(0.80f, 0.65f, 0.45f),
+        "saturn"  => new Color(0.90f, 0.80f, 0.55f),
+        "sun"     => new Color(1.00f, 0.90f, 0.30f),
+        _         => new Color(0.70f, 0.70f, 0.70f),
     };
 
-    // ── API pública ────────────────────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────
 
     public void SetThrottle(double t) { if (ActiveVessel != null) ActiveVessel.Throttle = t; }
-    public void SetSAS(bool enabled)  { if (ActiveVessel != null) ActiveVessel.SASEnabled = enabled; }
+    public void SetSAS(bool on)       { if (ActiveVessel != null) ActiveVessel.SASEnabled = on; }
+    public void ReleaseGroundHold()   { ActiveVessel?.ReleaseGroundHold(); }
 
     public void TriggerStaging()
     {
@@ -212,20 +222,9 @@ public partial class SimulationBridge : Node
         {
             Universe.AddVessel(debris);
             EmitSignal(SignalName.VesselStaged, debris.Id);
+            MissionManager.Instance?.NotifyStaged();
         }
     }
 
     public void SetTimeScale(double scale) => Universe.TimeScale = scale;
-
-    public Vessel? SpawnVesselAtLaunchPad(string launchSiteJson)
-    {
-        var earth = Universe.GetBody("earth");
-        if (earth == null) return null;
-        var vessel = new Vessel { Name = "New Vessel" };
-        vessel.Position = earth.Position + new Vector3d(0, earth.Radius + 10, 0);
-        vessel.Velocity = earth.Velocity;
-        Universe.AddVessel(vessel);
-        Universe.ActiveVessel = vessel;
-        return vessel;
-    }
 }

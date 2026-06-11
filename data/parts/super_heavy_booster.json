@@ -1,0 +1,24 @@
+{
+  "id": "super_heavy_booster",
+  "name": "Super Heavy Booster",
+  "description": "SpaceX Super Heavy first stage. 33 Raptor 2 sea-level engines in three rings deliver 74.4 MN at liftoff. Includes integrated LOX/LCH4 tanks: 900 t LCH4 + 2400 t LOX = 3300 t total. TWR at liftoff (full stack) approx 1.5.",
+  "category": "engine",
+  "mass_dry": 200000,
+  "cost": 100000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 2000,
+  "fuel_capacity_lf": 900000,
+  "fuel_capacity_ox": 2400000,
+  "thrust_vac": 74400000,
+  "thrust_sl": 69000000,
+  "isp_vac": 356,
+  "isp_sl": 327,
+  "gimbal_range": 7.0,
+  "fuel_type": "LiquidFuel+Oxidizer",
+  "mixture_ratio": 3.55,
+  "is_rcs": false,
+  "attachment_nodes": [
+    {"id": "top",         "position": [0, 20.0, 0], "size": 3, "type": "stack"},
+    {"id": "engine_bell", "position": [0, -2.0, 0], "size": 0, "type": "engine_bell"}
+  ]
+}
