@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using System.Linq;
 
 public partial class HUDController : Node
 {
@@ -30,12 +31,12 @@ public partial class HUDController : Node
         _warpLabel     = GetNodeOrNull<Label>(WarpLabelPath);
         _massLabel     = GetNodeOrNull<Label>(MassLabelPath);
 
-        // Add warp hint label (static, created once at startup)
+        // Controls hint label
         var hint = new Label();
-        hint.Text = "[,] warp-   [.] warp+   [Backspace] x1";
+        hint.Text = "[Z/X] throttle   [W/S] pitch   [A/D] yaw   [Q/E] roll   [T] SAS   [,/.] warp   [Space] stage";
         hint.Position = new Vector2(10, 900);
         hint.AddThemeColorOverride("font_color", new Color(0.6f, 0.6f, 0.6f));
-        hint.AddThemeFontSizeOverride("font_size", 14);
+        hint.AddThemeFontSizeOverride("font_size", 13);
         AddChild(hint);
     }
 
@@ -45,6 +46,17 @@ public partial class HUDController : Node
         var vessel   = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
         if (vessel == null || universe == null) return;
+
+        // ── Controles de rotación (leídos cada frame como teclas sostenidas) ──
+        // W/S = pitch  A/D = yaw  Q/E = roll
+        double pitch = 0, yaw = 0, roll = 0;
+        if (Input.IsKeyPressed(Key.W)) pitch += 1.0;
+        if (Input.IsKeyPressed(Key.S)) pitch -= 1.0;
+        if (Input.IsKeyPressed(Key.A)) yaw   -= 1.0;
+        if (Input.IsKeyPressed(Key.D)) yaw   += 1.0;
+        if (Input.IsKeyPressed(Key.Q)) roll  -= 1.0;
+        if (Input.IsKeyPressed(Key.E)) roll  += 1.0;
+        vessel.PitchYawRoll = new Exosphere.Simulation.Math.Vector3d(pitch, yaw, roll);
 
         var refBody  = universe.GetDominantBody(vessel.Position);
         double alt   = vessel.GetAltitude(refBody);
@@ -74,8 +86,16 @@ public partial class HUDController : Node
             SetLabel(_peLabel, "---");
         }
 
-        // Throttle
-        SetLabel(_throttleLabel, $"{vessel.Throttle * 100.0:F0}%");
+        // Throttle + engine status
+        bool enginesActive = vessel.Parts.ActiveEngines.Any();
+        string engStatus   = vessel.Throttle > 0.01
+            ? (enginesActive ? "FIRING" : "FLAME-OUT")
+            : "OFF";
+        SetLabel(_throttleLabel, $"THR {vessel.Throttle * 100.0:F0}%  [{engStatus}]");
+        if (_throttleLabel != null)
+            _throttleLabel.Modulate = vessel.Throttle > 0.01 && enginesActive
+                ? new Color(1.0f, 0.6f, 0.1f)
+                : new Color(1.0f, 1.0f, 1.0f);
 
         // Fuel
         double fuel = vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer;

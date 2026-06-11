@@ -115,20 +115,41 @@ public class Vessel
         ComputeGravity((IEnumerable<CelestialBody>)bodies);
 
     // ── Tick interno (consumo, SAS, rotación) ──────────────────────────────
+    // Autoridad de control: cuántos rad/s² aplica el input máximo (±1)
+    private const double ControlAuthority = 0.6;
+
     public void Tick(double dt, CelestialBody refBody)
     {
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
         Parts.ConsumePropellant(dt, pressure);
 
-        // Tick EVA crew
         foreach (var crew in Crew)
             crew.TickEVA(dt);
 
-        // SAS: amortigua velocidad angular
-        if (SASEnabled)
-            AngularVelocity = AngularVelocity * System.Math.Pow(0.001, dt);
+        // Aplicar input de rotación (en espacio local del vessel)
+        // PitchYawRoll: X=pitch (nariz arriba/abajo), Y=yaw (nariz izq/der), Z=roll (giro)
+        bool hasInput = PitchYawRoll.Magnitude > 0.01;
+        if (hasInput)
+        {
+            var localAngAccel = new Vector3d(
+                PitchYawRoll.X * ControlAuthority,
+                PitchYawRoll.Y * ControlAuthority,
+                PitchYawRoll.Z * ControlAuthority);
+            // Convertir de espacio local a mundo
+            AngularVelocity = AngularVelocity + Orientation.Rotate(localAngAccel) * dt;
 
-        // Aplicar velocidad angular a la orientación
+            // Limitar velocidad angular máxima (20°/s = 0.35 rad/s)
+            double maxAngVel = 0.35;
+            double mag = AngularVelocity.Magnitude;
+            if (mag > maxAngVel)
+                AngularVelocity = AngularVelocity * (maxAngVel / mag);
+        }
+
+        // SAS: solo amortigua cuando el jugador no está dando input
+        if (SASEnabled && !hasInput)
+            AngularVelocity = AngularVelocity * System.Math.Pow(0.005, dt);
+
+        // Integrar velocidad angular → orientación
         double angMag = AngularVelocity.Magnitude;
         if (angMag > 1e-12)
         {

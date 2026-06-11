@@ -12,6 +12,7 @@ public partial class VesselRenderer : Node3D
 
     private readonly Dictionary<string, Node3D> _partNodes = new();
     private MeshInstance3D? _hullMesh; // for reentry heat glow
+    private readonly List<MeshInstance3D> _plumes = new(); // engine exhaust cones
 
     private static StandardMaterial3D? _fallbackMaterial;
     private static StandardMaterial3D GetFallback()
@@ -126,6 +127,49 @@ public partial class VesselRenderer : Node3D
 
         foreach (var part in vessel.Parts.Parts)
             _partNodes[part.InstanceId] = _hullMesh;
+
+        // Engine exhaust plumes — one per Raptor (6 total)
+        SpawnPlumes(vacRingR, slRingR, engineMat);
+    }
+
+    private void SpawnPlumes(float vacRingR, float slRingR, StandardMaterial3D engineMat)
+    {
+        var plumeMat = new StandardMaterial3D
+        {
+            AlbedoColor              = new Color(1.0f, 0.85f, 0.5f, 0.0f),
+            Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
+            EmissionEnabled          = true,
+            Emission                 = new Color(1.0f, 0.6f, 0.1f),
+            EmissionEnergyMultiplier = 3.0f,
+            CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
+        };
+
+        // 3 vacuum Raptor plumes
+        for (int i = 0; i < 3; i++)
+        {
+            float a = i * 2.094395f;
+            var cone = new CylinderMesh { TopRadius = 0.0f, BottomRadius = 0.55f, Height = 5.0f, RadialSegments = 12 };
+            var node = new MeshInstance3D { Name = $"PlumeVac{i}", Mesh = cone, Visible = false };
+            node.SetSurfaceOverrideMaterial(0, (StandardMaterial3D)plumeMat.Duplicate());
+            // Base of plume at nozzle exit (y=-11.05), points downward (-Y)
+            node.Position = new Vector3(vacRingR * Mathf.Cos(a), -12.55f, vacRingR * Mathf.Sin(a));
+            AddChild(node);
+            _plumes.Add(node);
+        }
+
+        // 3 sea-level Raptor plumes (slightly shorter)
+        var plumeSLMat = (StandardMaterial3D)plumeMat.Duplicate();
+        plumeSLMat.Emission = new Color(1.0f, 0.7f, 0.2f);
+        for (int i = 0; i < 3; i++)
+        {
+            float a = i * 2.094395f + 1.047198f;
+            var cone = new CylinderMesh { TopRadius = 0.0f, BottomRadius = 0.42f, Height = 3.5f, RadialSegments = 12 };
+            var node = new MeshInstance3D { Name = $"PlumeSL{i}", Mesh = cone, Visible = false };
+            node.SetSurfaceOverrideMaterial(0, (StandardMaterial3D)plumeSLMat.Duplicate());
+            node.Position = new Vector3(slRingR * Mathf.Cos(a), -11.45f, slRingR * Mathf.Sin(a));
+            AddChild(node);
+            _plumes.Add(node);
+        }
     }
 
     private MeshInstance3D AddMesh(string name, Mesh mesh, StandardMaterial3D mat, Vector3 pos)
@@ -136,12 +180,30 @@ public partial class VesselRenderer : Node3D
         return node;
     }
 
-    // ── Reentry heat glow ─────────────────────────────────────────────────
+    // ── Visual updates (plumes + heat glow) ──────────────────────────────
 
     public override void _Process(double delta)
     {
         if (TargetVessel == null) return;
 
+        // Engine plumes — scale and brighten with throttle
+        float throttle = (float)TargetVessel.Throttle;
+        bool  firing   = throttle > 0.01f;
+        foreach (var plume in _plumes)
+        {
+            plume.Visible = firing;
+            if (firing)
+            {
+                // Flicker: ±10% random scale variation for flame effect
+                float flicker = 0.9f + (float)(GD.Randf() * 0.2f);
+                plume.Scale   = new Vector3(throttle * flicker, throttle * flicker, throttle * flicker);
+
+                if (plume.GetSurfaceOverrideMaterial(0) is StandardMaterial3D pm)
+                    pm.EmissionEnergyMultiplier = 2.5f + throttle * 2.0f;
+            }
+        }
+
+        // Reentry heat glow
         foreach (var part in TargetVessel.Parts.Parts)
         {
             if (!_partNodes.TryGetValue(part.InstanceId, out var node)) continue;
@@ -209,6 +271,7 @@ public partial class VesselRenderer : Node3D
     {
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
+        _plumes.Clear();
         _hullMesh = null;
     }
 

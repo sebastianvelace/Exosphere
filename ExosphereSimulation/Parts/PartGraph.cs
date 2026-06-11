@@ -60,13 +60,82 @@ public class PartGraph
         ActiveEngines.Aggregate(Vector3d.Zero, (sum, e) => sum + e.GetThrustVector());
 
     // ── Consumir propelante en todos los motores activos ──────────────────
+    // Cross-feed real: los motores extraen combustible de todos los tanques del grafo,
+    // no de sí mismos (los motores no tienen capacidad de combustible propia).
     public void ConsumePropellant(double dt, double ambientPressure)
     {
-        foreach (var engine in ActiveEngines.ToList())
+        var engines = ActiveEngines.ToList();
+        if (engines.Count == 0) return;
+
+        // Calcular flujo de masa total de todos los motores activos
+        double totalLFRate = 0, totalOxRate = 0, totalSolidRate = 0, totalMonoRate = 0;
+        foreach (var engine in engines)
         {
-            if (!engine.ConsumePropellant(dt, ambientPressure))
-                engine.IsStagingActive = false;  // flame-out
+            var def = engine.Definition;
+            double pf  = System.Math.Clamp(ambientPressure / 101325.0, 0.0, 1.0);
+            double isp = def.IspVac + (def.IspSL - def.IspVac) * pf;
+            if (isp < 1.0) continue;
+
+            double massFlow = (def.ThrustVac * engine.ThrottleLevel) / (isp * 9.80665);
+            var fuelType = def.FuelTypeStr.ToLowerInvariant();
+
+            if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel"))
+            {
+                totalLFRate += massFlow * (9.0 / 20.0);
+                totalOxRate += massFlow * (11.0 / 20.0);
+            }
+            else if (fuelType.Contains("solid"))
+                totalSolidRate += massFlow;
+            else if (fuelType.Contains("mono"))
+                totalMonoRate += massFlow;
         }
+
+        // Consumir de todos los tanques del grafo (cross-feed)
+        bool flameOut = false;
+
+        if (totalLFRate > 0 || totalOxRate > 0)
+        {
+            double lfNeeded  = totalLFRate * dt;
+            double oxNeeded  = totalOxRate * dt;
+            double totalLF   = _parts.Sum(p => p.LiquidFuel);
+            double totalOx   = _parts.Sum(p => p.Oxidizer);
+
+            if (totalLF < lfNeeded || totalOx < oxNeeded)
+            {
+                flameOut = true;
+            }
+            else
+            {
+                // Drenar proporcionalmente de cada tanque que tenga combustible
+                foreach (var p in _parts)
+                {
+                    if (totalLF > 0) p.LiquidFuel -= lfNeeded * (p.LiquidFuel / totalLF);
+                    if (totalOx > 0) p.Oxidizer   -= oxNeeded * (p.Oxidizer   / totalOx);
+                }
+            }
+        }
+
+        if (totalSolidRate > 0)
+        {
+            double solidNeeded = totalSolidRate * dt;
+            double totalSolid  = _parts.Sum(p => p.SolidFuel);
+            if (totalSolid < solidNeeded) flameOut = true;
+            else foreach (var p in _parts.Where(p2 => p2.SolidFuel > 0))
+                p.SolidFuel -= solidNeeded * (p.SolidFuel / totalSolid);
+        }
+
+        if (totalMonoRate > 0)
+        {
+            double monoNeeded = totalMonoRate * dt;
+            double totalMono  = _parts.Sum(p => p.Monopropellant);
+            if (totalMono < monoNeeded) flameOut = true;
+            else foreach (var p in _parts.Where(p2 => p2.Monopropellant > 0))
+                p.Monopropellant -= monoNeeded * (p.Monopropellant / totalMono);
+        }
+
+        if (flameOut)
+            foreach (var engine in engines)
+                engine.IsStagingActive = false;
     }
 
     // ── Staging: dispara el primer desacoplador disponible ────────────────
