@@ -1,0 +1,23 @@
+{
+  "id": "srb_kickback",
+  "name": "RT-10 Kickback Solid Rocket Booster",
+  "description": "A large solid rocket booster providing high initial thrust for heavy payloads. Once ignited, cannot be throttled or shut down.",
+  "category": "engine",
+  "mass_dry": 1500,
+  "cost": 2700,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 2000,
+  "fuel_capacity_solid": 8000,
+  "thrust_sl": 568750,
+  "thrust_vac": 593200,
+  "isp_sl": 195,
+  "isp_vac": 220,
+  "gimbal_range": 0.0,
+  "fuel_type": "SolidFuel",
+  "throttleable": false,
+  "is_rcs": false,
+  "attachment_nodes": [
+    {"id": "top",         "position": [0,  2.4, 0], "size": 1, "type": "stack"},
+    {"id": "engine_bell", "position": [0, -2.4, 0], "size": 0, "type": "engine_bell"}
+  ]
+}

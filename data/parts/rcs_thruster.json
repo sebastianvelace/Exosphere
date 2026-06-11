@@ -1,0 +1,18 @@
+{
+  "id": "rcs_thruster",
+  "name": "RV-105 RCS Thruster Block",
+  "description": "A four-way RCS thruster block for attitude control and fine orbital maneuvering. Uses monopropellant fuel.",
+  "category": "engine",
+  "mass_dry": 20,
+  "cost": 620,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1200,
+  "thrust": 1000,
+  "isp": 240,
+  "fuel_type": "Monopropellant",
+  "is_rcs": true,
+  "thruster_count": 4,
+  "attachment_nodes": [
+    {"id": "radial", "position": [0.3, 0, 0], "size": 0, "type": "radial"}
+  ]
+}

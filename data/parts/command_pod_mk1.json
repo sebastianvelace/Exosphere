@@ -1,0 +1,16 @@
+{
+  "id": "command_pod_mk1",
+  "name": "Mk1 Command Pod",
+  "description": "A single-occupant command capsule with integrated heat shield for atmospheric reentry. The workhorse of early crewed missions.",
+  "category": "command",
+  "mass_dry": 840,
+  "cost": 600,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 2400,
+  "max_crew": 1,
+  "has_heat_shield": true,
+  "monopropellant_capacity": 10,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -0.9, 0], "size": 1, "type": "stack"}
+  ]
+}

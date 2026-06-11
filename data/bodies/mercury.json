@@ -1,0 +1,23 @@
+{
+  "id": "mercury",
+  "name": "Mercury",
+  "mass": 3.301e23,
+  "radius": 2439700,
+  "soi": 112400000,
+  "rotational_period": 5067014,
+  "axial_tilt": 0.034,
+  "has_atmosphere": false,
+  "atmosphere": null,
+  "surface_gravity": 3.7,
+  "gm": 2.2032e13,
+  "orbital_elements": {
+    "semi_major_axis": 5.791e10,
+    "eccentricity": 0.2056,
+    "inclination": 7.005,
+    "longitude_of_node": 48.331,
+    "argument_of_periapsis": 29.124,
+    "mean_anomaly_at_epoch": 174.796,
+    "epoch": 0.0,
+    "reference_body": "sun"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "moon",
+  "name": "Moon",
+  "mass": 7.342e22,
+  "radius": 1737400,
+  "soi": 66100000,
+  "rotational_period": 2360591,
+  "axial_tilt": 1.54,
+  "has_atmosphere": false,
+  "atmosphere": null,
+  "surface_gravity": 1.62,
+  "gm": 4.9048695e12,
+  "orbital_elements": {
+    "semi_major_axis": 384400000,
+    "eccentricity": 0.0549,
+    "inclination": 5.145,
+    "longitude_of_node": 125.08,
+    "argument_of_periapsis": 318.15,
+    "mean_anomaly_at_epoch": 115.36,
+    "epoch": 0.0,
+    "reference_body": "earth"
+  }
+}

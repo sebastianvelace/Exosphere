@@ -1,0 +1,14 @@
+{
+  "id": "sun",
+  "name": "Sun",
+  "mass": 1.989e30,
+  "radius": 696000000,
+  "soi": 1.0e15,
+  "rotational_period": 2164320,
+  "axial_tilt": 7.25,
+  "has_atmosphere": false,
+  "atmosphere": null,
+  "surface_gravity": 274.0,
+  "gm": 1.32712440018e20,
+  "orbital_elements": null
+}

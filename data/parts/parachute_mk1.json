@@ -1,0 +1,18 @@
+{
+  "id": "parachute_mk1",
+  "name": "Mk1-3 Parachute",
+  "description": "A standard personnel parachute for safe atmospheric descent. Automatically deploys at the configured altitude when the vessel is in a safe dynamic pressure range.",
+  "category": "structure",
+  "mass_dry": 45,
+  "cost": 422,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 1200,
+  "drag_chute": 500.0,
+  "deploy_altitude": 500,
+  "semi_deploy_altitude": 3000,
+  "semi_deploy_drag": 50.0,
+  "min_pressure_deploy": 0.01,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.2, 0], "size": 1, "type": "stack"}
+  ]
+}

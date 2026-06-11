@@ -1,0 +1,32 @@
+{
+  "id": "venus",
+  "name": "Venus",
+  "mass": 4.867e24,
+  "radius": 6051800,
+  "soi": 616000000,
+  "rotational_period": -20996798,
+  "axial_tilt": 177.36,
+  "has_atmosphere": true,
+  "atmosphere": {
+    "scale_height": 15000,
+    "sea_level_density": 65.0,
+    "sea_level_pressure": 9200000,
+    "sea_level_temperature": 737.0,
+    "max_altitude": 250000,
+    "layers": [
+      {"alt_min": 0, "alt_max": 250000, "temp_base": 737.0, "lapse_rate": -0.0075}
+    ]
+  },
+  "surface_gravity": 8.87,
+  "gm": 3.24859e14,
+  "orbital_elements": {
+    "semi_major_axis": 1.082e11,
+    "eccentricity": 0.0067,
+    "inclination": 3.39,
+    "longitude_of_node": 76.68,
+    "argument_of_periapsis": 54.85,
+    "mean_anomaly_at_epoch": 50.416,
+    "epoch": 0.0,
+    "reference_body": "sun"
+  }
+}

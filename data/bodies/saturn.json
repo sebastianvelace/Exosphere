@@ -1,0 +1,39 @@
+{
+  "id": "saturn",
+  "name": "Saturn",
+  "mass": 5.683e26,
+  "radius": 60268000,
+  "soi": 54800000000,
+  "rotational_period": 38052,
+  "axial_tilt": 26.73,
+  "has_atmosphere": true,
+  "has_rings": true,
+  "rings": {
+    "inner_radius": 74500000,
+    "outer_radius": 140220000,
+    "opacity": 0.7
+  },
+  "atmosphere": {
+    "scale_height": 59500,
+    "sea_level_density": 0.19,
+    "sea_level_pressure": 100000,
+    "sea_level_temperature": 134.0,
+    "max_altitude": 1000000,
+    "layers": [
+      {"alt_min": 0,      "alt_max": 50000,  "temp_base": 134.0, "lapse_rate": -0.0009},
+      {"alt_min": 50000,  "alt_max": 1000000, "temp_base": 180.0, "lapse_rate": 0.0}
+    ]
+  },
+  "surface_gravity": 10.44,
+  "gm": 3.7931e16,
+  "orbital_elements": {
+    "semi_major_axis": 1.432e12,
+    "eccentricity": 0.0565,
+    "inclination": 2.485,
+    "longitude_of_node": 113.665,
+    "argument_of_periapsis": 339.392,
+    "mean_anomaly_at_epoch": 317.02,
+    "epoch": 0.0,
+    "reference_body": "sun"
+  }
+}

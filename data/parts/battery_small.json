@@ -1,0 +1,14 @@
+{
+  "id": "battery_small",
+  "name": "Z-100 Rechargeable Battery Pack",
+  "description": "A small rechargeable battery for storing electrical charge. Provides power when solar panels are in shadow.",
+  "category": "electrical",
+  "mass_dry": 10,
+  "cost": 80,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1200,
+  "ec_capacity": 100,
+  "attachment_nodes": [
+    {"id": "radial", "position": [0.3, 0, 0], "size": 0, "type": "radial"}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "fuel_tank_large",
+  "name": "Jumbo-64 Fuel Tank",
+  "description": "A large-capacity fuel tank for heavy-lift launch vehicles. Often used as the main propellant store on first stages.",
+  "category": "fuel_tank",
+  "mass_dry": 2000,
+  "cost": 2812,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1200,
+  "fuel_capacity_lf": 1440,
+  "fuel_capacity_ox": 1760,
+  "attachment_nodes": [
+    {"id": "top",    "position": [0,  3.6, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -3.6, 0], "size": 2, "type": "stack"}
+  ]
+}

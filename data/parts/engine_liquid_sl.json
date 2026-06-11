@@ -1,0 +1,22 @@
+{
+  "id": "engine_liquid_sl",
+  "name": "Pax-1D Sea Level Engine",
+  "description": "A sea-level optimized liquid fuel engine with excellent thrust-to-weight ratio. Designed for first-stage use. Equivalent to a Merlin 1D.",
+  "category": "engine",
+  "mass_dry": 630,
+  "cost": 3900,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 2000,
+  "thrust_vac": 845000,
+  "thrust_sl": 756000,
+  "isp_vac": 311,
+  "isp_sl": 282,
+  "gimbal_range": 5.0,
+  "fuel_type": "LiquidFuel+Oxidizer",
+  "mixture_ratio": 2.36,
+  "is_rcs": false,
+  "attachment_nodes": [
+    {"id": "top",         "position": [0,  0.5, 0], "size": 1, "type": "stack"},
+    {"id": "engine_bell", "position": [0, -1.0, 0], "size": 0, "type": "engine_bell"}
+  ]
+}

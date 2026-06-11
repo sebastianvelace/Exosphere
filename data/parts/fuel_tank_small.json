@@ -1,0 +1,16 @@
+{
+  "id": "fuel_tank_small",
+  "name": "FL-T200 Fuel Tank",
+  "description": "A compact liquid fuel tank suitable for small launch vehicles and upper stages. Holds a balanced ratio of liquid fuel and oxidizer.",
+  "category": "fuel_tank",
+  "mass_dry": 125,
+  "cost": 275,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1200,
+  "fuel_capacity_lf": 90,
+  "fuel_capacity_ox": 110,
+  "attachment_nodes": [
+    {"id": "top",    "position": [0,  0.9, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.9, 0], "size": 1, "type": "stack"}
+  ]
+}

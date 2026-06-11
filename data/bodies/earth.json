@@ -1,0 +1,37 @@
+{
+  "id": "earth",
+  "name": "Earth",
+  "mass": 5.972e24,
+  "radius": 6371000,
+  "soi": 924000000,
+  "rotational_period": 86164,
+  "axial_tilt": 23.44,
+  "has_atmosphere": true,
+  "atmosphere": {
+    "scale_height": 8500,
+    "sea_level_density": 1.225,
+    "sea_level_pressure": 101325,
+    "sea_level_temperature": 288.15,
+    "max_altitude": 140000,
+    "layers": [
+      {"alt_min": 0,     "alt_max": 11000,  "temp_base": 288.15, "lapse_rate": -0.0065},
+      {"alt_min": 11000, "alt_max": 20000,  "temp_base": 216.65, "lapse_rate": 0.0},
+      {"alt_min": 20000, "alt_max": 32000,  "temp_base": 216.65, "lapse_rate": 0.001},
+      {"alt_min": 32000, "alt_max": 47000,  "temp_base": 228.65, "lapse_rate": 0.0028},
+      {"alt_min": 47000, "alt_max": 86000,  "temp_base": 270.65, "lapse_rate": 0.0},
+      {"alt_min": 86000, "alt_max": 140000, "temp_base": 186.87, "lapse_rate": 0.0}
+    ]
+  },
+  "surface_gravity": 9.807,
+  "gm": 3.986004418e14,
+  "orbital_elements": {
+    "semi_major_axis": 1.496e11,
+    "eccentricity": 0.0167,
+    "inclination": 0.0,
+    "longitude_of_node": -11.26064,
+    "argument_of_periapsis": 114.20783,
+    "mean_anomaly_at_epoch": 358.617,
+    "epoch": 0.0,
+    "reference_body": "sun"
+  }
+}

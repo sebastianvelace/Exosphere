@@ -1,0 +1,15 @@
+{
+  "id": "decoupler_medium",
+  "name": "TD-12 Stack Decoupler",
+  "description": "A medium stack decoupler for separating larger stage combinations. Higher ejection force ensures clean separation even at heavier loads.",
+  "category": "decoupler",
+  "mass_dry": 60,
+  "cost": 300,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1200,
+  "ejection_force": 500,
+  "attachment_nodes": [
+    {"id": "top",    "position": [0,  0.15, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.15, 0], "size": 2, "type": "stack"}
+  ]
+}

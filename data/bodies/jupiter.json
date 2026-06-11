@@ -1,0 +1,33 @@
+{
+  "id": "jupiter",
+  "name": "Jupiter",
+  "mass": 1.898e27,
+  "radius": 71492000,
+  "soi": 48200000000,
+  "rotational_period": 35730,
+  "axial_tilt": 3.13,
+  "has_atmosphere": true,
+  "atmosphere": {
+    "scale_height": 27000,
+    "sea_level_density": 0.16,
+    "sea_level_pressure": 100000,
+    "sea_level_temperature": 165.0,
+    "max_altitude": 1000000,
+    "layers": [
+      {"alt_min": 0,      "alt_max": 50000,  "temp_base": 165.0, "lapse_rate": -0.002},
+      {"alt_min": 50000,  "alt_max": 1000000, "temp_base": 265.0, "lapse_rate": 0.0}
+    ]
+  },
+  "surface_gravity": 24.79,
+  "gm": 1.26687e17,
+  "orbital_elements": {
+    "semi_major_axis": 7.783e11,
+    "eccentricity": 0.0489,
+    "inclination": 1.304,
+    "longitude_of_node": 100.464,
+    "argument_of_periapsis": 273.867,
+    "mean_anomaly_at_epoch": 20.02,
+    "epoch": 0.0,
+    "reference_body": "sun"
+  }
+}

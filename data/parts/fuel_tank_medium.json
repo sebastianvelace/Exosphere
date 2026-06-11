@@ -1,0 +1,16 @@
+{
+  "id": "fuel_tank_medium",
+  "name": "FL-T800 Fuel Tank",
+  "description": "A medium-capacity liquid fuel tank. The standard choice for medium-lift launch vehicles and orbital stages.",
+  "category": "fuel_tank",
+  "mass_dry": 500,
+  "cost": 800,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1200,
+  "fuel_capacity_lf": 360,
+  "fuel_capacity_ox": 440,
+  "attachment_nodes": [
+    {"id": "top",    "position": [0,  1.8, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.8, 0], "size": 1, "type": "stack"}
+  ]
+}

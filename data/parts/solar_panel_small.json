@@ -1,0 +1,16 @@
+{
+  "id": "solar_panel_small",
+  "name": "OX-STAT Photovoltaic Panel",
+  "description": "A deployable solar panel that converts sunlight into electrical charge. Must be deployed before generating power.",
+  "category": "electrical",
+  "mass_dry": 18,
+  "cost": 75,
+  "drag_coefficient": 0.5,
+  "heat_tolerance": 1200,
+  "power_output": 1.0,
+  "deployable": true,
+  "tracking": false,
+  "attachment_nodes": [
+    {"id": "radial", "position": [0.5, 0, 0], "size": 0, "type": "radial"}
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "mars",
+  "name": "Mars",
+  "mass": 6.417e23,
+  "radius": 3389500,
+  "soi": 577000000,
+  "rotational_period": 88642,
+  "axial_tilt": 25.19,
+  "has_atmosphere": true,
+  "atmosphere": {
+    "scale_height": 11100,
+    "sea_level_density": 0.020,
+    "sea_level_pressure": 636,
+    "sea_level_temperature": 210.0,
+    "max_altitude": 100000,
+    "layers": [
+      {"alt_min": 0, "alt_max": 100000, "temp_base": 210.0, "lapse_rate": -0.00098}
+    ]
+  },
+  "surface_gravity": 3.721,
+  "gm": 4.282837e13,
+  "orbital_elements": {
+    "semi_major_axis": 2.279e11,
+    "eccentricity": 0.0934,
+    "inclination": 1.85,
+    "longitude_of_node": 49.558,
+    "argument_of_periapsis": 286.502,
+    "mean_anomaly_at_epoch": 19.412,
+    "epoch": 0.0,
+    "reference_body": "sun"
+  }
+}

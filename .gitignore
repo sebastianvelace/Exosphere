@@ -1,0 +1,21 @@
+# Godot
+.godot/
+*.uid
+export_presets.cfg
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+.vscode/settings.json
+
+# Exports
+exports/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Saves (dev)
+saves/
