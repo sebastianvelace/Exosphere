@@ -1692,6 +1692,9 @@ In Semana 6 SH is just abandoned after separation. Semana 11 completes the loop:
 | Starship nosecone too sharp | Known | Open — Semana 7 | SphereMesh hemisphere for rounded nose |
 | SH plumes stay visible after staging | Known | Open — Semana 7 | RebuildAfterStaging() needed |
 | Stack visual not rebuilt after separation | Known | Open — Semana 7 | Debris vessel gets no renderer |
+| Upper-stage Raptors fire from liftoff (both stages active) | Major | Open — Semana 12 | Stage sequencing: ignite Starship engines only at/after separation |
+| Cross-feed drains Starship tank during first-stage flight | Major | Open — Semana 12 | `PartGraph.ConsumePropellant` cross-feeds across the decoupler; draw from the active stage's tanks only so staging leaves the upper stage fuelled. Found via ascent test: stack stalls at ~77 km apoapsis, upper stage near-dry at separation |
+| No ascent-to-orbit autopilot / circularization | Known | Open — Semana 12 | Build gravity-turn + auto-stage + circularize autopilot (analogue of EDL/maneuver autopilots) |
 
 ---
 
