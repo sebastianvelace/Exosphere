@@ -31,8 +31,13 @@ public class OrbitalElements
     /// </summary>
     public double GetMeanAnomaly(double t, double gm)
     {
-        // Mean motion  n = √(GM / a³)  rad/s
-        double n = System.Math.Sqrt(gm / (SemiMajorAxis * SemiMajorAxis * SemiMajorAxis));
+        // Mean motion  n = √(GM / |a|³)  rad/s.
+        // Para órbitas hiperbólicas (a < 0) se usa |a| para evitar NaN; la propagación
+        // hiperbólica completa no está implementada (ver nota en FromStateVector).
+        double a3 = System.Math.Abs(SemiMajorAxis);
+        a3 = a3 * a3 * a3;
+        if (a3 <= 0.0) return MeanAnomalyAtEpoch;
+        double n = System.Math.Sqrt(gm / a3);
         double M = MeanAnomalyAtEpoch + n * (t - Epoch);
         // Wrap to [0, 2π)
         M %= 2.0 * System.Math.PI;
@@ -45,9 +50,12 @@ public class OrbitalElements
     /// </summary>
     public static double TrueAnomalyFromEccentric(double E, double e)
     {
-        // Standard formula: tan(ν/2) = √((1+e)/(1-e)) · tan(E/2)
+        // Standard formula: tan(ν/2) = √((1+e)/(1-e)) · tan(E/2).
+        // Guard e→1 (parabolic limit) to avoid division by zero / NaN.
+        double denom = 1.0 - e;
+        if (denom < 1e-12) denom = 1e-12;
         double halfE = E * 0.5;
-        double tanHalfNu = System.Math.Sqrt((1.0 + e) / (1.0 - e)) * System.Math.Tan(halfE);
+        double tanHalfNu = System.Math.Sqrt((1.0 + e) / denom) * System.Math.Tan(halfE);
         double nu = 2.0 * System.Math.Atan(tanHalfNu);
         // Wrap to [0, 2π)
         if (nu < 0.0) nu += 2.0 * System.Math.PI;
@@ -91,6 +99,13 @@ public class OrbitalElements
     {
         double r = pos.Magnitude;
         double v = vel.Magnitude;
+
+        // Guard against a degenerate state (coincident with body centre, or GM≤0):
+        // returning a trivial circular element set avoids NaN propagation downstream.
+        if (r < 1e-9 || gm <= 0.0)
+        {
+            return new OrbitalElements { ReferenceBodyId = referenceBodyId, Epoch = epoch };
+        }
 
         // ── Specific angular momentum vector ─────────────────────────────────
         Vector3d h = pos.Cross(vel);   // h = r × v

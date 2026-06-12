@@ -56,8 +56,12 @@ public class PartGraph
     }
 
     // ── Empuje total en espacio local ─────────────────────────────────────
-    public Vector3d GetTotalThrust() =>
-        ActiveEngines.Aggregate(Vector3d.Zero, (sum, e) => sum + e.GetThrustVector());
+    // Overload sin presión: empuje de vacío (compatibilidad).
+    public Vector3d GetTotalThrust() => GetTotalThrust(0.0);
+
+    // Empuje total corregido por presión ambiente (Pa).
+    public Vector3d GetTotalThrust(double ambientPressure) =>
+        ActiveEngines.Aggregate(Vector3d.Zero, (sum, e) => sum + e.GetThrustVector(ambientPressure));
 
     // ── Consumir propelante en todos los motores activos ──────────────────
     // Cross-feed real: los motores extraen combustible de todos los tanques del grafo,
@@ -72,11 +76,14 @@ public class PartGraph
         foreach (var engine in engines)
         {
             var def = engine.Definition;
+            // Isp interpolado por presión: pf=0 (vacío)→IspVac, pf=1 (mar)→IspSL.
             double pf  = System.Math.Clamp(ambientPressure / 101325.0, 0.0, 1.0);
             double isp = def.IspVac + (def.IspSL - def.IspVac) * pf;
             if (isp < 1.0) continue;
 
-            double massFlow = (def.ThrustVac * engine.ThrottleLevel) / (isp * 9.80665);
+            // ṁ = F(p)/(Isp·g₀) con el empuje corregido por presión (coherente con
+            // GetThrustMagnitude), no el empuje de vacío bruto.
+            double massFlow = engine.GetThrustMagnitude(ambientPressure) / (isp * 9.80665);
             var fuelType = def.FuelTypeStr.ToLowerInvariant();
 
             if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel"))

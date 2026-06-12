@@ -56,61 +56,106 @@ public class Vessel
             engine.ThrottleLevel = Throttle;
     }
 
-    // Empuje total en world space (N)
+    // Empuje total en world space (N) — empuje de vacío (compatibilidad).
     public Vector3d ComputeThrust()
     {
         ApplyThrottle();
         return Orientation.Rotate(Parts.GetTotalThrust());
     }
 
-    // Arrastre aerodinámico en world space (N)
-    public Vector3d ComputeDrag(CelestialBody body)
+    // Empuje total en world space (N), corregido por presión ambiente del cuerpo.
+    public Vector3d ComputeThrust(CelestialBody? refBody)
+    {
+        ApplyThrottle();
+        double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+        return Orientation.Rotate(Parts.GetTotalThrust(pressure));
+    }
+
+    // Arrastre aerodinámico en world space (N) — estado actual.
+    public Vector3d ComputeDrag(CelestialBody body) =>
+        ComputeDragAt(Position, Velocity, body);
+
+    // Arrastre evaluado en un estado (pos, vel) arbitrario (para subpasos RK4).
+    public Vector3d ComputeDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
     {
         if (body.Atmosphere == null) return Vector3d.Zero;
-        double alt     = GetAltitude(body);
+        double alt     = body.GetAltitude(pos);
         double density = body.Atmosphere.GetDensity(alt);
         if (density <= 0.0) return Vector3d.Zero;
 
-        var    surfVel = GetSurfaceVelocity(body);
+        // Velocidad relativa a la atmósfera en rotación (resta la velocidad de la
+        // superficie del cuerpo y su traslación), no inercial.
+        var    surfVel = vel - body.Velocity - body.GetSurfaceVelocity(pos);
         double speed   = surfVel.Magnitude;
-        if (speed < 0.001) return Vector3d.Zero;
+        if (speed < 0.001 || double.IsNaN(speed)) return Vector3d.Zero;
 
         // Estimar área de referencia proporcional al número de piezas
         double radius  = System.Math.Max(0.5, System.Math.Sqrt(Parts.Parts.Count * 0.3));
         double area    = System.Math.PI * radius * radius;
-        double cd      = 0.3;
 
-        // Factor de Mach (resistencia transónica)
-        double temp    = density > 0
-            ? 288.15 * (density / body.Atmosphere.SeaLevelDensity)
-            : 288.15;
-        double mach    = speed / System.Math.Sqrt(1.4 * 287.0 * System.Math.Max(1.0, temp));
+        // Cd base: promedio de los coeficientes de arrastre de las piezas (fallback 0.3).
+        double cd = 0.3;
+        if (Parts.Parts.Count > 0)
+        {
+            double cdSum = 0.0;
+            foreach (var p in Parts.Parts) cdSum += p.Definition.DragCoefficient;
+            double avg = cdSum / Parts.Parts.Count;
+            if (avg > 1e-6) cd = avg;
+        }
+
+        // Número de Mach usando la temperatura ISA real del modelo atmosférico,
+        // a = √(γ·R_specific·T), γ=1.4, R_specific=287 J/(kg·K) para aire.
+        double temp    = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
+        double mach    = speed / System.Math.Sqrt(1.4 * 287.0 * temp);
         double machMul = mach < 0.8 ? 1.0
                        : mach < 1.0 ? 1.0 + (mach - 0.8) * 5.0
                        : mach < 1.2 ? 2.0
                        : mach < 5.0 ? 2.0 - (mach - 1.2) * 0.25
                        : 1.0;
 
+        // Arrastre = ½·ρ·v²·Cd·A, opuesto a la velocidad relativa a la atmósfera.
         double drag = 0.5 * density * speed * speed * cd * area * machMul;
         return surfVel.Normalized * (-drag);
     }
 
     // Aceleración gravitacional total de todos los cuerpos (m/s²)
-    public Vector3d ComputeGravity(IEnumerable<CelestialBody> bodies)
+    public Vector3d ComputeGravity(IEnumerable<CelestialBody> bodies) =>
+        ComputeGravityAt(Position, bodies);
+
+    // Suma N-cuerpos evaluada en una posición arbitraria (para subpasos RK4).
+    public Vector3d ComputeGravityAt(Vector3d pos, IEnumerable<CelestialBody> bodies)
     {
         var accel = Vector3d.Zero;
         foreach (var body in bodies)
-            accel = accel + body.GetGravityAt(Position);
+            accel = accel + body.GetGravityAt(pos);
         return accel;
     }
 
-    // Aceleración neta para el integrador RK4 (m/s²)
-    public Vector3d ComputeNetAcceleration(IEnumerable<CelestialBody> bodies, CelestialBody? refBody)
+    // Aceleración neta para el integrador RK4 (m/s²) — estado actual.
+    public Vector3d ComputeNetAcceleration(IEnumerable<CelestialBody> bodies, CelestialBody? refBody) =>
+        ComputeNetAccelerationAt(Position, Velocity, bodies, refBody);
+
+    /// <summary>
+    /// Aceleración neta (gravedad N-cuerpos + empuje + arrastre) evaluada en un
+    /// estado (pos, vel) arbitrario. Esencial para que RK4 muestree las fuerzas en
+    /// los estados intermedios k₂…k₄ en lugar de reutilizar el estado actual del vessel.
+    /// </summary>
+    public Vector3d ComputeNetAccelerationAt(
+        Vector3d pos, Vector3d vel, IEnumerable<CelestialBody> bodies, CelestialBody? refBody)
     {
-        if (TotalMass <= 0.0) return ComputeGravity(bodies);
-        var gravity = ComputeGravity(bodies);
-        var thrust  = ComputeThrust() / TotalMass;
-        var drag    = refBody != null ? ComputeDrag(refBody) / TotalMass : Vector3d.Zero;
+        var gravity = ComputeGravityAt(pos, bodies);
+        if (TotalMass <= 0.0) return gravity;
+
+        // Empuje: dirección fija por la orientación durante el subpaso; magnitud
+        // corregida por la presión a la altitud del estado evaluado.
+        double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
+        ApplyThrottle();
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TotalMass;
+
+        var drag = refBody != null
+            ? ComputeDragAt(pos, vel, refBody) / TotalMass
+            : Vector3d.Zero;
+
         return gravity + thrust + drag;
     }
 

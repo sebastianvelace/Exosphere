@@ -118,7 +118,9 @@ public partial class AtmosphereModel
         if (t <= 0.0) return 0.0;
 
         double p = GetPressure(altitude);
-        return p * MolarMass / (R * t);
+        // Ley de gases ideales: ρ = p·M / (R·T). Guarda contra NaN/negativos.
+        double rho = p * MolarMass / (R * t);
+        return (double.IsNaN(rho) || rho < 0.0) ? 0.0 : rho;
     }
 
     // ── Hydrostatic helpers ──────────────────────────────────────────────────
