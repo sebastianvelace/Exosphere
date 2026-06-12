@@ -44,6 +44,15 @@ public partial class SimulationBridge : Node
         var audio = new AudioManager { Name = "AudioManager" };
         GetParent()?.CallDeferred("add_child", audio);
 
+        // Orbital map panel (toggle with M). Lives under the UI CanvasLayer so it
+        // renders above the 3D world; it owns the autopilot as a child.
+        var uiLayer = GetTree().Root.FindChild("UI", true, false) as CanvasLayer;
+        if (uiLayer != null)
+        {
+            var map = new MapViewController { Name = "MapViewController" };
+            uiLayer.CallDeferred("add_child", map);
+        }
+
         // Create LaunchPadController in the World node
         var worldNode = GetTree().Root.FindChild("World", true, false) as Node3D;
         if (worldNode != null)

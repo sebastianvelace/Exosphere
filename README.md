@@ -1288,7 +1288,7 @@ For synthesis (if .ogg files not available):
 | **AudioManager (synthesized)** | ✅ Done | 9 |
 | **HUD redesign (panels, gauges, phase banner)** | ✅ Done | 9 |
 | **Physics rigor pass (pressure-corrected thrust, true RK4)** | ✅ Done | 9 |
-| **MapViewController + ManeuverPlanner** | ⏳ Semana 10 | — |
+| **MapViewController + ManeuverPlanner + Autopilot** | ✅ Semana 10 | Perifocal 2D map (M), draggable node, dashed projected orbit, ΔV/burn-time, autopilot burn (±0.7%) |
 | **EDL sequence + Mars surface** | ⏳ Semana 11 | — |
 
 ---
@@ -1521,7 +1521,21 @@ var playback = player.GetStreamPlayback() as AudioStreamGeneratorPlayback;
 
 ---
 
-### Semana 10 — Orbital Maneuver Planner
+### Semana 10 — Orbital Maneuver Planner ✅ COMPLETED (2026-06-12)
+
+Implemented directly (the parallel agents lost their uncommitted `/tmp` worktrees to a session-limit interruption, so the work was redone from scratch). Both projects build 0 warnings / 0 errors; map rendering and autopilot execution verified in-engine.
+
+**`scripts/ManeuverPlanner.cs` (NEW):** Shared maneuver model + perifocal orbital geometry, all relative to the dominant body, double precision. Captures the live orbit from a state vector (`SetOrbit`): builds the perifocal basis (p̂ = periapsis dir from the eccentricity vector, q̂ = ŵ×p̂, ŵ = ĥ), semi-latus rectum `p = h²/μ`, eccentricity, semi-major axis, and current true anomaly `ν = atan2(r·q̂, r·p̂)`. Holds one node `{ trueAnomaly, ΔV_prograde, ΔV_normal, ΔV_radial }` and exposes: `PositionAt(ν)`/`VelocityAt(ν)` (conic `r=p/(1+e·cosν)` and `v=√(μ/p)·(−sinν·p̂+(e+cosν)·q̂)`), `BurnBasisAtNode` (live prograde/normal/radial unit vectors), `DeltaVInertial`, `PostBurnState`, and `EstimateBurnTime = ΔV/(thrust/mass)`. Conic-agnostic: open trajectories (e≥1) are sampled up to the asymptote `cos ν∞ = −1/e`.
+
+**`scripts/MapViewController.cs` (NEW):** Bottom-right 460×460 `Control` map panel, toggled with **M**, drawn with a custom `_Draw()` (2D perifocal projection — simpler and more robust than a 3D ortho SubViewport for ellipses/projections). Renders: reference-body disc + SOI ring, the vessel's orbit as a cyan polyline (220-sample conic), Ap/Pe markers, the vessel marker (triangle at live ν), the maneuver node (draggable diamond), and the **projected post-burn orbit as a dashed orange conic** (a temp planner re-derives the orbit from `PostBurnState`, projected into the *original* perifocal frame so both orbits share one coordinate system). Auto-fits scale to the bounding box of all curves. Interaction via `_GuiInput`: left-click/drag on the orbit places/moves the node (pixel→metre→`atan2` inverse transform); mouse wheel adjusts prograde ΔV (×10 with Shift, radial with Alt); ⏎ arms the autopilot, ⌫ clears. Live readout: Ap/Pe (or "HYPERBOLIC ESCAPE"), ΔV breakdown, burn time, and an `[ARMED]` flag.
+
+**`scripts/AutopilotController.cs` (NEW):** Child of the map; executes the planned burn. When armed it re-captures the live orbit each frame, waits until the vessel reaches the node's true anomaly (window or sign-change crossing detection), then snaps orientation so the engine (+Y local) points along the live burn direction (shortest-arc quaternion), zeroes angular velocity, throttles to 1, and accumulates delivered ΔV as `thrust/mass · (delta·TimeScale)` — **time-warp-correct book-keeping** — cutting throttle and clearing the node when the target ΔV is reached. *Verified:* a 120 m/s prograde burn raised orbital speed 9129.5 → 9248.7 m/s (+119.2 m/s, ~0.7% error) then auto-disarmed.
+
+**Wiring:** `SimulationBridge` creates `MapViewController` under the `UI` `CanvasLayer` via deferred `add_child` (it owns the autopilot as a child); `HUDController` controls hint gains `[M] map`.
+
+**Test criteria — all met:** map visible with M ✓ · orbit ellipse rendered ✓ · node added by clicking the orbit ✓ · ΔV + burn time displayed ✓ · autopilot executes the burn (119/120 m/s) ✓ · projected orbit updates as ΔV/node change ✓.
+
+**Original plan (kept for reference):**
 
 **Goal**: Player can plan and execute Trans-Mars Injection (or any interplanetary burn) from the map view.
 
