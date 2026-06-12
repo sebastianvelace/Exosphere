@@ -33,9 +33,40 @@ public class PartGraph
     public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer);
     public double TotalElectricCharge => _parts.Sum(p => p.ElectricCharge);
 
-    public IEnumerable<Part> ActiveEngines =>
-        _parts.Where(p => p.Definition.Category == PartCategory.Engine
-                       && p.IsStagingActive && !p.IsBroken);
+    // Parts belonging to the currently-firing stage: the subtree hanging below the
+    // lowest still-attached decoupler (the side away from the root command section).
+    // With no active decoupler the whole vessel is one stage. Engines only fire — and
+    // only draw propellant — within this set, so a multi-stage stack burns its bottom
+    // stage first and the upper stage stays fuelled until separation (real rockets do
+    // not cross-feed across stage interfaces, nor light all stages at liftoff).
+    public List<Part> CurrentStageParts()
+    {
+        var activeDecouplers = _parts
+            .Where(p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive)
+            .ToList();
+        if (activeDecouplers.Count == 0) return new List<Part>(_parts);
+
+        foreach (var d in activeDecouplers)
+        {
+            var child = GetChildren(d).FirstOrDefault();
+            if (child == null) continue;
+            var farSide = CollectSubtree(child);   // subtree below the decoupler
+            // The bottom stage's subtree contains no further attached decoupler.
+            if (!farSide.Any(p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive))
+                return farSide;
+        }
+        return new List<Part>(_parts);
+    }
+
+    public IEnumerable<Part> ActiveEngines
+    {
+        get
+        {
+            var stage = CurrentStageParts();
+            return stage.Where(p => p.Definition.Category == PartCategory.Engine
+                                 && p.IsStagingActive && !p.IsBroken);
+        }
+    }
 
     // Centro de masa en espacio local del vessel (+Y = arriba, raíz en Y=0)
     public Vector3d CenterOfMass
@@ -63,16 +94,19 @@ public class PartGraph
     public Vector3d GetTotalThrust(double ambientPressure) =>
         ActiveEngines.Aggregate(Vector3d.Zero, (sum, e) => sum + e.GetThrustVector(ambientPressure));
 
-    // ── Consumir propelante en todos los motores activos ──────────────────
-    // Cross-feed real: los motores extraen combustible de todos los tanques del grafo,
-    // no de sí mismos (los motores no tienen capacidad de combustible propia).
+    // ── Consumir propelante de los motores de la etapa activa ─────────────
+    // Cross-feed dentro de la etapa: los motores extraen combustible de los tanques de
+    // su propia etapa (los motores no tienen capacidad propia), pero NO a través de un
+    // desacoplador activo — así la etapa superior conserva su propelante hasta separarse.
     public void ConsumePropellant(double dt, double ambientPressure)
     {
-        var engines = ActiveEngines.ToList();
+        var stage   = CurrentStageParts();
+        var engines = stage.Where(p => p.Definition.Category == PartCategory.Engine
+                                    && p.IsStagingActive && !p.IsBroken).ToList();
         if (engines.Count == 0) return;
 
         // Calcular flujo de masa total de todos los motores activos
-        double totalLFRate = 0, totalOxRate = 0, totalSolidRate = 0, totalMonoRate = 0;
+        double totalLiquidRate = 0, totalSolidRate = 0, totalMonoRate = 0;
         foreach (var engine in engines)
         {
             var def = engine.Definition;
@@ -87,25 +121,26 @@ public class PartGraph
             var fuelType = def.FuelTypeStr.ToLowerInvariant();
 
             if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel"))
-            {
-                totalLFRate += massFlow * (9.0 / 20.0);
-                totalOxRate += massFlow * (11.0 / 20.0);
-            }
+                totalLiquidRate += massFlow;     // se reparte LF/Ox según la carga del tanque
             else if (fuelType.Contains("solid"))
                 totalSolidRate += massFlow;
             else if (fuelType.Contains("mono"))
                 totalMonoRate += massFlow;
         }
 
-        // Consumir de todos los tanques del grafo (cross-feed)
+        // Consumir de los tanques de la etapa activa (cross-feed dentro de la etapa)
         bool flameOut = false;
 
-        if (totalLFRate > 0 || totalOxRate > 0)
+        if (totalLiquidRate > 0)
         {
-            double lfNeeded  = totalLFRate * dt;
-            double oxNeeded  = totalOxRate * dt;
-            double totalLF   = _parts.Sum(p => p.LiquidFuel);
-            double totalOx   = _parts.Sum(p => p.Oxidizer);
+            double totalLF   = stage.Sum(p => p.LiquidFuel);
+            double totalOx   = stage.Sum(p => p.Oxidizer);
+            // Repartir el flujo de masa entre LF y Ox según la proporción cargada, de modo
+            // que ambos se agoten juntos (sin oxidante varado por una mezcla mal calibrada).
+            double inv = totalLF + totalOx;
+            double lfFrac = inv > 1e-9 ? totalLF / inv : 0.45;
+            double lfNeeded = totalLiquidRate * lfFrac * dt;
+            double oxNeeded = totalLiquidRate * (1.0 - lfFrac) * dt;
 
             if (totalLF < lfNeeded || totalOx < oxNeeded)
             {
@@ -114,7 +149,7 @@ public class PartGraph
             else
             {
                 // Drenar proporcionalmente de cada tanque que tenga combustible
-                foreach (var p in _parts)
+                foreach (var p in stage)
                 {
                     if (totalLF > 0) p.LiquidFuel -= lfNeeded * (p.LiquidFuel / totalLF);
                     if (totalOx > 0) p.Oxidizer   -= oxNeeded * (p.Oxidizer   / totalOx);
@@ -125,18 +160,18 @@ public class PartGraph
         if (totalSolidRate > 0)
         {
             double solidNeeded = totalSolidRate * dt;
-            double totalSolid  = _parts.Sum(p => p.SolidFuel);
+            double totalSolid  = stage.Sum(p => p.SolidFuel);
             if (totalSolid < solidNeeded) flameOut = true;
-            else foreach (var p in _parts.Where(p2 => p2.SolidFuel > 0))
+            else foreach (var p in stage.Where(p2 => p2.SolidFuel > 0))
                 p.SolidFuel -= solidNeeded * (p.SolidFuel / totalSolid);
         }
 
         if (totalMonoRate > 0)
         {
             double monoNeeded = totalMonoRate * dt;
-            double totalMono  = _parts.Sum(p => p.Monopropellant);
+            double totalMono  = stage.Sum(p => p.Monopropellant);
             if (totalMono < monoNeeded) flameOut = true;
-            else foreach (var p in _parts.Where(p2 => p2.Monopropellant > 0))
+            else foreach (var p in stage.Where(p2 => p2.Monopropellant > 0))
                 p.Monopropellant -= monoNeeded * (p.Monopropellant / totalMono);
         }
 

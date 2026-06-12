@@ -1692,9 +1692,10 @@ In Semana 6 SH is just abandoned after separation. Semana 11 completes the loop:
 | Starship nosecone too sharp | Known | Open — Semana 7 | SphereMesh hemisphere for rounded nose |
 | SH plumes stay visible after staging | Known | Open — Semana 7 | RebuildAfterStaging() needed |
 | Stack visual not rebuilt after separation | Known | Open — Semana 7 | Debris vessel gets no renderer |
-| Upper-stage Raptors fire from liftoff (both stages active) | Major | Open — Semana 12 | Stage sequencing: ignite Starship engines only at/after separation |
-| Cross-feed drains Starship tank during first-stage flight | Major | Open — Semana 12 | `PartGraph.ConsumePropellant` cross-feeds across the decoupler; draw from the active stage's tanks only so staging leaves the upper stage fuelled. Found via ascent test: stack stalls at ~77 km apoapsis, upper stage near-dry at separation |
-| No ascent-to-orbit autopilot / circularization | Known | Open — Semana 12 | Build gravity-turn + auto-stage + circularize autopilot (analogue of EDL/maneuver autopilots) |
+| Upper-stage Raptors fire from liftoff (both stages active) | Major | Fixed — Semana 12 | `PartGraph.CurrentStageParts()`: only the bottom stage's engines fire (subtree below the lowest attached decoupler) |
+| Cross-feed drains Starship tank during first-stage flight | Major | Fixed — Semana 12 | `ConsumePropellant` now draws only from the active stage's tanks (no cross-feed across an attached decoupler) — staging leaves the upper stage fully fuelled |
+| Oxidizer stranded by 9:11 LF:Ox burn ratio vs 1:2.67 tank load | Major | Fixed — Semana 12 | Consumption splits mass flow by the tanks' *loaded* LF:Ox ratio so both deplete together (SH now burns its full 3300 t, staging at ~110 km instead of ~25 km) |
+| No closed-loop ascent-to-orbit autopilot | Known | Open — Semana 12 | Propulsion is now correct (verified: SH stages high/fast, Starship retains full prop); an open-loop gravity turn can't balance loft vs horizontal build for a TWR-1.06 upper stage. Needs a PEG-style `AscentController` (analogue of EDL/maneuver autopilots) |
 
 ---
 
