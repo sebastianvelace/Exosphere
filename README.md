@@ -1285,7 +1285,9 @@ For synthesis (if .ogg files not available):
 | **SkyController (altitude-based sky)** | ✅ Done | 8 |
 | **PlumeSystem (GPU particles)** | ✅ Done | 8 |
 | **MaxQRingController** | ✅ Done | 8 |
-| **AudioManager** | ⏳ Semana 9 | — |
+| **AudioManager (synthesized)** | ✅ Done | 9 |
+| **HUD redesign (panels, gauges, phase banner)** | ✅ Done | 9 |
+| **Physics rigor pass (pressure-corrected thrust, true RK4)** | ✅ Done | 9 |
 | **MapViewController + ManeuverPlanner** | ⏳ Semana 10 | — |
 | **EDL sequence + Mars surface** | ⏳ Semana 11 | — |
 
@@ -1460,7 +1462,29 @@ For each Raptor engine:
 
 ---
 
-### Semana 9 — Audio and Mission UI
+### Semana 9 — Audio, Mission UI, and Physics Rigor ✅ COMPLETED (2026-06-11)
+
+Delivered by three parallel agents (audio / HUD / physics), each on an isolated worktree, then merged into `main`.
+
+**Audio — `scripts/AudioManager.cs` (NEW):** Fully procedural synthesis (no .ogg assets) via `AudioStreamGenerator` + `AudioStreamGeneratorPlayback`, zero-allocation per-sample `PushFrame` hot path with persistent filter/oscillator/RNG state (seamless buffers, no clicks):
+- Sea-level engine roar: low-pass-filtered noise (~60–400 Hz) + sub-sine + crackle AM; level = `throttle · slMix · 0.85`, `slMix = clamp(ρ/0.05, 0, 1)`.
+- Vacuum engine hiss: high-passed thin noise (>1.2 kHz) with slow breathing AM; level = `throttle · (1−slMix) · 0.55`. Engine voices gated on active engines + throttle.
+- Pad ambient: deep noise swell faded to silence by 80 km (`ambFade = clamp(1 − altKm/80, 0, 1)`).
+- Event one-shots with attack/decay envelopes: `PlayCountdownTick(int)` (440 Hz blip / 880 Hz ignition tone), `PlayLiftoff()`, `PlayStaging()`.
+- Buses created in code (`SFX→Engine3D/UI/Ambient`, `Master→Music`). Wired via `MissionManager` phase hooks (null-safe, no logic changes) and a deferred `add_child` in `SimulationBridge` mirroring `SkyController`.
+
+**HUD — `scripts/HUDController.cs` rework + `scenes/flight/Flight.tscn`:** Loose labels replaced with a container-based (`PanelContainer`/`VBox`/`HBox`) anchored `Control` built in code, so layout is robust, not pixel-hardcoded. **Left panel "VESSEL TELEMETRY"**: altitude, surface speed, mass, color-coded TWR, throttle bar gauge (with FIRING/FLAME-OUT/OFF), fuel bar gauge (green→red under 15%). **Right panel "ORBITAL DATA"**: apoapsis, periapsis, mission time, time-warp. **Top-center phase banner**: large, color-coded per phase, with an 8-dot mission-progress strip. **Center countdown**: large `T-NN` → "LIFTOFF" flash. All keyboard controls preserved.
+
+**Physics rigor — `ExosphereSimulation/` (Part, PartGraph, Vessel, Universe, AtmosphereModel, OrbitalElements):** Real bugs found and fixed, no public-API changes (new overloads only):
+- **Pressure-corrected thrust** `F(p) = F_vac − (p/p₀)(F_vac − F_sl)`, p₀=101325 Pa — previously vacuum thrust was used at all altitudes, ignoring `thrust_sl`. Mass flow ṁ = `F(p)/(Isp·g₀)` now matches produced thrust (was draining at vacuum rate). *Verified in-game:* launch TWR rises 2.52→2.62 during ascent as ambient pressure drops — correct behavior.
+- **True 4th-order RK4**: the integrator closure discarded substep position/velocity and always sampled forces at the stored state (Euler-quality). Added `ComputeNetAccelerationAt/ComputeGravityAt/ComputeDragAt(pos, vel, …)` so gravity, drag, and pressure-corrected thrust are evaluated at each substep.
+- **Gimbal** rewritten (was `offset·sin(offset)` ≈ 0 and ignored `GimbalRange`) → deflection = `offset·GimbalRange`, thrust tilted off +Y by `sin(angle)`.
+- **Mach/sound speed** now uses real ISA temperature `a = √(γRT)` (was a bogus isothermal back-solve); per-part `DragCoefficient` now used instead of a hardcoded 0.3.
+- NaN/divide-by-zero guards added in atmosphere density (ideal gas ρ=pM/RT), orbital-element conversion (r≈0, e→1, hyperbolic mean motion `√(GM/|a|³)`).
+
+**Deferred recommendations (documented, not yet implemented):** genuine hyperbolic/parabolic on-rails propagation (currently stubbed — guards only prevent NaN); an inertia-tensor-based attitude model (control authority is currently mass-independent); a unified lift-capable aerodynamics path with a true cross-sectional reference area (live drag path is `Vessel.ComputeDrag`; `Physics/AerodynamicsModel.cs` helper is not yet wired in).
+
+**Original plan (kept for reference):**
 
 **Goal**: The countdown, launch sequence, and flight have full audio. Mission phases shown clearly.
 
