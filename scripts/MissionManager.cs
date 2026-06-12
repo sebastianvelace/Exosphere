@@ -33,6 +33,7 @@ public partial class MissionManager : Node
 
     private bool _maxQTriggered;
     private bool _mecoTriggered;
+    private int  _lastTickSecond = -1;   // last whole-second countdown beep emitted
 
     public override void _Ready() => Instance = this;
 
@@ -45,6 +46,7 @@ public partial class MissionManager : Node
         IsCountingDown  = true;
         _maxQTriggered  = false;
         _mecoTriggered  = false;
+        _lastTickSecond = -1;
         SetPhase(MissionPhase.COUNTDOWN);
     }
 
@@ -68,6 +70,14 @@ public partial class MissionManager : Node
         if (IsCountingDown)
         {
             CountdownTimer -= delta;
+
+            // Audio: beep once per whole second as the countdown crosses each integer.
+            int sec = (int)System.Math.Ceiling(System.Math.Max(CountdownTimer, 0.0));
+            if (sec != _lastTickSecond)
+            {
+                _lastTickSecond = sec;
+                AudioManager.Instance?.PlayCountdownTick(sec);
+            }
 
             if (CountdownTimer <= 3.0 && Phase == MissionPhase.COUNTDOWN)
             {
@@ -154,6 +164,14 @@ public partial class MissionManager : Node
     private void SetPhase(MissionPhase newPhase)
     {
         Phase = newPhase;
+
+        // Audio cues on phase entry (null-safe; AudioManager may not exist yet).
+        switch (newPhase)
+        {
+            case MissionPhase.LIFTOFF:    AudioManager.Instance?.PlayLiftoff(); break;
+            case MissionPhase.SEPARATION: AudioManager.Instance?.PlayStaging(); break;
+        }
+
         EmitSignal(SignalName.PhaseChanged, newPhase.ToString());
         GD.Print($"[Mission] → {newPhase}");
     }
