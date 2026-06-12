@@ -147,13 +147,17 @@ public class Universe
             // Internal vessel tick (resource drain, SAS, crew EVA, etc.)
             vessel.Tick(dt, refBody);
 
-            // RK4 orbit integration
+            // RK4 orbit integration.
+            // The acceleration is evaluated at each RK4 sub-step's (pos, vel) — NOT the
+            // vessel's stored state — so the higher-order stages k₂…k₄ are meaningful.
+            // (Celestial body positions are held fixed across the sub-step, a standard
+            // simplification given dt ≤ 0.02 s.)
             (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
                 vessel.Position,
                 vessel.Velocity,
                 CurrentTime,
                 dt,
-                (pos, vel, _) => vessel.ComputeNetAcceleration(_bodies, refBody)
+                (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
             );
 
             // ── Structural loads & thermal ────────────────────────────────
@@ -204,7 +208,7 @@ public class Universe
                     vessel.Velocity,
                     CurrentTime,
                     dt,
-                    (pos, vel, _) => vessel.ComputeNetAcceleration(_bodies, refBody)
+                    (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
                 );
             }
             else
