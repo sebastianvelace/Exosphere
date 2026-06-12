@@ -89,19 +89,24 @@ public class Vessel
         double speed   = surfVel.Magnitude;
         if (speed < 0.001 || double.IsNaN(speed)) return Vector3d.Zero;
 
-        // Estimar área de referencia proporcional al número de piezas
-        double radius  = System.Math.Max(0.5, System.Math.Sqrt(Parts.Parts.Count * 0.3));
-        double area    = System.Math.PI * radius * radius;
+        // ── Área de referencia y Cd dependientes de la orientación ──────────────
+        // El vehículo se modela como un cilindro de diámetro de núcleo fijo. El área
+        // presentada y la "romería" (bluffness) dependen del ángulo entre su eje
+        // longitudinal (local +Y) y el flujo de aire: de morro/cola (axial) ofrece un
+        // área frontal pequeña y aerodinámica; de costado (belly-flop) ofrece un área
+        // lateral grande y roma. Esto reproduce la actitud de alta resistencia en la
+        // reentrada de Starship y la baja resistencia del flip-and-burn vertical.
+        const double diameter = 9.0;                                  // núcleo Starship/SH (m)
+        double radius      = diameter * 0.5;
+        double length      = System.Math.Max(diameter, Parts.Parts.Count * 12.0);  // altura del stack
+        double axialArea   = System.Math.PI * radius * radius;        // de morro/cola
+        double lateralArea = diameter * length;                       // de costado (broadside)
 
-        // Cd base: promedio de los coeficientes de arrastre de las piezas (fallback 0.3).
-        double cd = 0.3;
-        if (Parts.Parts.Count > 0)
-        {
-            double cdSum = 0.0;
-            foreach (var p in Parts.Parts) cdSum += p.Definition.DragCoefficient;
-            double avg = cdSum / Parts.Parts.Count;
-            if (avg > 1e-6) cd = avg;
-        }
+        Vector3d axis = Orientation.Rotate(Vector3d.Up);              // eje longitudinal en mundo
+        double cosA = System.Math.Abs(axis.Dot(surfVel.Normalized));  // 1=axial, 0=broadside
+        double aa   = cosA * cosA;
+        double area = lateralArea + (axialArea - lateralArea) * aa;
+        double cd   = 1.5 + (0.6 - 1.5) * aa;                         // romo 1.5 ↔ aerodinámico 0.6
 
         // Número de Mach usando la temperatura ISA real del modelo atmosférico,
         // a = √(γ·R_specific·T), γ=1.4, R_specific=287 J/(kg·K) para aire.

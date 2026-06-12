@@ -184,10 +184,13 @@ public class Universe
             double altitude = refBody.GetAltitude(vessel.Position);
             if (altitude < 0.0)
             {
-                vessel.Velocity = Vector3d.Zero;
                 // Push vessel back above the surface
                 var dir = (vessel.Position - refBody.Position).Normalized;
                 vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
+                // Come to rest relative to the ROTATING surface, not the inertial frame —
+                // setting absolute zero would leave the body's full orbital velocity as
+                // the vessel's apparent surface speed (a spurious ~24 km/s spike).
+                vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
             }
         }
     }

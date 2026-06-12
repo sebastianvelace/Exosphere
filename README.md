@@ -1289,7 +1289,7 @@ For synthesis (if .ogg files not available):
 | **HUD redesign (panels, gauges, phase banner)** | ✅ Done | 9 |
 | **Physics rigor pass (pressure-corrected thrust, true RK4)** | ✅ Done | 9 |
 | **MapViewController + ManeuverPlanner + Autopilot** | ✅ Semana 10 | Perifocal 2D map (M), draggable node, dashed projected orbit, ΔV/burn-time, autopilot burn (±0.7%) |
-| **EDL sequence + Mars surface** | ⏳ Semana 11 | — |
+| **EDL sequence + Mars surface** | ✅ Semana 11 | Auto Mars EDL (belly-flop → flip → suicide burn → soft landing −0.1 m/s), EDL HUD (radar altimeter, plasma, g-force), Mars sky/terrain, orientation-dependent drag |
 
 ---
 
@@ -1578,7 +1578,25 @@ Autopilot execution:
 
 ---
 
-### Semana 11 — Mars EDL and Planetary Surfaces
+### Semana 11 — Mars EDL and Planetary Surfaces ✅ COMPLETED (2026-06-12)
+
+Implemented and verified in-engine: a full automatic Mars Entry-Descent-Landing flown end to end (70 km entry → belly-flop → flip-and-burn → soft touchdown at **−0.1 m/s**, LANDED, simulation frozen), with a dedicated EDL HUD, Mars sky/terrain, and an orientation-dependent aerodynamics overhaul. Both projects build 0 warnings / 0 errors.
+
+**`scripts/EDLController.cs` (NEW):** A `Control` overlay + descent director, singleton, that arms automatically when the active vessel descends fast (vUp < −20, surface speed > 1200 m/s) into an atmospheric body. State machine `ENTRY → PEAK HEATING → AERO DESCENT → RETRO BURN → FINAL DESCENT → TOUCHDOWN`, driven by a **convective-heat proxy** (`ρ·v³`) for the entry/peak transitions and a **physics ignition gate** that lights the suicide burn the moment the (vertical-thrust-corrected) stopping distance is reached. Two-attitude autopilot: a **belly-flop** in the aero phases (long axis broadside to the airflow for max drag, heat-shield windward) then a **flip** so the engines point retrograde for the burn. The descent uses a **total-velocity suicide-burn law** — it commands the deceleration that brings the *whole* velocity vector (horizontal + vertical) to ~zero exactly at the ground along the slant path (`a_req = v²/2R`, `R ≈ alt·v/vDown`), so the burn kills cross-range and descent together instead of wasting propellant hovering — then a gentle (~3 m/s) vertical final approach. Legs deploy at 500 m; touchdown clamps the vessel to the surface and sets `MissionPhase.LANDED`. Drew the **EDL HUD**: plasma vignette during heating, a 0–5000 m radar altimeter, colour-coded vertical/horizontal speed and g-force, and a phase banner. *Verified:* lands with ~59 t of a 150 t reserve remaining, standing upright on its legs.
+
+**Orientation-dependent aerodynamics (`ExosphereSimulation/Vessel.cs`):** Replaced the part-count-proportional reference area (which gave a 9 m Starship only ~4 m² — drag was ~50× too weak) with a physically-scaled cylinder model: the presented area and Cd interpolate by the angle between the vehicle's long axis and the airflow — small streamlined frontal area (~63 m², Cd 0.6) nose/tail-on, large bluff lateral area (~450 m², Cd 1.5) broadside. This reproduces Starship's high-drag entry attitude *and* the low-drag flip-and-burn, and lets the thin Mars atmosphere actually bite during entry. (At Earth max-Q this is still <3 % of stack thrust, so ascent is unaffected.)
+
+**`scripts/SkyController.cs` (MODIFIED):** Now follows `GetDominantBody`, with a Mars palette (butterscotch zenith, dusty-orange horizon, rust ground, warm low ambient, smaller/dimmer sun) selected by body id, blended to the space profile by altitude as before.
+
+**`scripts/MarsTerrainController.cs` (NEW):** A `Node3D` that builds a 96×96 SurfaceTool patch once (two-octave FastNoiseLite, elevation-tinted rust vertex colours) and anchors it to the surface point under the vessel, visible only over Mars below 12 km — the planetary analogue of the Earth launch pad.
+
+**Sim robustness:** Hardened the surface-impact handler in `Universe.cs` to come to rest relative to the *rotating* surface (previously zeroing absolute velocity left the body's full ~24 km/s orbital velocity as the apparent surface speed — a spurious spike that also kicked landed vessels back up). Fixed the HUD "SURF SPEED" readout to use true surface-relative velocity (reads 0 when landed).
+
+**Wiring:** `SimulationBridge` adds `EDLController` under the `UI` `CanvasLayer` and `MarsTerrainController` under `World`; `HUDController` gains EDL phase colours and the `[M] map` hint.
+
+**Test criteria — met:** Mars surface visible at low altitude ✓ · reentry plasma vignette during EDL ✓ · belly-flop aero attitude during descent ✓ · retrofire nulls vertical speed ✓ · legs deploy and vessel lands softly (−0.1 m/s) ✓ · LANDED freezes the simulation ✓. (Super Heavy boostback deferred to a later pass — EDL was prioritised as the headline feature.)
+
+**Original plan (kept for reference):**
 
 **Goal**: Land on Mars. See red terrain. Experience real EDL.
 

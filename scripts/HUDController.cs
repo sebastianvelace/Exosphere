@@ -299,7 +299,9 @@ public partial class HUDController : Control
 
         var refBody = universe.GetDominantBody(vessel.Position);
         double alt   = vessel.GetAltitude(refBody);
-        double speed = (vessel.Velocity - refBody.Velocity).Magnitude;
+        // True speed relative to the rotating surface (reads 0 when landed), not merely
+        // relative to the body's orbital motion.
+        double speed = vessel.GetSurfaceVelocity(refBody).Magnitude;
 
         // ── Left telemetry ─────────────────────────────────────────────────
         _altValue.Text   = FormatDistance(alt);
@@ -476,6 +478,11 @@ public partial class HUDController : Control
         MissionPhase.ASCENT_SHIP => new Color(0.55f, 0.80f, 1.00f),
         MissionPhase.ORBIT       => new Color(0.30f, 0.95f, 1.00f),
         MissionPhase.COAST       => new Color(0.45f, 0.90f, 1.00f),
+        MissionPhase.ENTRY        => new Color(1.00f, 0.60f, 0.30f),
+        MissionPhase.PEAK_HEATING => new Color(1.00f, 0.35f, 0.20f),
+        MissionPhase.AERO_DESCENT => new Color(1.00f, 0.78f, 0.40f),
+        MissionPhase.RETRO_BURN   => new Color(0.50f, 0.85f, 1.00f),
+        MissionPhase.FINAL_DESCENT=> new Color(0.60f, 0.90f, 1.00f),
         MissionPhase.LANDED      => new Color(0.45f, 1.00f, 0.60f),
         _ => new Color(0.90f, 0.90f, 0.90f),
     };

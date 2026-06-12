@@ -16,6 +16,12 @@ public enum MissionPhase
     ASCENT_SHIP,
     ORBIT,
     COAST,
+    // ── Entry, Descent & Landing (driven by EDLController) ──
+    ENTRY,
+    PEAK_HEATING,
+    AERO_DESCENT,
+    RETRO_BURN,
+    FINAL_DESCENT,
     LANDED,
 }
 
@@ -56,6 +62,14 @@ public partial class MissionManager : Node
         if (Phase == MissionPhase.MECO)
             SetPhase(MissionPhase.SEPARATION);
     }
+
+    /// Allows the EDLController to drive entry/descent/landing phases.
+    public void EnterPhase(MissionPhase p) => SetPhase(p);
+
+    /// True once an interplanetary/descent profile has begun — pauses ascent logic.
+    public bool InDescent => Phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
+        or MissionPhase.AERO_DESCENT or MissionPhase.RETRO_BURN
+        or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED;
 
     // ── Process ───────────────────────────────────────────────────────────
 

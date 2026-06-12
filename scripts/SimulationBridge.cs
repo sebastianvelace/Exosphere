@@ -51,6 +51,9 @@ public partial class SimulationBridge : Node
         {
             var map = new MapViewController { Name = "MapViewController" };
             uiLayer.CallDeferred("add_child", map);
+
+            var edl = new EDLController { Name = "EDLController" };
+            uiLayer.CallDeferred("add_child", edl);
         }
 
         // Create LaunchPadController in the World node
@@ -60,6 +63,9 @@ public partial class SimulationBridge : Node
             _launchPad = new LaunchPadController();
             _launchPad.Name = "LaunchPadController";
             worldNode.CallDeferred("add_child", _launchPad);
+
+            var marsTerrain = new MarsTerrainController { Name = "MarsTerrainController" };
+            worldNode.CallDeferred("add_child", marsTerrain);
         }
 
         SpawnStarshipStack(dataPath);
