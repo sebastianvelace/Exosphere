@@ -3,66 +3,281 @@ namespace Exosphere.Game;
 using Godot;
 using System.Linq;
 
-public partial class HUDController : Node
+public partial class HUDController : Control
 {
-    // Nodos de la UI (asignados en el editor o buscados por nombre)
-    [Export] public NodePath AltitudeLabelPath  { get; set; } = "";
-    [Export] public NodePath SpeedLabelPath     { get; set; } = "";
-    [Export] public NodePath ApoapsisLabelPath  { get; set; } = "";
-    [Export] public NodePath PeriapsisLabelPath { get; set; } = "";
-    [Export] public NodePath ThrottleLabelPath  { get; set; } = "";
-    [Export] public NodePath FuelLabelPath      { get; set; } = "";
-    [Export] public NodePath TimeLabelPath      { get; set; } = "";
-    [Export] public NodePath WarpLabelPath      { get; set; } = "";
-    [Export] public NodePath MassLabelPath      { get; set; } = "";
+    // ── Palette ─────────────────────────────────────────────────────────────
+    private static readonly Color PanelBg     = new(0.04f, 0.06f, 0.09f, 0.55f);
+    private static readonly Color PanelBorder = new(0.35f, 0.65f, 0.95f, 0.55f);
+    private static readonly Color LabelDim    = new(0.62f, 0.70f, 0.80f, 1f);
+    private static readonly Color ValueBright = new(0.92f, 0.96f, 1.00f, 1f);
+    private static readonly Color Accent      = new(0.45f, 0.80f, 1.00f, 1f);
+    private static readonly Color GaugeTrack  = new(0.12f, 0.16f, 0.22f, 0.90f);
+    private static readonly Color ThrottleCol = new(1.00f, 0.62f, 0.15f, 1f);
+    private static readonly Color FuelCol     = new(0.30f, 0.85f, 0.55f, 1f);
+    private static readonly Color FuelLowCol  = new(0.95f, 0.40f, 0.30f, 1f);
+    private static readonly Color GreenTwr    = new(0.30f, 1.00f, 0.45f, 1f);
+    private static readonly Color RedTwr      = new(1.00f, 0.42f, 0.32f, 1f);
 
-    private Label? _altLabel, _speedLabel, _apLabel, _peLabel,
-                   _throttleLabel, _fuelLabel, _timeLabel, _warpLabel, _massLabel;
+    // ── Value labels (left telemetry) ───────────────────────────────────────
+    private Label _altValue   = null!;
+    private Label _speedValue = null!;
+    private Label _throttleValue = null!;
+    private Label _fuelValue  = null!;
+    private Label _massValue   = null!;
+    private Label _twrValue    = null!;
+    private ColorRect _throttleFill = null!;
+    private ColorRect _fuelFill     = null!;
+    private float _throttleTrackW;
+    private float _fuelTrackW;
 
-    // Dynamically created labels
-    private Label? _phaseLabel;
-    private Label? _twrLabel;
-    private Label? _countdownLabel;
+    // ── Value labels (right orbital) ────────────────────────────────────────
+    private Label _apValue   = null!;
+    private Label _peValue   = null!;
+    private Label _timeValue = null!;
+    private Label _warpValue = null!;
+
+    // ── Phase banner / progress / countdown ─────────────────────────────────
+    private Label _phaseLabel  = null!;
+    private HBoxContainer _phaseTrack = null!;
+    private readonly System.Collections.Generic.List<ColorRect> _phaseDots = new();
+    private Label _countdownLabel = null!;
+
+    // Phases shown on the progress strip (the main flight sequence).
+    private static readonly MissionPhase[] PhaseSequence =
+    {
+        MissionPhase.COUNTDOWN, MissionPhase.LIFTOFF, MissionPhase.ASCENT_SH,
+        MissionPhase.MAX_Q, MissionPhase.MECO, MissionPhase.SEPARATION,
+        MissionPhase.ASCENT_SHIP, MissionPhase.ORBIT,
+    };
 
     public override void _Ready()
     {
-        _altLabel      = GetNodeOrNull<Label>(AltitudeLabelPath);
-        _speedLabel    = GetNodeOrNull<Label>(SpeedLabelPath);
-        _apLabel       = GetNodeOrNull<Label>(ApoapsisLabelPath);
-        _peLabel       = GetNodeOrNull<Label>(PeriapsisLabelPath);
-        _throttleLabel = GetNodeOrNull<Label>(ThrottleLabelPath);
-        _fuelLabel     = GetNodeOrNull<Label>(FuelLabelPath);
-        _timeLabel     = GetNodeOrNull<Label>(TimeLabelPath);
-        _warpLabel     = GetNodeOrNull<Label>(WarpLabelPath);
-        _massLabel     = GetNodeOrNull<Label>(MassLabelPath);
+        BuildLeftPanel();
+        BuildRightPanel();
+        BuildPhaseBanner();
+        BuildCountdown();
+        BuildControlsHint();
+    }
 
-        // Mission phase label (top-centre)
-        _phaseLabel = MakeLabel(text: "PRE-LAUNCH", x: 760, y: 16, size: 16);
+    // ── Panel construction ──────────────────────────────────────────────────
+
+    private void BuildLeftPanel()
+    {
+        var panel = MakePanel();
+        panel.OffsetLeft = 18; panel.OffsetTop = 18;
+        AddChild(panel);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 7);
+        panel.AddChild(vbox);
+
+        vbox.AddChild(MakeHeader("VESSEL TELEMETRY"));
+
+        _altValue      = AddRow(vbox, "ALTITUDE", "---");
+        _speedValue    = AddRow(vbox, "SURF SPEED", "---");
+        _massValue     = AddRow(vbox, "MASS", "---");
+        _twrValue      = AddRow(vbox, "TWR", "---");
+
+        // Throttle gauge
+        vbox.AddChild(MakeGaugeLabel("THROTTLE"));
+        (_throttleFill, _throttleValue, _throttleTrackW) = AddGauge(vbox, ThrottleCol);
+
+        // Fuel gauge
+        vbox.AddChild(MakeGaugeLabel("FUEL"));
+        (_fuelFill, _fuelValue, _fuelTrackW) = AddGauge(vbox, FuelCol);
+    }
+
+    private void BuildRightPanel()
+    {
+        var panel = MakePanel();
+        panel.SetAnchorsPreset(LayoutPreset.TopRight);
+        panel.GrowHorizontal = GrowDirection.Begin;
+        panel.OffsetRight = -18; panel.OffsetTop = 18;
+        AddChild(panel);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 7);
+        panel.AddChild(vbox);
+
+        vbox.AddChild(MakeHeader("ORBITAL DATA"));
+        _apValue   = AddRow(vbox, "APOAPSIS", "---");
+        _peValue   = AddRow(vbox, "PERIAPSIS", "---");
+        _timeValue = AddRow(vbox, "MISSION TIME", "T+00:00:00");
+        _warpValue = AddRow(vbox, "TIME WARP", "Real Time");
+    }
+
+    private void BuildPhaseBanner()
+    {
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(LayoutPreset.TopWide);
+        center.OffsetTop = 14;
+        center.MouseFilter = MouseFilterEnum.Ignore;
+        AddChild(center);
+
+        var vbox = new VBoxContainer();
+        vbox.Alignment = BoxContainer.AlignmentMode.Center;
+        vbox.AddThemeConstantOverride("separation", 6);
+        center.AddChild(vbox);
+
+        _phaseLabel = new Label { Text = "PRE-LAUNCH" };
         _phaseLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        _phaseLabel.CustomMinimumSize = new Vector2(400, 30);
-        _phaseLabel.AddThemeColorOverride("font_color", new Color(0.9f, 0.8f, 0.2f));
-        AddChild(_phaseLabel);
+        _phaseLabel.AddThemeFontSizeOverride("font_size", 30);
+        _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(MissionPhase.PRE_LAUNCH));
+        _phaseLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
+        _phaseLabel.AddThemeConstantOverride("outline_size", 6);
+        vbox.AddChild(_phaseLabel);
 
-        // TWR label (right column)
-        _twrLabel = MakeLabel(text: "TWR: ---", x: 1550, y: 16, size: 14);
-        AddChild(_twrLabel);
+        // Mission progress strip
+        _phaseTrack = new HBoxContainer();
+        _phaseTrack.Alignment = BoxContainer.AlignmentMode.Center;
+        _phaseTrack.AddThemeConstantOverride("separation", 6);
+        vbox.AddChild(_phaseTrack);
+        foreach (var _ in PhaseSequence)
+        {
+            var dot = new ColorRect
+            {
+                CustomMinimumSize = new Vector2(34, 4),
+                Color = GaugeTrack,
+            };
+            _phaseDots.Add(dot);
+            _phaseTrack.AddChild(dot);
+        }
+    }
 
-        // Countdown label (big, centre) — hidden until countdown starts
-        _countdownLabel = MakeLabel(text: "", x: 860, y: 460, size: 48);
+    private void BuildCountdown()
+    {
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(LayoutPreset.Center);
+        center.OffsetTop = -120;
+        center.MouseFilter = MouseFilterEnum.Ignore;
+        AddChild(center);
+
+        _countdownLabel = new Label { Text = "" };
         _countdownLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        _countdownLabel.CustomMinimumSize = new Vector2(200, 60);
-        _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.3f, 0.1f));
+        _countdownLabel.AddThemeFontSizeOverride("font_size", 80);
+        _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.2f));
+        _countdownLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.9f));
+        _countdownLabel.AddThemeConstantOverride("outline_size", 10);
         _countdownLabel.Visible = false;
-        AddChild(_countdownLabel);
+        center.AddChild(_countdownLabel);
+    }
 
-        // Controls hint
-        var hint = new Label();
-        hint.Text = "[Z/X] throttle  [W/S] pitch  [A/D] yaw  [Q/E] roll  [T] SAS  [,/.] warp  [Space] stage  [L] launch  [C] camera";
-        hint.Position = new Vector2(10, 940);
-        hint.AddThemeColorOverride("font_color", new Color(0.55f, 0.55f, 0.55f));
-        hint.AddThemeFontSizeOverride("font_size", 13);
+    private void BuildControlsHint()
+    {
+        var hint = new Label
+        {
+            Text = "[Z/X] throttle   [W/S] pitch   [A/D] yaw   [Q/E] roll   [T] SAS   " +
+                   "[,/.] warp   [Space] stage   [L] launch   [C] camera",
+        };
+        hint.SetAnchorsPreset(LayoutPreset.BottomLeft);
+        hint.GrowVertical = GrowDirection.Begin;
+        hint.OffsetLeft = 18; hint.OffsetBottom = -12;
+        hint.AddThemeColorOverride("font_color", new Color(0.55f, 0.60f, 0.66f, 0.85f));
+        hint.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.7f));
+        hint.AddThemeConstantOverride("outline_size", 3);
+        hint.AddThemeFontSizeOverride("font_size", 12);
         AddChild(hint);
     }
+
+    // ── Widget factories ────────────────────────────────────────────────────
+
+    private static PanelContainer MakePanel()
+    {
+        var sb = new StyleBoxFlat
+        {
+            BgColor = PanelBg,
+            BorderColor = PanelBorder,
+            ContentMarginLeft = 14, ContentMarginRight = 14,
+            ContentMarginTop = 10, ContentMarginBottom = 12,
+        };
+        sb.SetBorderWidthAll(1);
+        sb.SetCornerRadiusAll(8);
+        var panel = new PanelContainer();
+        panel.AddThemeStyleboxOverride("panel", sb);
+        panel.CustomMinimumSize = new Vector2(290, 0);
+        panel.MouseFilter = MouseFilterEnum.Ignore;
+        return panel;
+    }
+
+    private static Label MakeHeader(string text)
+    {
+        var lbl = new Label { Text = text };
+        lbl.AddThemeFontSizeOverride("font_size", 13);
+        lbl.AddThemeColorOverride("font_color", Accent);
+        return lbl;
+    }
+
+    private static Label MakeGaugeLabel(string text)
+    {
+        var lbl = new Label { Text = text };
+        lbl.AddThemeFontSizeOverride("font_size", 12);
+        lbl.AddThemeColorOverride("font_color", LabelDim);
+        return lbl;
+    }
+
+    // A "LABEL ............ value" row using an HBox with a spacer.
+    private static Label AddRow(VBoxContainer parent, string caption, string initial)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+
+        var cap = new Label { Text = caption };
+        cap.AddThemeFontSizeOverride("font_size", 14);
+        cap.AddThemeColorOverride("font_color", LabelDim);
+        cap.CustomMinimumSize = new Vector2(125, 0);
+        row.AddChild(cap);
+
+        var val = new Label { Text = initial };
+        val.AddThemeFontSizeOverride("font_size", 16);
+        val.AddThemeColorOverride("font_color", ValueBright);
+        val.HorizontalAlignment = HorizontalAlignment.Right;
+        val.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        row.AddChild(val);
+
+        parent.AddChild(row);
+        return val;
+    }
+
+    // Horizontal bar gauge: a track ColorRect with a fill ColorRect overlaid,
+    // plus a right-aligned numeric overlay. Returns (fill, valueLabel, trackWidth).
+    private static (ColorRect fill, Label value, float trackWidth) AddGauge(
+        VBoxContainer parent, Color fillColor)
+    {
+        const float TrackW = 262f, TrackH = 18f;
+
+        var track = new ColorRect
+        {
+            CustomMinimumSize = new Vector2(TrackW, TrackH),
+            Color = GaugeTrack,
+        };
+        track.MouseFilter = MouseFilterEnum.Ignore;
+
+        var fill = new ColorRect
+        {
+            Color = fillColor,
+            Size = new Vector2(0, TrackH),
+            Position = Vector2.Zero,
+        };
+        fill.MouseFilter = MouseFilterEnum.Ignore;
+        track.AddChild(fill);
+
+        var value = new Label { Text = "0%" };
+        value.SetAnchorsPreset(LayoutPreset.FullRect);
+        value.HorizontalAlignment = HorizontalAlignment.Right;
+        value.VerticalAlignment = VerticalAlignment.Center;
+        value.AddThemeFontSizeOverride("font_size", 12);
+        value.AddThemeColorOverride("font_color", ValueBright);
+        value.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.8f));
+        value.AddThemeConstantOverride("outline_size", 3);
+        value.OffsetLeft = 6; value.OffsetRight = -6;
+        value.MouseFilter = MouseFilterEnum.Ignore;
+        track.AddChild(value);
+
+        parent.AddChild(track);
+        return (fill, value, TrackW);
+    }
+
+    // ── Per-frame update ────────────────────────────────────────────────────
 
     public override void _Process(double delta)
     {
@@ -86,78 +301,122 @@ public partial class HUDController : Node
         double alt   = vessel.GetAltitude(refBody);
         double speed = (vessel.Velocity - refBody.Velocity).Magnitude;
 
-        // ── Standard HUD labels ────────────────────────────────────────────
-        SetLabel(_altLabel, FormatDistance(alt));
-        SetLabel(_speedLabel, $"{speed:F1} m/s");
+        // ── Left telemetry ─────────────────────────────────────────────────
+        _altValue.Text   = FormatDistance(alt);
+        _speedValue.Text = $"{speed:F1} m/s";
+        _massValue.Text  = $"{vessel.TotalMass / 1000.0:F1} t";
 
+        // Throttle gauge
+        bool enginesActive = vessel.Parts.ActiveEngines.Any();
+        double thr = vessel.Throttle;
+        string engStatus = thr > 0.01 ? (enginesActive ? "FIRING" : "FLAME-OUT") : "OFF";
+        _throttleValue.Text = $"{thr * 100:F0}%  {engStatus}";
+        _throttleFill.Size = new Vector2(_throttleTrackW * (float)System.Math.Clamp(thr, 0, 1), 18);
+        _throttleFill.Color = (thr > 0.01 && !enginesActive) ? FuelLowCol : ThrottleCol;
+
+        // Fuel gauge (fraction of capacity)
+        double fuel = vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer;
+        double fuelCap = vessel.Parts.Parts.Sum(
+            p => p.Definition.FuelCapacityLF + p.Definition.FuelCapacityOx);
+        double fuelFrac = fuelCap > 0 ? fuel / fuelCap : 0;
+        _fuelValue.Text = $"{fuel / 1000.0:F1} t";
+        _fuelFill.Size  = new Vector2(_fuelTrackW * (float)System.Math.Clamp(fuelFrac, 0, 1), 18);
+        _fuelFill.Color = fuelFrac < 0.15 ? FuelLowCol : FuelCol;
+
+        // TWR
+        if (vessel.TotalMass > 0)
+        {
+            double surfG = refBody.GetSurfaceGravity();
+            double thrust = 0;
+            foreach (var en in vessel.Parts.ActiveEngines)
+                thrust += en.Definition.ThrustVac * en.ThrottleLevel;
+            double twr = thrust / (vessel.TotalMass * surfG);
+            if (thr > 0.01)
+            {
+                _twrValue.Text = $"{twr:F2}";
+                _twrValue.AddThemeColorOverride("font_color", twr >= 1.0 ? GreenTwr : RedTwr);
+            }
+            else
+            {
+                _twrValue.Text = "---";
+                _twrValue.AddThemeColorOverride("font_color", ValueBright);
+            }
+        }
+
+        // ── Right orbital data ─────────────────────────────────────────────
         try
         {
             var relPos = vessel.Position - refBody.Position;
             var relVel = vessel.Velocity - refBody.Velocity;
             var el = Exosphere.Simulation.OrbitalElements.FromStateVector(
                 relPos, relVel, refBody.GM, refBody.Id, universe.CurrentTime);
-            SetLabel(_apLabel, FormatDistance(el.Apoapsis  - refBody.Radius));
-            SetLabel(_peLabel, FormatDistance(el.Periapsis - refBody.Radius));
+            _apValue.Text = FormatDistance(el.Apoapsis  - refBody.Radius);
+            _peValue.Text = FormatDistance(el.Periapsis - refBody.Radius);
         }
         catch
         {
-            SetLabel(_apLabel, "---");
-            SetLabel(_peLabel, "---");
+            _apValue.Text = "---";
+            _peValue.Text = "---";
         }
 
-        bool enginesActive = vessel.Parts.ActiveEngines.Any();
-        string engStatus   = vessel.Throttle > 0.01
-            ? (enginesActive ? "FIRING" : "FLAME-OUT")
-            : "OFF";
-        SetLabel(_throttleLabel, $"THR {vessel.Throttle * 100:F0}%  [{engStatus}]");
-        if (_throttleLabel != null)
-            _throttleLabel.Modulate = vessel.Throttle > 0.01 && enginesActive
-                ? new Color(1f, 0.6f, 0.1f) : new Color(1f, 1f, 1f);
+        _timeValue.Text = FormatMissionTime(universe.CurrentTime);
 
-        double fuel = vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer;
-        SetLabel(_fuelLabel, $"{fuel / 1000.0:F1} t");
-        SetLabel(_massLabel, $"{vessel.TotalMass / 1000.0:F1} t");
-        SetLabel(_timeLabel, FormatMissionTime(universe.CurrentTime));
+        double ts = universe.TimeScale;
+        _warpValue.Text = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
+        _warpValue.AddThemeColorOverride("font_color", ts > 1.0 ? Accent : ValueBright);
 
-        if (_warpLabel != null)
+        // ── Mission phase banner + progress ────────────────────────────────
+        if (mission != null)
         {
-            double ts = universe.TimeScale;
-            _warpLabel.Text     = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
-            _warpLabel.Modulate = ts > 1.0 ? new Color(0.4f, 1f, 1f) : new Color(1f, 1f, 1f);
-        }
+            _phaseLabel.Text = FormatPhase(mission.Phase);
+            _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(mission.Phase));
+            UpdatePhaseTrack(mission.Phase);
 
-        // ── TWR label ──────────────────────────────────────────────────────
-        if (_twrLabel != null && vessel.TotalMass > 0)
-        {
-            double surfG = refBody.GetSurfaceGravity();
-            double thrust = 0;
-            foreach (var e in vessel.Parts.ActiveEngines)
-                thrust += e.Definition.ThrustVac * e.ThrottleLevel;
-            double twr = thrust / (vessel.TotalMass * surfG);
-            _twrLabel.Text     = vessel.Throttle > 0.01 ? $"TWR  {twr:F2}" : "TWR  ---";
-            _twrLabel.Modulate = twr >= 1.0 ? new Color(0.3f, 1f, 0.4f) : new Color(1f, 0.4f, 0.3f);
-        }
-
-        // ── Mission phase label ────────────────────────────────────────────
-        if (_phaseLabel != null && mission != null)
-        {
-            _phaseLabel.Text = mission.Phase.ToString().Replace("_", " ");
-        }
-
-        // ── Countdown display ──────────────────────────────────────────────
-        if (_countdownLabel != null && mission != null)
-        {
+            // Countdown
             bool show = mission.Phase is MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
-            _countdownLabel.Visible = show;
+            bool liftoffFlash = mission.Phase is MissionPhase.LIFTOFF
+                && mission.CountdownTimer <= 0.0;
             if (show)
             {
+                _countdownLabel.Visible = true;
                 int secs = (int)System.Math.Ceiling(mission.CountdownTimer);
-                _countdownLabel.Text = secs > 0 ? $"T-{secs:D2}" : "LIFTOFF";
+                if (secs > 0)
+                {
+                    _countdownLabel.Text = $"T- {secs:D2}";
+                    _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.2f));
+                }
+                else
+                {
+                    _countdownLabel.Text = "LIFTOFF";
+                    _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.55f, 0.1f));
+                }
+            }
+            else
+            {
+                _countdownLabel.Visible = false;
             }
         }
     }
 
-    // ── Keyboard input ────────────────────────────────────────────────────
+    private void UpdatePhaseTrack(MissionPhase current)
+    {
+        int currentIdx = System.Array.IndexOf(PhaseSequence, current);
+        // IGNITION belongs to the countdown bucket on the strip.
+        if (currentIdx < 0 && current == MissionPhase.IGNITION) currentIdx = 0;
+        for (int i = 0; i < _phaseDots.Count; i++)
+        {
+            if (currentIdx < 0)
+                _phaseDots[i].Color = GaugeTrack;                 // pre-launch: all dim
+            else if (i < currentIdx)
+                _phaseDots[i].Color = new Color(Accent, 0.45f);   // completed
+            else if (i == currentIdx)
+                _phaseDots[i].Color = PhaseColor(current);        // active
+            else
+                _phaseDots[i].Color = GaugeTrack;                 // upcoming
+        }
+    }
+
+    // ── Keyboard input (unchanged) ──────────────────────────────────────────
     public override void _UnhandledInput(InputEvent @event)
     {
         var bridge = SimulationBridge.Instance;
@@ -192,17 +451,34 @@ public partial class HUDController : Node
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    // ── Formatting helpers ──────────────────────────────────────────────────
 
-    private static Label MakeLabel(string text, int x, int y, int size)
+    private static string FormatPhase(MissionPhase phase) => phase switch
     {
-        var lbl = new Label { Text = text };
-        lbl.Position = new Vector2(x, y);
-        lbl.AddThemeFontSizeOverride("font_size", size);
-        return lbl;
-    }
+        MissionPhase.PRE_LAUNCH  => "PRE-LAUNCH",
+        MissionPhase.ASCENT_SH   => "ASCENT · SUPER HEAVY",
+        MissionPhase.MAX_Q       => "MAX-Q",
+        MissionPhase.MECO        => "MECO",
+        MissionPhase.ASCENT_SHIP => "ASCENT · STARSHIP",
+        _ => phase.ToString().Replace("_", " "),
+    };
 
-    private static void SetLabel(Label? label, string text) { if (label != null) label.Text = text; }
+    private static Color PhaseColor(MissionPhase phase) => phase switch
+    {
+        MissionPhase.PRE_LAUNCH  => new Color(0.70f, 0.78f, 0.88f),
+        MissionPhase.COUNTDOWN   => new Color(1.00f, 0.80f, 0.20f),
+        MissionPhase.IGNITION    => new Color(1.00f, 0.65f, 0.15f),
+        MissionPhase.LIFTOFF     => new Color(1.00f, 0.55f, 0.12f),
+        MissionPhase.ASCENT_SH   => new Color(1.00f, 0.45f, 0.20f),
+        MissionPhase.MAX_Q       => new Color(1.00f, 0.30f, 0.25f),
+        MissionPhase.MECO        => new Color(1.00f, 0.70f, 0.30f),
+        MissionPhase.SEPARATION  => new Color(0.85f, 0.70f, 1.00f),
+        MissionPhase.ASCENT_SHIP => new Color(0.55f, 0.80f, 1.00f),
+        MissionPhase.ORBIT       => new Color(0.30f, 0.95f, 1.00f),
+        MissionPhase.COAST       => new Color(0.45f, 0.90f, 1.00f),
+        MissionPhase.LANDED      => new Color(0.45f, 1.00f, 0.60f),
+        _ => new Color(0.90f, 0.90f, 0.90f),
+    };
 
     private static string FormatDistance(double meters)
     {

@@ -60,80 +60,12 @@ far = 1000000.0
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=1455421448]
 
-[node name="HUDController" type="Node" parent="UI" unique_id=392177974]
+[node name="HUDController" type="Control" parent="UI" unique_id=392177974]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
 script = ExtResource("4")
-AltitudeLabelPath = NodePath("AltitudeLabel")
-SpeedLabelPath = NodePath("SpeedLabel")
-ApoapsisLabelPath = NodePath("ApoapsisLabel")
-PeriapsisLabelPath = NodePath("PeriapsisLabel")
-ThrottleLabelPath = NodePath("ThrottleLabel")
-FuelLabelPath = NodePath("FuelLabel")
-TimeLabelPath = NodePath("TimeLabel")
-WarpLabelPath = NodePath("WarpLabel")
-MassLabelPath = NodePath("MassLabel")
-
-[node name="AltitudeLabel" type="Label" parent="UI/HUDController" unique_id=598978297]
-offset_left = 16.0
-offset_top = 16.0
-offset_right = 360.0
-offset_bottom = 40.0
-text = "ALT: ---"
-
-[node name="SpeedLabel" type="Label" parent="UI/HUDController" unique_id=334139595]
-offset_left = 16.0
-offset_top = 44.0
-offset_right = 360.0
-offset_bottom = 68.0
-text = "SPD: ---"
-
-[node name="ApoapsisLabel" type="Label" parent="UI/HUDController" unique_id=1683843283]
-offset_left = 16.0
-offset_top = 72.0
-offset_right = 360.0
-offset_bottom = 96.0
-text = "AP: ---"
-
-[node name="PeriapsisLabel" type="Label" parent="UI/HUDController" unique_id=1520682298]
-offset_left = 16.0
-offset_top = 100.0
-offset_right = 360.0
-offset_bottom = 124.0
-text = "PE: ---"
-
-[node name="ThrottleLabel" type="Label" parent="UI/HUDController" unique_id=1539023503]
-offset_left = 16.0
-offset_top = 128.0
-offset_right = 360.0
-offset_bottom = 152.0
-text = "THR: 0%"
-
-[node name="FuelLabel" type="Label" parent="UI/HUDController" unique_id=229937456]
-offset_left = 16.0
-offset_top = 156.0
-offset_right = 360.0
-offset_bottom = 180.0
-text = "FUEL: ---"
-
-[node name="MassLabel" type="Label" parent="UI/HUDController" unique_id=1631494581]
-offset_left = 16.0
-offset_top = 184.0
-offset_right = 360.0
-offset_bottom = 208.0
-text = "MASS: ---"
-
-[node name="TimeLabel" type="Label" parent="UI/HUDController" unique_id=1293623235]
-offset_left = 16.0
-offset_top = 212.0
-offset_right = 360.0
-offset_bottom = 236.0
-text = "T+00:00:00"
-
-[node name="WarpLabel" type="Label" parent="UI/HUDController" unique_id=1643614620]
-offset_left = 16.0
-offset_top = 240.0
-offset_right = 360.0
-offset_bottom = 264.0
-text = "x1"
 
 [node name="NavBallController" type="Node" parent="UI" unique_id=514771001]
 script = ExtResource("5")
