@@ -41,6 +41,9 @@ public partial class SimulationBridge : Node
         var sky = new SkyController { Name = "SkyController" };
         GetParent()?.CallDeferred("add_child", sky);
 
+        var audio = new AudioManager { Name = "AudioManager" };
+        GetParent()?.CallDeferred("add_child", audio);
+
         // Create LaunchPadController in the World node
         var worldNode = GetTree().Root.FindChild("World", true, false) as Node3D;
         if (worldNode != null)
