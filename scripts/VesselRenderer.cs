@@ -11,9 +11,35 @@ public partial class VesselRenderer : Node3D
     public Vessel? TargetVessel { get; set; }
 
     private readonly Dictionary<string, Node3D> _partNodes  = new();
-    private MeshInstance3D? _hullMesh;                        // for reentry heat glow
-    private readonly List<MeshInstance3D> _shPlumes   = new();  // Super Heavy exhaust
-    private readonly List<MeshInstance3D> _shipPlumes = new();  // Starship exhaust
+    private MeshInstance3D? _hullMesh;
+    private readonly List<MeshInstance3D> _shPlumes   = new();
+    private readonly List<MeshInstance3D> _shipPlumes = new();
+
+    // ── Layout constants (all in render units, y=0 = SH engine bell tips) ──
+    //
+    //  Full stack:
+    //   y = 0           SH engine bell tips (pointing down)
+    //   y = 0 → +2      SH engine skirt
+    //   y = +2 → +20    SH main body
+    //   y = +18 → +22   SH grid fins (overlap with interstage is realistic)
+    //   y = +20 → +22   interstage
+    //   y = +22         separation plane
+    //   y = +22 → +24   Starship engine bay / skirt  (BuildStarshipSection o=0)
+    //   y = +24 → +31   Starship lower body (tiles)
+    //   y = +31 → +38   Starship upper body (steel)
+    //   y = +38 → +43   Starship nosecone (ogive + dome)
+    //   y ≈ +43.25      nose tip
+    //
+    //  Standalone Starship (BuildStarshipSection o=-22):
+    //   y = -1.05       engine bell tips
+    //   y = 0 → +2      engine bay / skirt
+    //   y = +2 → +9     lower body (tiles)
+    //   y = +9 → +16    upper body (steel)
+    //   y = +16 → +21   nosecone
+    //   y ≈ +21.25      nose tip
+    //
+    //  Standalone SH (BuildSuperHeavyOnly):
+    //   Same SH body as full stack, separation scar at top
 
     // ── Build entry point ─────────────────────────────────────────────────
 
@@ -22,62 +48,71 @@ public partial class VesselRenderer : Node3D
         TargetVessel = vessel;
         ClearNodes();
 
-        bool hasFullStack = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
-        bool hasEngine    = vessel.Parts.Parts.Any(p => p.Definition.Category == PartCategory.Engine);
+        bool hasSH       = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool hasStarship  = vessel.Parts.Parts.Any(p =>
+            p.Definition.Id == "starship_engines" || p.Definition.Id == "starship_command");
+        bool hasAnyEngine = vessel.Parts.Parts.Any(p => p.Definition.Category == PartCategory.Engine);
 
-        if (hasFullStack)
-            BuildFullStack(vessel);
-        else if (hasEngine)
-            BuildStarshipSection(vessel, yOffset: 0f);
-        else
-            BuildGenericVessel(vessel);
+        if      (hasSH && hasStarship) BuildFullStack(vessel);
+        else if (hasSH)                BuildSuperHeavyOnly(vessel);
+        else if (hasAnyEngine)         BuildStarshipSection(vessel, yOffset: -22f);
+        else                           BuildGenericVessel(vessel);
     }
 
     // ── Full Starship + Super Heavy stack ─────────────────────────────────
-    //
-    // Y-up layout (y=0 = bottom of SH engine bells, resting on the OLM):
-    //   y=  0         SH engine bell tips (pointing down)
-    //   y=  0 → +2    SH engine skirt
-    //   y= +2 → +20   SH main body (18 units tall, steel)
-    //   y= +20 → +22  interstage adapter (dark steel, slightly tapered)
-    //   y= +22        stage separation plane
-    //   y= +22 → +24  Starship engine bay / skirt
-    //   y= +24 → +31  Starship lower body (heat-shield tiles, 7 units)
-    //   y= +31 → +38  Starship upper body (steel, 7 units)
-    //   y= +38 → +43  Starship nosecone (tapered, 5 units)
-    //   y= +43         nose tip
-    //   canards:  around y=+39–41
-    //   aft flaps: around y=+25–30
 
     private void BuildFullStack(Vessel vessel)
     {
+        BuildSuperHeavyGeometry(includeSepCap: false);
+        AddSHGridFins();
+
+        // Interstage adapter (y=20 → y=22)
+        var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
+        AddMesh("Interstage", new CylinderMesh
+            { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 2f, RadialSegments = 48 },
+            darkSteel, new Vector3(0, 21f, 0));
+
+        // Starship section sits at separation plane y=22
+        BuildStarshipSection(vessel, yOffset: 0f);
+
+        foreach (var part in vessel.Parts.Parts)
+            _partNodes[part.InstanceId] = _hullMesh!;
+    }
+
+    // ── Standalone Super Heavy (after staging, debris vessel) ─────────────
+
+    private void BuildSuperHeavyOnly(Vessel vessel)
+    {
+        BuildSuperHeavyGeometry(includeSepCap: true);
+        AddSHGridFins();
+
+        foreach (var part in vessel.Parts.Parts)
+            _partNodes[part.InstanceId] = _hullMesh!;
+    }
+
+    // ── Shared Super Heavy geometry ───────────────────────────────────────
+
+    private void BuildSuperHeavyGeometry(bool includeSepCap)
+    {
         var steel     = Mat(new Color(0.86f, 0.86f, 0.88f), 0.92f, 0.18f);
-        var tiles     = Mat(new Color(0.09f, 0.09f, 0.11f), 0.04f, 0.94f);
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
         var engineMat = Mat(new Color(0.18f, 0.18f, 0.20f), 0.82f, 0.38f);
 
-        // ── Super Heavy ────────────────────────────────────────────────────
-
-        // SH main body
-        AddMesh("SHBody", new CylinderMesh
+        // Main body (y=2 → y=20)
+        _hullMesh = AddMesh("SHBody", new CylinderMesh
             { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 18f, RadialSegments = 48 },
-            steel, new Vector3(0, 2f + 9f, 0));   // base=2, top=20, centre=11
+            steel, new Vector3(0, 11f, 0));
 
-        // SH engine skirt
+        // Engine skirt (y=0 → y=2)
         AddMesh("SHSkirt", new CylinderMesh
             { TopRadius = 1.15f, BottomRadius = 1.22f, Height = 2f, RadialSegments = 48 },
-            darkSteel, new Vector3(0, 1f, 0));     // base=0, top=2, centre=1
+            darkSteel, new Vector3(0, 1f, 0));
 
-        // Interstage adapter
-        AddMesh("Interstage", new CylinderMesh
-            { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 2f, RadialSegments = 48 },
-            darkSteel, new Vector3(0, 21f, 0));    // base=20, top=22, centre=21
-
-        // 33 Raptor 2 engine bells in 3 rings
-        const float shInnerR  = 0.30f;
-        const float shMidR    = 0.68f;
-        const float shOuterR  = 1.04f;
-        const float shBellY   = -0.6f;  // bell tips below y=0
+        // 33 Raptor engine bells in 3 rings (tips at y≈-0.6)
+        const float shInnerR = 0.30f;
+        const float shMidR   = 0.68f;
+        const float shOuterR = 1.04f;
+        const float shBellY  = -0.6f;
 
         for (int i = 0; i < 3; i++)
         {
@@ -101,19 +136,46 @@ public partial class VesselRenderer : Node3D
                 engineMat, new Vector3(shOuterR * Mathf.Cos(a), shBellY + 0.1f, shOuterR * Mathf.Sin(a)));
         }
 
-        // SH plumes — 6 representative plumes (inner-3 + mid-3)
+        // Optional separation scar when SH is standalone (after staging)
+        if (includeSepCap)
+        {
+            var scarMat = Mat(new Color(0.28f, 0.28f, 0.30f), 0.92f, 0.10f);
+            AddMesh("SepScar", new CylinderMesh
+                { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 0.35f, RadialSegments = 48 },
+                scarMat, new Vector3(0, 22.17f, 0));
+        }
+
+        // SH plumes (9 representative, inner + mid + outer sample)
         SpawnSHPlumes(shInnerR, shMidR, shOuterR);
-
-        // ── Starship section (offset +22 above SH) ────────────────────────
-        BuildStarshipSection(vessel, yOffset: 22f);
-
-        // Map all parts to hull mesh for heat glow
-        foreach (var part in vessel.Parts.Parts)
-            _partNodes[part.InstanceId] = _hullMesh!;
     }
 
-    // ── Standalone Starship (after staging, or initial spawn) ─────────────
-    // yOffset shifts the whole model upward to stack atop Super Heavy.
+    // ── 4 grid fins near top of Super Heavy ──────────────────────────────
+
+    private void AddSHGridFins()
+    {
+        var finMat = Mat(new Color(0.42f, 0.42f, 0.45f), 0.90f, 0.28f);
+        for (int i = 0; i < 4; i++)
+        {
+            float a    = i * Mathf.Pi * 0.5f;
+            float posX = 1.18f * Mathf.Cos(a);
+            float posZ = 1.18f * Mathf.Sin(a);
+            var fin = new MeshInstance3D
+            {
+                Name            = $"GridFin{i}",
+                Mesh            = new BoxMesh { Size = new Vector3(0.18f, 4.0f, 1.55f) },
+                Position        = new Vector3(posX, 19.5f, posZ),
+                RotationDegrees = new Vector3(0, -i * 90f, 0),
+            };
+            fin.SetSurfaceOverrideMaterial(0, finMat);
+            AddChild(fin);
+        }
+    }
+
+    // ── Starship section (standalone or stacked above SH) ─────────────────
+    //
+    //  o = yOffset. When called with:
+    //    o =  0    → skirt base at y=22  (full stack, Starship sits atop SH)
+    //    o = -22   → skirt base at y=0   (standalone Starship after separation)
 
     private void BuildStarshipSection(Vessel vessel, float yOffset)
     {
@@ -122,51 +184,74 @@ public partial class VesselRenderer : Node3D
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
         var engineMat = Mat(new Color(0.18f, 0.18f, 0.20f), 0.82f, 0.38f);
 
-        float o = yOffset;  // shorthand
+        float o = yOffset;
 
-        // Body: lower half (tiles) + upper half (steel)
+        // Body: lower (tiles) y=o+24→o+31; upper (steel) y=o+31→o+38
         _hullMesh = AddMesh("BodyUpper",
             new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 7f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 31f + 3.5f, 0));   // 31 → 38
+            steel, new Vector3(0, o + 34.5f, 0));
 
         AddMesh("BodyLower",
             new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 7f, RadialSegments = 48 },
-            tiles, new Vector3(0, o + 24f + 3.5f, 0));   // 24 → 31
+            tiles, new Vector3(0, o + 27.5f, 0));
 
-        // Nosecone
-        AddMesh("Nose",
-            new CylinderMesh { TopRadius = 0.04f, BottomRadius = 1.15f, Height = 5f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 38f + 2.5f, 0));   // 38 → 43
+        // ── Ogive nosecone (replaces old sharp cone) ──────────────────────
+        // Section 1: y=o+38 → o+41, taper r=1.15→0.72
+        AddMesh("Nose1",
+            new CylinderMesh { TopRadius = 0.72f, BottomRadius = 1.15f, Height = 3f, RadialSegments = 48 },
+            steel, new Vector3(0, o + 39.5f, 0));
 
-        // Engine skirt
+        // Section 2: y=o+41 → o+43, taper r=0.72→0.25
+        AddMesh("Nose2",
+            new CylinderMesh { TopRadius = 0.25f, BottomRadius = 0.72f, Height = 2f, RadialSegments = 48 },
+            steel, new Vector3(0, o + 42.0f, 0));
+
+        // Dome cap: hemisphere r=0.25 sitting on top of Nose2 at y=o+43
+        var noseDome = new MeshInstance3D
+        {
+            Name     = "NoseDome",
+            Mesh     = new SphereMesh
+            {
+                Radius         = 0.25f,
+                Height         = 0.5f,
+                IsHemisphere   = true,
+                RadialSegments = 20,
+                Rings          = 8,
+            },
+            Position = new Vector3(0, o + 43f, 0),
+        };
+        noseDome.SetSurfaceOverrideMaterial(0, steel);
+        AddChild(noseDome);
+
+        // Engine skirt (y=o+22 → o+24)
         AddMesh("Skirt",
             new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.08f, Height = 2f, RadialSegments = 48 },
-            darkSteel, new Vector3(0, o + 22f + 1f, 0)); // 22 → 24
+            darkSteel, new Vector3(0, o + 23f, 0));
 
-        // Forward canards
-        AddMesh("CanardL", new BoxMesh { Size = new Vector3(0.12f, 1.6f, 2.6f) },
-            darkSteel, new Vector3(-1.23f, o + 40f, 0));
-        AddMesh("CanardR", new BoxMesh { Size = new Vector3(0.12f, 1.6f, 2.6f) },
-            darkSteel, new Vector3( 1.23f, o + 40f, 0));
+        // Forward canards (small, near top of upper body)
+        AddMesh("CanardL",     new BoxMesh { Size = new Vector3(0.12f, 1.6f, 2.6f) },
+            darkSteel, new Vector3(-1.23f, o + 37f, 0));
+        AddMesh("CanardR",     new BoxMesh { Size = new Vector3(0.12f, 1.6f, 2.6f) },
+            darkSteel, new Vector3( 1.23f, o + 37f, 0));
         AddMesh("CanardRootL", new BoxMesh { Size = new Vector3(0.18f, 2.0f, 1.0f) },
-            steel, new Vector3(-1.16f, o + 40f, 0));
+            steel, new Vector3(-1.16f, o + 37f, 0));
         AddMesh("CanardRootR", new BoxMesh { Size = new Vector3(0.18f, 2.0f, 1.0f) },
-            steel, new Vector3( 1.16f, o + 40f, 0));
+            steel, new Vector3( 1.16f, o + 37f, 0));
 
-        // Aft body flaps
-        AddMesh("FlapL", new BoxMesh { Size = new Vector3(0.14f, 5.5f, 4.6f) },
+        // Aft body flaps (large, lower body area)
+        AddMesh("FlapL",     new BoxMesh { Size = new Vector3(0.14f, 5.5f, 4.6f) },
             tiles, new Vector3(-1.23f, o + 26.5f, 0));
-        AddMesh("FlapR", new BoxMesh { Size = new Vector3(0.14f, 5.5f, 4.6f) },
+        AddMesh("FlapR",     new BoxMesh { Size = new Vector3(0.14f, 5.5f, 4.6f) },
             tiles, new Vector3( 1.23f, o + 26.5f, 0));
         AddMesh("FlapRootL", new BoxMesh { Size = new Vector3(0.20f, 5.5f, 1.2f) },
             tiles, new Vector3(-1.16f, o + 26.5f, 0));
         AddMesh("FlapRootR", new BoxMesh { Size = new Vector3(0.20f, 5.5f, 1.2f) },
             tiles, new Vector3( 1.16f, o + 26.5f, 0));
 
-        // 3 vacuum Raptors (inner ring, longer bell)
+        // 3 vacuum Raptors (inner, longer bell)
         const float vacR = 0.38f;
         const float slR  = 0.72f;
-        float bellY = o + 22f - 1.05f;  // centre of bell at base of skirt
+        float bellY = o + 22f - 1.05f;
 
         for (int i = 0; i < 3; i++)
         {
@@ -176,7 +261,7 @@ public partial class VesselRenderer : Node3D
                 engineMat, new Vector3(vacR * Mathf.Cos(a), bellY, vacR * Mathf.Sin(a)));
         }
 
-        // 3 sea-level Raptors (outer ring, shorter bell)
+        // 3 sea-level Raptors (outer, shorter bell)
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f + 1.047198f;
@@ -188,7 +273,7 @@ public partial class VesselRenderer : Node3D
         // Starship plumes
         SpawnShipPlumes(vacR, slR, o + 22f);
 
-        if (yOffset == 0f)  // standalone build: map parts to hull
+        if (yOffset == -22f)
         {
             foreach (var part in vessel.Parts.Parts)
                 _partNodes[part.InstanceId] = _hullMesh!;
@@ -201,7 +286,6 @@ public partial class VesselRenderer : Node3D
     {
         var mat = PlumeMat(new Color(1f, 0.75f, 0.3f));
 
-        // 3 inner plumes
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f;
@@ -209,7 +293,6 @@ public partial class VesselRenderer : Node3D
             node.Position = new Vector3(innerR * Mathf.Cos(a), -3.0f, innerR * Mathf.Sin(a));
             _shPlumes.Add(node);
         }
-        // 3 representative mid plumes
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f + 1.047198f;
@@ -217,7 +300,6 @@ public partial class VesselRenderer : Node3D
             node.Position = new Vector3(midR * Mathf.Cos(a), -2.8f, midR * Mathf.Sin(a));
             _shPlumes.Add(node);
         }
-        // 3 representative outer plumes
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f + 0.523599f;
@@ -249,8 +331,7 @@ public partial class VesselRenderer : Node3D
     }
 
     private StandardMaterial3D PlumeMat(Color emission)
-    {
-        return new StandardMaterial3D
+        => new()
         {
             AlbedoColor              = new Color(1f, 0.85f, 0.5f, 0f),
             Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
@@ -259,7 +340,6 @@ public partial class VesselRenderer : Node3D
             EmissionEnergyMultiplier = 3.0f,
             CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
         };
-    }
 
     private MeshInstance3D PlumeCone(string name, float height, float radius, StandardMaterial3D mat)
     {
@@ -274,7 +354,7 @@ public partial class VesselRenderer : Node3D
         return node;
     }
 
-    // ── Visual updates ────────────────────────────────────────────────────
+    // ── Per-frame visual updates ──────────────────────────────────────────
 
     public override void _Process(double delta)
     {
@@ -284,21 +364,18 @@ public partial class VesselRenderer : Node3D
         bool  firing    = throttle > 0.01f;
         bool  shPresent = TargetVessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
 
-        // Update SH plumes
         foreach (var p in _shPlumes)
         {
             p.Visible = firing && shPresent;
             if (p.Visible) AnimatePlume(p, throttle);
         }
 
-        // Update Starship plumes (only when SH is gone or this is standalone Starship)
         foreach (var p in _shipPlumes)
         {
             p.Visible = firing && !shPresent;
             if (p.Visible) AnimatePlume(p, throttle);
         }
 
-        // Reentry heat glow on hull
         if (_hullMesh == null) return;
         foreach (var part in TargetVessel.Parts.Parts)
         {
@@ -346,8 +423,8 @@ public partial class VesselRenderer : Node3D
             _                     => (Mesh)new BoxMesh { Size = new Godot.Vector3(0.5f, 0.5f, 0.5f) },
         };
         node.Mesh = mesh;
-        var mat = new StandardMaterial3D { AlbedoColor = GetCategoryColor(part.Definition.Category) };
-        node.SetSurfaceOverrideMaterial(0, mat);
+        node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+            { AlbedoColor = GetCategoryColor(part.Definition.Category) });
         return node;
     }
 

@@ -148,15 +148,16 @@ public class PartGraph
 
         decoupler.IsStagingActive = false;
 
-        // El desacoplador se une a su hijo por un Joint
-        var separationJoint = _joints.FirstOrDefault(
-            j => j.Parent == decoupler || j.Child == decoupler);
+        // Buscamos primero el joint donde decoupler es Parent (separa lo que está DEBAJO).
+        // Esto garantiza que SH se detache correctamente en stack command→tank→eng→decoupler→SH.
+        var separationJoint = _joints.FirstOrDefault(j => j.Parent == decoupler)
+            ?? _joints.FirstOrDefault(j => j.Child  == decoupler);
         if (separationJoint == null) return null;
 
-        // El lado separado es el "child" del joint
-        var separationRoot = separationJoint.Child == decoupler
-            ? separationJoint.Parent
-            : separationJoint.Child;
+        // El lado separado es el Child si decoupler es Parent, o el Parent si decoupler es Child.
+        var separationRoot = separationJoint.Parent == decoupler
+            ? separationJoint.Child
+            : separationJoint.Parent;
 
         var detachedParts  = CollectSubtree(separationRoot);
         var detachedGraph  = new PartGraph();

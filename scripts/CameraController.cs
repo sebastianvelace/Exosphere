@@ -21,12 +21,12 @@ public partial class CameraController : Node3D
     [Export] public float MaxDistance      { get; set; } = 500_000f;
 
     // ── Pad preset positions [yaw°, pitch°, distance] ─────────────────────
-    // Cycle with C key: side view → front view → wide shot
+    // Cycle with C key: side view → tower side → wide front
     private static readonly (float yaw, float pitch, float dist)[] PadPresets =
     {
-        (  30f, 10f,  90f),   // default: slight side angle
-        ( 180f,  5f,  70f),   // other side (shows Mechazilla tower)
-        (   0f, 20f, 130f),   // front high
+        (  30f,  8f,  95f),   // default: slight side, frames full 43-unit stack
+        ( 180f,  4f,  75f),   // tower side (shows Mechazilla arms)
+        (   0f, 18f, 140f),   // front wide — shows full profile
     };
     private int _padPresetIdx = 0;
 
@@ -88,10 +88,9 @@ public partial class CameraController : Node3D
         float yawRad   = Mathf.DegToRad(_yaw);
         float pitchRad = Mathf.DegToRad(_pitch);
 
-        // In both modes we use the same orbit math; the target is always (0,0,0)
-        // because FloatingOrigin keeps the active vessel there.
-        // For Pad mode we add a slight upward look target offset so the whole stack is visible.
-        float lookAtY = Mode == CameraMode.Pad ? 20f : 0f;
+        // In both modes the active vessel is at render origin (FloatingOrigin).
+        // Pad mode: look at y=22 (separation plane midpoint) to frame the full 43-unit stack.
+        float lookAtY = Mode == CameraMode.Pad ? 22f : 0f;
 
         var camPos = new Vector3(
             _distance * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
@@ -99,6 +98,6 @@ public partial class CameraController : Node3D
             _distance * Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
 
         camera.Position = camPos;
-        camera.LookAt(new Vector3(0, lookAtY, 0), Vector3.Up);
+        camera.LookAt(new Vector3(0f, lookAtY, 0f), Vector3.Up);
     }
 }

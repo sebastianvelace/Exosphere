@@ -34,10 +34,10 @@ public partial class SimulationBridge : Node
         Universe.TimeScale = 1.0;
         _running = true;
 
-        // Create MissionManager as sibling
+        // Create MissionManager as sibling — deferred: parent (Flight) is busy in _Ready()
         var mm = new MissionManager();
         mm.Name = "MissionManager";
-        GetParent()?.AddChild(mm);
+        GetParent()?.CallDeferred("add_child", mm);
 
         // Create LaunchPadController in the World node
         var worldNode = GetTree().Root.FindChild("World", true, false) as Node3D;
@@ -45,7 +45,7 @@ public partial class SimulationBridge : Node
         {
             _launchPad = new LaunchPadController();
             _launchPad.Name = "LaunchPadController";
-            worldNode.AddChild(_launchPad);
+            worldNode.CallDeferred("add_child", _launchPad);
         }
 
         SpawnStarshipStack(dataPath);
@@ -218,12 +218,27 @@ public partial class SimulationBridge : Node
     {
         if (ActiveVessel == null) return;
         var debris = ActiveVessel.Stage();
-        if (debris != null)
+        if (debris == null) return;
+
+        Universe.AddVessel(debris);
+
+        // Rebuild active vessel renderer: SH is now gone → shows standalone Starship
+        _vesselRenderer?.BuildFromVessel(ActiveVessel);
+
+        // Spawn a renderer for the SH debris
+        var fo          = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        var vesselsNode = GetTree().Root.FindChild("Vessels",        true, false) as Node3D;
+        if (vesselsNode != null)
         {
-            Universe.AddVessel(debris);
-            EmitSignal(SignalName.VesselStaged, debris.Id);
-            MissionManager.Instance?.NotifyStaged();
+            var debrisRenderer = new VesselRenderer();
+            debrisRenderer.Name = "SHDebris_" + debris.Id[..8];
+            vesselsNode.AddChild(debrisRenderer);
+            debrisRenderer.BuildFromVessel(debris);
+            fo?.RegisterVesselNode(debris.Id, debrisRenderer);
         }
+
+        EmitSignal(SignalName.VesselStaged, debris.Id);
+        MissionManager.Instance?.NotifyStaged();
     }
 
     public void SetTimeScale(double scale) => Universe.TimeScale = scale;
