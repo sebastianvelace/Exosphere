@@ -10,10 +10,9 @@ public partial class VesselRenderer : Node3D
 {
     public Vessel? TargetVessel { get; set; }
 
-    private readonly Dictionary<string, Node3D> _partNodes  = new();
+    private readonly Dictionary<string, Node3D> _partNodes = new();
     private MeshInstance3D? _hullMesh;
-    private readonly List<MeshInstance3D> _shPlumes   = new();
-    private readonly List<MeshInstance3D> _shipPlumes = new();
+    private PlumeSystem?    _plumes;
 
     // ── Layout constants (all in render units, y=0 = SH engine bell tips) ──
     //
@@ -145,8 +144,9 @@ public partial class VesselRenderer : Node3D
                 scarMat, new Vector3(0, 22.17f, 0));
         }
 
-        // SH plumes (9 representative, inner + mid + outer sample)
-        SpawnSHPlumes(shInnerR, shMidR, shOuterR);
+        // GPU plumes
+        if (_plumes == null) { _plumes = new PlumeSystem { Name = "Plumes" }; AddChild(_plumes); }
+        _plumes.SetupSH(shInnerR, shMidR, shOuterR, shBellY);
     }
 
     // ── 4 grid fins near top of Super Heavy ──────────────────────────────
@@ -270,8 +270,9 @@ public partial class VesselRenderer : Node3D
                 engineMat, new Vector3(slR * Mathf.Cos(a), bellY + 0.35f, slR * Mathf.Sin(a)));
         }
 
-        // Starship plumes
-        SpawnShipPlumes(vacR, slR, o + 22f);
+        // GPU plumes for Starship engines
+        if (_plumes == null) { _plumes = new PlumeSystem { Name = "Plumes" }; AddChild(_plumes); }
+        _plumes.SetupStarship(vacR, slR, o + 22f);
 
         if (yOffset == -22f)
         {
@@ -280,102 +281,20 @@ public partial class VesselRenderer : Node3D
         }
     }
 
-    // ── Plumes ────────────────────────────────────────────────────────────
-
-    private void SpawnSHPlumes(float innerR, float midR, float outerR)
-    {
-        var mat = PlumeMat(new Color(1f, 0.75f, 0.3f));
-
-        for (int i = 0; i < 3; i++)
-        {
-            float a = i * 2.094395f;
-            var node = PlumeCone($"SHPlumeC{i}", 5.5f, 0.50f, mat);
-            node.Position = new Vector3(innerR * Mathf.Cos(a), -3.0f, innerR * Mathf.Sin(a));
-            _shPlumes.Add(node);
-        }
-        for (int i = 0; i < 3; i++)
-        {
-            float a = i * 2.094395f + 1.047198f;
-            var node = PlumeCone($"SHPlumeM{i}", 4.5f, 0.42f, mat);
-            node.Position = new Vector3(midR * Mathf.Cos(a), -2.8f, midR * Mathf.Sin(a));
-            _shPlumes.Add(node);
-        }
-        for (int i = 0; i < 3; i++)
-        {
-            float a = i * 2.094395f + 0.523599f;
-            var node = PlumeCone($"SHPlumeO{i}", 4.0f, 0.38f, mat);
-            node.Position = new Vector3(outerR * Mathf.Cos(a), -2.6f, outerR * Mathf.Sin(a));
-            _shPlumes.Add(node);
-        }
-    }
-
-    private void SpawnShipPlumes(float vacR, float slR, float baseY)
-    {
-        var vacMat = PlumeMat(new Color(1f, 0.55f, 0.1f));
-        var slMat  = PlumeMat(new Color(1f, 0.70f, 0.2f));
-
-        for (int i = 0; i < 3; i++)
-        {
-            float a = i * 2.094395f;
-            var node = PlumeCone($"PlVac{i}", 5.0f, 0.55f, (StandardMaterial3D)vacMat.Duplicate());
-            node.Position = new Vector3(vacR * Mathf.Cos(a), baseY - 2.55f, vacR * Mathf.Sin(a));
-            _shipPlumes.Add(node);
-        }
-        for (int i = 0; i < 3; i++)
-        {
-            float a = i * 2.094395f + 1.047198f;
-            var node = PlumeCone($"PlSL{i}", 3.5f, 0.42f, (StandardMaterial3D)slMat.Duplicate());
-            node.Position = new Vector3(slR * Mathf.Cos(a), baseY - 1.75f, slR * Mathf.Sin(a));
-            _shipPlumes.Add(node);
-        }
-    }
-
-    private StandardMaterial3D PlumeMat(Color emission)
-        => new()
-        {
-            AlbedoColor              = new Color(1f, 0.85f, 0.5f, 0f),
-            Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
-            EmissionEnabled          = true,
-            Emission                 = emission,
-            EmissionEnergyMultiplier = 3.0f,
-            CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
-        };
-
-    private MeshInstance3D PlumeCone(string name, float height, float radius, StandardMaterial3D mat)
-    {
-        var node = new MeshInstance3D
-        {
-            Name    = name,
-            Mesh    = new CylinderMesh { TopRadius = 0f, BottomRadius = radius, Height = height, RadialSegments = 10 },
-            Visible = false,
-        };
-        node.SetSurfaceOverrideMaterial(0, mat);
-        AddChild(node);
-        return node;
-    }
-
     // ── Per-frame visual updates ──────────────────────────────────────────
 
     public override void _Process(double delta)
     {
         if (TargetVessel == null) return;
 
-        float throttle  = (float)TargetVessel.Throttle;
-        bool  firing    = throttle > 0.01f;
-        bool  shPresent = TargetVessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        float  throttle  = (float)TargetVessel.Throttle;
+        bool   shPresent = TargetVessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        var    earth     = SimulationBridge.Instance?.Universe.GetBody("earth");
+        double alt       = earth != null ? TargetVessel.GetAltitude(earth) : 0.0;
 
-        foreach (var p in _shPlumes)
-        {
-            p.Visible = firing && shPresent;
-            if (p.Visible) AnimatePlume(p, throttle);
-        }
+        _plumes?.Update(throttle, shPresent, alt);
 
-        foreach (var p in _shipPlumes)
-        {
-            p.Visible = firing && !shPresent;
-            if (p.Visible) AnimatePlume(p, throttle);
-        }
-
+        // Reentry heat glow on hull
         if (_hullMesh == null) return;
         foreach (var part in TargetVessel.Parts.Parts)
         {
@@ -388,14 +307,6 @@ public partial class VesselRenderer : Node3D
             if (t > 0.05f)
                 mat.Emission = new Color(t, t * 0.35f, 0f) * t;
         }
-    }
-
-    private static void AnimatePlume(MeshInstance3D plume, float throttle)
-    {
-        float flicker = 0.9f + (float)(GD.Randf() * 0.2f);
-        plume.Scale = Vector3.One * (throttle * flicker);
-        if (plume.GetSurfaceOverrideMaterial(0) is StandardMaterial3D pm)
-            pm.EmissionEnergyMultiplier = 2.5f + throttle * 2.0f;
     }
 
     // ── Generic vessel fallback ───────────────────────────────────────────
@@ -454,8 +365,7 @@ public partial class VesselRenderer : Node3D
     {
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
-        _shPlumes.Clear();
-        _shipPlumes.Clear();
+        _plumes   = null;
         _hullMesh = null;
     }
 

@@ -19,10 +19,10 @@ public partial class SimulationBridge : Node
     [Signal] public delegate void VesselDestroyedEventHandler(string vesselId);
     [Signal] public delegate void SimulationLoadedEventHandler();
 
-    private bool                 _running          = false;
-    private VesselRenderer?      _vesselRenderer   = null;
-    private Camera3D?            _camera           = null;
-    private LaunchPadController? _launchPad        = null;
+    private bool                 _running        = false;
+    private VesselRenderer?      _vesselRenderer = null;
+    private Camera3D?            _camera         = null;
+    private LaunchPadController? _launchPad      = null;
     private Vector3d             _padWorldPos;   // Earth surface point directly below spawn
 
     public override void _Ready()
@@ -34,10 +34,12 @@ public partial class SimulationBridge : Node
         Universe.TimeScale = 1.0;
         _running = true;
 
-        // Create MissionManager as sibling — deferred: parent (Flight) is busy in _Ready()
-        var mm = new MissionManager();
-        mm.Name = "MissionManager";
+        // Create sibling nodes — deferred: parent (Flight) is busy in _Ready()
+        var mm = new MissionManager { Name = "MissionManager" };
         GetParent()?.CallDeferred("add_child", mm);
+
+        var sky = new SkyController { Name = "SkyController" };
+        GetParent()?.CallDeferred("add_child", sky);
 
         // Create LaunchPadController in the World node
         var worldNode = GetTree().Root.FindChild("World", true, false) as Node3D;
@@ -142,6 +144,10 @@ public partial class SimulationBridge : Node
             _vesselRenderer.Name = "StarshipRenderer";
             vesselsNode.AddChild(_vesselRenderer);
             _vesselRenderer.BuildFromVessel(vessel);
+
+            // MaxQ condensation ring — tracks active vessel (always at render origin)
+            var maxQ = new MaxQRingController { Name = "MaxQRing" };
+            vesselsNode.AddChild(maxQ);
 
             var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
             fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
