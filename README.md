@@ -1280,11 +1280,11 @@ For synthesis (if .ogg files not available):
 | VesselRenderer full stack (33 SH Raptors + 6 Ship) | ✅ Done | 6 |
 | CameraController Pad/Chase modes + C key | ✅ Done | 6 |
 | HUDController phase label + TWR + countdown overlay | ✅ Done | 6 |
-| **StarshipRenderer (correct proportions)** | ⏳ Semana 7 | — |
-| **SuperHeavyRenderer (33 Raptors separate)** | ⏳ Semana 7 | — |
-| **SkyController (altitude-based sky)** | ⏳ Semana 8 | — |
-| **PlumeSystem (GPU particles)** | ⏳ Semana 8 | — |
-| **MaxQRingController** | ⏳ Semana 8 | — |
+| **StarshipRenderer (correct proportions)** | ✅ Done | 7 |
+| **SuperHeavyRenderer (33 Raptors separate)** | ✅ Done | 7 |
+| **SkyController (altitude-based sky)** | ✅ Done | 8 |
+| **PlumeSystem (GPU particles)** | ✅ Done | 8 |
+| **MaxQRingController** | ✅ Done | 8 |
 | **AudioManager** | ⏳ Semana 9 | — |
 | **MapViewController + ManeuverPlanner** | ⏳ Semana 10 | — |
 | **EDL sequence + Mars surface** | ⏳ Semana 11 | — |
@@ -1355,7 +1355,20 @@ super_heavy_booster (engine)
 
 ---
 
-### Semana 7 — Visual Redesign (Starship + Super Heavy)
+### Semana 7 — Visual Redesign (Starship + Super Heavy) ✅ COMPLETED (2026-06-11)
+
+**What was implemented (as a single rewrite of `VesselRenderer.cs` rather than separate renderer files):**
+
+| File | Change |
+|---|---|
+| `ExosphereSimulation/Parts/PartGraph.cs` | **Staging bug fix** — `FireNextStage()` now prefers the joint where the decoupler is the *Parent* (the joint to SH below), so Super Heavy separates as debris and Starship keeps its engines. Previously it found `Joint(engines, decoupler)` first and wrongly detached the Starship engine section. |
+| `scripts/VesselRenderer.cs` | Full rewrite. `BuildFullStack` / `BuildSuperHeavyOnly` / `BuildStarshipSection(yOffset)` / `BuildGenericVessel` dispatch by part composition. 3-section ogive nosecone + hemisphere dome cap (replaces sharp cone). 4 SH grid fins with radially-correct rotation. Fixed the 22-unit visual gap (full stack uses `yOffset:0`, standalone Starship `yOffset:-22`). |
+| `scripts/SimulationBridge.cs` | After staging, creates a separate debris `VesselRenderer` for the standalone Super Heavy and rebuilds the active vessel renderer for the standalone Starship; registers both with FloatingOrigin. `CallDeferred("add_child", …)` used to avoid "parent busy" errors during `_Ready()`. |
+| `scripts/CameraController.cs` | `lookAtY` and pad presets retuned for the taller 43-unit stack. |
+
+**Layout convention:** `y=0` = SH engine bells, `y=22` = separation plane, Starship spans `y=22→43.25` in the full stack.
+
+**Original plan (kept for reference):**
 
 **Goal**: The two vehicles look recognizably like SpaceX hardware. Reference: images #11 and #12 in the project session.
 
@@ -1391,7 +1404,21 @@ When MissionManager enters SEPARATION phase:
 
 ---
 
-### Semana 8 — VFX and Atmosphere
+### Semana 8 — VFX and Atmosphere ✅ COMPLETED (2026-06-11)
+
+**What was implemented:**
+
+| File | Change |
+|---|---|
+| `scripts/SkyController.cs` | **NEW.** Reads vessel altitude each frame; smoothstep transition 8 km→80 km lerps `ProceduralSkyMaterial` top/horizon colours + ambient light/energy from ground-blue to space-black. |
+| `scripts/PlumeSystem.cs` | **NEW.** GPU-particle engine plumes (`GpuParticles3D`, ring emission matching the engine bell layout) replacing the old cone meshes. SH = 3 rings + bright core; Starship = vac + SL + core. **Altitude-dependent direction**: upward fireball at the pad (the Earth-surface mesh sits at render y≈0, so downward particles would be occluded) transitioning to a downward exhaust column with altitude. Soft radial circle texture (procedural `ImageTexture`) for glowing blobs instead of hard squares; additive blend; `VisibilityAabb` sized so particles are never frustum-culled. |
+| `scripts/MaxQRingController.cs` | **NEW.** Prandtl-Glauert condensation torus ring; alpha/emission/squash driven by dynamic pressure `q = ½ρv²` (appears ~12 kPa, peaks ~35 kPa). Position auto-selects full-stack vs standalone Starship. |
+| `scenes/flight/Flight.tscn` | Initial sky material + ambient set to ground-level daylight blue. |
+| `scripts/SimulationBridge.cs` | `SkyController` and `MaxQRingController` instantiated (deferred add_child). |
+
+**Verified by screenshots:** vivid blue sky on the pad, an orange ignition fireball at the base on liftoff, and a visibly desaturated/darker sky at ~70 km during ascent.
+
+**Original plan (kept for reference):**
 
 **Goal**: The game looks and feels like watching a SpaceX webcast.
 
