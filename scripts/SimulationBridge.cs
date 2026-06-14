@@ -23,7 +23,7 @@ public partial class SimulationBridge : Node
     private VesselRenderer?      _vesselRenderer = null;
     private Camera3D?            _camera         = null;
     private LaunchPadController? _launchPad      = null;
-    private Vector3d             _padWorldPos;   // Earth surface point directly below spawn
+    private Vector3d             _padWorldPos;
 
     public override void _Ready()
     {
@@ -111,13 +111,21 @@ public partial class SimulationBridge : Node
         if (!_running || Universe == null) return;
         Universe.Tick(delta);
 
-        // Update LaunchPad position: anchored to Earth surface, offset from active vessel
-        if (_launchPad != null && ActiveVessel != null && _padWorldPos != Vector3d.Zero)
+        // Anchor the LaunchPad to the Earth surface point directly BELOW the vessel,
+        // recomputed each frame (Earth orbits the Sun, so a fixed spawn-time world point
+        // drifts away). Convert the metres offset to render units (1 unit ≈ 2.8 m).
+        var padEarth = Universe.GetBody("earth");
+        if (_launchPad != null && ActiveVessel != null && padEarth != null)
         {
-            var offset = _padWorldPos - ActiveVessel.Position;
-            _launchPad.Position = new Godot.Vector3((float)offset.X, (float)offset.Y, (float)offset.Z);
-            var earth = Universe.GetBody("earth");
-            double alt = earth != null ? ActiveVessel.GetAltitude(earth) : 1e6;
+            const float metresPerUnit = 2.8f;
+            double alt = ActiveVessel.GetAltitude(padEarth);
+            var up = (ActiveVessel.Position - padEarth.Position).Normalized;
+            var surfacePos = padEarth.Position + up * padEarth.Radius;
+            var offset = surfacePos - ActiveVessel.Position;          // = -up·alt metres
+            _launchPad.Position = new Godot.Vector3(
+                (float)(offset.X / metresPerUnit),
+                (float)(offset.Y / metresPerUnit),
+                (float)(offset.Z / metresPerUnit));
             _launchPad.Visible = alt < 8_000;   // hide above 8 km
         }
     }

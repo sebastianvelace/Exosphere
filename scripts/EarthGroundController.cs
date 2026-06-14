@@ -36,9 +36,9 @@ public partial class EarthGroundController : Node3D
     private const int   Grid           = 160;             // subdivisions per side
 
     // ── Altitude fade bands (metres) ─────────────────────────────────────────
-    private const double FullAlt = 15_000.0;   // fully opaque at/below this
-    private const double FadeLo  = 40_000.0;   // start fading out here
-    private const double FadeHi  = 70_000.0;   // fully gone above here
+    private const double FullAlt = 10_000.0;   // fully opaque at/below this
+    private const double FadeLo  = 14_000.0;   // start fading out here
+    private const double FadeHi  = 26_000.0;   // fully gone above here (backdrop takes over)
 
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;

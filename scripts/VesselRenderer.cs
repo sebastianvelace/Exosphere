@@ -109,24 +109,43 @@ public partial class VesselRenderer : Node3D
         // upper-stage steel (more soot/handling on the booster).
         var steel     = Mat(new Color(0.78f, 0.78f, 0.80f), 0.93f, 0.22f);
         var darkSteel = Mat(new Color(0.46f, 0.46f, 0.49f), 0.88f, 0.34f);
-        var engineMat = Mat(new Color(0.16f, 0.16f, 0.18f), 0.80f, 0.40f);
+        // Soot-darkened steel for the engine skirt: heat/exhaust staining.
+        var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
 
-        // Main body (y=2 → y=20)
+        // Main body (y=2 → y=20). Split into a few barrel bands with slightly
+        // varied roughness so the bare 304L catches light unevenly (real steel
+        // never reads as one flat tube) and gets sootier toward the engines.
         _hullMesh = AddMesh("SHBody", new CylinderMesh
             { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 18f, RadialSegments = 48 },
             steel, new Vector3(0, 11f, 0));
 
+        // Faint mill-grain / band variation overlaid as very thin, marginally
+        // duller rings — breaks up the long cylinder so highlights vary by band.
+        var bandMat = Mat(new Color(0.74f, 0.74f, 0.77f), 0.92f, 0.30f);
+        for (int i = 0; i < 5; i++)
+        {
+            float by = Mathf.Lerp(3.4f, 18.6f, (i + 0.5f) / 5f);
+            AddMesh($"SHBand{i}", new CylinderMesh
+                { TopRadius = 1.152f, BottomRadius = 1.152f, Height = 1.4f, RadialSegments = 48 },
+                bandMat, new Vector3(0, by, 0));
+        }
+
+        // Soot gradient near the engines (lower booster darkens from exhaust).
+        AddMesh("SHSoot", new CylinderMesh
+            { TopRadius = 1.153f, BottomRadius = 1.20f, Height = 2.4f, RadialSegments = 48 },
+            sootSteel, new Vector3(0, 3.0f, 0));
+
         // Weld seams down the booster barrel sections.
-        AddWeldRings("SHWeld", 1.151f, 3f, 19.5f, 11);
+        AddWeldRings("SHWeld", 1.151f, 3f, 19.5f, 14);
 
         // Raceway / conduit running up one side of the booster (real SH detail).
         AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
             darkSteel, new Vector3(1.16f, 11f, 0f));
 
-        // Engine skirt (y=0 → y=2)
+        // Engine skirt (y=0 → y=2) — sooty, exhaust-stained near the bells.
         AddMesh("SHSkirt", new CylinderMesh
             { TopRadius = 1.15f, BottomRadius = 1.22f, Height = 2f, RadialSegments = 48 },
-            darkSteel, new Vector3(0, 1f, 0));
+            sootSteel, new Vector3(0, 1f, 0));
 
         // 33 Raptor engine bells in 3 rings (tips at y≈-0.6)
         const float shInnerR = 0.30f;
@@ -137,23 +156,23 @@ public partial class VesselRenderer : Node3D
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f;
-            AddMesh($"SHRapC{i}", new CylinderMesh
-                { TopRadius = 0.17f, BottomRadius = 0.26f, Height = 1.2f, RadialSegments = 14 },
-                engineMat, new Vector3(shInnerR * Mathf.Cos(a), shBellY, shInnerR * Mathf.Sin(a)));
+            AddRaptor($"SHRapC{i}",
+                new Vector3(shInnerR * Mathf.Cos(a), shBellY, shInnerR * Mathf.Sin(a)),
+                exitR: 0.27f, throatR: 0.13f, bellLen: 1.3f);
         }
         for (int i = 0; i < 10; i++)
         {
             float a = i * 0.628319f + 0.314159f;
-            AddMesh($"SHRapM{i}", new CylinderMesh
-                { TopRadius = 0.14f, BottomRadius = 0.22f, Height = 1.1f, RadialSegments = 12 },
-                engineMat, new Vector3(shMidR * Mathf.Cos(a), shBellY + 0.05f, shMidR * Mathf.Sin(a)));
+            AddRaptor($"SHRapM{i}",
+                new Vector3(shMidR * Mathf.Cos(a), shBellY + 0.05f, shMidR * Mathf.Sin(a)),
+                exitR: 0.23f, throatR: 0.11f, bellLen: 1.15f);
         }
         for (int i = 0; i < 20; i++)
         {
             float a = i * 0.314159f;
-            AddMesh($"SHRapO{i}", new CylinderMesh
-                { TopRadius = 0.12f, BottomRadius = 0.20f, Height = 1.0f, RadialSegments = 10 },
-                engineMat, new Vector3(shOuterR * Mathf.Cos(a), shBellY + 0.1f, shOuterR * Mathf.Sin(a)));
+            AddRaptor($"SHRapO{i}",
+                new Vector3(shOuterR * Mathf.Cos(a), shBellY + 0.1f, shOuterR * Mathf.Sin(a)),
+                exitR: 0.21f, throatR: 0.10f, bellLen: 1.05f);
         }
 
         // Optional separation scar when SH is standalone (after staging)
@@ -214,7 +233,6 @@ public partial class VesselRenderer : Node3D
         var steel     = Mat(new Color(0.87f, 0.87f, 0.89f), 0.93f, 0.16f);
         var tiles     = TileMat();
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
-        var engineMat = Mat(new Color(0.16f, 0.16f, 0.18f), 0.80f, 0.40f);
 
         float o = yOffset;
 
@@ -239,36 +257,43 @@ public partial class VesselRenderer : Node3D
         AddTileBand(o + 24f, o + 38f);
 
         // ── Ogive nosecone (smooth multi-segment taper) ───────────────────
-        // Real Starship nose is a smooth ogive. Use 4 short frusta to round it.
-        AddMesh("Nose1",
-            new CylinderMesh { TopRadius = 1.02f, BottomRadius = 1.15f, Height = 1.4f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 38.7f, 0));
-        AddMesh("Nose2",
-            new CylinderMesh { TopRadius = 0.82f, BottomRadius = 1.02f, Height = 1.4f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 40.1f, 0));
-        AddMesh("Nose3",
-            new CylinderMesh { TopRadius = 0.52f, BottomRadius = 0.82f, Height = 1.4f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 41.5f, 0));
-        AddMesh("Nose4",
-            new CylinderMesh { TopRadius = 0.20f, BottomRadius = 0.52f, Height = 1.3f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 42.85f, 0));
+        // Real Starship nose is a smooth ogive. Build it from many short frusta
+        // whose radii follow a tangent-ogive curve so the profile reads round,
+        // not faceted. Base y=o+38, tip y≈o+43.5 (5.5 units ≈ 15.4 m).
+        const int   noseSeg  = 12;
+        const float noseBase = 38f;          // body-relative base
+        const float noseLen  = 5.2f;
+        const float noseR    = 1.15f;
+        for (int i = 0; i < noseSeg; i++)
+        {
+            // Tangent-ogive radius as a function of normalised height u∈[0,1].
+            float u0 = (float)i       / noseSeg;
+            float u1 = (float)(i + 1) / noseSeg;
+            float rBot = noseR * Mathf.Sqrt(Mathf.Max(0f, 1f - u0 * u0));
+            float rTop = noseR * Mathf.Sqrt(Mathf.Max(0f, 1f - u1 * u1));
+            float segH = noseLen / noseSeg;
+            float yMid = o + noseBase + (u0 + u1) * 0.5f * noseLen;
+            AddMesh($"Nose{i}",
+                new CylinderMesh { TopRadius = rTop, BottomRadius = rBot, Height = segH * 1.04f, RadialSegments = 48 },
+                steel, new Vector3(0, yMid, 0));
+        }
 
         // Tile coverage continues up the windward side of the nose.
         AddTileBand(o + 38f, o + 41.5f, topRadius: 0.83f, botRadius: 1.16f);
 
-        // Dome cap: hemisphere sitting on top of Nose4 at y=o+43.5
+        // Dome cap: small hemisphere rounding off the ogive tip at y≈o+43.2
         var noseDome = new MeshInstance3D
         {
             Name     = "NoseDome",
             Mesh     = new SphereMesh
             {
-                Radius         = 0.20f,
-                Height         = 0.40f,
+                Radius         = 0.18f,
+                Height         = 0.36f,
                 IsHemisphere   = true,
-                RadialSegments = 24,
-                Rings          = 10,
+                RadialSegments = 32,
+                Rings          = 12,
             },
-            Position = new Vector3(0, o + 43.5f, 0),
+            Position = new Vector3(0, o + 43.18f, 0),
         };
         noseDome.SetSurfaceOverrideMaterial(0, steel);
         AddChild(noseDome);
@@ -289,7 +314,13 @@ public partial class VesselRenderer : Node3D
         AddFlap("AftFlapL", o + 26.2f, 5.6f, 3.4f, -0.55f, tiles);
         AddFlap("AftFlapR", o + 26.2f, 5.6f, 3.4f,  0.55f, tiles);
 
-        // 3 vacuum Raptors (inner, longer bell)
+        // Sooty engine-bay roof above the bells so the cluster sits in shadow.
+        var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
+        AddMesh("ShipBaySoot", new CylinderMesh
+            { TopRadius = 1.08f, BottomRadius = 1.10f, Height = 0.9f, RadialSegments = 48 },
+            sootSteel, new Vector3(0, o + 22.4f, 0));
+
+        // 3 vacuum Raptors (inner, long fixed bell — large exit area)
         const float vacR = 0.38f;
         const float slR  = 0.72f;
         float bellY = o + 22f - 1.05f;
@@ -297,18 +328,18 @@ public partial class VesselRenderer : Node3D
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f;
-            AddMesh($"RapVac{i}",
-                new CylinderMesh { TopRadius = 0.19f, BottomRadius = 0.44f, Height = 2.1f, RadialSegments = 20 },
-                engineMat, new Vector3(vacR * Mathf.Cos(a), bellY, vacR * Mathf.Sin(a)));
+            AddRaptor($"RapVac{i}",
+                new Vector3(vacR * Mathf.Cos(a), bellY - 0.45f, vacR * Mathf.Sin(a)),
+                exitR: 0.46f, throatR: 0.16f, bellLen: 2.2f);
         }
 
-        // 3 sea-level Raptors (outer, shorter bell)
+        // 3 sea-level Raptors (outer, shorter gimballing bell)
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f + 1.047198f;
-            AddMesh($"RapSL{i}",
-                new CylinderMesh { TopRadius = 0.21f, BottomRadius = 0.33f, Height = 1.4f, RadialSegments = 20 },
-                engineMat, new Vector3(slR * Mathf.Cos(a), bellY + 0.35f, slR * Mathf.Sin(a)));
+            AddRaptor($"RapSL{i}",
+                new Vector3(slR * Mathf.Cos(a), bellY + 0.35f, slR * Mathf.Sin(a)),
+                exitR: 0.34f, throatR: 0.14f, bellLen: 1.5f);
         }
 
         // GPU plumes for Starship engines
@@ -507,6 +538,51 @@ public partial class VesselRenderer : Node3D
         };
         root.SetSurfaceOverrideMaterial(0, mat);
         AddChild(root);
+    }
+
+    // ── Raptor engine ─────────────────────────────────────────────────────
+    // A real Raptor reads, from below, as: a flared regeneratively-cooled bell
+    // (warm copper/inconel metallic), a darker recessed throat up inside it, and
+    // a cluster of powerhead/turbopump plumbing on top. `pos` is the bell-exit
+    // (lowest) point; the engine is built pointing down (-Y).
+    private StandardMaterial3D? _bellMat, _throatMat, _powerMat;
+
+    private void AddRaptor(string name, Vector3 pos, float exitR, float throatR, float bellLen)
+    {
+        // Warm copper/inconel bell — metallic with a coppery albedo so it catches
+        // light as real engine hardware rather than a flat dark cone.
+        _bellMat   ??= Mat(new Color(0.42f, 0.27f, 0.18f), 0.95f, 0.34f);
+        // Recessed throat: very dark, slightly rough (soot + shadow up the bell).
+        _throatMat ??= Mat(new Color(0.06f, 0.055f, 0.05f), 0.55f, 0.70f);
+        // Powerhead plumbing: greenish-grey inconel/steel.
+        _powerMat  ??= Mat(new Color(0.34f, 0.35f, 0.33f), 0.88f, 0.40f);
+
+        float topR = throatR * 1.25f;        // bell radius at its top (near throat)
+
+        // Bell skirt — flared cone, wide at the exit (bottom), narrow at top.
+        AddMesh($"{name}Bell",
+            new CylinderMesh { TopRadius = topR, BottomRadius = exitR, Height = bellLen, RadialSegments = 24 },
+            _bellMat, new Vector3(pos.X, pos.Y + bellLen * 0.5f, pos.Z));
+
+        // Recessed throat plug just inside the top of the bell — gives the dark
+        // hollow the eye expects when looking up a nozzle from below.
+        AddMesh($"{name}Throat",
+            new CylinderMesh { TopRadius = throatR * 0.7f, BottomRadius = throatR, Height = bellLen * 0.45f, RadialSegments = 18 },
+            _throatMat, new Vector3(pos.X, pos.Y + bellLen * 0.78f, pos.Z));
+
+        // Powerhead / turbopump hint: a short wider drum on top of the throat.
+        AddMesh($"{name}Power",
+            new CylinderMesh { TopRadius = topR * 1.15f, BottomRadius = topR * 1.05f, Height = bellLen * 0.30f, RadialSegments = 16 },
+            _powerMat, new Vector3(pos.X, pos.Y + bellLen + bellLen * 0.10f, pos.Z));
+
+        // Two small plumbing nubs flanking the powerhead (turbopumps).
+        float nub = topR * 0.9f;
+        AddMesh($"{name}Pump0",
+            new SphereMesh { Radius = topR * 0.5f, Height = topR, RadialSegments = 10, Rings = 6 },
+            _powerMat, new Vector3(pos.X + nub, pos.Y + bellLen * 1.05f, pos.Z));
+        AddMesh($"{name}Pump1",
+            new SphereMesh { Radius = topR * 0.5f, Height = topR, RadialSegments = 10, Rings = 6 },
+            _powerMat, new Vector3(pos.X - nub, pos.Y + bellLen * 1.05f, pos.Z));
     }
 
     private void ClearNodes()

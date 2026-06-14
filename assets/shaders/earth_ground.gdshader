@@ -122,12 +122,16 @@ void fragment() {
 	// Atmospheric haze: blend the surface toward the sky/haze colour with distance, so
 	// terrain beyond the true horizon dissolves into a flat hazy band (no dome).
 	float dist = length(v_world_pos - CAMERA_POSITION_WORLD);
-	float haze = smoothstep(horizon_dist * 0.5, horizon_dist * 1.0, dist);
+	float haze = smoothstep(horizon_dist * 0.45, horizon_dist * 0.95, dist);
 	lit = mix(lit, haze_color, haze);
+
+	// Beyond the true horizon, fade the patch to TRANSPARENT so the scaled-space backdrop
+	// (the real Earth limb) shows through seamlessly — no hard patch-edge horizon line.
+	float edge = smoothstep(horizon_dist * 0.95, horizon_dist * 1.25, dist);
 
 	ALBEDO   = lit;
 	ROUGHNESS = mix(0.5, 0.95, ocean_mask);
 	METALLIC  = 0.0;
 	SPECULAR  = 0.2 + 0.4 * ocean_mask;
-	ALPHA     = clamp(fade, 0.0, 1.0);
+	ALPHA     = clamp(fade, 0.0, 1.0) * (1.0 - edge);
 }

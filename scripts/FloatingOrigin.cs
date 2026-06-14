@@ -17,7 +17,9 @@ public partial class FloatingOrigin : Node
     // keeps coordinates small (float-precise, no z-fighting) while the rocket-to-planet
     // proportion stays physically correct — a 121 m rocket really is ~1/52,000 of Earth.
     private const float BackdropDistance = 50_000.0f;
+    private const double MetresPerUnit   = 2.8;   // render scale (matches the vessel)
     private readonly Dictionary<string, Node3D> _planetNodes = new();
+    private Camera3D? _camera;
     // Orient Earth so Cape Canaveral (28.5°N, 80.6°W) sits at the +Y launch site, i.e.
     // the rocket lifts off over Florida / the US east coast.
     private static readonly Godot.Quaternion _planetTilt = CapeCanaveralTilt();
@@ -74,28 +76,33 @@ public partial class FloatingOrigin : Node
             }
         }
 
-        // Scaled-space backdrop: place each planet along its TRUE direction from the
-        // vessel, at a fixed distance, scaled so it subtends the correct angular size.
+        // Scaled-space backdrop, anchored to the CAMERA. Each planet is placed along its
+        // true direction from the camera at a fixed distance, scaled to its correct angular
+        // size for the camera's REAL distance to the body. Anchoring to the camera (rather
+        // than the vessel) means pulling the camera far back lifts the viewpoint into space
+        // so the whole planet shrinks to a disc — letting the player see the full Earth.
+        if (_camera == null || !IsInstanceValid(_camera))
+            _camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
+
+        var camRender = _camera?.GlobalPosition ?? Godot.Vector3.Zero;
+        // Real (sim) camera position: vessel is at the render origin; render units → metres.
+        var camSim = _currentOrigin + new Vector3d(camRender.X, camRender.Y, camRender.Z) * MetresPerUnit;
+
         foreach (var body in bridge.Universe.Bodies)
         {
             if (_planetNodes.TryGetValue(body.Id, out var node))
             {
-                var toBody = body.Position - _currentOrigin;   // true offset (metres)
+                var toBody = body.Position - camSim;            // from the camera (metres)
                 double d   = toBody.Magnitude;
                 double R   = body.Radius;
                 if (d < R + 1.0) d = R + 1.0;                   // never inside the surface
 
-                // Angular radius α of the body; backdrop radius so it subtends 2α at the
-                // fixed backdrop distance. Surface vessel → α≈90° (fills the sky).
-                double sinA = System.Math.Min(R / d, 0.999999);
-                double alpha = System.Math.Asin(sinA);
-                float  rBackdrop = BackdropDistance * (float)System.Math.Sin(alpha);
+                double sinA      = System.Math.Min(R / d, 0.999999);
+                float  rBackdrop = BackdropDistance * (float)sinA;   // subtends asin(R/d)
 
                 var dir = toBody.Normalized;
-                node.Position = new Godot.Vector3(
+                node.Position = camRender + new Godot.Vector3(
                     (float)dir.X, (float)dir.Y, (float)dir.Z) * BackdropDistance;
-                // Tilt the body 90° so its equator (blue/green) — not the polar ice cap —
-                // faces the +Y launch site; scale composes with this rotation.
                 node.Quaternion = _planetTilt;
                 node.Scale = Godot.Vector3.One * System.Math.Max(rBackdrop, 0.001f);
             }

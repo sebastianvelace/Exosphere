@@ -18,7 +18,7 @@ public partial class CameraController : Node3D
     [Export] public float OrbitSensitivity { get; set; } = 0.3f;
     [Export] public float ZoomSensitivity  { get; set; } = 1.2f;
     [Export] public float MinDistance      { get; set; } = 5f;
-    [Export] public float MaxDistance      { get; set; } = 5_000f;   // stay well inside the 50k backdrop
+    [Export] public float MaxDistance      { get; set; } = 400_000f;  // pull back into space to see the whole planet
 
     // ── Pad preset positions [yaw°, pitch°, distance] ─────────────────────
     // Cycle with C key: side view → tower side → wide front
