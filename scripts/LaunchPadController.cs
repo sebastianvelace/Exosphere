@@ -35,12 +35,18 @@ public partial class LaunchPadController : Node3D
         var steel     = Mat(new Color(0.55f, 0.56f, 0.58f), 0.55f, 0.85f); // grey lattice steel
         var darkSteel = Mat(new Color(0.28f, 0.28f, 0.31f), 0.60f, 0.80f); // OLM / dark steel
         var insul     = Mat(new Color(0.86f, 0.86f, 0.88f), 0.80f, 0.10f); // white cryo tanks
+        // Weathered, slightly lighter concrete for the wide tarmac, plus a mid
+        // scorch tone between clean concrete and fully-charred burnt.
+        var tarmac    = Mat(new Color(0.46f, 0.45f, 0.42f), 0.96f, 0.0f); // weathered apron
+        var scorch    = Mat(new Color(0.16f, 0.15f, 0.13f), 0.97f, 0.0f); // blast-zone stain
 
         BuildConcretePad(concrete, concDark, burnt);
+        BuildLaunchApron(tarmac, concDark, scorch, burnt);
         BuildOrbitalLaunchMount(darkSteel, concDark);
         BuildMechazillaTower(steel, darkSteel);
         BuildTankFarm(insul, steel);
         BuildLightningTowers(steel);
+        BuildGroundSupport(insul, steel, darkSteel, concrete, concDark);
     }
 
     // ── Raised concrete pad + flame deflector / trench ────────────────────
@@ -76,6 +82,211 @@ public partial class LaunchPadController : Node3D
         Spawn("ScorchApron", new CylinderMesh
             { TopRadius = 22f * U, BottomRadius = 22f * U, Height = 0.5f * U, RadialSegments = 32 },
             concDark, new Vector3(0, -22f * U + 6.1f * U, 0));
+
+        // ── Open flame channel venting the exhaust out to +Z ──────────────
+        // Two angled side walls forming a sloped concrete channel, and a long
+        // open trough downstream of the deflector so the trench reads as a real
+        // vent rather than a solid block.
+        const float padY    = -22f * U + 6.5f * U;
+        const float trenchZ0 = 18f * U;       // channel starts just past the mount
+        const float trenchLen = 70f * U;       // runs well out to +Z
+        const float wallH    = 9f * U;
+        const float halfChan = 13f * U;        // half-width of the open channel
+
+        foreach (var side in new[] { -1f, 1f })
+        {
+            var wall = new MeshInstance3D
+            {
+                Name            = side < 0 ? "TrenchWallL" : "TrenchWallR",
+                Mesh            = new BoxMesh { Size = new Vector3(2.5f * U, wallH, trenchLen) },
+                Position        = new Vector3(side * (halfChan + 1f * U),
+                                              padY + wallH * 0.5f - 1f * U,
+                                              trenchZ0 + trenchLen * 0.5f),
+                RotationDegrees = new Vector3(0, 0, side * 14f),  // splay outward at top
+            };
+            wall.SetSurfaceOverrideMaterial(0, burnt);
+            AddChild(wall);
+        }
+
+        // Charred channel floor between the walls (slightly below pad surface).
+        Spawn("TrenchFloor", new BoxMesh
+            { Size = new Vector3(halfChan * 2f, 1f * U, trenchLen) },
+            burnt, new Vector3(0, padY - 0.5f * U, trenchZ0 + trenchLen * 0.5f));
+
+        // Raised lip/berm at the far end where the exhaust exits the trench.
+        Spawn("TrenchExitBerm", new BoxMesh
+            { Size = new Vector3(halfChan * 2.4f, 5f * U, 4f * U) },
+            concDark, new Vector3(0, padY + 1.5f * U, trenchZ0 + trenchLen));
+    }
+
+    // ── Wide weathered launch apron / tarmac with panels + scorch zones ───
+    private void BuildLaunchApron(StandardMaterial3D tarmac, StandardMaterial3D concDark,
+                                  StandardMaterial3D scorch, StandardMaterial3D burnt)
+    {
+        // The apron sits flush with the pad surface so the complex reads as
+        // standing on a real spaceport surface, not bare ground.
+        const float padY   = -22f * U + 6.5f * U;
+        const float apron  = 180f * U;        // ~180 m square tarmac
+        const float topY   = padY + 0.05f * U;
+
+        // Main weathered concrete slab.
+        Spawn("ApronSlab", new BoxMesh { Size = new Vector3(apron, 1f * U, apron) },
+            tarmac, new Vector3(0, topY - 0.5f * U, 0));
+
+        // Expansion-joint / panel lines: thin darker strips on a grid so the
+        // surface reads as cast concrete panels rather than one flat colour.
+        const int   panels   = 9;             // grid divisions
+        const float jointW   = 0.5f * U;      // thin line width
+        const float surfaceY = topY + 0.02f * U;
+        float step = apron / panels;
+        float half = apron * 0.5f;
+        for (int i = 1; i < panels; i++)
+        {
+            float off = -half + i * step;
+            // Line running along Z (constant X).
+            Spawn($"JointX{i}", new BoxMesh { Size = new Vector3(jointW, 0.1f * U, apron) },
+                concDark, new Vector3(off, surfaceY, 0));
+            // Line running along X (constant Z).
+            Spawn($"JointZ{i}", new BoxMesh { Size = new Vector3(apron, 0.1f * U, jointW) },
+                concDark, new Vector3(0, surfaceY, off));
+        }
+
+        // Radiating blast/scorch stains fanning out from the mount centre — a
+        // few thin charred wedges (long boxes) at angles, darkening toward the
+        // exhaust vent direction (+Z).
+        var streaks = new (float ang, float len, StandardMaterial3D mat)[]
+        {
+            ( 90f, 78f * U, burnt),   // straight down the flame trench
+            ( 60f, 52f * U, scorch),
+            (120f, 52f * U, scorch),
+            ( 35f, 40f * U, scorch),
+            (145f, 40f * U, scorch),
+            (  0f, 34f * U, scorch),
+            (180f, 34f * U, scorch),
+            (270f, 30f * U, scorch),  // back side, lighter reach
+        };
+        foreach (var (angDeg, len, mat) in streaks)
+        {
+            float a   = Mathf.DegToRad(angDeg);
+            float mid = 18f * U + len * 0.5f;   // start outside the scorch apron
+            var streak = new MeshInstance3D
+            {
+                Name            = $"Scorch{(int)angDeg}",
+                Mesh            = new BoxMesh { Size = new Vector3(len, 0.12f * U, 9f * U) },
+                Position        = new Vector3(mid * Mathf.Cos(a), surfaceY + 0.01f * U,
+                                              mid * Mathf.Sin(a)),
+                RotationDegrees = new Vector3(0, -angDeg, 0),
+            };
+            streak.SetSurfaceOverrideMaterial(0, mat);
+            AddChild(streak);
+        }
+    }
+
+    // ── Propellant lines, GSE blockhouse and water-deluge tower ───────────
+    private void BuildGroundSupport(StandardMaterial3D insul, StandardMaterial3D steel,
+                                    StandardMaterial3D darkSteel, StandardMaterial3D concrete,
+                                    StandardMaterial3D concDark)
+    {
+        const float padY = -22f * U + 6.5f * U;
+
+        // ── Propellant pipe runs from the tank farm toward the OLM ─────────
+        // The tank farm sits near (+45,+45). Run a couple of insulated lines on
+        // low pipe-rack supports angling in toward the mount QD side.
+        var pipeStart = new Vector3(40f * U, padY, 40f * U);
+        var pipeEnd   = new Vector3(13f * U, padY, 13f * U);
+        Vector3 d     = pipeEnd - pipeStart;
+        float   run   = new Vector2(d.X, d.Z).Length();
+        float   yaw   = Mathf.RadToDeg(Mathf.Atan2(d.Z, d.X));
+        Vector3 pmid  = (pipeStart + pipeEnd) * 0.5f;
+
+        foreach (var (lane, tag) in new[] { (-1.4f * U, "LOX"), (1.4f * U, "CH4") })
+        {
+            // Perpendicular offset so the two lines run parallel.
+            float ox =  Mathf.Sin(Mathf.Atan2(d.Z, d.X)) * lane;
+            float oz = -Mathf.Cos(Mathf.Atan2(d.Z, d.X)) * lane;
+            var pipe = new MeshInstance3D
+            {
+                Name            = $"Pipe{tag}",
+                Mesh            = new CylinderMesh
+                    { TopRadius = 0.9f * U, BottomRadius = 0.9f * U, Height = run, RadialSegments = 10 },
+                Position        = new Vector3(pmid.X + ox, padY + 1.6f * U, pmid.Z + oz),
+                // Cylinder default axis is +Y; lay it down along the run direction.
+                RotationDegrees = new Vector3(0, -yaw, 90f),
+            };
+            pipe.SetSurfaceOverrideMaterial(0, insul);
+            AddChild(pipe);
+        }
+
+        // Low pipe-rack support posts under the lines.
+        int racks = 5;
+        for (int i = 1; i < racks; i++)
+        {
+            float t = i / (float)racks;
+            Vector3 p = pipeStart.Lerp(pipeEnd, t);
+            Spawn($"PipeRack{i}", new BoxMesh { Size = new Vector3(4.5f * U, 1.6f * U, 0.6f * U) },
+                steel, new Vector3(p.X, padY + 0.8f * U, p.Z));
+        }
+
+        // ── Water-deluge tank: tall white cylinder on a steel stand, feeding ─
+        // the pad sound-suppression system. Placed off the +X side, clear of
+        // the tower and trench.
+        var delugePos = new Vector3(52f * U, padY, -22f * U);
+        const float delH = 30f * U, delR = 7f * U;
+        // Support stand legs.
+        for (int i = 0; i < 4; i++)
+        {
+            float a  = i * Mathf.Tau / 4f + Mathf.Pi / 4f;
+            float lx = delugePos.X + Mathf.Cos(a) * delR * 0.8f;
+            float lz = delugePos.Z + Mathf.Sin(a) * delR * 0.8f;
+            Spawn($"DelugeLeg{i}", new BoxMesh { Size = new Vector3(0.9f * U, 14f * U, 0.9f * U) },
+                steel, new Vector3(lx, padY + 7f * U, lz));
+        }
+        Spawn("DelugeTank", new CylinderMesh
+            { TopRadius = delR, BottomRadius = delR, Height = delH, RadialSegments = 20 },
+            insul, new Vector3(delugePos.X, padY + 14f * U + delH * 0.5f, delugePos.Z));
+        var delDome = new MeshInstance3D
+        {
+            Name     = "DelugeDome",
+            Mesh     = new SphereMesh
+                { Radius = delR, Height = delR, IsHemisphere = true, RadialSegments = 20, Rings = 7 },
+            Position = new Vector3(delugePos.X, padY + 14f * U + delH, delugePos.Z),
+        };
+        delDome.SetSurfaceOverrideMaterial(0, insul);
+        AddChild(delDome);
+        // Deluge downcomer pipe running from the tank toward the pad.
+        Spawn("DelugePipe", new CylinderMesh
+            { TopRadius = 0.8f * U, BottomRadius = 0.8f * U, Height = 28f * U, RadialSegments = 8 },
+            steel, new Vector3(delugePos.X - 14f * U, padY + 1.2f * U, delugePos.Z));
+
+        // ── GSE blockhouse: low reinforced control building, set well back ──
+        var blockPos = new Vector3(-55f * U, padY, 50f * U);
+        Spawn("Blockhouse", new BoxMesh { Size = new Vector3(20f * U, 7f * U, 14f * U) },
+            concrete, new Vector3(blockPos.X, padY + 3.5f * U, blockPos.Z));
+        // Bermed roof slab + lower-profile annex.
+        Spawn("BlockhouseRoof", new BoxMesh { Size = new Vector3(22f * U, 1.2f * U, 16f * U) },
+            concDark, new Vector3(blockPos.X, padY + 7.6f * U, blockPos.Z));
+        Spawn("BlockhouseAnnex", new BoxMesh { Size = new Vector3(9f * U, 4f * U, 8f * U) },
+            concrete, new Vector3(blockPos.X + 13f * U, padY + 2f * U, blockPos.Z - 3f * U));
+
+        // ── A couple of horizontal GSE / nitrogen bullet tanks near the farm ─
+        foreach (var (zoff, tag) in new[] { (0f, "A"), (8f * U, "B") })
+        {
+            var bullet = new MeshInstance3D
+            {
+                Name            = $"GseBullet{tag}",
+                Mesh            = new CylinderMesh
+                    { TopRadius = 2.2f * U, BottomRadius = 2.2f * U, Height = 16f * U, RadialSegments = 14 },
+                Position        = new Vector3(66f * U, padY + 2.5f * U, 30f * U + zoff),
+                RotationDegrees = new Vector3(0, 0, 90f),  // lay horizontal along X
+            };
+            bullet.SetSurfaceOverrideMaterial(0, insul);
+            AddChild(bullet);
+            // Saddle supports.
+            Spawn($"GseSaddle{tag}1", new BoxMesh { Size = new Vector3(1f * U, 2.5f * U, 3f * U) },
+                steel, new Vector3(60f * U, padY + 1.2f * U, 30f * U + zoff));
+            Spawn($"GseSaddle{tag}2", new BoxMesh { Size = new Vector3(1f * U, 2.5f * U, 3f * U) },
+                steel, new Vector3(72f * U, padY + 1.2f * U, 30f * U + zoff));
+        }
     }
 
     // ── Orbital Launch Mount (OLM): ring table on splayed legs ────────────

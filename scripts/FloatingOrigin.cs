@@ -21,8 +21,9 @@ public partial class FloatingOrigin : Node
     private readonly Dictionary<string, Node3D> _planetNodes = new();
     private Camera3D? _camera;
     // Orient Earth so Cape Canaveral (28.5°N, 80.6°W) sits at the +Y launch site, i.e.
-    // the rocket lifts off over Florida / the US east coast.
-    private static readonly Godot.Quaternion _planetTilt = CapeCanaveralTilt();
+    // the rocket lifts off over Florida / the US east coast. Public so the ground patch
+    // can sample the same texture region at the launch site.
+    public static readonly Godot.Quaternion PlanetTilt = CapeCanaveralTilt();
 
     private static Godot.Quaternion CapeCanaveralTilt()
     {
@@ -103,7 +104,7 @@ public partial class FloatingOrigin : Node
                 var dir = toBody.Normalized;
                 node.Position = camRender + new Godot.Vector3(
                     (float)dir.X, (float)dir.Y, (float)dir.Z) * BackdropDistance;
-                node.Quaternion = _planetTilt;
+                node.Quaternion = PlanetTilt;
                 node.Scale = Godot.Vector3.One * System.Math.Max(rBackdrop, 0.001f);
             }
         }

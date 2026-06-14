@@ -52,6 +52,9 @@ public partial class EarthGroundController : Node3D
         {
             _mat = new ShaderMaterial { Shader = shader };
             _mat.SetShaderParameter("fade", 1.0f);
+            _mat.SetShaderParameter("earth_radius", 6_371_000.0f);
+            var img = Image.LoadFromFile(ProjectSettings.GlobalizePath("res://assets/textures/earth_day.jpg"));
+            if (img != null) { img.GenerateMipmaps(); _mat.SetShaderParameter("day_tex", ImageTexture.CreateFromImage(img)); }
             _mesh.SetSurfaceOverrideMaterial(0, _mat);
         }
         else
@@ -110,24 +113,20 @@ public partial class EarthGroundController : Node3D
             (float)(offsetM.Z / MetresPerUnit));
         GlobalTransform = new Transform3D(basis, offsetU);
 
-        // ── Drive surface scrolling from the vessel's GLOBAL position ─────────
-        // Project the surface point onto a stable east/north tangent frame so the
-        // ground coordinate slides continuously as the vessel moves over the
-        // planet — continents/coastlines then glide across the patch (= motion).
         if (_mat != null)
         {
-            var east  = Vector3d.Up.Cross(up);
-            if (east.Magnitude < 1e-6) east = Vector3d.Right;     // at the poles
-            east = east.Normalized;
-            var north = up.Cross(east).Normalized;
-
-            // Ground-tangential displacement of the surface point from planet centre,
-            // in metres, resolved onto (east, north). feature_scale in the shader is
-            // also in metres, so continents stay a fixed real-world size.
-            double gx = surfacePos.Dot(east);
-            double gz = surfacePos.Dot(north);
-            _mat.SetShaderParameter("ground_offset", new Vector2((float)gx, (float)gz));
             _mat.SetShaderParameter("fade", fade);
+
+            // Map the patch to the real Earth texture: the sub-vessel point and the patch's
+            // east/north axes, expressed in the texture/mesh-local frame (undo the planet
+            // tilt that the backdrop uses), so the ground shows the real launch-site terrain.
+            var tiltInv  = FloatingOrigin.PlanetTilt.Inverse();
+            var subP     = tiltInv * renderUp;
+            var eastL    = tiltInv * basis.X;    // patch +X (east)  in texture space
+            var northL   = tiltInv * basis.Z;    // patch +Z (north) in texture space
+            _mat.SetShaderParameter("sub_p", subP);
+            _mat.SetShaderParameter("east_local", eastL);
+            _mat.SetShaderParameter("north_local", northL);
 
             // True geometric horizon distance d = sqrt(2·R·h), in render units. Ground
             // beyond this hazes into the sky so the far curvature reads as a flat horizon.

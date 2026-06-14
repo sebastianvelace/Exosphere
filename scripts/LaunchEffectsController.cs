@@ -30,18 +30,19 @@ public partial class LaunchEffectsController : Node3D
     private const float MetresPerUnit = 2.8f;
 
     // Altitude band (metres) over which the cloud is active and fades out.
-    private const float TriggerCeilingM = 600f;   // above this: fully off
-    private const float FullIntensityM  = 120f;   // at/under this: full force
+    private const float TriggerCeilingM = 1000f;  // above this: fully off
+    private const float FullIntensityM  = 150f;   // at/under this: full force
     private const float MinThrottle     = 0.02f;  // throttle floor to count as "lit"
 
     // Pivot we rotate to align local +Y with the planet's "up" at the vessel,
     // and translate down to the receding ground point.
     private Node3D _pivot = null!;
 
-    // The three layers of the deluge cloud.
+    // The four layers of the deluge cloud.
     private GpuParticles3D _steamCore   = null!;  // dense, fast outward billow
     private GpuParticles3D _steamBoil   = null!;  // taller lingering boil-up
     private GpuParticles3D _dust        = null!;  // low dark debris/dust
+    private GpuParticles3D _haze        = null!;  // faint lingering ground dust haze
 
     // Shared soft-round billboard texture for all layers.
     private static ImageTexture? _softCircle;
@@ -60,8 +61,10 @@ public partial class LaunchEffectsController : Node3D
         _steamCore = BuildSteamCore();
         _steamBoil = BuildSteamBoil();
         _dust      = BuildDust();
+        _haze      = BuildHaze();
 
-        _pivot.AddChild(_dust);       // add dust first so it sits under the steam
+        _pivot.AddChild(_haze);       // faint ground haze underneath everything
+        _pivot.AddChild(_dust);       // dust sits under the steam
         _pivot.AddChild(_steamBoil);
         _pivot.AddChild(_steamCore);
 
@@ -142,15 +145,17 @@ public partial class LaunchEffectsController : Node3D
         // process material's emission interpolation by toggling Amount only when
         // it changes meaningfully. GPUParticles3D re-allocates on Amount change,
         // so we quantise to a few discrete steps to avoid churn.
-        int coreMax = 160, boilMax = 90, dustMax = 70;
+        int coreMax = 200, boilMax = 130, dustMax = 90, hazeMax = 60;
 
         int core = QuantiseAmount(coreMax, k);
         int boil = QuantiseAmount(boilMax, k);
         int dust = QuantiseAmount(dustMax, k);
+        int haze = QuantiseAmount(hazeMax, k);
 
         if (_steamCore.Amount != core) _steamCore.Amount = core;
         if (_steamBoil.Amount != boil) _steamBoil.Amount = boil;
         if (_dust.Amount     != dust) _dust.Amount       = dust;
+        if (_haze.Amount     != haze) _haze.Amount       = haze;
     }
 
     // Quantise to 1/4 steps so Amount only changes a handful of times.
@@ -167,6 +172,7 @@ public partial class LaunchEffectsController : Node3D
         _steamCore.Emitting = on;
         _steamBoil.Emitting = on;
         _dust.Emitting      = on;
+        _haze.Emitting      = on;
     }
 
     private void FadeOut(double delta)
@@ -212,57 +218,58 @@ public partial class LaunchEffectsController : Node3D
             // Emit from a broad ground ring around the pad base.
             EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
             EmissionRingAxis        = Vector3.Up,
-            EmissionRingRadius      = 3.0f,   // ~8.4 m radius ring
-            EmissionRingInnerRadius = 0.4f,
-            EmissionRingHeight      = 0.6f,
+            EmissionRingRadius      = 6.0f,   // ~17 m radius ring
+            EmissionRingInnerRadius = 0.8f,
+            EmissionRingHeight      = 1.0f,
 
             // Fire mostly OUTWARD & slightly up; wide spread so it fans across pad.
-            Direction          = new Vector3(0f, 0.35f, 1f).Normalized(),
-            Spread             = 75f,
-            Flatness           = 0.65f,        // bias toward horizontal sheeting
-            InitialVelocityMin = 14f,
-            InitialVelocityMax = 30f,
+            // Lower the vertical bias so the FIRST motion is a ground-hugging surge.
+            Direction          = new Vector3(0f, 0.18f, 1f).Normalized(),
+            Spread             = 82f,
+            Flatness           = 0.8f,         // strong bias toward horizontal sheeting
+            InitialVelocityMin = 26f,
+            InitialVelocityMax = 52f,
 
             // Heavy damping so it decelerates and balloons rather than streaking.
-            DampingMin = 6f,
-            DampingMax = 12f,
+            DampingMin = 5f,
+            DampingMax = 11f,
 
-            // Gentle buoyancy: once it slows, it boils upward.
-            Gravity = new Vector3(0f, 2.0f, 0f),
+            // Buoyancy: once the outward surge slows, it mushrooms upward.
+            Gravity = new Vector3(0f, 3.0f, 0f),
 
             // Turbulent, slow drift for that churning volume.
             TurbulenceEnabled               = true,
-            TurbulenceNoiseStrength         = 2.2f,
-            TurbulenceNoiseScale            = 1.4f,
-            TurbulenceInfluenceMin          = 0.1f,
-            TurbulenceInfluenceMax          = 0.5f,
+            TurbulenceNoiseStrength         = 3.0f,
+            TurbulenceNoiseScale            = 1.2f,
+            TurbulenceInfluenceMin          = 0.12f,
+            TurbulenceInfluenceMax          = 0.55f,
 
-            AngularVelocityMin = -40f,
-            AngularVelocityMax = 40f,
+            AngularVelocityMin = -45f,
+            AngularVelocityMax = 45f,
 
             // Big and growing — voluminous billows.
-            ScaleMin = 2.2f,
-            ScaleMax = 4.2f,
+            ScaleMin = 4.5f,
+            ScaleMax = 8.5f,
             ColorRamp = new GradientTexture1D { Gradient = grad },
         };
-        SetGrowCurve(pm, 0.4f, 1.0f); // grow over lifetime
+        SetGrowCurve(pm, 0.35f, 1.0f); // grow strongly over lifetime
 
-        var quad = new QuadMesh { Size = new Vector2(3.6f, 3.6f) };
-        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 1.25f));
+        var quad = new QuadMesh { Size = new Vector2(5.0f, 5.0f) };
+        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 1.15f));
 
         return new GpuParticles3D
         {
             Name            = "DelugeSteamCore",
-            Amount          = 160,
-            Lifetime        = 4.5f,
-            Preprocess      = 0.5f,           // start mid-billow so ignition isn't empty
-            Explosiveness   = 0.06f,
+            Amount          = 200,
+            Lifetime        = 6.0f,
+            Preprocess      = 0.6f,           // start mid-billow so ignition isn't empty
+            Explosiveness   = 0.08f,
             Randomness      = 0.5f,
             ProcessMaterial = pm,
             DrawPass1       = quad,
             Emitting        = false,
             LocalCoords     = false,          // world coords: cloud stays put as pivot recedes
-            VisibilityAabb  = new Aabb(new Vector3(-120f, -8f, -120f), new Vector3(240f, 160f, 240f)),
+            VisibilityAabb  = new Aabb(new Vector3(-260f, -12f, -260f), new Vector3(520f, 320f, 520f)),
         };
     }
 
@@ -288,51 +295,51 @@ public partial class LaunchEffectsController : Node3D
         {
             EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
             EmissionRingAxis        = Vector3.Up,
-            EmissionRingRadius      = 6.0f,
-            EmissionRingInnerRadius = 1.5f,
-            EmissionRingHeight      = 1.0f,
+            EmissionRingRadius      = 11.0f,
+            EmissionRingInnerRadius = 2.5f,
+            EmissionRingHeight      = 1.5f,
 
-            Direction          = new Vector3(0f, 1f, 0.4f).Normalized(),
-            Spread             = 55f,
-            InitialVelocityMin = 6f,
-            InitialVelocityMax = 16f,
+            Direction          = new Vector3(0f, 1f, 0.45f).Normalized(),
+            Spread             = 58f,
+            InitialVelocityMin = 9f,
+            InitialVelocityMax = 22f,
 
-            DampingMin = 3f,
-            DampingMax = 7f,
+            DampingMin = 2.5f,
+            DampingMax = 6f,
 
-            Gravity = new Vector3(0f, 4.5f, 0f), // stronger buoyant rise
+            Gravity = new Vector3(0f, 6.5f, 0f), // strong buoyant rise → tall wall
 
             TurbulenceEnabled       = true,
-            TurbulenceNoiseStrength = 2.8f,
-            TurbulenceNoiseScale    = 1.1f,
-            TurbulenceInfluenceMin  = 0.15f,
-            TurbulenceInfluenceMax  = 0.55f,
+            TurbulenceNoiseStrength = 3.4f,
+            TurbulenceNoiseScale    = 0.9f,
+            TurbulenceInfluenceMin  = 0.18f,
+            TurbulenceInfluenceMax  = 0.6f,
 
-            AngularVelocityMin = -25f,
-            AngularVelocityMax = 25f,
+            AngularVelocityMin = -28f,
+            AngularVelocityMax = 28f,
 
-            ScaleMin = 3.0f,
-            ScaleMax = 6.0f,
+            ScaleMin = 6.0f,
+            ScaleMax = 11.0f,
             ColorRamp = new GradientTexture1D { Gradient = grad },
         };
-        SetGrowCurve(pm, 0.5f, 1.0f);
+        SetGrowCurve(pm, 0.45f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(5.0f, 5.0f) };
-        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 1.0f));
+        var quad = new QuadMesh { Size = new Vector2(7.0f, 7.0f) };
+        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 0.9f));
 
         return new GpuParticles3D
         {
             Name            = "DelugeSteamBoil",
-            Amount          = 90,
-            Lifetime        = 6.5f,
-            Preprocess      = 1.0f,
+            Amount          = 130,
+            Lifetime        = 9.0f,
+            Preprocess      = 1.2f,
             Explosiveness   = 0.0f,
             Randomness      = 0.6f,
             ProcessMaterial = pm,
             DrawPass1       = quad,
             Emitting        = false,
             LocalCoords     = false,
-            VisibilityAabb  = new Aabb(new Vector3(-140f, -8f, -140f), new Vector3(280f, 220f, 280f)),
+            VisibilityAabb  = new Aabb(new Vector3(-320f, -12f, -320f), new Vector3(640f, 480f, 640f)),
         };
     }
 
@@ -358,35 +365,35 @@ public partial class LaunchEffectsController : Node3D
         {
             EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
             EmissionRingAxis        = Vector3.Up,
-            EmissionRingRadius      = 2.0f,
-            EmissionRingInnerRadius = 0.2f,
-            EmissionRingHeight      = 0.2f,
+            EmissionRingRadius      = 4.0f,
+            EmissionRingInnerRadius = 0.4f,
+            EmissionRingHeight      = 0.3f,
 
-            // Almost flat — blasts sideways across the pad.
-            Direction          = new Vector3(0f, 0.08f, 1f).Normalized(),
-            Spread             = 85f,
-            Flatness           = 0.9f,
-            InitialVelocityMin = 18f,
-            InitialVelocityMax = 36f,
+            // Almost flat — blasts sideways across the pad, fast and far.
+            Direction          = new Vector3(0f, 0.06f, 1f).Normalized(),
+            Spread             = 88f,
+            Flatness           = 0.95f,
+            InitialVelocityMin = 30f,
+            InitialVelocityMax = 60f,
 
-            DampingMin = 8f,
-            DampingMax = 16f,
+            DampingMin = 7f,
+            DampingMax = 15f,
 
             Gravity = new Vector3(0f, -1.0f, 0f), // dust settles, doesn't rise
 
             TurbulenceEnabled       = true,
-            TurbulenceNoiseStrength = 1.4f,
-            TurbulenceNoiseScale    = 1.6f,
+            TurbulenceNoiseStrength = 1.6f,
+            TurbulenceNoiseScale    = 1.4f,
             TurbulenceInfluenceMin  = 0.05f,
-            TurbulenceInfluenceMax  = 0.3f,
+            TurbulenceInfluenceMax  = 0.32f,
 
-            ScaleMin = 1.2f,
-            ScaleMax = 2.6f,
+            ScaleMin = 2.2f,
+            ScaleMax = 4.5f,
             ColorRamp = new GradientTexture1D { Gradient = grad },
         };
-        SetGrowCurve(pm, 0.6f, 1.0f);
+        SetGrowCurve(pm, 0.55f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(2.4f, 2.4f) };
+        var quad = new QuadMesh { Size = new Vector2(4.0f, 4.0f) };
         // Dust is lit-ish but still unshaded soft; alpha blend (not additive) so
         // it reads as dark, occluding debris rather than glowing vapour.
         var drawMat = new StandardMaterial3D
@@ -405,16 +412,98 @@ public partial class LaunchEffectsController : Node3D
         return new GpuParticles3D
         {
             Name            = "DelugeDust",
-            Amount          = 70,
-            Lifetime        = 3.5f,
+            Amount          = 90,
+            Lifetime        = 4.5f,
             Preprocess      = 0.3f,
-            Explosiveness   = 0.1f,
+            Explosiveness   = 0.12f,
             Randomness      = 0.5f,
             ProcessMaterial = pm,
             DrawPass1       = quad,
             Emitting        = false,
             LocalCoords     = false,
-            VisibilityAabb  = new Aabb(new Vector3(-120f, -8f, -10f), new Vector3(240f, 40f, 240f)),
+            VisibilityAabb  = new Aabb(new Vector3(-280f, -10f, -280f), new Vector3(560f, 60f, 560f)),
+        };
+    }
+
+    /// <summary>
+    /// Faint, very slow-drifting ground dust haze that lingers across the deck
+    /// after the initial blast — large, near-transparent low puffs that read as a
+    /// settling pall of vapour/dust hanging over the pad. Cheap and long-lived.
+    /// </summary>
+    private GpuParticles3D BuildHaze()
+    {
+        var grad = new Gradient
+        {
+            Colors = new[]
+            {
+                new Color(0.80f, 0.80f, 0.82f, 0.00f),
+                new Color(0.78f, 0.78f, 0.80f, 0.22f), // faint pale haze
+                new Color(0.72f, 0.72f, 0.75f, 0.16f),
+                new Color(0.68f, 0.68f, 0.71f, 0.00f),
+            },
+            Offsets = new[] { 0f, 0.2f, 0.7f, 1f },
+        };
+
+        var pm = new ParticleProcessMaterial
+        {
+            EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
+            EmissionRingAxis        = Vector3.Up,
+            EmissionRingRadius      = 14.0f,
+            EmissionRingInnerRadius = 2.0f,
+            EmissionRingHeight      = 0.5f,
+
+            // Slow, near-flat outward creep — the haze just hangs and spreads.
+            Direction          = new Vector3(0f, 0.05f, 1f).Normalized(),
+            Spread             = 90f,
+            Flatness           = 0.92f,
+            InitialVelocityMin = 3f,
+            InitialVelocityMax = 9f,
+
+            DampingMin = 1.5f,
+            DampingMax = 4f,
+
+            Gravity = new Vector3(0f, 0.4f, 0f), // barely rises
+
+            TurbulenceEnabled       = true,
+            TurbulenceNoiseStrength = 1.2f,
+            TurbulenceNoiseScale    = 0.7f,
+            TurbulenceInfluenceMin  = 0.05f,
+            TurbulenceInfluenceMax  = 0.25f,
+
+            ScaleMin = 8.0f,
+            ScaleMax = 14.0f,
+            ColorRamp = new GradientTexture1D { Gradient = grad },
+        };
+        SetGrowCurve(pm, 0.6f, 1.0f);
+
+        var quad = new QuadMesh { Size = new Vector2(9.0f, 9.0f) };
+        // Soft alpha-blended haze — not additive, so it reads as a dim pall.
+        var drawMat = new StandardMaterial3D
+        {
+            BillboardMode          = BaseMaterial3D.BillboardModeEnum.Particles,
+            ShadingMode            = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            BlendMode              = BaseMaterial3D.BlendModeEnum.Mix,
+            Transparency           = BaseMaterial3D.TransparencyEnum.Alpha,
+            DepthDrawMode          = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+            AlbedoTexture          = SoftCircle,
+            AlbedoColor            = Colors.White,
+            VertexColorUseAsAlbedo = true,
+        };
+        quad.SurfaceSetMaterial(0, drawMat);
+
+        return new GpuParticles3D
+        {
+            Name            = "DelugeHaze",
+            Amount          = 60,
+            Lifetime        = 12.0f,
+            Preprocess      = 2.0f,           // start with haze already settled
+            Explosiveness   = 0.0f,
+            Randomness      = 0.7f,
+            ProcessMaterial = pm,
+            DrawPass1       = quad,
+            Emitting        = false,
+            LocalCoords     = false,
+            VisibilityAabb  = new Aabb(new Vector3(-360f, -10f, -360f), new Vector3(720f, 120f, 720f)),
         };
     }
 
