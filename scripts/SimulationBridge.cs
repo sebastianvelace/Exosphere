@@ -54,6 +54,9 @@ public partial class SimulationBridge : Node
 
             var edl = new EDLController { Name = "EDLController" };
             uiLayer.CallDeferred("add_child", edl);
+
+            var ascent = new AscentController { Name = "AscentController" };
+            uiLayer.CallDeferred("add_child", ascent);
         }
 
         // Create LaunchPadController in the World node

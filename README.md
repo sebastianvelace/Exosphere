@@ -1290,6 +1290,7 @@ For synthesis (if .ogg files not available):
 | **Physics rigor pass (pressure-corrected thrust, true RK4)** | ✅ Done | 9 |
 | **MapViewController + ManeuverPlanner + Autopilot** | ✅ Semana 10 | Perifocal 2D map (M), draggable node, dashed projected orbit, ΔV/burn-time, autopilot burn (±0.7%) |
 | **EDL sequence + Mars surface** | ✅ Semana 11 | Auto Mars EDL (belly-flop → flip → suicide burn → soft landing −0.1 m/s), EDL HUD (radar altimeter, plasma, g-force), Mars sky/terrain, orientation-dependent drag |
+| **AscentController (launch → orbit)** | ✅ Semana 12 | Closed-loop ascent autopilot (G): gravity turn → coast → PEG-lite altitude-hold insertion; reaches 150×147 km circular orbit (e=0.000), auto-stages. Verified end to end |
 
 ---
 
@@ -1695,7 +1696,7 @@ In Semana 6 SH is just abandoned after separation. Semana 11 completes the loop:
 | Upper-stage Raptors fire from liftoff (both stages active) | Major | Fixed — Semana 12 | `PartGraph.CurrentStageParts()`: only the bottom stage's engines fire (subtree below the lowest attached decoupler) |
 | Cross-feed drains Starship tank during first-stage flight | Major | Fixed — Semana 12 | `ConsumePropellant` now draws only from the active stage's tanks (no cross-feed across an attached decoupler) — staging leaves the upper stage fully fuelled |
 | Oxidizer stranded by 9:11 LF:Ox burn ratio vs 1:2.67 tank load | Major | Fixed — Semana 12 | Consumption splits mass flow by the tanks' *loaded* LF:Ox ratio so both deplete together (SH now burns its full 3300 t, staging at ~110 km instead of ~25 km) |
-| No closed-loop ascent-to-orbit autopilot | Known | Open — Semana 12 | Propulsion is now correct (verified: SH stages high/fast, Starship retains full prop); an open-loop gravity turn can't balance loft vs horizontal build for a TWR-1.06 upper stage. Needs a PEG-style `AscentController` (analogue of EDL/maneuver autopilots) |
+| No closed-loop ascent-to-orbit autopilot | Known | Fixed — Semana 12 | `AscentController` (G): gravity turn → coast → PEG-lite altitude-hold insertion (thrust angle whose vertical component cancels gravity − centrifugal, holding altitude while building orbital velocity). Reaches a 150×147 km circular orbit (e=0.000) for the TWR-1.06 upper stage; auto-stages. Open-loop schedules couldn't balance loft vs horizontal build — closed-loop feedforward does |
 
 ---
 
