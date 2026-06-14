@@ -35,21 +35,31 @@ public static class PlanetMaterials
         // Sensible defaults so it looks great with zero tuning. Values that match
         // the shader's own defaults are set explicitly for clarity/robustness.
         mat.SetShaderParameter("sun_dir", DefaultSunDir);
-        mat.SetShaderParameter("ocean_color", new Color(0.015f, 0.09f, 0.27f));
-        mat.SetShaderParameter("ocean_shallow", new Color(0.05f, 0.32f, 0.50f));
-        mat.SetShaderParameter("land_low", new Color(0.10f, 0.34f, 0.10f));
-        mat.SetShaderParameter("land_high", new Color(0.42f, 0.34f, 0.20f));
-        mat.SetShaderParameter("ice_color", new Color(0.93f, 0.96f, 1.0f));
+        // Day-side palette tuned to read as a believable blue marble: a true
+        // mid-ocean blue, lush green→brown land, and clouds that are bright but
+        // not pure white (so the daylit face never washes out).
+        mat.SetShaderParameter("ocean_color", new Color(0.02f, 0.12f, 0.34f));    // mid ocean blue
+        mat.SetShaderParameter("ocean_shallow", new Color(0.06f, 0.34f, 0.52f));
+        mat.SetShaderParameter("land_low", new Color(0.10f, 0.34f, 0.11f));       // green lowlands
+        mat.SetShaderParameter("land_high", new Color(0.44f, 0.35f, 0.21f));      // brown/desert highlands
+        mat.SetShaderParameter("ice_color", new Color(0.92f, 0.95f, 1.0f));
+        mat.SetShaderParameter("cloud_color", new Color(0.90f, 0.92f, 0.95f));    // slightly off-white
         mat.SetShaderParameter("atmosphere_color", new Color(0.30f, 0.55f, 1.0f));
+        mat.SetShaderParameter("city_light_color", new Color(1.0f, 0.72f, 0.34f)); // warm sodium glow
+        mat.SetShaderParameter("sunset_color", new Color(1.0f, 0.42f, 0.16f));     // dusk band
         mat.SetShaderParameter("sea_level", 0.52f);
         mat.SetShaderParameter("continent_scale", 2.2f);
         mat.SetShaderParameter("cloud_scale", 3.0f);
         mat.SetShaderParameter("cloud_coverage", 0.42f);
         mat.SetShaderParameter("cloud_speed", 0.006f);
         mat.SetShaderParameter("ice_latitude", 0.74f);
-        mat.SetShaderParameter("ocean_specular", 0.7f);
+        // Keep the sun-glint TIGHT and modest so it's a small bright spot on the
+        // oceans rather than a glare across the whole daylit hemisphere.
+        mat.SetShaderParameter("ocean_specular", 0.35f);
         mat.SetShaderParameter("atmosphere_strength", 1.1f);
         mat.SetShaderParameter("night_lights", 1.0f);
+        mat.SetShaderParameter("city_density", 0.5f);
+        mat.SetShaderParameter("sunset_strength", 1.0f);
         return mat;
     }
 

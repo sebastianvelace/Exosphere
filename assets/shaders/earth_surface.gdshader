@@ -27,7 +27,8 @@ uniform vec3  land_high        : source_color = vec3(0.46, 0.37, 0.22);  // brow
 uniform vec3  ice_color        : source_color = vec3(0.93, 0.96, 1.00);
 uniform vec3  cloud_color      : source_color = vec3(1.0, 1.0, 1.0);
 uniform vec3  atmosphere_color : source_color = vec3(0.30, 0.55, 1.0);
-uniform vec3  city_light_color : source_color = vec3(1.0, 0.78, 0.42);
+uniform vec3  city_light_color : source_color = vec3(1.0, 0.72, 0.34);  // warm sodium-vapour glow
+uniform vec3  sunset_color     : source_color = vec3(1.0, 0.42, 0.16);  // terminator dusk band
 
 // Tuning ----------------------------------------------------------------------
 uniform float sea_level     : hint_range(0.0, 1.0)  = 0.52; // elevation threshold for land
@@ -39,6 +40,8 @@ uniform float ice_latitude  : hint_range(0.5, 1.0)  = 0.90; // |y| above which i
 uniform float ocean_specular: hint_range(0.0, 1.0)  = 0.12;
 uniform float atmosphere_strength : hint_range(0.0, 3.0) = 0.6;
 uniform float night_lights  : hint_range(0.0, 2.0)  = 1.0;
+uniform float city_density  : hint_range(0.0, 1.0)  = 0.5;  // higher = more widespread cities
+uniform float sunset_strength : hint_range(0.0, 3.0) = 1.0; // intensity of the dusk band
 
 varying vec3 v_local;        // normalized local-space position (point on unit sphere)
 varying vec3 v_world_normal;
@@ -162,38 +165,83 @@ void fragment() {
 	float clouds = smoothstep(cloud_coverage, cloud_coverage + 0.35, cloud_raw);
 
 	// ── Day / night lighting ────────────────────────────────────────────────
+	// `ndl` = cos(angle between surface normal and sun). +1 = subsolar point,
+	// 0 = terminator, -1 = antisolar (deep night). Every band below is keyed
+	// off this single value so the whole look sweeps correctly with sun_dir.
 	float ndl = dot(N, L);
-	float day = smoothstep(-0.15, 0.25, ndl);          // terminator softness
-	float ambient = 0.04;
+	// Soft terminator: full day a little past the boundary, full night a little
+	// before it. The wide -0.10..0.22 window keeps the day→night fade gentle.
+	float day = smoothstep(-0.10, 0.22, ndl);
+	float ambient = 0.035;
 
-	// Diffuse-lit surface.
-	vec3 lit = surface * (ambient + day * 1.15);
+	// Diffuse falloff that respects the spherical geometry (Lambert-ish, but
+	// clamped so the day hemisphere stays evenly lit rather than peaking hard at
+	// the subsolar point).
+	float diffuse = clamp(ndl, 0.0, 1.0);
+	diffuse = pow(diffuse, 0.75);                       // lift mid-latitudes a touch
+	vec3 lit = surface * (ambient + diffuse * 1.05);
 
-	// Ocean specular (sun glint) — only on water, only on the day side.
+	// ── Sunset / sunrise band at the terminator ─────────────────────────────
+	// A warm dusk glow concentrated where the sun grazes the horizon
+	// (ndl ≈ 0). Peaks right at the boundary and fades out into both day and
+	// night. Reddens the surface like low-angle sunlight scattering through air.
+	float dusk = exp(-pow(ndl / 0.16, 2.0));            // gaussian centred on terminator
+	// Only let the warm band live on the lit-ish side of the boundary so the
+	// deep-night hemisphere stays clean for the city lights.
+	dusk *= smoothstep(-0.30, 0.05, ndl);
+	lit = mix(lit, lit * 1.4 * sunset_color + sunset_color * 0.10,
+	          dusk * sunset_strength * 0.55);
+
+	// ── Rayleigh-style blue scatter toward the day limb ──────────────────────
+	// Air column is longest at grazing angles on the day side, scattering blue
+	// light forward. Brightens the daylit edge of the disk with a cool wash.
+	float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+	float rayleigh = fres * smoothstep(0.0, 0.5, ndl);  // day side only
+	lit += atmosphere_color * rayleigh * atmosphere_strength * 0.45;
+
+	// Ocean specular (sun glint) — TIGHT highlight on water, day side only, so
+	// it reads as a small bright spot, not a blown-out hemisphere.
 	vec3 H = normalize(L + V);
-	float spec = pow(max(dot(N, H), 0.0), 300.0);
-	lit += vec3(1.0, 0.97, 0.85) * spec * ocean_specular * ocean_mask * day;
+	float spec = pow(max(dot(N, H), 0.0), 600.0);
+	lit += vec3(1.0, 0.96, 0.82) * spec * ocean_specular * ocean_mask * day;
 
-	// City lights on the night side over land (not ocean / ice).
+	// ── City lights on the night side over land (not ocean / ice) ───────────
 	float night = 1.0 - day;
-	float city_field = fbm(p * 28.0, 4);
-	float cities = smoothstep(0.62, 0.78, city_field) * land * (1.0 - clamp(ice, 0.0, 1.0));
-	lit += city_light_color * cities * night * night_lights * 0.9;
+	// Two-scale clustering: a coarse field carves out lit regions (populated
+	// belts) vs dark wilderness; a fine field breaks them into city points.
+	float region = smoothstep(0.30, 0.62, 0.5 + fbm(p * 7.0 + 3.0, 4));
+	float points  = smoothstep(0.55, 0.80, 0.5 + 0.9 * fbm(p * 34.0 + 11.0, 4));
+	float fine    = smoothstep(0.45, 0.85, 0.5 + fbm(p * 90.0, 3));
+	// Density variation: bright clusters where region & points coincide, sparse
+	// elsewhere; `city_density` widens how much land lights up overall.
+	float cities = points * fine * mix(region, 1.0, city_density * 0.5);
+	cities *= land * (1.0 - clamp(ice, 0.0, 1.0));
+	// Fade in only at/after dusk: 0 in daylight, full on the deep night side.
+	float city_fade = smoothstep(0.05, -0.18, ndl);
+	cities *= city_fade;
+	vec3 city_glow = city_light_color * cities * night_lights;
+	lit += city_glow * 0.85;
 
-	// ── Clouds over the lit surface (white, lit by day, additive-ish) ───────
-	vec3 cloud_lit = cloud_color * (ambient + day * 1.0);
-	lit = mix(lit, cloud_lit, clouds * 0.5);
+	// ── Clouds over the lit surface (lit by day, dark at night) ─────────────
+	// Clouds catch a little sunset colour at the terminator too.
+	vec3 cloud_day = cloud_color * (ambient + diffuse * 1.0);
+	cloud_day = mix(cloud_day, cloud_day * sunset_color * 1.3, dusk * 0.5);
+	lit = mix(lit, cloud_day, clouds * 0.5);
 
 	// ── Blue Fresnel atmospheric rim ────────────────────────────────────────
-	float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 6.0);
-	// Rim is brightest where it is also day-lit; keep a faint dusk band.
-	float rim_day = smoothstep(-0.35, 0.4, ndl);
-	vec3 rim = atmosphere_color * fres * atmosphere_strength * (0.2 + 0.9 * rim_day);
+	// Brightest on the day limb, with a thin warm dusk tint at the terminator
+	// edge and a faint cool glow carrying onto the night limb.
+	float rim_fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
+	float rim_day = smoothstep(-0.5, 0.45, ndl);
+	vec3 rim_col = mix(atmosphere_color, sunset_color, dusk * 0.6);
+	vec3 rim = rim_col * rim_fres * atmosphere_strength * (0.12 + 0.95 * rim_day);
 	lit += rim;
 
 	ALBEDO = lit;
-	// Drive emission for night lights + rim so they glow without external light.
-	EMISSION = city_light_color * cities * night * night_lights * 0.6 + rim * 0.2;
+	// Emission makes the night-side cities and the limb glow self-illuminated
+	// (the shader is `unshaded`, so nothing else lights them).
+	EMISSION = city_glow * 0.7 + rim * 0.22
+	         + sunset_color * dusk * sunset_strength * 0.06;
 	ROUGHNESS = mix(0.55, 0.95, 1.0 - ocean_mask);   // ocean smoother than land
 	METALLIC = 0.0;
 	SPECULAR = 0.2 + 0.5 * ocean_mask;

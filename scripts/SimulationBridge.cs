@@ -44,6 +44,11 @@ public partial class SimulationBridge : Node
         var audio = new AudioManager { Name = "AudioManager" };
         GetParent()?.CallDeferred("add_child", audio);
 
+        // Sun-accurate lighting: orients the DirectionalLight from the real Sun direction
+        // and feeds sun_dir to the planet materials (day/night terminator + city lights).
+        var sun = new SunController { Name = "SunController" };
+        GetParent()?.CallDeferred("add_child", sun);
+
         // Orbital map panel (toggle with M). Lives under the UI CanvasLayer so it
         // renders above the 3D world; it owns the autopilot as a child.
         var uiLayer = GetTree().Root.FindChild("UI", true, false) as CanvasLayer;
@@ -69,6 +74,11 @@ public partial class SimulationBridge : Node
 
             var marsTerrain = new MarsTerrainController { Name = "MarsTerrainController" };
             worldNode.CallDeferred("add_child", marsTerrain);
+
+            // Local true-scale Earth ground patch: flat far horizon + scrolling surface
+            // features for motion at low altitude; fades into the scaled-space backdrop.
+            var earthGround = new EarthGroundController { Name = "EarthGroundController" };
+            worldNode.CallDeferred("add_child", earthGround);
 
             var starfield = new StarfieldController { Name = "StarfieldController" };
             worldNode.CallDeferred("add_child", starfield);
