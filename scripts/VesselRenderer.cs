@@ -65,11 +65,23 @@ public partial class VesselRenderer : Node3D
         BuildSuperHeavyGeometry(includeSepCap: false);
         AddSHGridFins();
 
-        // Interstage adapter (y=20 → y=22)
-        var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
+        // Hot-stage interstage ring (y=20 → y=22). Sooty steel, vented look.
+        var ringSteel = Mat(new Color(0.40f, 0.39f, 0.40f), 0.86f, 0.45f);
+        var ventMat   = Mat(new Color(0.10f, 0.10f, 0.11f), 0.70f, 0.55f);
         AddMesh("Interstage", new CylinderMesh
             { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 2f, RadialSegments = 48 },
-            darkSteel, new Vector3(0, 21f, 0));
+            ringSteel, new Vector3(0, 21f, 0));
+
+        // Vertical vent slots around the hot-stage ring (dark recesses).
+        for (int i = 0; i < 24; i++)
+        {
+            float a = i * Mathf.Pi / 12f;
+            AddMesh($"Vent{i}", new BoxMesh { Size = new Vector3(0.10f, 1.4f, 0.16f) },
+                ventMat, new Vector3(1.14f * Mathf.Cos(a), 21f, 1.14f * Mathf.Sin(a)));
+        }
+        // Lip rings top and bottom of the interstage.
+        AddWeldRing("InterLipB", 1.155f, 20.1f);
+        AddWeldRing("InterLipT", 1.155f, 21.9f);
 
         // Starship section sits at separation plane y=22
         BuildStarshipSection(vessel, yOffset: 0f);
@@ -93,14 +105,23 @@ public partial class VesselRenderer : Node3D
 
     private void BuildSuperHeavyGeometry(bool includeSepCap)
     {
-        var steel     = Mat(new Color(0.86f, 0.86f, 0.88f), 0.92f, 0.18f);
-        var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
-        var engineMat = Mat(new Color(0.18f, 0.18f, 0.20f), 0.82f, 0.38f);
+        // Super Heavy steel reads a touch warmer/duller than Starship's brighter
+        // upper-stage steel (more soot/handling on the booster).
+        var steel     = Mat(new Color(0.78f, 0.78f, 0.80f), 0.93f, 0.22f);
+        var darkSteel = Mat(new Color(0.46f, 0.46f, 0.49f), 0.88f, 0.34f);
+        var engineMat = Mat(new Color(0.16f, 0.16f, 0.18f), 0.80f, 0.40f);
 
         // Main body (y=2 → y=20)
         _hullMesh = AddMesh("SHBody", new CylinderMesh
             { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 18f, RadialSegments = 48 },
             steel, new Vector3(0, 11f, 0));
+
+        // Weld seams down the booster barrel sections.
+        AddWeldRings("SHWeld", 1.151f, 3f, 19.5f, 11);
+
+        // Raceway / conduit running up one side of the booster (real SH detail).
+        AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
+            darkSteel, new Vector3(1.16f, 11f, 0f));
 
         // Engine skirt (y=0 → y=2)
         AddMesh("SHSkirt", new CylinderMesh
@@ -153,17 +174,27 @@ public partial class VesselRenderer : Node3D
 
     private void AddSHGridFins()
     {
-        var finMat = Mat(new Color(0.42f, 0.42f, 0.45f), 0.90f, 0.28f);
+        // Real SH grid fins: 4 near the top, offset ~90° apart, slightly
+        // forward of the body. Built from a mount arm + a thin lattice slab.
+        var finMat   = Mat(new Color(0.40f, 0.40f, 0.43f), 0.90f, 0.34f);
+        var mountMat = Mat(new Color(0.34f, 0.34f, 0.37f), 0.86f, 0.42f);
+
         for (int i = 0; i < 4; i++)
         {
-            float a    = i * Mathf.Pi * 0.5f;
-            float posX = 1.18f * Mathf.Cos(a);
-            float posZ = 1.18f * Mathf.Sin(a);
+            float a   = i * Mathf.Pi * 0.5f;
+            float cos = Mathf.Cos(a);
+            float sin = Mathf.Sin(a);
+
+            // Mount hinge/arm against the hull.
+            AddMesh($"GridFinMount{i}", new BoxMesh { Size = new Vector3(0.55f, 1.3f, 0.70f) },
+                mountMat, new Vector3(1.18f * cos, 18.6f, 1.18f * sin));
+
+            // The lattice slab itself, projecting outward (the recognisable fin).
             var fin = new MeshInstance3D
             {
                 Name            = $"GridFin{i}",
-                Mesh            = new BoxMesh { Size = new Vector3(0.18f, 4.0f, 1.55f) },
-                Position        = new Vector3(posX, 19.5f, posZ),
+                Mesh            = new BoxMesh { Size = new Vector3(1.45f, 1.65f, 0.16f) },
+                Position        = new Vector3(1.78f * cos, 18.8f, 1.78f * sin),
                 RotationDegrees = new Vector3(0, -i * 90f, 0),
             };
             fin.SetSurfaceOverrideMaterial(0, finMat);
@@ -179,46 +210,65 @@ public partial class VesselRenderer : Node3D
 
     private void BuildStarshipSection(Vessel vessel, float yOffset)
     {
-        var steel     = Mat(new Color(0.86f, 0.86f, 0.88f), 0.92f, 0.18f);
-        var tiles     = Mat(new Color(0.09f, 0.09f, 0.11f), 0.04f, 0.94f);
+        // Starship steel is the brightest, cleanest bare 304L in the stack.
+        var steel     = Mat(new Color(0.87f, 0.87f, 0.89f), 0.93f, 0.16f);
+        var tiles     = TileMat();
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
-        var engineMat = Mat(new Color(0.18f, 0.18f, 0.20f), 0.82f, 0.38f);
+        var engineMat = Mat(new Color(0.16f, 0.16f, 0.18f), 0.80f, 0.40f);
 
         float o = yOffset;
 
-        // Body: lower (tiles) y=o+24→o+31; upper (steel) y=o+31→o+38
+        // ── Body barrel (steel) y=o+24 → o+38 ─────────────────────────────
+        // The windward (one) side is black heat-shield tiles; the leeward side
+        // stays bare steel. We model this as a full steel barrel plus a tile
+        // "shell" half wrapping the windward (-X / forward) side.
         _hullMesh = AddMesh("BodyUpper",
             new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 7f, RadialSegments = 48 },
             steel, new Vector3(0, o + 34.5f, 0));
 
         AddMesh("BodyLower",
             new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 7f, RadialSegments = 48 },
-            tiles, new Vector3(0, o + 27.5f, 0));
+            steel, new Vector3(0, o + 27.5f, 0));
 
-        // ── Ogive nosecone (replaces old sharp cone) ──────────────────────
-        // Section 1: y=o+38 → o+41, taper r=1.15→0.72
+        // Weld seams down the ship barrel.
+        AddWeldRings("ShipWeld", 1.151f, o + 25f, o + 37.5f, 8);
+
+        // Windward black-tile band: a slightly larger half-cylinder shell on the
+        // -X side, running the full body height. Built from short tile staves so
+        // the dark heat-shield reads clearly on one side only.
+        AddTileBand(o + 24f, o + 38f);
+
+        // ── Ogive nosecone (smooth multi-segment taper) ───────────────────
+        // Real Starship nose is a smooth ogive. Use 4 short frusta to round it.
         AddMesh("Nose1",
-            new CylinderMesh { TopRadius = 0.72f, BottomRadius = 1.15f, Height = 3f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 39.5f, 0));
-
-        // Section 2: y=o+41 → o+43, taper r=0.72→0.25
+            new CylinderMesh { TopRadius = 1.02f, BottomRadius = 1.15f, Height = 1.4f, RadialSegments = 48 },
+            steel, new Vector3(0, o + 38.7f, 0));
         AddMesh("Nose2",
-            new CylinderMesh { TopRadius = 0.25f, BottomRadius = 0.72f, Height = 2f, RadialSegments = 48 },
-            steel, new Vector3(0, o + 42.0f, 0));
+            new CylinderMesh { TopRadius = 0.82f, BottomRadius = 1.02f, Height = 1.4f, RadialSegments = 48 },
+            steel, new Vector3(0, o + 40.1f, 0));
+        AddMesh("Nose3",
+            new CylinderMesh { TopRadius = 0.52f, BottomRadius = 0.82f, Height = 1.4f, RadialSegments = 48 },
+            steel, new Vector3(0, o + 41.5f, 0));
+        AddMesh("Nose4",
+            new CylinderMesh { TopRadius = 0.20f, BottomRadius = 0.52f, Height = 1.3f, RadialSegments = 48 },
+            steel, new Vector3(0, o + 42.85f, 0));
 
-        // Dome cap: hemisphere r=0.25 sitting on top of Nose2 at y=o+43
+        // Tile coverage continues up the windward side of the nose.
+        AddTileBand(o + 38f, o + 41.5f, topRadius: 0.83f, botRadius: 1.16f);
+
+        // Dome cap: hemisphere sitting on top of Nose4 at y=o+43.5
         var noseDome = new MeshInstance3D
         {
             Name     = "NoseDome",
             Mesh     = new SphereMesh
             {
-                Radius         = 0.25f,
-                Height         = 0.5f,
+                Radius         = 0.20f,
+                Height         = 0.40f,
                 IsHemisphere   = true,
-                RadialSegments = 20,
-                Rings          = 8,
+                RadialSegments = 24,
+                Rings          = 10,
             },
-            Position = new Vector3(0, o + 43f, 0),
+            Position = new Vector3(0, o + 43.5f, 0),
         };
         noseDome.SetSurfaceOverrideMaterial(0, steel);
         AddChild(noseDome);
@@ -227,26 +277,17 @@ public partial class VesselRenderer : Node3D
         AddMesh("Skirt",
             new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.08f, Height = 2f, RadialSegments = 48 },
             darkSteel, new Vector3(0, o + 23f, 0));
+        AddWeldRing("SkirtLip", 1.155f, o + 24f);
 
-        // Forward canards (small, near top of upper body)
-        AddMesh("CanardL",     new BoxMesh { Size = new Vector3(0.12f, 1.6f, 2.6f) },
-            darkSteel, new Vector3(-1.23f, o + 37f, 0));
-        AddMesh("CanardR",     new BoxMesh { Size = new Vector3(0.12f, 1.6f, 2.6f) },
-            darkSteel, new Vector3( 1.23f, o + 37f, 0));
-        AddMesh("CanardRootL", new BoxMesh { Size = new Vector3(0.18f, 2.0f, 1.0f) },
-            steel, new Vector3(-1.16f, o + 37f, 0));
-        AddMesh("CanardRootR", new BoxMesh { Size = new Vector3(0.18f, 2.0f, 1.0f) },
-            steel, new Vector3( 1.16f, o + 37f, 0));
+        // ── Forward flaps (2 small, high on the body, windward -X side) ────
+        // Real V2 forward flaps are small and shifted toward the leeward edge
+        // of the windward face; tile-covered.
+        AddFlap("FwdFlapL", o + 37.0f, 3.0f, 2.0f, -0.62f, tiles);
+        AddFlap("FwdFlapR", o + 37.0f, 3.0f, 2.0f,  0.62f, tiles);
 
-        // Aft body flaps (large, lower body area)
-        AddMesh("FlapL",     new BoxMesh { Size = new Vector3(0.14f, 5.5f, 4.6f) },
-            tiles, new Vector3(-1.23f, o + 26.5f, 0));
-        AddMesh("FlapR",     new BoxMesh { Size = new Vector3(0.14f, 5.5f, 4.6f) },
-            tiles, new Vector3( 1.23f, o + 26.5f, 0));
-        AddMesh("FlapRootL", new BoxMesh { Size = new Vector3(0.20f, 5.5f, 1.2f) },
-            tiles, new Vector3(-1.16f, o + 26.5f, 0));
-        AddMesh("FlapRootR", new BoxMesh { Size = new Vector3(0.20f, 5.5f, 1.2f) },
-            tiles, new Vector3( 1.16f, o + 26.5f, 0));
+        // ── Aft flaps (2 large, low on the body) ──────────────────────────
+        AddFlap("AftFlapL", o + 26.2f, 5.6f, 3.4f, -0.55f, tiles);
+        AddFlap("AftFlapR", o + 26.2f, 5.6f, 3.4f,  0.55f, tiles);
 
         // 3 vacuum Raptors (inner, longer bell)
         const float vacR = 0.38f;
@@ -350,8 +391,29 @@ public partial class VesselRenderer : Node3D
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
+    // Bare 304L stainless: high metallic, low-ish roughness, full environment
+    // reflection with a faint specular tint. Used for all steel surfaces.
     private static StandardMaterial3D Mat(Color albedo, float metallic, float roughness)
-        => new() { AlbedoColor = albedo, Metallic = metallic, Roughness = roughness };
+        => new()
+        {
+            AlbedoColor      = albedo,
+            Metallic         = metallic,
+            MetallicSpecular = 0.55f,
+            Roughness        = roughness,
+            // Brighter steels read as bare metal; pick up the sky/IBL strongly.
+            RimEnabled       = false,
+        };
+
+    // Black hexagonal heat-shield tiles: dark, matte, dielectric (non-metal),
+    // with a touch of micro-specular so panel edges still catch light.
+    private static StandardMaterial3D TileMat()
+        => new()
+        {
+            AlbedoColor      = new Color(0.045f, 0.045f, 0.055f),
+            Metallic         = 0.0f,
+            MetallicSpecular = 0.18f,
+            Roughness        = 0.92f,
+        };
 
     private MeshInstance3D AddMesh(string name, Mesh mesh, StandardMaterial3D mat, Vector3 pos)
     {
@@ -359,6 +421,92 @@ public partial class VesselRenderer : Node3D
         node.SetSurfaceOverrideMaterial(0, mat);
         AddChild(node);
         return node;
+    }
+
+    // Shared material for thin darker weld/panel lines so the steel reads as
+    // a real, built vehicle made of stacked, welded rings.
+    private StandardMaterial3D? _weldMat;
+    private StandardMaterial3D WeldMat =>
+        _weldMat ??= Mat(new Color(0.36f, 0.36f, 0.39f), 0.85f, 0.45f);
+
+    // A thin ring proud of the hull marking a weld seam between barrel sections.
+    private void AddWeldRing(string name, float radius, float y)
+    {
+        AddMesh(name, new CylinderMesh
+            { TopRadius = radius, BottomRadius = radius, Height = 0.06f, RadialSegments = 48 },
+            WeldMat, new Vector3(0, y, 0));
+    }
+
+    // A stack of evenly spaced weld rings between two heights.
+    private void AddWeldRings(string prefix, float radius, float yStart, float yEnd, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            float t = (i + 1f) / (count + 1f);
+            AddWeldRing($"{prefix}{i}", radius, Mathf.Lerp(yStart, yEnd, t));
+        }
+    }
+
+    // Black heat-shield tile coverage over the windward (-X) half of a body
+    // section. Built from short tile staves spanning ~200° of the circumference
+    // so the dark side reads clearly while the leeward side stays bare steel.
+    private void AddTileBand(float yBottom, float yTop, float topRadius = 1.165f, float botRadius = 1.165f)
+    {
+        var tiles  = TileMat();
+        float yMid = (yBottom + yTop) * 0.5f;
+        float h    = yTop - yBottom;
+
+        // Windward arc centred on -X (angle = π), spanning ~200°.
+        const int   staves = 14;
+        const float arc    = 3.49f;            // ~200°
+        for (int i = 0; i < staves; i++)
+        {
+            float a = Mathf.Pi - arc * 0.5f + arc * (i + 0.5f) / staves;
+            float r = (topRadius + botRadius) * 0.5f;
+            // Thin curved-ish stave (a flat slat) sitting just proud of the hull.
+            var stave = new MeshInstance3D
+            {
+                Name            = $"Tile_{(int)(yMid * 10)}_{i}",
+                Mesh            = new BoxMesh { Size = new Vector3(0.52f, h, 0.10f) },
+                Position        = new Vector3(r * Mathf.Cos(a), yMid, r * Mathf.Sin(a)),
+                RotationDegrees = new Vector3(0, -Mathf.RadToDeg(a) + 90f, 0),
+            };
+            stave.SetSurfaceOverrideMaterial(0, tiles);
+            AddChild(stave);
+        }
+    }
+
+    // A Starship aerodynamic flap: a tile-covered slab plus a steel root, both
+    // mounted on the windward (-X) side and offset around the body by `angOff`
+    // radians from the -X axis.
+    private void AddFlap(string name, float y, float length, float chord, float angOff, StandardMaterial3D mat)
+    {
+        float a   = Mathf.Pi + angOff;
+        float cos = Mathf.Cos(a);
+        float sin = Mathf.Sin(a);
+        float deg = -Mathf.RadToDeg(a) + 90f;
+
+        // Flap blade, projecting radially outward.
+        var blade = new MeshInstance3D
+        {
+            Name            = name,
+            Mesh            = new BoxMesh { Size = new Vector3(chord, length, 0.16f) },
+            Position        = new Vector3(1.55f * cos, y, 1.55f * sin),
+            RotationDegrees = new Vector3(0, deg, 0),
+        };
+        blade.SetSurfaceOverrideMaterial(0, mat);
+        AddChild(blade);
+
+        // Root fairing where the flap meets the hull.
+        var root = new MeshInstance3D
+        {
+            Name            = name + "Root",
+            Mesh            = new BoxMesh { Size = new Vector3(0.55f, length, 0.20f) },
+            Position        = new Vector3(1.17f * cos, y, 1.17f * sin),
+            RotationDegrees = new Vector3(0, deg, 0),
+        };
+        root.SetSurfaceOverrideMaterial(0, mat);
+        AddChild(root);
     }
 
     private void ClearNodes()

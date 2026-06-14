@@ -3,10 +3,11 @@ namespace Exosphere.Game;
 using Godot;
 
 /// <summary>
-/// Drives the ProceduralSkyMaterial based on vessel altitude.
-/// Ground (0 km): bright blue troposphere sky.
-/// Transition (10–80 km): smoothly darkens through stratosphere/mesosphere.
-/// Space (80+ km): black starfield sky.
+/// Drives the ProceduralSkyMaterial + WorldEnvironment based on vessel altitude.
+/// Ground (0–10 km): bright blue troposphere sky (Rayleigh look).
+/// Transition (10–70 km): smoothly darkens through stratosphere/mesosphere.
+/// Space (80+ km): pure-black deep space — sky energy and ambient energy ~0,
+/// so the starfield + planet read against true black regardless of zoom.
 /// </summary>
 [GlobalClass]
 public partial class SkyController : Node
@@ -27,18 +28,24 @@ public partial class SkyController : Node
     static readonly Color M_GndB    = new(0.30f, 0.16f, 0.10f);   // dark rust base
     static readonly Color M_Ambient = new(0.95f, 0.70f, 0.50f);   // warm dusty light
 
-    // ── Space sky ─────────────────────────────────────────────────────────
-    static readonly Color S_Top     = new(0.004f, 0.004f, 0.012f);
-    static readonly Color S_Horizon = new(0.012f, 0.016f, 0.035f);
-    static readonly Color S_GndH    = new(0.008f, 0.010f, 0.020f);
-    static readonly Color S_GndB    = new(0.0f,   0.0f,   0.0f);
+    // ── Space sky — PURE BLACK (no residual colour cast at orbit) ─────────
+    static readonly Color S_Black = new(0.0f, 0.0f, 0.0f);
 
     // ── Ambient light ─────────────────────────────────────────────────────
     static readonly Color A_Ground = new(0.55f, 0.70f, 1.00f);   // bluish sky light
-    static readonly Color A_Space  = new(0.06f, 0.07f, 0.12f);   // faint starlight
+    static readonly Color A_Space  = new(0.0f,  0.0f,  0.0f);    // no fake sky light
 
-    const double TRANS_LOW  =  8_000.0;   // m: sky starts darkening
-    const double TRANS_HIGH = 80_000.0;   // m: fully space
+    // Altitude bands (metres of altitude over the dominant body):
+    //   < TRANS_LOW           → full ground-level atmosphere sky.
+    //   TRANS_LOW → TRANS_HIGH → blend ground → pure black.
+    //   > TRANS_HIGH          → fully space (pure black, ~0 ambient).
+    const double TRANS_LOW  = 10_000.0;   // m: sky starts darkening
+    const double TRANS_HIGH = 80_000.0;   // m: fully black space
+
+    // Ground-level sky/ambient energies (driven to ~0 in space).
+    const float SKY_ENERGY_GROUND = 1.0f;
+    const float AMB_ENERGY_EARTH  = 0.45f;
+    const float AMB_ENERGY_MARS   = 0.35f;
 
     public override void _Ready()
     {
@@ -64,7 +71,10 @@ public partial class SkyController : Node
 
     private void UpdateSky(float t, string bodyId)
     {
+        // f: 0 at ground, 1 in space. Smoothstep, then bias toward black so the
+        // upper atmosphere is essentially black well before the hard ceiling.
         float f = Smooth(t);
+        float fBlack = Smooth(f);   // double-smoothed → blue collapses early, black holds
 
         // Pick the ground-level palette for the current body (default: Earth blue).
         bool isMars = bodyId == "mars";
@@ -73,21 +83,34 @@ public partial class SkyController : Node
         Color gGH  = isMars ? M_GndH : G_GndH;
         Color gGB  = isMars ? M_GndB : G_GndB;
         Color aGnd = isMars ? M_Ambient : A_Ground;
+        float aGndE = isMars ? AMB_ENERGY_MARS : AMB_ENERGY_EARTH;
 
         if (_skyMat != null)
         {
-            _skyMat.SkyTopColor      = gTop.Lerp(S_Top, f);
-            _skyMat.SkyHorizonColor  = gHor.Lerp(S_Horizon, f);
-            _skyMat.GroundHorizonColor = gGH.Lerp(S_GndH, f);
-            _skyMat.GroundBottomColor  = gGB.Lerp(S_GndB, f);
-            // Sun glow fades as atmosphere thins (Mars sun is smaller/dimmer).
+            // Every band of the sky collapses to pure black in space — no blue cast.
+            _skyMat.SkyTopColor        = gTop.Lerp(S_Black, fBlack);
+            _skyMat.SkyHorizonColor    = gHor.Lerp(S_Black, fBlack);
+            _skyMat.GroundHorizonColor = gGH.Lerp(S_Black, fBlack);
+            _skyMat.GroundBottomColor  = gGB.Lerp(S_Black, fBlack);
+            // Sun glow tightens as atmosphere thins (Mars sun is smaller/dimmer).
             _skyMat.SunAngleMax = Mathf.Lerp(isMars ? 3.5f : 6.0f, 1.0f, f);
+            // Energy multiplier scales the whole sky; → ~0 so even the sun-disk
+            // scatter can't wash the background. Sun disk itself still draws.
+            _skyMat.EnergyMultiplier = Mathf.Lerp(SKY_ENERGY_GROUND, 0.0f, fBlack);
         }
 
         if (_env != null)
         {
-            _env.AmbientLightColor  = aGnd.Lerp(A_Space, f);
-            _env.AmbientLightEnergy = Mathf.Lerp(isMars ? 0.35f : 0.45f, 0.08f, f);
+            // Ambient → black with ~0 energy in space: nothing lit by a fake sky.
+            _env.AmbientLightColor  = aGnd.Lerp(A_Space, fBlack);
+            _env.AmbientLightEnergy = Mathf.Lerp(aGndE, 0.0f, fBlack);
+
+            // Background (sky) energy also collapses, so an environment whose
+            // background is the Sky reads as true black in orbit at any zoom.
+            _env.BackgroundEnergyMultiplier = Mathf.Lerp(1.0f, 0.0f, fBlack);
+
+            // Kill any atmospheric fog wash at altitude (depth/height fog → off).
+            _env.FogEnabled = f < 0.5f && _env.FogEnabled;
         }
     }
 

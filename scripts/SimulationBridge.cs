@@ -69,6 +69,9 @@ public partial class SimulationBridge : Node
 
             var marsTerrain = new MarsTerrainController { Name = "MarsTerrainController" };
             worldNode.CallDeferred("add_child", marsTerrain);
+
+            var starfield = new StarfieldController { Name = "StarfieldController" };
+            worldNode.CallDeferred("add_child", starfield);
         }
 
         SpawnStarshipStack(dataPath);
@@ -77,7 +80,12 @@ public partial class SimulationBridge : Node
 
         _camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
         if (_camera != null)
-            _camera.Far = 2_000_000.0f;
+        {
+            // Planets render as scaled-space backdrops at ~50 k units, so a modest far
+            // plane suffices — which keeps the depth buffer precise across the whole scene.
+            _camera.Near = 0.5f;
+            _camera.Far  = 120_000.0f;
+        }
 
         var light = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
         if (light != null)
@@ -136,8 +144,10 @@ public partial class SimulationBridge : Node
         vessel.Parts.AddJoint(new Joint(engines,   decoupler, "bottom", "top"));
         vessel.Parts.AddJoint(new Joint(decoupler, sh,        "bottom", "top"));
 
-        // Place on Earth surface at +Y from Earth centre (north pole, simple & clean)
-        // Visual model has stack bottom at y=0, so spawn altitude = 0 → launch mount height
+        // Spawn at +Y so the stack stands vertical in the render frame. The Earth backdrop
+        // is rotated (see FloatingOrigin) so the blue/green equator — not the polar ice —
+        // faces the launch site, keeping the planet realistic without tilting the rocket.
+        // Visual model has stack bottom at y=0, so spawn altitude = 0 → launch mount height.
         const double mountHeightM = 12.0;  // OLM height in metres
         var upDir = new Vector3d(0, 1, 0); // +Y from Earth centre
 
@@ -179,47 +189,25 @@ public partial class SimulationBridge : Node
 
     private void SpawnPlanets()
     {
-        const float renderScale = 1.0f / 10000.0f;
         var planetsNode = GetTree().Root.FindChild("Planets", true, false) as Node3D;
         var fo          = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
         if (planetsNode == null || fo == null) return;
 
         foreach (var body in Universe.Bodies)
         {
-            float r = (float)(body.Radius * renderScale);
-
-            var sphere = new SphereMesh { Radius = r, Height = r * 2f, RadialSegments = 64, Rings = 32 };
-            var mat    = new StandardMaterial3D();
-            mat.AlbedoColor     = GetPlanetColor(body.Id);
-            mat.Roughness       = 0.88f;
-            mat.EmissionEnabled = true;
-            mat.Emission        = GetPlanetColor(body.Id) * 0.28f;
+            // Unit sphere — FloatingOrigin scales each planet per-frame to its correct
+            // angular size as a precision-safe "scaled-space" backdrop. The shader supplies
+            // its own atmospheric Fresnel rim, so no separate glow shell is needed.
+            var sphere = new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 96, Rings = 48 };
+            var mat = body.Id == "earth"
+                ? PlanetMaterials.CreateEarth()
+                : PlanetMaterials.CreatePlanet(body.Id, GetPlanetColor(body.Id));
 
             var mesh = new MeshInstance3D { Name = body.Name + "_mesh", Mesh = sphere };
             mesh.SetSurfaceOverrideMaterial(0, mat);
             planetsNode.AddChild(mesh);
             fo.RegisterPlanetNode(body.Id, mesh);
-
-            if (body.Id == "earth") SpawnAtmosphereGlow(mesh, r);
         }
-    }
-
-    private static void SpawnAtmosphereGlow(MeshInstance3D earthMesh, float surfaceRadius)
-    {
-        float r = surfaceRadius * 1.028f;
-        var atm = new SphereMesh { Radius = r, Height = r * 2f, RadialSegments = 64, Rings = 32 };
-        var mat = new StandardMaterial3D
-        {
-            AlbedoColor              = new Color(0.25f, 0.55f, 1.0f, 0.0f),
-            Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
-            CullMode                 = BaseMaterial3D.CullModeEnum.Front,
-            EmissionEnabled          = true,
-            Emission                 = new Color(0.10f, 0.42f, 0.96f),
-            EmissionEnergyMultiplier = 0.60f,
-        };
-        var node = new MeshInstance3D { Name = "atmosphere_glow", Mesh = atm };
-        node.SetSurfaceOverrideMaterial(0, mat);
-        earthMesh.AddChild(node);
     }
 
     private static Color GetPlanetColor(string id) => id switch

@@ -18,7 +18,7 @@ public partial class CameraController : Node3D
     [Export] public float OrbitSensitivity { get; set; } = 0.3f;
     [Export] public float ZoomSensitivity  { get; set; } = 1.2f;
     [Export] public float MinDistance      { get; set; } = 5f;
-    [Export] public float MaxDistance      { get; set; } = 500_000f;
+    [Export] public float MaxDistance      { get; set; } = 5_000f;   // stay well inside the 50k backdrop
 
     // ── Pad preset positions [yaw°, pitch°, distance] ─────────────────────
     // Cycle with C key: side view → tower side → wide front
@@ -31,6 +31,10 @@ public partial class CameraController : Node3D
     private int _padPresetIdx = 0;
 
     private bool _dragging;
+
+    // ── Force-feel shake (cosmetic; driven by vessel state) ───────────────────
+    private readonly CameraShake _shake = new();
+    private bool _baseFovCaptured;
 
     public override void _Ready() => Instance = this;
 
@@ -99,5 +103,28 @@ public partial class CameraController : Node3D
 
         camera.Position = camPos;
         camera.LookAt(new Vector3(0f, lookAtY, 0f), Vector3.Up);
+
+        // ── Force-feel shake — applied AFTER LookAt so the orbit framing is intact.
+        // Drives off the active vessel's throttle/engine activity (rumble), dynamic
+        // pressure q = ½ρv² (Max-Q buffet) and g-force (subtle FOV kick). Amplitudes
+        // scale DOWN with orbit distance so zooming out stays calm.
+        if (!_baseFovCaptured)
+        {
+            _shake.BaseFov = camera.Fov;
+            _baseFovCaptured = true;
+        }
+
+        _shake.Update(delta, bridge?.ActiveVessel, bridge?.Universe, _distance);
+
+        // Translate in camera-local space so the jitter tracks the current view.
+        camera.Translate(_shake.PositionOffset);
+
+        // Add a small rotational perturbation on top of the LookAt orientation.
+        var rot = _shake.RotationOffset;
+        camera.RotateObjectLocal(Vector3.Right,   rot.X);  // pitch
+        camera.RotateObjectLocal(Vector3.Up,      rot.Y);  // yaw
+        camera.RotateObjectLocal(Vector3.Forward, rot.Z);  // roll
+
+        camera.Fov = _shake.Fov;
     }
 }

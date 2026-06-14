@@ -12,9 +12,15 @@ public partial class FloatingOrigin : Node
     private readonly Dictionary<string, Node3D> _bodyNodes   = new();
     private readonly Dictionary<string, Node3D> _vesselNodes = new();
 
-    // Planetas renderizados a escala reducida para evitar problemas de precisión float
-    private const float PlanetRenderScale = 1.0f / 10000.0f;
+    // Scaled-space backdrop: planets are unit spheres rendered at a FIXED distance and
+    // scaled to subtend their correct angular size for the vessel's real altitude. This
+    // keeps coordinates small (float-precise, no z-fighting) while the rocket-to-planet
+    // proportion stays physically correct — a 121 m rocket really is ~1/52,000 of Earth.
+    private const float BackdropDistance = 50_000.0f;
     private readonly Dictionary<string, Node3D> _planetNodes = new();
+    // 90° about X: brings a body's equator (not its pole) to face the +Y launch site.
+    private static readonly Godot.Quaternion _planetTilt =
+        new(Godot.Vector3.Right, Godot.Mathf.Pi * 0.5f);
 
     // Último origen usado (en coordenadas de simulación)
     private Vector3d _currentOrigin = Vector3d.Zero;
@@ -53,16 +59,30 @@ public partial class FloatingOrigin : Node
             }
         }
 
-        // Actualizar posición de planetas con escala de render reducida
+        // Scaled-space backdrop: place each planet along its TRUE direction from the
+        // vessel, at a fixed distance, scaled so it subtends the correct angular size.
         foreach (var body in bridge.Universe.Bodies)
         {
             if (_planetNodes.TryGetValue(body.Id, out var node))
             {
-                var relPos = body.Position - _currentOrigin;
+                var toBody = body.Position - _currentOrigin;   // true offset (metres)
+                double d   = toBody.Magnitude;
+                double R   = body.Radius;
+                if (d < R + 1.0) d = R + 1.0;                   // never inside the surface
+
+                // Angular radius α of the body; backdrop radius so it subtends 2α at the
+                // fixed backdrop distance. Surface vessel → α≈90° (fills the sky).
+                double sinA = System.Math.Min(R / d, 0.999999);
+                double alpha = System.Math.Asin(sinA);
+                float  rBackdrop = BackdropDistance * (float)System.Math.Sin(alpha);
+
+                var dir = toBody.Normalized;
                 node.Position = new Godot.Vector3(
-                    (float)(relPos.X * PlanetRenderScale),
-                    (float)(relPos.Y * PlanetRenderScale),
-                    (float)(relPos.Z * PlanetRenderScale));
+                    (float)dir.X, (float)dir.Y, (float)dir.Z) * BackdropDistance;
+                // Tilt the body 90° so its equator (blue/green) — not the polar ice cap —
+                // faces the +Y launch site; scale composes with this rotation.
+                node.Quaternion = _planetTilt;
+                node.Scale = Godot.Vector3.One * System.Math.Max(rBackdrop, 0.001f);
             }
         }
     }
