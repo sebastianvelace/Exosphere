@@ -22,6 +22,11 @@ uniform float fade : hint_range(0.0, 1.0) = 1.0;
 uniform float feature_scale = 120000.0;
 // Direction toward the sun (world space) for simple shading.
 uniform vec3  sun_dir = vec3(0.4, 0.6, 0.3);
+// Distance to the true horizon in RENDER UNITS (fed per-frame from altitude). Ground
+// beyond this fades into atmospheric haze, so the far curved-down terrain disappears
+// into a flat hazy horizon instead of reading as a small-planet dome.
+uniform float horizon_dist = 4000.0;
+uniform vec3  haze_color : source_color = vec3(0.58, 0.71, 0.88);
 
 uniform vec3 ocean_deep    : source_color = vec3(0.02, 0.13, 0.33);
 uniform vec3 ocean_shallow : source_color = vec3(0.08, 0.34, 0.52);
@@ -84,7 +89,7 @@ void fragment() {
 
 	float e = elevation(v_ground);
 	float sea = 0.50;
-	float land = smoothstep(sea - 0.015, sea + 0.025, e);
+	float land = smoothstep(sea - 0.004, sea + 0.006, e);   // crisp coastlines
 
 	// Ocean shading: deep blue → lighter near coasts, with faint ripple variation.
 	float shallow = smoothstep(sea - 0.10, sea, e);
@@ -113,6 +118,12 @@ void fragment() {
 	// White cloud tops with a soft shadow edge for visual reference points.
 	vec3 cloud_lit = cloud_color * (ambient + 0.7 * ndl);
 	lit = mix(lit, cloud_lit, clouds * 0.45);
+
+	// Atmospheric haze: blend the surface toward the sky/haze colour with distance, so
+	// terrain beyond the true horizon dissolves into a flat hazy band (no dome).
+	float dist = length(v_world_pos - CAMERA_POSITION_WORLD);
+	float haze = smoothstep(horizon_dist * 0.5, horizon_dist * 1.0, dist);
+	lit = mix(lit, haze_color, haze);
 
 	ALBEDO   = lit;
 	ROUGHNESS = mix(0.5, 0.95, ocean_mask);

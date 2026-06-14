@@ -82,6 +82,10 @@ public partial class SimulationBridge : Node
 
             var starfield = new StarfieldController { Name = "StarfieldController" };
             worldNode.CallDeferred("add_child", starfield);
+
+            // Liftoff steam/dust deluge cloud at the pad.
+            var launchFx = new LaunchEffectsController { Name = "LaunchEffectsController" };
+            worldNode.CallDeferred("add_child", launchFx);
         }
 
         SpawnStarshipStack(dataPath);

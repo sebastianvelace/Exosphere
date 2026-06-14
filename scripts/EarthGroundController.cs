@@ -128,6 +128,11 @@ public partial class EarthGroundController : Node3D
             double gz = surfacePos.Dot(north);
             _mat.SetShaderParameter("ground_offset", new Vector2((float)gx, (float)gz));
             _mat.SetShaderParameter("fade", fade);
+
+            // True geometric horizon distance d = sqrt(2·R·h), in render units. Ground
+            // beyond this hazes into the sky so the far curvature reads as a flat horizon.
+            double hMetres = System.Math.Sqrt(2.0 * earth.Radius * System.Math.Max(alt, 50.0));
+            _mat.SetShaderParameter("horizon_dist", (float)(hMetres / MetresPerUnit));
         }
     }
 

@@ -32,35 +32,34 @@ public static class PlanetMaterials
         var shader = GD.Load<Shader>(EarthShaderPath);
         var mat = new ShaderMaterial { Shader = shader };
 
-        // Sensible defaults so it looks great with zero tuning. Values that match
-        // the shader's own defaults are set explicitly for clarity/robustness.
+        // Real NASA imagery: natural-colour day map, Black-Marble city lights, clouds.
         mat.SetShaderParameter("sun_dir", DefaultSunDir);
-        // Day-side palette tuned to read as a believable blue marble: a true
-        // mid-ocean blue, lush green→brown land, and clouds that are bright but
-        // not pure white (so the daylit face never washes out).
-        mat.SetShaderParameter("ocean_color", new Color(0.02f, 0.12f, 0.34f));    // mid ocean blue
-        mat.SetShaderParameter("ocean_shallow", new Color(0.06f, 0.34f, 0.52f));
-        mat.SetShaderParameter("land_low", new Color(0.10f, 0.34f, 0.11f));       // green lowlands
-        mat.SetShaderParameter("land_high", new Color(0.44f, 0.35f, 0.21f));      // brown/desert highlands
-        mat.SetShaderParameter("ice_color", new Color(0.92f, 0.95f, 1.0f));
-        mat.SetShaderParameter("cloud_color", new Color(0.90f, 0.92f, 0.95f));    // slightly off-white
-        mat.SetShaderParameter("atmosphere_color", new Color(0.30f, 0.55f, 1.0f));
-        mat.SetShaderParameter("city_light_color", new Color(1.0f, 0.72f, 0.34f)); // warm sodium glow
-        mat.SetShaderParameter("sunset_color", new Color(1.0f, 0.42f, 0.16f));     // dusk band
-        mat.SetShaderParameter("sea_level", 0.52f);
-        mat.SetShaderParameter("continent_scale", 2.2f);
-        mat.SetShaderParameter("cloud_scale", 3.0f);
-        mat.SetShaderParameter("cloud_coverage", 0.42f);
-        mat.SetShaderParameter("cloud_speed", 0.006f);
-        mat.SetShaderParameter("ice_latitude", 0.74f);
-        // Keep the sun-glint TIGHT and modest so it's a small bright spot on the
-        // oceans rather than a glare across the whole daylit hemisphere.
-        mat.SetShaderParameter("ocean_specular", 0.35f);
-        mat.SetShaderParameter("atmosphere_strength", 1.1f);
-        mat.SetShaderParameter("night_lights", 1.0f);
-        mat.SetShaderParameter("city_density", 0.5f);
-        mat.SetShaderParameter("sunset_strength", 1.0f);
+        mat.SetShaderParameter("day_tex",   LoadTexture("res://assets/textures/earth_day.jpg"));
+        mat.SetShaderParameter("night_tex", LoadTexture("res://assets/textures/earth_night.jpg"));
+        mat.SetShaderParameter("cloud_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
+        mat.SetShaderParameter("atmosphere_color", new Color(0.36f, 0.58f, 1.0f));
+        mat.SetShaderParameter("atmosphere_strength", 0.8f);
+        mat.SetShaderParameter("cloud_amount", 0.85f);
+        mat.SetShaderParameter("night_lights", 2.4f);
+        mat.SetShaderParameter("day_gain", 1.15f);
         return mat;
+    }
+
+    /// <summary>
+    /// Loads an image file into a texture at runtime (avoids relying on Godot's .import
+    /// step for the bundled equirectangular JPEGs). Returns a 1×1 white fallback on error.
+    /// </summary>
+    private static Texture2D LoadTexture(string resPath)
+    {
+        var img = Image.LoadFromFile(ProjectSettings.GlobalizePath(resPath));
+        if (img != null)
+        {
+            img.GenerateMipmaps();
+            return ImageTexture.CreateFromImage(img);
+        }
+        var white = Image.CreateEmpty(1, 1, false, Image.Format.Rgb8);
+        white.Fill(Colors.White);
+        return ImageTexture.CreateFromImage(white);
     }
 
     /// <summary>

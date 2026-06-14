@@ -18,9 +18,24 @@ public partial class FloatingOrigin : Node
     // proportion stays physically correct — a 121 m rocket really is ~1/52,000 of Earth.
     private const float BackdropDistance = 50_000.0f;
     private readonly Dictionary<string, Node3D> _planetNodes = new();
-    // 90° about X: brings a body's equator (not its pole) to face the +Y launch site.
-    private static readonly Godot.Quaternion _planetTilt =
-        new(Godot.Vector3.Right, Godot.Mathf.Pi * 0.5f);
+    // Orient Earth so Cape Canaveral (28.5°N, 80.6°W) sits at the +Y launch site, i.e.
+    // the rocket lifts off over Florida / the US east coast.
+    private static readonly Godot.Quaternion _planetTilt = CapeCanaveralTilt();
+
+    private static Godot.Quaternion CapeCanaveralTilt()
+    {
+        float lat = Godot.Mathf.DegToRad(28.5f);
+        float lon = Godot.Mathf.DegToRad(-80.6f);
+        // Equirect convention used by the Earth shader: lon = atan2(z,x), lat = asin(y).
+        var pcc = new Godot.Vector3(
+            Godot.Mathf.Cos(lat) * Godot.Mathf.Cos(lon),
+            Godot.Mathf.Sin(lat),
+            Godot.Mathf.Cos(lat) * Godot.Mathf.Sin(lon));
+        var axis = pcc.Cross(Godot.Vector3.Up);
+        if (axis.Length() < 1e-5f) return Godot.Quaternion.Identity;
+        float angle = Godot.Mathf.Acos(Godot.Mathf.Clamp(pcc.Dot(Godot.Vector3.Up), -1f, 1f));
+        return new Godot.Quaternion(axis.Normalized(), angle);
+    }
 
     // Último origen usado (en coordenadas de simulación)
     private Vector3d _currentOrigin = Vector3d.Zero;
