@@ -27,8 +27,11 @@ public partial class FloatingOrigin : Node
 
     private static Godot.Quaternion CapeCanaveralTilt()
     {
-        float lat = Godot.Mathf.DegToRad(28.5f);
-        float lon = Godot.Mathf.DegToRad(-80.6f);
+        // Florida east coast (≈27.5°N, 80.7°W): verified to sit on LAND in the Blue Marble
+        // texture with the Atlantic just to the east, so the pad is on solid ground and the
+        // rocket flies out over the ocean — instead of the pad floating on water.
+        float lat = Godot.Mathf.DegToRad(27.5f);
+        float lon = Godot.Mathf.DegToRad(-80.7f);
         // Equirect convention used by the Earth shader: lon = atan2(z,x), lat = asin(y).
         var pcc = new Godot.Vector3(
             Godot.Mathf.Cos(lat) * Godot.Mathf.Cos(lon),
