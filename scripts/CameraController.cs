@@ -79,9 +79,9 @@ public partial class CameraController : Node3D
             if (earth != null)
             {
                 double alt = bridge.ActiveVessel.GetAltitude(earth);
-                if (Mode == CameraMode.Pad && alt > 500)
+                if (Mode == CameraMode.Pad && alt > 2000)
                     Mode = CameraMode.Chase;
-                if (Mode == CameraMode.Chase && alt < 200)
+                if (Mode == CameraMode.Chase && alt < 1500)
                     Mode = CameraMode.Pad;
             }
         }
@@ -92,17 +92,41 @@ public partial class CameraController : Node3D
         float yawRad   = Mathf.DegToRad(_yaw);
         float pitchRad = Mathf.DegToRad(_pitch);
 
-        // In both modes the active vessel is at render origin (FloatingOrigin).
-        // Pad mode: look at y=22 (separation plane midpoint) to frame the full 43-unit stack.
-        float lookAtY = Mode == CameraMode.Pad ? 22f : 0f;
+        // The active vessel is at the render origin (FloatingOrigin); the ground sits at
+        // -alt/2.8 render units below it. Below ~1.5 km, anchor the camera to the GROUND
+        // and watch the rocket climb away — over featureless ocean/terrain this is the only
+        // clear cue that the rocket is actually rising.
+        double trackAlt = 0.0;
+        if (bridge?.ActiveVessel is { } tv && bridge.Universe.GetBody("earth") is { } te)
+            trackAlt = tv.GetAltitude(te);
 
-        var camPos = new Vector3(
-            _distance * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
-            _distance * Mathf.Sin(pitchRad) + lookAtY,
-            _distance * Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
+        Vector3 camPos;
+        Vector3 lookTarget;
+        if (Mode == CameraMode.Pad && trackAlt < 2000.0)
+        {
+            // Ground-anchored tracking shot: the pad sits at groundY, the rocket at the
+            // origin (0..43 units tall). Look at the MIDPOINT and pull the camera back as the
+            // rocket climbs so BOTH the stationary pad and the rocket stay in frame — the
+            // growing gap between them is the clear, readable cue that the rocket is rising.
+            float groundY = -(float)(trackAlt / 2.8f);            // render-space ground level
+            float dist    = Mathf.Clamp((43f - groundY) * 1.05f, 70f, 850f);
+            float midY    = (groundY + 43f) * 0.5f;               // halfway pad→rocket-top
+            camPos = new Vector3(dist * Mathf.Sin(yawRad), midY, dist * Mathf.Cos(yawRad));
+            lookTarget = new Vector3(0f, midY, 0f);
+        }
+        else
+        {
+            // Pad/chase orbit framing.
+            float lookAtY = Mode == CameraMode.Pad ? 22f : 0f;
+            camPos = new Vector3(
+                _distance * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
+                _distance * Mathf.Sin(pitchRad) + lookAtY,
+                _distance * Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
+            lookTarget = new Vector3(0f, lookAtY, 0f);
+        }
 
         camera.Position = camPos;
-        camera.LookAt(new Vector3(0f, lookAtY, 0f), Vector3.Up);
+        camera.LookAt(lookTarget, Vector3.Up);
 
         // ── Force-feel shake — applied AFTER LookAt so the orbit framing is intact.
         // Drives off the active vessel's throttle/engine activity (rumble), dynamic
