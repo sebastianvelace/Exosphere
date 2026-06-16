@@ -18,9 +18,15 @@ public partial class AscentController : Control
 {
     public static AscentController? Instance { get; private set; }
 
-    private enum Phase { Idle, Ascent, Coast, Insert, Done }
+    private enum Phase { Idle, Ignition, Ascent, Coast, Insert, Done }
     private Phase _phase = Phase.Idle;
     private bool  _active;
+
+    // Engine spool-up: thrust ramps over this many seconds while the hold-downs stay clamped;
+    // the vehicle only releases once it can actually lift its own weight (TWR > 1).
+    private const double IgnitionTime = 3.0;
+    private double _ignitionT;
+    private double _twr, _q;   // live readout (thrust-to-weight, dynamic pressure)
 
     // Targets (computed from the body's atmosphere on engage).
     private double _apoTarget, _holdAlt, _peTarget;
@@ -64,16 +70,22 @@ public partial class AscentController : Control
         _peTarget  = _holdAlt - 7_000.0;
         _bodyName  = body.Name;
 
-        if (vessel.IsGroundHeld)
-        {
-            vessel.ReleaseGroundHold();
-            // Hand the mission-phase state machine its starting point so the HUD advances
-            // LIFTOFF → ASCENT → ORBIT during the autopilot climb instead of staying PRELAUNCH.
-            MissionManager.Instance?.EnterPhase(MissionPhase.LIFTOFF);
-        }
         vessel.SASEnabled = false;
         _active = true;
-        _phase  = Phase.Ascent;
+        // Start with a real ignition sequence when still clamped: spool the engines up and only
+        // release the hold-downs once thrust exceeds weight. If already flying, skip to ascent.
+        if (vessel.IsGroundHeld)
+        {
+            _phase     = Phase.Ignition;
+            _ignitionT = 0.0;
+            vessel.Throttle = 0.0;
+            MissionManager.Instance?.EnterPhase(MissionPhase.IGNITION);
+        }
+        else
+        {
+            _phase = Phase.Ascent;
+            MissionManager.Instance?.EnterPhase(MissionPhase.LIFTOFF);
+        }
         Visible = true;
         GD.Print($"[ASCENT-AP] engaged → target {_holdAlt/1000:F0} km circular over {_bodyName}");
     }
@@ -105,6 +117,41 @@ public partial class AscentController : Control
         east = east.Magnitude > 1e-6 ? east.Normalized : new Vector3d(0, 0, 1);
         double vUp = vel.Dot(up);
         _alt = body.GetAltitude(vessel.Position);
+
+        // ── Ignition: spool the engines while clamped, lift off only at TWR > 1 ──────
+        if (_phase == Phase.Ignition)
+        {
+            _ignitionT += delta;
+            double ramp = System.Math.Clamp(_ignitionT / IgnitionTime, 0.0, 1.0);
+            vessel.Throttle        = ramp;                       // engine spool-up
+            vessel.Orientation     = ShortestArc(Vector3d.Up, up);
+            vessel.AngularVelocity = Vector3d.Zero;
+            vessel.PitchYawRoll    = Vector3d.Zero;
+            if (universe.TimeScale > 1.0) universe.TimeScale = 1.0;
+
+            double rIgn   = rel.Magnitude;
+            double gLocal = body.GM / (rIgn * rIgn);
+            _q   = vessel.GetDynamicPressure(body);
+            _twr = vessel.ComputeThrust(body).Magnitude
+                 / System.Math.Max(vessel.TotalMass * gLocal, 1.0);
+
+            if (vessel.IsGroundHeld)
+            {
+                // Hold the clamps until the engines can actually lift the stack.
+                if (ramp >= 1.0 && _twr > 1.02)
+                {
+                    vessel.ReleaseGroundHold();
+                    MissionManager.Instance?.EnterPhase(MissionPhase.LIFTOFF);
+                    GD.Print($"[ASCENT-AP] liftoff — TWR {_twr:F2}");
+                }
+            }
+            else if (_alt > 40.0)
+            {
+                _phase = Phase.Ascent;     // cleared the pad
+            }
+            QueueRedraw();
+            return;
+        }
 
         var oe = OrbitalElements.FromStateVector(rel, vel, body.GM, body.Id, universe.CurrentTime);
         _apo = oe.Apoapsis  - body.Radius;
@@ -143,7 +190,11 @@ public partial class AscentController : Control
             // keeps climbing toward target even with a low-TWR upper stage.
             double f = System.Math.Clamp((_alt - 2_000.0) / 90_000.0, 0.0, 0.90);
             dir = (up * (1.0 - f) + east * f).Normalized;
-            throttle = 1.0; warp = 2.0;
+            // Ease the throttle down through peak dynamic pressure to limit aero loads, then
+            // back to full once past Max-Q — the real "throttling down … throttle up" profile.
+            _q = vessel.GetDynamicPressure(body);
+            throttle = System.Math.Clamp(1.0 - (_q - 22_000.0) / 18_000.0 * 0.4, 0.62, 1.0);
+            warp = 2.0;
         }
         else if (vUp > 25.0)
         {
@@ -203,6 +254,7 @@ public partial class AscentController : Control
 
         string label = _phase switch
         {
+            Phase.Ignition => "IGNITION — ENGINE START",
             Phase.Ascent => "ASCENT — GRAVITY TURN",
             Phase.Coast  => "ASCENT — COAST TO APOAPSIS",
             Phase.Insert => "ASCENT — ORBITAL INSERTION",
@@ -215,7 +267,10 @@ public partial class AscentController : Control
         DrawString(_font, pos + new Vector2(2, 2), label, HorizontalAlignment.Left, -1, 24, new Color(0, 0, 0, 0.7f));
         DrawString(_font, pos, label, HorizontalAlignment.Left, -1, 24, col);
 
-        string sub = $"AUTOPILOT · {_bodyName.ToUpperInvariant()}   Ap {_apo/1000:F0} km   Pe {_per/1000:F0} km   e {_ecc:F3}   →  {_holdAlt/1000:F0} km";
+        string sub = _phase == Phase.Ignition
+            ? $"AUTOPILOT · {_bodyName.ToUpperInvariant()}   ENGINE SPOOL-UP   TWR {_twr:F2}   {(_twr > 1.02 ? "▲ LIFTOFF" : "HOLD-DOWN CLAMPED")}"
+            : $"AUTOPILOT · {_bodyName.ToUpperInvariant()}   Ap {_apo/1000:F0} km   Pe {_per/1000:F0} km   e {_ecc:F3}"
+              + (_phase == Phase.Ascent && _q > 15_000 ? $"   q {_q/1000:F0} kPa" : $"   →  {_holdAlt/1000:F0} km");
         var ssz = _font.GetStringSize(sub, HorizontalAlignment.Left, -1, 14);
         DrawString(_font, new Vector2((vp.X - ssz.X) * 0.5f, vp.Y * 0.215f + 26f), sub,
                    HorizontalAlignment.Left, -1, 14, new Color(0.7f, 0.78f, 0.88f));

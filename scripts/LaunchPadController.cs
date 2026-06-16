@@ -287,6 +287,40 @@ public partial class LaunchPadController : Node3D
             Spawn($"GseSaddle{tag}2", new BoxMesh { Size = new Vector3(1f * U, 2.5f * U, 3f * U) },
                 steel, new Vector3(72f * U, padY + 1.2f * U, 30f * U + zoff));
         }
+
+        // ── Cable / utility tray running from the blockhouse toward the tower ──
+        // Elevated tray on short posts (reads as the buried-run riser bringing
+        // power and data from the control building to the OLM/OLIT).
+        var trayStart = new Vector3(-45f * U, padY, 45f * U);
+        var trayEnd   = new Vector3(-30f * U, padY, 6f * U);
+        Vector3 td    = trayEnd - trayStart;
+        float trayRun = new Vector2(td.X, td.Z).Length();
+        float trayYaw = Mathf.RadToDeg(Mathf.Atan2(td.Z, td.X));
+        Vector3 tmid  = (trayStart + trayEnd) * 0.5f;
+        var tray = new MeshInstance3D
+        {
+            Name            = "CableTray",
+            Mesh            = new BoxMesh { Size = new Vector3(trayRun, 0.5f * U, 1.4f * U) },
+            Position        = new Vector3(tmid.X, padY + 1.4f * U, tmid.Z),
+            RotationDegrees = new Vector3(0, -trayYaw, 0),
+        };
+        tray.SetSurfaceOverrideMaterial(0, darkSteel);
+        AddChild(tray);
+        int trayPosts = 5;
+        for (int i = 0; i <= trayPosts; i++)
+        {
+            Vector3 p = trayStart.Lerp(trayEnd, i / (float)trayPosts);
+            Spawn($"TrayPost{i}", new BoxMesh { Size = new Vector3(0.5f * U, 1.4f * U, 0.5f * U) },
+                steel, new Vector3(p.X, padY + 0.7f * U, p.Z));
+        }
+
+        // A couple of short vertical GSE bottle tanks near the farm (N2/He).
+        foreach (var (xoff, tag) in new[] { (0f, "X"), (7f * U, "Y") })
+        {
+            Spawn($"GseBottle{tag}", new CylinderMesh
+                { TopRadius = 2.0f * U, BottomRadius = 2.0f * U, Height = 11f * U, RadialSegments = 16 },
+                insul, new Vector3(58f * U + xoff, padY + 5.5f * U, 12f * U));
+        }
     }
 
     // ── Orbital Launch Mount (OLM): ring table on splayed legs ────────────
@@ -335,6 +369,39 @@ public partial class LaunchPadController : Node3D
         Spawn("HoldDownRing", new CylinderMesh
             { TopRadius = innerR + 0.6f * U, BottomRadius = innerR + 0.6f * U, Height = 0.5f * U, RadialSegments = 24 },
             steel, new Vector3(0, tableTopY + 0.2f * U, 0));
+
+        // ── Hold-down clamps + QD plate hardware around the centre hole ───────
+        // Twenty small clamp blocks ringing the booster interface, plus a few
+        // taller stanchions reading as the booster QD / shielding pylons.
+        const int clamps = 20;
+        for (int i = 0; i < clamps; i++)
+        {
+            float a  = i * Mathf.Tau / clamps;
+            float cr = innerR + 0.9f * U;
+            Spawn($"HoldDownClamp{i}", new BoxMesh
+                { Size = new Vector3(0.9f * U, 1.6f * U, 0.7f * U) },
+                conc, new Vector3(cr * Mathf.Cos(a), tableTopY + 0.8f * U, cr * Mathf.Sin(a)));
+        }
+
+        // Booster Quick-Disconnect (BQD) shield mast rising from the deck on the
+        // tower side — the tall housing the booster plugs into at lift-off.
+        Spawn("BQDMast", new BoxMesh { Size = new Vector3(2.4f * U, 16f * U, 3.0f * U) },
+            steel, new Vector3(-(innerR + 1.6f * U), tableTopY + 8f * U, 0));
+        Spawn("BQDHead", new BoxMesh { Size = new Vector3(3.2f * U, 2.6f * U, 3.8f * U) },
+            conc, new Vector3(-(innerR + 1.6f * U), tableTopY + 15f * U, 0));
+
+        // Deck top plating between the ring and the clamps so the table reads as
+        // a solid surface (thin annulus cap).
+        Spawn("OLMDeckCap", new CylinderMesh
+            { TopRadius = outerR - 0.4f * U, BottomRadius = outerR - 0.4f * U, Height = 0.4f * U, RadialSegments = 28 },
+            steel, new Vector3(0, tableTopY + 0.1f * U, 0));
+
+        // ── Water-cooled steel flame deflector plate beneath the centre hole ──
+        // A heavy plate slung under the table that the booster exhaust strikes,
+        // sitting above the concrete trench. Reads as the steel "shower head".
+        Spawn("DeflectorPlate", new CylinderMesh
+            { TopRadius = innerR + 2.5f * U, BottomRadius = innerR + 2.5f * U, Height = 1.2f * U, RadialSegments = 24 },
+            steel, new Vector3(0, tableTopY - tableThick - 7f * U, 0));
 
         // ── Splayed support legs (~6, ~20 m tall) ─────────────────────────
         // Legs run from under the table skirt down to the pad footing, splayed
@@ -401,6 +468,35 @@ public partial class LaunchPadController : Node3D
             brace.SetSurfaceOverrideMaterial(0, steel);
             AddChild(brace);
         }
+
+        // A second, lower bracing ring near the footing so the legs read as a
+        // proper braced frame, plus diagonal kickers between the two rings.
+        for (int i = 0; i < legCount; i++)
+        {
+            float a0 = i * Mathf.Tau / legCount + Mathf.Pi / legCount;
+            float a1 = (i + 1) * Mathf.Tau / legCount + Mathf.Pi / legCount;
+            float braceR = legBotR - 0.5f * U;
+            float bY = legBotY + 4f * U;
+            float x0 = braceR * Mathf.Cos(a0), z0 = braceR * Mathf.Sin(a0);
+            float x1 = braceR * Mathf.Cos(a1), z1 = braceR * Mathf.Sin(a1);
+            float mx = (x0 + x1) * 0.5f, mz = (z0 + z1) * 0.5f;
+            float len = Mathf.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
+            float ang = Mathf.Atan2(z1 - z0, x1 - x0);
+            var brace = new MeshInstance3D
+            {
+                Name            = $"OLMBraceLo{i}",
+                Mesh            = new BoxMesh { Size = new Vector3(len, 0.7f * U, 0.7f * U) },
+                Position        = new Vector3(mx, bY, mz),
+                RotationDegrees = new Vector3(0, -Mathf.RadToDeg(ang), 0),
+            };
+            brace.SetSurfaceOverrideMaterial(0, steel);
+            AddChild(brace);
+        }
+
+        // Insulated propellant feed manifold ring slung under the table deck.
+        Spawn("OLMFeedRing", new TorusMesh
+            { InnerRadius = innerR + 1.0f * U, OuterRadius = innerR + 2.0f * U, RingSegments = 24, Rings = 8 },
+            steel, new Vector3(0, tableTopY - tableThick - 1.5f * U, 0));
     }
 
     // ── Mechazilla: tall square lattice integration tower + chopstick arms ─
@@ -450,9 +546,56 @@ public partial class LaunchPadController : Node3D
             }
         }
 
+        // ── Solid utility / elevator spine running up the back (-X) face ──────
+        // The real OLIT has a clad service core; here a slim solid box column on
+        // the back face reads as the elevator + cable spine against the lattice.
+        Spawn("TowerSpine", new BoxMesh
+            { Size = new Vector3(2.0f * U, towerH * 0.96f, towerW * 0.7f) },
+            darkSteel, new Vector3(towerX - halfW - 0.6f * U, baseY + towerH * 0.5f, towerZ));
+
+        // Clad service-section panels at a few levels on the front face so the
+        // tower isn't pure open lattice (equipment rooms / cable trays).
+        for (int p = 0; p < 4; p++)
+        {
+            float py = baseY + towerH * (0.18f + p * 0.22f);
+            Spawn($"TowerPanel{p}", new BoxMesh
+                { Size = new Vector3(0.4f * U, towerH * 0.16f, towerW * 0.8f) },
+                darkSteel, new Vector3(towerX + halfW + 0.3f * U, py, towerZ));
+        }
+
+        // ── Perimeter walkways / railings at several work levels ──────────────
+        for (int w = 1; w <= 5; w++)
+        {
+            float wy = baseY + towerH * (w / 6f);
+            float ext = halfW + 1.2f * U;
+            // Four railing rails ringing the tower (thin beams).
+            AddBeam($"WalkXn{w}", new Vector3(towerX, wy, towerZ - ext), towerW + 2.4f * U, 0, true);
+            AddBeam($"WalkXp{w}", new Vector3(towerX, wy, towerZ + ext), towerW + 2.4f * U, 0, true);
+            AddBeam($"WalkZn{w}", new Vector3(towerX - ext, wy, towerZ), towerW + 2.4f * U, 0, false);
+            AddBeam($"WalkZp{w}", new Vector3(towerX + ext, wy, towerZ), towerW + 2.4f * U, 0, false);
+            // Thin grating deck.
+            Spawn($"WalkDeck{w}", new BoxMesh
+                { Size = new Vector3(towerW + 2.2f * U, 0.15f * U, towerW + 2.2f * U) },
+                darkSteel, new Vector3(towerX, wy - 0.6f * U, towerZ));
+        }
+
         // Tower cap / crane head.
         Spawn("TowerCap", new BoxMesh { Size = new Vector3(towerW + 1.5f * U, 5f * U, towerW + 1.5f * U) },
             darkSteel, new Vector3(towerX, baseY + towerH + 2.5f * U, towerZ));
+
+        // Service crane jib + hoist cable reaching out over the stack.
+        var jib = new MeshInstance3D
+        {
+            Name            = "TowerCraneJib",
+            Mesh            = new BoxMesh { Size = new Vector3(34f * U, 1.6f * U, 1.6f * U) },
+            Position        = new Vector3(towerX + 14f * U, baseY + towerH + 6f * U, towerZ),
+        };
+        jib.SetSurfaceOverrideMaterial(0, steel);
+        AddChild(jib);
+        Spawn("TowerCraneMast", new BoxMesh { Size = new Vector3(1.6f * U, 8f * U, 1.6f * U) },
+            steel, new Vector3(towerX - 6f * U, baseY + towerH + 6f * U, towerZ));
+        Spawn("CraneHoist", new BoxMesh { Size = new Vector3(1.0f * U, 14f * U, 1.0f * U) },
+            darkSteel, new Vector3(towerX + 28f * U, baseY + towerH - 1f * U, towerZ));
 
         // ── Chopstick catch arms (two horizontal arms partway up) ─────────
         // Real arms sit ~40–70 m up; here ~55 m so they're above the OLM table
@@ -507,19 +650,39 @@ public partial class LaunchPadController : Node3D
         }
     }
 
-    // ── Tank farm: cluster of tall white cryo storage tanks ───────────────
+    // ── Tank farm: cluster of tall white cryo storage tanks on a bund ─────
     private void BuildTankFarm(StandardMaterial3D insul, StandardMaterial3D steel)
     {
         // Off to the +X / +Z corner, away from the tower.
         Vector3 origin = new(45f * U, -22f * U + 6.5f * U, 45f * U);
         const float tankR = 5.5f * U;     // ~11 m diameter
-        const float tankH = 26f * U;      // ~26 m tall
+        const float baseH = 26f * U;      // nominal ~26 m tall
 
-        // 2×3 grid of cylindrical tanks (6 total).
-        for (int gx = 0; gx < 3; gx++)
-        for (int gz = 0; gz < 2; gz++)
+        // Concrete containment bund (spill berm) the whole farm sits on.
+        var bundCol = Mat(new Color(0.42f, 0.41f, 0.39f), 0.95f, 0.0f);
+        Spawn("TankBund", new BoxMesh { Size = new Vector3(60f * U, 1.6f * U, 44f * U) },
+            bundCol, new Vector3(origin.X + 13f * U, origin.Y + 0.8f * U, origin.Z + 6.5f * U));
+        // Low retaining wall around the bund (four thin boxes).
+        foreach (var (dx, dz, lx, lz) in new[]
         {
-            float px = origin.X + gx * 13f * U;
+            (-30f * U, 0f, 1.0f * U, 44f * U), (30f * U, 0f, 1.0f * U, 44f * U),
+            (0f, -22f * U, 60f * U, 1.0f * U), (0f, 22f * U, 60f * U, 1.0f * U),
+        })
+        {
+            Spawn("BundWall", new BoxMesh { Size = new Vector3(lx, 2.4f * U, lz) },
+                bundCol, new Vector3(origin.X + 13f * U + dx, origin.Y + 1.2f * U, origin.Z + 6.5f * U + dz));
+        }
+
+        // 8 vertical cryo tanks (2 rows × 4) at varied heights so the farm reads
+        // as a real propellant park rather than a uniform grid.
+        float[] hMul = { 1.0f, 1.18f, 0.86f, 1.1f, 0.92f, 1.22f, 0.8f, 1.05f };
+        var tankTops = new System.Collections.Generic.List<Vector3>();
+        int idx = 0;
+        for (int gz = 0; gz < 2; gz++)
+        for (int gx = 0; gx < 4; gx++)
+        {
+            float tankH = baseH * hMul[idx];
+            float px = origin.X + gx * 12.5f * U;
             float pz = origin.Z + gz * 13f * U;
             string n = $"Tank{gx}_{gz}";
 
@@ -543,7 +706,26 @@ public partial class LaunchPadController : Node3D
             Spawn($"{n}Skirt", new CylinderMesh
                 { TopRadius = tankR * 0.95f, BottomRadius = tankR, Height = 2f * U, RadialSegments = 20 },
                 steel, new Vector3(px, origin.Y + 1f * U, pz));
+
+            tankTops.Add(new Vector3(px, origin.Y + tankH, pz));
+            idx++;
         }
+
+        // Top-of-tank interconnect piping header running along each row.
+        foreach (int row in new[] { 0, 1 })
+        {
+            float pz   = origin.Z + row * 13f * U;
+            float topY = origin.Y + baseH * 1.25f + 1.5f * U;
+            Spawn($"TankHeader{row}", new CylinderMesh
+                { TopRadius = 0.8f * U, BottomRadius = 0.8f * U, Height = 38f * U, RadialSegments = 10 },
+                steel, new Vector3(origin.X + 19f * U, topY, pz))
+                .RotationDegrees = new Vector3(0, 90f, 90f);
+        }
+        // Cross header tying the two rows together at the tower side.
+        Spawn("TankCrossHeader", new CylinderMesh
+            { TopRadius = 0.8f * U, BottomRadius = 0.8f * U, Height = 14f * U, RadialSegments = 10 },
+            steel, new Vector3(origin.X, origin.Y + baseH * 1.25f + 1.5f * U, origin.Z + 6.5f * U))
+            .RotationDegrees = new Vector3(90f, 0, 0);
     }
 
     // ── Lightning-protection towers (thin tall masts) ─────────────────────
@@ -552,7 +734,7 @@ public partial class LaunchPadController : Node3D
         const float mastH = 130f * U;     // ~130 m masts
         const float baseY = -22f * U + 6.5f * U;
 
-        // A few masts ringing the pad, clear of the stack and tower.
+        // Three masts ringing the pad, clear of the stack and tower.
         var spots = new (float x, float z)[]
         {
             ( 38f * U, -38f * U),
@@ -560,6 +742,7 @@ public partial class LaunchPadController : Node3D
             ( 50f * U,   2f * U),
         };
 
+        var tips = new Vector3[spots.Length];
         int idx = 0;
         foreach (var (x, z) in spots)
         {
@@ -572,8 +755,49 @@ public partial class LaunchPadController : Node3D
             Spawn($"MastTip{idx}", new CylinderMesh
                 { TopRadius = 0.04f * U, BottomRadius = 0.25f * U, Height = 6f * U, RadialSegments = 6 },
                 steel, new Vector3(x, baseY + mastH + 3f * U, z));
+
+            // Concrete footing block under each mast.
+            Spawn($"MastFoot{idx}", new BoxMesh { Size = new Vector3(5f * U, 1.5f * U, 5f * U) },
+                Mat(new Color(0.40f, 0.39f, 0.37f), 0.95f, 0.0f), new Vector3(x, baseY + 0.75f * U, z));
+
+            tips[idx] = new Vector3(x, baseY + mastH + 6f * U, z);
             idx++;
         }
+
+        // Implied overhead catenary cabling strung between the mast tips: a thin
+        // dark wire per pair, sagging slightly (split into two angled segments).
+        var cableMat = Mat(new Color(0.06f, 0.06f, 0.07f), 0.9f, 0.2f);
+        for (int i = 0; i < tips.Length; i++)
+        {
+            Vector3 a = tips[i];
+            Vector3 b = tips[(i + 1) % tips.Length];
+            Vector3 mid = (a + b) * 0.5f - new Vector3(0, 8f * U, 0); // sag downward
+            AddCable($"LightCableA{i}", a, mid, cableMat);
+            AddCable($"LightCableB{i}", mid, b, cableMat);
+        }
+    }
+
+    // Thin straight cable segment between two points (for catenary wiring).
+    private void AddCable(string name, Vector3 a, Vector3 b, StandardMaterial3D mat)
+    {
+        Vector3 d   = b - a;
+        float   len = d.Length();
+        if (len < 0.001f) return;
+        var node = new MeshInstance3D
+        {
+            Name     = name,
+            Mesh     = new CylinderMesh
+                { TopRadius = 0.12f * U, BottomRadius = 0.12f * U, Height = len, RadialSegments = 5 },
+            Position = a + d * 0.5f,
+        };
+        // Orient cylinder (+Y axis) along the cable direction.
+        Vector3 up  = Vector3.Up;
+        Vector3 dir = d.Normalized();
+        Vector3 axis = up.Cross(dir);
+        if (axis.LengthSquared() > 1e-6f)
+            node.Quaternion = new Quaternion(axis.Normalized(), Mathf.Acos(Mathf.Clamp(up.Dot(dir), -1f, 1f)));
+        node.SetSurfaceOverrideMaterial(0, mat);
+        AddChild(node);
     }
 
     // ── Beam helpers for the tower lattice ────────────────────────────────

@@ -47,6 +47,17 @@ public class Vessel
     public Vector3d GetSurfaceVelocity(CelestialBody body) =>
         Velocity - body.Velocity - body.GetSurfaceVelocity(Position);
 
+    // Presión dinámica q = ½·ρ·v² (Pa) respecto a la atmósfera en rotación. Es la carga
+    // aerodinámica que define el "Max-Q" del ascenso y escala el arrastre y los momentos.
+    public double GetDynamicPressure(CelestialBody body)
+    {
+        if (body.Atmosphere == null) return 0.0;
+        double density = body.Atmosphere.GetDensity(GetAltitude(body));
+        if (density <= 0.0) return 0.0;
+        double speed = GetSurfaceVelocity(body).Magnitude;
+        return 0.5 * density * speed * speed;
+    }
+
     // ── Fuerzas ───────────────────────────────────────────────────────────
 
     // Aplica el throttle actual a todos los motores activos
@@ -174,6 +185,11 @@ public class Vessel
     // ── Tick interno (consumo, SAS, rotación) ──────────────────────────────
     // Autoridad de control: cuántos rad/s² aplica el input máximo (±1)
     private const double ControlAuthority = 0.6;
+    // Aerodinámica rotacional: tendencia a alinear el eje largo (+Y) con el flujo de aire
+    // (weathervaning, como un dardo estable) y amortiguación angular, ambas escaladas por q.
+    private const double AeroStability = 0.85;   // rad/s² a q≈30 kPa y ángulo de ataque pequeño
+    private const double AeroDamping   = 2.0;    // amortiguación angular por q (1/s)
+    private const double AeroQRef      = 30_000.0;
 
     public void Tick(double dt, CelestialBody refBody)
     {
@@ -205,6 +221,38 @@ public class Vessel
         // SAS: solo amortigua cuando el jugador no está dando input
         if (SASEnabled && !hasInput)
             AngularVelocity = AngularVelocity * System.Math.Pow(0.005, dt);
+
+        // ── Aerodinámica rotacional (weathervaning) ─────────────────────────
+        // La presión dinámica tiende a alinear el eje largo del cohete con el flujo de aire,
+        // como una flecha estable: produce el giro gravitacional natural y resiste las
+        // perturbaciones en la baja atmósfera. El término se desvanece cerca de 90° de ángulo
+        // de ataque (max(cosA,0)) para no luchar contra una actitud broadside deliberada
+        // (belly-flop). El piloto automático y la EDL fijan la orientación directamente, así
+        // que esto moldea sobre todo el vuelo manual en el ascenso inicial.
+        if (refBody?.Atmosphere != null)
+        {
+            double q = GetDynamicPressure(refBody);
+            if (q > 50.0)
+            {
+                var surfVel = GetSurfaceVelocity(refBody);
+                if (surfVel.Magnitude > 5.0)
+                {
+                    var    flow = surfVel.Normalized;
+                    var    axis = Orientation.Rotate(Vector3d.Up);
+                    double cosA = System.Math.Clamp(axis.Dot(flow), -1.0, 1.0);
+                    var    rotAxis = axis.Cross(flow);
+                    double sinA = rotAxis.Magnitude;
+                    double qn = System.Math.Min(q / AeroQRef, 1.5);
+                    if (sinA > 1e-4)
+                    {
+                        double restore = AeroStability * qn * sinA * System.Math.Max(cosA, 0.0);
+                        AngularVelocity += (rotAxis / sinA) * (restore * dt);
+                    }
+                    double damp = System.Math.Min(AeroDamping * qn * dt, 0.9);
+                    AngularVelocity *= (1.0 - damp);
+                }
+            }
+        }
 
         // Integrar velocidad angular → orientación
         double angMag = AngularVelocity.Magnitude;

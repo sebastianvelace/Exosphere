@@ -94,18 +94,34 @@ public partial class MissionManager : Node
             }
 
             if (CountdownTimer <= 3.0 && Phase == MissionPhase.COUNTDOWN)
-            {
                 SetPhase(MissionPhase.IGNITION);
-                bridge.SetThrottle(1.0);
-            }
+
+            // Engine spool-up: ramp thrust over the final 3 s instead of snapping to full.
+            if (Phase == MissionPhase.IGNITION)
+                bridge.SetThrottle(System.Math.Clamp((3.0 - CountdownTimer) / 3.0, 0.0, 1.0));
 
             if (CountdownTimer <= 0.0)
             {
-                CountdownTimer  = 0.0;
-                IsCountingDown  = false;
-                bridge.ReleaseGroundHold();
-                SetPhase(MissionPhase.LIFTOFF);
-                EmitSignal(SignalName.LaunchCommitted);
+                CountdownTimer = 0.0;
+                bridge.SetThrottle(1.0);
+
+                // Release the hold-downs only once the engines can actually lift the stack
+                // (thrust > weight), not merely because the clock hit zero.
+                bool canLift = false;
+                if (vessel != null)
+                {
+                    var rb = universe.GetDominantBody(vessel.Position);
+                    double r = (vessel.Position - rb.Position).Magnitude;
+                    double gLocal = rb.GM / (r * r);
+                    canLift = vessel.ComputeThrust(rb).Magnitude > vessel.TotalMass * gLocal * 1.02;
+                }
+                if (canLift)
+                {
+                    IsCountingDown = false;
+                    bridge.ReleaseGroundHold();
+                    SetPhase(MissionPhase.LIFTOFF);
+                    EmitSignal(SignalName.LaunchCommitted);
+                }
             }
         }
 
