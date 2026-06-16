@@ -21,7 +21,9 @@ uniform float earth_radius = 6371000.0;           // metres
 
 uniform float fade : hint_range(0.0, 1.0) = 1.0;
 uniform float horizon_dist = 4000.0;
-uniform vec3  haze_color : source_color = vec3(0.58, 0.71, 0.88);
+// Matches the SkyController ground-horizon blue so the patch dissolves into the sky with
+// no grey seam (EarthGroundController overrides it with the live sky horizon colour).
+uniform vec3  haze_color : source_color = vec3(0.40, 0.65, 1.0);
 uniform vec3  sun_dir = vec3(0.42, 0.78, 0.46);
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.14;
 
@@ -77,11 +79,13 @@ void fragment() {
 	float ndl = max(dot(N, L), 0.0);
 	vec3 lit = surface * (0.55 + 0.6 * ndl);
 
-	// Atmospheric haze beyond the horizon, then fade to transparent so the backdrop shows.
+	// Atmospheric perspective: distant ground fades toward the SKY-horizon colour and then
+	// dissolves to transparent, so it blends seamlessly into the sky/backdrop with no grey
+	// band. The colour blend leads the alpha fade so the seam is never a hard line.
 	float dist = length(v_world_pos - CAMERA_POSITION_WORLD);
-	float haze = smoothstep(horizon_dist * 0.45, horizon_dist * 0.95, dist);
+	float haze = smoothstep(horizon_dist * 0.60, horizon_dist * 1.05, dist);
 	lit = mix(lit, haze_color, haze);
-	float edge = smoothstep(horizon_dist * 0.95, horizon_dist * 1.25, dist);
+	float edge = smoothstep(horizon_dist * 0.90, horizon_dist * 1.12, dist);
 
 	ALBEDO    = lit;
 	ROUGHNESS = 0.85;

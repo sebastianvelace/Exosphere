@@ -61,9 +61,13 @@ void fragment() {
 	float diff = clamp(ndl, 0.0, 1.0);
 	vec3 lit = surface * (0.03 + day_gain * pow(diff, 0.8));
 
-	// City lights on the night side (emissive).
-	float night = 1.0 - day;
-	vec3 cities = nightCol * night * night_lights;
+	// City lights on the night side (emissive). Threshold on luminance so ONLY genuine
+	// bright lights pass — the Black Marble texture has a dark, blocky data floor in
+	// unlit regions that otherwise bleeds across the terminator as grey/blocky squares
+	// when viewed from orbit. Keep cities to the truly-dark side with a sharp night mask.
+	float night = smoothstep(0.10, -0.10, ndl);
+	float lum    = dot(nightCol, vec3(0.299, 0.587, 0.114));
+	vec3  cities = nightCol * smoothstep(0.07, 0.18, lum) * night * night_lights;
 	lit += cities;
 
 	// Warm sunrise/sunset band at the terminator.
@@ -76,5 +80,5 @@ void fragment() {
 	lit += atmosphere_color * fres * atmosphere_strength * (0.18 + 0.9 * rim_day);
 
 	ALBEDO = lit;
-	EMISSION = cities * 0.85;
+	EMISSION = cities * 0.6;
 }

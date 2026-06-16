@@ -112,9 +112,15 @@ public class Part
 
         if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel+oxidizer") || fuelType.Contains("liquidfuelandoxidizer"))
         {
-            // Ratio LF:Ox ≈ 9:11 por masa
-            double lfRate = massFlowRate * (9.0 / 20.0);
-            double oxRate = massFlowRate * (11.0 / 20.0);
+            // Reparte ṁ entre LF y Ox según la proporción REALMENTE cargada en la pieza,
+            // de modo que el O/F del motor (p. ej. 3.55 para Raptor) se respete y ambos
+            // recursos se agoten juntos. (Antes se usaba un 9:11 fijo → O/F ≈ 1.22, erróneo.)
+            // Esto deja este camino coherente con PartGraph.ConsumePropellant, la ruta
+            // autoritativa que invoca Vessel.Tick.
+            double total  = LiquidFuel + Oxidizer;
+            double lfFrac = total > 1e-9 ? LiquidFuel / total : 0.45;
+            double lfRate = massFlowRate * lfFrac;
+            double oxRate = massFlowRate * (1.0 - lfFrac);
             if (LiquidFuel < lfRate * dt || Oxidizer < oxRate * dt) return false;
             LiquidFuel -= lfRate * dt;
             Oxidizer   -= oxRate * dt;

@@ -116,6 +116,7 @@ public partial class EarthGroundController : Node3D
         if (_mat != null)
         {
             _mat.SetShaderParameter("fade", fade);
+            _mat.SetShaderParameter("haze_color", SkyController.CurrentHorizonColor);
 
             // Map the patch to the real Earth texture: the sub-vessel point and the patch's
             // east/north axes, expressed in the texture/mesh-local frame (undo the planet

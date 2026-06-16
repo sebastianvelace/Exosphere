@@ -12,6 +12,9 @@ using Godot;
 [GlobalClass]
 public partial class SkyController : Node
 {
+    /// Live ground-horizon sky colour (so the local ground patch can haze to a matching tint).
+    public static Color CurrentHorizonColor { get; private set; } = new(0.40f, 0.65f, 1.0f);
+
     private ProceduralSkyMaterial? _skyMat;
     private Environment?           _env;
 
@@ -90,6 +93,7 @@ public partial class SkyController : Node
             // Every band of the sky collapses to pure black in space — no blue cast.
             _skyMat.SkyTopColor        = gTop.Lerp(S_Black, fBlack);
             _skyMat.SkyHorizonColor    = gHor.Lerp(S_Black, fBlack);
+            CurrentHorizonColor        = gGH.Lerp(S_Black, fBlack);
             _skyMat.GroundHorizonColor = gGH.Lerp(S_Black, fBlack);
             _skyMat.GroundBottomColor  = gGB.Lerp(S_Black, fBlack);
             // Sun glow tightens as atmosphere thins (Mars sun is smaller/dimmer).
