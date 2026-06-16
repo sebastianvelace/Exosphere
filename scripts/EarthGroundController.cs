@@ -96,6 +96,10 @@ public partial class EarthGroundController : Node3D
         // Cross-fade: 1 below FullAlt → 0 above FadeHi (hold 1 across FullAlt..FadeLo).
         float fade = (float)(1.0 - Smoothstep(FadeLo, FadeHi, alt));
         if (alt <= FullAlt) fade = 1f;
+        // Also fade out by CAMERA altitude (e.g. zooming far out at the pad) so the local patch
+        // and the distant-Earth backdrop never overlap into a seam — the backdrop takes over.
+        float camFade = (float)(1.0 - Smoothstep(20_000.0, 36_000.0, FloatingOrigin.CameraAltOverEarth));
+        fade = System.Math.Min(fade, camFade);
         if (fade <= 0.001f) { Visible = false; return; }
         Visible = true;
 

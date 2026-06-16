@@ -43,6 +43,17 @@ public partial class FloatingOrigin : Node
     // Último origen usado (en coordenadas de simulación)
     private Vector3d _currentOrigin = Vector3d.Zero;
 
+    // Camera altitude over Earth's surface (metres), updated each frame. Both the distant-Earth
+    // backdrop and the local ground patch fade on this axis so they never overlap into a seam.
+    public static double CameraAltOverEarth { get; private set; } = 0.0;
+
+    private static double Smoothstep01(double a, double b, double x)
+    {
+        if (b <= a) return x >= b ? 1.0 : 0.0;
+        double t = System.Math.Clamp((x - a) / (b - a), 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    }
+
     public override void _Process(double delta)
     {
         var bridge = SimulationBridge.Instance;
@@ -97,6 +108,19 @@ public partial class FloatingOrigin : Node
                 double d   = toBody.Magnitude;
                 double R   = body.Radius;
                 if (d < R + 1.0) d = R + 1.0;                   // never inside the surface
+
+                // Earth: fade the distant backdrop in only as the CAMERA climbs (real ascent
+                // or zooming out). In the low launch view it stays hidden so the local ground
+                // patch + procedural sky own the horizon — no grey seam where the two meet.
+                if (body.Id == "earth")
+                {
+                    CameraAltOverEarth = d - R;
+                    float a = (float)Smoothstep01(15_000.0, 32_000.0, CameraAltOverEarth);
+                    if (node is MeshInstance3D mi &&
+                        mi.GetSurfaceOverrideMaterial(0) is ShaderMaterial sm)
+                        sm.SetShaderParameter("planet_alpha", a);
+                    node.Visible = a > 0.002f;
+                }
 
                 double sinA      = System.Math.Min(R / d, 0.999999);
                 float  rBackdrop = BackdropDistance * (float)sinA;   // subtends asin(R/d)

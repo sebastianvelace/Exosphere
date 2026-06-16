@@ -20,6 +20,11 @@ uniform float cloud_amount : hint_range(0.0, 1.0) = 0.85;
 uniform float cloud_speed  = 0.0015;
 uniform float night_lights : hint_range(0.0, 4.0) = 2.4;
 uniform float day_gain     : hint_range(0.5, 2.0) = 1.15;
+// Fades the whole distant-Earth backdrop in/out. Driven by FloatingOrigin from the CAMERA's
+// altitude: ~0 in the low launch view (so the local ground patch + sky own the horizon, no
+// grey seam between the two Earth representations) → 1 once the viewpoint is high enough that
+// the curved planet is what you should actually be seeing.
+uniform float planet_alpha : hint_range(0.0, 1.0) = 1.0;
 
 varying vec3 v_local;
 varying vec3 v_world_normal;
@@ -81,4 +86,5 @@ void fragment() {
 
 	ALBEDO = lit;
 	EMISSION = cities * 0.6;
+	ALPHA = planet_alpha;
 }

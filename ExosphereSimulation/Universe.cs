@@ -38,6 +38,18 @@ public class Universe
     /// <summary>Maximum physics sub-step (s) used in full-physics mode (50 Hz).</summary>
     private const double MaxPhysicsStep = 0.02;
 
+    /// <summary>
+    /// Maximum sub-step (s) used in the mixed time-warp branch for the active vessel.
+    /// Bodies on rails are exact, so the only error source here is the vessel's RK4
+    /// integration of its own orbit. RK4 keeps the orbit shape to ~1e-6 % even at much
+    /// larger steps, but bounding the step also bounds how far the vessel moves before
+    /// the dominant body / SOI is re-evaluated and before surface impact is checked —
+    /// at 2 s a LEO vessel advances ~16 km/step, so it cannot tunnel through a planet
+    /// or jump across an SOI boundary undetected. At warp 1000 (≈16.7 s of sim time per
+    /// frame) this is ~8 sub-steps, which is negligible since only one vessel integrates.
+    /// </summary>
+    private const double MaxCoastStep = 2.0;
+
     // ── Object management ─────────────────────────────────────────────────
 
     /// <summary>Adds a celestial body to the universe (no-op if already present).</summary>
@@ -104,9 +116,18 @@ public class Universe
         }
         else if (TimeScale <= 1000.0)
         {
-            // Mixed: active vessel uses RK4; all others go on rails
-            TickPhysicsMixed(simDelta);
-            CurrentTime += simDelta;
+            // Mixed: active vessel uses RK4; all others go on rails.
+            // Sub-step (capped at MaxCoastStep) so a single big warp dt is never fed to
+            // RK4 in one shot — this bounds per-step travel, keeps SOI/dominant-body
+            // re-evaluation timely, and lets surface-impact be checked each sub-step.
+            double remaining = simDelta;
+            while (remaining > 1e-12)
+            {
+                double step = System.Math.Min(remaining, MaxCoastStep);
+                TickPhysicsMixed(step);
+                CurrentTime += step;
+                remaining   -= step;
+            }
         }
         else
         {
@@ -213,6 +234,16 @@ public class Universe
                     dt,
                     (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
                 );
+
+                // Surface impact: keep the vessel from sinking through the body during warp.
+                // (Same guard as the full-physics path; comes to rest on the rotating surface.)
+                double altitude = refBody.GetAltitude(vessel.Position);
+                if (altitude < 0.0)
+                {
+                    var dir = (vessel.Position - refBody.Position).Normalized;
+                    vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
+                    vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                }
             }
             else
             {
