@@ -85,13 +85,22 @@ public partial class AttitudeNavball : Control
         double sinPitch = System.Math.Clamp(nose.Dot(up), -1.0, 1.0);
         _pitchDeg = System.Math.Asin(sinPitch) * Rad2Deg;
 
-        // Heading: nose direction projected onto the horizon plane (north/east).
-        var noseHoriz = nose - up * nose.Dot(up);
-        if (noseHoriz.MagnitudeSquared > 1e-9)
+        // Heading: when moving fast enough, use surface velocity projected to horizon
+        // (avoids jumps when nose is nearly vertical); otherwise fall back to nose direction.
+        var surfVelForHdg = vessel.GetSurfaceVelocity(body);
+        double speedForHdg = surfVelForHdg.Magnitude;
+        var hdgDir = speedForHdg > 5.0
+            ? (surfVelForHdg - up * surfVelForHdg.Dot(up))   // surface velocity on horizon plane
+            : (nose - up * nose.Dot(up));                      // nose on horizon plane (fallback)
+        if (hdgDir.MagnitudeSquared > 1e-9)
         {
-            noseHoriz = noseHoriz.Normalized;
-            double hdg = System.Math.Atan2(noseHoriz.Dot(east), noseHoriz.Dot(north)) * Rad2Deg;
-            _headingDeg = (hdg + 360.0) % 360.0;
+            hdgDir = hdgDir.Normalized;
+            double rawHdg = (System.Math.Atan2(hdgDir.Dot(east), hdgDir.Dot(north)) * Rad2Deg + 360.0) % 360.0;
+            // Low-pass filter to smooth out numerical jumps; handle 0/360 wrap-around.
+            double diff = rawHdg - _headingDeg;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            _headingDeg = (_headingDeg + diff * System.Math.Min(delta * 8.0, 1.0) + 360.0) % 360.0;
         }
 
         // Roll: bank of the wings about the nose axis, measured against local up.
@@ -201,8 +210,9 @@ public partial class AttitudeNavball : Control
         DrawColoredPolygon(new[] { p0, p1, skyB, skyA }, SkyCol);
         DrawColoredPolygon(new[] { p0, p1, grB, grA }, GroundCol);
 
-        // Mask corners back to a clean disc with the bezel colour ring.
-        DrawArc(c, Radius + 3.2f, 0, Mathf.Tau, 64, PanelBg, 7.5f, true);
+        // Mask everything outside the disc radius with a wide ring of the background colour.
+        DrawArc(c, Radius + 250f, 0, Mathf.Tau, 128, PanelBg, 500f, true);
+        // Then draw a thin border circle at the disc edge.
         DrawArc(c, Radius, 0, Mathf.Tau, 64, PanelBorder, 1.2f, true);
 
         // Horizon line.

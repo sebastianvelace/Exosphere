@@ -32,6 +32,7 @@ public partial class EngineGridHUD : Control
     // Cached telemetry computed each frame in _Process, rendered in _Draw.
     private int    _litEngines;
     private int    _totalActiveEngines;
+    private int    _nominalEngines;    // 33 for Super Heavy, 6 for Starship
     private double _throttle;
     private double _thrustKN;
     private double _twr;
@@ -71,12 +72,15 @@ public partial class EngineGridHUD : Control
         _totalActiveEngines = engines.Count;
         _throttle = vessel.Throttle;
 
+        // Determine nominal engine count: 33 for Super Heavy booster, 6 for Starship.
+        bool isSuperHeavy = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        _nominalEngines = isSuperHeavy ? 33 : 6;
+
         // Light an engine if throttle is up AND there's propellant feeding it.
         bool feeding = _throttle > 0.01 && _totalActiveEngines > 0;
-        // Scale the number of "lit" dots by throttle so a partial throttle reads as a
-        // partial-thrust board, but always light at least the active count when firing.
+        // Scale the number of "lit" dots proportionally with throttle.
         _litEngines = feeding
-            ? System.Math.Clamp(_totalActiveEngines, 0, TotalEngines)
+            ? System.Math.Clamp((int)System.Math.Round(_nominalEngines * _throttle), 0, _nominalEngines)
             : 0;
 
         double thrustN = 0, massFlowKgs = 0, ispThrustSum = 0;
@@ -122,12 +126,21 @@ public partial class EngineGridHUD : Control
         float cy = 78f;
         float rOuter = 50f, rMid = 32f, rInner = 13f;
         int litRemaining = _litEngines;
-        litRemaining = DrawRing(cx, cy, rOuter, RingOuter, litRemaining);
-        litRemaining = DrawRing(cx, cy, rMid,   RingMid,   litRemaining);
-        DrawRing(cx, cy, rInner, RingInner, litRemaining);
+        if (_nominalEngines == 33)
+        {
+            // Super Heavy: 3 rings (3 inner + 10 mid + 20 outer)
+            litRemaining = DrawRing(cx, cy, rOuter, RingOuter, litRemaining);
+            litRemaining = DrawRing(cx, cy, rMid,   RingMid,   litRemaining);
+            DrawRing(cx, cy, rInner, RingInner, litRemaining);
+        }
+        else
+        {
+            // Starship: single ring of 6 at mid radius
+            DrawRing(cx, cy, rMid, _nominalEngines, litRemaining);
+        }
 
         // Lit / total tally in the centre.
-        string tally = $"{_litEngines}/{TotalEngines}";
+        string tally = $"{_litEngines}/{_nominalEngines}";
         var tw = _font.GetStringSize(tally, HorizontalAlignment.Center, -1, 13);
         DrawString(_font, new Vector2(cx - tw.X * 0.5f, cy + 4), tally,
             HorizontalAlignment.Left, -1, 13,
