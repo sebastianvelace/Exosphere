@@ -396,9 +396,22 @@ public partial class SimulationBridge : Node
         if (body == null || v == null) return;
 
         v.IsGroundHeld = false;
-        var up = new Vector3d(1, 0, 0);
-        // Scale the viewing altitude with the body so gas giants aren't viewed from the surface.
-        double r = body.Radius + System.Math.Max(altitude, body.Radius * 0.6);
+
+        // Approach direction + distance: ringed bodies (Saturn) are viewed from OUTSIDE the
+        // ring system (rings reach ~2.3 R) at a 3/4 angle so the rings read as an open ellipse;
+        // other bodies are viewed from a sensible fraction of their radius.
+        Vector3d up;
+        double r;
+        if (bodyId == "saturn")
+        {
+            up = new Vector3d(0.45, 0.65, 0.5).Normalized;
+            r  = body.Radius * 5.0;
+        }
+        else
+        {
+            up = new Vector3d(1, 0, 0);
+            r  = body.Radius + System.Math.Max(altitude, body.Radius * 0.6);
+        }
         v.Position = body.Position + up * r;
         var tangent = new Vector3d(0, 1, 0).Cross(up).Normalized;
         double vCirc = System.Math.Sqrt(body.GM / r);
