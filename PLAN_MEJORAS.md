@@ -128,21 +128,120 @@ disipa al subir.
 
 ---
 
+---
+
+# Nuevas funciones (Ronda 14) — pedido del usuario
+
+## N7 · Llama del cohete REALISTA por presión atmosférica (ambos modelos) — VFX
+**Pedido**: al despegue la llama debe ser MUCHO más grande; conforme sube, "menos". El usuario
+quiere **el modelo más realista**, con la versión de **nivel del mar** (corta pero intensa) y la
+de **vacío** (larga y tenue) — *"quiero ambos modelos, en el espacio y en la tierra"*.
+
+**Física/realismo de referencia** (de footage real de Starship/Super Heavy):
+- **Nivel del mar (despegue)**: escape **sobre-expandido** → llama relativamente CORTA pero
+  **muy brillante/ancha**, naranja-blanca, con **discos de Mach (shock diamonds)** marcados y
+  apretados cerca de la tobera, envuelta en una **nube de polvo/vapor ENORME** que domina la
+  base. (33 Raptors → "the mother of all shock diamonds".)
+- **Conforme sube y baja la presión**: el ángulo del choque se afina, los diamantes se separan y
+  se suavizan; la llama se **alarga** y aclara.
+- **Vacío**: escape **perfectamente/ sub-expandido** → pluma **larga, ancha y TENUE/translúcida**
+  (núcleo brillante fino + halo difuso azulado), sin polvo, casi sin diamantes. Se ve "menos"
+  porque es difusa, aunque geométricamente sea más larga.
+- Mejorar la calidad visual de la llama corta de despegue (no que se vea pobre por ser corta):
+  núcleo incandescente, gradiente de color realista, turbulencia.
+
+**Imágenes/footage de referencia (añadir al revisar):**
+- TWZ — "Starship's 33 Engines Created The Mother Of All 'Shock Diamonds'":
+  https://www.twz.com/starships-33-engines-created-the-mother-of-all-shock-diamonds
+- Everyday Astronaut — Starship/Super Heavy Flight (plumas SL→altura, bells SL vs vacío):
+  https://everydayastronaut.com/starship-super-heavy-flight-4/
+- Wikipedia — SpaceX Starship (3 SL + 3 vacuum Raptor, campanas alargadas):
+  https://en.wikipedia.org/wiki/SpaceX_Starship
+
+**Archivos**: `assets/shaders/raptor_plume.gdshader` (curva longitud/brillo/diamantes vs presión),
+`scripts/PlumeSystem.cs` (escala por throttle × densidad), `scripts/LaunchEffectsController.cs`
+(nube de polvo gigante de despegue — ligado a N5).
+**Aceptación**: despegue = llama corta MUY brillante con diamantes + nube enorme; en altura la
+llama se alarga; en vacío pluma larga y tenue. Transición continua con la altitud/presión.
+
+## N8 · Botón de acelerar tiempo estilo KSP (x1…x1000+) — UI + SIM
+**Pedido**: botones de warp x2/x3/x10… **Estilo KSP (hasta x1000+)**.
+**Diseño**:
+- Niveles: x1, x2, x3, x5, x10, x50, x100, x1000 (configurable). UI con botones/indicador y
+  teclas `[.]`/`[,]` (ya existen) + el botón.
+- **Sobre-rieles en órbita**: a warp alto, poner la nave en órbita kepleriana exacta
+  (`IsOnRails` + `OrbitalElements` ya existen en `Vessel`) en vez de integrar paso a paso.
+- **Límite por altitud / propulsión**: warp alto BLOQUEADO cerca del suelo, en atmósfera densa o
+  con motores encendidos (como KSP). Mostrar el warp máximo permitido según el estado.
+- Respetar/!coordinar! con el auto-warp del `AscentController` (que ahora usa warp 1 en
+  propulsado, 4 en coast).
+**Archivos**: `scripts/HUDController.cs` (botón/indicador), `ExosphereSimulation/Universe.cs`
+(niveles + on-rails + sub-stepping), `scripts/SimulationBridge.cs` (`SetTimeScale`), posible
+`scripts/WarpController.cs`.
+**Aceptación**: el jugador sube/baja warp con botón y teclas; en órbita llega a x1000 sin que la
+órbita derive; cerca del suelo/propulsado el warp se limita; el HUD muestra el nivel y el tope.
+
+## N9 · Recursos y sistemas de misión realista — SIM + UI
+**Pedido (prioridad del usuario)**: **Soporte vital**, **Energía**, **Térmico y comunicaciones**
+(NO se pidió tripulación/EVA por ahora).
+**Sistemas**:
+- **Soporte vital**: O2 (consumo por tripulante), CO2 (acumulación/depuración), agua, comida;
+  alertas y límites de supervivencia; reservas y duración estimada.
+- **Energía**: paneles solares (potencia según ángulo al Sol y eclipse/sombra de la Tierra),
+  baterías (carga/descarga), consumo de sistemas; modo eclipse drena batería.
+- **Térmico**: balance de calor (Sol vs radiadores/sombra), límites de temperatura, radiadores.
+- **Comunicaciones**: antena + enlace con la Tierra (según línea de visión/distancia), retardo de
+  señal y **pérdida de control del autopiloto sin señal** (o aviso).
+**Archivos**: nuevos en `ExosphereSimulation/Systems/` (p.ej. `LifeSupportSystem.cs`,
+`PowerSystem.cs`, `ThermalSystem.cs`, `CommsSystem.cs`) integrados en `Vessel.Tick`; datos de
+recurso en `Part`/`PartDefinition`/JSON; nuevo panel de HUD `scripts/SystemsHUD.cs`.
+**Aceptación**: los recursos se consumen/regeneran con el tiempo y el estado (Sol, eclipse,
+tripulación); el HUD muestra O2/CO2/agua/energía/temperatura/señal con barras y alertas; quedarse
+sin energía o señal tiene consecuencias.
+
+## N10 · Fijar rumbo a otro planeta — INTERMEDIO — SIM + UI
+**Pedido**: elegir planeta destino → **nodo de maniobra Hohmann automático editable** + autopiloto
+que lo ejecuta. (Ya existe un planificador de maniobras de la Semana 10 — reutilizar.)
+**Diseño**:
+- Selector de **destino** (Marte, Luna, etc. — cuerpos del universo) en el mapa/HUD.
+- Calcular una **transferencia tipo Hohmann** desde la órbita actual: crear un **nodo de
+  maniobra** (Δv, tiempo) que el jugador puede **ajustar**; mostrar la trayectoria resultante.
+- **Autopiloto** que orienta y ejecuta el burn del nodo en el momento correcto.
+- (Intermedio: no hace falta ventana de lanzamiento/porkchop fino, pero sí una transferencia
+  válida y editable.)
+**Archivos**: `scripts/ManeuverPlanner*`/mapa orbital existentes (Semana 10), nuevo
+`scripts/TransferPlanner.cs` (Hohmann hacia el cuerpo destino), UI de selección de destino en el
+mapa `[M]`, autopiloto de ejecución de nodo (extender `AscentController`/nuevo
+`ManeuverExecutor.cs`).
+**Aceptación**: el jugador elige un planeta, aparece un nodo de transferencia editable y la
+trayectoria de encuentro; el autopiloto ejecuta el burn y la nave queda en curso al destino.
+
+---
+
 ## Reparto sugerido (archivos disjuntos → se puede paralelizar con agentes)
 | Frente | Tareas | Archivos exclusivos |
 |--------|--------|---------------------|
-| HUD | N1, N2, N6(heading) | `scripts/EngineGridHUD.cs`, `scripts/AttitudeNavball.cs`, `scripts/HUDController.cs` |
+| HUD-bugs | N1, N2, N6(heading) | `scripts/EngineGridHUD.cs`, `scripts/AttitudeNavball.cs`, `scripts/HUDController.cs` |
 | Tierra/nubes | N3, N4 | `assets/shaders/earth_surface.gdshader` (+ opcional `earth_ground.gdshader`) |
-| VFX | N5 | `scripts/LaunchEffectsController.cs` |
+| VFX-llama | N5, N7 | `assets/shaders/raptor_plume.gdshader`, `scripts/PlumeSystem.cs`, `scripts/LaunchEffectsController.cs` |
 | Ascenso | N6(G-force) | `scripts/AscentController.cs` |
+| Time-warp | N8 | `ExosphereSimulation/Universe.cs`, `scripts/SimulationBridge.cs`, `scripts/WarpController.cs` (HUD del warp: coordinar con HUD-bugs) |
+| Sistemas | N9 | `ExosphereSimulation/Systems/*` (nuevos), `scripts/SystemsHUD.cs` (nuevo), JSON de partes |
+| Interplanetario | N10 | `scripts/TransferPlanner.cs`/`ManeuverExecutor.cs` (nuevos), mapa orbital `[M]` |
 
-**Orden**: los 4 frentes son disjuntos → paralelizables. Prioridad: **N1 y N2** (bugs visibles del
-HUD) y **N3/N4** (la Tierra de cerca). Verificar cada cambio con harness headless (despegue,
-ascenso, órbita) y commitear por tarea. Builds 0/0 siempre.
+**Orden recomendado**:
+1. **Bugs primero**: N1, N2 (HUD), N3, N4 (Tierra) — son lo que más molesta ahora mismo.
+2. **VFX**: N5+N7 (llama realista por presión) — un solo frente.
+3. **Funciones nuevas grandes** (más diseño): N8 (warp), N9 (sistemas/recursos), N10 (interplanetario).
+Los frentes tienen archivos disjuntos → paralelizables con agentes (ojo: N8 y N1/N2 comparten
+HUD → coordinar el panel del warp). Verificar con harness headless y commitear por tarea. 0/0 siempre.
 
 ## Criterios de "hecho"
 - [ ] Rejilla enciende 33 (SH) / 6 (Starship) según throttle; tally correcto.
 - [ ] Navball sin cuadro marrón, recortado limpio al disco, a cualquier actitud.
 - [ ] Tierra nítida desde ~150 km; nubes con detalle/sombra; sin bloques.
-- [ ] Nube de despegue domina los primeros segundos.
+- [ ] Llama realista: despegue corta+brillante+diamantes+nube enorme; vacío larga+tenue; transición por presión.
+- [ ] Botón/teclas de warp x1…x1000+ con on-rails en órbita y límites cerca del suelo/propulsado.
+- [ ] Recursos (O2/CO2/agua/energía/térmico/señal) se consumen y se muestran con alertas y consecuencias.
+- [ ] Selección de planeta destino → nodo Hohmann editable + autopiloto que ejecuta el burn.
 - [ ] Ambos proyectos 0/0; harness temporal eliminado; commits por tarea.
