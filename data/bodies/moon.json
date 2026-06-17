@@ -9,7 +9,7 @@
   "has_atmosphere": false,
   "atmosphere": null,
   "surface_gravity": 1.62,
-  "gm": 4.9048695e12,
+  "gm": 4.902800e12,
   "orbital_elements": {
     "semi_major_axis": 384400000,
     "eccentricity": 0.0549,

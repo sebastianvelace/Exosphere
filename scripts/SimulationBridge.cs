@@ -132,18 +132,19 @@ public partial class SimulationBridge : Node
         var av = ActiveVessel;
         if (av != null)
         {
+            var refB = Universe.GetDominantBody(av.Position);
+            double atmDensity = refB.GetAtmosphericDensity(av.Position);
+            bool inAtmo = atmDensity > 0.01;
             if (av.Throttle > 0.01)
             {
-                MaxAllowedWarpIndex = 0; // no warp while thrusting
+                // Warp IS allowed while thrusting now — the active vessel stays on RK4 with a
+                // bounded sub-step (Universe.MaxThrustStep) so the burn is physics-faithful.
+                // Cap it: x3 in atmosphere, x10 in vacuum (never on-rails while powered).
+                MaxAllowedWarpIndex = inAtmo ? 2 : 4;   // index 2 = x3, index 4 = x10
             }
             else
             {
-                var refB = Universe.GetDominantBody(av.Position);
-                double atmDensity = refB.GetAtmosphericDensity(av.Position);
-                if (atmDensity > 0.01)
-                    MaxAllowedWarpIndex = 2; // max x3 in atmosphere
-                else
-                    MaxAllowedWarpIndex = WarpLevels.Length - 1; // max in vacuum/orbit
+                MaxAllowedWarpIndex = inAtmo ? 2 : WarpLevels.Length - 1; // x3 atmo, full in vacuum/orbit
             }
             // Clamp current warp index if it now exceeds the allowed maximum
             if (WarpIndex > MaxAllowedWarpIndex)
