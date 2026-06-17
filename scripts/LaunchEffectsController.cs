@@ -31,8 +31,8 @@ public partial class LaunchEffectsController : Node3D
 
     // N5: cloud dominates 0–3 s; ceiling lowered so it dissipates by ~300 m.
     // Altitude band (metres) over which the cloud is active and fades out.
-    private const float TriggerCeilingM = 300f;   // above this: fully off
-    private const float FullIntensityM  = 80f;    // at/under this: full force
+    private const float TriggerCeilingM = 550f;   // above this: fully off (smoke column lingers longer)
+    private const float FullIntensityM  = 140f;   // at/under this: full force (huge cloud through the first seconds)
     private const float MinThrottle     = 0.02f;  // throttle floor to count as "lit"
 
     // Pivot we rotate to align local +Y with the planet's "up" at the vessel,
@@ -238,8 +238,8 @@ public partial class LaunchEffectsController : Node3D
             Spread             = 88f,
             Flatness           = 0.78f,        // strong bias toward horizontal sheeting
             // N5: faster initial burst so the cloud DOMINATES the screen at 0-3 s.
-            InitialVelocityMin = 55f,          // was 36
-            InitialVelocityMax = 100f,         // was 72
+            InitialVelocityMin = 64f,          // more violent initial eruption
+            InitialVelocityMax = 118f,
 
             // Heavy damping so it decelerates and balloons rather than streaking.
             DampingMin = 6f,
