@@ -187,36 +187,46 @@ public partial class AttitudeNavball : Control
 
     private void DrawAttitudeBall(Vector2 c, float pitchPx, float roll)
     {
-        // Clip to the disc by drawing within a circle: emulate by drawing a big
-        // sky rect and ground rect rotated about the centre, then masking with a
-        // ring. Godot's immediate _Draw has no clip, so we approximate with polys
-        // sized to the disc and rely on the bezel ring to hide the corners.
+        // Sky and ground are built as polygons CLIPPED to the disc, so the ball is always a
+        // clean circle (no square corners). Sky = full disc; ground = the circular segment
+        // below the horizon. Godot's immediate _Draw has no clip region, so we clip by hand.
         var dir = new Vector2(Mathf.Sin(roll), -Mathf.Cos(roll)); // "up" on the ball
         var rightv = new Vector2(dir.Y, -dir.X);
 
-        // Horizon line passes through (c + dir*pitchPx)? pitch shifts horizon down
-        // when nose pitches up. Horizon point:
-        var horizonMid = c - dir * pitchPx;
-        float ext = Radius + 4f;
+        // Horizon line is the chord at signed distance pitchPx (along dir) from the centre.
+        float pp = Mathf.Clamp(pitchPx, -Radius, Radius);
+        var horizonMid = c - dir * pp;
+        float half = Mathf.Sqrt(Mathf.Max(0f, Radius * Radius - pp * pp));
+        var i1 = horizonMid - rightv * half;   // chord endpoints on the circle
+        var i2 = horizonMid + rightv * half;
 
-        // Sky (above horizon) and ground (below) as quads spanning the disc.
-        var p0 = horizonMid - rightv * ext;
-        var p1 = horizonMid + rightv * ext;
-        var skyA = p0 + dir * (2 * ext);
-        var skyB = p1 + dir * (2 * ext);
-        var grA  = p0 - dir * (2 * ext);
-        var grB  = p1 - dir * (2 * ext);
+        // Base disc = sky.
+        DrawCircle(c, Radius, SkyCol);
 
-        DrawColoredPolygon(new[] { p0, p1, skyB, skyA }, SkyCol);
-        DrawColoredPolygon(new[] { p0, p1, grB, grA }, GroundCol);
+        // Ground = circular segment below the horizon, walked around the rim with the chord
+        // intersections inserted at the two crossings (perfect clip, handles any roll/pitch).
+        var grd = new System.Collections.Generic.List<Vector2>();
+        const int N = 48;
+        Vector2 prev = c + new Vector2(Radius, 0f);
+        bool prevG = (prev - horizonMid).Dot(dir) < 0f;
+        for (int i = 1; i <= N; i++)
+        {
+            float a = i / (float)N * Mathf.Tau;
+            var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * Radius;
+            bool pG = (p - horizonMid).Dot(dir) < 0f;
+            if (prevG) grd.Add(prev);
+            if (pG != prevG)
+            {
+                var mid = (prev + p) * 0.5f;
+                grd.Add((i1 - mid).LengthSquared() <= (i2 - mid).LengthSquared() ? i1 : i2);
+            }
+            prev = p; prevG = pG;
+        }
+        if (grd.Count >= 3) DrawColoredPolygon(grd.ToArray(), GroundCol);
 
-        // Mask everything outside the disc radius with a wide ring of the background colour.
-        DrawArc(c, Radius + 250f, 0, Mathf.Tau, 128, PanelBg, 500f, true);
-        // Then draw a thin border circle at the disc edge.
-        DrawArc(c, Radius, 0, Mathf.Tau, 64, PanelBorder, 1.2f, true);
-
-        // Horizon line.
-        DrawLine(horizonMid - rightv * Radius, horizonMid + rightv * Radius, HorizonCol, 1.6f, true);
+        // Bezel + horizon line (the chord).
+        DrawArc(c, Radius, 0, Mathf.Tau, 64, PanelBorder, 1.4f, true);
+        if (half > 0.5f) DrawLine(i1, i2, HorizonCol, 1.6f, true);
 
         // Pitch ladder: ticks every 30°, within the disc.
         for (int deg = -60; deg <= 60; deg += 30)
