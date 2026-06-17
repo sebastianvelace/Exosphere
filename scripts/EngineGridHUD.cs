@@ -43,13 +43,13 @@ public partial class EngineGridHUD : Control
     public override void _Ready()
     {
         _font = ThemeDB.FallbackFont;
-        // Bottom-right corner, above the controls/altitude band.
-        SetAnchorsPreset(LayoutPreset.BottomRight);
-        GrowHorizontal = GrowDirection.Begin;
+        // Bottom-LEFT, above the money/controls band — frees the bottom-right for the MAP.
+        SetAnchorsPreset(LayoutPreset.BottomLeft);
+        GrowHorizontal = GrowDirection.End;
         GrowVertical   = GrowDirection.Begin;
         CustomMinimumSize = new Vector2(208, 232);
-        OffsetLeft = -226; OffsetTop = -344;
-        OffsetRight = -18; OffsetBottom = -112;
+        OffsetLeft = 18;  OffsetTop = -360;
+        OffsetRight = 226; OffsetBottom = -128;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 

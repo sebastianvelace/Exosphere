@@ -17,11 +17,13 @@ public partial class SystemsHUD : Control
     public override void _Ready()
     {
         _font = ThemeDB.FallbackFont;
-        SetAnchorsPreset(LayoutPreset.TopRight);
-        GrowHorizontal = GrowDirection.Begin;
-        CustomMinimumSize = new Vector2(180, 220);
-        OffsetLeft  = -198; OffsetTop    = 10;
-        OffsetRight =  -18; OffsetBottom = 230;
+        // Top-LEFT, directly below the LOADS · TRAJECTORY panel (ends ~y=265) so it no longer
+        // overlaps the STAGE · Δv · ORBIT panel on the top-right.
+        SetAnchorsPreset(LayoutPreset.TopLeft);
+        GrowHorizontal = GrowDirection.End;
+        CustomMinimumSize = new Vector2(290, 200);
+        OffsetLeft  = 18;  OffsetTop    = 288;
+        OffsetRight = 308; OffsetBottom = 488;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 

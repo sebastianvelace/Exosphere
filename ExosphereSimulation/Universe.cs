@@ -50,6 +50,10 @@ public class Universe
     /// </summary>
     private const double MaxCoastStep = 2.0;
 
+    /// <summary>Max RK4 sub-step (s) while the active vessel is THRUSTING under warp — kept
+    /// small so a powered burn stays accurate (≈2 steps/frame at x10).</summary>
+    private const double MaxThrustStep = 0.1;
+
     // ── Object management ─────────────────────────────────────────────────
 
     /// <summary>Adds a celestial body to the universe (no-op if already present).</summary>
@@ -120,10 +124,14 @@ public class Universe
             // Sub-step (capped at MaxCoastStep) so a single big warp dt is never fed to
             // RK4 in one shot — this bounds per-step travel, keeps SOI/dominant-body
             // re-evaluation timely, and lets surface-impact be checked each sub-step.
+            // While the active vessel is thrusting, tighten the sub-step so a powered burn under
+            // warp integrates accurately (thrust + gravity) and matches a real-time burn.
+            bool thrusting = ActiveVessel is { Throttle: > 0.01 };
+            double cap = thrusting ? MaxThrustStep : MaxCoastStep;
             double remaining = simDelta;
             while (remaining > 1e-12)
             {
-                double step = System.Math.Min(remaining, MaxCoastStep);
+                double step = System.Math.Min(remaining, cap);
                 TickPhysicsMixed(step);
                 CurrentTime += step;
                 remaining   -= step;
