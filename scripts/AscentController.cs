@@ -194,7 +194,9 @@ public partial class AscentController : Control
             // back to full once past Max-Q — the real "throttling down … throttle up" profile.
             _q = vessel.GetDynamicPressure(body);
             throttle = System.Math.Clamp(1.0 - (_q - 22_000.0) / 18_000.0 * 0.4, 0.62, 1.0);
-            warp = 2.0;
+            // Real time during powered ascent so the climb to orbit takes its full, realistic
+            // duration (~8-9 min) and is actually experienced — no fast-forward through it.
+            warp = 1.0;
         }
         else if (vUp > 25.0)
         {
@@ -220,7 +222,7 @@ public partial class AscentController : Control
             double sinCmd = System.Math.Clamp(sinFF + altCorr, -0.3, 0.95);
             double cosCmd = System.Math.Sqrt(System.Math.Max(0.0, 1.0 - sinCmd * sinCmd));
             dir = (tang * cosCmd + up * sinCmd).Normalized;
-            throttle = 1.0; warp = 4.0;
+            throttle = 1.0; warp = 1.0;   // real-time circularization burn
         }
 
         if (warp != universe.TimeScale) universe.TimeScale = warp;
