@@ -110,6 +110,11 @@ public partial class MapViewController : Control
                         _autopilot.Arm();
                     break;
 
+                case Key.J when Visible && _selectedTarget != null:
+                    SimulationBridge.Instance?.JumpToBody(_selectedTarget);
+                    Visible = false;
+                    break;
+
                 case Key.Delete or Key.Backspace when Visible:
                     Planner.ClearNode();
                     _autopilot.Disarm();

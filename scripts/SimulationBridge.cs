@@ -20,9 +20,9 @@ public partial class SimulationBridge : Node
     [Signal] public delegate void SimulationLoadedEventHandler();
 
     // ── Time-warp API ─────────────────────────────────────────────────────
-    public static readonly double[] WarpLevels = { 1, 2, 3, 5, 10, 50, 100, 1000 };
+    public static readonly double[] WarpLevels = { 1, 2, 3, 5, 10, 50, 100, 1000, 10000, 100000 };
     public int WarpIndex          { get; private set; } = 0;
-    public int MaxAllowedWarpIndex { get; private set; } = 7;
+    public int MaxAllowedWarpIndex { get; private set; } = 9;
 
     public void SetWarpIndex(int i)
     {
@@ -343,5 +343,24 @@ public partial class SimulationBridge : Node
 
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
         GD.Print($"[DEBUG] JumpToOrbit -> {altitude / 1000:F0} km circular, v={vCirc:F0} m/s");
+    }
+
+    /// DEBUG: jump to a ~300 km circular orbit around an arbitrary body (e.g. the transfer
+    /// target), to preview arrival/EDL without flying the whole cruise.
+    public void JumpToBody(string bodyId, double altitude = 300_000.0)
+    {
+        var body = Universe.GetBody(bodyId);
+        var v = ActiveVessel;
+        if (body == null || v == null) return;
+
+        v.IsGroundHeld = false;
+        var up = new Vector3d(1, 0, 0);
+        double r = body.Radius + altitude;
+        v.Position = body.Position + up * r;
+        var tangent = new Vector3d(0, 1, 0).Cross(up).Normalized;
+        double vCirc = System.Math.Sqrt(body.GM / r);
+        v.Velocity = body.Velocity + tangent * vCirc;
+        v.Throttle = 0.0;
+        GD.Print($"[DEBUG] JumpToBody {bodyId} -> orbit {altitude / 1000:F0} km");
     }
 }
