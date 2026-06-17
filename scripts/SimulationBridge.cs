@@ -270,7 +270,49 @@ public partial class SimulationBridge : Node
             mesh.SetSurfaceOverrideMaterial(0, mat);
             planetsNode.AddChild(mesh);
             fo.RegisterPlanetNode(body.Id, mesh);
+
+            if (body.Id == "saturn") AddSaturnRing(mesh);
         }
+    }
+
+    // Saturn's rings: a flat annulus child (local XZ plane) that scales/tilts with the
+    // scaled-space backdrop sphere. Inner/outer radii in body-radius units (sphere = 1).
+    private static void AddSaturnRing(MeshInstance3D parent)
+    {
+        var ring = new MeshInstance3D { Name = "SaturnRing", Mesh = BuildRingMesh(1.20f, 2.30f, 160) };
+        var shader = GD.Load<Shader>("res://assets/shaders/saturn_ring.gdshader");
+        if (shader != null)
+        {
+            var rmat = new ShaderMaterial { Shader = shader };
+            var img = Image.LoadFromFile(ProjectSettings.GlobalizePath("res://assets/textures/saturn_ring.png"));
+            if (img != null) { img.GenerateMipmaps(); rmat.SetShaderParameter("ring_tex", ImageTexture.CreateFromImage(img)); }
+            ring.SetSurfaceOverrideMaterial(0, rmat);
+        }
+        ring.CustomAabb = new Aabb(new Godot.Vector3(-2.4f, -0.1f, -2.4f), new Godot.Vector3(4.8f, 0.2f, 4.8f));
+        parent.AddChild(ring);
+    }
+
+    private static ArrayMesh BuildRingMesh(float inner, float outer, int seg)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        for (int i = 0; i < seg; i++)
+        {
+            float a0 = i / (float)seg * Mathf.Tau, a1 = (i + 1) / (float)seg * Mathf.Tau;
+            var d0 = new Godot.Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0));
+            var d1 = new Godot.Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
+            float u0 = i / (float)seg, u1 = (i + 1) / (float)seg;
+            RingVert(st, d0 * inner, 0f, u0); RingVert(st, d0 * outer, 1f, u0); RingVert(st, d1 * outer, 1f, u1);
+            RingVert(st, d0 * inner, 0f, u0); RingVert(st, d1 * outer, 1f, u1); RingVert(st, d1 * inner, 0f, u1);
+        }
+        return st.Commit();
+    }
+
+    private static void RingVert(SurfaceTool st, Godot.Vector3 p, float radialU, float angV)
+    {
+        st.SetNormal(Godot.Vector3.Up);
+        st.SetUV(new Godot.Vector2(radialU, angV));
+        st.AddVertex(p);
     }
 
     private static Color GetPlanetColor(string id) => id switch
