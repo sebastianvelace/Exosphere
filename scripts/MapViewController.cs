@@ -120,22 +120,22 @@ public partial class MapViewController : Control
                     break;
 
                 // Transfer Δv factor adjustment: [ decreases, ] increases (5% steps)
-                case Key.BracketLeft when Visible:
+                case Key.Bracketleft when Visible:
                 {
-                    var tNode = TransferPlanner.Instance?.CurrentNode;
-                    if (tNode != null)
+                    var tn = TransferPlanner.Instance?.CurrentNode;
+                    if (tn != null)
                     {
-                        tNode.DvAdjustFactor = System.Math.Max(0.50, tNode.DvAdjustFactor - 0.05);
+                        tn.DvAdjustFactor = System.Math.Max(0.50, tn.DvAdjustFactor - 0.05);
                         QueueRedraw();
                     }
                     break;
                 }
-                case Key.BracketRight when Visible:
+                case Key.Bracketright when Visible:
                 {
-                    var tNode = TransferPlanner.Instance?.CurrentNode;
-                    if (tNode != null)
+                    var tn = TransferPlanner.Instance?.CurrentNode;
+                    if (tn != null)
                     {
-                        tNode.DvAdjustFactor = System.Math.Min(1.50, tNode.DvAdjustFactor + 0.05);
+                        tn.DvAdjustFactor = System.Math.Min(1.50, tn.DvAdjustFactor + 0.05);
                         QueueRedraw();
                     }
                     break;
