@@ -259,3 +259,105 @@ recursos viven en los objetos de sistema (asociados al vessel activo).
 - [ ] N10: destino → nodo Hohmann editable + autopiloto que ejecuta.
 - [ ] N11: impacto duro → explosión (fuego+humo+escombros) + CRASHED; aterrizaje suave no explota.
 - [ ] Ambos proyectos 0/0; harness temporal eliminado; commits por tarea.
+
+---
+
+# FPV · Vista en primera persona desde la cabina (Crew Dragon style)
+
+> Decisiones del usuario: **cabina 3D completa** · estética **realista (pantallas, no ventana de
+> avión) con ventanillas pequeñas** para ver fuera · se activa **integrada en la tecla `[C]`** ·
+> debe transmitir velocidad/aceleración con **G-force + instrumentos en cabina + vista por las
+> ventanillas + vibración/sonido** (las 4). Funcional: que se SIENTA acelerar/frenar.
+
+## Contexto técnico relevante
+- El vessel activo se renderiza en el ORIGEN (FloatingOrigin) y se orienta con
+  `vessel.Orientation`. Escala 1 u = 2.8 m. El stack mide ~43 u; la tripulación va en la sección
+  superior de la nave (nariz de Starship) → la cabina se ancla ahí en espacio LOCAL del vessel.
+- Cámara: `scripts/CameraController.cs` con `enum CameraMode { Chase, Pad }`; la tecla `[C]`
+  (línea ~62) alterna modos; usa `CameraShake _shake` (`scripts/CameraShake.cs`, con
+  `PositionOffset/RotationOffset/Fov` y `Update(delta, vessel, universe, distance)`).
+- Telemetría de solo lectura ya disponible en `Vessel`/`PartGraph` (velocidad, altitud, throttle,
+  G por aceleración, q, Ap/Pe, getters de motor) y `OrbitalElements`. `AudioManager` existe.
+
+## Diseño general
+Una cabina 3D (estilo Crew Dragon) anclada al nodo del vessel, **visible solo en modo Cockpit**.
+La cámara se sitúa en el ojo del piloto, mirando al frente (local +Y de la nave), con look-around
+limitado por ratón. La aceleración empuja la cámara contra el asiento (G-force), las pantallas de
+la consola muestran telemetría en vivo, por las ventanillas se ve el exterior (estrellas, planeta,
+pluma), y un rumble interior + vibración escalan con el empuje y la presión dinámica.
+
+---
+
+## AGENTE FPV-A · Modelo 3D de la cabina  (archivo EXCLUSIVO: `scripts/CockpitRenderer.cs` NUEVO)
+- Construye el interior estilo **Crew Dragon**: mamparos/paredes curvas, **4 asientos**, una
+  **consola curva con 3 pantallas grandes**, ventanillas redondas pequeñas (3-4) con marco,
+  detalles (cinturones, conductos, luz ambiental suave emisiva). Todo en METROS × U (1/2.8).
+- Anclar el nodo de cabina al nodo del vessel (hijo del `VesselRenderer` o un nodo nuevo
+  parenteado al vessel), en el offset local de la sección de tripulación (parte alta, +Y).
+- **Visible solo en modo Cockpit** (expone `public void SetVisible(bool)` o una propiedad que
+  CameraController/B activa). Cuando esté visible, ocultar el exterior interno que estorbe.
+- Las 3 pantallas son `MeshInstance3D` planas nombradas **`Screen0`,`Screen1`,`Screen2`** (el
+  Agente C les pondrá la textura de telemetría). Exponer su transform/posición del ojo del piloto:
+  `public Transform3D EyeLocal { get; }` (posición+orientación del ojo en espacio del vessel) para
+  que B coloque la cámara.
+- Materiales PBR sobrios (blanco/gris Crew Dragon, negro mate en consolas). Mallas: bajos cientos.
+- **Aceptación**: en modo Cockpit se ve un interior creíble con consola, 3 pantallas, asientos y
+  ventanillas; build 0/0.
+
+## AGENTE FPV-B · Cámara IVA + integración en [C] + G-force  (EXCLUSIVO: `scripts/CameraController.cs`)
+- Añadir `Cockpit` a `enum CameraMode` y al **ciclo de la tecla `[C]`** (p.ej. Pad → Chase →
+  Cockpit → Pad). Avisar a `CockpitRenderer` para mostrar/ocultar la cabina según el modo.
+- En modo Cockpit: colocar la cámara en `EyeLocal` (de A): posición del ojo =
+  `vessel.Orientation.Rotate(eyeOffsetLocal)` en unidades de render; mirar al frente del vessel
+  (local +Y). **Look-around** con el ratón (yaw/pitch clamped a ±70°), que se recentra suave.
+- **G-force**: desplazar el ojo en sentido OPUESTO a la aceleración neta (te empuja contra el
+  asiento al acelerar; hacia delante al frenar/decelerar), proporcional a G, suavizado y con un
+  máximo (p.ej. ≤ 0.15 u). Añadir una leve inclinación (pitch) con la aceleración longitudinal.
+- Usar el `CameraShake` existente para la vibración (el Agente D lo amplifica en IVA).
+- **Aceptación**: `[C]` entra/sale de cabina; la cámara va dentro mirando al frente; al acelerar
+  se siente el empuje (la vista se hunde en el asiento) y al frenar lo contrario; build 0/0.
+
+## AGENTE FPV-C · Pantallas de instrumentos en cabina  (EXCLUSIVO: `scripts/CockpitInstruments.cs` NUEVO)
+- Telemetría EN VIVO sobre las 3 pantallas de la consola. Implementar con **SubViewport(s)** que
+  rendericen un `Control` 2D con los datos, y aplicar su `ViewportTexture` (emissiva) a los
+  `Screen0/1/2` que crea el Agente A (buscarlos por nombre y asignar el material).
+  - Pantalla central: **velocidad** grande + altitud + T+ (estilo PFD).
+  - Pantalla izquierda: **actitud/navball** + pitch/heading + vector prograde.
+  - Pantalla derecha: **motores/etapa** (empuje, throttle, TWR, Δv, Ap/Pe) + **G** y **q** (Max-Q).
+- Todo se actualiza cada frame leyendo `SimulationBridge.Instance.ActiveVessel` (solo lectura).
+  Estética tipo Crew Dragon (negro, líneas finas, acentos). Performance: viewports pequeños
+  (p.ej. 512×512) y refresco normal.
+- **Aceptación**: las 3 pantallas muestran datos que cambian en tiempo real (velocidad/altitud/G/
+  throttle/Ap-Pe/actitud) al volar; build 0/0.
+
+## AGENTE FPV-D · Vibración + sonido interior  (EXCLUSIVO: `scripts/CameraShake.cs` + `scripts/AudioManager.cs`)
+- En `CameraShake`: amplificar el temblor cuando la cámara está en modo Cockpit (más "metálico"
+  desde dentro), escalado por throttle y por presión dinámica `q`; pico extra en **Max-Q** y en
+  eventos de etapa (MECO/separación). Exponer un flag/intensidad IVA que B active.
+- En `AudioManager`: bucle de **rumble interior** cuyo volumen/tono sube con throttle y q; cortar
+  en vacío sin empuje (silencio del espacio) dejando solo vibraciones sutiles; golpe de sonido en
+  separación. (Si no hay assets de audio, dejar los hooks y un placeholder procedural/volumen.)
+- **Aceptación**: dentro de la cabina se oye/siente el rumble subir al acelerar y atravesar Max-Q,
+  y el silencio en vacío sin motores; build 0/0.
+
+---
+
+## Contratos de interfaz (para no chocar)
+- **A → B**: `CockpitRenderer.EyeLocal` (Transform3D del ojo en espacio del vessel) y
+  `CockpitRenderer.SetVisible(bool)`.
+- **A → C**: nodos `Screen0/1/2` (MeshInstance3D) en la cabina; C les asigna el material de viewport.
+- **B → A/D**: B llama a `SetVisible` al entrar/salir de Cockpit y activa la intensidad IVA del shake.
+- Todos: leer telemetría solo desde `SimulationBridge.Instance.ActiveVessel` (no editar el sim).
+
+## Orden y verificación
+- A primero (define `EyeLocal` y `Screen0/1/2`); B y C en paralelo tras A; D en paralelo (solo
+  shake/audio). Integrar y verificar con harness headless: entrar a Cockpit con `[C]`, capturar la
+  vista interior en el pad, en ascenso (G + pantallas + ventanillas) y en órbita. Builds 0/0;
+  borrar harness; commit por agente.
+
+## Aceptación global (FPV)
+- [ ] `[C]` incluye un modo Cockpit con interior 3D estilo Crew Dragon (asientos, consola, 3 pantallas, ventanillas).
+- [ ] La cámara va dentro mirando al frente, con look-around limitado.
+- [ ] Se SIENTE acelerar/frenar (empuje contra el asiento por G) y vibra con el motor/Max-Q.
+- [ ] Las 3 pantallas muestran telemetría en vivo; por las ventanillas se ve el exterior.
+- [ ] Rumble interior escala con empuje/q; silencio en vacío. Builds 0/0.
