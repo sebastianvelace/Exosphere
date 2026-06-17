@@ -21,7 +21,7 @@ public partial class MapViewController : Control
     // ── Transfer planner state ────────────────────────────────────────────────
     private string? _selectedTarget;   // body ID selected for Hohmann transfer
 
-    // Planets available for transfer, in keyboard order (keys 1–5)
+    // Planets available for transfer, in keyboard order (keys 1–6)
     private static readonly (string id, string label, Key key)[] TransferTargets =
     {
         ("mars",    "Mars",    Key.Key1),
@@ -29,6 +29,7 @@ public partial class MapViewController : Control
         ("venus",   "Venus",   Key.Key3),
         ("jupiter", "Jupiter", Key.Key4),
         ("mercury", "Mercury", Key.Key5),
+        ("saturn",  "Saturn",  Key.Key6),
     };
 
     // ── Layout ────────────────────────────────────────────────────────────────
