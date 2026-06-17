@@ -127,14 +127,24 @@ public partial class PlumeSystem : Node3D
         // Live flicker shared per group so the whole cluster pulses together.
         float flick = 0.92f + GD.Randf() * 0.10f;
 
+        // N7: atmospheric-pressure proxy for the new shader uniforms.
+        // atmo_pressure = exp(-alt/7000) already computed as (1 - expansion) before
+        // the smoothstep, but we keep the simpler inverse relationship here.
+        float atmoPressure = System.Math.Clamp(1f - expansion, 0f, 1f);
+
         foreach (var u in units)
         {
             // ── Shader-driven core cone ──────────────────────────────────────
             u.Pivot.Visible = firing;
             if (firing)
             {
-                u.ConeMat.SetShaderParameter("throttle",  throttle);
-                u.ConeMat.SetShaderParameter("expansion", expansion);
+                u.ConeMat.SetShaderParameter("throttle",       throttle);
+                u.ConeMat.SetShaderParameter("expansion",      expansion);
+                // N7: new uniforms — atmo_pressure and throttle_level.
+                // The shader reconciles both control paths, so writing both is safe
+                // and ensures the N7 plume_length / diamond / opacity logic fires.
+                u.ConeMat.SetShaderParameter("atmo_pressure",  atmoPressure);
+                u.ConeMat.SetShaderParameter("throttle_level", throttle);
 
                 // Length grows with throttle and (strongly) with altitude;
                 // mouth broadens in vacuum (underexpanded). Flicker jitters length.
@@ -224,12 +234,15 @@ public partial class PlumeSystem : Node3D
         };
 
         var mat = new ShaderMaterial { Shader = PlumeShader };
-        mat.SetShaderParameter("core_color",    core);
+        mat.SetShaderParameter("core_color",     core);
         mat.SetShaderParameter("edge_color",    new Color(1.0f, 0.45f, 0.12f));
         mat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
         mat.SetShaderParameter("energy",        sh ? 3.0f : 3.4f);
         mat.SetShaderParameter("throttle",      0f);
         mat.SetShaderParameter("expansion",     0f);
+        // N7: initialize the new atmospheric-pressure uniforms.
+        mat.SetShaderParameter("atmo_pressure",  1f);  // sea level at start
+        mat.SetShaderParameter("throttle_level", 0f);  // engines off at start
 
         var pivot = new Node3D
         {
