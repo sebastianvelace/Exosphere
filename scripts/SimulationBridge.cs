@@ -77,6 +77,9 @@ public partial class SimulationBridge : Node
 
             var warpCtrl = new WarpController { Name = "WarpController" };
             uiLayer.CallDeferred("add_child", warpCtrl);
+
+            var systemsCtrl = new SystemsController { Name = "SystemsController" };
+            uiLayer.CallDeferred("add_child", systemsCtrl);
         }
 
         // Create LaunchPadController in the World node
