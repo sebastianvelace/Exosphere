@@ -104,21 +104,24 @@ public static class PlanetMaterials
                 return SmoothCloudBody(
                     surface: new Color(0.90f, 0.78f, 0.52f),
                     detail:  new Color(0.78f, 0.62f, 0.38f),
-                    rimColor: new Color(0.95f, 0.80f, 0.55f), rimStrength: 0.8f);
+                    rimColor: new Color(0.95f, 0.80f, 0.55f), rimStrength: 0.8f,
+                    texturePath: "res://assets/textures/venus.jpg");
 
             case "jupiter":
                 return BandedBody(
                     surface: new Color(0.82f, 0.70f, 0.55f),
                     detail:  new Color(0.55f, 0.38f, 0.26f),
                     bandCount: 5.0f,
-                    rimColor: new Color(0.85f, 0.72f, 0.58f), rimStrength: 0.5f);
+                    rimColor: new Color(0.85f, 0.72f, 0.58f), rimStrength: 0.5f,
+                    texturePath: "res://assets/textures/jupiter.jpg");
 
             case "saturn":
                 return BandedBody(
                     surface: new Color(0.86f, 0.78f, 0.58f),
                     detail:  new Color(0.70f, 0.60f, 0.42f),
                     bandCount: 4.0f,
-                    rimColor: new Color(0.88f, 0.80f, 0.62f), rimStrength: 0.45f);
+                    rimColor: new Color(0.88f, 0.80f, 0.62f), rimStrength: 0.45f,
+                    texturePath: "res://assets/textures/saturn.jpg");
 
             case "sun":
                 return SunBody(baseColor);
@@ -158,7 +161,7 @@ public static class PlanetMaterials
     }
 
     private static Material BandedBody(Color surface, Color detail, float bandCount,
-                                       Color rimColor, float rimStrength)
+                                       Color rimColor, float rimStrength, string? texturePath = null)
     {
         var mat = BodyMaterial();
         mat.SetShaderParameter("mode", 1);
@@ -169,11 +172,12 @@ public static class PlanetMaterials
         mat.SetShaderParameter("band_warp", 0.08f);
         mat.SetShaderParameter("rim_color", rimColor);
         mat.SetShaderParameter("rim_strength", rimStrength);
+        if (texturePath != null) { mat.SetShaderParameter("surface_tex", LoadTexture(texturePath)); mat.SetShaderParameter("tex_amount", 1.0f); }
         return mat;
     }
 
     private static Material SmoothCloudBody(Color surface, Color detail,
-                                            Color rimColor, float rimStrength)
+                                            Color rimColor, float rimStrength, string? texturePath = null)
     {
         var mat = BodyMaterial();
         mat.SetShaderParameter("mode", 2);
@@ -183,6 +187,7 @@ public static class PlanetMaterials
         mat.SetShaderParameter("roughness_val", 0.6f);
         mat.SetShaderParameter("rim_color", rimColor);
         mat.SetShaderParameter("rim_strength", rimStrength);
+        if (texturePath != null) { mat.SetShaderParameter("surface_tex", LoadTexture(texturePath)); mat.SetShaderParameter("tex_amount", 1.0f); }
         return mat;
     }
 

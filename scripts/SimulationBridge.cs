@@ -355,7 +355,8 @@ public partial class SimulationBridge : Node
 
         v.IsGroundHeld = false;
         var up = new Vector3d(1, 0, 0);
-        double r = body.Radius + altitude;
+        // Scale the viewing altitude with the body so gas giants aren't viewed from the surface.
+        double r = body.Radius + System.Math.Max(altitude, body.Radius * 0.6);
         v.Position = body.Position + up * r;
         var tangent = new Vector3d(0, 1, 0).Cross(up).Normalized;
         double vCirc = System.Math.Sqrt(body.GM / r);
