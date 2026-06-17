@@ -147,6 +147,8 @@ public class Universe
         // 2. Integrate each active vessel with RK4
         foreach (var vessel in _vessels)
         {
+            if (vessel.IsDestroyed) continue; // frozen at crash point
+
             if (vessel.IsGroundHeld)
             {
                 // Vessel is clamped to the body surface — follow the body's orbit
@@ -205,13 +207,32 @@ public class Universe
             double altitude = refBody.GetAltitude(vessel.Position);
             if (altitude < 0.0)
             {
-                // Push vessel back above the surface
-                var dir = (vessel.Position - refBody.Position).Normalized;
-                vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
-                // Come to rest relative to the ROTATING surface, not the inertial frame —
-                // setting absolute zero would leave the body's full orbital velocity as
-                // the vessel's apparent surface speed (a spurious ~24 km/s spike).
-                vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                // Calculate impact speed relative to the rotating surface
+                var surfVel2     = vessel.GetSurfaceVelocity(refBody);
+                double impactSpeed = surfVel2.Magnitude;
+
+                bool isHardImpact = impactSpeed > 12.0 && !vessel.IsGroundHeld;
+
+                if (isHardImpact)
+                {
+                    // Hard crash: freeze the vessel at the impact point
+                    vessel.IsDestroyed     = true;
+                    vessel.CrashImpactSpeed  = impactSpeed;
+                    vessel.CrashSimPosition  = vessel.Position;
+                    var dir = (vessel.Position - refBody.Position).Normalized;
+                    vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
+                    vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                }
+                else
+                {
+                    // Soft-rest: controlled landing — come to rest on the rotating surface
+                    var dir = (vessel.Position - refBody.Position).Normalized;
+                    vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
+                    // Come to rest relative to the ROTATING surface, not the inertial frame —
+                    // setting absolute zero would leave the body's full orbital velocity as
+                    // the vessel's apparent surface speed (a spurious ~24 km/s spike).
+                    vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                }
             }
         }
     }
@@ -223,26 +244,67 @@ public class Universe
 
         foreach (var vessel in _vessels)
         {
-            if (vessel == ActiveVessel && !vessel.IsOnRails)
+            if (vessel.IsDestroyed) continue; // frozen at crash point
+
+            if (vessel == ActiveVessel)
             {
                 var refBody = GetDominantBody(vessel.Position);
-                vessel.Tick(dt, refBody);
-                (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
-                    vessel.Position,
-                    vessel.Velocity,
-                    CurrentTime,
-                    dt,
-                    (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
-                );
 
-                // Surface impact: keep the vessel from sinking through the body during warp.
-                // (Same guard as the full-physics path; comes to rest on the rotating surface.)
-                double altitude = refBody.GetAltitude(vessel.Position);
-                if (altitude < 0.0)
+                // Decide whether the active vessel should be on rails this step
+                bool shouldBeOnRails = TimeScale >= 10.0
+                    && vessel.Throttle < 0.01
+                    && refBody.GetAtmosphericDensity(vessel.Position) < 0.01;
+
+                if (shouldBeOnRails && !vessel.IsOnRails)
                 {
-                    var dir = (vessel.Position - refBody.Position).Normalized;
-                    vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
-                    vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                    vessel.IsOnRails    = true;
+                    vessel.OrbitalState = null; // will be computed in PropagateVesselOnRails
+                }
+                else if (!shouldBeOnRails && vessel.IsOnRails)
+                {
+                    vessel.IsOnRails    = false;
+                    vessel.OrbitalState = null;
+                }
+
+                if (vessel.IsOnRails)
+                {
+                    PropagateVesselOnRails(vessel, dt);
+                }
+                else
+                {
+                    vessel.Tick(dt, refBody);
+                    (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
+                        vessel.Position,
+                        vessel.Velocity,
+                        CurrentTime,
+                        dt,
+                        (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
+                    );
+
+                    // Surface impact: keep the vessel from sinking through the body during warp.
+                    double altitude = refBody.GetAltitude(vessel.Position);
+                    if (altitude < 0.0)
+                    {
+                        var surfVelMixed  = vessel.GetSurfaceVelocity(refBody);
+                        double impactSpeedMixed = surfVelMixed.Magnitude;
+                        bool isHardImpactMixed  = impactSpeedMixed > 12.0 && !vessel.IsGroundHeld;
+
+                        if (isHardImpactMixed)
+                        {
+                            vessel.IsDestroyed      = true;
+                            vessel.CrashImpactSpeed = impactSpeedMixed;
+                            vessel.CrashSimPosition = vessel.Position;
+                            var dir = (vessel.Position - refBody.Position).Normalized;
+                            vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
+                            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                        }
+                        else
+                        {
+                            var dir = (vessel.Position - refBody.Position).Normalized;
+                            vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
+                            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                        }
+                    }
                 }
             }
             else

@@ -31,6 +31,11 @@ public class Vessel
     public Vector3d GroundNormal          { get; set; }  // unit vector from body centre → spawn point
     public double   GroundOffset          { get; set; }  // height above body surface at spawn (m)
 
+    // ── Crash / destruction state ─────────────────────────────────────────
+    public bool     IsDestroyed           { get; set; } = false;
+    public double   CrashImpactSpeed      { get; set; } = 0.0;   // m/s relative to surface
+    public Vector3d CrashSimPosition      { get; set; } = Vector3d.Zero; // sim position of impact
+
     public void ReleaseGroundHold() => IsGroundHeld = false;
 
     // ── Tripulación ───────────────────────────────────────────────────────

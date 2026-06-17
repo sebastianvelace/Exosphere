@@ -19,6 +19,18 @@ public partial class SimulationBridge : Node
     [Signal] public delegate void VesselDestroyedEventHandler(string vesselId);
     [Signal] public delegate void SimulationLoadedEventHandler();
 
+    // ── Time-warp API ─────────────────────────────────────────────────────
+    public static readonly double[] WarpLevels = { 1, 2, 3, 5, 10, 50, 100, 1000 };
+    public int WarpIndex          { get; private set; } = 0;
+    public int MaxAllowedWarpIndex { get; private set; } = 7;
+
+    public void SetWarpIndex(int i)
+    {
+        i = System.Math.Clamp(i, 0, MaxAllowedWarpIndex);
+        WarpIndex = i;
+        SetTimeScale(WarpLevels[WarpIndex]);
+    }
+
     private bool                 _running        = false;
     private VesselRenderer?      _vesselRenderer = null;
     private Camera3D?            _camera         = null;
@@ -62,6 +74,9 @@ public partial class SimulationBridge : Node
 
             var ascent = new AscentController { Name = "AscentController" };
             uiLayer.CallDeferred("add_child", ascent);
+
+            var warpCtrl = new WarpController { Name = "WarpController" };
+            uiLayer.CallDeferred("add_child", warpCtrl);
         }
 
         // Create LaunchPadController in the World node
@@ -109,6 +124,29 @@ public partial class SimulationBridge : Node
     public override void _Process(double delta)
     {
         if (!_running || Universe == null) return;
+
+        // ── Recalculate MaxAllowedWarpIndex ──────────────────────────────
+        var av = ActiveVessel;
+        if (av != null)
+        {
+            if (av.Throttle > 0.01)
+            {
+                MaxAllowedWarpIndex = 0; // no warp while thrusting
+            }
+            else
+            {
+                var refB = Universe.GetDominantBody(av.Position);
+                double atmDensity = refB.GetAtmosphericDensity(av.Position);
+                if (atmDensity > 0.01)
+                    MaxAllowedWarpIndex = 2; // max x3 in atmosphere
+                else
+                    MaxAllowedWarpIndex = WarpLevels.Length - 1; // max in vacuum/orbit
+            }
+            // Clamp current warp index if it now exceeds the allowed maximum
+            if (WarpIndex > MaxAllowedWarpIndex)
+                SetWarpIndex(MaxAllowedWarpIndex);
+        }
+
         Universe.Tick(delta);
 
         // Anchor the LaunchPad to the Earth surface point directly BELOW the vessel,
