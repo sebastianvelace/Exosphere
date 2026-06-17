@@ -34,6 +34,23 @@ public class Part
     public double CurrentMass =>
         Definition.MassDry + LiquidFuel + Oxidizer + SolidFuel + Monopropellant;
 
+    // ── Deep-throttle floor (Raptor 2 ≈ 40 %) ─────────────────────────────
+    /// <summary>
+    /// Returns <paramref name="requested"/> snapped UP to the engine's documented minimum
+    /// throttle (<see cref="PartDefinition.MinThrottle"/>) — but only when it is genuinely
+    /// firing: a request of (near) 0 is a deliberate shutdown and is left at 0, never floored.
+    /// A real Raptor either runs at ≥40 % or is off; it does not hover at 12 %. The ascent path
+    /// opts into this; the suicide-burn EDL path does NOT call it, so its continuous low
+    /// setpoints pass through untouched.
+    /// </summary>
+    public double ApplyThrottleFloor(double requested)
+    {
+        if (Definition.Category != PartCategory.Engine) return requested;
+        double floor = Definition.MinThrottle;
+        if (floor <= 0.0 || requested <= 1e-3) return requested;          // off stays off
+        return System.Math.Clamp(System.Math.Max(requested, floor), 0.0, 1.0);
+    }
+
     // ── Inicializar recursos al máximo de capacidad ───────────────────────
     public void ResetResources()
     {
@@ -44,7 +61,55 @@ public class Part
         ElectricCharge = Definition.ECCapacity;
     }
 
+    // ── Startup / shutdown spool transient ────────────────────────────────
+    // A real Raptor cannot step its thrust instantly: the turbopumps spin up over a fraction
+    // of a second and the chamber pressure builds before full thrust. We model that with a
+    // first-order ramp of ThrottleLevel toward a commanded value, capped at SpoolRate per
+    // second. ~2.0/s ⇒ a 0→100 % spool in ~0.5 s, consistent with Raptor's brisk staged
+    // ignition while still smoothing the impulsive jolt at ignition. Callers that want an
+    // instant set still just assign ThrottleLevel directly.
+    public const double SpoolRate = 2.0;   // throttle units per second
+
+    /// <summary>
+    /// Advances <see cref="ThrottleLevel"/> toward <paramref name="commanded"/> at no more than
+    /// <see cref="SpoolRate"/> per second over <paramref name="dt"/>. Returns the new level.
+    /// </summary>
+    public double SpoolToward(double commanded, double dt)
+    {
+        commanded = System.Math.Clamp(commanded, 0.0, 1.0);
+        double maxStep = SpoolRate * dt;
+        double delta   = commanded - ThrottleLevel;
+        if (System.Math.Abs(delta) <= maxStep) ThrottleLevel = commanded;
+        else ThrottleLevel += System.Math.Sign(delta) * maxStep;
+        return ThrottleLevel;
+    }
+
     private const double SeaLevelPressurePa = 101_325.0;
+
+    /// <summary>
+    /// Pressure-interpolated specific impulse (s) for this engine: Isp_vac in vacuum
+    /// (p=0), Isp_sl at sea level (p=p₀), linear in between — the same blend used for
+    /// thrust, so F = ṁ·Isp·g₀ stays self-consistent at every altitude.
+    /// </summary>
+    public double GetIsp(double ambientPressure = 0.0)
+    {
+        double pf = System.Math.Clamp(ambientPressure / SeaLevelPressurePa, 0.0, 1.0);
+        return Definition.IspVac + (Definition.IspSL - Definition.IspVac) * pf;
+    }
+
+    /// <summary>
+    /// Current propellant mass flow (kg/s) this engine is drawing: ṁ = F(p)/(Isp(p)·g₀),
+    /// using the pressure-corrected thrust at the present throttle. 0 when not firing.
+    /// </summary>
+    public double GetMassFlow(double ambientPressure = 0.0)
+    {
+        if (Definition.Category != PartCategory.Engine
+            || IsBroken || !IsStagingActive || ThrottleLevel <= 0.0)
+            return 0.0;
+        double isp = GetIsp(ambientPressure);
+        if (isp < 1.0) return 0.0;
+        return GetThrustMagnitude(ambientPressure) / (isp * 9.80665);
+    }
 
     /// <summary>
     /// Pressure-corrected thrust magnitude (N) for this engine at the given ambient

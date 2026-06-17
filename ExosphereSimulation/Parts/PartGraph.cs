@@ -2,6 +2,13 @@ namespace Exosphere.Simulation.Parts;
 
 using Exosphere.Simulation.Math;
 
+/// <summary>
+/// Immutable per-engine telemetry row for the HUD. Thrust is in newtons (pressure-corrected),
+/// MassFlow in kg/s, Throttle in [0,1]. Built by <see cref="PartGraph.GetEngineReadouts"/>.
+/// </summary>
+public readonly record struct EngineReadout(
+    string InstanceId, string Name, double Throttle, double ThrustN, double MassFlowKgS);
+
 public class PartGraph
 {
     private readonly List<Part>  _parts  = new();
@@ -93,6 +100,89 @@ public class PartGraph
     // Empuje total corregido por presión ambiente (Pa).
     public Vector3d GetTotalThrust(double ambientPressure) =>
         ActiveEngines.Aggregate(Vector3d.Zero, (sum, e) => sum + e.GetThrustVector(ambientPressure));
+
+    // ── Read-only telemetry getters (consumed by the HUD) ─────────────────
+    // These never mutate the sim; they report what the engines of the CURRENT stage are
+    // doing at the given ambient pressure (Pa). Pass the live atmospheric pressure to get
+    // pressure-corrected figures, or 0 for the vacuum case. The HUD must not have to touch
+    // Part internals or duplicate the thrust equation — it just reads these.
+
+    /// <summary>Number of engines in the current stage that are lit (firing).</summary>
+    public int ActiveEngineCount =>
+        ActiveEngines.Count(e => e.ThrottleLevel > 1e-3);
+
+    /// <summary>Total pressure-corrected thrust magnitude (N) of the current stage now.</summary>
+    public double GetCurrentThrust(double ambientPressure) =>
+        ActiveEngines.Sum(e => e.GetThrustMagnitude(ambientPressure));
+
+    /// <summary>Total propellant mass flow of the current stage (kg/s) at this pressure.</summary>
+    public double GetCurrentMassFlow(double ambientPressure) =>
+        ActiveEngines.Sum(e => e.GetMassFlow(ambientPressure));
+
+    /// <summary>
+    /// Thrust-weighted current specific impulse (s) of the firing stage: the effective Isp of
+    /// the whole cluster, = ΣF / (Σṁ·g₀). 0 when nothing is firing.
+    /// </summary>
+    public double GetCurrentIsp(double ambientPressure)
+    {
+        double mdot = GetCurrentMassFlow(ambientPressure);
+        if (mdot <= 1e-9) return 0.0;
+        return GetCurrentThrust(ambientPressure) / (mdot * 9.80665);
+    }
+
+    /// <summary>Per-engine snapshot for the current stage (one row per engine part).</summary>
+    public IEnumerable<EngineReadout> GetEngineReadouts(double ambientPressure) =>
+        ActiveEngines.Select(e => new EngineReadout(
+            e.InstanceId,
+            e.Definition.Name,
+            e.ThrottleLevel,
+            e.GetThrustMagnitude(ambientPressure),
+            e.GetMassFlow(ambientPressure)));
+
+    /// <summary>
+    /// Ideal rocket-equation Δv (m/s) for a stage burning from <paramref name="wetMass"/> to
+    /// <paramref name="dryMass"/> at the current effective Isp: Δv = Isp·g₀·ln(m0/m1).
+    /// Returns 0 if masses or Isp are non-physical.
+    /// </summary>
+    public double GetStageDeltaV(double wetMass, double dryMass, double ambientPressure)
+    {
+        double isp = GetCurrentIsp(ambientPressure);
+        if (isp <= 1.0 || dryMass <= 0.0 || wetMass <= dryMass) return 0.0;
+        return isp * 9.80665 * System.Math.Log(wetMass / dryMass);
+    }
+
+    /// <summary>
+    /// Δv (m/s) of the CURRENT stage as currently loaded: wet = sum of current-stage part
+    /// masses, dry = wet minus the propellant the current-stage engines can actually draw.
+    /// Uses the stage's current effective Isp. Convenience wrapper over GetStageDeltaV.
+    /// </summary>
+    public double GetCurrentStageDeltaV(double ambientPressure)
+    {
+        var stage = CurrentStageParts();
+        double wet = stage.Sum(p => p.CurrentMass);
+        double propellant = stage.Sum(p =>
+            p.LiquidFuel + p.Oxidizer + p.SolidFuel + p.Monopropellant);
+        double dry = wet - propellant;
+        return GetStageDeltaV(wet, dry, ambientPressure);
+    }
+
+    /// <summary>
+    /// Snaps every firing engine in the current stage UP to its documented minimum throttle
+    /// (Raptor 2 ≈ 40 %). Opt-in: the ascent autopilot calls this so a too-low command never
+    /// commands a sub-floor burn; the suicide-burn EDL path does not, so its low setpoints are
+    /// left alone. Engines commanded to ~0 stay off. Returns the floored value applied to the
+    /// first engine (or the input if there is none) so a caller can keep Vessel.Throttle in sync.
+    /// </summary>
+    public double ClampAscentThrottle()
+    {
+        double applied = 0.0; bool any = false;
+        foreach (var e in ActiveEngines)
+        {
+            e.ThrottleLevel = e.ApplyThrottleFloor(e.ThrottleLevel);
+            if (!any) { applied = e.ThrottleLevel; any = true; }
+        }
+        return applied;
+    }
 
     // ── Consumir propelante de los motores de la etapa activa ─────────────
     // Cross-feed dentro de la etapa: los motores extraen combustible de los tanques de

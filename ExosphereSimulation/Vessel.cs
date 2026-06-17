@@ -58,6 +58,41 @@ public class Vessel
         return 0.5 * density * speed * speed;
     }
 
+    // ── Read-only engine telemetry for the HUD ────────────────────────────
+    // Thin wrappers that resolve the live ambient pressure from the reference body and defer
+    // to PartGraph, so the HUD reads one obvious call and never touches the sim or the thrust
+    // equation. All are pressure-corrected for the vessel's current altitude.
+
+    public double GetAmbientPressure(CelestialBody? body) =>
+        body?.Atmosphere?.GetPressure(GetAltitude(body)) ?? 0.0;
+
+    /// <summary>Engines of the current stage that are lit right now.</summary>
+    public int ActiveEngineCount => Parts.ActiveEngineCount;
+
+    /// <summary>Total pressure-corrected thrust (N) at the vessel's current altitude.</summary>
+    public double GetCurrentThrust(CelestialBody? body) =>
+        Parts.GetCurrentThrust(GetAmbientPressure(body));
+
+    /// <summary>Effective cluster specific impulse (s) right now.</summary>
+    public double GetCurrentIsp(CelestialBody? body) =>
+        Parts.GetCurrentIsp(GetAmbientPressure(body));
+
+    /// <summary>Current propellant mass flow in tonnes per second (HUD-friendly units).</summary>
+    public double GetCurrentMassFlowTps(CelestialBody? body) =>
+        Parts.GetCurrentMassFlow(GetAmbientPressure(body)) / 1000.0;
+
+    /// <summary>Per-engine telemetry rows (throttle, thrust N, mass flow kg/s).</summary>
+    public IEnumerable<EngineReadout> GetEngineReadouts(CelestialBody? body) =>
+        Parts.GetEngineReadouts(GetAmbientPressure(body));
+
+    /// <summary>Δv (m/s) of the current stage as loaded, at the current effective Isp.</summary>
+    public double GetCurrentStageDeltaV(CelestialBody? body) =>
+        Parts.GetCurrentStageDeltaV(GetAmbientPressure(body));
+
+    /// <summary>Δv (m/s) for an arbitrary wet/dry mass pair at the current effective Isp.</summary>
+    public double GetStageDeltaV(double wetMass, double dryMass, CelestialBody? body) =>
+        Parts.GetStageDeltaV(wetMass, dryMass, GetAmbientPressure(body));
+
     // ── Fuerzas ───────────────────────────────────────────────────────────
 
     // Aplica el throttle actual a todos los motores activos

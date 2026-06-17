@@ -42,6 +42,14 @@ public class PartDefinition
     [JsonPropertyName("fuel_type")]    public string FuelTypeStr { get; set; } = "";
     [JsonPropertyName("is_rcs")]       public bool IsRCS         { get; set; }
 
+    // Deepest stable throttle the engine can sustain, as a fraction of rated thrust.
+    // Real Raptor 2 deep-throttles to ~40 % (full-flow staged combustion stays lit but the
+    // turbopumps cannot run arbitrarily slow). This is informational: it is ENFORCED only when
+    // the caller opts in (see Part.GetEffectiveThrottle / PartGraph.ClampAscentThrottle), so a
+    // suicide-burn controller commanding a continuous low setpoint is never snapped up to it.
+    // 0 means "no documented floor" (e.g. throwaway test engines), and the engine may idle to 0.
+    [JsonPropertyName("min_throttle")] public double MinThrottle { get; set; }
+
     // Tank
     [JsonPropertyName("fuel_capacity_lf")]    public double FuelCapacityLF    { get; set; }
     [JsonPropertyName("fuel_capacity_ox")]    public double FuelCapacityOx    { get; set; }
