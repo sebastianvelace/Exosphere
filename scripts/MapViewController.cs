@@ -18,6 +18,19 @@ public partial class MapViewController : Control
     public ManeuverPlanner Planner { get; } = new();
     private AutopilotController _autopilot = null!;
 
+    // ── Transfer planner state ────────────────────────────────────────────────
+    private string? _selectedTarget;   // body ID selected for Hohmann transfer
+
+    // Planets available for transfer, in keyboard order (keys 1–5)
+    private static readonly (string id, string label, Key key)[] TransferTargets =
+    {
+        ("mars",    "Mars",    Key.Key1),
+        ("moon",    "Moon",    Key.Key2),
+        ("venus",   "Venus",   Key.Key3),
+        ("jupiter", "Jupiter", Key.Key4),
+        ("mercury", "Mercury", Key.Key5),
+    };
+
     // ── Layout ────────────────────────────────────────────────────────────────
     private const float PanelSize = 460f;
     private const float Margin    = 34f;     // px padding inside panel for the orbit
@@ -61,6 +74,12 @@ public partial class MapViewController : Control
         _autopilot = new AutopilotController { Name = "AutopilotController" };
         _autopilot.Bind(Planner);
         AddChild(_autopilot);
+
+        // Instanciar el planificador de transferencias y el ejecutor de maniobras
+        var planner  = new TransferPlanner  { Name = "TransferPlanner" };
+        var executor = new ManeuverExecutor { Name = "ManeuverExecutor" };
+        AddChild(planner);
+        AddChild(executor);
     }
 
     public void ToggleVisible() => Visible = !Visible;
@@ -77,13 +96,70 @@ public partial class MapViewController : Control
                     ToggleVisible();
                     QueueRedraw();
                     break;
-                case Key.Enter or Key.KpEnter when Visible && Planner.HasNode:
-                    _autopilot.Arm();
+
+                case Key.Enter or Key.KpEnter when Visible:
+                    // Enter with a transfer node selected: arm the ManeuverExecutor
+                    if (TransferPlanner.Instance?.CurrentNode is { } tNode)
+                    {
+                        ManeuverExecutor.Instance?.ExecuteNode(tNode);
+                        QueueRedraw();
+                        break;
+                    }
+                    // Fallback: arm the local autopilot for a manual node
+                    if (Planner.HasNode)
+                        _autopilot.Arm();
                     break;
+
                 case Key.Delete or Key.Backspace when Visible:
                     Planner.ClearNode();
                     _autopilot.Disarm();
+                    TransferPlanner.Instance?.ClearNode();
+                    ManeuverExecutor.Instance?.Abort();
+                    _selectedTarget = null;
                     QueueRedraw();
+                    break;
+
+                // Transfer Δv factor adjustment: [ decreases, ] increases (5% steps)
+                case Key.BracketLeft when Visible:
+                {
+                    var tNode = TransferPlanner.Instance?.CurrentNode;
+                    if (tNode != null)
+                    {
+                        tNode.DvAdjustFactor = System.Math.Max(0.50, tNode.DvAdjustFactor - 0.05);
+                        QueueRedraw();
+                    }
+                    break;
+                }
+                case Key.BracketRight when Visible:
+                {
+                    var tNode = TransferPlanner.Instance?.CurrentNode;
+                    if (tNode != null)
+                    {
+                        tNode.DvAdjustFactor = System.Math.Min(1.50, tNode.DvAdjustFactor + 0.05);
+                        QueueRedraw();
+                    }
+                    break;
+                }
+
+                default:
+                    // Transfer target selection (1–5) when map is open
+                    if (Visible)
+                    {
+                        foreach (var (id, _, tKey) in TransferTargets)
+                        {
+                            if (key.Keycode == tKey)
+                            {
+                                _selectedTarget = id;
+                                var node = TransferPlanner.Instance?.PlanTransfer(id);
+                                if (node != null)
+                                    GD.Print($"[Map] Transfer to {id}: " +
+                                             $"Δv={node.DvMagnitude:F0} m/s, " +
+                                             $"ToF={node.TimeOfFlight / 86400.0:F1} days");
+                                QueueRedraw();
+                                break;
+                            }
+                        }
+                    }
                     break;
             }
         }
@@ -166,6 +242,7 @@ public partial class MapViewController : Control
         {
             DrawText("SUB-ORBITAL", new Vector2(14, 46), TextDim, 13);
             DrawBodyOnly(refBody, relPos);
+            DrawTransferPanel();
             DrawFooter();
             return;
         }
@@ -222,6 +299,7 @@ public partial class MapViewController : Control
         }
 
         DrawReadout(vessel, refBody);
+        DrawTransferPanel();
         DrawFooter();
     }
 
@@ -376,9 +454,58 @@ public partial class MapViewController : Control
         }
     }
 
+    // ── Transfer panel (top-right corner) ────────────────────────────────────
+
+    private void DrawTransferPanel()
+    {
+        // Draw compact planet-selector list in the top-right of the panel
+        float x = PanelSize - 110f;
+        float y = 14f;
+        DrawText("TRANSFER", new Vector2(x, y), TextDim, 10);
+        y += 14f;
+
+        foreach (var (id, label, tKey) in TransferTargets)
+        {
+            bool selected = id == _selectedTarget;
+            Color col = selected ? Accentify(id) : TextDim;
+            string prefix = selected ? ">" : " ";
+            int keyNum = (int)(tKey - Key.Key1) + 1;
+            DrawText($"{prefix}[{keyNum}] {label}", new Vector2(x, y), col, 11);
+            y += 14f;
+        }
+
+        // Show current node details if one is planned
+        var node = TransferPlanner.Instance?.CurrentNode;
+        if (node != null)
+        {
+            y += 4f;
+            Color tCol = Accentify(node.TargetBodyId ?? "");
+            DrawText($"Δv1 {node.DvMagnitude * node.DvAdjustFactor:F0} m/s", new Vector2(x, y), tCol, 11);
+            y += 13f;
+            DrawText($"Δv2 {node.SecondBurnDv:F0} m/s", new Vector2(x, y), TextDim, 11);
+            y += 13f;
+            DrawText($"ToF {node.TimeOfFlight / 86400.0:F1} d", new Vector2(x, y), TextDim, 11);
+            y += 13f;
+            string adjPct = $"{node.DvAdjustFactor * 100.0:F0}%";
+            DrawText($"adj {adjPct}", new Vector2(x, y), TextDim, 11);
+            y += 13f;
+
+            // Executor status
+            if (ManeuverExecutor.Instance is { IsExecuting: true } exec)
+            {
+                DrawText($"BURN {exec.RemainingDv:F0} m/s", new Vector2(x, y),
+                         new Color(1f, 0.4f, 0.4f, 1f), 11);
+            }
+            else
+            {
+                DrawText("⏎ EXECUTE", new Vector2(x, y), GreenCol, 11);
+            }
+        }
+    }
+
     private void DrawFooter()
     {
-        DrawText("wheel: ΔV   ⇧wheel: ×10   alt+wheel: radial   ⏎ execute   ⌫ clear",
+        DrawText("wheel: ΔV  ⇧×10  alt: radial  ⏎ execute  ⌫ clear  1-5: transfer  [/]: adj ΔV",
                  new Vector2(14, PanelSize - 14), new Color(0.50f, 0.58f, 0.68f, 0.9f), 10);
     }
 
@@ -389,11 +516,15 @@ public partial class MapViewController : Control
 
     private static Color Accentify(string id) => id switch
     {
-        "earth" => new Color(0.45f, 0.80f, 1.00f),
-        "moon"  => new Color(0.80f, 0.82f, 0.86f),
-        "mars"  => new Color(1.00f, 0.55f, 0.35f),
-        "sun"   => new Color(1.00f, 0.85f, 0.35f),
-        _       => TextBright,
+        "earth"   => new Color(0.45f, 0.80f, 1.00f),
+        "moon"    => new Color(0.80f, 0.82f, 0.86f),
+        "mars"    => new Color(1.00f, 0.55f, 0.35f),
+        "sun"     => new Color(1.00f, 0.85f, 0.35f),
+        "venus"   => new Color(0.95f, 0.85f, 0.50f),
+        "jupiter" => new Color(0.90f, 0.72f, 0.50f),
+        "mercury" => new Color(0.70f, 0.68f, 0.66f),
+        "saturn"  => new Color(0.95f, 0.88f, 0.60f),
+        _         => TextBright,
     };
 
     private static string Fmt(double m)
