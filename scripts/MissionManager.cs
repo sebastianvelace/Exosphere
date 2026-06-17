@@ -23,6 +23,7 @@ public enum MissionPhase
     RETRO_BURN,
     FINAL_DESCENT,
     LANDED,
+    CRASHED,  // hard impact — vehicle lost
 }
 
 [GlobalClass]
@@ -33,6 +34,7 @@ public partial class MissionManager : Node
     public MissionPhase Phase        { get; private set; } = MissionPhase.PRE_LAUNCH;
     public double       CountdownTimer { get; private set; } = 10.0;
     public bool         IsCountingDown { get; private set; }
+    public bool         IsCrashed => Phase == MissionPhase.CRASHED;
 
     [Signal] public delegate void PhaseChangedEventHandler(string phaseName);
     [Signal] public delegate void LaunchCommittedEventHandler();
@@ -41,7 +43,18 @@ public partial class MissionManager : Node
     private bool _mecoTriggered;
     private int  _lastTickSecond = -1;   // last whole-second countdown beep emitted
 
-    public override void _Ready() => Instance = this;
+    public override void _Ready()
+    {
+        Instance = this;
+
+        // Spawn ExplosionController into the World node so it lives in 3D space.
+        var worldNode = GetTree()?.Root.FindChild("World", true, false) as Node3D;
+        if (worldNode != null)
+        {
+            var explosion = new ExplosionController { Name = "ExplosionController" };
+            worldNode.CallDeferred("add_child", explosion);
+        }
+    }
 
     // ── Public API ────────────────────────────────────────────────────────
 
@@ -69,7 +82,7 @@ public partial class MissionManager : Node
     /// True once an interplanetary/descent profile has begun — pauses ascent logic.
     public bool InDescent => Phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
         or MissionPhase.AERO_DESCENT or MissionPhase.RETRO_BURN
-        or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED;
+        or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED or MissionPhase.CRASHED;
 
     // ── Process ───────────────────────────────────────────────────────────
 
@@ -79,6 +92,15 @@ public partial class MissionManager : Node
         var vessel   = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
         if (bridge == null || universe == null) return;
+
+        // ── Crash detection (highest priority) ────────────────────────────────
+        if (vessel != null && vessel.IsDestroyed && Phase != MissionPhase.CRASHED)
+        {
+            SetPhase(MissionPhase.CRASHED);
+            return; // stop all ascent/descent logic
+        }
+        // If already CRASHED, nothing more to do
+        if (Phase == MissionPhase.CRASHED) return;
 
         // ── Countdown ──────────────────────────────────────────────────────
         if (IsCountingDown)
@@ -200,9 +222,21 @@ public partial class MissionManager : Node
         {
             case MissionPhase.LIFTOFF:    AudioManager.Instance?.PlayLiftoff(); break;
             case MissionPhase.SEPARATION: AudioManager.Instance?.PlayStaging(); break;
+            case MissionPhase.CRASHED:
+                // AudioManager.Instance?.PlayCrash(); // uncomment when PlayCrash() is added
+                break;
         }
 
         EmitSignal(SignalName.PhaseChanged, newPhase.ToString());
-        GD.Print($"[Mission] → {newPhase}");
+
+        if (newPhase == MissionPhase.CRASHED)
+        {
+            var activeVessel = SimulationBridge.Instance?.ActiveVessel;
+            GD.Print($"[Mission] → CRASHED (VEHICLE LOST / CRASHED) (impact {activeVessel?.CrashImpactSpeed:F0} m/s)");
+        }
+        else
+        {
+            GD.Print($"[Mission] → {newPhase}");
+        }
     }
 }
