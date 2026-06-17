@@ -186,9 +186,14 @@ public partial class CameraController : Node3D
 
         SetCockpitVisible(true);
 
-        // The vessel renders at the origin oriented by vessel.Orientation; the cockpit interior
-        // is a child of that node. Eye at local (0,36,0.6) u, forward +Y (nose), up -Z.
+        // The vessel renders at the origin; the cockpit is a sibling node we orient to the vessel
+        // each frame. Eye at local (0,36,0.6) u, forward +Y (nose), up -Z.
         var orient  = v.Orientation;
+        if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D ckn)
+        {
+            ckn.Position   = Vector3.Zero;
+            ckn.Quaternion = ToGQuat(orient);
+        }
         Vector3 eye = ToG(orient.Rotate(new Vector3d(0, 36, 0.6)));
         Vector3 fwd = ToG(orient.Rotate(new Vector3d(0, 1, 0))).Normalized();
         Vector3 up  = ToG(orient.Rotate(new Vector3d(0, 0, -1))).Normalized();
@@ -239,7 +244,11 @@ public partial class CameraController : Node3D
     {
         if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D ck && ck.Visible != vis)
             ck.Visible = vis;
+        // Hide the rocket exterior while inside the cockpit (restore it otherwise).
+        if (GetTree().Root.FindChild("StarshipRenderer", true, false) is Node3D sr && sr.Visible == vis)
+            sr.Visible = !vis;
     }
 
     private static Vector3 ToG(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+    private static Quaternion ToGQuat(Quaterniond q) => new((float)q.X, (float)q.Y, (float)q.Z, (float)q.W);
 }

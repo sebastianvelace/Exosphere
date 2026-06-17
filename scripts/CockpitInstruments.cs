@@ -50,7 +50,7 @@ public partial class CockpitInstruments : Node
                 AlbedoTexture = tex,
                 EmissionEnabled = true,
                 EmissionTexture = tex,
-                EmissionEnergyMultiplier = 1.3f,
+                EmissionEnergyMultiplier = 2.6f,
                 TextureFilter = BaseMaterial3D.TextureFilterEnum.Linear,
             };
             screen.SetSurfaceOverrideMaterial(0, mat);
