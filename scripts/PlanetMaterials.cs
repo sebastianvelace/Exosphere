@@ -75,10 +75,15 @@ public static class PlanetMaterials
                 return CreateEarth();
 
             case "moon":
+                // Believable lunar look: bright grey highlands with darker grey-brown
+                // maria, a dense crater field, and NO atmospheric rim (the Moon has no
+                // air, so the blue Fresnel limb is left off). Higher detail_scale packs
+                // in more, smaller craters so the disc reads as cratered at orbital size.
                 return RockyBody(
-                    surface: new Color(0.42f, 0.42f, 0.44f),
-                    detail:  new Color(0.20f, 0.20f, 0.22f),
-                    detailScale: 5.0f, roughness: 1.0f);
+                    surface: new Color(0.58f, 0.57f, 0.55f),   // light regolith highlands
+                    detail:  new Color(0.26f, 0.25f, 0.24f),   // dark maria (mare basalt)
+                    detailScale: 7.0f, roughness: 1.0f,
+                    rimColor: new Color(0.30f, 0.30f, 0.30f), rimStrength: 0.0f);
 
             case "mercury":
                 return RockyBody(

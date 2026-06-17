@@ -27,6 +27,7 @@ public partial class SunController : Node
     // Cached node lookups — re-found lazily if they go null (e.g. scene rebuild).
     private DirectionalLight3D? _light;
     private ShaderMaterial?     _earthMat;
+    private ShaderMaterial?     _skyMat;
 
     // Fixed sun direction (world space), biased toward the +Y launch site so the launch
     // and ascent happen in bright daylight while the far hemisphere stays in night with
@@ -43,6 +44,22 @@ public partial class SunController : Node
 
         OrientLight(FixedSunDir);
         FeedSunDir(FixedSunDir);
+        FeedSky(FixedSunDir);
+    }
+
+    /// <summary>
+    /// Pushes <c>sun_dir</c> into the combined atmosphere+stars sky material so the
+    /// glowing Sun disc/halo in the dome lines up exactly with the directional light
+    /// and the planet terminators.
+    /// </summary>
+    private void FeedSky(Vector3 sunDir)
+    {
+        if (_skyMat == null || !IsInstanceValid(_skyMat))
+        {
+            var wenv = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
+            _skyMat = wenv?.Environment?.Sky?.SkyMaterial as ShaderMaterial;
+        }
+        _skyMat?.SetShaderParameter("sun_dir", sunDir);
     }
 
     /// <summary>

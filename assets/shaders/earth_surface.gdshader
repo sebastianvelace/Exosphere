@@ -79,10 +79,20 @@ void fragment() {
 	float term = exp(-(ndl * ndl) / (0.14 * 0.14));
 	lit += vec3(1.0, 0.45, 0.20) * term * smoothstep(-0.3, 0.2, ndl) * 0.45;
 
-	// Blue atmospheric Fresnel rim — thin glow at the limb, brightest on the day side.
-	float fres = pow(1.0 - clamp(dot(N, Vv), 0.0, 1.0), 4.0);
-	float rim_day = smoothstep(-0.35, 0.4, ndl);
-	lit += atmosphere_color * fres * atmosphere_strength * (0.18 + 0.9 * rim_day);
+	// ── Blue atmospheric limb halo (Rayleigh airglow) ───────────────────────
+	// Two-lobe Fresnel: a wide soft scattering glow that fills toward the limb,
+	// plus a tight bright rim right at the edge — together they read as a real
+	// atmosphere shell rather than a thin outline. Brightest on the day side,
+	// carrying a faint twilight band a little past the terminator.
+	float ndv  = clamp(dot(N, Vv), 0.0, 1.0);
+	float fresWide = pow(1.0 - ndv, 2.2);   // broad scattering body of the halo
+	float fresEdge = pow(1.0 - ndv, 6.0);   // crisp bright limb line
+	float rim_day  = smoothstep(-0.5, 0.35, ndl);          // fades through terminator
+	float twilight = smoothstep(-0.45, -0.05, ndl) * (1.0 - smoothstep(0.0, 0.3, ndl));
+	vec3 halo = atmosphere_color * atmosphere_strength
+	          * ((fresWide * 0.55 + fresEdge * 1.1) * (0.10 + 0.95 * rim_day)
+	             + fresWide * 0.25 * twilight);
+	lit += halo;
 
 	ALBEDO = lit;
 	EMISSION = cities * 0.6;
