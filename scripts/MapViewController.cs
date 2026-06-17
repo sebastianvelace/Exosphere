@@ -20,6 +20,7 @@ public partial class MapViewController : Control
 
     // ── Transfer planner state ────────────────────────────────────────────────
     private string? _selectedTarget;   // body ID selected for Hohmann transfer
+    private bool    _solarView;        // top-down whole-solar-system overview (toggle [Tab])
 
     // Planets available for transfer, in keyboard order (keys 1–6)
     private static readonly (string id, string label, Key key)[] TransferTargets =
@@ -114,6 +115,11 @@ public partial class MapViewController : Control
                 case Key.J when Visible && _selectedTarget != null:
                     SimulationBridge.Instance?.JumpToBody(_selectedTarget);
                     Visible = false;
+                    break;
+
+                case Key.Tab when Visible:
+                    _solarView = !_solarView;
+                    QueueRedraw();
                     break;
 
                 case Key.Delete or Key.Backspace when Visible:
@@ -244,6 +250,15 @@ public partial class MapViewController : Control
 
         DrawText($"MAP · {refBody.Name.ToUpperInvariant()}", new Vector2(14, 24), Accentify(refBody.Id), 15);
 
+        // Whole-solar-system overview ([Tab] toggles it) — pick a destination from here too.
+        if (_solarView)
+        {
+            DrawSolarSystem(universe, refBody);
+            DrawTransferPanel();
+            DrawFooter();
+            return;
+        }
+
         if (!Planner.HasOrbit)
         {
             DrawText("SUB-ORBITAL", new Vector2(14, 46), TextDim, 13);
@@ -307,6 +322,76 @@ public partial class MapViewController : Control
         DrawReadout(vessel, refBody);
         DrawTransferPanel();
         DrawFooter();
+    }
+
+    // ── Solar-system overview (top-down, log radial scale) ─────────────────────
+    private void DrawSolarSystem(Universe universe, CelestialBody refBody)
+    {
+        var sun = universe.GetBody("sun");
+        if (sun == null) { DrawText("NO SUN", new Vector2(14, 46), TextDim, 12); return; }
+        Vector2 c = _center;
+        float innerR = 24f, outerR = PanelSize * 0.5f - Margin - 4f;
+
+        // Heliocentric distance range (planets only) → log radial scale so inner + outer fit.
+        double dMin = double.MaxValue, dMax = 0;
+        foreach (var b in universe.Bodies)
+        {
+            if (b.Id == "sun" || IsMoon(b)) continue;
+            double d = (b.Position - sun.Position).Magnitude;
+            if (d > 1e6) { dMin = System.Math.Min(dMin, d); dMax = System.Math.Max(dMax, d); }
+        }
+        if (dMax <= 0) return;
+        double lMin = System.Math.Log10(dMin * 0.7), lMax = System.Math.Log10(dMax * 1.35);
+
+        float RPix(double d)
+        {
+            double t = (System.Math.Log10(System.Math.Max(d, 1.0)) - lMin) / (lMax - lMin);
+            return innerR + (float)System.Math.Clamp(t, 0, 1) * (outerR - innerR);
+        }
+        Vector2 Pt(double d, double ang) =>
+            c + new Vector2((float)System.Math.Cos(ang), -(float)System.Math.Sin(ang)) * RPix(d);
+
+        DrawText("SOLAR SYSTEM    [Tab] local view", new Vector2(14, 46), TextDim, 11);
+
+        // Sun.
+        DrawCircle(c, 7f, new Color(1f, 0.85f, 0.30f));
+        DrawArc(c, 9f, 0, Mathf.Tau, 24, new Color(1f, 0.7f, 0.2f, 0.5f), 2f);
+
+        foreach (var b in universe.Bodies)
+        {
+            if (b.Id == "sun" || IsMoon(b)) continue;
+            var rel = b.Position - sun.Position;
+            double d = rel.Magnitude;
+            double ang = System.Math.Atan2(rel.Y, rel.X);   // ecliptic longitude (XY plane)
+            float rp = RPix(d);
+            DrawArc(c, rp, 0, Mathf.Tau, 96, new Color(0.40f, 0.55f, 0.75f, 0.22f), 1f);
+
+            var p = Pt(d, ang);
+            bool sel = b.Id == _selectedTarget;
+            bool cur = b.Id == refBody.Id;
+            DrawCircle(p, sel ? 5f : 3.5f, Accentify(b.Id));
+            if (cur) DrawArc(p, 8f, 0, Mathf.Tau, 20, VesselCol, 1.3f);
+            if (sel) DrawArc(p, 9f, 0, Mathf.Tau, 20, NodeCol, 1.8f);
+            DrawText(b.Name, p + new Vector2(7, -4), sel ? NodeCol : TextDim, 10);
+
+            // Moons of this body, clustered just outside the planet dot.
+            foreach (var m in universe.Bodies)
+            {
+                if (!IsMoon(m) || m.OrbitalElements?.ReferenceBodyId != b.Id) continue;
+                var mrel = m.Position - b.Position;
+                double mang = System.Math.Atan2(mrel.Y, mrel.X);
+                var mp = p + new Vector2((float)System.Math.Cos(mang), -(float)System.Math.Sin(mang)) * 11f;
+                bool msel = m.Id == _selectedTarget;
+                DrawCircle(mp, msel ? 4f : 2.5f, Accentify(m.Id));
+                if (msel) DrawArc(mp, 6f, 0, Mathf.Tau, 16, NodeCol, 1.5f);
+            }
+        }
+    }
+
+    private static bool IsMoon(CelestialBody b)
+    {
+        var r = b.OrbitalElements?.ReferenceBodyId;
+        return !string.IsNullOrEmpty(r) && r != "sun";
     }
 
     // ── Drawing helpers ───────────────────────────────────────────────────────
