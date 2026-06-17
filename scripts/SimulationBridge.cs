@@ -320,4 +320,28 @@ public partial class SimulationBridge : Node
     }
 
     public void SetTimeScale(double scale) => Universe.TimeScale = scale;
+
+    /// DEBUG: drop the active vessel straight into a circular orbit (~200 km) around Earth,
+    /// to test orbital features (transfer planner, etc.) without flying the whole ascent.
+    public void JumpToOrbit(double altitude = 200_000.0)
+    {
+        var earth = Universe.GetBody("earth");
+        var v = ActiveVessel;
+        if (earth == null || v == null) return;
+
+        v.IsGroundHeld = false;
+        var up = (v.Position - earth.Position).Normalized;
+        if (up.MagnitudeSquared < 1e-9) up = new Vector3d(0, 1, 0);
+        double r = earth.Radius + altitude;
+        v.Position = earth.Position + up * r;
+
+        var refDir  = System.Math.Abs(up.Dot(new Vector3d(0, 1, 0))) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
+        var tangent = refDir.Cross(up).Normalized;
+        double vCirc = System.Math.Sqrt(earth.GM / r);
+        v.Velocity = earth.Velocity + tangent * vCirc;
+        v.Throttle = 0.0;
+
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+        GD.Print($"[DEBUG] JumpToOrbit -> {altitude / 1000:F0} km circular, v={vCirc:F0} m/s");
+    }
 }

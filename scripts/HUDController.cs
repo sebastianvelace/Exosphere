@@ -287,7 +287,7 @@ public partial class HUDController : Control
         var hint = new Label
         {
             Text = "[Z/X] throttle   [W/S] pitch   [A/D] yaw   [Q/E] roll   [T] SAS   " +
-                   "[,/.] warp   [Space] stage   [L] launch   [G] ascent AP   [C] camera   [M] map",
+                   "[,/.] warp   [Space] stage   [L] launch   [G] ascent AP   [O] to-orbit   [C] camera   [M] map",
         };
         hint.SetAnchorsPreset(LayoutPreset.BottomLeft);
         hint.GrowVertical = GrowDirection.Begin;
@@ -665,6 +665,9 @@ public partial class HUDController : Control
                     break;
                 case Key.L:
                     MissionManager.Instance?.StartCountdown();
+                    break;
+                case Key.O:
+                    bridge.JumpToOrbit();
                     break;
                 case Key.Period:
                     bridge.SetTimeScale(System.Math.Min(1000.0, bridge.Universe.TimeScale * 2.0));
