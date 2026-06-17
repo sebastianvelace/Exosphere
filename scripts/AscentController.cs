@@ -223,6 +223,17 @@ public partial class AscentController : Control
             double cosCmd = System.Math.Sqrt(System.Math.Max(0.0, 1.0 - sinCmd * sinCmd));
             dir = (tang * cosCmd + up * sinCmd).Normalized;
             throttle = 1.0; warp = 1.0;   // real-time circularization burn
+
+            // G-cap: limit throttle during insertion to avoid sustained >4.5 g loads
+            double currentThrust = vessel.ComputeThrust(body).Magnitude;
+            double gAccel        = vessel.TotalMass > 0.0 ? currentThrust / vessel.TotalMass : 0.0;
+            double gravAccelMag  = vessel.ComputeGravity(universe.Bodies).Magnitude;
+            double gForce        = (gAccel - gravAccelMag) / 9.80665;
+            if (gForce > 4.0)
+            {
+                double targetThrottle = vessel.Throttle * (4.0 / gForce);
+                throttle = System.Math.Max(0.2, targetThrottle);
+            }
         }
 
         if (warp != universe.TimeScale) universe.TimeScale = warp;
