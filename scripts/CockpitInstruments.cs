@@ -64,7 +64,7 @@ public partial class ScreenPanel : Control
 {
     public int Which;
 
-    private static readonly Color Bg    = new(0.02f, 0.03f, 0.05f);
+    private static readonly Color Bg    = new(0.04f, 0.07f, 0.14f);
     private static readonly Color Cyan  = new(0.45f, 0.85f, 1.00f);
     private static readonly Color White = new(0.92f, 0.97f, 1.00f);
     private static readonly Color Dim   = new(0.55f, 0.65f, 0.78f);

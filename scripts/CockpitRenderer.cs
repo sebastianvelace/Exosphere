@@ -65,11 +65,13 @@ public partial class CockpitRenderer : Node3D
         Spawn("ConsoleLip", new BoxMesh { Size = new Vector3(1.8f, 0.08f, 0.6f) }, trim,
               new Vector3(0, EyeY + 1.45f, 0.7f), new Vector3(-18, 0, 0));
 
-        // Screens are thin flat panels perpendicular to +Y, so the eye (looking +Y) sees their face.
-        var sb = new BoxMesh { Size = new Vector3(0.62f, 0.02f, 0.42f) };
-        AddScreen("Screen0", sb, screenM, new Vector3(0f,    EyeY + 1.55f, 0.62f), new Vector3(-16, 0, 0));
-        AddScreen("Screen1", sb, screenM, new Vector3(-0.7f, EyeY + 1.5f,  0.66f), new Vector3(-16, 0, 22));
-        AddScreen("Screen2", sb, screenM, new Vector3(0.7f,  EyeY + 1.5f,  0.66f), new Vector3(-16, 0, -22));
+        // Three flat panels perpendicular to +Y (facing -Y toward the eye), side by side like a
+        // wide glass cockpit just below the forward sightline.
+        // Console screens sit BELOW the eye (down = +Z) and ahead (+Y), tilted up to face the eye.
+        var sb = new BoxMesh { Size = new Vector3(0.66f, 0.02f, 0.50f) };
+        AddScreen("Screen0", sb, screenM, new Vector3(0f,     EyeY + 1.0f, 0.95f), new Vector3(28, 0, 0));
+        AddScreen("Screen1", sb, screenM, new Vector3(-0.72f, EyeY + 0.95f, 0.98f), new Vector3(28, 0, 16));
+        AddScreen("Screen2", sb, screenM, new Vector3(0.72f,  EyeY + 0.95f, 0.98f), new Vector3(28, 0, -16));
 
         // ── Seats (two side by side, behind/below the console) ────────────────────
         for (int s = -1; s <= 1; s += 2)

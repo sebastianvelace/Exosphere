@@ -219,7 +219,7 @@ public partial class CameraController : Node3D
         }
         Vector3 right = fwd.Cross(up).Normalized();
         // Rest the gaze tilted ~18° down toward the console/screens; the nose & windows stay above.
-        Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(18f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
+        Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(22f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
 
         camera.Position = eye + _gOffset;
         camera.LookAt(eye + _gOffset + look, up);
