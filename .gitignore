@@ -19,3 +19,6 @@ Thumbs.db
 
 # Saves (dev)
 saves/
+
+# Claude Code internal state
+.claude/
