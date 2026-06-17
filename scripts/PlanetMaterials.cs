@@ -83,7 +83,8 @@ public static class PlanetMaterials
                     surface: new Color(0.58f, 0.57f, 0.55f),   // light regolith highlands
                     detail:  new Color(0.26f, 0.25f, 0.24f),   // dark maria (mare basalt)
                     detailScale: 7.0f, roughness: 1.0f,
-                    rimColor: new Color(0.30f, 0.30f, 0.30f), rimStrength: 0.0f);
+                    rimColor: new Color(0.30f, 0.30f, 0.30f), rimStrength: 0.0f,
+                    texturePath: "res://assets/textures/moon.jpg");
 
             case "mercury":
                 return RockyBody(
@@ -96,7 +97,8 @@ public static class PlanetMaterials
                     surface: new Color(0.62f, 0.31f, 0.17f),
                     detail:  new Color(0.34f, 0.16f, 0.10f),   // darker maria/lowlands
                     detailScale: 4.0f, roughness: 0.97f,
-                    rimColor: new Color(0.80f, 0.45f, 0.30f), rimStrength: 0.35f);
+                    rimColor: new Color(0.80f, 0.45f, 0.30f), rimStrength: 0.35f,
+                    texturePath: "res://assets/textures/mars.jpg");
 
             case "venus":
                 return SmoothCloudBody(
@@ -137,7 +139,7 @@ public static class PlanetMaterials
 
     private static Material RockyBody(Color surface, Color detail, float detailScale,
                                       float roughness, Color? rimColor = null,
-                                      float rimStrength = 0.0f)
+                                      float rimStrength = 0.0f, string? texturePath = null)
     {
         var mat = BodyMaterial();
         mat.SetShaderParameter("mode", 0);
@@ -147,6 +149,11 @@ public static class PlanetMaterials
         mat.SetShaderParameter("roughness_val", roughness);
         mat.SetShaderParameter("rim_color", rimColor ?? new Color(0.4f, 0.5f, 0.7f));
         mat.SetShaderParameter("rim_strength", rimStrength);
+        if (texturePath != null)
+        {
+            mat.SetShaderParameter("surface_tex", LoadTexture(texturePath));
+            mat.SetShaderParameter("tex_amount", 1.0f);
+        }
         return mat;
     }
 

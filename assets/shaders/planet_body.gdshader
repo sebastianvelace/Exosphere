@@ -24,6 +24,11 @@ uniform float roughness_val : hint_range(0.0, 1.0) = 0.95;
 uniform float rim_strength  : hint_range(0.0, 2.0) = 0.0;
 uniform float band_warp     : hint_range(0.0, 0.5) = 0.08;
 
+// Optional real surface map (Mars, Moon, …). When tex_amount > 0 the equirect texture
+// replaces the procedural base colour; procedural micro-detail still modulates it.
+uniform sampler2D surface_tex : source_color, hint_default_white, filter_linear_mipmap;
+uniform float tex_amount : hint_range(0.0, 1.0) = 0.0;
+
 varying vec3 v_local;
 varying vec3 v_world_normal;
 varying vec3 v_world_pos;
@@ -113,6 +118,16 @@ void fragment() {
 		// Venus: smooth creamy clouds, very low contrast.
 		float n = 0.5 + 0.5 * fbm(p * detail_scale, 5);
 		col = mix(surface_tint, detail_tint, n * 0.4);
+	}
+
+	// Real surface map overrides the procedural base when bound, keeping a touch of
+	// procedural micro-detail so it doesn't look flat when magnified up close.
+	if (tex_amount > 0.001) {
+		float lon = atan(p.z, p.x);
+		float lat = asin(clamp(p.y, -1.0, 1.0));
+		vec3 texCol = texture(surface_tex, vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI)).rgb;
+		texCol *= 0.92 + 0.16 * fbm(p * detail_scale * 6.0, 3);
+		col = mix(col, texCol, tex_amount);
 	}
 
 	// Day/night lighting.
