@@ -1,262 +1,148 @@
-# Exosphere — Plan de mejoras (Ronda 13)
+# Exosphere — Plan de mejoras (post-Ronda 13)
 
-> Documento de trabajo súper específico. Recoge TODO lo pedido + las respuestas a las
-> preguntas de alcance. No es código todavía: es el contrato de lo que hay que hacer,
-> con archivos, enfoque, criterios de aceptación y reparto por agentes.
+> Estado: la Ronda 13 (multi-agente) ya está integrada y commiteada. Este documento ahora SOLO
+> lista lo que FALTA: bugs y mejoras detectados en pruebas en vivo, con archivo·línea·mecanismo
+> y criterios de aceptación. Súper específico para poder ejecutarlo directo.
 
----
-
-## 0. Contexto técnico (leer antes de tocar nada)
-
-- **Motor**: Godot 4.6.3 mono (C# / .NET 8). Binario:
-  `/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64`
-  Ejecutar headless: `--path . --rendering-driver opengl3`.
-- **Escala de render**: `1 unidad = 2.8 m` (`MetresPerUnit = 2.8`). El stack completo
-  (Super Heavy + Starship) ≈ 121 m ≈ 43 unidades; diámetro de núcleo 9 m ≈ 1.15 u radio.
-- **Origen flotante**: el vessel activo se renderiza SIEMPRE en el origen
-  (`scripts/FloatingOrigin.cs`). Los planetas son "scaled-space": esferas unitarias
-  colocadas a `BackdropDistance = 50_000` u y escaladas al tamaño angular correcto.
-  La Tierra de fondo se desvanece según la altitud de la CÁMARA (`planet_alpha`).
-- **Sitio de lanzamiento**: Florida (27.5°N, 80.7°O) → orientado a +Y por
-  `FloatingOrigin.PlanetTilt`. Verificado sobre tierra firme.
-- **Builds (los dos deben quedar 0 errores / 0 warnings):**
-  - `dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet`
-  - `dotnet build Exosphere.csproj --nologo -v quiet`
-- **Patrón de prueba visual headless**: crear un autoload temporal `scripts/_XxxShot.cs`,
-  añadirlo a `[autoload]` en `project.godot`, correr Godot headless, guardar PNGs en `/tmp`,
-  revisarlos, y AL TERMINAR borrar el helper + `git checkout project.godot`. Nunca commitear
-  el harness ni el autoload.
-- **Reglas duras**: builds 0/0 antes de commitear · limpiar todo el código temporal ·
-  no romper el camino [G] autopiloto a órbita (debe seguir llegando a órbita) ·
-  mantener el estilo del archivo (comentarios mezcla ES/EN).
-
-### Respuestas de alcance del usuario (incorporadas)
-- **"El planeta se ve vacío"** → (a) el espacio negro está vacío: faltan estrellas, Vía
-  Láctea, Sol y Luna visibles; (b) la superficie se ve sin detalle/vida; (c) **la nave se ve
-  demasiado GRANDE en relación al planeta** (problema de escala/percepción); (d) **se llega de
-  la Tierra a órbita baja demasiado rápido** (tiempo de ascenso poco realista).
-- **Manejabilidad** → "mejórala en general" (respuesta de control + feedback visual).
-- **Datos del HUD prioritarios** → **Motores en vivo**, **Cargas y trayectoria**,
-  **Etapas y Δv** (además de la estética SpaceX y mejor cuenta atrás).
+## ✅ Hecho en Ronda 13 (no rehacer)
+Modelo de acero suave + nariz ojival + 33 bells curvas · físicas de motor (getters de telemetría
++ suelo de throttle Raptor inerte) · plumas con Mach diamonds que escalan con altitud + nube de
+despegue mayor · **espacio con estrellas/Vía Láctea + Sol con glow (excelente) + Luna + limbo
+atmosférico** · HUD estilo SpaceX + navball + rejilla de motores · ascenso a tiempo real (warp 1).
+El ascenso [G] **llega a órbita** correctamente. La escala nave/planeta quedó proporcional.
 
 ---
 
-## T1 · Cohete suave y realista (no "figuras geométricas pegadas")
-
-**Problema**: el modelo se ve como cilindros/cajas pegados, con cortes duros.
-**Objetivo**: una Starship/Super Heavy que se lea como un vehículo real: cuerpo de acero
-inoxidable continuo y suave, transiciones limpias, nariz ojival, aletas/flaps de Starship,
-rejilla de 33 Raptors en el booster, anillos de soldadura sutiles, sin discontinuidades.
-
-- **Archivos**: `scripts/VesselRenderer.cs` (modelo), opcional
-  `assets/shaders/` para un shader de acero PBR (anisotrópico, reflejos).
-- **Enfoque**:
-  - Subir la subdivisión de los cilindros del cuerpo y unir secciones con bordes biselados
-    (sin "tapas" visibles entre tramos). Nariz como ojiva tangente suave.
-  - Booster: anillo realista de 33 motores (3 anillos: 13+10+10 o layout real) con campanas
-    suaves; Starship: 3 sea-level + 3 vacuum (campanas grandes).
-  - Aletas/flaps de Starship (2 delanteras + 2 traseras) y rejillas del booster.
-  - Material acero inoxidable PBR (metallic alto, roughness variable, ligera anisotropía y
-    reflejo del cielo/Tierra), con tizne cerca de motores.
-  - NO romper la API de plumas (`_plumes.SetupSH/SetupStarship/Update`).
-- **Aceptación**: a 50–100 m la nave se ve continua y "metálica de verdad", sin escalones
-  geométricos; se distinguen flaps, rejilla de motores y campanas suaves. Builds 0/0.
-- **Agente sugerido**: Agente A (modelado), aislado en `VesselRenderer.cs` (+ shader nuevo).
+## 0. Contexto técnico (igual que siempre)
+- Godot 4.6.3 mono · escala `1 u = 2.8 m` · vessel en el origen (FloatingOrigin) · planetas
+  scaled-space · sitio de lanzamiento 27.5°N/80.7°O (tierra).
+- Builds 0/0 obligatorio: `dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet`
+  y `dotnet build Exosphere.csproj --nologo -v quiet`.
+- Binario Godot headless: `/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64 --path . --rendering-driver opengl3`.
+- Patrón de prueba: autoload temporal `scripts/_XxxShot.cs` → correr headless → PNGs en /tmp →
+  revisar → BORRAR helper + `git checkout project.godot`. Nunca commitear el harness.
+- **IMPORTANTE sobre la simulación de motores**: el sim modela cada ETAPA como **UNA sola
+  parte-motor** (el Super Heavy = 1 parte que produce 74 MN; Starship = 1 parte). El "33" y el
+  "6" son solo el MODELO visual. Por eso `Parts.ActiveEngines.Count == 1`. Cualquier HUD que
+  cuente motores debe derivar la cuenta nominal por etapa, no de `ActiveEngines.Count`.
 
 ---
 
-## T2 · Físicas de motores — investigar en internet y aplicar
-
-**Problema**: el comportamiento de los motores es simplificado; el usuario quiere que se
-investigue el Raptor real y se aplique fielmente.
-**Objetivo**: comportamiento del Raptor 2 (metalox, full-flow staged combustion) realista.
-
-- **Investigar (web) y documentar las fuentes** en el commit:
-  - Empuje SL ≈ 230 tf (~2.26 MN) y vacío ≈ 258 tf; Isp ≈ 327 s SL / 350 s vac
-    (RaptorVac ≈ 363–380 s). Presión de cámara ~300 bar. O/F (metalox) ≈ 3.6.
-  - **Throttle real 40–100 %** (no por debajo de ~40 %).
-  - **Transitorios de arranque/parada**: spool-up no instantáneo (ya hay rampa de 3 s; afinar
-    con curva realista), apagado, y curva empuje-vs-presión-ambiente (sobre-expansión a nivel
-    del mar → ganancia de empuje con la altitud).
-  - Gimbal (~15°), número de motores por etapa, secuencia de encendido escalonado.
-- **Archivos**: `ExosphereSimulation/Parts/Part.cs`, `data/parts/*.json`,
-  `ExosphereSimulation/Vessel.cs`, `scripts/AscentController.cs` (throttle floor / Max-Q),
-  `scripts/MissionManager.cs`.
-- **Aceptación**: F = ṁ·Isp·g₀ coherente (ya lo es) + suelo de throttle 40 % respetado donde
-  aplique (cuidado: la EDL usa throttle continuo bajo para aterrizar — no romperla) + curva
-  empuje/Isp por presión documentada con fuentes en el mensaje de commit. Builds 0/0.
-- **Agente sugerido**: Agente B (físicas/sim), aislado en `ExosphereSimulation/**` + JSON.
-  **Tiene permiso de WebSearch/WebFetch** para investigar y citar fuentes.
-
-> Relacionado con **T6 (tiempo a órbita)**: el mismo agente de física debe ajustar el perfil
-> para que el ascenso a LEO dure de forma realista (ver T6).
+## N1 · Rejilla de motores muestra "1/33" (solo 1 motor encendido) — BUG
+**Síntoma** (capturas de despegue y órbita): el panel PROPULSION enciende 1 punto y dice
+"1/33"; en la etapa de Starship sigue mostrando 33 y "1/33".
+**Mecanismo**: `scripts/EngineGridHUD.cs:70-80` — `_totalActiveEngines = engines.Count` (= 1, una
+parte-motor por etapa) → `_litEngines = clamp(1, 0, TotalEngines)= 1`. `TotalEngines` es la
+constante 33 fija.
+**Fix**:
+- Encender puntos = `round(N_nominal · throttle)` cuando hay propelente, donde `N_nominal` es la
+  cuenta NOMINAL de motores de la etapa activa: **33** si la etapa activa contiene
+  `super_heavy_booster`, **6** si es la etapa de Starship (3 SL + 3 vac). Detectar por
+  `Definition.Id` de las partes de `CurrentStageParts()` o de `ActiveEngines`.
+- Dibujar el layout correcto por etapa: 33 (3/10/20) para SH, 6 para Starship.
+- El tally debe leer p.ej. "33/33" a empuje pleno, "20/33" a ~60%, "6/6" en Starship.
+**Archivo**: `scripts/EngineGridHUD.cs` (constante/­layout por etapa + cuenta nominal).
+**Aceptación**: SH a 100% → 33 encendidos; Starship → 6; throttle parcial → proporcional; el
+número y el layout cambian al separar etapas.
 
 ---
 
-## T3 · Gases del cohete (plumas + nube de despegue) — mucho más, realista
-
-**Problema**: en los primeros segundos sale muchísimo menos humo/llama de lo real; las plumas
-y la nube de diluvio son pobres.
-**Objetivo**: despegue con MUCHO más volumen de gases, físicamente plausible.
-
-- **Primeros segundos (0–10 s)**: nube de diluvio/escape ENORME que envuelve la base —
-  vapor de agua del sistema de diluvio + polvo + escape, expandiéndose radialmente y subiendo
-  en columna; debe dominar la pantalla al inicio y disiparse al subir.
-- **Plumas de motor**: a nivel del mar, llama brillante sobre-expandida con discos de Mach;
-  conforme sube y baja la presión, la pluma se ALARGA y ensancha; en vacío, pluma larga,
-  tenue y muy expandida (casi invisible salvo el núcleo). 33 plumas en el booster.
-- **Archivos**: `scripts/LaunchEffectsController.cs` (nube de diluvio/polvo),
-  `assets/shaders/raptor_plume.gdshader` + sistema de plumas en `VesselRenderer.cs`/
-  `scripts/Plumes*` (no romper `SetupSH/SetupStarship/Update`). GPUParticles3D.
-- **Enfoque**: más partículas/turbulencia y emisión escalada por (throttle × densidad de
-  motores) y por altitud (presión); columna de humo persistente; discos de Mach como geometría
-  emisiva en la pluma; transición SL→vacío por presión ambiente.
-- **Aceptación**: el despegue se ve "violento" y lleno de gases; la pluma cambia con la
-  altitud; en órbita la pluma es la versión expandida de vacío. Rendimiento aceptable
-  (cientos de partículas, no miles). Builds 0/0.
-- **Agente sugerido**: Agente C (VFX), aislado en `LaunchEffectsController.cs`,
-  `raptor_plume.gdshader` y el sistema de plumas. ⚠️ Coordinar con Agente A: ambos tocan
-  `VesselRenderer.cs`. **Decisión**: el sistema de plumas se mueve/edita SOLO por el Agente C;
-  el Agente A no toca las llamadas de plumas. Si hay riesgo de colisión, el Agente C trabaja
-  después de A o en archivos de plumas separados.
+## N2 · Navball: aparece un CUADRO marrón/rojo (horizonte sin recortar) — BUG
+**Síntoma** (capturas a >2 km): junto/detrás del disco azul del navball aparece un cuadrado
+marrón que no encaja en el círculo; el medidor "no se ve bien".
+**Mecanismo**: `scripts/AttitudeNavball.cs:181-205` — el propio código admite *"Godot's immediate
+_Draw has no clip... we approximate with polys sized to the disc and rely on the bezel ring to
+hide the corners"*. Dibuja quads de cielo/suelo (`DrawColoredPolygon`, líneas 201-202) más
+grandes que el disco y el anillo del bisel (línea ~204) es demasiado fino para tapar las esquinas
+→ el quad de suelo (marrón) se ve como cuadrado.
+**Fix** (elegir uno, recomendado el primero):
+1. Tras dibujar cielo/suelo, tapar de verdad: dibujar un **anillo relleno** del color del panel
+   desde `Radius` hasta un radio grande (p.ej. `DrawArc`/triángulos en abanico, o un polígono
+   tipo dona) que oculte TODO lo que esté fuera del disco. Luego el bisel fino encima.
+2. O recortar los polígonos cielo/suelo a la circunferencia (intersección polígono-círculo).
+3. O renderizar el navball en un `SubViewport` con máscara circular / un `Control` con
+   `clip_contents` + máscara.
+Además: pulir el look (escalera de pitch dentro del disco, marcadores prograde/retrograde/radial
+nítidos, línea de horizonte).
+**Archivo**: `scripts/AttitudeNavball.cs`.
+**Aceptación**: a cualquier roll/pitch, el horizonte cielo/suelo queda DENTRO de un disco limpio,
+sin ningún cuadrado marrón visible.
 
 ---
 
-## T4 · Visual del espacio (después de salir de la atmósfera)
-
-**Problema**: el espacio se ve negro y vacío; la transición a espacio es sosa.
-**Objetivo**: espacio "vivo" y cinematográfico (responde al punto (a) del usuario).
-
-- **Estrellas reales**: skybox/starfield de campo estelar + **Vía Láctea** (textura
-  equirectangular de cielo nocturno, p. ej. NASA/ESO, cargada como las texturas de Tierra).
-- **Sol**: disco brillante con glare/halo (lens flare sutil), dirección consistente con
-  `SunController`.
-- **Luna**: cuerpo visible con su textura (ya existe `moon` en el universo) — asegurar que
-  el backdrop la renderice con tamaño angular correcto y textura.
-- **Tierra desde el espacio**: borde con dispersión atmosférica (glow azul en el limbo,
-  airglow), terminador suave (ya mejorado), nubes con más presencia.
-- **Archivos**: `scripts/SkyController.cs` (WorldEnvironment/Sky), `scripts/SunController.cs`,
-  `scripts/PlanetMaterials.cs`, `assets/shaders/earth_surface.gdshader`,
-  `assets/shaders/atmosphere.gdshader` (¿reactivar una cáscara de atmósfera para el limbo?),
-  `scripts/FloatingOrigin.cs` (backdrop), nueva textura de estrellas en `assets/textures/`.
-- **Aceptación**: al pasar ~80 km el fondo muestra estrellas + Vía Láctea, Sol con glare y la
-  Luna; la Tierra tiene halo atmosférico en el limbo. Builds 0/0; sin coste de memoria
-  excesivo (la textura de estrellas idealmente ≤ 8k).
-- **Agente sugerido**: Agente D (espacio/cielo), aislado en `SkyController.cs`,
-  `SunController.cs`, `atmosphere.gdshader`, textura de estrellas. ⚠️ Toca
-  `PlanetMaterials.cs`/`earth_surface.gdshader`/`FloatingOrigin.cs` que también afectan a
-  otros — **coordinar**: el limbo atmosférico de la Tierra lo hace D; el resto de
-  `FloatingOrigin` no se toca salvo registro del starfield.
+## N3 · Tierra desde órbita aún se ve pixelada/blanda (~150 km) — VISUAL
+**Síntoma** (capturas en órbita): la superficie y las nubes se ven borrosas/en bloques al mirar
+de cerca desde ~150 km.
+**Mecanismo**: `assets/shaders/earth_surface.gdshader:54` muestrea `day_tex` (8K) directo; a
+150 km cada texel (~5 km) se magnifica sin ningún detalle procedural que lo rompa → borroso.
+**Fix**:
+- Añadir **detalle fbm de alta frecuencia** que module contraste/brillo (y opcionalmente un
+  bump/relieve) del color base, mezclado por distancia/zoom, para romper la magnificación de
+  texels (igual que ya hace `earth_ground.gdshader` de cerca). Mantenerlo sutil para no
+  "ensuciar" la vista lejana.
+- Opcional (si hace falta): textura de día 16K (⚠️ memoria ~3×400 MB — evaluar; quizá solo día) o
+  un mapa de detalle tileable de terreno/océano.
+**Archivo**: `assets/shaders/earth_surface.gdshader`.
+**Aceptación**: a ~150 km la superficie se lee con micro-detalle nítido, sin bloques borrosos;
+la vista lejana (planeta completo) sigue limpia.
 
 ---
 
-## T5 · Interfaz (HUD) + cuenta atrás — estética SpaceX + más datos
-
-**Problema**: la UI se ve muy simple; la cuenta atrás es pobre.
-**Objetivo**: HUD estilo transmisión SpaceX (oscuro, limpio, tipografía condensada) con los
-datos que el piloto pidió.
-
-- **Datos a mostrar (prioridad del usuario)**:
-  - **Motores en vivo**: empuje total, **% por motor / rejilla de 33 motores encendidos**,
-    TWR, Isp, consumo (t/s).
-  - **Cargas y trayectoria**: fuerza **G**, **q dinámica** y aviso **Max-Q**,
-    apoapsis/periapsis, ángulo de vuelo (pitch/heading), **downrange**, velocidad vertical.
-  - **Etapas y Δv**: combustible por etapa, **Δv restante**, masa, eventos (cuenta de
-    MECO/Separación/SECO).
-  - Telemetría grande tipo webcast: velocidad + altitud + T+ centradas abajo.
-- **Cuenta atrás**: secuencia tipo SpaceX (T- con hitos: "Startup", "Engine Chill",
-  "Ignition", "Liftoff"), números grandes, beeps ya existentes (`AudioManager`).
-- **Estética**: paneles oscuros translúcidos, acentos (azul/cian SpaceX), barras de combustible
-  por etapa, líneas finas, esquinas marcadas; coherente en todas las pantallas.
-- **Archivos**: `scripts/HUDController.cs`, `scripts/MissionManager.cs` (secuencia de
-  cuenta atrás), `scripts/AscentController.cs` (ya expone q/TWR), posible nuevo
-  `scripts/EngineGridHUD.cs`. Datos de motores/Δv desde `Vessel`/`PartGraph` (puede requerir
-  exponer helpers de solo-lectura — coordinar con Agente B para no chocar).
-- **Aceptación**: HUD claramente "SpaceX", con rejilla de motores, G, q, Max-Q, Ap/Pe,
-  downrange, Δv por etapa y telemetría webcast; cuenta atrás con hitos. Builds 0/0.
-- **Agente sugerido**: Agente E (UI), aislado en `HUDController.cs` + nuevo HUD de motores.
-  ⚠️ Si necesita nuevos getters en `Vessel`/`PartGraph`, los pide al Agente B o se añaden en
-  una fase de integración para evitar colisiones en `ExosphereSimulation/**`.
+## N4 · Nubes poco realistas — VISUAL
+**Síntoma**: las nubes desde órbita se ven blancas, planas y en bloques; de cerca, los cuerpos
+de agua del parche de suelo se ven como manchas azules borrosas.
+**Mecanismo**: `assets/shaders/earth_surface.gdshader:56,62-63` — nubes = `mix(dayCol, vec3(1.0),
+cloud_tex.r·cloud_amount·day·0.85)`: blanco plano sin sombra ni volumen, magnificado desde la
+textura 8K. El parche de suelo (`earth_ground.gdshader`) no tiene capa de nubes.
+**Fix**:
+- Nubes orbitales: añadir **detalle fbm** sobre la cobertura (rompe el bloque), ligera
+  translucidez/penumbra, **sombra de nube proyectada** sobre la superficie (oscurecer el día bajo
+  nubes), y deriva animada más natural. Tono no 100% blanco (gris cálido en bordes).
+- Opcional: capa fina de nubes/penumbra en `earth_ground.gdshader` para baja altitud, y revisar
+  que las manchas azules de agua se vean como agua (specular/borde) y no como nubes.
+**Archivos**: `assets/shaders/earth_surface.gdshader` (principal), opcional `earth_ground.gdshader`.
+**Aceptación**: nubes con detalle/volumen y sombra sobre la Tierra; nada de manchas blancas en
+bloque; el agua de baja altitud se lee como agua.
 
 ---
 
-## T6 · Tiempo a órbita realista (se llega demasiado rápido) + escala
-
-**Problema A (tiempo)**: se llega a LEO en ~4 min de tiempo de misión; real ≈ 8–9 min.
-**Problema B (escala)**: la nave se percibe demasiado grande respecto al planeta.
-
-- **Tiempo a órbita**:
-  - Revisar el perfil del `AscentController`: gravity turn, throttle, y sobre todo el
-    **auto-warp** (warp=2 en ascenso, 4 en coast) que acorta el reloj. Objetivo: que el
-    **tiempo de misión** del ascenso sea realista (~8–9 min a SECO), reduciendo/eliminando el
-    auto-warp durante el ascenso propulsado y/o ajustando el perfil de empuje.
-  - Validar con telemetría: T+ a 150 km debería rondar 8–9 min, no 4.
-  - **Archivos**: `scripts/AscentController.cs`, `ExosphereSimulation/Universe.cs`
-    (TimeScale), `scripts/MissionManager.cs`.
-- **Escala/percepción**:
-  - Verificar que el backdrop subtiende el tamaño angular correcto (`FloatingOrigin`:
-    `rBackdrop = BackdropDistance·sin(asin(R/d))`) y que `MetresPerUnit=2.8` es coherente en
-    nave, suelo y plataforma. Confirmar el **FOV de la cámara** (`Camera3D.Fov`) — un FOV muy
-    estrecho agranda la nave respecto al fondo.
-  - Si la proporción es físicamente correcta pero "se siente" grande, ajustar FOV y/o el
-    encuadre de cámara para una sensación realista, SIN romper la proporción física.
-  - **Archivos**: `scripts/CameraController.cs`, `scripts/FloatingOrigin.cs`.
-- **Aceptación**: T+ a 150 km ≈ 8–9 min; la nave se ve proporcional al planeta (no
-  desproporcionadamente grande) manteniendo la escala física. Builds 0/0; el [G] sigue
-  llegando a órbita.
-- **Agente sugerido**: lo hace el **agente principal (yo)** porque toca el lazo de ascenso y
-  cámara (delicado, interactúa con T2/T5) — no en paralelo ciego.
+## N5 · Humo de despegue aún insuficiente los primeros segundos — VFX
+**Síntoma** (captura de LIFTOFF a 36 m): sale fuego pero la nube no DOMINA la pantalla como en un
+lanzamiento real de Starship; el usuario insiste en "muchísimo más" al inicio.
+**Mecanismo**: `scripts/LaunchEffectsController.cs` — la nube ya se agrandó en Ronda 13 pero falta
+volumen/altura/persistencia y un frente de polvo radial más violento en los primeros ~5 s.
+**Fix**: más partículas de vapor/polvo, mayor escala y buoyancy, columna más alta y duradera,
+frente de polvo radial a ras de suelo más amplio; mantener rendimiento (≤ ~700 partículas).
+**Archivo**: `scripts/LaunchEffectsController.cs`.
+**Aceptación**: a 0–3 s la base queda envuelta en una nube enorme que domina el encuadre y se
+disipa al subir.
 
 ---
 
-## T7 · Manejabilidad de la nave (mejorar en general: respuesta + feedback)
-
-**Problema**: el control manual no se siente bien; falta feedback.
-**Objetivo**: control preciso y con instrumentos.
-
-- **Respuesta de control**: afinar `ControlAuthority` (hoy 0.6 rad/s²), límite de velocidad
-  angular, y la amortiguación del SAS; considerar respuesta proporcional con rampa.
-- **Feedback visual**: **navball / indicador de actitud** (pitch/yaw/roll), marcadores
-  **prograde/retrograde**, vector de empuje, indicador de horizonte, heading.
-- **Modos SAS**: hold de actitud, prograde-hold, retrograde-hold, radial, normal.
-- **Archivos**: `scripts/Vessel.cs` (control), `scripts/CameraController.cs`,
-  `scripts/HUDController.cs` o nuevo `scripts/NavballController.cs`.
-- **Aceptación**: con la nave se puede apuntar con precisión, hay navball + marcadores
-  prograde/retrograde, y al menos prograde-hold funcional. Builds 0/0.
-- **Agente sugerido**: parte del **Agente E (UI)** para el navball/feedback + el agente
-  principal para el tuning de control en `Vessel.cs` (coordinar con T2).
+## N6 · Menores (revisar/pulir)
+- **HEADING del HUD salta** (275°→54°→90°→97°→109°… durante el ascenso): revisar el cálculo de
+  rumbo en `scripts/HUDController.cs`/`AttitudeNavball.cs` (proyección del vector velocidad/eje).
+- **G-force pico ~5.3 g** en inserción (real ~3.5–4 g): revisar si el perfil de empuje/PEG de
+  `scripts/AscentController.cs` mete un pico de G alto al final; suavizar si procede.
+- Confirmar que la rejilla y el navball se ven bien a la resolución real (no solo headless).
 
 ---
 
-## Reparto por agentes (archivos no solapados)
+## Reparto sugerido (archivos disjuntos → se puede paralelizar con agentes)
+| Frente | Tareas | Archivos exclusivos |
+|--------|--------|---------------------|
+| HUD | N1, N2, N6(heading) | `scripts/EngineGridHUD.cs`, `scripts/AttitudeNavball.cs`, `scripts/HUDController.cs` |
+| Tierra/nubes | N3, N4 | `assets/shaders/earth_surface.gdshader` (+ opcional `earth_ground.gdshader`) |
+| VFX | N5 | `scripts/LaunchEffectsController.cs` |
+| Ascenso | N6(G-force) | `scripts/AscentController.cs` |
 
-| Agente | Tareas | Archivos exclusivos | Permisos |
-|--------|--------|---------------------|----------|
-| **A — Modelo nave** | T1 | `scripts/VesselRenderer.cs` (sin tocar plumas), shader de acero nuevo | — |
-| **B — Físicas motor/sim** | T2, apoyo T6 | `ExosphereSimulation/**`, `data/parts/*.json` | **WebSearch/WebFetch** |
-| **C — VFX gases/plumas** | T3 | `LaunchEffectsController.cs`, `raptor_plume.gdshader`, sistema de plumas | — |
-| **D — Espacio/cielo** | T4 | `SkyController.cs`, `SunController.cs`, `atmosphere.gdshader`, textura estrellas | descarga texturas |
-| **E — UI/HUD/navball** | T5, parte T7 | `HUDController.cs`, nuevos `EngineGridHUD.cs`/`NavballController.cs` | — |
-| **Principal (yo)** | T6 (tiempo+escala), tuning control T7, integración y verificación | `AscentController.cs`, `CameraController.cs`, `Vessel.cs` (control), integración | — |
+**Orden**: los 4 frentes son disjuntos → paralelizables. Prioridad: **N1 y N2** (bugs visibles del
+HUD) y **N3/N4** (la Tierra de cerca). Verificar cada cambio con harness headless (despegue,
+ascenso, órbita) y commitear por tarea. Builds 0/0 siempre.
 
-**Conflictos a vigilar**:
-- `VesselRenderer.cs`: A (modelo) vs C (plumas) → C solo el sistema de plumas, A no toca plumas.
-- `Vessel.cs`/`PartGraph`: B (física) vs E (getters para HUD) vs principal (control) →
-  los getters de solo-lectura que pida E se añaden en la fase de integración por el principal.
-- `FloatingOrigin.cs`/`PlanetMaterials.cs`/`earth_surface.gdshader`: D (espacio) vs principal
-  (escala) → D solo limbo atmosférico + registro de starfield; principal solo backdrop/escala.
-
-**Orden sugerido**: lanzar A, B, C, D en paralelo (archivos disjuntos). E después de definir
-los getters de datos con B. T6/T7-tuning e integración final por el principal, con verificación
-headless (harness temporal) y commit por tarea. Builds 0/0 obligatorio en cada paso.
-
----
-
-## Criterios de "hecho" (global)
-- [ ] Ambos proyectos compilan 0 errores / 0 warnings.
-- [ ] El [G] autopiloto sigue llegando a órbita; T+ a 150 km ≈ 8–9 min.
-- [ ] Verificación headless con capturas para cada cambio visual (despegue, ascenso, espacio,
-      órbita, HUD, navball) y revisadas.
-- [ ] Todo el código/harness temporal eliminado; `project.godot` sin el autoload de prueba.
-- [ ] Fuentes de la investigación de motores citadas en el commit de T2.
-- [ ] Commits separados y descriptivos por tarea.
+## Criterios de "hecho"
+- [ ] Rejilla enciende 33 (SH) / 6 (Starship) según throttle; tally correcto.
+- [ ] Navball sin cuadro marrón, recortado limpio al disco, a cualquier actitud.
+- [ ] Tierra nítida desde ~150 km; nubes con detalle/sombra; sin bloques.
+- [ ] Nube de despegue domina los primeros segundos.
+- [ ] Ambos proyectos 0/0; harness temporal eliminado; commits por tarea.
