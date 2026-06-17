@@ -53,24 +53,30 @@ public partial class PlumeSystem : Node3D
     /// <summary>Sets up the 33-engine Super Heavy plume (3 concentric rings + core).</summary>
     public void SetupSH(float innerR, float midR, float outerR, float bellY)
     {
+        // 33 Raptors firing together merge into one enormous incandescent plume.
+        // We model it as a bright merged central column plus three concentric
+        // rings; the column dominates and the rings broaden the silhouette. Base
+        // lengths are generous — at sea level this is a short, fat, blinding flame;
+        // altitude then stretches it far longer (see Update()).
+
         // Bright central column (the merged plume core of the densely-packed cluster).
-        _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 0.32f,
-            length: 9.0f, count: 33,
-            core: new Color(0.78f, 0.88f, 1.00f), withLight: true, sh: true));
+        _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 0.55f,
+            length: 12.0f, count: 33,
+            core: new Color(0.80f, 0.89f, 1.00f), withLight: true, sh: true));
 
         // Inner ring — 3 engines.
-        _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.18f,
-            length: 8.0f, count: 3,
+        _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.22f,
+            length: 10.5f, count: 3,
             core: new Color(0.74f, 0.86f, 1.00f), withLight: false, sh: true));
 
         // Mid ring — 10 engines.
-        _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.22f,
-            length: 7.5f, count: 10,
+        _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.28f,
+            length: 9.5f, count: 10,
             core: new Color(0.72f, 0.85f, 1.00f), withLight: false, sh: true));
 
         // Outer ring — 20 engines, broadest cluster.
-        _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.28f,
-            length: 7.0f, count: 20,
+        _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.34f,
+            length: 9.0f, count: 20,
             core: new Color(0.70f, 0.84f, 1.00f), withLight: true, sh: true));
     }
 
@@ -78,13 +84,13 @@ public partial class PlumeSystem : Node3D
     public void SetupStarship(float vacR, float slR, float baseY)
     {
         // Vacuum Raptors — long, narrow, bright blue-white plume (big bell, sits lower).
-        _shipUnits.Add(BuildUnit("Ship_Vac", baseY - 1.05f, mouthR: vacR + 0.22f,
-            length: 9.5f, count: 3,
+        _shipUnits.Add(BuildUnit("Ship_Vac", baseY - 1.05f, mouthR: vacR + 0.26f,
+            length: 11.0f, count: 3,
             core: new Color(0.66f, 0.80f, 1.00f), withLight: true, sh: false));
 
         // Sea-level Raptors — tighter, shorter plume (shorter bell, sits a touch higher).
-        _shipUnits.Add(BuildUnit("Ship_SL", baseY - 0.70f, mouthR: slR + 0.18f,
-            length: 7.0f, count: 3,
+        _shipUnits.Add(BuildUnit("Ship_SL", baseY - 0.70f, mouthR: slR + 0.20f,
+            length: 8.5f, count: 3,
             core: new Color(0.74f, 0.86f, 1.00f), withLight: true, sh: false));
     }
 
@@ -95,11 +101,13 @@ public partial class PlumeSystem : Node3D
     {
         bool firing = throttle > 0.01f;
 
-        // Ambient-pressure proxy → expansion factor. Below ~1 km the plume is
-        // tight (overexpanded/sea-level); above the Kármán line it is fully
-        // underexpanded (broad, long, sparse diamonds). Smooth between.
-        float expansion = (float)System.Math.Clamp(
-            (altitude - 1_000.0) / 60_000.0, 0.0, 1.0);
+        // Ambient-pressure proxy → expansion factor. Modelled on an exponential
+        // atmosphere (~7 km scale height): the plume already starts visibly
+        // expanding in the first kilometres and is fully underexpanded (broad,
+        // very long, sparse diamonds) well before the Kármán line. At p≈p0 the
+        // plume is tight/over-expanded; as p→0 it becomes the long vacuum plume.
+        float pressRatio = (float)System.Math.Exp(-altitude / 7_000.0); // 1 at SL → 0 high up
+        float expansion  = System.Math.Clamp(1f - pressRatio, 0f, 1f);
         expansion = expansion * expansion * (3f - 2f * expansion); // smoothstep
 
         UpdateGroup(_shUnits,   firing && shPresent,  throttle, expansion, altitude);
@@ -133,10 +141,14 @@ public partial class PlumeSystem : Node3D
                 // The cone mesh is unit height (1.0) and unit-ish radius (0.5),
                 // anchored at the nozzle via the pivot, so scaling the pivot's
                 // Y stretches the plume downward while the mouth stays put.
+                //
+                // SL→vacuum: at sea level the plume is short & fat; in vacuum it
+                // lengthens dramatically (up to ~4x) and widens (up to ~2.3x) into
+                // the long faint underexpanded plume.
                 float lenScale = (0.55f + 0.45f * throttle)
-                               * (1.0f + expansion * 1.6f) * flick;
+                               * (1.0f + expansion * 3.0f) * flick;
                 float radScale = (0.85f + 0.30f * throttle)
-                               * (1.0f + expansion * 0.9f);
+                               * (1.0f + expansion * 1.3f);
                 u.Pivot.Scale = new Vector3(
                     (u.BaseRadius / 0.5f) * radScale,
                     u.BaseLength * lenScale,
@@ -153,9 +165,10 @@ public partial class PlumeSystem : Node3D
                 {
                     pm.Direction = dir;
                     pm.Spread    = smokeSpread;
-                    // Smoke thins out in vacuum (no air to billow into).
-                    pm.ScaleMin  = 0.5f * (1f - expansion * 0.6f);
-                    pm.ScaleMax  = 2.0f * (1f - expansion * 0.5f);
+                    // Big, billowing soot near the pad; smoke thins out in vacuum
+                    // (no air to billow into) leaving just the bright core.
+                    pm.ScaleMin  = (u.IsSuperHeavy ? 1.4f : 1.0f) * (1f - expansion * 0.7f);
+                    pm.ScaleMax  = (u.IsSuperHeavy ? 4.2f : 3.0f) * (1f - expansion * 0.6f);
                 }
             }
 
@@ -321,19 +334,19 @@ public partial class PlumeSystem : Node3D
 
             Direction          = new Vector3(0, -1, 0),
             Spread             = 12f,
-            InitialVelocityMin = 8f,
-            InitialVelocityMax = 22f,
+            InitialVelocityMin = 10f,
+            InitialVelocityMax = 26f,
 
             DampingMin = 2f,
             DampingMax = 5f,
 
-            ScaleMin = 0.5f,
-            ScaleMax = 2.0f,
+            ScaleMin = sh ? 1.4f : 1.0f,
+            ScaleMax = sh ? 4.2f : 3.0f,
 
             ColorRamp = gradTex,
         };
 
-        var quad = new QuadMesh { Size = new Vector2(1.4f, 1.4f) };
+        var quad = new QuadMesh { Size = new Vector2(2.6f, 2.6f) };
         var drawMat = new StandardMaterial3D
         {
             BillboardMode            = BaseMaterial3D.BillboardModeEnum.Enabled,

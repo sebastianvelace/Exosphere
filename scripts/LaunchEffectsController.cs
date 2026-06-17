@@ -145,7 +145,7 @@ public partial class LaunchEffectsController : Node3D
         // process material's emission interpolation by toggling Amount only when
         // it changes meaningfully. GPUParticles3D re-allocates on Amount change,
         // so we quantise to a few discrete steps to avoid churn.
-        int coreMax = 200, boilMax = 130, dustMax = 90, hazeMax = 60;
+        int coreMax = 210, boilMax = 140, dustMax = 90, hazeMax = 60;
 
         int core = QuantiseAmount(coreMax, k);
         int boil = QuantiseAmount(boilMax, k);
@@ -225,21 +225,21 @@ public partial class LaunchEffectsController : Node3D
             // Fire mostly OUTWARD & slightly up; wide spread so it fans across pad.
             // Lower the vertical bias so the FIRST motion is a ground-hugging surge.
             Direction          = new Vector3(0f, 0.18f, 1f).Normalized(),
-            Spread             = 82f,
+            Spread             = 84f,
             Flatness           = 0.8f,         // strong bias toward horizontal sheeting
-            InitialVelocityMin = 26f,
-            InitialVelocityMax = 52f,
+            InitialVelocityMin = 36f,
+            InitialVelocityMax = 72f,
 
             // Heavy damping so it decelerates and balloons rather than streaking.
             DampingMin = 5f,
             DampingMax = 11f,
 
             // Buoyancy: once the outward surge slows, it mushrooms upward.
-            Gravity = new Vector3(0f, 3.0f, 0f),
+            Gravity = new Vector3(0f, 3.5f, 0f),
 
             // Turbulent, slow drift for that churning volume.
             TurbulenceEnabled               = true,
-            TurbulenceNoiseStrength         = 3.0f,
+            TurbulenceNoiseStrength         = 3.4f,
             TurbulenceNoiseScale            = 1.2f,
             TurbulenceInfluenceMin          = 0.12f,
             TurbulenceInfluenceMax          = 0.55f,
@@ -247,21 +247,21 @@ public partial class LaunchEffectsController : Node3D
             AngularVelocityMin = -45f,
             AngularVelocityMax = 45f,
 
-            // Big and growing — voluminous billows.
-            ScaleMin = 4.5f,
-            ScaleMax = 8.5f,
+            // Huge and growing — voluminous billows that engulf the base.
+            ScaleMin = 6.5f,
+            ScaleMax = 12.0f,
             ColorRamp = new GradientTexture1D { Gradient = grad },
         };
         SetGrowCurve(pm, 0.35f, 1.0f); // grow strongly over lifetime
 
-        var quad = new QuadMesh { Size = new Vector2(5.0f, 5.0f) };
+        var quad = new QuadMesh { Size = new Vector2(6.0f, 6.0f) };
         quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 1.15f));
 
         return new GpuParticles3D
         {
             Name            = "DelugeSteamCore",
-            Amount          = 200,
-            Lifetime        = 6.0f,
+            Amount          = 210,
+            Lifetime        = 6.5f,
             Preprocess      = 0.6f,           // start mid-billow so ignition isn't empty
             Explosiveness   = 0.08f,
             Randomness      = 0.5f,
@@ -295,22 +295,22 @@ public partial class LaunchEffectsController : Node3D
         {
             EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
             EmissionRingAxis        = Vector3.Up,
-            EmissionRingRadius      = 11.0f,
+            EmissionRingRadius      = 13.0f,
             EmissionRingInnerRadius = 2.5f,
             EmissionRingHeight      = 1.5f,
 
-            Direction          = new Vector3(0f, 1f, 0.45f).Normalized(),
+            Direction          = new Vector3(0f, 1f, 0.40f).Normalized(),
             Spread             = 58f,
-            InitialVelocityMin = 9f,
-            InitialVelocityMax = 22f,
+            InitialVelocityMin = 11f,
+            InitialVelocityMax = 28f,
 
             DampingMin = 2.5f,
             DampingMax = 6f,
 
-            Gravity = new Vector3(0f, 6.5f, 0f), // strong buoyant rise → tall wall
+            Gravity = new Vector3(0f, 9.0f, 0f), // strong buoyant rise → tall mushroom
 
             TurbulenceEnabled       = true,
-            TurbulenceNoiseStrength = 3.4f,
+            TurbulenceNoiseStrength = 3.8f,
             TurbulenceNoiseScale    = 0.9f,
             TurbulenceInfluenceMin  = 0.18f,
             TurbulenceInfluenceMax  = 0.6f,
@@ -318,20 +318,20 @@ public partial class LaunchEffectsController : Node3D
             AngularVelocityMin = -28f,
             AngularVelocityMax = 28f,
 
-            ScaleMin = 6.0f,
-            ScaleMax = 11.0f,
+            ScaleMin = 8.0f,
+            ScaleMax = 15.0f,
             ColorRamp = new GradientTexture1D { Gradient = grad },
         };
         SetGrowCurve(pm, 0.45f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(7.0f, 7.0f) };
+        var quad = new QuadMesh { Size = new Vector2(8.0f, 8.0f) };
         quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 0.9f));
 
         return new GpuParticles3D
         {
             Name            = "DelugeSteamBoil",
-            Amount          = 130,
-            Lifetime        = 9.0f,
+            Amount          = 140,
+            Lifetime        = 10.0f,
             Preprocess      = 1.2f,
             Explosiveness   = 0.0f,
             Randomness      = 0.6f,
@@ -371,10 +371,10 @@ public partial class LaunchEffectsController : Node3D
 
             // Almost flat — blasts sideways across the pad, fast and far.
             Direction          = new Vector3(0f, 0.06f, 1f).Normalized(),
-            Spread             = 88f,
+            Spread             = 90f,
             Flatness           = 0.95f,
-            InitialVelocityMin = 30f,
-            InitialVelocityMax = 60f,
+            InitialVelocityMin = 42f,
+            InitialVelocityMax = 82f,
 
             DampingMin = 7f,
             DampingMax = 15f,
@@ -382,18 +382,18 @@ public partial class LaunchEffectsController : Node3D
             Gravity = new Vector3(0f, -1.0f, 0f), // dust settles, doesn't rise
 
             TurbulenceEnabled       = true,
-            TurbulenceNoiseStrength = 1.6f,
+            TurbulenceNoiseStrength = 1.8f,
             TurbulenceNoiseScale    = 1.4f,
             TurbulenceInfluenceMin  = 0.05f,
             TurbulenceInfluenceMax  = 0.32f,
 
-            ScaleMin = 2.2f,
-            ScaleMax = 4.5f,
+            ScaleMin = 3.0f,
+            ScaleMax = 6.0f,
             ColorRamp = new GradientTexture1D { Gradient = grad },
         };
         SetGrowCurve(pm, 0.55f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(4.0f, 4.0f) };
+        var quad = new QuadMesh { Size = new Vector2(5.0f, 5.0f) };
         // Dust is lit-ish but still unshaded soft; alpha blend (not additive) so
         // it reads as dark, occluding debris rather than glowing vapour.
         var drawMat = new StandardMaterial3D
@@ -448,7 +448,7 @@ public partial class LaunchEffectsController : Node3D
         {
             EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
             EmissionRingAxis        = Vector3.Up,
-            EmissionRingRadius      = 14.0f,
+            EmissionRingRadius      = 18.0f,
             EmissionRingInnerRadius = 2.0f,
             EmissionRingHeight      = 0.5f,
 
@@ -456,8 +456,8 @@ public partial class LaunchEffectsController : Node3D
             Direction          = new Vector3(0f, 0.05f, 1f).Normalized(),
             Spread             = 90f,
             Flatness           = 0.92f,
-            InitialVelocityMin = 3f,
-            InitialVelocityMax = 9f,
+            InitialVelocityMin = 4f,
+            InitialVelocityMax = 12f,
 
             DampingMin = 1.5f,
             DampingMax = 4f,
@@ -470,13 +470,13 @@ public partial class LaunchEffectsController : Node3D
             TurbulenceInfluenceMin  = 0.05f,
             TurbulenceInfluenceMax  = 0.25f,
 
-            ScaleMin = 8.0f,
-            ScaleMax = 14.0f,
+            ScaleMin = 10.0f,
+            ScaleMax = 17.0f,
             ColorRamp = new GradientTexture1D { Gradient = grad },
         };
         SetGrowCurve(pm, 0.6f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(9.0f, 9.0f) };
+        var quad = new QuadMesh { Size = new Vector2(11.0f, 11.0f) };
         // Soft alpha-blended haze — not additive, so it reads as a dim pall.
         var drawMat = new StandardMaterial3D
         {
