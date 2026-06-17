@@ -1,8 +1,9 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation.Math;
 
-public enum CameraMode { Chase, Pad }
+public enum CameraMode { Chase, Pad, Cockpit }
 
 public partial class CameraController : Node3D
 {
@@ -32,6 +33,13 @@ public partial class CameraController : Node3D
 
     private bool _dragging;
 
+    // ── First-person cockpit (IVA) state ──────────────────────────────────────
+    private bool     _cockpit;            // [C] cycles into this after the pad presets
+    private Vector3d _lastVel;
+    private double   _lastT = -1.0;
+    private Vector3  _gOffset, _gTarget;  // eye push from G-force (render units)
+    private float    _lookYaw, _lookPitch;
+
     // ── Force-feel shake (cosmetic; driven by vessel state) ───────────────────
     private readonly CameraShake _shake = new();
     private bool _baseFovCaptured;
@@ -53,24 +61,40 @@ public partial class CameraController : Node3D
 
         if (@event is InputEventMouseMotion mm && _dragging)
         {
-            _yaw   -= mm.Relative.X * OrbitSensitivity;
-            _pitch -= mm.Relative.Y * OrbitSensitivity;
-            _pitch  = Mathf.Clamp(_pitch, -89f, 89f);
+            if (_cockpit)
+            {
+                // Free-look inside the cockpit, clamped.
+                _lookYaw   = Mathf.Clamp(_lookYaw   - mm.Relative.X * 0.25f, -70f, 70f);
+                _lookPitch = Mathf.Clamp(_lookPitch - mm.Relative.Y * 0.25f, -70f, 70f);
+            }
+            else
+            {
+                _yaw   -= mm.Relative.X * OrbitSensitivity;
+                _pitch -= mm.Relative.Y * OrbitSensitivity;
+                _pitch  = Mathf.Clamp(_pitch, -89f, 89f);
+            }
         }
 
-        // C key: cycle pad camera presets
+        // C key: cycle pad/chase presets → first-person cockpit → back to preset 0.
         if (@event is InputEventKey key && key.Pressed && !key.Echo && key.Keycode == Key.C)
         {
-            _padPresetIdx = (_padPresetIdx + 1) % PadPresets.Length;
-            var preset = PadPresets[_padPresetIdx];
-            _yaw      = preset.yaw;
-            _pitch    = preset.pitch;
-            _distance = preset.dist;
+            _padPresetIdx = (_padPresetIdx + 1) % (PadPresets.Length + 1);
+            _cockpit = _padPresetIdx == PadPresets.Length;
+            if (!_cockpit)
+            {
+                var preset = PadPresets[_padPresetIdx];
+                _yaw      = preset.yaw;
+                _pitch    = preset.pitch;
+                _distance = preset.dist;
+            }
         }
     }
 
     public override void _Process(double delta)
     {
+        if (_cockpit) { DriveCockpit(delta); return; }
+        SetCockpitVisible(false);
+
         // Auto-switch to Chase mode once vessel is clear of the pad
         var bridge = SimulationBridge.Instance;
         if (bridge?.ActiveVessel != null)
@@ -151,4 +175,71 @@ public partial class CameraController : Node3D
 
         camera.Fov = _shake.Fov;
     }
+
+    // ── First-person cockpit camera ───────────────────────────────────────────
+    private void DriveCockpit(double delta)
+    {
+        var camera = GetNodeOrNull<Camera3D>("Camera3D");
+        var bridge = SimulationBridge.Instance;
+        var v = bridge?.ActiveVessel;
+        if (camera == null || bridge == null || v == null) return;
+
+        SetCockpitVisible(true);
+
+        // The vessel renders at the origin oriented by vessel.Orientation; the cockpit interior
+        // is a child of that node. Eye at local (0,36,0.6) u, forward +Y (nose), up -Z.
+        var orient  = v.Orientation;
+        Vector3 eye = ToG(orient.Rotate(new Vector3d(0, 36, 0.6)));
+        Vector3 fwd = ToG(orient.Rotate(new Vector3d(0, 1, 0))).Normalized();
+        Vector3 up  = ToG(orient.Rotate(new Vector3d(0, 0, -1))).Normalized();
+
+        // G-force: push the eye OPPOSITE the net acceleration (into the seat under thrust).
+        var uni = bridge.Universe;
+        if (uni != null)
+        {
+            double t = uni.CurrentTime;
+            if (_lastT > 0 && t - _lastT > 1e-4)
+            {
+                var a = (v.Velocity - _lastVel) / (t - _lastT);   // m/s²
+                Vector3 target = -ToG(a) / 9.80665f * 0.05f;
+                float m = target.Length();
+                if (m > 0.15f) target *= 0.15f / m;               // cap the seat push
+                _gTarget = target;
+            }
+            _lastVel = v.Velocity; _lastT = t;
+        }
+        _gOffset = _gOffset.Lerp(_gTarget, Mathf.Clamp((float)delta * 6f, 0f, 1f));
+
+        // Free-look (recenters when not dragging).
+        if (!_dragging)
+        {
+            float k = Mathf.Clamp((float)delta * 3f, 0f, 1f);
+            _lookYaw   = Mathf.Lerp(_lookYaw,   0f, k);
+            _lookPitch = Mathf.Lerp(_lookPitch, 0f, k);
+        }
+        Vector3 right = fwd.Cross(up).Normalized();
+        // Rest the gaze tilted ~18° down toward the console/screens; the nose & windows stay above.
+        Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(18f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
+
+        camera.Position = eye + _gOffset;
+        camera.LookAt(eye + _gOffset + look, up);
+
+        // Interior vibration — amplified vs the exterior views.
+        if (!_baseFovCaptured) { _shake.BaseFov = camera.Fov; _baseFovCaptured = true; }
+        _shake.Update(delta, v, uni, 40f);
+        camera.Translate(_shake.PositionOffset * 1.8f);
+        var rot = _shake.RotationOffset * 1.8f;
+        camera.RotateObjectLocal(Vector3.Right,   rot.X);
+        camera.RotateObjectLocal(Vector3.Up,      rot.Y);
+        camera.RotateObjectLocal(Vector3.Forward, rot.Z);
+        camera.Fov = _shake.Fov;
+    }
+
+    private void SetCockpitVisible(bool vis)
+    {
+        if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D ck && ck.Visible != vis)
+            ck.Visible = vis;
+    }
+
+    private static Vector3 ToG(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
 }

@@ -240,6 +240,11 @@ public partial class SimulationBridge : Node
             vesselsNode.AddChild(_vesselRenderer);
             _vesselRenderer.BuildFromVessel(vessel);
 
+            // First-person cockpit interior — child of the (origin-locked, oriented) vessel node
+            // so it sits inside the ship; the CameraController shows it only in Cockpit mode.
+            _vesselRenderer.AddChild(new CockpitRenderer { Name = "CockpitRenderer" });
+            AddChild(new CockpitInstruments { Name = "CockpitInstruments" });
+
             // MaxQ condensation ring — tracks active vessel (always at render origin)
             var maxQ = new MaxQRingController { Name = "MaxQRing" };
             vesselsNode.AddChild(maxQ);
