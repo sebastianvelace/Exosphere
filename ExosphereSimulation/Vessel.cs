@@ -100,24 +100,25 @@ public class Vessel
 
     // ── Fuerzas ───────────────────────────────────────────────────────────
 
-    // Aplica el throttle actual a todos los motores activos
-    private void ApplyThrottle()
+    // Avanza el spool de cada motor activo hacia el throttle comandado (Vessel.Throttle).
+    // Se llama UNA VEZ por tick de física (en Tick()), antes de que RK4 muestree las fuerzas.
+    // RK4 luego lee ThrottleLevel tal cual está — sin avanzar el spool de nuevo — para que
+    // los cuatro subpasos k₁…k₄ usen el mismo nivel de empuje dentro de un mismo tick.
+    private void ApplyThrottle(double dt)
     {
         foreach (var engine in Parts.ActiveEngines)
-            engine.ThrottleLevel = Throttle;
+            engine.SpoolToward(Throttle, dt);
     }
 
     // Empuje total en world space (N) — empuje de vacío (compatibilidad).
     public Vector3d ComputeThrust()
     {
-        ApplyThrottle();
         return Orientation.Rotate(Parts.GetTotalThrust());
     }
 
     // Empuje total en world space (N), corregido por presión ambiente del cuerpo.
     public Vector3d ComputeThrust(CelestialBody? refBody)
     {
-        ApplyThrottle();
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
         return Orientation.Rotate(Parts.GetTotalThrust(pressure));
     }
@@ -204,8 +205,9 @@ public class Vessel
 
         // Empuje: dirección fija por la orientación durante el subpaso; magnitud
         // corregida por la presión a la altitud del estado evaluado.
+        // ThrottleLevel ya fue avanzado por ApplyThrottle(dt) en Tick() antes de este subpaso,
+        // así que aquí solo leemos el valor spooled sin modificarlo.
         double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
-        ApplyThrottle();
         var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TotalMass;
 
         var drag = refBody != null
@@ -234,6 +236,12 @@ public class Vessel
     public void Tick(double dt, CelestialBody refBody)
     {
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+
+        // Avanzar el spool de motores UNA VEZ por tick (antes del consumo de propelante
+        // y antes de que RK4 muestree las fuerzas), para que los subpasos k₁…k₄ usen
+        // el mismo ThrottleLevel spooled dentro de un mismo paso de física.
+        ApplyThrottle(dt);
+
         Parts.ConsumePropellant(dt, pressure);
 
         foreach (var crew in Crew)

@@ -37,6 +37,12 @@ public partial class SimulationBridge : Node
     private LaunchPadController? _launchPad      = null;
     private Vector3d             _padWorldPos;
 
+    // ── Ignition ramp state ───────────────────────────────────────────────
+    // True while Ignite() is spooling up and waiting for TWR > 1.02 to release the hold-down.
+    private bool   _ignitionActive  = false;
+    // Throttle rate used during the ignition ramp (throttle units per second).
+    private const double IgnitionRampRate = 0.5;
+
     public override void _Ready()
     {
         Instance = this;
@@ -152,6 +158,33 @@ public partial class SimulationBridge : Node
         }
 
         Universe.Tick(delta);
+
+        // ── Ignition ramp: sube throttle y suelta hold-down cuando TWR > 1.02 ──────
+        if (_ignitionActive && av != null)
+        {
+            // Avanzar el throttle comandado hacia 1.0 a una tasa controlada
+            av.Throttle = System.Math.Min(av.Throttle + IgnitionRampRate * delta, 1.0);
+
+            if (av.IsGroundHeld)
+            {
+                // Verificar si el empuje actual ya supera la gravedad local × 1.02
+                var refB2 = Universe.GetDominantBody(av.Position);
+                if (refB2 != null && av.TotalMass > 0.0)
+                {
+                    double g    = refB2.GM / System.Math.Pow((av.Position - refB2.Position).Magnitude, 2.0);
+                    double thrust = av.GetCurrentThrust(refB2);
+                    double twr  = thrust / (av.TotalMass * g);
+                    if (twr > 1.02)
+                        av.ReleaseGroundHold();
+                }
+            }
+            else
+            {
+                // Ya en vuelo: ignición completada cuando throttle alcanza 1.0
+                if (av.Throttle >= 1.0)
+                    _ignitionActive = false;
+            }
+        }
 
         // Anchor the LaunchPad to the Earth surface point directly BELOW the vessel,
         // recomputed each frame (Earth orbits the Sun, so a fixed spawn-time world point
@@ -340,6 +373,58 @@ public partial class SimulationBridge : Node
     public void SetThrottle(double t) { if (ActiveVessel != null) ActiveVessel.Throttle = t; }
     public void SetSAS(bool on)       { if (ActiveVessel != null) ActiveVessel.SASEnabled = on; }
     public void ReleaseGroundHold()   { ActiveVessel?.ReleaseGroundHold(); }
+
+    // ── Ignition / throttle contracts (consumed by HUDController / Agente E) ─
+
+    /// <summary>
+    /// True while Ignite() is ramping up thrust and waiting for TWR &gt; 1.02 to release
+    /// the hold-down clamps. Resets once the vessel lifts off and throttle reaches 1.0.
+    /// </summary>
+    public bool IsIgnitionActive => _ignitionActive;
+
+    /// <summary>
+    /// Secuencia de ignición: arranca la rampa de throttle comandado hacia 1.0 y suelta
+    /// los hold-downs automáticamente cuando TWR &gt; 1.02.
+    /// Si el vessel ya está en vuelo, fija el throttle al máximo de inmediato.
+    /// </summary>
+    public void Ignite()
+    {
+        var v = ActiveVessel;
+        if (v == null) return;
+
+        if (v.IsGroundHeld)
+        {
+            // Inicio de secuencia de despegue: rampa controlada hasta soltar los clamps
+            _ignitionActive = true;
+        }
+        else
+        {
+            // En vuelo: throttle máximo instantáneo (sin secuencia de hold-down)
+            v.Throttle = 1.0;
+            _ignitionActive = false;
+        }
+    }
+
+    /// <summary>
+    /// Sube el throttle comandado de forma continua. El spool de los motores suaviza la respuesta.
+    /// Llamar cada frame con el dt real para un ascenso fluido sosteniendo la tecla.
+    /// </summary>
+    public void ThrottleUp(double dt)
+    {
+        var v = ActiveVessel;
+        if (v == null) return;
+        v.Throttle = System.Math.Min(v.Throttle + 0.5 * dt, 1.0);
+    }
+
+    /// <summary>
+    /// Baja el throttle comandado de forma continua. El spool de los motores suaviza la respuesta.
+    /// </summary>
+    public void ThrottleDown(double dt)
+    {
+        var v = ActiveVessel;
+        if (v == null) return;
+        v.Throttle = System.Math.Max(v.Throttle - 0.5 * dt, 0.0);
+    }
 
     public void TriggerStaging()
     {
