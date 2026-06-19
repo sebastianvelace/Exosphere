@@ -286,8 +286,8 @@ public partial class HUDController : Control
     {
         var hint = new Label
         {
-            Text = "[Z/X] throttle   [W/S] pitch   [A/D] yaw   [Q/E] roll   [T] SAS   " +
-                   "[,/.] warp   [Space] stage   [L] launch   [G] ascent AP   [O] to-orbit   [C] camera   [M] map",
+            Text = "hold [Z] ignite/throttle up   hold [X] throttle down   [W/S] pitch   [A/D] yaw   [Q/E] roll   " +
+                   "[T] SAS   [,/.] warp   [Space] stage   [L] launch   [G] ascent AP   [O] to-orbit   [C] camera   [M] map",
         };
         hint.SetAnchorsPreset(LayoutPreset.BottomLeft);
         hint.GrowVertical = GrowDirection.Begin;
@@ -413,6 +413,21 @@ public partial class HUDController : Control
         if (Input.IsKeyPressed(Key.Q)) rollIn  -= 1.0;
         if (Input.IsKeyPressed(Key.E)) rollIn  += 1.0;
         vessel.PitchYawRoll = new Vector3d(pitchIn, yawIn, rollIn);
+
+        // ── Hold-throttle (despegue manual) ─────────────────────────────────
+        // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al TWR>1.02);
+        // ya en vuelo, sube el throttle de forma progresiva. [X] mantenida lo baja.
+        // Hold [Z]: on the pad starts ignition (releases the hold-down at TWR>1.02);
+        // already flying, spools the throttle up. Hold [X] spools it down.
+        if (Input.IsPhysicalKeyPressed(Key.Z))
+        {
+            if (vessel.IsGroundHeld || bridge.IsIgnitionActive) bridge.Ignite();
+            else                                                 bridge.ThrottleUp(delta);
+        }
+        else if (Input.IsPhysicalKeyPressed(Key.X))
+        {
+            bridge.ThrottleDown(delta);
+        }
 
         var refBody = universe.GetDominantBody(vessel.Position);
         double alt   = vessel.GetAltitude(refBody);
@@ -651,12 +666,9 @@ public partial class HUDController : Control
         {
             switch (key.Keycode)
             {
-                case Key.Z:
-                    bridge.SetThrottle(System.Math.Min(1.0, (bridge.ActiveVessel?.Throttle ?? 0) + 0.05));
-                    break;
-                case Key.X:
-                    bridge.SetThrottle(System.Math.Max(0.0, (bridge.ActiveVessel?.Throttle ?? 0) - 0.05));
-                    break;
+                // [Z]/[X] son hold-throttle: se sondean en _Process (mantener para
+                // encender/acelerar / bajar). Aquí solo van las acciones de pulsación única.
+                // [Z]/[X] are hold-throttle, polled in _Process; only one-shot actions here.
                 case Key.Space:
                     bridge.TriggerStaging();
                     break;
