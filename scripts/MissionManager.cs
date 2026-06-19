@@ -99,8 +99,17 @@ public partial class MissionManager : Node
             SetPhase(MissionPhase.CRASHED);
             return; // stop all ascent/descent logic
         }
-        // If already CRASHED, nothing more to do
-        if (Phase == MissionPhase.CRASHED) return;
+        // CRASHED es terminal solo mientras el vessel siga destruido.
+        // Si el vessel fue recreado/no-está-destruido (e.g. un descenso fue abortado y el
+        // vessel rebotó de vuelta a órbita), limpiamos la fase para que el juego continúe.
+        // CRASHED is terminal only while the vessel is actually destroyed; if the vessel
+        // is not destroyed we fall through so normal ascent/descent logic can resume.
+        if (Phase == MissionPhase.CRASHED)
+        {
+            if (vessel == null || vessel.IsDestroyed) return;
+            // Vessel alive — clear the stuck CRASHED state so the player can fly again.
+            SetPhase(MissionPhase.ORBIT);
+        }
 
         // ── Countdown ──────────────────────────────────────────────────────
         if (IsCountingDown)
