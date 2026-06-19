@@ -34,6 +34,10 @@ public sealed class CameraShake
     // g-force (above 1g) at which the FOV kick saturates.
     private const float FovGReference  = 3.5f;
 
+    // Hard cap on cockpit (IVA) rotational shake, per axis (radians ≈ 2°). Keeps the
+    // interior view readable during ascent buffeting where the exterior view tolerates more.
+    public const float CockpitRotCap = 0.0349f; // 2° in radians
+
     // ── Smoothed intensities (ramp in/out so nothing pops) ───────────────────
     private float _thrustEnv;   // 0..1
     private float _buffetEnv;   // 0..1
@@ -53,6 +57,13 @@ public sealed class CameraShake
 
     /// <summary>Resulting rotational offset for this frame (radians, pitch/yaw/roll).</summary>
     public Vector3 RotationOffset { get; private set; } = Vector3.Zero;
+
+    /// <summary>
+    /// Rotational offset for the cockpit (IVA) view — same shake as <see cref="RotationOffset"/>
+    /// but each axis clamped to ±<see cref="CockpitRotCap"/> so ascent buffeting never throws
+    /// the interior camera far enough to obscure the windows/console.
+    /// </summary>
+    public Vector3 CockpitRotationOffset { get; private set; } = Vector3.Zero;
 
     /// <summary>Resulting field of view for this frame (degrees).</summary>
     public float Fov { get; private set; } = 70f;
@@ -139,6 +150,12 @@ public sealed class CameraShake
             Osc(19.4f, _seedY + 13f) * eRot + Osc(8.3f,  _seedY + 17f) * bRot, // pitch
             Osc(22.6f, _seedX + 13f) * eRot + Osc(9.7f,  _seedX + 17f) * bRot, // yaw
             Osc(16.2f, _seedZ + 13f) * eRot + Osc(11.4f, _seedZ + 17f) * bRot); // roll
+
+        // Cockpit variant: clamp each axis so interior buffeting stays readable.
+        CockpitRotationOffset = new Vector3(
+            Mathf.Clamp(RotationOffset.X, -CockpitRotCap, CockpitRotCap),
+            Mathf.Clamp(RotationOffset.Y, -CockpitRotCap, CockpitRotCap),
+            Mathf.Clamp(RotationOffset.Z, -CockpitRotCap, CockpitRotCap));
 
         // ── FOV kick under high g (subtle widen) ─────────────────────────────
         Fov = BaseFov + _fovEnv * MaxFovKick * zoom;
