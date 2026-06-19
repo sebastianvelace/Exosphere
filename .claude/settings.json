@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/build-check.sh\"",
+            "timeout": 120,
+            "statusMessage": "Verificando build 0/0…"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -20,5 +20,16 @@ Thumbs.db
 # Saves (dev)
 saves/
 
-# Claude Code internal state
-.claude/
+# Claude Code — versionar config compartida (skills/agents/hooks/settings),
+# ignorar estado transitorio y overrides personales.
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/hooks/
+!.claude/settings.json
+.claude/settings.local.json
+.claude/worktrees/
+
+# Harness de captura visual temporal (nunca debe commitearse — ver skill visual-testing)
+scripts/_*Shot.cs
+scripts/_*Shot.cs.uid
