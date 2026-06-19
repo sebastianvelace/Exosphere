@@ -68,7 +68,24 @@ public partial class EDLController : Control
         double speed   = surfVel.Magnitude;
         _heat = density * speed * speed * speed;            // ∝ convective heat flux
 
-        // ── State machine ──────────────────────────────────────────────────────
+        // ── Deactivation guard — runs BEFORE the activation check ─────────────
+        // Si salimos de la atmósfera o estamos ascendiendo claramente, reseteamos la
+        // EDL sin importar en qué fase interna estemos. Esto evita que una EDL real
+        // previa deje la máquina de estados atorada cuando el vessel vuelve al espacio.
+        // We only deactivate if we were actually running (not Inactive/Touchdown already
+        // holding the vessel on the ground).
+        if (_phase != Edl.Inactive && _phase != Edl.Touchdown)
+        {
+            bool aboveAtmo = _alt > body.Atmosphere.MaxAltitude * 1.05;
+            bool ascending = _vUp > 5.0;   // +5 m/s upward — clearly climbing away
+            if (aboveAtmo || ascending)
+            {
+                Deactivate();
+                return;
+            }
+        }
+
+        // ── Activation check ───────────────────────────────────────────────────
         if (_phase == Edl.Inactive)
         {
             bool descending = _vUp < -20.0;
