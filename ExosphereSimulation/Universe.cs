@@ -54,6 +54,15 @@ public class Universe
     /// small so a powered burn stays accurate (≈2 steps/frame at x10).</summary>
     private const double MaxThrustStep = 0.1;
 
+    /// <summary>
+    /// Maximum surface-relative speed (m/s) that counts as a soft landing.
+    /// At or below this threshold the vessel is gently clamped to the surface instead of
+    /// being destroyed.  Covers real-time gentle set-down and EDL final approach.
+    /// Orbital re-entry speeds (≥ 100 m/s) are several orders of magnitude above this
+    /// threshold, so they will always trigger destruction.
+    /// </summary>
+    private const double SoftLandingThreshold = 5.0;
+
     // ── Object management ─────────────────────────────────────────────────
 
     /// <summary>Adds a celestial body to the universe (no-op if already present).</summary>
@@ -215,30 +224,39 @@ public class Universe
             double altitude = refBody.GetAltitude(vessel.Position);
             if (altitude < 0.0)
             {
-                // Calculate impact speed relative to the rotating surface
-                var surfVel2     = vessel.GetSurfaceVelocity(refBody);
+                // Speed relative to the rotating surface at the impact point.
+                var    surfVel2    = vessel.GetSurfaceVelocity(refBody);
                 double impactSpeed = surfVel2.Magnitude;
 
-                bool isHardImpact = impactSpeed > 12.0 && !vessel.IsGroundHeld;
+                // Soft landing permission:
+                //   (a) vessel is ground-held (hold-down clamps on the pad), OR
+                //   (b) very low touch-down speed (≤ SoftLandingThreshold) — genuine EDL soft landing.
+                // Everything else → hard impact → destroy.
+                // Rationale: orbital re-entry ≥ hundreds of m/s; any accidental subsurface
+                // penetration at those speeds must NOT silently bounce the vessel back to orbit.
+                bool softLanding = vessel.IsGroundHeld
+                    || impactSpeed <= SoftLandingThreshold;
 
-                if (isHardImpact)
+                if (softLanding)
                 {
-                    // Hard crash: freeze the vessel at the impact point
-                    vessel.IsDestroyed     = true;
-                    vessel.CrashImpactSpeed  = impactSpeed;
-                    vessel.CrashSimPosition  = vessel.Position;
+                    // Clamp gently to the surface — vessel comes to rest on the
+                    // rotating body without accumulating subsurface penetration.
                     var dir = (vessel.Position - refBody.Position).Normalized;
-                    vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
+                    vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
+                    // Velocity = body orbital velocity + surface rotation at landing site
+                    // (setting inertial zero would leave a spurious ~7.9 km/s residual).
                     vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
                 }
                 else
                 {
-                    // Soft-rest: controlled landing — come to rest on the rotating surface
+                    // Hard crash: cualquier velocidad > SoftLandingThreshold → destrucción.
+                    // No soft-rest, no rebote a órbita.
+                    vessel.IsDestroyed      = true;
+                    vessel.CrashImpactSpeed = impactSpeed;
+                    vessel.CrashSimPosition = vessel.Position;
+                    // Freeze the wreckage on the surface so the camera has a reference point.
                     var dir = (vessel.Position - refBody.Position).Normalized;
-                    vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
-                    // Come to rest relative to the ROTATING surface, not the inertial frame —
-                    // setting absolute zero would leave the body's full orbital velocity as
-                    // the vessel's apparent surface speed (a spurious ~24 km/s spike).
+                    vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
                     vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
                 }
             }
@@ -258,7 +276,10 @@ public class Universe
             {
                 var refBody = GetDominantBody(vessel.Position);
 
-                // Decide whether the active vessel should be on rails this step
+                // Decide whether the active vessel should be on rails this step.
+                // Conditions: high time-warp AND coasting (throttle ≈ 0) AND above atmosphere.
+                // When throttle > 0.01 the vessel exits rails immediately (≤ 1 sub-step latency)
+                // so the next RK4 step picks up the thrust correctly.
                 bool shouldBeOnRails = TimeScale >= 10.0
                     && vessel.Throttle < 0.01
                     && refBody.GetAtmosphericDensity(vessel.Position) < 0.01;
@@ -293,23 +314,26 @@ public class Universe
                     double altitude = refBody.GetAltitude(vessel.Position);
                     if (altitude < 0.0)
                     {
-                        var surfVelMixed  = vessel.GetSurfaceVelocity(refBody);
+                        var    surfVelMixed    = vessel.GetSurfaceVelocity(refBody);
                         double impactSpeedMixed = surfVelMixed.Magnitude;
-                        bool isHardImpactMixed  = impactSpeedMixed > 12.0 && !vessel.IsGroundHeld;
 
-                        if (isHardImpactMixed)
+                        bool softLandingMixed = vessel.IsGroundHeld
+                            || impactSpeedMixed <= SoftLandingThreshold;
+
+                        if (softLandingMixed)
                         {
+                            var dir = (vessel.Position - refBody.Position).Normalized;
+                            vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
+                            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                        }
+                        else
+                        {
+                            // Hard crash under warp — destroy, no rebound.
                             vessel.IsDestroyed      = true;
                             vessel.CrashImpactSpeed = impactSpeedMixed;
                             vessel.CrashSimPosition = vessel.Position;
                             var dir = (vessel.Position - refBody.Position).Normalized;
                             vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
-                            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
-                        }
-                        else
-                        {
-                            var dir = (vessel.Position - refBody.Position).Normalized;
-                            vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
                             vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
                         }
                     }
@@ -346,6 +370,38 @@ public class Universe
 
         var reference = GetBody(vessel.OrbitalState.ReferenceBodyId);
         if (reference is null) return;
+
+        // ── Periapsis collision check (on-rails) ──────────────────────────
+        // The Kepler propagator works in conic sections and cannot detect when the
+        // orbital arc dips below the surface mid-step — the vessel would silently
+        // "tunnel through" the planet and reappear on the other side.
+        // Guard: if the current conic periapsis is below the body radius, the orbit
+        // already intersects the surface.  Destroy the vessel immediately instead of
+        // propagating a physically impossible trajectory.
+        // Nota: OrbitalElements.Periapsis = a*(1-e), medido desde el centro del cuerpo.
+        double periapsis = vessel.OrbitalState.Periapsis;
+        if (periapsis < reference.Radius)
+        {
+            // Vessel is on a sub-surface trajectory — impact is certain.
+            // Use the current state vector to estimate surface-relative impact speed.
+            var    relP0       = vessel.Position - reference.Position;
+            var    relV0       = vessel.Velocity - reference.Velocity;
+            double impactSpeed = relV0.Magnitude; // conservative: full orbital speed
+
+            vessel.IsDestroyed      = true;
+            vessel.CrashImpactSpeed = impactSpeed;
+            vessel.CrashSimPosition = vessel.Position;
+
+            // Clamp to surface for the renderer
+            var dir = relP0.Magnitude > 0.0 ? relP0.Normalized : Vector3d.Up;
+            vessel.Position = reference.Position + dir * (reference.Radius + 0.5);
+            vessel.Velocity = reference.Velocity + reference.GetSurfaceVelocity(vessel.Position);
+
+            // Force off rails so the destroyed state is visible immediately
+            vessel.IsOnRails    = false;
+            vessel.OrbitalState = null;
+            return;
+        }
 
         var (relP, relV) = KeplerPropagator.PropagateToTime(
             vessel.OrbitalState, CurrentTime + dt, reference.GM);
