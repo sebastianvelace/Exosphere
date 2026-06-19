@@ -34,11 +34,13 @@ public partial class CameraController : Node3D
     private bool _dragging;
 
     // ── First-person cockpit (IVA) state ──────────────────────────────────────
-    private bool     _cockpit;            // [C] cycles into this after the pad presets
-    private Vector3d _lastVel;
-    private double   _lastT = -1.0;
-    private Vector3  _gOffset, _gTarget;  // eye push from G-force (render units)
-    private float    _lookYaw, _lookPitch;
+    private bool       _cockpit;            // [C] cycles into this after the pad presets
+    private Vector3d   _lastVel;
+    private double     _lastT = -1.0;
+    private Vector3    _gOffset, _gTarget;  // eye push from G-force (render units)
+    private float      _lookYaw, _lookPitch;
+    // Smoothed vessel orientation — prevents raw sim jitter reaching the cockpit camera.
+    private Quaternion _smoothedOrientation = Quaternion.Identity;
 
     // ── Force-feel shake (cosmetic; driven by vessel state) ───────────────────
     private readonly CameraShake _shake = new();
@@ -186,17 +188,24 @@ public partial class CameraController : Node3D
 
         SetCockpitVisible(true);
 
+        // Smooth vessel orientation to absorb high-freq sim jitter. Rate 8/s: fast enough
+        // to track real pitch-overs, slow enough to kill single-frame noise spikes.
+        Quaternion rawOrient = ToGQuat(v.Orientation);
+        _smoothedOrientation = _smoothedOrientation.Slerp(rawOrient, Mathf.Clamp((float)delta * 8f, 0f, 1f));
+
         // The vessel renders at the origin; the cockpit is a sibling node we orient to the vessel
         // each frame. Eye at local (0,36,0.6) u, forward +Y (nose), up -Z.
-        var orient  = v.Orientation;
         if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D ckn)
         {
             ckn.Position   = Vector3.Zero;
-            ckn.Quaternion = ToGQuat(orient);
+            ckn.Quaternion = _smoothedOrientation;
         }
+
+        // Derive eye/fwd/up from the SMOOTHED orientation, not the raw sim value.
+        var orient = v.Orientation;
         Vector3 eye = ToG(orient.Rotate(new Vector3d(0, 36, 0.6)));
-        Vector3 fwd = ToG(orient.Rotate(new Vector3d(0, 1, 0))).Normalized();
-        Vector3 up  = ToG(orient.Rotate(new Vector3d(0, 0, -1))).Normalized();
+        Vector3 fwd = (_smoothedOrientation * Vector3.Up).Normalized();
+        Vector3 up  = (_smoothedOrientation * Vector3.Back).Normalized();
 
         // G-force: push the eye OPPOSITE the net acceleration (into the seat under thrust).
         var uni = bridge.Universe;
@@ -223,17 +232,18 @@ public partial class CameraController : Node3D
             _lookPitch = Mathf.Lerp(_lookPitch, 0f, k);
         }
         Vector3 right = fwd.Cross(up).Normalized();
-        // Rest the gaze tilted ~18° down toward the console/screens; the nose & windows stay above.
+        // Rest the gaze tilted ~22° down toward the console/screens.
         Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(22f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
 
         camera.Position = eye + _gOffset;
         camera.LookAt(eye + _gOffset + look, up);
 
-        // Interior vibration — amplified vs the exterior views.
+        // Interior vibration — reduced multiplier (×0.6 vs old ×1.8) so ascent stays readable.
+        // CameraShake also caps rotational throw to ±2° (see CameraShake.CockpitRotCap).
         if (!_baseFovCaptured) { _shake.BaseFov = camera.Fov; _baseFovCaptured = true; }
         _shake.Update(delta, v, uni, 40f);
-        camera.Translate(_shake.PositionOffset * 1.8f);
-        var rot = _shake.RotationOffset * 1.8f;
+        camera.Translate(_shake.PositionOffset * 0.6f);
+        var rot = _shake.CockpitRotationOffset;   // already capped to ±2° per axis
         camera.RotateObjectLocal(Vector3.Right,   rot.X);
         camera.RotateObjectLocal(Vector3.Up,      rot.Y);
         camera.RotateObjectLocal(Vector3.Forward, rot.Z);
