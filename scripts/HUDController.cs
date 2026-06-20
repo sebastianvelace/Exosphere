@@ -195,6 +195,11 @@ public partial class HUDController : Control
     // Big centred bottom telemetry band: SPEED · ALTITUDE · T+.
     private void BuildBottomBand()
     {
+        // SPEED y ALTITUDE flanquean el navball (centro-abajo, ~190 px de ancho): un hueco
+        // central amplio deja la esfera entre ambos sin solaparse. El reloj T+ se coloca
+        // como etiqueta independiente justo ENCIMA del navball para no quedar tapado.
+        // SPEED and ALTITUDE flank the centre-bottom navball (~190 px wide) with a wide gap;
+        // the T+ clock is a separate label ABOVE the navball so the disc never covers it.
         var center = new CenterContainer();
         center.SetAnchorsPreset(LayoutPreset.BottomWide);
         center.GrowVertical = GrowDirection.Begin;
@@ -203,13 +208,24 @@ public partial class HUDController : Control
         AddChild(center);
 
         var hbox = new HBoxContainer();
-        hbox.AddThemeConstantOverride("separation", 46);
+        hbox.AddThemeConstantOverride("separation", 250);   // navball clearance between stats
         hbox.Alignment = BoxContainer.AlignmentMode.Center;
         center.AddChild(hbox);
 
         _bigSpeed = AddBigStat(hbox, "SPEED", "0", "KM/H");
-        _bigTime  = AddBigStat(hbox, "T+", "00:00:00", "");
         _bigAlt   = AddBigStat(hbox, "ALTITUDE", "0.0", "KM");
+
+        // T+ clock — centred, above the navball disc.
+        var timeCenter = new CenterContainer();
+        timeCenter.SetAnchorsPreset(LayoutPreset.BottomWide);
+        timeCenter.GrowVertical = GrowDirection.Begin;
+        timeCenter.OffsetBottom = -212;   // just above the navball top
+        timeCenter.MouseFilter = MouseFilterEnum.Ignore;
+        AddChild(timeCenter);
+
+        var timeBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        timeCenter.AddChild(timeBox);
+        _bigTime = AddBigStat(timeBox, "T+", "00:00:00", "");
     }
 
     private Label AddBigStat(HBoxContainer parent, string caption, string value, string unit)
@@ -286,8 +302,8 @@ public partial class HUDController : Control
     {
         var hint = new Label
         {
-            Text = "[Z/X] throttle   [W/S] pitch   [A/D] yaw   [Q/E] roll   [T] SAS   " +
-                   "[,/.] warp   [Space] stage   [L] launch   [G] ascent AP   [O] to-orbit   [C] camera   [M] map",
+            Text = "hold [Z] ignite/throttle up   hold [X] throttle down   [W/S] pitch   [A/D] yaw   [Q/E] roll   " +
+                   "[T] SAS   [,/.] warp   [Space] stage   [L] launch   [G] ascent AP   [O] to-orbit   [C] camera   [M] map",
         };
         hint.SetAnchorsPreset(LayoutPreset.BottomLeft);
         hint.GrowVertical = GrowDirection.Begin;
@@ -413,6 +429,21 @@ public partial class HUDController : Control
         if (Input.IsKeyPressed(Key.Q)) rollIn  -= 1.0;
         if (Input.IsKeyPressed(Key.E)) rollIn  += 1.0;
         vessel.PitchYawRoll = new Vector3d(pitchIn, yawIn, rollIn);
+
+        // ── Hold-throttle (despegue manual) ─────────────────────────────────
+        // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al TWR>1.02);
+        // ya en vuelo, sube el throttle de forma progresiva. [X] mantenida lo baja.
+        // Hold [Z]: on the pad starts ignition (releases the hold-down at TWR>1.02);
+        // already flying, spools the throttle up. Hold [X] spools it down.
+        if (Input.IsPhysicalKeyPressed(Key.Z))
+        {
+            if (vessel.IsGroundHeld || bridge.IsIgnitionActive) bridge.Ignite();
+            else                                                 bridge.ThrottleUp(delta);
+        }
+        else if (Input.IsPhysicalKeyPressed(Key.X))
+        {
+            bridge.ThrottleDown(delta);
+        }
 
         var refBody = universe.GetDominantBody(vessel.Position);
         double alt   = vessel.GetAltitude(refBody);
@@ -651,12 +682,9 @@ public partial class HUDController : Control
         {
             switch (key.Keycode)
             {
-                case Key.Z:
-                    bridge.SetThrottle(System.Math.Min(1.0, (bridge.ActiveVessel?.Throttle ?? 0) + 0.05));
-                    break;
-                case Key.X:
-                    bridge.SetThrottle(System.Math.Max(0.0, (bridge.ActiveVessel?.Throttle ?? 0) - 0.05));
-                    break;
+                // [Z]/[X] son hold-throttle: se sondean en _Process (mantener para
+                // encender/acelerar / bajar). Aquí solo van las acciones de pulsación única.
+                // [Z]/[X] are hold-throttle, polled in _Process; only one-shot actions here.
                 case Key.Space:
                     bridge.TriggerStaging();
                     break;
