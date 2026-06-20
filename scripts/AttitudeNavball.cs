@@ -46,6 +46,15 @@ public partial class AttitudeNavball : Control
     private bool   _radialVisible;
     private double _speed;
 
+    // ── Pitch director (gravity-turn guidance) ────────────────────────────────
+    // Guía de actitud para el piloto manual: pitch objetivo que cae de ~90° (vertical en
+    // plataforma) a ~0° (horizontal) conforme sube, imitando un gravity turn. Sólo visible
+    // durante el ascenso atmosférico. The director suggests a pitch that eases from ~90°
+    // (vertical on the pad) to ~0° (horizontal) with altitude, mimicking a gravity turn.
+    private bool   _directorVisible;
+    private double _targetPitchDeg;
+    private static readonly Color DirectorCol = new(1.00f, 0.55f, 0.88f, 1f);  // magenta guía
+
     public override void _Ready()
     {
         _font = ThemeDB.FallbackFont;
@@ -123,6 +132,24 @@ public partial class AttitudeNavball : Control
         (_retrograde, _)                = ProjectMarker(-prograde, nose, noseRight, up);
         (_radialOut, _radialVisible)    = ProjectMarker(up, nose, noseRight, up);
 
+        // ── Director de pitch / gravity turn ──────────────────────────────────
+        // Perfil simple vs altitud: kick-over corto a 90°, luego cae cuadráticamente hasta
+        // ~0° en TurnTopAlt (≈70 km, fin de la atmósfera densa). Es una GUÍA, no autopiloto.
+        // Simple altitude profile: short vertical hold at 90°, then a quadratic fall to ~0°
+        // by TurnTopAlt (~70 km, top of the dense atmosphere). Guidance only, not autopilot.
+        double alt = vessel.GetAltitude(body);
+        const double KickAlt    = 1_000.0;    // mantener vertical hasta aquí
+        const double TurnTopAlt = 70_000.0;   // pitch objetivo ≈ 0° al alcanzar esta altitud
+        double f = System.Math.Clamp((alt - KickAlt) / (TurnTopAlt - KickAlt), 0.0, 1.0);
+        _targetPitchDeg = 90.0 * (1.0 - f) * (1.0 - f);   // 90° → 0°, curva suave
+        // Sólo mostrar la guía mientras subes por la atmósfera (no en órbita ni reentrada).
+        // Only show guidance while climbing through the atmosphere (not in orbit or re-entry).
+        var mission = MissionManager.Instance;
+        bool ascending = mission?.Phase is MissionPhase.LIFTOFF or MissionPhase.ASCENT_SH
+                          or MissionPhase.MAX_Q or MissionPhase.MECO or MissionPhase.SEPARATION
+                          or MissionPhase.ASCENT_SHIP;
+        _directorVisible = ascending && alt < TurnTopAlt;
+
         _valid = true;
         QueueRedraw();
     }
@@ -174,6 +201,10 @@ public partial class AttitudeNavball : Control
 
         // Roll pointer at top of bezel.
         DrawRollPointer(center, roll);
+
+        // Pitch director (gravity-turn target) — drawn on the ladder before the velocity
+        // markers so the prograde/nose cues stay on top.
+        if (_directorVisible) DrawPitchDirector(center, pitchPx, roll);
 
         // Velocity / radial markers.
         if (_progradeVisible) DrawProgradeMarker(center + RotateOffset(_prograde, roll), ProgradeCol, true);
@@ -295,6 +326,31 @@ public partial class AttitudeNavball : Control
         DrawCircle(p, 1.2f, RadialCol);
     }
 
+    // Director de pitch: una barra magenta con dos cuñas en la posición del pitch objetivo
+    // sobre la escalera (se mueve con horizonte y roll igual que los ticks). Llevar la
+    // retícula (morro) hasta la barra ejecuta el gravity turn sugerido.
+    // Pitch director: a magenta bar with two chevrons at the target pitch on the ladder
+    // (moves with horizon and roll like the ticks). Flying the nose reticle onto the bar
+    // executes the suggested gravity turn.
+    private void DrawPitchDirector(Vector2 c, float pitchPx, float roll)
+    {
+        var dir    = new Vector2(Mathf.Sin(roll), -Mathf.Cos(roll));   // "up" on the ball
+        var rightv = new Vector2(dir.Y, -dir.X);
+        float pp = Mathf.Clamp(pitchPx, -Radius, Radius);
+        var horizonMid = c - dir * pp;
+
+        float off = (float)(_targetPitchDeg / 90.0) * Radius;
+        var p = horizonMid + dir * off;
+        if ((p - c).Length() > Radius - 4f) return;   // fuera del disco / off the disc
+
+        const float halfLen = 22f, gap = 7f;
+        DrawLine(p - rightv * halfLen, p - rightv * gap, DirectorCol, 2.2f, true);
+        DrawLine(p + rightv * gap, p + rightv * halfLen, DirectorCol, 2.2f, true);
+        // Cuñas que apuntan hacia la barra (señal de "vuela el morro aquí").
+        DrawLine(p - rightv * gap, p - rightv * gap - dir * 5f, DirectorCol, 2.2f, true);
+        DrawLine(p + rightv * gap, p + rightv * gap - dir * 5f, DirectorCol, 2.2f, true);
+    }
+
     private void DrawHeadingTape(Vector2 top)
     {
         float w = Radius * 2f;
@@ -323,6 +379,16 @@ public partial class AttitudeNavball : Control
         var sz = _font.GetStringSize(line, HorizontalAlignment.Center, -1, 11);
         DrawString(_font, new Vector2(Size.X / 2f - sz.X / 2f, Size.Y - 4f), line,
             HorizontalAlignment.Left, -1, 11, ValueBright);
+
+        // Pitch objetivo del director, justo encima de la línea de actitud (sólo en ascenso).
+        // Director target pitch, just above the attitude line (ascent only).
+        if (_directorVisible)
+        {
+            string tgt = $"TARGET PITCH {_targetPitchDeg,3:F0}°";
+            var tsz = _font.GetStringSize(tgt, HorizontalAlignment.Center, -1, 11);
+            DrawString(_font, new Vector2(Size.X / 2f - tsz.X / 2f, Size.Y - 17f), tgt,
+                HorizontalAlignment.Left, -1, 11, DirectorCol);
+        }
     }
 
     // Shoelace area (absolute) — used to reject degenerate ground polygons.
