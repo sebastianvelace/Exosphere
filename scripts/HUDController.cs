@@ -41,6 +41,7 @@ public partial class HUDController : Control
     // ── Right panel: stages, Δv, propellant, event log ──────────────────────
     private Label _apValue   = null!;
     private Label _peValue   = null!;
+    private Label _suborbitalWarn = null!;   // aviso de trayectoria de impacto / impact-trajectory warning
     private Label _massValue = null!;
     private Label _dvValue   = null!;
     private Label _warpValue = null!;
@@ -139,6 +140,19 @@ public partial class HUDController : Control
         _dvValue   = AddRow(vbox, "STAGE Δv", "---");
         _apValue   = AddRow(vbox, "APOAPSIS", "---");
         _peValue   = AddRow(vbox, "PERIAPSIS", "---");
+
+        // Aviso de trayectoria suborbital: parte del bloque de órbita (en el VBox), por lo
+        // que nunca solapa otros paneles. Vacío salvo cuando la periapsis cae bajo superficie.
+        // Suborbital-trajectory warning: part of the orbit block (inside the VBox), so it never
+        // overlaps other panels. Empty unless periapsis falls below the surface.
+        _suborbitalWarn = new Label { Text = "" };
+        _suborbitalWarn.AddThemeFontSizeOverride("font_size", 13);
+        _suborbitalWarn.AddThemeColorOverride("font_color", FuelLowCol);
+        _suborbitalWarn.HorizontalAlignment = HorizontalAlignment.Center;
+        _suborbitalWarn.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _suborbitalWarn.CustomMinimumSize = new Vector2(262, 0);
+        vbox.AddChild(_suborbitalWarn);
+
         _warpValue = AddRow(vbox, "TIME WARP", "Real Time");
 
         vbox.AddChild(MakeGaugeLabel("LIQUID CH4"));
@@ -527,16 +541,39 @@ public partial class HUDController : Control
         // Stage Δv = Isp·g0·ln(m0/m1) for the current stage's engines & propellant.
         _dvValue.Text = FormatDv(vessel);
 
+        bool suborbital = false;
         try
         {
             var relPos = vessel.Position - refBody.Position;
             var relVel = vessel.Velocity - refBody.Velocity;
             var el = Exosphere.Simulation.OrbitalElements.FromStateVector(
                 relPos, relVel, refBody.GM, refBody.Id, universe.CurrentTime);
-            _apValue.Text = FormatDistance(el.Apoapsis  - refBody.Radius);
-            _peValue.Text = FormatDistance(el.Periapsis - refBody.Radius);
+            double peAlt = el.Periapsis - refBody.Radius;
+            _apValue.Text = FormatDistance(el.Apoapsis - refBody.Radius);
+
+            // Periapsis bajo la superficie ⇒ la órbita cruza el cuerpo: trayectoria
+            // suborbital/radial que va a impactar. Mostramos un aviso en rojo en lugar de
+            // un número negativo confuso (que no comunica que vas a estrellarte).
+            // Periapsis below the surface ⇒ the orbit crosses the body: a suborbital/radial
+            // impact trajectory. Show a red warning instead of a confusing negative number.
+            suborbital = peAlt < 0;
+            if (suborbital)
+            {
+                _peValue.Text = "IMPACT";
+                _peValue.AddThemeColorOverride("font_color", FuelLowCol);
+            }
+            else
+            {
+                _peValue.Text = FormatDistance(peAlt);
+                _peValue.AddThemeColorOverride("font_color", ValueBright);
+            }
         }
-        catch { _apValue.Text = "---"; _peValue.Text = "---"; }
+        catch
+        {
+            _apValue.Text = "---"; _peValue.Text = "---";
+            _peValue.AddThemeColorOverride("font_color", ValueBright);
+        }
+        _suborbitalWarn.Text = suborbital ? "▲ SUBORBITAL — IMPACT TRAJECTORY" : "";
 
         double ts = universe.TimeScale;
         _warpValue.Text = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
