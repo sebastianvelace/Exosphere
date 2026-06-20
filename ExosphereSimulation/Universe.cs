@@ -210,14 +210,34 @@ public class Universe
             // A full implementation would split the vessel here.
             _ = Physics.StressSolver.FindBreakingJoints(vessel.Parts).ToList();
 
-            // Aerodynamic heating
+            // Aerodynamic heating (orientation-aware re-entry).
+            // El flujo de aire incide según la dirección de avance relativa a la superficie;
+            // en el marco local del vessel determina si el escudo ventral (cara -Y) lo encara.
+            // Si el escudo va mal orientado, la cara desnuda se quema y la pieza supera su
+            // tolerancia → la nave se destruye (decisión de Universe, dueño de IsDestroyed).
             double density = refBody.GetAtmosphericDensity(vessel.Position);
-            if (density > 0.0)
+            if (density > 0.0 && !vessel.IsGroundHeld)
             {
                 var    surfVel   = vessel.GetSurfaceVelocity(refBody);
                 double airspeed  = surfVel.Magnitude;
                 double heatFlux  = Physics.ThermalModel.ComputeHeatFlux(density, airspeed);
-                Physics.StressSolver.ApplyThermalLoads(vessel.Parts, heatFlux, dt);
+
+                // Airflow direction in the vessel's local frame (orientation⁻¹ · flowDir).
+                var flowDirLocal = airspeed > 1e-6
+                    ? vessel.Orientation.Inverse().Rotate(surfVel.Normalized)
+                    : Vector3d.Zero;
+
+                var burned = Physics.StressSolver.ApplyThermalLoads(
+                    vessel.Parts, heatFlux, dt, flowDirLocal);
+
+                if (burned.Count > 0 && !vessel.IsDestroyed)
+                {
+                    // Burn-through: the vessel disintegrates in the airstream where it is —
+                    // no surface clamp (this is an atmospheric break-up, not a ground impact).
+                    vessel.IsDestroyed      = true;
+                    vessel.CrashImpactSpeed = airspeed;
+                    vessel.CrashSimPosition = vessel.Position;
+                }
             }
 
             // ── Surface impact detection ──────────────────────────────────
