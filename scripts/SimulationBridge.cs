@@ -283,6 +283,10 @@ public partial class SimulationBridge : Node
             var maxQ = new MaxQRingController { Name = "MaxQRing" };
             vesselsNode.AddChild(maxQ);
 
+            // Re-entry plasma glow — driven by the real convective heat flux (ρ·v³)
+            var plasma = new ReentryPlasmaController { Name = "ReentryPlasma" };
+            vesselsNode.AddChild(plasma);
+
             var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
             fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
         }
