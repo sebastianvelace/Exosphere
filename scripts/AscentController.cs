@@ -13,6 +13,12 @@ using Exosphere.Simulation.Parts;
 /// vertical component cancels gravity minus the centrifugal term) while building orbital
 /// velocity — the correct profile for a TWR~1 upper stage that cannot circularize
 /// impulsively. Auto-stages spent boosters. Draws a compact status banner.
+///
+/// A lighter <b>assist mode</b> (toggle with <b>H</b>) provides ONLY the gravity-turn
+/// pitch guidance — steering the nose along the same program via PitchYawRoll — while
+/// the player keeps the throttle ([Z]/[X]). Manual attitude input (W/S/A/D/Q/E) always
+/// wins: the assist yields any frame the player commands attitude. The two modes are
+/// mutually exclusive.
 /// </summary>
 public partial class AscentController : Control
 {
@@ -21,6 +27,21 @@ public partial class AscentController : Control
     private enum Phase { Idle, Ignition, Ascent, Coast, Insert, Done }
     private Phase _phase = Phase.Idle;
     private bool  _active;
+
+    // ── Assist mode ([H]) ───────────────────────────────────────────────────────
+    // Pilot-in-the-loop helper: applies ONLY the gravity-turn PITCH GUIDANCE (commanded
+    // through PitchYawRoll, NOT by overriding Orientation), leaving THROTTLE to the player
+    // (hold-[Z]/[X]). If the player commands attitude (W/S/A/D/Q/E) the assist yields that
+    // frame, so manual input always wins. Independent of the full [G] autopilot; engaging
+    // one disengages the other.
+    // Ayuda con el piloto en el bucle: aplica SOLO la GUÍA de pitch del giro gravitacional
+    // (vía PitchYawRoll, sin pisar Orientation) y deja el ACELERADOR al jugador ([Z]/[X]).
+    // Si el jugador comanda actitud, el assist cede ese frame: el input manual siempre gana.
+    private bool _assist;
+    // P-gain on attitude error and damping on body rate — tuned for a smooth, non-twitchy
+    // curve the weathervaning aero torque can settle without oscillation.
+    private const double AssistGain = 2.2;
+    private const double AssistDamp = 0.9;
 
     // Engine spool-up: thrust ramps over this many seconds while the hold-downs stay clamped;
     // the vehicle only releases once it can actually lift its own weight (TWR > 1).
@@ -43,15 +64,30 @@ public partial class AscentController : Control
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
         Visible = false;
+        // Run AFTER the HUD's manual-input pass so the assist's PitchYawRoll guidance
+        // overrides the zero the HUD writes when no attitude key is held. (Higher
+        // ProcessPriority = later in the frame.)
+        // Correr DESPUÉS del pase de input manual del HUD para que la guía del assist
+        // sobreescriba el cero que el HUD escribe cuando no se pulsa ninguna tecla.
+        ProcessPriority = 100;
     }
 
     public override void _UnhandledInput(InputEvent ev)
     {
-        if (ev is InputEventKey { Pressed: true, Echo: false, Keycode: Key.G })
+        if (ev is InputEventKey { Pressed: true, Echo: false } key)
         {
-            if (_active) Disengage();
-            else         Engage();
-            GetViewport().SetInputAsHandled();
+            if (key.Keycode == Key.G)
+            {
+                if (_active) Disengage();
+                else         Engage();
+                GetViewport().SetInputAsHandled();
+            }
+            else if (key.Keycode == Key.H)
+            {
+                if (_assist) DisengageAssist();
+                else         EngageAssist();
+                GetViewport().SetInputAsHandled();
+            }
         }
     }
 
@@ -94,14 +130,41 @@ public partial class AscentController : Control
     {
         _active = false;
         _phase  = Phase.Idle;
-        Visible = false;
+        Visible = _assist;   // keep banner if the assist is still on
         var bridge = SimulationBridge.Instance;
         if (bridge?.ActiveVessel is { } v) v.Throttle = 0.0;
         if (bridge?.Universe is { } u && u.TimeScale > 1.0) u.TimeScale = 1.0;
     }
 
+    // ── Assist ([H]): gravity-turn PITCH GUIDANCE only; player keeps the throttle ──
+    public void EngageAssist()
+    {
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        if (vessel == null || bridge?.Universe == null) return;
+
+        // Mutually exclusive with the full autopilot: turning on the assist drops [G].
+        if (_active) Disengage();
+        _assist = true;
+        vessel.SASEnabled = false;   // SAS would fight the guidance torque
+        Visible = true;
+        GD.Print("[ASCENT-AP] gravity-turn ASSIST engaged — pitch guidance on, throttle is yours");
+    }
+
+    public void DisengageAssist()
+    {
+        _assist = false;
+        if (!_active) Visible = false;
+        var bridge = SimulationBridge.Instance;
+        // Stop steering, but DO NOT touch throttle — the player owns it in assist mode.
+        if (bridge?.ActiveVessel is { } v) v.PitchYawRoll = Vector3d.Zero;
+        GD.Print("[ASCENT-AP] gravity-turn ASSIST disengaged");
+    }
+
     public override void _Process(double delta)
     {
+        // Assist mode runs on its own (it does not require the full autopilot to be active).
+        if (_assist && !_active) { ProcessAssist(); return; }
         if (!_active) return;
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
@@ -246,6 +309,82 @@ public partial class AscentController : Control
         QueueRedraw();
     }
 
+    // ── Assist guidance: command PitchYawRoll toward the gravity-turn heading ─────
+    // Same pitch program as the [G] Ascent phase, but we steer with body-rate commands
+    // (PitchYawRoll) instead of snapping Orientation, so the curve feels flown rather than
+    // teleported — and we yield the moment the player commands attitude.
+    // Mismo programa de pitch que la fase Ascent de [G], pero guiando con PitchYawRoll en
+    // vez de fijar Orientation: la curva se siente pilotada y cedemos en cuanto el jugador
+    // comanda actitud.
+    private void ProcessAssist()
+    {
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        if (vessel == null || universe == null) { DisengageAssist(); return; }
+
+        var body = universe.GetDominantBody(vessel.Position);
+        Vector3d rel  = vessel.Position - body.Position;
+        Vector3d vel  = vessel.Velocity - body.Velocity;
+        Vector3d up   = rel.Magnitude > 1e-6 ? rel.Normalized : Vector3d.Up;
+        Vector3d east = new Vector3d(0, 1, 0).Cross(up);
+        east = east.Magnitude > 1e-6 ? east.Normalized : new Vector3d(0, 0, 1);
+        _alt = body.GetAltitude(vessel.Position);
+
+        // Live readout so the banner shows the orbit building under the player's throttle.
+        var oe = OrbitalElements.FromStateVector(rel, vel, body.GM, body.Id, universe.CurrentTime);
+        _apo = oe.Apoapsis  - body.Radius;
+        _per = oe.Periapsis - body.Radius;
+        _ecc = oe.Eccentricity;
+        _bodyName = body.Name;
+        _q = vessel.GetDynamicPressure(body);
+
+        QueueRedraw();
+
+        // If the player is steering, get out of the way this frame — the HUD already wrote
+        // their PitchYawRoll, and running later we must NOT clobber it.
+        if (Input.IsKeyPressed(Key.W) || Input.IsKeyPressed(Key.S) ||
+            Input.IsKeyPressed(Key.A) || Input.IsKeyPressed(Key.D) ||
+            Input.IsKeyPressed(Key.Q) || Input.IsKeyPressed(Key.E))
+            return;
+
+        // Desired heading: straight up until the tower is cleared, then pitch over with
+        // altitude toward the horizon (keep ~10% vertical so apoapsis keeps climbing).
+        // Dirección deseada: vertical hasta despejar la torre, luego cabeceo con la altitud
+        // hacia el horizonte (conservar ~10% vertical para que el apoapsis siga subiendo).
+        Vector3d desired;
+        if (_alt < 200.0)
+        {
+            desired = up;
+        }
+        else
+        {
+            double f = System.Math.Clamp((_alt - 2_000.0) / 90_000.0, 0.0, 0.90);
+            desired = (up * (1.0 - f) + east * f).Normalized;
+        }
+
+        // Attitude error: rotate the world error axis (nose × desired) into body space and
+        // feed it as a proportional body-rate command, damped by the current body rate.
+        Vector3d nose = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+        Vector3d errAxisWorld = nose.Cross(desired);
+        double sinErr = System.Math.Clamp(errAxisWorld.Magnitude, 0.0, 1.0);
+        double angErr = System.Math.Asin(sinErr);                 // radians off-heading
+        Vector3d cmd = Vector3d.Zero;
+        if (angErr > 0.0008 && errAxisWorld.Magnitude > 1e-9)
+        {
+            Quaterniond inv = vessel.Orientation.Inverse();
+            Vector3d errLocal  = inv.Rotate(errAxisWorld.Normalized) * angErr;
+            Vector3d rateLocal = inv.Rotate(vessel.AngularVelocity);
+            cmd = errLocal * AssistGain - rateLocal * AssistDamp;
+        }
+
+        // Clamp to the [-1,1] per-axis input range the sim expects; never command roll.
+        vessel.PitchYawRoll = new Vector3d(
+            System.Math.Clamp(cmd.X, -1.0, 1.0),
+            System.Math.Clamp(cmd.Y, -1.0, 1.0),
+            0.0);
+    }
+
     // Drop a spent stage once the burning stage is nearly dry and a decoupler remains.
     private static void AutoStage(Vessel vessel, SimulationBridge bridge)
     {
@@ -262,8 +401,26 @@ public partial class AscentController : Control
     // ── HUD ───────────────────────────────────────────────────────────────────
     public override void _Draw()
     {
-        if (!_active && _phase != Phase.Done) return;
+        if (!_active && !_assist && _phase != Phase.Done) return;
         var vp = GetViewportRect().Size;
+
+        // Assist banner: distinct copy — the player still flies the throttle.
+        if (_assist && !_active)
+        {
+            const string al = "GRAVITY-TURN ASSIST — PITCH GUIDANCE";
+            var ac = new Color(0.6f, 0.95f, 0.7f);
+            var asz = _font.GetStringSize(al, HorizontalAlignment.Left, -1, 24);
+            var apos = new Vector2((vp.X - asz.X) * 0.5f, vp.Y * 0.215f);
+            DrawString(_font, apos + new Vector2(2, 2), al, HorizontalAlignment.Left, -1, 24, new Color(0, 0, 0, 0.7f));
+            DrawString(_font, apos, al, HorizontalAlignment.Left, -1, 24, ac);
+
+            string asub = $"THROTTLE: YOU ([Z]/[X])   {_bodyName.ToUpperInvariant()}   "
+                        + $"Ap {_apo/1000:F0} km   Pe {_per/1000:F0} km   e {_ecc:F3}";
+            var assz = _font.GetStringSize(asub, HorizontalAlignment.Left, -1, 14);
+            DrawString(_font, new Vector2((vp.X - assz.X) * 0.5f, vp.Y * 0.215f + 26f), asub,
+                       HorizontalAlignment.Left, -1, 14, new Color(0.7f, 0.85f, 0.78f));
+            return;
+        }
 
         string label = _phase switch
         {
