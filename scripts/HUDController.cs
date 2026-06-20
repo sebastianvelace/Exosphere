@@ -418,7 +418,7 @@ public partial class HUDController : Control
         var vessel   = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
         var mission  = MissionManager.Instance;
-        if (vessel == null || universe == null) return;
+        if (bridge == null || vessel == null || universe == null) return;
 
         // ── Rotation controls ──────────────────────────────────────────────
         double pitchIn = 0, yawIn = 0, rollIn = 0;
