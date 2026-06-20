@@ -18,6 +18,8 @@ public partial class SystemsController : Node
     public ThermalSystem     Thermal     { get; } = new();
     public CommsSystem       Comms       { get; } = new();
 
+    public bool ControlLimited { get; private set; }
+
     public override void _Ready()
     {
         Instance = this;
@@ -72,5 +74,27 @@ public partial class SystemsController : Node
 
         Vector3d earthPos = earthBody?.Position ?? Vector3d.Zero;
         Comms.Tick(delta, vessel.Position, earthPos, universe.Bodies);
+
+        ApplyGameplayConsequences(vessel);
+    }
+
+    private void ApplyGameplayConsequences(Exosphere.Simulation.Vessel vessel)
+    {
+        ControlLimited = Power.NoPowerAlert || !Comms.HasSignal || !LifeSupport.CrewAlive;
+
+        // Consecuencia suave: el jugador conserva el control manual, pero sin energía o
+        // enlace no hay SAS ni pilotos automáticos sosteniendo la nave por sí solos.
+        // Soft consequence: manual flight remains possible, but SAS and maneuver
+        // autopilots drop out when the ship has no power, no comms, or no live crew.
+        if (ControlLimited)
+        {
+            vessel.SASEnabled = false;
+            vessel.PitchYawRoll = Vector3d.Zero;
+
+            ManeuverExecutor.Instance?.Abort();
+
+            if (GetTree().Root.FindChild("AutopilotController", true, false) is AutopilotController ap)
+                ap.Disarm();
+        }
     }
 }

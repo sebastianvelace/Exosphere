@@ -7,6 +7,7 @@
   "cost": 50000,
   "drag_coefficient": 0.25,
   "heat_tolerance": 2800,
+  "has_heat_shield": true,
   "max_crew": 100,
   "attachment_nodes": [
     {"id": "bottom", "position": [0, -1.0, 0], "size": 3, "type": "stack"}

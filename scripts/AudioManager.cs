@@ -16,7 +16,8 @@ using Godot;
 ///     silence above ~80 km so space is silent.
 ///
 /// One-shot events (synthesised bursts, mixed into a dedicated event voice):
-///   • Countdown ticks / ignition tone, liftoff swell, stage-separation clunk.
+///   • Countdown ticks / ignition tone, liftoff swell, stage-separation clunk,
+///     crash/explosion burst.
 ///
 /// All voices share persistent oscillator / filter / RNG state so consecutive buffer
 /// fills join seamlessly (no inter-buffer clicks). The buffer-fill hot path performs no
@@ -346,4 +347,7 @@ public partial class AudioManager : Node
 
     /// <summary>Plays a stage-separation clunk + burst (short noise envelope).</summary>
     public void PlayStaging() => Trigger(0f, 0.5f, 0.7f);
+
+    /// <summary>Plays a broad noise burst for hard vehicle loss.</summary>
+    public void PlayCrash() => Trigger(0f, 1.6f, 1.0f);
 }

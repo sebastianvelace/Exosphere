@@ -31,6 +31,7 @@ public class PartDefinition
     [JsonPropertyName("cost")]        public double Cost        { get; set; }
     [JsonPropertyName("drag_coefficient")] public double DragCoefficient { get; set; } = 0.2;
     [JsonPropertyName("heat_tolerance")]   public double HeatTolerance   { get; set; } = 1200;
+    [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
     [JsonPropertyName("attachment_nodes")] public List<AttachmentNodeDef> AttachmentNodes { get; set; } = new();
 
     // Engine

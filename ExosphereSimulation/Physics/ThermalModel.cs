@@ -15,36 +15,15 @@ using Exosphere.Simulation.Parts;
 /// </summary>
 public static class ThermalModel
 {
-    // ── Heat-shield resolution (sin tocar PartDefinition, propiedad de A) ─────
-    //
-    // `has_heat_shield` vive en data/parts/*.json pero PartDefinition (de Agente A)
-    // todavía no lo deserializa, así que no podemos leerlo directamente desde el
-    // sim. Hasta que A exponga una propiedad `HasHeatShield`, identificamos una
-    // pieza con escudo por un proxy estable y data-driven sobre los campos que SÍ
-    // están cargados: una sección de mando (categoría Command) con una tolerancia
-    // térmica reforzada. Esto cubre `starship_command` (2800 K) y
-    // `command_pod_mk1` (2400 K, con `has_heat_shield:true`) sin marcar como
-    // escudo los motores de alta tolerancia (categoría Engine).
-    //
-    // `has_heat_shield` lives in data/parts/*.json, but PartDefinition (Agent A's
-    // file) does not deserialise it yet, so we cannot read it directly. Until A
-    // exposes a `HasHeatShield` property we detect a shielded part with a stable,
-    // data-driven proxy over the fields that ARE loaded.
-
-    /// <summary>Heat tolerance (K) at/above which a command part is treated as heat-shielded.</summary>
-    public const double HeatShieldToleranceThreshold = 2400.0;
-
     /// <summary>Minimum flux fraction a perfectly oriented heat shield lets through (ablative/radiative residual).</summary>
     public const double ShieldedFluxFloor = 0.08;
 
     /// <summary>
     /// Whether <paramref name="part"/> carries a windward heat shield.
-    /// Proxy over loaded <see cref="PartDefinition"/> fields until Agent A exposes
-    /// the JSON <c>has_heat_shield</c> flag; swap the body for that flag then.
+    /// Backed directly by the JSON <c>has_heat_shield</c> flag deserialised into
+    /// <see cref="PartDefinition.HasHeatShield"/>.
     /// </summary>
-    public static bool HasHeatShield(Part part) =>
-        part.Definition.Category == PartCategory.Command
-        && part.Definition.HeatTolerance >= HeatShieldToleranceThreshold;
+    public static bool HasHeatShield(Part part) => part.Definition.HasHeatShield;
 
     // ── Heat flux ─────────────────────────────────────────────────────────────
 

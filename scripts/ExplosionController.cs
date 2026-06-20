@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using System.Collections.Generic;
 
 /// <summary>
 /// Observes IsDestroyed on the active vessel and spawns a procedural explosion
@@ -13,9 +14,21 @@ public partial class ExplosionController : Node3D
     private GpuParticles3D? _fireParticles;
     private GpuParticles3D? _smokeParticles;
     private OmniLight3D? _flashLight;
+    private readonly List<DebrisPiece> _debris = new();
+    private readonly RandomNumberGenerator _rng = new();
+
+    private sealed class DebrisPiece
+    {
+        public MeshInstance3D Node = null!;
+        public Vector3 Velocity;
+        public Vector3 AngularVelocity;
+        public float Remaining;
+    }
 
     public override void _Ready()
     {
+        _rng.Randomize();
+
         // Create fire particles
         _fireParticles = CreateFireParticles();
         AddChild(_fireParticles);
@@ -44,6 +57,7 @@ public partial class ExplosionController : Node3D
             // Fade the flash light out over time
             if (_flashLight != null && _flashLight.LightEnergy > 0.01f)
                 _flashLight.LightEnergy -= (float)(delta * 8.0);
+            TickDebris((float)delta);
             return;
         }
 
@@ -69,13 +83,87 @@ public partial class ExplosionController : Node3D
         // Bright initial flash
         if (_flashLight != null) _flashLight.LightEnergy = 12.0f;
 
+        SpawnDebris();
+
         // Hide the vessel mesh renderer
         var vesselRenderer = GetTree()?.Root.FindChild("StarshipRenderer", true, false);
         if (vesselRenderer is Node3D vr3d) vr3d.Visible = false;
 
         GD.Print($"[CRASH] Vessel destroyed at {vessel.CrashImpactSpeed:F0} m/s");
 
-        // AudioManager.Instance?.PlayCrash();  // uncomment when PlayCrash() is added to AudioManager
+        AudioManager.Instance?.PlayCrash();
+    }
+
+    private void SpawnDebris()
+    {
+        var mat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.55f, 0.58f, 0.60f),
+            Metallic = 0.75f,
+            Roughness = 0.42f,
+        };
+
+        for (int i = 0; i < 22; i++)
+        {
+            var mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    _rng.RandfRange(0.4f, 2.4f),
+                    _rng.RandfRange(0.2f, 1.2f),
+                    _rng.RandfRange(0.4f, 2.0f))
+            };
+            var node = new MeshInstance3D
+            {
+                Mesh = mesh,
+                Position = Vector3.Zero,
+                Rotation = new Vector3(
+                    _rng.RandfRange(0f, Mathf.Tau),
+                    _rng.RandfRange(0f, Mathf.Tau),
+                    _rng.RandfRange(0f, Mathf.Tau)),
+            };
+            node.SetSurfaceOverrideMaterial(0, mat);
+            AddChild(node);
+
+            var dir = new Vector3(
+                _rng.RandfRange(-1f, 1f),
+                _rng.RandfRange(0.2f, 1.1f),
+                _rng.RandfRange(-1f, 1f)).Normalized();
+
+            _debris.Add(new DebrisPiece
+            {
+                Node = node,
+                Velocity = dir * _rng.RandfRange(18f, 85f),
+                AngularVelocity = new Vector3(
+                    _rng.RandfRange(-7f, 7f),
+                    _rng.RandfRange(-7f, 7f),
+                    _rng.RandfRange(-7f, 7f)),
+                Remaining = _rng.RandfRange(4f, 8f),
+            });
+        }
+    }
+
+    private void TickDebris(float delta)
+    {
+        for (int i = _debris.Count - 1; i >= 0; i--)
+        {
+            var d = _debris[i];
+            d.Remaining -= delta;
+            if (d.Remaining <= 0f)
+            {
+                d.Node.QueueFree();
+                _debris.RemoveAt(i);
+                continue;
+            }
+
+            d.Velocity += new Vector3(0, -9.8f, 0) * delta;
+            d.Node.Position += d.Velocity * delta;
+            d.Node.RotateObjectLocal(Vector3.Right, d.AngularVelocity.X * delta);
+            d.Node.RotateObjectLocal(Vector3.Up, d.AngularVelocity.Y * delta);
+            d.Node.RotateObjectLocal(Vector3.Forward, d.AngularVelocity.Z * delta);
+
+            float alpha = Mathf.Clamp(d.Remaining / 2f, 0f, 1f);
+            d.Node.Transparency = 1f - alpha;
+        }
     }
 
     private static GpuParticles3D CreateFireParticles()

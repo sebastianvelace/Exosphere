@@ -683,6 +683,7 @@ public partial class HUDController : Control
                 MissionPhase.ORBIT       => "SECO · ORBIT",
                 MissionPhase.ENTRY       => "ENTRY INTERFACE",
                 MissionPhase.LANDED      => "TOUCHDOWN",
+                MissionPhase.CRASHED     => "VEHICLE LOST",
                 _ => null!,
             };
             if (ev != null)
@@ -735,10 +736,10 @@ public partial class HUDController : Control
                     bridge.JumpToOrbit();
                     break;
                 case Key.Period:
-                    bridge.SetTimeScale(System.Math.Min(1000.0, bridge.Universe.TimeScale * 2.0));
+                    bridge.SetWarpIndex(bridge.WarpIndex + 1);
                     break;
                 case Key.Comma:
-                    bridge.SetTimeScale(System.Math.Max(1.0, bridge.Universe.TimeScale / 2.0));
+                    bridge.SetWarpIndex(bridge.WarpIndex - 1);
                     break;
             }
         }

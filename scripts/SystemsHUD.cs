@@ -21,9 +21,9 @@ public partial class SystemsHUD : Control
         // overlaps the STAGE · Δv · ORBIT panel on the top-right.
         SetAnchorsPreset(LayoutPreset.TopLeft);
         GrowHorizontal = GrowDirection.End;
-        CustomMinimumSize = new Vector2(290, 200);
+        CustomMinimumSize = new Vector2(290, 224);
         OffsetLeft  = 18;  OffsetTop    = 288;
-        OffsetRight = 308; OffsetBottom = 488;
+        OffsetRight = 308; OffsetBottom = 512;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
@@ -44,9 +44,14 @@ public partial class SystemsHUD : Control
         y = DrawBar(10, y, "O2",   (float)sys.LifeSupport.OxygenFraction,    sys.LifeSupport.OxygenAlert);
         y = DrawBar(10, y, "CO2",  1.0f - (float)sys.LifeSupport.CO2Fraction, sys.LifeSupport.CO2Alert);
         y = DrawBar(10, y, "H2O",  (float)sys.LifeSupport.WaterFraction,      false);
+        y = DrawBar(10, y, "FOOD", (float)sys.LifeSupport.FoodFraction,       false);
         y = DrawBar(10, y, "PWR",  (float)sys.Power.BatteryFraction,           sys.Power.LowPowerAlert);
         y = DrawBar(10, y, "TEMP", (float)sys.Thermal.ThermalFraction,         sys.Thermal.HotAlert || sys.Thermal.ColdAlert);
-        DrawBar(10, y,      "COMM", (float)sys.Comms.SignalStrength,            sys.Comms.LossOfSignalAlert);
+        y = DrawBar(10, y, "COMM", (float)sys.Comms.SignalStrength,            sys.Comms.LossOfSignalAlert);
+
+        string mode = sys.ControlLimited ? "CONTROL LIMITED" : "CONTROL NOMINAL";
+        DrawString(_font, new Vector2(10, y + 12), mode,
+            HorizontalAlignment.Left, -1, 10, sys.ControlLimited ? RedBar : GreenBar);
 
         // Signal delay label
         float delay = (float)sys.Comms.SignalDelaySeconds;

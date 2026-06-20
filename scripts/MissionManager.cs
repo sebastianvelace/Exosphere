@@ -252,9 +252,6 @@ public partial class MissionManager : Node
         {
             case MissionPhase.LIFTOFF:    AudioManager.Instance?.PlayLiftoff(); break;
             case MissionPhase.SEPARATION: AudioManager.Instance?.PlayStaging(); break;
-            case MissionPhase.CRASHED:
-                // AudioManager.Instance?.PlayCrash(); // uncomment when PlayCrash() is added
-                break;
         }
 
         EmitSignal(SignalName.PhaseChanged, newPhase.ToString());
