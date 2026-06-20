@@ -391,43 +391,83 @@ public class Universe
         var reference = GetBody(vessel.OrbitalState.ReferenceBodyId);
         if (reference is null) return;
 
-        // ── Periapsis collision check (on-rails) ──────────────────────────
+        // ── Periapsis / sub-surface collision check (on-rails) ────────────
         // The Kepler propagator works in conic sections and cannot detect when the
         // orbital arc dips below the surface mid-step — the vessel would silently
         // "tunnel through" the planet and reappear on the other side.
-        // Guard: if the current conic periapsis is below the body radius, the orbit
-        // already intersects the surface.  Destroy the vessel immediately instead of
-        // propagating a physically impossible trajectory.
-        // Nota: OrbitalElements.Periapsis = a*(1-e), medido desde el centro del cuerpo.
-        double periapsis = vessel.OrbitalState.Periapsis;
-        if (periapsis < reference.Radius)
+        //
+        // Guard: if the conic is suborbital (periapsis below the body radius) OR the
+        // trajectory is radial (h≈0 — a straight fall/lob with no well-defined orbit),
+        // the path already intersects the surface. Destroy the vessel immediately
+        // instead of propagating a physically impossible trajectory.
+        //
+        // IsSuborbital() uses the true periapsis radius (valid for elliptic, hyperbolic
+        // AND radial conics). The old a*(1-e) test hid radial/hyperbolic cases where the
+        // numbers sign-flip into a misleading large-positive periapsis — that was the root
+        // of the "rocket exits orbit straight through the planet" bug under warp.
+        if (vessel.OrbitalState.IsSuborbital(reference.Radius))
         {
-            // Vessel is on a sub-surface trajectory — impact is certain.
-            // Use the current state vector to estimate surface-relative impact speed.
-            var    relP0       = vessel.Position - reference.Position;
-            var    relV0       = vessel.Velocity - reference.Velocity;
-            double impactSpeed = relV0.Magnitude; // conservative: full orbital speed
-
-            vessel.IsDestroyed      = true;
-            vessel.CrashImpactSpeed = impactSpeed;
-            vessel.CrashSimPosition = vessel.Position;
-
-            // Clamp to surface for the renderer
-            var dir = relP0.Magnitude > 0.0 ? relP0.Normalized : Vector3d.Up;
-            vessel.Position = reference.Position + dir * (reference.Radius + 0.5);
-            vessel.Velocity = reference.Velocity + reference.GetSurfaceVelocity(vessel.Position);
-
-            // Force off rails so the destroyed state is visible immediately
-            vessel.IsOnRails    = false;
-            vessel.OrbitalState = null;
+            ResolveOnRailsImpact(vessel, reference);
             return;
         }
 
-        var (relP, relV) = KeplerPropagator.PropagateToTime(
-            vessel.OrbitalState, CurrentTime + dt, reference.GM);
+        // ── Sub-step sampling so high warp cannot skip below the surface ───
+        // Even with a periapsis above the surface, a single large warp step could place
+        // the sampled point on the far side of a tight periapsis pass without ever
+        // "seeing" the dip. Walk the step in bounded slices (≤ MaxCoastStep) and check the
+        // propagated radius at each sample. If any sample is below the surface, the arc
+        // grazes the body within this step → resolve the impact at that point, never skip it.
+        double remaining   = dt;
+        double sampleTime  = CurrentTime;
+        Vector3d lastRelP  = vessel.Position - reference.Position;
+        Vector3d lastRelV  = vessel.Velocity - reference.Velocity;
+        while (remaining > 1e-9)
+        {
+            double slice = System.Math.Min(remaining, MaxCoastStep);
+            sampleTime  += slice;
+            remaining   -= slice;
 
-        vessel.Position = reference.Position + relP;
-        vessel.Velocity = reference.Velocity + relV;
+            (lastRelP, lastRelV) = KeplerPropagator.PropagateToTime(
+                vessel.OrbitalState, sampleTime, reference.GM);
+
+            if (lastRelP.Magnitude < reference.Radius)
+            {
+                // The conic crosses the surface inside this step — impact here.
+                vessel.Position = reference.Position + lastRelP;
+                vessel.Velocity = reference.Velocity + lastRelV;
+                ResolveOnRailsImpact(vessel, reference);
+                return;
+            }
+        }
+
+        vessel.Position = reference.Position + lastRelP;
+        vessel.Velocity = reference.Velocity + lastRelV;
+    }
+
+    /// <summary>
+    /// Resolves a certain surface impact for an on-rails vessel: marks it destroyed,
+    /// records the surface-relative impact speed, clamps the wreck to the surface for the
+    /// renderer, and drops it off rails. The vessel reenters and is destroyed — it never
+    /// bounces back to orbit or tunnels through the body (R16 user decision).
+    /// </summary>
+    private void ResolveOnRailsImpact(Vessel vessel, CelestialBody reference)
+    {
+        var    relP0       = vessel.Position - reference.Position;
+        var    relV0       = vessel.Velocity - reference.Velocity;
+        double impactSpeed = relV0.Magnitude; // conservative: full orbital speed
+
+        vessel.IsDestroyed      = true;
+        vessel.CrashImpactSpeed = impactSpeed;
+        vessel.CrashSimPosition = vessel.Position;
+
+        // Clamp to surface for the renderer.
+        var dir = relP0.Magnitude > 0.0 ? relP0.Normalized : Vector3d.Up;
+        vessel.Position = reference.Position + dir * (reference.Radius + 0.5);
+        vessel.Velocity = reference.Velocity + reference.GetSurfaceVelocity(vessel.Position);
+
+        // Force off rails so the destroyed state is visible immediately.
+        vessel.IsOnRails    = false;
+        vessel.OrbitalState = null;
     }
 
     // ── Factory ───────────────────────────────────────────────────────────
