@@ -3,9 +3,16 @@ namespace Exosphere.Simulation.Physics;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 
+/// <summary>
+/// Re-entry aerodynamics helpers: dynamic pressure, Mach effects, and an
+/// orientation-dependent drag model. A blunt body (broadside / belly-flop) presents
+/// a large area and a high drag coefficient and brakes hard in the atmosphere; a
+/// streamlined nose-/tail-first attitude presents a small area and a low coefficient.
+/// Pure SI (kg/m³, m/s, m², N). Sin Godot.
+/// </summary>
 public static class AerodynamicsModel
 {
-    // Fuerza de arrastre (world space) en Newton
+    /// <summary>Drag force (world space, N), opposing the surface-relative velocity.</summary>
     public static Vector3d ComputeDrag(
         double density,
         Vector3d surfaceVelocity,
@@ -18,11 +25,11 @@ public static class AerodynamicsModel
         return surfaceVelocity.Normalized * (-magnitude);
     }
 
-    // Presión dinámica (Pa)
+    /// <summary>Dynamic pressure q = ½·ρ·v² (Pa).</summary>
     public static double ComputeDynamicPressure(double density, double speed) =>
         0.5 * density * speed * speed;
 
-    // Número de Mach
+    /// <summary>Mach number from airspeed (m/s) and local temperature (K): M = v / √(γ·R·T).</summary>
     public static double ComputeMach(double speed, double temperature)
     {
         const double gamma = 1.4;
@@ -31,7 +38,7 @@ public static class AerodynamicsModel
         return speed / sos;
     }
 
-    // Multiplicador de Cd por Mach (pico transónico)
+    /// <summary>Cd multiplier across the transonic drag-rise peak (≈2× near Mach 1).</summary>
     public static double GetMachDragMultiplier(double mach) =>
         mach < 0.8 ? 1.0
         : mach < 1.0 ? 1.0 + (mach - 0.8) * 5.0
@@ -39,11 +46,72 @@ public static class AerodynamicsModel
         : mach < 5.0 ? 2.0 - (mach - 1.2) * 0.25
         : 1.0;
 
-    // Área de referencia estimada del vessel (m²) basada en el grafo de piezas
+    /// <summary>Crude reference area (m²) from part count, for a vessel of unknown geometry.</summary>
     public static double EstimateReferenceArea(PartGraph graph)
     {
         double maxRadius = 0.5;
         maxRadius = System.Math.Max(maxRadius, System.Math.Sqrt(graph.Parts.Count * 0.2));
         return System.Math.PI * maxRadius * maxRadius;
+    }
+
+    // ── Orientation-dependent re-entry aero (cilindro Starship/SH) ─────────────
+    //
+    // El vehículo se modela como un cilindro de núcleo de 9 m. El área presentada y
+    // la "romería" (bluffness) dependen del ángulo entre su eje longitudinal (local
+    // +Y) y el flujo: de morro/cola (axial) ⇒ área pequeña y Cd bajo; de costado
+    // (belly-flop) ⇒ área lateral grande y Cd alto. Reproduce la reentrada de alta
+    // resistencia de Starship y el flip-and-burn vertical de baja resistencia.
+
+    /// <summary>Starship/Super-Heavy core diameter (m).</summary>
+    public const double CoreDiameter = 9.0;
+
+    /// <summary>
+    /// Effective frontal area (m²) for a stack of <paramref name="partCount"/> parts at an
+    /// axial alignment <paramref name="cosAlpha"/> = |axis·flow| (1 = nose/tail-on, 0 = broadside).
+    /// Interpolates between the axial cross-section (πr²) and the broadside slab (D·L).
+    /// </summary>
+    public static double EffectiveArea(int partCount, double cosAlpha)
+    {
+        double radius      = CoreDiameter * 0.5;
+        double length      = System.Math.Max(CoreDiameter, partCount * 12.0);
+        double axialArea   = System.Math.PI * radius * radius;
+        double lateralArea = CoreDiameter * length;
+        double aa          = System.Math.Clamp(cosAlpha * cosAlpha, 0.0, 1.0);
+        return lateralArea + (axialArea - lateralArea) * aa;
+    }
+
+    /// <summary>
+    /// Effective drag coefficient blended between a blunt broadside body (≈1.5) and a
+    /// streamlined axial body (≈0.6) by the axial alignment <paramref name="cosAlpha"/>.
+    /// </summary>
+    public static double EffectiveDragCoefficient(double cosAlpha)
+    {
+        double aa = System.Math.Clamp(cosAlpha * cosAlpha, 0.0, 1.0);
+        return 1.5 + (0.6 - 1.5) * aa;
+    }
+
+    /// <summary>
+    /// Full re-entry drag force (world space, N) for a vessel: orientation-dependent
+    /// area and Cd, with the transonic Mach multiplier folded in. <paramref name="surfaceVelocity"/>
+    /// is the velocity relative to the rotating atmosphere; <paramref name="longitudinalAxis"/> is
+    /// the vessel's long axis (local +Y) expressed in world space.
+    /// </summary>
+    public static Vector3d ComputeReentryDrag(
+        double density,
+        Vector3d surfaceVelocity,
+        Vector3d longitudinalAxis,
+        int partCount,
+        double temperature)
+    {
+        double speed = surfaceVelocity.Magnitude;
+        if (density <= 0.0 || speed < 1e-3) return Vector3d.Zero;
+
+        double cosAlpha = System.Math.Abs(longitudinalAxis.Normalized.Dot(surfaceVelocity.Normalized));
+        double area     = EffectiveArea(partCount, cosAlpha);
+        double cd       = EffectiveDragCoefficient(cosAlpha);
+        double machMul  = GetMachDragMultiplier(ComputeMach(speed, temperature));
+
+        double magnitude = 0.5 * density * speed * speed * cd * area * machMul;
+        return surfaceVelocity.Normalized * (-magnitude);
     }
 }
