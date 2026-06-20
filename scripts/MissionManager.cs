@@ -69,6 +69,27 @@ public partial class MissionManager : Node
         SetPhase(MissionPhase.COUNTDOWN);
     }
 
+    /// <summary>
+    /// Lanzamiento manual (hold-[Z]): salta el countdown y arranca la FSM en LIFTOFF.
+    /// La llama SimulationBridge cuando suelta los hold-downs por primera vez (TWR &gt; 1.02).
+    /// Idempotente: si ya salió de PRE_LAUNCH (countdown en curso o ya en vuelo) no hace nada,
+    /// para no pisar [L] (StartCountdown) ni reiniciar una misión en progreso.
+    ///
+    /// Manual launch (hold-[Z]): skips the countdown and starts the FSM at LIFTOFF.
+    /// Called by SimulationBridge once it releases the hold-downs (TWR &gt; 1.02).
+    /// Idempotent: does nothing unless we are still in PRE_LAUNCH.
+    /// </summary>
+    public void BeginFlight()
+    {
+        if (Phase != MissionPhase.PRE_LAUNCH) return;
+        // No estábamos en countdown, pero reseteamos los gatillos de fase por si acaso.
+        IsCountingDown  = false;
+        _maxQTriggered  = false;
+        _mecoTriggered  = false;
+        SetPhase(MissionPhase.LIFTOFF);
+        EmitSignal(SignalName.LaunchCommitted);
+    }
+
     /// Call from SimulationBridge.TriggerStaging when a stage fires.
     public void NotifyStaged()
     {

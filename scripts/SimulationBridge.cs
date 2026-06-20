@@ -175,7 +175,15 @@ public partial class SimulationBridge : Node
                     double thrust = av.GetCurrentThrust(refB2);
                     double twr  = thrust / (av.TotalMass * g);
                     if (twr > 1.02)
+                    {
                         av.ReleaseGroundHold();
+                        // Lanzamiento manual: al soltar los clamps por primera vez, arranca la FSM
+                        // de misión (PRE_LAUNCH → LIFTOFF). BeginFlight() es idempotente, así que
+                        // no pasa nada si la misión ya despegó por [L] (countdown).
+                        // Manual launch: kick the mission FSM off PRE_LAUNCH the moment the clamps
+                        // release. BeginFlight() is idempotent, so [L]/countdown launches are safe.
+                        MissionManager.Instance?.BeginFlight();
+                    }
                 }
             }
             else
