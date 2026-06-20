@@ -222,7 +222,13 @@ public partial class AttitudeNavball : Control
             }
             prev = p; prevG = pG;
         }
-        if (grd.Count >= 3) DrawColoredPolygon(grd.ToArray(), GroundCol);
+        // Solo rellenar si el segmento de tierra tiene área real. Cuando el morro apunta
+        // casi vertical (pitch ≈ ±90°, p.ej. en plataforma) la cuerda colapsa y los puntos
+        // quedan casi colineales → triangulación inválida. Lo saltamos en ese caso.
+        // Only fill when the ground segment has real area. Near-vertical pitch collapses the
+        // chord and leaves near-collinear points → invalid triangulation; skip it then.
+        if (grd.Count >= 3 && half > 1.0f && PolygonArea(grd) > 2.0f)
+            DrawColoredPolygon(grd.ToArray(), GroundCol);
 
         // Bezel + horizon line (the chord).
         DrawArc(c, Radius, 0, Mathf.Tau, 64, PanelBorder, 1.4f, true);
@@ -258,10 +264,17 @@ public partial class AttitudeNavball : Control
             DrawCircle(p, 1.6f, LabelDim);
         }
         // The moving roll indicator triangle (rotates with the ball "up").
-        var top = c + new Vector2(Mathf.Sin(roll), -Mathf.Cos(roll)) * Radius;
-        var tl  = top + new Vector2(Mathf.Cos(roll - Mathf.Pi / 2), Mathf.Sin(roll - Mathf.Pi / 2)) * 5f;
-        var tr  = top + new Vector2(Mathf.Cos(roll + Mathf.Pi / 2), Mathf.Sin(roll + Mathf.Pi / 2)) * 5f;
-        var apex = top - new Vector2(Mathf.Sin(roll), -Mathf.Cos(roll)) * 9f;
+        // El vértice apunta hacia el centro a lo largo del eje radial; la base es
+        // PERPENDICULAR a ese eje para que el triángulo nunca sea degenerado (colineal),
+        // lo que antes hacía fallar la triangulación de Godot a roll = 0.
+        // Apex points inward along the radial axis; the base is PERPENDICULAR to it so the
+        // triangle is never degenerate (collinear), which used to break Godot's triangulation.
+        var radial = new Vector2(Mathf.Sin(roll), -Mathf.Cos(roll));   // centre → top
+        var across = new Vector2(radial.Y, -radial.X);                 // base direction
+        var top  = c + radial * Radius;
+        var tl   = top + across * 5f;
+        var tr   = top - across * 5f;
+        var apex = top - radial * 9f;
         DrawColoredPolygon(new[] { tl, tr, apex }, Reticle);
     }
 
@@ -310,6 +323,19 @@ public partial class AttitudeNavball : Control
         var sz = _font.GetStringSize(line, HorizontalAlignment.Center, -1, 11);
         DrawString(_font, new Vector2(Size.X / 2f - sz.X / 2f, Size.Y - 4f), line,
             HorizontalAlignment.Left, -1, 11, ValueBright);
+    }
+
+    // Shoelace area (absolute) — used to reject degenerate ground polygons.
+    private static float PolygonArea(System.Collections.Generic.List<Vector2> pts)
+    {
+        float a = 0f;
+        for (int i = 0, n = pts.Count; i < n; i++)
+        {
+            var p = pts[i];
+            var q = pts[(i + 1) % n];
+            a += p.X * q.Y - q.X * p.Y;
+        }
+        return Mathf.Abs(a) * 0.5f;
     }
 
     // Markers are computed in the un-rolled disc frame; rotate them with the ball.
