@@ -324,16 +324,22 @@ public partial class PlumeSystem : Node3D
     {
         // Particle budget kept low: total stays in the low hundreds across all
         // rings. Soot/smoke is a translucent supporting layer, not the main show.
-        int amount = Mathf.Clamp(24 + engineCount * 3, 24, 90);
+        int amount = sh
+            ? Mathf.Clamp(58 + engineCount * 5, 80, 180)
+            : Mathf.Clamp(24 + engineCount * 3, 24, 90);
 
         // Edge soot colour ramp: faint incandescent orange → dark smoke → fade.
         var grad = new Gradient
         {
             Colors  = new[]
             {
-                new Color(1.00f, 0.55f, 0.20f, 0.55f), // incandescent near nozzle
-                new Color(0.45f, 0.22f, 0.10f, 0.35f), // cooling soot
-                new Color(0.10f, 0.10f, 0.12f, 0.0f),  // smoke fade-out
+                sh
+                    ? new Color(0.92f, 0.88f, 0.78f, 0.28f) // faint hot steam at the root
+                    : new Color(1.00f, 0.55f, 0.20f, 0.55f), // incandescent near nozzle
+                sh
+                    ? new Color(0.58f, 0.58f, 0.55f, 0.46f) // dense grey-white deluge/soot
+                    : new Color(0.48f, 0.42f, 0.36f, 0.35f),
+                new Color(0.16f, 0.16f, 0.17f, 0.0f),       // smoke fade-out
             },
             Offsets = new[] { 0f, 0.4f, 1f },
         };
@@ -349,14 +355,14 @@ public partial class PlumeSystem : Node3D
 
             Direction          = new Vector3(0, -1, 0),
             Spread             = 12f,
-            InitialVelocityMin = 10f,
-            InitialVelocityMax = 26f,
+            InitialVelocityMin = sh ? 15f : 10f,
+            InitialVelocityMax = sh ? 38f : 26f,
 
             DampingMin = 2f,
             DampingMax = 5f,
 
-            ScaleMin = sh ? 1.4f : 1.0f,
-            ScaleMax = sh ? 4.2f : 3.0f,
+            ScaleMin = sh ? 2.0f : 1.0f,
+            ScaleMax = sh ? 6.2f : 3.0f,
 
             ColorRamp = gradTex,
         };
@@ -366,13 +372,13 @@ public partial class PlumeSystem : Node3D
         {
             BillboardMode            = BaseMaterial3D.BillboardModeEnum.Enabled,
             ShadingMode              = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            BlendMode                = BaseMaterial3D.BlendModeEnum.Add,
+            BlendMode                = sh ? BaseMaterial3D.BlendModeEnum.Mix : BaseMaterial3D.BlendModeEnum.Add,
             Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
             DepthDrawMode            = BaseMaterial3D.DepthDrawModeEnum.Disabled,
             AlbedoTexture            = SoftCircle,
             AlbedoColor              = Colors.White,
-            EmissionEnabled          = true,
-            EmissionEnergyMultiplier = 1.6f,
+            EmissionEnabled          = !sh,
+            EmissionEnergyMultiplier = sh ? 0.7f : 1.6f,
             VertexColorUseAsAlbedo   = true,
         };
         quad.SurfaceSetMaterial(0, drawMat);
@@ -382,7 +388,7 @@ public partial class PlumeSystem : Node3D
             Name            = name,
             Position        = new Vector3(0, yPos, 0),
             Amount          = amount,
-            Lifetime        = 1.1f,
+            Lifetime        = sh ? 1.7f : 1.1f,
             ProcessMaterial = pm,
             DrawPass1       = quad,
             Emitting        = false,

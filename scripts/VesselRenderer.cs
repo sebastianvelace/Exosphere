@@ -149,6 +149,7 @@ public partial class VesselRenderer : Node3D
         // Raceway / conduit running up one side of the booster (real SH detail).
         AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
             darkSteel, new Vector3(BodyR + 0.01f, 11f, 0f));
+        AddBoosterLongitudinalSeams(darkSteel);
 
         // Engine skirt (y=0 → y=2) — sooty, blended into the body bottom so the
         // booster/engine transition has no hard cap. Slight outward flare.
@@ -231,6 +232,15 @@ public partial class VesselRenderer : Node3D
         AddMesh("SepLip", new CylinderMesh
             { TopRadius = BodyR + 0.02f, BottomRadius = BodyR + 0.02f, Height = 0.22f, RadialSegments = 48 },
             lipMat, new Vector3(0, 22.05f, 0));
+    }
+
+    private void AddBoosterLongitudinalSeams(Material mat)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.Tau / 8f + Mathf.Pi / 8f;
+            AddSurfaceBox($"SHLongSeam{i}", a, 11.3f, 15.2f, 0.030f, 0.10f, mat, BodyR + 0.030f);
+        }
     }
 
     // ── 4 grid fins near top of Super Heavy ──────────────────────────────
@@ -324,11 +334,13 @@ public partial class VesselRenderer : Node3D
         // asymmetric real-vehicle cue without changing the windward tile side.
         AddSurfaceBox("ShipRaceway", angle: 0f, y: o + 31.0f, height: 11.4f,
             width: 0.18f, depth: 0.18f, mat: darkSteel, radius: BodyR + 0.045f);
+        AddPayloadDoorOutline(o, darkSteel);
 
         // Windward black-tile band: a slightly larger half-cylinder shell on the
         // -X side, running the full body height. Built from short tile staves so
         // the dark heat-shield reads clearly on one side only.
         AddTileBand(o + 24f, o + 38f);
+        AddHeatShieldBorder(o + 24f, o + 38f, BodyR + 0.035f);
 
         // ── Ogive nosecone (smooth multi-segment taper) ───────────────────
         // Real Starship nose is a smooth tangent ogive. Build it from many short
@@ -368,6 +380,7 @@ public partial class VesselRenderer : Node3D
 
         // Tile coverage continues up the windward side of the nose.
         AddTileBand(o + 38f, o + 41.5f, topRadius: 0.83f * RScale, botRadius: BodyR + 0.01f);
+        AddHeatShieldBorder(o + 38f, o + 41.5f, BodyR + 0.030f);
 
         // Dome cap: small hemisphere rounding off the ogive tip at y≈o+43.0
         var noseDome = new MeshInstance3D
@@ -407,6 +420,7 @@ public partial class VesselRenderer : Node3D
         AddMesh("ShipBaySoot", new CylinderMesh
             { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
             sootSteel, new Vector3(0, o + 22.4f, 0));
+        AddAftShieldSkirt(o, sootSteel);
 
         // 3 vacuum Raptors (inner) + 3 sea-level (outer). Ring radii scale with
         // the wider 9 m hull so the six bells stay spread under the skirt.
@@ -681,6 +695,46 @@ public partial class VesselRenderer : Node3D
         AddChild(box);
     }
 
+    private void AddPayloadDoorOutline(float o, Material mat)
+    {
+        // Subtle leeward payload-bay/maintenance panel outline. It gives the
+        // stainless side real scale cues without turning into visible text.
+        const float a = 0f; // leeward side opposite the windward heat shield
+        float r = BodyR + 0.052f;
+        AddSurfaceBox("PayloadDoorLeft",  a - 0.17f, o + 34.0f, 7.0f, 0.030f, 0.12f, mat, r);
+        AddSurfaceBox("PayloadDoorRight", a + 0.17f, o + 34.0f, 7.0f, 0.030f, 0.12f, mat, r);
+        AddSurfaceBox("PayloadDoorTop",   a, o + 37.5f, 0.04f, 0.56f, 0.12f, mat, r);
+        AddSurfaceBox("PayloadDoorBottom",a, o + 30.5f, 0.04f, 0.56f, 0.12f, mat, r);
+    }
+
+    private void AddHeatShieldBorder(float yBottom, float yTop, float radius)
+    {
+        var border = Mat(new Color(0.018f, 0.018f, 0.022f), 0.0f, 0.96f);
+        const float arc = 3.49f;
+        foreach (float a in new[] { Mathf.Pi - arc * 0.5f, Mathf.Pi + arc * 0.5f })
+        {
+            float yMid = (yBottom + yTop) * 0.5f;
+            var strip = new MeshInstance3D
+            {
+                Name = "HeatShieldEdge",
+                Mesh = new BoxMesh { Size = new Vector3(0.055f, yTop - yBottom, 0.13f) },
+                Position = new Vector3(radius * Mathf.Cos(a), yMid, radius * Mathf.Sin(a)),
+                RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a) + 90f, 0f),
+            };
+            strip.SetSurfaceOverrideMaterial(0, border);
+            AddChild(strip);
+        }
+    }
+
+    private void AddAftShieldSkirt(float o, Material mat)
+    {
+        // Dark aft heat/soot blankets around the Ship engine bay. This makes the
+        // Starship-to-engine transition read closer to the real vehicle.
+        AddSurfaceBox("ShipAftBlackWrapL", Mathf.Pi - 0.72f, o + 24.2f, 1.5f, 0.30f, 0.15f, mat, BodyR + 0.055f);
+        AddSurfaceBox("ShipAftBlackWrapC", Mathf.Pi,         o + 24.0f, 1.7f, 0.38f, 0.15f, mat, BodyR + 0.055f);
+        AddSurfaceBox("ShipAftBlackWrapR", Mathf.Pi + 0.72f, o + 24.2f, 1.5f, 0.30f, 0.15f, mat, BodyR + 0.055f);
+    }
+
     // Black heat-shield tile coverage over the windward (-X) half of a body
     // section. Built from short tile staves spanning ~200° of the circumference
     // so the dark side reads clearly while the leeward side stays bare steel.
@@ -723,6 +777,21 @@ public partial class VesselRenderer : Node3D
                 };
                 seam.SetSurfaceOverrideMaterial(0, seams);
                 stave.AddChild(seam);
+            }
+
+            float rowH = h / rows;
+            for (int row = 0; row < rows; row++)
+            {
+                float y = -h * 0.5f + rowH * (row + 0.5f);
+                float x = (row + i) % 2 == 0 ? -0.13f : 0.13f;
+                var vSeam = new MeshInstance3D
+                {
+                    Name = $"TileSeamV_{(int)(yMid * 10)}_{i}_{row}",
+                    Mesh = new BoxMesh { Size = new Vector3(0.018f, rowH * 0.58f, 0.110f) },
+                    Position = new Vector3(x, y, -0.007f),
+                };
+                vSeam.SetSurfaceOverrideMaterial(0, seams);
+                stave.AddChild(vSeam);
             }
         }
     }
