@@ -110,26 +110,32 @@ public partial class EDLController : Control
         double aThrustFull = MaxThrustAccel(vessel, body, mass);
         double g = body.GetSurfaceGravity();
 
-        // Suicide-burn ignition altitude: distance needed to null vertical speed.
-        // Only the vertical component of thrust brakes the descent — when the velocity
-        // still has cross-range, pointing retrograde spends most thrust killing the
-        // horizontal component, so the *available* vertical decel is the full thrust
-        // scaled by the vertical fraction of the velocity vector. Igniting on this
-        // corrected distance guarantees we start the flip with room to null vDown.
         double vDown   = System.Math.Max(0.0, -_vUp);
         double vertFrac = speed > 1e-3 ? vDown / speed : 1.0;
-        double aVertAvail = aThrustFull * vertFrac - g;
-        double stopDist = aVertAvail > 0.5
-            ? vDown * vDown / (2.0 * aVertAvail)
-            : double.MaxValue;
+
+        // Distance the FULL retrograde burn needs to null the WHOLE velocity vector (not just the
+        // vertical part) — engines point retrograde, so they kill total speed. Net decel is the
+        // thrust minus the along-track gravity component.
+        double aBrake   = aThrustFull - g * vertFrac;
+        double stopDist = aBrake > 0.5 ? speed * speed / (2.0 * aBrake) : double.MaxValue;
 
         double atmoTop = body.Atmosphere!.MaxAltitude;
 
-        // Physics gate: ignite the retro/suicide burn the moment we're within the
-        // braking margin, regardless of how the aero phases are progressing. This is
-        // what guarantees the vessel can actually null its velocity before impact.
-        if (_phase is Edl.Entry or Edl.Peak or Edl.Aero &&
-            vDown > 5.0 && _alt <= stopDist * 1.25)
+        // Flip to the landing burn LOW, after the belly-flop has bled off velocity aerodynamically
+        // (real Starship belly-flops to near terminal velocity, then flips at ~0.5-2 km). Hold the
+        // broadside attitude through the whole aero descent — flipping to engines-retrograde high
+        // up loses the drag, lets the vessel penetrate deep at hypersonic speed, and burns it up.
+        // Gate: drop the belly-flop only once we're within the burn's stopping distance (so a fast
+        // arrival still ignites in time) AND below a low flip ceiling so a nominal aero-braked entry
+        // doesn't flip prematurely and waste propellant on a huge high-altitude burn.
+        // Flip altitude: scale with the burn's stopping distance for a fast arrival, but never
+        // below ~800 m so a vessel already at belly-flop terminal velocity (~70-100 m/s) still has
+        // comfortable room to flip and null the descent (a too-low flip can't arrest it in time).
+        const double FlipCeiling = 8_000.0;
+        double flipAlt = aBrake > 0.5
+            ? System.Math.Clamp(stopDist * 1.6, 800.0, FlipCeiling)
+            : 0.0;   // can't brake yet (still hypersonic) — keep belly-flop
+        if (_phase is Edl.Entry or Edl.Peak or Edl.Aero && vDown > 5.0 && _alt <= flipAlt)
         {
             _phase = Edl.Retro;
             mission?.EnterPhase(MissionPhase.RETRO_BURN);
@@ -181,30 +187,25 @@ public partial class EDLController : Control
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.PitchYawRoll    = Vector3d.Zero;
 
-        // ── Throttle: total-velocity suicide burn → gentle vertical final ───────
+        // ── Throttle: closed-loop descent-rate profile to a soft touchdown ──────
+        // By the time we flip (low, post-belly-flop) the velocity is mostly vertical. Track a
+        // target descent rate that follows a constant-deceleration profile easing to ~1.5 m/s at
+        // the pad: v_target(alt) = √(2·a·(alt−stopAlt)) + 1.5. Reserve braking authority (use 60%
+        // of thrust for the profile) so the closed loop has headroom and the engine spool can keep
+        // up — the old minimum-energy "stop exactly at the ground" burn commanded almost no thrust
+        // until the last instant and touched down hot.
         if (_phase is Edl.Retro or Edl.Final)
         {
-            double thr;
-            if (_alt > 120.0 && speed > 25.0)
-            {
-                // Engines point retrograde, so full thrust decelerates the WHOLE velocity
-                // vector (horizontal + vertical together). Command the deceleration that
-                // brings speed to ~zero exactly at the ground along the slant path:
-                //   slant range ≈ alt / sin γ = alt·speed / vDown ,  a_req = speed²/(2·range).
-                // Add gravity's along-track component so the closed burn holds the profile.
-                double slantRange = _alt * speed / System.Math.Max(vDown, 1.0);
-                double aReq = speed * speed / (2.0 * System.Math.Max(slantRange, 1.0));
-                double aCmd = aReq + g * vertFrac;
-                thr = aThrustFull > 1e-6 ? aCmd / aThrustFull : 0.0;
-            }
-            else
-            {
-                // Final approach: gentle vertical descent that eases to ~1.5 m/s at contact —
-                // a realistic Starship touchdown (the real vehicle sets down at ~1-2 m/s).
-                double sUp  = -System.Math.Clamp(1.0 + _alt * 0.04, 1.0, 6.0);
-                double aCmd = 0.6 * (sUp - _vUp) + g;
-                thr = aThrustFull > 1e-6 ? aCmd / aThrustFull : 0.0;
-            }
+            const double stopAlt = 6.0;
+            // Target descent rate: a gentle LINEAR profile that eases to ~1.5 m/s at the pad and
+            // is already below the post-belly-flop terminal velocity (~70 m/s) at the flip, so the
+            // burn starts braking immediately. Cap it by a constant-deceleration limit so a faster
+            // arrival is still braked hard enough. Close the loop with gravity feed-forward.
+            double vTargetLin = 1.5 + _alt * 0.06;
+            double vTargetMax = System.Math.Sqrt(2.0 * 0.60 * aThrustFull * System.Math.Max(0.0, _alt - stopAlt)) + 1.5;
+            double vTarget    = System.Math.Min(vTargetLin, vTargetMax);
+            double aCmd = 1.6 * (vDown - vTarget) + g;      // >0 ⇒ thrust up to brake toward profile
+            double thr  = aThrustFull > 1e-6 ? aCmd / aThrustFull : 0.0;
             vessel.Throttle = System.Math.Clamp(thr, 0.0, 1.0);
         }
         else
