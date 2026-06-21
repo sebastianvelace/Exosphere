@@ -95,9 +95,19 @@ Mejoras:
 - [x] Pluma SL/ascenso mas brillante y ANCHA (verificado por captura): el column merged de 33
   Raptors se leia como humo fino contra el cielo; ahora mouths mas anchos + energy 3.0->4.6 (SH) /
   3.4->4.0 (Ship). El ground cloud de 5 capas (`LaunchEffectsController`) ya era fuerte, no se toco.
-- [ ] Pluma vacio: expansion mas amplia y limpia, menor humo. (Necesita captura a alta altitud.)
+- [x] Pluma vacio: legibilidad subida (verificado por captura a 120/152 km). El shader
+  `raptor_plume.gdshader` ya hace el vacio opticamente DELGADO a proposito (realista); contra la
+  Tierra brillante se leia como un manchon. Subido `vacuumDim` 0.45->0.62 y `vacuumAlpha` 0.40->0.55
+  (sigue mas tenue que SL, ahora legible). NO se reescribio el shader — es un asset deliberado.
 - [ ] Startup/ramp: transicion visible desde ignicion a liftoff.
-- [ ] Hot-staging: plume entre etapas con iluminacion corta y smoke/soot en el ring.
+- [ ] Hot-staging: plume entre etapas — **GAP CONFIRMADO por captura**. Al separar (`exo_hotstage`,
+  ~63 km) la Starship ya enciende normal pero NO hay flash/plume brillante ENTRE etapas ni soot en el
+  hot-stage ring del booster. Approach para el proximo agente: enganchar la senal
+  `SimulationBridge.VesselStaged` (se emite en `TriggerStaging`); en un controlador nuevo
+  (`scripts/HotStageFlashController.cs`, patron self-install como `ReentryBreakupController`) spawnear
+  un OmniLight3D + un GpuParticles3D corto (~1-1.5 s) de plume/soot en el plano de separacion (y/o
+  scorch en el tope del booster en el `VesselRenderer` del debris). OJO: el momento dura ~1 frame —
+  el harness de captura debe disparar VARIOS frames seguidos tras el drop de part-count para verlo.
 - [ ] Ground cloud: polvo/vapor horizontal, no solo columna vertical.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
   opcional si no distrae.
@@ -179,9 +189,40 @@ Aceptacion:
 
 ## Orden De Implementacion Recomendado
 
-1. V0 capturas baseline.
-2. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino.
-3. V2 pluma liftoff + hot-staging. Liftoff parcial; falta hot-staging/vacio.
+1. V0 capturas baseline. ✅ Captura real con framebuffer via `xvfb-run` validada (ver tope del doc).
+2. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino y grid fins.
+3. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad). Falta:
+   **hot-staging** (gap confirmado, approach especificado arriba), startup/ramp, pluma de vacio
+   "limpia" con menos humo.
 4. V3 reentry plasma/charring.
 5. V4 camara/luz/atmosfera.
-6. V5 capturas automatizadas en CI.
+6. V5 capturas automatizadas en CI (cablear el xvfb capture de V0).
+
+## Bitacora Para El Proximo Agente (que se hizo y como continuar)
+
+Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
+
+**Hecho y verificado por screenshots reales (xvfb):**
+- **Captura real funcionando** (`xvfb-run` + autoload temporal `_CaptureShot.cs`). Ver bloque "V0"
+  arriba y la memoria `visual-capture-xvfb`. Esto es LA herramienta para todo cambio visual:
+  cambio -> build -> capturar -> mirar el PNG con la tool Read -> comparar. Igual que el tuning de
+  la EDL en R13. El `--headless` NO sirve (dummy renderer).
+- **Pluma SL/ascenso** mas brillante y ancha (`scripts/PlumeSystem.cs`, commit `390a7ce`): mouths del
+  core/anillos mas anchos + `energy` del shader SH 3.0->4.6 / Ship 3.4->4.0. Antes era humo gris fino.
+- **Pluma de vacio** legible (`assets/shaders/raptor_plume.gdshader`, commit `4d971ad`):
+  `vacuumDim`/`vacuumAlpha` un poco mas altos. El shader es un asset deliberado y bien hecho — NO
+  reescribir; tunear con cuidado.
+- El **ground cloud** (`LaunchEffectsController.cs`) ya es una nube de deluge de 5 capas muy iterada
+  ("N5"); las capturas confirman que es fuerte. **No tocar a ciegas.**
+
+**Como tunear plumas (mapa rapido):**
+- Tamaño/colores/brillo por anillo: `PlumeSystem.SetupSH` / `SetupStarship` (mouthR, length, core).
+- Brillo maestro + diamantes: uniforme `energy` y `diamond_count` en `PlumeSystem.BuildUnit`.
+- Forma/opacidad/color por presion (SL vs vacio): el fragment de `raptor_plume.gdshader`
+  (`effExpansion`, `reach`, `vacuumDim`, `vacuumAlpha`, `eScale`). SL = corto/brillante/diamantes;
+  vacio = largo/tenue/sin diamantes (a proposito).
+- Ground cloud (deluge): `LaunchEffectsController.cs`.
+
+**Proximo paso mas valioso:** hot-staging (gap confirmado, approach detallado en V2 arriba). Luego
+startup/ramp de ignicion, y despues V3 (reentry plasma ligado al heat flux real, que YA esta en el
+sim como `WorstHeatRatio`/`Part.ThermalDamage`).
