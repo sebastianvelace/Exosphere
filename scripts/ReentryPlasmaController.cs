@@ -69,6 +69,13 @@ public partial class ReentryPlasmaController : Node3D
         };
         _wake.SetSurfaceOverrideMaterial(0, _wakeMat);
         AddChild(_wake);
+
+        // Break-up VFX lives as a sibling effect at the same render origin. We host it
+        // here (rather than in SimulationBridge) so the plasma + break-up re-entry
+        // effects are created and torn down together. It watches the active vessel's
+        // thermal-destruction state on its own.
+        // El breakup cuelga del mismo origen de render; observa la destrucción térmica solo.
+        AddChild(new ReentryBreakupController { Name = "ReentryBreakup" });
     }
 
     public override void _Process(double delta)
