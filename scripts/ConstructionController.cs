@@ -22,6 +22,14 @@ public partial class ConstructionController : Control
     private Label _status = null!;
     private VesselRenderer? _previewRenderer;
 
+    // ── Direct 3D manipulation (preview picking) ──────────────────────────
+    private SubViewport?        _previewViewport;
+    private Camera3D?           _previewCamera;
+    private VabPickingLayer?    _picking;
+    private MeshInstance3D?     _highlight;
+    private StandardMaterial3D? _highlightMat;
+    private string?             _selectedInstanceId;
+
     public override void _Ready()
     {
         BuildUi();
@@ -35,6 +43,7 @@ public partial class ConstructionController : Control
         string path = ProjectSettings.GlobalizePath("res://data/parts");
         _catalog = PartCatalog.LoadFromDirectory(path);
         _assembly = new VesselAssembly(_catalog);
+        _picking?.Configure(_catalog);
 
         _catalogList.Clear();
         foreach (var part in _catalog.AllParts)
@@ -63,7 +72,7 @@ public partial class ConstructionController : Control
         var catalogBox = BuildPanel("Catalog");
         root.AddChild(catalogBox);
         _catalogList = new ItemList { Name = "CatalogList", CustomMinimumSize = new Vector2(380, 0) };
-        _catalogList.ItemSelected += _ => RefreshNodeChoices();
+        _catalogList.ItemSelected += _ => { RefreshNodeChoices(); RefreshNodeMarkers(); };
         catalogBox.AddChild(_catalogList);
 
         // Navegador de craft files guardados / Saved craft-file browser.
@@ -85,7 +94,7 @@ public partial class ConstructionController : Control
         var mid = BuildPanel("Assembly");
         root.AddChild(mid);
         _stackList = new ItemList { Name = "StackList", CustomMinimumSize = new Vector2(420, 0) };
-        _stackList.ItemSelected += _ => RefreshNodeChoices();
+        _stackList.ItemSelected += OnStackListSelected;
         mid.AddChild(_stackList);
 
         var controls = new GridContainer { Columns = 2 };
@@ -138,9 +147,13 @@ public partial class ConstructionController : Control
 
         var viewportContainer = new SubViewportContainer
         {
+            Name = "PreviewContainer",
             CustomMinimumSize = new Vector2(360, 360),
             Stretch = true,
         };
+        // Recibimos input del ratón sobre la preview para hacer picking 3D.
+        // We receive mouse input over the preview to drive 3D picking.
+        viewportContainer.GuiInput += OnPreviewGuiInput;
         info.AddChild(viewportContainer);
 
         var viewport = new SubViewport
@@ -148,8 +161,13 @@ public partial class ConstructionController : Control
             Size = new Vector2I(720, 720),
             TransparentBg = true,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            // Hacemos el raycast manualmente sobre DirectSpaceState; no usamos el
+            // picking automático de Godot. / We raycast manually against
+            // DirectSpaceState; Godot's automatic object picking stays off.
+            PhysicsObjectPicking = false,
         };
         viewportContainer.AddChild(viewport);
+        _previewViewport = viewport;
 
         var previewRoot = new Node3D { Name = "PreviewRoot" };
         viewport.AddChild(previewRoot);
@@ -167,11 +185,41 @@ public partial class ConstructionController : Control
         };
         previewRoot.AddChild(camera);
         camera.LookAtFromPosition(new Vector3(0f, 28f, 86f), new Vector3(0f, 20f, 0f), Vector3.Up);
+        _previewCamera = camera;
         _previewRenderer = new VesselRenderer { Name = "PreviewVessel" };
         previewRoot.AddChild(_previewRenderer);
 
+        // Capa de picking (hermana del renderer): cuerpos de colisión invisibles
+        // por pieza y por nodo disponible. / Picking layer (renderer sibling):
+        // invisible collision bodies per part and per available node.
+        _picking = new VabPickingLayer { Name = "Picking" };
+        previewRoot.AddChild(_picking);
+
+        // Resaltado de la pieza seleccionada: una cápsula translúcida.
+        // Selected-part highlight: a translucent capsule.
+        _highlight = new MeshInstance3D { Name = "Highlight", Visible = false };
+        _highlightMat = new StandardMaterial3D
+        {
+            AlbedoColor     = new Color(1.0f, 0.85f, 0.20f, 0.28f),
+            Transparency    = BaseMaterial3D.TransparencyEnum.Alpha,
+            ShadingMode     = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            CullMode        = BaseMaterial3D.CullModeEnum.Disabled,
+            EmissionEnabled = true,
+            Emission        = new Color(0.9f, 0.7f, 0.1f),
+        };
+        previewRoot.AddChild(_highlight);
+
         _status = new Label { Name = "Status", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         info.AddChild(_status);
+
+        var hint = new Label
+        {
+            Name = "Hint",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Text = "Preview: click a part to select. With a catalog part chosen, "
+                 + "click a green node marker to attach. [Del] removes the selection.",
+        };
+        info.AddChild(hint);
     }
 
     private static VBoxContainer BuildPanel(string title)
@@ -440,6 +488,8 @@ public partial class ConstructionController : Control
             if (_assembly.Parts.Count == 0)
             {
                 _previewRenderer.Visible = false;
+                _picking?.RebuildSelectionBodies(_assembly);
+                ClearSelection();
                 return;
             }
 
@@ -450,6 +500,17 @@ public partial class ConstructionController : Control
         {
             _previewRenderer.Visible = false;
         }
+
+        // Reconstruimos los cuerpos de picking tras cada cambio de asamblea, y
+        // revalidamos la selección/resaltado y los marcadores de nodo.
+        // Rebuild picking bodies after every assembly change, then revalidate the
+        // selection/highlight and the node markers.
+        _picking?.RebuildSelectionBodies(_assembly);
+        if (_selectedInstanceId != null && _assembly.Parts.All(p => p.InstanceId != _selectedInstanceId))
+            ClearSelection();
+        else
+            UpdateHighlight();
+        RefreshNodeMarkers();
     }
 
     private void RefreshNodeChoices()
@@ -488,6 +549,9 @@ public partial class ConstructionController : Control
 
     private string? SelectedAssemblyInstanceId()
     {
+        // La selección en la preview 3D tiene prioridad; si no, caemos a la lista.
+        // The 3D preview selection wins; otherwise fall back to the stack list.
+        if (_selectedInstanceId != null) return _selectedInstanceId;
         int[] selected = _stackList.GetSelectedItems();
         return selected.Length == 0 ? null : _stackList.GetItemMetadata(selected[0]).AsString();
     }
@@ -496,6 +560,188 @@ public partial class ConstructionController : Control
     {
         int selected = option.Selected;
         return selected < 0 ? null : option.GetItemMetadata(selected).AsString();
+    }
+
+    // ── Direct 3D manipulation ────────────────────────────────────────────
+
+    // Selección desde la lista textual → sincroniza el resaltado de la preview.
+    // Selection from the text list → syncs the preview highlight.
+    private void OnStackListSelected(long index)
+    {
+        string? id = index < 0 || index >= _stackList.ItemCount
+            ? null
+            : _stackList.GetItemMetadata((int)index).AsString();
+        SelectInstance(id, syncList: false);
+        RefreshNodeChoices();
+    }
+
+    // Click sobre la preview 3D: raycast desde la cámara hacia los cuerpos de
+    // picking. Si pega en un marcador de nodo → adjunta; si pega en una pieza →
+    // la selecciona; si no pega en nada → deselecciona.
+    // Click on the 3D preview: raycast from the camera against the picking
+    // bodies. Hit a node marker → attach; hit a part → select; miss → deselect.
+    private void OnPreviewGuiInput(InputEvent ev)
+    {
+        if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        {
+            HandlePreviewClick(mb.Position);
+        }
+    }
+
+    private void HandlePreviewClick(Vector2 localPos)
+    {
+        if (_previewViewport == null || _previewCamera == null || _picking == null) return;
+
+        // La posición viene en coords del contenedor; escalamos al tamaño real
+        // del SubViewport (el contenedor estira la imagen).
+        // localPos is in container coords; scale it to the SubViewport's real
+        // size (the container stretches the rendered image).
+        var container = _previewViewport.GetParent<SubViewportContainer>();
+        Vector2 vpSize = _previewViewport.Size;
+        Vector2 cSize = container.Size;
+        Vector2 vpPos = cSize.X > 0 && cSize.Y > 0
+            ? new Vector2(localPos.X / cSize.X * vpSize.X, localPos.Y / cSize.Y * vpSize.Y)
+            : localPos;
+
+        Vector3 from = _previewCamera.ProjectRayOrigin(vpPos);
+        Vector3 dir  = _previewCamera.ProjectRayNormal(vpPos);
+
+        var space = _previewViewport.World3D.DirectSpaceState;
+        var query = new PhysicsRayQueryParameters3D
+        {
+            From = from,
+            To   = from + dir * 1000f,
+            CollisionMask = _picking.PickCollisionMask,
+            CollideWithAreas  = false,
+            CollideWithBodies = true,
+        };
+        var hit = space.IntersectRay(query);
+        if (hit.Count == 0)
+        {
+            ClearSelection();
+            RefreshNodeChoices();
+            SetStatus("Selection cleared.");
+            return;
+        }
+
+        var collider = hit["collider"].As<Node>();
+        string kind = collider != null ? (string)collider.GetMeta(VabPickingLayer.MetaKind, "") : "";
+
+        if (kind == VabPickingLayer.KindNode)
+        {
+            string instanceId = (string)collider!.GetMeta(VabPickingLayer.MetaInstance, "");
+            string nodeId     = (string)collider.GetMeta(VabPickingLayer.MetaNode, "");
+            AttachAtNode(instanceId, nodeId);
+        }
+        else if (kind == VabPickingLayer.KindPart)
+        {
+            string instanceId = (string)collider!.GetMeta(VabPickingLayer.MetaInstance, "");
+            SelectInstance(instanceId, syncList: true);
+            RefreshNodeChoices();
+            SetStatus("Part selected.");
+        }
+    }
+
+    // Adjunta la pieza de catálogo elegida en el nodo clickeado. Resuelve el
+    // childNode compatible automáticamente (el primero que encaje).
+    // Attaches the chosen catalog part at the clicked node, auto-resolving the
+    // first compatible child node.
+    private void AttachAtNode(string parentInstanceId, string parentNodeId)
+    {
+        if (_assembly == null || _catalog == null) return;
+        string? partId = SelectedCatalogPartId();
+        if (partId == null) { SetStatus("Select a catalog part first."); return; }
+        if (!_catalog.TryGet(partId, out var childDef)) { SetStatus("Unknown catalog part."); return; }
+
+        var parentPart = _assembly.Parts.FirstOrDefault(p => p.InstanceId == parentInstanceId);
+        if (parentPart == null) return;
+        var parentDef  = _catalog[parentPart.DefinitionId];
+        var parentNode = parentDef.AttachmentNodes.FirstOrDefault(n => n.Id == parentNodeId);
+        if (parentNode == null) return;
+
+        var childNode = childDef.AttachmentNodes
+            .FirstOrDefault(n => VesselAssembly.NodesAreCompatible(parentNode, n));
+        if (childNode == null) { SetStatus("No compatible node on the catalog part."); return; }
+
+        try
+        {
+            var attached = _assembly.AttachPart(parentInstanceId, parentNodeId, partId, childNode.Id);
+            Refresh();
+            SelectInstance(attached.InstanceId, syncList: true);
+            SetStatus($"Attached {childDef.Name}.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    // Selecciona una pieza (o ninguna) y actualiza resaltado, lista y marcadores.
+    // Selects a part (or none) and updates highlight, list, and markers.
+    private void SelectInstance(string? instanceId, bool syncList)
+    {
+        _selectedInstanceId = instanceId;
+        UpdateHighlight();
+        RefreshNodeMarkers();
+
+        if (syncList)
+        {
+            _stackList.DeselectAll();
+            if (instanceId != null)
+            {
+                for (int i = 0; i < _stackList.ItemCount; i++)
+                {
+                    if (_stackList.GetItemMetadata(i).AsString() == instanceId)
+                    {
+                        _stackList.Select(i);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void ClearSelection() => SelectInstance(null, syncList: true);
+
+    // Coloca y dimensiona la cápsula de resaltado sobre la pieza seleccionada.
+    // Places and sizes the highlight capsule over the selected part.
+    private void UpdateHighlight()
+    {
+        if (_highlight == null || _picking == null) return;
+        if (_selectedInstanceId == null
+            || !_picking.TryGetPartBounds(_selectedInstanceId, out var center, out var radius, out var halfHeight))
+        {
+            _highlight.Visible = false;
+            return;
+        }
+
+        _highlight.Mesh = new CapsuleMesh
+        {
+            Radius = radius * 1.08f,
+            Height = Mathf.Max(halfHeight * 2f, radius * 2f) * 1.04f,
+        };
+        if (_highlightMat != null)
+            _highlight.SetSurfaceOverrideMaterial(0, _highlightMat);
+        _highlight.Position = center;
+        _highlight.Visible  = true;
+    }
+
+    // Muestra los marcadores de nodo si hay pieza seleccionada + pieza de catálogo.
+    // Shows node markers when a part is selected and a catalog part is chosen.
+    private void RefreshNodeMarkers()
+    {
+        _picking?.ShowNodeMarkers(_selectedInstanceId, SelectedCatalogPartId());
+    }
+
+    // [Del] borra el subárbol seleccionado desde la preview.
+    // [Del] removes the selected subtree from the preview.
+    public override void _UnhandledKeyInput(InputEvent ev)
+    {
+        if (ev is InputEventKey k && k.Pressed && k.Keycode == Key.Delete && _selectedInstanceId != null)
+        {
+            OnDelete();
+            GetViewport().SetInputAsHandled();
+        }
     }
 
     private void SetStatus(string message)
