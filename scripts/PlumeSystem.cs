@@ -60,24 +60,26 @@ public partial class PlumeSystem : Node3D
         // altitude then stretches it far longer (see Update()).
 
         // Bright central column (the merged plume core of the densely-packed cluster).
-        _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 0.55f,
-            length: 13.5f, count: 33,
-            core: new Color(0.80f, 0.89f, 1.00f), withLight: true, sh: true));
+        // Real Super Heavy liftoff is a SHORT but very WIDE, blinding flame disk — the 33
+        // engines merge into one incandescent column. Fatter mouth + a touch more length.
+        _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 0.95f,
+            length: 15.0f, count: 33,
+            core: new Color(0.85f, 0.92f, 1.00f), withLight: true, sh: true));
 
         // Inner ring — 3 engines.
-        _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.22f,
-            length: 11.5f, count: 3,
-            core: new Color(0.74f, 0.86f, 1.00f), withLight: false, sh: true));
+        _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.34f,
+            length: 12.5f, count: 3,
+            core: new Color(0.80f, 0.89f, 1.00f), withLight: false, sh: true));
 
         // Mid ring — 10 engines.
-        _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.28f,
-            length: 10.7f, count: 10,
-            core: new Color(0.72f, 0.85f, 1.00f), withLight: false, sh: true));
+        _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.42f,
+            length: 11.7f, count: 10,
+            core: new Color(0.78f, 0.88f, 1.00f), withLight: false, sh: true));
 
         // Outer ring — 20 engines, broadest cluster.
-        _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.34f,
-            length: 10.2f, count: 20,
-            core: new Color(0.70f, 0.84f, 1.00f), withLight: true, sh: true));
+        _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.50f,
+            length: 11.0f, count: 20,
+            core: new Color(0.76f, 0.87f, 1.00f), withLight: true, sh: true));
     }
 
     /// <summary>Sets up the Starship plume (3 vacuum + 3 sea-level Raptors).</summary>
@@ -239,7 +241,9 @@ public partial class PlumeSystem : Node3D
         mat.SetShaderParameter("core_color",     core);
         mat.SetShaderParameter("edge_color",    new Color(1.0f, 0.45f, 0.12f));
         mat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
-        mat.SetShaderParameter("energy",        sh ? 3.0f : 3.4f);
+        // Master brightness — the merged 33-engine column reads brighter against the daytime
+        // sky than a single ring; bumped so liftoff/ascent exhaust actually glows.
+        mat.SetShaderParameter("energy",        sh ? 4.6f : 4.0f);
         mat.SetShaderParameter("throttle",      0f);
         mat.SetShaderParameter("expansion",     0f);
         // N7: initialize the new atmospheric-pressure uniforms.
