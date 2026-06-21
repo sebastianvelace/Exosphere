@@ -202,8 +202,10 @@ public partial class CameraController : Node3D
         }
 
         // Derive eye/fwd/up from the SMOOTHED orientation, not the raw sim value.
-        var orient = v.Orientation;
-        Vector3 eye = ToG(orient.Rotate(new Vector3d(0, 36, 0.6)));
+        // The cockpit mesh is oriented with _smoothedOrientation above; using raw
+        // vessel orientation for the eye can put the camera through the dash during
+        // abrupt state jumps such as debug orbit -> reentry captures.
+        Vector3 eye = _smoothedOrientation * new Vector3(0f, 36f, 0.6f);
         Vector3 fwd = (_smoothedOrientation * Vector3.Up).Normalized();
         Vector3 up  = (_smoothedOrientation * Vector3.Back).Normalized();
 
@@ -232,8 +234,9 @@ public partial class CameraController : Node3D
             _lookPitch = Mathf.Lerp(_lookPitch, 0f, k);
         }
         Vector3 right = fwd.Cross(up).Normalized();
-        // Rest the gaze tilted ~22° down toward the console/screens.
-        Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(22f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
+        // Rest the gaze slightly down toward the console without letting the
+        // dashboard dominate the windshield view.
+        Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(8f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
 
         camera.Position = eye + _gOffset;
         camera.LookAt(eye + _gOffset + look, up);

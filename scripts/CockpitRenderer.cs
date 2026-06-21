@@ -43,14 +43,14 @@ public partial class CockpitRenderer : Node3D
         Spawn("Floor",   new BoxMesh { Size = new Vector3(2.3f, 3.2f, 0.10f) }, floorM, new Vector3(0, EyeY - 0.1f, 1.05f));
 
         // ── Dashboard: a wide raked console below the forward sightline ────────────
-        Spawn("Dash",     new BoxMesh { Size = new Vector3(2.1f, 0.95f, 0.16f) }, panel, new Vector3(0, EyeY + 1.15f, 0.92f), new Vector3(54, 0, 0));
-        Spawn("DashEdge", new BoxMesh { Size = new Vector3(2.15f, 0.07f, 0.22f) }, trim, new Vector3(0, EyeY + 0.78f, 0.66f), new Vector3(54, 0, 0));
+        Spawn("Dash",     new BoxMesh { Size = new Vector3(2.1f, 0.78f, 0.12f) }, panel, new Vector3(0, EyeY + 1.22f, 1.34f), new Vector3(54, 0, 0));
+        Spawn("DashEdge", new BoxMesh { Size = new Vector3(2.15f, 0.06f, 0.16f) }, trim, new Vector3(0, EyeY + 0.86f, 1.12f), new Vector3(54, 0, 0));
 
         // Three screens on the dashboard, auto-oriented to face the pilot eye.
-        var sq = new QuadMesh { Size = new Vector2(0.58f, 0.40f) };
-        AddScreen("Screen0", sq, screenM, new Vector3(0f,     EyeY + 1.02f, 0.78f));
-        AddScreen("Screen1", sq, screenM, new Vector3(-0.66f, EyeY + 1.00f, 0.80f));
-        AddScreen("Screen2", sq, screenM, new Vector3(0.66f,  EyeY + 1.00f, 0.80f));
+        var sq = new QuadMesh { Size = new Vector2(0.46f, 0.30f) };
+        AddScreen("Screen0", sq, screenM, new Vector3(0f,     EyeY + 1.08f, 1.20f));
+        AddScreen("Screen1", sq, screenM, new Vector3(-0.58f, EyeY + 1.06f, 1.22f));
+        AddScreen("Screen2", sq, screenM, new Vector3(0.58f,  EyeY + 1.06f, 1.22f));
 
         // ── Windshield frame (the front is open to space; this just outlines it) ───
         Spawn("WsTop",     new BoxMesh { Size = new Vector3(2.0f, 0.09f, 0.09f) }, frameM, new Vector3(0, EyeY + 1.9f, -0.55f));
