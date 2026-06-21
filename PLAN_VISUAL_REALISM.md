@@ -16,7 +16,23 @@ Este plan prioriza mejoras visibles y verificables sobre sistemas nuevos.
 - Las dimensiones visibles deben respetar escala real aproximada: Starship/Super
   Heavy 9 m de diametro, stack ~121 m, Ship ~50 m, booster ~71 m.
 
-## V0 — Preparacion De Capturas
+## V0 — Preparacion De Capturas  ✅ FUNCIONANDO
+
+Captura con framebuffer real **validada** via `xvfb-run` (ya instalado): se corre Godot SIN
+`--headless` bajo un display virtual y un autoload temporal `scripts/_CaptureShot.cs` (patron
+`_*Shot`, gitignored) que engancha el autopiloto de ascenso, espera `RenderingServer.FramePostDraw`
+y guarda PNGs a `/tmp` en fases clave (ignition/liftoff/low-ascent), reportando avgLum/nonEmpty para
+descartar pantallas negras. Comando:
+
+```bash
+xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" --path . --rendering-driver opengl3
+```
+
+Esto desbloquea verificar TODO cambio visual con screenshots reales (antes el dummy renderer de
+`--headless` impedia capturar). El harness es temporal y se limpia (`rm` + `git checkout project.godot`).
+Siguiente paso natural: cablearlo a CI bajo Xvfb (V5).
+
+## V0 (original) — Preparacion De Capturas
 
 Antes de hacer cambios visuales grandes:
 
@@ -76,7 +92,10 @@ Archivos probables:
 
 Mejoras:
 - [x] Pluma SL: mas opaca, turbulenta, expandida contra el pad, con core brillante.
-- [ ] Pluma vacio: expansion mas amplia y limpia, menor humo.
+- [x] Pluma SL/ascenso mas brillante y ANCHA (verificado por captura): el column merged de 33
+  Raptors se leia como humo fino contra el cielo; ahora mouths mas anchos + energy 3.0->4.6 (SH) /
+  3.4->4.0 (Ship). El ground cloud de 5 capas (`LaunchEffectsController`) ya era fuerte, no se toco.
+- [ ] Pluma vacio: expansion mas amplia y limpia, menor humo. (Necesita captura a alta altitud.)
 - [ ] Startup/ramp: transicion visible desde ignicion a liftoff.
 - [ ] Hot-staging: plume entre etapas con iluminacion corta y smoke/soot en el ring.
 - [ ] Ground cloud: polvo/vapor horizontal, no solo columna vertical.
