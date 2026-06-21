@@ -14,6 +14,20 @@ public partial class VesselRenderer : Node3D
     private MeshInstance3D? _hullMesh;
     private PlumeSystem?    _plumes;
 
+    // ── Real-scale hull radius ────────────────────────────────────────────
+    // Starship/Super Heavy are 9 m in diameter → 4.5 m radius. At the render
+    // scale of 1 u = 2.8 m that is 4.5/2.8 ≈ 1.607 u. The body was previously
+    // modelled at 1.15 u (≈6.4 m Ø, too thin). RScale lifts every RADIAL
+    // dimension to the real 9 m hull WITHOUT touching the vertical layout, so
+    // the stack stays ~43 u (≈121 m) tall and the camera/cockpit framing —
+    // which keys off that height — is unaffected.
+    // Starship/Super Heavy miden 9 m de diámetro → radio 4.5 m ≈ 1.607 u a la
+    // escala de render. RScale escala SOLO lo radial; la altura no se toca
+    // (cámara y cabina dependen de ella).
+    private const float BodyR  = 1.607f;          // real 9 m-Ø hull radius (u)
+    private const float OldR   = 1.15f;           // legacy modelling radius (u)
+    private const float RScale = BodyR / OldR;    // ≈1.397 radial scale factor
+
     // ── Layout constants (all in render units, y=0 = SH engine bell tips) ──
     //
     //  Full stack:
@@ -70,7 +84,7 @@ public partial class VesselRenderer : Node3D
             weldSpacing: 0.9f);
         var ventMat   = Mat(new Color(0.10f, 0.10f, 0.11f), 0.70f, 0.55f);
         AddMesh("Interstage", new CylinderMesh
-            { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 2f, RadialSegments = 64 },
+            { TopRadius = BodyR, BottomRadius = BodyR, Height = 2f, RadialSegments = 64 },
             ringSteel, new Vector3(0, 21f, 0));
 
         // Vertical vent slots around the hot-stage ring (dark recesses).
@@ -78,11 +92,11 @@ public partial class VesselRenderer : Node3D
         {
             float a = i * Mathf.Pi / 12f;
             AddMesh($"Vent{i}", new BoxMesh { Size = new Vector3(0.10f, 1.4f, 0.16f) },
-                ventMat, new Vector3(1.14f * Mathf.Cos(a), 21f, 1.14f * Mathf.Sin(a)));
+                ventMat, new Vector3(1.14f * RScale * Mathf.Cos(a), 21f, 1.14f * RScale * Mathf.Sin(a)));
         }
         // Lip rings top and bottom of the interstage.
-        AddWeldRing("InterLipB", 1.155f, 20.1f);
-        AddWeldRing("InterLipT", 1.155f, 21.9f);
+        AddWeldRing("InterLipB", 1.155f * RScale, 20.1f);
+        AddWeldRing("InterLipT", 1.155f * RScale, 21.9f);
 
         // Starship section sits at separation plane y=22
         BuildStarshipSection(vessel, yOffset: 0f);
@@ -120,23 +134,24 @@ public partial class VesselRenderer : Node3D
         var shSteel = SteelMat(new Color(0.80f, 0.80f, 0.82f), 0.93f, 0.22f,
             weldSpacing: 1.6f, sootBot: -9f, sootTop: -5.5f);
         _hullMesh = AddMesh("SHBody", new CylinderMesh
-            { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 18f, RadialSegments = 64 },
+            { TopRadius = BodyR, BottomRadius = BodyR, Height = 18f, RadialSegments = 64 },
             shSteel, new Vector3(0, 11f, 0));
 
         // Raceway / conduit running up one side of the booster (real SH detail).
         AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
-            darkSteel, new Vector3(1.16f, 11f, 0f));
+            darkSteel, new Vector3(BodyR + 0.01f, 11f, 0f));
 
         // Engine skirt (y=0 → y=2) — sooty, blended into the body bottom so the
         // booster/engine transition has no hard cap. Slight outward flare.
         AddMesh("SHSkirt", new CylinderMesh
-            { TopRadius = 1.15f, BottomRadius = 1.22f, Height = 2.2f, RadialSegments = 64 },
+            { TopRadius = BodyR, BottomRadius = 1.22f * RScale, Height = 2.2f, RadialSegments = 64 },
             sootSteel, new Vector3(0, 0.95f, 0));
 
-        // 33 Raptor engine bells in 3 rings (tips at y≈-0.6)
-        const float shInnerR = 0.30f;
-        const float shMidR   = 0.68f;
-        const float shOuterR = 1.04f;
+        // 33 Raptor engine bells in 3 rings (tips at y≈-0.6). Ring radii scale
+        // with the wider 9 m hull so the cluster stays spread under the skirt.
+        const float shInnerR = 0.30f * RScale;
+        const float shMidR   = 0.68f * RScale;
+        const float shOuterR = 1.04f * RScale;
         const float shBellY  = -0.6f;
 
         for (int i = 0; i < 3; i++)
@@ -166,7 +181,7 @@ public partial class VesselRenderer : Node3D
         {
             var scarMat = Mat(new Color(0.28f, 0.28f, 0.30f), 0.92f, 0.10f);
             AddMesh("SepScar", new CylinderMesh
-                { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 0.35f, RadialSegments = 48 },
+                { TopRadius = BodyR, BottomRadius = BodyR, Height = 0.35f, RadialSegments = 48 },
                 scarMat, new Vector3(0, 22.17f, 0));
         }
 
@@ -193,14 +208,14 @@ public partial class VesselRenderer : Node3D
 
             // Mount hinge/arm against the hull.
             AddMesh($"GridFinMount{i}", new BoxMesh { Size = new Vector3(0.55f, 1.3f, 0.70f) },
-                mountMat, new Vector3(1.18f * cos, 18.6f, 1.18f * sin));
+                mountMat, new Vector3((BodyR + 0.03f) * cos, 18.6f, (BodyR + 0.03f) * sin));
 
             // The lattice slab itself, projecting outward (the recognisable fin).
             var fin = new MeshInstance3D
             {
                 Name            = $"GridFin{i}",
                 Mesh            = new BoxMesh { Size = new Vector3(1.45f, 1.65f, 0.16f) },
-                Position        = new Vector3(1.78f * cos, 18.8f, 1.78f * sin),
+                Position        = new Vector3((BodyR + 0.63f) * cos, 18.8f, (BodyR + 0.63f) * sin),
                 RotationDegrees = new Vector3(0, -i * 90f, 0),
             };
             fin.SetSurfaceOverrideMaterial(0, finMat);
@@ -256,7 +271,7 @@ public partial class VesselRenderer : Node3D
         var shipSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.16f,
             weldSpacing: 1.55f);
         _hullMesh = AddMesh("Body",
-            new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.15f, Height = 14f, RadialSegments = 64 },
+            new CylinderMesh { TopRadius = BodyR, BottomRadius = BodyR, Height = 14f, RadialSegments = 64 },
             shipSteel, new Vector3(0, o + 31f, 0));
 
         // Windward black-tile band: a slightly larger half-cylinder shell on the
@@ -273,7 +288,7 @@ public partial class VesselRenderer : Node3D
         const int   noseSeg  = 22;
         const float noseBase = 38f;          // body-relative base
         const float noseLen  = 5.2f;
-        const float noseR    = 1.15f;
+        const float noseR    = BodyR;        // base radius matches the 9 m body
         var noseSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.18f,
             weldSpacing: 1.3f);
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
@@ -301,7 +316,7 @@ public partial class VesselRenderer : Node3D
         }
 
         // Tile coverage continues up the windward side of the nose.
-        AddTileBand(o + 38f, o + 41.5f, topRadius: 0.83f, botRadius: 1.16f);
+        AddTileBand(o + 38f, o + 41.5f, topRadius: 0.83f * RScale, botRadius: BodyR + 0.01f);
 
         // Dome cap: small hemisphere rounding off the ogive tip at y≈o+43.0
         var noseDome = new MeshInstance3D
@@ -322,9 +337,9 @@ public partial class VesselRenderer : Node3D
 
         // Engine skirt (y=o+22 → o+24)
         AddMesh("Skirt",
-            new CylinderMesh { TopRadius = 1.15f, BottomRadius = 1.08f, Height = 2f, RadialSegments = 48 },
+            new CylinderMesh { TopRadius = BodyR, BottomRadius = 1.08f * RScale, Height = 2f, RadialSegments = 48 },
             darkSteel, new Vector3(0, o + 23f, 0));
-        AddWeldRing("SkirtLip", 1.155f, o + 24f);
+        AddWeldRing("SkirtLip", 1.155f * RScale, o + 24f);
 
         // ── Forward flaps (2 small, high on the body, windward -X side) ────
         // Real V2 forward flaps are small and shifted toward the leeward edge
@@ -339,12 +354,13 @@ public partial class VesselRenderer : Node3D
         // Sooty engine-bay roof above the bells so the cluster sits in shadow.
         var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
         AddMesh("ShipBaySoot", new CylinderMesh
-            { TopRadius = 1.08f, BottomRadius = 1.10f, Height = 0.9f, RadialSegments = 48 },
+            { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
             sootSteel, new Vector3(0, o + 22.4f, 0));
 
-        // 3 vacuum Raptors (inner, long fixed bell — large exit area)
-        const float vacR = 0.38f;
-        const float slR  = 0.72f;
+        // 3 vacuum Raptors (inner) + 3 sea-level (outer). Ring radii scale with
+        // the wider 9 m hull so the six bells stay spread under the skirt.
+        const float vacR = 0.38f * RScale;
+        const float slR  = 0.72f * RScale;
         float bellY = o + 22f - 1.05f;
 
         for (int i = 0; i < 3; i++)
@@ -542,7 +558,7 @@ public partial class VesselRenderer : Node3D
     // Black heat-shield tile coverage over the windward (-X) half of a body
     // section. Built from short tile staves spanning ~200° of the circumference
     // so the dark side reads clearly while the leeward side stays bare steel.
-    private void AddTileBand(float yBottom, float yTop, float topRadius = 1.165f, float botRadius = 1.165f)
+    private void AddTileBand(float yBottom, float yTop, float topRadius = BodyR + 0.015f, float botRadius = BodyR + 0.015f)
     {
         var tiles  = TileMat();
         var seams  = Mat(new Color(0.010f, 0.010f, 0.012f), 0.0f, 0.96f);
@@ -593,12 +609,12 @@ public partial class VesselRenderer : Node3D
         float sin = Mathf.Sin(a);
         float deg = -Mathf.RadToDeg(a) + 90f;
 
-        // Flap blade, projecting radially outward.
+        // Flap blade, projecting radially outward (offset rides the 9 m hull).
         var blade = new MeshInstance3D
         {
             Name            = name,
             Mesh            = new BoxMesh { Size = new Vector3(chord, length, 0.16f) },
-            Position        = new Vector3(1.55f * cos, y, 1.55f * sin),
+            Position        = new Vector3((BodyR + 0.40f) * cos, y, (BodyR + 0.40f) * sin),
             RotationDegrees = new Vector3(0, deg, 0),
         };
         blade.SetSurfaceOverrideMaterial(0, mat);
@@ -609,7 +625,7 @@ public partial class VesselRenderer : Node3D
         {
             Name            = name + "Root",
             Mesh            = new BoxMesh { Size = new Vector3(0.55f, length, 0.20f) },
-            Position        = new Vector3(1.17f * cos, y, 1.17f * sin),
+            Position        = new Vector3((BodyR + 0.02f) * cos, y, (BodyR + 0.02f) * sin),
             RotationDegrees = new Vector3(0, deg, 0),
         };
         root.SetSurfaceOverrideMaterial(0, mat);
