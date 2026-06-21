@@ -225,7 +225,7 @@ public partial class SimulationBridge : Node
         if (!defs.TryGetValue("starship_command",  out var cmdDef))  return;
         if (!defs.TryGetValue("starship_tank",      out var tankDef)) return;
         if (!defs.TryGetValue("starship_engines",   out var engDef))  return;
-        if (!defs.TryGetValue("decoupler_medium",   out var decDef))  return;
+        if (!defs.TryGetValue("decoupler_heavy",    out var decDef))  return;
         if (!defs.TryGetValue("super_heavy_booster",out var shDef))   return;
 
         var vessel = new Vessel { Name = "Starship IFT-7" };

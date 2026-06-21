@@ -22,8 +22,7 @@ Estado V1: implementado el flujo minimo data-driven y testeado. Pendiente para l
 - Pendiente:
   - preview 3D editable,
   - craft files persistentes,
-  - boton de flujo para entrar/salir del VAB,
-  - revisar datos de tamanos de nodos en el stack Starship hardcodeado (`decoupler_medium` size 2 vs nodos Starship size 3).
+  - boton de flujo para entrar/salir del VAB.
 
 ## Reentry Fisico Y Visual Avanzado
 

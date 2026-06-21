@@ -1,0 +1,15 @@
+{
+  "id": "decoupler_heavy",
+  "name": "TD-30 Heavy Stack Decoupler",
+  "description": "A heavy stack decoupler for Starship-class stages and other large 9 m launch vehicles. Sized for high-load hot-staging and clean separation.",
+  "category": "decoupler",
+  "mass_dry": 120,
+  "cost": 900,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1500,
+  "ejection_force": 1000,
+  "attachment_nodes": [
+    {"id": "top",    "position": [0,  0.2, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.2, 0], "size": 3, "type": "stack"}
+  ]
+}

@@ -60,8 +60,8 @@ public sealed class ConstructionRegressionTests
         var vessel = BuildStarshipLikeAssembly().ToVessel("VAB Export");
 
         Assert.Equal("VAB Export", vessel.Name);
-        Assert.Equal(4, vessel.Parts.Parts.Count);
-        Assert.Equal(3, vessel.Parts.Joints.Count);
+        Assert.Equal(5, vessel.Parts.Parts.Count);
+        Assert.Equal(4, vessel.Parts.Joints.Count);
         Assert.NotNull(vessel.Parts.Root);
         Assert.True(vessel.TotalMass > 0.0);
     }
@@ -87,7 +87,8 @@ public sealed class ConstructionRegressionTests
         var command = assembly.AddRoot("starship_command");
         var tank = assembly.AttachPart(command.InstanceId, "bottom", "starship_tank", "top");
         var engines = assembly.AttachPart(tank.InstanceId, "bottom", "starship_engines", "top");
-        assembly.AttachPart(engines.InstanceId, "bottom", "super_heavy_booster", "top");
+        var decoupler = assembly.AttachPart(engines.InstanceId, "bottom", "decoupler_heavy", "top");
+        assembly.AttachPart(decoupler.InstanceId, "bottom", "super_heavy_booster", "top");
         return assembly;
     }
 
