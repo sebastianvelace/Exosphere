@@ -16,6 +16,13 @@ public partial class TransferPlanner : Node
     public string? TargetBodyId  { get; private set; }
     public ManeuverNode? CurrentNode { get; private set; }
 
+    /// <summary>
+    /// Última predicción de encuentro con el destino (entrada a SOI o máxima aproximación),
+    /// en marco HELIOCÉNTRICO. Se recalcula en <see cref="PlanTransfer"/> y al ajustar el Δv.
+    /// Encounter prediction for the selected target — heliocentric (Sun-relative) frame.
+    /// </summary>
+    public EncounterResult? Encounter { get; private set; }
+
     public override void _Ready() => Instance = this;
 
     /// <summary>
@@ -77,13 +84,85 @@ public partial class TransferPlanner : Node
                  $"Δv2={plan.SecondBurnDeltaV:F0} m/s, ToF={plan.TimeOfFlight / 86400.0:F1} days, " +
                  $"phase={plan.RequiredPhaseAngle * MathUtils.RAD_TO_DEG:F1} deg");
 
+        PredictEncounter();
         return CurrentNode;
+    }
+
+    /// <summary>
+    /// Recalcula la predicción de encuentro para el nodo actual usando el factor de ajuste
+    /// vigente. Propaga la cónica heliocéntrica POST-burn y la posición del destino hacia
+    /// adelante para hallar la entrada a su SOI o el punto de máxima aproximación.
+    /// Recomputes the encounter for the current node (call after Δv adjustments).
+    /// </summary>
+    public void PredictEncounter()
+    {
+        Encounter = null;
+        var node = CurrentNode;
+        if (node?.TargetBodyId == null) return;
+
+        var universe = SimulationBridge.Instance?.Universe;
+        var vessel   = SimulationBridge.Instance?.ActiveVessel;
+        var sun      = universe?.GetBody("sun");
+        var target   = universe?.GetBody(node.TargetBodyId);
+        if (universe == null || vessel == null || sun == null || target == null) return;
+        if (sun.GM <= 0.0) return;
+
+        // Estado heliocéntrico post-burn: aplicamos el Δv (con su factor de ajuste) a la
+        // velocidad actual del vessel respecto al Sol, en el instante del burn (= ahora).
+        var relPos    = vessel.Position - sun.Position;
+        var helioVel  = vessel.Velocity - sun.Velocity;
+        // node.DeltaV ya codifica el SIGNO de la maniobra (retrógrado para Venus, etc.);
+        // dvDir apunta en la dirección correcta y DvMagnitude es la magnitud positiva.
+        var dvDir     = node.DeltaV.Magnitude > 1e-6 ? node.DeltaV.Normalized : Vector3d.Zero;
+        var postVel   = helioVel + dvDir * (node.DvMagnitude * node.DvAdjustFactor);
+        if (relPos.Magnitude < 1000.0) return;
+
+        var postOrbit = OrbitalElements.FromStateVector(relPos, postVel, sun.GM, "sun", node.BurnTime);
+        if (postOrbit.IsRadial) return;
+
+        // Ventana de búsqueda: hasta ~1.3× el tiempo de vuelo Hohmann (margen para fases no ideales).
+        double window = System.Math.Max(node.TimeOfFlight * 1.3, 3600.0);
+
+        // Posición del destino RELATIVA AL SOL en t (compone padre+luna si es un satélite).
+        Vector3d TargetRel(double t) => HelioPositionAt(target, t, universe, sun) - sun.Position;
+
+        Encounter = TrajectoryPrediction.FindEncounter(
+            postOrbit, sun.GM, TargetRel,
+            targetSoiRadius: target.SphereOfInfluence,
+            startTime: node.BurnTime, searchWindow: window);
+
+        if (Encounter is { } enc)
+        {
+            string tag = enc.HasEncounter ? "SOI entry" : "closest approach";
+            GD.Print($"[TransferPlanner] {tag}: dist={enc.ClosestApproachDistance / 1e6:F0} Mm, " +
+                     $"ETA={(enc.TimeOfClosestApproach - node.BurnTime) / 86400.0:F1} d");
+        }
+    }
+
+    /// <summary>
+    /// Posición INERCIAL (mundo) de <paramref name="body"/> en el tiempo <paramref name="t"/>,
+    /// propagando su cónica Kepler y componiendo recursivamente la de su cuerpo padre.
+    /// Bodies sin elementos (el Sol) quedan en su posición actual.
+    /// </summary>
+    private static Vector3d HelioPositionAt(CelestialBody body, double t, Universe universe, CelestialBody sun)
+    {
+        var oe = body.OrbitalElements;
+        if (oe == null) return body.Position;   // raíz (Sol) — fija
+
+        var parent = universe.GetBody(oe.ReferenceBodyId);
+        if (parent == null) return body.Position;
+
+        var (relPos, _) = oe.GetStateAtTime(t, parent.GM);
+        Vector3d parentPos = parent.Id == sun.Id ? sun.Position
+                                                 : HelioPositionAt(parent, t, universe, sun);
+        return parentPos + relPos;
     }
 
     public void ClearNode()
     {
         CurrentNode  = null;
         TargetBodyId = null;
+        Encounter    = null;
     }
 }
 
