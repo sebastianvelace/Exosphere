@@ -21,7 +21,7 @@ public partial class EDLController : Control
     // ── Trigger thresholds ────────────────────────────────────────────────────
     private const double EntrySpeed   = 1200.0;   // m/s surface speed to arm entry
     private const double TouchdownAlt  = 6.0;       // m (legs contact height)
-    private const double TouchdownVel  = 6.0;       // m/s
+    private const double TouchdownVel  = 3.0;       // m/s (real Starship sets down at ~1-2 m/s)
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -199,8 +199,9 @@ public partial class EDLController : Control
             }
             else
             {
-                // Final approach: gentle vertical descent (≈3 m/s) for a soft touchdown.
-                double sUp  = -System.Math.Clamp(2.0 + _alt * 0.05, 2.0, 8.0);
+                // Final approach: gentle vertical descent that eases to ~1.5 m/s at contact —
+                // a realistic Starship touchdown (the real vehicle sets down at ~1-2 m/s).
+                double sUp  = -System.Math.Clamp(1.0 + _alt * 0.04, 1.0, 6.0);
                 double aCmd = 0.6 * (sUp - _vUp) + g;
                 thr = aThrustFull > 1e-6 ? aCmd / aThrustFull : 0.0;
             }

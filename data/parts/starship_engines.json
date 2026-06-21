@@ -1,7 +1,7 @@
 {
   "id": "starship_engines",
   "name": "Starship Raptor Engine Cluster",
-  "description": "Six Raptor 2 engines: 3 vacuum-optimised (ISP 380 s, 2.2 MN each) + 3 sea-level (ISP 327 s, 2.05 MN each). Combined vacuum thrust 13.5 MN. Used for orbit insertion, transit burns, and EDL flip.",
+  "description": "Six Raptor 2 engines: 3 vacuum-optimised (Raptor Vac ISP ~363 s, 2.2 MN each) + 3 sea-level (ISP 327 s, 2.05 MN each). Cluster vacuum ISP ~363 s, combined thrust 13.5 MN. Used for orbit insertion, transit burns, and EDL flip.",
   "category": "engine",
   "mass_dry": 15000,
   "cost": 18000,
@@ -9,7 +9,7 @@
   "heat_tolerance": 3000,
   "thrust_vac": 13500000,
   "thrust_sl": 11000000,
-  "isp_vac": 380,
+  "isp_vac": 363,
   "isp_sl": 327,
   "gimbal_range": 6.0,
   "fuel_type": "LiquidFuel+Oxidizer",
