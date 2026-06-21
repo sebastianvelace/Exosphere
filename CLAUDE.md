@@ -68,6 +68,7 @@ Important implemented systems:
 - Godot code lives under `scripts/` and namespace `Exosphere.Game`.
 - Main scene: `scenes/flight/Flight.tscn`.
 - VAB scene: `scenes/construction/Construction.tscn`.
+- Flight opens VAB with `V`; VAB launches the current craft through `CraftLaunchRequest`.
 - The active vessel is rendered at origin through `FloatingOrigin`.
 - Render scale: `1 Godot unit = 2.8 m`.
 - Planets are scaled-space backdrops, not placed at true render distances.
@@ -99,7 +100,7 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 ## Known Limits
 
 - One physical engine part per stage. The 33 Super Heavy and 6 Starship engines are visual, not individually simulated.
-- VAB V1 does not yet have 3D preview, craft persistence, or menu/flight navigation.
+- VAB V1.5 has 3D preview, craft persistence, and VAB-to-launch flow. It still lacks direct node manipulation in the preview and a craft-file browser.
 - Reentry has physics basis and tests, but not full per-piece progressive damage or breakup VFX.
 - Interplanetary planning exists but needs stronger patched-conic validation and better UX.
 - CI is not configured yet.

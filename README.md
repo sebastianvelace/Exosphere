@@ -26,6 +26,7 @@ Implemented and working:
   - `scripts/ConstructionController.cs`
   - `scenes/construction/Construction.tscn`
   - catalog loading, compatible-node validation, mass/propellant/TWR/delta-v metrics, subtree delete, export to `Vessel`/`PartGraph`
+  - 3D preview, craft JSON save/load, `V` from flight to VAB, `Launch` from VAB to pad
 - Automated tests:
   - gravity
   - RK4 energy/radius conservation
@@ -100,6 +101,7 @@ Flight:
 - `.` / `,`: warp up / down
 - `Backspace`: warp x1
 - `C`: cycle camera presets and cockpit
+- `V`: open VAB / construction scene
 - Mouse right-drag: orbit/free-look camera
 - Mouse wheel: zoom
 
@@ -178,7 +180,7 @@ The Starship default stack currently uses:
 ## Current Limitations
 
 - One physical engine part per stage; 33/6 engines are visual, not individual physical engines.
-- VAB V1 has no 3D preview, craft-file persistence, or menu/flight navigation button yet.
+- VAB V1.5 has 3D preview, craft-file persistence, and VAB-to-launch flow. It still lacks direct attachment-node manipulation in the preview and a craft-file browser.
 - Reentry has real heat-flux basis and shield orientation tests, but not full per-piece progressive damage and breakup VFX.
 - Interplanetary planning exists at helper/UI level, but needs stronger patched-conic validation and better UX.
 - CI is not configured yet.

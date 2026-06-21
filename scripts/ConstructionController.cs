@@ -3,9 +3,12 @@ namespace Exosphere.Game;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Parts;
 using Godot;
+using System.Text.Json;
 
 public partial class ConstructionController : Control
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
     private PartCatalog? _catalog;
     private VesselAssembly? _assembly;
 
@@ -13,8 +16,10 @@ public partial class ConstructionController : Control
     private ItemList _stackList = null!;
     private OptionButton _parentNode = null!;
     private OptionButton _childNode = null!;
+    private LineEdit _craftName = null!;
     private Label _stats = null!;
     private Label _status = null!;
+    private VesselRenderer? _previewRenderer;
 
     public override void _Ready()
     {
@@ -67,6 +72,9 @@ public partial class ConstructionController : Control
 
         var controls = new GridContainer { Columns = 2 };
         mid.AddChild(controls);
+        controls.AddChild(new Label { Text = "Craft name" });
+        _craftName = new LineEdit { Text = "Constructed Vessel" };
+        controls.AddChild(_craftName);
         controls.AddChild(new Label { Text = "Parent node" });
         _parentNode = new OptionButton();
         controls.AddChild(_parentNode);
@@ -93,10 +101,57 @@ public partial class ConstructionController : Control
         export.Pressed += OnExport;
         buttons.AddChild(export);
 
-        var info = BuildPanel("Stats");
+        var save = new Button { Text = "Save" };
+        save.Pressed += OnSave;
+        buttons.AddChild(save);
+
+        var load = new Button { Text = "Load" };
+        load.Pressed += OnLoad;
+        buttons.AddChild(load);
+
+        var launch = new Button { Text = "Launch" };
+        launch.Pressed += OnLaunch;
+        buttons.AddChild(launch);
+
+        var info = BuildPanel("Stats / Preview");
         root.AddChild(info);
         _stats = new Label { Name = "Stats", CustomMinimumSize = new Vector2(300, 180) };
         info.AddChild(_stats);
+
+        var viewportContainer = new SubViewportContainer
+        {
+            CustomMinimumSize = new Vector2(360, 360),
+            Stretch = true,
+        };
+        info.AddChild(viewportContainer);
+
+        var viewport = new SubViewport
+        {
+            Size = new Vector2I(720, 720),
+            TransparentBg = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+        };
+        viewportContainer.AddChild(viewport);
+
+        var previewRoot = new Node3D { Name = "PreviewRoot" };
+        viewport.AddChild(previewRoot);
+        previewRoot.AddChild(new DirectionalLight3D
+        {
+            Name = "PreviewLight",
+            LightEnergy = 1.8f,
+            RotationDegrees = new Vector3(-45f, -35f, 0f),
+        });
+        var camera = new Camera3D
+        {
+            Name = "PreviewCamera",
+            Fov = 32f,
+            Current = true,
+        };
+        previewRoot.AddChild(camera);
+        camera.LookAtFromPosition(new Vector3(0f, 28f, 86f), new Vector3(0f, 20f, 0f), Vector3.Up);
+        _previewRenderer = new VesselRenderer { Name = "PreviewVessel" };
+        previewRoot.AddChild(_previewRenderer);
+
         _status = new Label { Name = "Status", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         info.AddChild(_status);
     }
@@ -170,8 +225,71 @@ public partial class ConstructionController : Control
         if (_assembly == null) return;
         try
         {
-            var vessel = _assembly.ToVessel("Constructed Vessel");
+            var vessel = _assembly.ToVessel(CraftName());
             SetStatus($"Export ready: {vessel.Name}, {vessel.Parts.Parts.Count} parts.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private void OnSave()
+    {
+        if (_assembly == null) return;
+        try
+        {
+            string dir = CraftDirectory();
+            System.IO.Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, $"{SafeCraftFileName()}.json");
+            var craft = _assembly.ToCraft(CraftName());
+            System.IO.File.WriteAllText(path, JsonSerializer.Serialize(craft, JsonOptions));
+            SetStatus($"Saved craft: {path}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private void OnLoad()
+    {
+        if (_catalog == null) return;
+        try
+        {
+            string path = System.IO.Path.Combine(CraftDirectory(), $"{SafeCraftFileName()}.json");
+            if (!System.IO.File.Exists(path))
+            {
+                SetStatus($"Craft file not found: {path}");
+                return;
+            }
+
+            var craft = JsonSerializer.Deserialize<VesselCraftDefinition>(
+                System.IO.File.ReadAllText(path), JsonOptions);
+            if (craft == null)
+            {
+                SetStatus("Craft file is empty or invalid.");
+                return;
+            }
+
+            _assembly = VesselAssembly.FromCraft(_catalog, craft);
+            _craftName.Text = craft.Name;
+            Refresh();
+            SetStatus($"Loaded craft: {path}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private void OnLaunch()
+    {
+        if (_assembly == null) return;
+        try
+        {
+            CraftLaunchRequest.Set(_assembly.ToCraft(CraftName()));
+            GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
         }
         catch (Exception ex)
         {
@@ -200,9 +318,32 @@ public partial class ConstructionController : Control
                 $"SL thrust: {m.SeaLevelThrust / 1000.0:F0} kN\n" +
                 $"SL TWR: {m.SeaLevelTwr:F2}\n" +
                 $"Vac delta-v: {m.VacuumDeltaV:F0} m/s";
+
+            UpdatePreview();
         }
 
         RefreshNodeChoices();
+    }
+
+    private void UpdatePreview()
+    {
+        if (_assembly == null || _previewRenderer == null) return;
+
+        try
+        {
+            if (_assembly.Parts.Count == 0)
+            {
+                _previewRenderer.Visible = false;
+                return;
+            }
+
+            _previewRenderer.Visible = true;
+            _previewRenderer.BuildFromVessel(_assembly.ToVessel(CraftName()));
+        }
+        catch
+        {
+            _previewRenderer.Visible = false;
+        }
     }
 
     private void RefreshNodeChoices()
@@ -256,4 +397,22 @@ public partial class ConstructionController : Control
         if (_status != null) _status.Text = message;
         GD.Print($"[VAB] {message}");
     }
+
+    private string CraftName()
+    {
+        string name = _craftName?.Text.Trim() ?? "";
+        return string.IsNullOrWhiteSpace(name) ? "Constructed Vessel" : name;
+    }
+
+    private string SafeCraftFileName()
+    {
+        var chars = CraftName()
+            .Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '_')
+            .ToArray();
+        string name = new string(chars).Trim('_');
+        return string.IsNullOrWhiteSpace(name) ? "craft" : name;
+    }
+
+    private static string CraftDirectory() =>
+        ProjectSettings.GlobalizePath("user://crafts");
 }

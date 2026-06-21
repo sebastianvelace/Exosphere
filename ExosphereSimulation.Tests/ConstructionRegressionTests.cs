@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation.Construction;
+using System.Text.Json;
 using Xunit;
 
 public sealed class ConstructionRegressionTests
@@ -64,6 +65,23 @@ public sealed class ConstructionRegressionTests
         Assert.Equal(4, vessel.Parts.Joints.Count);
         Assert.NotNull(vessel.Parts.Root);
         Assert.True(vessel.TotalMass > 0.0);
+    }
+
+    [Fact]
+    public void CraftDefinitionRoundTripsThroughJsonAndRebuildsAssembly()
+    {
+        var original = BuildStarshipLikeAssembly();
+        var craft = original.ToCraft("Round Trip");
+        string json = JsonSerializer.Serialize(craft);
+        var restoredCraft = JsonSerializer.Deserialize<VesselCraftDefinition>(json)!;
+
+        var restored = VesselAssembly.FromCraft(LoadCatalog(), restoredCraft);
+
+        Assert.Equal("Round Trip", restoredCraft.Name);
+        Assert.Equal(original.Parts.Count, restored.Parts.Count);
+        Assert.Equal(original.Connections.Count, restored.Connections.Count);
+        Assert.Equal(original.ComputeMetrics().WetMass, restored.ComputeMetrics().WetMass);
+        Assert.Equal(5, restored.ToVessel("Restored").Parts.Parts.Count);
     }
 
     [Fact]

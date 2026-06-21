@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 
@@ -113,6 +114,7 @@ public partial class SimulationBridge : Node
         }
 
         SpawnStarshipStack(dataPath);
+        SpawnPendingConstructedVessel(dataPath);
         SpawnPlanets();
         EmitSignal(SignalName.SimulationLoaded);
 
@@ -211,6 +213,17 @@ public partial class SimulationBridge : Node
                 (float)(offset.Z / metresPerUnit));
             _launchPad.Visible = alt < 8_000;   // hide above 8 km
         }
+    }
+
+    private void SpawnPendingConstructedVessel(string dataPath)
+    {
+        var craft = CraftLaunchRequest.Pop();
+        if (craft == null) return;
+
+        var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(dataPath, "parts"));
+        var assembly = VesselAssembly.FromCraft(catalog, craft);
+        PlaceConstructedVesselOnPad(assembly.ToVessel(craft.Name));
+        GD.Print($"[VAB] Placed constructed craft on pad: {craft.Name}");
     }
 
     // ── Starship + Super Heavy stack on Starbase launchpad ────────────────

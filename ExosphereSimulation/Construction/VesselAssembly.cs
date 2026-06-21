@@ -182,6 +182,48 @@ public sealed class VesselAssembly
         return vessel;
     }
 
+    public VesselCraftDefinition ToCraft(string name = "Constructed Vessel") => new()
+    {
+        Name = name,
+        Parts = _parts.ToList(),
+        Connections = _connections.ToList(),
+    };
+
+    public static VesselAssembly FromCraft(PartCatalog catalog, VesselCraftDefinition craft)
+    {
+        var assembly = new VesselAssembly(catalog);
+        if (craft.Parts.Count == 0) return assembly;
+
+        var seen = new HashSet<string>();
+        foreach (var part in craft.Parts)
+        {
+            if (!seen.Add(part.InstanceId))
+                throw new InvalidOperationException($"Duplicate assembly part '{part.InstanceId}'.");
+            _ = assembly.RequirePart(part.DefinitionId);
+            assembly._parts.Add(part);
+        }
+
+        if (assembly._parts.Count(p => p.ParentInstanceId == null) != 1)
+            throw new InvalidOperationException("Craft must contain exactly one root part.");
+
+        foreach (var connection in craft.Connections)
+        {
+            var parent = assembly.RequireInstance(connection.ParentInstanceId);
+            var child = assembly.RequireInstance(connection.ChildInstanceId);
+            var parentDef = assembly.RequirePart(parent.DefinitionId);
+            var childDef = assembly.RequirePart(child.DefinitionId);
+            var parentNode = RequireNode(parentDef, connection.ParentNodeId);
+            var childNode = RequireNode(childDef, connection.ChildNodeId);
+
+            assembly.ValidateCompatibleNodes(parent.InstanceId, parentNode, child.DefinitionId, childNode);
+            assembly._connections.Add(connection);
+            assembly._usedNodes.Add((parent.InstanceId, parentNode.Id));
+            assembly._usedNodes.Add((child.InstanceId, childNode.Id));
+        }
+
+        return assembly;
+    }
+
     public IEnumerable<AttachmentNodeDef> AvailableNodes(string instanceId)
     {
         var part = RequireInstance(instanceId);

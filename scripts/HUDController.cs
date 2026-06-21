@@ -735,6 +735,10 @@ public partial class HUDController : Control
                 case Key.O:
                     bridge.JumpToOrbit();
                     break;
+                case Key.V:
+                    GetTree().ChangeSceneToFile("res://scenes/construction/Construction.tscn");
+                    GetViewport().SetInputAsHandled();
+                    break;
                 case Key.Period:
                     bridge.SetWarpIndex(bridge.WarpIndex + 1);
                     break;
