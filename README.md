@@ -22,13 +22,16 @@ Implemented and working:
 - Time warp levels: `1,2,3,5,10,50,100,1000,10000,100000`
 - HUD, navball, map view, transfer planning helpers, cockpit, systems HUD, launch/crash/reentry visual effects
 - Pure Hohmann transfer calculator in `ExosphereSimulation/Navigation` with Earth-Mars and Earth-Venus regression tests
+- Patched-conic SOI transitions and encounter prediction for on-rails interplanetary coast
 - Starship/Super Heavy procedural mesh with hot-stage ring, grid-fin lattice, windward tiles, flaps, Raptor clusters and stainless steel shader
-- VAB V1:
+- Survivable Starship EDL profile: belly-flop reentry, low-altitude flip-and-burn and soft touchdown
+- VAB V1.5:
   - `ExosphereSimulation/Construction`
   - `scripts/ConstructionController.cs`
+  - `scripts/VabPickingLayer.cs`
   - `scenes/construction/Construction.tscn`
   - catalog loading, compatible-node validation, mass/propellant/TWR/delta-v metrics, subtree delete, export to `Vessel`/`PartGraph`
-  - 3D preview, craft JSON save/load, saved-craft browser panel, `V` from flight to VAB, `Launch` from VAB to pad
+  - 3D preview, direct click-to-attach node picking, craft JSON save/load, saved-craft browser panel, `V` from flight to VAB, `Launch` from VAB to pad
 - Automated tests:
   - gravity
   - RK4 energy/radius conservation
@@ -41,7 +44,7 @@ Implemented and working:
   - SOI selection
   - VAB catalog/assembly/export behavior
 
-See `ROADMAP.md` for the current plan. It is the live roadmap.
+See `ROADMAP.md` for the current plan. `PLAN_REALISM.md` records the physics/telemetry audit, and `PLAN_VISUAL_REALISM.md` is the next visual-fidelity track.
 
 ## Build And Test
 
@@ -188,12 +191,11 @@ The Starship default stack currently uses:
 ## Current Limitations
 
 - One physical engine part per stage; 33/6 engines are visual, not individual physical engines.
-- VAB V1.5 has 3D preview, craft-file persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks direct attachment-node manipulation in the 3D preview.
-- Reentry has windward plasma glow, progressive heat-shield tile charring, and a thermal break-up VFX when a vessel burns up. Still limited: per-piece structural break-up and control-loss consequences.
-- Starship hull is modelled at the real 9 m diameter; after staging the separated Super Heavy shows an exposed, scorched hot-stage ring.
+- VAB V1.5 has 3D preview, click-to-attach node picking, craft-file persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks drag/rotate gizmos and a dedicated main-menu flow.
+- Reentry has windward plasma glow, progressive heat-shield tile charring, survivable belly-flop EDL, and a thermal break-up VFX when a vessel burns up. Still limited: per-piece structural break-up, control-loss consequences, and richer plasma/shock visuals.
+- Starship hull is modelled at the real 9 m diameter; after staging the separated Super Heavy shows an exposed, scorched hot-stage ring. Remaining visual work is fidelity/detail: more real-life proportions, surface variation, tiles, engine bay detail, frost/soot, plume behavior, and verified screenshots.
 - CI provisions Godot in the workflow and runs the headless smoke checks strictly, with an anti-harness guard; full PNG capture in CI is still a follow-up.
-- Interplanetary planning has a tested Hohmann core, but still needs patched-conic SOI transitions, long-cruise validation and better node UX.
-- CI is configured for simulation build/tests. Godot build/smoke runs locally through `tools/ci_check.sh` and in CI only when `GODOT_BIN` is provided.
+- Interplanetary planning has a tested Hohmann core, patched-conic SOI transitions, encounter prediction, and better node readouts. It still needs long-cruise validation, a more accurate Moon-transfer model, and draggable maneuver nodes.
 - Automated visual screenshots need a real framebuffer; current headless smoke tests only validate load/runtime.
 
 ## Working Rules

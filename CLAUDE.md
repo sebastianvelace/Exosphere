@@ -1,6 +1,6 @@
 # Exosphere Agent Notes
 
-This file is the short operational guide for agents working in this repo. `ROADMAP.md` is the live product plan. Do not look for `PLAN_MEJORAS.md`; it has been retired.
+This file is the short operational guide for agents working in this repo. `ROADMAP.md` is the live product plan. `PLAN_REALISM.md` is the physics/telemetry audit log. `PLAN_VISUAL_REALISM.md` is the next visual-fidelity track. Do not look for `PLAN_MEJORAS.md`; it has been retired.
 
 ## Required Checks
 
@@ -68,7 +68,7 @@ Important implemented systems:
 - heat-shield flag from part JSON
 - hard impact destruction
 - VAB catalog/assembly/export in `ExosphereSimulation/Construction`
-- Hohmann transfer math in `ExosphereSimulation/Navigation`
+- Hohmann transfer math, encounter prediction, and patched-conic SOI transitions in `ExosphereSimulation/Navigation` and `Universe`
 
 ## Game Layer Rules
 
@@ -76,6 +76,7 @@ Important implemented systems:
 - Main scene: `scenes/flight/Flight.tscn`.
 - VAB scene: `scenes/construction/Construction.tscn`.
 - Flight opens VAB with `V`; VAB launches the current craft through `CraftLaunchRequest`.
+- VAB direct picking lives in `scripts/VabPickingLayer.cs`; it creates collision bodies for parts and compatible attachment nodes and is driven by `ConstructionController`.
 - The active vessel is rendered at origin through `FloatingOrigin`.
 - Render scale: `1 Godot unit = 2.8 m`.
 - Planets are scaled-space backdrops, not placed at true render distances.
@@ -107,12 +108,13 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 ## Known Limits
 
 - One physical engine part per stage. The 33 Super Heavy and 6 Starship engines are visual, not individually simulated.
-- VAB V1.5 has 3D preview, craft persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks direct node manipulation in the 3D preview.
-- Reentry has physics basis and tests plus windward plasma, tile charring, and a thermal break-up VFX. It still lacks per-piece structural break-up and control-loss consequences.
+- VAB V1.5 has 3D preview, click-to-attach node picking, craft persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks drag/rotate gizmos and a dedicated menu flow.
+- Reentry has physics basis and tests plus windward plasma, tile charring, survivable belly-flop EDL, and a thermal break-up VFX. It still lacks per-piece structural break-up, control-loss consequences, and richer shock/plasma rendering.
 - Patched-conic SOI transitions are implemented for on-rails vessels (warp-resolution-independent); inside on-rails propagation use `BodyStateAt(body, t)` for body state at the epoch/crossing time, not the end-of-tick global position.
-- Interplanetary planning has a tested Hohmann core, but needs stronger patched-conic validation and better UX.
-- CI is configured for simulation build/tests. Godot build/smoke is strict in `tools/ci_check.sh` and optional in GitHub Actions unless `GODOT_BIN` is provided.
+- Interplanetary planning has a tested Hohmann core, patched-conic SOI transitions, encounter prediction, and maneuver readouts. It still needs long-cruise validation, a better Moon-transfer model, and draggable maneuver nodes.
+- CI builds/tests the sim, builds the Godot C# layer, downloads Godot 4.6.3 mono in GitHub Actions, and runs strict headless smoke checks. Local `tools/ci_check.sh` runs Godot smoke only when `GODOT_BIN` or the default local Godot path exists.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
+- Current product priority after documentation cleanup: visual fidelity against real Starship/Super Heavy references. Prefer scoped improvements to `VesselRenderer`, `ReentryPlasmaController`, `PlumeSystem`, camera/lighting, and visual capture before broad new gameplay systems.
 
 ## Workflow
 

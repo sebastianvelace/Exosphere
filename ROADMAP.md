@@ -1,118 +1,114 @@
 # Exosphere Roadmap
 
-Estado de cierre actual:
-- Builds .NET/Godot pasan con 0 warnings y 0 errores.
-- `ExosphereSimulation.Tests` cubre gravedad, RK4, Kepler, radial/suborbital, rails-impact, motores, termica de escudo, aerodinamica y SOI.
-- Godot headless carga la escena principal sin errores.
-- VAB V1.5 existe como nucleo testeable (`ExosphereSimulation/Construction`), escena `Construction.tscn`, preview 3D, craft files y flujo VAB -> launch.
+Este es el roadmap vivo del proyecto. Los planes viejos `PLAN_MEJORAS.md`,
+`PLAN_MEJORAS_R15.md` y `PLAN_MEJORAS_R16.md` fueron cerrados/retirados. La
+auditoria tecnica de fisica vive en `PLAN_REALISM.md`; el proximo frente
+visual vive en `PLAN_VISUAL_REALISM.md`.
 
-## Estado De Implementacion (tanda actual)
+## Estado Actual
 
-- **VAB UX — navegador de craft files**: HECHO en `main`. Panel "Saved Crafts" en el VAB
-  (`ConstructionController`) que lista `user://crafts` y carga al clickear. Pendiente aun:
-  manipulacion directa de nodos en la preview 3D.
-- **Reentry visual avanzado**: HECHO en `main`. Plasma concentrado en la cara windward,
-  oscurecimiento de tiles por dano termico (`VesselRenderer`), y breakup VFX al destruirse por
-  calor (`ReentryBreakupController`). Pendiente: perdida de control por fallo estructural.
-- **Interplanetario — patched conics / transiciones de SOI**: HECHO en `main`. El vessel on-rails
-  re-encuadra su conico al cruzar una frontera de SOI (`ReframeVesselToBody` + `BodyStateAt` +
-  `GetDominantBodyAt` en `Universe.cs`), con continuidad inercial independiente de la resolucion del
-  warp. Causa raiz corregida: tanto el conico INICIAL como la reconstruccion del cruce deben usar el
-  estado del cuerpo de referencia en el epoch/instante del cruce (`BodyStateAt`), no su posicion de
-  fin-de-tick — usar la de fin-de-tick sesgaba la orbita por (velocidad x dt) (~60000 km a max warp:
-  una orbita erronea al instante de enganchar warp). Tests: salida SOI Tierra->Sol, entrada SOI Luna,
-  cruise Tierra->Marte, no-regresion LEO, y continuidad a max-warp Tick. Pendiente aun: solver
-  hiperbolico ya cubre escape; falta validacion de cruise muy largo y UX de nodos arrastrables.
+Base tecnica cerrada en `main`:
 
-- **Starship visual fidelity**: HECHO en `main`. Casco a diámetro real 9 m (`RScale` escala solo lo
-  radial; la altura ~121 m no se toca, asi que camara/cabina no se rompen) y el Super Heavy separado
-  tras staging muestra el anillo hot-stage expuesto con vent slots quemados (`VesselRenderer`).
-  Convive con el charring de tiles por dano termico. Pendiente: capturas de aceptacion con
-  framebuffer real; engine-out real (requiere abandonar el contrato de una parte-motor por etapa).
-- **CI / headless**: HECHO en `main`. `.github/workflows/ci.yml` descarga+cachea Godot 4.6.3 mono,
-  corre build de juego + smoke headless (escena principal y VAB) de forma estricta, y prepara
-  `xvfb-run` para captura con framebuffer. `tools/ci_check.sh` y un step de CI fallan si se cuela un
-  harness temporal (`scripts/_*Shot.cs` trackeado o autoload `_*Shot` en `project.godot`). Pendiente:
-  completar la captura visual PNG end-to-end en CI.
+- Builds .NET/Godot esperados: 0 warnings, 0 errores.
+- `ExosphereSimulation.Tests` cubre gravedad, RK4, Kepler, radial/suborbital,
+  rails-impact, motores, termica de escudo, aerodinamica, SOI, navegacion y VAB.
+- Godot headless carga la escena principal y la escena de construccion.
+- CI descarga Godot 4.6.3 mono, compila la capa Godot C#, corre smoke headless y
+  mantiene un guard contra harnesses temporales commiteados.
+- VAB V1.5 esta conectado al vuelo: catalogo data-driven, preview 3D, node
+  picking click-to-attach, save/load de crafts, navegador de crafts y launch al pad.
+- Starship/Super Heavy tiene malla procedural con diametro real de 9 m, hot-stage
+  ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
+  charring termico y Super Heavy separado con anillo expuesto/quemado.
+- Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
+- Reentry/EDL Starship esta validado por telemetria: belly-flop sostenido,
+  flip-and-burn bajo y touchdown suave.
+- Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
+  prediction, marcador/readout de encuentro y readout de maniobra.
 
-No quedan frentes mayores en cola del roadmap original; siguientes pasos posibles: save/load de mision,
-recursos de vida/energia conectados a fases, engine-out real, y manipulacion de nodos en la preview del VAB.
+## Prioridad Inmediata
 
-## VAB / Construccion De Naves
+La siguiente etapa no debe abrir un sistema grande nuevo. Primero hay que subir la
+fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
-Estado V1.5: implementado el flujo minimo data-driven, testeado y conectado al vuelo.
+1. **Visual fidelity Starship/Super Heavy**
+   - Detalle realista de acero inoxidable, weld lines, tile layout, soot, frost,
+     vents, raceways, chine/flap bases, grid fins y engine bay.
+   - Mejor separacion visual Ship/Booster despues de hot-staging.
+   - Plumas de Raptor mas creibles en SL/vac, startup, throttle y staging.
 
-- Hecho:
-  - escena `scenes/construction/Construction.tscn`,
-  - `ConstructionController`,
-  - catalogo desde `data/parts/*.json`,
-  - seleccionar pieza, adjuntar a nodo compatible, borrar subarbol,
-  - recalcular masa, propelente, TWR y delta-v,
-  - exportar a `Vessel`/`PartGraph`,
-  - `SimulationBridge.PlaceConstructedVesselOnPad(...)`,
-  - preview 3D con `VesselRenderer`,
-  - save/load de craft JSON en `user://crafts`,
-  - tecla `V` desde vuelo al VAB,
-  - boton `Launch` desde VAB a `Flight.tscn`,
-  - tests de catalogo, nodos, metricas, conexiones incompatibles y export,
-  - **navegador visual de craft files** (panel "Saved Crafts" en `ConstructionController`),
-  - **manipulacion directa de attachment-nodes en la preview 3D** (`VabPickingLayer`: raycast
-    camara->preview, seleccionar/adjuntar/borrar clickeando, validando `NodesAreCompatible`).
-- Pendiente:
-  - menu principal dedicado,
-  - gizmos de arrastre/rotacion para reposicionar piezas en la preview (hoy es click-to-attach).
+2. **Reentry visual**
+   - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
+   - Brillo windward, trail ionizado, tiles que se oscurecen por temperatura y
+     breakup mas legible si falla el escudo/orientacion.
 
-## Reentry Fisico Y Visual Avanzado
+3. **Entorno y camaras**
+   - Iluminacion solar, exposicion, sky/atmosfera, ground pad y camaras para que
+     launch/orbit/reentry/cockpit se lean como escalas reales.
 
-Estado incremental: reentry ya separa causa termica vs impacto, acumula `ThermalDamage` por pieza y tiene tests de entrada nominal, sin escudo, mala orientacion y ley `sqrt(rho) * v^3`.
+4. **Capturas de aceptacion**
+   - Automatizar capturas con framebuffer real para pad, liftoff, Max-Q, staging,
+     orbit/map, belly-flop reentry, flip-and-burn, touchdown/crash y cockpit.
 
-- Pendiente:
-  - plasma por flujo termico,
-  - brillo en zona windward,
-  - dano/oscurecimiento de tiles,
-  - breakup si no hay escudo o actitud correcta.
-  - perdida de control si falla estructura critica,
-  - EDL belly-first mas robusto antes de flip-and-burn.
+## Sistemas Cerrados Que No Se Deben Rehacer Sin Motivo
 
-## Starship Visual Fidelity
+- RK4/Kepler/on-rails y patched conics.
+- Guardas radial/suborbital y destruccion por impacto.
+- Heat-shield data-driven con orientacion de flujo.
+- Ascenso [G] y EDL R13. Cualquier cambio debe preservar sus telemetrias.
+- VAB catalog/assembly/export y picking actual.
 
-Estado incremental: la nave ya tiene hot-stage ring, grid fins con lattice, flaps con bisagras, tiles windward con seams, motores 33/6 visuales y acero procedural.
+## Pendientes Reales
 
-- Pendiente:
-  - proporciones de 9 m y altura realista,
-  - separar visualmente Super Heavy y Ship despues de staging con damage/sep details,
-  - capturas de aceptacion con framebuffer real,
-  - engine-out real en una fase futura si se abandona el contrato de una parte-motor por etapa.
+### VAB / Construccion
 
-## Interplanetario Real
+- Menu principal dedicado.
+- Gizmos de arrastre/rotacion para reposicionar piezas en la preview.
+- Mejor feedback visual de nodos compatibles/incompatibles.
+- Validacion visual de crafts guardados antes de launch.
 
-Estado incremental: el calculo Hohmann vive en `ExosphereSimulation/Navigation`, tiene tests de Tierra-Marte/Tierra-Venus y `TransferPlanner` consume ese nucleo con phase angle.
+### Visual Starship/Super Heavy
 
-- Hecho:
-  - selector de destino en mapa,
-  - nodos Hohmann,
-  - signos correctos para burns exteriores/interiores,
-  - tiempo de vuelo y phase angle testeados,
-  - `ManeuverExecutor` orienta y ejecuta burns,
-  - **patched conics reales en transiciones de SOI** (Universe re-encuadra al cruzar, warp-independiente),
-  - **prediccion/visualizacion de encuentros** (`Navigation/TrajectoryPrediction.FindEncounter`: entrada
-    a SOI por biseccion o maxima aproximacion por golden-section, con tests; readout y marcador en el mapa),
-  - **UX de nodos de maniobra mas clara** (readout de T-node/burn/Ap-Pe resultantes, ajuste con `[`/`]`).
-- Pendiente:
-  - tests de cruise muy largo,
-  - modelo de transferencia a la Luna mas preciso (hoy usa el Hohmann heliocentrico simplificado),
-  - nodos de maniobra arrastrables con el mouse (hoy se ajustan por teclado).
+- Plan detallado: `PLAN_VISUAL_REALISM.md`.
+- Capturas de aceptacion con framebuffer real.
+- Engine-out real queda fuera de esta etapa porque rompe el contrato actual de
+  una parte-motor fisica por etapa.
 
-## CI / Headless Tests
+### Reentry Fisico/Visual
 
-Estado: CI basico agregado con `.github/workflows/ci.yml` y check local estricto `tools/ci_check.sh`.
+- Per-piece structural breakup.
+- Perdida de control si falla una pieza critica.
+- Lift aerodinamico y AoA real, no solo drag orientacion-dependiente.
+- Atmosfera residual sobre 140 km para decaimiento orbital lento, si se decide
+  priorizar realismo orbital fino.
 
-- Hecho:
-  - `dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet`,
-  - `dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo`,
-  - build Godot + Godot headless smoke local,
-  - build Godot + Godot smoke opcional en CI si `GODOT_BIN` existe.
-- Pendiente:
-  - instalar/proveer Godot en CI remoto,
-  - definir estrategia de capturas visuales con framebuffer real,
-  - evitar que harness/autoload temporales entren a commits.
+### Interplanetario
+
+- Tests de cruise muy largo.
+- Transferencia lunar mas precisa que el Hohmann heliocentrico simplificado.
+- Nodos de maniobra arrastrables con mouse.
+
+### Gameplay
+
+- Save/load de mision.
+- Misiones/objetivos de progresion.
+- Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
+- Fallos, damage consequences y recuperacion.
+
+### CI / Visual Testing
+
+- Captura PNG end-to-end en CI usando Xvfb.
+- Comparacion minima de screenshots para detectar pantallas negras, UI rota o
+  render sin nave.
+- Mantener el guard anti-harness: no commitear `scripts/_*Shot.cs` ni autoloads
+  temporales.
+
+## Orden Recomendado
+
+1. Ejecutar `bash tools/ci_check.sh` antes de tocar visuales.
+2. Implementar el primer bloque de `PLAN_VISUAL_REALISM.md`: capturas de
+   referencia + mejora de materiales/superficie de Starship.
+3. Agregar capturas de aceptacion reproducibles.
+4. Mejorar plumas/staging/reentry VFX.
+5. Recien despues volver a gameplay grande: misiones, save/load, recursos o
+   engine-out real.
