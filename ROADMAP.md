@@ -6,6 +6,15 @@ Estado de cierre actual:
 - Godot headless carga la escena principal sin errores.
 - VAB V1.5 existe como nucleo testeable (`ExosphereSimulation/Construction`), escena `Construction.tscn`, preview 3D, craft files y flujo VAB -> launch.
 
+## En Implementacion Activa (agentes desplegados)
+
+Este roadmap esta en ejecucion. Frentes con trabajo en curso ahora mismo:
+- **Interplanetario real — patched conics / transiciones de SOI** (sim + tests + physics-reviewer).
+- **Reentry visual avanzado — plasma por flujo, dano de tiles y breakup** (capa de juego).
+- **VAB UX — navegador de craft files y manipulacion en preview** (capa de juego).
+
+Los demas frentes (Starship visual fidelity, CI remoto) quedan en cola para la siguiente tanda.
+
 ## VAB / Construccion De Naves
 
 Estado V1.5: implementado el flujo minimo data-driven, testeado y conectado al vuelo.
