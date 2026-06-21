@@ -380,12 +380,19 @@ public class Universe
 
     private void PropagateVesselOnRails(Vessel vessel, double dt)
     {
-        // Compute or reuse cached orbital elements
+        // Compute or reuse cached orbital elements.
+        // CRITICAL: the global bodies were already propagated to the tick's END time by
+        // PropagateAllBodies before this runs, but vessel.Position/Velocity still correspond
+        // to CurrentTime (the conic's epoch). Build the relative state against the reference
+        // body's state AT CurrentTime (via BodyStateAt) — using its end-of-tick position would
+        // bias the initial conic by (body velocity × dt), which at high warp (dt up to 2000 s)
+        // is tens of thousands of km — a wrong orbit the instant warp is engaged.
         if (vessel.OrbitalState is null)
         {
-            var refBody = GetDominantBody(vessel.Position);
-            var relPos  = vessel.Position - refBody.Position;
-            var relVel  = vessel.Velocity - refBody.Velocity;
+            var refBody      = GetDominantBodyAt(vessel.Position, CurrentTime);
+            var (refP, refV) = BodyStateAt(refBody, CurrentTime);
+            var relPos       = vessel.Position - refP;
+            var relVel       = vessel.Velocity - refV;
             vessel.OrbitalState    = KeplerPropagator.ComputeElements(
                 relPos, relVel, refBody.GM, refBody.Id, CurrentTime);
             vessel.ReferenceBodyId = refBody.Id;
@@ -393,6 +400,24 @@ public class Universe
 
         var reference = GetBody(vessel.OrbitalState.ReferenceBodyId);
         if (reference is null) return;
+
+        // ── Patched-conic SOI transition guard (pre-step) ─────────────────
+        // The vessel may have drifted into (or out of) another body's sphere of
+        // influence since the cached conic was last computed against `reference`.
+        // If the dominant body changed, re-frame the state to it and recompute the
+        // conic there BEFORE propagating, so this step's arc is integrated in the
+        // correct frame. GetDominantBody works on the inertial position — identical
+        // in every frame — so re-framing preserves inertial continuity (no jump in
+        // absolute position/velocity, only the orbital elements change).
+        // vessel.Position corresponds to CurrentTime (end of the previous tick); evaluate the
+        // dominant body and re-frame against the body state at THAT instant, not end-of-tick.
+        var dominantNow = GetDominantBodyAt(vessel.Position, CurrentTime);
+        if (dominantNow.Id != vessel.OrbitalState!.ReferenceBodyId)
+        {
+            var (bp, bv) = BodyStateAt(dominantNow, CurrentTime);
+            ReframeVesselToBody(vessel, dominantNow, bp, bv, CurrentTime);
+            reference = dominantNow;
+        }
 
         // ── Periapsis / sub-surface collision check (on-rails) ────────────
         // The Kepler propagator works in conic sections and cannot detect when the
@@ -433,18 +458,136 @@ public class Universe
             (lastRelP, lastRelV) = KeplerPropagator.PropagateToTime(
                 vessel.OrbitalState, sampleTime, reference.GM);
 
+            // Reference body inertial state at THIS sub-step time (bodies are globally
+            // frozen at end-of-tick; the crossing/impact happens earlier).
+            var (refPosAt, refVelAt) = BodyStateAt(reference, sampleTime);
+
             if (lastRelP.Magnitude < reference.Radius)
             {
                 // The conic crosses the surface inside this step — impact here.
-                vessel.Position = reference.Position + lastRelP;
-                vessel.Velocity = reference.Velocity + lastRelV;
+                vessel.Position = refPosAt + lastRelP;
+                vessel.Velocity = refVelAt + lastRelV;
                 ResolveOnRailsImpact(vessel, reference);
                 return;
+            }
+
+            // ── Mid-step SOI crossing (patched-conic) ─────────────────────
+            // The slice may have carried the vessel across an SOI boundary (e.g.
+            // into the Moon's SOI, or out of Earth's into the Sun's). Resolve the
+            // dominant body at the propagated inertial point. If it changed, commit
+            // the inertial state here, re-frame to the new dominant body with the
+            // conic's epoch set to THIS crossing time (sampleTime) — so the remaining
+            // slices, sampled at absolute times, stay phase-correct — and keep
+            // sub-stepping the rest of the step in the new conic. This walks the
+            // boundary instead of tunnelling through it under warp.
+            // Reconstruct the inertial crossing point with the reference body at the SAME
+            // instant (sampleTime), and decide the dominant body in that same frame.
+            var inertialP = refPosAt + lastRelP;
+            var inertialV = refVelAt + lastRelV;
+            var dominantHere = GetDominantBodyAt(inertialP, sampleTime);
+            if (dominantHere.Id != reference.Id)
+            {
+                vessel.Position = inertialP;
+                vessel.Velocity = inertialV;
+                var (newRefP, newRefV) = BodyStateAt(dominantHere, sampleTime);
+                ReframeVesselToBody(vessel, dominantHere, newRefP, newRefV, sampleTime);
+                reference = dominantHere;
+
+                // A fresh frame may already be on a collision course (e.g. an arc that
+                // dips below the new body's surface). Honour the same suborbital guard.
+                if (vessel.OrbitalState!.IsSuborbital(reference.Radius))
+                {
+                    ResolveOnRailsImpact(vessel, reference);
+                    return;
+                }
+
+                // Re-anchor the per-slice state from the NEW conic at this crossing time,
+                // so a crossing on the final slice still reconstructs consistently below.
+                (lastRelP, lastRelV) = KeplerPropagator.PropagateToTime(
+                    vessel.OrbitalState!, sampleTime, reference.GM);
             }
         }
 
         vessel.Position = reference.Position + lastRelP;
         vessel.Velocity = reference.Velocity + lastRelV;
+    }
+
+    /// <summary>
+    /// Re-frames an on-rails vessel onto a new dominant body, recomputing its conic
+    /// in that body's frame from the SAME inertial state. The vessel's absolute
+    /// (inertial) position and velocity are unchanged — only the reference body and
+    /// the derived Keplerian elements change — so the trajectory is continuous across
+    /// the sphere-of-influence boundary (a patched-conic transition).
+    /// </summary>
+    /// <remarks>
+    /// Caller must have set <see cref="Vessel.Position"/>/<see cref="Vessel.Velocity"/>
+    /// to the inertial state at the crossing point, and pass the new body's inertial
+    /// state <paramref name="bodyPos"/>/<paramref name="bodyVel"/> AT THE SAME instant
+    /// (<paramref name="epoch"/>). The global body objects are frozen at the tick's end
+    /// time during sub-stepping, so the crossing-time body state must be supplied
+    /// explicitly (see <see cref="BodyStateAt"/>) — otherwise the relative state is
+    /// computed against the wrong frame and a spurious inertial jump appears under warp.
+    /// <paramref name="epoch"/> is the simulation time the inertial state corresponds to;
+    /// the recomputed conic stores its mean anomaly at that epoch so subsequent
+    /// propagation to absolute times stays phase-correct.
+    /// </remarks>
+    private static void ReframeVesselToBody(
+        Vessel vessel, CelestialBody newBody, Vector3d bodyPos, Vector3d bodyVel, double epoch)
+    {
+        var relPos = vessel.Position - bodyPos;
+        var relVel = vessel.Velocity - bodyVel;
+
+        vessel.OrbitalState    = KeplerPropagator.ComputeElements(
+            relPos, relVel, newBody.GM, newBody.Id, epoch);
+        vessel.ReferenceBodyId = newBody.Id;
+    }
+
+    /// <summary>
+    /// Inertial state (position, velocity) of a body at an arbitrary simulation time,
+    /// WITHOUT mutating global body state. Mirrors <c>KeplerPropagator.PropagateAllBodies</c>
+    /// by walking the reference chain (Moon → Earth → Sun); a root body with no orbital
+    /// elements is treated as fixed at its current stored position.
+    ///
+    /// Needed because the global bodies are propagated once to the tick's END time, but
+    /// an on-rails SOI crossing happens at an intermediate sub-step time — the reference
+    /// body's state at THAT instant is what keeps the patched-conic re-frame continuous.
+    /// </summary>
+    private (Vector3d pos, Vector3d vel) BodyStateAt(CelestialBody body, double t)
+    {
+        if (body.OrbitalElements is null)
+            return (body.Position, body.Velocity);   // root (e.g. Sun) — fixed at origin
+
+        var refBody = GetBody(body.OrbitalElements.ReferenceBodyId);
+        if (refBody is null)
+            return (body.Position, body.Velocity);
+
+        var (refPos, refVel)  = BodyStateAt(refBody, t);
+        var (relPos, relVel)  = body.OrbitalElements.GetStateAtTime(t, refBody.GM);
+        return (refPos + relPos, refVel + relVel);
+    }
+
+    /// <summary>
+    /// Like <see cref="GetDominantBody"/> but evaluates each body's position at time
+    /// <paramref name="t"/> (via <see cref="BodyStateAt"/>) instead of its frozen end-of-tick
+    /// position — so an SOI boundary test during sub-stepping is decided in the right frame.
+    /// </summary>
+    private CelestialBody GetDominantBodyAt(Vector3d position, double t)
+    {
+        CelestialBody? best    = null;
+        double         bestSoi = double.MaxValue;
+
+        foreach (var body in _bodies)
+        {
+            var (bp, _) = BodyStateAt(body, t);
+            double dist = (position - bp).Magnitude;
+            if (dist < body.SphereOfInfluence && body.SphereOfInfluence < bestSoi)
+            {
+                bestSoi = body.SphereOfInfluence;
+                best    = body;
+            }
+        }
+
+        return best ?? _bodies.OrderByDescending(b => b.Mass).First();
     }
 
     /// <summary>
