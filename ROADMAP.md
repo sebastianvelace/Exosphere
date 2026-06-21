@@ -14,12 +14,15 @@ Estado de cierre actual:
 - **Reentry visual avanzado**: HECHO en `main`. Plasma concentrado en la cara windward,
   oscurecimiento de tiles por dano termico (`VesselRenderer`), y breakup VFX al destruirse por
   calor (`ReentryBreakupController`). Pendiente: perdida de control por fallo estructural.
-- **Interplanetario — patched conics / transiciones de SOI**: PARCIAL, en la rama
-  `feat/patched-conic-soi-transition`, NO mergeado. La transicion de SOI funciona y tiene tests,
-  pero `physics-reviewer` detecto que a warp maximo (2000 s/Tick) el cruce de SOI se detecta a
-  tiempos de simulacion distintos segun la resolucion del warp (residual dt-proporcional ~9e7 m).
-  Se corrigio la reconstruccion del frame (BodyStateAt) reduciendolo de ~1.6e8 m a ~9e7 m y se
-  dejo un test [Fact(Skip)] que fija el caso. Queda resolver la causa de fondo antes de mergear.
+- **Interplanetario — patched conics / transiciones de SOI**: HECHO en `main`. El vessel on-rails
+  re-encuadra su conico al cruzar una frontera de SOI (`ReframeVesselToBody` + `BodyStateAt` +
+  `GetDominantBodyAt` en `Universe.cs`), con continuidad inercial independiente de la resolucion del
+  warp. Causa raiz corregida: tanto el conico INICIAL como la reconstruccion del cruce deben usar el
+  estado del cuerpo de referencia en el epoch/instante del cruce (`BodyStateAt`), no su posicion de
+  fin-de-tick — usar la de fin-de-tick sesgaba la orbita por (velocidad x dt) (~60000 km a max warp:
+  una orbita erronea al instante de enganchar warp). Tests: salida SOI Tierra->Sol, entrada SOI Luna,
+  cruise Tierra->Marte, no-regresion LEO, y continuidad a max-warp Tick. Pendiente aun: solver
+  hiperbolico ya cubre escape; falta validacion de cruise muy largo y UX de nodos arrastrables.
 
 Frentes en cola: Starship visual fidelity (proporciones 9 m, separar SH/Ship), CI con Godot remoto.
 
