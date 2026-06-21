@@ -54,11 +54,13 @@ Estado V1.5: implementado el flujo minimo data-driven, testeado y conectado al v
   - save/load de craft JSON en `user://crafts`,
   - tecla `V` desde vuelo al VAB,
   - boton `Launch` desde VAB a `Flight.tscn`,
-  - tests de catalogo, nodos, metricas, conexiones incompatibles y export.
+  - tests de catalogo, nodos, metricas, conexiones incompatibles y export,
+  - **navegador visual de craft files** (panel "Saved Crafts" en `ConstructionController`),
+  - **manipulacion directa de attachment-nodes en la preview 3D** (`VabPickingLayer`: raycast
+    camara->preview, seleccionar/adjuntar/borrar clickeando, validando `NodesAreCompatible`).
 - Pendiente:
-  - manipular attachment nodes directo en la preview,
-  - lista visual de craft files,
-  - menu principal dedicado.
+  - menu principal dedicado,
+  - gizmos de arrastre/rotacion para reposicionar piezas en la preview (hoy es click-to-attach).
 
 ## Reentry Fisico Y Visual Avanzado
 
@@ -91,12 +93,15 @@ Estado incremental: el calculo Hohmann vive en `ExosphereSimulation/Navigation`,
   - nodos Hohmann,
   - signos correctos para burns exteriores/interiores,
   - tiempo de vuelo y phase angle testeados,
-  - `ManeuverExecutor` orienta y ejecuta burns.
+  - `ManeuverExecutor` orienta y ejecuta burns,
+  - **patched conics reales en transiciones de SOI** (Universe re-encuadra al cruzar, warp-independiente),
+  - **prediccion/visualizacion de encuentros** (`Navigation/TrajectoryPrediction.FindEncounter`: entrada
+    a SOI por biseccion o maxima aproximacion por golden-section, con tests; readout y marcador en el mapa),
+  - **UX de nodos de maniobra mas clara** (readout de T-node/burn/Ap-Pe resultantes, ajuste con `[`/`]`).
 - Pendiente:
-  - patched conics reales en transiciones Tierra/Luna/Sol,
-  - trayectoria/intercepcion visual mas precisa,
-  - tests de cruise largo y cambio de SOI,
-  - UX de nodos arrastrables mas clara.
+  - tests de cruise muy largo,
+  - modelo de transferencia a la Luna mas preciso (hoy usa el Hohmann heliocentrico simplificado),
+  - nodos de maniobra arrastrables con el mouse (hoy se ajustan por teclado).
 
 ## CI / Headless Tests
 
