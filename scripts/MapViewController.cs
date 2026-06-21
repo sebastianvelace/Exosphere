@@ -138,6 +138,7 @@ public partial class MapViewController : Control
                     if (tn != null)
                     {
                         tn.DvAdjustFactor = System.Math.Max(0.50, tn.DvAdjustFactor - 0.05);
+                        TransferPlanner.Instance?.PredictEncounter();   // refresh encounter readout
                         QueueRedraw();
                     }
                     break;
@@ -148,6 +149,7 @@ public partial class MapViewController : Control
                     if (tn != null)
                     {
                         tn.DvAdjustFactor = System.Math.Min(1.50, tn.DvAdjustFactor + 0.05);
+                        TransferPlanner.Instance?.PredictEncounter();   // refresh encounter readout
                         QueueRedraw();
                     }
                     break;
@@ -274,16 +276,20 @@ public partial class MapViewController : Control
                                  Planner.PeriapsisDir, Planner.AheadDir, master,
                                  Planner.TrueAnomalyLimit());
 
-        List<Vector2>? projCurve = null;
+        List<Vector2>?  projCurve = null;
+        ManeuverPlanner? projOrbit = null;   // post-burn orbit, for the resulting Ap/Pe readout
         if (Planner.HasNode && Planner.DeltaVMagnitude > 0.01)
         {
             var (pPos, pVel) = Planner.PostBurnState();
             var tmp = new ManeuverPlanner();
             tmp.SetOrbit(pPos, pVel, refBody.GM);
             if (tmp.HasOrbit)
+            {
+                projOrbit = tmp;
                 projCurve = SampleConic(tmp.Eccentricity, tmp.SemiLatusRectum,
                                         tmp.PeriapsisDir, tmp.AheadDir, master,
                                         tmp.TrueAnomalyLimit());
+            }
         }
 
         ComputeScale(curve, projCurve);
@@ -319,7 +325,7 @@ public partial class MapViewController : Control
             DrawNodeDiamond(nPx, NodeCol);
         }
 
-        DrawReadout(vessel, refBody);
+        DrawReadout(vessel, refBody, projOrbit);
         DrawTransferPanel();
         DrawFooter();
     }
@@ -384,6 +390,26 @@ public partial class MapViewController : Control
                 bool msel = m.Id == _selectedTarget;
                 DrawCircle(mp, msel ? 4f : 2.5f, Accentify(m.Id));
                 if (msel) DrawArc(mp, 6f, 0, Mathf.Tau, 16, NodeCol, 1.5f);
+            }
+        }
+
+        // ── Encounter marker (SOI entry / closest approach) for the planned transfer ──
+        // Position is heliocentric; map it through the same log-radial projection. A filled
+        // ring means SOI capture; a hollow ring means a miss (closest approach only).
+        if (TransferPlanner.Instance?.Encounter is { } enc)
+        {
+            var ePos = enc.EncounterPosition;   // relative to the Sun
+            double ed   = ePos.Magnitude;
+            double eang = System.Math.Atan2(ePos.Y, ePos.X);
+            if (ed > 1e6)
+            {
+                var ep = Pt(ed, eang);
+                Color ecol = enc.HasEncounter ? GreenCol : new Color(1f, 0.65f, 0.30f);
+                if (enc.HasEncounter) DrawCircle(ep, 4.5f, ecol);
+                DrawArc(ep, 7f, 0, Mathf.Tau, 20, ecol, 1.6f);
+                // small "X" crosshair so the marker reads clearly against orbit rings
+                DrawLine(ep + new Vector2(-5, -5), ep + new Vector2(5, 5), ecol, 1.2f);
+                DrawLine(ep + new Vector2(-5, 5),  ep + new Vector2(5, -5), ecol, 1.2f);
             }
         }
     }
@@ -512,9 +538,10 @@ public partial class MapViewController : Control
         DrawPolyline(new[] { pts[0], pts[1], pts[2], pts[3], pts[0] }, new Color(0, 0, 0, 0.6f), 1f);
     }
 
-    private void DrawReadout(Vessel vessel, CelestialBody refBody)
+    private void DrawReadout(Vessel vessel, CelestialBody refBody, ManeuverPlanner? projOrbit)
     {
-        float x = 14, y = PanelSize - 96;
+        // Stacked higher than before to fit the richer node readout (current + resulting orbit).
+        float x = 14, y = PanelSize - 132;
         if (Planner.Eccentricity < 1.0)
         {
             double ap = Planner.SemiMajorAxis * (1 + Planner.Eccentricity) - refBody.Radius;
@@ -535,13 +562,34 @@ public partial class MapViewController : Control
             DrawText($"ΔV {Planner.DeltaVMagnitude:F0} m/s  (pro {Planner.DvPrograde:+0;-0}  rad {Planner.DvRadial:+0;-0})",
                      new Vector2(x, y), NodeCol, 13);
             y += 17;
+
+            // Time to the node (next pass) — drag/scroll updates this live.
+            double tNode = Planner.TimeToNode();
+            string etaStr = tNode > 0.0 ? FmtTime(tNode) : "—";
             string burnStr = thrustVac > 0 ? $"{burn:F1} s" : "no engines";
             string armed = _autopilot.IsArmed ? "  [ARMED]" : "";
-            DrawText($"burn {burnStr}{armed}", new Vector2(x, y), _autopilot.IsArmed ? GreenCol : TextDim, 13);
+            DrawText($"T-node {etaStr}   burn {burnStr}{armed}",
+                     new Vector2(x, y), _autopilot.IsArmed ? GreenCol : TextDim, 13);
+            y += 17;
+
+            // Resulting orbit after the burn (drawn dashed above) — its Ap/Pe in numbers.
+            if (projOrbit != null)
+            {
+                if (projOrbit.Eccentricity < 1.0)
+                {
+                    double rap = projOrbit.SemiMajorAxis * (1 + projOrbit.Eccentricity) - refBody.Radius;
+                    double rpe = projOrbit.SemiMajorAxis * (1 - projOrbit.Eccentricity) - refBody.Radius;
+                    DrawText($"→ Ap {Fmt(rap)}   Pe {Fmt(rpe)}", new Vector2(x, y), ProjCol, 12);
+                }
+                else
+                {
+                    DrawText("→ HYPERBOLIC ESCAPE", new Vector2(x, y), ProjCol, 12);
+                }
+            }
         }
         else
         {
-            DrawText("click orbit to add maneuver node", new Vector2(x, y), TextDim, 12);
+            DrawText("click/drag orbit to add or move node", new Vector2(x, y), TextDim, 12);
         }
     }
 
@@ -581,6 +629,20 @@ public partial class MapViewController : Control
             DrawText($"adj {adjPct}", new Vector2(x, y), TextDim, 11);
             y += 13f;
 
+            // Encounter readout: SOI capture (green) or closest-approach miss (orange).
+            if (TransferPlanner.Instance?.Encounter is { } enc)
+            {
+                y += 3f;
+                Color ecol = enc.HasEncounter ? GreenCol : new Color(1f, 0.65f, 0.30f);
+                DrawText(enc.HasEncounter ? "ENCOUNTER" : "miss", new Vector2(x, y), ecol, 10);
+                y += 12f;
+                DrawText($"appr {Fmt(enc.ClosestApproachDistance)}", new Vector2(x, y), ecol, 11);
+                y += 13f;
+                double eta = enc.TimeOfClosestApproach - node.BurnTime;
+                DrawText($"ETA {FmtTime(eta)}", new Vector2(x, y), TextDim, 11);
+                y += 13f;
+            }
+
             // Executor status
             if (ManeuverExecutor.Instance is { IsExecuting: true } exec)
             {
@@ -596,7 +658,7 @@ public partial class MapViewController : Control
 
     private void DrawFooter()
     {
-        DrawText("wheel: ΔV  ⇧×10  alt: radial  ⏎ execute  ⌫ clear  1-5: transfer  [/]: adj ΔV",
+        DrawText("drag: move node  wheel: ΔV ⇧×10 alt:radial  ⏎ exec  ⌫ clear  1-5 transfer  [/] adj  Tab: sys+encounter",
                  new Vector2(14, PanelSize - 14), new Color(0.50f, 0.58f, 0.68f, 0.9f), 10);
     }
 
@@ -623,5 +685,14 @@ public partial class MapViewController : Control
         if (System.Math.Abs(m) >= 1e6) return $"{m / 1e6:F2} Mm";
         if (System.Math.Abs(m) >= 1e3) return $"{m / 1e3:F0} km";
         return $"{m:F0} m";
+    }
+
+    // Human-readable elapsed time: days / hours / minutes / seconds.
+    private static string FmtTime(double s)
+    {
+        if (s >= 86400.0) return $"{s / 86400.0:F1} d";
+        if (s >= 3600.0)  return $"{s / 3600.0:F1} h";
+        if (s >= 60.0)    return $"{s / 60.0:F0} m";
+        return $"{s:F0} s";
     }
 }

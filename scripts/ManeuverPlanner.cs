@@ -173,4 +173,34 @@ public sealed class ManeuverPlanner
         double nuInf = System.Math.Acos(System.Math.Clamp(-1.0 / Eccentricity, -1.0, 1.0));
         return nuInf * 0.98;                                  // stay just inside asymptote
     }
+
+    /// <summary>
+    /// Time (s) from the vessel's current position forward to the maneuver node, for a
+    /// closed orbit. Returns 0 for open conics (where "next pass" is not periodic) or when
+    /// the orbit is undefined. Converts both true anomalies to mean anomaly and divides the
+    /// forward angular gap by the mean motion n = √(μ/a³).
+    /// Tiempo hasta el nodo: ν → M (vía E) y el hueco angular hacia adelante / movimiento medio.
+    /// </summary>
+    public double TimeToNode()
+    {
+        if (!HasOrbit || !HasNode || Eccentricity >= 1.0 || SemiMajorAxis <= 0.0)
+            return 0.0;
+
+        double n = System.Math.Sqrt(Mu / (SemiMajorAxis * SemiMajorAxis * SemiMajorAxis));
+        if (n <= 0.0 || double.IsNaN(n)) return 0.0;
+
+        double mNow  = MeanAnomalyFromTrue(TrueAnomalyNow, Eccentricity);
+        double mNode = MeanAnomalyFromTrue(NodeTrueAnomaly, Eccentricity);
+        double dM    = WrapTwoPi(mNode - mNow);   // forward to the next node pass
+        return dM / n;
+    }
+
+    /// <summary>Mean anomaly (rad) from true anomaly for an elliptic orbit (e &lt; 1).</summary>
+    private static double MeanAnomalyFromTrue(double nu, double e)
+    {
+        double tanHalfNu = System.Math.Tan(nu * 0.5);
+        double E = 2.0 * System.Math.Atan(System.Math.Sqrt((1.0 - e) / (1.0 + e)) * tanHalfNu);
+        double M = E - e * System.Math.Sin(E);
+        return WrapTwoPi(M);
+    }
 }
