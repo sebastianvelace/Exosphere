@@ -176,18 +176,52 @@ public partial class VesselRenderer : Node3D
                 exitR: 0.21f, throatR: 0.10f, bellLen: 1.05f, bellRings: 3);
         }
 
-        // Optional separation scar when SH is standalone (after staging)
+        // Exposed hot-stage interstage when SH is standalone (after staging).
+        // In the full stack this vented ring is hidden under the Ship; once the
+        // booster separates it's the SH's most recognisable feature, so we build
+        // it out here: a sooty hot-stage ring scorched by the Ship's exhaust,
+        // ringed with vent slots and capped by a scorched separation lip.
+        // Anillo hot-stage expuesto tras el staging: en el stack queda oculto bajo
+        // la Ship; al separarse es el rasgo más reconocible del SH, así que lo
+        // mostramos chamuscado por el escape de la Ship, con vents y un labio quemado.
         if (includeSepCap)
-        {
-            var scarMat = Mat(new Color(0.28f, 0.28f, 0.30f), 0.92f, 0.10f);
-            AddMesh("SepScar", new CylinderMesh
-                { TopRadius = BodyR, BottomRadius = BodyR, Height = 0.35f, RadialSegments = 48 },
-                scarMat, new Vector3(0, 22.17f, 0));
-        }
+            BuildExposedHotStageRing();
 
         // GPU plumes
         if (_plumes == null) { _plumes = new PlumeSystem { Name = "Plumes" }; AddChild(_plumes); }
         _plumes.SetupSH(shInnerR, shMidR, shOuterR, shBellY);
+    }
+
+    // ── Exposed hot-stage interstage (standalone SH after separation) ─────
+    // The booster body tops out at y=20. The hot-stage ring sits y=20 → y=22
+    // (same plane the full stack hides under the Ship). When the SH flies
+    // alone we expose it: a scorched vented ring + a burnt separation lip.
+    private void BuildExposedHotStageRing()
+    {
+        // Heavily sooted steel — the Ship's plume scorches this ring on staging.
+        var scorched = SteelMat(new Color(0.30f, 0.29f, 0.30f), 0.84f, 0.55f,
+            weldSpacing: 0.9f);
+        var ventMat  = Mat(new Color(0.05f, 0.05f, 0.06f), 0.60f, 0.70f);
+        var lipMat   = Mat(new Color(0.18f, 0.17f, 0.17f), 0.88f, 0.45f);
+
+        // The vented hot-stage barrel itself (y=20 → y=22).
+        AddMesh("HotStageRing", new CylinderMesh
+            { TopRadius = BodyR, BottomRadius = BodyR, Height = 2f, RadialSegments = 64 },
+            scorched, new Vector3(0, 21f, 0));
+
+        // Vertical vent slots around the ring — these are the open passages the
+        // Ship's exhaust blew through during hot-staging.
+        for (int i = 0; i < 24; i++)
+        {
+            float a = i * Mathf.Pi / 12f;
+            AddMesh($"HotVent{i}", new BoxMesh { Size = new Vector3(0.11f, 1.5f, 0.18f) },
+                ventMat, new Vector3((BodyR - 0.02f) * Mathf.Cos(a), 21f, (BodyR - 0.02f) * Mathf.Sin(a)));
+        }
+
+        // Burnt separation lip capping the exposed ring (the torn separation plane).
+        AddMesh("SepLip", new CylinderMesh
+            { TopRadius = BodyR + 0.02f, BottomRadius = BodyR + 0.02f, Height = 0.22f, RadialSegments = 48 },
+            lipMat, new Vector3(0, 22.05f, 0));
     }
 
     // ── 4 grid fins near top of Super Heavy ──────────────────────────────
