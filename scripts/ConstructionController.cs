@@ -14,6 +14,7 @@ public partial class ConstructionController : Control
 
     private ItemList _catalogList = null!;
     private ItemList _stackList = null!;
+    private ItemList _craftBrowser = null!;
     private OptionButton _parentNode = null!;
     private OptionButton _childNode = null!;
     private LineEdit _craftName = null!;
@@ -43,6 +44,7 @@ public partial class ConstructionController : Control
         }
 
         Refresh();
+        RefreshCraftBrowser();
         SetStatus("Catalog loaded.");
     }
 
@@ -63,6 +65,22 @@ public partial class ConstructionController : Control
         _catalogList = new ItemList { Name = "CatalogList", CustomMinimumSize = new Vector2(380, 0) };
         _catalogList.ItemSelected += _ => RefreshNodeChoices();
         catalogBox.AddChild(_catalogList);
+
+        // Navegador de craft files guardados / Saved craft-file browser.
+        var browserBox = BuildPanel("Saved Crafts");
+        root.AddChild(browserBox);
+        _craftBrowser = new ItemList { Name = "CraftBrowser", CustomMinimumSize = new Vector2(280, 0) };
+        // Doble-click o selección carga el craft / select to load that craft.
+        _craftBrowser.ItemActivated += OnCraftBrowserActivated;
+        browserBox.AddChild(_craftBrowser);
+
+        var refreshCrafts = new Button { Text = "Refresh List" };
+        refreshCrafts.Pressed += RefreshCraftBrowser;
+        browserBox.AddChild(refreshCrafts);
+
+        var loadSelected = new Button { Text = "Load Selected" };
+        loadSelected.Pressed += OnLoadSelectedCraft;
+        browserBox.AddChild(loadSelected);
 
         var mid = BuildPanel("Assembly");
         root.AddChild(mid);
@@ -244,6 +262,7 @@ public partial class ConstructionController : Control
             string path = System.IO.Path.Combine(dir, $"{SafeCraftFileName()}.json");
             var craft = _assembly.ToCraft(CraftName());
             System.IO.File.WriteAllText(path, JsonSerializer.Serialize(craft, JsonOptions));
+            RefreshCraftBrowser();
             SetStatus($"Saved craft: {path}");
         }
         catch (Exception ex)
@@ -254,33 +273,120 @@ public partial class ConstructionController : Control
 
     private void OnLoad()
     {
-        if (_catalog == null) return;
+        string path = System.IO.Path.Combine(CraftDirectory(), $"{SafeCraftFileName()}.json");
+        if (!System.IO.File.Exists(path))
+        {
+            SetStatus($"Craft file not found: {path}");
+            return;
+        }
+        LoadCraftFromPath(path);
+    }
+
+    // Carga un craft desde una ruta concreta / load a craft from an explicit path.
+    private bool LoadCraftFromPath(string path)
+    {
+        if (_catalog == null) return false;
         try
         {
-            string path = System.IO.Path.Combine(CraftDirectory(), $"{SafeCraftFileName()}.json");
-            if (!System.IO.File.Exists(path))
-            {
-                SetStatus($"Craft file not found: {path}");
-                return;
-            }
-
             var craft = JsonSerializer.Deserialize<VesselCraftDefinition>(
                 System.IO.File.ReadAllText(path), JsonOptions);
             if (craft == null)
             {
                 SetStatus("Craft file is empty or invalid.");
-                return;
+                return false;
             }
 
             _assembly = VesselAssembly.FromCraft(_catalog, craft);
             _craftName.Text = craft.Name;
             Refresh();
-            SetStatus($"Loaded craft: {path}");
+            SetStatus($"Loaded craft: {craft.Name} ({craft.Parts.Count} parts)");
+            return true;
         }
         catch (Exception ex)
         {
             SetStatus(ex.Message);
+            return false;
         }
+    }
+
+    // Reconstruye la lista de craft guardados desde user://crafts.
+    // Rebuilds the saved-craft list from user://crafts.
+    private void RefreshCraftBrowser()
+    {
+        _craftBrowser.Clear();
+        string dir = CraftDirectory();
+        if (!System.IO.Directory.Exists(dir))
+        {
+            int empty = _craftBrowser.AddItem("(no saved crafts)");
+            _craftBrowser.SetItemDisabled(empty, true);
+            return;
+        }
+
+        string[] files = System.IO.Directory.GetFiles(dir, "*.json");
+        System.Array.Sort(files);
+        if (files.Length == 0)
+        {
+            int empty = _craftBrowser.AddItem("(no saved crafts)");
+            _craftBrowser.SetItemDisabled(empty, true);
+            return;
+        }
+
+        foreach (string file in files)
+        {
+            string label = DescribeCraftFile(file);
+            int idx = _craftBrowser.AddItem(label);
+            _craftBrowser.SetItemMetadata(idx, file);
+        }
+    }
+
+    // Lee un craft para mostrar nombre + nº de piezas + masa (best-effort).
+    // Reads a craft to show name + part count + mass (best-effort).
+    private string DescribeCraftFile(string path)
+    {
+        string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
+        try
+        {
+            var craft = JsonSerializer.Deserialize<VesselCraftDefinition>(
+                System.IO.File.ReadAllText(path), JsonOptions);
+            if (craft == null) return $"{fileName}  [invalid]";
+
+            string detail = $"{craft.Parts.Count} parts";
+            if (_catalog != null && craft.Parts.Count > 0)
+            {
+                try
+                {
+                    var metrics = VesselAssembly.FromCraft(_catalog, craft).ComputeMetrics();
+                    detail += $", {metrics.WetMass / 1000.0:F1} t";
+                }
+                catch
+                {
+                    // Craft no reconstruible (catálogo cambiado); mostramos solo el conteo.
+                    // Craft can't be rebuilt (catalog changed); show count only.
+                }
+            }
+            return $"{craft.Name}  [{detail}]";
+        }
+        catch
+        {
+            return $"{fileName}  [unreadable]";
+        }
+    }
+
+    private void OnCraftBrowserActivated(long index) => LoadCraftAt((int)index);
+
+    private void OnLoadSelectedCraft()
+    {
+        int[] selected = _craftBrowser.GetSelectedItems();
+        if (selected.Length == 0) { SetStatus("Select a saved craft first."); return; }
+        LoadCraftAt(selected[0]);
+    }
+
+    private void LoadCraftAt(int index)
+    {
+        if (index < 0 || index >= _craftBrowser.ItemCount) return;
+        var meta = _craftBrowser.GetItemMetadata(index);
+        if (meta.VariantType == Variant.Type.Nil) return; // entrada vacía / empty placeholder
+        LoadCraftFromPath(meta.AsString());
     }
 
     private void OnLaunch()
