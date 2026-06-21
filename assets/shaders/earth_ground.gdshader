@@ -26,6 +26,7 @@ uniform float horizon_dist = 4000.0;
 uniform vec3  haze_color : source_color = vec3(0.40, 0.65, 1.0);
 uniform vec3  sun_dir = vec3(0.42, 0.78, 0.46);
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.14;
+uniform float coastal_grade : hint_range(0.0, 1.0) = 0.62;
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -70,6 +71,18 @@ void fragment() {
 	vec3  dir = normalize(sub_p + ae * east_local + an * north_local);
 	vec2  uv  = equirect(dir);
 	vec3  surface = texture(day_tex, uv).rgb;
+
+	// Low-altitude launch views should read as coastal fill, marsh and sand,
+	// not as saturated satellite green. Keep the Blue Marble macro-shapes, but
+	// grade land toward muted Starbase/Cape-like tones close to the pad.
+	float luma = dot(surface, vec3(0.299, 0.587, 0.114));
+	float water_hint = smoothstep(0.18, 0.34, surface.b - max(surface.r, surface.g) * 0.62);
+	vec3 muted = mix(vec3(luma), surface, 0.34);
+	vec3 coastal_land = mix(vec3(0.34, 0.31, 0.24), vec3(0.24, 0.28, 0.20), smoothstep(0.34, 0.62, luma));
+	vec3 coastal_water = vec3(0.05, 0.15, 0.19);
+	vec3 coastal = mix(coastal_land, coastal_water, water_hint);
+	surface = mix(muted, coastal, coastal_grade);
+	surface *= 0.82;
 
 	// Subtle procedural micro-detail so the (low-res) texture isn't flat up close.
 	float det = fbm(v_patch * 0.0006) + 0.5 * fbm(v_patch * 0.0028);

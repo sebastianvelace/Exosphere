@@ -29,7 +29,7 @@ public partial class LaunchPadController : Node3D
     private void BuildEnvironment()
     {
         // ── Shared materials (kept few so they batch) ──────────────────────
-        var concrete  = Mat(new Color(0.40f, 0.39f, 0.37f), 0.95f, 0.0f);
+        var concrete  = Mat(new Color(0.34f, 0.33f, 0.31f), 0.95f, 0.0f);
         var concDark  = Mat(new Color(0.24f, 0.23f, 0.21f), 0.97f, 0.0f);
         var burnt     = Mat(new Color(0.09f, 0.08f, 0.07f), 0.98f, 0.0f);
         var steel     = Mat(new Color(0.55f, 0.56f, 0.58f), 0.55f, 0.85f); // grey lattice steel
@@ -37,10 +37,15 @@ public partial class LaunchPadController : Node3D
         var insul     = Mat(new Color(0.86f, 0.86f, 0.88f), 0.80f, 0.10f); // white cryo tanks
         // Weathered, slightly lighter concrete for the wide tarmac, plus a mid
         // scorch tone between clean concrete and fully-charred burnt.
-        var tarmac    = Mat(new Color(0.46f, 0.45f, 0.42f), 0.96f, 0.0f); // weathered apron
+        var tarmac    = Mat(new Color(0.30f, 0.30f, 0.28f), 0.96f, 0.0f); // weathered apron
         var scorch    = Mat(new Color(0.16f, 0.15f, 0.13f), 0.97f, 0.0f); // blast-zone stain
+        var sandFill  = Mat(new Color(0.31f, 0.28f, 0.21f), 0.98f, 0.0f);
+        var gravel    = Mat(new Color(0.20f, 0.19f, 0.17f), 0.98f, 0.0f);
+        var asphalt   = Mat(new Color(0.08f, 0.085f, 0.08f), 0.96f, 0.0f);
+        var paint     = Mat(new Color(0.62f, 0.52f, 0.22f), 0.88f, 0.0f);
 
         BuildConcretePad(concrete, concDark, burnt);
+        BuildCoastalSite(sandFill, gravel, asphalt, tarmac, concDark, paint);
         BuildLaunchApron(tarmac, concDark, scorch, burnt);
         BuildOrbitalLaunchMount(darkSteel, concDark);
         BuildMechazillaTower(steel, darkSteel);
@@ -117,6 +122,130 @@ public partial class LaunchPadController : Node3D
         Spawn("TrenchExitBerm", new BoxMesh
             { Size = new Vector3(halfChan * 2.4f, 5f * U, 4f * U) },
             concDark, new Vector3(0, padY + 1.5f * U, trenchZ0 + trenchLen));
+    }
+
+    // ── Coastal launch site: filled island, access roads and service marks ──
+    private void BuildCoastalSite(StandardMaterial3D sandFill, StandardMaterial3D gravel,
+                                  StandardMaterial3D asphalt, StandardMaterial3D tarmac,
+                                  StandardMaterial3D concDark, StandardMaterial3D paint)
+    {
+        const float padY = -22f * U + 6.5f * U;
+        const float fillTop = padY - 0.08f * U;
+        const float surfaceY = padY + 0.03f * U;
+
+        // Broad compacted coastal fill under the concrete complex. This breaks
+        // the "green field" read and gives the pad a Starbase-like industrial
+        // island silhouette before the real Earth texture takes over in the far
+        // distance.
+        Spawn("CoastalFill", new BoxMesh { Size = new Vector3(360f * U, 0.65f * U, 300f * U) },
+            sandFill, new Vector3(-8f * U, fillTop - 0.32f * U, 0));
+        Spawn("GravelPadShoulder", new BoxMesh { Size = new Vector3(245f * U, 0.22f * U, 220f * U) },
+            gravel, new Vector3(0, fillTop + 0.02f * U, 0));
+
+        // The true-scale Earth patch sits at the surface under the vehicle and
+        // can visually cover old below-grade pad slabs. These thin ground skins
+        // sit just above that patch, with a centre opening so they do not cover
+        // the OLM table or hold-down hardware.
+        const float skinY = 0.08f * U;
+        Spawn("SurfaceApronNorth", new BoxMesh { Size = new Vector3(190f * U, 0.10f * U, 62f * U) },
+            tarmac, new Vector3(0, skinY, -61f * U));
+        Spawn("SurfaceApronSouth", new BoxMesh { Size = new Vector3(190f * U, 0.10f * U, 62f * U) },
+            tarmac, new Vector3(0, skinY, 61f * U));
+        Spawn("SurfaceApronWest", new BoxMesh { Size = new Vector3(62f * U, 0.10f * U, 66f * U) },
+            tarmac, new Vector3(-64f * U, skinY, 0));
+        Spawn("SurfaceApronEast", new BoxMesh { Size = new Vector3(62f * U, 0.10f * U, 66f * U) },
+            tarmac, new Vector3(64f * U, skinY, 0));
+        Spawn("SurfaceFillWest", new BoxMesh { Size = new Vector3(70f * U, 0.10f * U, 250f * U) },
+            sandFill, new Vector3(-145f * U, skinY - 0.01f * U, 0));
+        Spawn("SurfaceFillEast", new BoxMesh { Size = new Vector3(70f * U, 0.10f * U, 250f * U) },
+            sandFill, new Vector3(145f * U, skinY - 0.01f * U, 0));
+        Spawn("SurfaceFillNorth", new BoxMesh { Size = new Vector3(250f * U, 0.10f * U, 58f * U) },
+            sandFill, new Vector3(0, skinY - 0.01f * U, -128f * U));
+        Spawn("SurfaceFillSouth", new BoxMesh { Size = new Vector3(250f * U, 0.10f * U, 58f * U) },
+            sandFill, new Vector3(0, skinY - 0.01f * U, 128f * U));
+
+        SpawnRot("SurfaceMainRoad", new BoxMesh { Size = new Vector3(18f * U, 0.08f * U, 330f * U) },
+            asphalt, new Vector3(-84f * U, skinY + 0.04f * U, 20f * U), new Vector3(0, -7f, 0));
+        SpawnRot("SurfaceTankRoad", new BoxMesh { Size = new Vector3(15f * U, 0.08f * U, 145f * U) },
+            asphalt, new Vector3(54f * U, skinY + 0.045f * U, 42f * U), new Vector3(0, 88f, 0));
+
+        for (int i = 1; i < 6; i++)
+        {
+            float off = (-90f + i * 30f) * U;
+            Spawn($"SurfaceJointNorth{i}", new BoxMesh { Size = new Vector3(190f * U, 0.04f * U, 0.55f * U) },
+                concDark, new Vector3(0, skinY + 0.07f * U, off - 61f * U));
+            Spawn($"SurfaceJointSouth{i}", new BoxMesh { Size = new Vector3(190f * U, 0.04f * U, 0.55f * U) },
+                concDark, new Vector3(0, skinY + 0.07f * U, off + 61f * U));
+        }
+        for (int i = 1; i < 5; i++)
+        {
+            float off = (-76f + i * 30f) * U;
+            Spawn($"SurfaceJointWest{i}", new BoxMesh { Size = new Vector3(0.55f * U, 0.04f * U, 66f * U) },
+                concDark, new Vector3(off - 64f * U, skinY + 0.07f * U, 0));
+            Spawn($"SurfaceJointEast{i}", new BoxMesh { Size = new Vector3(0.55f * U, 0.04f * U, 66f * U) },
+                concDark, new Vector3(off + 64f * U, skinY + 0.07f * U, 0));
+        }
+
+        // Low berms around the filled site, visible at pad/liftoff camera height.
+        Spawn("NorthBerm", new BoxMesh { Size = new Vector3(340f * U, 2.2f * U, 5f * U) },
+            sandFill, new Vector3(-8f * U, padY + 0.75f * U, -145f * U));
+        Spawn("SouthBerm", new BoxMesh { Size = new Vector3(340f * U, 2.2f * U, 5f * U) },
+            sandFill, new Vector3(-8f * U, padY + 0.75f * U, 145f * U));
+        Spawn("WestBerm", new BoxMesh { Size = new Vector3(5f * U, 2.0f * U, 280f * U) },
+            sandFill, new Vector3(-185f * U, padY + 0.65f * U, 0));
+
+        // Service roads and paved access lanes. Slight rotations avoid a toy-like
+        // grid while still reading clearly from the launch camera.
+        SpawnRot("MainAccessRoad", new BoxMesh { Size = new Vector3(18f * U, 0.18f * U, 360f * U) },
+            asphalt, new Vector3(-84f * U, surfaceY, 18f * U), new Vector3(0, -7f, 0));
+        SpawnRot("TankFarmServiceRoad", new BoxMesh { Size = new Vector3(16f * U, 0.18f * U, 150f * U) },
+            asphalt, new Vector3(52f * U, surfaceY + 0.01f * U, 38f * U), new Vector3(0, 88f, 0));
+        SpawnRot("TowerServiceRoad", new BoxMesh { Size = new Vector3(13f * U, 0.18f * U, 120f * U) },
+            asphalt, new Vector3(-47f * U, surfaceY + 0.01f * U, -35f * U), new Vector3(0, -32f, 0));
+
+        // Painted centre and hold-short marks. Thin boxes keep the cost low and
+        // add scale cues when the vehicle lifts off through smoke.
+        for (int i = 0; i < 13; i++)
+        {
+            float z = (-145f + i * 24f) * U;
+            SpawnRot($"AccessCenterLine{i}", new BoxMesh { Size = new Vector3(0.7f * U, 0.06f * U, 9f * U) },
+                paint, new Vector3(-84f * U, surfaceY + 0.05f * U, z + 18f * U), new Vector3(0, -7f, 0));
+        }
+        for (int i = 0; i < 6; i++)
+        {
+            SpawnRot($"HoldShortStripe{i}", new BoxMesh { Size = new Vector3(2.0f * U, 0.07f * U, 18f * U) },
+                paint, new Vector3((-92f + i * 3.2f) * U, surfaceY + 0.06f * U, -58f * U),
+                new Vector3(0, 83f, 0));
+        }
+
+        // Subtle patched slabs around the main apron so the concrete reads as
+        // poured and repaired instead of a single procedural plate.
+        var patches = new (float x, float z, float sx, float sz, float yaw)[]
+        {
+            (-52f, -62f, 26f, 14f,  2f), (58f, -48f, 22f, 18f, -4f),
+            (-64f,  40f, 18f, 22f, -3f), (42f,  68f, 28f, 12f,  5f),
+            (  8f, -78f, 32f, 10f,  0f),
+        };
+        foreach (var (x, z, sx, sz, yaw) in patches)
+        {
+            SpawnRot("ConcreteRepairPatch", new BoxMesh { Size = new Vector3(sx * U, 0.08f * U, sz * U) },
+                concDark, new Vector3(x * U, surfaceY + 0.02f * U, z * U), new Vector3(0, yaw, 0));
+        }
+
+        // Water-deluge outlets around the OLM deck: small dark nozzles plus a
+        // feed ring on the pad surface. They show why smoke/steam blooms from
+        // around the mount during ignition.
+        Spawn("DelugePadRing", new TorusMesh
+            { InnerRadius = 13f * U, OuterRadius = 14.2f * U, RingSegments = 32, Rings = 6 },
+            concDark, new Vector3(0, surfaceY + 0.12f * U, 0));
+        for (int i = 0; i < 16; i++)
+        {
+            float a = i * Mathf.Tau / 16f;
+            SpawnRot($"DelugeOutlet{i}", new BoxMesh { Size = new Vector3(1.4f * U, 0.6f * U, 2.4f * U) },
+                concDark,
+                new Vector3(13.8f * U * Mathf.Cos(a), surfaceY + 0.35f * U, 13.8f * U * Mathf.Sin(a)),
+                new Vector3(0, -Mathf.RadToDeg(a), 0));
+        }
     }
 
     // ── Wide weathered launch apron / tarmac with panels + scorch zones ───
@@ -839,6 +968,14 @@ public partial class LaunchPadController : Node3D
         var node = new MeshInstance3D { Name = name, Mesh = mesh, Position = pos };
         node.SetSurfaceOverrideMaterial(0, mat);
         AddChild(node);
+        return node;
+    }
+
+    private MeshInstance3D SpawnRot(string name, Mesh mesh, StandardMaterial3D mat, Vector3 pos,
+                                    Vector3 rotationDegrees)
+    {
+        var node = Spawn(name, mesh, mat, pos);
+        node.RotationDegrees = rotationDegrees;
         return node;
     }
 }
