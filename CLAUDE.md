@@ -122,5 +122,6 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - Keep `README.md` and this file aligned with the repo.
 - One coherent commit per task.
 - Do not commit generated files: `.godot/`, `bin/`, `obj/`, `*.uid`.
-- Do not commit temporary visual harnesses such as `scripts/_*Shot.cs`.
+- Do not commit temporary visual harnesses such as `scripts/_*Shot.cs`,
+  `scripts/*VerifyShot.cs`, or `scenes/*VerifyShot.tscn`.
 - Do not break `[G]` ascent or EDL while working on unrelated features.

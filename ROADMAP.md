@@ -19,7 +19,11 @@ Base tecnica cerrada en `main`:
   picking click-to-attach, save/load de crafts, navegador de crafts y launch al pad.
 - Starship/Super Heavy tiene malla procedural con diametro real de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
-  charring termico y Super Heavy separado con anillo expuesto/quemado.
+  charring termico, bordes de heat shield, patron de tiles, payload-door cues,
+  seams longitudinales, pluma liftoff mas densa y Super Heavy separado con anillo
+  expuesto/quemado.
+- El entorno de lanzamiento tiene una primera pasada costera/industrial con
+  caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
 - Reentry/EDL Starship esta validado por telemetria: belly-flop sostenido,
   flip-and-burn bajo y touchdown suave.
@@ -32,10 +36,12 @@ La siguiente etapa no debe abrir un sistema grande nuevo. Primero hay que subir 
 fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 1. **Visual fidelity Starship/Super Heavy**
-   - Detalle realista de acero inoxidable, weld lines, tile layout, soot, frost,
-     vents, raceways, chine/flap bases, grid fins y engine bay.
+   - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield
+     edge, soot/frost, vents, raceways, grid fins, flaps y engine bay.
+   - Siguiente: close-up fino con referencias reales: proporciones de flaps/nariz,
+     tiles mas finos, markings no intrusivos y variacion de acero.
    - Mejor separacion visual Ship/Booster despues de hot-staging.
-   - Plumas de Raptor mas creibles en SL/vac, startup, throttle y staging.
+   - Siguiente: hot-staging plume y pluma vacio mas diferenciadas.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
@@ -43,7 +49,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      breakup mas legible si falla el escudo/orientacion.
 
 3. **Entorno y camaras**
-   - Iluminacion solar, exposicion, sky/atmosfera, ground pad y camaras para que
+   - Pad costero ya tiene primera pasada visual.
+   - Siguiente: iluminacion solar, exposicion, sky/atmosfera y camaras para que
      launch/orbit/reentry/cockpit se lean como escalas reales.
 
 4. **Capturas de aceptacion**
@@ -100,15 +107,15 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Captura PNG end-to-end en CI usando Xvfb.
 - Comparacion minima de screenshots para detectar pantallas negras, UI rota o
   render sin nave.
-- Mantener el guard anti-harness: no commitear `scripts/_*Shot.cs` ni autoloads
-  temporales.
+- Mantener el guard anti-harness: no commitear `scripts/_*Shot.cs`,
+  `scripts/*VerifyShot.cs`, `scenes/*VerifyShot.tscn` ni autoloads temporales.
 
 ## Orden Recomendado
 
 1. Ejecutar `bash tools/ci_check.sh` antes de tocar visuales.
-2. Implementar el primer bloque de `PLAN_VISUAL_REALISM.md`: capturas de
-   referencia + mejora de materiales/superficie de Starship.
+2. Cerrar el siguiente bloque de `PLAN_VISUAL_REALISM.md`: hot-staging/vac plume
+   y reentry visual avanzado.
 3. Agregar capturas de aceptacion reproducibles.
-4. Mejorar plumas/staging/reentry VFX.
+4. Mejorar camara/luz/atmosfera.
 5. Recien despues volver a gameplay grande: misiones, save/load, recursos o
    engine-out real.

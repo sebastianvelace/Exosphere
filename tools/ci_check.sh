@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Guard anti-harness: el harness de captura visual temporal (scripts/_*Shot.cs) y los
-# autoloads temporales en project.godot NUNCA deben commitearse (ver skill visual-testing).
-# Anti-harness guard: the temporary visual-capture harness (scripts/_*Shot.cs) and temporary
-# autoloads in project.godot must NEVER be committed (see the visual-testing skill).
-TRACKED_HARNESS="$(git ls-files 'scripts/_*Shot.cs' 'scripts/_*Shot.cs.uid')"
+# Guard anti-harness: los harnesses de captura visual temporales, escenas y autoloads
+# temporales en project.godot NUNCA deben commitearse.
+# Anti-harness guard: temporary visual-capture harness scripts/scenes and temporary
+# autoloads in project.godot must NEVER be committed.
+TRACKED_HARNESS="$(git ls-files 'scripts/_*Shot.cs' 'scripts/_*Shot.cs.uid' 'scripts/*VerifyShot.cs' 'scripts/*VerifyShot.cs.uid' 'scenes/*VerifyShot.tscn' 'scenes/*VerifyShot.tscn.uid')"
 if [[ -n "$TRACKED_HARNESS" ]]; then
   echo "ERROR: temporary capture harness is tracked in git:"
   echo "$TRACKED_HARNESS"
   echo "Remove it before committing (see skill visual-testing / .gitignore)."
   exit 1
 fi
-if grep -Eq '_[A-Za-z0-9]*Shot' project.godot; then
+if grep -Eq '(_[A-Za-z0-9]*Shot|[A-Za-z0-9]*VerifyShot)' project.godot; then
   echo "ERROR: a temporary capture autoload is present in project.godot."
   echo "Restore it with: git checkout project.godot"
   exit 1

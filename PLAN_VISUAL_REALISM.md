@@ -33,8 +33,9 @@ Antes de hacer cambios visuales grandes:
   - touchdown/crash,
   - cockpit.
 - Guardar outputs fuera del repo o en carpeta ignorada.
-- Confirmar que `tools/ci_check.sh` sigue limpio y que no hay `scripts/_*Shot.cs`
-  ni autoload temporal en `project.godot`.
+- Confirmar que `tools/ci_check.sh` sigue limpio y que no hay `scripts/_*Shot.cs`,
+  `scripts/*VerifyShot.cs`, `scenes/*VerifyShot.tscn` ni autoload temporal en
+  `project.godot`.
 
 Aceptacion:
 - Las capturas muestran nave, UI y efectos sin pantalla negra.
@@ -48,16 +49,17 @@ Archivos probables:
 - `data/parts/super_heavy_booster.json`
 
 Mejoras:
-- Acero inoxidable con paneles sutiles, variacion por bandas y anisotropia fake.
-- Weld/ring seams a lo largo del stack.
-- Tile layout mas reconocible en la cara windward: patron, borde, zonas negras y
+- [x] Acero inoxidable con paneles sutiles, variacion por bandas y anisotropia fake.
+- [x] Weld/ring seams a lo largo del stack.
+- [x] Tile layout mas reconocible en la cara windward: patron, borde, zonas negras y
   transicion hacia acero.
-- Raceways/cable covers y detalles externos principales.
-- Grid fins mas cercanas a forma real: espesor, pivote, lattice y sombreado.
-- Flaps con base/hinge mas legibles y offset realista.
-- Engine bay con 33 motores visuales mas creibles: outer ring, inner cluster,
+- [x] Raceways/cable covers y detalles externos principales.
+- [ ] Grid fins mas cercanas a forma real: espesor, pivote, lattice y sombreado.
+- [x] Flaps con base/hinge mas legibles y offset realista.
+- [x] Engine bay con 33 motores visuales mas creibles: outer ring, inner cluster,
   mounts, dark cavities.
-- Super Heavy separado: hot-stage ring, vents, soot, scorched top and aft skirt.
+- [x] Super Heavy separado: hot-stage ring, vents, soot, scorched top and aft skirt.
+- [x] Primera pasada de payload-door cues, seams longitudinales y aft shield/skirt.
 
 Aceptacion:
 - En pad lateral se identifica inmediatamente una Starship/Super Heavy.
@@ -73,12 +75,12 @@ Archivos probables:
 - `scripts/VesselRenderer.cs`
 
 Mejoras:
-- Pluma SL: mas opaca, turbulenta, expandida contra el pad, con core brillante.
-- Pluma vacio: expansion mas amplia y limpia, menor humo.
-- Startup/ramp: transicion visible desde ignicion a liftoff.
-- Hot-staging: plume entre etapas con iluminacion corta y smoke/soot en el ring.
-- Ground cloud: polvo/vapor horizontal, no solo columna vertical.
-- Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
+- [x] Pluma SL: mas opaca, turbulenta, expandida contra el pad, con core brillante.
+- [ ] Pluma vacio: expansion mas amplia y limpia, menor humo.
+- [ ] Startup/ramp: transicion visible desde ignicion a liftoff.
+- [ ] Hot-staging: plume entre etapas con iluminacion corta y smoke/soot en el ring.
+- [ ] Ground cloud: polvo/vapor horizontal, no solo columna vertical.
+- [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
   opcional si no distrae.
 
 Aceptacion:
@@ -159,8 +161,8 @@ Aceptacion:
 ## Orden De Implementacion Recomendado
 
 1. V0 capturas baseline.
-2. V1 materiales/superficie Starship.
-3. V2 pluma liftoff + hot-staging.
+2. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino.
+3. V2 pluma liftoff + hot-staging. Liftoff parcial; falta hot-staging/vacio.
 4. V3 reentry plasma/charring.
 5. V4 camara/luz/atmosfera.
 6. V5 capturas automatizadas en CI.

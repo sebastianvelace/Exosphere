@@ -33,3 +33,7 @@ saves/
 # Harness de captura visual temporal (nunca debe commitearse — ver skill visual-testing)
 scripts/_*Shot.cs
 scripts/_*Shot.cs.uid
+scripts/*VerifyShot.cs
+scripts/*VerifyShot.cs.uid
+scenes/*VerifyShot.tscn
+scenes/*VerifyShot.tscn.uid

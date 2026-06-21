@@ -23,7 +23,7 @@ jobs:
       - name: Guard against committed capture harness
         shell: bash
         run: |
-          tracked="$(git ls-files 'scripts/_*Shot.cs' 'scripts/_*Shot.cs.uid')"
+          tracked="$(git ls-files 'scripts/_*Shot.cs' 'scripts/_*Shot.cs.uid' 'scripts/*VerifyShot.cs' 'scripts/*VerifyShot.cs.uid' 'scenes/*VerifyShot.tscn' 'scenes/*VerifyShot.tscn.uid')"
           if [ -n "$tracked" ]; then
             echo "ERROR: temporary capture harness is tracked in git:"
             echo "$tracked"
