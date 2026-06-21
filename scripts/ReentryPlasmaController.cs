@@ -43,7 +43,7 @@ public partial class ReentryPlasmaController : Node3D
         _shock = new MeshInstance3D
         {
             Name    = "ReentryShock",
-            Mesh    = new SphereMesh { Radius = 2.4f, Height = 4.8f, RadialSegments = 24, Rings = 12 },
+            Mesh    = new SphereMesh { Radius = 0.95f, Height = 1.9f, RadialSegments = 24, Rings = 12 },
             Visible = false,
         };
         _shock.SetSurfaceOverrideMaterial(0, _shockMat);
@@ -54,9 +54,9 @@ public partial class ReentryPlasmaController : Node3D
         {
             Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
             BlendMode                = BaseMaterial3D.BlendModeEnum.Add,
-            AlbedoColor              = new Color(0.6f, 0.30f, 1.0f, 0f),
+            AlbedoColor              = new Color(1.0f, 0.30f, 0.08f, 0f),
             EmissionEnabled          = true,
-            Emission                 = new Color(0.55f, 0.30f, 1.0f),
+            Emission                 = new Color(1.0f, 0.28f, 0.08f),
             EmissionEnergyMultiplier = 1.4f,
             CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
             ShadingMode              = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -64,7 +64,7 @@ public partial class ReentryPlasmaController : Node3D
         _wake = new MeshInstance3D
         {
             Name    = "ReentryWake",
-            Mesh    = new CylinderMesh { TopRadius = 0.1f, BottomRadius = 2.0f, Height = 18f, RadialSegments = 20 },
+            Mesh    = new CylinderMesh { TopRadius = 0.05f, BottomRadius = 0.75f, Height = 10f, RadialSegments = 20 },
             Visible = false,
         };
         _wake.SetSurfaceOverrideMaterial(0, _wakeMat);
@@ -133,8 +133,8 @@ public partial class ReentryPlasmaController : Node3D
         Vector3 bodyCentre = new Vector3(0f, hasSH ? 30f : 8f, 0f);
 
         // Shock sits on the windward (leading) face; wake streams out behind.
-        _shock.Position = bodyCentre + flowDir * (hasSH ? 14f : 6f);
-        _wake.Position  = bodyCentre - flowDir * 9f;
+        _shock.Position = bodyCentre + flowDir * (hasSH ? 5f : 1.35f);
+        _wake.Position  = bodyCentre - flowDir * (hasSH ? 7f : 4.0f);
 
         // Flatten the shock into the flow plane so it reads as a bow cap hugging the
         // windward face rather than a round ball. Squash along the flow axis.
@@ -159,16 +159,16 @@ public partial class ReentryPlasmaController : Node3D
             1.0f,
             0.40f + 0.50f * white,
             0.08f + 0.72f * white,
-            (float)(intensity * 0.85f * flicker) * (0.6f + 0.4f * concentr));
+            (float)(intensity * 0.28f * flicker) * (0.6f + 0.4f * concentr));
         _shockMat.AlbedoColor              = shockCol;
         _shockMat.Emission                 = new Color(shockCol.R, shockCol.G, shockCol.B);
-        _shockMat.EmissionEnergyMultiplier = (float)(2.0 + intensity * 4.0) * flicker * exposure;
+        _shockMat.EmissionEnergyMultiplier = (float)(0.8 + intensity * 2.0) * flicker * exposure;
 
-        _wakeMat.AlbedoColor              = new Color(0.6f, 0.30f, 1.0f, (float)(intensity * 0.35f));
-        _wakeMat.EmissionEnergyMultiplier = (float)(1.0 + intensity * 2.0);
+        _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f, (float)(intensity * 0.16f));
+        _wakeMat.EmissionEnergyMultiplier = (float)(0.7 + intensity * 1.4);
 
         // Windward cap: flatten along the flow (thin, wide bow shock) and grow with flux.
-        float sizeScale = Mathf.Lerp(0.7f, 1.4f, (float)intensity);
+        float sizeScale = Mathf.Lerp(0.45f, 1.0f, (float)intensity);
         float flatten   = Mathf.Lerp(0.85f, 0.45f, align);       // belly-first = thinner cap
         // Mesh local +Y now points along the flow (set by OrientYAxis above), so
         // squash Y to press the cap onto the windward face.
