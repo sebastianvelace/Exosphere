@@ -433,7 +433,14 @@ public class Universe
         // AND radial conics). The old a*(1-e) test hid radial/hyperbolic cases where the
         // numbers sign-flip into a misleading large-positive periapsis — that was the root
         // of the "rocket exits orbit straight through the planet" bug under warp.
-        if (vessel.OrbitalState.IsSuborbital(reference.Radius))
+        // Only a RADIAL conic (h≈0, degenerate) must be resolved here — it cannot be
+        // propagated by Kepler at all. A normal suborbital ELLIPSE (e.g. a vessel that
+        // lowered its periapsis to deorbit) is valid and is left to the per-slice surface
+        // check below: it coasts down realistically and only impacts when it actually reaches
+        // the surface, so the atmosphere/EDL can fly the reentry. Destroying it the instant
+        // its periapsis dips below the radius — while still at apoapsis hundreds of km up —
+        // made reentry under warp impossible.
+        if (vessel.OrbitalState.IsRadial)
         {
             var (refP0, refV0) = BodyStateAt(reference, CurrentTime);
             ResolveOnRailsImpact(vessel, reference, refP0, refV0);
@@ -494,9 +501,9 @@ public class Universe
                 ReframeVesselToBody(vessel, dominantHere, newRefP, newRefV, sampleTime);
                 reference = dominantHere;
 
-                // A fresh frame may already be on a collision course (e.g. an arc that
-                // dips below the new body's surface). Honour the same suborbital guard.
-                if (vessel.OrbitalState!.IsSuborbital(reference.Radius))
+                // Only a radial (degenerate) conic must be resolved here; a suborbital ellipse
+                // in the new frame coasts down and is caught by the per-slice surface check.
+                if (vessel.OrbitalState!.IsRadial)
                 {
                     ResolveOnRailsImpact(vessel, reference, newRefP, newRefV);
                     return;

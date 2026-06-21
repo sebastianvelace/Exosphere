@@ -131,13 +131,24 @@ public sealed class PhysicsRegressionTests
         };
         universe.AddVessel(vessel);
 
-        universe.Tick(0.1);
+        // A suborbital ellipse is NOT destroyed the instant its periapsis dips below the radius
+        // (it is still at apoapsis, 200 km up) — it coasts down on rails and is destroyed only
+        // when it actually reaches the surface. Propagate until it impacts, and verify it never
+        // tunnels through to the far side in the meantime (the R16 "exits through the planet" bug).
+        double minAltSeen = double.MaxValue;
+        for (int i = 0; i < 8 && !vessel.IsDestroyed; i++)   // up to 8000 s of sim time
+        {
+            universe.Tick(0.1);
+            minAltSeen = System.Math.Min(minAltSeen, earth.GetAltitude(vessel.Position));
+        }
 
         Assert.True(vessel.IsDestroyed);
         Assert.Equal(VesselDestructionCause.GroundImpact, vessel.DestructionCause);
         Assert.False(vessel.IsOnRails);
         Assert.True(vessel.CrashImpactSpeed > 1_000.0);
         Assert.True(earth.GetAltitude(vessel.Position) >= 0.0);
+        // Never tunnelled: it never appeared deep below the surface while coasting on rails.
+        Assert.True(minAltSeen > -1_000.0, $"Vessel tunnelled to {minAltSeen:F0} m before impact.");
     }
 
     [Theory]
