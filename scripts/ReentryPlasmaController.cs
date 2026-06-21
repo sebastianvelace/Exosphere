@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Physics;
 
 /// <summary>
@@ -68,6 +69,13 @@ public partial class ReentryPlasmaController : Node3D
         };
         _wake.SetSurfaceOverrideMaterial(0, _wakeMat);
         AddChild(_wake);
+
+        // Break-up VFX lives as a sibling effect at the same render origin. We host it
+        // here (rather than in SimulationBridge) so the plasma + break-up re-entry
+        // effects are created and torn down together. It watches the active vessel's
+        // thermal-destruction state on its own.
+        // El breakup cuelga del mismo origen de render; observa la destrucción térmica solo.
+        AddChild(new ReentryBreakupController { Name = "ReentryBreakup" });
     }
 
     public override void _Process(double delta)
@@ -107,6 +115,19 @@ public partial class ReentryPlasmaController : Node3D
         Vector3 flowDir = new Vector3((float)surfVel.X, (float)surfVel.Y, (float)surfVel.Z);
         flowDir = flowDir.LengthSquared() > 1e-6f ? flowDir.Normalized() : Vector3.Up;
 
+        // ── Windward concentration ─────────────────────────────────────────
+        // The visible bow shock should sit on, and brighten with, the face that
+        // actually MEETS the flow — exactly the windward face the heat model uses.
+        // We express the airflow in the vessel's local frame and read how squarely
+        // the ventral heat shield faces it: belly-first (good attitude) lights the
+        // ventral cap hard; a bad attitude spreads a hotter, more chaotic glow.
+        //
+        // Concentración windward: el shock se ata a la cara que encara el flujo
+        // (la misma que usa el modelo térmico), brillando con su alineación real.
+        Vector3d flowLocal = vessel.Orientation.Inverse().Rotate(
+            new Vector3d(surfVel.X, surfVel.Y, surfVel.Z));
+        double windward = ThermalModel.WindwardFactor(flowLocal);   // 1 = belly squarely into flow
+
         // Vessel body centre at the render origin; full stack sits higher than a lone Starship.
         bool hasSH = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
         Vector3 bodyCentre = new Vector3(0f, hasSH ? 30f : 8f, 0f);
@@ -115,28 +136,43 @@ public partial class ReentryPlasmaController : Node3D
         _shock.Position = bodyCentre + flowDir * (hasSH ? 14f : 6f);
         _wake.Position  = bodyCentre - flowDir * 9f;
 
+        // Flatten the shock into the flow plane so it reads as a bow cap hugging the
+        // windward face rather than a round ball. Squash along the flow axis.
+        OrientYAxis(_shock, flowDir);
+
         // Orient the wake cylinder (+Y axis) to point downstream (away from the flow).
         OrientYAxis(_wake, -flowDir);
 
         // Flicker so the plasma boils rather than glowing flat.
         float flicker = 0.8f + (float)(GD.Randf() * 0.4f);
 
-        // Colour shifts orange → white-hot as intensity rises.
-        float white = (float)intensity;
+        // A well-shielded belly-first re-entry burns brightest and tightest on the
+        // ventral cap; a turned-away (bare-side) attitude is hotter overall but the
+        // glow smears and reddens (no shield deflecting the flux).
+        float align     = (float)windward;                       // 0..1
+        float concentr  = Mathf.Lerp(0.55f, 1.0f, align);        // ventral focus
+        float exposure  = Mathf.Lerp(1.15f, 1.0f, align);        // bare side runs hotter
+
+        // Colour shifts orange → white-hot as intensity rises; bare-side bias reddens it.
+        float white = (float)intensity * concentr;
         var shockCol = new Color(
             1.0f,
-            0.45f + 0.45f * white,
-            0.10f + 0.70f * white,
-            (float)(intensity * 0.85f * flicker));
+            0.40f + 0.50f * white,
+            0.08f + 0.72f * white,
+            (float)(intensity * 0.85f * flicker) * (0.6f + 0.4f * concentr));
         _shockMat.AlbedoColor              = shockCol;
         _shockMat.Emission                 = new Color(shockCol.R, shockCol.G, shockCol.B);
-        _shockMat.EmissionEnergyMultiplier = (float)(2.0 + intensity * 4.0) * flicker;
+        _shockMat.EmissionEnergyMultiplier = (float)(2.0 + intensity * 4.0) * flicker * exposure;
 
         _wakeMat.AlbedoColor              = new Color(0.6f, 0.30f, 1.0f, (float)(intensity * 0.35f));
         _wakeMat.EmissionEnergyMultiplier = (float)(1.0 + intensity * 2.0);
 
+        // Windward cap: flatten along the flow (thin, wide bow shock) and grow with flux.
         float sizeScale = Mathf.Lerp(0.7f, 1.4f, (float)intensity);
-        _shock.Scale = new Vector3(sizeScale, sizeScale, sizeScale);
+        float flatten   = Mathf.Lerp(0.85f, 0.45f, align);       // belly-first = thinner cap
+        // Mesh local +Y now points along the flow (set by OrientYAxis above), so
+        // squash Y to press the cap onto the windward face.
+        _shock.Scale = new Vector3(sizeScale * (1f + 0.4f * align), sizeScale * flatten, sizeScale * (1f + 0.4f * align));
     }
 
     // Rotate a mesh whose local +Y should point along <paramref name="dir"/>.
