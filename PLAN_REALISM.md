@@ -26,11 +26,14 @@
   profundo a alta velocidad** (4600 m/s a 26 km, 3500 m/s a 22 km) en vez de frenar arriba; q alcanza
   **~390 kPa** (≈8× el reingreso real de ~50 kPa) y se quema (`ThermalBreakup`) a ~20 km con
   heatRatio 1.2 / maxT ~1810 K. Pasa igual con entrada empinada (-130 m/s) o somera (-70 m/s).
-- **Causa-raíz (acoplamiento EDL-aero-térmico):** durante la fase de entrada (sin empuje) la EDL no
-  fuerza la actitud **broadside/belly-flop** (eje perpendicular al flujo). Sin eso: (a) el drag es
-  bajo (Cd axial ~0.6, área pequeña) → no decelera en la atmósfera alta → penetra profundo; y (b) el
-  escudo ventral no encara el flujo → no protege → las piezas superan su tolerancia. El modelo aero
-  YA da alto drag broadside; el problema es que la EDL no impone esa orientación temprano.
+- **Causa-raíz PRECISA (`scripts/EDLController.cs:131-136`):** el "physics gate" pasa de la entrada
+  belly-flop (Entry/Peak/Aero) a **`Retro` (motores retrógrados = eje AXIAL, Cd ~0.6, área pequeña)**
+  en cuanto la *distancia de frenado VERTICAL* (`stopDist = vDown²/2aVert`) cubre la altitud — pero
+  ignora la enorme velocidad HORIZONTAL aún presente. Al voltear a axial pierde el drag broadside
+  (Cd 1.5, área lateral 9 m × L) que debería frenarla en la atmósfera alta, y el escudo ventral deja
+  de encarar el flujo. Resultado: drag débil → penetra profundo (4600 m/s a 26 km) → q ~390 kPa y
+  calor que supera las tolerancias. El modelo aero YA da alto drag broadside; el fallo es el gate
+  EDL que abandona el belly-flop demasiado pronto (y solo razona sobre el componente vertical).
 - **Fix propuesto:** en `scripts/EDLController.cs`, fase Entry/Peak/Aero → comandar y MANTENER actitud
   belly-flop (eje ⟂ a la velocidad, escudo al flujo) hasta el flip-and-burn final; verificar que el
   drag broadside frena a ~1-2 km/s en la atmósfera alta antes de descender. Calibrar tolerancias
