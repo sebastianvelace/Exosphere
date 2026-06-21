@@ -61,22 +61,22 @@ public partial class PlumeSystem : Node3D
 
         // Bright central column (the merged plume core of the densely-packed cluster).
         _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 0.55f,
-            length: 12.0f, count: 33,
+            length: 13.5f, count: 33,
             core: new Color(0.80f, 0.89f, 1.00f), withLight: true, sh: true));
 
         // Inner ring — 3 engines.
         _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.22f,
-            length: 10.5f, count: 3,
+            length: 11.5f, count: 3,
             core: new Color(0.74f, 0.86f, 1.00f), withLight: false, sh: true));
 
         // Mid ring — 10 engines.
         _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.28f,
-            length: 9.5f, count: 10,
+            length: 10.7f, count: 10,
             core: new Color(0.72f, 0.85f, 1.00f), withLight: false, sh: true));
 
         // Outer ring — 20 engines, broadest cluster.
         _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.34f,
-            length: 9.0f, count: 20,
+            length: 10.2f, count: 20,
             core: new Color(0.70f, 0.84f, 1.00f), withLight: true, sh: true));
     }
 
@@ -122,7 +122,7 @@ public partial class PlumeSystem : Node3D
         // the bright core always points down the nozzle axis.
         float altT = (float)System.Math.Clamp((altitude - 50.0) / 450.0, 0.0, 1.0);
         var   dir  = new Vector3(0, 0.55f, 0).Lerp(new Vector3(0, -1f, 0), altT).Normalized();
-        float smokeSpread = Mathf.Lerp(48f, 10f + expansion * 6f, altT);
+        float smokeSpread = Mathf.Lerp(58f, 10f + expansion * 6f, altT);
 
         // Live flicker shared per group so the whole cluster pulses together.
         float flick = 0.92f + GD.Randf() * 0.10f;
@@ -157,8 +157,10 @@ public partial class PlumeSystem : Node3D
                 // the long faint underexpanded plume.
                 float lenScale = (0.55f + 0.45f * throttle)
                                * (1.0f + expansion * 3.0f) * flick;
+                float seaLevelBroadening = u.IsSuperHeavy ? 1.18f : 1.0f;
                 float radScale = (0.85f + 0.30f * throttle)
-                               * (1.0f + expansion * 1.3f);
+                               * (1.0f + expansion * 1.3f)
+                               * Mathf.Lerp(seaLevelBroadening, 1.0f, expansion);
                 u.Pivot.Scale = new Vector3(
                     (u.BaseRadius / 0.5f) * radScale,
                     u.BaseLength * lenScale,
@@ -177,8 +179,8 @@ public partial class PlumeSystem : Node3D
                     pm.Spread    = smokeSpread;
                     // Big, billowing soot near the pad; smoke thins out in vacuum
                     // (no air to billow into) leaving just the bright core.
-                    pm.ScaleMin  = (u.IsSuperHeavy ? 1.4f : 1.0f) * (1f - expansion * 0.7f);
-                    pm.ScaleMax  = (u.IsSuperHeavy ? 4.2f : 3.0f) * (1f - expansion * 0.6f);
+                    pm.ScaleMin  = (u.IsSuperHeavy ? 1.8f : 1.0f) * (1f - expansion * 0.7f);
+                    pm.ScaleMax  = (u.IsSuperHeavy ? 5.4f : 3.0f) * (1f - expansion * 0.6f);
                 }
             }
 

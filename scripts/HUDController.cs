@@ -282,7 +282,7 @@ public partial class HUDController : Control
     {
         var center = new CenterContainer();
         center.SetAnchorsPreset(LayoutPreset.Center);
-        center.OffsetTop = -130;
+        center.OffsetTop = -190;
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
 
@@ -293,15 +293,15 @@ public partial class HUDController : Control
 
         _countdownLabel = new Label { Text = "" };
         _countdownLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        _countdownLabel.AddThemeFontSizeOverride("font_size", 84);
+        _countdownLabel.AddThemeFontSizeOverride("font_size", 48);
         _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.2f));
         _countdownLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.9f));
-        _countdownLabel.AddThemeConstantOverride("outline_size", 10);
+        _countdownLabel.AddThemeConstantOverride("outline_size", 7);
         vbox.AddChild(_countdownLabel);
 
         _countdownMilestone = new Label { Text = "" };
         _countdownMilestone.HorizontalAlignment = HorizontalAlignment.Center;
-        _countdownMilestone.AddThemeFontSizeOverride("font_size", 20);
+        _countdownMilestone.AddThemeFontSizeOverride("font_size", 15);
         _countdownMilestone.AddThemeColorOverride("font_color", Accent);
         _countdownMilestone.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
         _countdownMilestone.AddThemeConstantOverride("outline_size", 6);
@@ -639,8 +639,7 @@ public partial class HUDController : Control
 
     private void UpdateCountdown(MissionManager mission)
     {
-        bool show = mission.Phase is MissionPhase.COUNTDOWN or MissionPhase.IGNITION
-                    || (mission.Phase == MissionPhase.LIFTOFF && mission.CountdownTimer > -1.5);
+        bool show = mission.Phase is MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
         if (!show) { _countdownRoot.Visible = false; return; }
 
         _countdownRoot.Visible = true;
