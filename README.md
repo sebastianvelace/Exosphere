@@ -55,6 +55,12 @@ dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
 
 Expected result: 0 warnings, 0 errors, all tests passing.
 
+Local all-in-one check:
+
+```bash
+bash tools/ci_check.sh
+```
+
 Godot smoke test:
 
 ```bash
@@ -185,7 +191,7 @@ The Starship default stack currently uses:
 - VAB V1.5 has 3D preview, craft-file persistence, and VAB-to-launch flow. It still lacks direct attachment-node manipulation in the preview and a craft-file browser.
 - Reentry thermal damage is tracked per part, but visible tile damage, breakup sequencing and control-loss consequences are still limited.
 - Interplanetary planning has a tested Hohmann core, but still needs patched-conic SOI transitions, long-cruise validation and better node UX.
-- CI is not configured yet.
+- CI is configured for simulation build/tests. Godot build/smoke runs locally through `tools/ci_check.sh` and in CI only when `GODOT_BIN` is provided.
 - Automated visual screenshots need a real framebuffer; current headless smoke tests only validate load/runtime.
 
 ## Working Rules

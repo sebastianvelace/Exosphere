@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build simulation
+        run: dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
+
+      - name: Test simulation
+        run: dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
+
+      - name: Optional Godot build and smoke
+        shell: bash
+        run: |
+          if [ -n "${GODOT_BIN:-}" ] && [ -x "$GODOT_BIN" ]; then
+            dotnet build Exosphere.csproj --nologo -v quiet
+            "$GODOT_BIN" --headless --path . --quit-after 3 --rendering-driver opengl3
+            "$GODOT_BIN" --headless --path . --quit-after 3 --rendering-driver opengl3 res://scenes/construction/Construction.tscn
+          else
+            echo "GODOT_BIN is not set; skipping Godot build/smoke in CI."
+          fi

@@ -12,6 +12,12 @@ dotnet build Exosphere.csproj --nologo -v quiet
 dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
 ```
 
+Or run the local aggregate:
+
+```bash
+bash tools/ci_check.sh
+```
+
 Run Godot smoke checks when scene/game-layer behavior changes:
 
 ```bash
@@ -104,7 +110,7 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - VAB V1.5 has 3D preview, craft persistence, and VAB-to-launch flow. It still lacks direct node manipulation in the preview and a craft-file browser.
 - Reentry has physics basis and tests, but not full per-piece progressive damage or breakup VFX.
 - Interplanetary planning has a tested Hohmann core, but needs stronger patched-conic validation and better UX.
-- CI is not configured yet.
+- CI is configured for simulation build/tests. Godot build/smoke is strict in `tools/ci_check.sh` and optional in GitHub Actions unless `GODOT_BIN` is provided.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 
 ## Workflow

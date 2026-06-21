@@ -68,12 +68,14 @@ Estado incremental: el calculo Hohmann vive en `ExosphereSimulation/Navigation`,
 
 ## CI / Headless Tests
 
-Objetivo: hacer que el cierre actual sea repetible por push.
+Estado: CI basico agregado con `.github/workflows/ci.yml` y check local estricto `tools/ci_check.sh`.
 
-- Pipeline con:
+- Hecho:
   - `dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet`,
-  - `dotnet build Exosphere.csproj --nologo -v quiet`,
   - `dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo`,
-  - Godot headless smoke test de `scenes/flight/Flight.tscn`.
-- Definir estrategia de capturas visuales con framebuffer real. El modo `--headless` actual usa renderer dummy y no expone textura de viewport para PNG.
-- Evitar que harness/autoload temporales entren a commits.
+  - build Godot + Godot headless smoke local,
+  - build Godot + Godot smoke opcional en CI si `GODOT_BIN` existe.
+- Pendiente:
+  - instalar/proveer Godot en CI remoto,
+  - definir estrategia de capturas visuales con framebuffer real,
+  - evitar que harness/autoload temporales entren a commits.
