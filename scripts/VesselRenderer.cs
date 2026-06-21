@@ -14,6 +14,13 @@ public partial class VesselRenderer : Node3D
     private MeshInstance3D? _hullMesh;
     private PlumeSystem?    _plumes;
 
+    // Windward heat-shield tile materials (one per tile band). Kept so the
+    // per-frame update can char/blacken and faintly glow them as the ventral
+    // parts accumulate ThermalDamage during re-entry.
+    // Materiales de tiles windward: se guardan para quemarlos/oscurecerlos con el daño térmico.
+    private readonly List<StandardMaterial3D> _tileMats = new();
+    private static readonly Color TileBaseColor = new(0.045f, 0.045f, 0.055f);
+
     // ── Layout constants (all in render units, y=0 = SH engine bell tips) ──
     //
     //  Full stack:
@@ -411,6 +418,56 @@ public partial class VesselRenderer : Node3D
                     mat.Emission = new Color(t, t * 0.35f, 0f) * t;
             }
         }
+
+        UpdateTileCharring();
+    }
+
+    // ── Heat-shield tile charring ─────────────────────────────────────────
+    // The windward black tiles char and discolour as the protected (heat-shield)
+    // parts take ThermalDamage on re-entry. We drive every tile band off the worst
+    // accumulated damage and peak temperature among shielded parts: charred tiles
+    // go from black toward a scorched dark brown, and when truly hot they pick up a
+    // faint ember glow. Purely cosmetic — destruction is still decided by the sim.
+    //
+    // Carbonizado de las tiles: usa el peor ThermalDamage/Temperature de las piezas
+    // con escudo para oscurecer y, si está muy caliente, dar un leve brillo de ascua.
+    private void UpdateTileCharring()
+    {
+        if (_tileMats.Count == 0 || TargetVessel == null) return;
+
+        double worstDamage = 0.0;
+        double peakTemp    = 0.0;
+        foreach (var part in TargetVessel.Parts.Parts)
+        {
+            if (!part.Definition.HasHeatShield) continue;
+            if (part.ThermalDamage > worstDamage) worstDamage = part.ThermalDamage;
+            if (part.Temperature   > peakTemp)    peakTemp    = part.Temperature;
+        }
+
+        float dmg = (float)System.Math.Clamp(worstDamage, 0.0, 1.0);
+        // Ember glow only once the shield runs genuinely hot (well past steel limits).
+        float ember = (float)System.Math.Clamp((peakTemp - 1100.0) / 900.0, 0.0, 1.0);
+
+        // Scorch tint: charred ablative reads as a warm sooty brown over the base black.
+        var scorch = new Color(0.085f, 0.050f, 0.038f);
+        Color albedo = TileBaseColor.Lerp(scorch, dmg);
+
+        foreach (var mat in _tileMats)
+        {
+            mat.AlbedoColor = albedo;
+            // Slightly rougher and lighter-edged as it ablates.
+            mat.Roughness   = Mathf.Lerp(0.92f, 0.99f, dmg);
+
+            bool glow = ember > 0.02f;
+            mat.EmissionEnabled = glow;
+            if (glow)
+            {
+                // Deep-red ember rising with both temperature and accumulated damage.
+                float e = ember * (0.35f + 0.65f * dmg);
+                mat.Emission                 = new Color(0.9f, 0.18f, 0.04f);
+                mat.EmissionEnergyMultiplier = e * 1.6f;
+            }
+        }
     }
 
     // ── Generic vessel fallback ───────────────────────────────────────────
@@ -545,6 +602,8 @@ public partial class VesselRenderer : Node3D
     private void AddTileBand(float yBottom, float yTop, float topRadius = 1.165f, float botRadius = 1.165f)
     {
         var tiles  = TileMat();
+        // Register this band's tile material so _Process can char it with damage.
+        _tileMats.Add(tiles);
         var seams  = Mat(new Color(0.010f, 0.010f, 0.012f), 0.0f, 0.96f);
         float yMid = (yBottom + yTop) * 0.5f;
         float h    = yTop - yBottom;
@@ -693,6 +752,7 @@ public partial class VesselRenderer : Node3D
     {
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
+        _tileMats.Clear();
         _plumes   = null;
         _hullMesh = null;
     }
