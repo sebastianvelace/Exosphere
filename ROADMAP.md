@@ -24,7 +24,19 @@ Estado de cierre actual:
   cruise Tierra->Marte, no-regresion LEO, y continuidad a max-warp Tick. Pendiente aun: solver
   hiperbolico ya cubre escape; falta validacion de cruise muy largo y UX de nodos arrastrables.
 
-Frentes en cola: Starship visual fidelity (proporciones 9 m, separar SH/Ship), CI con Godot remoto.
+- **Starship visual fidelity**: HECHO en `main`. Casco a diámetro real 9 m (`RScale` escala solo lo
+  radial; la altura ~121 m no se toca, asi que camara/cabina no se rompen) y el Super Heavy separado
+  tras staging muestra el anillo hot-stage expuesto con vent slots quemados (`VesselRenderer`).
+  Convive con el charring de tiles por dano termico. Pendiente: capturas de aceptacion con
+  framebuffer real; engine-out real (requiere abandonar el contrato de una parte-motor por etapa).
+- **CI / headless**: HECHO en `main`. `.github/workflows/ci.yml` descarga+cachea Godot 4.6.3 mono,
+  corre build de juego + smoke headless (escena principal y VAB) de forma estricta, y prepara
+  `xvfb-run` para captura con framebuffer. `tools/ci_check.sh` y un step de CI fallan si se cuela un
+  harness temporal (`scripts/_*Shot.cs` trackeado o autoload `_*Shot` en `project.godot`). Pendiente:
+  completar la captura visual PNG end-to-end en CI.
+
+No quedan frentes mayores en cola del roadmap original; siguientes pasos posibles: save/load de mision,
+recursos de vida/energia conectados a fases, engine-out real, y manipulacion de nodos en la preview del VAB.
 
 ## VAB / Construccion De Naves
 
