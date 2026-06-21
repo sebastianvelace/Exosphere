@@ -19,9 +19,16 @@
   coastea y se destruye al tocar superficie (la atmósfera/EDL vuelan el reingreso). Telemetría:
   deorbit → aero-frenado (q sube) → calentamiento. + tanque de Starship con escudo windward.
 
-**HALLAZGO NUEVO de alta prioridad (caracterizado por telemetría, pendiente — pase dedicado):**
+- **R13 — reingreso sobrevivible end-to-end (HECHO, validado).** La EDL ahora mantiene belly-flop
+  todo el descenso (flip por altitud baja ~800 m, no por `stopDist` vertical que era ∞), el aero
+  frena (peakQ 390→**21 kPa**, ≈real), el escudo cubre las piezas windward, y un controlador de
+  perfil de descenso lineal hace el flip-and-burn final. Telemetría (Starship ~148 t, reserva 6%,
+  deorbit desde 150 km): aero-frena a ~70 m/s → **aterriza ~0 m/s, sin destruirse**, peakHeat 0.10.
+  Commit `93228af`. + decoupler/hot-stage ring con escudo (acero, tol 1700 K).
 
-### R13. La Starship NO sobrevive el reingreso — la EDL no la mantiene en belly-flop
+---
+
+### R13 (resuelto — detalle del root cause). La Starship NO sobrevivía el reingreso — la EDL no la mantenía en belly-flop
 - **Evidencia (harness de reingreso, Starship sola ~148 t, deorbit desde 200 km):** la nave **penetra
   profundo a alta velocidad** (4600 m/s a 26 km, 3500 m/s a 22 km) en vez de frenar arriba; q alcanza
   **~390 kPa** (≈8× el reingreso real de ~50 kPa) y se quema (`ThermalBreakup`) a ~20 km con
