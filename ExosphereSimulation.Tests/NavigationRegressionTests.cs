@@ -99,6 +99,45 @@ public sealed class NavigationRegressionTests
         Assert.True(velError < 50.0, $"Inertial velocity diverged by {velError:N3} m/s across warp resolutions.");
     }
 
+    // KNOWN GAP (held out of main): at real max warp (×100000 @ 50 Hz → 2000 s sim per Tick),
+    // a hyperbolic Earth→Sun escape is detected crossing Earth's SOI at a materially different
+    // SIM TIME depending on the warp sub-step size (fine ~1s Tick: t≈555042 s; coarse 2000 s
+    // Tick: t≈456266 s — a ~99 000 s difference), so the heliocentric injection state differs
+    // (fine vs coarse end state ≈ 9.2e7 m / 98 m/s apart). Reconstructing the crossing with the
+    // reference body state at the crossing time (BodyStateAt) cut this from ~1.6e8 m to ~9.2e7 m,
+    // but the residual is dt-proportional, pointing at a deeper on-rails propagation interaction —
+    // not just the frozen-frame reconstruction. Re-enable this [Fact] when that is resolved.
+    [Fact(Skip = "Known gap: SOI crossing detected at different sim-times across warp resolutions (dt-proportional). See comment.")]
+    public void EarthSoiExitStaysContinuousAtRealMaxWarpTick()
+    {
+        double r0 = 700_000_000.0;   // inside Earth's SOI
+        var seed = NewSolarSystem().GetBody("earth")!;
+        double escapeSpeed = System.Math.Sqrt(2.0 * seed.GM / r0);
+        var startOffset   = new Vector3d(r0, 0.0, 0.0);
+        var startVelEarth = new Vector3d(0.0, 1.25 * escapeSpeed, 0.0);
+
+        var fineUniverse = NewSolarSystem();
+        var fine = MakeEscapingVessel(fineUniverse.GetBody("earth")!, startOffset, startVelEarth);
+        fineUniverse.AddVessel(fine);
+        var (finePos, fineVel) = RunWarp(fineUniverse, fine, totalSeconds: 700_000.0, stepSeconds: 1.0);
+
+        // Coarse = one full max-warp Tick worth of sim time per Tick (2000 s).
+        var coarseUniverse = NewSolarSystem();
+        var coarse = MakeEscapingVessel(coarseUniverse.GetBody("earth")!, startOffset, startVelEarth);
+        coarseUniverse.AddVessel(coarse);
+        var (coarsePos, coarseVel) = RunWarp(coarseUniverse, coarse, totalSeconds: 700_000.0, stepSeconds: 2_000.0);
+
+        Assert.Equal("sun", fine.OrbitalState!.ReferenceBodyId);
+        Assert.Equal("sun", coarse.OrbitalState!.ReferenceBodyId);
+        AssertFinite(coarsePos);
+        AssertFinite(coarseVel);
+
+        double posError = (finePos - coarsePos).Magnitude;
+        double velError = (fineVel - coarseVel).Magnitude;
+        Assert.True(posError < 500_000.0, $"SOI exit jumped {posError:N1} m (vel {velError:N4} m/s) at max-warp Tick.");
+        Assert.True(velError < 50.0, $"SOI exit velocity jumped {velError:N3} m/s at max-warp Tick.");
+    }
+
     [Fact]
     public void VesselEnteringMoonSoiReReferencesToMoon()
     {
@@ -202,7 +241,7 @@ public sealed class NavigationRegressionTests
         double energy0 = startVel.MagnitudeSquared * 0.5 - sun.GM / rel0.Magnitude;
 
         // Cruise roughly half the transfer time of flight under high warp.
-        var (endPos, endVel) = RunWarp(universe, vessel, totalSeconds: plan.TimeOfFlight * 0.5, stepSeconds: 100.0);
+        var (endPos, endVel) = RunWarp(universe, vessel, totalSeconds: plan.TimeOfFlight * 0.5, stepSeconds: 2_000.0);
 
         AssertFinite(endPos);
         AssertFinite(endVel);
