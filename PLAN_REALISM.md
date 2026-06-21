@@ -6,6 +6,47 @@
 > Cada ítem trae evidencia, referencia real, causa-raíz (`archivo:línea`), fix propuesto, archivos
 > y criterio de aceptación. Organizado en olas para ejecución multi-agente con archivos exclusivos.
 
+## ESTADO DE EJECUCIÓN (actualizado tras implementar e ir validando por telemetría)
+
+**HECHO y validado en `main`:**
+- **Ola 1 (R1-R3) — ascenso realista.** Gravity turn agresivo + hot-staging en MECO. Telemetría:
+  Max-Q ~33 kPa a 8 km, separación a 61 km/2.16 km/s, **órbita a 150 km/7.67 km/s en ~8 min**.
+- **R9, R10 — touchdown EDL ~1.5 m/s, ISP cluster 363 s.**
+- **R8, R4 — ya estaban hechos** (escudo data-driven; drag de ascenso con el modelo de 9 m).
+- **Reingreso AHORA OCURRE** (era IMPOSIBLE): el guard on-rails destruía cualquier órbita suborbital
+  en el apoapsis apenas el periapsis caía bajo el radio → la nave se aniquilaba a 200+ km al
+  deorbitar. Ahora solo el cónico RADIAL (degenerado) se resuelve al instante; una elipse suborbital
+  coastea y se destruye al tocar superficie (la atmósfera/EDL vuelan el reingreso). Telemetría:
+  deorbit → aero-frenado (q sube) → calentamiento. + tanque de Starship con escudo windward.
+
+**HALLAZGO NUEVO de alta prioridad (caracterizado por telemetría, pendiente — pase dedicado):**
+
+### R13. La Starship NO sobrevive el reingreso — la EDL no la mantiene en belly-flop
+- **Evidencia (harness de reingreso, Starship sola ~148 t, deorbit desde 200 km):** la nave **penetra
+  profundo a alta velocidad** (4600 m/s a 26 km, 3500 m/s a 22 km) en vez de frenar arriba; q alcanza
+  **~390 kPa** (≈8× el reingreso real de ~50 kPa) y se quema (`ThermalBreakup`) a ~20 km con
+  heatRatio 1.2 / maxT ~1810 K. Pasa igual con entrada empinada (-130 m/s) o somera (-70 m/s).
+- **Causa-raíz (acoplamiento EDL-aero-térmico):** durante la fase de entrada (sin empuje) la EDL no
+  fuerza la actitud **broadside/belly-flop** (eje perpendicular al flujo). Sin eso: (a) el drag es
+  bajo (Cd axial ~0.6, área pequeña) → no decelera en la atmósfera alta → penetra profundo; y (b) el
+  escudo ventral no encara el flujo → no protege → las piezas superan su tolerancia. El modelo aero
+  YA da alto drag broadside; el problema es que la EDL no impone esa orientación temprano.
+- **Fix propuesto:** en `scripts/EDLController.cs`, fase Entry/Peak/Aero → comandar y MANTENER actitud
+  belly-flop (eje ⟂ a la velocidad, escudo al flujo) hasta el flip-and-burn final; verificar que el
+  drag broadside frena a ~1-2 km/s en la atmósfera alta antes de descender. Calibrar tolerancias
+  térmicas y el flip-and-burn por masa. Validar con el **harness de reingreso** (deorbit → aterrizaje).
+- **Aceptación:** una Starship con masa de aterrizaje realista reingresa belly-first, frena por aero a
+  ~ sub-km/s en la atmósfera alta sin superar el escudo, hace flip-and-burn y aterriza ≤2 m/s.
+- **Método de validación (reproducible):** autoload temporal `_ReentryShot` (patrón visual-testing):
+  `JumpToOrbit(200km)` + `TriggerStaging()` + drenar propelente a reserva + deorbit retrógrado, luego
+  registrar alt/spd/q/heatRatio/maxT/fase hasta aterrizaje o destrucción.
+
+### R14. (relacionada) El test de reingreso usaba el stack completo / tanques llenos
+- La Starship reingresa casi vacía (~120-150 t), no con 1300 t de propelente (TWR ~1, no frena). Y se
+  reingresa solo la Starship, no el stack. El guiado de aterrizaje debe asumir masa de aterrizaje real.
+
+---
+
 ## 0. Veredicto de la auditoría
 
 **Lo que YA es realista (no tocar):**
