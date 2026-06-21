@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
 
+# Versión de Godot usada en CI. Subirla aquí actualiza descarga + cache en un solo sitio.
+# Godot version used in CI. Bump here to update download + cache in one place.
+env:
+  GODOT_VERSION: 4.6.3
+  GODOT_RELEASE: stable
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -11,6 +17,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Guard anti-harness: falla si un harness de captura temporal entró al repo.
+      # Anti-harness guard: fail if a temporary capture harness got committed.
+      - name: Guard against committed capture harness
+        shell: bash
+        run: |
+          tracked="$(git ls-files 'scripts/_*Shot.cs' 'scripts/_*Shot.cs.uid')"
+          if [ -n "$tracked" ]; then
+            echo "ERROR: temporary capture harness is tracked in git:"
+            echo "$tracked"
+            echo "These files must never be committed (see skill visual-testing / .gitignore)."
+            exit 1
+          fi
+          if grep -Eq '_[A-Za-z0-9]*Shot' project.godot; then
+            echo "ERROR: a temporary capture autoload is present in project.godot."
+            echo "Restore it with: git checkout project.godot"
+            exit 1
+          fi
+          echo "No committed capture harness detected."
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -23,13 +48,76 @@ jobs:
       - name: Test simulation
         run: dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
 
-      - name: Optional Godot build and smoke
+      # Cache del binario de Godot por versión para no descargarlo en cada run.
+      # Cache the Godot binary per version to avoid re-downloading every run.
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-mono-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux-x86_64
+
+      # Descarga oficial: github.com/godotengine/godot releases (mono, linux x86_64).
+      # Official download from the godotengine/godot releases (mono, linux x86_64).
+      - name: Download Godot (mono, linux x86_64)
+        if: steps.cache-godot.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          if [ -n "${GODOT_BIN:-}" ] && [ -x "$GODOT_BIN" ]; then
-            dotnet build Exosphere.csproj --nologo -v quiet
-            "$GODOT_BIN" --headless --path . --quit-after 3 --rendering-driver opengl3
-            "$GODOT_BIN" --headless --path . --quit-after 3 --rendering-driver opengl3 res://scenes/construction/Construction.tscn
-          else
-            echo "GODOT_BIN is not set; skipping Godot build/smoke in CI."
+          set -euo pipefail
+          tag="${GODOT_VERSION}-${GODOT_RELEASE}"
+          base="Godot_v${tag}_mono_linux_x86_64"
+          url="https://github.com/godotengine/godot/releases/download/${tag}/${base}.zip"
+          mkdir -p ~/godot
+          echo "Downloading $url"
+          curl -fL --retry 3 -o /tmp/godot.zip "$url"
+          unzip -q /tmp/godot.zip -d ~/godot
+          # El zip extrae a una carpeta homónima que contiene el ejecutable.
+          # The zip extracts to a same-named folder containing the executable.
+          chmod +x ~/godot/"${base}"/"${base}".x86_64
+
+      - name: Export GODOT_BIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_mono_linux_x86_64"
+          bin="$HOME/godot/${base}/${base}.x86_64"
+          if [ ! -x "$bin" ]; then
+            echo "ERROR: Godot binary not found at $bin"
+            exit 1
           fi
+          echo "GODOT_BIN=$bin" >> "$GITHUB_ENV"
+          "$bin" --version
+
+      - name: Build game layer
+        run: dotnet build Exosphere.csproj --nologo -v quiet
+
+      # Smoke headless: arranca la escena principal y la de construcción y sale.
+      # Headless smoke: boot the main scene and the construction scene, then quit.
+      - name: Godot headless smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path . --quit-after 3 --rendering-driver opengl3
+          "$GODOT_BIN" --headless --path . --quit-after 3 --rendering-driver opengl3 res://scenes/construction/Construction.tscn
+
+      # Captura de viewport con framebuffer real (Xvfb). --headless usa el renderer
+      # dummy y no produce píxeles; para un PNG de viewport hace falta un display real.
+      # Este paso deja el framebuffer listo y documentado; la captura visual completa
+      # (autoload de harness + PNG) es un follow-up — ver skill visual-testing.
+      #
+      # Real-framebuffer viewport capture (Xvfb). --headless uses the dummy renderer
+      # and produces no pixels; a viewport PNG needs a real display. This step wires
+      # up the framebuffer and documents it; the full visual capture (harness autoload
+      # + PNG) is a follow-up — see the visual-testing skill.
+      - name: Install Xvfb (framebuffer for viewport capture)
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Smoke under Xvfb (real framebuffer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # xvfb-run provee un display virtual; aquí corremos el mismo smoke pero
+          # con un framebuffer real, de modo que un follow-up pueda capturar PNGs.
+          # xvfb-run provides a virtual display; here we run the same smoke but with
+          # a real framebuffer so a follow-up can capture PNGs.
+          xvfb-run -a "$GODOT_BIN" --path . --quit-after 3 --rendering-driver opengl3
