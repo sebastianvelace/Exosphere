@@ -435,7 +435,8 @@ public class Universe
         // of the "rocket exits orbit straight through the planet" bug under warp.
         if (vessel.OrbitalState.IsSuborbital(reference.Radius))
         {
-            ResolveOnRailsImpact(vessel, reference);
+            var (refP0, refV0) = BodyStateAt(reference, CurrentTime);
+            ResolveOnRailsImpact(vessel, reference, refP0, refV0);
             return;
         }
 
@@ -467,7 +468,7 @@ public class Universe
                 // The conic crosses the surface inside this step — impact here.
                 vessel.Position = refPosAt + lastRelP;
                 vessel.Velocity = refVelAt + lastRelV;
-                ResolveOnRailsImpact(vessel, reference);
+                ResolveOnRailsImpact(vessel, reference, refPosAt, refVelAt);
                 return;
             }
 
@@ -497,7 +498,7 @@ public class Universe
                 // dips below the new body's surface). Honour the same suborbital guard.
                 if (vessel.OrbitalState!.IsSuborbital(reference.Radius))
                 {
-                    ResolveOnRailsImpact(vessel, reference);
+                    ResolveOnRailsImpact(vessel, reference, newRefP, newRefV);
                     return;
                 }
 
@@ -596,10 +597,20 @@ public class Universe
     /// renderer, and drops it off rails. The vessel reenters and is destroyed — it never
     /// bounces back to orbit or tunnels through the body (R16 user decision).
     /// </summary>
-    private void ResolveOnRailsImpact(Vessel vessel, CelestialBody reference)
+    /// <remarks>
+    /// <paramref name="refPos"/>/<paramref name="refVel"/> are the reference body's inertial
+    /// state AT THE IMPACT INSTANT (the bodies are globally frozen at the tick end, so under
+    /// warp the body has moved tens of thousands of km since the impact). They are used for the
+    /// impact-relative speed and the radial direction, so the wreck is clamped on the correct
+    /// side of the body (using the body's stale end-of-tick position for the direction could
+    /// put it on the far side at high warp). The surface clamp itself uses the body's current
+    /// position, since that is where the body renders this frame.
+    /// </remarks>
+    private void ResolveOnRailsImpact(
+        Vessel vessel, CelestialBody reference, Vector3d refPos, Vector3d refVel)
     {
-        var    relP0       = vessel.Position - reference.Position;
-        var    relV0       = vessel.Velocity - reference.Velocity;
+        var    relP0       = vessel.Position - refPos;
+        var    relV0       = vessel.Velocity - refVel;
         double impactSpeed = relV0.Magnitude; // conservative: full orbital speed
 
         vessel.IsDestroyed      = true;
@@ -607,7 +618,7 @@ public class Universe
         vessel.CrashImpactSpeed = impactSpeed;
         vessel.CrashSimPosition = vessel.Position;
 
-        // Clamp to surface for the renderer.
+        // Clamp to the body's current surface for the renderer, along the true impact direction.
         var dir = relP0.Magnitude > 0.0 ? relP0.Normalized : Vector3d.Up;
         vessel.Position = reference.Position + dir * (reference.Radius + 0.5);
         vessel.Velocity = reference.Velocity + reference.GetSurfaceVelocity(vessel.Position);
