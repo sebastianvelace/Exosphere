@@ -21,6 +21,7 @@ Implemented and working:
 - Orientation-dependent drag and basic reentry heating / heat-shield handling
 - Time warp levels: `1,2,3,5,10,50,100,1000,10000,100000`
 - HUD, navball, map view, transfer planning helpers, cockpit, systems HUD, launch/crash/reentry visual effects
+- Starship/Super Heavy procedural mesh with hot-stage ring, grid-fin lattice, windward tiles, flaps, Raptor clusters and stainless steel shader
 - VAB V1:
   - `ExosphereSimulation/Construction`
   - `scripts/ConstructionController.cs`

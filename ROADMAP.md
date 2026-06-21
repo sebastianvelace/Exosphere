@@ -52,24 +52,13 @@ Objetivo: convertir reentry en un sistema de dano, control y VFX, no solo en una
 
 ## Starship Visual Fidelity
 
-Objetivo: que la nave se lea mas claramente como Starship/Super Heavy sin cambiar todavia el contrato fisico de etapas.
+Estado incremental: la nave ya tiene hot-stage ring, grid fins con lattice, flaps con bisagras, tiles windward con seams, motores 33/6 visuales y acero procedural.
 
-- Mejorar geometria procedural:
+- Pendiente:
   - proporciones de 9 m y altura realista,
-  - nariz ojival mas limpia,
-  - hot-stage ring,
-  - grid fins,
-  - flaps de Starship,
-  - tiles negros en cara windward,
-  - acero inoxidable con variacion sutil.
-- Separar visualmente Super Heavy y Ship despues de staging.
-- Mantener motores 33/6 como visuales hasta una fase futura.
-- Capturas de aceptacion:
-  - pad lateral,
-  - despegue con pluma,
-  - staging,
-  - Starship sola en orbita,
-  - belly-first reentry.
+  - separar visualmente Super Heavy y Ship despues de staging con damage/sep details,
+  - capturas de aceptacion con framebuffer real,
+  - engine-out real en una fase futura si se abandona el contrato de una parte-motor por etapa.
 
 ## Interplanetario Real
 

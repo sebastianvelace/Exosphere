@@ -183,6 +183,7 @@ public partial class VesselRenderer : Node3D
         // forward of the body. Built from a mount arm + a thin lattice slab.
         var finMat   = Mat(new Color(0.40f, 0.40f, 0.43f), 0.90f, 0.34f);
         var mountMat = Mat(new Color(0.34f, 0.34f, 0.37f), 0.86f, 0.42f);
+        var gridMat  = Mat(new Color(0.18f, 0.18f, 0.20f), 0.86f, 0.45f);
 
         for (int i = 0; i < 4; i++)
         {
@@ -204,6 +205,31 @@ public partial class VesselRenderer : Node3D
             };
             fin.SetSurfaceOverrideMaterial(0, finMat);
             AddChild(fin);
+
+            // Grid lattice ribs on the fin face. These small raised bars make the
+            // fins read as real open grid fins instead of flat paddles.
+            for (int r = -2; r <= 2; r++)
+            {
+                var rib = new MeshInstance3D
+                {
+                    Name = $"GridFin{i}_RibH{r}",
+                    Mesh = new BoxMesh { Size = new Vector3(1.30f, 0.045f, 0.19f) },
+                    Position = new Vector3(0f, r * 0.26f, -0.01f),
+                };
+                rib.SetSurfaceOverrideMaterial(0, gridMat);
+                fin.AddChild(rib);
+            }
+            for (int c = -2; c <= 2; c++)
+            {
+                var rib = new MeshInstance3D
+                {
+                    Name = $"GridFin{i}_RibV{c}",
+                    Mesh = new BoxMesh { Size = new Vector3(0.045f, 1.42f, 0.20f) },
+                    Position = new Vector3(c * 0.25f, 0f, -0.02f),
+                };
+                rib.SetSurfaceOverrideMaterial(0, gridMat);
+                fin.AddChild(rib);
+            }
         }
     }
 
@@ -519,6 +545,7 @@ public partial class VesselRenderer : Node3D
     private void AddTileBand(float yBottom, float yTop, float topRadius = 1.165f, float botRadius = 1.165f)
     {
         var tiles  = TileMat();
+        var seams  = Mat(new Color(0.010f, 0.010f, 0.012f), 0.0f, 0.96f);
         float yMid = (yBottom + yTop) * 0.5f;
         float h    = yTop - yBottom;
 
@@ -539,6 +566,20 @@ public partial class VesselRenderer : Node3D
             };
             stave.SetSurfaceOverrideMaterial(0, tiles);
             AddChild(stave);
+
+            int rows = System.Math.Clamp((int)(h / 0.85f), 3, 18);
+            for (int row = 1; row < rows; row++)
+            {
+                float y = -h * 0.5f + h * row / rows;
+                var seam = new MeshInstance3D
+                {
+                    Name = $"TileSeamH_{(int)(yMid * 10)}_{i}_{row}",
+                    Mesh = new BoxMesh { Size = new Vector3(0.50f, 0.018f, 0.108f) },
+                    Position = new Vector3(0f, y, -0.006f),
+                };
+                seam.SetSurfaceOverrideMaterial(0, seams);
+                stave.AddChild(seam);
+            }
         }
     }
 
@@ -573,6 +614,17 @@ public partial class VesselRenderer : Node3D
         };
         root.SetSurfaceOverrideMaterial(0, mat);
         AddChild(root);
+
+        var hingeMat = Mat(new Color(0.18f, 0.18f, 0.20f), 0.80f, 0.40f);
+        var hinge = new MeshInstance3D
+        {
+            Name = name + "Hinge",
+            Mesh = new CylinderMesh { TopRadius = 0.055f, BottomRadius = 0.055f, Height = length * 0.92f, RadialSegments = 14 },
+            Position = new Vector3(-0.28f, 0f, -0.11f),
+            RotationDegrees = new Vector3(0f, 0f, 0f),
+        };
+        hinge.SetSurfaceOverrideMaterial(0, hingeMat);
+        root.AddChild(hinge);
     }
 
     // ── Raptor engine ─────────────────────────────────────────────────────
