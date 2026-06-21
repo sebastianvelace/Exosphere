@@ -386,6 +386,45 @@ public partial class SimulationBridge : Node
     public void SetSAS(bool on)       { if (ActiveVessel != null) ActiveVessel.SASEnabled = on; }
     public void ReleaseGroundHold()   { ActiveVessel?.ReleaseGroundHold(); }
 
+    /// <summary>
+    /// Places an externally constructed vessel on the active launch pad and makes it the
+    /// controlled vessel. Used by the VAB/export flow; keeps the same ground-hold contract
+    /// as the default Starship stack.
+    /// </summary>
+    public void PlaceConstructedVesselOnPad(Vessel vessel, double mountHeightM = 12.0)
+    {
+        var earth = Universe.GetBody("earth");
+        if (earth == null) return;
+
+        if (ActiveVessel != null)
+            Universe.RemoveVessel(ActiveVessel);
+
+        var upDir = new Vector3d(0, 1, 0);
+        vessel.Position = earth.Position + upDir * (earth.Radius + mountHeightM);
+        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
+        vessel.Orientation = Quaterniond.Identity;
+        vessel.SASEnabled = true;
+        vessel.IsGroundHeld = true;
+        vessel.GroundNormal = upDir;
+        vessel.GroundOffset = mountHeightM;
+
+        _padWorldPos = earth.Position + upDir * earth.Radius;
+        Universe.AddVessel(vessel);
+        Universe.ActiveVessel = vessel;
+
+        var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
+        if (_vesselRenderer == null && vesselsNode != null)
+        {
+            _vesselRenderer = new VesselRenderer { Name = "StarshipRenderer" };
+            vesselsNode.AddChild(_vesselRenderer);
+        }
+
+        _vesselRenderer?.BuildFromVessel(vessel);
+        var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        if (_vesselRenderer != null)
+            fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
+    }
+
     // ── Ignition / throttle contracts (consumed by HUDController / Agente E) ─
 
     /// <summary>

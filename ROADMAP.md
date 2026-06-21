@@ -4,26 +4,26 @@ Estado de cierre actual:
 - Builds .NET/Godot pasan con 0 warnings y 0 errores.
 - `ExosphereSimulation.Tests` cubre gravedad, RK4, Kepler, radial/suborbital, rails-impact, motores, termica de escudo, aerodinamica y SOI.
 - Godot headless carga la escena principal sin errores.
+- VAB V1 existe como nucleo testeable (`ExosphereSimulation/Construction`), escena `Construction.tscn` y `ConstructionController`.
 
 ## VAB / Construccion De Naves
 
-Objetivo: un VAB minimo pero usable, data-driven y compatible con el `SimulationBridge` actual.
+Estado V1: implementado el flujo minimo data-driven y testeado. Pendiente para la siguiente iteracion: preview 3D, navegacion desde menu/flight y persistencia de craft files.
 
-- Crear `scenes/construction/Construction.tscn`.
-- Anadir `ConstructionController`.
-- Cargar catalogo desde `data/parts/*.json`, sin hardcodear piezas.
-- Permitir ensamblaje vertical inicial:
-  - seleccionar pieza,
-  - adjuntar a nodo compatible,
-  - borrar pieza,
-  - recalcular masa, propelente, TWR y delta-v.
-- Exportar una definicion de vessel que `SimulationBridge` pueda instanciar en plataforma.
-- Mantener V1 bajo el contrato actual de una parte-motor por etapa.
-- Tests minimos:
-  - carga catalogo,
-  - valida nodos de attachment,
-  - calcula masa/propelente/delta-v,
-  - rechaza conexiones incompatibles.
+- Hecho:
+  - escena `scenes/construction/Construction.tscn`,
+  - `ConstructionController`,
+  - catalogo desde `data/parts/*.json`,
+  - seleccionar pieza, adjuntar a nodo compatible, borrar subarbol,
+  - recalcular masa, propelente, TWR y delta-v,
+  - exportar a `Vessel`/`PartGraph`,
+  - `SimulationBridge.PlaceConstructedVesselOnPad(...)`,
+  - tests de catalogo, nodos, metricas, conexiones incompatibles y export.
+- Pendiente:
+  - preview 3D editable,
+  - craft files persistentes,
+  - boton de flujo para entrar/salir del VAB,
+  - revisar datos de tamanos de nodos en el stack Starship hardcodeado (`decoupler_medium` size 2 vs nodos Starship size 3).
 
 ## Reentry Fisico Y Visual Avanzado
 
