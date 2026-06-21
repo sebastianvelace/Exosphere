@@ -134,6 +134,7 @@ public sealed class PhysicsRegressionTests
         universe.Tick(0.1);
 
         Assert.True(vessel.IsDestroyed);
+        Assert.Equal(VesselDestructionCause.GroundImpact, vessel.DestructionCause);
         Assert.False(vessel.IsOnRails);
         Assert.True(vessel.CrashImpactSpeed > 1_000.0);
         Assert.True(earth.GetAltitude(vessel.Position) >= 0.0);
@@ -172,6 +173,70 @@ public sealed class PhysicsRegressionTests
 
         Assert.True(protectedRatio < 1.0);
         Assert.True(exposedRatio > 1.0);
+    }
+
+    [Fact]
+    public void ReentryHeatingScalesWithSqrtDensityAndVelocityCubed()
+    {
+        double baseline = ThermalModel.ComputeHeatFlux(0.01, 2_000.0);
+        double densityScaled = ThermalModel.ComputeHeatFlux(0.04, 2_000.0);
+        double velocityScaled = ThermalModel.ComputeHeatFlux(0.01, 4_000.0);
+
+        AssertWithinRelative(baseline * 2.0, densityScaled, 1e-12);
+        AssertWithinRelative(baseline * 8.0, velocityScaled, 1e-12);
+    }
+
+    [Fact]
+    public void NominalBellyFirstShieldedReentrySurvivesButWrongOrientationBurnsThrough()
+    {
+        var protectedGraph = new PartGraph();
+        protectedGraph.SetRoot(new Part(new PartDefinition
+        {
+            Id = "shielded",
+            CategoryStr = "command",
+            MassDry = 100.0,
+            HeatTolerance = 2_800.0,
+            HasHeatShield = true,
+        }));
+
+        var wrongWayGraph = new PartGraph();
+        wrongWayGraph.SetRoot(new Part(new PartDefinition
+        {
+            Id = "wrong_way",
+            CategoryStr = "command",
+            MassDry = 100.0,
+            HeatTolerance = 2_800.0,
+            HasHeatShield = true,
+        }));
+
+        const double severeFlux = 50_000_000.0;
+        var protectedBurned = StressSolver.ApplyThermalLoads(protectedGraph, severeFlux, 10.0, Vector3d.Up);
+        var wrongWayBurned = StressSolver.ApplyThermalLoads(wrongWayGraph, severeFlux, 10.0, -Vector3d.Up);
+
+        Assert.Empty(protectedBurned);
+        Assert.True(protectedGraph.Parts[0].ThermalDamage < 1.0);
+        Assert.Single(wrongWayBurned);
+        Assert.True(wrongWayGraph.Parts[0].IsThermallyBurned);
+    }
+
+    [Fact]
+    public void ReentryWithoutHeatShieldBurnsThrough()
+    {
+        var graph = new PartGraph();
+        graph.SetRoot(new Part(new PartDefinition
+        {
+            Id = "bare",
+            CategoryStr = "command",
+            MassDry = 100.0,
+            HeatTolerance = 1_200.0,
+            HasHeatShield = false,
+        }));
+
+        var burned = StressSolver.ApplyThermalLoads(graph, 50_000_000.0, 10.0, Vector3d.Up);
+
+        Assert.Single(burned);
+        Assert.True(graph.Parts[0].IsBroken);
+        Assert.True(graph.Parts[0].ThermalDamage >= 1.0);
     }
 
     [Fact]

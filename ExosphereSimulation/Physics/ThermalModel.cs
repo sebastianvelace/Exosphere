@@ -96,7 +96,17 @@ public static class ThermalModel
     public static bool ApplyHeat(Part part, double heatFlux, double dt)
     {
         part.Temperature = UpdateTemperature(part.Temperature, heatFlux, dt, part.CurrentMass);
-        return part.Temperature > part.Definition.HeatTolerance;
+        double ratio = part.ThermalRatio;
+        if (ratio > 1.0)
+        {
+            double overLimit = ratio - 1.0;
+            part.ThermalDamage = System.Math.Clamp(part.ThermalDamage + overLimit * dt * 0.5, 0.0, 1.0);
+        }
+        else
+        {
+            part.ThermalDamage = System.Math.Max(0.0, part.ThermalDamage - dt * 0.01);
+        }
+        return part.IsThermallyBurned;
     }
 
     /// <summary>

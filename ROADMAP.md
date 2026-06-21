@@ -30,25 +30,15 @@ Estado V1.5: implementado el flujo minimo data-driven, testeado y conectado al v
 
 ## Reentry Fisico Y Visual Avanzado
 
-Objetivo: convertir reentry en un sistema de dano, control y VFX, no solo en una condicion de destruccion.
+Estado incremental: reentry ya separa causa termica vs impacto, acumula `ThermalDamage` por pieza y tiene tests de entrada nominal, sin escudo, mala orientacion y ley `sqrt(rho) * v^3`.
 
-- Separar dano termico de ground crash.
-- Anadir estado de dano termico progresivo por pieza:
-  - temperatura,
-  - ratio sobre tolerancia,
-  - pieza quemada,
-  - perdida de control si falla estructura critica.
-- Conectar VFX a heat flux real:
+- Pendiente:
   - plasma por flujo termico,
   - brillo en zona windward,
   - dano/oscurecimiento de tiles,
   - breakup si no hay escudo o actitud correcta.
-- EDL debe orientar belly-first con el heat shield al flujo y luego hacer flip-and-burn.
-- Tests:
-  - entrada nominal sobrevive,
-  - entrada sin escudo destruye,
-  - entrada mal orientada destruye,
-  - heating crece con `sqrt(rho) * v^3`.
+  - perdida de control si falla estructura critica,
+  - EDL belly-first mas robusto antes de flip-and-burn.
 
 ## Starship Visual Fidelity
 

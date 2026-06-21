@@ -235,6 +235,7 @@ public class Universe
                     // Burn-through: the vessel disintegrates in the airstream where it is —
                     // no surface clamp (this is an atmospheric break-up, not a ground impact).
                     vessel.IsDestroyed      = true;
+                    vessel.DestructionCause = VesselDestructionCause.ThermalBreakup;
                     vessel.CrashImpactSpeed = airspeed;
                     vessel.CrashSimPosition = vessel.Position;
                 }
@@ -272,6 +273,7 @@ public class Universe
                     // Hard crash: cualquier velocidad > SoftLandingThreshold → destrucción.
                     // No soft-rest, no rebote a órbita.
                     vessel.IsDestroyed      = true;
+                    vessel.DestructionCause = VesselDestructionCause.GroundImpact;
                     vessel.CrashImpactSpeed = impactSpeed;
                     vessel.CrashSimPosition = vessel.Position;
                     // Freeze the wreckage on the surface so the camera has a reference point.
@@ -350,6 +352,7 @@ public class Universe
                         {
                             // Hard crash under warp — destroy, no rebound.
                             vessel.IsDestroyed      = true;
+                            vessel.DestructionCause = VesselDestructionCause.GroundImpact;
                             vessel.CrashImpactSpeed = impactSpeedMixed;
                             vessel.CrashSimPosition = vessel.Position;
                             var dir = (vessel.Position - refBody.Position).Normalized;
@@ -457,6 +460,7 @@ public class Universe
         double impactSpeed = relV0.Magnitude; // conservative: full orbital speed
 
         vessel.IsDestroyed      = true;
+        vessel.DestructionCause = VesselDestructionCause.GroundImpact;
         vessel.CrashImpactSpeed = impactSpeed;
         vessel.CrashSimPosition = vessel.Position;
 

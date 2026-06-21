@@ -18,7 +18,7 @@ Implemented and working:
 - Double-precision simulation types: `Vector3d`, `Quaterniond`, `Universe`, `Vessel`, `CelestialBody`, `OrbitalElements`
 - RK4 integration, Kepler/on-rails propagation, SOI selection, radial/suborbital guards, hard-impact destruction
 - Pressure-corrected engines, mass flow, Isp, staging and stage delta-v
-- Orientation-dependent drag and basic reentry heating / heat-shield handling
+- Orientation-dependent drag, reentry heating, progressive part thermal damage, heat-shield orientation handling and destruction causes
 - Time warp levels: `1,2,3,5,10,50,100,1000,10000,100000`
 - HUD, navball, map view, transfer planning helpers, cockpit, systems HUD, launch/crash/reentry visual effects
 - Starship/Super Heavy procedural mesh with hot-stage ring, grid-fin lattice, windward tiles, flaps, Raptor clusters and stainless steel shader
@@ -182,7 +182,7 @@ The Starship default stack currently uses:
 
 - One physical engine part per stage; 33/6 engines are visual, not individual physical engines.
 - VAB V1.5 has 3D preview, craft-file persistence, and VAB-to-launch flow. It still lacks direct attachment-node manipulation in the preview and a craft-file browser.
-- Reentry has real heat-flux basis and shield orientation tests, but not full per-piece progressive damage and breakup VFX.
+- Reentry thermal damage is tracked per part, but visible tile damage, breakup sequencing and control-loss consequences are still limited.
 - Interplanetary planning exists at helper/UI level, but needs stronger patched-conic validation and better UX.
 - CI is not configured yet.
 - Automated visual screenshots need a real framebuffer; current headless smoke tests only validate load/runtime.

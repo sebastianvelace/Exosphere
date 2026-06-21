@@ -22,9 +22,14 @@ public class Part
 
     // ── Estado físico ─────────────────────────────────────────────────────
     public double Temperature     { get; set; } = 290.0;  // K
+    public double ThermalDamage   { get; set; } = 0.0;    // 0..1 progressive burn-through
     public bool   IsBroken        { get; set; }
     public bool   IsDeployed      { get; set; }
     public bool   IsStagingActive { get; set; } = true;
+    public double ThermalRatio => Definition.HeatTolerance > 0.0
+        ? Temperature / Definition.HeatTolerance
+        : 0.0;
+    public bool IsThermallyBurned => ThermalDamage >= 1.0;
 
     // ── Control del motor ─────────────────────────────────────────────────
     public double   ThrottleLevel { get; set; }          // [0, 1]

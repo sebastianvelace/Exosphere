@@ -3,6 +3,13 @@ namespace Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 
+public enum VesselDestructionCause
+{
+    None,
+    GroundImpact,
+    ThermalBreakup,
+}
+
 public class Vessel
 {
     public string Id   { get; }    = Guid.NewGuid().ToString();
@@ -33,6 +40,7 @@ public class Vessel
 
     // ── Crash / destruction state ─────────────────────────────────────────
     public bool     IsDestroyed           { get; set; } = false;
+    public VesselDestructionCause DestructionCause { get; set; } = VesselDestructionCause.None;
     public double   CrashImpactSpeed      { get; set; } = 0.0;   // m/s relative to surface
     public Vector3d CrashSimPosition      { get; set; } = Vector3d.Zero; // sim position of impact
 
