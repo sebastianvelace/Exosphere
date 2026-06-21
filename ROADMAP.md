@@ -52,19 +52,19 @@ Estado incremental: la nave ya tiene hot-stage ring, grid fins con lattice, flap
 
 ## Interplanetario Real
 
-Objetivo: que las transferencias Tierra-Luna/Marte sean jugables y fisicamente coherentes.
+Estado incremental: el calculo Hohmann vive en `ExosphereSimulation/Navigation`, tiene tests de Tierra-Marte/Tierra-Venus y `TransferPlanner` consume ese nucleo con phase angle.
 
-- Validar floating-origin y scaled-space en cruceros largos.
-- Endurecer patched conics en transiciones Tierra/Luna/Sol.
-- Permitir selector de destino en mapa.
-- Generar nodos Hohmann editables.
-- Mostrar trayectoria e intercepcion estimada.
-- Anadir `ManeuverExecutor` robusto para orientar y ejecutar burns.
-- Tests:
-  - SOI dominante en fronteras,
-  - Kepler/rails estable en coast largo,
-  - maniobra aplica delta-v esperado,
-  - trayectoria objetivo no produce NaN ni saltos de referencia.
+- Hecho:
+  - selector de destino en mapa,
+  - nodos Hohmann,
+  - signos correctos para burns exteriores/interiores,
+  - tiempo de vuelo y phase angle testeados,
+  - `ManeuverExecutor` orienta y ejecuta burns.
+- Pendiente:
+  - patched conics reales en transiciones Tierra/Luna/Sol,
+  - trayectoria/intercepcion visual mas precisa,
+  - tests de cruise largo y cambio de SOI,
+  - UX de nodos arrastrables mas clara.
 
 ## CI / Headless Tests
 

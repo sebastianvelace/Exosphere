@@ -21,6 +21,7 @@ Implemented and working:
 - Orientation-dependent drag, reentry heating, progressive part thermal damage, heat-shield orientation handling and destruction causes
 - Time warp levels: `1,2,3,5,10,50,100,1000,10000,100000`
 - HUD, navball, map view, transfer planning helpers, cockpit, systems HUD, launch/crash/reentry visual effects
+- Pure Hohmann transfer calculator in `ExosphereSimulation/Navigation` with Earth-Mars and Earth-Venus regression tests
 - Starship/Super Heavy procedural mesh with hot-stage ring, grid-fin lattice, windward tiles, flaps, Raptor clusters and stainless steel shader
 - VAB V1:
   - `ExosphereSimulation/Construction`
@@ -183,7 +184,7 @@ The Starship default stack currently uses:
 - One physical engine part per stage; 33/6 engines are visual, not individual physical engines.
 - VAB V1.5 has 3D preview, craft-file persistence, and VAB-to-launch flow. It still lacks direct attachment-node manipulation in the preview and a craft-file browser.
 - Reentry thermal damage is tracked per part, but visible tile damage, breakup sequencing and control-loss consequences are still limited.
-- Interplanetary planning exists at helper/UI level, but needs stronger patched-conic validation and better UX.
+- Interplanetary planning has a tested Hohmann core, but still needs patched-conic SOI transitions, long-cruise validation and better node UX.
 - CI is not configured yet.
 - Automated visual screenshots need a real framebuffer; current headless smoke tests only validate load/runtime.
 

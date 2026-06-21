@@ -62,6 +62,7 @@ Important implemented systems:
 - heat-shield flag from part JSON
 - hard impact destruction
 - VAB catalog/assembly/export in `ExosphereSimulation/Construction`
+- Hohmann transfer math in `ExosphereSimulation/Navigation`
 
 ## Game Layer Rules
 
@@ -102,7 +103,7 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - One physical engine part per stage. The 33 Super Heavy and 6 Starship engines are visual, not individually simulated.
 - VAB V1.5 has 3D preview, craft persistence, and VAB-to-launch flow. It still lacks direct node manipulation in the preview and a craft-file browser.
 - Reentry has physics basis and tests, but not full per-piece progressive damage or breakup VFX.
-- Interplanetary planning exists but needs stronger patched-conic validation and better UX.
+- Interplanetary planning has a tested Hohmann core, but needs stronger patched-conic validation and better UX.
 - CI is not configured yet.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 

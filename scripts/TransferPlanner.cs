@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Navigation;
 
 /// <summary>
 /// Calcula nodos de maniobra de transferencia Hohmann a un cuerpo destino.
@@ -44,26 +45,12 @@ public partial class TransferPlanner : Node
 
         if (r1 < 1000.0 || r2 < 1000.0) return null;
 
-        // Hohmann: semi-eje mayor de la elipse de transferencia
-        double sma = (r1 + r2) * 0.5;
         double mu  = sunBody.GM;
         if (mu <= 0.0) return null;
 
-        // Velocidades circulares en r1 y r2
-        double v1Circular = System.Math.Sqrt(mu / r1);
-        double v2Circular = System.Math.Sqrt(mu / r2);
-
-        // Velocidades en los vértices de la elipse de transferencia (vis-viva)
-        double vTransfer1 = System.Math.Sqrt(mu * (2.0 / r1 - 1.0 / sma));
-        double vTransfer2 = System.Math.Sqrt(mu * (2.0 / r2 - 1.0 / sma));
-
-        // Δv requeridos
-        double dv1 = vTransfer1 - v1Circular;  // primer burn (prograde cuando r2 > r1)
-        double dv2 = v2Circular - vTransfer2;   // segundo burn en llegada
-
-        // Tiempo de vuelo = medio período de la órbita de transferencia
-        double period = 2.0 * System.Math.PI * System.Math.Sqrt(sma * sma * sma / mu);
-        double tof    = period * 0.5;
+        HohmannTransferPlan plan;
+        try { plan = HohmannTransfer.Compute(mu, r1, r2); }
+        catch (ArgumentException) { return null; }
 
         // Momento del burn = ahora
         double burnTime = universe.CurrentTime;
@@ -77,16 +64,18 @@ public partial class TransferPlanner : Node
         CurrentNode = new ManeuverNode
         {
             BurnTime     = burnTime,
-            DeltaV       = prograde * dv1,
-            DvMagnitude  = System.Math.Abs(dv1),
+            DeltaV       = prograde * plan.FirstBurnDeltaV,
+            DvMagnitude  = System.Math.Abs(plan.FirstBurnDeltaV),
             TargetBodyId = targetBodyId,
-            TimeOfFlight = tof,
-            SecondBurnDv = dv2,
-            TransferSma  = sma,
+            TimeOfFlight = plan.TimeOfFlight,
+            SecondBurnDv = plan.SecondBurnDeltaV,
+            TransferSma  = plan.TransferSemiMajorAxis,
+            RequiredPhaseAngle = plan.RequiredPhaseAngle,
         };
 
-        GD.Print($"[TransferPlanner] Hohmann to {targetBodyId}: Δv1={dv1:F0} m/s, " +
-                 $"Δv2={dv2:F0} m/s, ToF={tof / 86400.0:F1} days");
+        GD.Print($"[TransferPlanner] Hohmann to {targetBodyId}: Δv1={plan.FirstBurnDeltaV:F0} m/s, " +
+                 $"Δv2={plan.SecondBurnDeltaV:F0} m/s, ToF={plan.TimeOfFlight / 86400.0:F1} days, " +
+                 $"phase={plan.RequiredPhaseAngle * MathUtils.RAD_TO_DEG:F1} deg");
 
         return CurrentNode;
     }
@@ -121,6 +110,9 @@ public class ManeuverNode
 
     /// <summary>Semi-eje mayor de la elipse de transferencia (m).</summary>
     public double   TransferSma    { get; set; }
+
+    /// <summary>Required coplanar target lead angle at departure (rad), [0, 2pi).</summary>
+    public double   RequiredPhaseAngle { get; set; }
 
     /// <summary>Factor de ajuste manual del usuario (±10% por pasos de 5%).</summary>
     public double   DvAdjustFactor { get; set; } = 1.0;
