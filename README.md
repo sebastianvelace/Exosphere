@@ -16,7 +16,7 @@ Implemented and working:
 - Data-driven solar system with 8 body JSON files in `data/bodies/`
 - Data-driven parts catalog with 20 JSON files in `data/parts/`
 - Double-precision simulation types: `Vector3d`, `Quaterniond`, `Universe`, `Vessel`, `CelestialBody`, `OrbitalElements`
-- RK4 integration, Kepler/on-rails propagation, SOI selection, radial/suborbital guards, hard-impact destruction
+- RK4 integration, Kepler/on-rails propagation, SOI selection, patched-conic SOI transitions (warp-resolution-independent), radial/suborbital guards, hard-impact destruction
 - Pressure-corrected engines, mass flow, Isp, staging and stage delta-v
 - Orientation-dependent drag, reentry heating, progressive part thermal damage, heat-shield orientation handling and destruction causes
 - Time warp levels: `1,2,3,5,10,50,100,1000,10000,100000`
@@ -28,7 +28,7 @@ Implemented and working:
   - `scripts/ConstructionController.cs`
   - `scenes/construction/Construction.tscn`
   - catalog loading, compatible-node validation, mass/propellant/TWR/delta-v metrics, subtree delete, export to `Vessel`/`PartGraph`
-  - 3D preview, craft JSON save/load, `V` from flight to VAB, `Launch` from VAB to pad
+  - 3D preview, craft JSON save/load, saved-craft browser panel, `V` from flight to VAB, `Launch` from VAB to pad
 - Automated tests:
   - gravity
   - RK4 energy/radius conservation
@@ -188,8 +188,10 @@ The Starship default stack currently uses:
 ## Current Limitations
 
 - One physical engine part per stage; 33/6 engines are visual, not individual physical engines.
-- VAB V1.5 has 3D preview, craft-file persistence, and VAB-to-launch flow. It still lacks direct attachment-node manipulation in the preview and a craft-file browser.
-- Reentry thermal damage is tracked per part, but visible tile damage, breakup sequencing and control-loss consequences are still limited.
+- VAB V1.5 has 3D preview, craft-file persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks direct attachment-node manipulation in the 3D preview.
+- Reentry has windward plasma glow, progressive heat-shield tile charring, and a thermal break-up VFX when a vessel burns up. Still limited: per-piece structural break-up and control-loss consequences.
+- Starship hull is modelled at the real 9 m diameter; after staging the separated Super Heavy shows an exposed, scorched hot-stage ring.
+- CI provisions Godot in the workflow and runs the headless smoke checks strictly, with an anti-harness guard; full PNG capture in CI is still a follow-up.
 - Interplanetary planning has a tested Hohmann core, but still needs patched-conic SOI transitions, long-cruise validation and better node UX.
 - CI is configured for simulation build/tests. Godot build/smoke runs locally through `tools/ci_check.sh` and in CI only when `GODOT_BIN` is provided.
 - Automated visual screenshots need a real framebuffer; current headless smoke tests only validate load/runtime.

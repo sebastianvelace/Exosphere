@@ -107,8 +107,9 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 ## Known Limits
 
 - One physical engine part per stage. The 33 Super Heavy and 6 Starship engines are visual, not individually simulated.
-- VAB V1.5 has 3D preview, craft persistence, and VAB-to-launch flow. It still lacks direct node manipulation in the preview and a craft-file browser.
-- Reentry has physics basis and tests, but not full per-piece progressive damage or breakup VFX.
+- VAB V1.5 has 3D preview, craft persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks direct node manipulation in the 3D preview.
+- Reentry has physics basis and tests plus windward plasma, tile charring, and a thermal break-up VFX. It still lacks per-piece structural break-up and control-loss consequences.
+- Patched-conic SOI transitions are implemented for on-rails vessels (warp-resolution-independent); inside on-rails propagation use `BodyStateAt(body, t)` for body state at the epoch/crossing time, not the end-of-tick global position.
 - Interplanetary planning has a tested Hohmann core, but needs stronger patched-conic validation and better UX.
 - CI is configured for simulation build/tests. Godot build/smoke is strict in `tools/ci_check.sh` and optional in GitHub Actions unless `GODOT_BIN` is provided.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
