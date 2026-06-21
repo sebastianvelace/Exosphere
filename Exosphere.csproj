@@ -11,5 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="ExosphereSimulation/**/*.cs" />
+    <Compile Remove="ExosphereSimulation.Tests/**/*.cs" />
+    <Compile Remove=".godot/**/*.cs" />
   </ItemGroup>
 </Project>
