@@ -16,46 +16,76 @@ Este plan prioriza mejoras visibles y verificables sobre sistemas nuevos.
 - Las dimensiones visibles deben respetar escala real aproximada: Starship/Super
   Heavy 9 m de diametro, stack ~121 m, Ship ~50 m, booster ~71 m.
 
-## V0 — Preparacion De Capturas  ✅ FUNCIONANDO
+## V0 — Capturas Visuales Locales ✅ FUNCIONANDO / CI PARCIAL
 
-Captura con framebuffer real **validada** via `xvfb-run` (ya instalado): se corre Godot SIN
-`--headless` bajo un display virtual y un autoload temporal `scripts/_CaptureShot.cs` (patron
-`_*Shot`, gitignored) que engancha el autopiloto de ascenso, espera `RenderingServer.FramePostDraw`
-y guarda PNGs a `/tmp` en fases clave (ignition/liftoff/low-ascent), reportando avgLum/nonEmpty para
-descartar pantallas negras. Comando:
+Captura local con framebuffer real **validada** via `xvfb-run` (ya instalado):
+se corre Godot SIN `--headless` bajo un display virtual y un autoload temporal
+`scripts/_CaptureShot.cs` o harness equivalente gitignored, espera
+`RenderingServer.FramePostDraw` y guarda PNGs a `/tmp` en fases clave.
 
 ```bash
 xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" --path . --rendering-driver opengl3
 ```
 
-Esto desbloquea verificar TODO cambio visual con screenshots reales (antes el dummy renderer de
-`--headless` impedia capturar). El harness es temporal y se limpia (`rm` + `git checkout project.godot`).
-Siguiente paso natural: cablearlo a CI bajo Xvfb (V5).
+Estado:
+- [x] `--headless` queda reservado para smoke/load; no sirve para validar PNGs
+  visuales en este entorno porque usa dummy renderer.
+- [x] Captura local con Xvfb validada y usada para pad, liftoff, ascenso y pluma
+  orbital.
+- [x] Guard anti-harness cubre `scripts/_*Shot.cs`, `scripts/*VerifyShot.cs`,
+  `scenes/*VerifyShot.tscn` y autoloads temporales en `project.godot`.
+- [ ] Pendiente CI: capturas PNG end-to-end, artifacts descargables y heuristicas
+  simples de imagen no negra / nave visible / UI visible.
 
-## V0 (original) — Preparacion De Capturas
+Baseline minimo a mantener fuera del repo:
+- pad lateral,
+- liftoff con pluma,
+- Max-Q/ascent,
+- hot-staging,
+- Starship sola en orbita,
+- map/orbit view,
+- belly-flop reentry,
+- flip-and-burn,
+- touchdown/crash,
+- cockpit.
 
-Antes de hacer cambios visuales grandes:
+## V0.5 — Auditoria Con Referencias Reales
 
-- Crear harness temporal no commiteado para capturas con framebuffer real.
-- Capturar baseline:
-  - pad lateral,
-  - liftoff con pluma,
-  - Max-Q/ascent,
-  - hot-staging,
-  - Starship sola en orbita,
-  - map/orbit view,
-  - belly-flop reentry,
-  - flip-and-burn,
-  - touchdown/crash,
-  - cockpit.
-- Guardar outputs fuera del repo o en carpeta ignorada.
-- Confirmar que `tools/ci_check.sh` sigue limpio y que no hay `scripts/_*Shot.cs`,
-  `scripts/*VerifyShot.cs`, `scenes/*VerifyShot.tscn` ni autoload temporal en
-  `project.godot`.
+Objetivo: evitar mejoras visuales por intuicion. Cada cambio visual relevante debe
+partir de una referencia real, una captura actual comparable y un criterio de
+aceptacion explicito.
 
-Aceptacion:
-- Las capturas muestran nave, UI y efectos sin pantalla negra.
-- Hay una comparacion visual antes/despues para cada cambio importante.
+Referencias iniciales a consultar antes de implementar:
+- SpaceX Starship official: https://www.spacex.com/vehicles/starship/
+- SpaceX flight webcasts / update pages de Starship Flight 4-6 para liftoff,
+  Max-Q, hot-staging, boostback, reentry y splashdown.
+- NASA / Artemis / HLS para variantes futuras y diferencias visuales: HLS no es
+  la Starship atmosferica normal; no mezclar landing legs/solar arrays/HLS con el
+  stack orbital actual salvo que se cree variante nueva.
+- Fotos/video de Starbase: OLM, water-cooled steel plate, deluge, tank farm,
+  chopsticks, SQD/BQD y lightning towers.
+
+Matriz de busqueda y aceptacion:
+
+| Fase | Referencia real | Captura actual | Diferencia observable | Archivo dueño | Criterio de aceptacion |
+| --- | --- | --- | --- | --- | --- |
+| Pad lateral | Starship/Super Heavy en Starbase, vista lateral diurna | `/tmp/exosphere_pad_*.png` | Silueta, proporcion nariz/flaps/grid fins, brillo acero, escala del OLM | `VesselRenderer.cs`, `LaunchPadController.cs`, `CameraController.cs` | Stack 9 m / ~121 m reconocible; detalles legibles sin ruido ni plastico blanco |
+| Liftoff | IFT liftoff daylight, 33 Raptors + deluge | `/tmp/exosphere_liftoff_*.png` | Pluma merged, nube horizontal, exposicion, tower clear | `PlumeSystem.cs`, `LaunchEffectsController.cs`, `LaunchPadController.cs` | Pluma brillante/ancha, deluge horizontal, nave no oculta, HUD legible |
+| Startup/ramp | Engine chill/startup T-3s a liftoff | `/tmp/exosphere_startup_*.png` | Preburn, flare progresivo, anillos encendiendo, vapor antes de release | `PlumeSystem.cs`, `LaunchEffectsController.cs`, `SimulationBridge.cs` solo si hace falta exponer estado | Secuencia no salta de apagado a full plume; hay progreso visual durante hold-down |
+| Hot-staging | IFT hot-stage frames T+2:39/T+2:40 | `/tmp/exosphere_hotstage_*.png` | Flash/plume entre etapas, soot ring, separacion Ship/Booster | `HotStageFlashController.cs`, `VesselRenderer.cs`, `PlumeSystem.cs` | Un frame estatico permite entender que Starship encendio antes de separarse |
+| Orbit burn | Upper-stage / Raptor vacuum plume references | `/tmp/exosphere_orbit_*.png` | Pluma larga, azul/blanca, opticamente delgada, sin humo denso | `PlumeSystem.cs`, `raptor_plume.gdshader` | Vac plume visible contra Tierra sin parecer pluma SL |
+| Reentry nominal | Starship reentry / Shuttle reentry analogs | `/tmp/exosphere_reentry_nominal_*.png` | Shock windward, wake, leading edges, tiles protegidas | `ReentryPlasmaController.cs`, `VesselRenderer.cs` | Belly-flop nominal se ve protegido y controlado; plasma no tapa UI/cockpit |
+| Reentry fallo | Starship Flight 4-6 flap/tile damage references | `/tmp/exosphere_reentry_bad_attitude_*.png` | Flujo pegando fuera del escudo, flap/nose heating localizado | `ReentryPlasmaController.cs`, `VesselRenderer.cs` | Mala orientacion se ve peligrosa antes de destruirse |
+| Touchdown/flip | Starship flip/landing footage | `/tmp/exosphere_touchdown_*.png` | Flip burn, plume-ground interaction, encuadre vertical | `EDLController.cs`, `CameraController.cs`, `PlumeSystem.cs` | Ship completa en cuadro, pluma legible, touchdown readable |
+| Orbit/map beauty | Tierra/terminador/vacuum lighting | `/tmp/exosphere_orbit_map_*.png` | Terminador, brillo de acero, sky/atmosfera, escala | `PlanetMaterials.cs`, `SkyController.cs`, `SunController.cs` | Nave, planeta y UI se leen sin clipping ni terminador inconsistente |
+
+Reglas:
+- Guardar referencias como links/notas, no assets pesados, salvo permiso claro.
+- Capturar antes/despues con misma resolucion, fase, camara y hora visual cuando
+  sea posible.
+- Separar tres estados: `implementado`, `verificado por screenshot`,
+  `comparado contra referencia`.
+- No marcar un item como cerrado solo por existir codigo.
 
 ## V1 — Starship/Super Heavy Exterior
 
@@ -70,7 +100,9 @@ Mejoras:
 - [x] Tile layout mas reconocible en la cara windward: patron, borde, zonas negras y
   transicion hacia acero.
 - [x] Raceways/cable covers y detalles externos principales.
-- [ ] Grid fins mas cercanas a forma real: espesor, pivote, lattice y sombreado.
+- [x] Grid fins primera pasada: 4 fins, mount/pivote, lattice visual y sombreado basico.
+- [ ] Grid fins close-up: proporcion fina, inclinacion/offset, biseles y silueta
+  menos rectangular contra referencias reales.
 - [x] Flaps con base/hinge mas legibles y offset realista.
 - [x] Engine bay con 33 motores visuales mas creibles: outer ring, inner cluster,
   mounts, dark cavities.
@@ -108,7 +140,9 @@ Mejoras:
   un OmniLight3D + un GpuParticles3D corto (~1-1.5 s) de plume/soot en el plano de separacion (y/o
   scorch en el tope del booster en el `VesselRenderer` del debris). OJO: el momento dura ~1 frame —
   el harness de captura debe disparar VARIOS frames seguidos tras el drop de part-count para verlo.
-- [ ] Ground cloud: polvo/vapor horizontal, no solo columna vertical.
+- [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
+- [ ] Validar en capturas si el deluge cloud no tapa en exceso la silueta durante
+  liftoff lateral y no queda flotando al alejarse el pad.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
   opcional si no distrae.
 
@@ -117,7 +151,7 @@ Aceptacion:
 - El pad no tapa la nave ni oculta el estado de vuelo.
 - La pluma cambia visualmente entre SL, upper stage y vacio.
 
-## V3 — Reentry Visual
+## V3 — Reentry Visual ✅ PARCIAL
 
 Archivos probables:
 - `scripts/ReentryPlasmaController.cs`
@@ -126,14 +160,21 @@ Archivos probables:
 - `ExosphereSimulation/Physics/ThermalModel.cs` solo si hace falta exponer datos
   ya existentes; no retunear fisica sin tests.
 
-Mejoras:
-- Plasma ligado a heat flux, velocidad y densidad, no solo a un umbral simple.
-- Shock layer concentrado en windward y nose/leading edges.
-- Trail ionizado/estela tenue durante peak heating.
-- Charring progresivo por zonas de tile.
-- Breakup visual por fragmentos calientes cuando `ThermalBreakup` ocurre.
-- Si la orientacion es incorrecta, los efectos deben dejar claro que el flujo pega
-  donde no hay escudo.
+Hecho:
+- [x] Plasma ligado al heat flux real (`ThermalModel.ComputeHeatFlux`), densidad
+  y velocidad.
+- [x] Shock cap orientado a la cara windward usando `ThermalModel.WindwardFactor`.
+- [x] Wake ionizado tenue durante heating.
+- [x] Charring progresivo de tiles por `Part.ThermalDamage`/temperatura.
+- [x] Breakup VFX cuando ocurre destruccion termica.
+- [x] Entrada mal orientada se ve mas roja/extendida que belly-first nominal.
+
+Pendiente:
+- [ ] Shock/plasma localizado en nose, leading edges y flap edges, no solo cap global.
+- [ ] Charring por zonas: nose/flaps/belly no deben degradarse todos al mismo ritmo.
+- [ ] Capturas comparativas belly-flop nominal vs mala orientacion.
+- [ ] Verificar que plasma/wake no ocultan HUD, cockpit ni map view.
+- [ ] Afinar color/alpha por fase: inicio de plasma, peak heating, salida de heating.
 
 Aceptacion:
 - Belly-flop nominal se ve protegido y controlado.
@@ -190,13 +231,15 @@ Aceptacion:
 ## Orden De Implementacion Recomendado
 
 1. V0 capturas baseline. ✅ Captura real con framebuffer via `xvfb-run` validada (ver tope del doc).
-2. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino y grid fins.
-3. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad). Falta:
+2. V0.5 auditoria con referencias reales para cada fase antes de tocar mas VFX.
+3. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino
+   y grid fins close-up.
+4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad). Falta:
    **hot-staging** (gap confirmado, approach especificado arriba), startup/ramp, pluma de vacio
    "limpia" con menos humo.
-4. V3 reentry plasma/charring.
-5. V4 camara/luz/atmosfera.
-6. V5 capturas automatizadas en CI (cablear el xvfb capture de V0).
+5. V3 reentry plasma/charring localizado.
+6. V4 camara/luz/atmosfera.
+7. V5 capturas automatizadas en CI (cablear el xvfb capture de V0).
 
 ## Bitacora Para El Proximo Agente (que se hizo y como continuar)
 

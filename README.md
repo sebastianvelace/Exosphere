@@ -81,6 +81,19 @@ VAB smoke test:
 
 Note: Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture is not reliable without a real framebuffer such as Xvfb or an equivalent display backend.
 
+## Visual Capture Rule
+
+Use Godot `--headless` only for smoke/load checks. For screenshot validation, run
+Godot under a real framebuffer:
+
+```bash
+xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" --path . --rendering-driver opengl3
+```
+
+Screenshot harnesses must be temporary and untracked: `scripts/_*Shot.cs`,
+`scripts/*VerifyShot.cs`, `scenes/*VerifyShot.tscn`, and temporary autoload edits
+in `project.godot`.
+
 ## Run In Godot
 
 Open the project folder in Godot 4.6.3 mono and run the project. The main scene is:

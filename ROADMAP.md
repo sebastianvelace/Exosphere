@@ -113,9 +113,13 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 ## Orden Recomendado
 
 1. Ejecutar `bash tools/ci_check.sh` antes de tocar visuales.
-2. Cerrar el siguiente bloque de `PLAN_VISUAL_REALISM.md`: hot-staging/vac plume
-   y reentry visual avanzado.
-3. Agregar capturas de aceptacion reproducibles.
+2. Cerrar el siguiente bloque visual real:
+   - hot-staging flash/plume entre etapas;
+   - startup/ramp de ignicion;
+   - validacion de pluma de vacio contra captura orbital;
+   - reentry visual avanzado solo en lo pendiente: nose/leading edges, capturas
+     nominal/fallo y legibilidad HUD.
+3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
 5. Recien despues volver a gameplay grande: misiones, save/load, recursos o
    engine-out real.

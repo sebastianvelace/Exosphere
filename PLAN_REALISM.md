@@ -203,13 +203,11 @@ equivocada hace la órbita.
 
 ---
 
-## Orden de ejecución sugerido
-1. **Ola 1** (R1+R2+R3) — un agente, `AscentController.cs` + `MissionManager.cs`. Máximo impacto de
-   realismo, archivos acotados, verificable con la telemetría. **Empezar por acá.**
-2. **Ola 3** (R8, R9, R10) — pulido de reingreso/datos; archivos disjuntos de Ola 1 → en paralelo.
-3. **Ola 2** (R4, R6, R7) — sim/aero con tests + `physics-reviewer`. R5 (multi-motor) es su propio
-   épico, planear aparte por su impacto en render/staging/contratos.
-4. **Ola 4** — sistemas/UX cuando lo anterior esté firme.
+## Orden de ejecucion actual
+1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
+2. Backlog fisico real pendiente: R5 multi-motor, R6 lift/AoA, R7 termosfera/decay.
+3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5.
+4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)
 - Build 0/0 (sim + juego) + `dotnet test` verde; tests nuevos donde se toque física.

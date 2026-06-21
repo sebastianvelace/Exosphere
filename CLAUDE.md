@@ -35,6 +35,19 @@ For VAB:
 
 Expected standard: 0 warnings, 0 errors, tests passing.
 
+## Visual Capture Rule
+
+Use Godot `--headless` only for smoke/load checks. For screenshot validation, run
+Godot under a real framebuffer:
+
+```bash
+xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" --path . --rendering-driver opengl3
+```
+
+Screenshot harnesses must be temporary and untracked: `scripts/_*Shot.cs`,
+`scripts/*VerifyShot.cs`, `scenes/*VerifyShot.tscn`, and temporary autoload edits
+in `project.godot`.
+
 ## Architecture Boundary
 
 There are two assemblies:
