@@ -6,14 +6,22 @@ Estado de cierre actual:
 - Godot headless carga la escena principal sin errores.
 - VAB V1.5 existe como nucleo testeable (`ExosphereSimulation/Construction`), escena `Construction.tscn`, preview 3D, craft files y flujo VAB -> launch.
 
-## En Implementacion Activa (agentes desplegados)
+## Estado De Implementacion (tanda actual)
 
-Este roadmap esta en ejecucion. Frentes con trabajo en curso ahora mismo:
-- **Interplanetario real — patched conics / transiciones de SOI** (sim + tests + physics-reviewer).
-- **Reentry visual avanzado — plasma por flujo, dano de tiles y breakup** (capa de juego).
-- **VAB UX — navegador de craft files y manipulacion en preview** (capa de juego).
+- **VAB UX — navegador de craft files**: HECHO en `main`. Panel "Saved Crafts" en el VAB
+  (`ConstructionController`) que lista `user://crafts` y carga al clickear. Pendiente aun:
+  manipulacion directa de nodos en la preview 3D.
+- **Reentry visual avanzado**: HECHO en `main`. Plasma concentrado en la cara windward,
+  oscurecimiento de tiles por dano termico (`VesselRenderer`), y breakup VFX al destruirse por
+  calor (`ReentryBreakupController`). Pendiente: perdida de control por fallo estructural.
+- **Interplanetario — patched conics / transiciones de SOI**: PARCIAL, en la rama
+  `feat/patched-conic-soi-transition`, NO mergeado. La transicion de SOI funciona y tiene tests,
+  pero `physics-reviewer` detecto que a warp maximo (2000 s/Tick) el cruce de SOI se detecta a
+  tiempos de simulacion distintos segun la resolucion del warp (residual dt-proporcional ~9e7 m).
+  Se corrigio la reconstruccion del frame (BodyStateAt) reduciendolo de ~1.6e8 m a ~9e7 m y se
+  dejo un test [Fact(Skip)] que fija el caso. Queda resolver la causa de fondo antes de mergear.
 
-Los demas frentes (Starship visual fidelity, CI remoto) quedan en cola para la siguiente tanda.
+Frentes en cola: Starship visual fidelity (proporciones 9 m, separar SH/Ship), CI con Godot remoto.
 
 ## VAB / Construccion De Naves
 
