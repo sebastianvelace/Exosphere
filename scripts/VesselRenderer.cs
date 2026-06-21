@@ -143,6 +143,8 @@ public partial class VesselRenderer : Node3D
         _hullMesh = AddMesh("SHBody", new CylinderMesh
             { TopRadius = BodyR, BottomRadius = BodyR, Height = 18f, RadialSegments = 64 },
             shSteel, new Vector3(0, 11f, 0));
+        AddWeldRings("SHBarrelWeld", BodyR + 0.018f, 3.1f, 19.0f, 9);
+        AddHullRing("SHFrostLOX", BodyR + 0.026f, 15.8f, 0.10f, FrostMat);
 
         // Raceway / conduit running up one side of the booster (real SH detail).
         AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
@@ -314,6 +316,14 @@ public partial class VesselRenderer : Node3D
         _hullMesh = AddMesh("Body",
             new CylinderMesh { TopRadius = BodyR, BottomRadius = BodyR, Height = 14f, RadialSegments = 64 },
             shipSteel, new Vector3(0, o + 31f, 0));
+        AddWeldRings("ShipBarrelWeld", BodyR + 0.018f, o + 24.8f, o + 37.3f, 7);
+        AddHullRing("ShipFrostLOX", BodyR + 0.026f, o + 34.2f, 0.08f, FrostMat);
+        AddHullRing("ShipFrostCH4", BodyR + 0.026f, o + 28.0f, 0.07f, FrostMat);
+
+        // Leeward external raceway/cable cover. It gives the upper stage an
+        // asymmetric real-vehicle cue without changing the windward tile side.
+        AddSurfaceBox("ShipRaceway", angle: 0f, y: o + 31.0f, height: 11.4f,
+            width: 0.18f, depth: 0.18f, mat: darkSteel, radius: BodyR + 0.045f);
 
         // Windward black-tile band: a slightly larger half-cylinder shell on the
         // -X side, running the full body height. Built from short tile staves so
@@ -628,12 +638,21 @@ public partial class VesselRenderer : Node3D
     private StandardMaterial3D WeldMat =>
         _weldMat ??= Mat(new Color(0.36f, 0.36f, 0.39f), 0.85f, 0.45f);
 
+    private StandardMaterial3D? _frostMat;
+    private StandardMaterial3D FrostMat =>
+        _frostMat ??= Mat(new Color(0.70f, 0.80f, 0.86f), 0.05f, 0.86f);
+
     // A thin ring proud of the hull marking a weld seam between barrel sections.
     private void AddWeldRing(string name, float radius, float y)
     {
+        AddHullRing(name, radius, y, 0.06f, WeldMat);
+    }
+
+    private void AddHullRing(string name, float radius, float y, float height, Material mat)
+    {
         AddMesh(name, new CylinderMesh
-            { TopRadius = radius, BottomRadius = radius, Height = 0.06f, RadialSegments = 48 },
-            WeldMat, new Vector3(0, y, 0));
+            { TopRadius = radius, BottomRadius = radius, Height = height, RadialSegments = 64 },
+            mat, new Vector3(0, y, 0));
     }
 
     // A stack of evenly spaced weld rings between two heights.
@@ -644,6 +663,22 @@ public partial class VesselRenderer : Node3D
             float t = (i + 1f) / (count + 1f);
             AddWeldRing($"{prefix}{i}", radius, Mathf.Lerp(yStart, yEnd, t));
         }
+    }
+
+    private void AddSurfaceBox(string name, float angle, float y, float height,
+        float width, float depth, Material mat, float radius)
+    {
+        float cos = Mathf.Cos(angle);
+        float sin = Mathf.Sin(angle);
+        var box = new MeshInstance3D
+        {
+            Name            = name,
+            Mesh            = new BoxMesh { Size = new Vector3(width, height, depth) },
+            Position        = new Vector3(radius * cos, y, radius * sin),
+            RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(angle) + 90f, 0f),
+        };
+        box.SetSurfaceOverrideMaterial(0, mat);
+        AddChild(box);
     }
 
     // Black heat-shield tile coverage over the windward (-X) half of a body
