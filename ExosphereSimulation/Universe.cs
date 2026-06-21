@@ -380,12 +380,19 @@ public class Universe
 
     private void PropagateVesselOnRails(Vessel vessel, double dt)
     {
-        // Compute or reuse cached orbital elements
+        // Compute or reuse cached orbital elements.
+        // CRITICAL: the global bodies were already propagated to the tick's END time by
+        // PropagateAllBodies before this runs, but vessel.Position/Velocity still correspond
+        // to CurrentTime (the conic's epoch). Build the relative state against the reference
+        // body's state AT CurrentTime (via BodyStateAt) — using its end-of-tick position would
+        // bias the initial conic by (body velocity × dt), which at high warp (dt up to 2000 s)
+        // is tens of thousands of km — a wrong orbit the instant warp is engaged.
         if (vessel.OrbitalState is null)
         {
-            var refBody = GetDominantBody(vessel.Position);
-            var relPos  = vessel.Position - refBody.Position;
-            var relVel  = vessel.Velocity - refBody.Velocity;
+            var refBody      = GetDominantBodyAt(vessel.Position, CurrentTime);
+            var (refP, refV) = BodyStateAt(refBody, CurrentTime);
+            var relPos       = vessel.Position - refP;
+            var relVel       = vessel.Velocity - refV;
             vessel.OrbitalState    = KeplerPropagator.ComputeElements(
                 relPos, relVel, refBody.GM, refBody.Id, CurrentTime);
             vessel.ReferenceBodyId = refBody.Id;

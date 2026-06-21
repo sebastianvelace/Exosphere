@@ -99,15 +99,15 @@ public sealed class NavigationRegressionTests
         Assert.True(velError < 50.0, $"Inertial velocity diverged by {velError:N3} m/s across warp resolutions.");
     }
 
-    // KNOWN GAP (held out of main): at real max warp (×100000 @ 50 Hz → 2000 s sim per Tick),
-    // a hyperbolic Earth→Sun escape is detected crossing Earth's SOI at a materially different
-    // SIM TIME depending on the warp sub-step size (fine ~1s Tick: t≈555042 s; coarse 2000 s
-    // Tick: t≈456266 s — a ~99 000 s difference), so the heliocentric injection state differs
-    // (fine vs coarse end state ≈ 9.2e7 m / 98 m/s apart). Reconstructing the crossing with the
-    // reference body state at the crossing time (BodyStateAt) cut this from ~1.6e8 m to ~9.2e7 m,
-    // but the residual is dt-proportional, pointing at a deeper on-rails propagation interaction —
-    // not just the frozen-frame reconstruction. Re-enable this [Fact] when that is resolved.
-    [Fact(Skip = "Known gap: SOI crossing detected at different sim-times across warp resolutions (dt-proportional). See comment.")]
+    // Regression guard for warp-resolution-independent SOI transitions. At real max warp
+    // (×100000 @ 50 Hz → 2000 s of sim time advanced per single Tick) the bodies are propagated
+    // to the tick's END time before the vessel is propagated, so BOTH the initial conic and the
+    // SOI-crossing reconstruction must use the reference body's state at the EPOCH / crossing time
+    // (BodyStateAt), not its end-of-tick position. Using the stale end-of-tick body position
+    // biased the orbit by (body velocity × dt) — at 2000 s that is ~60 000 km, which shifted the
+    // SOI exit by ~99 000 s of sim time and the heliocentric injection by ~1.6e8 m. A hyperbolic
+    // Earth→Sun escape must now end at (nearly) the same inertial state at any warp sub-step size.
+    [Fact]
     public void EarthSoiExitStaysContinuousAtRealMaxWarpTick()
     {
         double r0 = 700_000_000.0;   // inside Earth's SOI
