@@ -43,6 +43,26 @@ public partial class AscentController : Control
     private const double AssistGain = 2.2;
     private const double AssistDamp = 0.9;
 
+    // ── Staging (hot-stage at MECO, not at depletion) ──────────────────────────────
+    // Real Super Heavy MECO/hot-staging is at ~2.3-2.4 km/s and ~65 km, leaving a
+    // boostback/landing reserve — NOT a burn-to-empty at apoapsis. Stage on velocity so
+    // the upper stage (Starship) flies the orbital insertion, like the real vehicle.
+    private const double StagingSpeed      = 2300.0;   // m/s surface speed to hot-stage SH
+    private const double StagingMinAlt     = 45_000.0; // m floor so a slow climb still stages high
+    private const double BoosterReserveFrac = 0.06;    // never burn the booster below ~6% prop
+    private bool _mecoStaged;
+
+    // Gravity-turn elevation angle (deg above the local horizon) as a function of altitude.
+    // Vertical off the pad, then an AGGRESSIVE pitch-over so horizontal velocity builds early
+    // instead of lofting to a high ballistic apoapsis: ~57° at 10 km, ~43° at 20 km, ~23° at
+    // 40 km, ~5° by ~65 km. (The old law was linear-in-altitude and stayed ~85° to Max-Q.)
+    private static double GravityTurnElevationDeg(double altMeters)
+    {
+        if (altMeters < 600.0) return 90.0;
+        double f = System.Math.Sqrt(System.Math.Clamp((altMeters - 600.0) / 64_000.0, 0.0, 1.0));
+        return System.Math.Clamp(90.0 - 85.0 * f, 5.0, 90.0);
+    }
+
     // Engine spool-up: thrust ramps over this many seconds while the hold-downs stay clamped;
     // the vehicle only releases once it can actually lift its own weight (TWR > 1).
     private const double IgnitionTime = 3.0;
@@ -108,6 +128,7 @@ public partial class AscentController : Control
 
         vessel.SASEnabled = false;
         _active = true;
+        _mecoStaged = false;
         // Start with a real ignition sequence when still clamped: spool the engines up and only
         // release the hold-downs once thrust exceeds weight. If already flying, skip to ascent.
         if (vessel.IsGroundHeld)
@@ -249,10 +270,20 @@ public partial class AscentController : Control
 
         if (_phase == Phase.Ascent)
         {
-            // Gravity turn: pitch over with altitude, keeping ~10% vertical so apoapsis
-            // keeps climbing toward target even with a low-TWR upper stage.
-            double f = System.Math.Clamp((_alt - 2_000.0) / 90_000.0, 0.0, 0.90);
-            dir = (up * (1.0 - f) + east * f).Normalized;
+            // Realistic gravity turn: vertical off the pad, then pitch over by an
+            // altitude-scheduled elevation angle (aggressive — builds horizontal velocity
+            // early instead of lofting). dir = horizon·cos(elev) + up·sin(elev).
+            double elevDeg = GravityTurnElevationDeg(_alt);
+            // Loft floor: the low-TWR upper stage flattens out before the apoapsis reaches the
+            // parking target and would stall low (then start descending), so keep enough upward
+            // pitch to drive the apoapsis up to target — easing the floor off as it nears.
+            if (_apo < _apoTarget)
+            {
+                double need = System.Math.Clamp((_apoTarget - _apo) / 40_000.0, 0.0, 1.0);
+                elevDeg = System.Math.Max(elevDeg, 8.0 + need * 22.0);   // 8°..30° floor
+            }
+            double elev = elevDeg * System.Math.PI / 180.0;
+            dir = (east * System.Math.Cos(elev) + up * System.Math.Sin(elev)).Normalized;
             // Ease the throttle down through peak dynamic pressure to limit aero loads, then
             // back to full once past Max-Q — the real "throttling down … throttle up" profile.
             _q = vessel.GetDynamicPressure(body);
@@ -305,7 +336,7 @@ public partial class AscentController : Control
         vessel.PitchYawRoll    = Vector3d.Zero;
         vessel.Throttle        = throttle;
 
-        AutoStage(vessel, bridge!);
+        AutoStage(vessel, bridge!, body);
         QueueRedraw();
     }
 
@@ -359,8 +390,9 @@ public partial class AscentController : Control
         }
         else
         {
-            double f = System.Math.Clamp((_alt - 2_000.0) / 90_000.0, 0.0, 0.90);
-            desired = (up * (1.0 - f) + east * f).Normalized;
+            // Same aggressive gravity-turn elevation schedule as the [G] autopilot.
+            double elev = GravityTurnElevationDeg(_alt) * System.Math.PI / 180.0;
+            desired = (east * System.Math.Cos(elev) + up * System.Math.Sin(elev)).Normalized;
         }
 
         // Attitude error: rotate the world error axis (nose × desired) into body space and
@@ -385,9 +417,36 @@ public partial class AscentController : Control
             0.0);
     }
 
-    // Drop a spent stage once the burning stage is nearly dry and a decoupler remains.
-    private static void AutoStage(Vessel vessel, SimulationBridge bridge)
+    // Staging logic. For the Super Heavy first stage, HOT-STAGE at MECO — when it reaches
+    // staging velocity (with a boostback/landing reserve still in the tanks) — rather than
+    // burning it to depletion at apoapsis. Real SH MECO ~2.3-2.4 km/s, ~65 km; the upper stage
+    // then flies the orbital insertion. For any other (upper) stage, drop it at near-depletion.
+    private void AutoStage(Vessel vessel, SimulationBridge bridge, CelestialBody body)
     {
+        Part? sh = null;
+        foreach (var p in vessel.Parts.Parts)
+            if (p.Definition.Id == "super_heavy_booster") { sh = p; break; }
+
+        if (sh != null)
+        {
+            if (_mecoStaged) return;   // already separated this flight (booster may still be in debris)
+            double surfSpeed = vessel.GetSurfaceVelocity(body).Magnitude;
+            double cap  = sh.Definition.FuelCapacityLF + sh.Definition.FuelCapacityOx;
+            double left = sh.LiquidFuel + sh.Oxidizer;
+            double frac = cap > 0.0 ? left / cap : 0.0;
+
+            bool mecoBySpeed   = surfSpeed >= StagingSpeed && _alt > StagingMinAlt;
+            bool mecoByReserve = frac <= BoosterReserveFrac;   // never burn the booster dry
+            if (mecoBySpeed || mecoByReserve)
+            {
+                MissionManager.Instance?.EnterPhase(MissionPhase.MECO);
+                bridge.TriggerStaging();   // hot-stage: drop SH; Starship continues the insertion
+                _mecoStaged = true;
+            }
+            return;
+        }
+
+        // Upper stage(s): drop once the burning stage is nearly dry and a decoupler remains.
         double stageFuel = 0.0;
         foreach (var p in vessel.Parts.CurrentStageParts()) stageFuel += p.LiquidFuel;
         if (stageFuel > 4_000.0) return;
