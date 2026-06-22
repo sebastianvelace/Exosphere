@@ -131,7 +131,10 @@ Mejoras:
   `raptor_plume.gdshader` ya hace el vacio opticamente DELGADO a proposito (realista); contra la
   Tierra brillante se leia como un manchon. Subido `vacuumDim` 0.45->0.62 y `vacuumAlpha` 0.40->0.55
   (sigue mas tenue que SL, ahora legible). NO se reescribio el shader — es un asset deliberado.
-- [ ] Startup/ramp: transicion visible desde ignicion a liftoff.
+- [x] Startup/ramp: transicion visible desde ignicion a liftoff. `EngineStartupController`
+  agrega glow/flicker, vapor de chill y flecks de ignicion mientras la nave sigue
+  ground-held; verificado con trigger local Xvfb en `/tmp/exosphere_startup_00..33.png`.
+  Pendiente: comparar intensidad/timing contra referencias reales y ajustar solo si se ve teatral.
 - [x] Hot-staging VFX implementado en codigo: al staging `SimulationBridge.TriggerStaging`
   reconstruye la Ship, spawnea el debris de Super Heavy y emite `VesselStaged`;
   `HotStageFlashController` escucha esa senal y dispara flash/luz/anillo de choque/plume corto/hollin.
@@ -237,8 +240,8 @@ Aceptacion:
    y grid fins close-up.
 4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad),
    ✅ hot-staging VFX implementado y verificado con trigger local multiframe. Falta:
-   captura de hot-staging en ascenso real, comparacion contra referencia, startup/ramp
-   y pluma de vacio "limpia" con menos humo.
+   captura de hot-staging en ascenso real, comparacion contra referencia, comparacion fina
+   de startup/ramp y pluma de vacio "limpia" con menos humo.
 5. V3 reentry plasma/charring localizado.
 6. V4 camara/luz/atmosfera.
 7. V5 capturas automatizadas en CI (cablear el xvfb capture de V0).
@@ -266,6 +269,9 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
   `VesselRenderer` muestra Super Heavy separado con hot-stage ring expuesto, vents y
   scorch/labio quemado. Validado con trigger local multiframe (`/tmp/exosphere_hotstage_after_*.png`).
   Falta capturar el evento dentro del ascenso real y comparar contra frames IFT T+2:39/T+2:40.
+- **Startup/ramp VFX**: `EngineStartupController` agrega pre-release engine glow, vapor y
+  flicker en el mount mientras `IsGroundHeld` y throttle sube. Validado con trigger local
+  multiframe (`/tmp/exosphere_startup_*.png`); falta comparar contra startup real y ajustar timing.
 
 **Como tunear plumas (mapa rapido):**
 - Tamaño/colores/brillo por anillo: `PlumeSystem.SetupSH` / `SetupStarship` (mouthR, length, core).
@@ -275,7 +281,7 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
   vacio = largo/tenue/sin diamantes (a proposito).
 - Ground cloud (deluge): `LaunchEffectsController.cs`.
 
-**Proximo paso mas valioso:** screenshot sweep de hot-staging con framebuffer real y captura
-multiframe; despues comparar contra referencia IFT y ajustar solo lo observable. Luego startup/ramp
-de ignicion, y despues V3 (reentry plasma ligado al heat flux real, que YA esta en el sim como
-`WorstHeatRatio`/`Part.ThermalDamage`).
+**Proximo paso mas valioso:** screenshot sweep de hot-staging en ascenso real con framebuffer
+real y captura multiframe; despues comparar hot-staging/startup contra referencia IFT y ajustar
+solo lo observable. Luego V3 (reentry plasma localizado ligado al heat flux real, que YA esta
+en el sim como `WorstHeatRatio`/`Part.ThermalDamage`).

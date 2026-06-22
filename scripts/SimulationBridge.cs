@@ -112,6 +112,10 @@ public partial class SimulationBridge : Node
             var launchFx = new LaunchEffectsController { Name = "LaunchEffectsController" };
             worldNode.CallDeferred("add_child", launchFx);
 
+            // Pre-release engine startup glow, steam and ignition flicker at the mount.
+            var startupFx = new EngineStartupController { Name = "EngineStartupController" };
+            worldNode.CallDeferred("add_child", startupFx);
+
             // Transient Ship-engine flash and soot burst at Starship/Super Heavy hot-staging.
             var hotStageFx = new HotStageFlashController { Name = "HotStageFlashController" };
             worldNode.CallDeferred("add_child", hotStageFx);
