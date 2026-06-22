@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using System.Collections.Generic;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Physics;
 
@@ -20,6 +21,17 @@ public partial class ReentryPlasmaController : Node3D
     private MeshInstance3D?     _wake;    // trailing ionised wake
     private StandardMaterial3D? _shockMat;
     private StandardMaterial3D? _wakeMat;
+    private readonly List<EdgeGlow> _edgeGlows = new();
+
+    private sealed class EdgeGlow
+    {
+        public MeshInstance3D Mesh = null!;
+        public StandardMaterial3D Mat = null!;
+        public Vector3d LocalPosition;
+        public Vector3 BaseScale;
+        public float Weight;
+        public float Delay;
+    }
 
     // Heat-flux thresholds (W/m²). Below FLUX_THRESH there is no visible plasma;
     // at/above FLUX_PEAK the glow is saturated white-hot.
@@ -70,6 +82,8 @@ public partial class ReentryPlasmaController : Node3D
         _wake.SetSurfaceOverrideMaterial(0, _wakeMat);
         AddChild(_wake);
 
+        BuildLocalizedEdgeGlows();
+
         // Break-up VFX lives as a sibling effect at the same render origin. We host it
         // here (rather than in SimulationBridge) so the plasma + break-up re-entry
         // effects are created and torn down together. It watches the active vessel's
@@ -86,8 +100,7 @@ public partial class ReentryPlasmaController : Node3D
         var vessel = bridge?.ActiveVessel;
         if (bridge == null || vessel == null || vessel.IsDestroyed)
         {
-            _shock.Visible = false;
-            _wake.Visible  = false;
+            SetEffectsVisible(false);
             return;
         }
 
@@ -103,8 +116,7 @@ public partial class ReentryPlasmaController : Node3D
 
         if (intensity < 0.01)
         {
-            _shock.Visible = false;
-            _wake.Visible  = false;
+            SetEffectsVisible(false);
             return;
         }
 
@@ -128,9 +140,10 @@ public partial class ReentryPlasmaController : Node3D
             new Vector3d(surfVel.X, surfVel.Y, surfVel.Z));
         double windward = ThermalModel.WindwardFactor(flowLocal);   // 1 = belly squarely into flow
 
-        // Vessel body centre at the render origin; full stack sits higher than a lone Starship.
+        // Vessel body centre in render space. The plasma controller is a sibling of
+        // the renderer, so it must apply the vessel orientation itself.
         bool hasSH = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
-        Vector3 bodyCentre = new Vector3(0f, hasSH ? 30f : 8f, 0f);
+        Vector3 bodyCentre = ToGodot(vessel.Orientation.Rotate(new Vector3d(0.0, hasSH ? 30.0 : 8.0, 0.0)));
 
         // Shock sits on the windward (leading) face; wake streams out behind.
         _shock.Position = bodyCentre + flowDir * (hasSH ? 5f : 1.35f);
@@ -159,7 +172,7 @@ public partial class ReentryPlasmaController : Node3D
             1.0f,
             0.40f + 0.50f * white,
             0.08f + 0.72f * white,
-            (float)(intensity * 0.28f * flicker) * (0.6f + 0.4f * concentr));
+            (float)(intensity * 0.36f * flicker) * (0.6f + 0.4f * concentr));
         _shockMat.AlbedoColor              = shockCol;
         _shockMat.Emission                 = new Color(shockCol.R, shockCol.G, shockCol.B);
         _shockMat.EmissionEnergyMultiplier = (float)(0.8 + intensity * 2.0) * flicker * exposure;
@@ -173,7 +186,126 @@ public partial class ReentryPlasmaController : Node3D
         // Mesh local +Y now points along the flow (set by OrientYAxis above), so
         // squash Y to press the cap onto the windward face.
         _shock.Scale = new Vector3(sizeScale * (1f + 0.4f * align), sizeScale * flatten, sizeScale * (1f + 0.4f * align));
+
+        UpdateLocalizedEdgeGlows(vessel.Orientation, (float)intensity, align, exposure, hasSH, flicker);
     }
+
+    private void BuildLocalizedEdgeGlows()
+    {
+        // Standalone Starship render coordinates (BuildStarshipSection yOffset = -22):
+        // nose tip ≈ y 21, forward flaps ≈ y 15, aft flaps ≈ y 4.
+        AddEdgeGlow("NoseLeadingHeat", new Vector3(-1.18f, 19.6f, 0.0f),
+            new Vector3(0.52f, 1.70f, 0.52f), weight: 1.0f, delay: 0.0f, nose: true);
+
+        AddEdgeGlow("BellyCenterHeat", new Vector3(-1.72f, 9.8f, 0.0f),
+            new Vector3(0.15f, 7.1f, 0.15f), weight: 0.58f, delay: 0.05f);
+
+        AddEdgeGlow("FwdFlapLeftHeat",  new Vector3(-1.66f, 15.0f,  1.20f),
+            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.08f);
+        AddEdgeGlow("FwdFlapRightHeat", new Vector3(-1.66f, 15.0f, -1.20f),
+            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.11f);
+
+        AddEdgeGlow("AftFlapLeftHeat",   new Vector3(-1.72f, 4.2f,  1.10f),
+            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.16f);
+        AddEdgeGlow("AftFlapRightHeat",  new Vector3(-1.72f, 4.2f, -1.10f),
+            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.19f);
+    }
+
+    private void AddEdgeGlow(string name, Vector3 position, Vector3 baseScale,
+        float weight, float delay, bool nose = false)
+    {
+        var mat = new StandardMaterial3D
+        {
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+            AlbedoColor = new Color(1.0f, 0.30f, 0.08f, 0f),
+            EmissionEnabled = true,
+            Emission = new Color(1.0f, 0.34f, 0.08f),
+            EmissionEnergyMultiplier = 0f,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        };
+
+        Mesh mesh = nose
+            ? new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 24, Rings = 12 }
+            : new CylinderMesh { TopRadius = 0.9f, BottomRadius = 0.9f, Height = 1f, RadialSegments = 16 };
+
+        var glow = new MeshInstance3D
+        {
+            Name = name,
+            Mesh = mesh,
+            Position = position,
+            Scale = baseScale,
+            Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            MaterialOverride = mat,
+        };
+
+        AddChild(glow);
+        _edgeGlows.Add(new EdgeGlow
+        {
+            Mesh = glow,
+            Mat = mat,
+            LocalPosition = new Vector3d(position.X, position.Y, position.Z),
+            BaseScale = baseScale,
+            Weight = weight,
+            Delay = delay,
+        });
+    }
+
+    private void UpdateLocalizedEdgeGlows(Quaterniond vesselOrientation, float intensity,
+        float align, float exposure, bool hasSH, float flicker)
+    {
+        // The localized cues are authored for standalone Starship. During full-stack
+        // ascent/reentry, hide them rather than drawing heat on the booster stack.
+        if (hasSH)
+        {
+            foreach (var edge in _edgeGlows) edge.Mesh.Visible = false;
+            return;
+        }
+
+        float edgeBase = Mathf.Clamp((intensity - 0.08f) / 0.92f, 0f, 1f);
+        float focus = Mathf.Lerp(0.58f, 1.0f, align);
+
+        foreach (var edge in _edgeGlows)
+        {
+            float k = Mathf.Clamp((edgeBase - edge.Delay) / (1f - edge.Delay), 0f, 1f);
+            if (k <= 0.01f)
+            {
+                edge.Mesh.Visible = false;
+                continue;
+            }
+
+            k *= edge.Weight * focus * flicker;
+            edge.Mesh.Visible = true;
+            edge.Mesh.Position = ToGodot(vesselOrientation.Rotate(edge.LocalPosition));
+            OrientYAxis(edge.Mesh, ToGodot(vesselOrientation.Rotate(Vector3d.Up)));
+            edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.65f * k);
+
+            float white = Mathf.Clamp(k * 1.25f, 0f, 1f);
+            var col = new Color(
+                1.0f,
+                0.22f + 0.60f * white,
+                0.06f + 0.42f * white,
+                0.16f + 0.54f * k);
+
+            edge.Mat.AlbedoColor = col;
+            edge.Mat.Emission = new Color(col.R, col.G, col.B);
+            edge.Mat.EmissionEnergyMultiplier = (2.0f + 8.0f * k) * exposure;
+        }
+    }
+
+    private void SetEffectsVisible(bool visible)
+    {
+        if (_shock != null) _shock.Visible = visible;
+        if (_wake != null) _wake.Visible = visible;
+        foreach (var edge in _edgeGlows)
+            edge.Mesh.Visible = visible;
+    }
+
+    private static Vector3 ToGodot(Vector3d v) =>
+        new((float)v.X, (float)v.Y, (float)v.Z);
 
     // Rotate a mesh whose local +Y should point along <paramref name="dir"/>.
     private static void OrientYAxis(Node3D node, Vector3 dir)

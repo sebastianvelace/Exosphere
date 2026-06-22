@@ -169,12 +169,17 @@ Hecho:
   y velocidad.
 - [x] Shock cap orientado a la cara windward usando `ThermalModel.WindwardFactor`.
 - [x] Wake ionizado tenue durante heating.
+- [x] Glow localizado primera pasada: nariz, belly center y leading edges de flaps
+  usan el mismo heat flux/windward y siguen `vessel.Orientation` aunque el plasma
+  sea sibling del renderer. Validado con captura sintética Xvfb
+  `/tmp/exosphere_reentry_edges.png`; pendiente captura de EDL nominal/fallo real.
 - [x] Charring progresivo de tiles por `Part.ThermalDamage`/temperatura.
 - [x] Breakup VFX cuando ocurre destruccion termica.
 - [x] Entrada mal orientada se ve mas roja/extendida que belly-first nominal.
 
 Pendiente:
-- [ ] Shock/plasma localizado en nose, leading edges y flap edges, no solo cap global.
+- [ ] Afinar shock/plasma localizado con capturas reales de EDL: tamano, alpha,
+  color y timing en nose, leading edges y flap edges.
 - [ ] Charring por zonas: nose/flaps/belly no deben degradarse todos al mismo ritmo.
 - [ ] Capturas comparativas belly-flop nominal vs mala orientacion.
 - [ ] Verificar que plasma/wake no ocultan HUD, cockpit ni map view.
@@ -242,7 +247,8 @@ Aceptacion:
    ✅ hot-staging VFX implementado y verificado con trigger local multiframe. Falta:
    captura de hot-staging en ascenso real, comparacion contra referencia, comparacion fina
    de startup/ramp y pluma de vacio "limpia" con menos humo.
-5. V3 reentry plasma/charring localizado.
+5. V3 reentry plasma/charring localizado. ✅ primera pasada de glows localizados
+   en nose/belly/flaps; falta comparativa nominal/fallo y charring por zonas.
 6. V4 camara/luz/atmosfera.
 7. V5 capturas automatizadas en CI (cablear el xvfb capture de V0).
 
@@ -272,6 +278,9 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
 - **Startup/ramp VFX**: `EngineStartupController` agrega pre-release engine glow, vapor y
   flicker en el mount mientras `IsGroundHeld` y throttle sube. Validado con trigger local
   multiframe (`/tmp/exosphere_startup_*.png`); falta comparar contra startup real y ajustar timing.
+- **Reentry localized glow V1**: `ReentryPlasmaController` ya no asume nave vertical para
+  cap/wake; aplica `vessel.Orientation` al centro de plasma y a glows de nariz, belly y flaps.
+  Validado con captura sintética `/tmp/exosphere_reentry_edges.png`; falta barrido real de EDL.
 
 **Como tunear plumas (mapa rapido):**
 - Tamaño/colores/brillo por anillo: `PlumeSystem.SetupSH` / `SetupStarship` (mouthR, length, core).

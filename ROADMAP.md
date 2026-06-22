@@ -45,8 +45,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
-   - Brillo windward, trail ionizado, tiles que se oscurecen por temperatura y
-     breakup mas legible si falla el escudo/orientacion.
+   - Primera pasada de glow localizado en nose, belly y flap leading edges ya implementada.
+   - Siguiente: capturas nominal/fallo reales, ajuste de alpha/timing y charring por zonas.
 
 3. **Entorno y camaras**
    - Pad costero ya tiene primera pasada visual.
