@@ -111,6 +111,10 @@ public partial class SimulationBridge : Node
             // Liftoff steam/dust deluge cloud at the pad.
             var launchFx = new LaunchEffectsController { Name = "LaunchEffectsController" };
             worldNode.CallDeferred("add_child", launchFx);
+
+            // Transient Ship-engine flash and soot burst at Starship/Super Heavy hot-staging.
+            var hotStageFx = new HotStageFlashController { Name = "HotStageFlashController" };
+            worldNode.CallDeferred("add_child", hotStageFx);
         }
 
         SpawnStarshipStack(dataPath);

@@ -40,8 +40,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      edge, soot/frost, vents, raceways, grid fins, flaps y engine bay.
    - Siguiente: close-up fino con referencias reales: proporciones de flaps/nariz,
      tiles mas finos, markings no intrusivos y variacion de acero.
-   - Mejor separacion visual Ship/Booster despues de hot-staging.
-   - Siguiente: hot-staging plume y pluma vacio mas diferenciadas.
+   - Hot-staging VFX implementado y verificado con trigger local multiframe; falta captura en ascenso real y comparacion contra referencia.
+   - Siguiente: startup/ramp de ignicion y pluma vacio mas diferenciada.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
@@ -114,7 +114,7 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 1. Ejecutar `bash tools/ci_check.sh` antes de tocar visuales.
 2. Cerrar el siguiente bloque visual real:
-   - hot-staging flash/plume entre etapas;
+   - captura de hot-staging en ascenso real y comparacion contra referencia;
    - startup/ramp de ignicion;
    - validacion de pluma de vacio contra captura orbital;
    - reentry visual avanzado solo en lo pendiente: nose/leading edges, capturas

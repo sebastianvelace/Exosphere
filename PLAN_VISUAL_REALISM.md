@@ -132,14 +132,15 @@ Mejoras:
   Tierra brillante se leia como un manchon. Subido `vacuumDim` 0.45->0.62 y `vacuumAlpha` 0.40->0.55
   (sigue mas tenue que SL, ahora legible). NO se reescribio el shader — es un asset deliberado.
 - [ ] Startup/ramp: transicion visible desde ignicion a liftoff.
-- [ ] Hot-staging: plume entre etapas — **GAP CONFIRMADO por captura**. Al separar (`exo_hotstage`,
-  ~63 km) la Starship ya enciende normal pero NO hay flash/plume brillante ENTRE etapas ni soot en el
-  hot-stage ring del booster. Approach para el proximo agente: enganchar la senal
-  `SimulationBridge.VesselStaged` (se emite en `TriggerStaging`); en un controlador nuevo
-  (`scripts/HotStageFlashController.cs`, patron self-install como `ReentryBreakupController`) spawnear
-  un OmniLight3D + un GpuParticles3D corto (~1-1.5 s) de plume/soot en el plano de separacion (y/o
-  scorch en el tope del booster en el `VesselRenderer` del debris). OJO: el momento dura ~1 frame —
-  el harness de captura debe disparar VARIOS frames seguidos tras el drop de part-count para verlo.
+- [x] Hot-staging VFX implementado en codigo: al staging `SimulationBridge.TriggerStaging`
+  reconstruye la Ship, spawnea el debris de Super Heavy y emite `VesselStaged`;
+  `HotStageFlashController` escucha esa senal y dispara flash/luz/anillo de choque/plume corto/hollin.
+  Validacion local: trigger forzado con harness temporal bajo Xvfb produjo multiframe
+  `/tmp/exosphere_hotstage_after_00..11.png`; se ve flash inicial y fade a humo/hollin. Pendiente:
+  captura en ascenso real y ajuste fino de encuadre/posicion contra referencia.
+- [ ] Hot-staging comparado contra referencia: pendiente comparar `/tmp/exosphere_hotstage_*.png`
+  con frames reales IFT T+2:39/T+2:40. Criterio: flash/plume entre etapas visible, booster separado
+  con ring chamuscado, Ship encendida y escala/encuadre legibles sin ocultar HUD.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
 - [ ] Validar en capturas si el deluge cloud no tapa en exceso la silueta durante
   liftoff lateral y no queda flotando al alejarse el pad.
@@ -234,9 +235,10 @@ Aceptacion:
 2. V0.5 auditoria con referencias reales para cada fase antes de tocar mas VFX.
 3. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino
    y grid fins close-up.
-4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad). Falta:
-   **hot-staging** (gap confirmado, approach especificado arriba), startup/ramp, pluma de vacio
-   "limpia" con menos humo.
+4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad),
+   ✅ hot-staging VFX implementado y verificado con trigger local multiframe. Falta:
+   captura de hot-staging en ascenso real, comparacion contra referencia, startup/ramp
+   y pluma de vacio "limpia" con menos humo.
 5. V3 reentry plasma/charring localizado.
 6. V4 camara/luz/atmosfera.
 7. V5 capturas automatizadas en CI (cablear el xvfb capture de V0).
@@ -258,6 +260,13 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
 - El **ground cloud** (`LaunchEffectsController.cs`) ya es una nube de deluge de 5 capas muy iterada
   ("N5"); las capturas confirman que es fuerte. **No tocar a ciegas.**
 
+**Implementado, pendiente de comparar contra referencia:**
+- **Hot-staging VFX**: `SimulationBridge.TriggerStaging` separa Ship/Booster y emite
+  `VesselStaged`; `HotStageFlashController` agrega flash/luz/anillo/plume/hollin, y
+  `VesselRenderer` muestra Super Heavy separado con hot-stage ring expuesto, vents y
+  scorch/labio quemado. Validado con trigger local multiframe (`/tmp/exosphere_hotstage_after_*.png`).
+  Falta capturar el evento dentro del ascenso real y comparar contra frames IFT T+2:39/T+2:40.
+
 **Como tunear plumas (mapa rapido):**
 - Tamaño/colores/brillo por anillo: `PlumeSystem.SetupSH` / `SetupStarship` (mouthR, length, core).
 - Brillo maestro + diamantes: uniforme `energy` y `diamond_count` en `PlumeSystem.BuildUnit`.
@@ -266,6 +275,7 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
   vacio = largo/tenue/sin diamantes (a proposito).
 - Ground cloud (deluge): `LaunchEffectsController.cs`.
 
-**Proximo paso mas valioso:** hot-staging (gap confirmado, approach detallado en V2 arriba). Luego
-startup/ramp de ignicion, y despues V3 (reentry plasma ligado al heat flux real, que YA esta en el
-sim como `WorstHeatRatio`/`Part.ThermalDamage`).
+**Proximo paso mas valioso:** screenshot sweep de hot-staging con framebuffer real y captura
+multiframe; despues comparar contra referencia IFT y ajustar solo lo observable. Luego startup/ramp
+de ignicion, y despues V3 (reentry plasma ligado al heat flux real, que YA esta en el sim como
+`WorstHeatRatio`/`Part.ThermalDamage`).
