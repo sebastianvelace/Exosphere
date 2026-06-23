@@ -379,6 +379,7 @@ public partial class VesselRenderer : Node3D
         AddSurfaceBox("ShipRaceway", angle: 0f, y: o + 31.0f, height: 11.4f,
             width: 0.18f, depth: 0.18f, mat: darkSteel, radius: BodyR + 0.045f);
         AddPayloadDoorOutline(o, darkSteel);
+        AddShipCloseupCues(o);
 
         // Windward black-tile band: a slightly larger half-cylinder shell on the
         // -X side, running the full body height. Built from short tile staves so
@@ -786,6 +787,36 @@ public partial class VesselRenderer : Node3D
         AddSurfaceBox("PayloadDoorBottom",a, o + 30.5f, 0.04f, 0.56f, 0.12f, mat, r);
     }
 
+    private void AddShipCloseupCues(float o)
+    {
+        var panelMat = Mat(new Color(0.30f, 0.30f, 0.33f), 0.86f, 0.46f);
+        var darkMark = Mat(new Color(0.055f, 0.055f, 0.062f), 0.20f, 0.82f);
+        var paleMark = Mat(new Color(0.72f, 0.73f, 0.75f), 0.35f, 0.66f);
+
+        // Small leeward access panels and vent/drain ports. These are deliberately
+        // subtle: close-up scale cues without turning the vehicle into a billboard.
+        AddSurfaceBox("ShipNoseAccessPanel", 0.20f, o + 39.6f, 1.15f, 0.030f, 0.11f, panelMat, BodyR + 0.050f);
+        AddSurfaceBox("ShipUpperAccessPanel", -0.24f, o + 35.0f, 1.55f, 0.032f, 0.11f, panelMat, BodyR + 0.050f);
+        AddSurfaceBox("ShipAftAccessPanel", 0.32f, o + 27.1f, 1.15f, 0.030f, 0.11f, panelMat, BodyR + 0.050f);
+
+        foreach (float y in new[] { o + 36.2f, o + 33.3f, o + 29.0f })
+        {
+            AddSurfaceBox($"ShipVentPort{(int)(y * 10)}A", 0.43f, y, 0.20f, 0.055f, 0.12f, darkMark, BodyR + 0.060f);
+            AddSurfaceBox($"ShipVentPort{(int)(y * 10)}B", 0.51f, y - 0.24f, 0.16f, 0.050f, 0.12f, darkMark, BodyR + 0.060f);
+        }
+
+        // Minimal serial-style bars on the leeward steel side. Avoids fake logos,
+        // but gives the large stainless tube a real-world service marking cue.
+        float a = -0.46f;
+        float r = BodyR + 0.063f;
+        AddSurfaceBox("ShipSerialStem", a, o + 32.6f, 1.25f, 0.035f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialTop", a, o + 33.20f, 0.035f, 0.42f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialMid", a, o + 32.60f, 0.035f, 0.34f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialBot", a, o + 32.00f, 0.035f, 0.42f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialTick0", a - 0.09f, o + 33.05f, 0.42f, 0.030f, 0.12f, paleMark, r);
+        AddSurfaceBox("ShipSerialTick1", a - 0.15f, o + 32.18f, 0.42f, 0.030f, 0.12f, paleMark, r);
+    }
+
     private void AddHeatShieldBorder(float yBottom, float yTop, float radius)
     {
         var border = Mat(new Color(0.018f, 0.018f, 0.022f), 0.0f, 0.96f);
@@ -895,6 +926,28 @@ public partial class VesselRenderer : Node3D
         };
         blade.SetSurfaceOverrideMaterial(0, mat);
         AddChild(blade);
+
+        var edgeMat = Mat(new Color(0.020f, 0.020f, 0.024f), 0.0f, 0.94f);
+        var leading = new MeshInstance3D
+        {
+            Name = name + "LeadingEdge",
+            Mesh = new BoxMesh { Size = new Vector3(0.12f, length * 0.96f, 0.070f) },
+            Position = new Vector3(chord * 0.45f, 0f, -0.10f),
+        };
+        leading.SetSurfaceOverrideMaterial(0, edgeMat);
+        blade.AddChild(leading);
+
+        for (int s = -2; s <= 2; s++)
+        {
+            var seam = new MeshInstance3D
+            {
+                Name = $"{name}TileSeam{s}",
+                Mesh = new BoxMesh { Size = new Vector3(chord * 0.70f, 0.030f, 0.060f) },
+                Position = new Vector3(0f, s * length * 0.16f, -0.105f),
+            };
+            seam.SetSurfaceOverrideMaterial(0, edgeMat);
+            blade.AddChild(seam);
+        }
 
         // Root fairing where the flap meets the hull.
         var root = new MeshInstance3D

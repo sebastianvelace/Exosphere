@@ -110,6 +110,9 @@ Mejoras:
   mounts, dark cavities.
 - [x] Super Heavy separado: hot-stage ring, vents, soot, scorched top and aft skirt.
 - [x] Primera pasada de payload-door cues, seams longitudinales y aft shield/skirt.
+- [x] Close-up cues Starship V1: access panels discretos, vent/drain ports,
+  serial-style bars no intrusivos, leading edges y tile seams en flaps. Validado
+  con captura Xvfb `/tmp/exosphere_ship_closeup.png`.
 
 Aceptacion:
 - En pad lateral se identifica inmediatamente una Starship/Super Heavy.
@@ -249,7 +252,8 @@ Aceptacion:
 1. V0 capturas baseline. ✅ Captura real con framebuffer via `xvfb-run` validada (ver tope del doc).
 2. V0.5 auditoria con referencias reales para cada fase antes de tocar mas VFX.
 3. V1 materiales/superficie Starship. Parcialmente cerrado; grid fins close-up V1
-   implementado. Falta close-up fino de nariz/flaps/tiles/markings contra referencia.
+   y close-up cues Starship V1 implementados. Falta comparacion fina de
+   nariz/flaps/tiles/markings contra referencia.
 4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad),
    ✅ hot-staging VFX implementado y verificado con trigger local multiframe,
    ✅ smoke/soot de pluma vacio atenuado. Falta: captura de hot-staging en ascenso real,
@@ -295,6 +299,9 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
 - **Grid fins close-up V1**: `VesselRenderer.AddSHGridFins` usa placa trapezoidal,
   hinge drum, marco/ribs/diagonales y cant leve. Validado con
   `/tmp/exosphere_gridfin_closeup.png`; falta comparacion fina contra referencias Starbase/IFT.
+- **Starship close-up cues V1**: `VesselRenderer` agrega access panels, vents,
+  serial-style bars, leading edges y seams en flaps. Validado con
+  `/tmp/exosphere_ship_closeup.png`; falta comparacion fina contra referencias reales.
 
 **Como tunear plumas (mapa rapido):**
 - Tamaño/colores/brillo por anillo: `PlumeSystem.SetupSH` / `SetupStarship` (mouthR, length, core).

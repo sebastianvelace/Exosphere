@@ -39,8 +39,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield
      edge, soot/frost, vents, raceways, grid fins, flaps y engine bay.
    - Grid fins close-up V1 implementado con placa trapezoidal, hinge/lattice y diagonales.
-   - Siguiente: close-up fino con referencias reales: proporciones de flaps/nariz,
-     tiles mas finos, markings no intrusivos y variacion de acero.
+   - Starship close-up cues V1 implementado con access panels, vent/drain ports,
+     markings discretos, flap leading edges y tile seams.
+   - Siguiente: comparacion fina con referencias reales: proporciones de flaps/nariz,
+     densidad de tiles, ubicacion de markings y variacion de acero.
    - Startup/ramp y hot-staging VFX implementados y verificados con trigger local multiframe.
    - Pluma de vacio ahora atenúa smoke/soot con expansion alta.
    - Siguiente: captura de hot-staging en ascenso real, comparacion contra referencia y validacion orbital de pluma vacio limpia.
