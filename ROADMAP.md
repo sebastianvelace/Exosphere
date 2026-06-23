@@ -38,6 +38,7 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield
      edge, soot/frost, vents, raceways, grid fins, flaps y engine bay.
+   - Grid fins close-up V1 implementado con placa trapezoidal, hinge/lattice y diagonales.
    - Siguiente: close-up fino con referencias reales: proporciones de flaps/nariz,
      tiles mas finos, markings no intrusivos y variacion de acero.
    - Startup/ramp y hot-staging VFX implementados y verificados con trigger local multiframe.

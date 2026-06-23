@@ -101,8 +101,10 @@ Mejoras:
   transicion hacia acero.
 - [x] Raceways/cable covers y detalles externos principales.
 - [x] Grid fins primera pasada: 4 fins, mount/pivote, lattice visual y sombreado basico.
-- [ ] Grid fins close-up: proporcion fina, inclinacion/offset, biseles y silueta
-  menos rectangular contra referencias reales.
+- [x] Grid fins close-up V1: placa trapezoidal con grosor, hinge drum, marco,
+  ribs densos y diagonales; menos rectangular que la primera pasada. Validado con
+  captura Xvfb `/tmp/exosphere_gridfin_closeup.png`. Pendiente comparar proporciones
+  finas contra referencia real.
 - [x] Flaps con base/hinge mas legibles y offset realista.
 - [x] Engine bay con 33 motores visuales mas creibles: outer ring, inner cluster,
   mounts, dark cavities.
@@ -246,8 +248,8 @@ Aceptacion:
 
 1. V0 capturas baseline. ✅ Captura real con framebuffer via `xvfb-run` validada (ver tope del doc).
 2. V0.5 auditoria con referencias reales para cada fase antes de tocar mas VFX.
-3. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino
-   y grid fins close-up.
+3. V1 materiales/superficie Starship. Parcialmente cerrado; grid fins close-up V1
+   implementado. Falta close-up fino de nariz/flaps/tiles/markings contra referencia.
 4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad),
    ✅ hot-staging VFX implementado y verificado con trigger local multiframe,
    ✅ smoke/soot de pluma vacio atenuado. Falta: captura de hot-staging en ascenso real,
@@ -290,6 +292,9 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
 - **Reentry localized glow V1**: `ReentryPlasmaController` ya no asume nave vertical para
   cap/wake; aplica `vessel.Orientation` al centro de plasma y a glows de nariz, belly y flaps.
   Validado con captura sintética `/tmp/exosphere_reentry_edges.png`; falta barrido real de EDL.
+- **Grid fins close-up V1**: `VesselRenderer.AddSHGridFins` usa placa trapezoidal,
+  hinge drum, marco/ribs/diagonales y cant leve. Validado con
+  `/tmp/exosphere_gridfin_closeup.png`; falta comparacion fina contra referencias Starbase/IFT.
 
 **Como tunear plumas (mapa rapido):**
 - Tamaño/colores/brillo por anillo: `PlumeSystem.SetupSH` / `SetupStarship` (mouthR, length, core).

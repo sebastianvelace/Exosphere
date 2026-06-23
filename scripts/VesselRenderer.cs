@@ -247,42 +247,74 @@ public partial class VesselRenderer : Node3D
 
     private void AddSHGridFins()
     {
-        // Real SH grid fins: 4 near the top, offset ~90° apart, slightly
-        // forward of the body. Built from a mount arm + a thin lattice slab.
-        var finMat   = Mat(new Color(0.40f, 0.40f, 0.43f), 0.90f, 0.34f);
+        // Real SH grid fins: 4 near the top, offset ~90° apart. They read as
+        // thick cast lattice panels with a tapered outer silhouette, hinge drum
+        // and diagonal webbing, not flat rectangular paddles.
+        var finMat   = Mat(new Color(0.34f, 0.34f, 0.37f), 0.90f, 0.38f);
         var mountMat = Mat(new Color(0.34f, 0.34f, 0.37f), 0.86f, 0.42f);
-        var gridMat  = Mat(new Color(0.18f, 0.18f, 0.20f), 0.86f, 0.45f);
+        var gridMat  = Mat(new Color(0.13f, 0.13f, 0.15f), 0.86f, 0.52f);
 
         for (int i = 0; i < 4; i++)
         {
             float a   = i * Mathf.Pi * 0.5f;
             float cos = Mathf.Cos(a);
             float sin = Mathf.Sin(a);
+            float deg = -i * 90f;
 
             // Mount hinge/arm against the hull.
             AddMesh($"GridFinMount{i}", new BoxMesh { Size = new Vector3(0.55f, 1.3f, 0.70f) },
                 mountMat, new Vector3((BodyR + 0.03f) * cos, 18.6f, (BodyR + 0.03f) * sin));
 
-            // The lattice slab itself, projecting outward (the recognisable fin).
+            var hinge = AddMesh($"GridFinHinge{i}",
+                new CylinderMesh { TopRadius = 0.18f, BottomRadius = 0.18f, Height = 1.45f, RadialSegments = 18 },
+                mountMat, new Vector3((BodyR + 0.34f) * cos, 18.75f, (BodyR + 0.34f) * sin));
+            hinge.RotationDegrees = new Vector3(0f, deg, 90f);
+
+            // Tapered lattice slab, canted slightly so it does not read as a flat square.
             var fin = new MeshInstance3D
             {
                 Name            = $"GridFin{i}",
-                Mesh            = new BoxMesh { Size = new Vector3(1.45f, 1.65f, 0.16f) },
-                Position        = new Vector3((BodyR + 0.63f) * cos, 18.8f, (BodyR + 0.63f) * sin),
-                RotationDegrees = new Vector3(0, -i * 90f, 0),
+                Mesh            = BuildGridFinPlateMesh(rootChord: 1.62f, tipChord: 1.18f, height: 1.85f, thickness: 0.18f),
+                Position        = new Vector3((BodyR + 0.78f) * cos, 18.85f, (BodyR + 0.78f) * sin),
+                RotationDegrees = new Vector3(0f, deg + 6f, 4f),
             };
             fin.SetSurfaceOverrideMaterial(0, finMat);
             AddChild(fin);
 
-            // Grid lattice ribs on the fin face. These small raised bars make the
-            // fins read as real open grid fins instead of flat paddles.
+            // Perimeter frame.
+            foreach (float y in new[] { -0.78f, 0.78f })
+            {
+                var rib = new MeshInstance3D
+                {
+                    Name = $"GridFin{i}_FrameH{y}",
+                    Mesh = new BoxMesh { Size = new Vector3(1.34f, 0.070f, 0.24f) },
+                    Position = new Vector3(0f, y, -0.025f),
+                };
+                rib.SetSurfaceOverrideMaterial(0, gridMat);
+                fin.AddChild(rib);
+            }
+            foreach (float x in new[] { -0.60f, 0.60f })
+            {
+                var rib = new MeshInstance3D
+                {
+                    Name = $"GridFin{i}_FrameV{x}",
+                    Mesh = new BoxMesh { Size = new Vector3(0.075f, 1.62f, 0.24f) },
+                    Position = new Vector3(x, 0f, -0.025f),
+                };
+                rib.SetSurfaceOverrideMaterial(0, gridMat);
+                fin.AddChild(rib);
+            }
+
+            // Dense open grid: small raised webs plus two diagonals. The actual
+            // voids are not cut out, but the dark thin material and tapered plate
+            // make the silhouette read as a real cast grid fin at game distance.
             for (int r = -2; r <= 2; r++)
             {
                 var rib = new MeshInstance3D
                 {
                     Name = $"GridFin{i}_RibH{r}",
-                    Mesh = new BoxMesh { Size = new Vector3(1.30f, 0.045f, 0.19f) },
-                    Position = new Vector3(0f, r * 0.26f, -0.01f),
+                    Mesh = new BoxMesh { Size = new Vector3(1.12f, 0.040f, 0.25f) },
+                    Position = new Vector3(0f, r * 0.27f, -0.04f),
                 };
                 rib.SetSurfaceOverrideMaterial(0, gridMat);
                 fin.AddChild(rib);
@@ -292,8 +324,20 @@ public partial class VesselRenderer : Node3D
                 var rib = new MeshInstance3D
                 {
                     Name = $"GridFin{i}_RibV{c}",
-                    Mesh = new BoxMesh { Size = new Vector3(0.045f, 1.42f, 0.20f) },
+                    Mesh = new BoxMesh { Size = new Vector3(0.040f, 1.42f, 0.25f) },
                     Position = new Vector3(c * 0.25f, 0f, -0.02f),
+                };
+                rib.SetSurfaceOverrideMaterial(0, gridMat);
+                fin.AddChild(rib);
+            }
+            foreach (float d in new[] { -1f, 1f })
+            {
+                var rib = new MeshInstance3D
+                {
+                    Name = $"GridFin{i}_Diag{d}",
+                    Mesh = new BoxMesh { Size = new Vector3(0.045f, 1.75f, 0.23f) },
+                    Position = new Vector3(0f, 0f, -0.055f),
+                    RotationDegrees = new Vector3(0f, 0f, d * 38f),
                 };
                 rib.SetSurfaceOverrideMaterial(0, gridMat);
                 fin.AddChild(rib);
@@ -644,6 +688,41 @@ public partial class VesselRenderer : Node3D
         node.SetSurfaceOverrideMaterial(0, mat);
         AddChild(node);
         return node;
+    }
+
+    private static ArrayMesh BuildGridFinPlateMesh(float rootChord, float tipChord, float height, float thickness)
+    {
+        float y0 = -height * 0.5f;
+        float y1 =  height * 0.5f;
+        float r0 = rootChord * 0.5f;
+        float r1 = tipChord * 0.5f;
+        float z0 = -thickness * 0.5f;
+        float z1 =  thickness * 0.5f;
+
+        var verts = new Vector3[]
+        {
+            new(-r0, y0, z0), new( r0, y0, z0), new( r1, y1, z0), new(-r1, y1, z0),
+            new(-r0, y0, z1), new( r0, y0, z1), new( r1, y1, z1), new(-r1, y1, z1),
+        };
+
+        int[] idx =
+        {
+            0, 1, 2, 0, 2, 3, // front
+            5, 4, 7, 5, 7, 6, // back
+            4, 0, 3, 4, 3, 7, // left edge
+            1, 5, 6, 1, 6, 2, // right edge
+            3, 2, 6, 3, 6, 7, // top
+            4, 5, 1, 4, 1, 0, // bottom
+        };
+
+        var arr = new Godot.Collections.Array();
+        arr.Resize((int)Mesh.ArrayType.Max);
+        arr[(int)Mesh.ArrayType.Vertex] = verts;
+        arr[(int)Mesh.ArrayType.Index] = idx;
+
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arr);
+        return mesh;
     }
 
     // Shared material for thin darker weld/panel lines so the steel reads as
