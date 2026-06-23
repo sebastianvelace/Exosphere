@@ -41,7 +41,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
    - Siguiente: close-up fino con referencias reales: proporciones de flaps/nariz,
      tiles mas finos, markings no intrusivos y variacion de acero.
    - Startup/ramp y hot-staging VFX implementados y verificados con trigger local multiframe.
-   - Siguiente: captura de hot-staging en ascenso real, comparacion contra referencia y pluma vacio mas diferenciada.
+   - Pluma de vacio ahora atenúa smoke/soot con expansion alta.
+   - Siguiente: captura de hot-staging en ascenso real, comparacion contra referencia y validacion orbital de pluma vacio limpia.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.

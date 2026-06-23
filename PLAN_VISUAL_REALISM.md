@@ -131,6 +131,11 @@ Mejoras:
   `raptor_plume.gdshader` ya hace el vacio opticamente DELGADO a proposito (realista); contra la
   Tierra brillante se leia como un manchon. Subido `vacuumDim` 0.45->0.62 y `vacuumAlpha` 0.40->0.55
   (sigue mas tenue que SL, ahora legible). NO se reescribio el shader — es un asset deliberado.
+- [x] Pluma vacio limpia: `PlumeSystem` atenúa/apaga partículas de humo y soot cuando
+  `expansion` es alta, especialmente en Starship; el shader sube levemente
+  `vacuumDim`/`vacuumAlpha` para mantener un core azul/blanco legible contra Tierra
+  sin volver a una nube de pad. Validado con captura sintética
+  `/tmp/exosphere_orbit_plume_clean.png`.
 - [x] Startup/ramp: transicion visible desde ignicion a liftoff. `EngineStartupController`
   agrega glow/flicker, vapor de chill y flecks de ignicion mientras la nave sigue
   ground-held; verificado con trigger local Xvfb en `/tmp/exosphere_startup_00..33.png`.
@@ -244,9 +249,10 @@ Aceptacion:
 3. V1 materiales/superficie Starship. Parcialmente cerrado; falta close-up fino
    y grid fins close-up.
 4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad),
-   ✅ hot-staging VFX implementado y verificado con trigger local multiframe. Falta:
-   captura de hot-staging en ascenso real, comparacion contra referencia, comparacion fina
-   de startup/ramp y pluma de vacio "limpia" con menos humo.
+   ✅ hot-staging VFX implementado y verificado con trigger local multiframe,
+   ✅ smoke/soot de pluma vacio atenuado. Falta: captura de hot-staging en ascenso real,
+   comparacion contra referencia, comparacion fina de startup/ramp y captura/reference
+   de pluma de vacio limpia.
 5. V3 reentry plasma/charring localizado. ✅ primera pasada de glows localizados
    en nose/belly/flaps; falta comparativa nominal/fallo y charring por zonas.
 6. V4 camara/luz/atmosfera.
@@ -263,9 +269,12 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
   la EDL en R13. El `--headless` NO sirve (dummy renderer).
 - **Pluma SL/ascenso** mas brillante y ancha (`scripts/PlumeSystem.cs`, commit `390a7ce`): mouths del
   core/anillos mas anchos + `energy` del shader SH 3.0->4.6 / Ship 3.4->4.0. Antes era humo gris fino.
-- **Pluma de vacio** legible (`assets/shaders/raptor_plume.gdshader`, commit `4d971ad`):
+- **Pluma de vacio** legible (`assets/shaders/raptor_plume.gdshader`, commits `4d971ad` + actual):
   `vacuumDim`/`vacuumAlpha` un poco mas altos. El shader es un asset deliberado y bien hecho — NO
   reescribir; tunear con cuidado.
+- **Pluma de vacio limpia** (`scripts/PlumeSystem.cs`): el smoke/soot se apaga con
+  `expansion` alta (`smokePresence`), dejando el shader-core azul/blanco como capa dominante.
+  Si la pluma orbital se ve sucia, ajustar ese factor; no tocar la nube N5 del pad.
 - El **ground cloud** (`LaunchEffectsController.cs`) ya es una nube de deluge de 5 capas muy iterada
   ("N5"); las capturas confirman que es fuerte. **No tocar a ciegas.**
 

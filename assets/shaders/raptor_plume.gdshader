@@ -172,13 +172,13 @@ void fragment() {
 	col = mix(col, whiteHot, clamp(diamond * 1.3, 0.0, 1.0));
 
 	// N7: vacuum plume dims the core — thin gas, far fewer photons per unit volume.
-	// Kept dimmer than sea level (realistic optically-thin plume) but lifted a touch so the
+	// Kept dimmer than sea level (realistic optically-thin plume) but lifted enough so the
 	// orbital-insertion burn still reads clearly against the bright Earth/space backdrop.
-	float vacuumDim = mix(1.0, 0.62, effExpansion * effExpansion);
+	float vacuumDim = mix(1.0, 0.74, effExpansion * effExpansion);
 
 	// Sea-level plumes are visually punchier per unit length; vacuum a touch
 	// dimmer (very thin gas), but its length makes it dominant in frame.
-	float eScale = mix(1.15, 0.85, effExpansion) * vacuumDim;
+	float eScale = mix(1.15, 0.95, effExpansion) * vacuumDim;
 	float e   = energy * eScale * (0.35 + 0.65 * effThrottle);
 
 	vec3 emission = col * bright * e;
@@ -187,6 +187,6 @@ void fragment() {
 	EMISSION = emission;
 	// N7: alpha — at SL the plume is opaque/bright; in vacuum it is translucent.
 	// Vacuum alpha reduced so the halo reads as diffuse, not solid.
-	float vacuumAlpha = mix(1.0, 0.55, effExpansion);
+	float vacuumAlpha = mix(1.0, 0.64, effExpansion);
 	ALPHA = clamp(bright * (0.55 + 0.45 * effThrottle) * vacuumAlpha, 0.0, 1.0);
 }

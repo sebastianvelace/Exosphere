@@ -170,19 +170,25 @@ public partial class PlumeSystem : Node3D
             }
 
             // ── Turbulent smoke particles ────────────────────────────────────
-            u.Smoke.Emitting = firing;
+            // Methalox vacuum exhaust is optically thin: keep soot/smoke as a
+            // low-atmosphere breakup layer, then hand the look over to the shader
+            // core once expansion is high. This keeps orbit burns blue/clean
+            // instead of pad-smoky.
+            float smokePresence = Mathf.Clamp(1f - expansion * (u.IsSuperHeavy ? 0.92f : 1.12f), 0f, 1f);
+            float smokeAmount = throttle * smokePresence * smokePresence;
+            u.Smoke.Emitting = firing && smokeAmount > 0.02f;
             if (firing)
             {
-                u.Smoke.AmountRatio = Mathf.Clamp(throttle, 0.05f, 1f);
-                u.Smoke.SpeedScale  = 0.85f + throttle * 0.35f + GD.Randf() * 0.12f;
+                u.Smoke.AmountRatio = Mathf.Clamp(smokeAmount, 0.0f, 1f);
+                u.Smoke.SpeedScale  = 0.70f + throttle * 0.28f + smokePresence * 0.25f + GD.Randf() * 0.08f;
                 if (u.Smoke.ProcessMaterial is ParticleProcessMaterial pm)
                 {
                     pm.Direction = dir;
                     pm.Spread    = smokeSpread;
                     // Big, billowing soot near the pad; smoke thins out in vacuum
                     // (no air to billow into) leaving just the bright core.
-                    pm.ScaleMin  = (u.IsSuperHeavy ? 1.8f : 1.0f) * (1f - expansion * 0.7f);
-                    pm.ScaleMax  = (u.IsSuperHeavy ? 5.4f : 3.0f) * (1f - expansion * 0.6f);
+                    pm.ScaleMin  = (u.IsSuperHeavy ? 1.8f : 1.0f) * Mathf.Lerp(0.06f, 1.0f, smokePresence);
+                    pm.ScaleMax  = (u.IsSuperHeavy ? 5.4f : 3.0f) * Mathf.Lerp(0.10f, 1.0f, smokePresence);
                 }
             }
 
