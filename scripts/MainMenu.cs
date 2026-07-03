@@ -180,7 +180,16 @@ public partial class MainMenu : Control
         content.AddChild(Metric("SIMULATION", "REAL-TIME PHYSICS"));
         content.AddChild(Divider());
 
-        var hint = new Label { Text = "Press Enter to begin" };
+        var controls = new Label
+        {
+            Text = "Pad: [L] auto sequence  ·  [hold Z] manual ignition\nFlight: [G] guidance  ·  [H] pitch assist  ·  [M] map",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        controls.AddThemeFontSizeOverride("font_size", 11);
+        controls.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        content.AddChild(controls);
+
+        var hint = new Label { Text = "Press Enter to begin flight" };
         hint.AddThemeFontSizeOverride("font_size", 12);
         hint.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         content.AddChild(hint);
