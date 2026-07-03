@@ -55,6 +55,11 @@ Tests lock the totals, not the uncertain internal allocation.
 - Manual pitch, yaw and roll authority derives from current thrust, gimbal angle,
   engine lever arm and propellant-dependent moments of inertia. Main-engine-off
   control falls back to conservative reaction-control authority.
+- `[G]` MECO/hot-staging is decided solely by `AscentController` via
+  `AscentStagingPolicy.ShouldHotStageSuperHeavy` (~2.3 km/s, ~65 km, 6% booster reserve).
+  `MissionManager` must not cut throttle on fuel depletion.
+- Soft landing permission in `Universe` uses `AscentStagingPolicy.SoftLandingSpeedMps` (3 m/s),
+  harmonized with `EDLController` touchdown target.
 - Gravity remains N-body in the inertial integrator. Local TWR and weight use the
   dominant body's field at the vessel's current position.
 

@@ -61,7 +61,7 @@ public class Universe
     /// Orbital re-entry speeds (≥ 100 m/s) are several orders of magnitude above this
     /// threshold, so they will always trigger destruction.
     /// </summary>
-    private const double SoftLandingThreshold = 5.0;
+    private const double SoftLandingThreshold = Flight.AscentStagingPolicy.SoftLandingSpeedMps;
 
     // ── Object management ─────────────────────────────────────────────────
 
