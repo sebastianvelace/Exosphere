@@ -54,7 +54,7 @@
 | Master index | `docs/audits/MASTER_IMPROVEMENT_INDEX.md` |
 | This log | `.atl/OVERNIGHT_LOOP_LOG.md` |
 
-**Counts:** 47 unique items | 7 P0 | 8 P1 | 22 P2 | 10 P3
+**Counts:** ~181 raw | **62 deduplicated** | 10 P0 tier | 14 P1 | 28 P2 | 10 P3
 
 **NON-GOALS:** VAB rewrite, engine-out, R5 multi-motor (now), global tonemap, R13 retune, HLS art, committed harnesses, boostback.
 
@@ -68,6 +68,12 @@
 4. Append timestamp block here.
 5. `git pull --rebase origin docs/deep-audit-overnight-jul2026` before commit if branch shared.
 
+## 2026-07-03T04:06Z — Gameplay mission audit persisted
+
+- `docs/audits/GAMEPLAY_MISSION_AUDIT.md` (18 items G-001..G-018)
+- Commit: `docs(audit): gameplay mission improvement plan`
+- Top P0: G-001 save/load, G-002 objectives, G-006 multi-vessel, G-007 pad-to-recovery
+
 ---
 
 ## 2026-07-03T04:05Z — Physics deep audit (Wave 4)
@@ -79,4 +85,3 @@
 | **Commit** | `docs(audit): physics deep improvement plan` |
 | **Items** | 28 (P-A01–P-X07) |
 | **Top 5** | P-A03, P-S01, P-I01, P-O01, P-R06 |
-| **SHA** | `f538f62` (`f538f6245151dbc3700e195c6c9bdf9e9b754ff5`) |
