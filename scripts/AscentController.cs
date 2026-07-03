@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 
@@ -44,12 +45,8 @@ public partial class AscentController : Control
     private const double AssistDamp = 0.9;
 
     // ── Staging (hot-stage at MECO, not at depletion) ──────────────────────────────
-    // Real Super Heavy MECO/hot-staging is at ~2.3-2.4 km/s and ~65 km, leaving a
-    // boostback/landing reserve — NOT a burn-to-empty at apoapsis. Stage on velocity so
-    // the upper stage (Starship) flies the orbital insertion, like the real vehicle.
-    private const double StagingSpeed      = 2300.0;   // m/s surface speed to hot-stage SH
-    private const double StagingMinAlt     = 45_000.0; // m floor so a slow climb still stages high
-    private const double BoosterReserveFrac = 0.06;    // never burn the booster below ~6% prop
+    // Criteria live in AscentStagingPolicy — sole [G] MECO authority; MissionManager must
+    // not cut throttle or trigger MECO on fuel depletion.
     private bool _mecoStaged;
 
     // Gravity-turn elevation angle (deg above the local horizon) as a function of altitude.
@@ -436,9 +433,8 @@ public partial class AscentController : Control
             double left = sh.LiquidFuel + sh.Oxidizer;
             double frac = cap > 0.0 ? left / cap : 0.0;
 
-            bool mecoBySpeed   = surfSpeed >= StagingSpeed && _alt > StagingMinAlt;
-            bool mecoByReserve = frac <= BoosterReserveFrac;   // never burn the booster dry
-            if (mecoBySpeed || mecoByReserve)
+            if (AscentStagingPolicy.ShouldHotStageSuperHeavy(
+                    _mecoStaged, sh != null, surfSpeed, _alt, frac))
             {
                 MissionManager.Instance?.EnterPhase(MissionPhase.MECO);
                 bridge.TriggerStaging();   // hot-stage: drop SH; Starship continues the insertion

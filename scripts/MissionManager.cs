@@ -40,7 +40,6 @@ public partial class MissionManager : Node
     [Signal] public delegate void LaunchCommittedEventHandler();
 
     private bool _maxQTriggered;
-    private bool _mecoTriggered;
     private int  _lastTickSecond = -1;   // last whole-second countdown beep emitted
 
     public override void _Ready()
@@ -64,7 +63,6 @@ public partial class MissionManager : Node
         CountdownTimer  = 10.0;
         IsCountingDown  = true;
         _maxQTriggered  = false;
-        _mecoTriggered  = false;
         _lastTickSecond = -1;
         SetPhase(MissionPhase.COUNTDOWN);
     }
@@ -85,15 +83,15 @@ public partial class MissionManager : Node
         // No estábamos en countdown, pero reseteamos los gatillos de fase por si acaso.
         IsCountingDown  = false;
         _maxQTriggered  = false;
-        _mecoTriggered  = false;
         SetPhase(MissionPhase.LIFTOFF);
         EmitSignal(SignalName.LaunchCommitted);
     }
 
     /// Call from SimulationBridge.TriggerStaging when a stage fires.
+    /// MECO/separation timing for [G] is owned by AscentController; manual staging skips MECO.
     public void NotifyStaged()
     {
-        if (Phase == MissionPhase.MECO)
+        if (Phase is MissionPhase.MECO or MissionPhase.ASCENT_SH or MissionPhase.MAX_Q)
             SetPhase(MissionPhase.SEPARATION);
     }
 
@@ -199,23 +197,6 @@ public partial class MissionManager : Node
                     {
                         _maxQTriggered = true;
                         SetPhase(MissionPhase.MAX_Q);
-                    }
-                }
-                // Auto-MECO when SH propellant is nearly gone and we're high enough
-                if (!_mecoTriggered && alt > 55_000)
-                {
-                    // After staging, SH part is gone — check if SH is still in vessel parts
-                    bool shStillPresent = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
-                    if (shStillPresent)
-                    {
-                        var shPart = vessel.Parts.Parts.First(p => p.Definition.Id == "super_heavy_booster");
-                        double shFuel = shPart.LiquidFuel + shPart.Oxidizer;
-                        if (shFuel < 10_000)
-                        {
-                            _mecoTriggered = true;
-                            bridge.SetThrottle(0.0);
-                            SetPhase(MissionPhase.MECO);
-                        }
                     }
                 }
                 break;
