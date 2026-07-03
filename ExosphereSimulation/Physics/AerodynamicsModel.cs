@@ -46,12 +46,11 @@ public static class AerodynamicsModel
         : mach < 5.0 ? 2.0 - (mach - 1.2) * 0.25
         : 1.0;
 
-    /// <summary>Crude reference area (m²) from part count, for a vessel of unknown geometry.</summary>
+    /// <summary>Axial reference area (m²) from the declared physical envelope.</summary>
     public static double EstimateReferenceArea(PartGraph graph)
     {
-        double maxRadius = 0.5;
-        maxRadius = System.Math.Max(maxRadius, System.Math.Sqrt(graph.Parts.Count * 0.2));
-        return System.Math.PI * maxRadius * maxRadius;
+        double radius = graph.MaximumDiameter * 0.5;
+        return System.Math.PI * radius * radius;
     }
 
     // ── Orientation-dependent re-entry aero (cilindro Starship/SH) ─────────────
@@ -71,11 +70,23 @@ public static class AerodynamicsModel
     /// Interpolates between the axial cross-section (πr²) and the broadside slab (D·L).
     /// </summary>
     public static double EffectiveArea(int partCount, double cosAlpha)
+        => EffectiveArea(
+            System.Math.Max(CoreDiameter, partCount * 12.0),
+            CoreDiameter,
+            cosAlpha);
+
+    /// <summary>
+    /// Effective projected area for a cylindrical vehicle with an explicit length and
+    /// diameter. This is the authoritative path for Starship; the part-count overload only
+    /// remains for legacy craft whose JSON does not yet declare dimensions.
+    /// </summary>
+    public static double EffectiveArea(double length, double diameter, double cosAlpha)
     {
-        double radius      = CoreDiameter * 0.5;
-        double length      = System.Math.Max(CoreDiameter, partCount * 12.0);
+        diameter = System.Math.Max(0.1, diameter);
+        length = System.Math.Max(diameter, length);
+        double radius      = diameter * 0.5;
         double axialArea   = System.Math.PI * radius * radius;
-        double lateralArea = CoreDiameter * length;
+        double lateralArea = diameter * length;
         double aa          = System.Math.Clamp(cosAlpha * cosAlpha, 0.0, 1.0);
         return lateralArea + (axialArea - lateralArea) * aa;
     }
@@ -122,6 +133,19 @@ public static class AerodynamicsModel
         Vector3d surfaceVelocity,
         Vector3d longitudinalAxis,
         int partCount)
+        => ComputeLift(
+            density,
+            surfaceVelocity,
+            longitudinalAxis,
+            System.Math.Max(CoreDiameter, partCount * 12.0),
+            CoreDiameter);
+
+    public static Vector3d ComputeLift(
+        double density,
+        Vector3d surfaceVelocity,
+        Vector3d longitudinalAxis,
+        double vehicleLength,
+        double vehicleDiameter)
     {
         double speed = surfaceVelocity.Magnitude;
         if (density <= 0.0 || speed < 1e-3) return Vector3d.Zero;
@@ -135,7 +159,7 @@ public static class AerodynamicsModel
         if (perpLen < 1e-6) return Vector3d.Zero;   // axial flight: no lift plane defined
 
         double cl   = EffectiveLiftCoefficient(cosAlpha);
-        double area = EffectiveArea(partCount, System.Math.Abs(cosAlpha));
+        double area = EffectiveArea(vehicleLength, vehicleDiameter, System.Math.Abs(cosAlpha));
         double magnitude = 0.5 * density * speed * speed * cl * area;
         return (perp / perpLen) * magnitude;
     }
@@ -152,12 +176,27 @@ public static class AerodynamicsModel
         Vector3d longitudinalAxis,
         int partCount,
         double temperature)
+        => ComputeReentryDrag(
+            density,
+            surfaceVelocity,
+            longitudinalAxis,
+            System.Math.Max(CoreDiameter, partCount * 12.0),
+            CoreDiameter,
+            temperature);
+
+    public static Vector3d ComputeReentryDrag(
+        double density,
+        Vector3d surfaceVelocity,
+        Vector3d longitudinalAxis,
+        double vehicleLength,
+        double vehicleDiameter,
+        double temperature)
     {
         double speed = surfaceVelocity.Magnitude;
         if (density <= 0.0 || speed < 1e-3) return Vector3d.Zero;
 
         double cosAlpha = System.Math.Abs(longitudinalAxis.Normalized.Dot(surfaceVelocity.Normalized));
-        double area     = EffectiveArea(partCount, cosAlpha);
+        double area     = EffectiveArea(vehicleLength, vehicleDiameter, cosAlpha);
         double cd       = EffectiveDragCoefficient(cosAlpha);
         double machMul  = GetMachDragMultiplier(ComputeMach(speed, temperature));
 

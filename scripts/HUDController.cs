@@ -514,7 +514,7 @@ public partial class HUDController : Control
         _massValue.Text = $"{vessel.TotalMass / 1000.0:F1} t";
 
         // Stage Δv = Isp·g0·ln(m0/m1) for the current stage's engines & propellant.
-        _dvValue.Text = FormatDv(vessel);
+        _dvValue.Text = FormatDv(vessel, refBody);
 
         bool suborbital = false;
         try
@@ -586,29 +586,12 @@ public partial class HUDController : Control
     }
 
     // Stage Δv (rocket equation): m0 = total mass, m1 = total − current-stage propellant.
-    private static string FormatDv(Exosphere.Simulation.Vessel vessel)
+    private static string FormatDv(
+        Exosphere.Simulation.Vessel vessel,
+        Exosphere.Simulation.CelestialBody body)
     {
-        var stageParts = vessel.Parts.CurrentStageParts();
-        if (stageParts.Count == 0) return "---";
-
-        // Effective Isp: thrust-weighted across active engines (vacuum figure).
-        double thrustSum = 0, ispThrust = 0;
-        foreach (var en in vessel.Parts.ActiveEngines)
-        {
-            double t = en.Definition.ThrustVac;
-            double isp = en.Definition.IspVac > 0 ? en.Definition.IspVac : 0;
-            thrustSum += t; ispThrust += isp * t;
-        }
-        if (thrustSum <= 0) return "---";
-        double ispEff = ispThrust / thrustSum;
-
-        // Propellant available in the current stage's tanks.
-        double prop = stageParts.Sum(p => p.LiquidFuel + p.Oxidizer);
-        double m0 = vessel.TotalMass;
-        double m1 = m0 - prop;
-        if (m1 <= 0 || m0 <= m1) return "0 m/s";
-
-        double dv = ispEff * 9.80665 * System.Math.Log(m0 / m1);
+        double dv = vessel.GetCurrentStageDeltaV(body);
+        if (dv <= 0.0) return "---";
         return $"{dv:N0} m/s";
     }
 

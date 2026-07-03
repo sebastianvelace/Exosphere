@@ -92,14 +92,15 @@ public class Part
     private const double SeaLevelPressurePa = 101_325.0;
 
     /// <summary>
-    /// Pressure-interpolated specific impulse (s) for this engine: Isp_vac in vacuum
-    /// (p=0), Isp_sl at sea level (p=p₀), linear in between — the same blend used for
-    /// thrust, so F = ṁ·Isp·g₀ stays self-consistent at every altitude.
+    /// Pressure-corrected specific impulse (s): Isp_vac in vacuum, Isp_sl at Earth
+    /// sea level, and linear extrapolation above one atmosphere. The extrapolation is
+    /// intentionally not capped so dense-atmosphere back-pressure can cause flameout.
     /// </summary>
     public double GetIsp(double ambientPressure = 0.0)
     {
-        double pf = System.Math.Clamp(ambientPressure / SeaLevelPressurePa, 0.0, 1.0);
-        return Definition.IspVac + (Definition.IspSL - Definition.IspVac) * pf;
+        double pf = System.Math.Max(0.0, ambientPressure / SeaLevelPressurePa);
+        return System.Math.Max(0.0,
+            Definition.IspVac + (Definition.IspSL - Definition.IspVac) * pf);
     }
 
     /// <summary>
@@ -125,12 +126,18 @@ public class Part
     /// Falls back to vacuum thrust when no sea-level figure is provided.
     /// </summary>
     public double GetThrustMagnitude(double ambientPressure = 0.0)
+        => GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
+
+    /// <summary>Pressure-corrected rated thrust at 100% throttle (N).</summary>
+    public double GetFullThrottleThrustMagnitude(double ambientPressure = 0.0)
     {
         double fVac = Definition.ThrustVac;
         double fSL  = Definition.ThrustSL > 0.0 ? Definition.ThrustSL : fVac;
-        double pf   = System.Math.Clamp(ambientPressure / SeaLevelPressurePa, 0.0, 1.0);
+        // Do not cap at one atmosphere. Dense worlds such as Venus impose far more
+        // back-pressure than Earth, eventually reducing net nozzle thrust to zero.
+        double pf   = System.Math.Max(0.0, ambientPressure / SeaLevelPressurePa);
         double f    = fVac - pf * (fVac - fSL);
-        return System.Math.Max(0.0, f) * ThrottleLevel;
+        return System.Math.Max(0.0, f);
     }
 
     // ── Vector de empuje en espacio local de la pieza (+Y = arriba) ───────
@@ -168,8 +175,9 @@ public class Part
 
         // ISP interpolado por presión (vac ↔ sl).
         // pf = 0 en vacío (p=0) → Isp_vac;  pf = 1 a nivel del mar → Isp_sl.
-        double pressureFraction = System.Math.Clamp(ambientPressure / SeaLevelPressurePa, 0.0, 1.0);
-        double isp = Definition.IspVac + (Definition.IspSL - Definition.IspVac) * pressureFraction;
+        double pressureFraction = System.Math.Max(0.0, ambientPressure / SeaLevelPressurePa);
+        double isp = System.Math.Max(0.0,
+            Definition.IspVac + (Definition.IspSL - Definition.IspVac) * pressureFraction);
         if (isp < 1.0) return false;
 
         // Flujo másico ṁ = F(p) / (Isp(p)·g₀), g₀ = 9.80665 m/s².
@@ -188,7 +196,9 @@ public class Part
             // Esto deja este camino coherente con PartGraph.ConsumePropellant, la ruta
             // autoritativa que invoca Vessel.Tick.
             double total  = LiquidFuel + Oxidizer;
-            double lfFrac = total > 1e-9 ? LiquidFuel / total : 0.45;
+            double lfFrac = Definition.MixtureRatio > 0.0
+                ? 1.0 / (1.0 + Definition.MixtureRatio)
+                : total > 1e-9 ? LiquidFuel / total : 0.45;
             double lfRate = massFlowRate * lfFrac;
             double oxRate = massFlowRate * (1.0 - lfFrac);
             if (LiquidFuel < lfRate * dt || Oxidizer < oxRate * dt) return false;

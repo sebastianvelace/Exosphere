@@ -59,21 +59,12 @@ public partial class EngineGridHUD : Control
         if (vessel == null || universe == null) return;
 
         var body = universe.GetDominantBody(vessel.Position);
-        double alt = vessel.GetAltitude(body);
-
-        // Ambient pressure proxy: blend SL/Vac figures by atmospheric density ratio so
-        // thrust/Isp read realistically through ascent. (We only have density getters.)
-        double rho = body.Atmosphere != null ? body.GetAtmosphericDensity(vessel.Position) : 0.0;
-        double rho0 = body.Atmosphere?.SeaLevelDensity ?? 1.225;
-        double atmFrac = rho0 > 0 ? System.Math.Clamp(rho / rho0, 0.0, 1.0) : 0.0;
 
         var engines = vessel.Parts.ActiveEngines.ToList();
-        _totalActiveEngines = engines.Count;
+        _totalActiveEngines = engines.Sum(e => System.Math.Max(1, e.Definition.EngineCount));
         _throttle = vessel.Throttle;
 
-        // Determine nominal engine count: 33 for Super Heavy booster, 6 for Starship.
-        bool isSuperHeavy = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
-        _nominalEngines = isSuperHeavy ? 33 : 6;
+        _nominalEngines = System.Math.Max(1, _totalActiveEngines);
 
         // Light an engine if throttle is up AND there's propellant feeding it.
         bool feeding = _throttle > 0.01 && _totalActiveEngines > 0;
@@ -82,32 +73,14 @@ public partial class EngineGridHUD : Control
             ? System.Math.Clamp((int)System.Math.Round(_nominalEngines * _throttle), 0, _nominalEngines)
             : 0;
 
-        double thrustN = 0, massFlowKgs = 0, ispThrustSum = 0;
-        foreach (var en in engines)
-        {
-            var d = en.Definition;
-            double thrustVacN = d.ThrustVac;
-            double thrustSLN  = d.ThrustSL > 0 ? d.ThrustSL : d.ThrustVac;
-            double isp        = d.IspVac > 0 ? d.IspVac : 1.0;
-            double ispSL      = d.IspSL  > 0 ? d.IspSL  : isp;
-
-            double thr = en.ThrottleLevel > 0 ? en.ThrottleLevel : _throttle;
-            double thrustHere = Lerp(thrustVacN, thrustSLN, atmFrac) * thr;
-            double ispHere    = Lerp(isp, ispSL, atmFrac);
-
-            thrustN += thrustHere;
-            ispThrustSum += ispHere * thrustHere;
-            // mdot = F / (Isp · g0)
-            if (ispHere > 0) massFlowKgs += thrustHere / (ispHere * 9.80665);
-        }
-
+        double thrustN = vessel.GetCurrentThrust(body);
         _thrustKN = thrustN / 1000.0;
-        _massFlow = massFlowKgs / 1000.0;                  // t/s
-        _ispEff   = thrustN > 0 ? ispThrustSum / thrustN : 0;
+        _massFlow = vessel.GetCurrentMassFlowTps(body);
+        _ispEff   = vessel.GetCurrentIsp(body);
 
-        double surfG = body.GetSurfaceGravity();
-        _twrValid = vessel.TotalMass > 0 && surfG > 0 && thrustN > 0;
-        _twr = _twrValid ? thrustN / (vessel.TotalMass * surfG) : 0;
+        double localWeight = vessel.GetWeightNewtons(body);
+        _twrValid = localWeight > 0 && thrustN > 0;
+        _twr = _twrValid ? thrustN / localWeight : 0;
 
         QueueRedraw();
     }
@@ -191,6 +164,4 @@ public partial class EngineGridHUD : Control
     {
         DrawStyleBox(_panelStyle, r);
     }
-
-    private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 }

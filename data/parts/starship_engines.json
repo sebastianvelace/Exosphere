@@ -1,9 +1,11 @@
 {
   "id": "starship_engines",
   "name": "Starship Raptor Engine Cluster",
-  "description": "Six Raptor 2 engines: 3 vacuum-optimised (Raptor Vac ISP ~363 s, 2.2 MN each) + 3 sea-level (ISP 327 s, 2.05 MN each). Cluster vacuum ISP ~363 s, combined thrust 13.5 MN. Used for orbit insertion, transit burns, and EDL flip.",
+  "description": "Flight 7 cluster of three sea-level and three vacuum Raptor 2 engines. Aggregate performance is used because the simulation represents the cluster as one physical part.",
   "category": "engine",
   "mass_dry": 15000,
+  "length_m": 4.0,
+  "diameter_m": 9.0,
   "cost": 18000,
   "drag_coefficient": 0.3,
   "heat_tolerance": 3000,
@@ -14,9 +16,12 @@
   "gimbal_range": 6.0,
   "fuel_type": "LiquidFuel+Oxidizer",
   "mixture_ratio": 3.55,
+  "engine_count": 6,
+  "min_throttle": 0.40,
+  "thrust_position_y_m": -2.0,
   "is_rcs": false,
   "attachment_nodes": [
-    {"id": "top",         "position": [0,  1.0, 0], "size": 3, "type": "stack"},
-    {"id": "bottom",      "position": [0, -1.0, 0], "size": 3, "type": "stack"}
+    {"id": "top",         "position": [0,  2.0, 0], "size": 3, "type": "stack"},
+    {"id": "bottom",      "position": [0, -2.0, 0], "size": 3, "type": "stack"}
   ]
 }

@@ -310,9 +310,8 @@ public partial class AscentController : Control
             double gLocal = body.GM / (r * r);
             double vH = (vel - up * vUp).Magnitude;
             double centrifugal = vH * vH / r;
-            double thrustVac = 0.0;
-            foreach (var e in vessel.Parts.ActiveEngines) thrustVac += e.Definition.ThrustVac;
-            double aThrust = thrustVac / System.Math.Max(vessel.TotalMass, 1.0);
+            double aThrust = vessel.GetMaximumThrust(body) /
+                System.Math.Max(vessel.TotalMass, 1.0);
             double sinFF  = (gLocal - centrifugal) / System.Math.Max(aThrust, 0.1);
             double altCorr = 0.00002 * (_holdAlt - _alt) - 0.002 * vUp;
             double sinCmd = System.Math.Clamp(sinFF + altCorr, -0.3, 0.95);

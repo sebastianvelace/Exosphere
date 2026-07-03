@@ -50,9 +50,9 @@ public sealed class ConstructionRegressionTests
 
         Assert.True(metrics.WetMass > metrics.DryMass);
         Assert.True(metrics.PropellantMass > 0.0);
-        Assert.True(metrics.SeaLevelThrust > 70_000_000.0);
+        Assert.Equal(74_400_000.0, metrics.SeaLevelThrust);
         Assert.True(metrics.SeaLevelTwr > 1.0);
-        Assert.True(metrics.VacuumDeltaV > 5_000.0);
+        Assert.InRange(metrics.VacuumDeltaV, 3_900.0, 4_200.0);
     }
 
     [Fact]

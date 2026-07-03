@@ -34,6 +34,11 @@ public class PartDefinition
     [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
     [JsonPropertyName("attachment_nodes")] public List<AttachmentNodeDef> AttachmentNodes { get; set; } = new();
 
+    // Physical envelope. These values let the aerodynamic model use the actual vehicle
+    // dimensions instead of inferring a fictional length from the number of logical parts.
+    [JsonPropertyName("length_m")]   public double LengthM   { get; set; }
+    [JsonPropertyName("diameter_m")] public double DiameterM { get; set; }
+
     // Engine
     [JsonPropertyName("thrust_vac")]   public double ThrustVac   { get; set; }
     [JsonPropertyName("thrust_sl")]    public double ThrustSL    { get; set; }
@@ -42,6 +47,10 @@ public class PartDefinition
     [JsonPropertyName("gimbal_range")] public double GimbalRange { get; set; }
     [JsonPropertyName("fuel_type")]    public string FuelTypeStr { get; set; } = "";
     [JsonPropertyName("is_rcs")]       public bool IsRCS         { get; set; }
+    [JsonPropertyName("engine_count")] public int EngineCount    { get; set; } = 1;
+    [JsonPropertyName("mixture_ratio")] public double MixtureRatio { get; set; }
+    // Axial location of the effective thrust plane relative to this part's centre.
+    [JsonPropertyName("thrust_position_y_m")] public double ThrustPositionYM { get; set; }
 
     // Deepest stable throttle the engine can sustain, as a fraction of rated thrust.
     // Real Raptor 2 deep-throttles to ~40 % (full-flow staged combustion stays lit but the

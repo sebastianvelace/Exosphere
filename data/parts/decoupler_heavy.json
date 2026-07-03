@@ -1,16 +1,18 @@
 {
   "id": "decoupler_heavy",
   "name": "TD-30 Heavy Stack Decoupler",
-  "description": "A heavy stack decoupler / hot-stage ring for Starship-class stages and other large 9 m launch vehicles. Stainless-steel construction sized for high-load hot-staging, clean separation, and the heat of the staging plume and reentry.",
+  "description": "Flight 7 hot-stage ring and mechanical stage interface. Its 5 t engineering allocation is included in the 200 t dry Super Heavy stage baseline.",
   "category": "decoupler",
-  "mass_dry": 120,
+  "mass_dry": 5000,
+  "length_m": 3.5,
+  "diameter_m": 9.0,
   "cost": 900,
   "drag_coefficient": 0.2,
   "heat_tolerance": 1700,
   "has_heat_shield": true,
   "ejection_force": 1000,
   "attachment_nodes": [
-    {"id": "top",    "position": [0,  0.2, 0], "size": 3, "type": "stack"},
-    {"id": "bottom", "position": [0, -0.2, 0], "size": 3, "type": "stack"}
+    {"id": "top",    "position": [0,  1.75, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.75, 0], "size": 3, "type": "stack"}
   ]
 }

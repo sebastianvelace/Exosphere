@@ -100,33 +100,36 @@ public sealed class VesselAssembly
 
     public VesselMetrics ComputeMetrics(double gravity = G0)
     {
-        double wet = 0.0;
-        double dry = 0.0;
+        if (_parts.Count == 0)
+            return new VesselMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+        var graph = ToPartGraph();
+        double wet = graph.TotalMass;
+        double dry = graph.DryMass;
         double thrustSl = 0.0;
         double thrustVac = 0.0;
         double ispWeightedThrust = 0.0;
 
-        foreach (var item in _parts)
+        // Report the stage that would fire now. Upper-stage engines do not contribute
+        // thrust at liftoff, and the lower stage must accelerate all attached mass.
+        foreach (var engine in graph.ActiveEngines)
         {
-            var def = RequirePart(item.DefinitionId);
-            double prop = def.FuelCapacityLF + def.FuelCapacityOx + def.FuelCapacitySolid + def.FuelCapacityMono;
-            dry += def.MassDry;
-            wet += def.MassDry + prop;
-
-            if (def.Category == PartCategory.Engine)
-            {
-                double sl = def.ThrustSL > 0.0 ? def.ThrustSL : def.ThrustVac;
-                double vac = def.ThrustVac > 0.0 ? def.ThrustVac : sl;
-                thrustSl += sl;
-                thrustVac += vac;
-                if (def.IspVac > 0.0)
-                    ispWeightedThrust += vac * def.IspVac;
-            }
+            var def = engine.Definition;
+            double sl = def.ThrustSL > 0.0 ? def.ThrustSL : def.ThrustVac;
+            double vac = def.ThrustVac > 0.0 ? def.ThrustVac : sl;
+            thrustSl += sl;
+            thrustVac += vac;
+            if (def.IspVac > 0.0)
+                ispWeightedThrust += vac * def.IspVac;
         }
 
         double ispVac = thrustVac > 0.0 ? ispWeightedThrust / thrustVac : 0.0;
-        double dv = wet > dry && dry > 0.0 && ispVac > 0.0
-            ? ispVac * G0 * System.Math.Log(wet / dry)
+        var stage = graph.CurrentStageParts();
+        double stagePropellant = stage.Sum(p =>
+            p.LiquidFuel + p.Oxidizer + p.SolidFuel + p.Monopropellant);
+        double burnoutMass = wet - stagePropellant;
+        double dv = wet > burnoutMass && burnoutMass > 0.0 && ispVac > 0.0
+            ? ispVac * G0 * System.Math.Log(wet / burnoutMass)
             : 0.0;
         double twr = wet > 0.0 && gravity > 0.0 ? thrustSl / (wet * gravity) : 0.0;
 
