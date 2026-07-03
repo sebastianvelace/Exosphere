@@ -18,7 +18,7 @@
 - Found legacy: `docs/physics_audit.md` (2026-06-13).
 - Found: `.atl/OVERENGINEERING_AUDIT_JUL2026.md`, `.atl/DELEGATION_JUL2026.md`.
 - Spawned explore subagents for visual/shader/CI/audio/parts and physics/gameplay/navigation synthesis.
-- Wave 1 agent files `docs/audits/*.md` still absent — synthesized from subagent output + plan docs.
+- **Parallel Wave 1 agents landed:** `PHYSICS_DEEP_AUDIT.md`, `VISUAL_DEEP_AUDIT.md`, `UX_EXPERIENCE_AUDIT.md`, `GAMEPLAY_MISSION_AUDIT.md` (read + merged into master index).
 
 ## 2026-07-03T04:15Z — Wave 2 gap hunt
 
