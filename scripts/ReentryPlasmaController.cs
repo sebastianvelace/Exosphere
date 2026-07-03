@@ -23,6 +23,8 @@ public partial class ReentryPlasmaController : Node3D
     private StandardMaterial3D? _wakeMat;
     private readonly List<EdgeGlow> _edgeGlows = new();
 
+    private enum EdgeKind { Nose, Belly, Flap }
+
     private sealed class EdgeGlow
     {
         public MeshInstance3D Mesh = null!;
@@ -31,6 +33,7 @@ public partial class ReentryPlasmaController : Node3D
         public Vector3 BaseScale;
         public float Weight;
         public float Delay;
+        public EdgeKind Kind;
     }
 
     // Heat-flux thresholds (W/m²). Below FLUX_THRESH there is no visible plasma;
@@ -163,21 +166,28 @@ public partial class ReentryPlasmaController : Node3D
         // ventral cap; a turned-away (bare-side) attitude is hotter overall but the
         // glow smears and reddens (no shield deflecting the flux).
         float align     = (float)windward;                       // 0..1
+        float misalign  = 1f - align;
         float concentr  = Mathf.Lerp(0.55f, 1.0f, align);        // ventral focus
         float exposure  = Mathf.Lerp(1.15f, 1.0f, align);        // bare side runs hotter
+        float hudGuard  = Mathf.Lerp(0.68f, 1.0f, align);        // dimmer belly-first so HUD stays readable
+        float dangerMul = Mathf.Lerp(1.30f, 1.0f, align);       // bad attitude runs hotter visually
+        float redShift  = align < 0.45f
+            ? Mathf.Lerp(0.48f, 1.0f, align / 0.45f)
+            : 1.0f;
 
         // Colour shifts orange → white-hot as intensity rises; bare-side bias reddens it.
         float white = (float)intensity * concentr;
         var shockCol = new Color(
             1.0f,
-            0.40f + 0.50f * white,
-            0.08f + 0.72f * white,
-            (float)(intensity * 0.36f * flicker) * (0.6f + 0.4f * concentr));
+            (0.40f + 0.50f * white) * redShift,
+            (0.08f + 0.72f * white) * redShift,
+            (float)(intensity * 0.36f * flicker) * (0.6f + 0.4f * concentr) * hudGuard);
         _shockMat.AlbedoColor              = shockCol;
         _shockMat.Emission                 = new Color(shockCol.R, shockCol.G, shockCol.B);
-        _shockMat.EmissionEnergyMultiplier = (float)(0.8 + intensity * 2.0) * flicker * exposure;
+        _shockMat.EmissionEnergyMultiplier = (float)(0.8 + intensity * 2.0) * flicker * exposure * dangerMul;
 
-        _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f, (float)(intensity * 0.16f));
+        _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f,
+            (float)(intensity * 0.16f) * Mathf.Lerp(0.50f, 1.0f, misalign));
         _wakeMat.EmissionEnergyMultiplier = (float)(0.7 + intensity * 1.4);
 
         // Windward cap: flatten along the flow (thin, wide bow shock) and grow with flux.
@@ -195,24 +205,24 @@ public partial class ReentryPlasmaController : Node3D
         // Standalone Starship render coordinates (BuildStarshipSection yOffset = -22):
         // nose tip ≈ y 21, forward flaps ≈ y 15, aft flaps ≈ y 4.
         AddEdgeGlow("NoseLeadingHeat", new Vector3(-1.18f, 19.6f, 0.0f),
-            new Vector3(0.52f, 1.70f, 0.52f), weight: 1.0f, delay: 0.0f, nose: true);
+            new Vector3(0.52f, 1.70f, 0.52f), weight: 1.0f, delay: 0.0f, kind: EdgeKind.Nose);
 
         AddEdgeGlow("BellyCenterHeat", new Vector3(-1.72f, 9.8f, 0.0f),
-            new Vector3(0.15f, 7.1f, 0.15f), weight: 0.58f, delay: 0.05f);
+            new Vector3(0.11f, 5.4f, 0.11f), weight: 0.52f, delay: 0.05f, kind: EdgeKind.Belly);
 
         AddEdgeGlow("FwdFlapLeftHeat",  new Vector3(-1.66f, 15.0f,  1.20f),
-            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.08f);
+            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.08f, kind: EdgeKind.Flap);
         AddEdgeGlow("FwdFlapRightHeat", new Vector3(-1.66f, 15.0f, -1.20f),
-            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.11f);
+            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.11f, kind: EdgeKind.Flap);
 
         AddEdgeGlow("AftFlapLeftHeat",   new Vector3(-1.72f, 4.2f,  1.10f),
-            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.16f);
+            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.16f, kind: EdgeKind.Flap);
         AddEdgeGlow("AftFlapRightHeat",  new Vector3(-1.72f, 4.2f, -1.10f),
-            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.19f);
+            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.19f, kind: EdgeKind.Flap);
     }
 
     private void AddEdgeGlow(string name, Vector3 position, Vector3 baseScale,
-        float weight, float delay, bool nose = false)
+        float weight, float delay, EdgeKind kind)
     {
         var mat = new StandardMaterial3D
         {
@@ -227,7 +237,7 @@ public partial class ReentryPlasmaController : Node3D
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
         };
 
-        Mesh mesh = nose
+        Mesh mesh = kind == EdgeKind.Nose
             ? new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 24, Rings = 12 }
             : new CylinderMesh { TopRadius = 0.9f, BottomRadius = 0.9f, Height = 1f, RadialSegments = 16 };
 
@@ -251,6 +261,7 @@ public partial class ReentryPlasmaController : Node3D
             BaseScale = baseScale,
             Weight = weight,
             Delay = delay,
+            Kind = kind,
         });
     }
 
@@ -267,6 +278,10 @@ public partial class ReentryPlasmaController : Node3D
 
         float edgeBase = Mathf.Clamp((intensity - 0.08f) / 0.92f, 0f, 1f);
         float focus = Mathf.Lerp(0.58f, 1.0f, align);
+        float misalign = 1f - align;
+        float noseBoost  = Mathf.Lerp(0.55f, 1.05f, misalign);
+        float bellyScale = Mathf.Lerp(0.38f, 0.95f, align);
+        float flapBoost  = Mathf.Lerp(0.70f, 1.15f, misalign);
 
         foreach (var edge in _edgeGlows)
         {
@@ -277,7 +292,22 @@ public partial class ReentryPlasmaController : Node3D
                 continue;
             }
 
-            k *= edge.Weight * focus * flicker;
+            float zoneMul = edge.Kind switch
+            {
+                EdgeKind.Nose  => noseBoost,
+                EdgeKind.Belly => bellyScale,
+                EdgeKind.Flap  => flapBoost,
+                _              => 1f,
+            };
+            float alphaCap = edge.Kind switch
+            {
+                EdgeKind.Nose  => 0.40f,
+                EdgeKind.Belly => 0.24f,
+                EdgeKind.Flap  => 0.36f,
+                _              => 0.45f,
+            };
+
+            k *= edge.Weight * focus * flicker * zoneMul;
             edge.Mesh.Visible = true;
             edge.Mesh.Position = ToGodot(vesselOrientation.Rotate(edge.LocalPosition));
             OrientYAxis(edge.Mesh, ToGodot(vesselOrientation.Rotate(Vector3d.Up)));
@@ -288,7 +318,7 @@ public partial class ReentryPlasmaController : Node3D
                 1.0f,
                 0.22f + 0.60f * white,
                 0.06f + 0.42f * white,
-                0.16f + 0.54f * k);
+                Mathf.Min(0.16f + 0.54f * k, alphaCap));
 
             edge.Mat.AlbedoColor = col;
             edge.Mat.Emission = new Color(col.R, col.G, col.B);
