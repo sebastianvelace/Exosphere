@@ -109,9 +109,27 @@ by ALTITUDE (smoothstep 70→130 km) — ambient energy 0.45→0.12, sun energy 
 HDR glow 0→0.6, Filmic kept. `SunController` still owns light orientation (never
 touches energy) so there is no conflict. Xvfb-verified: pad identical to baseline,
 orbit gains metallic contrast without subexposing the ship or washing Earth.
-**Next:** (a) a reentry phase — warm, dimmer exposure tied to `ThermalModel` heat so
-plasma reads without washing the cockpit/HUD; (b) tune the ascent mid-blend against a
-real Max-Q capture; (c) optional per-phase color grade (cooler in space).
+
+**Reentry phase — DESIGNED, blocked on a harness capability (attempted, reverted).**
+The design: add a `reentryFactor ∈ [0,1]` from the SAME convective flux the plasma
+uses — `ThermalModel.ComputeHeatFlux(body.GetAtmosphericDensity(pos), surfaceSpeed)`,
+thresholds `5e4`/`6e5` W/m² (mirror `ReentryPlasmaController`). When it fires, lerp the
+overlay by `reentryFactor`: ambient → ~0.10, sun energy → ~0.9, glow → ~0.8, so the
+emissive fireball dominates without washing the cockpit/HUD. It only activates on heat,
+so it CANNOT regress the pad/orbit look.
+**Why it was reverted (honesty):** it could not be visually verified headless. Forcing
+reentry via `JumpToOrbit(85_000)` gives an AXIAL attitude (tiny windward plasma cap)
+and at moderate flux the light shift is imperceptible against the bright Earth; pushing
+to saturated flux burns the ship up first. The dramatic case — a belly-flop EDL with a
+large windward cap — is exactly what the overlay is for, but the harness can't produce
+it yet.
+**Unblock first, then ship:** teach the play harness a real DEORBIT → EDL path (milestone
+7): set a retrograde attitude + throttle burn to drop periapsis into the atmosphere so
+`EDLController` auto-engages belly-flop (it fires on `vUp < -20 && inAtmo && speed >
+EntrySpeed`), giving a big windward plasma to capture and tune the overlay against. With
+that frame, re-add the reentry overlay and verify before/after.
+**Also next:** tune the ascent mid-blend against a real Max-Q capture; optional cooler
+color grade in space.
 
 ### B2. Liftoff plume visibility — MED
 
