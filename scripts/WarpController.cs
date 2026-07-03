@@ -43,6 +43,11 @@ public partial class WarpController : Control
                 bridge.SetWarpIndex(bridge.WarpIndex - 1);
                 handled = true;
             }
+            else if (key.Keycode == Key.Backspace)
+            {
+                bridge.SetWarpIndex(0);
+                handled = true;
+            }
 
             if (handled)
                 GetViewport().SetInputAsHandled();

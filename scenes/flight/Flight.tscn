@@ -2,7 +2,6 @@
 
 [ext_resource type="Script" uid="uid://cgv3867aco32i" path="res://scripts/SimulationBridge.cs" id="1"]
 [ext_resource type="Script" uid="uid://c07jmycayi338" path="res://scripts/FloatingOrigin.cs" id="2"]
-[ext_resource type="Script" uid="uid://lucbcu3txwro" path="res://scripts/TimeWarpController.cs" id="3"]
 [ext_resource type="Script" uid="uid://dbjojxl6gqgql" path="res://scripts/HUDController.cs" id="4"]
 [ext_resource type="Script" path="res://scripts/CameraController.cs" id="6"]
 
@@ -32,9 +31,6 @@ script = ExtResource("1")
 [node name="FloatingOrigin" type="Node" parent="." unique_id=68116945]
 script = ExtResource("2")
 SceneRootPath = NodePath("../World")
-
-[node name="TimeWarpController" type="Node" parent="." unique_id=527935751]
-script = ExtResource("3")
 
 [node name="World" type="Node3D" parent="." unique_id=941805704]
 
