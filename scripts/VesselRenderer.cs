@@ -35,28 +35,30 @@ public partial class VesselRenderer : Node3D
     private const float OldR   = 1.15f;           // legacy modelling radius (u)
     private const float RScale = BodyR / OldR;    // ≈1.397 radial scale factor
 
+    // Flight 7 vertical split @ 2.8 m/u — booster 71 m, ship 50 m, stack ~121 m.
+    private const float MetresPerUnit = 2.8f;
+    private const float SepPlaneY       = 71f / MetresPerUnit;
+    private const float ShipSkirtH      = 2f;
+    private const float ShipBodyH       = 11.5f;
+    private const float ShipNoseH       = 50f / MetresPerUnit - ShipSkirtH - ShipBodyH;
+    private const float ShipSkirtBase   = 22f;
+    private const float ShipBodyBase    = ShipSkirtBase + ShipSkirtH;
+    private const float ShipNoseBase    = ShipBodyBase + ShipBodyH;
+    private const float StackShipOffset = SepPlaneY - ShipSkirtBase;
+    private const float ShBodyBot       = 2f;
+    private const float ShBodyTop       = SepPlaneY - 2f;
+    private const float ShBodyH         = ShBodyTop - ShBodyBot;
+    private const float ShGridFinY      = ShBodyTop - 2.0f;
+
     // ── Layout constants (all in render units, y=0 = SH engine bell tips) ──
     //
-    //  Full stack:
-    //   y = 0           SH engine bell tips (pointing down)
-    //   y = 0 → +2      SH engine skirt
-    //   y = +2 → +20    SH main body
-    //   y = +18 → +22   SH grid fins (overlap with interstage is realistic)
-    //   y = +20 → +22   interstage
-    //   y = +22         separation plane
-    //   y = +22 → +24   Starship engine bay / skirt  (BuildStarshipSection o=0)
-    //   y = +24 → +31   Starship lower body (tiles)
-    //   y = +31 → +38   Starship upper body (steel)
-    //   y = +38 → +43   Starship nosecone (ogive + dome)
-    //   y ≈ +43.25      nose tip
+    //  Full stack (Flight 7 proportions):
+    //   y = SepPlaneY   separation plane (71 m)
+    //   stack tip ≈ SepPlaneY + 50 m
     //
     //  Standalone Starship (BuildStarshipSection o=-22):
     //   y = -1.05       engine bell tips
-    //   y = 0 → +2      engine bay / skirt
-    //   y = +2 → +9     lower body (tiles)
-    //   y = +9 → +16    upper body (steel)
-    //   y = +16 → +21   nosecone
-    //   y ≈ +21.25      nose tip
+    //   y = 0 → +50m    ship section (skirt through nose)
     //
     //  Standalone SH (BuildSuperHeavyOnly):
     //   Same SH body as full stack, separation scar at top
@@ -92,21 +94,21 @@ public partial class VesselRenderer : Node3D
         var ventMat   = Mat(new Color(0.10f, 0.10f, 0.11f), 0.70f, 0.55f);
         AddMesh("Interstage", new CylinderMesh
             { TopRadius = BodyR, BottomRadius = BodyR, Height = 2f, RadialSegments = 64 },
-            ringSteel, new Vector3(0, 21f, 0));
+            ringSteel, new Vector3(0, SepPlaneY - 1f, 0));
 
         // Vertical vent slots around the hot-stage ring (dark recesses).
         for (int i = 0; i < 24; i++)
         {
             float a = i * Mathf.Pi / 12f;
             AddMesh($"Vent{i}", new BoxMesh { Size = new Vector3(0.10f, 1.4f, 0.16f) },
-                ventMat, new Vector3(1.14f * RScale * Mathf.Cos(a), 21f, 1.14f * RScale * Mathf.Sin(a)));
+                ventMat, new Vector3(1.14f * RScale * Mathf.Cos(a), SepPlaneY - 1f, 1.14f * RScale * Mathf.Sin(a)));
         }
         // Lip rings top and bottom of the interstage.
-        AddWeldRing("InterLipB", 1.155f * RScale, 20.1f);
-        AddWeldRing("InterLipT", 1.155f * RScale, 21.9f);
+        AddWeldRing("InterLipB", 1.155f * RScale, ShBodyTop + 0.1f);
+        AddWeldRing("InterLipT", 1.155f * RScale, SepPlaneY - 0.1f);
 
-        // Starship section sits at separation plane y=22
-        BuildStarshipSection(vessel, yOffset: 0f);
+        // Starship section sits at separation plane
+        BuildStarshipSection(vessel, yOffset: StackShipOffset);
 
         foreach (var part in vessel.Parts.Parts)
             _partNodes[part.InstanceId] = _hullMesh!;
@@ -139,16 +141,16 @@ public partial class VesselRenderer : Node3D
         // Main body (y=2 → y=20), a single tall barrel. Body-local y runs
         // [-9, +9]; soot fades in over the bottom ~3 units (toward the engines).
         var shSteel = SteelMat(new Color(0.80f, 0.80f, 0.82f), 0.93f, 0.22f,
-            weldSpacing: 1.6f, sootBot: -9f, sootTop: -5.5f);
+            weldSpacing: 1.6f, sootBot: -ShBodyH * 0.5f, sootTop: -ShBodyH * 0.5f + 3.5f);
         _hullMesh = AddMesh("SHBody", new CylinderMesh
-            { TopRadius = BodyR, BottomRadius = BodyR, Height = 18f, RadialSegments = 64 },
-            shSteel, new Vector3(0, 11f, 0));
-        AddWeldRings("SHBarrelWeld", BodyR + 0.018f, 3.1f, 19.0f, 9);
-        AddHullRing("SHFrostLOX", BodyR + 0.026f, 15.8f, 0.10f, FrostMat);
+            { TopRadius = BodyR, BottomRadius = BodyR, Height = ShBodyH, RadialSegments = 64 },
+            shSteel, new Vector3(0, ShBodyBot + ShBodyH * 0.5f, 0));
+        AddWeldRings("SHBarrelWeld", BodyR + 0.018f, ShBodyBot + 1.1f, ShBodyTop - 1.0f, 9);
+        AddHullRing("SHFrostLOX", BodyR + 0.026f, ShBodyTop - 3.8f, 0.10f, FrostMat);
 
         // Raceway / conduit running up one side of the booster (real SH detail).
         AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
-            darkSteel, new Vector3(BodyR + 0.01f, 11f, 0f));
+            darkSteel, new Vector3(BodyR + 0.01f, ShBodyBot + ShBodyH * 0.5f, 0f));
         AddBoosterLongitudinalSeams(darkSteel);
 
         // Engine skirt (y=0 → y=2) — sooty, blended into the body bottom so the
@@ -217,7 +219,7 @@ public partial class VesselRenderer : Node3D
         // The vented hot-stage barrel itself (y=20 → y=22).
         AddMesh("HotStageRing", new CylinderMesh
             { TopRadius = BodyR, BottomRadius = BodyR, Height = 2f, RadialSegments = 64 },
-            scorched, new Vector3(0, 21f, 0));
+            scorched, new Vector3(0, ShBodyTop + 1f, 0));
 
         // Vertical vent slots around the ring — these are the open passages the
         // Ship's exhaust blew through during hot-staging.
@@ -225,13 +227,13 @@ public partial class VesselRenderer : Node3D
         {
             float a = i * Mathf.Pi / 12f;
             AddMesh($"HotVent{i}", new BoxMesh { Size = new Vector3(0.11f, 1.5f, 0.18f) },
-                ventMat, new Vector3((BodyR - 0.02f) * Mathf.Cos(a), 21f, (BodyR - 0.02f) * Mathf.Sin(a)));
+                ventMat, new Vector3((BodyR - 0.02f) * Mathf.Cos(a), ShBodyTop + 1f, (BodyR - 0.02f) * Mathf.Sin(a)));
         }
 
         // Burnt separation lip capping the exposed ring (the torn separation plane).
         AddMesh("SepLip", new CylinderMesh
             { TopRadius = BodyR + 0.02f, BottomRadius = BodyR + 0.02f, Height = 0.22f, RadialSegments = 48 },
-            lipMat, new Vector3(0, 22.05f, 0));
+            lipMat, new Vector3(0, SepPlaneY + 0.05f, 0));
     }
 
     private void AddBoosterLongitudinalSeams(Material mat)
@@ -239,7 +241,7 @@ public partial class VesselRenderer : Node3D
         for (int i = 0; i < 8; i++)
         {
             float a = i * Mathf.Tau / 8f + Mathf.Pi / 8f;
-            AddSurfaceBox($"SHLongSeam{i}", a, 11.3f, 15.2f, 0.030f, 0.10f, mat, BodyR + 0.030f);
+            AddSurfaceBox($"SHLongSeam{i}", a, ShBodyBot + ShBodyH * 0.5f, ShBodyH * 0.84f, 0.030f, 0.10f, mat, BodyR + 0.030f);
         }
     }
 
@@ -263,11 +265,11 @@ public partial class VesselRenderer : Node3D
 
             // Mount hinge/arm against the hull.
             AddMesh($"GridFinMount{i}", new BoxMesh { Size = new Vector3(0.55f, 1.3f, 0.70f) },
-                mountMat, new Vector3((BodyR + 0.03f) * cos, 18.6f, (BodyR + 0.03f) * sin));
+                mountMat, new Vector3((BodyR + 0.03f) * cos, ShGridFinY, (BodyR + 0.03f) * sin));
 
             var hinge = AddMesh($"GridFinHinge{i}",
                 new CylinderMesh { TopRadius = 0.18f, BottomRadius = 0.18f, Height = 1.45f, RadialSegments = 18 },
-                mountMat, new Vector3((BodyR + 0.34f) * cos, 18.75f, (BodyR + 0.34f) * sin));
+                mountMat, new Vector3((BodyR + 0.34f) * cos, ShGridFinY + 0.15f, (BodyR + 0.34f) * sin));
             hinge.RotationDegrees = new Vector3(0f, deg, 90f);
 
             // Tapered lattice slab, canted slightly so it does not read as a flat square.
@@ -275,7 +277,7 @@ public partial class VesselRenderer : Node3D
             {
                 Name            = $"GridFin{i}",
                 Mesh            = BuildGridFinPlateMesh(rootChord: 1.62f, tipChord: 1.18f, height: 1.85f, thickness: 0.18f),
-                Position        = new Vector3((BodyR + 0.78f) * cos, 18.85f, (BodyR + 0.78f) * sin),
+                Position        = new Vector3((BodyR + 0.78f) * cos, ShGridFinY + 0.25f, (BodyR + 0.78f) * sin),
                 RotationDegrees = new Vector3(0f, deg + 6f, 4f),
             };
             fin.SetSurfaceOverrideMaterial(0, finMat);
@@ -347,56 +349,43 @@ public partial class VesselRenderer : Node3D
 
     // ── Starship section (standalone or stacked above SH) ─────────────────
     //
-    //  o = yOffset. When called with:
-    //    o =  0    → skirt base at y=22  (full stack, Starship sits atop SH)
-    //    o = -22   → skirt base at y=0   (standalone Starship after separation)
+    //  o = StackShipOffset → skirt base at SepPlaneY (full stack)
+    //  o = -22             → skirt base at y=0 (standalone Starship)
 
     private void BuildStarshipSection(Vessel vessel, float yOffset)
     {
-        // Starship steel is the brightest, cleanest bare 304L in the stack.
         var tiles     = TileMat();
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
 
         float o = yOffset;
+        float bodyMid = o + ShipBodyBase + ShipBodyH * 0.5f;
+        float bodyTop = o + ShipNoseBase;
+        float bodyBot = o + ShipBodyBase;
+        float fwdFlapY = o + ShipNoseBase - 1.5f;
+        float aftFlapY = o + ShipBodyBase + 2.4f;
+        float skirtMid = o + ShipSkirtBase + ShipSkirtH * 0.5f;
+        float skirtTop = o + ShipBodyBase;
 
-        // ── Body barrel (steel) y=o+24 → o+38 ─────────────────────────────
-        // The windward (one) side is black heat-shield tiles; the leeward side
-        // stays bare steel. We model this as ONE continuous full-height steel
-        // barrel (no upper/lower seam) plus a tile "shell" half wrapping the
-        // windward (-X / forward) side. Body-local y runs [-7, +7]; the shader
-        // adds weld banding so the long tube doesn't read flat.
-        var shipSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.16f,
-            weldSpacing: 1.55f);
+        var shipSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.16f, weldSpacing: 1.55f);
         _hullMesh = AddMesh("Body",
-            new CylinderMesh { TopRadius = BodyR, BottomRadius = BodyR, Height = 14f, RadialSegments = 64 },
-            shipSteel, new Vector3(0, o + 31f, 0));
-        AddWeldRings("ShipBarrelWeld", BodyR + 0.018f, o + 24.8f, o + 37.3f, 7);
-        AddHullRing("ShipFrostLOX", BodyR + 0.026f, o + 34.2f, 0.08f, FrostMat);
-        AddHullRing("ShipFrostCH4", BodyR + 0.026f, o + 28.0f, 0.07f, FrostMat);
+            new CylinderMesh { TopRadius = BodyR, BottomRadius = BodyR, Height = ShipBodyH, RadialSegments = 64 },
+            shipSteel, new Vector3(0, bodyMid, 0));
+        AddWeldRings("ShipBarrelWeld", BodyR + 0.018f, bodyBot + 0.8f, bodyTop - 0.7f, 7);
+        AddHullRing("ShipFrostLOX", BodyR + 0.026f, bodyTop - 1.3f, 0.08f, FrostMat);
+        AddHullRing("ShipFrostCH4", BodyR + 0.026f, bodyMid - 1.75f, 0.07f, FrostMat);
 
-        // Leeward external raceway/cable cover. It gives the upper stage an
-        // asymmetric real-vehicle cue without changing the windward tile side.
-        AddSurfaceBox("ShipRaceway", angle: 0f, y: o + 31.0f, height: 11.4f,
+        AddSurfaceBox("ShipRaceway", angle: 0f, y: bodyMid, height: ShipBodyH * 0.81f,
             width: 0.18f, depth: 0.18f, mat: darkSteel, radius: BodyR + 0.045f);
         AddPayloadDoorOutline(o, darkSteel);
         AddShipCloseupCues(o);
 
-        // Windward black-tile band: a slightly larger half-cylinder shell on the
-        // -X side, running the full body height. Built from short tile staves so
-        // the dark heat-shield reads clearly on one side only.
-        AddTileBand(o + 24f, o + 38f);
-        AddHeatShieldBorder(o + 24f, o + 38f, BodyR + 0.035f);
+        AddTileBand(bodyBot, bodyTop);
+        AddHeatShieldBorder(bodyBot, bodyTop, BodyR + 0.035f);
 
-        // ── Ogive nosecone (smooth multi-segment taper) ───────────────────
-        // Real Starship nose is a smooth tangent ogive. Build it from many short
-        // frusta whose radii follow the ogive curve; with enough segments and a
-        // slight vertical overlap the profile reads round, not faceted. The
-        // shared-vertex radii match exactly across joints so there are no steps.
-        // Base y=o+38, tip y≈o+43.2 (5.2 units ≈ 14.6 m).
         const int   noseSeg  = 22;
-        const float noseBase = 38f;          // body-relative base
-        const float noseLen  = 5.2f;
-        const float noseR    = BodyR;        // base radius matches the 9 m body
+        const float noseBase = ShipNoseBase;
+        const float noseLen  = ShipNoseH;
+        const float noseR    = BodyR;
         var noseSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.18f,
             weldSpacing: 1.3f);
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
@@ -424,8 +413,9 @@ public partial class VesselRenderer : Node3D
         }
 
         // Tile coverage continues up the windward side of the nose.
-        AddTileBand(o + 38f, o + 41.5f, topRadius: 0.83f * RScale, botRadius: BodyR + 0.01f);
-        AddHeatShieldBorder(o + 38f, o + 41.5f, BodyR + 0.030f);
+        AddTileBand(o + ShipNoseBase, o + ShipNoseBase + ShipNoseH * 0.67f,
+            topRadius: 0.83f * RScale, botRadius: BodyR + 0.01f);
+        AddHeatShieldBorder(o + ShipNoseBase, o + ShipNoseBase + ShipNoseH * 0.67f, BodyR + 0.030f);
 
         // Dome cap: small hemisphere rounding off the ogive tip at y≈o+43.0
         var noseDome = new MeshInstance3D
@@ -444,34 +434,25 @@ public partial class VesselRenderer : Node3D
         noseDome.SetSurfaceOverrideMaterial(0, noseSteel);
         AddChild(noseDome);
 
-        // Engine skirt (y=o+22 → o+24)
         AddMesh("Skirt",
-            new CylinderMesh { TopRadius = BodyR, BottomRadius = 1.08f * RScale, Height = 2f, RadialSegments = 48 },
-            darkSteel, new Vector3(0, o + 23f, 0));
-        AddWeldRing("SkirtLip", 1.155f * RScale, o + 24f);
+            new CylinderMesh { TopRadius = BodyR, BottomRadius = 1.08f * RScale, Height = ShipSkirtH, RadialSegments = 48 },
+            darkSteel, new Vector3(0, skirtMid, 0));
+        AddWeldRing("SkirtLip", 1.155f * RScale, skirtTop);
 
-        // ── Forward flaps (2 small, high on the body, windward -X side) ────
-        // Real V2 forward flaps are small and shifted toward the leeward edge
-        // of the windward face; tile-covered.
-        AddFlap("FwdFlapL", o + 37.0f, 3.0f, 2.0f, -0.62f, tiles);
-        AddFlap("FwdFlapR", o + 37.0f, 3.0f, 2.0f,  0.62f, tiles);
+        AddFlap("FwdFlapL", fwdFlapY, 3.0f, 2.0f, -0.62f, tiles);
+        AddFlap("FwdFlapR", fwdFlapY, 3.0f, 2.0f,  0.62f, tiles);
+        AddFlap("AftFlapL", aftFlapY, 5.6f, 3.4f, -0.55f, tiles);
+        AddFlap("AftFlapR", aftFlapY, 5.6f, 3.4f,  0.55f, tiles);
 
-        // ── Aft flaps (2 large, low on the body) ──────────────────────────
-        AddFlap("AftFlapL", o + 26.2f, 5.6f, 3.4f, -0.55f, tiles);
-        AddFlap("AftFlapR", o + 26.2f, 5.6f, 3.4f,  0.55f, tiles);
-
-        // Sooty engine-bay roof above the bells so the cluster sits in shadow.
         var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
         AddMesh("ShipBaySoot", new CylinderMesh
             { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
-            sootSteel, new Vector3(0, o + 22.4f, 0));
+            sootSteel, new Vector3(0, o + ShipSkirtBase + 0.4f, 0));
         AddAftShieldSkirt(o, sootSteel);
 
-        // 3 vacuum Raptors (inner) + 3 sea-level (outer). Ring radii scale with
-        // the wider 9 m hull so the six bells stay spread under the skirt.
         const float vacR = 0.38f * RScale;
         const float slR  = 0.72f * RScale;
-        float bellY = o + 22f - 1.05f;
+        float bellY = o + ShipSkirtBase - 1.05f;
 
         for (int i = 0; i < 3; i++)
         {
@@ -492,7 +473,7 @@ public partial class VesselRenderer : Node3D
 
         // GPU plumes for Starship engines
         if (_plumes == null) { _plumes = new PlumeSystem { Name = "Plumes" }; AddChild(_plumes); }
-        _plumes.SetupStarship(vacR, slR, o + 22f);
+        _plumes.SetupStarship(vacR, slR, o + ShipSkirtBase);
 
         if (yOffset == -22f)
         {
@@ -775,16 +756,21 @@ public partial class VesselRenderer : Node3D
         AddChild(box);
     }
 
+    private static float ShipRelY(float o, float legacyRelFromSkirt)
+    {
+        const float legacyShipSpan = 21.25f;
+        float span = ShipSkirtH + ShipBodyH + ShipNoseH;
+        return o + ShipSkirtBase + legacyRelFromSkirt * (span / legacyShipSpan);
+    }
+
     private void AddPayloadDoorOutline(float o, Material mat)
     {
-        // Subtle leeward payload-bay/maintenance panel outline. It gives the
-        // stainless side real scale cues without turning into visible text.
-        const float a = 0f; // leeward side opposite the windward heat shield
+        const float a = 0f;
         float r = BodyR + 0.052f;
-        AddSurfaceBox("PayloadDoorLeft",  a - 0.17f, o + 34.0f, 7.0f, 0.030f, 0.12f, mat, r);
-        AddSurfaceBox("PayloadDoorRight", a + 0.17f, o + 34.0f, 7.0f, 0.030f, 0.12f, mat, r);
-        AddSurfaceBox("PayloadDoorTop",   a, o + 37.5f, 0.04f, 0.56f, 0.12f, mat, r);
-        AddSurfaceBox("PayloadDoorBottom",a, o + 30.5f, 0.04f, 0.56f, 0.12f, mat, r);
+        AddSurfaceBox("PayloadDoorLeft",  a - 0.17f, ShipRelY(o, 12.0f), 7.0f, 0.030f, 0.12f, mat, r);
+        AddSurfaceBox("PayloadDoorRight", a + 0.17f, ShipRelY(o, 12.0f), 7.0f, 0.030f, 0.12f, mat, r);
+        AddSurfaceBox("PayloadDoorTop",   a, ShipRelY(o, 15.5f), 0.04f, 0.56f, 0.12f, mat, r);
+        AddSurfaceBox("PayloadDoorBottom",a, ShipRelY(o, 8.5f), 0.04f, 0.56f, 0.12f, mat, r);
     }
 
     private void AddShipCloseupCues(float o)
@@ -793,28 +779,25 @@ public partial class VesselRenderer : Node3D
         var darkMark = Mat(new Color(0.055f, 0.055f, 0.062f), 0.20f, 0.82f);
         var paleMark = Mat(new Color(0.72f, 0.73f, 0.75f), 0.35f, 0.66f);
 
-        // Small leeward access panels and vent/drain ports. These are deliberately
-        // subtle: close-up scale cues without turning the vehicle into a billboard.
-        AddSurfaceBox("ShipNoseAccessPanel", 0.20f, o + 39.6f, 1.15f, 0.030f, 0.11f, panelMat, BodyR + 0.050f);
-        AddSurfaceBox("ShipUpperAccessPanel", -0.24f, o + 35.0f, 1.55f, 0.032f, 0.11f, panelMat, BodyR + 0.050f);
-        AddSurfaceBox("ShipAftAccessPanel", 0.32f, o + 27.1f, 1.15f, 0.030f, 0.11f, panelMat, BodyR + 0.050f);
+        AddSurfaceBox("ShipNoseAccessPanel", 0.20f, ShipRelY(o, 17.6f), 1.15f, 0.030f, 0.11f, panelMat, BodyR + 0.050f);
+        AddSurfaceBox("ShipUpperAccessPanel", -0.24f, ShipRelY(o, 13.0f), 1.55f, 0.032f, 0.11f, panelMat, BodyR + 0.050f);
+        AddSurfaceBox("ShipAftAccessPanel", 0.32f, ShipRelY(o, 5.1f), 1.15f, 0.030f, 0.11f, panelMat, BodyR + 0.050f);
 
-        foreach (float y in new[] { o + 36.2f, o + 33.3f, o + 29.0f })
+        foreach (float rel in new[] { 14.2f, 11.3f, 7.0f })
         {
+            float y = ShipRelY(o, rel);
             AddSurfaceBox($"ShipVentPort{(int)(y * 10)}A", 0.43f, y, 0.20f, 0.055f, 0.12f, darkMark, BodyR + 0.060f);
             AddSurfaceBox($"ShipVentPort{(int)(y * 10)}B", 0.51f, y - 0.24f, 0.16f, 0.050f, 0.12f, darkMark, BodyR + 0.060f);
         }
 
-        // Minimal serial-style bars on the leeward steel side. Avoids fake logos,
-        // but gives the large stainless tube a real-world service marking cue.
         float a = -0.46f;
         float r = BodyR + 0.063f;
-        AddSurfaceBox("ShipSerialStem", a, o + 32.6f, 1.25f, 0.035f, 0.12f, darkMark, r);
-        AddSurfaceBox("ShipSerialTop", a, o + 33.20f, 0.035f, 0.42f, 0.12f, darkMark, r);
-        AddSurfaceBox("ShipSerialMid", a, o + 32.60f, 0.035f, 0.34f, 0.12f, darkMark, r);
-        AddSurfaceBox("ShipSerialBot", a, o + 32.00f, 0.035f, 0.42f, 0.12f, darkMark, r);
-        AddSurfaceBox("ShipSerialTick0", a - 0.09f, o + 33.05f, 0.42f, 0.030f, 0.12f, paleMark, r);
-        AddSurfaceBox("ShipSerialTick1", a - 0.15f, o + 32.18f, 0.42f, 0.030f, 0.12f, paleMark, r);
+        AddSurfaceBox("ShipSerialStem", a, ShipRelY(o, 10.6f), 1.25f, 0.035f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialTop", a, ShipRelY(o, 11.2f), 0.035f, 0.42f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialMid", a, ShipRelY(o, 10.6f), 0.035f, 0.34f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialBot", a, ShipRelY(o, 10.0f), 0.035f, 0.42f, 0.12f, darkMark, r);
+        AddSurfaceBox("ShipSerialTick0", a - 0.09f, ShipRelY(o, 11.05f), 0.42f, 0.030f, 0.12f, paleMark, r);
+        AddSurfaceBox("ShipSerialTick1", a - 0.15f, ShipRelY(o, 10.18f), 0.42f, 0.030f, 0.12f, paleMark, r);
     }
 
     private void AddHeatShieldBorder(float yBottom, float yTop, float radius)
@@ -840,9 +823,9 @@ public partial class VesselRenderer : Node3D
     {
         // Dark aft heat/soot blankets around the Ship engine bay. This makes the
         // Starship-to-engine transition read closer to the real vehicle.
-        AddSurfaceBox("ShipAftBlackWrapL", Mathf.Pi - 0.72f, o + 24.2f, 1.5f, 0.30f, 0.15f, mat, BodyR + 0.055f);
-        AddSurfaceBox("ShipAftBlackWrapC", Mathf.Pi,         o + 24.0f, 1.7f, 0.38f, 0.15f, mat, BodyR + 0.055f);
-        AddSurfaceBox("ShipAftBlackWrapR", Mathf.Pi + 0.72f, o + 24.2f, 1.5f, 0.30f, 0.15f, mat, BodyR + 0.055f);
+        AddSurfaceBox("ShipAftBlackWrapL", Mathf.Pi - 0.72f, ShipRelY(o, 2.2f), 1.5f, 0.30f, 0.15f, mat, BodyR + 0.055f);
+        AddSurfaceBox("ShipAftBlackWrapC", Mathf.Pi,         ShipRelY(o, 2.0f), 1.7f, 0.38f, 0.15f, mat, BodyR + 0.055f);
+        AddSurfaceBox("ShipAftBlackWrapR", Mathf.Pi + 0.72f, ShipRelY(o, 2.2f), 1.5f, 0.30f, 0.15f, mat, BodyR + 0.055f);
     }
 
     // Black heat-shield tile coverage over the windward (-X) half of a body
