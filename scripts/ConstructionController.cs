@@ -737,7 +737,14 @@ public partial class ConstructionController : Control
     // [Del] removes the selected subtree from the preview.
     public override void _UnhandledKeyInput(InputEvent ev)
     {
-        if (ev is InputEventKey k && k.Pressed && k.Keycode == Key.Delete && _selectedInstanceId != null)
+        if (ev is not InputEventKey { Pressed: true, Echo: false } k) return;
+
+        if (k.Keycode == Key.Escape)
+        {
+            GetTree().ChangeSceneToFile("res://scenes/ui/MainMenu.tscn");
+            GetViewport().SetInputAsHandled();
+        }
+        else if (k.Keycode == Key.Delete && _selectedInstanceId != null)
         {
             OnDelete();
             GetViewport().SetInputAsHandled();

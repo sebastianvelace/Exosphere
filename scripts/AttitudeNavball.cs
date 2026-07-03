@@ -17,18 +17,18 @@ using Exosphere.Simulation.Math;
 // Attitude is expressed by projecting the vessel nose into this frame.
 public partial class AttitudeNavball : Control
 {
-    private static readonly Color PanelBg     = new(0.03f, 0.05f, 0.08f, 0.65f);
-    private static readonly Color PanelBorder = new(0.28f, 0.55f, 0.85f, 0.45f);
-    private static readonly Color SkyCol      = new(0.18f, 0.42f, 0.72f, 1f);
-    private static readonly Color GroundCol   = new(0.42f, 0.30f, 0.16f, 1f);
-    private static readonly Color HorizonCol  = new(0.95f, 0.97f, 1.00f, 1f);
-    private static readonly Color LadderCol   = new(0.85f, 0.90f, 0.98f, 0.75f);
-    private static readonly Color Reticle     = new(1.00f, 0.85f, 0.20f, 1f);
-    private static readonly Color ProgradeCol = new(0.40f, 1.00f, 0.55f, 1f);
-    private static readonly Color RetroCol    = new(1.00f, 0.45f, 0.40f, 1f);
-    private static readonly Color RadialCol   = new(0.55f, 0.80f, 1.00f, 1f);
-    private static readonly Color LabelDim    = new(0.65f, 0.72f, 0.82f, 1f);
-    private static readonly Color ValueBright = new(0.92f, 0.96f, 1.00f, 1f);
+    private static readonly Color PanelBg     = InterfaceTheme.GlassStrong;
+    private static readonly Color PanelBorder = InterfaceTheme.EdgeStrong;
+    private static readonly Color SkyCol      = new(0.28f, 0.30f, 0.34f, 1f);
+    private static readonly Color GroundCol   = new(0.075f, 0.082f, 0.095f, 1f);
+    private static readonly Color HorizonCol  = InterfaceTheme.Text;
+    private static readonly Color LadderCol   = new(0.82f, 0.84f, 0.88f, 0.64f);
+    private static readonly Color Reticle     = InterfaceTheme.Text;
+    private static readonly Color ProgradeCol = InterfaceTheme.Text;
+    private static readonly Color RetroCol    = new(0.62f, 0.65f, 0.70f, 1f);
+    private static readonly Color RadialCol   = new(0.76f, 0.78f, 0.82f, 1f);
+    private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
+    private static readonly Color ValueBright = InterfaceTheme.Text;
 
     private const float Radius = 78f;
 
@@ -53,7 +53,7 @@ public partial class AttitudeNavball : Control
     // (vertical on the pad) to ~0° (horizontal) with altitude, mimicking a gravity turn.
     private bool   _directorVisible;
     private double _targetPitchDeg;
-    private static readonly Color DirectorCol = new(1.00f, 0.55f, 0.88f, 1f);  // magenta guía
+    private static readonly Color DirectorCol = InterfaceTheme.Warning;
 
     public override void _Ready()
     {
@@ -64,8 +64,8 @@ public partial class AttitudeNavball : Control
         CustomMinimumSize = new Vector2(2 * Radius + 28, 2 * Radius + 46);
         OffsetLeft  = -(Radius + 14);
         OffsetRight =  (Radius + 14);
-        OffsetTop   = -(2 * Radius + 56);
-        OffsetBottom = -10;
+        OffsetTop   = -(2 * Radius + 80);
+        OffsetBottom = -34;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
@@ -355,7 +355,7 @@ public partial class AttitudeNavball : Control
     {
         float w = Radius * 2f;
         var rect = new Rect2(top.X - w / 2f, top.Y, w, 16f);
-        DrawRect(rect, new Color(0.05f, 0.07f, 0.10f, 0.7f), true);
+        DrawRect(rect, InterfaceTheme.GlassStrong, true);
         DrawRect(rect, PanelBorder, false, 1f);
 
         // Tick every 30°, centred on current heading.

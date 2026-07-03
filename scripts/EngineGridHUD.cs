@@ -16,18 +16,16 @@ public partial class EngineGridHUD : Control
     private const int RingOuter = 20;
     private const int TotalEngines = RingInner + RingMid + RingOuter;
 
-    private static readonly Color PanelBg     = new(0.03f, 0.05f, 0.08f, 0.62f);
-    private static readonly Color PanelBorder = new(0.28f, 0.55f, 0.85f, 0.45f);
-    private static readonly Color DotOff      = new(0.16f, 0.20f, 0.27f, 0.95f);
-    private static readonly Color DotOn       = new(1.00f, 0.62f, 0.20f, 1f);
-    private static readonly Color DotOnHot    = new(1.00f, 0.85f, 0.45f, 1f);
-    private static readonly Color LabelDim    = new(0.60f, 0.68f, 0.78f, 1f);
-    private static readonly Color ValueBright = new(0.92f, 0.96f, 1.00f, 1f);
-    private static readonly Color Accent      = new(0.45f, 0.80f, 1.00f, 1f);
-    private static readonly Color GreenTwr    = new(0.30f, 1.00f, 0.45f, 1f);
-    private static readonly Color RedTwr      = new(1.00f, 0.42f, 0.32f, 1f);
+    private static readonly Color DotOff      = InterfaceTheme.Track;
+    private static readonly Color DotOn       = new(0.78f, 0.81f, 0.86f, 1f);
+    private static readonly Color DotOnHot    = InterfaceTheme.Text;
+    private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
+    private static readonly Color ValueBright = InterfaceTheme.Text;
+    private static readonly Color Accent      = InterfaceTheme.Text;
+    private static readonly Color RedTwr      = InterfaceTheme.Alert;
 
     private Font _font = null!;
+    private StyleBoxFlat _panelStyle = null!;
 
     // Cached telemetry computed each frame in _Process, rendered in _Draw.
     private int    _litEngines;
@@ -43,13 +41,14 @@ public partial class EngineGridHUD : Control
     public override void _Ready()
     {
         _font = ThemeDB.FallbackFont;
+        _panelStyle = InterfaceTheme.GlassPanel(0.76f, 12, 0, 0);
         // Bottom-LEFT, above the money/controls band — frees the bottom-right for the MAP.
         SetAnchorsPreset(LayoutPreset.BottomLeft);
         GrowHorizontal = GrowDirection.End;
         GrowVertical   = GrowDirection.Begin;
-        CustomMinimumSize = new Vector2(208, 232);
-        OffsetLeft = 18;  OffsetTop = -360;
-        OffsetRight = 226; OffsetBottom = -128;
+        CustomMinimumSize = new Vector2(194, 224);
+        OffsetLeft = 18; OffsetTop = -340;
+        OffsetRight = 212; OffsetBottom = -116;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
@@ -151,7 +150,7 @@ public partial class EngineGridHUD : Control
         ry = DrawReadout(12, ry, "THRUST", $"{_thrustKN:N0} kN", ValueBright);
         ry = DrawReadout(12, ry, "TWR",
             _twrValid ? $"{_twr:F2}" : "---",
-            _twrValid ? (_twr >= 1.0 ? GreenTwr : RedTwr) : LabelDim);
+            _twrValid ? (_twr >= 1.0 ? ValueBright : RedTwr) : LabelDim);
         ry = DrawReadout(12, ry, "Isp",
             _ispEff > 0 ? $"{_ispEff:F0} s" : "---", ValueBright);
         DrawReadout(12, ry, "ṁ FLOW",
@@ -190,8 +189,7 @@ public partial class EngineGridHUD : Control
 
     private void DrawPanel(Rect2 r)
     {
-        DrawRect(r, PanelBg, true);
-        DrawRect(r, PanelBorder, false, 1.0f);
+        DrawStyleBox(_panelStyle, r);
     }
 
     private static double Lerp(double a, double b, double t) => a + (b - a) * t;

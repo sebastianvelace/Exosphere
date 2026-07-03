@@ -14,19 +14,16 @@ using Exosphere.Simulation.Math;
 public partial class HUDController : Control
 {
     // ── Palette ─────────────────────────────────────────────────────────────
-    private static readonly Color PanelBg     = new(0.03f, 0.05f, 0.08f, 0.58f);
-    private static readonly Color PanelBorder = new(0.28f, 0.55f, 0.85f, 0.45f);
-    private static readonly Color LabelDim    = new(0.60f, 0.68f, 0.78f, 1f);
-    private static readonly Color ValueBright = new(0.92f, 0.96f, 1.00f, 1f);
-    private static readonly Color Accent      = new(0.45f, 0.80f, 1.00f, 1f);
-    private static readonly Color GaugeTrack  = new(0.12f, 0.16f, 0.22f, 0.90f);
-    private static readonly Color ThrottleCol = new(1.00f, 0.62f, 0.15f, 1f);
-    private static readonly Color FuelCol     = new(0.30f, 0.85f, 0.55f, 1f);
-    private static readonly Color OxCol       = new(0.35f, 0.70f, 1.00f, 1f);
-    private static readonly Color FuelLowCol  = new(0.95f, 0.40f, 0.30f, 1f);
-    private static readonly Color GreenTwr    = new(0.30f, 1.00f, 0.45f, 1f);
-    private static readonly Color RedTwr      = new(1.00f, 0.42f, 0.32f, 1f);
-    private static readonly Color WarnCol     = new(1.00f, 0.78f, 0.25f, 1f);
+    private static readonly Color PanelBg     = InterfaceTheme.Glass;
+    private static readonly Color PanelBorder = InterfaceTheme.Edge;
+    private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
+    private static readonly Color ValueBright = InterfaceTheme.Text;
+    private static readonly Color Accent      = InterfaceTheme.Text;
+    private static readonly Color GaugeTrack  = InterfaceTheme.Track;
+    private static readonly Color FuelCol     = new(0.76f, 0.79f, 0.84f, 1f);
+    private static readonly Color OxCol       = new(0.96f, 0.97f, 1.00f, 1f);
+    private static readonly Color FuelLowCol  = InterfaceTheme.Alert;
+    private static readonly Color WarnCol     = InterfaceTheme.Warning;
 
     // ── Left panel: loads & trajectory ──────────────────────────────────────
     private Label _altValue   = null!;
@@ -88,7 +85,6 @@ public partial class HUDController : Control
         BuildPhaseBanner();
         BuildBottomBand();
         BuildCountdown();
-        BuildControlsHint();
 
         // Spawn the engine board and navball as children.
         AddChild(new EngineGridHUD  { Name = "EngineGridHUD" });
@@ -107,7 +103,7 @@ public partial class HUDController : Control
         vbox.AddThemeConstantOverride("separation", 6);
         panel.AddChild(vbox);
 
-        vbox.AddChild(MakeHeader("LOADS · TRAJECTORY"));
+        vbox.AddChild(MakeHeader("FLIGHT"));
         _altValue       = AddRow(vbox, "ALTITUDE", "---");
         _vspeedValue    = AddRow(vbox, "VERT SPEED", "---");
         _gValue         = AddRow(vbox, "G-FORCE", "---");
@@ -135,7 +131,7 @@ public partial class HUDController : Control
         vbox.AddThemeConstantOverride("separation", 6);
         panel.AddChild(vbox);
 
-        vbox.AddChild(MakeHeader("STAGE · Δv · ORBIT"));
+        vbox.AddChild(MakeHeader("ORBIT / VEHICLE"));
         _massValue = AddRow(vbox, "MASS", "---");
         _dvValue   = AddRow(vbox, "STAGE Δv", "---");
         _apValue   = AddRow(vbox, "APOAPSIS", "---");
@@ -150,7 +146,7 @@ public partial class HUDController : Control
         _suborbitalWarn.AddThemeColorOverride("font_color", FuelLowCol);
         _suborbitalWarn.HorizontalAlignment = HorizontalAlignment.Center;
         _suborbitalWarn.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        _suborbitalWarn.CustomMinimumSize = new Vector2(262, 0);
+        _suborbitalWarn.CustomMinimumSize = new Vector2(246, 0);
         vbox.AddChild(_suborbitalWarn);
 
         _warpValue = AddRow(vbox, "TIME WARP", "Real Time");
@@ -161,19 +157,23 @@ public partial class HUDController : Control
         (_oxFill, _oxValue, _oxTrackW) = AddGauge(vbox, OxCol);
 
         vbox.AddChild(MakeHeader("EVENT LOG"));
-        _eventLog = new Label { Text = "—" };
+        _eventLog = new Label { Text = "-" };
         _eventLog.AddThemeFontSizeOverride("font_size", 11);
         _eventLog.AddThemeColorOverride("font_color", LabelDim);
-        _eventLog.CustomMinimumSize = new Vector2(262, 64);
+        _eventLog.CustomMinimumSize = new Vector2(246, 56);
         _eventLog.VerticalAlignment = VerticalAlignment.Top;
         vbox.AddChild(_eventLog);
     }
 
     private void BuildPhaseBanner()
     {
-        var center = new CenterContainer();
-        center.SetAnchorsPreset(LayoutPreset.TopWide);
-        center.OffsetTop = 14;
+        var center = new PanelContainer();
+        center.SetAnchorsPreset(LayoutPreset.CenterTop);
+        center.GrowHorizontal = GrowDirection.Both;
+        center.OffsetLeft = -240;
+        center.OffsetTop = 18;
+        center.OffsetRight = 240;
+        center.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.62f, 12, 18, 10));
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
 
@@ -184,10 +184,10 @@ public partial class HUDController : Control
 
         _phaseLabel = new Label { Text = "PRE-LAUNCH" };
         _phaseLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        _phaseLabel.AddThemeFontSizeOverride("font_size", 28);
+        _phaseLabel.AddThemeFontSizeOverride("font_size", 16);
         _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(MissionPhase.PRE_LAUNCH));
         _phaseLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
-        _phaseLabel.AddThemeConstantOverride("outline_size", 6);
+        _phaseLabel.AddThemeConstantOverride("outline_size", 3);
         vbox.AddChild(_phaseLabel);
 
         _phaseTrack = new HBoxContainer();
@@ -198,7 +198,7 @@ public partial class HUDController : Control
         {
             var dot = new ColorRect
             {
-                CustomMinimumSize = new Vector2(34, 4),
+                CustomMinimumSize = new Vector2(27, 2),
                 Color = GaugeTrack,
             };
             _phaseDots.Add(dot);
@@ -217,12 +217,12 @@ public partial class HUDController : Control
         var center = new CenterContainer();
         center.SetAnchorsPreset(LayoutPreset.BottomWide);
         center.GrowVertical = GrowDirection.Begin;
-        center.OffsetBottom = -44;
+        center.OffsetBottom = -32;
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
 
         var hbox = new HBoxContainer();
-        hbox.AddThemeConstantOverride("separation", 250);   // navball clearance between stats
+        hbox.AddThemeConstantOverride("separation", 260);
         hbox.Alignment = BoxContainer.AlignmentMode.Center;
         center.AddChild(hbox);
 
@@ -233,7 +233,7 @@ public partial class HUDController : Control
         var timeCenter = new CenterContainer();
         timeCenter.SetAnchorsPreset(LayoutPreset.BottomWide);
         timeCenter.GrowVertical = GrowDirection.Begin;
-        timeCenter.OffsetBottom = -212;   // just above the navball top
+        timeCenter.OffsetBottom = -220;
         timeCenter.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(timeCenter);
 
@@ -251,14 +251,14 @@ public partial class HUDController : Control
         var cap = new Label { Text = caption };
         cap.HorizontalAlignment = HorizontalAlignment.Center;
         cap.AddThemeFontSizeOverride("font_size", 13);
-        cap.AddThemeColorOverride("font_color", Accent);
+        cap.AddThemeColorOverride("font_color", LabelDim);
         cap.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.8f));
         cap.AddThemeConstantOverride("outline_size", 4);
         vbox.AddChild(cap);
 
         var val = new Label { Text = value };
         val.HorizontalAlignment = HorizontalAlignment.Center;
-        val.AddThemeFontSizeOverride("font_size", 38);
+        val.AddThemeFontSizeOverride("font_size", 34);
         val.AddThemeColorOverride("font_color", ValueBright);
         val.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
         val.AddThemeConstantOverride("outline_size", 6);
@@ -282,7 +282,7 @@ public partial class HUDController : Control
     {
         var center = new CenterContainer();
         center.SetAnchorsPreset(LayoutPreset.Center);
-        center.OffsetTop = -190;
+        center.OffsetTop = -178;
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
 
@@ -294,7 +294,7 @@ public partial class HUDController : Control
         _countdownLabel = new Label { Text = "" };
         _countdownLabel.HorizontalAlignment = HorizontalAlignment.Center;
         _countdownLabel.AddThemeFontSizeOverride("font_size", 48);
-        _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.2f));
+        _countdownLabel.AddThemeColorOverride("font_color", WarnCol);
         _countdownLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.9f));
         _countdownLabel.AddThemeConstantOverride("outline_size", 7);
         vbox.AddChild(_countdownLabel);
@@ -302,7 +302,7 @@ public partial class HUDController : Control
         _countdownMilestone = new Label { Text = "" };
         _countdownMilestone.HorizontalAlignment = HorizontalAlignment.Center;
         _countdownMilestone.AddThemeFontSizeOverride("font_size", 15);
-        _countdownMilestone.AddThemeColorOverride("font_color", Accent);
+        _countdownMilestone.AddThemeColorOverride("font_color", LabelDim);
         _countdownMilestone.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
         _countdownMilestone.AddThemeConstantOverride("outline_size", 6);
         vbox.AddChild(_countdownMilestone);
@@ -312,39 +312,14 @@ public partial class HUDController : Control
     }
     private CenterContainer _countdownRoot = null!;
 
-    private void BuildControlsHint()
-    {
-        var hint = new Label
-        {
-            Text = "hold [Z] ignite/throttle up   hold [X] throttle down   [W/S] pitch   [A/D] yaw   [Q/E] roll   " +
-                   "[T] SAS   [,/.] warp   [Space] stage   [L] launch   [G] ascent AP   [O] to-orbit   [C] camera   [M] map",
-        };
-        hint.SetAnchorsPreset(LayoutPreset.BottomLeft);
-        hint.GrowVertical = GrowDirection.Begin;
-        hint.OffsetLeft = 18; hint.OffsetBottom = -12;
-        hint.AddThemeColorOverride("font_color", new Color(0.55f, 0.60f, 0.66f, 0.85f));
-        hint.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.7f));
-        hint.AddThemeConstantOverride("outline_size", 3);
-        hint.AddThemeFontSizeOverride("font_size", 12);
-        AddChild(hint);
-    }
-
     // ── Widget factories ────────────────────────────────────────────────────
 
     private static PanelContainer MakePanel()
     {
-        var sb = new StyleBoxFlat
-        {
-            BgColor = PanelBg,
-            BorderColor = PanelBorder,
-            ContentMarginLeft = 14, ContentMarginRight = 14,
-            ContentMarginTop = 10, ContentMarginBottom = 12,
-        };
-        sb.SetBorderWidthAll(1);
-        sb.SetCornerRadiusAll(6);
+        var sb = InterfaceTheme.GlassPanel(0.76f, 12, 16, 13);
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", sb);
-        panel.CustomMinimumSize = new Vector2(290, 0);
+        panel.CustomMinimumSize = new Vector2(278, 0);
         panel.MouseFilter = MouseFilterEnum.Ignore;
         return panel;
     }
@@ -352,8 +327,8 @@ public partial class HUDController : Control
     private static Label MakeHeader(string text)
     {
         var lbl = new Label { Text = text };
-        lbl.AddThemeFontSizeOverride("font_size", 13);
-        lbl.AddThemeColorOverride("font_color", Accent);
+        lbl.AddThemeFontSizeOverride("font_size", 11);
+        lbl.AddThemeColorOverride("font_color", LabelDim);
         return lbl;
     }
 
@@ -371,13 +346,13 @@ public partial class HUDController : Control
         row.AddThemeConstantOverride("separation", 8);
 
         var cap = new Label { Text = caption };
-        cap.AddThemeFontSizeOverride("font_size", 14);
+        cap.AddThemeFontSizeOverride("font_size", 12);
         cap.AddThemeColorOverride("font_color", LabelDim);
-        cap.CustomMinimumSize = new Vector2(125, 0);
+        cap.CustomMinimumSize = new Vector2(118, 0);
         row.AddChild(cap);
 
         var val = new Label { Text = initial };
-        val.AddThemeFontSizeOverride("font_size", 16);
+        val.AddThemeFontSizeOverride("font_size", 14);
         val.AddThemeColorOverride("font_color", ValueBright);
         val.HorizontalAlignment = HorizontalAlignment.Right;
         val.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -390,7 +365,7 @@ public partial class HUDController : Control
     private static (ColorRect fill, Label value, float trackWidth) AddGauge(
         VBoxContainer parent, Color fillColor)
     {
-        const float TrackW = 262f, TrackH = 16f;
+        const float TrackW = 246f, TrackH = 8f;
 
         var track = new ColorRect
         {
@@ -412,7 +387,7 @@ public partial class HUDController : Control
         value.SetAnchorsPreset(LayoutPreset.FullRect);
         value.HorizontalAlignment = HorizontalAlignment.Right;
         value.VerticalAlignment = VerticalAlignment.Center;
-        value.AddThemeFontSizeOverride("font_size", 11);
+        value.AddThemeFontSizeOverride("font_size", 9);
         value.AddThemeColorOverride("font_color", ValueBright);
         value.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.8f));
         value.AddThemeConstantOverride("outline_size", 3);
@@ -573,7 +548,7 @@ public partial class HUDController : Control
             _apValue.Text = "---"; _peValue.Text = "---";
             _peValue.AddThemeColorOverride("font_color", ValueBright);
         }
-        _suborbitalWarn.Text = suborbital ? "▲ SUBORBITAL — IMPACT TRAJECTORY" : "";
+        _suborbitalWarn.Text = suborbital ? "SUBORBITAL / IMPACT TRAJECTORY" : "";
 
         double ts = universe.TimeScale;
         _warpValue.Text = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
@@ -588,8 +563,8 @@ public partial class HUDController : Control
         double oxFrac = oxCap > 0 ? ox / oxCap : 0;
         _lfValue.Text = $"{lf / 1000.0:F1} t";
         _oxValue.Text = $"{ox / 1000.0:F1} t";
-        _lfFill.Size = new Vector2(_lfTrackW * (float)System.Math.Clamp(lfFrac, 0, 1), 16);
-        _oxFill.Size = new Vector2(_oxTrackW * (float)System.Math.Clamp(oxFrac, 0, 1), 16);
+        _lfFill.Size = new Vector2(_lfTrackW * (float)System.Math.Clamp(lfFrac, 0, 1), 8);
+        _oxFill.Size = new Vector2(_oxTrackW * (float)System.Math.Clamp(oxFrac, 0, 1), 8);
         _lfFill.Color = lfFrac < 0.12 ? FuelLowCol : FuelCol;
         _oxFill.Color = oxFrac < 0.12 ? FuelLowCol : OxCol;
 
@@ -649,17 +624,17 @@ public partial class HUDController : Control
         if (mission.Phase == MissionPhase.LIFTOFF || secs <= 0)
         {
             _countdownLabel.Text = "LIFTOFF";
-            _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.55f, 0.1f));
+            _countdownLabel.AddThemeColorOverride("font_color", ValueBright);
             _countdownMilestone.Text = "VEHICLE HAS CLEARED THE TOWER";
         }
         else
         {
             _countdownLabel.Text = $"T- {secs:00}";
-            _countdownLabel.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.2f));
+            _countdownLabel.AddThemeColorOverride("font_color", WarnCol);
             // SpaceX-style milestone callouts down the count.
             _countdownMilestone.Text = secs switch
             {
-                > 7 => "STARTUP · GO FOR LAUNCH",
+                > 7 => "STARTUP / GO FOR LAUNCH",
                 > 4 => "ENGINE CHILL",
                 > 2 => "IGNITION SEQUENCE START",
                 _   => "ENGINE IGNITION",
@@ -679,7 +654,7 @@ public partial class HUDController : Control
                 MissionPhase.MECO        => "MECO",
                 MissionPhase.SEPARATION  => "STAGE SEP",
                 MissionPhase.ASCENT_SHIP => "SHIP IGNITION",
-                MissionPhase.ORBIT       => "SECO · ORBIT",
+                MissionPhase.ORBIT       => "SECO / ORBIT",
                 MissionPhase.ENTRY       => "ENTRY INTERFACE",
                 MissionPhase.LANDED      => "TOUCHDOWN",
                 MissionPhase.CRASHED     => "VEHICLE LOST",
@@ -693,7 +668,7 @@ public partial class HUDController : Control
             }
             _lastPhase = phase;
         }
-        if (_events.Count == 0) _eventLog.Text = "awaiting launch…";
+        if (_events.Count == 0) _eventLog.Text = "Awaiting launch";
     }
 
     private void UpdatePhaseTrack(MissionPhase current)
@@ -719,6 +694,10 @@ public partial class HUDController : Control
         {
             switch (key.Keycode)
             {
+                case Key.Escape:
+                    GetTree().ChangeSceneToFile("res://scenes/ui/MainMenu.tscn");
+                    GetViewport().SetInputAsHandled();
+                    break;
                 // [Z]/[X] son hold-throttle: se sondean en _Process (mantener para
                 // encender/acelerar / bajar). Aquí solo van las acciones de pulsación única.
                 // [Z]/[X] are hold-throttle, polled in _Process; only one-shot actions here.
@@ -753,33 +732,18 @@ public partial class HUDController : Control
     private static string FormatPhase(MissionPhase phase) => phase switch
     {
         MissionPhase.PRE_LAUNCH  => "PRE-LAUNCH",
-        MissionPhase.ASCENT_SH   => "ASCENT · SUPER HEAVY",
+        MissionPhase.ASCENT_SH   => "ASCENT / SUPER HEAVY",
         MissionPhase.MAX_Q       => "MAX-Q",
         MissionPhase.MECO        => "MECO",
-        MissionPhase.ASCENT_SHIP => "ASCENT · STARSHIP",
+        MissionPhase.ASCENT_SHIP => "ASCENT / STARSHIP",
         _ => phase.ToString().Replace("_", " "),
     };
 
     private static Color PhaseColor(MissionPhase phase) => phase switch
     {
-        MissionPhase.PRE_LAUNCH  => new Color(0.70f, 0.78f, 0.88f),
-        MissionPhase.COUNTDOWN   => new Color(1.00f, 0.80f, 0.20f),
-        MissionPhase.IGNITION    => new Color(1.00f, 0.65f, 0.15f),
-        MissionPhase.LIFTOFF     => new Color(1.00f, 0.55f, 0.12f),
-        MissionPhase.ASCENT_SH   => new Color(1.00f, 0.45f, 0.20f),
-        MissionPhase.MAX_Q       => new Color(1.00f, 0.30f, 0.25f),
-        MissionPhase.MECO        => new Color(1.00f, 0.70f, 0.30f),
-        MissionPhase.SEPARATION  => new Color(0.85f, 0.70f, 1.00f),
-        MissionPhase.ASCENT_SHIP => new Color(0.55f, 0.80f, 1.00f),
-        MissionPhase.ORBIT       => new Color(0.30f, 0.95f, 1.00f),
-        MissionPhase.COAST       => new Color(0.45f, 0.90f, 1.00f),
-        MissionPhase.ENTRY        => new Color(1.00f, 0.60f, 0.30f),
-        MissionPhase.PEAK_HEATING => new Color(1.00f, 0.35f, 0.20f),
-        MissionPhase.AERO_DESCENT => new Color(1.00f, 0.78f, 0.40f),
-        MissionPhase.RETRO_BURN   => new Color(0.50f, 0.85f, 1.00f),
-        MissionPhase.FINAL_DESCENT=> new Color(0.60f, 0.90f, 1.00f),
-        MissionPhase.LANDED      => new Color(0.45f, 1.00f, 0.60f),
-        _ => new Color(0.90f, 0.90f, 0.90f),
+        MissionPhase.COUNTDOWN or MissionPhase.IGNITION => WarnCol,
+        MissionPhase.MAX_Q or MissionPhase.PEAK_HEATING or MissionPhase.CRASHED => FuelLowCol,
+        _ => ValueBright,
     };
 
     private static string FormatDistance(double meters)

@@ -10,16 +10,18 @@ using Godot;
 public partial class WarpController : Control
 {
     private Font _font = null!;
+    private StyleBoxFlat _panelStyle = null!;
 
     public override void _Ready()
     {
         _font = ThemeDB.FallbackFont;
+        _panelStyle = InterfaceTheme.GlassPanel(0.68f, 12, 0, 0);
         SetAnchorsPreset(LayoutPreset.TopLeft);
-        CustomMinimumSize = new Vector2(160, 40);
-        OffsetLeft   = 10;
-        OffsetTop    = 10;
-        OffsetRight  = 170;
-        OffsetBottom = 50;
+        CustomMinimumSize = new Vector2(178, 50);
+        OffsetLeft   = 320;
+        OffsetTop    = 18;
+        OffsetRight  = 498;
+        OffsetBottom = 68;
         MouseFilter  = MouseFilterEnum.Ignore;
     }
 
@@ -55,16 +57,15 @@ public partial class WarpController : Control
         double currentRate = SimulationBridge.WarpLevels[bridge.WarpIndex];
         double maxRate     = SimulationBridge.WarpLevels[bridge.MaxAllowedWarpIndex];
 
-        string line1 = $"WARP  x{currentRate:G}";
-        string line2 = $"[max: x{maxRate:G}]";
+        string line1 = $"TIME  x{currentRate:G}";
+        string line2 = $"MAXIMUM  x{maxRate:G}";
 
-        var bgRect = new Rect2(0, 0, 160, 40);
-        DrawRect(bgRect, new Color(0, 0, 0, 0.55f));
+        DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, Size));
 
         // Highlight warp indicator in amber when warping, white at x1
-        var col1 = bridge.WarpIndex > 0 ? new Color(1.0f, 0.80f, 0.20f) : new Color(0.85f, 0.85f, 0.85f);
-        DrawString(_font, new Vector2(8, 16), line1, HorizontalAlignment.Left, -1, 15, col1);
-        DrawString(_font, new Vector2(8, 34), line2, HorizontalAlignment.Left, -1, 12, new Color(0.6f, 0.6f, 0.6f));
+        var col1 = bridge.WarpIndex > 0 ? InterfaceTheme.Warning : InterfaceTheme.Text;
+        DrawString(_font, new Vector2(14, 20), line1, HorizontalAlignment.Left, -1, 13, col1);
+        DrawString(_font, new Vector2(14, 39), line2, HorizontalAlignment.Left, -1, 10, InterfaceTheme.TextMuted);
     }
 
     public override void _Process(double delta) => QueueRedraw();

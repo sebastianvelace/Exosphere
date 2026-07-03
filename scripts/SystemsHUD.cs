@@ -4,26 +4,25 @@ using Godot;
 
 public partial class SystemsHUD : Control
 {
-    private static readonly Color PanelBg     = new(0.03f, 0.05f, 0.08f, 0.62f);
-    private static readonly Color PanelBorder = new(0.28f, 0.55f, 0.85f, 0.45f);
-    private static readonly Color GreenBar    = new(0.30f, 1.00f, 0.45f, 1f);
-    private static readonly Color YellowBar   = new(1.00f, 0.78f, 0.25f, 1f);
-    private static readonly Color RedBar      = new(1.00f, 0.40f, 0.30f, 1f);
-    private static readonly Color LabelDim    = new(0.60f, 0.68f, 0.78f, 1f);
-    private static readonly Color Accent      = new(0.45f, 0.80f, 1.00f, 1f);
+    private static readonly Color NominalBar  = new(0.88f, 0.90f, 0.94f, 1f);
+    private static readonly Color YellowBar   = InterfaceTheme.Warning;
+    private static readonly Color RedBar      = InterfaceTheme.Alert;
+    private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
+    private static readonly Color Accent      = InterfaceTheme.Text;
 
     private Font _font = null!;
+    private StyleBoxFlat _panelStyle = null!;
 
     public override void _Ready()
     {
         _font = ThemeDB.FallbackFont;
-        // Top-LEFT, directly below the LOADS · TRAJECTORY panel (ends ~y=265) so it no longer
-        // overlaps the STAGE · Δv · ORBIT panel on the top-right.
-        SetAnchorsPreset(LayoutPreset.TopLeft);
-        GrowHorizontal = GrowDirection.End;
-        CustomMinimumSize = new Vector2(290, 224);
-        OffsetLeft  = 18;  OffsetTop    = 288;
-        OffsetRight = 308; OffsetBottom = 512;
+        _panelStyle = InterfaceTheme.GlassPanel(0.76f, 12, 0, 0);
+        // Secondary health information sits below the orbit block on the right.
+        SetAnchorsPreset(LayoutPreset.TopRight);
+        GrowHorizontal = GrowDirection.Begin;
+        CustomMinimumSize = new Vector2(278, 190);
+        OffsetLeft = -296; OffsetTop = 340;
+        OffsetRight = -18; OffsetBottom = 530;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
@@ -35,23 +34,22 @@ public partial class SystemsHUD : Control
         if (sys == null) return;
 
         var size = Size;
-        DrawRect(new Rect2(Vector2.Zero, size), PanelBg, true);
-        DrawRect(new Rect2(Vector2.Zero, size), PanelBorder, false, 1f);
+        DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
 
-        DrawString(_font, new Vector2(10, 16), "SYSTEMS", HorizontalAlignment.Left, -1, 12, Accent);
+        DrawString(_font, new Vector2(14, 20), "SYSTEMS", HorizontalAlignment.Left, -1, 11, Accent);
 
-        float y = 28f;
-        y = DrawBar(10, y, "O2",   (float)sys.LifeSupport.OxygenFraction,    sys.LifeSupport.OxygenAlert);
-        y = DrawBar(10, y, "CO2",  1.0f - (float)sys.LifeSupport.CO2Fraction, sys.LifeSupport.CO2Alert);
-        y = DrawBar(10, y, "H2O",  (float)sys.LifeSupport.WaterFraction,      false);
-        y = DrawBar(10, y, "FOOD", (float)sys.LifeSupport.FoodFraction,       false);
-        y = DrawBar(10, y, "PWR",  (float)sys.Power.BatteryFraction,           sys.Power.LowPowerAlert);
-        y = DrawBar(10, y, "TEMP", (float)sys.Thermal.ThermalFraction,         sys.Thermal.HotAlert || sys.Thermal.ColdAlert);
-        y = DrawBar(10, y, "COMM", (float)sys.Comms.SignalStrength,            sys.Comms.LossOfSignalAlert);
+        float y = 34f;
+        y = DrawBar(14, y, "O2",   (float)sys.LifeSupport.OxygenFraction,    sys.LifeSupport.OxygenAlert);
+        y = DrawBar(14, y, "CO2",  1.0f - (float)sys.LifeSupport.CO2Fraction, sys.LifeSupport.CO2Alert);
+        y = DrawBar(14, y, "H2O",  (float)sys.LifeSupport.WaterFraction,      false);
+        y = DrawBar(14, y, "FOOD", (float)sys.LifeSupport.FoodFraction,       false);
+        y = DrawBar(14, y, "PWR",  (float)sys.Power.BatteryFraction,           sys.Power.LowPowerAlert);
+        y = DrawBar(14, y, "TEMP", (float)sys.Thermal.ThermalFraction,         sys.Thermal.HotAlert || sys.Thermal.ColdAlert);
+        y = DrawBar(14, y, "COMM", (float)sys.Comms.SignalStrength,            sys.Comms.LossOfSignalAlert);
 
         string mode = sys.ControlLimited ? "CONTROL LIMITED" : "CONTROL NOMINAL";
         DrawString(_font, new Vector2(10, y + 12), mode,
-            HorizontalAlignment.Left, -1, 10, sys.ControlLimited ? RedBar : GreenBar);
+            HorizontalAlignment.Left, -1, 10, sys.ControlLimited ? RedBar : LabelDim);
 
         // Signal delay label
         float delay = (float)sys.Comms.SignalDelaySeconds;
@@ -70,10 +68,10 @@ public partial class SystemsHUD : Control
 
         float barX = x + 36;
         float barW = Size.X - barX - 10;
-        DrawRect(new Rect2(barX, y, barW, 9), new Color(0.12f, 0.16f, 0.22f), true);
+        DrawRect(new Rect2(barX, y, barW, 7), InterfaceTheme.Track, true);
 
-        Color barCol = alert ? RedBar : (fraction > 0.4f ? GreenBar : YellowBar);
-        DrawRect(new Rect2(barX, y, barW * fraction, 9), barCol, true);
+        Color barCol = alert ? RedBar : (fraction > 0.4f ? NominalBar : YellowBar);
+        DrawRect(new Rect2(barX, y, barW * fraction, 7), barCol, true);
 
         return y + 14f;
     }
