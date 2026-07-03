@@ -89,9 +89,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 - Per-piece structural breakup.
 - Perdida de control si falla una pieza critica.
-- Lift aerodinamico y AoA real, no solo drag orientacion-dependiente.
-- Atmosfera residual sobre 140 km para decaimiento orbital lento, si se decide
-  priorizar realismo orbital fino.
+- Lift/AoA en sim ✅ (R6); guiado EDL con lift (α<90°) sigue pendiente en game-layer.
+- Decaimiento orbital LEO ✅ (R7 termosfera residual); on-rails/warp no decae (limite conocido).
 
 ### Interplanetario
 

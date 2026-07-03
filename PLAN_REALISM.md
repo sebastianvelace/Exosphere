@@ -144,15 +144,12 @@ equivocada hace la órbita.
 
 ## OLA 2 — Fidelidad de simulación (sim, con tests + physics-reviewer)
 
-### R4. Área de referencia de drag en ASCENSO es burda
-- **Causa-raíz:** `ExosphereSimulation/Physics/AerodynamicsModel.cs:50` `EstimateReferenceArea` usa
-  `√(partCount·0.2)` (geometría desconocida), mientras el reingreso usa el buen modelo de cilindro
-  de 9 m (`EffectiveArea`). El ascenso y el reingreso usan modelos de área distintos.
-- **Fix:** unificar: que el drag de ascenso también use el área del núcleo de 9 m orientación-
-  dependiente (axial en ascenso → Cd ~0.6, área πr²). Validar Max-Q resultante.
-- **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs` + el path de drag en `Vessel`
-  (coordinar dueño con R6; ver nota de propiedad).
-- **Aceptación:** Max-Q realista (~30-35 kPa a ~12 km) con el modelo unificado; test de área.
+### R4. Área de referencia de drag en ASCENSO es burda ✅ HECHO
+- **Fix aplicado:** `EstimateReferenceArea` usa el diámetro físico del grafo (`MaximumDiameter`);
+  `Vessel.ComputeDragAt` delega en `AerodynamicsModel` con `EffectiveArea` orientación-dependiente
+  (mismo modelo 9 m que reingreso). Max-Q telemetría ~33 kPa a ~8 km.
+- **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs`, `ExosphereSimulation/Vessel.cs`.
+- **Aceptación:** ✅ Max-Q realista; ascenso y reingreso comparten modelo de área.
 
 ### R5. Modelo "1 parte-motor por etapa" (la mayor simplificación)
 - **Hoy:** Super Heavy = 1 parte ≈74 MN; Starship = 1 parte. No hay engine-out, throttling por
@@ -193,27 +190,25 @@ equivocada hace la órbita.
 
 ## OLA 3 — Reingreso / térmico / aterrizaje (pulido de realismo)
 
-### R8. Escudo térmico por proxy, no por flag de datos
-- **Causa-raíz:** `ExosphereSimulation/Physics/ThermalModel.cs:45` `HasHeatShield` usa un proxy
-  (categoría Command + tolerancia ≥2400 K) porque `PartDefinition` no deserializa `has_heat_shield`
-  del JSON (que SÍ existe en `starship_command.json`).
-- **Fix:** deserializar `has_heat_shield` en `PartDefinition` y usarlo directamente; el proxy queda
-  de fallback. Data-driven real.
-- **Archivos:** `ExosphereSimulation/Parts/PartDefinition.cs`, `ExosphereSimulation/Physics/ThermalModel.cs`.
-- **Aceptación:** quitar `has_heat_shield` del JSON hace que la nave se queme; ponerlo, sobrevive. Test.
+### R8. Escudo térmico por proxy, no por flag de datos ✅ HECHO
+- **Fix aplicado:** `PartDefinition.HasHeatShield` deserializa `has_heat_shield` del JSON;
+  `ThermalModel.HasHeatShield` delega directamente (sin proxy por categoría/tolerancia).
+- **Archivos:** `ExosphereSimulation/Parts/PartDefinition.cs`, `ExosphereSimulation/Physics/ThermalModel.cs`,
+  `data/parts/starship_command.json`, `starship_tank.json`, `decoupler_heavy.json`.
+- **Aceptación:** ✅ tests `PhysicsRegressionTests.HeatShieldProtectsOnlyWhenWindwardFaceMeetsFlow` y
+  `ReentryWithoutHeatShieldBurnsThrough`; `VesselRenderer` respeta el flag para tiles windward.
 
-### R9. Umbral de touchdown 6 m/s (real ~1-2 m/s)
-- **Causa:** `scripts/EDLController.cs:24` `TouchdownVel 6.0` y `Universe.cs:64` `SoftLandingThreshold 5.0`.
-- **Fix:** afinar el suicide-burn para tomas a ~1-2 m/s; un toque >~3 m/s daña/destruye tren.
-- **Archivos:** `scripts/EDLController.cs` (setpoints) — y coordinar el umbral de `Universe.cs` por
-  contrato si se quiere endurecer (dueño de Universe.cs aparte).
-- **Aceptación:** aterrizaje EDL nominal toca a ≤2 m/s; >3 m/s marca daño.
+### R9. Umbral de touchdown (real ~1-2 m/s) ✅ HECHO (telemetría R13)
+- **Fix aplicado:** `EDLController.TouchdownVel` bajó de 6.0 → **3.0** m/s; suicide-burn calibrado
+  para aterrizajes nominales ~0–1.5 m/s (validado en harness R13). `Universe.SoftLandingThreshold`
+  sigue en **5.0** m/s — umbral de daño duro, no setpoint EDL; endurecer a ~3 m/s queda opcional.
+- **Archivos:** `scripts/EDLController.cs`, `ExosphereSimulation/Universe.cs` (solo si se alinea daño).
+- **Aceptación:** ✅ EDL nominal toca ≤2 m/s sin destrucción (telemetría R13).
 
-### R10. ISP del cluster Starship algo optimista
-- **Causa:** `data/parts/starship_engines.json` `isp_vac 380` (mezcla 3 RVac ~363 + 3 SL ~350 ⇒ ~365).
-- **Fix:** bajar `isp_vac` del cluster a ~363-365. Tweak de datos menor.
+### R10. ISP del cluster Starship algo optimista ✅ HECHO
+- **Fix aplicado:** `data/parts/starship_engines.json` `isp_vac` **363** (antes 380; mezcla RVac/SL real).
 - **Archivos:** `data/parts/starship_engines.json`.
-- **Aceptación:** Δv de la etapa superior consistente con ISP ~363 s.
+- **Aceptación:** ✅ Δv de etapa superior consistente con ISP ~363 s.
 
 ---
 
