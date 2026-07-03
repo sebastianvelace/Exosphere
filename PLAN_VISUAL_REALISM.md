@@ -151,9 +151,11 @@ Mejoras:
   Validacion local: trigger forzado con harness temporal bajo Xvfb produjo multiframe
   `/tmp/exosphere_hotstage_after_00..11.png`; se ve flash inicial y fade a humo/hollin. Pendiente:
   captura en ascenso real y ajuste fino de encuadre/posicion contra referencia.
-- [ ] Hot-staging comparado contra referencia: pendiente comparar `/tmp/exosphere_hotstage_*.png`
-  con frames reales IFT T+2:39/T+2:40. Criterio: flash/plume entre etapas visible, booster separado
-  con ring chamuscado, Ship encendida y escala/encuadre legibles sin ocultar HUD.
+- [x] Hot-staging comparado contra referencia: captura multiframe en ascenso real `[G]`
+  bajo xvfb (`/tmp/exosphere_hotstage_ascent_00..13.png`, jul 2026). Criterio cumplido:
+  flash/pluma entre etapas, ring chamuscado en booster, Ship encendida antes de separarse,
+  HUD legible. Ver `.atl/agent-hotstaging-log.md`. Pendiente: comparacion lado-a-lado con
+  frame IFT T+2:39 para afinar intensidad del flash.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
 - [ ] Validar en capturas si el deluge cloud no tapa en exceso la silueta durante
   liftoff lateral y no queda flotando al alejarse el pad.
@@ -271,9 +273,9 @@ Aceptacion:
    nariz/flaps/tiles/markings contra referencia.
 4. V2 plumas. ✅ Pluma SL/ascenso (brillo+ancho), ✅ pluma de vacio (legibilidad),
    ✅ hot-staging VFX implementado y verificado con trigger local multiframe,
-   ✅ smoke/soot de pluma vacio atenuado. Falta: captura de hot-staging en ascenso real,
-   comparacion contra referencia, comparacion fina de startup/ramp y captura/reference
-   de pluma de vacio limpia.
+   ✅ hot-staging capturado en ascenso real `[G]` (jul 2026, ver `.atl/agent-hotstaging-log.md`),
+   ✅ smoke/soot de pluma vacio atenuado. Falta: comparacion fina hot-staging vs frame IFT,
+   comparacion fina de startup/ramp y captura/reference de pluma de vacio limpia.
 5. V3 reentry plasma/charring localizado. ✅ primera pasada de glows localizados
    en nose/belly/flaps; falta comparativa nominal/fallo y charring por zonas.
 6. V4 camara/luz/atmosfera.
