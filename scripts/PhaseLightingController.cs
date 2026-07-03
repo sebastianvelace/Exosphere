@@ -22,7 +22,9 @@ using Exosphere.Simulation.Physics;
 /// fireball dominates; glow ramps so the shock reads without washing HUD/cockpit.
 ///
 /// Tonemapping stays Filmic. <see cref="SunController"/> owns the light's
-/// ORIENTATION and never touches energy, so there is no conflict.
+/// ORIENTATION; <see cref="SkyController"/> owns ambient COLOUR; this controller
+/// is the sole writer of ambient ENERGY (V-039). Re-entry may overlay warm ambient
+/// colour on top of the sky palette when plasma is active.
 /// </summary>
 [GlobalClass]
 public partial class PhaseLightingController : Node
@@ -48,6 +50,11 @@ public partial class PhaseLightingController : Node
 
     private Godot.Environment? _env;
     private DirectionalLight3D? _light;
+
+    public override void _Ready()
+    {
+        ProcessPriority = 10; // after SkyController so ambient energy is last-writer
+    }
 
     public override void _Process(double delta)
     {

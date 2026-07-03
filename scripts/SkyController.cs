@@ -61,6 +61,7 @@ public partial class SkyController : Node
 
     public override void _Ready()
     {
+        ProcessPriority = -10; // before PhaseLightingController (ambient colour only)
         var wenv = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
         _env = wenv?.Environment;
 
@@ -107,7 +108,6 @@ public partial class SkyController : Node
         Color gGH  = isMars ? M_GndH : G_GndH;
         Color gGB  = isMars ? M_GndB : G_GndB;
         Color aGnd = isMars ? M_Ambient : A_Ground;
-        float aGndE = isMars ? AMB_ENERGY_MARS : AMB_ENERGY_EARTH;
 
         if (_skyMat != null)
         {
@@ -129,9 +129,8 @@ public partial class SkyController : Node
 
         if (_env != null)
         {
-            // Ambient → black with ~0 energy in space: nothing lit by a fake sky.
-            _env.AmbientLightColor  = aGnd.Lerp(A_Space, fSpace);
-            _env.AmbientLightEnergy = Mathf.Lerp(aGndE, 0.0f, fSpace);
+            // Ambient colour only — energy is owned by PhaseLightingController (V-039).
+            _env.AmbientLightColor = aGnd.Lerp(A_Space, fSpace);
 
             // Keep the sky background visible at full strength so the stars (and the
             // Sun disc/halo) read in orbit at any zoom. The shader itself fades the
