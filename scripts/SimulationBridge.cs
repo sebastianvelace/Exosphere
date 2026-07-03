@@ -25,11 +25,34 @@ public partial class SimulationBridge : Node
     public int WarpIndex          { get; private set; } = 0;
     public int MaxAllowedWarpIndex { get; private set; } = 9;
 
+    /// <summary>Reason shown when the player tries to warp above <see cref="MaxAllowedWarpIndex"/>.</summary>
+    public string? WarpClampReason { get; private set; }
+    /// <summary>Simulation time (s) until <see cref="WarpClampReason"/> stops displaying.</summary>
+    public double WarpClampReasonUntil { get; private set; }
+
     public void SetWarpIndex(int i)
     {
+        int requested = i;
         i = System.Math.Clamp(i, 0, MaxAllowedWarpIndex);
+        if (requested > MaxAllowedWarpIndex)
+        {
+            WarpClampReason = ComputeWarpClampReason();
+            WarpClampReasonUntil = Universe.CurrentTime + 4.0;
+        }
         WarpIndex = i;
         SetTimeScale(WarpLevels[WarpIndex]);
+    }
+
+    private string ComputeWarpClampReason()
+    {
+        var v = ActiveVessel;
+        if (v != null && v.Throttle > 0.01) return "THRUSTING";
+        if (v != null)
+        {
+            var refB = Universe.GetDominantBody(v.Position);
+            if (refB.GetAtmosphericDensity(v.Position) > 0.01) return "ATMOSPHERE";
+        }
+        return "WARP LIMIT";
     }
 
     private bool                 _running        = false;

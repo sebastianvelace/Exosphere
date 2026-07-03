@@ -613,8 +613,18 @@ public partial class HUDController : Control
         _suborbitalWarn.Text = suborbital ? "SUBORBITAL / IMPACT TRAJECTORY" : "";
 
         double ts = universe.TimeScale;
-        _warpValue.Text = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
-        _warpValue.AddThemeColorOverride("font_color", ts > 1.0 ? Accent : ValueBright);
+        if (universe.CurrentTime < bridge.WarpClampReasonUntil && bridge.WarpClampReason != null)
+        {
+            _warpValue.Text = ts <= 1.0
+                ? $"Real Time  ·  {bridge.WarpClampReason}"
+                : $"× {(int)ts}  ·  {bridge.WarpClampReason}";
+            _warpValue.AddThemeColorOverride("font_color", WarnCol);
+        }
+        else
+        {
+            _warpValue.Text = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
+            _warpValue.AddThemeColorOverride("font_color", ts > 1.0 ? Accent : ValueBright);
+        }
 
         // ── Propellant bars (fuel vs oxidizer fractions) ───────────────────
         double lf = vessel.Parts.TotalLiquidFuel;

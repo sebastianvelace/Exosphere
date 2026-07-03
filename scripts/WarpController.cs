@@ -43,11 +43,6 @@ public partial class WarpController : Control
                 bridge.SetWarpIndex(bridge.WarpIndex - 1);
                 handled = true;
             }
-            else if (key.Keycode == Key.Backspace)
-            {
-                bridge.SetWarpIndex(0);
-                handled = true;
-            }
 
             if (handled)
                 GetViewport().SetInputAsHandled();
@@ -65,12 +60,26 @@ public partial class WarpController : Control
         string line1 = $"TIME  x{currentRate:G}";
         string line2 = $"MAXIMUM  x{maxRate:G}";
 
+        var universe = bridge.Universe;
+        bool showClamp = bridge.WarpClampReason != null
+            && universe != null
+            && universe.CurrentTime < bridge.WarpClampReasonUntil;
+
+        float panelH = showClamp ? 68f : 50f;
+        CustomMinimumSize = new Vector2(178, panelH);
+        OffsetBottom = OffsetTop + panelH;
+
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, Size));
 
-        // Highlight warp indicator in amber when warping, white at x1
         var col1 = bridge.WarpIndex > 0 ? InterfaceTheme.Warning : InterfaceTheme.Text;
         DrawString(_font, new Vector2(14, 20), line1, HorizontalAlignment.Left, -1, 13, col1);
         DrawString(_font, new Vector2(14, 39), line2, HorizontalAlignment.Left, -1, 10, InterfaceTheme.TextMuted);
+
+        if (showClamp)
+        {
+            string line3 = $"CLAMP — {bridge.WarpClampReason}";
+            DrawString(_font, new Vector2(14, 58), line3, HorizontalAlignment.Left, -1, 10, InterfaceTheme.Warning);
+        }
     }
 
     public override void _Process(double delta) => QueueRedraw();
