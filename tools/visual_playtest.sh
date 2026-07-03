@@ -358,12 +358,17 @@ public partial class _PlaytestShot : Node
                 _log.Flush();
             }
         }
-        else if (alt > 120_000.0 && vessel.Throttle < 0.01 && mission?.Phase == MissionPhase.ORBIT)
+        else if (alt > 120_000.0 && vessel.Throttle < 0.01 && mission?.InDescent != true)
         {
+            // Coast to the entry interface fast regardless of the exact mission-phase label.
+            // The old gate required Phase==ORBIT, but the deorbit burn can leave ORBIT while
+            // apoapsis is still high, stranding a ~90 min coast at 1x and blowing the wall budget.
             bridge.SetTimeScale(200.0);
         }
-        else if (alt < 120_000.0 || mission?.InDescent == true)
+        else
         {
+            // Entry interface reached (below 120 km or descent armed): real-time so RK4 aero/
+            // heating runs and ENTRY/PEAK_HEATING/RETRO_BURN/LANDED phases fire for capture.
             bridge.SetTimeScale(1.0);
         }
     }
