@@ -85,3 +85,19 @@
 | **Commit** | `docs(audit): physics deep improvement plan` |
 | **Items** | 28 (P-A01–P-X07) |
 | **Top 5** | P-A03, P-S01, P-I01, P-O01, P-R06 |
+| **SHA** | `fde03de` (`fde03de…`) |
+
+---
+
+## 2026-07-03T04:08Z — Visual deep audit persisted
+
+| Field | Value |
+|-------|-------|
+| **Agent** | visual (06043e3f-a667-4bd7-a7c8-d9627dbb3d41) |
+| **Artifact** | `docs/audits/VISUAL_DEEP_AUDIT.md` |
+| **Commit** | `docs(audit): visual deep improvement plan` |
+| **Items** | 52 (V-001–V-052) |
+| **Top 5** | V-050, V-024, V-017, V-009, V-012 |
+| **Harness cleanup** | Removed `_ReentryShot` autoload + `scripts/_ReentryShot.cs`; restored `project.godot` |
+| **SHA** | `64ab144` (`64ab144d0021dc359759bdc9d33b6a8f485f5c16`) |
+| **SHA** | `fde03de` (`fde03de736e38be91c4c95c5abeb05da5ca3b2c4`) |
