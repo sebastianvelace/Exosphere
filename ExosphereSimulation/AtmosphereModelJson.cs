@@ -32,6 +32,8 @@ public partial class AtmosphereModel
             SeaLevelTemperature = json.TryGetProperty("sea_level_temperature", out var slt) ? slt.GetDouble() : 288.15,
             MaxAltitude         = json.TryGetProperty("max_altitude",          out var ma)  ? ma.GetDouble()  : 140_000.0,
             MolarMass           = json.TryGetProperty("molar_mass",            out var mm)  ? mm.GetDouble()  : 0.0289644,
+            ThermosphereScaleHeight = json.TryGetProperty("thermosphere_scale_height", out var tsh) ? tsh.GetDouble() : 0.0,
+            ThermosphereTopAltitude = json.TryGetProperty("thermosphere_top_altitude", out var tta) ? tta.GetDouble() : 0.0,
             Layers              = layers,
         };
     }

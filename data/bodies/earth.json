@@ -13,6 +13,8 @@
     "sea_level_pressure": 101325,
     "sea_level_temperature": 288.15,
     "max_altitude": 140000,
+    "thermosphere_scale_height": 45000,
+    "thermosphere_top_altitude": 1000000,
     "layers": [
       {"alt_min": 0,     "alt_max": 11000,  "temp_base": 288.15, "lapse_rate": -0.0065},
       {"alt_min": 11000, "alt_max": 20000,  "temp_base": 216.65, "lapse_rate": 0.0},

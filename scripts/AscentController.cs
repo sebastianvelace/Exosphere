@@ -120,7 +120,9 @@ public partial class AscentController : Control
 
         var body = universe.GetDominantBody(vessel.Position);
         double atmoTop = body.Atmosphere?.MaxAltitude ?? 0.0;
-        // Park just above the atmosphere (so the orbit doesn't decay), with a sane floor.
+        // Park just above the aerodynamically significant atmosphere, with a sane
+        // floor. Note: a residual thermosphere now gives this parking orbit a slow
+        // (RK4-only) decay rather than being eternal — acceptable for a low LEO hold.
         _holdAlt   = System.Math.Max(atmoTop + 10_000.0, 80_000.0);
         _apoTarget = _holdAlt + 2_000.0;
         _peTarget  = _holdAlt - 7_000.0;

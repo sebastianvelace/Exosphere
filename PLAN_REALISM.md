@@ -155,12 +155,19 @@ equivocada hace la órbita.
 - **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs`, `scripts/EDLController.cs` (uso).
 - **Aceptación:** en belly-flop hay componente de lift; el alcance de reingreso cambia con la actitud.
 
-### R7. Atmósfera cortada a 140 km → sin decaimiento orbital
+### R7. Atmósfera cortada a 140 km → sin decaimiento orbital ✅ HECHO
 - **Causa:** `max_altitude 140000` en `earth.json`; sobre eso, densidad 0 → LEO no decae nunca.
-- **Fix:** densidad exponencial residual (térmosfera) por encima para un decaimiento lento realista
-  en LEO bajo; o documentar como simplificación aceptada. Severidad media.
-- **Archivos:** `ExosphereSimulation/AtmosphereModel.cs` / `data/bodies/earth.json`.
-- **Aceptación:** una órbita de 150 km decae de forma lenta y monótona (test) en vez de ser eterna.
+- **Fix aplicado:** termósfera residual — sobre `MaxAltitude` la densidad decae exponencialmente
+  desde la densidad de borde (`ThermosphereScaleHeight` ≈ 45 km, tope `ThermosphereTopAltitude`
+  1000 km). Aproximación de escala única, documentada como tal (H real crece con la altitud).
+  **Clave:** NO se movió `MaxAltitude` (lo leen EDL/ascenso/systems como límite aerodinámico);
+  sólo `GetDensity` gana la cola, `GetPressure` sigue 0 sobre 140 km.
+- **Archivos:** `ExosphereSimulation/AtmosphereModel.cs`, `AtmosphereModelJson.cs`,
+  `data/bodies/earth.json`, tests `AtmosphereThermosphereTests.cs`.
+- **Aceptación:** ✅ densidad positiva/continua/monótona en LEO bajo (150/200/400 km), vacío sobre
+  1000 km (7 tests). Revisado por `physics-reviewer` en contexto fresco: veredicto CORRECTO.
+- **Nota:** el drag sólo se aplica en RK4 (vessel activo); on-rails/Kepler no decae (límite conocido).
+  Comentario de `AscentController.cs` de parking orbit actualizado (ya no dice "no decae").
 
 ---
 
@@ -205,7 +212,7 @@ equivocada hace la órbita.
 
 ## Orden de ejecucion actual
 1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
-2. Backlog fisico real pendiente: R5 multi-motor, R6 lift/AoA, R7 termosfera/decay.
+2. Backlog fisico real pendiente: R5 multi-motor, R6 lift/AoA. (R7 termosfera/decay ✅ HECHO)
 3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5.
 4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 

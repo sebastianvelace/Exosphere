@@ -45,6 +45,24 @@ public partial class AtmosphereModel
     public double MolarMass { get; init; } = 0.0289644;     // Earth air
 
     /// <summary>
+    /// Scale height of the residual thermosphere above <see cref="MaxAltitude"/> (m).
+    /// 0 disables the tail (density hard-cuts to vacuum at the top of the ISA layers).
+    /// When positive, density decays exponentially from the boundary density so low
+    /// LEO experiences slow orbital decay. This is a documented single-exponential
+    /// approximation; the real Earth thermosphere effective scale height is ~40-60 km
+    /// and grows with altitude. Only <see cref="GetDensity"/> uses this tail —
+    /// <see cref="MaxAltitude"/> still marks the aerodynamically significant boundary
+    /// that flight controllers (ascent, EDL, systems) reason about.
+    /// </summary>
+    public double ThermosphereScaleHeight { get; init; } = 0.0;
+
+    /// <summary>
+    /// Altitude above which the residual thermosphere density is treated as vacuum (m).
+    /// Only relevant when <see cref="ThermosphereScaleHeight"/> is positive.
+    /// </summary>
+    public double ThermosphereTopAltitude { get; init; } = 0.0;
+
+    /// <summary>
     /// ISA temperature layers, ordered by ascending altitude.
     /// Empty list ⇒ exponential fallback model.
     /// </summary>
@@ -90,6 +108,15 @@ public partial class AtmosphereModel
         if (Layers.Count == 0)
             return SeaLevelPressure * System.Math.Exp(-altitude / ScaleHeight);
 
+        return LayeredPressure(altitude);
+    }
+
+    /// <summary>
+    /// Layered ISA pressure (Pa) without the <see cref="MaxAltitude"/> cutoff.
+    /// Used internally so the thermosphere tail can anchor to the boundary density.
+    /// </summary>
+    private double LayeredPressure(double altitude)
+    {
         EnsureLayerBasePressures();
 
         // Locate the layer containing this altitude (clamp into last layer above the top).
@@ -103,24 +130,45 @@ public partial class AtmosphereModel
     }
 
     /// <summary>
+    /// Layered ISA density (kg/m³) via the ideal gas law, without the
+    /// <see cref="MaxAltitude"/> cutoff. Used internally.
+    /// </summary>
+    private double LayeredDensity(double altitude)
+    {
+        double t = GetTemperature(altitude);
+        if (t <= 0.0) return 0.0;
+
+        double p = LayeredPressure(altitude);
+        double rho = p * MolarMass / (R * t);
+        return (double.IsNaN(rho) || rho < 0.0) ? 0.0 : rho;
+    }
+
+    /// <summary>
     /// Returns atmospheric density (kg/m³) at a given altitude above the surface (m).
     /// Layered model: ideal gas law  ρ = P·M / (R·T).
     /// No layers: exponential scale-height model  ρ = ρ₀ · exp(−h / H).
     /// </summary>
     public double GetDensity(double altitude)
     {
-        if (altitude >= MaxAltitude || altitude < 0.0) return 0.0;
+        if (altitude < 0.0) return 0.0;
 
         if (Layers.Count == 0)
-            return SeaLevelDensity * System.Math.Exp(-altitude / ScaleHeight);
+            return altitude >= MaxAltitude
+                ? 0.0
+                : SeaLevelDensity * System.Math.Exp(-altitude / ScaleHeight);
 
-        double t = GetTemperature(altitude);
-        if (t <= 0.0) return 0.0;
+        // Above the ISA layers, decay exponentially from the boundary density so low
+        // LEO experiences slow orbital decay instead of a hard cut to vacuum.
+        if (altitude >= MaxAltitude)
+        {
+            if (ThermosphereScaleHeight <= 0.0 || altitude >= ThermosphereTopAltitude)
+                return 0.0;
 
-        double p = GetPressure(altitude);
-        // Ley de gases ideales: ρ = p·M / (R·T). Guarda contra NaN/negativos.
-        double rho = p * MolarMass / (R * t);
-        return (double.IsNaN(rho) || rho < 0.0) ? 0.0 : rho;
+            double baseRho = LayeredDensity(MaxAltitude);
+            return baseRho * System.Math.Exp(-(altitude - MaxAltitude) / ThermosphereScaleHeight);
+        }
+
+        return LayeredDensity(altitude);
     }
 
     // ── Hydrostatic helpers ──────────────────────────────────────────────────
@@ -170,13 +218,15 @@ public partial class AtmosphereModel
     /// <summary>Standard Earth-like atmosphere (ISA layers).</summary>
     public static AtmosphereModel Earth() => new()
     {
-        MaxAltitude         = 140_000.0,    // 140 km
-        SeaLevelDensity     = 1.225,
-        ScaleHeight         = 8500.0,
-        SeaLevelPressure    = 101_325.0,
-        SeaLevelTemperature = 288.15,
-        MolarMass           = 0.0289644,
-        Layers              = new List<AtmosphereLayer>
+        MaxAltitude             = 140_000.0,    // 140 km — aerodynamically significant boundary
+        SeaLevelDensity         = 1.225,
+        ScaleHeight             = 8500.0,
+        SeaLevelPressure        = 101_325.0,
+        SeaLevelTemperature     = 288.15,
+        MolarMass               = 0.0289644,
+        ThermosphereScaleHeight = 45_000.0,     // residual LEO drag → slow orbital decay
+        ThermosphereTopAltitude = 1_000_000.0,  // 1000 km
+        Layers                  = new List<AtmosphereLayer>
         {
             new(     0.0,  11_000.0, 288.15, -0.0065),
             new(11_000.0,  20_000.0, 216.65,  0.0),
