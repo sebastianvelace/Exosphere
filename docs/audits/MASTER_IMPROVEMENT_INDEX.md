@@ -44,16 +44,16 @@
 
 | Rank | ID | Item | I×R×F | Owner branch | Evidence |
 |------|-----|------|-------|--------------|----------|
-| 1 | **VAL-01** | DEORBIT→EDL playtest harness + phase-gated xvfb PNG matrix | 100 | `feat/visual-capture-*` | `PLAN_PLAYTEST.md:58-130`; unblocks VS-12, GU-05, CC-01 |
+| 1 | ~~**VAL-01**~~ | ~~DEORBIT→EDL playtest harness + phase-gated xvfb PNG matrix~~ — **DONE** (harness `tools/visual_playtest.sh` + CI pad smoke); **EDL tail gap open** — `peak_heating`/`retro_burn`/`touchdown` timeout, blocks V-024/VS-12/GU-05 | 100 | `integrate/jul2026-realism-loop` | `tools/visual_playtest.sh`; `ci.yml` |
 | 2 | ~~**DOC-01**~~ | ~~Supersede stale `docs/physics_audit.md`~~ — **DONE** (`docs/refresh-realism-docs`) | 100 | `docs/*` | `DATA_DRIFT_AUDIT.md` DD-01–05 |
-| 3 | **VIS-01** | Rebalance render booster/ship vertical split (71/50 m) | 75 | `feat/visual-vessel-*` | `VesselRenderer.cs:52-63,140-407` |
-| 4 | **CC-01** | CI PNG capture + non-black heuristic + artifacts (V5) | 60 | `feat/visual-capture-*` | `ci.yml:103-124`; `PLAN_VISUAL_REALISM.md:241-257` |
-| 5 | **PG-04** | Harmonize `SoftLandingThreshold` 5→~3 m/s with EDL | 60 | `feat/physics-*` | `Universe.cs:64`; `EDLController.cs:24` |
-| 6 | **VS-01** | Wire or delete orphan `reentry_glow.gdshader` | 64 | `feat/visual-reentry-*` | Shader file; zero references |
-| 7 | **VIS-03** | Hot-staging multiframe vs IFT T+2:39 reference | 64 | `feat/visual-hotstage-*` | `PLAN_VISUAL_REALISM.md:45-46`; V-012 |
+| 3 | ~~**VIS-01**~~ | ~~Rebalance render booster/ship vertical split (71/50 m)~~ — **DONE** (`f9e5fd6` Flight 7 proportions) | 75 | `integrate/jul2026-realism-loop` | `VesselRenderer.cs` |
+| 4 | ~~**CC-01**~~ | ~~CI PNG capture + non-black heuristic + artifacts (V5)~~ — **DONE (partial)** pad smoke + artifact upload; full non-black matrix pending | 60 | `integrate/jul2026-realism-loop` | `ci.yml` (visual smoke job) |
+| 5 | ~~**PG-04**~~ | ~~Harmonize `SoftLandingThreshold` 5→~3 m/s with EDL~~ — **DONE** (`Universe`→`AscentStagingPolicy.SoftLandingSpeedMps=3.0`, matches `EDLController.TouchdownVel`) | 60 | `integrate/jul2026-realism-loop` | `Universe.cs`; `EDLController.cs:24` |
+| 6 | ~~**VS-01**~~ | ~~Wire or delete orphan `reentry_glow.gdshader`~~ — **DONE** (wired into `ReentryPlasmaController`) | 64 | `integrate/jul2026-realism-loop` | `ReentryPlasmaController.cs:44,48` |
+| 7 | **VIS-03** | Hot-staging multiframe vs IFT T+2:39 reference | 64 | `feat/visual-hotstaging-ascent-capture` (not merged) | `PLAN_VISUAL_REALISM.md:45-46`; V-012 |
 | 8 | **V-017** | OLM centre hole legacy 1.15u not 9 m BodyR | 72 | visual-pad | `VISUAL_DEEP_AUDIT.md` V-017 |
-| 9 | **V-024** | Belly-flop EDL nominal reference capture | 80 | visual-capture | `VISUAL_DEEP_AUDIT.md` V-024 |
-| 10 | **PHYS-01** | MissionManager MECO fuel cut vs AscentController | 75 | `feat/flight-edl-*` | `MissionManager.cs:204-218`; P-A03 |
+| 9 | **V-024** | Belly-flop EDL nominal reference capture — **blocked on VAL-01 EDL tail** | 80 | visual-capture | `VISUAL_DEEP_AUDIT.md` V-024 |
+| 10 | ~~**PHYS-01**~~ | ~~MissionManager MECO fuel cut vs AscentController~~ — **DONE** (auto-MECO removed; `AscentStagingPolicy` sole authority, 6 tests) | 75 | `integrate/jul2026-realism-loop` | `MissionManager.cs`; `AscentStagingPolicy.cs`; P-A03 |
 
 *Merged aliases (not separate P0): GU-01→VAL-01, DD-01→DOC-01, VS-09→VIS-01.*
 
@@ -61,20 +61,16 @@
 
 ## Full prioritized backlog (deduplicated)
 
-### P0 — Next session (9 items — realism-filtered; mission P0s deferred per ROADMAP)
+### P0 — Next session (3 items open; 6 shipped in `integrate/jul2026-realism-loop`)
 
-| ID | Summary | Domain | Agent |
-|----|---------|--------|-------|
-| VAL-01 | Playtest harness: pad→orbit→reentry→touchdown + `/tmp` log + PNG matrix | Validation | visual-capture |
-| ~~DOC-01~~ | ~~Refresh physics audit / drift docs~~ — **DONE** Jul 2026 | Docs | docs |
-| VIS-01 | VesselRenderer 71/50 m vertical proportions | Visual | visual-vessel |
-| CC-01 | CI Xvfb PNG gate (V5) | CI | visual-capture |
-| PG-04 | Landing threshold harmonization | Physics | physics |
-| VS-01 | Reentry shader strategy (wire or delete) | Visual | visual-reentry |
-| VIS-03 | Hot-stage IFT reference compare | Visual | visual-hotstage + capture |
-| V-017 | OLM centre hole sized for legacy hull (9 m mismatch) | Pad | visual-pad |
-| V-024 | Belly-flop EDL reference capture baseline | Visual | visual-capture |
-| PHYS-01 | Single MECO authority (remove MissionManager fuel cut) | Gameplay | flight-edl |
+Shipped this branch: ~~VAL-01~~ (harness+CI, EDL tail open), ~~DOC-01~~, ~~VIS-01~~, ~~CC-01~~ (partial), ~~PG-04~~, ~~VS-01~~, ~~PHYS-01~~. Remaining open below.
+
+| ID | Summary | Domain | Agent | Status |
+|----|---------|--------|-------|--------|
+| VAL-01-tail | EDL tail capture: `peak_heating`/`retro_burn`/`touchdown` reliably (extend wall time / smarter vacuum coast warp) | Validation | visual-capture | **open — keystone** |
+| V-024 | Belly-flop EDL reference capture baseline | Visual | visual-capture | blocked on VAL-01-tail |
+| V-017 | OLM centre hole sized for legacy hull (9 m mismatch) | Pad | visual-pad | open |
+| VIS-03 | Hot-stage IFT reference compare | Visual | visual-hotstage + capture | on `feat/visual-hotstaging-ascent-capture` (not merged) |
 
 ### P1 — High (8 items)
 
@@ -85,7 +81,7 @@
 | DD-02 | Document mixture_ratio dual contract | 100→doc |
 | CC-08 | Spatial engine audio (`AudioStreamPlayer3D`) | 48 |
 | CC-09 | Reentry / Max-Q / hot-stage audio events | 48 |
-| HYG-01 | Remove dead NavBall + duplicate warp input | 48 |
+| ~~HYG-01~~ | ~~Remove dead NavBall + duplicate warp input~~ — **DONE** (`integrate/jul2026-realism-loop`: NavBallController + TimeWarpController removed, WarpController consolidated) | 48 |
 | VS-10 | Document or align sim 123.1 m vs render 121.1 m | 48 |
 | VS-11 | Re-enable edge glow full-stack reentry | 36 |
 
@@ -164,4 +160,5 @@ Append new findings to `AUDIT_WAVE_N.md` when re-reading codebase. Re-score and 
 
 ---
 
-*Generated by overnight loop orchestrator — docs only, no code changes.*
+*Generated by overnight loop orchestrator (Wave 1–3, docs only).*
+*Reconciled 2026-07-03 against `integrate/jul2026-realism-loop` after implementation review: VAL-01, VIS-01, CC-01, PG-04, VS-01, PHYS-01, HYG-01 shipped and verified (build 0/0, 75/75 tests). Remaining P0: VAL-01 EDL tail (keystone), V-017, V-024 (blocked on tail), VIS-03 (unmerged branch).*
