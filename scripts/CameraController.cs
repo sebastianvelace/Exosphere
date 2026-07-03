@@ -11,6 +11,16 @@ public partial class CameraController : Node3D
 
     public CameraMode Mode { get; set; } = CameraMode.Pad;
 
+    /// <summary>True while the first-person cockpit camera is active ([C] cycle).</summary>
+    public bool IsCockpitView => _cockpit;
+
+    /// <summary>Switch to first-person cockpit (used by debug/visual harnesses).</summary>
+    public void EnterCockpitView()
+    {
+        _cockpit = true;
+        _padPresetIdx = PadPresets.Length;
+    }
+
     // ── Chase / orbit state ───────────────────────────────────────────────
     private float _yaw      = 25f;
     private float _pitch    = 12f;

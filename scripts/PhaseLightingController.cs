@@ -2,16 +2,13 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Physics;
 
 /// <summary>
 /// Drives the scene <see cref="WorldEnvironment"/> and the sun
 /// <see cref="DirectionalLight3D"/> by flight phase so lighting reads correctly in
 /// both regimes instead of using one global look.
-///
-/// The core issue this fixes: a single global environment cannot be right for both
-/// the daylit pad (needs bright sky-blue ambient fill) and space (needs almost no
-/// fill, high contrast, and HDR bloom so the sun and steel specular pop). A global
-/// ACES/glow pass either washed the pad or left the ship subexposed in orbit.
 ///
 /// Rather than switch discretely on the mission FSM (which snaps), this blends
 /// smoothly on ALTITUDE — a robust proxy for "how much atmosphere/sky is around
@@ -19,32 +16,35 @@ using Exosphere.Simulation;
 /// look; above <see cref="AtmoBlendHigh"/> we reach the full space look; in between
 /// it interpolates.
 ///
-/// Tonemapping stays Filmic (verified to expose the steel well). We only move the
-/// ambient fill down, ramp HDR glow up, and lift the sun energy for stronger
-/// specular. <see cref="SunController"/> owns the light's ORIENTATION and never
-/// touches energy, so there is no conflict.
+/// Re-entry adds a second overlay driven by the same convective heat flux the plasma
+/// VFX uses (<see cref="ThermalModel.ComputeHeatFlux"/>), optionally primed by
+/// mission descent phases. When plasma is hot, ambient and sun dim so the emissive
+/// fireball dominates; glow ramps so the shock reads without washing HUD/cockpit.
+///
+/// Tonemapping stays Filmic. <see cref="SunController"/> owns the light's
+/// ORIENTATION and never touches energy, so there is no conflict.
 /// </summary>
 [GlobalClass]
 public partial class PhaseLightingController : Node
 {
-    /// <summary>Altitude (m) at/below which the full atmospheric/pad look applies.</summary>
     private const float AtmoBlendLow  = 70_000f;
-
-    /// <summary>Altitude (m) at/above which the full space look applies.</summary>
     private const float AtmoBlendHigh = 130_000f;
 
-    // Ambient fill energy: bright bluish sky fill on the pad → near-dark in space.
     private const float AmbientEnergyPad   = 0.45f;
     private const float AmbientEnergySpace = 0.12f;
-
-    // Sun directional energy: baseline on the pad → stronger in vacuum so steel
-    // specular reads against the black background.
     private const float SunEnergyPad   = 1.5f;
     private const float SunEnergySpace = 1.95f;
-
-    // HDR glow (bloom): off on the diffuse pad → on in space, where the sun disc,
-    // bright Earth limb and steel specular are genuine HDR hotspots.
     private const float GlowIntensitySpace = 0.6f;
+
+    private const double FluxThresh = 5.0e4;
+    private const double FluxPeak   = 6.0e5;
+    private const float AmbientEnergyReentry = 0.10f;
+    private const float SunEnergyReentry     = 0.90f;
+    private const float GlowIntensityReentry = 0.80f;
+    private static readonly Color AmbientColorReentry = new(0.82f, 0.42f, 0.20f);
+
+    private const float CockpitAmbientBoost  = 0.08f;
+    private const float CockpitGlowReduction = 0.18f;
 
     private Godot.Environment? _env;
     private DirectionalLight3D? _light;
@@ -62,21 +62,68 @@ public partial class PhaseLightingController : Node
         double alt = av.GetAltitude(body);
         float s = Smoothstep(AtmoBlendLow, AtmoBlendHigh, (float)alt);
 
-        // Ambient fill drops toward space → higher contrast, more metallic ship.
-        _env.AmbientLightEnergy = Mathf.Lerp(AmbientEnergyPad, AmbientEnergySpace, s);
+        float ambient = Mathf.Lerp(AmbientEnergyPad, AmbientEnergySpace, s);
+        float sun     = Mathf.Lerp(SunEnergyPad, SunEnergySpace, s);
+        float glow    = Mathf.Lerp(0.0f, GlowIntensitySpace, s);
 
-        // Glow stays enabled but its intensity ramps from 0, so the pad (s = 0) gets
-        // no bloom and space gets the full HDR pop. Only pixels above the HDR
-        // threshold bloom, so the UI (separate CanvasLayer) and diffuse steel stay clean.
-        _env.GlowEnabled       = true;
-        _env.GlowIntensity     = Mathf.Lerp(0.0f, GlowIntensitySpace, s);
-        _env.GlowStrength      = 0.9f;
-        _env.GlowBloom         = 0.05f;
-        _env.GlowBlendMode     = Godot.Environment.GlowBlendModeEnum.Additive;
-        _env.GlowHdrThreshold  = 1.0f;
+        float reentry = ComputeReentryFactor(bridge, av, body, alt);
+
+        if (reentry > 0.001f)
+        {
+            ambient = Mathf.Lerp(ambient, AmbientEnergyReentry, reentry);
+            sun     = Mathf.Lerp(sun, SunEnergyReentry, reentry);
+            glow    = Mathf.Lerp(glow, GlowIntensityReentry, reentry);
+            _env.AmbientLightColor = _env.AmbientLightColor.Lerp(AmbientColorReentry, reentry);
+        }
+
+        if (CameraController.Instance?.IsCockpitView == true && reentry > 0.01f)
+        {
+            ambient = Mathf.Min(AmbientEnergyPad, ambient + CockpitAmbientBoost * reentry);
+            glow    = Mathf.Max(0.0f, glow - CockpitGlowReduction * reentry);
+        }
+
+        _env.AmbientLightEnergy = ambient;
+
+        _env.GlowEnabled      = true;
+        _env.GlowIntensity    = glow;
+        _env.GlowStrength     = 0.9f;
+        _env.GlowBloom        = 0.05f;
+        _env.GlowBlendMode    = Godot.Environment.GlowBlendModeEnum.Additive;
+        _env.GlowHdrThreshold = 1.0f;
 
         if (_light != null)
-            _light.LightEnergy = Mathf.Lerp(SunEnergyPad, SunEnergySpace, s);
+            _light.LightEnergy = sun;
+    }
+
+    private static float ComputeReentryFactor(SimulationBridge bridge, Vessel av,
+        CelestialBody body, double alt)
+    {
+        double density  = body.GetAtmosphericDensity(av.Position);
+        double airspeed = av.GetSurfaceVelocity(body).Magnitude;
+        double flux     = ThermalModel.ComputeHeatFlux(density, airspeed);
+        float fluxFactor  = (float)System.Math.Clamp(
+            (flux - FluxThresh) / (FluxPeak - FluxThresh), 0.0, 1.0);
+
+        float phaseFactor = 0f;
+        var mission = MissionManager.Instance;
+        if (mission?.InDescent == true && alt < 120_000.0)
+        {
+            Vector3d up = (av.Position - body.Position).Normalized;
+            double vUp = av.GetSurfaceVelocity(body).Dot(up);
+            if (vUp < -20.0)
+            {
+                phaseFactor = mission.Phase switch
+                {
+                    MissionPhase.ENTRY         => 0.30f,
+                    MissionPhase.PEAK_HEATING    => 0.50f,
+                    MissionPhase.AERO_DESCENT    => 0.20f,
+                    MissionPhase.FINAL_DESCENT   => 0.12f,
+                    _                            => 0f,
+                };
+            }
+        }
+
+        return Mathf.Max(fluxFactor, phaseFactor);
     }
 
     private void EnsureRefs()
