@@ -1,34 +1,42 @@
 namespace Exosphere.Simulation.Systems;
 
-/// Life support: O2, CO2, water, food for the crew.
 public class LifeSupportSystem
 {
-    // Reservas (kg)
     public double OxygenKg   { get; private set; } = 200.0;
     public double CO2Kg      { get; private set; } = 0.0;
     public double WaterKg    { get; private set; } = 500.0;
     public double FoodKg     { get; private set; } = 300.0;
 
-    // Capacidades máximas
     public double MaxOxygen  => 200.0;
     public double MaxWater   => 500.0;
     public double MaxFood    => 300.0;
-    public double MaxCO2     => 50.0;   // límite de toxicidad
+    public double MaxCO2     => 50.0;
 
     public bool OxygenAlert  { get; private set; }
     public bool CO2Alert     { get; private set; }
     public bool CrewAlive    { get; private set; } = true;
 
-    // Consumo por tripulante por segundo
-    private const double OxygenPerCrewPerSec = 0.000833;  // ~3 kg/hora/persona
-    private const double CO2PerCrewPerSec    = 0.000694;  // ~2.5 kg/hora/persona
-    private const double WaterPerCrewPerSec  = 0.000278;  // ~1 kg/hora/persona
-    private const double FoodPerCrewPerSec   = 0.0000833; // ~300g/hora/persona
-    private const double CO2ScrubPerSec      = 0.000600;  // depuradora base
+    private const double OxygenPerCrewPerSec = 0.000833;
+    private const double CO2PerCrewPerSec    = 0.000694;
+    private const double WaterPerCrewPerSec  = 0.000278;
+    private const double FoodPerCrewPerSec   = 0.0000833;
+    private const double CO2ScrubPerSec      = 0.000600;
 
-    public void Tick(double dt, int crewCount)
+    private const double EcLoadPerCrewActiveKw = 0.45;
+    private const double EcLoadStandbyKw       = 0.15;
+
+    public double GetEcLoadKw(int crewCount, SystemsMissionPhase phase)
+    {
+        if (crewCount <= 0 || !CrewAlive) return 0.0;
+        return phase == SystemsMissionPhase.Active
+            ? EcLoadPerCrewActiveKw * crewCount
+            : EcLoadStandbyKw;
+    }
+
+    public void Tick(double dt, int crewCount, SystemsMissionPhase phase = SystemsMissionPhase.Active)
     {
         if (!CrewAlive || crewCount <= 0) return;
+        if (phase == SystemsMissionPhase.Idle) return;
 
         double o2Used   = OxygenPerCrewPerSec * crewCount * dt;
         double co2Gen   = CO2PerCrewPerSec    * crewCount * dt;
@@ -52,7 +60,6 @@ public class LifeSupportSystem
     public double WaterFraction  => WaterKg  / MaxWater;
     public double FoodFraction   => FoodKg   / MaxFood;
 
-    // Duración estimada en horas a consumo actual
     public double EstimatedO2HoursRemaining(int crewCount) =>
         crewCount > 0 ? OxygenKg / (OxygenPerCrewPerSec * crewCount * 3600.0) : double.PositiveInfinity;
 }

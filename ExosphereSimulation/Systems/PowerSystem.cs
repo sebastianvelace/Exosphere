@@ -7,22 +7,23 @@ public class PowerSystem
     public double BatteryKwh    { get; private set; } = 50.0;  // kWh
     public double MaxBatteryKwh => 50.0;
     public double SolarOutputKw { get; private set; } = 0.0;   // kW
-    public double BaseLoadKw    => 5.0;   // consumo base de sistemas
+    public double BaseLoadKw    => 5.0;   // avionics, computers, SAS standby
+    public double ExtraLoadKw   { get; private set; }
 
     public bool LowPowerAlert { get; private set; }
     public bool NoPowerAlert  { get; private set; }
 
-    // Panel area and efficiency
-    private const double SolarPanelArea       = 40.0;   // m²
-    private const double SolarPanelEfficiency = 0.28;   // 28%
-    private const double SolarConstant        = 1361.0; // W/m² a 1 AU
+    private const double SolarPanelArea       = 40.0;
+    private const double SolarPanelEfficiency = 0.28;
+    private const double SolarConstant        = 1361.0;
 
-    public void Tick(double dt, Vector3d vesselPosition, Vector3d sunPosition, bool inEclipse)
+    public void Tick(double dt, Vector3d vesselPosition, Vector3d sunPosition, bool inEclipse,
+                     double extraLoadKw = 0.0)
     {
-        // Solar power generation
+        ExtraLoadKw = System.Math.Max(0.0, extraLoadKw);
+
         if (!inEclipse)
         {
-            // Distance falloff from Sun (approximate: use 1 AU = 1.496e11 m as reference)
             double distToSun = (vesselPosition - sunPosition).Magnitude;
             double auDist    = System.Math.Max(distToSun / 1.496e11, 0.1);
             double solarFlux = SolarConstant / (auDist * auDist);
@@ -30,10 +31,10 @@ public class PowerSystem
         }
         else
         {
-            SolarOutputKw = 0.0; // eclipse
+            SolarOutputKw = 0.0;
         }
 
-        double netPowerKw = SolarOutputKw - BaseLoadKw;
+        double netPowerKw = SolarOutputKw - BaseLoadKw - ExtraLoadKw;
         double deltaKwh   = netPowerKw * (dt / 3600.0);
         BatteryKwh = System.Math.Clamp(BatteryKwh + deltaKwh, 0.0, MaxBatteryKwh);
 
