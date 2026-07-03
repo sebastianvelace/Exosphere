@@ -1,7 +1,3 @@
-// NOTE: This node must be instantiated by an integrator (e.g. SimulationBridge._Ready())
-// by calling:  GetParent()?.CallDeferred("add_child", new SystemsController { Name = "SystemsController" });
-// Agent F (N9) created this file. Agent D is responsible for wiring it in SimulationBridge._Ready().
-
 namespace Exosphere.Game;
 
 using Godot;
@@ -24,7 +20,6 @@ public partial class SystemsController : Node
     {
         Instance = this;
 
-        // Add SystemsHUD as a sibling under the UI CanvasLayer.
         var uiLayer = GetTree().Root.FindChild("UI", true, false) as CanvasLayer;
         if (uiLayer != null)
         {
@@ -43,30 +38,19 @@ public partial class SystemsController : Node
         var refBody = universe.GetDominantBody(vessel.Position);
         double alt  = vessel.GetAltitude(refBody);
 
-        int crewCount = vessel.Crew.Count > 0 ? vessel.Crew.Count : 4; // default 4 crew
-        LifeSupport.Tick(delta, crewCount);
+        int crewCount = vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
+        var sysPhase  = MapMissionPhase(MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
+        LifeSupport.Tick(delta, crewCount, sysPhase);
 
-        // Eclipse detection: is the vessel in Earth's shadow?
         var earthBody = universe.GetBody("earth");
         var sunBody   = universe.GetBody("sun");
-        bool inEclipse = false;
-        if (earthBody != null && sunBody != null)
-        {
-            var toSun   = (sunBody.Position - vessel.Position).Normalized;
-            var toEarth = earthBody.Position - vessel.Position;
-            double toEarthMag = toEarth.Magnitude;
-            if (toEarthMag > 0.1)
-            {
-                double cosAngle = System.Math.Clamp(toSun.Dot(toEarth.Normalized), -1.0, 1.0);
-                double angle    = System.Math.Acos(cosAngle);
-                double shadowHalfAngle = System.Math.Asin(
-                    System.Math.Clamp(earthBody.Radius / toEarthMag, 0.0, 1.0));
-                inEclipse = angle < shadowHalfAngle;
-            }
-        }
+        bool inEclipse = earthBody != null && sunBody != null
+            && MissionGeometry.IsInEarthUmbra(
+                vessel.Position, earthBody.Position, sunBody.Position, earthBody.Radius);
 
         Vector3d sunPos = sunBody?.Position ?? Vector3d.Zero;
-        Power.Tick(delta, vessel.Position, sunPos, inEclipse);
+        double lsLoadKw = LifeSupport.GetEcLoadKw(crewCount, sysPhase);
+        Power.Tick(delta, vessel.Position, sunPos, inEclipse, lsLoadKw);
 
         bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
         double atmoTemp = inAtmo ? refBody.Atmosphere!.GetTemperature(alt) : 3.0;
@@ -82,10 +66,6 @@ public partial class SystemsController : Node
     {
         ControlLimited = Power.NoPowerAlert || !Comms.HasSignal || !LifeSupport.CrewAlive;
 
-        // Consecuencia suave: el jugador conserva el control manual, pero sin energía o
-        // enlace no hay SAS ni pilotos automáticos sosteniendo la nave por sí solos.
-        // Soft consequence: manual flight remains possible, but SAS and maneuver
-        // autopilots drop out when the ship has no power, no comms, or no live crew.
         if (ControlLimited)
         {
             vessel.SASEnabled = false;
@@ -97,4 +77,10 @@ public partial class SystemsController : Node
                 ap.Disarm();
         }
     }
+
+    private static SystemsMissionPhase MapMissionPhase(MissionPhase phase) => phase switch
+    {
+        MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN or MissionPhase.LANDED => SystemsMissionPhase.Idle,
+        _ => SystemsMissionPhase.Active,
+    };
 }

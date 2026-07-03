@@ -17,11 +17,17 @@ public class CommsSystem
                      IReadOnlyList<CelestialBody> bodies)
     {
         double distToEarth = (vesselPosition - earthPosition).Magnitude;
+        double earthRadius = 0.0;
+        foreach (var body in bodies)
+        {
+            if (body.Id == "earth") { earthRadius = body.Radius; break; }
+        }
 
         // Check line-of-sight (simplified: check if any body blocks the path)
         bool los = CheckLineOfSight(vesselPosition, earthPosition, bodies);
 
-        SignalDelaySeconds = distToEarth / SpeedOfLight;
+        SignalDelaySeconds = MissionGeometry.SignalDelaySeconds(
+            vesselPosition, earthPosition, SpeedOfLight, earthRadius);
         SignalStrength     = los ? System.Math.Clamp(1.0 - distToEarth / MaxDSNRangeM, 0.0, 1.0) : 0.0;
         HasSignal          = los && SignalStrength > 0.05;
         LossOfSignalAlert  = !HasSignal;
