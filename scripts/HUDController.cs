@@ -61,6 +61,11 @@ public partial class HUDController : Control
     private Label _countdownLabel = null!;
     private Label _countdownMilestone = null!;
 
+    // ── Pad help overlay + launch path callout (UX-001 / UX-002) ─────────────
+    private PanelContainer _padHelpRoot = null!;
+    private Label _launchPathLabel = null!;
+    private bool _padHelpDismissed;
+
     // ── Derived-state tracking ──────────────────────────────────────────────
     private Vector3d _lastVel;
     private double   _lastT = -1;
@@ -75,7 +80,9 @@ public partial class HUDController : Control
     {
         MissionPhase.COUNTDOWN, MissionPhase.LIFTOFF, MissionPhase.ASCENT_SH,
         MissionPhase.MAX_Q, MissionPhase.MECO, MissionPhase.SEPARATION,
-        MissionPhase.ASCENT_SHIP, MissionPhase.ORBIT,
+        MissionPhase.ASCENT_SHIP, MissionPhase.ORBIT, MissionPhase.COAST,
+        MissionPhase.ENTRY, MissionPhase.PEAK_HEATING, MissionPhase.AERO_DESCENT,
+        MissionPhase.FINAL_DESCENT, MissionPhase.LANDED, MissionPhase.CRASHED,
     };
 
     public override void _Ready()
@@ -85,6 +92,7 @@ public partial class HUDController : Control
         BuildPhaseBanner();
         BuildBottomBand();
         BuildCountdown();
+        BuildPadHelpOverlay();
 
         // Spawn the engine board and navball as children.
         AddChild(new EngineGridHUD  { Name = "EngineGridHUD" });
@@ -170,9 +178,9 @@ public partial class HUDController : Control
         var center = new PanelContainer();
         center.SetAnchorsPreset(LayoutPreset.CenterTop);
         center.GrowHorizontal = GrowDirection.Both;
-        center.OffsetLeft = -240;
+        center.OffsetLeft = -320;
         center.OffsetTop = 18;
-        center.OffsetRight = 240;
+        center.OffsetRight = 320;
         center.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.62f, 12, 18, 10));
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
@@ -190,15 +198,23 @@ public partial class HUDController : Control
         _phaseLabel.AddThemeConstantOverride("outline_size", 3);
         vbox.AddChild(_phaseLabel);
 
+        _launchPathLabel = new Label { Text = "" };
+        _launchPathLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        _launchPathLabel.AddThemeFontSizeOverride("font_size", 11);
+        _launchPathLabel.AddThemeColorOverride("font_color", LabelDim);
+        _launchPathLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _launchPathLabel.CustomMinimumSize = new Vector2(580, 0);
+        vbox.AddChild(_launchPathLabel);
+
         _phaseTrack = new HBoxContainer();
         _phaseTrack.Alignment = BoxContainer.AlignmentMode.Center;
-        _phaseTrack.AddThemeConstantOverride("separation", 6);
+        _phaseTrack.AddThemeConstantOverride("separation", 4);
         vbox.AddChild(_phaseTrack);
         foreach (var _ in PhaseSequence)
         {
             var dot = new ColorRect
             {
-                CustomMinimumSize = new Vector2(27, 2),
+                CustomMinimumSize = new Vector2(18, 2),
                 Color = GaugeTrack,
             };
             _phaseDots.Add(dot);
@@ -311,6 +327,52 @@ public partial class HUDController : Control
         _countdownRoot = center;
     }
     private CenterContainer _countdownRoot = null!;
+
+    private void BuildPadHelpOverlay()
+    {
+        _padHelpRoot = new PanelContainer();
+        _padHelpRoot.SetAnchorsPreset(LayoutPreset.Center);
+        _padHelpRoot.OffsetLeft = -290;
+        _padHelpRoot.OffsetTop = 40;
+        _padHelpRoot.OffsetRight = 290;
+        _padHelpRoot.OffsetBottom = 210;
+        _padHelpRoot.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.78f, 14, 22, 18));
+        _padHelpRoot.MouseFilter = MouseFilterEnum.Ignore;
+        AddChild(_padHelpRoot);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 8);
+        _padHelpRoot.AddChild(vbox);
+
+        var title = new Label { Text = "MISSION CONTROLS" };
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        title.AddThemeFontSizeOverride("font_size", 14);
+        title.AddThemeColorOverride("font_color", ValueBright);
+        vbox.AddChild(title);
+
+        vbox.AddChild(MakeHelpLine("[L]  AUTO LAUNCH SEQUENCE"));
+        vbox.AddChild(MakeHelpLine("[hold Z]  MANUAL IGNITION / THROTTLE UP"));
+        vbox.AddChild(MakeHelpLine("[hold X]  THROTTLE DOWN"));
+        vbox.AddChild(MakeHelpLine("[G]  FULL ASCENT GUIDANCE"));
+        vbox.AddChild(MakeHelpLine("[H]  PITCH ASSIST (HOLD / RELEASE)"));
+        vbox.AddChild(MakeHelpLine("[M]  ORBITAL MAP    [Tab]  SOLAR VIEW"));
+        vbox.AddChild(MakeHelpLine("[,] / [.]  TIME WARP"));
+
+        var dismiss = new Label { Text = "Dismiss with [F1]  ·  auto-hides after liftoff" };
+        dismiss.HorizontalAlignment = HorizontalAlignment.Center;
+        dismiss.AddThemeFontSizeOverride("font_size", 10);
+        dismiss.AddThemeColorOverride("font_color", LabelDim);
+        vbox.AddChild(dismiss);
+    }
+
+    private static Label MakeHelpLine(string text)
+    {
+        var lbl = new Label { Text = text };
+        lbl.HorizontalAlignment = HorizontalAlignment.Center;
+        lbl.AddThemeFontSizeOverride("font_size", 12);
+        lbl.AddThemeColorOverride("font_color", LabelDim);
+        return lbl;
+    }
 
     // ── Widget factories ────────────────────────────────────────────────────
 
@@ -551,8 +613,18 @@ public partial class HUDController : Control
         _suborbitalWarn.Text = suborbital ? "SUBORBITAL / IMPACT TRAJECTORY" : "";
 
         double ts = universe.TimeScale;
-        _warpValue.Text = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
-        _warpValue.AddThemeColorOverride("font_color", ts > 1.0 ? Accent : ValueBright);
+        if (universe.CurrentTime < bridge.WarpClampReasonUntil && bridge.WarpClampReason != null)
+        {
+            _warpValue.Text = ts <= 1.0
+                ? $"Real Time  ·  {bridge.WarpClampReason}"
+                : $"× {(int)ts}  ·  {bridge.WarpClampReason}";
+            _warpValue.AddThemeColorOverride("font_color", WarnCol);
+        }
+        else
+        {
+            _warpValue.Text = ts <= 1.0 ? "Real Time" : $"× {(int)ts}";
+            _warpValue.AddThemeColorOverride("font_color", ts > 1.0 ? Accent : ValueBright);
+        }
 
         // ── Propellant bars (fuel vs oxidizer fractions) ───────────────────
         double lf = vessel.Parts.TotalLiquidFuel;
@@ -582,6 +654,73 @@ public partial class HUDController : Control
             UpdatePhaseTrack(mission.Phase);
             UpdateEventLog(mission.Phase, universe.CurrentTime);
             UpdateCountdown(mission);
+            UpdateLaunchPathCallout(mission, bridge, vessel, refBody);
+            UpdatePadHelp(mission);
+        }
+    }
+
+    private void UpdatePadHelp(MissionManager mission)
+    {
+        if (mission.Phase >= MissionPhase.LIFTOFF)
+            _padHelpDismissed = true;
+
+        bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
+        _padHelpRoot.Visible = onPad && !_padHelpDismissed;
+    }
+
+    private void UpdateLaunchPathCallout(
+        MissionManager mission,
+        SimulationBridge bridge,
+        Exosphere.Simulation.Vessel vessel,
+        Exosphere.Simulation.CelestialBody refBody)
+    {
+        bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
+        if (!onPad)
+        {
+            _launchPathLabel.Text = "";
+            return;
+        }
+
+        if (mission.Phase == MissionPhase.PRE_LAUNCH)
+        {
+            _launchPathLabel.Text = "AUTO SEQUENCE [L]  ·  MANUAL STARTUP [hold Z]";
+            _launchPathLabel.AddThemeColorOverride("font_color", LabelDim);
+            return;
+        }
+
+        if (bridge.IsIgnitionActive && !mission.IsCountingDown)
+        {
+            double twr = vessel.GetThrustToWeightRatio(refBody);
+            _launchPathLabel.Text = twr <= 1.02
+                ? $"MANUAL STARTUP — HOLD (TWR {twr:F2} < 1.02)"
+                : "MANUAL STARTUP — RELEASING CLAMPS";
+            _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
+            return;
+        }
+
+        if (mission.IsCountingDown)
+        {
+            double twr = vessel.GetThrustToWeightRatio(refBody);
+            if (mission.Phase == MissionPhase.IGNITION && vessel.IsGroundHeld && twr <= 1.02)
+            {
+                _launchPathLabel.Text = mission.CountdownTimer <= 0.0
+                    ? $"AUTO SEQUENCE — HOLD (TWR {twr:F2} < 1.02)"
+                    : "AUTO SEQUENCE — ENGINE START";
+                _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
+            }
+            else if (mission.Phase == MissionPhase.COUNTDOWN)
+            {
+                int secs = (int)System.Math.Ceiling(mission.CountdownTimer);
+                _launchPathLabel.Text = $"AUTO SEQUENCE — T- {secs:00}";
+                _launchPathLabel.AddThemeColorOverride("font_color", LabelDim);
+            }
+            else
+            {
+                _launchPathLabel.Text = "AUTO SEQUENCE — ENGINE START";
+                _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
+            }
         }
     }
 
@@ -638,7 +777,12 @@ public partial class HUDController : Control
                 MissionPhase.SEPARATION  => "STAGE SEP",
                 MissionPhase.ASCENT_SHIP => "SHIP IGNITION",
                 MissionPhase.ORBIT       => "SECO / ORBIT",
+                MissionPhase.COAST       => "COAST",
                 MissionPhase.ENTRY       => "ENTRY INTERFACE",
+                MissionPhase.PEAK_HEATING => "PEAK HEATING",
+                MissionPhase.AERO_DESCENT => "AERO DESCENT",
+                MissionPhase.RETRO_BURN  => "RETRO BURN",
+                MissionPhase.FINAL_DESCENT => "FINAL DESCENT",
                 MissionPhase.LANDED      => "TOUCHDOWN",
                 MissionPhase.CRASHED     => "VEHICLE LOST",
                 _ => null!,
@@ -658,6 +802,9 @@ public partial class HUDController : Control
     {
         int currentIdx = System.Array.IndexOf(PhaseSequence, current);
         if (currentIdx < 0 && current == MissionPhase.IGNITION) currentIdx = 0;
+        if (currentIdx < 0 && current == MissionPhase.RETRO_BURN)
+            currentIdx = System.Array.IndexOf(PhaseSequence, MissionPhase.FINAL_DESCENT);
+        if (currentIdx < 0 && current == MissionPhase.PRE_LAUNCH) currentIdx = -1;
         for (int i = 0; i < _phaseDots.Count; i++)
         {
             if (currentIdx < 0)        _phaseDots[i].Color = GaugeTrack;
@@ -706,6 +853,10 @@ public partial class HUDController : Control
                 case Key.Comma:
                     bridge.SetWarpIndex(bridge.WarpIndex - 1);
                     break;
+                case Key.F1:
+                    _padHelpDismissed = !_padHelpDismissed;
+                    GetViewport().SetInputAsHandled();
+                    break;
             }
         }
     }
@@ -719,6 +870,10 @@ public partial class HUDController : Control
         MissionPhase.MAX_Q       => "MAX-Q",
         MissionPhase.MECO        => "MECO",
         MissionPhase.ASCENT_SHIP => "ASCENT / STARSHIP",
+        MissionPhase.AERO_DESCENT => "AERO DESCENT",
+        MissionPhase.PEAK_HEATING => "PEAK HEATING",
+        MissionPhase.FINAL_DESCENT => "FINAL DESCENT",
+        MissionPhase.RETRO_BURN  => "RETRO BURN",
         _ => phase.ToString().Replace("_", " "),
     };
 
@@ -726,6 +881,7 @@ public partial class HUDController : Control
     {
         MissionPhase.COUNTDOWN or MissionPhase.IGNITION => WarnCol,
         MissionPhase.MAX_Q or MissionPhase.PEAK_HEATING or MissionPhase.CRASHED => FuelLowCol,
+        MissionPhase.LANDED => new Color(0.55f, 0.95f, 0.65f, 1f),
         _ => ValueBright,
     };
 
