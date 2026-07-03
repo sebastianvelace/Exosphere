@@ -4,7 +4,6 @@
 [ext_resource type="Script" uid="uid://c07jmycayi338" path="res://scripts/FloatingOrigin.cs" id="2"]
 [ext_resource type="Script" uid="uid://lucbcu3txwro" path="res://scripts/TimeWarpController.cs" id="3"]
 [ext_resource type="Script" uid="uid://dbjojxl6gqgql" path="res://scripts/HUDController.cs" id="4"]
-[ext_resource type="Script" uid="uid://b0yhjw4qygegb" path="res://scripts/NavBallController.cs" id="5"]
 [ext_resource type="Script" path="res://scripts/CameraController.cs" id="6"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMaterial_1"]
@@ -66,6 +65,3 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("4")
-
-[node name="NavBallController" type="Node" parent="UI" unique_id=514771001]
-script = ExtResource("5")
