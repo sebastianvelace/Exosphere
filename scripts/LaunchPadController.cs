@@ -10,8 +10,8 @@ using Godot;
 ///
 /// Scale: render units are ~2.8 m/unit (see VesselRenderer). The vessel sits
 /// at the render origin with its base (booster engine tips) at y≈0 and a body
-/// radius of ~1.15 units (~9 m diameter). Everything here is positioned so the
-/// booster fires down through the centre of the launch mount.
+/// radius of ~1.607 units (~9 m diameter, matches VesselRenderer.BodyR). Everything
+/// here is positioned so the booster fires down through the centre of the launch mount.
 /// </summary>
 public partial class LaunchPadController : Node3D
 {
@@ -19,6 +19,9 @@ public partial class LaunchPadController : Node3D
 
     // 1 render unit ≈ 2.8 m. Helper so the code below can read in metres.
     private const float U = 1f / 2.8f;   // metres → render units
+
+    // Match VesselRenderer.BodyR — 9 m Ø hull (4.5 m radius).
+    private const float VesselBodyR = 1.607f;
 
     public override void _Ready()
     {
@@ -461,7 +464,7 @@ public partial class LaunchPadController : Node3D
         const float tableTopY   = -0.6f * U;                 // just below booster base
         const float tableThick  = 4f * U;                    // table deck thickness
         const float outerR      = 10.5f * U;                 // ~21 m outer diameter
-        const float innerR      = 3.6f * U;                  // centre hole (booster R≈1.15u)
+        const float innerR      = VesselBodyR + 0.06f;       // ~9.2 m Ø (was legacy 7.2 m)
         float tableMidY = tableTopY - tableThick * 0.5f;
 
         // Steel ring deck — built as an annulus from a tube of trapezoid segments
@@ -496,7 +499,7 @@ public partial class LaunchPadController : Node3D
 
         // Booster hold-down ring on the deck (where the booster clamps sit).
         Spawn("HoldDownRing", new CylinderMesh
-            { TopRadius = innerR + 0.6f * U, BottomRadius = innerR + 0.6f * U, Height = 0.5f * U, RadialSegments = 24 },
+            { TopRadius = innerR + 0.15f, BottomRadius = innerR + 0.15f, Height = 0.5f * U, RadialSegments = 24 },
             steel, new Vector3(0, tableTopY + 0.2f * U, 0));
 
         // ── Hold-down clamps + QD plate hardware around the centre hole ───────
@@ -506,7 +509,7 @@ public partial class LaunchPadController : Node3D
         for (int i = 0; i < clamps; i++)
         {
             float a  = i * Mathf.Tau / clamps;
-            float cr = innerR + 0.9f * U;
+            float cr = innerR + 0.32f;
             Spawn($"HoldDownClamp{i}", new BoxMesh
                 { Size = new Vector3(0.9f * U, 1.6f * U, 0.7f * U) },
                 conc, new Vector3(cr * Mathf.Cos(a), tableTopY + 0.8f * U, cr * Mathf.Sin(a)));
