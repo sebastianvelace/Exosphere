@@ -20,7 +20,7 @@
 | [NAVIGATION_AUDIT.md](./NAVIGATION_AUDIT.md) | Transfers, map, SOI | 4 |
 | [DATA_DRIFT_AUDIT.md](./DATA_DRIFT_AUDIT.md) | Doc/code/schema drift | 9 |
 | [CROSSCUTTING_AUDIT.md](./CROSSCUTTING_AUDIT.md) | CI, audio, perf, merges | 14 |
-| [../physics_audit.md](../physics_audit.md) | Legacy (Jun 2026) — **superseded** | — |
+| [../physics_audit.md](../physics_audit.md) | Legacy parameter audit — **refreshed Jul 2026** (DOC-01) | — |
 | [.atl/OVERENGINEERING_AUDIT_JUL2026.md](../../.atl/OVERENGINEERING_AUDIT_JUL2026.md) | Dead code | 13 |
 | [.atl/OVERNIGHT_LOOP_LOG.md](../../.atl/OVERNIGHT_LOOP_LOG.md) | Orchestrator progress log | — |
 
@@ -45,7 +45,7 @@
 | Rank | ID | Item | I×R×F | Owner branch | Evidence |
 |------|-----|------|-------|--------------|----------|
 | 1 | **VAL-01** | DEORBIT→EDL playtest harness + phase-gated xvfb PNG matrix | 100 | `feat/visual-capture-*` | `PLAN_PLAYTEST.md:58-130`; unblocks VS-12, GU-05, CC-01 |
-| 2 | **DOC-01** | Supersede stale `docs/physics_audit.md` (drag, mixture_ratio, thrust, ISP) | 100 | `docs/*` | `DATA_DRIFT_AUDIT.md` DD-01–05 |
+| 2 | ~~**DOC-01**~~ | ~~Supersede stale `docs/physics_audit.md`~~ — **DONE** (`docs/refresh-realism-docs`) | 100 | `docs/*` | `DATA_DRIFT_AUDIT.md` DD-01–05 |
 | 3 | **VIS-01** | Rebalance render booster/ship vertical split (71/50 m) | 75 | `feat/visual-vessel-*` | `VesselRenderer.cs:52-63,140-407` |
 | 4 | **CC-01** | CI PNG capture + non-black heuristic + artifacts (V5) | 60 | `feat/visual-capture-*` | `ci.yml:103-124`; `PLAN_VISUAL_REALISM.md:241-257` |
 | 5 | **PG-04** | Harmonize `SoftLandingThreshold` 5→~3 m/s with EDL | 60 | `feat/physics-*` | `Universe.cs:64`; `EDLController.cs:24` |
@@ -61,12 +61,12 @@
 
 ## Full prioritized backlog (deduplicated)
 
-### P0 — Next session (10 items — realism-filtered; mission P0s deferred per ROADMAP)
+### P0 — Next session (9 items — realism-filtered; mission P0s deferred per ROADMAP)
 
 | ID | Summary | Domain | Agent |
 |----|---------|--------|-------|
 | VAL-01 | Playtest harness: pad→orbit→reentry→touchdown + `/tmp` log + PNG matrix | Validation | visual-capture |
-| DOC-01 | Refresh physics audit / drift docs | Docs | docs |
+| ~~DOC-01~~ | ~~Refresh physics audit / drift docs~~ — **DONE** Jul 2026 | Docs | docs |
 | VIS-01 | VesselRenderer 71/50 m vertical proportions | Visual | visual-vessel |
 | CC-01 | CI Xvfb PNG gate (V5) | CI | visual-capture |
 | PG-04 | Landing threshold harmonization | Physics | physics |
@@ -131,7 +131,7 @@
 | **Vessel proportions** | `feat/visual-vessel-*` | `main` | VIS-01 before/after xvfb pad lateral |
 | **Hot-staging** | `feat/visual-hotstage-*` | capture branch | VIS-03 IFT compare PNG set |
 | **Reentry VFX** | `feat/visual-reentry-*` | capture branch | VS-01 decision + VS-12 tuning |
-| **Docs sync** | `docs/*` | this branch | DOC-01 supersede header on legacy audit |
+| **Docs sync** | `docs/*` | this branch | DOC-01 **done** — legacy audit banner + drift fixes |
 | **Physics threshold** | `feat/physics-*` | `main` | PG-04 + xUnit regression |
 | **Audio** | `feat/audio-*` | `main` | CC-08/09 event surface (after VAL-01 for EDL cues) |
 | **Navigation** | `feat/nav-*` | `main` | NV-01 lunar model spike (defer if visual tranche open) |
