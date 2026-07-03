@@ -121,3 +121,18 @@ jobs:
           # xvfb-run provides a virtual display; here we run the same smoke but with
           # a real framebuffer so a follow-up can capture PNGs.
           xvfb-run -a "$GODOT_BIN" --path . --quit-after 3 --rendering-driver opengl3
+
+      # VAL-01 smoke: temporary autoload harness (never committed) + pad PNG artifact.
+      - name: Visual playtest smoke (pad capture)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/visual_playtest.sh --smoke --skip-build
+
+      - name: Upload visual smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-smoke-pad
+          path: /tmp/exo_play/exo_play_pad.png
+          if-no-files-found: warn
