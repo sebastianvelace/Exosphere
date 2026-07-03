@@ -70,9 +70,13 @@
 
 ## 2026-07-03T04:06Z — Gameplay mission audit persisted
 
-- `docs/audits/GAMEPLAY_MISSION_AUDIT.md` (18 items G-001..G-018)
-- Commit: `docs(audit): gameplay mission improvement plan`
-- Top P0: G-001 save/load, G-002 objectives, G-006 multi-vessel, G-007 pad-to-recovery
+| Field | Value |
+|-------|-------|
+| **Agent** | gameplay (5a1481f7-2524-4897-951c-2b80bd7456a0) |
+| **Artifact** | `docs/audits/GAMEPLAY_MISSION_AUDIT.md` |
+| **Commit** | `docs(audit): gameplay mission improvement plan` |
+| **Items** | 18 (G-001–G-018) |
+| **Top 5** | G-001, G-002, G-007, G-006, G-004 |
 
 ---
 

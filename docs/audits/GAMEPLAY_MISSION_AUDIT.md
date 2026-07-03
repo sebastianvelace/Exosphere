@@ -1,6 +1,7 @@
 # Gameplay & Mission Flow Audit — Exosphere
 
 **Wave:** 1 (overnight Jul 2026)  
+**Agent:** 5a1481f7-2524-4897-951c-2b80bd7456a0  
 **Date:** 2026-07-02  
 **Scope:** ROADMAP pending gameplay, `SaveSystem.cs`, `MissionManager.cs`, `CrewMember`, `ExosphereSimulation/Systems/*`, `lua_scripts/`, `ExosphereSimulation/Construction/*`, pad→orbit→EDL→recovery arc.  
 **Mode:** Read-only code/doc scan. No C# changes.
