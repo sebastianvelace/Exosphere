@@ -53,9 +53,29 @@ public class Vessel
     // ── Propiedades calculadas ─────────────────────────────────────────────
     public double    TotalMass     => Parts.TotalMass;
     public Vector3d  CenterOfMass  => Position + Orientation.Rotate(Parts.CenterOfMass);
+    public double    VehicleLength => Parts.VehicleLength;
+    public double    MaximumDiameter => Parts.MaximumDiameter;
 
     public double GetAltitude(CelestialBody body) =>
         (Position - body.Position).Magnitude - body.Radius;
+
+    /// <summary>Local gravitational acceleration from one body at the vessel position.</summary>
+    public double GetLocalGravity(CelestialBody body) =>
+        body.GetGravityAt(Position).Magnitude;
+
+    /// <summary>
+    /// Weight force (N) in the selected body's local gravity field. Mass remains invariant;
+    /// weight changes with body and altitude.
+    /// </summary>
+    public double GetWeightNewtons(CelestialBody body) =>
+        TotalMass * GetLocalGravity(body);
+
+    /// <summary>Pressure- and altitude-corrected thrust-to-local-weight ratio.</summary>
+    public double GetThrustToWeightRatio(CelestialBody body)
+    {
+        double weight = GetWeightNewtons(body);
+        return weight > 0.0 ? GetCurrentThrust(body) / weight : 0.0;
+    }
 
     // Velocidad relativa a la superficie (para aerodinámica)
     public Vector3d GetSurfaceVelocity(CelestialBody body) =>
@@ -86,6 +106,10 @@ public class Vessel
     /// <summary>Total pressure-corrected thrust (N) at the vessel's current altitude.</summary>
     public double GetCurrentThrust(CelestialBody? body) =>
         Parts.GetCurrentThrust(GetAmbientPressure(body));
+
+    /// <summary>Maximum pressure-corrected thrust available from the current stage.</summary>
+    public double GetMaximumThrust(CelestialBody? body) =>
+        Parts.GetMaximumThrust(GetAmbientPressure(body));
 
     /// <summary>Effective cluster specific impulse (s) right now.</summary>
     public double GetCurrentIsp(CelestialBody? body) =>
@@ -155,8 +179,10 @@ public class Vessel
         Vector3d axis = Orientation.Rotate(Vector3d.Up);   // eje longitudinal en mundo
         double   temp = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
 
-        var drag = AerodynamicsModel.ComputeReentryDrag(density, surfVel, axis, Parts.Parts.Count, temp);
-        var lift = AerodynamicsModel.ComputeLift(density, surfVel, axis, Parts.Parts.Count);
+        var drag = AerodynamicsModel.ComputeReentryDrag(
+            density, surfVel, axis, VehicleLength, MaximumDiameter, temp);
+        var lift = AerodynamicsModel.ComputeLift(
+            density, surfVel, axis, VehicleLength, MaximumDiameter);
         return drag + lift;
     }
 
@@ -210,8 +236,9 @@ public class Vessel
         ComputeGravity((IEnumerable<CelestialBody>)bodies);
 
     // ── Tick interno (consumo, SAS, rotación) ──────────────────────────────
-    // Autoridad de control: cuántos rad/s² aplica el input máximo (±1)
-    private const double ControlAuthority = 0.6;
+    // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor
+    // gimbal authority is computed from thrust, lever arm, CoM and moment of inertia.
+    private const double ReactionControlAuthority = 0.01;
     // Aerodinámica rotacional: tendencia a alinear el eje largo (+Y) con el flujo de aire
     // (weathervaning, como un dardo estable) y amortiguación angular, ambas escaladas por q.
     private const double AeroStability = 0.85;   // rad/s² a q≈30 kPa y ángulo de ataque pequeño
@@ -237,10 +264,16 @@ public class Vessel
         bool hasInput = PitchYawRoll.Magnitude > 0.01;
         if (hasInput)
         {
+            double pitchYawAuthority = System.Math.Max(
+                ReactionControlAuthority,
+                Parts.GetPitchYawAngularAcceleration(pressure));
+            double rollAuthority = System.Math.Max(
+                ReactionControlAuthority,
+                Parts.GetRollAngularAcceleration(pressure));
             var localAngAccel = new Vector3d(
-                PitchYawRoll.X * ControlAuthority,
-                PitchYawRoll.Y * ControlAuthority,
-                PitchYawRoll.Z * ControlAuthority);
+                PitchYawRoll.X * pitchYawAuthority,
+                PitchYawRoll.Y * pitchYawAuthority,
+                PitchYawRoll.Z * rollAuthority);
             // Convertir de espacio local a mundo
             AngularVelocity = AngularVelocity + Orientation.Rotate(localAngAccel) * dt;
 

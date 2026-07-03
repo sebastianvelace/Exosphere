@@ -39,6 +39,27 @@ public class PartGraph
     public double TotalLiquidFuel  => _parts.Sum(p => p.LiquidFuel);
     public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer);
     public double TotalElectricCharge => _parts.Sum(p => p.ElectricCharge);
+    public double VehicleLength
+    {
+        get
+        {
+            double specified = _parts.Sum(p => System.Math.Max(0.0, p.Definition.LengthM));
+            return specified > 0.0
+                ? specified
+                : System.Math.Max(1.0, _parts.Count * 12.0);
+        }
+    }
+    public double MaximumDiameter
+    {
+        get
+        {
+            if (_parts.Count == 0) return 1.0;
+            double specified = _parts.Max(p => System.Math.Max(0.0, p.Definition.DiameterM));
+            return specified > 0.0
+                ? specified
+                : System.Math.Max(1.0, 2.0 * System.Math.Sqrt(_parts.Count * 0.2));
+        }
+    }
 
     // Parts belonging to the currently-firing stage: the subtree hanging below the
     // lowest still-attached decoupler (the side away from the root command section).
@@ -93,6 +114,72 @@ public class PartGraph
         }
     }
 
+    /// <summary>
+    /// Approximate transverse inertia (kg·m²) of the declared cylindrical envelope.
+    /// It changes continuously as propellant mass is consumed.
+    /// </summary>
+    public double TransverseMomentOfInertia
+    {
+        get
+        {
+            double radius = MaximumDiameter * 0.5;
+            return TotalMass * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
+        }
+    }
+
+    /// <summary>Approximate roll-axis inertia (kg·m²) of the vehicle envelope.</summary>
+    public double AxialMomentOfInertia
+    {
+        get
+        {
+            double radius = MaximumDiameter * 0.5;
+            return 0.5 * TotalMass * radius * radius;
+        }
+    }
+
+    /// <summary>
+    /// Pitch/yaw angular acceleration available from live engine gimbal torque.
+    /// Uses each cluster's physical thrust plane and the current propellant-dependent CoM.
+    /// </summary>
+    public double GetPitchYawAngularAcceleration(double ambientPressure)
+    {
+        double inertia = TransverseMomentOfInertia;
+        if (inertia <= 0.0) return 0.0;
+
+        var positions = ComputePartLocalPositions();
+        double comY = CenterOfMass.Y;
+        double torque = 0.0;
+        foreach (var engine in ActiveEngines)
+        {
+            if (!positions.TryGetValue(engine, out var centre)) continue;
+            double thrustY = centre.Y + engine.Definition.ThrustPositionYM;
+            double lever = System.Math.Abs(thrustY - comY);
+            double gimbal = System.Math.Abs(engine.Definition.GimbalRange) * MathUtils.DEG_TO_RAD;
+            torque += engine.GetThrustMagnitude(ambientPressure) * lever * System.Math.Sin(gimbal);
+        }
+        return torque / inertia;
+    }
+
+    /// <summary>
+    /// Roll angular acceleration from differential gimbal across a multi-engine cluster.
+    /// A 65% radius is a conservative effective moment arm for concentric Raptor layouts.
+    /// </summary>
+    public double GetRollAngularAcceleration(double ambientPressure)
+    {
+        double inertia = AxialMomentOfInertia;
+        if (inertia <= 0.0) return 0.0;
+
+        double radius = MaximumDiameter * 0.5 * 0.65;
+        double torque = 0.0;
+        foreach (var engine in ActiveEngines)
+        {
+            if (engine.Definition.EngineCount < 2) continue;
+            double gimbal = System.Math.Abs(engine.Definition.GimbalRange) * MathUtils.DEG_TO_RAD;
+            torque += engine.GetThrustMagnitude(ambientPressure) * radius * System.Math.Sin(gimbal);
+        }
+        return torque / inertia;
+    }
+
     // ── Empuje total en espacio local ─────────────────────────────────────
     // Overload sin presión: empuje de vacío (compatibilidad).
     public Vector3d GetTotalThrust() => GetTotalThrust(0.0);
@@ -109,11 +196,17 @@ public class PartGraph
 
     /// <summary>Number of engines in the current stage that are lit (firing).</summary>
     public int ActiveEngineCount =>
-        ActiveEngines.Count(e => e.ThrottleLevel > 1e-3);
+        ActiveEngines
+            .Where(e => e.ThrottleLevel > 1e-3)
+            .Sum(e => System.Math.Max(1, e.Definition.EngineCount));
 
     /// <summary>Total pressure-corrected thrust magnitude (N) of the current stage now.</summary>
     public double GetCurrentThrust(double ambientPressure) =>
         ActiveEngines.Sum(e => e.GetThrustMagnitude(ambientPressure));
+
+    /// <summary>Pressure-corrected current-stage thrust available at full throttle.</summary>
+    public double GetMaximumThrust(double ambientPressure) =>
+        ActiveEngines.Sum(e => e.GetFullThrottleThrustMagnitude(ambientPressure));
 
     /// <summary>Total propellant mass flow of the current stage (kg/s) at this pressure.</summary>
     public double GetCurrentMassFlow(double ambientPressure) =>
@@ -159,7 +252,9 @@ public class PartGraph
     public double GetCurrentStageDeltaV(double ambientPressure)
     {
         var stage = CurrentStageParts();
-        double wet = stage.Sum(p => p.CurrentMass);
+        // The active booster accelerates every still-attached stage above it. Its rocket-
+        // equation mass ratio must therefore include the complete vehicle as carried mass.
+        double wet = TotalMass;
         double propellant = stage.Sum(p =>
             p.LiquidFuel + p.Oxidizer + p.SolidFuel + p.Monopropellant);
         double dry = wet - propellant;
@@ -197,12 +292,14 @@ public class PartGraph
 
         // Calcular flujo de masa total de todos los motores activos
         double totalLiquidRate = 0, totalSolidRate = 0, totalMonoRate = 0;
+        double methaneRate = 0, oxidizerRate = 0;
         foreach (var engine in engines)
         {
             var def = engine.Definition;
-            // Isp interpolado por presión: pf=0 (vacío)→IspVac, pf=1 (mar)→IspSL.
-            double pf  = System.Math.Clamp(ambientPressure / 101325.0, 0.0, 1.0);
-            double isp = def.IspVac + (def.IspSL - def.IspVac) * pf;
+            // Isp corregido por presión. No se recorta en 1 atm: mundos densos pueden
+            // reducir el rendimiento hasta impedir que el motor produzca empuje neto.
+            double pf  = System.Math.Max(0.0, ambientPressure / 101325.0);
+            double isp = System.Math.Max(0.0, def.IspVac + (def.IspSL - def.IspVac) * pf);
             if (isp < 1.0) continue;
 
             // ṁ = F(p)/(Isp·g₀) con el empuje corregido por presión (coherente con
@@ -211,7 +308,15 @@ public class PartGraph
             var fuelType = def.FuelTypeStr.ToLowerInvariant();
 
             if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel"))
-                totalLiquidRate += massFlow;     // se reparte LF/Ox según la carga del tanque
+            {
+                totalLiquidRate += massFlow;
+                if (def.MixtureRatio > 0.0)
+                {
+                    double fuelFraction = 1.0 / (1.0 + def.MixtureRatio);
+                    methaneRate += massFlow * fuelFraction;
+                    oxidizerRate += massFlow * (1.0 - fuelFraction);
+                }
+            }
             else if (fuelType.Contains("solid"))
                 totalSolidRate += massFlow;
             else if (fuelType.Contains("mono"))
@@ -225,10 +330,13 @@ public class PartGraph
         {
             double totalLF   = stage.Sum(p => p.LiquidFuel);
             double totalOx   = stage.Sum(p => p.Oxidizer);
-            // Repartir el flujo de masa entre LF y Ox según la proporción cargada, de modo
-            // que ambos se agoten juntos (sin oxidante varado por una mezcla mal calibrada).
+            // Prefer the engine's declared oxidizer/fuel ratio. Falling back to the loaded
+            // tank ratio preserves compatibility with old parts that do not declare one.
+            double declaredRate = methaneRate + oxidizerRate;
             double inv = totalLF + totalOx;
-            double lfFrac = inv > 1e-9 ? totalLF / inv : 0.45;
+            double lfFrac = declaredRate > 1e-9
+                ? methaneRate / declaredRate
+                : inv > 1e-9 ? totalLF / inv : 0.45;
             double lfNeeded = totalLiquidRate * lfFrac * dt;
             double oxNeeded = totalLiquidRate * (1.0 - lfFrac) * dt;
 

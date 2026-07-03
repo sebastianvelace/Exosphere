@@ -1,9 +1,11 @@
 {
   "id": "starship_tank",
   "name": "Starship Propellant Tank",
-  "description": "Main LOX/LCH4 propellant tank for the Starship upper stage. Feeds 3 Raptor Vac + 3 Raptor SL engines. Capacity: 264 t LCH4 + 936 t LOX = 1200 t total (O/F 3.55). The windward side is covered by the same hexagonal heat-shield tiles as the nosecone, so it survives reentry belly-first.",
+  "description": "Flight 7 Block 2 common bulkhead and main tanks. Holds 264 t CH4 and 936 t LOX (1,200 t total at O/F 3.55). Dry mass is allocated so the complete ship is 100 t dry.",
   "category": "fuel_tank",
-  "mass_dry": 5000,
+  "mass_dry": 50000,
+  "length_m": 29.6,
+  "diameter_m": 9.0,
   "cost": 20000,
   "drag_coefficient": 0.2,
   "heat_tolerance": 1800,
@@ -11,7 +13,7 @@
   "fuel_capacity_lf": 264000,
   "fuel_capacity_ox": 936000,
   "attachment_nodes": [
-    {"id": "top",    "position": [0,  6.0, 0], "size": 3, "type": "stack"},
-    {"id": "bottom", "position": [0, -6.0, 0], "size": 3, "type": "stack"}
+    {"id": "top",    "position": [0,  14.8, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -14.8, 0], "size": 3, "type": "stack"}
   ]
 }

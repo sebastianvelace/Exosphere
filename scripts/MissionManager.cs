@@ -163,9 +163,7 @@ public partial class MissionManager : Node
                 if (vessel != null)
                 {
                     var rb = universe.GetDominantBody(vessel.Position);
-                    double r = (vessel.Position - rb.Position).Magnitude;
-                    double gLocal = rb.GM / (r * r);
-                    canLift = vessel.ComputeThrust(rb).Magnitude > vessel.TotalMass * gLocal * 1.02;
+                    canLift = vessel.GetThrustToWeightRatio(rb) > 1.02;
                 }
                 if (canLift)
                 {

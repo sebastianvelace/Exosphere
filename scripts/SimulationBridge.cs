@@ -181,9 +181,7 @@ public partial class SimulationBridge : Node
                 var refB2 = Universe.GetDominantBody(av.Position);
                 if (refB2 != null && av.TotalMass > 0.0)
                 {
-                    double g    = refB2.GM / System.Math.Pow((av.Position - refB2.Position).Magnitude, 2.0);
-                    double thrust = av.GetCurrentThrust(refB2);
-                    double twr  = thrust / (av.TotalMass * g);
+                    double twr = av.GetThrustToWeightRatio(refB2);
                     if (twr > 1.02)
                     {
                         av.ReleaseGroundHold();

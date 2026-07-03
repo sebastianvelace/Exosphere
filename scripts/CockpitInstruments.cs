@@ -140,7 +140,7 @@ public partial class ScreenPanel : Control
     {
         Text(20, 40, "PROPULSION", Dim, 18);
         double thrust = v.GetCurrentThrust(body);
-        double tw = thrust / System.Math.Max(v.TotalMass * body.GetSurfaceGravity(), 1.0);
+        double tw = v.GetThrustToWeightRatio(body);
         double dv = v.GetCurrentStageDeltaV(body);
 
         Text(20, 95, "THRUST", Cyan, 18);   Text(250, 95, $"{thrust / 1000:N0} kN", White, 22);

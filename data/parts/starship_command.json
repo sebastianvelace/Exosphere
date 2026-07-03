@@ -1,15 +1,17 @@
 {
   "id": "starship_command",
   "name": "Starship Command Section",
-  "description": "Starship upper stage command, nosecone, crew quarters, and payload bay. Dry mass includes structure, ECLSS, avionics, and heat shield tiles on the windward side.",
+  "description": "Flight 7 Block 2 nose, payload section, avionics and forward flaps. The 35 t dry mass is an engineering allocation within a 100 t dry Starship stage; SpaceX does not publish a component mass breakdown.",
   "category": "command",
-  "mass_dry": 80000,
+  "mass_dry": 35000,
+  "length_m": 18.5,
+  "diameter_m": 9.0,
   "cost": 50000,
   "drag_coefficient": 0.25,
   "heat_tolerance": 2800,
   "has_heat_shield": true,
   "max_crew": 100,
   "attachment_nodes": [
-    {"id": "bottom", "position": [0, -1.0, 0], "size": 3, "type": "stack"}
+    {"id": "bottom", "position": [0, -9.25, 0], "size": 3, "type": "stack"}
   ]
 }

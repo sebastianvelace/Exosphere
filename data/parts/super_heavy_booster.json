@@ -1,9 +1,11 @@
 {
   "id": "super_heavy_booster",
   "name": "Super Heavy Booster",
-  "description": "SpaceX Super Heavy first stage. 33 Raptor 2 sea-level engines in three rings deliver 74.4 MN at liftoff. Includes integrated LOX/LCH4 tanks: 725 t LCH4 + 2575 t LOX = 3300 t total (O/F 3.55). TWR at liftoff (full stack) approx 1.5.",
+  "description": "Flight 7 Super Heavy with 33 Raptor 2 engines. Holds 725 t CH4 and 2,575 t LOX (3,300 t total at O/F 3.55). Booster dry allocation plus hot-stage ring totals 200 t.",
   "category": "engine",
-  "mass_dry": 200000,
+  "mass_dry": 195000,
+  "length_m": 67.5,
+  "diameter_m": 9.0,
   "cost": 100000,
   "drag_coefficient": 0.2,
   "heat_tolerance": 2000,
@@ -16,9 +18,12 @@
   "gimbal_range": 7.0,
   "fuel_type": "LiquidFuel+Oxidizer",
   "mixture_ratio": 3.55,
+  "engine_count": 33,
+  "min_throttle": 0.40,
+  "thrust_position_y_m": -33.75,
   "is_rcs": false,
   "attachment_nodes": [
-    {"id": "top",         "position": [0, 20.0, 0], "size": 3, "type": "stack"},
-    {"id": "engine_bell", "position": [0, -2.0, 0], "size": 0, "type": "engine_bell"}
+    {"id": "top",         "position": [0, 33.75, 0], "size": 3, "type": "stack"},
+    {"id": "engine_bell", "position": [0, -33.75, 0], "size": 0, "type": "engine_bell"}
   ]
 }

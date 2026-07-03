@@ -344,9 +344,7 @@ public partial class EDLController : Control
     private static double MaxThrustAccel(Vessel vessel, CelestialBody body, double mass)
     {
         if (mass <= 0) return 0;
-        double thrustVac = 0;
-        foreach (var e in vessel.Parts.ActiveEngines) thrustVac += e.Definition.ThrustVac;
-        return thrustVac / mass;
+        return vessel.GetMaximumThrust(body) / mass;
     }
 
     private static Vector3d AnyPerp(Vector3d v)
