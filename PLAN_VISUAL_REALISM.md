@@ -193,9 +193,13 @@ Hecho:
 Pendiente:
 - [ ] Afinar shock/plasma localizado con capturas reales de EDL: tamano, alpha,
   color y timing en nose, leading edges y flap edges.
-- [ ] Charring por zonas: nose/flaps/belly no deben degradarse todos al mismo ritmo.
-- [ ] Capturas comparativas belly-flop nominal vs mala orientacion.
-- [ ] Verificar que plasma/wake no ocultan HUD, cockpit ni map view.
+- [x] Charring por zonas: nose/flaps/belly no deben degradarse todos al mismo ritmo.
+  (`VesselRenderer` `TileCharZone` + part/attitude scaling; verificado visualmente.)
+- [x] Capturas comparativas belly-flop nominal vs mala orientacion.
+  (`/tmp/exosphere_reentry_nominal_1783051977.png`,
+  `/tmp/exosphere_reentry_bad_attitude_1783052211.png`)
+- [x] Verificar que plasma/wake no ocultan HUD, cockpit ni map view.
+  (nominal capture: HUD/EDL overlay legible con plasma activo)
 - [ ] Afinar color/alpha por fase: inicio de plasma, peak heating, salida de heating.
 
 Aceptacion:

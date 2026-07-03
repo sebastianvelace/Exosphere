@@ -5,6 +5,7 @@ using System.Linq;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
 
 public partial class VesselRenderer : Node3D
 {
@@ -14,11 +15,11 @@ public partial class VesselRenderer : Node3D
     private MeshInstance3D? _hullMesh;
     private PlumeSystem?    _plumes;
 
-    // Windward heat-shield tile materials (one per tile band). Kept so the
-    // per-frame update can char/blacken and faintly glow them as the ventral
-    // parts accumulate ThermalDamage during re-entry.
-    // Materiales de tiles windward: se guardan para quemarlos/oscurecerlos con el daño térmico.
-    private readonly List<StandardMaterial3D> _tileMats = new();
+    private enum TileCharZone { Belly, Nose, FwdFlap, AftFlap }
+
+    // Windward heat-shield tile materials grouped by zone so belly, nose and flaps
+    // char at different rates during re-entry.
+    private readonly Dictionary<TileCharZone, List<StandardMaterial3D>> _tileZoneMats = new();
     private static readonly Color TileBaseColor = new(0.045f, 0.045f, 0.055f);
 
     // ── Real-scale hull radius ────────────────────────────────────────────
@@ -354,7 +355,10 @@ public partial class VesselRenderer : Node3D
 
     private void BuildStarshipSection(Vessel vessel, float yOffset)
     {
-        var tiles     = TileMat();
+        var fwdFlapTiles = TileMat();
+        RegisterTileMat(TileCharZone.FwdFlap, fwdFlapTiles);
+        var aftFlapTiles = TileMat();
+        RegisterTileMat(TileCharZone.AftFlap, aftFlapTiles);
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
 
         float o = yOffset;
@@ -379,7 +383,7 @@ public partial class VesselRenderer : Node3D
         AddPayloadDoorOutline(o, darkSteel);
         AddShipCloseupCues(o);
 
-        AddTileBand(bodyBot, bodyTop);
+        AddTileBand(bodyBot, bodyTop, TileCharZone.Belly);
         AddHeatShieldBorder(bodyBot, bodyTop, BodyR + 0.035f);
 
         const int   noseSeg  = 22;
@@ -414,7 +418,7 @@ public partial class VesselRenderer : Node3D
 
         // Tile coverage continues up the windward side of the nose.
         AddTileBand(o + ShipNoseBase, o + ShipNoseBase + ShipNoseH * 0.67f,
-            topRadius: 0.83f * RScale, botRadius: BodyR + 0.01f);
+            TileCharZone.Nose, topRadius: 0.83f * RScale, botRadius: BodyR + 0.01f);
         AddHeatShieldBorder(o + ShipNoseBase, o + ShipNoseBase + ShipNoseH * 0.67f, BodyR + 0.030f);
 
         // Dome cap: small hemisphere rounding off the ogive tip at y≈o+43.0
@@ -439,11 +443,10 @@ public partial class VesselRenderer : Node3D
             darkSteel, new Vector3(0, skirtMid, 0));
         AddWeldRing("SkirtLip", 1.155f * RScale, skirtTop);
 
-        AddFlap("FwdFlapL", fwdFlapY, 3.0f, 2.0f, -0.62f, tiles);
-        AddFlap("FwdFlapR", fwdFlapY, 3.0f, 2.0f,  0.62f, tiles);
-        AddFlap("AftFlapL", aftFlapY, 5.6f, 3.4f, -0.55f, tiles);
-        AddFlap("AftFlapR", aftFlapY, 5.6f, 3.4f,  0.55f, tiles);
-
+        AddFlap("FwdFlapL", fwdFlapY, 3.0f, 2.0f, -0.62f, fwdFlapTiles);
+        AddFlap("FwdFlapR", fwdFlapY, 3.0f, 2.0f,  0.62f, fwdFlapTiles);
+        AddFlap("AftFlapL", aftFlapY, 5.6f, 3.4f, -0.55f, aftFlapTiles);
+        AddFlap("AftFlapR", aftFlapY, 5.6f, 3.4f,  0.55f, aftFlapTiles);
         var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
         AddMesh("ShipBaySoot", new CylinderMesh
             { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
@@ -523,51 +526,82 @@ public partial class VesselRenderer : Node3D
     }
 
     // ── Heat-shield tile charring ─────────────────────────────────────────
-    // The windward black tiles char and discolour as the protected (heat-shield)
-    // parts take ThermalDamage on re-entry. We drive every tile band off the worst
-    // accumulated damage and peak temperature among shielded parts: charred tiles
-    // go from black toward a scorched dark brown, and when truly hot they pick up a
-    // faint ember glow. Purely cosmetic — destruction is still decided by the sim.
-    //
-    // Carbonizado de las tiles: usa el peor ThermalDamage/Temperature de las piezas
-    // con escudo para oscurecer y, si está muy caliente, dar un leve brillo de ascua.
+    // Each tile zone chars from its owning part (command → nose/fwd flaps, tank →
+    // belly/aft flaps) and scales with attitude misalignment via WindwardFactor.
     private void UpdateTileCharring()
     {
-        if (_tileMats.Count == 0 || TargetVessel == null) return;
+        if (_tileZoneMats.Count == 0 || TargetVessel == null) return;
 
-        double worstDamage = 0.0;
-        double peakTemp    = 0.0;
+        double cmdDamage = 0.0, cmdTemp = 0.0;
+        double tankDamage = 0.0, tankTemp = 0.0;
         foreach (var part in TargetVessel.Parts.Parts)
         {
-            if (!part.Definition.HasHeatShield) continue;
-            if (part.ThermalDamage > worstDamage) worstDamage = part.ThermalDamage;
-            if (part.Temperature   > peakTemp)    peakTemp    = part.Temperature;
+            switch (part.Definition.Id)
+            {
+                case "starship_command":
+                    if (part.ThermalDamage > cmdDamage) cmdDamage = part.ThermalDamage;
+                    if (part.Temperature   > cmdTemp)    cmdTemp    = part.Temperature;
+                    break;
+                case "starship_tank":
+                    if (part.ThermalDamage > tankDamage) tankDamage = part.ThermalDamage;
+                    if (part.Temperature   > tankTemp)    tankTemp    = part.Temperature;
+                    break;
+            }
         }
 
-        float dmg = (float)System.Math.Clamp(worstDamage, 0.0, 1.0);
-        // Ember glow only once the shield runs genuinely hot (well past steel limits).
+        float align = 1f;
+        var earth = SimulationBridge.Instance?.Universe.GetBody("earth");
+        if (earth != null)
+        {
+            var surfVel = TargetVessel.GetSurfaceVelocity(earth);
+            if (surfVel.Magnitude > 1e-6)
+            {
+                Vector3d flowLocal = TargetVessel.Orientation.Inverse().Rotate(surfVel);
+                align = (float)ThermalModel.WindwardFactor(flowLocal);
+            }
+        }
+        float misalign = 1f - align;
+
+        CharZone(TileCharZone.Belly,   tankDamage, tankTemp, Mathf.Lerp(1.35f, 0.80f, align));
+        CharZone(TileCharZone.Nose,    cmdDamage,  cmdTemp,  0.30f + 0.85f * misalign);
+        CharZone(TileCharZone.FwdFlap, cmdDamage,  cmdTemp,  0.40f + 0.90f * misalign);
+        CharZone(TileCharZone.AftFlap, tankDamage, tankTemp, 0.35f + 0.80f * misalign);
+    }
+
+    private void CharZone(TileCharZone zone, double rawDamage, double peakTemp, float dmgScale)
+    {
+        if (!_tileZoneMats.TryGetValue(zone, out var mats) || mats.Count == 0) return;
+
+        float dmg = (float)System.Math.Clamp(rawDamage * dmgScale, 0.0, 1.0);
         float ember = (float)System.Math.Clamp((peakTemp - 1100.0) / 900.0, 0.0, 1.0);
 
-        // Scorch tint: charred ablative reads as a warm sooty brown over the base black.
         var scorch = new Color(0.085f, 0.050f, 0.038f);
         Color albedo = TileBaseColor.Lerp(scorch, dmg);
 
-        foreach (var mat in _tileMats)
+        foreach (var mat in mats)
         {
             mat.AlbedoColor = albedo;
-            // Slightly rougher and lighter-edged as it ablates.
             mat.Roughness   = Mathf.Lerp(0.92f, 0.99f, dmg);
 
             bool glow = ember > 0.02f;
             mat.EmissionEnabled = glow;
             if (glow)
             {
-                // Deep-red ember rising with both temperature and accumulated damage.
                 float e = ember * (0.35f + 0.65f * dmg);
                 mat.Emission                 = new Color(0.9f, 0.18f, 0.04f);
                 mat.EmissionEnergyMultiplier = e * 1.6f;
             }
         }
+    }
+
+    private void RegisterTileMat(TileCharZone zone, StandardMaterial3D mat)
+    {
+        if (!_tileZoneMats.TryGetValue(zone, out var list))
+        {
+            list = new List<StandardMaterial3D>();
+            _tileZoneMats[zone] = list;
+        }
+        list.Add(mat);
     }
 
     // ── Generic vessel fallback ───────────────────────────────────────────
@@ -831,11 +865,11 @@ public partial class VesselRenderer : Node3D
     // Black heat-shield tile coverage over the windward (-X) half of a body
     // section. Built from short tile staves spanning ~200° of the circumference
     // so the dark side reads clearly while the leeward side stays bare steel.
-    private void AddTileBand(float yBottom, float yTop, float topRadius = BodyR + 0.015f, float botRadius = BodyR + 0.015f)
+    private void AddTileBand(float yBottom, float yTop, TileCharZone zone,
+        float topRadius = BodyR + 0.015f, float botRadius = BodyR + 0.015f)
     {
-        var tiles  = TileMat();
-        // Register this band's tile material so _Process can char it with damage.
-        _tileMats.Add(tiles);
+        var tiles = TileMat();
+        RegisterTileMat(zone, tiles);
         var seams  = Mat(new Color(0.010f, 0.010f, 0.012f), 0.0f, 0.96f);
         float yMid = (yBottom + yTop) * 0.5f;
         float h    = yTop - yBottom;
@@ -1021,7 +1055,7 @@ public partial class VesselRenderer : Node3D
     {
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
-        _tileMats.Clear();
+        _tileZoneMats.Clear();
         _plumes   = null;
         _hullMesh = null;
     }
