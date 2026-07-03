@@ -34,8 +34,9 @@ Estado:
   orbital.
 - [x] Guard anti-harness cubre `scripts/_*Shot.cs`, `scripts/*VerifyShot.cs`,
   `scenes/*VerifyShot.tscn` y autoloads temporales en `project.godot`.
+- [x] `tools/visual_playtest.sh` — runner local + CI `--smoke` (VAL-01 partial).
 - [ ] Pendiente CI: capturas PNG end-to-end, artifacts descargables y heuristicas
-  simples de imagen no negra / nave visible / UI visible.
+  simples de imagen no negra / nave visible / UI visible (CC-01 full matrix).
 
 Baseline minimo a mantener fuera del repo:
 - pad lateral,

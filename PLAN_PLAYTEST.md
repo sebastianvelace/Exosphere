@@ -76,6 +76,58 @@ Record per milestone: `alt, spd, vSpeed, q, g, phase, heatRatio, maxT` → dump 
 (+`.uid`), `git checkout project.godot`, confirm `git status` is clean. See the
 `visual-testing` skill for the autoload-registration + teardown pattern.
 
+### Implemented runner — `tools/visual_playtest.sh` (VAL-01, Jul 2026)
+
+Reusable local tool that generates the temporary autoload, registers it, runs Godot
+under `xvfb-run`, captures state-gated PNGs, writes `/tmp/exo_play.log`, and
+**always** removes the harness + restores `project.godot` on exit (trap).
+
+```bash
+# Full acceptance run (pad → ascent → orbit beauty → deorbit attempt; ~15–20 min wall)
+bash tools/visual_playtest.sh
+
+# CI / quick pipeline check (pad capture only, ~60 s)
+bash tools/visual_playtest.sh --smoke
+
+# Options: --out-dir DIR  --log FILE  --skip-build
+```
+
+**Outputs**
+
+| File | Content |
+| --- | --- |
+| `/tmp/exo_play/exo_play_<milestone>.png` | Viewport PNG per milestone |
+| `/tmp/exo_play.log` | `CAPTURE` telemetry lines + `SUMMARY` / `GAP` |
+
+**Milestone status (verified Jul 2026 on `integrate/jul2026-realism-loop`)**
+
+| Milestone | Slug | Status |
+| --- | --- | --- |
+| Pad pre-launch | `pad` | ✅ state-gated (alt ≈ 12 m) |
+| Liftoff plume | `liftoff` | ✅ alt 80–350 m + LIFTOFF/ASCENT_SH |
+| Max-Q | `maxq` | ✅ `MissionPhase.MAX_Q` |
+| Hot-stage / separation | `separation` | ✅ MECO / SEPARATION / ASCENT_SHIP |
+| Orbit insertion | `orbit` | ✅ natural [G] autopilot or 480 s fallback teleport |
+| Orbit beauty | `orbit_beauty` | ✅ `JumpToOrbit(250 km)` |
+| Entry interface | `entry` | ✅ after retro burn (peri ≈ 80 km) |
+| Peak heating | `peak_heating` | ⚠️ **GAP** — often times out before PEAK_HEATING |
+| Retro burn | `retro_burn` | ⚠️ **GAP** — same |
+| Touchdown | `touchdown` | ⚠️ **GAP** — full belly-flop EDL not completing in 1200 s wall |
+
+**Known gaps (honest, do not fake success)**
+
+- **Deorbit → EDL tail:** Entry captures, but peak/retro/touchdown need longer wall
+  time or smarter warp through the vacuum coast. Log line:
+  `GAP deorbit→EDL: no ENTRY phase reached within 720s` when deorbit fails entirely.
+- **Ascent duration:** Natural [G] orbit insertion can exceed 480 s sim-time at x1;
+  fallback `JumpToOrbit(200 km)` only fires while still in ascent phases.
+- **V-024 belly-flop reference:** Blocked on reliable `peak_heating` + `retro_burn`
+  captures — unblocks VS-12 / reentry lighting overlay verification.
+
+**CI:** `build-test` job runs `--smoke` under Xvfb and uploads `exo_play_pad.png`
+as an artifact. Full PNG matrix remains a **local acceptance** step until CC-01
+(non-black heuristic + full artifact matrix) lands.
+
 ---
 
 ## 2. Future-work backlog (evidence-backed, prioritized)

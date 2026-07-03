@@ -30,16 +30,14 @@ if [[ -x "$GODOT" ]]; then
   "$GODOT" --headless --path . --quit-after 3 --rendering-driver opengl3 res://scenes/construction/Construction.tscn
 
   # Captura de viewport con framebuffer real: --headless usa el renderer dummy y no
-  # produce píxeles. Para un PNG de viewport se necesita un framebuffer real (Xvfb):
-  #   xvfb-run -a "$GODOT" --path . --quit-after 3 --rendering-driver opengl3
-  # La captura visual completa (autoload de harness + PNG) es un follow-up; ver skill
-  # visual-testing. Aquí solo lo documentamos para no romper el check local sin display.
+  # produce píxeles. Para aceptación visual completa usar:
+  #   bash tools/visual_playtest.sh          # local full matrix
+  #   bash tools/visual_playtest.sh --smoke  # pad-only (~60s, same as CI)
   #
   # Real-framebuffer viewport capture: --headless uses the dummy renderer and produces
-  # no pixels. A viewport PNG needs a real framebuffer (Xvfb), e.g.:
-  #   xvfb-run -a "$GODOT" --path . --quit-after 3 --rendering-driver opengl3
-  # Full visual capture (harness autoload + PNG) is a follow-up; see the visual-testing
-  # skill. We only document it here so the local check does not require a display.
+  # no pixels. Full visual acceptance:
+  #   bash tools/visual_playtest.sh          # local full matrix
+  #   bash tools/visual_playtest.sh --smoke  # pad-only (~60s, CI parity)
 else
   echo "Skipping Godot smoke: set GODOT_BIN or install Godot at $DEFAULT_GODOT"
 fi
