@@ -2,6 +2,7 @@ namespace Exosphere.Simulation;
 
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
 
 public enum VesselDestructionCause
 {
@@ -131,11 +132,13 @@ public class Vessel
         return Orientation.Rotate(Parts.GetTotalThrust(pressure));
     }
 
-    // Arrastre aerodinámico en world space (N) — estado actual.
+    // Fuerza aerodinámica total (drag + lift de cuerpo) en world space (N) — estado actual.
     public Vector3d ComputeDrag(CelestialBody body) =>
         ComputeDragAt(Position, Velocity, body);
 
-    // Arrastre evaluado en un estado (pos, vel) arbitrario (para subpasos RK4).
+    // Fuerza aerodinámica evaluada en un estado (pos, vel) arbitrario (para subpasos RK4).
+    // Delega en AerodynamicsModel: drag orientación-dependiente (cilindro de 9 m, Cd y área
+    // blend axial↔broadside, pico transónico) más la sustentación de cuerpo CL=CLmax·sin(2α).
     public Vector3d ComputeDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
     {
         if (body.Atmosphere == null) return Vector3d.Zero;
@@ -149,38 +152,12 @@ public class Vessel
         double speed   = surfVel.Magnitude;
         if (speed < 0.001 || double.IsNaN(speed)) return Vector3d.Zero;
 
-        // ── Área de referencia y Cd dependientes de la orientación ──────────────
-        // El vehículo se modela como un cilindro de diámetro de núcleo fijo. El área
-        // presentada y la "romería" (bluffness) dependen del ángulo entre su eje
-        // longitudinal (local +Y) y el flujo de aire: de morro/cola (axial) ofrece un
-        // área frontal pequeña y aerodinámica; de costado (belly-flop) ofrece un área
-        // lateral grande y roma. Esto reproduce la actitud de alta resistencia en la
-        // reentrada de Starship y la baja resistencia del flip-and-burn vertical.
-        const double diameter = 9.0;                                  // núcleo Starship/SH (m)
-        double radius      = diameter * 0.5;
-        double length      = System.Math.Max(diameter, Parts.Parts.Count * 12.0);  // altura del stack
-        double axialArea   = System.Math.PI * radius * radius;        // de morro/cola
-        double lateralArea = diameter * length;                       // de costado (broadside)
+        Vector3d axis = Orientation.Rotate(Vector3d.Up);   // eje longitudinal en mundo
+        double   temp = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
 
-        Vector3d axis = Orientation.Rotate(Vector3d.Up);              // eje longitudinal en mundo
-        double cosA = System.Math.Abs(axis.Dot(surfVel.Normalized));  // 1=axial, 0=broadside
-        double aa   = cosA * cosA;
-        double area = lateralArea + (axialArea - lateralArea) * aa;
-        double cd   = 1.5 + (0.6 - 1.5) * aa;                         // romo 1.5 ↔ aerodinámico 0.6
-
-        // Número de Mach usando la temperatura ISA real del modelo atmosférico,
-        // a = √(γ·R_specific·T), γ=1.4, R_specific=287 J/(kg·K) para aire.
-        double temp    = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
-        double mach    = speed / System.Math.Sqrt(1.4 * 287.0 * temp);
-        double machMul = mach < 0.8 ? 1.0
-                       : mach < 1.0 ? 1.0 + (mach - 0.8) * 5.0
-                       : mach < 1.2 ? 2.0
-                       : mach < 5.0 ? 2.0 - (mach - 1.2) * 0.25
-                       : 1.0;
-
-        // Arrastre = ½·ρ·v²·Cd·A, opuesto a la velocidad relativa a la atmósfera.
-        double drag = 0.5 * density * speed * speed * cd * area * machMul;
-        return surfVel.Normalized * (-drag);
+        var drag = AerodynamicsModel.ComputeReentryDrag(density, surfVel, axis, Parts.Parts.Count, temp);
+        var lift = AerodynamicsModel.ComputeLift(density, surfVel, axis, Parts.Parts.Count);
+        return drag + lift;
     }
 
     // Aceleración gravitacional total de todos los cuerpos (m/s²)

@@ -90,6 +90,56 @@ public static class AerodynamicsModel
         return 1.5 + (0.6 - 1.5) * aa;
     }
 
+    // ── Body lift (R6) ─────────────────────────────────────────────────────────
+    //
+    // Un cilindro simétrico volando con ángulo de ataque genera sustentación de
+    // cuerpo perpendicular al flujo, en el plano eje-flujo, hacia el lado del morro.
+    // Modelo Newtoniano simplificado CL = CLmax·sin(2α): cero de morro (α=0) y de
+    // costado puro (α=90°), máximo a 45°. Con CLmax 0.7 y el Cd/área combinados del
+    // modelo de drag, a α≈70° da L/D ≈ 0.3 — el régimen real de la Starship en EDL.
+
+    /// <summary>Peak body-lift coefficient of the 9 m cylinder (at 45° angle of attack).</summary>
+    public const double MaxLiftCoefficient = 0.7;
+
+    /// <summary>
+    /// Body-lift coefficient CL = CLmax·sin(2α) from the signed axial alignment
+    /// <paramref name="cosAlpha"/> = axis·flow. Zero nose-/tail-on and at exact broadside;
+    /// negative when flying tail-first so the lift flips to the correct side.
+    /// </summary>
+    public static double EffectiveLiftCoefficient(double cosAlpha)
+    {
+        double c = System.Math.Clamp(cosAlpha, -1.0, 1.0);
+        return MaxLiftCoefficient * 2.0 * c * System.Math.Sqrt(1.0 - c * c);
+    }
+
+    /// <summary>
+    /// Body-lift force (world space, N): perpendicular to the surface-relative flow, in the
+    /// axis-flow plane, toward the side the nose points. <paramref name="longitudinalAxis"/>
+    /// is the vessel's long axis (local +Y, nose direction) expressed in world space.
+    /// </summary>
+    public static Vector3d ComputeLift(
+        double density,
+        Vector3d surfaceVelocity,
+        Vector3d longitudinalAxis,
+        int partCount)
+    {
+        double speed = surfaceVelocity.Magnitude;
+        if (density <= 0.0 || speed < 1e-3) return Vector3d.Zero;
+
+        var flowDir     = surfaceVelocity.Normalized;
+        var axis        = longitudinalAxis.Normalized;
+        double cosAlpha = axis.Dot(flowDir);
+
+        var perp = axis - flowDir * cosAlpha;
+        double perpLen = perp.Magnitude;
+        if (perpLen < 1e-6) return Vector3d.Zero;   // axial flight: no lift plane defined
+
+        double cl   = EffectiveLiftCoefficient(cosAlpha);
+        double area = EffectiveArea(partCount, System.Math.Abs(cosAlpha));
+        double magnitude = 0.5 * density * speed * speed * cl * area;
+        return (perp / perpLen) * magnitude;
+    }
+
     /// <summary>
     /// Full re-entry drag force (world space, N) for a vessel: orientation-dependent
     /// area and Cd, with the transonic Mach multiplier folded in. <paramref name="surfaceVelocity"/>
