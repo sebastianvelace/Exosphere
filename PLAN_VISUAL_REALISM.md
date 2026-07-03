@@ -209,6 +209,13 @@ Archivos probables:
 - `scripts/PlanetMaterials.cs`
 - `scripts/EarthGroundController.cs`
 
+> HALLAZGO (sesion jul 2026, ver `PLAN_PLAYTEST.md` B1): probar tonemap/glow GLOBAL
+> NO funciona. ACES + `tonemap_white` oscurece la nave en orbita (subexpuesta), y el
+> glow-only no rinde en pad/orbita/liftoff porque no hay hotspots HDR. La causa es que
+> la luz es global: el ambient azulado de cielo (0.55,0.70,1.0 @0.45) esta bien en el
+> pad pero MAL en el espacio. La solucion es un `PhaseLightingController` por fase,
+> verificado con el harness de playtest. NO commitear cambios globales de env a ciegas.
+
 Mejoras:
 - Exposicion y color por fase: pad, ascent, space, reentry, cockpit.
 - Horizonte y atmosfera con gradiente mas realista.
