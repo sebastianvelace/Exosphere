@@ -68,6 +68,12 @@ public partial class SimulationBridge : Node
         var sun = new SunController { Name = "SunController" };
         GetParent()?.CallDeferred("add_child", sun);
 
+        // Phase-driven environment: blends ambient/glow/sun energy by altitude so the
+        // pad daylight and the space vacuum look are each correct. SunController owns
+        // the light orientation; this owns its energy + the WorldEnvironment.
+        var phaseLight = new PhaseLightingController { Name = "PhaseLightingController" };
+        GetParent()?.CallDeferred("add_child", phaseLight);
+
         // Orbital map panel (toggle with M). Lives under the UI CanvasLayer so it
         // renders above the 3D world; it owns the autopilot as a child.
         var uiLayer = GetTree().Root.FindChild("UI", true, false) as CanvasLayer;

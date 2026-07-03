@@ -80,7 +80,7 @@ Record per milestone: `alt, spd, vSpeed, q, g, phase, heatRatio, maxT` → dump 
 
 ## 2. Future-work backlog (evidence-backed, prioritized)
 
-### B1. Phase-based lighting controller — HIGH (the real V4 unlock)
+### B1. Phase-based lighting controller — V1 DONE (altitude blend); reentry/cockpit pending
 
 **Evidence (this session, before/after xvfb captures, reverted — NOT shipped):**
 - A global `tonemap_mode = ACES` + `tonemap_white = 2.0` **darkened the ship in
@@ -103,6 +103,15 @@ the pad: keep the current daylight look. **Verify each phase with the play harne
 above** — this is exactly what makes it safe to change global lighting without
 regressing the pad or washing the UI (UI is on a separate `CanvasLayer`, unaffected
 by env glow).
+
+**V1 DONE** (`scripts/PhaseLightingController.cs`, wired in `SimulationBridge`): blends
+by ALTITUDE (smoothstep 70→130 km) — ambient energy 0.45→0.12, sun energy 1.5→1.95,
+HDR glow 0→0.6, Filmic kept. `SunController` still owns light orientation (never
+touches energy) so there is no conflict. Xvfb-verified: pad identical to baseline,
+orbit gains metallic contrast without subexposing the ship or washing Earth.
+**Next:** (a) a reentry phase — warm, dimmer exposure tied to `ThermalModel` heat so
+plasma reads without washing the cockpit/HUD; (b) tune the ascent mid-blend against a
+real Max-Q capture; (c) optional per-phase color grade (cooler in space).
 
 ### B2. Liftoff plume visibility — MED
 

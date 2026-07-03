@@ -215,9 +215,17 @@ Archivos probables:
 > la luz es global: el ambient azulado de cielo (0.55,0.70,1.0 @0.45) esta bien en el
 > pad pero MAL en el espacio. La solucion es un `PhaseLightingController` por fase,
 > verificado con el harness de playtest. NO commitear cambios globales de env a ciegas.
+>
+> HECHO (V1): `scripts/PhaseLightingController.cs` mezcla la iluminacion por ALTITUD
+> (suave, 70->130 km): baja el ambient (0.45->0.12), sube la energia solar (1.5->1.95)
+> y rampa el glow HDR (0->0.6) al entrar al espacio; mantiene Filmic. `SunController`
+> sigue duenio de la ORIENTACION de la luz (no toca energia) => sin conflicto. Validado
+> con captura Xvfb: pad IDENTICO al baseline, orbita con contraste/pop metalico sin
+> subexponer la nave ni lavar la Tierra. PENDIENTE: fase de reentry (exposicion calida
+> del plasma) y cockpit; hoy reentry usa el look atmosferico (s=0), que es correcto.
 
 Mejoras:
-- Exposicion y color por fase: pad, ascent, space, reentry, cockpit.
+- Exposicion y color por fase: pad, ascent, space (HECHO por altitud), reentry, cockpit.
 - Horizonte y atmosfera con gradiente mas realista.
 - Camaras de seguimiento con encuadre estable para stack completo y Ship sola.
 - Mejor percepcion de escala en pad y cerca de superficie.
