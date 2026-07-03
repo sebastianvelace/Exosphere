@@ -19,7 +19,7 @@ public partial class ReentryPlasmaController : Node3D
 {
     private MeshInstance3D?     _shock;   // bright shock cap on the windward side
     private MeshInstance3D?     _wake;    // trailing ionised wake
-    private StandardMaterial3D? _shockMat;
+    private ShaderMaterial?     _shockMat;
     private StandardMaterial3D? _wakeMat;
     private readonly List<EdgeGlow> _edgeGlows = new();
 
@@ -38,20 +38,18 @@ public partial class ReentryPlasmaController : Node3D
     const double FLUX_THRESH = 5.0e4;
     const double FLUX_PEAK   = 6.0e5;
 
+    private const string ShockShaderPath = "res://assets/shaders/reentry_glow.gdshader";
+
     public override void _Ready()
     {
-        // Windward shock — a sphere we squash into a glowing cap facing the airflow.
-        _shockMat = new StandardMaterial3D
-        {
-            Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode                = BaseMaterial3D.BlendModeEnum.Add,
-            AlbedoColor              = new Color(1.0f, 0.45f, 0.10f, 0f),
-            EmissionEnabled          = true,
-            Emission                 = new Color(1.0f, 0.45f, 0.12f),
-            EmissionEnergyMultiplier = 2.5f,
-            CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
-            ShadingMode              = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        };
+        var shockShader = GD.Load<Shader>(ShockShaderPath);
+        var noise = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth, Frequency = 4f };
+        var noiseTex = new NoiseTexture2D { Noise = noise, Width = 256, Height = 256, Seamless = true };
+
+        _shockMat = new ShaderMaterial { Shader = shockShader };
+        _shockMat.SetShaderParameter("noise_tex", noiseTex);
+        _shockMat.SetShaderParameter("heat_level", 0f);
+        _shockMat.SetShaderParameter("halo_size", 0.12f);
         _shock = new MeshInstance3D
         {
             Name    = "ReentryShock",
@@ -159,23 +157,15 @@ public partial class ReentryPlasmaController : Node3D
         // Flicker so the plasma boils rather than glowing flat.
         float flicker = 0.8f + (float)(GD.Randf() * 0.4f);
 
-        // A well-shielded belly-first re-entry burns brightest and tightest on the
-        // ventral cap; a turned-away (bare-side) attitude is hotter overall but the
-        // glow smears and reddens (no shield deflecting the flux).
-        float align     = (float)windward;                       // 0..1
-        float concentr  = Mathf.Lerp(0.55f, 1.0f, align);        // ventral focus
-        float exposure  = Mathf.Lerp(1.15f, 1.0f, align);        // bare side runs hotter
+        float align     = (float)windward;
+        float concentr  = Mathf.Lerp(0.55f, 1.0f, align);
+        float exposure  = Mathf.Lerp(1.15f, 1.0f, align);
+        float hudGuard  = Mathf.Lerp(0.68f, 1.0f, align);
+        float dangerMul = Mathf.Lerp(1.30f, 1.0f, align);
 
-        // Colour shifts orange → white-hot as intensity rises; bare-side bias reddens it.
-        float white = (float)intensity * concentr;
-        var shockCol = new Color(
-            1.0f,
-            0.40f + 0.50f * white,
-            0.08f + 0.72f * white,
-            (float)(intensity * 0.36f * flicker) * (0.6f + 0.4f * concentr));
-        _shockMat.AlbedoColor              = shockCol;
-        _shockMat.Emission                 = new Color(shockCol.R, shockCol.G, shockCol.B);
-        _shockMat.EmissionEnergyMultiplier = (float)(0.8 + intensity * 2.0) * flicker * exposure;
+        float heatLevel = Mathf.Clamp(
+            (float)intensity * concentr * hudGuard * dangerMul * flicker, 0f, 1f);
+        _shockMat.SetShaderParameter("heat_level", heatLevel);
 
         _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f, (float)(intensity * 0.16f));
         _wakeMat.EmissionEnergyMultiplier = (float)(0.7 + intensity * 1.4);
@@ -192,22 +182,21 @@ public partial class ReentryPlasmaController : Node3D
 
     private void BuildLocalizedEdgeGlows()
     {
-        // Standalone Starship render coordinates (BuildStarshipSection yOffset = -22):
-        // nose tip ≈ y 21, forward flaps ≈ y 15, aft flaps ≈ y 4.
-        AddEdgeGlow("NoseLeadingHeat", new Vector3(-1.18f, 19.6f, 0.0f),
+        const float shipSpanScale = (2f + 11.5f + 4.357f) / 21.25f;
+        AddEdgeGlow("NoseLeadingHeat", new Vector3(-1.18f, 19.6f * shipSpanScale, 0.0f),
             new Vector3(0.52f, 1.70f, 0.52f), weight: 1.0f, delay: 0.0f, nose: true);
 
-        AddEdgeGlow("BellyCenterHeat", new Vector3(-1.72f, 9.8f, 0.0f),
+        AddEdgeGlow("BellyCenterHeat", new Vector3(-1.72f, 9.8f * shipSpanScale, 0.0f),
             new Vector3(0.15f, 7.1f, 0.15f), weight: 0.58f, delay: 0.05f);
 
-        AddEdgeGlow("FwdFlapLeftHeat",  new Vector3(-1.66f, 15.0f,  1.20f),
+        AddEdgeGlow("FwdFlapLeftHeat",  new Vector3(-1.66f, 15.0f * shipSpanScale,  1.20f),
             new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.08f);
-        AddEdgeGlow("FwdFlapRightHeat", new Vector3(-1.66f, 15.0f, -1.20f),
+        AddEdgeGlow("FwdFlapRightHeat", new Vector3(-1.66f, 15.0f * shipSpanScale, -1.20f),
             new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.11f);
 
-        AddEdgeGlow("AftFlapLeftHeat",   new Vector3(-1.72f, 4.2f,  1.10f),
+        AddEdgeGlow("AftFlapLeftHeat",   new Vector3(-1.72f, 4.2f * shipSpanScale,  1.10f),
             new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.16f);
-        AddEdgeGlow("AftFlapRightHeat",  new Vector3(-1.72f, 4.2f, -1.10f),
+        AddEdgeGlow("AftFlapRightHeat",  new Vector3(-1.72f, 4.2f * shipSpanScale, -1.10f),
             new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.19f);
     }
 
