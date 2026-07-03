@@ -731,6 +731,8 @@ public partial class LaunchPadController : Node3D
         // and read as the catch hardware. They point toward the OLM (+X side).
         BuildChopstickArms(towerX, towerZ, halfW, baseY, darkSteel, steel);
 
+        BuildTowerServiceDetails(towerX, towerZ, halfW, baseY, towerH, steel, darkSteel);
+
         // Quick-disconnect / carrier arm lower down, swinging toward the stack.
         Spawn("QDArm", new BoxMesh { Size = new Vector3(26f * U, 3f * U, 4f * U) },
             darkSteel, new Vector3(towerX + 14f * U, baseY + 30f * U, towerZ - 6f * U));
@@ -762,6 +764,24 @@ public partial class LaunchPadController : Node3D
                 { Size = new Vector3(armLen * 0.7f, 0.6f * U, 1.2f * U) },
                 pivotMat, new Vector3(armMidX, baseY + armY + 1.5f * U,
                     towerZ + zoff + (zoff < 0 ? 1.2f * U : -1.2f * U)));
+
+            // Dark elastomer/rub rail and nose roller at the catch end. These
+            // small high-contrast shapes make the arms read as catch hardware,
+            // not just two rectangular beams.
+            Spawn($"ChopstickRubRail{tag}", new BoxMesh
+                { Size = new Vector3(armLen * 0.58f, 0.35f * U, 0.45f * U) },
+                armMat, new Vector3(armMidX + armLen * 0.08f, baseY + armY + 1.75f * U,
+                    towerZ + zoff + (zoff < 0 ? 1.85f * U : -1.85f * U)));
+            var roller = new MeshInstance3D
+            {
+                Name            = $"ChopstickNoseRoller{tag}",
+                Mesh            = new CylinderMesh
+                    { TopRadius = 0.75f * U, BottomRadius = 0.75f * U, Height = 2.0f * U, RadialSegments = 10 },
+                Position        = new Vector3(armBaseX + armLen - 1.4f * U, baseY + armY + 1.2f * U, towerZ + zoff),
+                RotationDegrees = new Vector3(90f, 0, 0),
+            };
+            roller.SetSurfaceOverrideMaterial(0, pivotMat);
+            AddChild(roller);
         }
 
         // Tilt linkage struts from the carriage out to the arm tips.
@@ -777,6 +797,66 @@ public partial class LaunchPadController : Node3D
             strut.SetSurfaceOverrideMaterial(0, armMat);
             AddChild(strut);
         }
+
+        var cableMat = Mat(new Color(0.06f, 0.06f, 0.07f), 0.9f, 0.35f);
+        foreach (var zoff in new[] { -armGap, armGap })
+        {
+            Vector3 towerSheave = new(towerX + halfW, baseY + 94f * U, towerZ + zoff);
+            Vector3 armTip      = new(armBaseX + armLen - 2f * U, baseY + armY + 4.5f * U, towerZ + zoff);
+            AddCable($"CatchLiftCable{(zoff < 0 ? "L" : "R")}", towerSheave, armTip, cableMat);
+        }
+    }
+
+    private void BuildTowerServiceDetails(float towerX, float towerZ, float halfW, float baseY, float towerH,
+                                          StandardMaterial3D steel, StandardMaterial3D darkSteel)
+    {
+        var blackRubber = Mat(new Color(0.025f, 0.025f, 0.030f), 0.75f, 0.25f);
+        var caution     = Mat(new Color(0.78f, 0.62f, 0.16f), 0.82f, 0.0f);
+        var cableMat    = Mat(new Color(0.055f, 0.055f, 0.065f), 0.86f, 0.25f);
+
+        // Vertical rails where the catch-arm carriage rides, plus small sheave
+        // boxes near the top. These are very visible in side pad shots.
+        float railY = baseY + towerH * 0.48f;
+        float railH = towerH * 0.78f;
+        for (int i = 0; i < 2; i++)
+        {
+            float z = towerZ + (i == 0 ? -4.0f * U : 4.0f * U);
+            Spawn($"CarriageRail{i}", new BoxMesh { Size = new Vector3(0.55f * U, railH, 0.45f * U) },
+                blackRubber, new Vector3(towerX + halfW + 0.75f * U, railY, z));
+            Spawn($"CarriageSheave{i}", new BoxMesh { Size = new Vector3(1.6f * U, 1.4f * U, 1.6f * U) },
+                steel, new Vector3(towerX + halfW + 0.9f * U, baseY + towerH * 0.86f, z));
+        }
+
+        // Ship quick-disconnect arm at upper-stage height. It reaches toward the
+        // leeward side of the Ship but stops short of the hull so it does not
+        // visually intersect the rocket.
+        float sqdY = baseY + 108f * U;
+        float armBaseX = towerX + halfW + 0.8f * U;
+        float armLen = 28f * U;
+        Spawn("ShipQDArmTruss", new BoxMesh { Size = new Vector3(armLen, 1.7f * U, 1.5f * U) },
+            darkSteel, new Vector3(armBaseX + armLen * 0.5f, sqdY, towerZ + 3.4f * U));
+        Spawn("ShipQDArmPipe", new CylinderMesh
+            { TopRadius = 0.42f * U, BottomRadius = 0.42f * U, Height = armLen * 0.9f, RadialSegments = 8 },
+            steel, new Vector3(armBaseX + armLen * 0.5f, sqdY + 1.0f * U, towerZ + 2.2f * U))
+            .RotationDegrees = new Vector3(0, 90f, 90f);
+        Spawn("ShipQDHead", new BoxMesh { Size = new Vector3(2.6f * U, 4.0f * U, 3.8f * U) },
+            darkSteel, new Vector3(armBaseX + armLen - 1.2f * U, sqdY - 0.6f * U, towerZ + 3.4f * U));
+        Spawn("ShipQDSoftSeal", new BoxMesh { Size = new Vector3(0.55f * U, 3.0f * U, 2.8f * U) },
+            blackRubber, new Vector3(armBaseX + armLen + 0.3f * U, sqdY - 0.6f * U, towerZ + 3.4f * U));
+
+        // Cable tray and caution bands around the working platforms.
+        Spawn("UpperCableTray", new BoxMesh { Size = new Vector3(4.0f * U, towerH * 0.52f, 0.55f * U) },
+            blackRubber, new Vector3(towerX - halfW - 1.9f * U, baseY + towerH * 0.55f, towerZ + halfW + 0.8f * U));
+        for (int b = 0; b < 5; b++)
+        {
+            float y = baseY + towerH * (0.20f + b * 0.13f);
+            Spawn($"TowerCautionBand{b}", new BoxMesh { Size = new Vector3(0.25f * U, 0.35f * U, halfW * 1.8f) },
+                caution, new Vector3(towerX + halfW + 0.6f * U, y, towerZ));
+        }
+
+        Vector3 cableTop = new(towerX + halfW + 0.6f * U, baseY + towerH * 0.86f, towerZ + 3.4f * U);
+        Vector3 cableEnd = new(armBaseX + armLen - 2.0f * U, sqdY + 1.6f * U, towerZ + 3.4f * U);
+        AddCable("ShipQDSupportCable", cableTop, cableEnd, cableMat);
     }
 
     // ── Tank farm: cluster of tall white cryo storage tanks on a bund ─────
