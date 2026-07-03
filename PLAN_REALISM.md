@@ -19,6 +19,22 @@
   coastea y se destruye al tocar superficie (la atmósfera/EDL vuelan el reingreso). Telemetría:
   deorbit → aero-frenado (q sube) → calentamiento. + tanque de Starship con escudo windward.
 
+- **R7 — termosfera residual (HECHO, validado numéricamente).** Cola exponencial de densidad sobre
+  `MaxAltitude` (140 km) anclada a la densidad del borde ISA, H=45 km, corte a 1000 km. Contra
+  NRLMSISE-00 (actividad solar media) queda dentro de factor ~2-5 entre 140 y 500 km. Solo
+  `GetDensity` tiene cola; presión sigue en vacío sobre 140 km y `MaxAltitude` sigue siendo la
+  frontera aerodinámica de los controllers. Test de aceptación: órbita circular de 150 km en RK4
+  decae de forma lenta y monótona (`OrbitalDecayTests`). A warp ≥10 el vessel pasa a on-rails
+  (gate `density < 0.01`) y NO decae — limitación documentada.
+
+- **R6 — sustentación de cuerpo con ángulo de ataque (HECHO).** `AerodynamicsModel.ComputeLift`:
+  CL = 0.7·sin(2α), perpendicular al flujo en el plano eje-flujo, hacia el lado del morro; signo
+  correcto volando de cola. Cero exacto axial y de costado puro (cilindro simétrico), L/D ≈ 0.3 a
+  α=70° (régimen EDL real de Starship). `Vessel.ComputeDragAt` ahora delega en `AerodynamicsModel`
+  (drag+lift, se eliminó la duplicación inline) y devuelve la fuerza aero total. La EDL actual
+  comanda belly-flop ~90° ⇒ lift ~0 ⇒ sin regresión del perfil R13 validado; usar α<90° en la EDL
+  para guiado con lift queda como mejora de game-layer.
+
 - **R13 — reingreso sobrevivible end-to-end (HECHO, validado).** La EDL ahora mantiene belly-flop
   todo el descenso (flip por altitud baja ~800 m, no por `stopDist` vertical que era ∞), el aero
   frena (peakQ 390→**21 kPa**, ≈real), el escudo cubre las piezas windward, y un controlador de
@@ -147,13 +163,17 @@ equivocada hace la órbita.
 - **Aceptación:** apagar un motor reduce empuje proporcional y desplaza el centro de empuje; tests.
 - **Nota:** romper este contrato impacta render (los 33/6 visuales) y staging; planear aparte.
 
-### R6. Sin sustentación aerodinámica / ángulo de ataque
-- **Hoy:** el aero es sólo drag (orientación-dependiente). Starship reentra con **lift de cuerpo** y
-  control por flaps para cross-range y guiado.
-- **Fix:** añadir un vector de lift (perpendicular al flujo, función del ángulo de ataque) y, en EDL,
-  modular actitud/flaps para guiado. Sim puro + test.
-- **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs`, `scripts/EDLController.cs` (uso).
-- **Aceptación:** en belly-flop hay componente de lift; el alcance de reingreso cambia con la actitud.
+### R6. Sin sustentación aerodinámica / ángulo de ataque ✅ HECHO
+- **Hoy (antes):** el aero era sólo drag (orientación-dependiente). Starship reentra con **lift de
+  cuerpo** y control por flaps para cross-range y guiado.
+- **Fix aplicado:** `AerodynamicsModel.ComputeLift` — CL = CLmax·sin(2α) (CLmax 0.7), perpendicular
+  al flujo en el plano eje-flujo, hacia el lado del morro, con signo correcto volando de cola.
+  `Vessel.ComputeDragAt` delega ahora en `AerodynamicsModel` (drag + lift; se eliminó la
+  duplicación inline del modelo aero). Sim puro + tests.
+- **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs`, `ExosphereSimulation/Vessel.cs`,
+  tests `AerodynamicLiftTests.cs`. (EDL con α<90° para guiado con lift: pendiente game-layer.)
+- **Aceptación:** ✅ lift ⊥ al flujo hacia el lado del morro, cero axial y de costado puro
+  (cilindro simétrico), L/D ≈ 0.3 a α=70° (régimen EDL real); el alcance cambia con la actitud.
 
 ### R7. Atmósfera cortada a 140 km → sin decaimiento orbital ✅ HECHO
 - **Causa:** `max_altitude 140000` en `earth.json`; sobre eso, densidad 0 → LEO no decae nunca.
@@ -212,7 +232,7 @@ equivocada hace la órbita.
 
 ## Orden de ejecucion actual
 1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
-2. Backlog fisico real pendiente: R5 multi-motor, R6 lift/AoA. (R7 termosfera/decay ✅ HECHO)
+2. Backlog fisico real pendiente: R5 multi-motor. (R6 lift/AoA ✅ y R7 termosfera/decay ✅ HECHOS)
 3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5.
 4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 

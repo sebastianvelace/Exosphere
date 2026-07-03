@@ -30,6 +30,20 @@ escribiste tú, así que lo evalúas por sus propios méritos, no por el razonam
    ¿El cambio asume 1 nodo visual = 1 motor físico?
 7. **Crash/EDL** — `Universe.cs` hace soft-rest en `altitude < 0`. ¿El cambio rompe el ascenso [G]
    a órbita o la EDL de aterrizaje con throttle profundo?
+8. **Atmósfera/termosfera** — `AtmosphereModel.GetDensity` tiene cola exponencial residual sobre
+   `MaxAltitude` (Tierra: H=45 km anclada a la densidad del borde ISA de 140 km, vacío sobre
+   `ThermosphereTopAltitude` 1000 km; validada contra NRLMSISE-00 dentro de factor ~2-5 hasta
+   500 km). SOLO la densidad tiene cola: `GetPressure` sigue siendo 0 sobre `MaxAltitude`, e
+   `IsInAtmosphere`/controllers siguen usando `MaxAltitude` como frontera aerodinámica. Verifica:
+   continuidad de ρ en el borde (sin salto), monotonía decreciente, vacío exacto sobre el tope, y
+   que el gate on-rails (`density < 0.01` en `Universe.cs`) no cambie de comportamiento.
+9. **Aero = drag + lift** — `Vessel.ComputeDrag/ComputeDragAt` devuelven la fuerza aerodinámica
+   TOTAL: drag orientación-dependiente (cilindro 9 m, blend axial↔broadside, pico transónico) más
+   sustentación de cuerpo `AerodynamicsModel.ComputeLift` con CL = 0.7·sin(2α). Verifica: lift
+   perpendicular al flujo superficie-relativo (marco en rotación, NO inercial), en el plano
+   eje-flujo hacia el lado del morro; cero exacto volando axial y de costado puro (cilindro
+   simétrico); signo invertido volando de cola; L/D ≈ 0.3 a α=70°. Un cambio que dé lift en
+   belly-flop puro (α=90°) o que use la velocidad inercial para el flujo es un fallo.
 
 ## Cómo reportar
 
