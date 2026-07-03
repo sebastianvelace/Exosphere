@@ -66,12 +66,12 @@ public sealed class SystemsMissionPhaseTests
         var leoPos   = new Vector3d(EarthRadius + 400_000.0, 0.0, 0.0);
         var moonPos  = new Vector3d(384_400_000.0, 0.0, 0.0);
 
-        double leoDelay  = MissionGeometry.SignalDelaySeconds(leoPos, earthPos, SpeedOfLight);
-        double moonDelay = MissionGeometry.SignalDelaySeconds(moonPos, earthPos, SpeedOfLight);
+        double leoDelay  = MissionGeometry.SignalDelaySeconds(leoPos, earthPos, SpeedOfLight, EarthRadius);
+        double moonDelay = MissionGeometry.SignalDelaySeconds(moonPos, earthPos, SpeedOfLight, EarthRadius);
 
-        Assert.InRange(leoDelay, 0.015, 0.030);
+        Assert.InRange(leoDelay, 0.001, 0.010);
         Assert.InRange(moonDelay, 1.0, 1.5);
-        Assert.True(moonDelay > leoDelay * 50.0);
+        Assert.True(moonDelay > leoDelay * 100.0);
     }
 
     [Fact]
@@ -80,11 +80,12 @@ public sealed class SystemsMissionPhaseTests
         var comms = new CommsSystem();
         var earthPos = Vector3d.Zero;
         var vesselPos = new Vector3d(EarthRadius + 400_000.0, 0.0, 0.0);
-        var bodies = new List<CelestialBody>();
+        var earth = new CelestialBody { Id = "earth", Radius = EarthRadius };
+        var bodies = new List<CelestialBody> { earth };
 
         comms.Tick(1.0, vesselPos, earthPos, bodies);
 
-        double expected = MissionGeometry.SignalDelaySeconds(vesselPos, earthPos);
+        double expected = MissionGeometry.SignalDelaySeconds(vesselPos, earthPos, speedOfLight: 3e8, EarthRadius);
         Assert.InRange(comms.SignalDelaySeconds, expected * 0.999, expected * 1.001);
         Assert.True(comms.HasSignal);
     }

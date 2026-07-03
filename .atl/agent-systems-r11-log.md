@@ -26,7 +26,7 @@
 
 - Earth umbra only (point Sun, no Moon penumbra).
 - Fixed panel area/efficiency; no body-attitude solar pointing.
-- Comms delay is one-way geometric distance / c; no relay scheduling.
+- Comms delay is one-way slant range to Earth surface (nadir) / c when radius known; geocenter fallback otherwise.
 - Life support EC: 0.45 kW/crew active, 0.15 kW standby (not ISS-calibrated).
 
 ## Tests added

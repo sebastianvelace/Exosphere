@@ -28,7 +28,14 @@ public static class MissionGeometry
 
     /// <summary>
     /// One-way signal delay (seconds) from vessel to Earth at speed of light.
+    /// When earthRadius is provided, uses slant range to the surface (nadir link).
     /// </summary>
-    public static double SignalDelaySeconds(Vector3d vesselPos, Vector3d earthPos, double speedOfLight = 3e8)
-        => (vesselPos - earthPos).Magnitude / speedOfLight;
+    public static double SignalDelaySeconds(Vector3d vesselPos, Vector3d earthPos,
+        double speedOfLight = 3e8, double earthRadius = 0.0)
+    {
+        double dist = (vesselPos - earthPos).Magnitude;
+        if (earthRadius > 0.0)
+            dist = System.Math.Max(dist - earthRadius, 0.0);
+        return dist / speedOfLight;
+    }
 }
