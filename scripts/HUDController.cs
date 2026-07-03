@@ -80,7 +80,9 @@ public partial class HUDController : Control
     {
         MissionPhase.COUNTDOWN, MissionPhase.LIFTOFF, MissionPhase.ASCENT_SH,
         MissionPhase.MAX_Q, MissionPhase.MECO, MissionPhase.SEPARATION,
-        MissionPhase.ASCENT_SHIP, MissionPhase.ORBIT,
+        MissionPhase.ASCENT_SHIP, MissionPhase.ORBIT, MissionPhase.COAST,
+        MissionPhase.ENTRY, MissionPhase.PEAK_HEATING, MissionPhase.AERO_DESCENT,
+        MissionPhase.FINAL_DESCENT, MissionPhase.LANDED, MissionPhase.CRASHED,
     };
 
     public override void _Ready()
@@ -176,9 +178,9 @@ public partial class HUDController : Control
         var center = new PanelContainer();
         center.SetAnchorsPreset(LayoutPreset.CenterTop);
         center.GrowHorizontal = GrowDirection.Both;
-        center.OffsetLeft = -240;
+        center.OffsetLeft = -320;
         center.OffsetTop = 18;
-        center.OffsetRight = 240;
+        center.OffsetRight = 320;
         center.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.62f, 12, 18, 10));
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
@@ -206,13 +208,13 @@ public partial class HUDController : Control
 
         _phaseTrack = new HBoxContainer();
         _phaseTrack.Alignment = BoxContainer.AlignmentMode.Center;
-        _phaseTrack.AddThemeConstantOverride("separation", 6);
+        _phaseTrack.AddThemeConstantOverride("separation", 4);
         vbox.AddChild(_phaseTrack);
         foreach (var _ in PhaseSequence)
         {
             var dot = new ColorRect
             {
-                CustomMinimumSize = new Vector2(27, 2),
+                CustomMinimumSize = new Vector2(18, 2),
                 Color = GaugeTrack,
             };
             _phaseDots.Add(dot);
@@ -765,7 +767,12 @@ public partial class HUDController : Control
                 MissionPhase.SEPARATION  => "STAGE SEP",
                 MissionPhase.ASCENT_SHIP => "SHIP IGNITION",
                 MissionPhase.ORBIT       => "SECO / ORBIT",
+                MissionPhase.COAST       => "COAST",
                 MissionPhase.ENTRY       => "ENTRY INTERFACE",
+                MissionPhase.PEAK_HEATING => "PEAK HEATING",
+                MissionPhase.AERO_DESCENT => "AERO DESCENT",
+                MissionPhase.RETRO_BURN  => "RETRO BURN",
+                MissionPhase.FINAL_DESCENT => "FINAL DESCENT",
                 MissionPhase.LANDED      => "TOUCHDOWN",
                 MissionPhase.CRASHED     => "VEHICLE LOST",
                 _ => null!,
@@ -785,6 +792,9 @@ public partial class HUDController : Control
     {
         int currentIdx = System.Array.IndexOf(PhaseSequence, current);
         if (currentIdx < 0 && current == MissionPhase.IGNITION) currentIdx = 0;
+        if (currentIdx < 0 && current == MissionPhase.RETRO_BURN)
+            currentIdx = System.Array.IndexOf(PhaseSequence, MissionPhase.FINAL_DESCENT);
+        if (currentIdx < 0 && current == MissionPhase.PRE_LAUNCH) currentIdx = -1;
         for (int i = 0; i < _phaseDots.Count; i++)
         {
             if (currentIdx < 0)        _phaseDots[i].Color = GaugeTrack;
@@ -850,6 +860,10 @@ public partial class HUDController : Control
         MissionPhase.MAX_Q       => "MAX-Q",
         MissionPhase.MECO        => "MECO",
         MissionPhase.ASCENT_SHIP => "ASCENT / STARSHIP",
+        MissionPhase.AERO_DESCENT => "AERO DESCENT",
+        MissionPhase.PEAK_HEATING => "PEAK HEATING",
+        MissionPhase.FINAL_DESCENT => "FINAL DESCENT",
+        MissionPhase.RETRO_BURN  => "RETRO BURN",
         _ => phase.ToString().Replace("_", " "),
     };
 
@@ -857,6 +871,7 @@ public partial class HUDController : Control
     {
         MissionPhase.COUNTDOWN or MissionPhase.IGNITION => WarnCol,
         MissionPhase.MAX_Q or MissionPhase.PEAK_HEATING or MissionPhase.CRASHED => FuelLowCol,
+        MissionPhase.LANDED => new Color(0.55f, 0.95f, 0.65f, 1f),
         _ => ValueBright,
     };
 
