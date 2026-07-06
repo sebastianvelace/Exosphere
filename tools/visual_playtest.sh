@@ -110,7 +110,7 @@ public partial class _PlaytestShot : Node
 {
     const double FluxPeak = 6.0e5;
     const int SettleFrames = 4;
-    const double MaxRuntimeSec = 1200.0;
+    const double MaxRuntimeSec = 1800.0;
     const double AscentFallbackSec = 480.0;
 
     readonly string _mode;
@@ -350,7 +350,11 @@ public partial class _PlaytestShot : Node
             vessel.Orientation = ShortestArc(Vector3d.Up, retro);
             vessel.Throttle = 1.0;
             vessel.SASEnabled = false;
-            if (periAlt < 85_000.0)
+            // Commit the entry: a shallow periapsis (~64 km) grazes and can skip back out of
+            // the atmosphere, re-coasting a full orbit and blowing the wall budget. Target
+            // ~55 km so the belly-flop enters on a single committed pass (survivable corridor
+            // for a high-drag broadside attitude) and reaches touchdown in a few sim-minutes.
+            if (periAlt < 55_000.0)
             {
                 vessel.Throttle = 0.0;
                 _deorbitDone = true;

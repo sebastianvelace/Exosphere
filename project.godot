@@ -32,3 +32,7 @@ project/assembly_name="Exosphere"
 [physics]
 
 common/physics_ticks_per_second=50
+
+[autoload]
+
+PlaytestShot="*res://scripts/_PlaytestShot.cs"
