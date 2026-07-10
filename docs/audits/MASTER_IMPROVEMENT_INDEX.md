@@ -1,5 +1,9 @@
 # Master Improvement Index — Exosphere
 
+> **Documento rector actual:**
+> [`REALISM_ASTRONAUT_MASTER_PLAN.md`](REALISM_ASTRONAUT_MASTER_PLAN.md). Este índice
+> conserva inventario histórico; algunos estados de física/visual están superados.
+
 **Wave:** 3 (overnight Jul 2026)  
 **Branch:** `docs/deep-audit-overnight-jul2026`  
 **Scoring:** Impact (1–5) × Realism (1–5) × Feasibility (1–5) = **1–125**; tier **P0–P3** for delegation

@@ -1,5 +1,9 @@
 # Exosphere Physics Deep Audit (Jul 2026)
 
+> **Estado histórico.** La auditoría vigente y sus cierres están en
+> [`REALISM_ASTRONAUT_MASTER_PLAN.md`](REALISM_ASTRONAUT_MASTER_PLAN.md). P-A03,
+> P-A05 y P-R04 ya no describen el código actual.
+
 **Scope:** Beyond closed items in `PLAN_REALISM.md` (R1–R4, R6–R10, R13).  
 **Baseline:** Flight 7 Block 2 per `docs/starship_physics_baseline.md`.  
 **Method:** Code + xUnit gap analysis; telemetry references from `PLAN_REALISM.md`, `.atl/agent-hotstaging-log.md`, R13 harness.
