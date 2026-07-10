@@ -31,6 +31,25 @@ public sealed class SystemsMissionPhaseTests
     }
 
     [Fact]
+    public void SolarDiscVisibilityResolvesSunlightTotalityAndPenumbra()
+    {
+        var observer = Vector3d.Zero;
+        var sun = new Vector3d(150_000_000_000.0, 0.0, 0.0);
+        const double sunRadius = 696_000_000.0;
+
+        double clear = MissionGeometry.SolarDiscVisibility(
+            observer, new Vector3d(0.0, 10_000_000.0, 0.0), EarthRadius, sun, sunRadius);
+        double total = MissionGeometry.SolarDiscVisibility(
+            observer, new Vector3d(10_000_000.0, 0.0, 0.0), EarthRadius, sun, sunRadius);
+        double partial = MissionGeometry.SolarDiscVisibility(
+            observer, new Vector3d(10_000_000.0, 6_350_000.0, 0.0), EarthRadius, sun, sunRadius);
+
+        Assert.Equal(1.0, clear, 12);
+        Assert.Equal(0.0, total, 12);
+        Assert.InRange(partial, 0.01, 0.99);
+    }
+
+    [Fact]
     public void PowerSystem_EclipseZeroesSolarOutput()
     {
         var power = new PowerSystem();

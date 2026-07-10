@@ -28,14 +28,14 @@ public static class ThermalModel
     // ── Heat flux ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Convective heat flux (W/m²) — simplified Detra–Kemp–Riddell stagnation-point
-    /// model:  q ≈ k · √ρ · v³.  ρ in kg/m³, v in m/s.
+    /// Convective heat flux (W/m²) — Sutton-Graves stagnation-point approximation:
+    /// q ≈ k·√(ρ/Rn)·v³. ρ in kg/m³, nose radius Rn in m, v in m/s.
     /// </summary>
-    public static double ComputeHeatFlux(double density, double velocity)
+    public static double ComputeHeatFlux(double density, double velocity, double noseRadius = 1.0)
     {
-        if (density <= 0.0 || velocity <= 0.0) return 0.0;
+        if (density <= 0.0 || velocity <= 0.0 || noseRadius <= 0.0) return 0.0;
         const double k = 1.83e-4;
-        return k * System.Math.Sqrt(density) * System.Math.Pow(velocity, 3);
+        return k * System.Math.Sqrt(density / noseRadius) * System.Math.Pow(velocity, 3);
     }
 
     /// <summary>
@@ -102,10 +102,8 @@ public static class ThermalModel
             double overLimit = ratio - 1.0;
             part.ThermalDamage = System.Math.Clamp(part.ThermalDamage + overLimit * dt * 0.5, 0.0, 1.0);
         }
-        else
-        {
-            part.ThermalDamage = System.Math.Max(0.0, part.ThermalDamage - dt * 0.01);
-        }
+        // Burn-through damage is loss of TPS/material and is irreversible. Cooling changes
+        // temperature, not the amount of material that has already charred or ablated.
         return part.IsThermallyBurned;
     }
 

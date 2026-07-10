@@ -220,7 +220,8 @@ public class Universe
             {
                 var    surfVel   = vessel.GetSurfaceVelocity(refBody);
                 double airspeed  = surfVel.Magnitude;
-                double heatFlux  = Physics.ThermalModel.ComputeHeatFlux(density, airspeed);
+                double heatFlux  = Physics.ThermalModel.ComputeHeatFlux(
+                    density, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
 
                 // Airflow direction in the vessel's local frame (orientation⁻¹ · flowDir).
                 var flowDirLocal = airspeed > 1e-6
@@ -648,32 +649,17 @@ public class Universe
         var bodiesDir = System.IO.Path.Combine(dataDir, "bodies");
         var bodies    = CelestialBody.LoadAllFromDirectory(bodiesDir);
 
-        // Add the root body (Sun) first so it sits at the inertial origin
+        // Root body sits at the inertial origin. PropagateAllBodies recursively resolves
+        // parents before children, independent of JSON/filesystem enumeration order.
         if (bodies.TryGetValue("sun", out var sun))
         {
             sun.Position = Vector3d.Zero;
             sun.Velocity = Vector3d.Zero;
-            universe.AddBody(sun);
         }
+        KeplerPropagator.PropagateAllBodies(bodies.Values, 0.0);
 
-        // Add all other bodies, initialising position from orbital elements at t = 0
-        foreach (var (id, body) in bodies)
-        {
-            if (id == "sun") continue;
-
-            if (body.OrbitalElements is not null)
-            {
-                var refId = body.OrbitalElements.ReferenceBodyId;
-                if (bodies.TryGetValue(refId, out var refBody))
-                {
-                    var (pos, vel) = body.OrbitalElements.GetStateAtTime(0.0, refBody.GM);
-                    body.Position  = refBody.Position + pos;
-                    body.Velocity  = refBody.Velocity + vel;
-                }
-            }
-
+        foreach (var body in bodies.Values)
             universe.AddBody(body);
-        }
 
         return universe;
     }

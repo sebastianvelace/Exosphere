@@ -198,6 +198,34 @@ public sealed class PhysicsRegressionTests
     }
 
     [Fact]
+    public void SuttonGravesHeatingScalesWithInverseSqrtNoseRadius()
+    {
+        double sharp = ThermalModel.ComputeHeatFlux(0.01, 2_000.0, noseRadius: 1.0);
+        double blunt = ThermalModel.ComputeHeatFlux(0.01, 2_000.0, noseRadius: 4.0);
+
+        AssertWithinRelative(sharp * 0.5, blunt, 1e-12);
+    }
+
+    [Fact]
+    public void ThermalDamageDoesNotHealWhenThePartCools()
+    {
+        var part = new Part(new PartDefinition
+        {
+            Id = "damaged-tps", CategoryStr = "structure", MassDry = 100.0,
+            HeatTolerance = 1_000.0,
+        })
+        {
+            Temperature = 1_100.0,
+            ThermalDamage = 0.4,
+        };
+
+        _ = ThermalModel.ApplyHeat(part, heatFlux: 0.0, dt: 100.0);
+
+        Assert.True(part.Temperature < 1_100.0);
+        Assert.True(part.ThermalDamage >= 0.4);
+    }
+
+    [Fact]
     public void NominalBellyFirstShieldedReentrySurvivesButWrongOrientationBurnsThrough()
     {
         var protectedGraph = new PartGraph();

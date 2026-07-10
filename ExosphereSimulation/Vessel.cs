@@ -92,6 +92,19 @@ public class Vessel
         return 0.5 * density * speed * speed;
     }
 
+    /// <summary>
+    /// Proper acceleration felt by crew and structure (m/s²), excluding gravity because
+    /// free fall is weightless. While held on a surface, the support reaction balances local
+    /// gravity, so a stationary astronaut correctly feels approximately 1 g.
+    /// </summary>
+    public Vector3d GetProperAcceleration(CelestialBody body)
+    {
+        if (IsGroundHeld)
+            return -body.GetGravityAt(Position);
+        if (TotalMass <= 0.0) return Vector3d.Zero;
+        return (ComputeThrust(body) + ComputeDrag(body)) / TotalMass;
+    }
+
     // ── Read-only engine telemetry for the HUD ────────────────────────────
     // Thin wrappers that resolve the live ambient pressure from the reference body and defer
     // to PartGraph, so the HUD reads one obvious call and never touches the sim or the thrust
@@ -257,6 +270,14 @@ public class Vessel
         // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
         // pitch → giro local X, yaw → giro local Z, roll → giro local Y.
         bool hasInput = PitchYawRoll.Magnitude > 0.01;
+        // Couple the commanded attitude torque to the actual thrust vector. Engines sit
+        // below the CoM: +pitch needs -Z deflection; +yaw needs +X deflection. Roll remains
+        // differential-cluster torque and has no net lateral force in this aggregate model.
+        foreach (var engine in Parts.ActiveEngines)
+            engine.GimbalOffset = hasInput
+                ? new Vector3d(PitchYawRoll.Y, 0.0, -PitchYawRoll.X)
+                : Vector3d.Zero;
+
         if (hasInput)
         {
             double pitchYawAuthority = System.Math.Max(
@@ -331,7 +352,10 @@ public class Vessel
             Name        = Name + " (debris)",
             Position    = Position,
             Velocity    = Velocity,
-            Orientation = Orientation
+            Orientation = Orientation,
+            AngularVelocity = AngularVelocity,
+            ReferenceBodyId = ReferenceBodyId,
+            SASEnabled = SASEnabled,
         };
         if (detached.Root != null) debris.Parts.SetRoot(detached.Root);
         foreach (var p in detached.Parts) debris.Parts.AddPart(p);

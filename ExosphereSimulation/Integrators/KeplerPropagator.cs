@@ -51,28 +51,47 @@ public static class KeplerPropagator
     /// <see cref="CelestialBody.Velocity"/> in the inertial simulation frame.
     /// Bodies without orbital elements (e.g. the Sun) are left untouched.
     /// </summary>
-    /// <remarks>
-    /// The propagation order matters for multi-level hierarchies (Sun → planet → moon).
-    /// Callers should ensure that parent bodies are propagated before their children,
-    /// or pass a list already sorted by hierarchy depth.  When all parent positions are
-    /// updated first this method converges in a single pass.
-    /// </remarks>
     public static void PropagateAllBodies(IEnumerable<CelestialBody> bodies, double targetTime)
     {
-        // Build a fast lookup map so we can resolve parent positions.
         var bodyMap = bodies.ToDictionary(b => b.Id, StringComparer.Ordinal);
+        var completed = new HashSet<string>(StringComparer.Ordinal);
+        var visiting = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var body in bodyMap.Values)
+            PropagateHierarchy(body, bodyMap, targetTime, completed, visiting);
+    }
+
+    private static void PropagateHierarchy(
+        CelestialBody body,
+        IReadOnlyDictionary<string, CelestialBody> bodyMap,
+        double targetTime,
+        HashSet<string> completed,
+        HashSet<string> visiting)
+    {
+        if (completed.Contains(body.Id)) return;
+        if (!visiting.Add(body.Id))
+            throw new InvalidOperationException($"Orbital reference cycle detected at '{body.Id}'.");
+
+        if (body.OrbitalElements is { } elements)
         {
-            if (body.OrbitalElements is null) continue;   // root body — fixed at origin
+            if (!bodyMap.TryGetValue(elements.ReferenceBodyId, out var refBody))
+            {
+                // Small isolated test/sandbox universes may intentionally omit the parent.
+                // Preserve the body's supplied inertial state, matching the legacy behavior.
+                visiting.Remove(body.Id);
+                completed.Add(body.Id);
+                return;
+            }
 
-            var refId = body.OrbitalElements.ReferenceBodyId;
-            if (!bodyMap.TryGetValue(refId, out var refBody)) continue;
+            PropagateHierarchy(refBody, bodyMap, targetTime, completed, visiting);
 
-            var (relPos, relVel) = body.OrbitalElements.GetStateAtTime(targetTime, refBody.GM);
+            var (relPos, relVel) = elements.GetStateAtTime(targetTime, refBody.GM);
 
             body.Position = refBody.Position + relPos;
             body.Velocity = refBody.Velocity + relVel;
         }
+
+        visiting.Remove(body.Id);
+        completed.Add(body.Id);
     }
 }

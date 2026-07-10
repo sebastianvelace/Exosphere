@@ -72,6 +72,26 @@ public sealed class StarshipRealismTests
             p => p.Definition.Id == "super_heavy_booster");
     }
 
+    [Fact]
+    public void StagingPreservesDetachedStageRigidBodyMotion()
+    {
+        var (vessel, _, _, _, _) = BuildFlight7Stack();
+        vessel.Position = new Vector3d(1.0e7, 2.0e7, -3.0e7);
+        vessel.Velocity = new Vector3d(1200.0, -400.0, 7300.0);
+        vessel.AngularVelocity = new Vector3d(0.02, -0.03, 0.01);
+        vessel.Orientation = Quaterniond.FromEuler(12.0, -8.0, 4.0);
+        vessel.ReferenceBodyId = "earth";
+
+        var detached = vessel.Stage();
+
+        Assert.NotNull(detached);
+        Assert.Equal(vessel.Position, detached!.Position);
+        Assert.Equal(vessel.Velocity, detached.Velocity);
+        Assert.Equal(vessel.AngularVelocity, detached.AngularVelocity);
+        Assert.Equal(vessel.Orientation, detached.Orientation);
+        Assert.Equal(vessel.ReferenceBodyId, detached.ReferenceBodyId);
+    }
+
     [Theory]
     [InlineData("earth", 1.50, 1.70)]
     [InlineData("moon", 9.5, 11.5)]
@@ -93,6 +113,26 @@ public sealed class StarshipRealismTests
         AssertClose(expectedGravity, localGravity, 1e-12);
         AssertClose(vessel.TotalMass * localGravity, vessel.GetWeightNewtons(body), 1e-12);
         Assert.InRange(vessel.GetThrustToWeightRatio(body), minimumTwr, maximumTwr);
+    }
+
+    [Fact]
+    public void ProperAccelerationDistinguishesSurfaceSupportFreefallAndThrust()
+    {
+        var earth = LoadBody("earth");
+        var (vessel, booster, _, _, _) = BuildFlight7Stack();
+        vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 12.0);
+        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
+
+        vessel.IsGroundHeld = true;
+        double supportedG = vessel.GetProperAcceleration(earth).Magnitude / G0;
+        Assert.InRange(supportedG, 0.99, 1.01);
+
+        vessel.IsGroundHeld = false;
+        booster.ThrottleLevel = 0.0;
+        Assert.True(vessel.GetProperAcceleration(earth).Magnitude < 1e-9);
+
+        booster.ThrottleLevel = 1.0;
+        Assert.True(vessel.GetProperAcceleration(earth).Magnitude / G0 > 1.0);
     }
 
     [Fact]
@@ -190,6 +230,24 @@ public sealed class StarshipRealismTests
         vessel.Tick(0.1, earth);
         Assert.True(vessel.AngularVelocity.Y > 0.0);
         Assert.True(System.Math.Abs(vessel.AngularVelocity.Z) < 1e-12);
+    }
+
+    [Fact]
+    public void GimbalCommandCouplesAttitudeTorqueToLateralThrust()
+    {
+        var earth = LoadBody("earth");
+        var (vessel, booster, _, _, _) = BuildFlight7Stack();
+        vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 100_000.0);
+        vessel.SASEnabled = false;
+        vessel.PitchYawRoll = new Vector3d(1.0, 0.0, 0.0);
+        booster.ThrottleLevel = 1.0;
+
+        vessel.Tick(0.02, earth);
+        Vector3d thrust = vessel.ComputeThrust(earth);
+
+        Assert.True(booster.GimbalOffset.Z < 0.0);
+        Assert.True(thrust.Z < 0.0, $"Pitch gimbal must create lateral thrust, got {thrust}");
+        Assert.True(vessel.AngularVelocity.X > 0.0);
     }
 
     private static (Vessel vessel, Part booster, Part ring, Part shipEngines, Part shipTank)

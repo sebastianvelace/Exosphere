@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Integrators;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Navigation;
 using Xunit;
@@ -9,6 +10,44 @@ public sealed class NavigationRegressionTests
 {
     private const double SunGm = 1.32712440018e20;
     private const double Au = 1.495978707e11;
+
+    [Fact]
+    public void BodyHierarchyPropagationIsIndependentOfInputOrder()
+    {
+        static (CelestialBody sun, CelestialBody planet, CelestialBody moon) MakeSystem()
+        {
+            var sun = new CelestialBody { Id = "sun", GM = SunGm };
+            var planet = new CelestialBody
+            {
+                Id = "planet", GM = 3.986e14,
+                OrbitalElements = new OrbitalElements
+                {
+                    SemiMajorAxis = Au, Eccentricity = 0.01,
+                    MeanAnomalyAtEpoch = 0.4, ReferenceBodyId = "sun",
+                },
+            };
+            var moon = new CelestialBody
+            {
+                Id = "moon", GM = 4.9e12,
+                OrbitalElements = new OrbitalElements
+                {
+                    SemiMajorAxis = 384_400_000.0, Eccentricity = 0.055,
+                    MeanAnomalyAtEpoch = 1.2, ReferenceBodyId = "planet",
+                },
+            };
+            return (sun, planet, moon);
+        }
+
+        const double t = 86_400.0;
+        var a = MakeSystem();
+        KeplerPropagator.PropagateAllBodies(new[] { a.sun, a.planet, a.moon }, t);
+        var b = MakeSystem();
+        KeplerPropagator.PropagateAllBodies(new[] { b.moon, b.planet, b.sun }, t);
+
+        Assert.True((a.planet.Position - b.planet.Position).Magnitude < 1e-6);
+        Assert.True((a.moon.Position - b.moon.Position).Magnitude < 1e-6);
+        Assert.True((a.moon.Velocity - b.moon.Velocity).Magnitude < 1e-9);
+    }
 
     [Fact]
     public void EarthToMarsHohmannHasExpectedSignAndFlightTime()
