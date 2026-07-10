@@ -503,18 +503,8 @@ public partial class HUDController : Control
         var up       = (vessel.Position - refBody.Position).Normalized;
         double vspeed = surfVel.Dot(up);                  // climb rate (m/s)
 
-        // ── G-force (from net-acceleration magnitude, smoothed) ────────────
-        double gNow = 0;
-        if (_lastT >= 0)
-        {
-            double dt = universe.CurrentTime - _lastT;
-            if (dt > 1e-4)
-            {
-                var accel = (vessel.Velocity - _lastVel) / dt;     // m/s²
-                gNow = accel.Magnitude / 9.80665;
-            }
-            else gNow = _gSmoothed;
-        }
+        // ── Proper acceleration felt by the crew (gravity-free in orbit) ───
+        double gNow = vessel.GetProperAcceleration(refBody).Magnitude / 9.80665;
         _lastVel = vessel.Velocity;
         _lastT   = universe.CurrentTime;
         _gSmoothed = _gSmoothed + (gNow - _gSmoothed) * 0.2;

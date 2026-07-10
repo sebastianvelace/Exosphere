@@ -110,7 +110,8 @@ public partial class ReentryPlasmaController : Node3D
         double density  = body.GetAtmosphericDensity(vessel.Position);
         var    surfVel  = vessel.GetSurfaceVelocity(body);
         double airspeed = surfVel.Magnitude;
-        double flux     = ThermalModel.ComputeHeatFlux(density, airspeed);
+        double flux     = ThermalModel.ComputeHeatFlux(
+            density, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
 
         double intensity = System.Math.Clamp(
             (flux - FLUX_THRESH) / (FLUX_PEAK - FLUX_THRESH), 0.0, 1.0);

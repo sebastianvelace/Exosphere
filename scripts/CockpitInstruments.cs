@@ -86,8 +86,8 @@ public partial class ScreenPanel : Control
 
         var body   = uni.GetDominantBody(v.Position);
         double alt  = v.GetAltitude(body);
-        double spd  = (v.Velocity - body.Velocity).Magnitude;
         var    sv   = v.GetSurfaceVelocity(body);
+        double spd  = sv.Magnitude;
         double vsp  = sv.Dot((v.Position - body.Position).Normalized);
         double q    = v.GetDynamicPressure(body);
 

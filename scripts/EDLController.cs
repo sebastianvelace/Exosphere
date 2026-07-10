@@ -59,10 +59,7 @@ public partial class EDLController : Control
         _bodyName = body.Name;
 
         double mass = vessel.TotalMass;
-        Vector3d nonGrav = mass > 0
-            ? (vessel.ComputeThrust(body) + vessel.ComputeDrag(body)) / mass
-            : Vector3d.Zero;
-        _gForce = nonGrav.Magnitude / 9.80665;
+        _gForce = vessel.GetProperAcceleration(body).Magnitude / 9.80665;
 
         double density = body.Atmosphere.GetDensity(_alt);
         double speed   = surfVel.Magnitude;

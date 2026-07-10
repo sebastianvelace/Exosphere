@@ -12,8 +12,8 @@ using Godot;
 ///
 /// The Sky's material is swapped at runtime from the scene's ProceduralSkyMaterial
 /// to a custom <c>space_sky.gdshader</c> (shader_type sky) so a single dome can carry
-/// both the atmosphere gradient and the star backdrop. SunController feeds the same
-/// <c>sun_dir</c> into it so the sky-Sun lines up with the directional light.
+/// both the atmosphere gradient and the star backdrop. The physical Sun is rendered
+/// separately at its real angular size.
 /// </summary>
 [GlobalClass]
 public partial class SkyController : Node
@@ -77,7 +77,7 @@ public partial class SkyController : Node
             _env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;
         }
 
-        UpdateSky(0.0f, "earth");   // start at ground level
+        UpdateSky(0.0f, "earth", 1.0f);   // start at ground level
     }
 
     public override void _Process(double delta)
@@ -90,11 +90,23 @@ public partial class SkyController : Node
         // Sky profile follows whichever body currently dominates the vessel.
         var body = universe.GetDominantBody(vessel.Position);
         double alt = vessel.GetAltitude(body);
-        double raw = System.Math.Clamp((alt - TRANS_LOW) / (TRANS_HIGH - TRANS_LOW), 0.0, 1.0);
-        UpdateSky((float)raw, body.Id);
+        double raw = body.Atmosphere == null
+            ? 1.0
+            : System.Math.Clamp((alt - TRANS_LOW) / (TRANS_HIGH - TRANS_LOW), 0.0, 1.0);
+        float daylight = 1f;
+        var sun = universe.GetBody("sun");
+        if (sun != null)
+        {
+            var up = (vessel.Position - body.Position).Normalized;
+            var toSun = (sun.Position - vessel.Position).Normalized;
+            // Atmospheric twilight begins while the Sun is still below the geometric
+            // horizon. Airless bodies ignore this palette because raw=1 above.
+            daylight = Smoothstep(-0.12f, 0.03f, (float)up.Dot(toSun));
+        }
+        UpdateSky((float)raw, body.Id, daylight);
     }
 
-    private void UpdateSky(float t, string bodyId)
+    private void UpdateSky(float t, string bodyId, float daylight)
     {
         // f: 0 at ground, 1 in space. Smoothstep, then bias toward space so the
         // upper atmosphere is essentially gone (stars showing) well before the ceiling.
@@ -118,19 +130,26 @@ public partial class SkyController : Node
             _skyMat.SetShaderParameter("ground_bottom", gGB);
 
             // Atmosphere energy → ~0 in space so the blue dome can't wash the stars.
-            _skyMat.SetShaderParameter("atmo_energy", Mathf.Lerp(SKY_ENERGY_GROUND, 0.0f, fSpace));
+            float atmoDayEnergy = Mathf.Lerp(0.015f, SKY_ENERGY_GROUND, daylight);
+            _skyMat.SetShaderParameter("atmo_energy", Mathf.Lerp(atmoDayEnergy, 0.0f, fSpace));
             // Cross-fade blue atmosphere → star panorama.
-            _skyMat.SetShaderParameter("space_blend", fSpace);
+            // Ground facilities/planet foreground keep the eye adapted; only a restrained
+            // star field survives at surface exposure. Deep space still reaches full strength.
+            float nightStars = (1f - daylight) * (1f - fSpace) * 0.38f;
+            float starBlend = Mathf.Max(fSpace, nightStars);
+            _skyMat.SetShaderParameter("space_blend", starBlend);
             // Brighten stars only as the sky darkens (kept faint near the ground).
-            _skyMat.SetShaderParameter("star_energy", Mathf.Lerp(0.0f, STAR_ENERGY, fSpace));
+            _skyMat.SetShaderParameter("star_energy", STAR_ENERGY * starBlend);
 
-            CurrentHorizonColor = gGH.Lerp(new Color(0, 0, 0), fSpace);
+            CurrentHorizonColor = gGH.Lerp(new Color(0, 0, 0),
+                Mathf.Max(fSpace, (1f - daylight) * 0.96f));
         }
 
         if (_env != null)
         {
             // Ambient colour only — energy is owned by PhaseLightingController (V-039).
-            _env.AmbientLightColor = aGnd.Lerp(A_Space, fSpace);
+            Color litAmbient = aGnd * Mathf.Lerp(0.035f, 1f, daylight);
+            _env.AmbientLightColor = litAmbient.Lerp(A_Space, fSpace);
 
             // Keep the sky background visible at full strength so the stars (and the
             // Sun disc/halo) read in orbit at any zoom. The shader itself fades the
@@ -161,4 +180,10 @@ public partial class SkyController : Node
     }
 
     static float Smooth(float t) => t * t * (3f - 2f * t);
+
+    static float Smoothstep(float edge0, float edge1, float x)
+    {
+        float t = Mathf.Clamp((x - edge0) / (edge1 - edge0), 0f, 1f);
+        return Smooth(t);
+    }
 }

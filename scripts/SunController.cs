@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Systems;
 
 /// <summary>
 /// Keeps scene lighting consistent with the Sun's true position each frame.
@@ -24,42 +25,33 @@ using Exosphere.Simulation.Math;
 [GlobalClass]
 public partial class SunController : Node
 {
+    public static float SolarVisibility { get; private set; } = 1f;
+
     // Cached node lookups — re-found lazily if they go null (e.g. scene rebuild).
     private DirectionalLight3D? _light;
     private ShaderMaterial?     _earthMat;
-    private ShaderMaterial?     _skyMat;
-
-    // Fixed sun direction (world space), biased toward the +Y launch site so the launch
-    // and ascent happen in bright daylight while the far hemisphere stays in night with
-    // city lights. The day/night terminator and all lit surfaces stay congruent with this
-    // one direction. (The real Sun body currently leaves the launch site at night; a fixed
-    // sun gives a controlled, good-looking lighting setup that is still self-consistent.)
-    private static readonly Vector3 FixedSunDir =
-        new Vector3(0.42f, 0.78f, 0.46f).Normalized();
 
     public override void _Process(double delta)
     {
         var bridge = SimulationBridge.Instance;
-        if (bridge?.ActiveVessel == null) return;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        var sun = universe?.GetBody("sun");
+        if (vessel == null || universe == null || sun == null) return;
 
-        OrientLight(FixedSunDir);
-        FeedSunDir(FixedSunDir);
-        FeedSky(FixedSunDir);
-    }
+        Vector3d simDir = (sun.Position - vessel.Position).Normalized;
+        var renderDir = new Vector3((float)simDir.X, (float)simDir.Y, (float)simDir.Z);
+        OrientLight(renderDir);
+        FeedSunDir(renderDir);
 
-    /// <summary>
-    /// Pushes <c>sun_dir</c> into the combined atmosphere+stars sky material so the
-    /// glowing Sun disc/halo in the dome lines up exactly with the directional light
-    /// and the planet terminators.
-    /// </summary>
-    private void FeedSky(Vector3 sunDir)
-    {
-        if (_skyMat == null || !IsInstanceValid(_skyMat))
+        double visibility = 1.0;
+        foreach (var body in universe.Bodies)
         {
-            var wenv = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
-            _skyMat = wenv?.Environment?.Sky?.SkyMaterial as ShaderMaterial;
+            if (body.Id == "sun") continue;
+            visibility = System.Math.Min(visibility, MissionGeometry.SolarDiscVisibility(
+                vessel.Position, body.Position, body.Radius, sun.Position, sun.Radius));
         }
-        _skyMat?.SetShaderParameter("sun_dir", sunDir);
+        SolarVisibility = (float)visibility;
     }
 
     /// <summary>

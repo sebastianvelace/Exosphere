@@ -22,11 +22,19 @@ public partial class LaunchPadController : Node3D
 
     // Match VesselRenderer.BodyR — 9 m Ø hull (4.5 m radius).
     private const float VesselBodyR = 1.607f;
+    private readonly List<SpotLight3D> _nightFloodlights = new();
 
     public override void _Ready()
     {
         Instance = this;
         BuildEnvironment();
+    }
+
+    public override void _Process(double delta)
+    {
+        bool night = SunController.SolarVisibility < 0.20f;
+        foreach (var light in _nightFloodlights)
+            light.Visible = night;
     }
 
     private void BuildEnvironment()
@@ -55,6 +63,37 @@ public partial class LaunchPadController : Node3D
         BuildTankFarm(insul, steel);
         BuildLightningTowers(steel);
         BuildGroundSupport(insul, steel, darkSteel, concrete, concDark);
+        BuildNightFloodlights();
+    }
+
+    private void BuildNightFloodlights()
+    {
+        // High-mast industrial floodlights keep the vehicle and working deck visible during
+        // a physically dark launch window. They switch off in daylight instead of adding a
+        // permanent fill light to every exterior scene.
+        var positions = new[]
+        {
+            new Vector3(-18f, 24f,  16f),
+            new Vector3( 18f, 24f,  16f),
+            new Vector3(-14f, 18f, -18f),
+            new Vector3( 14f, 18f, -18f),
+        };
+        foreach (var pos in positions)
+        {
+            var light = new SpotLight3D
+            {
+                Name = "NightFloodlight",
+                LightColor = new Color(1.0f, 0.86f, 0.68f),
+                LightEnergy = 42f,
+                SpotRange = 130f,
+                SpotAngle = 42f,
+                ShadowEnabled = true,
+                Visible = false,
+            };
+            AddChild(light);
+            light.LookAtFromPosition(pos, new Vector3(0f, 20f, 0f), Vector3.Up);
+            _nightFloodlights.Add(light);
+        }
     }
 
     // ── Raised concrete pad + flame deflector / trench ────────────────────

@@ -5,7 +5,8 @@
 // 1 = space), between:
 //   • a procedural-style blue atmosphere gradient (zenith → horizon → ground), and
 //   • a real equirectangular Milky-Way / star panorama for deep space,
-// plus a soft glowing Sun disc + halo in `sun_dir` that reads at every altitude.
+// The physical Sun is rendered as a correctly scaled celestial body; this shader does
+// not add a second decorative Sun or lens halo.
 //
 // Driven entirely by SkyController (colours, energy, space_blend, sun_dir) so the
 // same altitude bands that used to fade to pure black now fade to a living star sky.
@@ -29,14 +30,6 @@ uniform float space_blend : hint_range(0.0, 1.0) = 0.0;
 
 // Brightness of the star panorama (kept low so daytime ground sky isn't speckled).
 uniform float star_energy : hint_range(0.0, 4.0) = 1.0;
-
-// Direction TOWARD the sun (world space, normalized) — matches SunController.
-uniform vec3 sun_dir = vec3(0.42, 0.78, 0.46);
-
-// Sun appearance.
-uniform vec3  sun_color   : source_color = vec3(1.0, 0.96, 0.86);
-uniform float sun_size    : hint_range(0.001, 0.2) = 0.018;  // angular radius (radians-ish)
-uniform float sun_energy  : hint_range(0.0, 20.0) = 8.0;
 
 // Equirectangular lookup for the star panorama from a world direction.
 vec2 dir_to_equirect(vec3 d) {
@@ -66,19 +59,6 @@ void sky() {
 	// Cross-fade: blue atmosphere near the ground → stars in space.
 	// Additive blend at the seam reads as stars emerging through a thinning sky.
 	vec3 col = mix(atmo, stars, space_blend);
-
-	// ── Sun disc + halo ─────────────────────────────────────────────────────
-	// `sun_dir` points toward the sun; cosine between view and sun gives the disc.
-	float cd = dot(dir, normalize(sun_dir));
-	float ang = acos(clamp(cd, -1.0, 1.0));        // angular distance to sun centre
-	// Crisp core disc.
-	float disc = 1.0 - smoothstep(sun_size, sun_size * 1.6, ang);
-	// Soft halo / glow falling off over a few disc-radii (lens-flare feel).
-	float halo = exp(-ang / (sun_size * 7.0)) * 0.55
-	           + exp(-ang / (sun_size * 22.0)) * 0.20;
-
-	vec3 sun = sun_color * (disc * sun_energy + halo * sun_energy * 0.6);
-	col += sun;
 
 	COLOR = col;
 }

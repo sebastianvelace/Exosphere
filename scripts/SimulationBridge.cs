@@ -134,9 +134,6 @@ public partial class SimulationBridge : Node
             var earthGround = new EarthGroundController { Name = "EarthGroundController" };
             worldNode.CallDeferred("add_child", earthGround);
 
-            var starfield = new StarfieldController { Name = "StarfieldController" };
-            worldNode.CallDeferred("add_child", starfield);
-
             // Liftoff steam/dust deluge cloud at the pad.
             var launchFx = new LaunchEffectsController { Name = "LaunchEffectsController" };
             worldNode.CallDeferred("add_child", launchFx);

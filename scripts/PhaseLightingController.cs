@@ -99,7 +99,7 @@ public partial class PhaseLightingController : Node
         _env.GlowHdrThreshold = 1.0f;
 
         if (_light != null)
-            _light.LightEnergy = sun;
+            _light.LightEnergy = sun * SunController.SolarVisibility;
     }
 
     private static float ComputeReentryFactor(SimulationBridge bridge, Vessel av,
@@ -107,7 +107,8 @@ public partial class PhaseLightingController : Node
     {
         double density  = body.GetAtmosphericDensity(av.Position);
         double airspeed = av.GetSurfaceVelocity(body).Magnitude;
-        double flux     = ThermalModel.ComputeHeatFlux(density, airspeed);
+        double flux     = ThermalModel.ComputeHeatFlux(
+            density, airspeed, System.Math.Max(0.1, av.MaximumDiameter * 0.5));
         float fluxFactor  = (float)System.Math.Clamp(
             (flux - FluxThresh) / (FluxPeak - FluxThresh), 0.0, 1.0);
 

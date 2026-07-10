@@ -12,8 +12,10 @@ using Godot;
 /// </summary>
 public partial class CockpitRenderer : Node3D
 {
-    private const float EyeY = 36f;
-    private const float EyeZ = 0.6f;
+    public const float AuthoredEyeY = 36f;
+    public const float AuthoredEyeZ = 0.6f;
+    private const float EyeY = AuthoredEyeY;
+    private const float EyeZ = AuthoredEyeZ;
 
     public bool CockpitVisible { get => Visible; set => Visible = value; }
 

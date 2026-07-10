@@ -34,9 +34,10 @@ public sealed class CameraShake
     // g-force (above 1g) at which the FOV kick saturates.
     private const float FovGReference  = 3.5f;
 
-    // Hard cap on cockpit (IVA) rotational shake, per axis (radians ≈ 2°). Keeps the
-    // interior view readable during ascent buffeting where the exterior view tolerates more.
-    public const float CockpitRotCap = 0.0349f; // 2° in radians
+    // IVA represents a restrained head, not an external chase camera: cap at ~0.23° and
+    // centimetre-scale translation (render scale 2.8 m/u).
+    public const float CockpitRotCap = 0.004f;
+    public const float CockpitTransCap = 0.006f;
 
     // ── Smoothed intensities (ramp in/out so nothing pops) ───────────────────
     private float _thrustEnv;   // 0..1
@@ -64,6 +65,7 @@ public sealed class CameraShake
     /// the interior camera far enough to obscure the windows/console.
     /// </summary>
     public Vector3 CockpitRotationOffset { get; private set; } = Vector3.Zero;
+    public Vector3 CockpitPositionOffset { get; private set; } = Vector3.Zero;
 
     /// <summary>Resulting field of view for this frame (degrees).</summary>
     public float Fov { get; private set; } = 70f;
@@ -142,6 +144,7 @@ public sealed class CameraShake
             Osc(10.8f, _seedZ + 7f) * 0.7f + Osc(14.9f, _seedZ + 9f) * 0.3f) * bAmp;
 
         PositionOffset = engineTrans + buffetTrans;
+        CockpitPositionOffset = ClampLength(PositionOffset * 0.006f, CockpitTransCap);
 
         // ── Rotational shake (radians) ───────────────────────────────────────
         float eRot = Mathf.DegToRad(_thrustEnv * MaxThrustRot * zoom);
@@ -159,6 +162,12 @@ public sealed class CameraShake
 
         // ── FOV kick under high g (subtle widen) ─────────────────────────────
         Fov = BaseFov + _fovEnv * MaxFovKick * zoom;
+    }
+
+    private static Vector3 ClampLength(Vector3 value, float maxLength)
+    {
+        float length = value.Length();
+        return length > maxLength && length > 1e-8f ? value * (maxLength / length) : value;
     }
 
     // Single normalised oscillator in [-1, 1].

@@ -203,11 +203,22 @@ public partial class CameraController : Node3D
         Quaternion rawOrient = ToGQuat(v.Orientation);
         _smoothedOrientation = _smoothedOrientation.Slerp(rawOrient, Mathf.Clamp((float)delta * 8f, 0f, 1f));
 
-        // The vessel renders at the origin; the cockpit is a sibling node we orient to the vessel
-        // each frame. Eye at local (0,36,0.6) u, forward +Y (nose), up -Z.
+        // The vessel renders at the origin. The authored cockpit sits at y=36 for the full
+        // 121 m stack, but standalone Starship is rebuilt with its engines at y≈0 and nose at
+        // y≈18. Move both interior and eye down by the 25.36-unit separation-plane shift
+        // (36 → 10.64) after staging; otherwise the astronaut
+        // camera floats ~50 m above the separated Ship.
+        bool hasSuperHeavy = v.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool isStarship = v.Parts.Parts.Any(p =>
+            p.Definition.Id == "starship_command" || p.Definition.Id == "starship_engines");
+        float eyeLocalY = hasSuperHeavy ? CockpitRenderer.AuthoredEyeY
+            : isStarship ? 10.64f
+            : Mathf.Max(1.2f, (float)(v.VehicleLength / 2.8 * 0.72));
+        float cockpitLocalOffsetY = eyeLocalY - CockpitRenderer.AuthoredEyeY;
+
         if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D ckn)
         {
-            ckn.Position   = Vector3.Zero;
+            ckn.Position   = _smoothedOrientation * new Vector3(0f, cockpitLocalOffsetY, 0f);
             ckn.Quaternion = _smoothedOrientation;
         }
 
@@ -215,7 +226,8 @@ public partial class CameraController : Node3D
         // The cockpit mesh is oriented with _smoothedOrientation above; using raw
         // vessel orientation for the eye can put the camera through the dash during
         // abrupt state jumps such as debug orbit -> reentry captures.
-        Vector3 eye = _smoothedOrientation * new Vector3(0f, 36f, 0.6f);
+        Vector3 eye = _smoothedOrientation * new Vector3(
+            0f, eyeLocalY, CockpitRenderer.AuthoredEyeZ);
         Vector3 fwd = (_smoothedOrientation * Vector3.Up).Normalized();
         Vector3 up  = (_smoothedOrientation * Vector3.Back).Normalized();
 
@@ -226,10 +238,11 @@ public partial class CameraController : Node3D
             double t = uni.CurrentTime;
             if (_lastT > 0 && t - _lastT > 1e-4)
             {
-                var a = (v.Velocity - _lastVel) / (t - _lastT);   // m/s²
-                Vector3 target = -ToG(a) / 9.80665f * 0.05f;
+                var body = uni.GetDominantBody(v.Position);
+                var properAccel = v.GetProperAcceleration(body);
+                Vector3 target = -ToG(properAccel) / 9.80665f * 0.004f;
                 float m = target.Length();
-                if (m > 0.15f) target *= 0.15f / m;               // cap the seat push
+                if (m > 0.015f) target *= 0.015f / m;
                 _gTarget = target;
             }
             _lastVel = v.Velocity; _lastT = t;
@@ -255,12 +268,12 @@ public partial class CameraController : Node3D
         // CameraShake also caps rotational throw to ±2° (see CameraShake.CockpitRotCap).
         if (!_baseFovCaptured) { _shake.BaseFov = camera.Fov; _baseFovCaptured = true; }
         _shake.Update(delta, v, uni, 40f);
-        camera.Translate(_shake.PositionOffset * 0.6f);
+        camera.Translate(_shake.CockpitPositionOffset);
         var rot = _shake.CockpitRotationOffset;   // already capped to ±2° per axis
         camera.RotateObjectLocal(Vector3.Right,   rot.X);
         camera.RotateObjectLocal(Vector3.Up,      rot.Y);
         camera.RotateObjectLocal(Vector3.Forward, rot.Z);
-        camera.Fov = _shake.Fov;
+        camera.Fov = _shake.BaseFov; // the human eye does not widen its field under g-load
     }
 
     private void SetCockpitVisible(bool vis)
