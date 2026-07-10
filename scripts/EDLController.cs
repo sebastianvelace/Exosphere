@@ -183,7 +183,13 @@ public partial class EDLController : Control
         {
             aimAxis = -velDir;                              // engines retrograde
         }
-        vessel.Orientation     = ShortestArc(Vector3d.Up, aimAxis);
+        // In the aero phases pitch is not enough: roll the vehicle so the actual tiled
+        // local -X belly faces the velocity vector. This keeps rendering, heating and drag
+        // on the same physical side of the Ship. During the landing burn only the thrust
+        // axis matters, so use the shortest rotation.
+        vessel.Orientation = _phase is Edl.Entry or Edl.Peak or Edl.Aero
+            ? Exosphere.Simulation.Physics.AerodynamicsModel.ComputeBellyFirstOrientation(aimAxis, velDir)
+            : ShortestArc(Vector3d.Up, aimAxis);
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.PitchYawRoll    = Vector3d.Zero;
 

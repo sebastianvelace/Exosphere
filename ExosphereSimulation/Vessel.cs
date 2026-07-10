@@ -239,12 +239,6 @@ public class Vessel
     // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor
     // gimbal authority is computed from thrust, lever arm, CoM and moment of inertia.
     private const double ReactionControlAuthority = 0.01;
-    // Aerodinámica rotacional: tendencia a alinear el eje largo (+Y) con el flujo de aire
-    // (weathervaning, como un dardo estable) y amortiguación angular, ambas escaladas por q.
-    private const double AeroStability = 0.85;   // rad/s² a q≈30 kPa y ángulo de ataque pequeño
-    private const double AeroDamping   = 2.0;    // amortiguación angular por q (1/s)
-    private const double AeroQRef      = 30_000.0;
-
     public void Tick(double dt, CelestialBody refBody)
     {
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
@@ -259,8 +253,9 @@ public class Vessel
         foreach (var crew in Crew)
             crew.TickEVA(dt);
 
-        // Aplicar input de rotación (en espacio local del vessel)
-        // PitchYawRoll: X=pitch (nariz arriba/abajo), Y=yaw (nariz izq/der), Z=roll (giro)
+        // Aplicar input de rotación (en espacio local del vessel). El eje longitudinal
+        // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
+        // pitch → giro local X, yaw → giro local Z, roll → giro local Y.
         bool hasInput = PitchYawRoll.Magnitude > 0.01;
         if (hasInput)
         {
@@ -272,8 +267,8 @@ public class Vessel
                 Parts.GetRollAngularAcceleration(pressure));
             var localAngAccel = new Vector3d(
                 PitchYawRoll.X * pitchYawAuthority,
-                PitchYawRoll.Y * pitchYawAuthority,
-                PitchYawRoll.Z * rollAuthority);
+                PitchYawRoll.Z * rollAuthority,
+                PitchYawRoll.Y * pitchYawAuthority);
             // Convertir de espacio local a mundo
             AngularVelocity = AngularVelocity + Orientation.Rotate(localAngAccel) * dt;
 
@@ -288,35 +283,29 @@ public class Vessel
         if (SASEnabled && !hasInput)
             AngularVelocity = AngularVelocity * System.Math.Pow(0.005, dt);
 
-        // ── Aerodinámica rotacional (weathervaning) ─────────────────────────
-        // La presión dinámica tiende a alinear el eje largo del cohete con el flujo de aire,
-        // como una flecha estable: produce el giro gravitacional natural y resiste las
-        // perturbaciones en la baja atmósfera. El término se desvanece cerca de 90° de ángulo
-        // de ataque (max(cosA,0)) para no luchar contra una actitud broadside deliberada
-        // (belly-flop). El piloto automático y la EDL fijan la orientación directamente, así
-        // que esto moldea sobre todo el vuelo manual en el ascenso inicial.
+        // ── Aerodinámica rotacional por torque real ─────────────────────────
+        // El arrastre actúa en un centro de presión detrás del CoM y crea un momento que se
+        // divide por la inercia actual (que cambia al consumir propelente). El aire también
+        // amortigua pitch/yaw. Así un stack pesado gira con lentitud, una Ship ligera responde
+        // más y el efecto desaparece físicamente al caer q, sin una aceleración artificial fija.
         if (refBody?.Atmosphere != null)
         {
-            double q = GetDynamicPressure(refBody);
-            if (q > 50.0)
+            double altitude = GetAltitude(refBody);
+            double density = refBody.Atmosphere.GetDensity(altitude);
+            var surfVel = GetSurfaceVelocity(refBody);
+            if (density > 0.0 && surfVel.Magnitude > 1.0)
             {
-                var surfVel = GetSurfaceVelocity(refBody);
-                if (surfVel.Magnitude > 5.0)
-                {
-                    var    flow = surfVel.Normalized;
-                    var    axis = Orientation.Rotate(Vector3d.Up);
-                    double cosA = System.Math.Clamp(axis.Dot(flow), -1.0, 1.0);
-                    var    rotAxis = axis.Cross(flow);
-                    double sinA = rotAxis.Magnitude;
-                    double qn = System.Math.Min(q / AeroQRef, 1.5);
-                    if (sinA > 1e-4)
-                    {
-                        double restore = AeroStability * qn * sinA * System.Math.Max(cosA, 0.0);
-                        AngularVelocity += (rotAxis / sinA) * (restore * dt);
-                    }
-                    double damp = System.Math.Min(AeroDamping * qn * dt, 0.9);
-                    AngularVelocity *= (1.0 - damp);
-                }
+                double temp = System.Math.Max(1.0, refBody.Atmosphere.GetTemperature(altitude));
+                var angularAccel = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
+                    density,
+                    surfVel,
+                    Orientation.Rotate(Vector3d.Up),
+                    AngularVelocity,
+                    VehicleLength,
+                    MaximumDiameter,
+                    Parts.TransverseMomentOfInertia,
+                    temp);
+                AngularVelocity += angularAccel * dt;
             }
         }
 

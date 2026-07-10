@@ -112,18 +112,18 @@ public static class ThermalModel
     /// <summary>
     /// Windward alignment ∈ [0,1] of a part's shield with the incoming flow.
     /// Starship re-enters belly-first: the heat shield is on the ventral face, modelled
-    /// here as the vessel's local <c>-Y</c> (down) side meeting the airflow broadside.
+    /// here as the vessel's local <c>-X</c> side. This matches the black tile geometry in
+    /// VesselRenderer instead of treating the engine end as the heat shield.
     /// 1 ⇒ the shielded belly is squarely into the flow; 0 ⇒ the bare side leads.
     ///
     /// <paramref name="flowDirLocal"/> is the airflow direction expressed in the vessel's
     /// local frame (i.e. <c>orientation⁻¹ · surfaceVelocityDir</c>). The shield faces the
-    /// flow when that direction points toward local <c>+Y</c> (air coming "up" into the
-    /// down-facing belly).
+    /// flow when the direction of travel through the air points toward local <c>-X</c>.
     /// </summary>
     public static double WindwardFactor(Vector3d flowDirLocal)
     {
         if (flowDirLocal.Magnitude < 1e-9) return 0.0;
-        double along = flowDirLocal.Normalized.Dot(Vector3d.Up);
+        double along = flowDirLocal.Normalized.Dot(-Vector3d.Right);
         return System.Math.Clamp(along, 0.0, 1.0);
     }
 }

@@ -203,4 +203,87 @@ public static class AerodynamicsModel
         double magnitude = 0.5 * density * speed * speed * cd * area * machMul;
         return surfaceVelocity.Normalized * (-magnitude);
     }
+
+    // ── Aerodynamic attitude dynamics ────────────────────────────────────────
+
+    /// <summary>
+    /// Angular acceleration caused by the aerodynamic force acting behind the centre of
+    /// mass, plus rate damping from the surrounding air. This turns the vehicle through a
+    /// real torque/inertia relationship rather than applying a fixed "weathervane" rate.
+    /// The returned vector is in world space (rad/s²).
+    /// </summary>
+    public static Vector3d ComputeAttitudeAngularAcceleration(
+        double density,
+        Vector3d surfaceVelocity,
+        Vector3d longitudinalAxis,
+        Vector3d angularVelocity,
+        double vehicleLength,
+        double vehicleDiameter,
+        double transverseMomentOfInertia,
+        double temperature)
+    {
+        double speed = surfaceVelocity.Magnitude;
+        if (density <= 0.0 || speed < 1.0 || transverseMomentOfInertia <= 0.0)
+            return Vector3d.Zero;
+
+        var axis = longitudinalAxis.Normalized;
+        var drag = ComputeReentryDrag(
+            density, surfaceVelocity, axis, vehicleLength, vehicleDiameter, temperature);
+
+        // A modest static margin. Long launch stacks place their aerodynamic centre farther
+        // behind the CoM than the shorter Ship; limiting it avoids an unrealistically violent
+        // snap at Max-Q while propellant shifts the actual inertia continuously.
+        double cpOffset = System.Math.Clamp(vehicleLength * 0.08,
+            vehicleDiameter * 0.35, vehicleDiameter * 1.35);
+        var momentArm = axis * (-cpOffset);
+        var torqueAcceleration = momentArm.Cross(drag) / transverseMomentOfInertia;
+
+        // Air damps pitch/yaw rates, but does not directly erase roll about the nearly
+        // axisymmetric hull. Scale smoothly with q and cap the decay rate for numerical
+        // stability during dense-atmosphere descent.
+        double q = ComputeDynamicPressure(density, speed);
+        double dampingRate = System.Math.Min(1.25, 0.55 * q / 30_000.0);
+        var rollRate = axis * angularVelocity.Dot(axis);
+        var pitchYawRate = angularVelocity - rollRate;
+        var dampingAcceleration = pitchYawRate * (-dampingRate);
+
+        return torqueAcceleration + dampingAcceleration;
+    }
+
+    /// <summary>
+    /// Builds a full attitude for broadside entry: local +Y follows the commanded long
+    /// axis while the tiled local -X belly faces the direction of travel through the air.
+    /// </summary>
+    public static Quaterniond ComputeBellyFirstOrientation(
+        Vector3d longitudinalAxis, Vector3d velocityDirection)
+    {
+        var axis = longitudinalAxis.Normalized;
+        var qAxis = ShortestArc(Vector3d.Up, axis);
+        var currentBelly = qAxis.Rotate(-Vector3d.Right).Normalized;
+        var desiredBelly = velocityDirection - axis * velocityDirection.Dot(axis);
+        if (desiredBelly.Magnitude < 1e-6) return qAxis;
+        desiredBelly = desiredBelly.Normalized;
+
+        double sin = axis.Dot(currentBelly.Cross(desiredBelly));
+        double cos = System.Math.Clamp(currentBelly.Dot(desiredBelly), -1.0, 1.0);
+        var qRoll = Quaterniond.FromAxisAngle(axis, System.Math.Atan2(sin, cos));
+        return (qRoll * qAxis).Normalize();
+    }
+
+    private static Quaterniond ShortestArc(Vector3d from, Vector3d to)
+    {
+        var f = from.Normalized;
+        var t = to.Normalized;
+        double dot = f.Dot(t);
+        if (dot > 0.99999) return Quaterniond.Identity;
+        if (dot < -0.99999)
+        {
+            Vector3d perpendicular = System.Math.Abs(f.X) < 0.9
+                ? f.Cross(Vector3d.Right)
+                : f.Cross(Vector3d.Up);
+            return Quaterniond.FromAxisAngle(perpendicular.Normalized, System.Math.PI);
+        }
+        return Quaterniond.FromAxisAngle(f.Cross(t).Normalized,
+            System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0)));
+    }
 }

@@ -172,6 +172,26 @@ public sealed class StarshipRealismTests
         Assert.True(broadside / axial > 17.0);
     }
 
+    [Fact]
+    public void SemanticYawAndRollMapToThePhysicalAxesOfAYUpVehicle()
+    {
+        var earth = LoadBody("earth");
+        var vessel = VesselWithPointMass(1_000.0,
+            earth.Position + Vector3d.Right * (earth.Radius + 500_000.0));
+        vessel.SASEnabled = false;
+
+        vessel.PitchYawRoll = new Vector3d(0.0, 1.0, 0.0); // semantic yaw
+        vessel.Tick(0.1, earth);
+        Assert.True(vessel.AngularVelocity.Z > 0.0);
+        Assert.True(System.Math.Abs(vessel.AngularVelocity.Y) < 1e-12);
+
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.PitchYawRoll = new Vector3d(0.0, 0.0, 1.0); // semantic roll
+        vessel.Tick(0.1, earth);
+        Assert.True(vessel.AngularVelocity.Y > 0.0);
+        Assert.True(System.Math.Abs(vessel.AngularVelocity.Z) < 1e-12);
+    }
+
     private static (Vessel vessel, Part booster, Part ring, Part shipEngines, Part shipTank)
         BuildFlight7Stack()
     {

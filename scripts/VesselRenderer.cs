@@ -15,6 +15,18 @@ public partial class VesselRenderer : Node3D
     private MeshInstance3D? _hullMesh;
     private PlumeSystem?    _plumes;
 
+    private sealed class FlapRig
+    {
+        public MeshInstance3D Blade = null!;
+        public Quaternion Neutral;
+        public float Side;
+        public bool Forward;
+    }
+
+    // The four aerodynamic surfaces are live visual instruments: their deployment follows
+    // dynamic pressure, heat-shield attitude and control mixing instead of remaining frozen.
+    private readonly List<FlapRig> _flapRigs = new();
+
     private enum TileCharZone { Belly, Nose, FwdFlap, AftFlap }
 
     // Windward heat-shield tile materials grouped by zone so belly, nose and flaps
@@ -493,10 +505,15 @@ public partial class VesselRenderer : Node3D
 
         float  throttle  = (float)TargetVessel.Throttle;
         bool   shPresent = TargetVessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
-        var    earth     = SimulationBridge.Instance?.Universe.GetBody("earth");
-        double alt       = earth != null ? TargetVessel.GetAltitude(earth) : 0.0;
+        var universe = SimulationBridge.Instance?.Universe;
+        var body = universe?.GetDominantBody(TargetVessel.Position);
+        double alt = body != null ? TargetVessel.GetAltitude(body) : 0.0;
+        double pressureRatio = body?.Atmosphere != null
+            ? System.Math.Clamp(TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
+            : 0.0;
 
-        _plumes?.Update(throttle, shPresent, alt);
+        _plumes?.Update(throttle, shPresent, alt, pressureRatio);
+        UpdateFlaps(delta, body);
 
         // Reentry heat glow on hull. The main hull now uses the procedural steel
         // ShaderMaterial (emit via the `emit_strength` uniform); small detail
@@ -522,13 +539,47 @@ public partial class VesselRenderer : Node3D
             }
         }
 
-        UpdateTileCharring();
+        UpdateTileCharring(body);
+    }
+
+    private void UpdateFlaps(double delta, CelestialBody? body)
+    {
+        if (_flapRigs.Count == 0 || TargetVessel == null) return;
+
+        float aeroDeployment = 0f;
+        if (body?.Atmosphere != null)
+        {
+            double q = TargetVessel.GetDynamicPressure(body);
+            var surfVel = TargetVessel.GetSurfaceVelocity(body);
+            if (surfVel.Magnitude > 1.0)
+            {
+                var localFlow = TargetVessel.Orientation.Inverse().Rotate(surfVel.Normalized);
+                float belly = (float)System.Math.Clamp(localFlow.Dot(-Vector3d.Right), 0.0, 1.0);
+                float qAuthority = Mathf.SmoothStep(0f, 1f,
+                    (float)System.Math.Clamp((q - 250.0) / 4_000.0, 0.0, 1.0));
+                aeroDeployment = belly * qAuthority;
+            }
+        }
+
+        float pitch = (float)TargetVessel.PitchYawRoll.X;
+        float roll  = (float)TargetVessel.PitchYawRoll.Z;
+        float response = 1f - Mathf.Exp(-(float)delta * 3.8f);
+
+        foreach (var flap in _flapRigs)
+        {
+            float baseDeg = (flap.Forward ? 28f : 42f) * aeroDeployment;
+            float pitchMix = pitch * (flap.Forward ? 8f : -10f) * aeroDeployment;
+            float rollMix  = roll * flap.Side * 11f * aeroDeployment;
+            float signedDeg = flap.Side * Mathf.Clamp(baseDeg + pitchMix + rollMix, 0f, 52f);
+            var target = flap.Neutral * new Quaternion(Vector3.Up, Mathf.DegToRad(signedDeg));
+            flap.Blade.Quaternion = flap.Blade.Quaternion.Slerp(target, response);
+        }
     }
 
     // ── Heat-shield tile charring ─────────────────────────────────────────
     // Each tile zone chars from its owning part (command → nose/fwd flaps, tank →
     // belly/aft flaps) and scales with attitude misalignment via WindwardFactor.
-    private void UpdateTileCharring()
+    private void UpdateTileCharring(CelestialBody? body)
     {
         if (_tileZoneMats.Count == 0 || TargetVessel == null) return;
 
@@ -550,10 +601,9 @@ public partial class VesselRenderer : Node3D
         }
 
         float align = 1f;
-        var earth = SimulationBridge.Instance?.Universe.GetBody("earth");
-        if (earth != null)
+        if (body != null)
         {
-            var surfVel = TargetVessel.GetSurfaceVelocity(earth);
+            var surfVel = TargetVessel.GetSurfaceVelocity(body);
             if (surfVel.Magnitude > 1e-6)
             {
                 Vector3d flowLocal = TargetVessel.Orientation.Inverse().Rotate(surfVel);
@@ -943,6 +993,13 @@ public partial class VesselRenderer : Node3D
         };
         blade.SetSurfaceOverrideMaterial(0, mat);
         AddChild(blade);
+        _flapRigs.Add(new FlapRig
+        {
+            Blade = blade,
+            Neutral = blade.Quaternion,
+            Side = name.EndsWith("L", StringComparison.Ordinal) ? -1f : 1f,
+            Forward = name.StartsWith("Fwd", StringComparison.Ordinal),
+        });
 
         var edgeMat = Mat(new Color(0.020f, 0.020f, 0.024f), 0.0f, 0.94f);
         var leading = new MeshInstance3D
@@ -1056,6 +1113,7 @@ public partial class VesselRenderer : Node3D
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
         _tileZoneMats.Clear();
+        _flapRigs.Clear();
         _plumes   = null;
         _hullMesh = null;
     }

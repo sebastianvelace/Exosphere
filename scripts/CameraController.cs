@@ -111,10 +111,10 @@ public partial class CameraController : Node3D
         var bridge = SimulationBridge.Instance;
         if (bridge?.ActiveVessel != null)
         {
-            var earth = bridge.Universe.GetBody("earth");
-            if (earth != null)
+            var body = bridge.Universe.GetDominantBody(bridge.ActiveVessel.Position);
+            if (body != null)
             {
-                double alt = bridge.ActiveVessel.GetAltitude(earth);
+                double alt = bridge.ActiveVessel.GetAltitude(body);
                 if (Mode == CameraMode.Pad && alt > 700)
                     Mode = CameraMode.Chase;
                 if (Mode == CameraMode.Chase && alt < 450)
@@ -133,8 +133,8 @@ public partial class CameraController : Node3D
         // and watch the rocket climb away — over featureless ocean/terrain this is the only
         // clear cue that the rocket is actually rising.
         double trackAlt = 0.0;
-        if (bridge?.ActiveVessel is { } tv && bridge.Universe.GetBody("earth") is { } te)
-            trackAlt = tv.GetAltitude(te);
+        if (bridge?.ActiveVessel is { } tv)
+            trackAlt = tv.GetAltitude(bridge.Universe.GetDominantBody(tv.Position));
 
         Vector3 camPos;
         Vector3 lookTarget;

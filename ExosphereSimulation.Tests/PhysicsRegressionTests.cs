@@ -179,8 +179,8 @@ public sealed class PhysicsRegressionTests
         var graph = new PartGraph();
         graph.SetRoot(shielded);
 
-        double protectedRatio = StressSolver.WorstHeatRatio(graph, Vector3d.Up);
-        double exposedRatio = StressSolver.WorstHeatRatio(graph, -Vector3d.Up);
+        double protectedRatio = StressSolver.WorstHeatRatio(graph, -Vector3d.Right);
+        double exposedRatio = StressSolver.WorstHeatRatio(graph, Vector3d.Right);
 
         Assert.True(protectedRatio < 1.0);
         Assert.True(exposedRatio > 1.0);
@@ -221,8 +221,8 @@ public sealed class PhysicsRegressionTests
         }));
 
         const double severeFlux = 50_000_000.0;
-        var protectedBurned = StressSolver.ApplyThermalLoads(protectedGraph, severeFlux, 10.0, Vector3d.Up);
-        var wrongWayBurned = StressSolver.ApplyThermalLoads(wrongWayGraph, severeFlux, 10.0, -Vector3d.Up);
+        var protectedBurned = StressSolver.ApplyThermalLoads(protectedGraph, severeFlux, 10.0, -Vector3d.Right);
+        var wrongWayBurned = StressSolver.ApplyThermalLoads(wrongWayGraph, severeFlux, 10.0, Vector3d.Right);
 
         Assert.Empty(protectedBurned);
         Assert.True(protectedGraph.Parts[0].ThermalDamage < 1.0);

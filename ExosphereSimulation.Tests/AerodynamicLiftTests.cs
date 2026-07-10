@@ -86,4 +86,60 @@ public sealed class AerodynamicLiftTests
         Assert.True(cl20 < cl45 && cl70 < cl45);
         Assert.True(cl20 > 0.0 && cl70 > 0.0);
     }
+
+    [Fact]
+    public void AerodynamicMomentRotatesNoseTowardTheVelocity()
+    {
+        // Nose points +Y while the vehicle travels mostly +Y with a small +X error.
+        // A CP behind the CoM must produce negative-Z acceleration, which rotates +Y
+        // toward +X rather than away from it.
+        var velocity = new Vector3d(150.0, 1_500.0, 0.0);
+        var accel = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
+            density: 0.18,
+            surfaceVelocity: velocity,
+            longitudinalAxis: Vector3d.Up,
+            angularVelocity: Vector3d.Zero,
+            vehicleLength: 50.0,
+            vehicleDiameter: 9.0,
+            transverseMomentOfInertia: 2.0e8,
+            temperature: 250.0);
+
+        Assert.True(accel.Z < 0.0, $"Expected restoring -Z acceleration, got {accel}");
+        Assert.True(accel.Magnitude > 0.0);
+    }
+
+    [Fact]
+    public void AerodynamicRateDampingOpposesPitchButPreservesAxisRoll()
+    {
+        var accel = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
+            density: 0.20,
+            surfaceVelocity: Vector3d.Up * 900.0,
+            longitudinalAxis: Vector3d.Up,
+            angularVelocity: new Vector3d(0.12, 0.08, 0.0),
+            vehicleLength: 50.0,
+            vehicleDiameter: 9.0,
+            transverseMomentOfInertia: 2.0e8,
+            temperature: 260.0);
+
+        Assert.True(accel.X < 0.0, "pitch rate should be aerodynamically damped");
+        Assert.True(System.Math.Abs(accel.Y) < 1e-12,
+            "an axisymmetric hull should not receive synthetic roll damping");
+    }
+
+    [Fact]
+    public void BellyFirstAttitudeAlignsBothLongAxisAndVisibleHeatShield()
+    {
+        var longAxis = new Vector3d(0.2, 0.8, 0.3).Normalized;
+        var rawVelocity = new Vector3d(-0.9, 0.1, 0.4).Normalized;
+        var velocity = (rawVelocity - longAxis * rawVelocity.Dot(longAxis)).Normalized;
+
+        var attitude = AerodynamicsModel.ComputeBellyFirstOrientation(longAxis, velocity);
+        var actualAxis = attitude.Rotate(Vector3d.Up).Normalized;
+        var actualBelly = attitude.Rotate(-Vector3d.Right).Normalized;
+
+        Assert.True(actualAxis.Dot(longAxis) > 0.999999999);
+        Assert.True(actualBelly.Dot(velocity) > 0.999999999,
+            $"Visible -X heat shield must face velocity: belly={actualBelly}, velocity={velocity}");
+        Assert.Equal(1.0, ThermalModel.WindwardFactor(attitude.Inverse().Rotate(velocity)), 10);
+    }
 }

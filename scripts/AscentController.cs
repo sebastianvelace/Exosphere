@@ -329,9 +329,7 @@ public partial class AscentController : Control
         }
 
         if (warp != universe.TimeScale) universe.TimeScale = warp;
-        vessel.Orientation     = ShortestArc(Vector3d.Up, dir);
-        vessel.AngularVelocity = Vector3d.Zero;
-        vessel.PitchYawRoll    = Vector3d.Zero;
+        CommandAttitude(vessel, dir);
         vessel.Throttle        = throttle;
 
         AutoStage(vessel, bridge!, body);
@@ -408,11 +406,37 @@ public partial class AscentController : Control
             cmd = errLocal * AssistGain - rateLocal * AssistDamp;
         }
 
-        // Clamp to the [-1,1] per-axis input range the sim expects; never command roll.
+        ApplyLocalTorqueCommand(vessel, cmd, allowRoll: false);
+    }
+
+    private static void CommandAttitude(Vessel vessel, Vector3d desiredDirection)
+    {
+        Vector3d nose = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+        Vector3d desired = desiredDirection.Normalized;
+        Vector3d cross = nose.Cross(desired);
+        double sin = System.Math.Clamp(cross.Magnitude, 0.0, 1.0);
+        double cos = System.Math.Clamp(nose.Dot(desired), -1.0, 1.0);
+        double angle = System.Math.Atan2(sin, cos);
+
+        Vector3d localCommand = Vector3d.Zero;
+        if (angle > 0.0005 && cross.Magnitude > 1e-9)
+        {
+            var inv = vessel.Orientation.Inverse();
+            Vector3d errorLocal = inv.Rotate(cross.Normalized) * angle;
+            Vector3d rateLocal = inv.Rotate(vessel.AngularVelocity);
+            localCommand = errorLocal * AssistGain - rateLocal * AssistDamp;
+        }
+        ApplyLocalTorqueCommand(vessel, localCommand, allowRoll: false);
+    }
+
+    private static void ApplyLocalTorqueCommand(Vessel vessel, Vector3d localTorqueCommand, bool allowRoll)
+    {
+        // Vessel.PitchYawRoll is semantic, not a raw XYZ angular vector:
+        // local X→pitch, local Z→yaw, local Y→roll because +Y is the long axis.
         vessel.PitchYawRoll = new Vector3d(
-            System.Math.Clamp(cmd.X, -1.0, 1.0),
-            System.Math.Clamp(cmd.Y, -1.0, 1.0),
-            0.0);
+            System.Math.Clamp(localTorqueCommand.X, -1.0, 1.0),
+            System.Math.Clamp(localTorqueCommand.Z, -1.0, 1.0),
+            allowRoll ? System.Math.Clamp(localTorqueCommand.Y, -1.0, 1.0) : 0.0);
     }
 
     // Staging logic. For the Super Heavy first stage, HOT-STAGE at MECO — when it reaches

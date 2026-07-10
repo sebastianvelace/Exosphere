@@ -20,7 +20,7 @@ using System.Collections.Generic;
 ///
 /// Public surface used by VesselRenderer is preserved exactly:
 ///   SetupSH(float, float, float, float), SetupStarship(float, float, float),
-///   Update(float, bool, double).
+///   Update(float, bool, double), with a pressure-aware overload for planetary flight.
 /// </summary>
 public partial class PlumeSystem : Node3D
 {
@@ -101,23 +101,32 @@ public partial class PlumeSystem : Node3D
     /// <summary>Update emitters from vessel state. Call in VesselRenderer._Process().</summary>
     public void Update(float throttle, bool shPresent, double altitude)
     {
+        float pressureRatio = (float)System.Math.Exp(-System.Math.Max(0.0, altitude) / 7_000.0);
+        Update(throttle, shPresent, altitude, pressureRatio);
+    }
+
+    /// <summary>
+    /// Pressure-aware update. <paramref name="ambientPressureRatio"/> is p/p₀, so Mars,
+    /// Venus and vacuum expand the exhaust according to their actual atmosphere rather
+    /// than borrowing Earth's scale height from the altitude alone.
+    /// </summary>
+    public void Update(float throttle, bool shPresent, double altitude, double ambientPressureRatio)
+    {
         bool firing = throttle > 0.01f;
 
-        // Ambient-pressure proxy → expansion factor. Modelled on an exponential
-        // atmosphere (~7 km scale height): the plume already starts visibly
-        // expanding in the first kilometres and is fully underexpanded (broad,
-        // very long, sparse diamonds) well before the Kármán line. At p≈p0 the
-        // plume is tight/over-expanded; as p→0 it becomes the long vacuum plume.
-        float pressRatio = (float)System.Math.Exp(-altitude / 7_000.0); // 1 at SL → 0 high up
+        // Measured ambient-pressure ratio → expansion factor. At p≈p0 the plume is
+        // tight/over-expanded; as p→0 it becomes the long vacuum plume. The smoothstep
+        // avoids visible changes in derivative as the vehicle crosses atmospheric layers.
+        float pressRatio = (float)System.Math.Clamp(ambientPressureRatio, 0.0, 1.0);
         float expansion  = System.Math.Clamp(1f - pressRatio, 0f, 1f);
         expansion = expansion * expansion * (3f - 2f * expansion); // smoothstep
 
-        UpdateGroup(_shUnits,   firing && shPresent,  throttle, expansion, altitude);
-        UpdateGroup(_shipUnits, firing && !shPresent, throttle, expansion, altitude);
+        UpdateGroup(_shUnits,   firing && shPresent,  throttle, expansion, pressRatio, altitude);
+        UpdateGroup(_shipUnits, firing && !shPresent, throttle, expansion, pressRatio, altitude);
     }
 
     private static void UpdateGroup(List<PlumeUnit> units,
-        bool firing, float throttle, float expansion, double altitude)
+        bool firing, float throttle, float expansion, float pressureRatio, double altitude)
     {
         // Near the pad (<~100 m) exhaust is deflected up/outward by the mount;
         // higher up it streams straight down. Drives smoke direction only —
@@ -132,7 +141,7 @@ public partial class PlumeSystem : Node3D
         // N7: atmospheric-pressure proxy for the new shader uniforms.
         // atmo_pressure = exp(-alt/7000) already computed as (1 - expansion) before
         // the smoothstep, but we keep the simpler inverse relationship here.
-        float atmoPressure = System.Math.Clamp(1f - expansion, 0f, 1f);
+        float atmoPressure = pressureRatio;
 
         foreach (var u in units)
         {
