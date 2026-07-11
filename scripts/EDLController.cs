@@ -2,7 +2,10 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
 
 /// <summary>
 /// Entry, Descent and Landing director + HUD overlay. Activates when the active
@@ -29,6 +32,9 @@ public partial class EDLController : Control
 
     private Font _font = null!;
     private bool _legsDeployed;
+    private bool _flipInProgress;
+    private double _flipElapsed;
+    private double _attitudeErrorDeg;
 
     public override void _Ready()
     {
@@ -74,7 +80,10 @@ public partial class EDLController : Control
         if (_phase != Edl.Inactive && _phase != Edl.Touchdown)
         {
             bool aboveAtmo = _alt > body.Atmosphere.MaxAltitude * 1.05;
-            bool ascending = _vUp > 5.0;   // +5 m/s upward — clearly climbing away
+            // Upward motion aborts an atmospheric entry, but a landing burn can briefly
+            // overshoot through zero vertical speed. Treating that correction as an abort
+            // leaves a powered vehicle without guidance.
+            bool ascending = _phase is Edl.Entry or Edl.Peak or Edl.Aero && _vUp > 5.0;
             if (aboveAtmo || ascending)
             {
                 Deactivate();
@@ -91,6 +100,8 @@ public partial class EDLController : Control
             {
                 _phase = Edl.Entry;
                 _legsDeployed = false;
+                _flipInProgress = false;
+                _flipElapsed = 0.0;
                 Visible = true;
                 mission?.EnterPhase(MissionPhase.ENTRY);
             }
@@ -104,11 +115,19 @@ public partial class EDLController : Control
     private void AdvancePhase(Vessel vessel, CelestialBody body, MissionManager? mission,
         double mass, double speed, Vector3d up, Vector3d surfVel, double delta, Universe universe)
     {
-        double aThrustFull = MaxThrustAccel(vessel, body, mass);
         double g = body.GetSurfaceGravity();
 
         double vDown   = System.Math.Max(0.0, -_vUp);
         double vertFrac = speed > 1e-3 ? vDown / speed : 1.0;
+        Vector3d velDir = surfVel.Magnitude > 1e-3 ? surfVel.Normalized : -up;
+        Quaterniond retroTarget = ShortestArc(Vector3d.Up, -velDir);
+        Part? shipEngines = vessel.Parts.Parts.FirstOrDefault(
+            p => p.Definition.Id == "starship_engines");
+        bool aeroPhase = _phase is Edl.Entry or Edl.Peak or Edl.Aero;
+        if (aeroPhase)
+            shipEngines?.SelectEngineCount(System.Math.Min(3,
+                System.Math.Max(1, shipEngines.Definition.EngineCount)));
+        double aThrustFull = MaxLandingThrustAccel(vessel, body, shipEngines, mass);
 
         // Distance the FULL retrograde burn needs to null the WHOLE velocity vector (not just the
         // vertical part) — engines point retrograde, so they kill total speed. Net decel is the
@@ -129,12 +148,24 @@ public partial class EDLController : Control
         // below ~800 m so a vessel already at belly-flop terminal velocity (~70-100 m/s) still has
         // comfortable room to flip and null the descent (a too-low flip can't arrest it in time).
         const double FlipCeiling = 8_000.0;
+        double pressure = vessel.GetAmbientPressure(body);
+        double flipIgnitionThrottle = shipEngines?.Definition.MinThrottle > 0.0
+            ? shipEngines.Definition.MinThrottle
+            : 0.40;
+        double fullAngularAuthority = aeroPhase
+            ? System.Math.Max(0.01,
+                vessel.Parts.GetMaximumPitchYawAngularAcceleration(pressure) * flipIgnitionThrottle)
+            : 0.01;
+        double flipAngle = AttitudeGuidance.ErrorAngleRadians(vessel.Orientation, retroTarget);
+        double flipTime = EstimateFlipTime(flipAngle, fullAngularAuthority, maxRate: 0.35);
         double flipAlt = aBrake > 0.5
-            ? System.Math.Clamp(stopDist * 1.6, 800.0, FlipCeiling)
+            ? System.Math.Clamp(stopDist * 2.2 + vDown * (flipTime + 3.0), 3_000.0, FlipCeiling)
             : 0.0;   // can't brake yet (still hypersonic) — keep belly-flop
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero && vDown > 5.0 && _alt <= flipAlt)
         {
             _phase = Edl.Retro;
+            _flipInProgress = true;
+            _flipElapsed = 0.0;
             mission?.EnterPhase(MissionPhase.RETRO_BURN);
         }
 
@@ -154,7 +185,9 @@ public partial class EDLController : Control
                 break;
             case Edl.Final:
                 if (_alt < 500.0) _legsDeployed = true;
-                if (_alt < TouchdownAlt && System.Math.Abs(_vUp) < TouchdownVel)
+                double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
+                if (_alt < TouchdownAlt && System.Math.Abs(_vUp) < TouchdownVel && _horiz < 2.0
+                    && upright > System.Math.Cos(10.0 * MathUtils.DEG_TO_RAD))
                 {
                     _phase = Edl.Touchdown;
                     Touchdown(vessel, body, mission);
@@ -169,12 +202,25 @@ public partial class EDLController : Control
         // Entry/Peak/Aero: present the long axis broadside to the airflow (max drag,
         // heat-shield windward) to bleed velocity aerodynamically like real Starship.
         // Retro/Final: flip so the engines (local +Y thrust) point retrograde.
-        Vector3d velDir = surfVel.Magnitude > 1e-3 ? surfVel.Normalized : -up;
         Vector3d aimAxis;
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero)
         {
-            Vector3d perp = up - velDir * up.Dot(velDir);   // up-component ⊥ to airflow
-            aimAxis = perp.Magnitude > 1e-3 ? perp.Normalized : AnyPerp(velDir);
+            // Fly a lift-up ~70° AoA instead of exact 90° broadside. Exact broadside has
+            // CL=0 for a symmetric body and degenerates into a steep ballistic entry; this
+            // target retains nearly all projected drag while generating Starship-like L/D.
+            aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
+        }
+        else if (_phase == Edl.Final && _horiz < 12.0)
+        {
+            // Stay primarily upright but cant into the lateral velocity so the same thrust
+            // command can actually remove drift. A perfectly vertical axis cannot satisfy a
+            // horizontal-speed error and otherwise turns that error into an endless hover.
+            Vector3d lateralVelocity = surfVel - up * _vUp;
+            double tiltRatio = System.Math.Min(
+                System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD), _horiz * 0.04);
+            aimAxis = lateralVelocity.Magnitude > 1e-3
+                ? (up - lateralVelocity.Normalized * tiltRatio).Normalized
+                : up;
         }
         else
         {
@@ -184,11 +230,36 @@ public partial class EDLController : Control
         // local -X belly faces the velocity vector. This keeps rendering, heating and drag
         // on the same physical side of the Ship. During the landing burn only the thrust
         // axis matters, so use the shortest rotation.
-        vessel.Orientation = _phase is Edl.Entry or Edl.Peak or Edl.Aero
-            ? Exosphere.Simulation.Physics.AerodynamicsModel.ComputeBellyFirstOrientation(aimAxis, velDir)
+        Quaterniond desiredAttitude = _phase is Edl.Entry or Edl.Peak or Edl.Aero
+            ? AerodynamicsModel.ComputeBellyFirstOrientation(aimAxis, velDir)
             : ShortestArc(Vector3d.Up, aimAxis);
-        vessel.AngularVelocity = Vector3d.Zero;
-        vessel.PitchYawRoll    = Vector3d.Zero;
+        vessel.PitchYawRoll = _phase is Edl.Entry or Edl.Peak or Edl.Aero
+            ? AttitudeGuidance.ComputeCommand(
+                vessel.Orientation,
+                desiredAttitude,
+                vessel.AngularVelocity,
+                proportionalGain: 2.6,
+                dampingGain: 1.2,
+                allowRoll: true)
+            : AttitudeGuidance.ComputeAxisPointingCommand(
+                vessel.Orientation,
+                Vector3d.Up,
+                aimAxis,
+                vessel.AngularVelocity,
+                proportionalGain: 2.2,
+                dampingGain: 6.0);
+        _attitudeErrorDeg = AttitudeGuidance.ErrorAngleRadians(
+            vessel.Orientation, desiredAttitude) * MathUtils.RAD_TO_DEG;
+
+        if (_flipInProgress)
+        {
+            _flipElapsed += delta;
+            if (_attitudeErrorDeg < 5.0)
+            {
+                _flipInProgress = false;
+                GD.Print($"[EDL] physical flip complete in {_flipElapsed:F1}s");
+            }
+        }
 
         // ── Throttle: closed-loop descent-rate profile to a soft touchdown ──────
         // By the time we flip (low, post-belly-flop) the velocity is mostly vertical. Track a
@@ -204,12 +275,43 @@ public partial class EDLController : Control
             // is already below the post-belly-flop terminal velocity (~70 m/s) at the flip, so the
             // burn starts braking immediately. Cap it by a constant-deceleration limit so a faster
             // arrival is still braked hard enough. Close the loop with gravity feed-forward.
-            double vTargetLin = 1.5 + _alt * 0.06;
+            double vTargetLin = 1.5 + _alt * 0.035;
             double vTargetMax = System.Math.Sqrt(2.0 * 0.60 * aThrustFull * System.Math.Max(0.0, _alt - stopAlt)) + 1.5;
             double vTarget    = System.Math.Min(vTargetLin, vTargetMax);
-            double aCmd = 1.6 * (vDown - vTarget) + g;      // >0 ⇒ thrust up to brake toward profile
-            double thr  = aThrustFull > 1e-6 ? aCmd / aThrustFull : 0.0;
-            vessel.Throttle = System.Math.Clamp(thr, 0.0, 1.0);
+            double horizontalTarget = System.Math.Max(0.5, _alt * 0.02);
+            double verticalError = vDown - vTarget;
+            double horizontalError = _horiz - horizontalTarget;
+            double coupledHorizontalError = _phase == Edl.Retro ? horizontalError : 0.0;
+            double brakingError = System.Math.Max(0.0,
+                System.Math.Max(verticalError, coupledHorizontalError));
+            // Divide by the commanded thrust axis, not by -velocity. In final vertical flight
+            // the velocity can pass through zero while the engine remains upright; using
+            // -velocity there creates a singular 5 g command and launches the vehicle upward.
+            double thrustUpComponent = System.Math.Max(0.20, aimAxis.Dot(up));
+            // A small bounded descent bias prevents an endless hover when below the target
+            // rate, while retaining at least ~0.85 g of support (no free-fall/relight cycle).
+            double descentBias = System.Math.Clamp(0.35 * verticalError, -1.5, 0.0);
+            double aCmd = 1.6 * brakingError
+                + g / thrustUpComponent
+                + descentBias
+                - 1.2 * System.Math.Max(0.0, _vUp);
+            bool alignedForBurn = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(aimAxis)
+                > System.Math.Cos(15.0 * MathUtils.DEG_TO_RAD);
+            if (!alignedForBurn && _phase == Edl.Retro)
+            {
+                // Begin on aerodynamic flaps. Light the three centre engines only for the
+                // last 45° so gimbal assists without spending most of the ignition impulse
+                // prograde/downrange while the Ship is still belly-first.
+                shipEngines?.SelectEngineCount(3);
+                double axisAlignment = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(aimAxis);
+                vessel.Throttle = axisAlignment > System.Math.Cos(45.0 * MathUtils.DEG_TO_RAD)
+                    ? shipEngines?.ApplyThrottleFloor(flipIgnitionThrottle) ?? flipIgnitionThrottle
+                    : 0.0;
+            }
+            else
+            {
+                CommandLandingEngines(vessel, body, shipEngines, aCmd, mass);
+            }
         }
         else
         {
@@ -226,14 +328,29 @@ public partial class EDLController : Control
         vessel.GroundNormal = up;
         vessel.GroundOffset = System.Math.Max(0.0, _alt);
         vessel.AngularVelocity = Vector3d.Zero;
-        vessel.Orientation  = ShortestArc(Vector3d.Up, up);  // stand upright on the legs
+        vessel.PitchYawRoll = Vector3d.Zero;
         mission?.EnterPhase(MissionPhase.LANDED);
         GD.Print($"[EDL] TOUCHDOWN on {body.Name}  vUp={_vUp:F1} m/s");
     }
 
     private void Deactivate()
     {
-        if (_phase != Edl.Inactive) { _phase = Edl.Inactive; Visible = false; }
+        if (_phase != Edl.Inactive)
+        {
+            var vessel = SimulationBridge.Instance?.ActiveVessel;
+            foreach (var engine in vessel?.Parts.Parts.Where(
+                         p => p.Definition.Category == PartCategory.Engine)
+                     ?? Enumerable.Empty<Part>())
+                engine.SelectEngineCount(System.Math.Max(1, engine.Definition.EngineCount));
+            if (vessel != null)
+            {
+                vessel.Throttle = 0.0;
+                vessel.PitchYawRoll = Vector3d.Zero;
+            }
+            _phase = Edl.Inactive;
+            _flipInProgress = false;
+            Visible = false;
+        }
     }
 
     // ── HUD overlay ─────────────────────────────────────────────────────────────
@@ -350,10 +467,66 @@ public partial class EDLController : Control
         return vessel.GetMaximumThrust(body) / mass;
     }
 
-    private static Vector3d AnyPerp(Vector3d v)
+    private static double MaxLandingThrustAccel(
+        Vessel vessel, CelestialBody body, Part? engineCluster, double mass)
     {
-        var a = System.Math.Abs(v.X) < 0.9 ? Vector3d.Right : Vector3d.Up;
-        return v.Cross(a).Normalized;
+        if (mass <= 0.0) return 0.0;
+        if (engineCluster == null) return MaxThrustAccel(vessel, body, mass);
+        int represented = System.Math.Max(1, engineCluster.Definition.EngineCount);
+        int landingCount = System.Math.Min(3, represented);
+        double rated = engineCluster.GetRatedFullThrottleThrustMagnitude(
+            vessel.GetAmbientPressure(body));
+        return rated * landingCount / represented / mass;
+    }
+
+    private static void CommandLandingEngines(
+        Vessel vessel, CelestialBody body, Part? engineCluster, double accelerationCmd, double mass)
+    {
+        if (engineCluster == null || mass <= 0.0)
+        {
+            vessel.Throttle = 0.0;
+            return;
+        }
+
+        int represented = System.Math.Max(1, engineCluster.Definition.EngineCount);
+        int maxLandingEngines = System.Math.Min(3, represented);
+        double ratedCluster = engineCluster.GetRatedFullThrottleThrustMagnitude(
+            vessel.GetAmbientPressure(body));
+        double perEngine = ratedCluster / represented;
+        double desiredThrust = System.Math.Max(0.0, accelerationCmd * mass);
+        if (perEngine <= 1.0 || desiredThrust <= 1.0)
+        {
+            engineCluster.SelectEngineCount(0);
+            vessel.Throttle = 0.0;
+            return;
+        }
+
+        int selected = maxLandingEngines;
+        for (int count = 1; count <= maxLandingEngines; count++)
+        {
+            if (desiredThrust <= perEngine * count)
+            {
+                selected = count;
+                break;
+            }
+        }
+
+        engineCluster.SelectEngineCount(selected);
+        double throttle = desiredThrust / (perEngine * selected);
+        vessel.Throttle = engineCluster.ApplyThrottleFloor(
+            System.Math.Clamp(throttle, 0.0, 1.0));
+    }
+
+    private static double EstimateFlipTime(double angle, double angularAcceleration, double maxRate)
+    {
+        if (angle <= 0.0) return 0.0;
+        angularAcceleration = System.Math.Max(1e-4, angularAcceleration);
+        maxRate = System.Math.Max(1e-3, maxRate);
+        double triangularAngle = maxRate * maxRate / angularAcceleration;
+        if (angle <= triangularAngle)
+            return 2.0 * System.Math.Sqrt(angle / angularAcceleration);
+        return 2.0 * maxRate / angularAcceleration
+             + (angle - triangularAngle) / maxRate;
     }
 
     private static Quaterniond ShortestArc(Vector3d from, Vector3d to)

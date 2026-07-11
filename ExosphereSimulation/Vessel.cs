@@ -327,8 +327,33 @@ public class Vessel
                     Parts.TransverseMomentOfInertia,
                     temp);
                 AngularVelocity += angularAccel * dt;
+
+                // Starship's four body flaps remain the primary attitude actuators during
+                // unpowered entry. Their hinge force scales with q and their physical lever
+                // arm; this replaces the impossible assumption that only lit engines can
+                // hold a lift-producing angle of attack.
+                bool hasBodyFlaps = Parts.Parts.Any(p => p.Definition.Id == "starship_command");
+                if (hasBodyFlaps && hasInput)
+                {
+                    AngularVelocity += AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+                        density,
+                        surfVel,
+                        Orientation,
+                        PitchYawRoll,
+                        VehicleLength,
+                        MaximumDiameter,
+                        Parts.TransverseMomentOfInertia) * dt;
+                }
             }
         }
+
+        // Apply the physical angular-rate envelope after every torque source, including aero.
+        // Clamping earlier allowed a high-q aerodynamic moment to bypass the limit in the same
+        // integration step and produce a numerically explosive snap.
+        const double maximumAngularRate = 0.35;
+        double finalAngularRate = AngularVelocity.Magnitude;
+        if (finalAngularRate > maximumAngularRate)
+            AngularVelocity *= maximumAngularRate / finalAngularRate;
 
         // Integrar velocidad angular → orientación
         double angMag = AngularVelocity.Magnitude;

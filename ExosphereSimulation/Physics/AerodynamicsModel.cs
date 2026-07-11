@@ -112,6 +112,34 @@ public static class AerodynamicsModel
     /// <summary>Peak body-lift coefficient of the 9 m cylinder (at 45° angle of attack).</summary>
     public const double MaxLiftCoefficient = 0.7;
 
+    /// <summary>Nominal Starship entry angle of attack: high drag with positive body lift.</summary>
+    public const double NominalEntryAngleOfAttackDegrees = 70.0;
+
+    /// <summary>
+    /// Builds the longitudinal-axis target for a lift-up atmospheric entry. The resulting
+    /// axis is <paramref name="angleOfAttackDegrees"/> away from prograde and lies in the
+    /// velocity/local-up plane, so body lift points away from the planet instead of merely
+    /// accepting a ballistic, zero-lift broadside descent.
+    /// </summary>
+    public static Vector3d ComputeLiftUpEntryAxis(
+        Vector3d localUp,
+        Vector3d velocityDirection,
+        double angleOfAttackDegrees = NominalEntryAngleOfAttackDegrees)
+    {
+        var flow = velocityDirection.Normalized;
+        var liftUp = localUp - flow * localUp.Dot(flow);
+        if (liftUp.Magnitude < 1e-6)
+            liftUp = System.Math.Abs(flow.Dot(Vector3d.Up)) < 0.9
+                ? (Vector3d.Up - flow * Vector3d.Up.Dot(flow)).Normalized
+                : (Vector3d.Right - flow * Vector3d.Right.Dot(flow)).Normalized;
+        else
+            liftUp = liftUp.Normalized;
+
+        double alpha = System.Math.Clamp(angleOfAttackDegrees, 0.0, 90.0)
+            * MathUtils.DEG_TO_RAD;
+        return (flow * System.Math.Cos(alpha) + liftUp * System.Math.Sin(alpha)).Normalized;
+    }
+
     /// <summary>
     /// Body-lift coefficient CL = CLmax·sin(2α) from the signed axial alignment
     /// <paramref name="cosAlpha"/> = axis·flow. Zero nose-/tail-on and at exact broadside;
@@ -248,6 +276,44 @@ public static class AerodynamicsModel
         var dampingAcceleration = pitchYawRate * (-dampingRate);
 
         return torqueAcceleration + dampingAcceleration;
+    }
+
+    /// <summary>
+    /// Approximate flap-control angular acceleration from aerodynamic hinge forces. The four
+    /// flaps are represented as a combined control area and a lever arm about the CoM; q creates
+    /// the force, so authority fades naturally in thin air and does not require engine thrust.
+    /// The command uses semantic fields X=pitch, Y=yaw, Z=roll; these are mapped to the
+    /// vehicle's physical local axes X=pitch, Y=roll, Z=yaw.
+    /// </summary>
+    public static Vector3d ComputeFlapControlAngularAcceleration(
+        double density,
+        Vector3d surfaceVelocity,
+        Quaterniond orientation,
+        Vector3d pitchYawRollCommand,
+        double vehicleLength,
+        double vehicleDiameter,
+        double transverseMomentOfInertia)
+    {
+        if (density <= 0.0 || surfaceVelocity.Magnitude < 1.0
+            || transverseMomentOfInertia <= 0.0 || pitchYawRollCommand.Magnitude < 1e-6)
+            return Vector3d.Zero;
+
+        double q = ComputeDynamicPressure(density, surfaceVelocity.Magnitude);
+        // Four large surfaces: combined projected planform is approximately one-and-a-half
+        // 9 m hull cross-sections, with fore/aft pairs acting far from the mass centre.
+        double combinedFlapArea = 1.40 * vehicleDiameter * vehicleDiameter;
+        double leverArm = 0.45 * vehicleLength;
+        const double controlCoefficient = 1.00;
+        double pitchYawAuthority = System.Math.Min(
+            1.20,
+            q * combinedFlapArea * leverArm * controlCoefficient / transverseMomentOfInertia);
+        double rollAuthority = pitchYawAuthority * 0.55;
+
+        var localAcceleration = new Vector3d(
+            System.Math.Clamp(pitchYawRollCommand.X, -1.0, 1.0) * pitchYawAuthority,
+            System.Math.Clamp(pitchYawRollCommand.Z, -1.0, 1.0) * rollAuthority,
+            System.Math.Clamp(pitchYawRollCommand.Y, -1.0, 1.0) * pitchYawAuthority);
+        return orientation.Rotate(localAcceleration);
     }
 
     /// <summary>

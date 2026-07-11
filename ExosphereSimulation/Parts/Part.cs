@@ -34,6 +34,28 @@ public class Part
     // ── Control del motor ─────────────────────────────────────────────────
     public double   ThrottleLevel { get; set; }          // [0, 1]
     public Vector3d GimbalOffset  { get; set; } = Vector3d.Zero;  // deflexión normalizada
+    private double _activeEngineFraction = 1.0;
+
+    /// <summary>
+    /// Fraction of the engines represented by this aggregate part that are selected.
+    /// Defaults to one (the complete cluster). EDL can select a discrete 1/2/3-engine
+    /// centre cluster without pretending all six Raptors deep-throttle together.
+    /// </summary>
+    public double ActiveEngineFraction
+    {
+        get => _activeEngineFraction;
+        set => _activeEngineFraction = System.Math.Clamp(value, 0.0, 1.0);
+    }
+
+    public int SelectedEngineCount => Definition.Category == PartCategory.Engine
+        ? (int)System.Math.Round(System.Math.Max(1, Definition.EngineCount) * ActiveEngineFraction)
+        : 0;
+
+    public void SelectEngineCount(int count)
+    {
+        int total = System.Math.Max(1, Definition.EngineCount);
+        ActiveEngineFraction = System.Math.Clamp(count, 0, total) / (double)total;
+    }
 
     // ── Masa actual (seca + propelante) ───────────────────────────────────
     public double CurrentMass =>
@@ -44,9 +66,8 @@ public class Part
     /// Returns <paramref name="requested"/> snapped UP to the engine's documented minimum
     /// throttle (<see cref="PartDefinition.MinThrottle"/>) — but only when it is genuinely
     /// firing: a request of (near) 0 is a deliberate shutdown and is left at 0, never floored.
-    /// A real Raptor either runs at ≥40 % or is off; it does not hover at 12 %. The ascent path
-    /// opts into this; the suicide-burn EDL path does NOT call it, so its continuous low
-    /// setpoints pass through untouched.
+    /// A real Raptor either runs at ≥40 % or is off; it does not hover at 12 %. Ascent and EDL
+    /// opt into this; EDL combines the floor with discrete engine selection for lower thrust.
     /// </summary>
     public double ApplyThrottleFloor(double requested)
     {
@@ -128,8 +149,12 @@ public class Part
     public double GetThrustMagnitude(double ambientPressure = 0.0)
         => GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
 
-    /// <summary>Pressure-corrected rated thrust at 100% throttle (N).</summary>
+    /// <summary>Pressure-corrected thrust of the selected engines at 100% throttle (N).</summary>
     public double GetFullThrottleThrustMagnitude(double ambientPressure = 0.0)
+        => GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
+
+    /// <summary>Pressure-corrected rated thrust of the complete represented cluster.</summary>
+    public double GetRatedFullThrottleThrustMagnitude(double ambientPressure = 0.0)
     {
         double fVac = Definition.ThrustVac;
         double fSL  = Definition.ThrustSL > 0.0 ? Definition.ThrustSL : fVac;

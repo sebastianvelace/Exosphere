@@ -29,7 +29,6 @@ public partial class EngineGridHUD : Control
 
     // Cached telemetry computed each frame in _Process, rendered in _Draw.
     private int    _litEngines;
-    private int    _totalActiveEngines;
     private int    _nominalEngines;    // 33 for Super Heavy, 6 for Starship
     private double _throttle;
     private double _thrustKN;
@@ -61,17 +60,14 @@ public partial class EngineGridHUD : Control
         var body = universe.GetDominantBody(vessel.Position);
 
         var engines = vessel.Parts.ActiveEngines.ToList();
-        _totalActiveEngines = engines.Sum(e => System.Math.Max(1, e.Definition.EngineCount));
         _throttle = vessel.Throttle;
 
-        _nominalEngines = System.Math.Max(1, _totalActiveEngines);
+        _nominalEngines = System.Math.Max(1,
+            engines.Sum(e => System.Math.Max(1, e.Definition.EngineCount)));
 
-        // Light an engine if throttle is up AND there's propellant feeding it.
-        bool feeding = _throttle > 0.01 && _totalActiveEngines > 0;
-        // Scale the number of "lit" dots proportionally with throttle.
-        _litEngines = feeding
-            ? System.Math.Clamp((int)System.Math.Round(_nominalEngines * _throttle), 0, _nominalEngines)
-            : 0;
+        // Engine count is discrete. Throttle changes dot brightness and telemetry, never the
+        // number of lit chambers; EDL can genuinely select 1/2/3 of Starship's six Raptors.
+        _litEngines = System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
 
         double thrustN = vessel.GetCurrentThrust(body);
         _thrustKN = thrustN / 1000.0;

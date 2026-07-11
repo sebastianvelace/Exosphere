@@ -206,10 +206,9 @@ public partial class AscentController : Control
         {
             _ignitionT += delta;
             double ramp = System.Math.Clamp(_ignitionT / IgnitionTime, 0.0, 1.0);
-            vessel.Throttle        = ramp;                       // engine spool-up
-            vessel.Orientation     = ShortestArc(Vector3d.Up, up);
-            vessel.AngularVelocity = Vector3d.Zero;
-            vessel.PitchYawRoll    = Vector3d.Zero;
+            vessel.Throttle = ramp;                              // engine spool-up
+            vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
+                vessel.Orientation, Vector3d.Up, up, vessel.AngularVelocity);
             if (universe.TimeScale > 1.0) universe.TimeScale = 1.0;
 
             double rIgn   = rel.Magnitude;
@@ -257,8 +256,8 @@ public partial class AscentController : Control
         {
             // Stable orbit reached (periapsis clears the atmosphere) — cut and hand back.
             _phase = Phase.Done;
-            vessel.Orientation = ShortestArc(Vector3d.Up, tang);
             vessel.Throttle = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
             if (universe.TimeScale > 1.0) universe.TimeScale = 1.0;
             MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
             GD.Print($"[ASCENT-AP] orbit reached {_apo/1000:F0}×{_per/1000:F0} km (e={_ecc:F3}) — disengaging");

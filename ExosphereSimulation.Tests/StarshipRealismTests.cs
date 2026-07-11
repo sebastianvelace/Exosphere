@@ -250,6 +250,29 @@ public sealed class StarshipRealismTests
         Assert.True(vessel.AngularVelocity.X > 0.0);
     }
 
+    [Fact]
+    public void StarshipClusterSelectsDiscreteEnginesWithProportionalThrustAndFlow()
+    {
+        var (vessel, _, _, shipEngines, _) = BuildFlight7Stack();
+        _ = vessel.Stage();
+        shipEngines.ThrottleLevel = 1.0;
+
+        shipEngines.SelectEngineCount(6);
+        double sixThrust = shipEngines.GetThrustMagnitude(0.0);
+        double sixFlow = shipEngines.GetMassFlow(0.0);
+
+        shipEngines.SelectEngineCount(3);
+        Assert.Equal(3, shipEngines.SelectedEngineCount);
+        AssertClose(sixThrust * 0.5, shipEngines.GetThrustMagnitude(0.0), 1e-12);
+        AssertClose(sixFlow * 0.5, shipEngines.GetMassFlow(0.0), 1e-12);
+        Assert.Equal(3, vessel.ActiveEngineCount);
+
+        shipEngines.SelectEngineCount(1);
+        Assert.Equal(1, vessel.ActiveEngineCount);
+        AssertClose(sixThrust / 6.0, shipEngines.GetThrustMagnitude(0.0), 1e-12);
+        Assert.Equal(0.40, shipEngines.ApplyThrottleFloor(0.10), 12);
+    }
+
     private static (Vessel vessel, Part booster, Part ring, Part shipEngines, Part shipTank)
         BuildFlight7Stack()
     {

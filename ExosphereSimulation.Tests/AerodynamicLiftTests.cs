@@ -88,6 +88,56 @@ public sealed class AerodynamicLiftTests
     }
 
     [Fact]
+    public void LiftUpEntryAxisHoldsNominalAngleAndProducesOutwardLift()
+    {
+        var velocity = new Vector3d(1.0, -0.1, 0.0).Normalized;
+        var localUp = Vector3d.Up;
+        var axis = AerodynamicsModel.ComputeLiftUpEntryAxis(localUp, velocity);
+
+        double angleDeg = System.Math.Acos(axis.Dot(velocity)) * 180.0 / System.Math.PI;
+        var lift = AerodynamicsModel.ComputeLift(Density, velocity * Speed, axis, PartCount);
+        var outward = (localUp - velocity * localUp.Dot(velocity)).Normalized;
+
+        Assert.Equal(AerodynamicsModel.NominalEntryAngleOfAttackDegrees, angleDeg, 8);
+        Assert.True(lift.Dot(outward) > 0.0, "entry guidance must command lift away from the body");
+    }
+
+    [Fact]
+    public void FlapAuthorityScalesWithDynamicPressureAndOpposesNoAxisMapping()
+    {
+        var command = new Vector3d(1.0, 0.0, 0.0); // semantic pitch -> local X
+        var slow = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+            0.02, Vector3d.Right * 300.0, Quaterniond.Identity, command, 52.0, 9.0, 5.0e7);
+        var fast = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+            0.02, Vector3d.Right * 600.0, Quaterniond.Identity, command, 52.0, 9.0, 5.0e7);
+
+        Assert.True(slow.X > 0.0);
+        Assert.True(System.Math.Abs(slow.Y) < 1e-12 && System.Math.Abs(slow.Z) < 1e-12);
+        Assert.Equal(4.0, fast.Magnitude / slow.Magnitude, 8);
+    }
+
+    [Fact]
+    public void FullFlapsCanTrimNominalStarshipEntryMoment()
+    {
+        const double speed = 160.0;
+        const double q = 12_000.0;
+        double density = 2.0 * q / (speed * speed);
+        double alpha = AerodynamicsModel.NominalEntryAngleOfAttackDegrees * MathUtils.DEG_TO_RAD;
+        var velocity = Vector3d.Right * speed;
+        var axis = new Vector3d(System.Math.Cos(alpha), System.Math.Sin(alpha), 0.0);
+        var attitude = AerodynamicsModel.ComputeBellyFirstOrientation(axis, velocity.Normalized);
+        const double inertia = 5.6e7;
+
+        var staticMoment = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
+            density, velocity, axis, Vector3d.Zero, 52.0, 9.0, inertia, 270.0);
+        var flapMoment = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+            density, velocity, attitude, new Vector3d(0.0, -1.0, 0.0), 52.0, 9.0, inertia);
+
+        Assert.True(flapMoment.Magnitude >= staticMoment.Magnitude,
+            $"full flaps must be able to trim entry: flap={flapMoment.Magnitude:F3}, static={staticMoment.Magnitude:F3}");
+    }
+
+    [Fact]
     public void AerodynamicMomentRotatesNoseTowardTheVelocity()
     {
         // Nose points +Y while the vehicle travels mostly +Y with a small +X error.

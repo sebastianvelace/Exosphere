@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 
 /// <summary>
@@ -83,11 +84,17 @@ public partial class AutopilotController : Node
         if (dir.Magnitude < 1e-6) { EndBurn(); IsArmed = false; return; }
         dir = dir.Normalized;
 
-        // Snap orientation so the engine (+Y local) points along the burn direction.
-        vessel.Orientation     = ShortestArc(Vector3d.Up, dir);
-        vessel.AngularVelocity = Vector3d.Zero;
-        vessel.PitchYawRoll    = Vector3d.Zero;
-        vessel.Throttle        = 1.0;
+        // Slew through bounded torque and wait for the physical attitude to settle before
+        // ignition. The engine remains pointed by its actual integrated quaternion throughout.
+        vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
+            vessel.Orientation, Vector3d.Up, dir, vessel.AngularVelocity);
+        double alignment = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(dir);
+        if (alignment < 0.998 || vessel.AngularVelocity.Magnitude > 0.03)
+        {
+            vessel.Throttle = 0.0;
+            return;
+        }
+        vessel.Throttle = 1.0;
 
         // Accumulate delivered ΔV from the actual thrust this frame. The vessel
         // integrates over simulation time (delta · TimeScale), so the ΔV book-keeping
@@ -110,7 +117,7 @@ public partial class AutopilotController : Node
         _targetDv   = _planner.DeltaVMagnitude;
         _deliveredDv = 0.0;
         _restoreSas = vessel.SASEnabled;
-        vessel.SASEnabled = false;   // we command orientation directly
+        vessel.SASEnabled = false;
     }
 
     private void FinishBurn(Vessel vessel)
@@ -127,6 +134,7 @@ public partial class AutopilotController : Node
         if (v != null)
         {
             v.Throttle    = 0.0;
+            v.PitchYawRoll = Vector3d.Zero;
             v.SASEnabled  = _restoreSas;
         }
         IsBurning = false;

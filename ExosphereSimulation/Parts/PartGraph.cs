@@ -142,6 +142,13 @@ public class PartGraph
     /// Uses each cluster's physical thrust plane and the current propellant-dependent CoM.
     /// </summary>
     public double GetPitchYawAngularAcceleration(double ambientPressure)
+        => GetPitchYawAngularAcceleration(ambientPressure, fullThrottle: false);
+
+    /// <summary>Pitch/yaw authority if every selected engine were at full throttle.</summary>
+    public double GetMaximumPitchYawAngularAcceleration(double ambientPressure)
+        => GetPitchYawAngularAcceleration(ambientPressure, fullThrottle: true);
+
+    private double GetPitchYawAngularAcceleration(double ambientPressure, bool fullThrottle)
     {
         double inertia = TransverseMomentOfInertia;
         if (inertia <= 0.0) return 0.0;
@@ -155,7 +162,10 @@ public class PartGraph
             double thrustY = centre.Y + engine.Definition.ThrustPositionYM;
             double lever = System.Math.Abs(thrustY - comY);
             double gimbal = System.Math.Abs(engine.Definition.GimbalRange) * MathUtils.DEG_TO_RAD;
-            torque += engine.GetThrustMagnitude(ambientPressure) * lever * System.Math.Sin(gimbal);
+            double thrust = fullThrottle
+                ? engine.GetFullThrottleThrustMagnitude(ambientPressure)
+                : engine.GetThrustMagnitude(ambientPressure);
+            torque += thrust * lever * System.Math.Sin(gimbal);
         }
         return torque / inertia;
     }
@@ -198,7 +208,7 @@ public class PartGraph
     public int ActiveEngineCount =>
         ActiveEngines
             .Where(e => e.ThrottleLevel > 1e-3)
-            .Sum(e => System.Math.Max(1, e.Definition.EngineCount));
+            .Sum(e => e.SelectedEngineCount);
 
     /// <summary>Total pressure-corrected thrust magnitude (N) of the current stage now.</summary>
     public double GetCurrentThrust(double ambientPressure) =>
@@ -263,9 +273,9 @@ public class PartGraph
 
     /// <summary>
     /// Snaps every firing engine in the current stage UP to its documented minimum throttle
-    /// (Raptor 2 ≈ 40 %). Opt-in: the ascent autopilot calls this so a too-low command never
-    /// commands a sub-floor burn; the suicide-burn EDL path does not, so its low setpoints are
-    /// left alone. Engines commanded to ~0 stay off. Returns the floored value applied to the
+    /// (Raptor 2 ≈ 40 %). Opt-in: ascent and EDL call this so a too-low command never requests
+    /// a sub-floor burn; EDL selects fewer engines when it needs lower total thrust. Engines
+    /// commanded to ~0 stay off. Returns the floored value applied to the
     /// first engine (or the input if there is none) so a caller can keep Vessel.Throttle in sync.
     /// </summary>
     public double ClampAscentThrottle()

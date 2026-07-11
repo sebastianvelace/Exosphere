@@ -115,6 +115,8 @@ public class Universe
         double simDelta = realDeltaTime * TimeScale;
         if (simDelta <= 0.0) return;
 
+        bool anyForceSensitive = _vessels.Any(RequiresBoundedWarpPropagation);
+
         if (TimeScale <= 4.0)
         {
             // Full RK4 physics, capped at MaxPhysicsStep per sub-step
@@ -127,7 +129,7 @@ public class Universe
                 remaining   -= step;
             }
         }
-        else if (TimeScale <= 1000.0)
+        else if (TimeScale <= 1000.0 || anyForceSensitive)
         {
             // Mixed: active vessel uses RK4; all others go on rails.
             // Sub-step (capped at MaxCoastStep) so a single big warp dt is never fed to
@@ -136,7 +138,10 @@ public class Universe
             // While the active vessel is thrusting, tighten the sub-step so a powered burn under
             // warp integrates accurately (thrust + gravity) and matches a real-time burn.
             bool thrusting = ActiveVessel is { Throttle: > 0.01 };
-            double cap = thrusting ? MaxThrustStep : MaxCoastStep;
+            bool forceSensitive = ActiveVessel != null && RequiresOffRailsPhysics(ActiveVessel);
+            double cap = thrusting ? MaxThrustStep
+                       : forceSensitive ? MaxPhysicsStep
+                       : MaxCoastStep;
             double remaining = simDelta;
             while (remaining > 1e-12)
             {
@@ -151,6 +156,62 @@ public class Universe
             // Pure rails: everything propagated analytically
             TickRails(simDelta);
             CurrentTime += simDelta;
+        }
+    }
+
+    /// <summary>
+    /// True when analytic Kepler rails would discard a force or event that materially changes
+    /// the outcome: thrust/spool, atmospheric loads or heating, ground proximity/contact.
+    /// </summary>
+    public bool RequiresOffRailsPhysics(Vessel vessel)
+    {
+        if (vessel.IsDestroyed) return false;
+        if (vessel.IsGroundHeld || vessel.Throttle > 1e-3
+            || vessel.Parts.ActiveEngines.Any(e => e.ThrottleLevel > 1e-3))
+            return true;
+        if (_bodies.Count == 0) return false;
+
+        var body = GetDominantBody(vessel.Position);
+        double altitude = body.GetAltitude(vessel.Position);
+        if (altitude < 1_000.0) return true; // airless landing/contact corridor too
+        if (body.Atmosphere == null) return false;
+
+        double density = body.GetAtmosphericDensity(vessel.Position);
+        if (density <= 0.0) return false;
+        double speed = vessel.GetSurfaceVelocity(body).Magnitude;
+        double q = 0.5 * density * speed * speed;
+        double heatFlux = Physics.ThermalModel.ComputeHeatFlux(
+            density, speed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+        return altitude <= body.Atmosphere.MaxAltitude * 1.05
+            || q >= 0.5
+            || heatFlux >= 500.0;
+    }
+
+    /// <summary>
+    /// Also guards a coasting conic whose periapsis will enter the atmosphere. It may stay
+    /// on rails while high, but warp must use bounded slices so the atmosphere boundary is
+    /// detected instead of jumping across the entire entry in one analytic step.
+    /// </summary>
+    public bool RequiresBoundedWarpPropagation(Vessel vessel)
+    {
+        if (RequiresOffRailsPhysics(vessel)) return true;
+        if (_bodies.Count == 0 || vessel.IsDestroyed) return false;
+        var body = GetDominantBody(vessel.Position);
+        if (body.Atmosphere == null) return false;
+
+        try
+        {
+            var state = vessel.OrbitalState ?? OrbitalElements.FromStateVector(
+                vessel.Position - body.Position,
+                vessel.Velocity - body.Velocity,
+                body.GM,
+                body.Id,
+                CurrentTime);
+            return state.Periapsis <= body.Radius + body.Atmosphere.MaxAltitude * 1.05;
+        }
+        catch (ArgumentException)
+        {
+            return true; // degenerate/suborbital state: choose bounded physics safely
         }
     }
 
@@ -178,8 +239,16 @@ public class Universe
 
             if (vessel.IsOnRails)
             {
-                PropagateVesselOnRails(vessel, dt);
-                continue;
+                if (RequiresOffRailsPhysics(vessel))
+                {
+                    vessel.IsOnRails = false;
+                    vessel.OrbitalState = null;
+                }
+                else
+                {
+                    PropagateVesselOnRails(vessel, dt);
+                    continue;
+                }
             }
 
             var refBody = GetDominantBody(vessel.Position);
@@ -200,89 +269,62 @@ public class Universe
                 (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
             );
 
-            // ── Structural loads & thermal ────────────────────────────────
-            var netAccel  = vessel.ComputeNetAcceleration(_bodies, refBody);
-            var gravAccel = vessel.ComputeGravity(_bodies);
-            var nonGrav   = netAccel - gravAccel;   // the g-force the vessel "feels"
+            ApplyPostIntegrationPhysics(vessel, refBody, dt);
+        }
+    }
 
-            Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation);
-            // FindBreakingJoints returns joints whose load has exceeded their tolerance.
-            // A full implementation would split the vessel here.
-            _ = Physics.StressSolver.FindBreakingJoints(vessel.Parts).ToList();
+    private void ApplyPostIntegrationPhysics(Vessel vessel, CelestialBody refBody, double dt)
+    {
+        var netAccel  = vessel.ComputeNetAcceleration(_bodies, refBody);
+        var gravAccel = vessel.ComputeGravity(_bodies);
+        var nonGrav   = netAccel - gravAccel;
+        Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation);
+        _ = Physics.StressSolver.FindBreakingJoints(vessel.Parts).ToList();
 
-            // Aerodynamic heating (orientation-aware re-entry).
-            // El flujo de aire incide según la dirección de avance relativa a la superficie;
-            // en el marco local del vessel determina si el escudo ventral (cara -Y) lo encara.
-            // Si el escudo va mal orientado, la cara desnuda se quema y la pieza supera su
-            // tolerancia → la nave se destruye (decisión de Universe, dueño de IsDestroyed).
-            double density = refBody.GetAtmosphericDensity(vessel.Position);
-            if (density > 0.0 && !vessel.IsGroundHeld)
+        double density = refBody.GetAtmosphericDensity(vessel.Position);
+        if (density > 0.0 && !vessel.IsGroundHeld)
+        {
+            var surfVel = vessel.GetSurfaceVelocity(refBody);
+            double airspeed = surfVel.Magnitude;
+            double heatFlux = Physics.ThermalModel.ComputeHeatFlux(
+                density, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+            var flowDirLocal = airspeed > 1e-6
+                ? vessel.Orientation.Inverse().Rotate(surfVel.Normalized)
+                : Vector3d.Zero;
+            var burned = Physics.StressSolver.ApplyThermalLoads(
+                vessel.Parts, heatFlux, dt, flowDirLocal);
+            if (burned.Count > 0 && !vessel.IsDestroyed)
             {
-                var    surfVel   = vessel.GetSurfaceVelocity(refBody);
-                double airspeed  = surfVel.Magnitude;
-                double heatFlux  = Physics.ThermalModel.ComputeHeatFlux(
-                    density, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
-
-                // Airflow direction in the vessel's local frame (orientation⁻¹ · flowDir).
-                var flowDirLocal = airspeed > 1e-6
-                    ? vessel.Orientation.Inverse().Rotate(surfVel.Normalized)
-                    : Vector3d.Zero;
-
-                var burned = Physics.StressSolver.ApplyThermalLoads(
-                    vessel.Parts, heatFlux, dt, flowDirLocal);
-
-                if (burned.Count > 0 && !vessel.IsDestroyed)
-                {
-                    // Burn-through: the vessel disintegrates in the airstream where it is —
-                    // no surface clamp (this is an atmospheric break-up, not a ground impact).
-                    vessel.IsDestroyed      = true;
-                    vessel.DestructionCause = VesselDestructionCause.ThermalBreakup;
-                    vessel.CrashImpactSpeed = airspeed;
-                    vessel.CrashSimPosition = vessel.Position;
-                }
+                vessel.IsDestroyed      = true;
+                vessel.DestructionCause = VesselDestructionCause.ThermalBreakup;
+                vessel.CrashImpactSpeed = airspeed;
+                vessel.CrashSimPosition = vessel.Position;
             }
+        }
 
-            // ── Surface impact detection ──────────────────────────────────
-            double altitude = refBody.GetAltitude(vessel.Position);
-            if (altitude < 0.0)
-            {
-                // Speed relative to the rotating surface at the impact point.
-                var    surfVel2    = vessel.GetSurfaceVelocity(refBody);
-                double impactSpeed = surfVel2.Magnitude;
+        HandleSurfaceImpact(vessel, refBody);
+    }
 
-                // Soft landing permission:
-                //   (a) vessel is ground-held (hold-down clamps on the pad), OR
-                //   (b) very low touch-down speed (≤ SoftLandingThreshold) — genuine EDL soft landing.
-                // Everything else → hard impact → destroy.
-                // Rationale: orbital re-entry ≥ hundreds of m/s; any accidental subsurface
-                // penetration at those speeds must NOT silently bounce the vessel back to orbit.
-                bool softLanding = vessel.IsGroundHeld
-                    || impactSpeed <= SoftLandingThreshold;
+    private static void HandleSurfaceImpact(Vessel vessel, CelestialBody refBody)
+    {
+        if (refBody.GetAltitude(vessel.Position) >= 0.0) return;
 
-                if (softLanding)
-                {
-                    // Clamp gently to the surface — vessel comes to rest on the
-                    // rotating body without accumulating subsurface penetration.
-                    var dir = (vessel.Position - refBody.Position).Normalized;
-                    vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
-                    // Velocity = body orbital velocity + surface rotation at landing site
-                    // (setting inertial zero would leave a spurious ~7.9 km/s residual).
-                    vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
-                }
-                else
-                {
-                    // Hard crash: cualquier velocidad > SoftLandingThreshold → destrucción.
-                    // No soft-rest, no rebote a órbita.
-                    vessel.IsDestroyed      = true;
-                    vessel.DestructionCause = VesselDestructionCause.GroundImpact;
-                    vessel.CrashImpactSpeed = impactSpeed;
-                    vessel.CrashSimPosition = vessel.Position;
-                    // Freeze the wreckage on the surface so the camera has a reference point.
-                    var dir = (vessel.Position - refBody.Position).Normalized;
-                    vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
-                    vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
-                }
-            }
+        double impactSpeed = vessel.GetSurfaceVelocity(refBody).Magnitude;
+        bool softLanding = vessel.IsGroundHeld || impactSpeed <= SoftLandingThreshold;
+        var dir = (vessel.Position - refBody.Position).Normalized;
+        if (softLanding)
+        {
+            vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
+            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+        }
+        else
+        {
+            vessel.IsDestroyed      = true;
+            vessel.DestructionCause = VesselDestructionCause.GroundImpact;
+            vessel.CrashImpactSpeed = impactSpeed;
+            vessel.CrashSimPosition = vessel.Position;
+            vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
+            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
         }
     }
 
@@ -295,17 +337,27 @@ public class Universe
         {
             if (vessel.IsDestroyed) continue; // frozen at crash point
 
+            var refBody = GetDominantBody(vessel.Position);
+            if (vessel.IsGroundHeld)
+            {
+                vessel.Position = refBody.Position
+                    + vessel.GroundNormal * (refBody.Radius + vessel.GroundOffset);
+                vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                vessel.IsOnRails = false;
+                vessel.Tick(dt, refBody);
+                continue;
+            }
+
+            bool requiresForces = RequiresOffRailsPhysics(vessel);
+
             if (vessel == ActiveVessel)
             {
-                var refBody = GetDominantBody(vessel.Position);
-
                 // Decide whether the active vessel should be on rails this step.
                 // Conditions: high time-warp AND coasting (throttle ≈ 0) AND above atmosphere.
                 // When throttle > 0.01 the vessel exits rails immediately (≤ 1 sub-step latency)
                 // so the next RK4 step picks up the thrust correctly.
                 bool shouldBeOnRails = TimeScale >= 10.0
-                    && vessel.Throttle < 0.01
-                    && refBody.GetAtmosphericDensity(vessel.Position) < 0.01;
+                    && !requiresForces;
 
                 if (shouldBeOnRails && !vessel.IsOnRails)
                 {
@@ -324,50 +376,32 @@ public class Universe
                 }
                 else
                 {
-                    vessel.Tick(dt, refBody);
-                    (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
-                        vessel.Position,
-                        vessel.Velocity,
-                        CurrentTime,
-                        dt,
-                        (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
-                    );
-
-                    // Surface impact: keep the vessel from sinking through the body during warp.
-                    double altitude = refBody.GetAltitude(vessel.Position);
-                    if (altitude < 0.0)
-                    {
-                        var    surfVelMixed    = vessel.GetSurfaceVelocity(refBody);
-                        double impactSpeedMixed = surfVelMixed.Magnitude;
-
-                        bool softLandingMixed = vessel.IsGroundHeld
-                            || impactSpeedMixed <= SoftLandingThreshold;
-
-                        if (softLandingMixed)
-                        {
-                            var dir = (vessel.Position - refBody.Position).Normalized;
-                            vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
-                            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
-                        }
-                        else
-                        {
-                            // Hard crash under warp — destroy, no rebound.
-                            vessel.IsDestroyed      = true;
-                            vessel.DestructionCause = VesselDestructionCause.GroundImpact;
-                            vessel.CrashImpactSpeed = impactSpeedMixed;
-                            vessel.CrashSimPosition = vessel.Position;
-                            var dir = (vessel.Position - refBody.Position).Normalized;
-                            vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
-                            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
-                        }
-                    }
+                    IntegrateVesselOffRails(vessel, refBody, dt);
                 }
+            }
+            else if (requiresForces)
+            {
+                vessel.IsOnRails = false;
+                vessel.OrbitalState = null;
+                IntegrateVesselOffRails(vessel, refBody, dt);
             }
             else
             {
                 PropagateVesselOnRails(vessel, dt);
             }
         }
+    }
+
+    private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
+    {
+        vessel.Tick(dt, refBody);
+        (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
+            vessel.Position,
+            vessel.Velocity,
+            CurrentTime,
+            dt,
+            (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody));
+        ApplyPostIntegrationPhysics(vessel, refBody, dt);
     }
 
     private void TickRails(double dt)

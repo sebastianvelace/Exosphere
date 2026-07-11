@@ -38,6 +38,7 @@ public partial class PlumeSystem : Node3D
 
         public float BaseLength;                    // sea-level plume length (render units)
         public float BaseRadius;                    // plume mouth radius at the nozzle
+        public float BaseEnergy;
         public bool  IsSuperHeavy;
     }
 
@@ -111,6 +112,10 @@ public partial class PlumeSystem : Node3D
     /// than borrowing Earth's scale height from the altitude alone.
     /// </summary>
     public void Update(float throttle, bool shPresent, double altitude, double ambientPressureRatio)
+        => Update(throttle, shPresent, altitude, ambientPressureRatio, selectedShipEngines: 6);
+
+    public void Update(float throttle, bool shPresent, double altitude,
+        double ambientPressureRatio, int selectedShipEngines)
     {
         bool firing = throttle > 0.01f;
 
@@ -121,12 +126,21 @@ public partial class PlumeSystem : Node3D
         float expansion  = System.Math.Clamp(1f - pressRatio, 0f, 1f);
         expansion = expansion * expansion * (3f - 2f * expansion); // smoothstep
 
-        UpdateGroup(_shUnits,   firing && shPresent,  throttle, expansion, pressRatio, altitude);
-        UpdateGroup(_shipUnits, firing && !shPresent, throttle, expansion, pressRatio, altitude);
+        UpdateGroup(_shUnits, firing && shPresent, throttle, expansion, pressRatio, altitude, 1f);
+
+        float slFraction  = Mathf.Clamp(selectedShipEngines / 3f, 0f, 1f);
+        float vacFraction = Mathf.Clamp((selectedShipEngines - 3) / 3f, 0f, 1f);
+        if (_shipUnits.Count > 0)
+            UpdateGroup(_shipUnits, firing && !shPresent && vacFraction > 0f,
+                throttle, expansion, pressRatio, altitude, vacFraction, start: 0, count: 1);
+        if (_shipUnits.Count > 1)
+            UpdateGroup(_shipUnits, firing && !shPresent && slFraction > 0f,
+                throttle, expansion, pressRatio, altitude, slFraction, start: 1, count: 1);
     }
 
     private static void UpdateGroup(List<PlumeUnit> units,
-        bool firing, float throttle, float expansion, float pressureRatio, double altitude)
+        bool firing, float throttle, float expansion, float pressureRatio, double altitude,
+        float activeFraction, int start = 0, int count = -1)
     {
         // Near the pad (<~100 m) exhaust is deflected up/outward by the mount;
         // higher up it streams straight down. Drives smoke direction only —
@@ -143,8 +157,10 @@ public partial class PlumeSystem : Node3D
         // the smoothstep, but we keep the simpler inverse relationship here.
         float atmoPressure = pressureRatio;
 
-        foreach (var u in units)
+        int end = count < 0 ? units.Count : System.Math.Min(units.Count, start + count);
+        for (int index = start; index < end; index++)
         {
+            var u = units[index];
             // ── Shader-driven core cone ──────────────────────────────────────
             u.Pivot.Visible = firing;
             if (firing)
@@ -156,6 +172,7 @@ public partial class PlumeSystem : Node3D
                 // and ensures the N7 plume_length / diamond / opacity logic fires.
                 u.ConeMat.SetShaderParameter("atmo_pressure",  atmoPressure);
                 u.ConeMat.SetShaderParameter("throttle_level", throttle);
+                u.ConeMat.SetShaderParameter("energy", u.BaseEnergy * Mathf.Max(0.28f, activeFraction));
 
                 // Length grows with throttle and (strongly) with altitude;
                 // mouth broadens in vacuum (underexpanded). Flicker jitters length.
@@ -173,9 +190,9 @@ public partial class PlumeSystem : Node3D
                                * (1.0f + expansion * 1.3f)
                                * Mathf.Lerp(seaLevelBroadening, 1.0f, expansion);
                 u.Pivot.Scale = new Vector3(
-                    (u.BaseRadius / 0.5f) * radScale,
+                    (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction),
                     u.BaseLength * lenScale,
-                    (u.BaseRadius / 0.5f) * radScale);
+                    (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction));
             }
 
             // ── Turbulent smoke particles ────────────────────────────────────
@@ -184,7 +201,7 @@ public partial class PlumeSystem : Node3D
             // core once expansion is high. This keeps orbit burns blue/clean
             // instead of pad-smoky.
             float smokePresence = Mathf.Clamp(1f - expansion * (u.IsSuperHeavy ? 0.92f : 1.12f), 0f, 1f);
-            float smokeAmount = throttle * smokePresence * smokePresence;
+            float smokeAmount = throttle * smokePresence * smokePresence * activeFraction;
             u.Smoke.Emitting = firing && smokeAmount > 0.02f;
             if (firing)
             {
@@ -211,7 +228,7 @@ public partial class PlumeSystem : Node3D
                     // altitude (nothing to light up in vacuum), flickers alive.
                     float groundBoost = 1f - altT * 0.45f;
                     u.Light.LightEnergy = (u.IsSuperHeavy ? 9.0f : 5.0f)
-                                        * throttle * groundBoost * flick;
+                                        * throttle * groundBoost * flick * activeFraction;
                     u.Light.OmniRange   = u.BaseLength
                                         * (u.IsSuperHeavy ? 1.6f : 1.3f)
                                         * (0.7f + throttle * 0.5f);
@@ -229,6 +246,7 @@ public partial class PlumeSystem : Node3D
         {
             BaseLength   = length,
             BaseRadius   = mouthR,
+            BaseEnergy   = sh ? 4.6f : 4.0f,
             IsSuperHeavy = sh,
         };
 
@@ -258,7 +276,7 @@ public partial class PlumeSystem : Node3D
         mat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
         // Master brightness — the merged 33-engine column reads brighter against the daytime
         // sky than a single ring; bumped so liftoff/ascent exhaust actually glows.
-        mat.SetShaderParameter("energy",        sh ? 4.6f : 4.0f);
+        mat.SetShaderParameter("energy",        unit.BaseEnergy);
         mat.SetShaderParameter("throttle",      0f);
         mat.SetShaderParameter("expansion",     0f);
         // N7: initialize the new atmospheric-pressure uniforms.

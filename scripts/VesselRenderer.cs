@@ -511,8 +511,10 @@ public partial class VesselRenderer : Node3D
         double pressureRatio = body?.Atmosphere != null
             ? System.Math.Clamp(TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
             : 0.0;
+        int selectedShipEngines = TargetVessel.Parts.Parts
+            .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 6;
 
-        _plumes?.Update(throttle, shPresent, alt, pressureRatio);
+        _plumes?.Update(throttle, shPresent, alt, pressureRatio, selectedShipEngines);
         UpdateFlaps(delta, body);
 
         // Reentry heat glow on hull. The main hull now uses the procedural steel

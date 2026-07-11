@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 
 /// <summary>
@@ -48,6 +49,7 @@ public partial class ManeuverExecutor : Node
         if (vessel != null)
         {
             vessel.Throttle    = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
             vessel.SASEnabled  = _restoreSas;
         }
         IsExecuting = false;
@@ -72,19 +74,13 @@ public partial class ManeuverExecutor : Node
         var currentNose = vessel.Orientation.Rotate(Vector3d.Up);
         double alignment = currentNose.Dot(burnDir);
 
+        vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
+            vessel.Orientation, Vector3d.Up, burnDir, vessel.AngularVelocity);
+
         if (!_orientationLocked)
         {
-            if (alignment < 0.998)
+            if (alignment < 0.998 || vessel.AngularVelocity.Magnitude > 0.03)
             {
-                // Rotar gradualmente hacia burnDir
-                var cross = currentNose.Cross(burnDir);
-                if (cross.Magnitude > 1e-6)
-                {
-                    double rotSpeed = 0.5 * delta; // rad por frame
-                    var deltaRot = Quaterniond.FromAxisAngle(cross.Normalized, rotSpeed);
-                    vessel.Orientation     = (deltaRot * vessel.Orientation).Normalize();
-                    vessel.AngularVelocity = Vector3d.Zero;
-                }
                 vessel.Throttle = 0.0;
                 return; // no quemar hasta estar alineado
             }
@@ -99,11 +95,7 @@ public partial class ManeuverExecutor : Node
             return;
         }
 
-        // Snap de orientación para mantenerla exacta durante el burn
-        vessel.Orientation     = ShortestArc(Vector3d.Up, burnDir);
-        vessel.AngularVelocity = Vector3d.Zero;
-        vessel.PitchYawRoll    = Vector3d.Zero;
-        vessel.Throttle        = 1.0;
+        vessel.Throttle = 1.0;
 
         // ── Contabilidad del Δv entregado ─────────────────────────────────────
         var refBody = universe.GetDominantBody(vessel.Position);
@@ -119,6 +111,7 @@ public partial class ManeuverExecutor : Node
         if (RemainingDv <= 0.0)
         {
             vessel.Throttle    = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
             vessel.SASEnabled  = _restoreSas;
             IsExecuting        = false;
             _node              = null;
