@@ -15,8 +15,9 @@ Base tecnica cerrada en `main`:
 - Godot headless carga la escena principal y la escena de construccion.
 - CI descarga Godot 4.6.3 mono, compila la capa Godot C#, corre smoke headless y
   mantiene un guard contra harnesses temporales commiteados.
-- VAB V1.5 esta conectado al vuelo: catalogo data-driven, preview 3D, node
-  picking click-to-attach, save/load de crafts, navegador de crafts y launch al pad.
+- VAB V1.6 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click auto-attach,
+  plantillas Starter/Starship, preview/picking 3D, undo/redo, checklist de lanzamiento,
+  save/load, navegador de crafts y launch al pad.
 - Starship/Super Heavy tiene malla procedural con diametro real de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
   charring termico, bordes de heat shield, patron de tiles, payload-door cues,
@@ -75,7 +76,7 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 ### VAB / Construccion
 
 - Menu principal dedicado.
-- Gizmos de arrastre/rotacion para reposicionar piezas en la preview.
+- Drag-and-drop con ghost, simetría radial y gizmos de arrastre/rotación.
 - Mejor feedback visual de nodos compatibles/incompatibles.
 - Validacion visual de crafts guardados antes de launch.
 
