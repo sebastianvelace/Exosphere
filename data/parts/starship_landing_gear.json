@@ -1,0 +1,28 @@
+{
+  "id": "starship_landing_gear",
+  "name": "Starship EDL Landing Gear",
+  "description": "Experimental six-foot landing system for the simulator's reusable EDL variant. It is an explicit gameplay engineering model, not hardware flown on Flight 7.",
+  "category": "landing",
+  "mass_dry": 3000,
+  "length_m": 0.0,
+  "diameter_m": 9.0,
+  "cost": 12000,
+  "drag_coefficient": 0.05,
+  "heat_tolerance": 1400,
+  "deployable": true,
+  "max_load": 2500000,
+  "spring_strength": 2350000,
+  "damper_strength": 550000,
+  "suspension_travel_m": 0.60,
+  "contact_radius_m": 0.35,
+  "static_friction": 0.60,
+  "dynamic_friction": 0.45,
+  "contact_point_count": 6,
+  "contact_ring_radius_m": 4.20,
+  "contact_offset_y_m": -7.50,
+  "contact_com_offset_y_m": -28.70,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, 0, 0], "size": 3, "type": "stack"}
+  ]
+}

@@ -11,7 +11,7 @@
 **HECHO y validado en `main`:**
 - **Ola 1 (R1-R3) — ascenso realista.** Gravity turn agresivo + hot-staging en MECO. Telemetría:
   Max-Q ~33 kPa a 8 km, separación a 61 km/2.16 km/s, **órbita a 150 km/7.67 km/s en ~8 min**.
-- **R9, R10 — touchdown EDL ~1.5 m/s, ISP cluster 363 s.**
+- **R9, R10 — touchdown EDL físico multipunto, ISP cluster 363 s.**
 - **R8, R4 — ya estaban hechos** (escudo data-driven; drag de ascenso con el modelo de 9 m).
 - **Reingreso AHORA OCURRE** (era IMPOSIBLE): el guard on-rails destruía cualquier órbita suborbital
   en el apoapsis apenas el periapsis caía bajo el radio → la nave se aniquilaba a 200+ km al
@@ -198,12 +198,15 @@ equivocada hace la órbita.
 - **Aceptación:** ✅ tests `PhysicsRegressionTests.HeatShieldProtectsOnlyWhenWindwardFaceMeetsFlow` y
   `ReentryWithoutHeatShieldBurnsThrough`; `VesselRenderer` respeta el flag para tiles windward.
 
-### R9. Umbral de touchdown (real ~1-2 m/s) ✅ HECHO (telemetría R13)
-- **Fix aplicado:** `EDLController.TouchdownVel` bajó de 6.0 → **3.0** m/s; suicide-burn calibrado
-  para aterrizajes nominales ~0–1.5 m/s (validado en harness R13). `Universe.SoftLandingThreshold`
-  sigue en **5.0** m/s — umbral de daño duro, no setpoint EDL; endurecer a ~3 m/s queda opcional.
-- **Archivos:** `scripts/EDLController.cs`, `ExosphereSimulation/Universe.cs` (solo si se alinea daño).
-- **Aceptación:** ✅ EDL nominal toca ≤2 m/s sin destrucción (telemetría R13).
+### R9. Touchdown físico multipunto ✅ HECHO V1
+- **Fix aplicado:** se eliminó el gate altitud/velocidad y el snap a `IsGroundHeld`. Seis pies
+  producen fuerza normal, fricción y torque; carga/recorrido pueden destruir el vehículo.
+  `LANDED` exige ≥3 contactos y 0,50 s dentro del envelope cinemático/upright.
+- **Archivos:** `SurfaceContactSolver.cs`, `Vessel.cs`, `Universe.cs`, `EDLController.cs`,
+  `starship_landing_gear.json`, `VesselRenderer.cs`.
+- **Aceptación:** ✅ pruebas puras/integradas y golden EDL con contacto/settlement explícitos.
+  Pendientes: terreno DEM/pendiente, stick-slip, contacto de casco y datum sim↔render único.
+- **Detalle y fuentes:** `docs/audits/LANDING_CONTACT_REALISM.md`.
 
 ### R10. ISP del cluster Starship algo optimista ✅ HECHO
 - **Fix aplicado:** `data/parts/starship_engines.json` `isp_vac` **363** (antes 380; mezcla RVac/SL real).

@@ -388,9 +388,14 @@ public partial class _PlaytestShot : Node
             double horizontal = (surfVel - up * vUp).Magnitude;
             var cluster = vessel.Parts.Parts.FirstOrDefault(p => p.Definition.Id == "starship_engines");
             double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
+            int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
+            double maxStroke = vessel.LastSurfaceContact?.Points.Max(p => p.PenetrationM) ?? 0.0;
+            double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
             _log.WriteLine($"TRACE t={simElapsed:F1} alt={alt:F1} vUp={vUp:F1} horiz={horizontal:F1} " +
                 $"throttle={vessel.Throttle:F3} spool={cluster?.ThrottleLevel ?? 0.0:F3} " +
-                $"engines={cluster?.SelectedEngineCount ?? 0} upright={upright:F4} phase={phase}");
+                $"engines={cluster?.SelectedEngineCount ?? 0} upright={upright:F4} phase={phase} " +
+                $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
+                $"settled={vessel.IsSurfaceSettled}");
             _log.Flush();
             _nextEdlTelemetry = simElapsed + 5.0;
         }
@@ -441,7 +446,17 @@ public partial class _PlaytestShot : Node
 
         if (vessel.IsDestroyed)
         {
-            _log.WriteLine($"FAIL vessel destroyed phase={phase} alt={alt:F0} spd={surfVel.Magnitude:F0}");
+            var contact = vessel.LastSurfaceContact;
+            int contacts = contact?.ContactCount ?? 0;
+            double maxStroke = contact?.Points.Max(p => p.PenetrationM) ?? 0.0;
+            double peakLegLoad = contact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
+            _log.WriteLine($"FAIL vessel destroyed phase={phase} alt={alt:F1} " +
+                $"spd={surfVel.Magnitude:F2} cause={vessel.DestructionCause} " +
+                $"impact={vessel.CrashImpactSpeed:F2} gear={vessel.HasDeployedLandingGear} " +
+                $"points={vessel.LandingContactPoints.Count} contacts={contacts} " +
+                $"maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
+                $"travelExcess={contact?.MaxTravelExcessM ?? 0.0:F3} " +
+                $"overTravel={contact?.HasOverTravel ?? false} overload={contact?.HasOverload ?? false}");
             _log.Flush();
             Finish("CRASHED");
             return;
@@ -558,11 +573,16 @@ public partial class _PlaytestShot : Node
         double flux = ThermalModel.ComputeHeatFlux(density, spd);
         int selectedEngines = vessel.Parts.Parts
             .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 0;
+        int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
+        double maxStroke = vessel.LastSurfaceContact?.Points.Max(p => p.PenetrationM) ?? 0.0;
+        double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
 
         _log.WriteLine(
             $"CAPTURE {slug} path={path} alt={alt:F1} spd={spd:F1} vSpeed={vSpeed:F1} q={q:F0} g={g:F2} " +
             $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2} " +
-            $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines}");
+            $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines} " +
+            $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
+            $"settled={vessel.IsSurfaceSettled}");
         _log.Flush();
     }
 
@@ -658,6 +678,10 @@ verify_pngs() {
     done
     if ! grep -q 'SUMMARY reason=LANDED' "$LOG"; then
       echo "ERROR: deterministic EDL did not end in a verified landing" >&2
+      return 1
+    fi
+    if ! grep -Eq 'CAPTURE touchdown .*contacts=[3-9][0-9]* .*settled=True' "$LOG"; then
+      echo "ERROR: touchdown was not supported by at least three settled physical contacts" >&2
       return 1
     fi
   fi

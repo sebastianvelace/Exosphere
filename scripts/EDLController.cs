@@ -23,8 +23,6 @@ public partial class EDLController : Control
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
     private const double EntrySpeed   = 1200.0;   // m/s surface speed to arm entry
-    private const double TouchdownAlt  = 6.0;       // m (legs contact height)
-    private const double TouchdownVel  = 3.0;       // m/s (real Starship sets down at ~1-2 m/s)
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -33,6 +31,7 @@ public partial class EDLController : Control
     private Font _font = null!;
     private bool _legsDeployed;
     private bool _flipInProgress;
+    private bool _landingCutoffCommitted;
     private double _flipElapsed;
     private double _attitudeErrorDeg;
 
@@ -101,6 +100,7 @@ public partial class EDLController : Control
                 _phase = Edl.Entry;
                 _legsDeployed = false;
                 _flipInProgress = false;
+                _landingCutoffCommitted = false;
                 _flipElapsed = 0.0;
                 Visible = true;
                 mission?.EnterPhase(MissionPhase.ENTRY);
@@ -184,10 +184,14 @@ public partial class EDLController : Control
                 if (_alt < 1500.0) { _phase = Edl.Final; mission?.EnterPhase(MissionPhase.FINAL_DESCENT); }
                 break;
             case Edl.Final:
-                if (_alt < 500.0) _legsDeployed = true;
-                double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
-                if (_alt < TouchdownAlt && System.Math.Abs(_vUp) < TouchdownVel && _horiz < 2.0
-                    && upright > System.Math.Cos(10.0 * MathUtils.DEG_TO_RAD))
+                if (_alt < 500.0)
+                {
+                    _legsDeployed = true;
+                    foreach (var gear in vessel.Parts.Parts.Where(
+                                 p => p.Definition.Category == PartCategory.Landing))
+                        gear.IsDeployed = true;
+                }
+                if (vessel.IsSurfaceSettled)
                 {
                     _phase = Edl.Touchdown;
                     Touchdown(vessel, body, mission);
@@ -215,9 +219,16 @@ public partial class EDLController : Control
             // Stay primarily upright but cant into the lateral velocity so the same thrust
             // command can actually remove drift. A perfectly vertical axis cannot satisfy a
             // horizontal-speed error and otherwise turns that error into an endless hover.
+            // In the last 30 m above the feet, blend that cant back to vertical: arriving
+            // tilted consumes suspension stroke geometrically before impact and overloads the
+            // downhill foot even at a gentle vertical speed.
             Vector3d lateralVelocity = surfVel - up * _vUp;
+            const double contactDatumAlt = 7.85;
+            double flareBlend = System.Math.Clamp(
+                (_alt - contactDatumAlt) / 30.0, 0.0, 1.0);
             double tiltRatio = System.Math.Min(
-                System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD), _horiz * 0.04);
+                System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD), _horiz * 0.04)
+                * flareBlend;
             aimAxis = lateralVelocity.Magnitude > 1e-3
                 ? (up - lateralVelocity.Normalized * tiltRatio).Normalized
                 : up;
@@ -263,20 +274,37 @@ public partial class EDLController : Control
 
         // ── Throttle: closed-loop descent-rate profile to a soft touchdown ──────
         // By the time we flip (low, post-belly-flop) the velocity is mostly vertical. Track a
-        // target descent rate that follows a constant-deceleration profile easing to ~1.5 m/s at
-        // the pad: v_target(alt) = √(2·a·(alt−stopAlt)) + 1.5. Reserve braking authority (use 60%
+        // target descent rate that follows a constant-deceleration profile easing to 1.2 m/s at
+        // first foot contact. Reserve braking authority (use 60%
         // of thrust for the profile) so the closed loop has headroom and the engine spool can keep
         // up — the old minimum-energy "stop exactly at the ground" burn commanded almost no thrust
         // until the last instant and touched down hot.
         if (_phase is Edl.Retro or Edl.Final)
         {
-            const double stopAlt = 6.0;
-            // Target descent rate: a gentle LINEAR profile that eases to ~1.5 m/s at the pad and
+            // Once a foot has touched, commit to the compliant gear: shut the engines down
+            // and let spring/damper/friction settle the body. Relighting against a loaded foot
+            // would hide the contact dynamics and can overload one leg.
+            if (_phase == Edl.Final && vessel.HasSurfaceContact)
+                _landingCutoffCommitted = true;
+            if (_phase == Edl.Final && _landingCutoffCommitted)
+            {
+                vessel.Throttle = 0.0;
+                vessel.PitchYawRoll = Vector3d.Zero;
+                shipEngines?.SelectEngineCount(0);
+                return;
+            }
+
+            const double contactDatumAlt = 7.85; // 7.50 m leg offset + 0.35 m foot radius
+            const double touchdownRate = 1.20;
+            // Target descent rate: a gentle LINEAR profile that eases to 1.2 m/s at first
+            // physical foot contact and
             // is already below the post-belly-flop terminal velocity (~70 m/s) at the flip, so the
             // burn starts braking immediately. Cap it by a constant-deceleration limit so a faster
             // arrival is still braked hard enough. Close the loop with gravity feed-forward.
-            double vTargetLin = 1.5 + _alt * 0.035;
-            double vTargetMax = System.Math.Sqrt(2.0 * 0.60 * aThrustFull * System.Math.Max(0.0, _alt - stopAlt)) + 1.5;
+            double heightToContact = System.Math.Max(0.0, _alt - contactDatumAlt);
+            double vTargetLin = touchdownRate + heightToContact * 0.035;
+            double vTargetMax = System.Math.Sqrt(2.0 * 0.60 * aThrustFull * heightToContact)
+                + touchdownRate;
             double vTarget    = System.Math.Min(vTargetLin, vTargetMax);
             double horizontalTarget = System.Math.Max(0.5, _alt * 0.02);
             double verticalError = vDown - vTarget;
@@ -322,15 +350,10 @@ public partial class EDLController : Control
     private void Touchdown(Vessel vessel, CelestialBody body, MissionManager? mission)
     {
         vessel.Throttle = 0.0;
-        // Plant the vessel on the surface (reuses the pre-launch ground-hold clamp).
-        Vector3d up = (vessel.Position - body.Position).Normalized;
-        vessel.IsGroundHeld = true;
-        vessel.GroundNormal = up;
-        vessel.GroundOffset = System.Math.Max(0.0, _alt);
-        vessel.AngularVelocity = Vector3d.Zero;
         vessel.PitchYawRoll = Vector3d.Zero;
         mission?.EnterPhase(MissionPhase.LANDED);
-        GD.Print($"[EDL] TOUCHDOWN on {body.Name}  vUp={_vUp:F1} m/s");
+        GD.Print($"[EDL] TOUCHDOWN settled on {body.Name}  vUp={_vUp:F1} m/s " +
+            $"contacts={vessel.LastSurfaceContact?.ContactCount ?? 0}");
     }
 
     private void Deactivate()
@@ -342,6 +365,10 @@ public partial class EDLController : Control
                          p => p.Definition.Category == PartCategory.Engine)
                      ?? Enumerable.Empty<Part>())
                 engine.SelectEngineCount(System.Math.Max(1, engine.Definition.EngineCount));
+            foreach (var gear in vessel?.Parts.Parts.Where(
+                         p => p.Definition.Category == PartCategory.Landing)
+                     ?? Enumerable.Empty<Part>())
+                gear.IsDeployed = false;
             if (vessel != null)
             {
                 vessel.Throttle = 0.0;
@@ -349,6 +376,7 @@ public partial class EDLController : Control
             }
             _phase = Edl.Inactive;
             _flipInProgress = false;
+            _landingCutoffCommitted = false;
             Visible = false;
         }
     }

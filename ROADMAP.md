@@ -26,7 +26,8 @@ Base tecnica cerrada en `main`:
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
 - Reentry/EDL Starship esta validado por telemetria: belly-flop sostenido,
-  flip-and-burn bajo y touchdown suave.
+  flip-and-burn bajo y touchdown sobre seis patas físicas con resorte, damping,
+  fricción, torque, límites de carga/recorrido y asentamiento persistente.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
   prediction, marcador/readout de encuentro y readout de maniobra.
 

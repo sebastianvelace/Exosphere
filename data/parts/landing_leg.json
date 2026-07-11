@@ -9,8 +9,12 @@
   "heat_tolerance": 1200,
   "deployable": true,
   "max_load": 500000,
-  "spring_strength": 450,
-  "damper_strength": 0.5,
+  "spring_strength": 250000,
+  "damper_strength": 30000,
+  "suspension_travel_m": 0.45,
+  "contact_radius_m": 0.20,
+  "static_friction": 0.60,
+  "dynamic_friction": 0.45,
   "attachment_nodes": [
     {"id": "radial", "position": [0.5, 0, 0], "size": 0, "type": "radial"}
   ]

@@ -11,8 +11,8 @@ atmósfera rotante, drag/lift por actitud, escala angular planetaria y floating 
 
 Todavía no es una simulación «totalmente realista». Los bloqueos restantes no son
 detalles cosméticos: marcos planetarios inconsistentes, actuadores 6-DoF agregados,
-física distinta según warp, EDL con actitud instantánea, atmósferas planetarias
-aproximadas, contacto puntual y ausencia de fallo estructural real. Este documento
+atmósferas planetarias aproximadas, terreno esférico liso y ausencia de fallo estructural
+real. Este documento
 separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 
 ## Implementado en esta ola
@@ -37,6 +37,8 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 - Cuerpos sin atmósfera muestran cielo negro desde la superficie.
 - Propagación Sol→planeta→luna jerárquica, independiente del orden de JSON.
 - Etapa separada hereda posición, velocidad, actitud y velocidad angular.
+- Touchdown usa seis pies con resorte, amortiguador, fricción, torque y límites de
+  recorrido/carga; aterrizar ya no congela posición, velocidad ni actitud.
 
 ## Hallazgos priorizados
 
@@ -52,7 +54,7 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 | RF-08 | Cluster agregado permite throttle EDL imposible | **Cerrado V1** | Selección 0–6 proporcional; EDL 1/2/3 + mínimo 40%; falta relight probabilístico |
 | RF-09 | Hot staging atómico y sin impulso | **P1 pendiente** | Ship encendida ≥0.5 s antes; momento conservado |
 | RF-10 | Cargas estructurales no rompen | **P1 pendiente** | Joint sobre límite divide el grafo |
-| RF-11 | Colisión punto-esfera | **P1 pendiente** | Contacto por patas/casco, vertical/horizontal/tilt |
+| RF-11 | Colisión punto-esfera | **Cerrado V1** | Seis patas, carga/fricción/torque y vuelco; faltan DEM, pendiente y casco |
 | RF-12 | Rails sin J2/drag/SRP; escape radial incorrecto | **P1 pendiente** | Escape radial válido y precesión J2 <1%/día |
 | AV-01 | Cabina fuera de Starship al separar | **Cerrado** | Ojo relativo a base cambia <0.1u |
 | AV-02 | Dos soles y luz fija | **Cerrado** | Sol ~0.53° cerca de Tierra y penumbra continua |
@@ -175,4 +177,5 @@ solo tamaño de PNG.
 ## Documentos relacionados
 
 `docs/starship_physics_baseline.md`, `PHYSICS_DEEP_AUDIT.md`,
-`VISUAL_DEEP_AUDIT.md`, `CROSSCUTTING_AUDIT.md` y `docs/physics/hot_stage_overlap.md`.
+`VISUAL_DEEP_AUDIT.md`, `CROSSCUTTING_AUDIT.md`, `LANDING_CONTACT_REALISM.md` y
+`docs/physics/hot_stage_overlap.md`.
