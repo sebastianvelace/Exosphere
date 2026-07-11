@@ -90,21 +90,23 @@ public class Part
     // ── Startup / shutdown spool transient ────────────────────────────────
     // A real Raptor cannot step its thrust instantly: the turbopumps spin up over a fraction
     // of a second and the chamber pressure builds before full thrust. We model that with a
-    // first-order ramp of ThrottleLevel toward a commanded value, capped at SpoolRate per
-    // second. ~2.0/s ⇒ a 0→100 % spool in ~0.5 s, consistent with Raptor's brisk staged
-    // ignition while still smoothing the impulsive jolt at ignition. Callers that want an
-    // instant set still just assign ThrottleLevel directly.
-    public const double SpoolRate = 2.0;   // throttle units per second
+    // first-order ramp of ThrottleLevel toward a commanded value. Startup at ~2.0/s reaches
+    // 100 % in ~0.5 s; shutdown uses a faster 5.0/s (~0.2 s) so cutoff does not keep injecting
+    // landing impulse as long as chamber-pressure buildup. Callers that want an instant set
+    // still just assign ThrottleLevel directly.
+    public const double SpoolRate = 2.0;           // startup throttle units per second
+    public const double ShutdownSpoolRate = 5.0;   // shutdown throttle units per second
 
     /// <summary>
     /// Advances <see cref="ThrottleLevel"/> toward <paramref name="commanded"/> at no more than
-    /// <see cref="SpoolRate"/> per second over <paramref name="dt"/>. Returns the new level.
+    /// the direction-specific spool rate over <paramref name="dt"/>. Returns the new level.
     /// </summary>
     public double SpoolToward(double commanded, double dt)
     {
         commanded = System.Math.Clamp(commanded, 0.0, 1.0);
-        double maxStep = SpoolRate * dt;
         double delta   = commanded - ThrottleLevel;
+        double rate = delta < 0.0 ? ShutdownSpoolRate : SpoolRate;
+        double maxStep = rate * dt;
         if (System.Math.Abs(delta) <= maxStep) ThrottleLevel = commanded;
         else ThrottleLevel += System.Math.Sign(delta) * maxStep;
         return ThrottleLevel;

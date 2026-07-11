@@ -34,6 +34,19 @@ public class Vessel
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
+    // ── Physical landing contact ─────────────────────────────────────────
+    private ContactPointDefinition[] _landingContactPoints = [];
+    private Vector3d _landingCenterOfMassFromDatumLocal = Vector3d.Zero;
+    public IReadOnlyList<ContactPointDefinition> LandingContactPoints => _landingContactPoints;
+    public ContactWrench? LastSurfaceContact { get; internal set; }
+    public Vector3d LastContactForceWorld { get; internal set; } = Vector3d.Zero;
+    public Vector3d LastContactTorqueWorld { get; internal set; } = Vector3d.Zero;
+    public double SurfaceSettledDuration { get; internal set; }
+    public bool IsSurfaceSettled { get; internal set; }
+    public bool HasSurfaceContact => LastSurfaceContact?.ContactCount > 0;
+    public bool HasDeployedLandingGear => _landingContactPoints.Length > 0
+        && Parts.Parts.Any(p => p.Definition.Category == PartCategory.Landing && p.IsDeployed);
+
     // ── Ground hold (pre-launch hold-down) ────────────────────────────────
     public bool     IsGroundHeld          { get; set; }
     public Vector3d GroundNormal          { get; set; }  // unit vector from body centre → spawn point
@@ -46,6 +59,65 @@ public class Vessel
     public Vector3d CrashSimPosition      { get; set; } = Vector3d.Zero; // sim position of impact
 
     public void ReleaseGroundHold() => IsGroundHeld = false;
+
+    /// <summary>
+    /// Builds the aggregate foot ring declared by the installed landing-gear part. The current
+    /// Starship renderer uses a skirt datum rather than the part-graph root, so the data stores
+    /// both the visible point offset and its physical moment arm from the CoM explicitly.
+    /// </summary>
+    public void ConfigureLandingContactsFromParts()
+    {
+        var gear = Parts.Parts.FirstOrDefault(p =>
+            p.Definition.Category == PartCategory.Landing
+            && p.Definition.ContactPointCount > 0);
+        if (gear == null)
+        {
+            _landingContactPoints = [];
+            _landingCenterOfMassFromDatumLocal = Vector3d.Zero;
+            return;
+        }
+
+        var def = gear.Definition;
+        int count = System.Math.Max(1, def.ContactPointCount);
+        double ring = System.Math.Max(0.0, def.ContactRingRadiusM);
+        // Lateral damping must be much softer than axial suspension damping: applying the
+        // axial coefficient at a ~29 m CoM arm creates an artificial overturning impulse.
+        // Coulomb friction still caps the force at the declared dynamic coefficient.
+        double tangentialDamping = System.Math.Max(0.0, def.DamperStrength * 0.05);
+        double friction = def.DynamicFriction > 0.0
+            ? def.DynamicFriction
+            : System.Math.Max(0.0, def.StaticFriction);
+        _landingContactPoints = Enumerable.Range(0, count).Select(i =>
+        {
+            double angle = i * 2.0 * System.Math.PI / count;
+            return new ContactPointDefinition(
+                Name: $"{def.Id}-foot-{i}",
+                LocalPositionFromDatum: new Vector3d(
+                    ring * System.Math.Cos(angle),
+                    def.ContactOffsetYM,
+                    ring * System.Math.Sin(angle)),
+                ContactRadiusM: System.Math.Max(0.0, def.ContactRadiusM),
+                SpringStiffnessNPerM: System.Math.Max(0.0, def.SpringStrength),
+                DampingNsPerM: System.Math.Max(0.0, def.DamperStrength),
+                TangentialDampingNsPerM: tangentialDamping,
+                FrictionCoefficient: friction,
+                MaxCompressionM: System.Math.Max(0.0, def.SuspensionTravelM),
+                MaxLoadN: System.Math.Max(0.0, def.MaxLoad));
+        }).ToArray();
+
+        // pointFromDatum - pointFromCom = comFromDatum
+        _landingCenterOfMassFromDatumLocal = new Vector3d(
+            0.0,
+            def.ContactOffsetYM - def.ContactComOffsetYM,
+            0.0);
+    }
+
+    public RigidBodyContactInput GetContactInput(Vector3d position, Vector3d velocity) => new(
+        DatumPositionWorld: position,
+        CenterOfMassPositionWorld: position + Orientation.Rotate(_landingCenterOfMassFromDatumLocal),
+        CenterOfMassVelocityWorld: velocity,
+        Orientation: Orientation,
+        AngularVelocityWorld: AngularVelocity);
 
     // ── Tripulación ───────────────────────────────────────────────────────
     public List<CrewMember> Crew { get; } = new();
@@ -102,7 +174,7 @@ public class Vessel
         if (IsGroundHeld)
             return -body.GetGravityAt(Position);
         if (TotalMass <= 0.0) return Vector3d.Zero;
-        return (ComputeThrust(body) + ComputeDrag(body)) / TotalMass;
+        return (ComputeThrust(body) + ComputeDrag(body) + LastContactForceWorld) / TotalMass;
     }
 
     // ── Read-only engine telemetry for the HUD ────────────────────────────
@@ -252,7 +324,7 @@ public class Vessel
     // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor
     // gimbal authority is computed from thrust, lever arm, CoM and moment of inertia.
     private const double ReactionControlAuthority = 0.01;
-    public void Tick(double dt, CelestialBody refBody)
+    public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
 
@@ -354,6 +426,21 @@ public class Vessel
         double finalAngularRate = AngularVelocity.Magnitude;
         if (finalAngularRate > maximumAngularRate)
             AngularVelocity *= maximumAngularRate / finalAngularRate;
+
+        // Ground contact is an external physical torque, not an actuator command. Apply it
+        // after the vehicle-control rate envelope so an impact can genuinely rotate/tip the
+        // rigid body instead of being silently clipped to the autopilot's 20°/s limit.
+        if (externalContactTorqueWorld.MagnitudeSquared > 1e-12)
+        {
+            var torqueLocal = Orientation.Inverse().Rotate(externalContactTorqueWorld);
+            double iTrans = System.Math.Max(1.0, Parts.TransverseMomentOfInertia);
+            double iAxial = System.Math.Max(1.0, Parts.AxialMomentOfInertia);
+            var angularAccelerationLocal = new Vector3d(
+                torqueLocal.X / iTrans,
+                torqueLocal.Y / iAxial,
+                torqueLocal.Z / iTrans);
+            AngularVelocity += Orientation.Rotate(angularAccelerationLocal) * dt;
+        }
 
         // Integrar velocidad angular → orientación
         double angMag = AngularVelocity.Magnitude;

@@ -12,6 +12,18 @@ public sealed class StarshipRealismTests
     private const double SeaLevelPressure = 101_325.0;
 
     [Fact]
+    public void EngineShutdownSpoolsDownFasterThanStartup()
+    {
+        var engine = new Part(new PartDefinition { CategoryStr = "engine" });
+
+        engine.ThrottleLevel = 0.0;
+        Assert.Equal(0.2, engine.SpoolToward(1.0, 0.1), 12);
+
+        engine.ThrottleLevel = 1.0;
+        Assert.Equal(0.5, engine.SpoolToward(0.0, 0.1), 12);
+    }
+
+    [Fact]
     public void Flight7StackMatchesDeclaredMassAndGeometryBaseline()
     {
         var (vessel, _, _, _, _) = BuildFlight7Stack();

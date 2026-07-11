@@ -11,7 +11,7 @@ infinitamente regulable y la desaparición de aero/térmica/contacto bajo warp.
 
 El resultado es un modelo 6-DoF agregado y coherente, no una réplica certificable de
 Starship. Sigue faltando CFD/coeficientes publicados, motores como cuerpos individuales,
-tensor de inercia completo, slosh, contacto por patas y un TPS multicapa. Por ello la
+tensor de inercia completo, slosh, terreno con relieve y un TPS multicapa. Por ello la
 palabra «totalmente realista» no se usa como criterio de aprobación.
 
 ## Cambios físicos
@@ -81,5 +81,5 @@ siendo una condición de prueba; no sustituye el golden pad→órbita→aterriza
 2. Barrer masa, dispersión atmosférica, AoA, reserva y viento; una única trayectoria
    nominal no prueba robustez.
 3. Reemplazar coeficientes agregados por tablas Mach×AoA×flap validadas.
-4. Modelar patas, fricción, pendiente y vuelco en contacto.
+4. Añadir terreno compartido con pendiente/relieve y contactos de casco al modelo de patas.
 5. Comparar peak-q, heating y estado final x1/x10/x1000 en una reentrada completa.

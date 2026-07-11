@@ -55,8 +55,8 @@ public class PartDefinition
     // Deepest stable throttle the engine can sustain, as a fraction of rated thrust.
     // Real Raptor 2 deep-throttles to ~40 % (full-flow staged combustion stays lit but the
     // turbopumps cannot run arbitrarily slow). This is informational: it is ENFORCED only when
-    // the caller opts in (see Part.GetEffectiveThrottle / PartGraph.ClampAscentThrottle), so a
-    // suicide-burn controller commanding a continuous low setpoint is never snapped up to it.
+    // the caller opts in (see Part.ApplyThrottleFloor), so ascent and EDL can combine the
+    // physical floor with discrete engine selection.
     // 0 means "no documented floor" (e.g. throwaway test engines), and the engine may idle to 0.
     [JsonPropertyName("min_throttle")] public double MinThrottle { get; set; }
 
@@ -71,6 +71,19 @@ public class PartDefinition
     [JsonPropertyName("max_crew")]       public int    MaxCrew       { get; set; }
     [JsonPropertyName("max_load")]       public double MaxLoad       { get; set; }
     [JsonPropertyName("deployable")]     public bool   Deployable    { get; set; }
+    // Landing-contact properties use SI units. Aggregate gear parts may represent a ring of
+    // several identical feet; the reference offset follows the current render/skirt datum,
+    // while the CoM offset is the physical moment arm used for torque.
+    [JsonPropertyName("spring_strength")]       public double SpringStrength       { get; set; }
+    [JsonPropertyName("damper_strength")]       public double DamperStrength       { get; set; }
+    [JsonPropertyName("suspension_travel_m")]   public double SuspensionTravelM    { get; set; }
+    [JsonPropertyName("contact_radius_m")]      public double ContactRadiusM       { get; set; }
+    [JsonPropertyName("static_friction")]       public double StaticFriction       { get; set; }
+    [JsonPropertyName("dynamic_friction")]      public double DynamicFriction      { get; set; }
+    [JsonPropertyName("contact_point_count")]   public int    ContactPointCount    { get; set; }
+    [JsonPropertyName("contact_ring_radius_m")] public double ContactRingRadiusM   { get; set; }
+    [JsonPropertyName("contact_offset_y_m")]    public double ContactOffsetYM      { get; set; }
+    [JsonPropertyName("contact_com_offset_y_m")]public double ContactComOffsetYM   { get; set; }
     [JsonPropertyName("drag_chute")]     public double DragChute     { get; set; }
     [JsonPropertyName("deploy_altitude")]public double DeployAltitude{ get; set; }
 

@@ -274,6 +274,7 @@ public partial class SimulationBridge : Node
         if (!defs.TryGetValue("starship_command",  out var cmdDef))  return;
         if (!defs.TryGetValue("starship_tank",      out var tankDef)) return;
         if (!defs.TryGetValue("starship_engines",   out var engDef))  return;
+        if (!defs.TryGetValue("starship_landing_gear", out var gearDef)) return;
         if (!defs.TryGetValue("decoupler_heavy",    out var decDef))  return;
         if (!defs.TryGetValue("super_heavy_booster",out var shDef))   return;
 
@@ -282,6 +283,7 @@ public partial class SimulationBridge : Node
         var command  = new Part(cmdDef);
         var tank     = new Part(tankDef);
         var engines  = new Part(engDef);
+        var gear     = new Part(gearDef);
         var decoupler= new Part(decDef);
         var sh       = new Part(shDef);
 
@@ -289,14 +291,18 @@ public partial class SimulationBridge : Node
         vessel.Parts.AddPart(command);
         vessel.Parts.AddPart(tank);
         vessel.Parts.AddPart(engines);
+        vessel.Parts.AddPart(gear);
         vessel.Parts.AddPart(decoupler);
         vessel.Parts.AddPart(sh);
 
-        // Stack (top → bottom): command → tank → engines → decoupler → super_heavy
+        // Stack (top → bottom): command → tank → engines → EDL gear → decoupler → SH.
+        // The zero-length aggregate gear keeps the physical engine/interstage datum unchanged.
         vessel.Parts.AddJoint(new Joint(command,   tank,      "bottom", "top"));
         vessel.Parts.AddJoint(new Joint(tank,      engines,   "bottom", "top"));
-        vessel.Parts.AddJoint(new Joint(engines,   decoupler, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(engines,   gear,      "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(gear,      decoupler, "bottom", "top"));
         vessel.Parts.AddJoint(new Joint(decoupler, sh,        "bottom", "top"));
+        vessel.ConfigureLandingContactsFromParts();
 
         // Spawn at +Y so the stack stands vertical in the render frame. The Earth backdrop
         // is rotated (see FloatingOrigin) so the blue/green equator — not the polar ice —
@@ -456,6 +462,7 @@ public partial class SimulationBridge : Node
         vessel.IsGroundHeld = true;
         vessel.GroundNormal = upDir;
         vessel.GroundOffset = mountHeightM;
+        vessel.ConfigureLandingContactsFromParts();
 
         _padWorldPos = earth.Position + upDir * earth.Radius;
         Universe.AddVessel(vessel);

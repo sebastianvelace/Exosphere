@@ -37,6 +37,7 @@ public class Universe
 
     /// <summary>Maximum physics sub-step (s) used in full-physics mode (50 Hz).</summary>
     private const double MaxPhysicsStep = 0.02;
+    private const double MaxContactStep = 0.005;
 
     /// <summary>
     /// Maximum sub-step (s) used in the mixed time-warp branch for the active vessel.
@@ -116,6 +117,9 @@ public class Universe
         if (simDelta <= 0.0) return;
 
         bool anyForceSensitive = _vessels.Any(RequiresBoundedWarpPropagation);
+        bool anyContactSensitive = _bodies.Count > 0 && _vessels.Any(v =>
+            v.HasDeployedLandingGear
+            && GetDominantBody(v.Position).GetAltitude(v.Position) < 100.0);
 
         if (TimeScale <= 4.0)
         {
@@ -123,7 +127,8 @@ public class Universe
             double remaining = simDelta;
             while (remaining > 1e-12)
             {
-                double step  = System.Math.Min(remaining, MaxPhysicsStep);
+                double step  = System.Math.Min(remaining,
+                    anyContactSensitive ? MaxContactStep : MaxPhysicsStep);
                 TickPhysics(step);
                 CurrentTime += step;
                 remaining   -= step;
@@ -139,7 +144,8 @@ public class Universe
             // warp integrates accurately (thrust + gravity) and matches a real-time burn.
             bool thrusting = ActiveVessel is { Throttle: > 0.01 };
             bool forceSensitive = ActiveVessel != null && RequiresOffRailsPhysics(ActiveVessel);
-            double cap = thrusting ? MaxThrustStep
+            double cap = anyContactSensitive ? MaxContactStep
+                       : thrusting ? MaxThrustStep
                        : forceSensitive ? MaxPhysicsStep
                        : MaxCoastStep;
             double remaining = simDelta;
@@ -253,23 +259,7 @@ public class Universe
 
             var refBody = GetDominantBody(vessel.Position);
 
-            // Internal vessel tick (resource drain, SAS, crew EVA, etc.)
-            vessel.Tick(dt, refBody);
-
-            // RK4 orbit integration.
-            // The acceleration is evaluated at each RK4 sub-step's (pos, vel) — NOT the
-            // vessel's stored state — so the higher-order stages k₂…k₄ are meaningful.
-            // (Celestial body positions are held fixed across the sub-step, a standard
-            // simplification given dt ≤ 0.02 s.)
-            (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
-                vessel.Position,
-                vessel.Velocity,
-                CurrentTime,
-                dt,
-                (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
-            );
-
-            ApplyPostIntegrationPhysics(vessel, refBody, dt);
+            IntegrateVesselOffRails(vessel, refBody, dt);
         }
     }
 
@@ -277,7 +267,10 @@ public class Universe
     {
         var netAccel  = vessel.ComputeNetAcceleration(_bodies, refBody);
         var gravAccel = vessel.ComputeGravity(_bodies);
-        var nonGrav   = netAccel - gravAccel;
+        var contactAccel = vessel.TotalMass > 0.0
+            ? vessel.LastContactForceWorld / vessel.TotalMass
+            : Vector3d.Zero;
+        var nonGrav   = netAccel - gravAccel + contactAccel;
         Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation);
         _ = Physics.StressSolver.FindBreakingJoints(vessel.Parts).ToList();
 
@@ -394,14 +387,99 @@ public class Universe
 
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
     {
-        vessel.Tick(dt, refBody);
+        var contactBefore = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
+        vessel.LastContactForceWorld = contactBefore?.ForceWorld ?? Vector3d.Zero;
+        vessel.LastContactTorqueWorld = contactBefore?.TorqueWorld ?? Vector3d.Zero;
+
+        vessel.Tick(dt, refBody, vessel.LastContactTorqueWorld);
         (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
             vessel.Position,
             vessel.Velocity,
             CurrentTime,
             dt,
-            (pos, vel, _) => vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody));
+            (pos, vel, _) =>
+            {
+                var stageContact = EvaluateLandingContact(vessel, refBody, pos, vel);
+                var contactAcceleration = vessel.TotalMass > 0.0
+                    ? (stageContact?.ForceWorld ?? Vector3d.Zero) / vessel.TotalMass
+                    : Vector3d.Zero;
+                return vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
+                    + contactAcceleration;
+            });
+
+        var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
+        UpdateLandingContactState(vessel, refBody, contactAfter, dt);
         ApplyPostIntegrationPhysics(vessel, refBody, dt);
+    }
+
+    private static Physics.ContactWrench? EvaluateLandingContact(
+        Vessel vessel, CelestialBody body, Vector3d position, Vector3d velocity)
+    {
+        if (!vessel.HasDeployedLandingGear || vessel.LandingContactPoints.Count == 0)
+            return null;
+        var input = vessel.GetContactInput(position, velocity);
+        return Physics.SurfaceContactSolver.EvaluateSphere(
+            input, vessel.LandingContactPoints, body);
+    }
+
+    private static void UpdateLandingContactState(
+        Vessel vessel, CelestialBody body, Physics.ContactWrench? contact, double dt)
+    {
+        vessel.LastSurfaceContact = contact;
+        vessel.LastContactForceWorld = contact?.ForceWorld ?? Vector3d.Zero;
+        vessel.LastContactTorqueWorld = contact?.TorqueWorld ?? Vector3d.Zero;
+
+        if (contact == null || contact.ContactCount == 0)
+        {
+            vessel.SurfaceSettledDuration = 0.0;
+            vessel.IsSurfaceSettled = false;
+            return;
+        }
+
+        // Landing-leg joints dissipate residual pitch/yaw once the load is shared by at
+        // least three feet. This is passive structural damping, not an attitude snap: the
+        // integrated angular velocity decays continuously while contact torque remains free
+        // to tip an actually unstable vehicle.
+        if (contact.ContactCount >= 3)
+            vessel.AngularVelocity *= System.Math.Exp(-8.0 * dt);
+
+        double impactSpeed = vessel.GetSurfaceVelocity(body).Magnitude;
+        // Bottom-out remains diagnostic until a non-linear bump-stop/primary-structure load
+        // path exists. The penalty force is not capped, so the declared ultimate leg load is
+        // the physical failure gate instead of an arbitrary penetration epsilon.
+        if (contact.HasOverload)
+        {
+            vessel.IsDestroyed = true;
+            vessel.DestructionCause = VesselDestructionCause.GroundImpact;
+            vessel.CrashImpactSpeed = impactSpeed;
+            vessel.CrashSimPosition = vessel.Position;
+            vessel.SurfaceSettledDuration = 0.0;
+            vessel.IsSurfaceSettled = false;
+            return;
+        }
+
+        var normal = (vessel.Position - body.Position).Normalized;
+        var surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        double normalSpeed = System.Math.Abs(surfaceVelocity.Dot(normal));
+        double tangentialSpeed = (surfaceVelocity - normal * surfaceVelocity.Dot(normal)).Magnitude;
+        double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(normal);
+        double localGravity = body.GetGravityAt(vessel.Position).Magnitude;
+        double normalSupportAcceleration = vessel.TotalMass > 0.0
+            ? contact.ForceWorld.Dot(normal) / vessel.TotalMass
+            : 0.0;
+        bool supportedNearWeight = localGravity > 0.0
+            && normalSupportAcceleration > 0.75 * localGravity
+            && normalSupportAcceleration < 1.25 * localGravity;
+        bool settledNow = contact.ContactCount >= 3
+            && normalSpeed < 0.25
+            && tangentialSpeed < 0.50
+            && vessel.AngularVelocity.Magnitude < 0.03
+            && upright > System.Math.Cos(10.0 * MathUtils.DEG_TO_RAD)
+            && supportedNearWeight;
+        vessel.SurfaceSettledDuration = settledNow
+            ? vessel.SurfaceSettledDuration + dt
+            : 0.0;
+        vessel.IsSurfaceSettled = vessel.SurfaceSettledDuration >= 0.50;
     }
 
     private void TickRails(double dt)

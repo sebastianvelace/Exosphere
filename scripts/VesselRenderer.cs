@@ -27,6 +27,18 @@ public partial class VesselRenderer : Node3D
     // dynamic pressure, heat-shield attitude and control mixing instead of remaining frozen.
     private readonly List<FlapRig> _flapRigs = new();
 
+    private sealed class LandingLegRig
+    {
+        public Node3D Root = null!;
+        public MeshInstance3D Strut = null!;
+        public MeshInstance3D Foot = null!;
+        public int Index;
+        public float FullLength;
+    }
+
+    private readonly List<LandingLegRig> _landingLegRigs = new();
+    private float _landingGearDeployment;
+
     private enum TileCharZone { Belly, Nose, FwdFlap, AftFlap }
 
     // Windward heat-shield tile materials grouped by zone so belly, nose and flaps
@@ -464,6 +476,8 @@ public partial class VesselRenderer : Node3D
             { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
             sootSteel, new Vector3(0, o + ShipSkirtBase + 0.4f, 0));
         AddAftShieldSkirt(o, sootSteel);
+        if (vessel.Parts.Parts.Any(p => p.Definition.Id == "starship_landing_gear"))
+            AddStarshipLandingGear(o + ShipSkirtBase);
 
         const float vacR = 0.38f * RScale;
         const float slR  = 0.72f * RScale;
@@ -516,6 +530,7 @@ public partial class VesselRenderer : Node3D
 
         _plumes?.Update(throttle, shPresent, alt, pressureRatio, selectedShipEngines);
         UpdateFlaps(delta, body);
+        UpdateLandingGear(delta);
 
         // Reentry heat glow on hull. The main hull now uses the procedural steel
         // ShaderMaterial (emit via the `emit_strength` uniform); small detail
@@ -643,6 +658,89 @@ public partial class VesselRenderer : Node3D
                 mat.Emission                 = new Color(0.9f, 0.18f, 0.04f);
                 mat.EmissionEnergyMultiplier = e * 1.6f;
             }
+        }
+    }
+
+    private void AddStarshipLandingGear(float skirtDatumY)
+    {
+        var strutMat = Mat(new Color(0.32f, 0.34f, 0.36f), 0.90f, 0.30f);
+        var footMat = Mat(new Color(0.18f, 0.19f, 0.20f), 0.82f, 0.48f);
+        const int count = 6;
+        const float physicalRingM = 4.20f;
+        const float physicalLengthM = 7.50f;
+        float ring = physicalRingM / MetresPerUnit;
+        float length = physicalLengthM / MetresPerUnit;
+
+        for (int i = 0; i < count; i++)
+        {
+            float angle = i * Mathf.Tau / count;
+            var root = new Node3D
+            {
+                Name = $"LandingLeg{i}",
+                Position = new Vector3(ring * Mathf.Cos(angle), skirtDatumY, ring * Mathf.Sin(angle)),
+            };
+            AddChild(root);
+
+            var strut = new MeshInstance3D
+            {
+                Name = "Strut",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.075f,
+                    BottomRadius = 0.105f,
+                    Height = length,
+                    RadialSegments = 18,
+                },
+                Position = new Vector3(0f, -length * 0.5f, 0f),
+            };
+            strut.SetSurfaceOverrideMaterial(0, strutMat);
+            root.AddChild(strut);
+
+            var foot = new MeshInstance3D
+            {
+                Name = "Footpad",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.35f / MetresPerUnit,
+                    BottomRadius = 0.42f / MetresPerUnit,
+                    Height = 0.10f,
+                    RadialSegments = 24,
+                },
+                Position = new Vector3(0f, -length, 0f),
+            };
+            foot.SetSurfaceOverrideMaterial(0, footMat);
+            root.AddChild(foot);
+            _landingLegRigs.Add(new LandingLegRig
+            {
+                Root = root,
+                Strut = strut,
+                Foot = foot,
+                Index = i,
+                FullLength = length,
+            });
+        }
+    }
+
+    private void UpdateLandingGear(double delta)
+    {
+        if (TargetVessel == null || _landingLegRigs.Count == 0) return;
+        bool deployed = TargetVessel.Parts.Parts.Any(p =>
+            p.Definition.Category == PartCategory.Landing && p.IsDeployed);
+        _landingGearDeployment = Mathf.MoveToward(
+            _landingGearDeployment, deployed ? 1f : 0f, (float)delta * 1.5f);
+
+        foreach (var rig in _landingLegRigs)
+        {
+            double compressionM = TargetVessel.LastSurfaceContact?.Points
+                .FirstOrDefault(p => p.Name.EndsWith($"-{rig.Index}", StringComparison.Ordinal))
+                .PenetrationM ?? 0.0;
+            float compression = (float)(compressionM / MetresPerUnit);
+            float visibleLength = Mathf.Max(0.08f,
+                rig.FullLength * _landingGearDeployment - compression);
+            rig.Strut.Scale = new Vector3(1f, visibleLength / rig.FullLength, 1f);
+            rig.Strut.Position = new Vector3(0f, -visibleLength * 0.5f, 0f);
+            rig.Foot.Position = new Vector3(0f, -visibleLength, 0f);
+            rig.Root.Visible = _landingGearDeployment > 0.01f;
         }
     }
 
@@ -1116,6 +1214,8 @@ public partial class VesselRenderer : Node3D
         _partNodes.Clear();
         _tileZoneMats.Clear();
         _flapRigs.Clear();
+        _landingLegRigs.Clear();
+        _landingGearDeployment = 0f;
         _plumes   = null;
         _hullMesh = null;
     }
