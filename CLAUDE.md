@@ -25,6 +25,14 @@ Run Godot smoke checks when scene/game-layer behavior changes:
   --headless --path . --quit-after 3 --rendering-driver opengl3
 ```
 
+For fast VAB iteration (cached builds + construction tests + VAB scene smoke):
+
+```bash
+bash tools/vab_quick_check.sh
+```
+
+Use the full `tools/ci_check.sh` once before committing instead of after every UI edit.
+
 For VAB:
 
 ```bash
@@ -121,7 +129,7 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 ## Known Limits
 
 - One physical engine part per stage. The 33 Super Heavy and 6 Starship engines are visual, not individually simulated.
-- VAB V1.5 has 3D preview, click-to-attach node picking, craft persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks drag/rotate gizmos and a dedicated menu flow.
+- VAB V1.6 has filtered catalog, double-click auto-attach, Starter/Starship templates, undo/redo, launch validation, 3D picking, craft persistence, and VAB-to-launch flow. It still lacks drag/rotate gizmos, radial symmetry, and a dedicated menu flow.
 - Reentry has physics basis and tests plus windward plasma, tile charring, survivable belly-flop EDL, and a thermal break-up VFX. It still lacks per-piece structural break-up, control-loss consequences, and richer shock/plasma rendering.
 - Patched-conic SOI transitions are implemented for on-rails vessels (warp-resolution-independent); inside on-rails propagation use `BodyStateAt(body, t)` for body state at the epoch/crossing time, not the end-of-tick global position.
 - Interplanetary planning has a tested Hohmann core, patched-conic SOI transitions, encounter prediction, and maneuver readouts. It still needs long-cruise validation, a better Moon-transfer model, and draggable maneuver nodes.

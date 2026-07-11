@@ -15,12 +15,21 @@ public partial class ConstructionController : Control
     private ItemList _catalogList = null!;
     private ItemList _stackList = null!;
     private ItemList _craftBrowser = null!;
+    private LineEdit _catalogSearch = null!;
+    private OptionButton _categoryFilter = null!;
     private OptionButton _parentNode = null!;
     private OptionButton _childNode = null!;
     private LineEdit _craftName = null!;
     private Label _stats = null!;
     private Label _status = null!;
+    private Label _validation = null!;
+    private Button _launchButton = null!;
+    private Button _undoButton = null!;
+    private Button _redoButton = null!;
+    private Label _previewEmpty = null!;
     private VesselRenderer? _previewRenderer;
+    private readonly Stack<VesselCraftDefinition> _undo = new();
+    private readonly Stack<VesselCraftDefinition> _redo = new();
 
     // ── Direct 3D manipulation (preview picking) ──────────────────────────
     private SubViewport?        _previewViewport;
@@ -45,21 +54,48 @@ public partial class ConstructionController : Control
         _assembly = new VesselAssembly(_catalog);
         _picking?.Configure(_catalog);
 
-        _catalogList.Clear();
-        foreach (var part in _catalog.AllParts)
-        {
-            int idx = _catalogList.AddItem($"{part.Name}  [{part.CategoryStr}]");
-            _catalogList.SetItemMetadata(idx, part.Id);
-        }
+        PopulateCatalogList();
 
         Refresh();
         RefreshCraftBrowser();
         SetStatus("Catalog loaded.");
     }
 
+    private void PopulateCatalogList()
+    {
+        if (_catalogList == null || _catalog == null) return;
+        string search = _catalogSearch?.Text.Trim() ?? "";
+        string category = _categoryFilter?.Selected switch
+        {
+            1 => "command",
+            2 => "fuel_tank",
+            3 => "engine",
+            4 => "decoupler",
+            5 => "landing",
+            _ => "",
+        };
+
+        _catalogList.Clear();
+        foreach (var part in _catalog.AllParts.Where(part =>
+                     (category.Length == 0 || part.CategoryStr.Equals(category, StringComparison.OrdinalIgnoreCase))
+                     && (search.Length == 0
+                         || part.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                         || part.Id.Contains(search, StringComparison.OrdinalIgnoreCase))))
+        {
+            int idx = _catalogList.AddItem(
+                $"{part.Name}   |   {part.MassDry / 1000.0:F1} t · {part.CategoryStr.Replace('_', ' ')}");
+            _catalogList.SetItemMetadata(idx, part.Id);
+        }
+    }
+
     private void BuildUi()
     {
         SetAnchorsPreset(LayoutPreset.FullRect);
+
+        var background = new ColorRect { Color = new Color("101722") };
+        background.SetAnchorsPreset(LayoutPreset.FullRect);
+        background.MouseFilter = MouseFilterEnum.Ignore;
+        AddChild(background);
 
         var root = new HBoxContainer { Name = "Layout" };
         root.SetAnchorsPreset(LayoutPreset.FullRect);
@@ -67,18 +103,37 @@ public partial class ConstructionController : Control
         root.OffsetTop = 24;
         root.OffsetRight = -24;
         root.OffsetBottom = -24;
+        root.AddThemeConstantOverride("separation", 18);
         AddChild(root);
 
-        var catalogBox = BuildPanel("Catalog");
+        var catalogBox = BuildPanel("PART LIBRARY");
         root.AddChild(catalogBox);
-        _catalogList = new ItemList { Name = "CatalogList", CustomMinimumSize = new Vector2(380, 0) };
+        var filters = new HBoxContainer();
+        catalogBox.AddChild(filters);
+        _catalogSearch = new LineEdit { PlaceholderText = "Search parts…", SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _catalogSearch.TextChanged += _ => PopulateCatalogList();
+        filters.AddChild(_catalogSearch);
+        _categoryFilter = new OptionButton { CustomMinimumSize = new Vector2(120, 0) };
+        foreach (string category in new[] { "All", "Command", "Fuel tank", "Engine", "Decoupler", "Landing" })
+            _categoryFilter.AddItem(category);
+        _categoryFilter.ItemSelected += _ => PopulateCatalogList();
+        filters.AddChild(_categoryFilter);
+
+        _catalogList = new ItemList { Name = "CatalogList", CustomMinimumSize = new Vector2(300, 300) };
         _catalogList.ItemSelected += _ => { RefreshNodeChoices(); RefreshNodeMarkers(); };
+        _catalogList.ItemActivated += _ => OnQuickAdd();
         catalogBox.AddChild(_catalogList);
+        catalogBox.AddChild(new Label
+        {
+            Text = "Double-click to add · select a yellow part or green node first",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Modulate = new Color("8fa5b8"),
+        });
 
         // Navegador de craft files guardados / Saved craft-file browser.
-        var browserBox = BuildPanel("Saved Crafts");
-        root.AddChild(browserBox);
-        _craftBrowser = new ItemList { Name = "CraftBrowser", CustomMinimumSize = new Vector2(280, 0) };
+        var browserBox = BuildPanel("SAVED VEHICLES");
+        catalogBox.AddChild(browserBox);
+        _craftBrowser = new ItemList { Name = "CraftBrowser", CustomMinimumSize = new Vector2(280, 110) };
         // Doble-click o selección carga el craft / select to load that craft.
         _craftBrowser.ItemActivated += OnCraftBrowserActivated;
         browserBox.AddChild(_craftBrowser);
@@ -91,16 +146,21 @@ public partial class ConstructionController : Control
         loadSelected.Pressed += OnLoadSelectedCraft;
         browserBox.AddChild(loadSelected);
 
-        var mid = BuildPanel("Assembly");
+        var mid = BuildPanel("VEHICLE STACK");
         root.AddChild(mid);
-        _stackList = new ItemList { Name = "StackList", CustomMinimumSize = new Vector2(420, 0) };
+        _stackList = new ItemList { Name = "StackList", CustomMinimumSize = new Vector2(420, 260) };
         _stackList.ItemSelected += OnStackListSelected;
         mid.AddChild(_stackList);
 
         var controls = new GridContainer { Columns = 2 };
         mid.AddChild(controls);
         controls.AddChild(new Label { Text = "Craft name" });
-        _craftName = new LineEdit { Text = "Constructed Vessel" };
+        _craftName = new LineEdit
+        {
+            Text = "Constructed Vessel",
+            CustomMinimumSize = new Vector2(220, 0),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
         controls.AddChild(_craftName);
         controls.AddChild(new Label { Text = "Parent node" });
         _parentNode = new OptionButton();
@@ -109,8 +169,28 @@ public partial class ConstructionController : Control
         _childNode = new OptionButton();
         controls.AddChild(_childNode);
 
-        var buttons = new HBoxContainer();
+        var buttons = new GridContainer { Columns = 4 };
         mid.AddChild(buttons);
+
+        var newCraft = new Button { Text = "New" };
+        newCraft.Pressed += OnNewCraft;
+        buttons.AddChild(newCraft);
+
+        var starter = new Button { Text = "Starter" };
+        starter.Pressed += OnStarterRocket;
+        buttons.AddChild(starter);
+
+        var starship = new Button { Text = "Starship" };
+        starship.Pressed += OnStarshipTemplate;
+        buttons.AddChild(starship);
+
+        _undoButton = new Button { Text = "Undo" };
+        _undoButton.Pressed += OnUndo;
+        buttons.AddChild(_undoButton);
+
+        _redoButton = new Button { Text = "Redo" };
+        _redoButton.Pressed += OnRedo;
+        buttons.AddChild(_redoButton);
 
         var addRoot = new Button { Text = "Set Root" };
         addRoot.Pressed += OnSetRoot;
@@ -136,14 +216,16 @@ public partial class ConstructionController : Control
         load.Pressed += OnLoad;
         buttons.AddChild(load);
 
-        var launch = new Button { Text = "Launch" };
-        launch.Pressed += OnLaunch;
-        buttons.AddChild(launch);
+        _launchButton = new Button { Text = "Launch" };
+        _launchButton.Pressed += OnLaunch;
+        buttons.AddChild(_launchButton);
 
-        var info = BuildPanel("Stats / Preview");
+        var info = BuildPanel("FLIGHT READINESS / 3D");
         root.AddChild(info);
         _stats = new Label { Name = "Stats", CustomMinimumSize = new Vector2(300, 180) };
         info.AddChild(_stats);
+        _validation = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        info.AddChild(_validation);
 
         var viewportContainer = new SubViewportContainer
         {
@@ -168,6 +250,17 @@ public partial class ConstructionController : Control
         };
         viewportContainer.AddChild(viewport);
         _previewViewport = viewport;
+
+        _previewEmpty = new Label
+        {
+            Text = "NO VEHICLE ON THE FLOOR\nDouble-click a command part to begin",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            MouseFilter = MouseFilterEnum.Ignore,
+            Modulate = new Color("6f8799"),
+        };
+        _previewEmpty.SetAnchorsPreset(LayoutPreset.FullRect);
+        viewportContainer.AddChild(_previewEmpty);
 
         var previewRoot = new Node3D { Name = "PreviewRoot" };
         viewport.AddChild(previewRoot);
@@ -229,7 +322,9 @@ public partial class ConstructionController : Control
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        panel.AddChild(new Label { Text = title });
+        var heading = new Label { Text = title, Modulate = new Color("67d9ff") };
+        heading.AddThemeFontSizeOverride("font_size", 15);
+        panel.AddChild(heading);
         return panel;
     }
 
@@ -241,6 +336,7 @@ public partial class ConstructionController : Control
 
         try
         {
+            RecordUndo();
             _assembly.AddRoot(partId);
             Refresh();
             SetStatus("Root part set.");
@@ -266,6 +362,7 @@ public partial class ConstructionController : Control
 
         try
         {
+            RecordUndo();
             _assembly.AttachPart(parentId, parentNode, partId, childNode);
             Refresh();
             SetStatus("Part attached.");
@@ -281,6 +378,7 @@ public partial class ConstructionController : Control
         if (_assembly == null) return;
         string? instanceId = SelectedAssemblyInstanceId();
         if (instanceId == null) { SetStatus("Select an assembly part first."); return; }
+        RecordUndo();
         _assembly.DeletePart(instanceId);
         Refresh();
         SetStatus("Part removed.");
@@ -345,6 +443,8 @@ public partial class ConstructionController : Control
             }
 
             _assembly = VesselAssembly.FromCraft(_catalog, craft);
+            _undo.Clear();
+            _redo.Clear();
             _craftName.Text = craft.Name;
             Refresh();
             SetStatus($"Loaded craft: {craft.Name} ({craft.Parts.Count} parts)");
@@ -442,6 +542,12 @@ public partial class ConstructionController : Control
         if (_assembly == null) return;
         try
         {
+            var validation = _assembly.ValidateForLaunch();
+            if (!validation.CanLaunch)
+            {
+                SetStatus(validation.Errors[0]);
+                return;
+            }
             CraftLaunchRequest.Set(_assembly.ToCraft(CraftName()));
             GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
         }
@@ -456,6 +562,11 @@ public partial class ConstructionController : Control
         _stackList.Clear();
         if (_assembly != null && _catalog != null)
         {
+            if (_assembly.Parts.Count == 0)
+            {
+                int empty = _stackList.AddItem("Build from the library → double-click a command part");
+                _stackList.SetItemDisabled(empty, true);
+            }
             foreach (var part in _assembly.Parts)
             {
                 PartDefinition def = _catalog[part.DefinitionId];
@@ -473,8 +584,27 @@ public partial class ConstructionController : Control
                 $"SL TWR: {m.SeaLevelTwr:F2}\n" +
                 $"Vac delta-v: {m.VacuumDeltaV:F0} m/s";
 
+            var validation = _assembly.ValidateForLaunch();
+            _launchButton.Disabled = !validation.CanLaunch;
+            _validation.Text = validation.CanLaunch
+                ? (validation.Warnings.Count == 0
+                    ? "● READY FOR FLIGHT"
+                    : $"● READY · {string.Join(" · ", validation.Warnings)}")
+                : $"○ BUILD CHECK · {string.Join(" · ", validation.Errors)}";
+            _validation.Modulate = validation.CanLaunch ? new Color("63e6a6") : new Color("ffb454");
+
             UpdatePreview();
         }
+        else
+        {
+            _stats.Text = "Wet mass: —\nDry mass: —\nPropellant: —\nSL thrust: —\nSL TWR: —\nVac delta-v: —";
+            _validation.Text = "○ BUILD CHECK · Add a command part to start the vehicle.";
+            _validation.Modulate = new Color("ffb454");
+            _launchButton.Disabled = true;
+        }
+
+        _undoButton.Disabled = _undo.Count == 0;
+        _redoButton.Disabled = _redo.Count == 0;
 
         RefreshNodeChoices();
     }
@@ -488,12 +618,14 @@ public partial class ConstructionController : Control
             if (_assembly.Parts.Count == 0)
             {
                 _previewRenderer.Visible = false;
+                _previewEmpty.Visible = true;
                 _picking?.RebuildSelectionBodies(_assembly);
                 ClearSelection();
                 return;
             }
 
             _previewRenderer.Visible = true;
+            _previewEmpty.Visible = false;
             _previewRenderer.BuildFromVessel(_assembly.ToVessel(CraftName()));
         }
         catch
@@ -560,6 +692,131 @@ public partial class ConstructionController : Control
     {
         int selected = option.Selected;
         return selected < 0 ? null : option.GetItemMetadata(selected).AsString();
+    }
+
+    private void OnQuickAdd()
+    {
+        if (_assembly == null || _catalog == null) return;
+        string? partId = SelectedCatalogPartId();
+        if (partId == null) return;
+
+        try
+        {
+            if (_assembly.Parts.Count == 0)
+            {
+                RecordUndo();
+                var root = _assembly.AddRoot(partId);
+                Refresh();
+                SelectInstance(root.InstanceId, syncList: true);
+                SetStatus($"Started with {_catalog[partId].Name}.");
+                return;
+            }
+
+            string? parentId = SelectedAssemblyInstanceId();
+            if (parentId == null || _assembly.CompatibleAttachments(parentId, partId).Count == 0)
+            {
+                parentId = _assembly.Parts
+                    .Reverse()
+                    .FirstOrDefault(p => _assembly.CompatibleAttachments(p.InstanceId, partId).Count > 0)
+                    ?.InstanceId;
+            }
+            if (parentId == null)
+            {
+                SetStatus("No free compatible node. Select a different part or green node.");
+                return;
+            }
+
+            RecordUndo();
+            var attached = _assembly.AttachPartAutomatically(parentId, partId);
+            Refresh();
+            SelectInstance(attached.InstanceId, syncList: true);
+            SetStatus($"Attached {_catalog[partId].Name} automatically.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private void OnNewCraft()
+    {
+        if (_catalog == null) return;
+        if (_assembly != null && _assembly.Parts.Count > 0)
+            RecordUndo();
+        _assembly = new VesselAssembly(_catalog);
+        _craftName.Text = "Constructed Vessel";
+        ClearSelection();
+        Refresh();
+        SetStatus("New vehicle. Double-click a command part to begin.");
+    }
+
+    private void OnStarterRocket() => BuildTemplate(
+        "Starter Rocket",
+        "command_pod_mk1",
+        "fuel_tank_small",
+        "engine_liquid_sl");
+
+    private void OnStarshipTemplate() => BuildTemplate(
+        "Starship / Super Heavy",
+        "starship_command",
+        "starship_tank",
+        "starship_engines",
+        "starship_landing_gear",
+        "decoupler_heavy",
+        "super_heavy_booster");
+
+    private void BuildTemplate(string name, params string[] definitionIds)
+    {
+        if (_catalog == null || definitionIds.Length == 0) return;
+        try
+        {
+            if (_assembly != null) RecordUndo();
+            var next = new VesselAssembly(_catalog);
+            var current = next.AddRoot(definitionIds[0]);
+            foreach (string definitionId in definitionIds.Skip(1))
+                current = next.AttachPartAutomatically(current.InstanceId, definitionId);
+            _assembly = next;
+            _craftName.Text = name;
+            ClearSelection();
+            Refresh();
+            SelectInstance(current.InstanceId, syncList: true);
+            SetStatus($"Loaded {name} template. Edit any part before launch.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private void RecordUndo()
+    {
+        if (_assembly == null) return;
+        _undo.Push(_assembly.ToCraft(CraftName()));
+        _redo.Clear();
+    }
+
+    private void OnUndo()
+    {
+        if (_catalog == null || _assembly == null || _undo.Count == 0) return;
+        _redo.Push(_assembly.ToCraft(CraftName()));
+        RestoreHistory(_undo.Pop(), "Undid last build action.");
+    }
+
+    private void OnRedo()
+    {
+        if (_catalog == null || _assembly == null || _redo.Count == 0) return;
+        _undo.Push(_assembly.ToCraft(CraftName()));
+        RestoreHistory(_redo.Pop(), "Redid build action.");
+    }
+
+    private void RestoreHistory(VesselCraftDefinition craft, string status)
+    {
+        if (_catalog == null) return;
+        _assembly = VesselAssembly.FromCraft(_catalog, craft);
+        _craftName.Text = craft.Name;
+        ClearSelection();
+        Refresh();
+        SetStatus(status);
     }
 
     // ── Direct 3D manipulation ────────────────────────────────────────────
@@ -665,6 +922,7 @@ public partial class ConstructionController : Control
 
         try
         {
+            RecordUndo();
             var attached = _assembly.AttachPart(parentInstanceId, parentNodeId, partId, childNode.Id);
             Refresh();
             SelectInstance(attached.InstanceId, syncList: true);
@@ -747,6 +1005,16 @@ public partial class ConstructionController : Control
         else if (k.Keycode == Key.Delete && _selectedInstanceId != null)
         {
             OnDelete();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (k.CtrlPressed && k.Keycode == Key.Z)
+        {
+            OnUndo();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (k.CtrlPressed && k.Keycode == Key.Y)
+        {
+            OnRedo();
             GetViewport().SetInputAsHandled();
         }
     }

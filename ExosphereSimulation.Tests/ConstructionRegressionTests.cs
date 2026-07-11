@@ -99,6 +99,64 @@ public sealed class ConstructionRegressionTests
         Assert.Contains(assembly.AvailableNodes(root.InstanceId), n => n.Id == "bottom");
     }
 
+    [Fact]
+    public void AutomaticAttachmentChoosesACompatibleFreeNode()
+    {
+        var assembly = new VesselAssembly(LoadCatalog());
+        var command = assembly.AddRoot("starship_command");
+
+        var tank = assembly.AttachPartAutomatically(command.InstanceId, "starship_tank");
+
+        Assert.Equal(command.InstanceId, tank.ParentInstanceId);
+        Assert.Equal("bottom", tank.ParentNodeId);
+        Assert.Equal("top", tank.ChildNodeId);
+        Assert.Empty(assembly.CompatibleAttachments(command.InstanceId, "starship_tank"));
+    }
+
+    [Fact]
+    public void LaunchValidationExplainsIncompleteAndFlightReadyCrafts()
+    {
+        var incomplete = new VesselAssembly(LoadCatalog());
+        incomplete.AddRoot("starship_command");
+
+        var invalid = incomplete.ValidateForLaunch();
+        var valid = BuildStarshipLikeAssembly().ValidateForLaunch();
+
+        Assert.False(invalid.CanLaunch);
+        Assert.Contains(invalid.Errors, e => e.Contains("engine", StringComparison.OrdinalIgnoreCase));
+        Assert.True(valid.CanLaunch, string.Join("; ", valid.Errors));
+    }
+
+    [Fact]
+    public void AutomaticAttachmentRejectsAFullOrIncompatibleParentClearly()
+    {
+        var assembly = new VesselAssembly(LoadCatalog());
+        var command = assembly.AddRoot("starship_command");
+        assembly.AttachPartAutomatically(command.InstanceId, "starship_tank");
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            assembly.AttachPartAutomatically(command.InstanceId, "starship_tank"));
+
+        Assert.Contains("No compatible free node", ex.Message);
+    }
+
+    [Fact]
+    public void StarshipTemplateSequenceAutoBuildsAFlightReadyTree()
+    {
+        var assembly = new VesselAssembly(LoadCatalog());
+        var current = assembly.AddRoot("starship_command");
+        foreach (string definitionId in new[]
+                 {
+                     "starship_tank", "starship_engines", "starship_landing_gear",
+                     "decoupler_heavy", "super_heavy_booster",
+                 })
+            current = assembly.AttachPartAutomatically(current.InstanceId, definitionId);
+
+        Assert.Equal(6, assembly.Parts.Count);
+        Assert.Equal(5, assembly.Connections.Count);
+        Assert.True(assembly.ValidateForLaunch().CanLaunch);
+    }
+
     private static VesselAssembly BuildStarshipLikeAssembly()
     {
         var assembly = new VesselAssembly(LoadCatalog());

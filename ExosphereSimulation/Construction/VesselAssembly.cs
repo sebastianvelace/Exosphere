@@ -25,6 +25,17 @@ public sealed record VesselMetrics(
     double SeaLevelTwr,
     double VacuumDeltaV);
 
+public sealed record AssemblyValidation(
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<string> Warnings)
+{
+    public bool CanLaunch => Errors.Count == 0;
+}
+
+public sealed record CompatibleAttachment(
+    string ParentNodeId,
+    string ChildNodeId);
+
 public sealed class VesselAssembly
 {
     private const double G0 = 9.80665;
@@ -73,6 +84,73 @@ public sealed class VesselAssembly
         _usedNodes.Add((parent.InstanceId, parentNode.Id));
         _usedNodes.Add((child.InstanceId, childNode.Id));
         return child;
+    }
+
+    public IReadOnlyList<CompatibleAttachment> CompatibleAttachments(
+        string parentInstanceId,
+        string childDefinitionId)
+    {
+        var parent = RequireInstance(parentInstanceId);
+        var childDef = RequirePart(childDefinitionId);
+        var availableParentNodes = AvailableNodes(parent.InstanceId).ToArray();
+
+        return availableParentNodes
+            .SelectMany(parentNode => childDef.AttachmentNodes
+                .Where(childNode => NodesAreCompatible(parentNode, childNode))
+                .Select(childNode => new CompatibleAttachment(parentNode.Id, childNode.Id)))
+            .OrderBy(pair => NodePreference(pair.ParentNodeId))
+            .ThenBy(pair => ChildNodePreference(pair.ParentNodeId, pair.ChildNodeId))
+            .ThenBy(pair => pair.ParentNodeId, StringComparer.Ordinal)
+            .ThenBy(pair => pair.ChildNodeId, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    public AssemblyPart AttachPartAutomatically(string parentInstanceId, string childDefinitionId)
+    {
+        var match = CompatibleAttachments(parentInstanceId, childDefinitionId).FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"No compatible free node for '{childDefinitionId}' on the selected part.");
+        return AttachPart(
+            parentInstanceId, match.ParentNodeId, childDefinitionId, match.ChildNodeId);
+    }
+
+    public AssemblyValidation ValidateForLaunch(double gravity = G0)
+    {
+        var errors = new List<string>();
+        var warnings = new List<string>();
+        if (_parts.Count == 0)
+        {
+            errors.Add("Add a command part to start the vehicle.");
+            return new AssemblyValidation(errors, warnings);
+        }
+
+        if (_parts.Count(p => p.ParentInstanceId == null) != 1)
+            errors.Add("The vehicle must have exactly one root part.");
+        if (!_parts.Any(p => RequirePart(p.DefinitionId).Category == PartCategory.Command))
+            errors.Add("Add a command or crew-control part.");
+        if (!_parts.Any(p => RequirePart(p.DefinitionId).Category == PartCategory.Engine))
+            errors.Add("Add at least one engine.");
+
+        var connectedChildren = _connections.Select(c => c.ChildInstanceId).ToHashSet();
+        if (_parts.Any(p => p.ParentInstanceId != null && !connectedChildren.Contains(p.InstanceId)))
+            errors.Add("Every non-root part must be connected to the vehicle tree.");
+
+        if (errors.Count == 0)
+        {
+            var metrics = ComputeMetrics(gravity);
+            if (metrics.PropellantMass <= 0.0)
+                warnings.Add("No propellant is loaded; powered flight will be very short.");
+            if (metrics.SeaLevelThrust <= 0.0)
+                errors.Add("The active stage has no sea-level thrust.");
+            else if (metrics.SeaLevelTwr <= 1.0)
+                errors.Add($"Sea-level TWR is {metrics.SeaLevelTwr:F2}; it must exceed 1.00.");
+            else if (metrics.SeaLevelTwr < 1.15)
+                warnings.Add($"Sea-level TWR {metrics.SeaLevelTwr:F2} leaves little launch margin.");
+            if (metrics.VacuumDeltaV < 1_000.0)
+                warnings.Add($"Active-stage vacuum delta-v is only {metrics.VacuumDeltaV:F0} m/s.");
+        }
+
+        return new AssemblyValidation(errors, warnings);
     }
 
     public bool DeletePart(string instanceId)
@@ -271,6 +349,24 @@ public sealed class VesselAssembly
 
     private static bool IsAttachable(AttachmentNodeDef node) =>
         !node.Type.Equals("engine_bell", StringComparison.OrdinalIgnoreCase);
+
+    private static int NodePreference(string nodeId) => nodeId.ToLowerInvariant() switch
+    {
+        "bottom" => 0,
+        "top" => 1,
+        "radial" => 2,
+        _ => 3,
+    };
+
+    private static int ChildNodePreference(string parentNodeId, string childNodeId)
+    {
+        string parent = parentNodeId.ToLowerInvariant();
+        string child = childNodeId.ToLowerInvariant();
+        if (parent == "bottom" && child == "top") return 0;
+        if (parent == "top" && child == "bottom") return 0;
+        if (parent == "radial" && child == "radial") return 0;
+        return 1;
+    }
 
     private void RebuildUsedNodes()
     {
