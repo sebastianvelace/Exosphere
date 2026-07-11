@@ -34,6 +34,33 @@ public class PartDefinition
     [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
     [JsonPropertyName("attachment_nodes")] public List<AttachmentNodeDef> AttachmentNodes { get; set; } = new();
 
+    // Thermal protection. The defaults describe Starship's ventral tiles over a stainless
+    // hull; a part only uses them when has_heat_shield is set.
+
+    /// <summary>
+    /// Heat capacity of the TPS layer per unit area (J/(m²·K)). Starship's silica tiles are
+    /// ~7 kg/m² at ~1000 J/(kg·K). Low on purpose: a heat shield works by getting hot fast
+    /// and radiating, not by soaking heat up.
+    /// </summary>
+    [JsonPropertyName("tps_heat_capacity_per_area")]
+    public double TpsHeatCapacityPerArea { get; set; } = 7_000.0;
+
+    /// <summary>
+    /// Thermal conductance from the TPS face through to the structure (W/(m²·K)). This is
+    /// the number that decides whether the vehicle survives: ~0.1 W/(m·K) of silica over
+    /// 2 cm gives ~5, which passes only a few kW/m² inward out of hundreds.
+    /// </summary>
+    [JsonPropertyName("tps_conductance")]
+    public double TpsConductance { get; set; } = 5.0;
+
+    /// <summary>
+    /// Heat capacity of the load-bearing skin per unit area (J/(m²·K)). ~4 mm of stainless
+    /// at 7900 kg/m³ and 500 J/(kg·K). Only the shell participates on entry timescales —
+    /// the propellant and structure deeper in do not have time to warm up.
+    /// </summary>
+    [JsonPropertyName("structure_heat_capacity_per_area")]
+    public double StructureHeatCapacityPerArea { get; set; } = 15_800.0;
+
     // Physical envelope. These values let the aerodynamic model use the actual vehicle
     // dimensions instead of inferring a fictional length from the number of logical parts.
     [JsonPropertyName("length_m")]   public double LengthM   { get; set; }

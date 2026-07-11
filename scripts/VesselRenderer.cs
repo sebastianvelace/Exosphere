@@ -541,7 +541,9 @@ public partial class VesselRenderer : Node3D
             if (!_partNodes.TryGetValue(part.InstanceId, out var node)) continue;
             if (node is not MeshInstance3D mesh) continue;
 
-            float t = (float)System.Math.Clamp((part.Temperature - 290.0) / 2000.0, 0.0, 1.0);
+            // The TPS face is what glows and chars, not the structure it protects — a working
+            // heat shield runs white-hot precisely so the hull behind it does not.
+            float t = (float)System.Math.Clamp((part.SkinTemperature - 290.0) / 2000.0, 0.0, 1.0);
             var surfMat = mesh.GetSurfaceOverrideMaterial(0);
 
             if (surfMat is ShaderMaterial sm)
@@ -607,12 +609,12 @@ public partial class VesselRenderer : Node3D
             switch (part.Definition.Id)
             {
                 case "starship_command":
-                    if (part.ThermalDamage > cmdDamage) cmdDamage = part.ThermalDamage;
-                    if (part.Temperature   > cmdTemp)    cmdTemp    = part.Temperature;
+                    if (part.ThermalDamage   > cmdDamage) cmdDamage = part.ThermalDamage;
+                    if (part.SkinTemperature > cmdTemp)   cmdTemp   = part.SkinTemperature;
                     break;
                 case "starship_tank":
-                    if (part.ThermalDamage > tankDamage) tankDamage = part.ThermalDamage;
-                    if (part.Temperature   > tankTemp)    tankTemp    = part.Temperature;
+                    if (part.ThermalDamage   > tankDamage) tankDamage = part.ThermalDamage;
+                    if (part.SkinTemperature > tankTemp)   tankTemp   = part.SkinTemperature;
                     break;
             }
         }

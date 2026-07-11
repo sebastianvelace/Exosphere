@@ -15,9 +15,6 @@ using Exosphere.Simulation.Parts;
 /// </summary>
 public static class ThermalModel
 {
-    /// <summary>Minimum flux fraction a perfectly oriented heat shield lets through (ablative/radiative residual).</summary>
-    public const double ShieldedFluxFloor = 0.08;
-
     /// <summary>
     /// Whether <paramref name="part"/> carries a windward heat shield.
     /// Backed directly by the JSON <c>has_heat_shield</c> flag deserialised into
@@ -38,72 +35,119 @@ public static class ThermalModel
         return k * System.Math.Sqrt(density / noseRadius) * System.Math.Pow(velocity, 3);
     }
 
-    /// <summary>
-    /// Fraction of the free-stream heat flux that actually reaches a part, given its
-    /// shield state and how well that shield faces the flow.
-    ///
-    /// <para><paramref name="windwardFactor"/> ∈ [0,1] is the alignment of the shield's
-    /// windward face with the incoming flow: 1 = shield squarely into the flow
-    /// (belly-flop on the heat-shield side), 0 = shield turned away (the bare,
-    /// unprotected side meets the plasma).</para>
-    ///
-    /// An oriented shield deflects most of the flux (down to <see cref="ShieldedFluxFloor"/>);
-    /// a shield turned away offers no protection. Parts without a shield always take
-    /// the full flux.
-    /// </summary>
-    public static double EffectiveFluxFactor(bool hasShield, double windwardFactor)
-    {
-        if (!hasShield) return 1.0;
-        double w = System.Math.Clamp(windwardFactor, 0.0, 1.0);
-        // Shield squarely into the flow → ShieldedFluxFloor; turned away → 1.0 (no help).
-        return 1.0 - (1.0 - ShieldedFluxFloor) * w;
-    }
-
     // ── Temperature integration ────────────────────────────────────────────────
 
+    /// <summary>Grey-body emissivity of the outer surface.</summary>
+    public const double Emissivity = 0.9;
+
+    /// <summary>Stefan-Boltzmann constant, W/(m²·K⁴).</summary>
+    public const double StefanBoltzmann = 5.67e-8;
+
+    /// <summary>Largest sub-step the stiff T⁴ radiation term stays stable at (s).</summary>
+    private const double MaxSubStep = 0.02;
+
+    /// <summary>Cap on sub-steps per call, so a long warp tick cannot stall the sim.</summary>
+    private const int MaxSubSteps = 256;
+
+    /// <summary>Radiative-equilibrium temperature (K) of a surface under <paramref name="flux"/>.</summary>
+    public static double RadiativeEquilibrium(double flux) =>
+        flux <= 0.0 ? 0.0 : System.Math.Pow(flux / (Emissivity * StefanBoltzmann), 0.25);
+
     /// <summary>
-    /// Integrates one part's temperature (K) for <paramref name="dt"/> seconds under
-    /// an incident <paramref name="heatFlux"/> (W/m²), balancing convective heating
-    /// against grey-body radiative cooling. Floors at 3 K so it never goes unphysical.
+    /// Advances the two-node thermal state of a surface: an outer TPS skin that meets the
+    /// plasma, and the load-bearing structure behind it.
+    ///
+    /// <para>Skin: absorbs the incident flux, radiates it back as a grey body, and leaks a
+    /// little inward. Because its heat capacity is small, it climbs within seconds to the
+    /// radiative equilibrium where re-radiation balances heating — around 1700 K at peak
+    /// entry. That is the tiles doing their job, not the vehicle failing.</para>
+    ///
+    /// <para>Structure: over the fraction the shield covers, it only receives what conducts
+    /// through the TPS — a few kW/m² out of hundreds. Over the fraction left bare (no shield,
+    /// or the shield turned away from the flow) it takes the full flux on naked metal and
+    /// climbs roughly twenty times faster. That difference is the whole point of a heat
+    /// shield, and it is why attitude decides whether an entry is survivable.</para>
     /// </summary>
-    public static double UpdateTemperature(
-        double currentTemp,
-        double heatFlux,
+    /// <param name="skinTemp">Current TPS face temperature (K).</param>
+    /// <param name="structureTemp">Current structure temperature (K).</param>
+    /// <param name="flux">Incident convective flux (W/m²) in the free stream.</param>
+    /// <param name="dt">Time to advance (s).</param>
+    /// <param name="shieldedFraction">Fraction of the exposed area actually covered by TPS facing the flow, ∈ [0,1].</param>
+    /// <param name="tpsCapacityPerArea">TPS heat capacity per area (J/(m²·K)).</param>
+    /// <param name="tpsConductance">TPS→structure conductance (W/(m²·K)).</param>
+    /// <param name="structureCapacityPerArea">Structure skin heat capacity per area (J/(m²·K)).</param>
+    public static (double Skin, double Structure) StepTwoNode(
+        double skinTemp,
+        double structureTemp,
+        double flux,
         double dt,
-        double partMass = 100.0)
+        double shieldedFraction,
+        double tpsCapacityPerArea,
+        double tpsConductance,
+        double structureCapacityPerArea)
     {
-        const double specificHeat    = 800.0;   // J/(kg·K)
-        const double emissivity      = 0.9;
-        const double stefanBoltzmann = 5.67e-8; // W/(m²·K⁴)
-        const double surfaceArea     = 1.0;     // m² (approx)
+        if (dt <= 0.0) return (skinTemp, structureTemp);
 
-        double thermalMass = System.Math.Max(1.0, partMass) * specificHeat;
-        double radiation   = emissivity * stefanBoltzmann
-                             * System.Math.Pow(currentTemp, 4) * surfaceArea;
-        double netPower    = heatFlux * surfaceArea - radiation;
-        double dTemp       = (netPower / thermalMass) * dt;
+        double s    = System.Math.Clamp(shieldedFraction, 0.0, 1.0);
+        double cTps = System.Math.Max(1.0, tpsCapacityPerArea);
+        double cStr = System.Math.Max(1.0, structureCapacityPerArea);
+        double u    = System.Math.Max(0.0, tpsConductance);
 
-        return System.Math.Max(3.0, currentTemp + dTemp);
+        int steps = (int)System.Math.Ceiling(dt / MaxSubStep);
+        steps = System.Math.Clamp(steps, 1, MaxSubSteps);
+        double h = dt / steps;
+
+        double ts = skinTemp;
+        double tb = structureTemp;
+
+        for (int i = 0; i < steps; i++)
+        {
+            double radSkin = Emissivity * StefanBoltzmann * System.Math.Pow(ts, 4);
+            double radStr  = Emissivity * StefanBoltzmann * System.Math.Pow(tb, 4);
+            double inward  = u * (ts - tb);
+
+            // The skin only exists where TPS covers; elsewhere the plasma meets bare structure.
+            double skinPower = flux - radSkin - inward;
+            double strPower  = s * inward + (1.0 - s) * (flux - radStr);
+
+            ts = System.Math.Max(3.0, ts + skinPower / cTps * h);
+            tb = System.Math.Max(3.0, tb + strPower  / cStr * h);
+        }
+
+        return (ts, tb);
     }
 
     /// <summary>
-    /// Applies an incident heat flux to a part for <paramref name="dt"/> seconds,
-    /// accumulating <see cref="Part.Temperature"/>. Returns true if the part is now
-    /// hotter than its <see cref="PartDefinition.HeatTolerance"/>.
-    /// The flux is the value already reaching the part (shield attenuation, if any,
-    /// must be applied by the caller via <see cref="EffectiveFluxFactor"/>).
+    /// Applies the free-stream <paramref name="heatFlux"/> to a part for <paramref name="dt"/>
+    /// seconds through the two-node model, accumulating irreversible burn-through on the
+    /// STRUCTURE. Returns true once the part has burned through.
+    ///
+    /// <paramref name="shieldedFraction"/> is how much of the exposed face is protected: the
+    /// part's shield flag times how squarely that shield meets the flow.
     /// </summary>
-    public static bool ApplyHeat(Part part, double heatFlux, double dt)
+    public static bool ApplyHeat(Part part, double heatFlux, double dt, double shieldedFraction)
     {
-        part.Temperature = UpdateTemperature(part.Temperature, heatFlux, dt, part.CurrentMass);
+        var def = part.Definition;
+
+        (part.SkinTemperature, part.Temperature) = StepTwoNode(
+            part.SkinTemperature,
+            part.Temperature,
+            heatFlux,
+            dt,
+            def.HasHeatShield ? shieldedFraction : 0.0,
+            def.TpsHeatCapacityPerArea,
+            def.TpsConductance,
+            def.StructureHeatCapacityPerArea);
+
         double ratio = part.ThermalRatio;
         if (ratio > 1.0)
         {
             double overLimit = ratio - 1.0;
             part.ThermalDamage = System.Math.Clamp(part.ThermalDamage + overLimit * dt * 0.5, 0.0, 1.0);
         }
-        // Burn-through damage is loss of TPS/material and is irreversible. Cooling changes
-        // temperature, not the amount of material that has already charred or ablated.
+
+        // Burn-through is loss of material and is irreversible. Cooling changes temperature,
+        // not the amount of structure that has already charred or ablated away.
         return part.IsThermallyBurned;
     }
 

@@ -165,25 +165,64 @@ public sealed class PhysicsRegressionTests
     [Fact]
     public void HeatShieldProtectsOnlyWhenWindwardFaceMeetsFlow()
     {
-        var shielded = new Part(new PartDefinition
+        // Same vehicle, same heating, same duration — only the attitude differs. Belly-first
+        // the tiles take the plasma and the hull stays cool; tail-first the hull takes it bare.
+        const double PeakFlux = 3.0e5;   // W/m², roughly peak entry heating
+        const double Duration = 300.0;   // s
+
+        double StructureTempAfterEntry(Vector3d flowDirLocal)
         {
-            Id = "shielded_command",
-            CategoryStr = "command",
-            MassDry = 100.0,
-            HeatTolerance = 1_000.0,
-            HasHeatShield = true,
-        })
-        {
-            Temperature = 1_500.0,
-        };
+            var graph = new PartGraph();
+            graph.SetRoot(new Part(new PartDefinition
+            {
+                Id = "shielded_command",
+                CategoryStr = "command",
+                MassDry = 100.0,
+                HeatTolerance = 1_000.0,
+                HasHeatShield = true,
+            }));
+
+            for (double t = 0.0; t < Duration; t += 0.5)
+                StressSolver.ApplyThermalLoads(graph, PeakFlux, 0.5, flowDirLocal);
+
+            return graph.Parts[0].Temperature;
+        }
+
+        // The heat shield sits on the vessel's local -X face (see ThermalModel.WindwardFactor).
+        double bellyFirst = StructureTempAfterEntry(-Vector3d.Right);
+        double tailFirst  = StructureTempAfterEntry(Vector3d.Right);
+
+        Assert.True(bellyFirst < 1_000.0,
+            $"a correctly oriented shield must keep the structure below tolerance (got {bellyFirst:F0} K)");
+        Assert.True(tailFirst > 1_000.0,
+            $"a shield turned away from the flow must not protect the structure (got {tailFirst:F0} K)");
+    }
+
+    [Fact]
+    public void HeatShieldFaceRunsWhiteHotWhileTheStructureStaysCool()
+    {
+        // This is what a heat shield IS: the tile glows so the hull does not have to.
+        const double PeakFlux = 3.0e5;
+
         var graph = new PartGraph();
-        graph.SetRoot(shielded);
+        graph.SetRoot(new Part(new PartDefinition
+        {
+            Id = "shielded_tank", CategoryStr = "structure", MassDry = 100_000.0,
+            HeatTolerance = 1_200.0, HasHeatShield = true,
+        }));
 
-        double protectedRatio = StressSolver.WorstHeatRatio(graph, -Vector3d.Right);
-        double exposedRatio = StressSolver.WorstHeatRatio(graph, Vector3d.Right);
+        for (double t = 0.0; t < 300.0; t += 0.5)
+            StressSolver.ApplyThermalLoads(graph, PeakFlux, 0.5, -Vector3d.Right);
 
-        Assert.True(protectedRatio < 1.0);
-        Assert.True(exposedRatio > 1.0);
+        var part = graph.Parts[0];
+
+        // The face settles at radiative equilibrium, where re-radiation balances the heating.
+        double equilibrium = ThermalModel.RadiativeEquilibrium(PeakFlux);
+        Assert.InRange(part.SkinTemperature, equilibrium * 0.9, equilibrium * 1.02);
+
+        Assert.True(part.SkinTemperature > 1_400.0, "the TPS face must actually get hot");
+        Assert.True(part.Temperature < 800.0,
+            $"the structure behind an intact shield must stay cool (got {part.Temperature:F0} K)");
     }
 
     [Fact]
@@ -219,7 +258,7 @@ public sealed class PhysicsRegressionTests
             ThermalDamage = 0.4,
         };
 
-        _ = ThermalModel.ApplyHeat(part, heatFlux: 0.0, dt: 100.0);
+        _ = ThermalModel.ApplyHeat(part, heatFlux: 0.0, dt: 100.0, shieldedFraction: 0.0);
 
         Assert.True(part.Temperature < 1_100.0);
         Assert.True(part.ThermalDamage >= 0.4);

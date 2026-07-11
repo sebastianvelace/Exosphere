@@ -21,7 +21,22 @@ public class Part
     public double ElectricCharge  { get; set; }
 
     // ── Estado físico ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Structure temperature (K) — the load-bearing skin BEHIND the thermal protection.
+    /// This is what has to survive: <see cref="ThermalRatio"/> and burn-through are measured
+    /// against it, because the vehicle is lost when the structure fails, not when the tiles
+    /// glow (they are supposed to glow).
+    /// </summary>
     public double Temperature     { get; set; } = 290.0;  // K
+
+    /// <summary>
+    /// Outer TPS/skin temperature (K) — the tile face that meets the plasma. Thin and low
+    /// mass, so it climbs fast and settles at radiative equilibrium (~1700 K at peak entry
+    /// heating) while insulating the structure behind it.
+    /// </summary>
+    public double SkinTemperature { get; set; } = 290.0;  // K
+
     public double ThermalDamage   { get; set; } = 0.0;    // 0..1 progressive burn-through
     public bool   IsBroken        { get; set; }
     public bool   IsDeployed      { get; set; }

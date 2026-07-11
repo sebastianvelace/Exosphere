@@ -41,6 +41,10 @@ Base tecnica cerrada en `main`:
   terrestre bajo g terrestre), altitud geopotencial, capas USSA-76 completas (T/P/rho dentro
   de 0,02%) y termosfera de escala creciente (1,14x vs NRLMSISE). El flujo termico en la
   interfaz de entrada se duplica: ahora hay atmosfera real por encima de 86 km.
+- TPS de dos nodos (RF-07): piel de losetas en equilibrio radiativo (~1420 K) sobre una
+  estructura acoplada por conduccion. La reentrada era **imposible de fallar** (la nave
+  llegaba a 292 K tras 400 s de flujo pico); ahora la actitud decide: belly-flop sobrevive,
+  tumbando se quema. Las losetas ademas por fin brillan y se carbonizan.
 
 ## Prioridad Inmediata
 

@@ -65,19 +65,8 @@ public static class StressSolver
     /// </summary>
     public static List<Part> ApplyThermalLoads(PartGraph graph, double heatFlux, double dt)
     {
-        var destroyed = new List<Part>();
-        foreach (var part in graph.Parts)
-        {
-            bool shield = ThermalModel.HasHeatShield(part);
-            // Sin orientación conocida, asumimos el escudo bien orientado (caso favorable).
-            double flux = heatFlux * ThermalModel.EffectiveFluxFactor(shield, windwardFactor: 1.0);
-            if (ThermalModel.ApplyHeat(part, flux, dt))
-            {
-                part.IsBroken = true;
-                destroyed.Add(part);
-            }
-        }
-        return destroyed;
+        // Sin orientación conocida, asumimos el escudo bien orientado (caso favorable).
+        return ApplyThermalLoads(graph, heatFlux, dt, shieldedFraction: 1.0);
     }
 
     /// <summary>
@@ -88,15 +77,21 @@ public static class StressSolver
     /// Returns the parts that exceeded their tolerance this tick.
     /// </summary>
     public static List<Part> ApplyThermalLoads(
-        PartGraph graph, double heatFlux, double dt, Vector3d flowDirLocal)
+        PartGraph graph, double heatFlux, double dt, Vector3d flowDirLocal) =>
+        ApplyThermalLoads(graph, heatFlux, dt, ThermalModel.WindwardFactor(flowDirLocal));
+
+    /// <summary>
+    /// Applies the free-stream flux to every part with a known shielded fraction. The flux is
+    /// NOT pre-attenuated: the two-node model decides what actually reaches the structure,
+    /// because protection is insulation, not a discount on the incoming heat.
+    /// </summary>
+    private static List<Part> ApplyThermalLoads(
+        PartGraph graph, double heatFlux, double dt, double shieldedFraction)
     {
-        double windward = ThermalModel.WindwardFactor(flowDirLocal);
         var destroyed = new List<Part>();
         foreach (var part in graph.Parts)
         {
-            bool shield = ThermalModel.HasHeatShield(part);
-            double flux = heatFlux * ThermalModel.EffectiveFluxFactor(shield, windward);
-            if (ThermalModel.ApplyHeat(part, flux, dt))
+            if (ThermalModel.ApplyHeat(part, heatFlux, dt, shieldedFraction))
             {
                 part.IsBroken = true;
                 destroyed.Add(part);
@@ -114,12 +109,13 @@ public static class StressSolver
     /// destroyed — but the destruction decision belongs to the impact/crash owner
     /// (Universe), which reads this ratio. This solver never sets <c>Vessel.IsDestroyed</c>.
     ///
-    /// Orientation-agnostic form: a part carrying a heat shield is assumed best-oriented and
-    /// its ratio is scaled down by the shielded flux floor; bare parts count at face value.
-    /// For an orientation-sensitive verdict use <see cref="WorstHeatRatio(PartGraph, Vector3d)"/>.
+    /// This reads the STRUCTURE temperature, which already carries whatever protection the
+    /// shield gave it: the two-node model insulates the structure while the TPS face runs
+    /// white-hot, so no extra discount belongs here. Orientation still decides the outcome —
+    /// it decides how fast the structure heats, not how its temperature is scored.
     ///
-    /// Razón de daño térmico peor caso: máx(Temperature/heat_tolerance). ≥1.0 ⇒ la nave
-    /// debería destruirse (lo decide C). Las piezas con escudo cuentan como protegidas.
+    /// Razón de daño térmico peor caso: máx(Temperature/heat_tolerance) sobre la estructura.
+    /// ≥1.0 ⇒ la nave debería destruirse (lo decide Universe).
     /// </summary>
     public static double WorstHeatRatio(PartGraph parts)
     {
@@ -127,35 +123,8 @@ public static class StressSolver
         foreach (var part in parts.Parts)
         {
             if (part.IsBroken) continue;
-            double tol = part.Definition.HeatTolerance;
-            if (tol <= 0.0) continue;
-            bool shield = ThermalModel.HasHeatShield(part);
-            double protection = shield ? ThermalModel.ShieldedFluxFloor : 1.0;
-            double ratio = (part.Temperature / tol) * protection;
-            if (ratio > worst) worst = ratio;
-        }
-        return worst;
-    }
-
-    /// <summary>
-    /// Orientation-aware worst-case thermal damage ratio. <paramref name="flowDirLocal"/> is
-    /// the airflow direction in the vessel's local frame. A heat-shielded part is protected
-    /// in proportion to how squarely its windward (belly) face meets the flow: shield into
-    /// the flow ⇒ low ratio (survives); shield turned away ⇒ full ratio (the bare side burns
-    /// through and the ratio crosses 1.0). Bare parts always count at face value.
-    /// </summary>
-    public static double WorstHeatRatio(PartGraph parts, Vector3d flowDirLocal)
-    {
-        double windward = ThermalModel.WindwardFactor(flowDirLocal);
-        double worst = 0.0;
-        foreach (var part in parts.Parts)
-        {
-            if (part.IsBroken) continue;
-            double tol = part.Definition.HeatTolerance;
-            if (tol <= 0.0) continue;
-            bool shield = ThermalModel.HasHeatShield(part);
-            double protection = ThermalModel.EffectiveFluxFactor(shield, windward);
-            double ratio = (part.Temperature / tol) * protection;
+            if (part.Definition.HeatTolerance <= 0.0) continue;
+            double ratio = part.ThermalRatio;
             if (ratio > worst) worst = ratio;
         }
         return worst;
