@@ -45,6 +45,9 @@ Base tecnica cerrada en `main`:
   estructura acoplada por conduccion. La reentrada era **imposible de fallar** (la nave
   llegaba a 292 K tras 400 s de flujo pico); ahora la actitud decide: belly-flop sobrevive,
   tumbando se quema. Las losetas ademas por fin brillan y se carbonizan.
+- Panel THERMAL en el HUD del EDL: cara del TPS, barra de casco contra tolerancia y
+  alineacion del escudo con el flujo (el unico numero accionable), con aviso SHIELD OFF FLOW
+  solo cuando hay flujo real detras. Sin el, la reentrada letal mataba a ciegas.
 
 ## Prioridad Inmediata
 

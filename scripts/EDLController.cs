@@ -28,6 +28,13 @@ public partial class EDLController : Control
     private double _alt, _vUp, _horiz, _gForce, _heat;
     private string _bodyName = "";
 
+    // ── Thermal state (the entry is now survivable-or-not, so the crew has to SEE it) ──
+    private double _skinTemp;        // TPS face (K) — supposed to be white-hot
+    private double _hullRatio;       // structure temperature / tolerance — this is what kills
+    private double _thermalDamage;   // irreversible char, 0..1
+    private double _shieldAlign;     // 0..1 — how squarely the tiles meet the flow
+    private double _fluxNow;         // W/m², free-stream convective flux
+
     private Font _font = null!;
     private bool _legsDeployed;
     private bool _flipInProgress;
@@ -69,6 +76,8 @@ public partial class EDLController : Control
         double density = body.Atmosphere.GetDensity(_alt);
         double speed   = surfVel.Magnitude;
         _heat = density * speed * speed * speed;            // ∝ convective heat flux
+
+        RefreshThermalState(vessel, body, density, speed, surfVel);
 
         // ── Deactivation guard — runs BEFORE the activation check ─────────────
         // Si salimos de la atmósfera o estamos ascendiendo claramente, reseteamos la
@@ -397,6 +406,12 @@ public partial class EDLController : Control
 
         DrawAltimeter(vp);
         DrawTelemetry(vp);
+
+        // The aero phases are the ones that can burn the vehicle; below them the panel would
+        // just be noise on a descent that is already thermally over.
+        if (_phase is Edl.Entry or Edl.Peak or Edl.Aero)
+            DrawThermal(vp);
+
         DrawPhaseBanner(vp);
     }
 
@@ -435,6 +450,83 @@ public partial class EDLController : Control
             DrawLine(new Vector2(x, ty), new Vector2(x + 6, ty), new Color(0.5f, 0.6f, 0.7f, 0.7f), 1f);
             Text($"{(5 - i) * 1000}", new Vector2(x - 50, ty + 5), new Color(0.55f, 0.62f, 0.72f), 11);
         }
+    }
+
+    /// <summary>
+    /// Reads the same thermal state the simulation is actually integrating, so the crew sees
+    /// the numbers that decide their survival rather than a decorative gauge.
+    /// </summary>
+    private void RefreshThermalState(
+        Vessel vessel, CelestialBody body, double density, double speed, Vector3d surfVel)
+    {
+        _fluxNow = ThermalModel.ComputeHeatFlux(
+            density, speed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+
+        var flowLocal = speed > 1e-6
+            ? vessel.Orientation.Inverse().Rotate(surfVel.Normalized)
+            : Vector3d.Zero;
+        _shieldAlign = ThermalModel.WindwardFactor(flowLocal);
+
+        _skinTemp = 0.0;
+        _hullRatio = 0.0;
+        _thermalDamage = 0.0;
+
+        foreach (var part in vessel.Parts.Parts)
+        {
+            // Only the tiled parts say anything about the heat shield. The engine cluster
+            // carries no tiles by design and runs hot without meaning anything is wrong.
+            if (!part.Definition.HasHeatShield) continue;
+
+            if (part.SkinTemperature > _skinTemp)   _skinTemp = part.SkinTemperature;
+            if (part.ThermalRatio    > _hullRatio)  _hullRatio = part.ThermalRatio;
+            if (part.ThermalDamage   > _thermalDamage) _thermalDamage = part.ThermalDamage;
+        }
+    }
+
+    private void DrawThermal(Vector2 vp)
+    {
+        // Left-hand column, clear of the flight/orbit panels the rest of the HUD owns.
+        float px = 260f, py = vp.Y * 0.30f;
+        const float pw = 230f, ph = 200f;
+
+        DrawRect(new Rect2(px - 14, py - 26, pw, ph), new Color(0.04f, 0.06f, 0.09f, 0.78f));
+        DrawRect(new Rect2(px - 14, py - 26, pw, ph), new Color(0.45f, 0.65f, 0.95f, 0.35f), false, 1.2f);
+        Text("THERMAL", new Vector2(px - 6, py - 8), new Color(0.55f, 0.68f, 0.85f), 13);
+
+        float x = px, y = py + 14f;
+        var label = new Color(0.6f, 0.7f, 0.82f);
+
+        Text("TPS FACE", new Vector2(x, y), label, 13);
+        Text($"{_skinTemp:F0} K", new Vector2(x, y + 20),
+            _skinTemp > 1200 ? new Color(1f, 0.62f, 0.25f) : new Color(0.9f, 0.95f, 1f), 20);
+
+        // The hull bar is the one that matters: at 1.0 the structure is failing.
+        Text("HULL", new Vector2(x, y + 52), label, 13);
+        float ratio = (float)System.Math.Clamp(_hullRatio, 0.0, 1.2);
+        Color hullCol = _hullRatio > 0.9 ? new Color(1f, 0.3f, 0.25f)
+                      : _hullRatio > 0.65 ? new Color(1f, 0.8f, 0.3f)
+                      : new Color(0.45f, 1f, 0.6f);
+
+        const float barW = 130f, barH = 12f;
+        DrawRect(new Rect2(x, y + 60, barW, barH), new Color(0.05f, 0.07f, 0.10f, 0.8f));
+        DrawRect(new Rect2(x, y + 60, barW * ratio / 1.2f, barH), hullCol);
+        DrawRect(new Rect2(x, y + 60, barW, barH), new Color(0.45f, 0.65f, 0.95f, 0.5f), false, 1.2f);
+        Text($"{_hullRatio * 100.0:F0}%", new Vector2(x + barW + 10, y + 71), hullCol, 16);
+
+        // Shield alignment is the ACTIONABLE number — it is the one the pilot can fix.
+        Text("SHIELD", new Vector2(x, y + 92), label, 13);
+        Color alignCol = _shieldAlign > 0.85 ? new Color(0.45f, 1f, 0.6f)
+                       : _shieldAlign > 0.5  ? new Color(1f, 0.8f, 0.3f)
+                       : new Color(1f, 0.3f, 0.25f);
+        Text($"{_shieldAlign * 100.0:F0}%", new Vector2(x, y + 112), alignCol, 20);
+
+        // Only shout when it actually matters: a shield off the flow with real heat behind it.
+        if (_shieldAlign < 0.7 && _fluxNow > 5.0e4)
+            Text("SHIELD OFF FLOW", new Vector2(x, y + 140), new Color(1f, 0.3f, 0.25f), 18);
+
+        if (_thermalDamage > 0.0)
+            Text($"TPS DAMAGE {_thermalDamage * 100.0:F0}%",
+                new Vector2(x, y + 164), new Color(1f, 0.45f, 0.3f), 16);
     }
 
     private void DrawTelemetry(Vector2 vp)
