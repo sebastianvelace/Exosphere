@@ -20,27 +20,40 @@ public partial class FloatingOrigin : Node
     private const double MetresPerUnit   = 2.8;   // render scale (matches the vessel)
     private readonly Dictionary<string, Node3D> _planetNodes = new();
     private Camera3D? _camera;
-    // Orient Earth so Cape Canaveral (28.5°N, 80.6°W) sits at the +Y launch site, i.e.
-    // the rocket lifts off over Florida / the US east coast. Public so the ground patch
-    // can sample the same texture region at the launch site.
-    public static readonly Godot.Quaternion PlanetTilt = CapeCanaveralTilt();
 
-    private static Godot.Quaternion CapeCanaveralTilt()
+    /// <summary>
+    /// Rotation carrying the Earth texture's own lat/lon frame onto the simulation's
+    /// body-fixed frame, so a point at (lat, lon) in the texture is drawn exactly where
+    /// the simulation puts that latitude and longitude.
+    ///
+    /// This used to be a compensating tilt: the rocket was spawned on the inertial +Y axis
+    /// and the planet was spun until Florida happened to sit under it. Now the pad is
+    /// placed at its real geodetic coordinates, so the texture only has to agree with the
+    /// spin axis and the launch site lands on Florida on its own.
+    ///
+    /// Public so the ground patch can undo it and sample the same texture region.
+    /// </summary>
+    public static Godot.Quaternion PlanetTilt { get; private set; } = Godot.Quaternion.Identity;
+
+    /// <summary>
+    /// Builds <see cref="PlanetTilt"/> from the body's spin axis, using the SAME body-fixed
+    /// basis as <c>CelestialBody.GetSurfacePosition</c>. Texture convention (equirect, as
+    /// the Earth shader reads it): +Y is the north pole, lon = atan2(z, x).
+    /// </summary>
+    private static void BuildPlanetTilt(Exosphere.Simulation.CelestialBody body)
     {
-        // Florida east coast (≈27.5°N, 80.7°W): verified to sit on LAND in the Blue Marble
-        // texture with the Atlantic just to the east, so the pad is on solid ground and the
-        // rocket flies out over the ocean — instead of the pad floating on water.
-        float lat = Godot.Mathf.DegToRad(27.5f);
-        float lon = Godot.Mathf.DegToRad(-80.7f);
-        // Equirect convention used by the Earth shader: lon = atan2(z,x), lat = asin(y).
-        var pcc = new Godot.Vector3(
-            Godot.Mathf.Cos(lat) * Godot.Mathf.Cos(lon),
-            Godot.Mathf.Sin(lat),
-            Godot.Mathf.Cos(lat) * Godot.Mathf.Sin(lon));
-        var axis = pcc.Cross(Godot.Vector3.Up);
-        if (axis.Length() < 1e-5f) return Godot.Quaternion.Identity;
-        float angle = Godot.Mathf.Acos(Godot.Mathf.Clamp(pcc.Dot(Godot.Vector3.Up), -1f, 1f));
-        return new Godot.Quaternion(axis.Normalized(), angle);
+        var north = body.RotationAxis;
+        var seed  = System.Math.Abs(north.Z) < 0.9 ? new Vector3d(0, 0, 1) : new Vector3d(1, 0, 0);
+        var primeMeridian = seed.Cross(north).Normalized;        // texture (lat 0, lon 0)
+        var ninetyEast    = north.Cross(primeMeridian).Normalized; // texture (lat 0, lon 90°E)
+
+        // Columns map texture axes → simulation axes: x → prime meridian, y → north, z → 90°E.
+        var basis = new Godot.Basis(
+            new Godot.Vector3((float)primeMeridian.X, (float)primeMeridian.Y, (float)primeMeridian.Z),
+            new Godot.Vector3((float)north.X,         (float)north.Y,         (float)north.Z),
+            new Godot.Vector3((float)ninetyEast.X,    (float)ninetyEast.Y,    (float)ninetyEast.Z));
+
+        PlanetTilt = basis.GetRotationQuaternion();
     }
 
     // Último origen usado (en coordenadas de simulación)
@@ -57,10 +70,24 @@ public partial class FloatingOrigin : Node
         return t * t * (3.0 - 2.0 * t);
     }
 
+    private bool _planetTiltBuilt;
+
     public override void _Process(double delta)
     {
         var bridge = SimulationBridge.Instance;
         if (bridge?.Universe == null) return;
+
+        // The spin axis comes from body JSON, so the texture frame can only be built once
+        // the universe is loaded.
+        if (!_planetTiltBuilt)
+        {
+            var earthBody = bridge.Universe.GetBody("earth");
+            if (earthBody != null)
+            {
+                BuildPlanetTilt(earthBody);
+                _planetTiltBuilt = true;
+            }
+        }
 
         var activeVessel = bridge.ActiveVessel;
         if (activeVessel == null) return;

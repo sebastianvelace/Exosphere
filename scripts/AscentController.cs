@@ -196,8 +196,12 @@ public partial class AscentController : Control
         Vector3d rel  = vessel.Position - body.Position;
         Vector3d vel  = vessel.Velocity - body.Velocity;
         Vector3d up   = rel.Normalized;
-        Vector3d east = new Vector3d(0, 1, 0).Cross(up);
-        east = east.Magnitude > 1e-6 ? east.Normalized : new Vector3d(0, 0, 1);
+
+        // East is defined by the body's spin axis (east = ω̂ × r̂), not by an inertial
+        // axis: turning downrange has to chase the same direction the ground is already
+        // carrying us, otherwise the gravity turn throws away the launch site's boost.
+        Vector3d east = body.GetEastDirection(vessel.Position);
+        if (east.Magnitude < 1e-6) east = new Vector3d(0, 0, 1);   // polar pad: any azimuth
         double vUp = vel.Dot(up);
         _alt = body.GetAltitude(vessel.Position);
 

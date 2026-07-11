@@ -39,12 +39,15 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 - Etapa separada hereda posición, velocidad, actitud y velocidad angular.
 - Touchdown usa seis pies con resorte, amortiguador, fricción, torque y límites de
   recorrido/carga; aterrizar ya no congela posición, velocidad ni actitud.
+- El pad se planta en las coordenadas geodésicas reales del sitio de lanzamiento, así que
+  hereda el empuje de rotación que le corresponde a su latitud (ω·R·cos φ). El gravity turn
+  persigue el este definido por el eje de giro, no por un eje inercial fijo.
 
 ## Hallazgos priorizados
 
 | ID | Brecha | Estado | Evidencia / aceptación |
 |---|---|---|---|
-| RF-01 | Marco eclíptico `+Z` vs rotación planetaria `+Y` | **P0 pendiente** | Unificar eje y lat/lon; Cape aporta `408±3 m/s` al este |
+| RF-01 | Marco eclíptico `+Z` vs rotación planetaria `+Y` | **Cerrado V1** | Pad en lat/lon reales de `data/launch_sites`; Kennedy aporta `407,9 m/s` al este (antes 184,8 desde `+Y`, latitud efectiva 66,6°). Eje único `RotationAxis` deriva superficie/latitud/este; 13 tests. Falta unificar el marco orbital heliocéntrico con la eclíptica |
 | RF-02 | Propagación lunar dependía del orden de archivos | **Cerrado** | Test invierte Sol/planeta/luna y exige estados idénticos |
 | RF-03 | Gimbal no alteraba fuerza traslacional | **Parcial** | Acoplado en cluster; faltan motores individuales y tensor completo |
 | RF-04 | EDL/maniobras escriben orientación | **Cerrado V1** | Ningún controlador runtime asigna `Orientation`; corredor sembrado mide flip 15,33 s |

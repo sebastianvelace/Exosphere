@@ -97,28 +97,97 @@ public class CelestialBody
     }
 
     /// <summary>
-    /// Surface velocity at <paramref name="worldPos"/> due to the body's rotation (m/s).
-    /// Used to compute airspeed relative to the atmosphere.
+    /// Unit rotation axis in the inertial frame: +Y tilted toward +X by the axial tilt.
+    /// This is the single definition of the body's spin axis — surface velocity, latitude
+    /// and the local east direction are all derived from it, so they cannot drift apart.
+    /// </summary>
+    public Vector3d RotationAxis
+    {
+        get
+        {
+            double tiltRad = AxialTilt * MathUtils.DEG_TO_RAD;
+            return new Vector3d(
+                System.Math.Sin(tiltRad),
+                System.Math.Cos(tiltRad),
+                0.0).Normalized;
+        }
+    }
+
+    /// <summary>Angular velocity ω (rad/s). Sign preserved: negative ⇒ retrograde.</summary>
+    public double AngularSpeed =>
+        System.Math.Abs(RotationalPeriod) < 1.0
+            ? 0.0
+            : 2.0 * System.Math.PI / RotationalPeriod;
+
+    /// <summary>
+    /// Surface velocity at <paramref name="worldPos"/> due to the body's rotation (m/s):
+    /// v = ω⃗ × r⃗. This is what a launch site hands the vehicle for free, and what
+    /// airspeed is measured against.
     /// </summary>
     public Vector3d GetSurfaceVelocity(Vector3d worldPos)
     {
-        if (System.Math.Abs(RotationalPeriod) < 1.0) return Vector3d.Zero;
+        if (AngularSpeed == 0.0) return Vector3d.Zero;
 
-        double omega    = 2.0 * System.Math.PI / RotationalPeriod;   // rad/s (sign preserved)
-        double tiltRad  = AxialTilt * MathUtils.DEG_TO_RAD;
+        var omegaVec = RotationAxis * AngularSpeed;
+        return omegaVec.Cross(worldPos - Position);
+    }
 
-        // Rotation axis: +Y tilted toward +X by the axial tilt
-        var rotAxis = new Vector3d(
-            System.Math.Sin(tiltRad),
-            System.Math.Cos(tiltRad),
-            0.0).Normalized;
-
-        // ω⃗ = omega * rotAxis
-        var omegaVec = rotAxis * omega;
-
-        // v = ω⃗ × r⃗
+    /// <summary>
+    /// Local east (the direction the surface is carried by rotation) at
+    /// <paramref name="worldPos"/>: east = ω̂ × r̂. Degenerate at the poles, where the
+    /// radial and the spin axis are parallel; returns zero there.
+    /// </summary>
+    public Vector3d GetEastDirection(Vector3d worldPos)
+    {
         var relPos = worldPos - Position;
-        return omegaVec.Cross(relPos);
+        if (relPos.MagnitudeSquared < 1.0) return Vector3d.Zero;
+
+        var east = RotationAxis.Cross(relPos.Normalized);
+        return east.Magnitude > 1e-9 ? east.Normalized : Vector3d.Zero;
+    }
+
+    /// <summary>
+    /// Geodetic latitude (degrees, +N) of <paramref name="worldPos"/>, measured from the
+    /// equatorial plane normal to <see cref="RotationAxis"/>.
+    /// </summary>
+    public double GetLatitude(Vector3d worldPos)
+    {
+        var relPos = worldPos - Position;
+        if (relPos.MagnitudeSquared < 1.0) return 0.0;
+
+        double sinLat = System.Math.Clamp(relPos.Normalized.Dot(RotationAxis), -1.0, 1.0);
+        return System.Math.Asin(sinLat) * MathUtils.RAD_TO_DEG;
+    }
+
+    /// <summary>
+    /// Inertial position of the surface point at the given geodetic coordinates.
+    ///
+    /// The body-fixed basis is built from <see cref="RotationAxis"/>, so the co-latitude —
+    /// and therefore the rotational boost a launch site inherits — is physically correct:
+    /// a site at latitude φ is carried east at ω·R·cos φ.
+    ///
+    /// Longitude is measured about the spin axis from an arbitrary but fixed prime
+    /// meridian. The simulation does not track a sidereal spin phase, so longitude only
+    /// fixes where sites sit relative to each other, not where they sit at an epoch.
+    /// </summary>
+    /// <param name="latitudeDeg">Geodetic latitude, +N (degrees).</param>
+    /// <param name="longitudeDeg">Longitude, +E (degrees).</param>
+    /// <param name="altitudeM">Height above mean radius (m).</param>
+    public Vector3d GetSurfacePosition(double latitudeDeg, double longitudeDeg, double altitudeM = 0.0)
+    {
+        double lat = latitudeDeg  * MathUtils.DEG_TO_RAD;
+        double lon = longitudeDeg * MathUtils.DEG_TO_RAD;
+
+        // Orthonormal body-fixed basis: axis (north) + two equatorial vectors.
+        var north = RotationAxis;
+        var seed  = System.Math.Abs(north.Z) < 0.9 ? new Vector3d(0, 0, 1) : new Vector3d(1, 0, 0);
+        var primeMeridian = seed.Cross(north).Normalized;      // in the equatorial plane
+        var ninetyEast    = north.Cross(primeMeridian).Normalized;
+
+        var equatorial = primeMeridian * System.Math.Cos(lon) + ninetyEast * System.Math.Sin(lon);
+        var up         = equatorial * System.Math.Cos(lat) + north * System.Math.Sin(lat);
+
+        return Position + up.Normalized * (Radius + altitudeM);
     }
 
     // ── JSON loading ───────────────────────────────────────────────────────

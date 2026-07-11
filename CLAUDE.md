@@ -115,7 +115,9 @@ Important implemented systems:
 Data lives in JSON:
 - `data/bodies/*.json`
 - `data/parts/*.json`
-- `data/launch_sites/*.json`
+- `data/launch_sites/*.json` — live: `SimulationBridge.LaunchSiteId` picks the pad, and the
+  site's latitude sets the rotational boost the vehicle inherits (ω·R·cos φ). Never spawn a
+  vessel on a hardcoded axis; derive the pad frame from `CelestialBody.GetSurfacePosition`.
 
 Do not hardcode physical constants in game code when they belong in JSON. Copy the schema of nearby files when adding data.
 

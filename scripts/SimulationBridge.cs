@@ -61,6 +61,12 @@ public partial class SimulationBridge : Node
     private LaunchPadController? _launchPad      = null;
     private Vector3d             _padWorldPos;
 
+    // ── Launch site ───────────────────────────────────────────────────────
+    /// <summary>Id of the pad every vessel launches from (see data/launch_sites).</summary>
+    [Export] public string LaunchSiteId { get; set; } = "kennedy";
+
+    private LaunchSite? _launchSite;
+
     // ── Ignition ramp state ───────────────────────────────────────────────
     // True while Ignite() is spooling up and waiting for TWR > 1.02 to release the hold-down.
     private bool   _ignitionActive  = false;
@@ -75,6 +81,10 @@ public partial class SimulationBridge : Node
         Universe = Universe.LoadFromDataDirectory(dataPath);
         Universe.TimeScale = 1.0;
         _running = true;
+
+        var sites = LaunchSite.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "launch_sites"));
+        if (!sites.TryGetValue(LaunchSiteId, out _launchSite))
+            GD.PushWarning($"[Sim] Launch site '{LaunchSiteId}' not found; pad will fall back to the equator.");
 
         // Create sibling nodes — deferred: parent (Flight) is busy in _Ready()
         var mm = new MissionManager { Name = "MissionManager" };
@@ -304,25 +314,12 @@ public partial class SimulationBridge : Node
         vessel.Parts.AddJoint(new Joint(decoupler, sh,        "bottom", "top"));
         vessel.ConfigureLandingContactsFromParts();
 
-        // Spawn at +Y so the stack stands vertical in the render frame. The Earth backdrop
-        // is rotated (see FloatingOrigin) so the blue/green equator — not the polar ice —
-        // faces the launch site, keeping the planet realistic without tilting the rocket.
-        // Visual model has stack bottom at y=0, so spawn altitude = 0 → launch mount height.
+        // Stand the stack on the real launch site. The hull's +Y is rotated onto the local
+        // vertical there, so the rocket is upright at the pad's true latitude instead of
+        // being planted on an arbitrary axis. Visual model has stack bottom at y=0, so
+        // spawn altitude = 0 → launch mount height.
         const double mountHeightM = 12.0;  // OLM height in metres
-        var upDir = new Vector3d(0, 1, 0); // +Y from Earth centre
-
-        vessel.Position = earth.Position + upDir * (earth.Radius + mountHeightM);
-        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
-        vessel.Orientation = Quaterniond.Identity;  // +Y up = radial up at spawn point
-        vessel.SASEnabled = true;
-
-        // Ground hold: keeps vessel locked to surface until T-0
-        vessel.IsGroundHeld  = true;
-        vessel.GroundNormal  = upDir;
-        vessel.GroundOffset  = mountHeightM;
-
-        // Save pad surface position for LaunchPad visual anchoring
-        _padWorldPos = earth.Position + upDir * earth.Radius;
+        StandOnPad(vessel, earth, mountHeightM);
 
         Universe.AddVessel(vessel);
         Universe.ActiveVessel = vessel;
@@ -442,6 +439,37 @@ public partial class SimulationBridge : Node
     public void ReleaseGroundHold()   { ActiveVessel?.ReleaseGroundHold(); }
 
     /// <summary>
+    /// Stands <paramref name="vessel"/> on the launch pad: at the launch site's real
+    /// geodetic position, upright along the local vertical, and already moving with the
+    /// ground beneath it.
+    ///
+    /// The site's latitude is what earns the free eastward velocity the body's rotation
+    /// gives a pad (ω·R·cos φ — ≈408 m/s at Kennedy). Spawning along an arbitrary axis
+    /// instead puts the pad at the wrong latitude and quietly steals that delta-v, so the
+    /// pad frame is derived from data, never hardcoded.
+    /// </summary>
+    private void StandOnPad(Vessel vessel, CelestialBody body, double mountHeightM)
+    {
+        Vector3d padSurface = _launchSite != null
+            ? _launchSite.GetPosition(body)
+            : body.GetSurfacePosition(0.0, 0.0);   // fallback: the equator, not the pole
+
+        var upDir = (padSurface - body.Position).Normalized;
+
+        vessel.Position    = padSurface + upDir * mountHeightM;
+        vessel.Velocity    = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, upDir);  // hull +Y → local vertical
+        vessel.SASEnabled  = true;
+
+        // Ground hold: keeps the vessel locked to the surface until T-0.
+        vessel.IsGroundHeld = true;
+        vessel.GroundNormal = upDir;
+        vessel.GroundOffset = mountHeightM;
+
+        _padWorldPos = padSurface;
+    }
+
+    /// <summary>
     /// Places an externally constructed vessel on the active launch pad and makes it the
     /// controlled vessel. Used by the VAB/export flow; keeps the same ground-hold contract
     /// as the default Starship stack.
@@ -454,17 +482,9 @@ public partial class SimulationBridge : Node
         if (ActiveVessel != null)
             Universe.RemoveVessel(ActiveVessel);
 
-        var upDir = new Vector3d(0, 1, 0);
-        vessel.Position = earth.Position + upDir * (earth.Radius + mountHeightM);
-        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
-        vessel.Orientation = Quaterniond.Identity;
-        vessel.SASEnabled = true;
-        vessel.IsGroundHeld = true;
-        vessel.GroundNormal = upDir;
-        vessel.GroundOffset = mountHeightM;
+        StandOnPad(vessel, earth, mountHeightM);
         vessel.ConfigureLandingContactsFromParts();
 
-        _padWorldPos = earth.Position + upDir * earth.Radius;
         Universe.AddVessel(vessel);
         Universe.ActiveVessel = vessel;
 

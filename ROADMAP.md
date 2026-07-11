@@ -34,6 +34,9 @@ Base tecnica cerrada en `main`:
 - Audio de vuelo derivado de física real: airflow por presion dinamica, brillo por
   Mach, buffet transonico/max-Q/entrada, rugido de plasma con el mismo flujo termico
   que la bola de fuego, y motor airborne vs structure-borne segun densidad ambiente.
+- Marco de lanzamiento real (RF-01): el pad usa lat/lon de `data/launch_sites`, hereda
+  ω·R·cos φ (Kennedy: 408 m/s al este, antes 185) y el gravity turn persigue el este del
+  eje de giro. Staging pasa de 2156 a 2308 m/s, entrando en la banda 2,2–2,5 km/s.
 
 ## Prioridad Inmediata
 

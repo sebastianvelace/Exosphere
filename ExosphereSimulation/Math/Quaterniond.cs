@@ -72,6 +72,30 @@ public readonly struct Quaterniond : IEquatable<Quaterniond>
     }
 
     /// <summary>
+    /// Shortest-arc rotation taking <paramref name="from"/> onto <paramref name="to"/>.
+    /// Used to stand a vehicle upright on a pad: it maps the hull's local axis onto the
+    /// launch site's radial up, whatever inertial direction that happens to be.
+    /// Anti-parallel inputs pick an arbitrary perpendicular axis and rotate by π.
+    /// </summary>
+    public static Quaterniond FromTo(Vector3d from, Vector3d to)
+    {
+        Vector3d a = from.Normalized;
+        Vector3d b = to.Normalized;
+
+        double dot = System.Math.Clamp(a.Dot(b), -1.0, 1.0);
+        if (dot > 1.0 - 1e-12) return Identity;
+
+        if (dot < -1.0 + 1e-12)
+        {
+            // Anti-parallel: any axis perpendicular to `a` gives a valid π rotation.
+            Vector3d seed = System.Math.Abs(a.X) < 0.9 ? new Vector3d(1, 0, 0) : new Vector3d(0, 0, 1);
+            return FromAxisAngle(a.Cross(seed).Normalized, System.Math.PI);
+        }
+
+        return FromAxisAngle(a.Cross(b), System.Math.Acos(dot));
+    }
+
+    /// <summary>
     /// Creates a quaternion from Euler angles in degrees (intrinsic ZYX / yaw-pitch-roll).
     /// Application order: roll (Z) → pitch (X) → yaw (Y).
     /// </summary>
