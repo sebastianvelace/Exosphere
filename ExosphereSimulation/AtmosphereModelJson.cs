@@ -24,8 +24,27 @@ public partial class AtmosphereModel
             layers.Sort((a, b) => a.AltMin.CompareTo(b.AltMin));
         }
 
+        var optics = new AtmosphereOptics();
+        if (json.TryGetProperty("optics", out var opticalJson))
+        {
+            optics = new AtmosphereOptics
+            {
+                RayleighScattering = ReadVector(opticalJson, "rayleigh_scattering"),
+                MieScattering = ReadVector(opticalJson, "mie_scattering"),
+                MieAbsorption = ReadVector(opticalJson, "mie_absorption"),
+                OzoneAbsorption = ReadVector(opticalJson, "ozone_absorption"),
+                RayleighScaleHeight = ReadDouble(opticalJson, "rayleigh_scale_height", 8_000.0),
+                MieScaleHeight = ReadDouble(opticalJson, "mie_scale_height", 1_200.0),
+                OzoneCenterAltitude = ReadDouble(opticalJson, "ozone_center_altitude", 25_000.0),
+                OzoneHalfWidth = ReadDouble(opticalJson, "ozone_half_width", 15_000.0),
+                MieAnisotropy = ReadDouble(opticalJson, "mie_anisotropy", 0.80),
+                SunIlluminanceScale = ReadDouble(opticalJson, "sun_illuminance_scale", 20.0),
+            };
+        }
+
         return new AtmosphereModel
         {
+            Optics             = optics,
             ScaleHeight         = json.TryGetProperty("scale_height",          out var sh)  ? sh.GetDouble()  : 8500.0,
             SeaLevelDensity     = json.TryGetProperty("sea_level_density",     out var sld) ? sld.GetDouble() : 1.225,
             SeaLevelPressure    = json.TryGetProperty("sea_level_pressure",    out var slp) ? slp.GetDouble() : 101_325.0,
@@ -40,4 +59,20 @@ public partial class AtmosphereModel
             Layers              = layers,
         };
     }
+
+    private static Math.Vector3d ReadVector(
+        System.Text.Json.JsonElement json, string name)
+    {
+        if (!json.TryGetProperty(name, out var value)
+            || value.ValueKind != System.Text.Json.JsonValueKind.Array)
+            return Math.Vector3d.Zero;
+        var values = value.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+        return values.Length == 3
+            ? new Math.Vector3d(values[0], values[1], values[2])
+            : Math.Vector3d.Zero;
+    }
+
+    private static double ReadDouble(
+        System.Text.Json.JsonElement json, string name, double fallback) =>
+        json.TryGetProperty(name, out var value) ? value.GetDouble() : fallback;
 }
