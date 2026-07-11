@@ -37,6 +37,10 @@ Base tecnica cerrada en `main`:
 - Marco de lanzamiento real (RF-01): el pad usa lat/lon de `data/launch_sites`, hereda
   ω·R·cos φ (Kennedy: 408 m/s al este, antes 185) y el gravity turn persigue el este del
   eje de giro. Staging pasa de 2156 a 2308 m/s, entrando en la banda 2,2–2,5 km/s.
+- Atmosferas por planeta (RF-06): gravedad y masa molar propias (Marte/Venus usaban aire
+  terrestre bajo g terrestre), altitud geopotencial, capas USSA-76 completas (T/P/rho dentro
+  de 0,02%) y termosfera de escala creciente (1,14x vs NRLMSISE). El flujo termico en la
+  interfaz de entrada se duplica: ahora hay atmosfera real por encima de 86 km.
 
 ## Prioridad Inmediata
 

@@ -20,11 +20,25 @@ public record AtmosphereLayer(double AltMin, double AltMax, double TempBase, dou
 /// </summary>
 public partial class AtmosphereModel
 {
-    /// <summary>Standard gravitational acceleration (m/s²).</summary>
-    private const double G0 = 9.80665;
-
     /// <summary>Universal gas constant (J/(mol·K)).</summary>
     private const double R = 8.31446;
+
+    /// <summary>
+    /// Surface gravitational acceleration used by the hydrostatic integration (m/s²).
+    /// Per body: an atmospheric column is held up by that planet's gravity, not Earth's.
+    /// </summary>
+    public double SurfaceGravity { get; init; } = 9.80665;   // Earth default
+
+    /// <summary>
+    /// Effective radius (m) used to convert geometric altitude into geopotential altitude.
+    ///
+    /// Layered standard atmospheres (USSA-1976 and its planetary equivalents) are tabulated
+    /// against GEOPOTENTIAL altitude, which is what lets the hydrostatic integration use a
+    /// constant surface gravity: the geopotential coordinate already absorbs gravity falling
+    /// off with height. Feeding it geometric altitude instead silently over-weighs the
+    /// column — the error grows with altitude (~1.1 km of offset by 86 km on Earth).
+    /// </summary>
+    public double GeopotentialRadius { get; init; } = 6_356_766.0;   // Earth default
 
     /// <summary>Altitude above which the atmosphere is considered absent (m).</summary>
     public double MaxAltitude { get; init; }
@@ -57,6 +71,18 @@ public partial class AtmosphereModel
     public double ThermosphereScaleHeight { get; init; } = 0.0;
 
     /// <summary>
+    /// Growth rate of the thermosphere scale height with altitude (dimensionless):
+    /// H(z) = H₀ + k·(z − MaxAltitude).
+    ///
+    /// The thermosphere heats with altitude, so its scale height grows — on Earth from
+    /// ~19 km at 140 km to ~60 km at 400 km. A single exponential cannot span that: it is
+    /// either too dense high up or too thin low down. Integrating dρ/ρ = −dz/H(z) with H
+    /// linear gives the closed form used in <see cref="GetDensity"/>, which collapses back
+    /// to the plain exponential as k → 0 (the default).
+    /// </summary>
+    public double ThermosphereScaleHeightGrowth { get; init; } = 0.0;
+
+    /// <summary>
     /// Altitude above which the residual thermosphere density is treated as vacuum (m).
     /// Only relevant when <see cref="ThermosphereScaleHeight"/> is positive.
     /// </summary>
@@ -72,7 +98,14 @@ public partial class AtmosphereModel
     private double[]? _layerBasePressures;
 
     /// <summary>
-    /// Returns atmospheric temperature (K) at a given altitude above the surface (m).
+    /// Geometric altitude (m above the surface) → geopotential altitude (m), the coordinate
+    /// the layer table is defined against: h = R·z / (R + z).
+    /// </summary>
+    public double ToGeopotential(double geometricAltitude) =>
+        GeopotentialRadius * geometricAltitude / (GeopotentialRadius + geometricAltitude);
+
+    /// <summary>
+    /// Returns atmospheric temperature (K) at a given geometric altitude above the surface (m).
     /// Layered ISA model when layers are present, otherwise constant sea-level temperature.
     /// </summary>
     public double GetTemperature(double altitude)
@@ -80,18 +113,19 @@ public partial class AtmosphereModel
         if (Layers.Count == 0) return SeaLevelTemperature;
 
         if (altitude < 0.0) altitude = 0.0;
+        double h = ToGeopotential(altitude);
 
         // Find the layer containing this altitude; above the top layer,
         // extrapolate from the last layer's profile.
         AtmosphereLayer layer = Layers[^1];
         foreach (var l in Layers)
         {
-            if (altitude < l.AltMax) { layer = l; break; }
+            if (h < l.AltMax) { layer = l; break; }
         }
 
         double t = layer.LapseRate == 0.0
             ? layer.TempBase
-            : layer.TempBase + layer.LapseRate * (altitude - layer.AltMin);
+            : layer.TempBase + layer.LapseRate * (h - layer.AltMin);
 
         return System.Math.Max(t, 0.0);
     }
@@ -119,14 +153,16 @@ public partial class AtmosphereModel
     {
         EnsureLayerBasePressures();
 
+        double h = ToGeopotential(altitude);
+
         // Locate the layer containing this altitude (clamp into last layer above the top).
         int idx = Layers.Count - 1;
         for (int i = 0; i < Layers.Count; i++)
         {
-            if (altitude < Layers[i].AltMax) { idx = i; break; }
+            if (h < Layers[i].AltMax) { idx = i; break; }
         }
 
-        return PressureWithinLayer(Layers[idx], _layerBasePressures![idx], altitude);
+        return PressureWithinLayer(Layers[idx], _layerBasePressures![idx], h);
     }
 
     /// <summary>
@@ -157,15 +193,22 @@ public partial class AtmosphereModel
                 ? 0.0
                 : SeaLevelDensity * System.Math.Exp(-altitude / ScaleHeight);
 
-        // Above the ISA layers, decay exponentially from the boundary density so low
-        // LEO experiences slow orbital decay instead of a hard cut to vacuum.
+        // Above the ISA layers, decay from the boundary density so low LEO experiences
+        // slow orbital decay instead of a hard cut to vacuum.
         if (altitude >= MaxAltitude)
         {
             if (ThermosphereScaleHeight <= 0.0 || altitude >= ThermosphereTopAltitude)
                 return 0.0;
 
             double baseRho = LayeredDensity(MaxAltitude);
-            return baseRho * System.Math.Exp(-(altitude - MaxAltitude) / ThermosphereScaleHeight);
+            double dz      = altitude - MaxAltitude;
+            double k       = ThermosphereScaleHeightGrowth;
+
+            // H grows with altitude: ρ = ρ₀ · (1 + k·Δz/H₀)^(−1/k). k → 0 is the exponential.
+            if (k <= 1e-9)
+                return baseRho * System.Math.Exp(-dz / ThermosphereScaleHeight);
+
+            return baseRho * System.Math.Pow(1.0 + k * dz / ThermosphereScaleHeight, -1.0 / k);
         }
 
         return LayeredDensity(altitude);
@@ -174,23 +217,26 @@ public partial class AtmosphereModel
     // ── Hydrostatic helpers ──────────────────────────────────────────────────
 
     /// <summary>
-    /// Pressure at <paramref name="altitude"/> inside (or extrapolated above)
-    /// <paramref name="layer"/>, given the pressure at the layer's base.
+    /// Pressure at <paramref name="geopotentialAltitude"/> inside (or extrapolated above)
+    /// <paramref name="layer"/>, given the pressure at the layer's base. Both the layer
+    /// bounds and the argument are geopotential, which is what makes a constant
+    /// <see cref="SurfaceGravity"/> the correct gravity to integrate with.
     /// </summary>
-    private double PressureWithinLayer(AtmosphereLayer layer, double basePressure, double altitude)
+    private double PressureWithinLayer(AtmosphereLayer layer, double basePressure, double geopotentialAltitude)
     {
-        double dh = altitude - layer.AltMin;
+        double dh = geopotentialAltitude - layer.AltMin;
+        double gm = SurfaceGravity * MolarMass;
 
         if (layer.LapseRate == 0.0)
         {
             // Isothermal: P = P_b · exp(−g·M·Δh / (R·T))
-            return basePressure * System.Math.Exp(-G0 * MolarMass * dh / (R * layer.TempBase));
+            return basePressure * System.Math.Exp(-gm * dh / (R * layer.TempBase));
         }
 
         // Gradient: P = P_b · (T/T_b)^(−g·M / (R·L))
         double t = layer.TempBase + layer.LapseRate * dh;
         if (t <= 0.0) return 0.0;
-        double exponent = -G0 * MolarMass / (R * layer.LapseRate);
+        double exponent = -gm / (R * layer.LapseRate);
         return basePressure * System.Math.Pow(t / layer.TempBase, exponent);
     }
 
@@ -216,6 +262,21 @@ public partial class AtmosphereModel
     // ── Factory helpers ───────────────────────────────────────────────────────
 
     /// <summary>Standard Earth-like atmosphere (ISA layers).</summary>
+    /// <summary>
+    /// US Standard Atmosphere 1976. Layer bounds and lapse rates are the published table,
+    /// in GEOPOTENTIAL metres (see <see cref="GeopotentialRadius"/>).
+    ///
+    /// The first seven layers are USSA-76 proper, which assumes a constant mean molar mass
+    /// and is therefore reproduced essentially exactly by this ideal-gas formulation, up to
+    /// 84 852 m geopotential (86 km geometric).
+    ///
+    /// Above that, USSA-76 switches to a different formulation in which the mean molar mass
+    /// falls as the gases dissociate. The last four layers approximate its temperature
+    /// profile (rising to ~560 K by 140 km) while still holding molar mass constant, so
+    /// density up there is an approximation, not a reproduction. It is good to a few tens
+    /// of percent — far better than an isothermal cap, which starves the column of the
+    /// thermal expansion that actually holds the thermosphere up.
+    /// </summary>
     public static AtmosphereModel Earth() => new()
     {
         MaxAltitude             = 140_000.0,    // 140 km — aerodynamically significant boundary
@@ -224,38 +285,64 @@ public partial class AtmosphereModel
         SeaLevelPressure        = 101_325.0,
         SeaLevelTemperature     = 288.15,
         MolarMass               = 0.0289644,
-        ThermosphereScaleHeight = 45_000.0,     // residual LEO drag → slow orbital decay
-        ThermosphereTopAltitude = 1_000_000.0,  // 1000 km
+        SurfaceGravity          = 9.80665,
+        GeopotentialRadius      = 6_356_766.0,
+        // Fitted to NRLMSISE-00 from 140 to 500 km on the corrected anchor: within 1.14x
+        // across the whole band (the best single exponential manages only 3.0x).
+        ThermosphereScaleHeight       = 18_750.0,   // H₀ at 140 km
+        ThermosphereScaleHeightGrowth = 0.160,      // → ~60 km by 400 km
+        ThermosphereTopAltitude       = 1_000_000.0,
         Layers                  = new List<AtmosphereLayer>
         {
-            new(     0.0,  11_000.0, 288.15, -0.0065),
-            new(11_000.0,  20_000.0, 216.65,  0.0),
-            new(20_000.0,  32_000.0, 216.65,  0.001),
-            new(32_000.0,  47_000.0, 228.65,  0.0028),
-            new(47_000.0,  51_000.0, 270.65,  0.0),
-            new(51_000.0,  71_000.0, 270.65, -0.0028),
+            new(       0.0,  11_000.0, 288.15, -0.0065),    // troposphere
+            new(  11_000.0,  20_000.0, 216.65,  0.0),       // tropopause
+            new(  20_000.0,  32_000.0, 216.65,  0.001),     // stratosphere
+            new(  32_000.0,  47_000.0, 228.65,  0.0028),    // stratosphere
+            new(  47_000.0,  51_000.0, 270.65,  0.0),       // stratopause
+            new(  51_000.0,  71_000.0, 270.65, -0.0028),    // mesosphere
+            new(  71_000.0,  84_852.0, 214.65, -0.002),     // mesopause
+            // Above 84 852 m geopotential: approximated USSA-76 upper temperature profile.
+            new(  84_852.0,  89_715.0, 186.87,  0.0),
+            new(  89_715.0, 108_130.0, 186.87,  0.0028852),
+            new( 108_130.0, 117_777.0, 240.00,  0.0124390),
+            new( 117_777.0, 136_985.0, 360.00,  0.0103931),
         },
     };
 
-    /// <summary>Thin Martian CO₂ atmosphere.</summary>
+    /// <summary>
+    /// Thin Martian CO₂ atmosphere. Mirrors <c>data/bodies/mars.json</c> — the molar mass is
+    /// CO₂ and the gravity is Mars's, not Earth air held up by Earth gravity.
+    /// </summary>
     public static AtmosphereModel Mars() => new()
     {
         MaxAltitude         = 100_000.0,    // 100 km
         SeaLevelDensity     = 0.020,
         ScaleHeight         = 11_100.0,
-        SeaLevelPressure    = 610.0,
+        SeaLevelPressure    = 636.0,
         SeaLevelTemperature = 210.0,
-        MolarMass           = 0.04401,
+        MolarMass           = 0.04401,      // CO₂
+        SurfaceGravity      = 3.72076,
+        GeopotentialRadius  = 3_389_500.0,
+        Layers              = new List<AtmosphereLayer>
+        {
+            new(0.0, 100_000.0, 210.0, -0.00098),
+        },
     };
 
-    /// <summary>Thick Venusian CO₂ atmosphere.</summary>
+    /// <summary>Thick Venusian CO₂ atmosphere. Mirrors <c>data/bodies/venus.json</c>.</summary>
     public static AtmosphereModel Venus() => new()
     {
         MaxAltitude         = 250_000.0,
         SeaLevelDensity     = 65.0,
-        ScaleHeight         = 15_900.0,
+        ScaleHeight         = 15_000.0,
         SeaLevelPressure    = 9_200_000.0,
         SeaLevelTemperature = 737.0,
-        MolarMass           = 0.04401,
+        MolarMass           = 0.04401,      // CO₂
+        SurfaceGravity      = 8.87,
+        GeopotentialRadius  = 6_051_800.0,
+        Layers              = new List<AtmosphereLayer>
+        {
+            new(0.0, 250_000.0, 737.0, -0.0075),
+        },
     };
 }

@@ -42,6 +42,9 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 - El pad se planta en las coordenadas geodésicas reales del sitio de lanzamiento, así que
   hereda el empuje de rotación que le corresponde a su latitud (ω·R·cos φ). El gravity turn
   persigue el este definido por el eje de giro, no por un eje inercial fijo.
+- Cada atmósfera se sostiene con la gravedad y el gas de su propio planeta. La columna se
+  integra en altitud geopotencial, que es como está tabulada USSA-76, y la termosfera tiene
+  altura de escala creciente porque se calienta con la altura.
 
 ## Hallazgos priorizados
 
@@ -52,7 +55,7 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 | RF-03 | Gimbal no alteraba fuerza traslacional | **Parcial** | Acoplado en cluster; faltan motores individuales y tensor completo |
 | RF-04 | EDL/maniobras escriben orientación | **Cerrado V1** | Ningún controlador runtime asigna `Orientation`; corredor sembrado mide flip 15,33 s |
 | RF-05 | Resultado cambia con warp | **Parcial** | Fuerzas/thermal/contacto comparten ruta; paridad corta x1/x100 cubierta, falta golden x1000 |
-| RF-06 | Planetas comparten supuestos de gas/gravedad | **P0 pendiente** | Tablas por planeta; Earth P/rho/T <5% de error |
+| RF-06 | Planetas comparten supuestos de gas/gravedad | **Cerrado V1** | Gravedad y masa molar por cuerpo (Marte/Venus usaban aire terrestre bajo g terrestre: columna ~50x fina). Altitud geopotencial + capas USSA-76 completas: Earth T/P/rho dentro de **0,02%** en cada frontera de capa. Cola de termosfera con escala creciente: **1,14x** vs NRLMSISE 140-500 km (antes el exponencial único no pasaba de 3,0x). Falta masa molar variable sobre 86 km |
 | RF-07 | TPS de un nodo/área fija | **P0 parcial** | Rn/daño corregidos; falta tile+estructura, conducción y ablación |
 | RF-08 | Cluster agregado permite throttle EDL imposible | **Cerrado V1** | Selección 0–6 proporcional; EDL 1/2/3 + mínimo 40%; falta relight probabilístico |
 | RF-09 | Hot staging atómico y sin impulso | **P1 pendiente** | Ship encendida ≥0.5 s antes; momento conservado |

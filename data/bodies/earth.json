@@ -1,7 +1,7 @@
 {
   "id": "earth",
   "name": "Earth",
-  "mass": 5.972e24,
+  "mass": 5.972e+24,
   "radius": 6371000,
   "soi": 924000000,
   "rotational_period": 86164,
@@ -13,21 +13,84 @@
     "sea_level_pressure": 101325,
     "sea_level_temperature": 288.15,
     "max_altitude": 140000,
-    "thermosphere_scale_height": 45000,
+    "thermosphere_scale_height": 18750,
     "thermosphere_top_altitude": 1000000,
     "layers": [
-      {"alt_min": 0,     "alt_max": 11000,  "temp_base": 288.15, "lapse_rate": -0.0065},
-      {"alt_min": 11000, "alt_max": 20000,  "temp_base": 216.65, "lapse_rate": 0.0},
-      {"alt_min": 20000, "alt_max": 32000,  "temp_base": 216.65, "lapse_rate": 0.001},
-      {"alt_min": 32000, "alt_max": 47000,  "temp_base": 228.65, "lapse_rate": 0.0028},
-      {"alt_min": 47000, "alt_max": 86000,  "temp_base": 270.65, "lapse_rate": 0.0},
-      {"alt_min": 86000, "alt_max": 140000, "temp_base": 186.87, "lapse_rate": 0.0}
-    ]
+      {
+        "alt_min": 0,
+        "alt_max": 11000,
+        "temp_base": 288.15,
+        "lapse_rate": -0.0065
+      },
+      {
+        "alt_min": 11000,
+        "alt_max": 20000,
+        "temp_base": 216.65,
+        "lapse_rate": 0.0
+      },
+      {
+        "alt_min": 20000,
+        "alt_max": 32000,
+        "temp_base": 216.65,
+        "lapse_rate": 0.001
+      },
+      {
+        "alt_min": 32000,
+        "alt_max": 47000,
+        "temp_base": 228.65,
+        "lapse_rate": 0.0028
+      },
+      {
+        "alt_min": 47000,
+        "alt_max": 51000,
+        "temp_base": 270.65,
+        "lapse_rate": 0.0
+      },
+      {
+        "alt_min": 51000,
+        "alt_max": 71000,
+        "temp_base": 270.65,
+        "lapse_rate": -0.0028
+      },
+      {
+        "alt_min": 71000,
+        "alt_max": 84852,
+        "temp_base": 214.65,
+        "lapse_rate": -0.002
+      },
+      {
+        "alt_min": 84852,
+        "alt_max": 89715,
+        "temp_base": 186.87,
+        "lapse_rate": 0.0
+      },
+      {
+        "alt_min": 89715,
+        "alt_max": 108130,
+        "temp_base": 186.87,
+        "lapse_rate": 0.0028852
+      },
+      {
+        "alt_min": 108130,
+        "alt_max": 117777,
+        "temp_base": 240.0,
+        "lapse_rate": 0.012439
+      },
+      {
+        "alt_min": 117777,
+        "alt_max": 136985,
+        "temp_base": 360.0,
+        "lapse_rate": 0.0103931
+      }
+    ],
+    "surface_gravity": 9.80665,
+    "geopotential_radius": 6356766.0,
+    "thermosphere_scale_height_growth": 0.16
   },
   "surface_gravity": 9.807,
-  "gm": 3.986004418e14,
+  "gm": 398600441800000.0,
   "orbital_elements": {
-    "semi_major_axis": 1.496e11,
+    "semi_major_axis": 149600000000.0,
     "eccentricity": 0.0167,
     "inclination": 0.0,
     "longitude_of_node": -11.26064,

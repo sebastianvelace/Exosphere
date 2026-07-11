@@ -32,7 +32,10 @@ public partial class AtmosphereModel
             SeaLevelTemperature = json.TryGetProperty("sea_level_temperature", out var slt) ? slt.GetDouble() : 288.15,
             MaxAltitude         = json.TryGetProperty("max_altitude",          out var ma)  ? ma.GetDouble()  : 140_000.0,
             MolarMass           = json.TryGetProperty("molar_mass",            out var mm)  ? mm.GetDouble()  : 0.0289644,
+            SurfaceGravity      = json.TryGetProperty("surface_gravity",       out var sg)  ? sg.GetDouble()  : 9.80665,
+            GeopotentialRadius  = json.TryGetProperty("geopotential_radius",   out var gr)  ? gr.GetDouble()  : 6_356_766.0,
             ThermosphereScaleHeight = json.TryGetProperty("thermosphere_scale_height", out var tsh) ? tsh.GetDouble() : 0.0,
+            ThermosphereScaleHeightGrowth = json.TryGetProperty("thermosphere_scale_height_growth", out var tg) ? tg.GetDouble() : 0.0,
             ThermosphereTopAltitude = json.TryGetProperty("thermosphere_top_altitude", out var tta) ? tta.GetDouble() : 0.0,
             Layers              = layers,
         };
