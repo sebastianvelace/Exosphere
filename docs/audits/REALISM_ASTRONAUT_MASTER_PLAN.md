@@ -55,7 +55,7 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 | RF-03 | Gimbal no alteraba fuerza traslacional | **Parcial** | Acoplado en cluster; faltan motores individuales y tensor completo |
 | RF-04 | EDL/maniobras escriben orientación | **Cerrado V1** | Ningún controlador runtime asigna `Orientation`; corredor sembrado mide flip 15,33 s |
 | RF-05 | Resultado cambia con warp | **Parcial** | Fuerzas/thermal/contacto comparten ruta; paridad corta x1/x100 cubierta, falta golden x1000 |
-| RF-06 | Planetas comparten supuestos de gas/gravedad | **Cerrado V1** | Gravedad y masa molar por cuerpo (Marte/Venus usaban aire terrestre bajo g terrestre: columna ~50x fina). Altitud geopotencial + capas USSA-76 completas: Earth T/P/rho dentro de **0,02%** en cada frontera de capa. Cola de termosfera con escala creciente: **1,14x** vs NRLMSISE 140-500 km (antes el exponencial único no pasaba de 3,0x). Falta masa molar variable sobre 86 km |
+| RF-06 | Planetas compartían gas/gravedad/óptica | **Cerrado V1** | USSA-76 + CO₂ propio; Rayleigh/Mie/O₃ por cuerpo y Sol con masa de aire; falta clima/LUT espectral |
 | RF-07 | TPS de un nodo/área fija | **Cerrado V1** | Dos nodos: piel TPS (equilibrio radiativo ~1420 K en pico) y estructura acoplada por conducción. Antes el área fija de 1 m² contra la masa total dejaba la nave a **292 K tras 400 s de flujo pico**: era imposible quemarse. Ahora belly-flop sobrevive (369 K), 30° desviado raspa (989 K) y tumbando revienta a los 222 s. Falta ablación real |
 | RF-08 | Cluster agregado permite throttle EDL imposible | **Cerrado V1** | Selección 0–6 proporcional; EDL 1/2/3 + mínimo 40%; falta relight probabilístico |
 | RF-09 | Hot staging atómico y sin impulso | **P1 pendiente** | Ship encendida ≥0.5 s antes; momento conservado |
@@ -64,8 +64,8 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 | RF-12 | Rails sin J2/drag/SRP; escape radial incorrecto | **P1 pendiente** | Escape radial válido y precesión J2 <1%/día |
 | AV-01 | Cabina fuera de Starship al separar | **Cerrado** | Ojo relativo a base cambia <0.1u |
 | AV-02 | Dos soles y luz fija | **Cerrado** | Sol ~0.53° cerca de Tierra y penumbra continua |
-| AV-03 | Cielo terrestre en cuerpos sin aire | **Parcial** | Airless negro; faltan perfiles Venus/gigantes y `local_up` |
-| AV-04 | Dos campos estelares/adaptación fija | **Parcial** | Un panorama; falta autoexposición temporal |
+| AV-03 | Cielo terrestre en cuerpos sin aire | **Cerrado V1** | Airless negro; Tierra/Marte/Venus físicos, `local_up` y sombra esférica |
+| AV-04 | Dos campos estelares/adaptación fija | **Parcial** | Un panorama con extinción óptica; falta autoexposición temporal |
 | AV-05 | Shake IVA de metros/FOV por g | **Cerrado V1** | <4.2 cm, vibración <1.7 cm, rotación <0.23°, FOV fijo |
 | AV-06 | Cabina abierta y VFX atraviesan casco | **P1 pendiente** | Ventanas, vidrio y capas de render |
 | AV-07 | Plasma cambia iluminación solar global | **P1 pendiente** | Luz local del shock, Sol estable, ruido continuo |

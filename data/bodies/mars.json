@@ -13,6 +13,17 @@
     "sea_level_pressure": 636,
     "sea_level_temperature": 210.0,
     "max_altitude": 100000,
+    "optics": {
+      "rayleigh_scattering": [0.000000116, 0.000000271, 0.000000662],
+      "mie_scattering": [0.000020, 0.000018, 0.000014],
+      "mie_absorption": [0.000002, 0.000004, 0.000008],
+      "ozone_absorption": [0.0, 0.0, 0.0],
+      "rayleigh_scale_height": 11100,
+      "mie_scale_height": 11000,
+      "ozone_half_width": 0,
+      "mie_anisotropy": 0.76,
+      "sun_illuminance_scale": 14.0
+    },
     "layers": [
       {
         "alt_min": 0,

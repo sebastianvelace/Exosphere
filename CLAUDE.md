@@ -33,6 +33,12 @@ bash tools/vab_quick_check.sh
 
 Use the full `tools/ci_check.sh` once before committing instead of after every UI edit.
 
+For atmosphere work (optical/physical tests + flight-scene shader smoke):
+
+```bash
+bash tools/atmosphere_quick_check.sh
+```
+
 For VAB:
 
 ```bash

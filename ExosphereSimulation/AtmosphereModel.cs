@@ -20,6 +20,8 @@ public record AtmosphereLayer(double AltMin, double AltMax, double TempBase, dou
 /// </summary>
 public partial class AtmosphereModel
 {
+    /// <summary>Visible-spectrum scattering/absorption contract shared with rendering.</summary>
+    public AtmosphereOptics Optics { get; init; } = new();
     /// <summary>Universal gas constant (J/(mol·K)).</summary>
     private const double R = 8.31446;
 
@@ -279,6 +281,13 @@ public partial class AtmosphereModel
     /// </summary>
     public static AtmosphereModel Earth() => new()
     {
+        Optics = new AtmosphereOptics
+        {
+            RayleighScattering = new Math.Vector3d(5.802e-6, 13.558e-6, 33.100e-6),
+            MieScattering = new Math.Vector3d(3.996e-6, 3.996e-6, 3.996e-6),
+            MieAbsorption = new Math.Vector3d(0.444e-6, 0.444e-6, 0.444e-6),
+            OzoneAbsorption = new Math.Vector3d(0.650e-6, 1.881e-6, 0.085e-6),
+        },
         MaxAltitude             = 140_000.0,    // 140 km — aerodynamically significant boundary
         SeaLevelDensity         = 1.225,
         ScaleHeight             = 8500.0,
@@ -315,6 +324,18 @@ public partial class AtmosphereModel
     /// </summary>
     public static AtmosphereModel Mars() => new()
     {
+        Optics = new AtmosphereOptics
+        {
+            RayleighScattering = new Math.Vector3d(0.116e-6, 0.271e-6, 0.662e-6),
+            MieScattering = new Math.Vector3d(20.0e-6, 18.0e-6, 14.0e-6),
+            MieAbsorption = new Math.Vector3d(2.0e-6, 4.0e-6, 8.0e-6),
+            RayleighScaleHeight = 11_100.0,
+            MieScaleHeight = 11_000.0,
+            OzoneAbsorption = Math.Vector3d.Zero,
+            OzoneHalfWidth = 0.0,
+            MieAnisotropy = 0.76,
+            SunIlluminanceScale = 14.0,
+        },
         MaxAltitude         = 100_000.0,    // 100 km
         SeaLevelDensity     = 0.020,
         ScaleHeight         = 11_100.0,
@@ -332,6 +353,18 @@ public partial class AtmosphereModel
     /// <summary>Thick Venusian CO₂ atmosphere. Mirrors <c>data/bodies/venus.json</c>.</summary>
     public static AtmosphereModel Venus() => new()
     {
+        Optics = new AtmosphereOptics
+        {
+            RayleighScattering = new Math.Vector3d(45.0e-6, 70.0e-6, 120.0e-6),
+            MieScattering = new Math.Vector3d(90.0e-6, 82.0e-6, 62.0e-6),
+            MieAbsorption = new Math.Vector3d(8.0e-6, 18.0e-6, 42.0e-6),
+            RayleighScaleHeight = 15_000.0,
+            MieScaleHeight = 15_000.0,
+            OzoneAbsorption = Math.Vector3d.Zero,
+            OzoneHalfWidth = 0.0,
+            MieAnisotropy = 0.85,
+            SunIlluminanceScale = 10.0,
+        },
         MaxAltitude         = 250_000.0,
         SeaLevelDensity     = 65.0,
         ScaleHeight         = 15_000.0,

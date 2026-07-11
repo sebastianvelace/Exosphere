@@ -29,9 +29,6 @@ using Exosphere.Simulation.Physics;
 [GlobalClass]
 public partial class PhaseLightingController : Node
 {
-    private const float AtmoBlendLow  = 70_000f;
-    private const float AtmoBlendHigh = 130_000f;
-
     private const float AmbientEnergyPad   = 0.45f;
     private const float AmbientEnergySpace = 0.12f;
     private const float SunEnergyPad   = 1.5f;
@@ -67,7 +64,10 @@ public partial class PhaseLightingController : Node
 
         var body = bridge!.Universe.GetDominantBody(av.Position);
         double alt = av.GetAltitude(body);
-        float s = Smoothstep(AtmoBlendLow, AtmoBlendHigh, (float)alt);
+        var optics = body.Atmosphere?.Optics;
+        double opticalAir = optics == null ? 0.0 : System.Math.Max(
+            optics.RayleighDensity(alt), optics.MieDensity(alt));
+        float s = 1.0f - Smoothstep(0.0002f, 0.02f, (float)opticalAir);
 
         float ambient = Mathf.Lerp(AmbientEnergyPad, AmbientEnergySpace, s);
         float sun     = Mathf.Lerp(SunEnergyPad, SunEnergySpace, s);
@@ -99,7 +99,23 @@ public partial class PhaseLightingController : Node
         _env.GlowHdrThreshold = 1.0f;
 
         if (_light != null)
-            _light.LightEnergy = sun * SunController.SolarVisibility;
+        {
+            var sunBody = bridge.Universe.GetBody("sun");
+            var up = (av.Position - body.Position).Normalized;
+            double sunElevation = sunBody != null
+                ? up.Dot((sunBody.Position - av.Position).Normalized)
+                : 1.0;
+            var direct = optics?.DirectSolarTransmittance(alt, sunElevation)
+                ?? new Vector3d(1.0, 1.0, 1.0);
+            double peak = System.Math.Max(1e-6,
+                System.Math.Max(direct.X, System.Math.Max(direct.Y, direct.Z)));
+            _light.LightColor = new Color(
+                (float)(direct.X / peak),
+                (float)(direct.Y / peak),
+                (float)(direct.Z / peak));
+            double luminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
+            _light.LightEnergy = sun * (float)luminance * SunController.SolarVisibility;
+        }
     }
 
     private static float ComputeReentryFactor(SimulationBridge bridge, Vessel av,

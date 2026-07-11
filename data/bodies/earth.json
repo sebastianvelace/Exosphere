@@ -15,6 +15,18 @@
     "max_altitude": 140000,
     "thermosphere_scale_height": 18750,
     "thermosphere_top_altitude": 1000000,
+    "optics": {
+      "rayleigh_scattering": [0.000005802, 0.000013558, 0.0000331],
+      "mie_scattering": [0.000003996, 0.000003996, 0.000003996],
+      "mie_absorption": [0.000000444, 0.000000444, 0.000000444],
+      "ozone_absorption": [0.000000650, 0.000001881, 0.000000085],
+      "rayleigh_scale_height": 8000,
+      "mie_scale_height": 1200,
+      "ozone_center_altitude": 25000,
+      "ozone_half_width": 15000,
+      "mie_anisotropy": 0.8,
+      "sun_illuminance_scale": 20.0
+    },
     "layers": [
       {
         "alt_min": 0,
