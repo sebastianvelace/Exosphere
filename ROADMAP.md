@@ -31,6 +31,9 @@ Base tecnica cerrada en `main`:
   fricción, torque, límites de carga/recorrido y asentamiento persistente.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
   prediction, marcador/readout de encuentro y readout de maniobra.
+- Audio de vuelo derivado de física real: airflow por presion dinamica, brillo por
+  Mach, buffet transonico/max-Q/entrada, rugido de plasma con el mismo flujo termico
+  que la bola de fuego, y motor airborne vs structure-borne segun densidad ambiente.
 
 ## Prioridad Inmediata
 
