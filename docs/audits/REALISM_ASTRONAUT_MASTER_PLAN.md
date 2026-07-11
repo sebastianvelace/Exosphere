@@ -23,6 +23,10 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 - Gimbal acoplado a torque y vector de empuje lateral.
 - Piloto de ascenso por torque/gimbal, sin sobrescribir quaternion durante el vuelo.
 - Cuatro flaps visuales gobernadas por q, actitud windward y mezcla de control.
+- Cuatro flaps físicas con momento proporcional a q, área, brazo e inercia; entrada lift-up a 70° AoA.
+- EDL manda actuadores: flip finito, encendido al mínimo estable y selección discreta de 1/2/3 Raptors.
+- Rails prohibidos con thrust, atmósfera, calentamiento o contacto; periapsis atmosférico limita el warp.
+- Ascent y ejecutores de maniobra mandan torque; los setters de actitud quedan solo en inicialización/debug.
 - Plumas, flaps y carbonizado dependen del cuerpo dominante y presión real.
 - Sutton-Graves incluye radio de nariz `sqrt(rho/Rn)·V³`; daño TPS irreversible.
 - Aceleración propia unificada: ~1 g apoyado, ~0 g en caída libre, thrust+aero en vuelo.
@@ -41,11 +45,11 @@ separa lo validado de lo aproximado y define evidencia para cerrar cada brecha.
 | RF-01 | Marco eclíptico `+Z` vs rotación planetaria `+Y` | **P0 pendiente** | Unificar eje y lat/lon; Cape aporta `408±3 m/s` al este |
 | RF-02 | Propagación lunar dependía del orden de archivos | **Cerrado** | Test invierte Sol/planeta/luna y exige estados idénticos |
 | RF-03 | Gimbal no alteraba fuerza traslacional | **Parcial** | Acoplado en cluster; faltan motores individuales y tensor completo |
-| RF-04 | EDL/maniobras escriben orientación | **P0 pendiente** | Ningún controlador asigna `Orientation`; flip físico >2 s |
-| RF-05 | Resultado cambia con warp | **P0 pendiente** | Reentrada x1/x10/x1000: peak-q/heat dentro de 3% |
+| RF-04 | EDL/maniobras escriben orientación | **Cerrado V1** | Ningún controlador runtime asigna `Orientation`; corredor sembrado mide flip 15,33 s |
+| RF-05 | Resultado cambia con warp | **Parcial** | Fuerzas/thermal/contacto comparten ruta; paridad corta x1/x100 cubierta, falta golden x1000 |
 | RF-06 | Planetas comparten supuestos de gas/gravedad | **P0 pendiente** | Tablas por planeta; Earth P/rho/T <5% de error |
 | RF-07 | TPS de un nodo/área fija | **P0 parcial** | Rn/daño corregidos; falta tile+estructura, conducción y ablación |
-| RF-08 | Cluster agregado permite throttle EDL imposible | **P0 pendiente** | Motores 1/3/6, mínimo estable, startup y relight |
+| RF-08 | Cluster agregado permite throttle EDL imposible | **Cerrado V1** | Selección 0–6 proporcional; EDL 1/2/3 + mínimo 40%; falta relight probabilístico |
 | RF-09 | Hot staging atómico y sin impulso | **P1 pendiente** | Ship encendida ≥0.5 s antes; momento conservado |
 | RF-10 | Cargas estructurales no rompen | **P1 pendiente** | Joint sobre límite divide el grafo |
 | RF-11 | Colisión punto-esfera | **P1 pendiente** | Contacto por patas/casco, vertical/horizontal/tilt |

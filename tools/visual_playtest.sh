@@ -14,6 +14,7 @@ OUT_DIR="${OUT_DIR:-/tmp/exo_play}"
 LOG="${LOG:-/tmp/exo_play.log}"
 MODE="full"
 SKIP_BUILD=0
+PROJECT_BACKUP=""
 
 usage() {
   cat <<'EOF'
@@ -23,9 +24,10 @@ Runs the Exosphere visual playtest harness (temporary autoload, never committed)
 
 Options:
   --smoke       Pad-only capture (~30s). Used by CI for pipeline validation.
+  --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
   --log FILE    Telemetry log path (default: /tmp/exo_play.log)
-  --skip-build  Skip dotnet build (assume already built)
+  --skip-build  Skip the simulation-library prebuild (the Godot project is still built)
   -h, --help    Show this help
 
 Environment:
@@ -43,6 +45,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --smoke) MODE="smoke"; shift ;;
+    --edl) MODE="edl"; shift ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --log) LOG="$2"; shift 2 ;;
     --skip-build) SKIP_BUILD=1; shift ;;
@@ -54,8 +57,9 @@ done
 cleanup() {
   local ec=$?
   rm -f "$HARNESS" "${HARNESS}.uid" 2>/dev/null || true
-  if [[ -n "${PROJECT_RESTORED:-}" ]]; then
-    git checkout -- project.godot 2>/dev/null || true
+  if [[ -n "$PROJECT_BACKUP" && -f "$PROJECT_BACKUP" ]]; then
+    cp "$PROJECT_BACKUP" project.godot
+    rm -f "$PROJECT_BACKUP"
   fi
   if [[ $ec -ne 0 ]]; then
     echo "visual_playtest: failed (exit $ec). Harness cleaned; project.godot restored." >&2
@@ -77,6 +81,8 @@ register_autoload() {
   if grep -q 'PlaytestShot=' project.godot 2>/dev/null; then
     return
   fi
+  PROJECT_BACKUP="$(mktemp /tmp/exo_project_godot.XXXXXX)"
+  cp project.godot "$PROJECT_BACKUP"
   if grep -q '^\[autoload\]' project.godot; then
     sed -i '/^\[autoload\]/a PlaytestShot="*res://scripts/_PlaytestShot.cs"' project.godot
   else
@@ -87,7 +93,6 @@ register_autoload() {
 PlaytestShot="*res://scripts/_PlaytestShot.cs"
 EOF
   fi
-  PROJECT_RESTORED=1
 }
 
 write_harness() {
@@ -128,6 +133,8 @@ public partial class _PlaytestShot : Node
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     bool _beautyJumped;
     int _beautyWaitFrames;
+    bool _edlSeeded, _flipComplete;
+    double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     bool _finished;
 
     public _PlaytestShot()
@@ -195,6 +202,12 @@ public partial class _PlaytestShot : Node
             }
             if (_pad && _pendingSlug == null)
                 Finish("SMOKE_OK");
+            return;
+        }
+
+        if (_mode == "edl")
+        {
+            ProcessEdlVerification(bridge, vessel, universe, body, mission, alt, surfVel, phase);
             return;
         }
 
@@ -299,8 +312,6 @@ public partial class _PlaytestShot : Node
         {
             QueueCapture("touchdown");
             _landed = true;
-            Finish("LANDED");
-            return;
         }
 
         if (vessel.IsDestroyed)
@@ -313,7 +324,7 @@ public partial class _PlaytestShot : Node
 
         if (_landed && _pendingSlug == null)
         {
-            Finish("DONE");
+            Finish("LANDED");
             return;
         }
 
@@ -324,6 +335,126 @@ public partial class _PlaytestShot : Node
             _log.Flush();
             Finish("EDL_GAP");
         }
+    }
+
+    private void ProcessEdlVerification(SimulationBridge bridge, Vessel vessel, Universe universe,
+        CelestialBody body, MissionManager? mission, double alt, Vector3d surfVel, string phase)
+    {
+        if (!_edlSeeded)
+        {
+            if (_readyFrames < 30 || EDLController.Instance == null) return;
+
+            // Exercise the same staged ship that the flight scene uses, but begin close enough
+            // to entry to make this a repeatable verification instead of a multi-orbit demo.
+            if (vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster"))
+            {
+                bridge.TriggerStaging();
+                vessel = bridge.ActiveVessel!;
+            }
+
+            body = universe.Bodies.First(b => b.Name == "Earth");
+            Vector3d up = Vector3d.Right;
+            Vector3d horizontal = Vector3d.Forward;
+            Vector3d airVelocity = horizontal * 1800.0 - up * 120.0;
+            Vector3d velocityDirection = airVelocity.Normalized;
+            Vector3d longAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velocityDirection);
+
+            vessel.Position = body.Position + up * (body.Radius + 70_000.0);
+            vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position) + airVelocity;
+            vessel.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(longAxis, velocityDirection);
+            vessel.AngularVelocity = Vector3d.Zero;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.SASEnabled = false;
+            vessel.IsGroundHeld = false;
+            vessel.IsOnRails = false;
+            vessel.OrbitalState = null;
+            vessel.Throttle = 0.0;
+            DrainToReserve(vessel, 0.12);
+            mission?.EnterPhase(MissionPhase.ORBIT);
+            bridge.SetTimeScale(3.0);
+
+            _edlSeeded = true;
+            _edlScenarioStart = universe.CurrentTime;
+            _log.WriteLine("ACTION seeded deterministic EDL alt=70000m airspeed=1804m/s reserve=12%");
+            _log.Flush();
+            return;
+        }
+
+        double simElapsed = universe.CurrentTime - _edlScenarioStart;
+        if (simElapsed >= _nextEdlTelemetry)
+        {
+            Vector3d up = (vessel.Position - body.Position).Normalized;
+            double vUp = surfVel.Dot(up);
+            double horizontal = (surfVel - up * vUp).Magnitude;
+            var cluster = vessel.Parts.Parts.FirstOrDefault(p => p.Definition.Id == "starship_engines");
+            double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
+            _log.WriteLine($"TRACE t={simElapsed:F1} alt={alt:F1} vUp={vUp:F1} horiz={horizontal:F1} " +
+                $"throttle={vessel.Throttle:F3} spool={cluster?.ThrottleLevel ?? 0.0:F3} " +
+                $"engines={cluster?.SelectedEngineCount ?? 0} upright={upright:F4} phase={phase}");
+            _log.Flush();
+            _nextEdlTelemetry = simElapsed + 5.0;
+        }
+
+        if (!_entry && mission?.Phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
+                or MissionPhase.AERO_DESCENT or MissionPhase.RETRO_BURN
+                or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED)
+        {
+            QueueCapture("entry");
+            _entry = true;
+        }
+
+        if (!_peak && mission?.Phase == MissionPhase.PEAK_HEATING)
+        {
+            QueueCapture("peak_heating");
+            _peak = true;
+        }
+
+        if (!_retro && mission?.Phase is MissionPhase.RETRO_BURN or MissionPhase.FINAL_DESCENT)
+        {
+            QueueCapture("retro_burn");
+            _retro = true;
+            _retroStart = universe.CurrentTime;
+        }
+
+        if (_retro && !_flipComplete && _pendingSlug == null && surfVel.Magnitude > 1.0)
+        {
+            Vector3d nose = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+            double alignment = nose.Dot(-surfVel.Normalized);
+            if (alignment > System.Math.Cos(5.0 * System.Math.PI / 180.0) &&
+                universe.CurrentTime - _retroStart > 0.5)
+            {
+                QueueCapture("flip_complete");
+                _flipComplete = true;
+                int engines = vessel.Parts.Parts
+                    .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 0;
+                _log.WriteLine($"CHECK finite_flip duration={universe.CurrentTime - _retroStart:F2}s " +
+                    $"alignment={alignment:F5} omega={vessel.AngularVelocity.Magnitude:F4} engines={engines}");
+                _log.Flush();
+            }
+        }
+
+        if (!_landed && mission?.Phase == MissionPhase.LANDED)
+        {
+            QueueCapture("touchdown");
+            _landed = true;
+        }
+
+        if (vessel.IsDestroyed)
+        {
+            _log.WriteLine($"FAIL vessel destroyed phase={phase} alt={alt:F0} spd={surfVel.Magnitude:F0}");
+            _log.Flush();
+            Finish("CRASHED");
+            return;
+        }
+
+        if (_landed && _pendingSlug == null)
+        {
+            Finish(_flipComplete ? "LANDED" : "LANDED_WITHOUT_FLIP");
+            return;
+        }
+
+        if (simElapsed > 900.0)
+            Finish("EDL_TIMEOUT");
     }
 
     private void ProcessDeorbit(SimulationBridge bridge, Vessel vessel, Universe universe,
@@ -425,10 +556,13 @@ public partial class _PlaytestShot : Node
         double heatRatio = vessel.Parts.Parts.Max(p => p.ThermalRatio);
         double density = body.GetAtmosphericDensity(vessel.Position);
         double flux = ThermalModel.ComputeHeatFlux(density, spd);
+        int selectedEngines = vessel.Parts.Parts
+            .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 0;
 
         _log.WriteLine(
             $"CAPTURE {slug} path={path} alt={alt:F1} spd={spd:F1} vSpeed={vSpeed:F1} q={q:F0} g={g:F2} " +
-            $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2}");
+            $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2} " +
+            $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines}");
         _log.Flush();
     }
 
@@ -514,6 +648,18 @@ verify_pngs() {
         return 1
       fi
     done
+  elif [[ "$MODE" == "edl" ]]; then
+    local required=(entry retro_burn flip_complete touchdown)
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing required EDL milestone PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+    done
+    if ! grep -q 'SUMMARY reason=LANDED' "$LOG"; then
+      echo "ERROR: deterministic EDL did not end in a verified landing" >&2
+      return 1
+    fi
   fi
 
   echo "visual_playtest: verified PNG(s) in $OUT_DIR (min ${min_bytes} bytes)"
@@ -524,8 +670,8 @@ write_harness
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
   dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
-  dotnet build Exosphere.csproj --nologo -v quiet
 fi
+dotnet build Exosphere.csproj --nologo -v quiet
 
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR"/exo_play_*.png 2>/dev/null || true
@@ -541,6 +687,8 @@ verify_pngs
 
 if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"
+elif [[ "$MODE" == "edl" ]]; then
+  echo "visual_playtest: deterministic EDL verification OK"
 else
   echo "visual_playtest: full run complete — review $LOG for GAP lines"
 fi
