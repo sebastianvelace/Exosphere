@@ -39,6 +39,7 @@ public partial class AtmosphereModel
                 OzoneHalfWidth = ReadDouble(opticalJson, "ozone_half_width", 15_000.0),
                 MieAnisotropy = ReadDouble(opticalJson, "mie_anisotropy", 0.80),
                 SunIlluminanceScale = ReadDouble(opticalJson, "sun_illuminance_scale", 20.0),
+                LowOrderDiffuseStrength = ReadDouble(opticalJson, "low_order_diffuse_strength", 0.25),
             };
         }
 

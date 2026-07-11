@@ -79,6 +79,7 @@ public partial class SkyController : Node
             _skyMat.SetShaderParameter("mie_scattering", Vector3.Zero);
             _skyMat.SetShaderParameter("mie_absorption", Vector3.Zero);
             _skyMat.SetShaderParameter("ozone_absorption", Vector3.Zero);
+            _skyMat.SetShaderParameter("low_order_diffuse_strength", 0.0f);
             return;
         }
 
@@ -92,6 +93,8 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("ozone_half_width", (float)optics.OzoneHalfWidth);
         _skyMat.SetShaderParameter("mie_g", (float)optics.MieAnisotropy);
         _skyMat.SetShaderParameter("sun_illuminance", (float)optics.SunIlluminanceScale);
+        _skyMat.SetShaderParameter("low_order_diffuse_strength",
+            (float)optics.LowOrderDiffuseStrength);
 
         Color groundHorizon = body.Id switch
         {

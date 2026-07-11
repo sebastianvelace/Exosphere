@@ -89,6 +89,25 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(preset.OzoneAbsorption, json.OzoneAbsorption);
         Assert.Equal(preset.RayleighScaleHeight, json.RayleighScaleHeight);
         Assert.Equal(preset.MieScaleHeight, json.MieScaleHeight);
+        Assert.Equal(preset.LowOrderDiffuseStrength, json.LowOrderDiffuseStrength);
+    }
+
+    [Fact]
+    public void LowOrderDiffuseSourceIsBoundedAndRespectsPlanetShadow()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var density = new Vector3d(1.0, 1.0, 0.0);
+        var clear = optics.LowOrderDiffuseSource(density, new Vector3d(1.0, 1.0, 1.0));
+        var attenuated = optics.LowOrderDiffuseSource(density, new Vector3d(0.2, 0.2, 0.2));
+        var shadow = optics.LowOrderDiffuseSource(
+            density, Vector3d.Zero, planetOccluded: true);
+
+        Assert.Equal(Vector3d.Zero, clear);
+        Assert.Equal(Vector3d.Zero, shadow);
+        Assert.True(attenuated.X > 0.0 && attenuated.Y > 0.0 && attenuated.Z > 0.0);
+        double bound = (optics.RayleighScattering.X + optics.MieScattering.X)
+            * optics.LowOrderDiffuseStrength / (4.0 * System.Math.PI);
+        Assert.InRange(attenuated.X, 0.0, bound);
     }
 
     private static CelestialBody LoadBody(string id) => CelestialBody.LoadFromJson(

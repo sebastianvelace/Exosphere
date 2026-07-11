@@ -107,6 +107,11 @@ public partial class SimulationBridge : Node
         var phaseLight = new PhaseLightingController { Name = "PhaseLightingController" };
         GetParent()?.CallDeferred("add_child", phaseLight);
 
+        // Human-eye exposure adapts after the sky and phase-light controllers have
+        // established the physical luminance state for this frame.
+        var exposure = new VisualExposureController { Name = "VisualExposureController" };
+        GetParent()?.CallDeferred("add_child", exposure);
+
         // Orbital map panel (toggle with M). Lives under the UI CanvasLayer so it
         // renders above the 3D world; it owns the autopilot as a child.
         var uiLayer = GetTree().Root.FindChild("UI", true, false) as CanvasLayer;

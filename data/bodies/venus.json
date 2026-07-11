@@ -22,7 +22,8 @@
       "mie_scale_height": 15000,
       "ozone_half_width": 0,
       "mie_anisotropy": 0.85,
-      "sun_illuminance_scale": 10.0
+      "sun_illuminance_scale": 10.0,
+      "low_order_diffuse_strength": 0.40
     },
     "layers": [
       {

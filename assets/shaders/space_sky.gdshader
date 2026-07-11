@@ -21,6 +21,8 @@ uniform float ozone_half_width = 15000.0;
 uniform float mie_g = 0.80;
 uniform float sun_illuminance = 20.0;
 uniform float star_energy = 0.9;
+uniform float eye_star_gain = 0.0;
+uniform float low_order_diffuse_strength : hint_range(0.0, 0.5) = 0.25;
 
 uniform vec3 ground_horizon : source_color = vec3(0.30, 0.55, 0.90);
 uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
@@ -72,6 +74,11 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 	return depth;
 }
 
+bool sun_is_occluded(vec3 position, vec3 direction) {
+	vec2 ground_hit = ray_sphere(position, direction, planet_radius);
+	return ground_hit.x > 0.0;
+}
+
 vec2 dir_to_equirect(vec3 direction) {
 	float lon = atan(direction.z, direction.x);
 	float lat = asin(clamp(direction.y, -1.0, 1.0));
@@ -99,6 +106,7 @@ void sky() {
 
 	vec3 optical_depth = vec3(0.0);
 	vec3 in_scatter = vec3(0.0);
+	vec3 diffuse_scatter = vec3(0.0);
 	if (crosses_atmosphere && ray_end > ray_start) {
 		float step_length = (ray_end - ray_start) / float(VIEW_STEPS);
 		float mu = dot(view_dir, to_sun);
@@ -116,10 +124,23 @@ void sky() {
 			vec3 density = density_at_height(height);
 			vec3 sample_extinction = extinction(density);
 			vec3 sun_depth = optical_depth_to_sun(sample_position, to_sun, outer_radius);
-			vec3 throughput = transmittance(optical_depth + sun_depth);
+			vec3 view_throughput = transmittance(optical_depth);
+			vec3 sun_throughput = transmittance(sun_depth);
+			vec3 throughput = view_throughput * sun_throughput;
 			vec3 scattering = rayleigh_scattering * density.x * rayleigh_phase
 				+ mie_scattering * density.y * mie_phase;
 			in_scatter += throughput * scattering * step_length;
+
+			// Conservative local order-2 closure: redistribute a bounded fraction of
+			// direct-beam losses isotropically. Planet shadow is kept at zero explicitly.
+			if (!sun_is_occluded(sample_position, to_sun)) {
+				vec3 beta_s = rayleigh_scattering * density.x + mie_scattering * density.y;
+				vec3 omega = clamp(beta_s / max(sample_extinction, vec3(1e-12)), vec3(0.0), vec3(1.0));
+				vec3 removed = clamp(vec3(1.0) - sun_throughput, vec3(0.0), vec3(1.0));
+				vec3 source_2 = beta_s * omega * removed
+					* (low_order_diffuse_strength / (4.0 * PI));
+				diffuse_scatter += view_throughput * source_2 * step_length;
+			}
 			optical_depth += sample_extinction * step_length;
 		}
 	}
@@ -129,10 +150,10 @@ void sky() {
 	if (hits_ground) stars = vec3(0.0);
 
 	// Exponential filmic response keeps the physical HDR integral bounded for Godot's sky.
-	vec3 atmosphere = vec3(1.0) - exp(-in_scatter * sun_illuminance);
+	vec3 atmosphere = vec3(1.0) - exp(-(in_scatter + diffuse_scatter) * sun_illuminance);
 	float sky_luminance = dot(atmosphere, vec3(0.2126, 0.7152, 0.0722));
 	float eye_star_visibility = 1.0 - smoothstep(0.002, 0.035, sky_luminance);
-	vec3 color = atmosphere + stars * star_transmittance * eye_star_visibility;
+	vec3 color = atmosphere + stars * star_transmittance * eye_star_visibility * eye_star_gain;
 
 	if (hits_ground) {
 		float nadir = clamp(-dot(view_dir, up), 0.0, 1.0);

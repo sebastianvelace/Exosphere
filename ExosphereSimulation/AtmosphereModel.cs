@@ -287,6 +287,7 @@ public partial class AtmosphereModel
             MieScattering = new Math.Vector3d(3.996e-6, 3.996e-6, 3.996e-6),
             MieAbsorption = new Math.Vector3d(0.444e-6, 0.444e-6, 0.444e-6),
             OzoneAbsorption = new Math.Vector3d(0.650e-6, 1.881e-6, 0.085e-6),
+            LowOrderDiffuseStrength = 0.25,
         },
         MaxAltitude             = 140_000.0,    // 140 km — aerodynamically significant boundary
         SeaLevelDensity         = 1.225,
@@ -335,6 +336,7 @@ public partial class AtmosphereModel
             OzoneHalfWidth = 0.0,
             MieAnisotropy = 0.76,
             SunIlluminanceScale = 14.0,
+            LowOrderDiffuseStrength = 0.08,
         },
         MaxAltitude         = 100_000.0,    // 100 km
         SeaLevelDensity     = 0.020,
@@ -364,6 +366,7 @@ public partial class AtmosphereModel
             OzoneHalfWidth = 0.0,
             MieAnisotropy = 0.85,
             SunIlluminanceScale = 10.0,
+            LowOrderDiffuseStrength = 0.40,
         },
         MaxAltitude         = 250_000.0,
         SeaLevelDensity     = 65.0,
