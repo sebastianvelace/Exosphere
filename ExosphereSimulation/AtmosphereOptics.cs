@@ -19,6 +19,8 @@ public sealed record AtmosphereOptics
     public double OzoneHalfWidth { get; init; } = 15_000.0;
     public double MieAnisotropy { get; init; } = 0.80;
     public double SunIlluminanceScale { get; init; } = 20.0;
+    /// <summary>Bounded isotropic second-order fill used by the realtime sky integrator.</summary>
+    public double LowOrderDiffuseStrength { get; init; } = 0.25;
 
     public Vector3d MieExtinction => MieScattering + MieAbsorption;
     public bool IsEnabled => RayleighScattering.MagnitudeSquared > 0.0
@@ -83,6 +85,33 @@ public sealed record AtmosphereOptics
             System.Math.Exp(-tau.X),
             System.Math.Exp(-tau.Y),
             System.Math.Exp(-tau.Z));
+    }
+
+    /// <summary>
+    /// Local second-order source approximation. Light removed from the direct solar beam is
+    /// redistributed isotropically, bounded per colour band by the single-scattering albedo.
+    /// Solid planetary shadow is an explicit zero: an opaque planet is not a scattering event.
+    /// </summary>
+    public Vector3d LowOrderDiffuseSource(
+        Vector3d density, Vector3d solarTransmittance, bool planetOccluded = false)
+    {
+        if (planetOccluded || LowOrderDiffuseStrength <= 0.0) return Vector3d.Zero;
+        var scattering = RayleighScattering * density.X + MieScattering * density.Y;
+        var ext = scattering + MieAbsorption * density.Y + OzoneAbsorption * density.Z;
+        const double invFourPi = 1.0 / (4.0 * System.Math.PI);
+        return new Vector3d(
+            DiffuseBand(scattering.X, ext.X, solarTransmittance.X),
+            DiffuseBand(scattering.Y, ext.Y, solarTransmittance.Y),
+            DiffuseBand(scattering.Z, ext.Z, solarTransmittance.Z)) *
+            (LowOrderDiffuseStrength * invFourPi);
+    }
+
+    private static double DiffuseBand(double scattering, double extinction, double solarT)
+    {
+        if (scattering <= 0.0 || extinction <= 0.0) return 0.0;
+        double albedo = System.Math.Clamp(scattering / extinction, 0.0, 1.0);
+        double removed = System.Math.Clamp(1.0 - solarT, 0.0, 1.0);
+        return scattering * albedo * removed;
     }
 
     private double OzoneColumnAbove(double altitude)

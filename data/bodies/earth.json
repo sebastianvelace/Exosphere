@@ -25,7 +25,8 @@
       "ozone_center_altitude": 25000,
       "ozone_half_width": 15000,
       "mie_anisotropy": 0.8,
-      "sun_illuminance_scale": 20.0
+      "sun_illuminance_scale": 20.0,
+      "low_order_diffuse_strength": 0.25
     },
     "layers": [
       {
