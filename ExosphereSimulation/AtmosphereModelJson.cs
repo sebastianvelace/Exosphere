@@ -40,6 +40,11 @@ public partial class AtmosphereModel
                 MieAnisotropy = ReadDouble(opticalJson, "mie_anisotropy", 0.80),
                 SunIlluminanceScale = ReadDouble(opticalJson, "sun_illuminance_scale", 20.0),
                 LowOrderDiffuseStrength = ReadDouble(opticalJson, "low_order_diffuse_strength", 0.25),
+                CloudBaseAltitude = ReadDouble(opticalJson, "cloud_base_altitude", 0.0),
+                CloudTopAltitude = ReadDouble(opticalJson, "cloud_top_altitude", 0.0),
+                CloudExtinction = ReadDouble(opticalJson, "cloud_extinction", 0.0),
+                CloudCoverage = ReadDouble(opticalJson, "cloud_coverage", 0.0),
+                CloudWindRadiansPerSecond = ReadDouble(opticalJson, "cloud_wind_radians_per_second", 0.0),
             };
         }
 

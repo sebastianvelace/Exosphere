@@ -16,10 +16,13 @@ public partial class SkyController : Node
 
     private const string SkyShaderPath = "res://assets/shaders/space_sky.gdshader";
     private const string StarTexPath = "res://assets/textures/starmap_milkyway_8k.jpg";
+    private const string EarthCloudTexPath = "res://assets/textures/earth_clouds.jpg";
+    private const string VenusCloudTexPath = "res://assets/textures/venus.jpg";
     private const float StarEnergy = 0.9f;
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
+    private string? _boundCloudBodyId;
 
     public override void _Ready()
     {
@@ -31,9 +34,12 @@ public partial class SkyController : Node
         if (_env?.Sky == null) return;
         _skyMat = new ShaderMaterial { Shader = GD.Load<Shader>(SkyShaderPath) };
         _skyMat.SetShaderParameter("star_tex", LoadStarTexture());
+        _skyMat.SetShaderParameter("cloud_coverage_tex", LoadTexture(EarthCloudTexPath, Colors.Black));
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
         _env.Sky.SkyMaterial = _skyMat;
-        _env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;
+        // The cloud field evolves slowly. Incremental refresh updates one cubemap face per
+        // frame and avoids paying the complete gas+cloud integration six times every frame.
+        _env.Sky.ProcessMode = Sky.ProcessModeEnum.Incremental;
     }
 
     public override void _Process(double delta)
@@ -80,6 +86,7 @@ public partial class SkyController : Node
             _skyMat.SetShaderParameter("mie_absorption", Vector3.Zero);
             _skyMat.SetShaderParameter("ozone_absorption", Vector3.Zero);
             _skyMat.SetShaderParameter("low_order_diffuse_strength", 0.0f);
+            _skyMat.SetShaderParameter("cloud_enabled", false);
             return;
         }
 
@@ -95,6 +102,21 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("sun_illuminance", (float)optics.SunIlluminanceScale);
         _skyMat.SetShaderParameter("low_order_diffuse_strength",
             (float)optics.LowOrderDiffuseStrength);
+        _skyMat.SetShaderParameter("cloud_enabled", optics.HasCloudLayer);
+        _skyMat.SetShaderParameter("cloud_base_altitude", (float)optics.CloudBaseAltitude);
+        _skyMat.SetShaderParameter("cloud_top_altitude", (float)optics.CloudTopAltitude);
+        _skyMat.SetShaderParameter("cloud_extinction", (float)optics.CloudExtinction);
+        _skyMat.SetShaderParameter("cloud_coverage", (float)optics.CloudCoverage);
+        _skyMat.SetShaderParameter("cloud_longitude_offset",
+            (float)(SimulationBridge.Instance!.Universe.CurrentTime
+                * optics.CloudWindRadiansPerSecond / Mathf.Tau));
+        _skyMat.SetShaderParameter("cloud_world_to_texture",
+            new Basis(FloatingOrigin.PlanetTilt.Inverse()));
+        if (_boundCloudBodyId != body.Id)
+        {
+            _skyMat.SetShaderParameter("cloud_coverage_tex", LoadCloudTexture(body.Id));
+            _boundCloudBodyId = body.Id;
+        }
 
         Color groundHorizon = body.Id switch
         {
@@ -136,15 +158,22 @@ public partial class SkyController : Node
         (float)value.X, (float)value.Y, (float)value.Z);
 
     private static Texture2D LoadStarTexture()
+        => LoadTexture(StarTexPath, Colors.Black);
+
+    private static Texture2D LoadCloudTexture(string bodyId) => bodyId == "venus"
+        ? LoadTexture(VenusCloudTexPath, Colors.Black)
+        : LoadTexture(EarthCloudTexPath, Colors.Black);
+
+    private static Texture2D LoadTexture(string resourcePath, Color fallback)
     {
-        var image = Image.LoadFromFile(ProjectSettings.GlobalizePath(StarTexPath));
+        var image = Image.LoadFromFile(ProjectSettings.GlobalizePath(resourcePath));
         if (image != null)
         {
             image.GenerateMipmaps();
             return ImageTexture.CreateFromImage(image);
         }
         var dark = Image.CreateEmpty(1, 1, false, Image.Format.Rgb8);
-        dark.Fill(Colors.Black);
+        dark.Fill(fallback);
         return ImageTexture.CreateFromImage(dark);
     }
 

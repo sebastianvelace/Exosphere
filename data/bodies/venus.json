@@ -23,7 +23,12 @@
       "ozone_half_width": 0,
       "mie_anisotropy": 0.85,
       "sun_illuminance_scale": 10.0,
-      "low_order_diffuse_strength": 0.40
+      "low_order_diffuse_strength": 0.40,
+      "cloud_base_altitude": 48000,
+      "cloud_top_altitude": 70000,
+      "cloud_extinction": 0.00028,
+      "cloud_coverage": 0.96,
+      "cloud_wind_radians_per_second": 0.000004
     },
     "layers": [
       {

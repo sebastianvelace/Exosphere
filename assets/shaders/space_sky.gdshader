@@ -4,6 +4,7 @@
 shader_type sky;
 
 uniform sampler2D star_tex : source_color, filter_linear_mipmap;
+uniform sampler2D cloud_coverage_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
 uniform vec3 sun_dir = vec3(0.4, 0.5, 0.8);
 uniform vec3 local_up = vec3(0.0, 1.0, 0.0);
 uniform float planet_radius = 6371000.0;
@@ -23,12 +24,21 @@ uniform float sun_illuminance = 20.0;
 uniform float star_energy = 0.9;
 uniform float eye_star_gain = 0.0;
 uniform float low_order_diffuse_strength : hint_range(0.0, 0.5) = 0.25;
+uniform bool cloud_enabled = false;
+uniform float cloud_base_altitude = 1200.0;
+uniform float cloud_top_altitude = 12000.0;
+uniform float cloud_extinction = 0.00011;
+uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.58;
+uniform float cloud_longitude_offset = 0.0;
+uniform mat3 cloud_world_to_texture;
 
 uniform vec3 ground_horizon : source_color = vec3(0.30, 0.55, 0.90);
 uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
 
 const int VIEW_STEPS = 12;
 const int LIGHT_STEPS = 6;
+const int CLOUD_VIEW_STEPS = 10;
+const int CLOUD_LIGHT_STEPS = 2;
 
 vec2 ray_sphere(vec3 origin, vec3 direction, float radius) {
 	float b = dot(origin, direction);
@@ -83,6 +93,44 @@ vec2 dir_to_equirect(vec3 direction) {
 	float lon = atan(direction.z, direction.x);
 	float lat = asin(clamp(direction.y, -1.0, 1.0));
 	return vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI);
+}
+
+float cloud_height_shape(float height) {
+	float u = (height - cloud_base_altitude)
+		/ max(cloud_top_altitude - cloud_base_altitude, 1.0);
+	return smoothstep(0.0, 0.12, u) * (1.0 - smoothstep(0.72, 1.0, u));
+}
+
+float cloud_density(vec3 position) {
+	float height = length(position) - planet_radius;
+	float shape = cloud_height_shape(height);
+	if (shape <= 0.0) return 0.0;
+	vec3 texture_direction = normalize(cloud_world_to_texture * normalize(position));
+	vec2 uv = dir_to_equirect(texture_direction) + vec2(cloud_longitude_offset, 0.0);
+	float weather = texture(cloud_coverage_tex, uv).r;
+	float detail = texture(cloud_coverage_tex, uv * 3.07 + vec2(0.17, 0.31)).r;
+	float threshold = 1.0 - cloud_coverage;
+	return shape * smoothstep(threshold - 0.12, threshold + 0.10,
+		weather + (detail - 0.5) * 0.22);
+}
+
+float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
+	if (sun_is_occluded(position, to_sun)) return 0.0;
+	vec2 outer_hit = ray_sphere(position, to_sun, planet_radius + cloud_top_altitude);
+	float distance_to_edge = max(outer_hit.y, 0.0);
+	float step_length = distance_to_edge / float(CLOUD_LIGHT_STEPS);
+	float optical_depth = 0.0;
+	for (int i = 0; i < CLOUD_LIGHT_STEPS; i++) {
+		vec3 p = position + to_sun * ((float(i) + 0.5) * step_length);
+		optical_depth += cloud_density(p) * cloud_extinction * step_length;
+	}
+	return exp(-min(optical_depth, 80.0));
+}
+
+float hg_phase(float mu, float g) {
+	float g2 = g * g;
+	return (1.0 - g2) / (4.0 * PI
+		* pow(max(1.0 + g2 - 2.0 * g * mu, 1e-3), 1.5));
 }
 
 void sky() {
@@ -145,15 +193,58 @@ void sky() {
 		}
 	}
 
+	// Exact nearest interval through the spherical cloud shell. This remains geometric
+	// from below the base through orbit; no altitude colour fade is involved.
+	vec3 cloud_radiance = vec3(0.0);
+	float cloud_transmittance = 1.0;
+	if (cloud_enabled && cloud_top_altitude > cloud_base_altitude) {
+		vec2 outer_cloud = ray_sphere(origin, view_dir, planet_radius + cloud_top_altitude);
+		vec2 inner_cloud = ray_sphere(origin, view_dir, planet_radius + cloud_base_altitude);
+		float cloud_start = max(outer_cloud.x, 0.0);
+		float cloud_end = outer_cloud.y;
+		float origin_radius = length(origin);
+		if (origin_radius < planet_radius + cloud_base_altitude && inner_cloud.y > cloud_start)
+			cloud_start = inner_cloud.y;
+		else if (inner_cloud.x > cloud_start && inner_cloud.x < cloud_end)
+			cloud_end = inner_cloud.x;
+		if (ground_hit.x > cloud_start && ground_hit.x < cloud_end)
+			cloud_end = ground_hit.x;
+
+		if (cloud_end > cloud_start) {
+			float cloud_step = (cloud_end - cloud_start) / float(CLOUD_VIEW_STEPS);
+			float mu_cloud = dot(view_dir, to_sun);
+			float phase_cloud = 0.82 * hg_phase(mu_cloud, 0.82)
+				+ 0.18 * hg_phase(mu_cloud, -0.20);
+			for (int i = 0; i < CLOUD_VIEW_STEPS; i++) {
+				vec3 p = origin + view_dir
+					* (cloud_start + (float(i) + 0.5) * cloud_step);
+				float rho = cloud_density(p);
+				if (rho > 0.001) {
+					float segment_alpha = 1.0
+						- exp(-rho * cloud_extinction * cloud_step);
+					float direct_light = cloud_sun_transmittance(p, to_sun);
+					vec3 atmospheric_sun = transmittance(
+						optical_depth_to_sun(p, to_sun, outer_radius));
+					vec3 source = atmospheric_sun
+						* (direct_light * phase_cloud + 0.018);
+					cloud_radiance += cloud_transmittance * source * segment_alpha;
+					cloud_transmittance *= 1.0 - segment_alpha;
+				}
+			}
+		}
+	}
+
 	vec3 stars = texture(star_tex, dir_to_equirect(view_dir)).rgb * star_energy;
 	vec3 star_transmittance = crosses_atmosphere ? transmittance(optical_depth) : vec3(1.0);
 	if (hits_ground) stars = vec3(0.0);
 
 	// Exponential filmic response keeps the physical HDR integral bounded for Godot's sky.
-	vec3 atmosphere = vec3(1.0) - exp(-(in_scatter + diffuse_scatter) * sun_illuminance);
+	vec3 atmosphere = vec3(1.0) - exp(
+		-(in_scatter + diffuse_scatter + cloud_radiance) * sun_illuminance);
 	float sky_luminance = dot(atmosphere, vec3(0.2126, 0.7152, 0.0722));
 	float eye_star_visibility = 1.0 - smoothstep(0.002, 0.035, sky_luminance);
-	vec3 color = atmosphere + stars * star_transmittance * eye_star_visibility * eye_star_gain;
+	vec3 color = atmosphere + stars * star_transmittance * cloud_transmittance
+		* eye_star_visibility * eye_star_gain;
 
 	if (hits_ground) {
 		float nadir = clamp(-dot(view_dir, up), 0.0, 1.0);
