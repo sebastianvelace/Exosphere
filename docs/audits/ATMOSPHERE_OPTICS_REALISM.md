@@ -78,7 +78,8 @@ bash tools/atmosphere_quick_check.sh
 ## Próximos gates
 
 1. LUTs 4D con multiple scattering y unidades espectrales; reemplazar el cierre S₂ local.
-2. Nubes volumétricas con optical depth, self-shadow y viento.
+2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
+   sobre terreno y aerial perspective segmentada.
 3. Aerosoles por clima/latitud y capas Venus validadas.
 4. Refracción, polarización y airglow.
 5. Golden por cuerpo: mediodía, sunset, 20/50/80/150/400 km y eclipse.

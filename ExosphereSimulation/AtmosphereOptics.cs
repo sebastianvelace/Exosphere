@@ -21,6 +21,43 @@ public sealed record AtmosphereOptics
     public double SunIlluminanceScale { get; init; } = 20.0;
     /// <summary>Bounded isotropic second-order fill used by the realtime sky integrator.</summary>
     public double LowOrderDiffuseStrength { get; init; } = 0.25;
+    public double CloudBaseAltitude { get; init; } = 0.0;
+    public double CloudTopAltitude { get; init; } = 0.0;
+    public double CloudExtinction { get; init; } = 0.0;
+    public double CloudCoverage { get; init; } = 0.0;
+    public double CloudWindRadiansPerSecond { get; init; } = 0.0;
+
+    public bool HasCloudLayer => AreFinite(CloudBaseAltitude, CloudTopAltitude,
+            CloudExtinction, CloudCoverage, CloudWindRadiansPerSecond)
+        && CloudBaseAltitude >= 0.0 && CloudTopAltitude > CloudBaseAltitude
+        && CloudExtinction > 0.0 && CloudCoverage is > 0.0 and <= 1.0;
+
+    /// <summary>Normalised vertical density envelope with soft cloud-base and anvil fades.</summary>
+    public double CloudVerticalDensity(double altitude)
+    {
+        if (!HasCloudLayer || altitude <= CloudBaseAltitude || altitude >= CloudTopAltitude)
+            return 0.0;
+        double fraction = (altitude - CloudBaseAltitude) /
+            (CloudTopAltitude - CloudBaseAltitude);
+        double baseFade = Smoothstep(0.0, 0.12, fraction);
+        double topFade = 1.0 - Smoothstep(0.72, 1.0, fraction);
+        return baseFade * topFade;
+    }
+
+    /// <summary>
+    /// Converts a normalised weather-map sample into cloud occupancy. Coverage controls the
+    /// occupied fraction for a uniformly distributed map; the soft edge avoids binary clouds.
+    /// </summary>
+    public double CloudWeatherDensity(double weatherSample)
+    {
+        if (!HasCloudLayer || !double.IsFinite(weatherSample)) return 0.0;
+        double threshold = 1.0 - CloudCoverage;
+        return Smoothstep(threshold - 0.12, threshold + 0.10,
+            System.Math.Clamp(weatherSample, 0.0, 1.0));
+    }
+
+    public double CloudLocalExtinction(double altitude, double weatherSample) =>
+        CloudExtinction * CloudVerticalDensity(altitude) * CloudWeatherDensity(weatherSample);
 
     public Vector3d MieExtinction => MieScattering + MieAbsorption;
     public bool IsEnabled => RayleighScattering.MagnitudeSquared > 0.0
@@ -113,6 +150,15 @@ public sealed record AtmosphereOptics
         double removed = System.Math.Clamp(1.0 - solarT, 0.0, 1.0);
         return scattering * albedo * removed;
     }
+
+    private static double Smoothstep(double low, double high, double value)
+    {
+        double t = System.Math.Clamp((value - low) / (high - low), 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    }
+
+    private static bool AreFinite(params double[] values) =>
+        values.All(double.IsFinite);
 
     private double OzoneColumnAbove(double altitude)
     {

@@ -90,6 +90,11 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(preset.RayleighScaleHeight, json.RayleighScaleHeight);
         Assert.Equal(preset.MieScaleHeight, json.MieScaleHeight);
         Assert.Equal(preset.LowOrderDiffuseStrength, json.LowOrderDiffuseStrength);
+        Assert.Equal(preset.CloudBaseAltitude, json.CloudBaseAltitude);
+        Assert.Equal(preset.CloudTopAltitude, json.CloudTopAltitude);
+        Assert.Equal(preset.CloudExtinction, json.CloudExtinction);
+        Assert.Equal(preset.CloudCoverage, json.CloudCoverage);
+        Assert.Equal(preset.CloudWindRadiansPerSecond, json.CloudWindRadiansPerSecond);
     }
 
     [Fact]
@@ -108,6 +113,62 @@ public sealed class AtmosphereOpticsTests
         double bound = (optics.RayleighScattering.X + optics.MieScattering.X)
             * optics.LowOrderDiffuseStrength / (4.0 * System.Math.PI);
         Assert.InRange(attenuated.X, 0.0, bound);
+    }
+
+    [Fact]
+    public void EarthCloudLayerHasSoftFiniteVerticalSupport()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+
+        Assert.True(optics.HasCloudLayer);
+        Assert.Equal(0.0, optics.CloudVerticalDensity(optics.CloudBaseAltitude));
+        Assert.Equal(0.0, optics.CloudVerticalDensity(optics.CloudTopAltitude));
+        Assert.True(optics.CloudVerticalDensity(3_000.0) > 0.8);
+        Assert.True(optics.CloudVerticalDensity(11_500.0) < 0.1);
+        Assert.InRange(optics.CloudCoverage, 0.0, 1.0);
+    }
+
+    [Fact]
+    public void MarsCloudLayerIsDisabledUntilAValidatedProfileExists()
+    {
+        var optics = LoadBody("mars").Atmosphere!.Optics;
+
+        Assert.False(optics.HasCloudLayer);
+        Assert.Equal(0.0, optics.CloudVerticalDensity(5_000.0));
+    }
+
+    [Fact]
+    public void CloudWeatherAndAltitudeJointlyBoundLocalExtinction()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        double previous = 0.0;
+        for (int i = 0; i <= 100; i++)
+        {
+            double density = optics.CloudWeatherDensity(i / 100.0);
+            Assert.InRange(density, previous, 1.0);
+            previous = density;
+        }
+
+        Assert.Equal(0.0, optics.CloudLocalExtinction(500.0, 1.0));
+        Assert.Equal(0.0, optics.CloudLocalExtinction(3_000.0, 0.0));
+        Assert.InRange(optics.CloudLocalExtinction(3_000.0, 1.0),
+            0.0, optics.CloudExtinction);
+    }
+
+    [Fact]
+    public void InvalidCloudParametersCannotEnableRendering()
+    {
+        var invalid = new AtmosphereOptics
+        {
+            CloudBaseAltitude = 1_000.0,
+            CloudTopAltitude = double.NaN,
+            CloudExtinction = 0.001,
+            CloudCoverage = 2.0,
+        };
+
+        Assert.False(invalid.HasCloudLayer);
+        Assert.Equal(0.0, invalid.CloudVerticalDensity(2_000.0));
+        Assert.Equal(0.0, invalid.CloudWeatherDensity(0.5));
     }
 
     private static CelestialBody LoadBody(string id) => CelestialBody.LoadFromJson(
