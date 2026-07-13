@@ -125,7 +125,7 @@ public partial class EarthGroundController : Node3D
             // Map the patch to the real Earth texture: the sub-vessel point and the patch's
             // east/north axes, expressed in the texture/mesh-local frame (undo the planet
             // tilt that the backdrop uses), so the ground shows the real launch-site terrain.
-            var tiltInv  = FloatingOrigin.PlanetTilt.Inverse();
+            var tiltInv  = FloatingOrigin.PlanetOrientation.Inverse();
             var subP     = tiltInv * renderUp;
             var eastL    = tiltInv * basis.X;    // patch +X (east)  in texture space
             var northL   = tiltInv * basis.Z;    // patch +Z (north) in texture space

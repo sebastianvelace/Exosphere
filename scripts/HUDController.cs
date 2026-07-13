@@ -518,7 +518,7 @@ public partial class HUDController : Control
         {
             var vdir = surfVel.Normalized;
             flightPitch = System.Math.Asin(System.Math.Clamp(vdir.Dot(up), -1, 1)) * 180.0 / System.Math.PI;
-            var spinAxis = new Vector3d(0, 1, 0);
+            var spinAxis = refBody.RotationAxis;
             var north = spinAxis - up * spinAxis.Dot(up);
             if (north.MagnitudeSquared > 1e-9)
             {
@@ -536,13 +536,17 @@ public partial class HUDController : Control
         // ── Downrange (great-circle from launch surface point) ─────────────
         if (!_launchCaptured && (mission?.Phase is MissionPhase.LIFTOFF or MissionPhase.ASCENT_SH) && alt > 30)
         {
-            _launchSurfacePoint = (vessel.Position - refBody.Position).Normalized;  // unit, body frame
+            var inertial = (vessel.Position - refBody.Position).Normalized;
+            _launchSurfacePoint = refBody.ToBodyFixedDirection(
+                inertial, universe.CurrentTime).Normalized;
             _launchCaptured = true;
         }
         double downrange = 0;
         if (_launchCaptured)
         {
-            var now = (vessel.Position - refBody.Position).Normalized;
+            var inertialNow = (vessel.Position - refBody.Position).Normalized;
+            var now = refBody.ToBodyFixedDirection(
+                inertialNow, universe.CurrentTime).Normalized;
             double cosAng = System.Math.Clamp(now.Dot(_launchSurfacePoint), -1, 1);
             downrange = System.Math.Acos(cosAng) * refBody.Radius;
         }

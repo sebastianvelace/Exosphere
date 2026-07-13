@@ -214,6 +214,34 @@ public class LaunchSiteFrameTests
     }
 
     [Fact]
+    public void RotatingStarbaseHasConstantBodyFixedCoordinates()
+    {
+        var earth = LoadBody("earth");
+        var site = LoadSite("starbase");
+        var atStart = (site.GetPosition(earth, 0.0) - earth.Position).Normalized;
+        var afterHourInertial = (site.GetPosition(earth, 3_600.0) - earth.Position).Normalized;
+        var afterHourBodyFixed = earth.ToBodyFixedDirection(afterHourInertial, 3_600.0);
+
+        Assert.Equal(atStart.X, afterHourBodyFixed.X, 10);
+        Assert.Equal(atStart.Y, afterHourBodyFixed.Y, 10);
+        Assert.Equal(atStart.Z, afterHourBodyFixed.Z, 10);
+    }
+
+    [Fact]
+    public void BodyFixedDownrangeIgnoresPurePlanetaryRotation()
+    {
+        var earth = LoadBody("earth");
+        var site = LoadSite("starbase");
+        var launch = (site.GetPosition(earth, 0.0) - earth.Position).Normalized;
+        var later = (site.GetPosition(earth, 120.0) - earth.Position).Normalized;
+        var laterFixed = earth.ToBodyFixedDirection(later, 120.0).Normalized;
+        double downrange = System.Math.Acos(System.Math.Clamp(
+            launch.Dot(laterFixed), -1.0, 1.0)) * earth.Radius;
+
+        Assert.InRange(downrange, 0.0, 0.1);
+    }
+
+    [Fact]
     public void KennedyRenderFrameIsOrthonormalRightHandedAndRadiallyUpright()
     {
         var earth = LoadBody("earth");
