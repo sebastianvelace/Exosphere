@@ -18,8 +18,12 @@ public class ThermalSystem
     private const double Boltzmann     = 5.67e-8;
 
     public void Tick(double dt, bool inEclipse, bool inAtmosphere, double atmosphericTemp)
+        => Tick(dt, inEclipse ? 0.0 : 1.0, inAtmosphere, atmosphericTemp);
+
+    public void Tick(double dt, double solarVisibility, bool inAtmosphere, double atmosphericTemp)
     {
-        double solarIn = inEclipse ? 0.0 : SolarHeatFlux * SolarAbsorb * VehicleArea * 0.5;
+        double solarIn = System.Math.Clamp(solarVisibility, 0.0, 1.0)
+            * SolarHeatFlux * SolarAbsorb * VehicleArea * 0.5;
 
         // Radiation to space
         double radOut = Emissivity * Boltzmann * VehicleArea * System.Math.Pow(TemperatureK, 4);

@@ -367,6 +367,9 @@ public partial class SimulationBridge : Node
 
         foreach (var body in Universe.Bodies)
         {
+            // The photosphere is rendered by the sky shader at its exact angular radius.
+            // A second scaled-space sphere would overlap it and break eclipse silhouettes.
+            if (body.Id == "sun") continue;
             // Unit sphere — FloatingOrigin scales each planet per-frame to its correct
             // angular size as a precision-safe "scaled-space" backdrop. The shader supplies
             // its own atmospheric Fresnel rim, so no separate glow shell is needed.

@@ -44,17 +44,25 @@ public partial class SystemsController : Node
 
         var earthBody = universe.GetBody("earth");
         var sunBody   = universe.GetBody("sun");
-        bool inEclipse = earthBody != null && sunBody != null
-            && MissionGeometry.IsInEarthUmbra(
-                vessel.Position, earthBody.Position, sunBody.Position, earthBody.Radius);
+        double solarVisibility = 1.0;
+        if (sunBody != null)
+        {
+            foreach (var body in universe.Bodies)
+            {
+                if (body.Id == "sun") continue;
+                solarVisibility = System.Math.Min(solarVisibility,
+                    MissionGeometry.SolarDiscVisibility(vessel.Position, body.Position,
+                        body.Radius, sunBody.Position, sunBody.Radius));
+            }
+        }
 
         Vector3d sunPos = sunBody?.Position ?? Vector3d.Zero;
         double lsLoadKw = LifeSupport.GetEcLoadKw(crewCount, sysPhase);
-        Power.Tick(delta, vessel.Position, sunPos, inEclipse, lsLoadKw);
+        Power.Tick(delta, vessel.Position, sunPos, solarVisibility, lsLoadKw);
 
         bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
         double atmoTemp = inAtmo ? refBody.Atmosphere!.GetTemperature(alt) : 3.0;
-        Thermal.Tick(delta, inEclipse, inAtmo, atmoTemp);
+        Thermal.Tick(delta, solarVisibility, inAtmo, atmoTemp);
 
         Vector3d earthPos = earthBody?.Position ?? Vector3d.Zero;
         Comms.Tick(delta, vessel.Position, earthPos, universe.Bodies);

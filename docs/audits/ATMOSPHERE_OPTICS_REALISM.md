@@ -81,5 +81,5 @@ bash tools/atmosphere_quick_check.sh
 2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
    sobre terreno y aerial perspective segmentada.
 3. Aerosoles por clima/latitud y capas Venus validadas.
-4. Refracción, polarización y airglow.
+4. Refracción del disco solar/horizonte, polarización y airglow.
 5. Golden por cuerpo: mediodía, sunset, 20/50/80/150/400 km y eclipse.

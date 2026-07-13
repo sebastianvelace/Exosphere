@@ -8,6 +8,43 @@ using Exosphere.Simulation.Math;
 /// </summary>
 public static class MissionGeometry
 {
+    /// <summary>Apparent angular radius of a sphere, in radians.</summary>
+    public static double ApparentAngularRadius(double physicalRadius, double distance)
+    {
+        if (!double.IsFinite(physicalRadius) || !double.IsFinite(distance)
+            || physicalRadius <= 0.0 || distance <= 0.0)
+            return 0.0;
+        return System.Math.Asin(System.Math.Clamp(physicalRadius / distance, 0.0, 1.0));
+    }
+
+    /// <summary>Visible fraction of a circular source after overlap by one circular occluder.</summary>
+    public static double DiscVisibility(
+        double sourceAngularRadius, double occluderAngularRadius, double separation)
+    {
+        if (!double.IsFinite(sourceAngularRadius) || !double.IsFinite(occluderAngularRadius)
+            || !double.IsFinite(separation) || sourceAngularRadius <= 0.0
+            || occluderAngularRadius < 0.0 || separation < 0.0)
+            return 1.0;
+        double rs = sourceAngularRadius;
+        double ro = occluderAngularRadius;
+        if (ro == 0.0 || separation >= rs + ro) return 1.0;
+        if (ro >= separation + rs) return 0.0;
+        if (rs >= separation + ro)
+            return System.Math.Clamp(1.0 - ro * ro / (rs * rs), 0.0, 1.0);
+
+        // Normalise by the source radius before evaluating the lens. This avoids loss of
+        // precision for astronomical discs whose angular radii are only milliradians.
+        double q = ro / rs;
+        double s = separation / rs;
+        double x1 = System.Math.Clamp((s * s + 1.0 - q * q) / (2.0 * s), -1.0, 1.0);
+        double x2 = System.Math.Clamp((s * s + q * q - 1.0) / (2.0 * s * q), -1.0, 1.0);
+        double lens = System.Math.Acos(x1) + q * q * System.Math.Acos(x2)
+            - 0.5 * System.Math.Sqrt(System.Math.Max(0.0,
+                (-s + 1.0 + q) * (s + 1.0 - q)
+              * (s - 1.0 + q) * (s + 1.0 + q)));
+        return System.Math.Clamp(1.0 - lens / System.Math.PI, 0.0, 1.0);
+    }
+
     /// <summary>
     /// Fraction of the apparent solar disc visible after occultation by a spherical body.
     /// Exact overlap area of the two apparent discs resolves full light, penumbra, totality
@@ -28,24 +65,13 @@ public static class MissionGeometry
             return 1.0;
         if (toSun.Dot(toOcc) <= 0.0 || occDist >= sunDist) return 1.0;
 
-        double rs = System.Math.Asin(System.Math.Clamp(sunRadius / sunDist, 0.0, 1.0));
-        double ro = System.Math.Asin(System.Math.Clamp(occluderRadius / occDist, 0.0, 1.0));
-        double sep = System.Math.Acos(System.Math.Clamp(
-            toSun.Normalized.Dot(toOcc.Normalized), -1.0, 1.0));
-
-        if (sep >= rs + ro) return 1.0;
-        if (ro >= sep + rs) return 0.0;
-        if (rs >= sep + ro)
-            return System.Math.Clamp(1.0 - ro * ro / (rs * rs), 0.0, 1.0);
-
-        double x1 = System.Math.Clamp((sep * sep + rs * rs - ro * ro) / (2.0 * sep * rs), -1.0, 1.0);
-        double x2 = System.Math.Clamp((sep * sep + ro * ro - rs * rs) / (2.0 * sep * ro), -1.0, 1.0);
-        double lens = rs * rs * System.Math.Acos(x1)
-                    + ro * ro * System.Math.Acos(x2)
-                    - 0.5 * System.Math.Sqrt(System.Math.Max(0.0,
-                        (-sep + rs + ro) * (sep + rs - ro)
-                      * (sep - rs + ro) * (sep + rs + ro)));
-        return System.Math.Clamp(1.0 - lens / (System.Math.PI * rs * rs), 0.0, 1.0);
+        double rs = ApparentAngularRadius(sunRadius, sunDist);
+        double ro = ApparentAngularRadius(occluderRadius, occDist);
+        var sunDir = toSun.Normalized;
+        var occDir = toOcc.Normalized;
+        double sep = System.Math.Atan2(sunDir.Cross(occDir).Magnitude,
+            System.Math.Clamp(sunDir.Dot(occDir), -1.0, 1.0));
+        return DiscVisibility(rs, ro, sep);
     }
 
     /// <summary>
