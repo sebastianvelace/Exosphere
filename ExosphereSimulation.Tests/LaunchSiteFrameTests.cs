@@ -163,6 +163,57 @@ public class LaunchSiteFrameTests
     }
 
     [Fact]
+    public void TimedSurfacePositionMovesAtRotationalSurfaceVelocity()
+    {
+        var earth = LoadBody("earth");
+        var site = LoadSite("starbase");
+        const double time = 12_345.0;
+        const double dt = 0.001;
+        var p0 = site.GetPosition(earth, time);
+        var p1 = site.GetPosition(earth, time + dt);
+        var finiteDifference = (p1 - p0) / dt;
+        var expected = earth.GetSurfaceVelocity(p0);
+
+        Assert.InRange((finiteDifference - expected).Magnitude, 0.0, 0.05);
+    }
+
+    [Fact]
+    public void TimedLaunchFrameRemainsUprightAndRightHanded()
+    {
+        var earth = LoadBody("earth");
+        var site = LoadSite("starbase");
+        var frame = site.GetLocalFrame(earth, 86_164.0);
+        var position = site.GetPosition(earth, 86_164.0);
+
+        Assert.Equal(1.0, frame.Determinant, 10);
+        Assert.Equal(1.0,
+            frame.Up.Dot((position - earth.Position).Normalized), 10);
+        Assert.True(earth.GetSurfaceVelocity(position).Dot(frame.East) > 0.0);
+    }
+
+    [Fact]
+    public void ReleasedVehicleWithSurfaceVelocityDoesNotShootSidewaysFromPad()
+    {
+        var earth = LoadBody("earth");
+        var site = LoadSite("starbase");
+        const double t = 1_000.0;
+        const double dt = 1.0;
+        double interfaceHeight = LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation;
+        var frame = site.GetLocalFrame(earth, t);
+        var vesselStart = site.GetPosition(earth, t) + frame.Up * interfaceHeight;
+        var inheritedVelocity = earth.GetSurfaceVelocity(vesselStart);
+        var linearVesselAfterOneSecond = vesselStart + inheritedVelocity * dt;
+        var padAfterOneSecond = site.GetPosition(earth, t + dt);
+        var relative = linearVesselAfterOneSecond - padAfterOneSecond;
+
+        // First-order motion of pad and vehicle is identical. Remaining error is only the
+        // sub-centimetre curvature term from approximating the vehicle path as a tangent.
+        Assert.InRange(System.Math.Abs(relative.Dot(frame.East)), 0.0, 0.05);
+        Assert.InRange(System.Math.Abs(relative.Dot(frame.North)), 0.0, 0.05);
+        Assert.InRange(relative.Dot(frame.Up), interfaceHeight - 0.05, interfaceHeight + 0.05);
+    }
+
+    [Fact]
     public void KennedyRenderFrameIsOrthonormalRightHandedAndRadiallyUpright()
     {
         var earth = LoadBody("earth");

@@ -190,6 +190,18 @@ public class CelestialBody
         return Position + up.Normalized * (Radius + altitudeM);
     }
 
+    /// <summary>
+    /// Inertial position of a body-fixed surface coordinate at simulation time. Longitude
+    /// advances by the body's sidereal angular speed, making the derivative exactly the
+    /// rotational surface velocity used by atmosphere and launch physics.
+    /// </summary>
+    public Vector3d GetSurfacePositionAtTime(
+        double latitudeDeg, double longitudeDeg, double simulationTime, double altitudeM = 0.0)
+    {
+        double rotationDegrees = AngularSpeed * simulationTime * MathUtils.RAD_TO_DEG;
+        return GetSurfacePosition(latitudeDeg, longitudeDeg + rotationDegrees, altitudeM);
+    }
+
     // ── JSON loading ───────────────────────────────────────────────────────
 
     /// <summary>

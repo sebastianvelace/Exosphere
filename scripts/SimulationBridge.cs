@@ -254,14 +254,15 @@ public partial class SimulationBridge : Node
         {
             const float metresPerUnit = 2.8f;
             double alt = ActiveVessel.GetAltitude(padEarth);
-            var surfacePos = _launchSite?.GetPosition(padEarth)
-                ?? padEarth.GetSurfacePosition(0.0, 0.0);
+            double time = Universe.CurrentTime;
+            var surfacePos = _launchSite?.GetPosition(padEarth, time)
+                ?? padEarth.GetSurfacePositionAtTime(0.0, 0.0, time);
             var offset = surfacePos - ActiveVessel.Position;          // = -up·alt metres
             var position = new Godot.Vector3(
                 (float)(offset.X / metresPerUnit),
                 (float)(offset.Y / metresPerUnit),
                 (float)(offset.Z / metresPerUnit));
-            var frame = _launchSite?.GetLocalFrame(padEarth);
+            var frame = _launchSite?.GetLocalFrame(padEarth, time);
             var east = frame?.East ?? padEarth.GetEastDirection(surfacePos);
             var up = frame?.Up ?? (surfacePos - padEarth.Position).Normalized;
             var south = frame?.South ?? east.Cross(up).Normalized;
