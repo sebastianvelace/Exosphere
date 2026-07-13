@@ -577,6 +577,20 @@ public partial class SimulationBridge : Node
         var debris = ActiveVessel.Stage();
         if (debris == null) return;
 
+        // Rebase the remaining Ship from the old stack-base datum to the physical
+        // separation plane. Without this, Ship and Super Heavy occupy the same world point
+        // while their renderers use different local origins, producing total interpenetration.
+        Vector3d axis = ActiveVessel.Orientation.Rotate(Vector3d.Up).Normalized;
+        double separationHeight = System.Math.Max(1.0, debris.VehicleLength);
+        ActiveVessel.Position += axis * separationHeight;
+
+        // Small spring/pusher impulse with zero net momentum and 1 m/s relative opening.
+        double shipMass = System.Math.Max(ActiveVessel.TotalMass, 1.0);
+        double debrisMass = System.Math.Max(debris.TotalMass, 1.0);
+        double totalMass = shipMass + debrisMass;
+        ActiveVessel.Velocity += axis * (debrisMass / totalMass);
+        debris.Velocity -= axis * (shipMass / totalMass);
+
         Universe.AddVessel(debris);
 
         // Rebuild active vessel renderer: SH is now gone → shows standalone Starship

@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Visual;
 
 public enum CameraMode { Chase, Pad, Cockpit }
 
@@ -160,12 +161,28 @@ public partial class CameraController : Node3D
         else
         {
             // Pad/chase orbit framing.
+            var active = bridge?.ActiveVessel;
             float lookAtY = Mode == CameraMode.Pad ? 22f : 0f;
+            float effectiveDistance = _distance;
+            Vector3 vesselCenter = Vector3.Zero;
+            if (Mode == CameraMode.Chase && active != null)
+            {
+                effectiveDistance = Mathf.Max(effectiveDistance, (float)
+                    VehicleCameraFraming.MinimumOrbitDistance(
+                        active.VehicleLength, active.MaximumDiameter, camera.Fov));
+                float centerU = (float)(active.VehicleLength / (2.0 * 2.8));
+                vesselCenter = ToGQuat(active.Orientation) * (Vector3.Up * centerU);
+            }
             camPos = new Vector3(
-                _distance * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
-                _distance * Mathf.Sin(pitchRad) + lookAtY,
-                _distance * Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
+                effectiveDistance * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
+                effectiveDistance * Mathf.Sin(pitchRad) + lookAtY,
+                effectiveDistance * Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
             lookTarget = new Vector3(0f, lookAtY, 0f);
+            if (Mode == CameraMode.Chase)
+            {
+                camPos += surfaceFrame.Inverse() * vesselCenter;
+                lookTarget = surfaceFrame.Inverse() * vesselCenter;
+            }
         }
 
         // The presets above are authored in local launch coordinates. Rotate them into the

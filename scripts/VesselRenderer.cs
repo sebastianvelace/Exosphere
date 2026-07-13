@@ -479,22 +479,22 @@ public partial class VesselRenderer : Node3D
         if (vessel.Parts.Parts.Any(p => p.Definition.Id == "starship_landing_gear"))
             AddStarshipLandingGear(o + ShipSkirtBase);
 
-        const float vacR = 0.38f * RScale;
-        const float slR  = 0.72f * RScale;
+        const float slR  = 0.38f * RScale; // three compact central gimballing engines
+        const float vacR = 0.72f * RScale; // three large outer vacuum engines
         float bellY = o + ShipSkirtBase - 1.05f;
 
         for (int i = 0; i < 3; i++)
         {
-            float a = i * 2.094395f;
+            float a = i * 2.094395f + 1.047198f;
             AddRaptor($"RapVac{i}",
                 new Vector3(vacR * Mathf.Cos(a), bellY - 0.45f, vacR * Mathf.Sin(a)),
                 exitR: 0.46f, throatR: 0.16f, bellLen: 2.2f, bellRings: 6);
         }
 
-        // 3 sea-level Raptors (outer, shorter gimballing bell)
+        // 3 sea-level Raptors (central, shorter gimballing bells)
         for (int i = 0; i < 3; i++)
         {
-            float a = i * 2.094395f + 1.047198f;
+            float a = i * 2.094395f;
             AddRaptor($"RapSL{i}",
                 new Vector3(slR * Mathf.Cos(a), bellY + 0.35f, slR * Mathf.Sin(a)),
                 exitR: 0.34f, throatR: 0.14f, bellLen: 1.5f);
@@ -1185,7 +1185,9 @@ public partial class VesselRenderer : Node3D
             // s=0 is the topmost ring; its centre sits high, exit ring at bottom.
             float yc = pos.Y + bellLen - (s + 0.5f) * h;
             AddMesh($"{name}Bell{s}",
-                new CylinderMesh { TopRadius = rTop, BottomRadius = rBot, Height = h * 1.05f, RadialSegments = 36 },
+                new CylinderMesh { TopRadius = rTop, BottomRadius = rBot,
+                    Height = h * 1.05f, RadialSegments = 36,
+                    CapTop = false, CapBottom = false },
                 _bellMat, new Vector3(pos.X, yc, pos.Z));
         }
 
