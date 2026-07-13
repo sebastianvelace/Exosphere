@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Systems;
 using Godot;
 
 /// <summary>
@@ -58,7 +59,43 @@ public partial class SkyController : Node
         double altitude = vessel.GetAltitude(body);
 
         BindAtmosphere(body, altitude, upD, sunD);
+        BindSolarGeometry(vessel.Position, sun);
         UpdateEnvironment(body, altitude, upD.Dot(sunD));
+    }
+
+    private void BindSolarGeometry(Vector3d observer, CelestialBody? sun)
+    {
+        if (_skyMat == null || sun == null || SimulationBridge.Instance?.Universe is not { } universe)
+            return;
+
+        double sunDistance = (sun.Position - observer).Magnitude;
+        _skyMat.SetShaderParameter("sun_angular_radius", (float)
+            MissionGeometry.ApparentAngularRadius(sun.Radius, sunDistance));
+
+        CelestialBody? bestOccluder = null;
+        double lowestVisibility = 1.0;
+        foreach (var candidate in universe.Bodies)
+        {
+            if (candidate.Id == "sun") continue;
+            double visibility = MissionGeometry.SolarDiscVisibility(
+                observer, candidate.Position, candidate.Radius, sun.Position, sun.Radius);
+            if (visibility < lowestVisibility)
+            {
+                lowestVisibility = visibility;
+                bestOccluder = candidate;
+            }
+        }
+
+        bool enabled = bestOccluder != null && lowestVisibility < 0.999999;
+        _skyMat.SetShaderParameter("solar_visibility", (float)lowestVisibility);
+        _skyMat.SetShaderParameter("solar_occluder_enabled", enabled);
+        if (!enabled) return;
+
+        Vector3d direction = (bestOccluder!.Position - observer).Normalized;
+        double distance = (bestOccluder.Position - observer).Magnitude;
+        _skyMat.SetShaderParameter("solar_occluder_dir", ToGodot(direction));
+        _skyMat.SetShaderParameter("solar_occluder_angular_radius", (float)
+            MissionGeometry.ApparentAngularRadius(bestOccluder.Radius, distance));
     }
 
     private void BindAtmosphere(

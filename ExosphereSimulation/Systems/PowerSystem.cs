@@ -19,15 +19,21 @@ public class PowerSystem
 
     public void Tick(double dt, Vector3d vesselPosition, Vector3d sunPosition, bool inEclipse,
                      double extraLoadKw = 0.0)
+        => Tick(dt, vesselPosition, sunPosition, inEclipse ? 0.0 : 1.0, extraLoadKw);
+
+    public void Tick(double dt, Vector3d vesselPosition, Vector3d sunPosition,
+                     double solarVisibility, double extraLoadKw = 0.0)
     {
         ExtraLoadKw = System.Math.Max(0.0, extraLoadKw);
+        solarVisibility = System.Math.Clamp(solarVisibility, 0.0, 1.0);
 
-        if (!inEclipse)
+        if (solarVisibility > 0.0)
         {
             double distToSun = (vesselPosition - sunPosition).Magnitude;
             double auDist    = System.Math.Max(distToSun / 1.496e11, 0.1);
             double solarFlux = SolarConstant / (auDist * auDist);
-            SolarOutputKw    = solarFlux * SolarPanelArea * SolarPanelEfficiency / 1000.0;
+            SolarOutputKw    = solarFlux * SolarPanelArea * SolarPanelEfficiency
+                * solarVisibility / 1000.0;
         }
         else
         {

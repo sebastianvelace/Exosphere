@@ -31,6 +31,12 @@ uniform float cloud_extinction = 0.00011;
 uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.58;
 uniform float cloud_longitude_offset = 0.0;
 uniform mat3 cloud_world_to_texture;
+uniform float sun_angular_radius = 0.00465;
+uniform float sun_disc_radiance = 32.0;
+uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
+uniform bool solar_occluder_enabled = false;
+uniform vec3 solar_occluder_dir = vec3(0.0, -1.0, 0.0);
+uniform float solar_occluder_angular_radius = 0.0;
 
 uniform vec3 ground_horizon : source_color = vec3(0.30, 0.55, 0.90);
 uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
@@ -226,7 +232,7 @@ void sky() {
 					vec3 atmospheric_sun = transmittance(
 						optical_depth_to_sun(p, to_sun, outer_radius));
 					vec3 source = atmospheric_sun
-						* (direct_light * phase_cloud + 0.018);
+						* (direct_light * phase_cloud * solar_visibility + 0.018);
 					cloud_radiance += cloud_transmittance * source * segment_alpha;
 					cloud_transmittance *= 1.0 - segment_alpha;
 				}
@@ -240,11 +246,35 @@ void sky() {
 
 	// Exponential filmic response keeps the physical HDR integral bounded for Godot's sky.
 	vec3 atmosphere = vec3(1.0) - exp(
-		-(in_scatter + diffuse_scatter + cloud_radiance) * sun_illuminance);
+		-((in_scatter + diffuse_scatter) * solar_visibility + cloud_radiance)
+		* sun_illuminance);
 	float sky_luminance = dot(atmosphere, vec3(0.2126, 0.7152, 0.0722));
 	float eye_star_visibility = 1.0 - smoothstep(0.002, 0.035, sky_luminance);
 	vec3 color = atmosphere + stars * star_transmittance * cloud_transmittance
 		* eye_star_visibility * eye_star_gain;
+
+	// Resolved solar photosphere. The radial term approximates visible-band limb
+	// darkening; an angular occulting disc produces partial, total and annular eclipses.
+	float sun_chord = length(view_dir - to_sun);
+	float sun_radius_chord = 2.0 * sin(0.5 * sun_angular_radius);
+	float sun_edge = max(sun_radius_chord * 0.08, 0.00025);
+	float solar_disc = 1.0 - smoothstep(sun_radius_chord - sun_edge,
+		sun_radius_chord + sun_edge, sun_chord);
+	float radial = clamp(sun_chord / max(sun_radius_chord, 1e-6), 0.0, 1.0);
+	float mu_limb = sqrt(max(1.0 - radial * radial, 0.0));
+	float limb_darkening = (0.40 + 0.60 * mu_limb) / 0.80;
+	float occultation = 1.0;
+	if (solar_occluder_enabled) {
+		float occ_chord = length(view_dir - normalize(solar_occluder_dir));
+		float occ_radius_chord = 2.0 * sin(0.5 * solar_occluder_angular_radius);
+		float occ_edge = max(occ_radius_chord * 0.015, 0.00015);
+		occultation = smoothstep(occ_radius_chord - occ_edge,
+			occ_radius_chord + occ_edge, occ_chord);
+	}
+	if (hits_ground) solar_disc = 0.0;
+	vec3 solar_color = vec3(1.0, 0.985, 0.94) * star_transmittance;
+	color += solar_color * sun_disc_radiance * solar_disc
+		* limb_darkening * occultation * cloud_transmittance;
 
 	if (hits_ground) {
 		float nadir = clamp(-dot(view_dir, up), 0.0, 1.0);
