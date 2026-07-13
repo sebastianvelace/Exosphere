@@ -148,7 +148,7 @@ public partial class SkyController : Node
             (float)(SimulationBridge.Instance!.Universe.CurrentTime
                 * optics.CloudWindRadiansPerSecond / Mathf.Tau));
         _skyMat.SetShaderParameter("cloud_world_to_texture",
-            new Basis(FloatingOrigin.PlanetTilt.Inverse()));
+            new Basis(FloatingOrigin.PlanetOrientation.Inverse()));
         if (_boundCloudBodyId != body.Id)
         {
             _skyMat.SetShaderParameter("cloud_coverage_tex", LoadCloudTexture(body.Id));

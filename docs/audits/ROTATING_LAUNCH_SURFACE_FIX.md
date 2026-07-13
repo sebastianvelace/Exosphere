@@ -32,3 +32,12 @@ aunque actualizaba la velocidad como si la superficie rotara.
 Las pruebas comparan la derivada finita de la posición del sitio con `ω × r`, verifican lateralidad
 del frame tras un día sideral y prueban que, durante el primer segundo tras liberar, la separación
 este/norte entre vehículo y pad permanece por debajo de 5 cm.
+
+## Coherencia visual y navegación
+
+Una segunda regresión mantenía el mapa terrestre, el parche local, las nubes y el downrange en el
+marco inercial. La orientación visible de la Tierra ahora incluye la misma fase sideral que el sitio;
+EarthGround y el mapa meteorológico deshacen esa orientación al muestrear texturas. Downrange se
+calcula transformando lanzamiento y posición actual al frame body-fixed, por lo que 120 segundos de
+rotación pura producen aproximadamente cero metros, no decenas de kilómetros ficticios. El heading
+usa el eje de rotación real del cuerpo en vez del +Y global.

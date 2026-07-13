@@ -34,6 +34,8 @@ public partial class FloatingOrigin : Node
     /// Public so the ground patch can undo it and sample the same texture region.
     /// </summary>
     public static Godot.Quaternion PlanetTilt { get; private set; } = Godot.Quaternion.Identity;
+    /// <summary>Texture-to-inertial orientation including the live sidereal spin phase.</summary>
+    public static Godot.Quaternion PlanetOrientation { get; private set; } = Godot.Quaternion.Identity;
 
     /// <summary>
     /// Builds <see cref="PlanetTilt"/> from the body's spin axis, using the SAME body-fixed
@@ -54,6 +56,7 @@ public partial class FloatingOrigin : Node
             new Godot.Vector3((float)ninetyEast.X,    (float)ninetyEast.Y,    (float)ninetyEast.Z));
 
         PlanetTilt = basis.GetRotationQuaternion();
+        PlanetOrientation = PlanetTilt;
     }
 
     // Último origen usado (en coordenadas de simulación)
@@ -91,6 +94,15 @@ public partial class FloatingOrigin : Node
 
         var activeVessel = bridge.ActiveVessel;
         if (activeVessel == null) return;
+
+        var liveEarth = bridge.Universe.GetBody("earth");
+        if (liveEarth != null)
+        {
+            var axis = ToGodotV3(liveEarth.RotationAxis).Normalized();
+            var spin = new Godot.Quaternion(axis,
+                (float)(liveEarth.AngularSpeed * bridge.Universe.CurrentTime));
+            PlanetOrientation = spin * PlanetTilt;
+        }
 
         // El nuevo origen es la posición del vessel activo
         _currentOrigin = activeVessel.Position;
@@ -158,7 +170,7 @@ public partial class FloatingOrigin : Node
                 var dir = toBody.Normalized;
                 node.Position = camRender + new Godot.Vector3(
                     (float)dir.X, (float)dir.Y, (float)dir.Z) * BackdropDistance;
-                node.Quaternion = PlanetTilt;
+                node.Quaternion = body.Id == "earth" ? PlanetOrientation : PlanetTilt;
                 node.Scale = Godot.Vector3.One * System.Math.Max(rBackdrop, 0.001f);
             }
         }

@@ -202,6 +202,15 @@ public class CelestialBody
         return GetSurfacePosition(latitudeDeg, longitudeDeg + rotationDegrees, altitudeM);
     }
 
+    /// <summary>Transforms an inertial direction into the body's rotating frame.</summary>
+    public Vector3d ToBodyFixedDirection(Vector3d inertialDirection, double simulationTime)
+    {
+        if (AngularSpeed == 0.0) return inertialDirection;
+        var inverseSpin = Math.Quaterniond.FromAxisAngle(
+            RotationAxis, -AngularSpeed * simulationTime);
+        return inverseSpin.Rotate(inertialDirection);
+    }
+
     // ── JSON loading ───────────────────────────────────────────────────────
 
     /// <summary>
