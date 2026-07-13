@@ -1,5 +1,6 @@
 namespace Exosphere.Game;
 
+using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Physics;
 using Exosphere.Simulation.Visual;
@@ -49,24 +50,31 @@ public partial class VisualExposureController : Node
         double speed = vessel.GetSurfaceVelocity(body).Magnitude;
         double heatFlux = ThermalModel.ComputeHeatFlux(
             density, speed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
-        double plasma = Smoothstep(5.0e4, 6.0e5, heatFlux);
+        double plasma = Smoothstep(VehicleVisualPhysics.VisibleReentryFluxWm2,
+            VehicleVisualPhysics.SaturatedReentryFluxWm2, heatFlux);
 
         // Relative field luminance: diffuse sky dominates in atmosphere; direct light
         // represents sunlit cabin/vehicle surfaces, with plasma acting as a bright source.
         double skyLuminance = 0.22 * System.Math.Clamp(air, 0.0, 1.0) * daylight;
         double surfaceLuminance = 0.16 * directLuminance * SunController.SolarVisibility;
         double sceneLuminance = 0.0004 + skyLuminance + surfaceLuminance + 0.55 * plasma;
-        if (CameraController.Instance?.IsCockpitView == true)
-            sceneLuminance *= 0.72;
+        bool cockpit = CameraController.Instance?.IsCockpitView == true;
+        if (cockpit)
+            sceneLuminance = System.Math.Max(sceneLuminance, 0.056); // interior practical-light floor
 
         double target = ExposureAdaptation.TargetForLuminance(sceneLuminance);
+        if (cockpit) target = System.Math.Min(target, 1.8);
         float exposure = (float)_adaptation.Update(target, delta);
+        if (cockpit) exposure = Mathf.Min(exposure, 1.8f);
         _environment.TonemapExposure = exposure;
 
         // Star visibility remains governed by local sky luminance in the shader; this gain
         // adds the slower retinal response, preventing instant stars after entering shadow.
+        float darkAdaptation = Mathf.Clamp((exposure - 1.45f) / 3.55f, 0.0f, 1.0f);
+        float photopicSuppression = (float)System.Math.Clamp(
+            skyLuminance * 4.0 + surfaceLuminance * 6.0 + plasma, 0.0, 1.0);
         _skyMaterial?.SetShaderParameter("eye_star_gain",
-            Mathf.Clamp((exposure - 0.65f) / 3.35f, 0.0f, 1.0f));
+            darkAdaptation * (1.0f - photopicSuppression));
     }
 
     private void EnsureReferences()

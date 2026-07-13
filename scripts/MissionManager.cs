@@ -169,6 +169,9 @@ public partial class MissionManager : Node
                     bridge.ReleaseGroundHold();
                     SetPhase(MissionPhase.LIFTOFF);
                     EmitSignal(SignalName.LaunchCommitted);
+                    // [L] owns the complete automatic mission: guidance and hot
+                    // staging must start with the launch, not require a hidden [G].
+                    AscentController.Instance?.Engage();
                 }
             }
         }

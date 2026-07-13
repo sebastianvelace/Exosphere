@@ -46,17 +46,12 @@ public static class PlanetMaterials
     }
 
     /// <summary>
-    /// Loads an image file into a texture at runtime (avoids relying on Godot's .import
-    /// step for the bundled equirectangular JPEGs). Returns a 1×1 white fallback on error.
+    /// Loads Godot's imported/cached texture. Returns a 1×1 white fallback on error.
     /// </summary>
     private static Texture2D LoadTexture(string resPath)
     {
-        var img = Image.LoadFromFile(ProjectSettings.GlobalizePath(resPath));
-        if (img != null)
-        {
-            img.GenerateMipmaps();
-            return ImageTexture.CreateFromImage(img);
-        }
+        var imported = GD.Load<Texture2D>(resPath);
+        if (imported != null) return imported;
         var white = Image.CreateEmpty(1, 1, false, Image.Format.Rgb8);
         white.Fill(Colors.White);
         return ImageTexture.CreateFromImage(white);

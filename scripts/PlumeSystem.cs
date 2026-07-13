@@ -83,18 +83,26 @@ public partial class PlumeSystem : Node3D
             core: new Color(0.76f, 0.87f, 1.00f), withLight: true, sh: true));
     }
 
-    /// <summary>Sets up the Starship plume (3 vacuum + 3 sea-level Raptors).</summary>
-    public void SetupStarship(float vacR, float slR, float baseY)
+    /// <summary>Sets up six individual Starship plumes at the six nozzle exits.</summary>
+    public void SetupStarship(float vacRingR, float slRingR, float vacExitY, float slExitY,
+        float vacExitR, float slExitR)
     {
-        // Vacuum Raptors — long, narrow, bright blue-white plume (big bell, sits lower).
-        _shipUnits.Add(BuildUnit("Ship_Vac", baseY - 1.05f, mouthR: vacR + 0.26f,
-            length: 11.0f, count: 3,
-            core: new Color(0.66f, 0.80f, 1.00f), withLight: true, sh: false));
-
-        // Sea-level Raptors — tighter, shorter plume (shorter bell, sits a touch higher).
-        _shipUnits.Add(BuildUnit("Ship_SL", baseY - 0.70f, mouthR: slR + 0.20f,
-            length: 8.5f, count: 3,
-            core: new Color(0.74f, 0.86f, 1.00f), withLight: true, sh: false));
+        for (int i = 0; i < 3; i++)
+        {
+            float a = i * Mathf.Tau / 3f + Mathf.Pi / 3f;
+            _shipUnits.Add(BuildUnit($"Ship_Vac{i}", vacExitY, vacExitR,
+                length: 7.5f, count: 1, core: new Color(0.86f, 0.93f, 1.00f),
+                withLight: i == 0, sh: false,
+                xPos: vacRingR * Mathf.Cos(a), zPos: vacRingR * Mathf.Sin(a)));
+        }
+        for (int i = 0; i < 3; i++)
+        {
+            float a = i * Mathf.Tau / 3f;
+            _shipUnits.Add(BuildUnit($"Ship_SL{i}", slExitY, slExitR,
+                length: 6.8f, count: 1, core: new Color(0.92f, 0.97f, 1.00f),
+                withLight: i == 0, sh: false,
+                xPos: slRingR * Mathf.Cos(a), zPos: slRingR * Mathf.Sin(a)));
+        }
     }
 
     // ── Per-frame update ──────────────────────────────────────────────────
@@ -128,25 +136,24 @@ public partial class PlumeSystem : Node3D
 
         UpdateGroup(_shUnits, firing && shPresent, throttle, expansion, pressRatio, altitude, 1f);
 
-        float slFraction  = Mathf.Clamp(selectedShipEngines / 3f, 0f, 1f);
-        float vacFraction = Mathf.Clamp((selectedShipEngines - 3) / 3f, 0f, 1f);
-        if (_shipUnits.Count > 0)
-            UpdateGroup(_shipUnits, firing && !shPresent && vacFraction > 0f,
-                throttle, expansion, pressRatio, altitude, vacFraction, start: 0, count: 1);
-        if (_shipUnits.Count > 1)
-            UpdateGroup(_shipUnits, firing && !shPresent && slFraction > 0f,
-                throttle, expansion, pressRatio, altitude, slFraction, start: 1, count: 1);
+        int slActive = System.Math.Clamp(selectedShipEngines, 0, 3);
+        int vacActive = System.Math.Clamp(selectedShipEngines - 3, 0, 3);
+        if (_shipUnits.Count >= 3)
+            UpdateGroup(_shipUnits, firing && !shPresent && vacActive > 0,
+                throttle, expansion, pressRatio, altitude, 1f,
+                start: 0, count: 3, activeCount: vacActive);
+        if (_shipUnits.Count >= 6)
+            UpdateGroup(_shipUnits, firing && !shPresent && slActive > 0,
+                throttle, expansion, pressRatio, altitude, 1f,
+                start: 3, count: 3, activeCount: slActive);
     }
 
     private static void UpdateGroup(List<PlumeUnit> units,
         bool firing, float throttle, float expansion, float pressureRatio, double altitude,
-        float activeFraction, int start = 0, int count = -1)
+        float activeFraction, int start = 0, int count = -1, int activeCount = -1)
     {
-        // Near the pad (<~100 m) exhaust is deflected up/outward by the mount;
-        // higher up it streams straight down. Drives smoke direction only —
-        // the bright core always points down the nozzle axis.
         float altT = (float)System.Math.Clamp((altitude - 50.0) / 450.0, 0.0, 1.0);
-        var   dir  = new Vector3(0, 0.55f, 0).Lerp(new Vector3(0, -1f, 0), altT).Normalized();
+        var dir = Vector3.Down;
         float smokeSpread = Mathf.Lerp(58f, 10f + expansion * 6f, altT);
 
         // Live flicker shared per group so the whole cluster pulses together.
@@ -161,9 +168,10 @@ public partial class PlumeSystem : Node3D
         for (int index = start; index < end; index++)
         {
             var u = units[index];
+            bool unitFiring = firing && (activeCount < 0 || index - start < activeCount);
             // ── Shader-driven core cone ──────────────────────────────────────
-            u.Pivot.Visible = firing;
-            if (firing)
+            u.Pivot.Visible = unitFiring;
+            if (unitFiring)
             {
                 u.ConeMat.SetShaderParameter("throttle",       throttle);
                 u.ConeMat.SetShaderParameter("expansion",      expansion);
@@ -183,11 +191,12 @@ public partial class PlumeSystem : Node3D
                 // SL→vacuum: at sea level the plume is short & fat; in vacuum it
                 // lengthens dramatically (up to ~4x) and widens (up to ~2.3x) into
                 // the long faint underexpanded plume.
+                float vacuumLengthGain = u.IsSuperHeavy ? 3.0f : 1.8f;
                 float lenScale = (0.55f + 0.45f * throttle)
-                               * (1.0f + expansion * 3.0f) * flick;
+                               * (1.0f + expansion * vacuumLengthGain) * flick;
                 float seaLevelBroadening = u.IsSuperHeavy ? 1.18f : 1.0f;
                 float radScale = (0.85f + 0.30f * throttle)
-                               * (1.0f + expansion * 1.3f)
+                               * (1.0f + expansion * (u.IsSuperHeavy ? 1.3f : 0.72f))
                                * Mathf.Lerp(seaLevelBroadening, 1.0f, expansion);
                 u.Pivot.Scale = new Vector3(
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction),
@@ -201,9 +210,10 @@ public partial class PlumeSystem : Node3D
             // core once expansion is high. This keeps orbit burns blue/clean
             // instead of pad-smoky.
             float smokePresence = Mathf.Clamp(1f - expansion * (u.IsSuperHeavy ? 0.92f : 1.12f), 0f, 1f);
-            float smokeAmount = throttle * smokePresence * smokePresence * activeFraction;
-            u.Smoke.Emitting = firing && smokeAmount > 0.02f;
-            if (firing)
+            float smokeAmount = throttle * smokePresence * smokePresence * activeFraction
+                * (u.IsSuperHeavy ? 0.22f : 0.08f);
+            u.Smoke.Emitting = unitFiring && smokeAmount > 0.02f;
+            if (unitFiring)
             {
                 u.Smoke.AmountRatio = Mathf.Clamp(smokeAmount, 0.0f, 1f);
                 u.Smoke.SpeedScale  = 0.70f + throttle * 0.28f + smokePresence * 0.25f + GD.Randf() * 0.08f;
@@ -213,16 +223,16 @@ public partial class PlumeSystem : Node3D
                     pm.Spread    = smokeSpread;
                     // Big, billowing soot near the pad; smoke thins out in vacuum
                     // (no air to billow into) leaving just the bright core.
-                    pm.ScaleMin  = (u.IsSuperHeavy ? 1.8f : 1.0f) * Mathf.Lerp(0.06f, 1.0f, smokePresence);
-                    pm.ScaleMax  = (u.IsSuperHeavy ? 5.4f : 3.0f) * Mathf.Lerp(0.10f, 1.0f, smokePresence);
+                    pm.ScaleMin  = (u.IsSuperHeavy ? 0.45f : 0.22f) * Mathf.Lerp(0.06f, 1.0f, smokePresence);
+                    pm.ScaleMax  = (u.IsSuperHeavy ? 1.25f : 0.65f) * Mathf.Lerp(0.10f, 1.0f, smokePresence);
                 }
             }
 
             // ── Nozzle glow light ────────────────────────────────────────────
             if (u.Light != null)
             {
-                u.Light.Visible = firing;
-                if (firing)
+                u.Light.Visible = unitFiring;
+                if (unitFiring)
                 {
                     // Strong at the pad for ground illumination, eases off with
                     // altitude (nothing to light up in vacuum), flickers alive.
@@ -240,13 +250,14 @@ public partial class PlumeSystem : Node3D
     // ── Factory helpers ────────────────────────────────────────────────────
 
     private PlumeUnit BuildUnit(string name, float yPos, float mouthR,
-        float length, int count, Color core, bool withLight, bool sh)
+        float length, int count, Color core, bool withLight, bool sh,
+        float xPos = 0f, float zPos = 0f)
     {
         var unit = new PlumeUnit
         {
             BaseLength   = length,
             BaseRadius   = mouthR,
-            BaseEnergy   = sh ? 4.6f : 4.0f,
+            BaseEnergy   = sh ? 4.6f : 5.5f,
             IsSuperHeavy = sh,
         };
 
@@ -262,7 +273,7 @@ public partial class PlumeSystem : Node3D
         var coneMesh = new CylinderMesh
         {
             TopRadius      = 0.5f,
-            BottomRadius   = 0.05f,
+            BottomRadius   = sh ? 0.14f : 0.90f,
             Height         = 1.0f,
             RadialSegments = 20,
             Rings          = 24,
@@ -274,6 +285,7 @@ public partial class PlumeSystem : Node3D
         mat.SetShaderParameter("core_color",     core);
         mat.SetShaderParameter("edge_color",    new Color(1.0f, 0.45f, 0.12f));
         mat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
+        mat.SetShaderParameter("tail_radius", sh ? 0.14f : 0.90f);
         // Master brightness — the merged 33-engine column reads brighter against the daytime
         // sky than a single ring; bumped so liftoff/ascent exhaust actually glows.
         mat.SetShaderParameter("energy",        unit.BaseEnergy);
@@ -286,7 +298,7 @@ public partial class PlumeSystem : Node3D
         var pivot = new Node3D
         {
             Name     = name + "_Pivot",
-            Position = new Vector3(0, yPos, 0),
+            Position = new Vector3(xPos, yPos, zPos),
             Visible  = false,
         };
         AddChild(pivot);
@@ -310,7 +322,7 @@ public partial class PlumeSystem : Node3D
         unit.ConeMat = mat;
 
         // ── Turbulent smoke / soot particles ─────────────────────────────────
-        unit.Smoke = BuildSmoke(name + "_Smoke", yPos, mouthR, count, sh);
+        unit.Smoke = BuildSmoke(name + "_Smoke", xPos, yPos, zPos, mouthR, count, sh);
         AddChild(unit.Smoke);
 
         // ── Nozzle glow light ────────────────────────────────────────────────
@@ -319,7 +331,7 @@ public partial class PlumeSystem : Node3D
             var light = new OmniLight3D
             {
                 Name             = name + "_Glow",
-                Position         = new Vector3(0, yPos - 0.3f, 0),
+                Position         = new Vector3(xPos, yPos - 0.3f, zPos),
                 LightColor       = new Color(0.85f, 0.92f, 1.0f),
                 OmniRange        = length,
                 LightEnergy      = 0f,
@@ -356,7 +368,7 @@ public partial class PlumeSystem : Node3D
     private static ImageTexture? _softCircle;
     private static ImageTexture SoftCircle => _softCircle ??= BuildSoftCircleTexture();
 
-    private GpuParticles3D BuildSmoke(string name, float yPos, float mouthR,
+    private GpuParticles3D BuildSmoke(string name, float xPos, float yPos, float zPos, float mouthR,
         int engineCount, bool sh)
     {
         // Particle budget kept low: total stays in the low hundreds across all
@@ -423,7 +435,7 @@ public partial class PlumeSystem : Node3D
         return new GpuParticles3D
         {
             Name            = name,
-            Position        = new Vector3(0, yPos, 0),
+            Position        = new Vector3(xPos, yPos, zPos),
             Amount          = amount,
             Lifetime        = sh ? 1.7f : 1.1f,
             ProcessMaterial = pm,

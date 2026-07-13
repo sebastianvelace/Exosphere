@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using System.Collections.Generic;
+using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Physics;
 
@@ -38,8 +39,8 @@ public partial class ReentryPlasmaController : Node3D
 
     // Heat-flux thresholds (W/m²). Below FLUX_THRESH there is no visible plasma;
     // at/above FLUX_PEAK the glow is saturated white-hot.
-    const double FLUX_THRESH = 5.0e4;
-    const double FLUX_PEAK   = 6.0e5;
+    const double FLUX_THRESH = VehicleVisualPhysics.VisibleReentryFluxWm2;
+    const double FLUX_PEAK   = VehicleVisualPhysics.SaturatedReentryFluxWm2;
 
     private const string ShockShaderPath = "res://assets/shaders/reentry_glow.gdshader";
 
@@ -177,7 +178,7 @@ public partial class ReentryPlasmaController : Node3D
         _wakeMat.EmissionEnergyMultiplier = (float)(0.7 + intensity * 1.4);
 
         // Windward cap: flatten along the flow (thin, wide bow shock) and grow with flux.
-        float sizeScale = Mathf.Lerp(0.45f, 1.0f, (float)intensity);
+        float sizeScale = Mathf.Lerp(0.62f, 1.08f, (float)intensity);
         float flatten   = Mathf.Lerp(0.85f, 0.45f, align);       // belly-first = thinner cap
         // Mesh local +Y now points along the flow (set by OrientYAxis above), so
         // squash Y to press the cap onto the windward face.

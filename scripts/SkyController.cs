@@ -19,11 +19,14 @@ public partial class SkyController : Node
     private const string StarTexPath = "res://assets/textures/starmap_milkyway_8k.jpg";
     private const string EarthCloudTexPath = "res://assets/textures/earth_clouds.jpg";
     private const string VenusCloudTexPath = "res://assets/textures/venus.jpg";
-    private const float StarEnergy = 0.9f;
+    // The 8K map contains photographic Milky-Way exposure.  Naked-eye stars are
+    // substantially dimmer whenever Earth, atmosphere or a sunlit vehicle is in view.
+    private const float StarEnergy = 0.24f;
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
     private string? _boundCloudBodyId;
+    private double _updateAccumulator = 1.0;
 
     public override void _Ready()
     {
@@ -45,6 +48,13 @@ public partial class SkyController : Node
 
     public override void _Process(double delta)
     {
+        // Rebuilding a procedural sky cubemap for every simulation frame was one
+        // of the largest launch-time stalls.  Atmospheric geometry changes slowly;
+        // 12 Hz remains visually continuous and lets incremental cubemap work settle.
+        _updateAccumulator += delta;
+        if (_updateAccumulator < 1.0 / 12.0) return;
+        _updateAccumulator = 0.0;
+
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
@@ -187,7 +197,13 @@ public partial class SkyController : Node
             "venus" => new Color(1.0f, 0.80f, 0.52f),
             _ => new Color(0.55f, 0.70f, 1.00f),
         };
-        _env.AmbientLightColor = ambient * (air * Mathf.Lerp(0.025f, 1.0f, daylight));
+        float atmosphericFill = air * Mathf.Lerp(0.025f, 1.0f, daylight);
+        // Near-Earth shadow is not absolute black: the illuminated planet is a
+        // huge blue-white reflector.  Keep a restrained Earthshine floor in LEO.
+        float earthshine = body.Id == "earth" && altitude < 1_000_000.0
+            ? 0.28f * Mathf.Lerp(0.25f, 1.0f, daylight)
+            : 0.0f;
+        _env.AmbientLightColor = ambient * Mathf.Max(atmosphericFill, earthshine);
         _env.BackgroundEnergyMultiplier = 1.0f;
     }
 
@@ -203,12 +219,10 @@ public partial class SkyController : Node
 
     private static Texture2D LoadTexture(string resourcePath, Color fallback)
     {
-        var image = Image.LoadFromFile(ProjectSettings.GlobalizePath(resourcePath));
-        if (image != null)
-        {
-            image.GenerateMipmaps();
-            return ImageTexture.CreateFromImage(image);
-        }
+        // Use Godot's imported, cached texture instead of decoding and mipmapping
+        // the same 8K JPEG synchronously in several controllers.
+        var imported = GD.Load<Texture2D>(resourcePath);
+        if (imported != null) return imported;
         var dark = Image.CreateEmpty(1, 1, false, Image.Format.Rgb8);
         dark.Fill(fallback);
         return ImageTexture.CreateFromImage(dark);

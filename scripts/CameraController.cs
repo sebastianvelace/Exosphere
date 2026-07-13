@@ -56,8 +56,22 @@ public partial class CameraController : Node3D
     // ── Force-feel shake (cosmetic; driven by vessel state) ───────────────────
     private readonly CameraShake _shake = new();
     private bool _baseFovCaptured;
+    private bool _trackedVehicleInitialized;
+    private bool _trackedHadBooster;
+    private float _externalFov = 75f;
+    private float _externalNear = 0.5f;
+    private const float CockpitFov = 60f;
+    private const float CockpitNear = 0.04f;
 
-    public override void _Ready() => Instance = this;
+    public override void _Ready()
+    {
+        Instance = this;
+        if (GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
+        {
+            _externalFov = camera.Fov;
+            _externalNear = camera.Near;
+        }
+    }
 
     public override void _Input(InputEvent @event)
     {
@@ -113,6 +127,25 @@ public partial class CameraController : Node3D
         if (bridge?.ActiveVessel != null)
         {
             var body = bridge.Universe.GetDominantBody(bridge.ActiveVessel.Position);
+            bool hasBooster = bridge.ActiveVessel.Parts.Parts.Any(
+                p => p.Definition.Id == "super_heavy_booster");
+            if (_trackedVehicleInitialized && _trackedHadBooster && !hasBooster
+                && _distance is > 70f and < 105f)
+            {
+                _distance = 38f; // keep the 50 m Ship readable after the 121 m stack separates
+                // Start the separated-stage view from the illuminated quarter.
+                // The user can still orbit freely afterwards.
+                var sun = bridge.Universe.GetBody("sun");
+                if (sun != null)
+                {
+                    var localSun = BuildSurfaceFrame(body, bridge.ActiveVessel.Position).Inverse()
+                        * ToG((sun.Position - bridge.ActiveVessel.Position).Normalized);
+                    _yaw = Mathf.RadToDeg(Mathf.Atan2(localSun.X, localSun.Z));
+                    _pitch = Mathf.Clamp(Mathf.RadToDeg(Mathf.Asin(localSun.Y)), -25f, 35f);
+                }
+            }
+            _trackedHadBooster = hasBooster;
+            _trackedVehicleInitialized = true;
             if (body != null)
             {
                 double alt = bridge.ActiveVessel.GetAltitude(body);
@@ -125,6 +158,8 @@ public partial class CameraController : Node3D
 
         var camera = GetNodeOrNull<Camera3D>("Camera3D");
         if (camera == null) return;
+        camera.Near = _externalNear;
+        _shake.BaseFov = _externalFov;
 
         float yawRad   = Mathf.DegToRad(_yaw);
         float pitchRad = Mathf.DegToRad(_pitch);
@@ -256,7 +291,7 @@ public partial class CameraController : Node3D
         Vector3 eye = _smoothedOrientation * new Vector3(
             0f, eyeLocalY, CockpitRenderer.AuthoredEyeZ);
         Vector3 fwd = (_smoothedOrientation * Vector3.Up).Normalized();
-        Vector3 up  = (_smoothedOrientation * Vector3.Back).Normalized();
+        Vector3 up  = (_smoothedOrientation * Vector3.Forward).Normalized();
 
         // G-force: push the eye OPPOSITE the net acceleration (into the seat under thrust).
         var uni = bridge.Universe;
@@ -286,8 +321,9 @@ public partial class CameraController : Node3D
         Vector3 right = fwd.Cross(up).Normalized();
         // Rest the gaze slightly down toward the console without letting the
         // dashboard dominate the windshield view.
-        Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(8f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
+        Vector3 look  = fwd.Rotated(right, Mathf.DegToRad(-14f + _lookPitch)).Rotated(up, Mathf.DegToRad(_lookYaw));
 
+        camera.Near = CockpitNear;
         camera.Position = eye + _gOffset;
         camera.LookAt(eye + _gOffset + look, up);
 
@@ -300,7 +336,7 @@ public partial class CameraController : Node3D
         camera.RotateObjectLocal(Vector3.Right,   rot.X);
         camera.RotateObjectLocal(Vector3.Up,      rot.Y);
         camera.RotateObjectLocal(Vector3.Forward, rot.Z);
-        camera.Fov = _shake.BaseFov; // the human eye does not widen its field under g-load
+        camera.Fov = CockpitFov; // stable IVA optics; no exterior wide-angle distortion
     }
 
     private void SetCockpitVisible(bool vis)

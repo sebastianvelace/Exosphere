@@ -27,12 +27,13 @@ public partial class CockpitRenderer : Node3D
 
     private void Build()
     {
-        var wall   = Mat(new Color(0.80f, 0.83f, 0.88f), 0.5f, 0.08f);
-        var floorM = Mat(new Color(0.46f, 0.49f, 0.54f), 0.7f, 0.05f);
+        var wall   = Mat(new Color(0.18f, 0.20f, 0.24f), 0.62f, 0.05f);
+        var floorM = Mat(new Color(0.08f, 0.09f, 0.11f), 0.82f, 0.02f);
         var panel  = Mat(new Color(0.09f, 0.10f, 0.13f), 0.4f, 0.3f);   // dark console
-        var trim   = Mat(new Color(0.30f, 0.34f, 0.40f), 0.4f, 0.45f);
-        var frameM = Mat(new Color(0.55f, 0.58f, 0.64f), 0.4f, 0.5f);
+        var trim   = Mat(new Color(0.16f, 0.18f, 0.22f), 0.55f, 0.28f);
+        var frameM = Mat(new Color(0.12f, 0.14f, 0.17f), 0.50f, 0.35f);
         var seatM  = Mat(new Color(0.12f, 0.13f, 0.16f), 0.72f, 0.0f);
+        var accent = Mat(new Color(0.28f, 0.32f, 0.37f), 0.42f, 0.48f);
 
         var screenM = Mat(new Color(0.02f, 0.04f, 0.08f), 0.2f, 0f);
         screenM.EmissionEnabled = true; screenM.Emission = new Color(0.06f, 0.12f, 0.22f);
@@ -47,18 +48,24 @@ public partial class CockpitRenderer : Node3D
         // ── Dashboard: a wide raked console below the forward sightline ────────────
         Spawn("Dash",     new BoxMesh { Size = new Vector3(2.1f, 0.78f, 0.12f) }, panel, new Vector3(0, EyeY + 1.22f, 1.34f), new Vector3(54, 0, 0));
         Spawn("DashEdge", new BoxMesh { Size = new Vector3(2.15f, 0.06f, 0.16f) }, trim, new Vector3(0, EyeY + 0.86f, 1.12f), new Vector3(54, 0, 0));
+        Spawn("CentrePedestal", new BoxMesh { Size = new Vector3(0.34f, 1.25f, 0.30f) }, panel,
+            new Vector3(0, EyeY + 0.15f, 0.93f), new Vector3(10, 0, 0));
 
         // Three screens on the dashboard, auto-oriented to face the pilot eye.
         var sq = new QuadMesh { Size = new Vector2(0.46f, 0.30f) };
-        AddScreen("Screen0", sq, screenM, new Vector3(0f,     EyeY + 1.08f, 1.20f));
-        AddScreen("Screen1", sq, screenM, new Vector3(-0.58f, EyeY + 1.06f, 1.22f));
-        AddScreen("Screen2", sq, screenM, new Vector3(0.58f,  EyeY + 1.06f, 1.22f));
-
+        AddScreen("Screen0", sq, screenM, new Vector3(0f,     EyeY + 0.90f, 1.02f));
+        AddScreen("Screen1", sq, screenM, new Vector3(-0.58f, EyeY + 0.90f, 1.02f));
+        AddScreen("Screen2", sq, screenM, new Vector3(0.58f,  EyeY + 0.90f, 1.02f));
         // ── Windshield frame (the front is open to space; this just outlines it) ───
         Spawn("WsTop",     new BoxMesh { Size = new Vector3(2.0f, 0.09f, 0.09f) }, frameM, new Vector3(0, EyeY + 1.9f, -0.55f));
         Spawn("WsPillarL", new BoxMesh { Size = new Vector3(0.09f, 1.7f, 0.09f) }, frameM, new Vector3(-1.0f, EyeY + 1.45f, 0.0f),  new Vector3(38, 0, 0));
         Spawn("WsPillarR", new BoxMesh { Size = new Vector3(0.09f, 1.7f, 0.09f) }, frameM, new Vector3( 1.0f, EyeY + 1.45f, 0.0f),  new Vector3(38, 0, 0));
         Spawn("WsCentre",  new BoxMesh { Size = new Vector3(0.05f, 1.6f, 0.05f) }, frameM, new Vector3(0f,    EyeY + 1.5f, -0.05f), new Vector3(38, 0, 0));
+        Spawn("OverheadPanel", new BoxMesh { Size = new Vector3(1.15f, 0.72f, 0.06f) }, panel,
+            new Vector3(0, EyeY + 0.62f, -0.79f), new Vector3(-10, 0, 0));
+        for (int i = -4; i <= 4; i++)
+            Spawn($"OverheadSwitch{i}", new BoxMesh { Size = new Vector3(0.055f, 0.12f, 0.045f) },
+                accent, new Vector3(i * 0.105f, EyeY + 0.72f, -0.835f));
 
         // ── Seats (two side by side, reclined) ─────────────────────────────────────
         for (int s = -1; s <= 1; s += 2)
@@ -69,8 +76,8 @@ public partial class CockpitRenderer : Node3D
         }
 
         // ── Soft interior lighting (sealed hull gets no sun) ───────────────────────
-        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 0.4f, -0.5f), OmniRange = 5.0f, LightEnergy = 1.7f, LightColor = new Color(0.85f, 0.89f, 1.0f) });
-        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 1.0f, 0.7f),  OmniRange = 3.0f, LightEnergy = 1.1f, LightColor = new Color(0.6f, 0.75f, 1.0f) });
+        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 0.4f, -0.5f), OmniRange = 4.0f, LightEnergy = 0.48f, LightColor = new Color(0.72f, 0.79f, 0.92f) });
+        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 1.0f, 0.7f),  OmniRange = 2.8f, LightEnergy = 0.28f, LightColor = new Color(0.45f, 0.61f, 0.84f) });
         _ = EyeZ;
     }
 

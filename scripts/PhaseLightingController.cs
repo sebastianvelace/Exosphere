@@ -30,13 +30,13 @@ using Exosphere.Simulation.Physics;
 public partial class PhaseLightingController : Node
 {
     private const float AmbientEnergyPad   = 0.45f;
-    private const float AmbientEnergySpace = 0.12f;
+    private const float AmbientEnergySpace = 0.18f;
     private const float SunEnergyPad   = 1.5f;
     private const float SunEnergySpace = 1.95f;
     private const float GlowIntensitySpace = 0.6f;
 
-    private const double FluxThresh = 5.0e4;
-    private const double FluxPeak   = 6.0e5;
+    private const double FluxThresh = VehicleVisualPhysics.VisibleReentryFluxWm2;
+    private const double FluxPeak   = VehicleVisualPhysics.SaturatedReentryFluxWm2;
     private const float AmbientEnergyReentry = 0.10f;
     private const float SunEnergyReentry     = 0.90f;
     private const float GlowIntensityReentry = 0.80f;
@@ -83,10 +83,10 @@ public partial class PhaseLightingController : Node
             _env.AmbientLightColor = _env.AmbientLightColor.Lerp(AmbientColorReentry, reentry);
         }
 
-        if (CameraController.Instance?.IsCockpitView == true && reentry > 0.01f)
+        if (CameraController.Instance?.IsCockpitView == true)
         {
-            ambient = Mathf.Min(AmbientEnergyPad, ambient + CockpitAmbientBoost * reentry);
-            glow    = Mathf.Max(0.0f, glow - CockpitGlowReduction * reentry);
+            ambient = Mathf.Min(AmbientEnergyPad, ambient + CockpitAmbientBoost * Mathf.Max(0.25f, reentry));
+            glow = Mathf.Min(glow, 0.12f);
         }
 
         _env.AmbientLightEnergy = ambient;

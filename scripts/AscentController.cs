@@ -186,6 +186,15 @@ public partial class AscentController : Control
         // Assist mode runs on its own (it does not require the full autopilot to be active).
         if (_assist && !_active) { ProcessAssist(); return; }
         if (!_active) return;
+        if (MissionManager.Instance?.InDescent == true)
+        {
+            // EDL is the sole attitude/throttle owner from entry onward.
+            _active = false;
+            _assist = false;
+            _phase = Phase.Idle;
+            Visible = false;
+            return;
+        }
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;

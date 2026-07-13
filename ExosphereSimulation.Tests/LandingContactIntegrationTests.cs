@@ -23,6 +23,12 @@ public sealed class LandingContactIntegrationTests
         Assert.InRange(body.GetAltitude(vessel.Position), 6.5, 8.5);
         Assert.InRange(vessel.GetSurfaceVelocity(body).Magnitude, 0.0, 0.55);
         Assert.InRange(vessel.GetProperAcceleration(body).Magnitude / 9.80665, 0.85, 1.15);
+
+        double sleepingAltitude = body.GetAltitude(vessel.Position);
+        for (int i = 0; i < 500; i++) universe.Tick(0.005);
+        Assert.True(vessel.IsSurfaceSettled);
+        Assert.False(vessel.IsGroundHeld);
+        Assert.InRange(System.Math.Abs(body.GetAltitude(vessel.Position) - sleepingAltitude), 0.0, 0.01);
     }
 
     [Fact]

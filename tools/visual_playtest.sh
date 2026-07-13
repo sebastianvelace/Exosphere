@@ -24,6 +24,9 @@ Runs the Exosphere visual playtest harness (temporary autoload, never committed)
 
 Options:
   --smoke       Pad-only capture (~30s). Used by CI for pipeline validation.
+  --launch      Capture ignition and early vertical liftoff, then exit.
+  --ship        Stage immediately and capture powered standalone Starship in vacuum.
+  --cockpit     Capture the first-person cockpit optics and interior.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
   --log FILE    Telemetry log path (default: /tmp/exo_play.log)
@@ -45,6 +48,9 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --smoke) MODE="smoke"; shift ;;
+    --launch) MODE="launch"; shift ;;
+    --ship) MODE="ship"; shift ;;
+    --cockpit) MODE="cockpit"; shift ;;
     --edl) MODE="edl"; shift ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --log) LOG="$2"; shift 2 ;;
@@ -133,7 +139,7 @@ public partial class _PlaytestShot : Node
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     bool _beautyJumped;
     int _beautyWaitFrames;
-    bool _edlSeeded, _flipComplete;
+    bool _edlSeeded, _flipComplete, _shipSeeded;
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     bool _finished;
 
@@ -193,6 +199,47 @@ public partial class _PlaytestShot : Node
 
         TryCapturePending();
 
+        if (_mode == "cockpit")
+        {
+            CameraController.Instance?.EnterCockpitView();
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                bridge.TriggerStaging();
+                bridge.JumpToOrbit(118_000.0);
+                bridge.SetThrottle(0.35);
+                _shipSeeded = true;
+                return;
+            }
+            if (_shipSeeded && _pendingSlug == null && _readyFrames >= 110 && !_orbitBeauty)
+            {
+                QueueCapture("cockpit");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("COCKPIT_OK");
+            return;
+        }
+
+        if (_mode == "ship")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                bridge.TriggerStaging();
+                bridge.JumpToOrbit(118_000.0);
+                bridge.SetThrottle(1.0);
+                _shipSeeded = true;
+                return;
+            }
+            if (_shipSeeded && _pendingSlug == null && _readyFrames >= 110 && !_orbitBeauty)
+            {
+                QueueCapture("ship_vacuum");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("SHIP_OK");
+            return;
+        }
+
         if (_mode == "smoke")
         {
             if (!_pad && _readyFrames >= 45)
@@ -232,6 +279,12 @@ public partial class _PlaytestShot : Node
         {
             QueueCapture("liftoff");
             _liftoff = true;
+        }
+
+        if (_mode == "launch" && _liftoff && _pendingSlug == null)
+        {
+            Finish("LAUNCH_OK");
+            return;
         }
 
         if (!_maxq && mission?.Phase == MissionPhase.MAX_Q)
