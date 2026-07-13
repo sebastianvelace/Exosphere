@@ -133,8 +133,15 @@ public partial class CameraController : Node3D
         // and watch the rocket climb away — over featureless ocean/terrain this is the only
         // clear cue that the rocket is actually rising.
         double trackAlt = 0.0;
+        Basis surfaceFrame = Basis.Identity;
+        Vector3 renderUp = Vector3.Up;
         if (bridge?.ActiveVessel is { } tv)
-            trackAlt = tv.GetAltitude(bridge.Universe.GetDominantBody(tv.Position));
+        {
+            var trackingBody = bridge.Universe.GetDominantBody(tv.Position);
+            trackAlt = tv.GetAltitude(trackingBody);
+            surfaceFrame = BuildSurfaceFrame(trackingBody, tv.Position);
+            renderUp = surfaceFrame.Y;
+        }
 
         Vector3 camPos;
         Vector3 lookTarget;
@@ -161,8 +168,11 @@ public partial class CameraController : Node3D
             lookTarget = new Vector3(0f, lookAtY, 0f);
         }
 
-        camera.Position = camPos;
-        camera.LookAt(lookTarget, Vector3.Up);
+        // The presets above are authored in local launch coordinates. Rotate them into the
+        // vessel's geodetic frame so screen-up follows radial up instead of inertial +Y.
+        camera.Position = surfaceFrame * camPos;
+        lookTarget = surfaceFrame * lookTarget;
+        camera.LookAt(lookTarget, renderUp);
 
         // ── Force-feel shake — applied AFTER LookAt so the orbit framing is intact.
         // Drives off the active vessel's throttle/engine activity (rumble), dynamic
@@ -287,4 +297,18 @@ public partial class CameraController : Node3D
 
     private static Vector3 ToG(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
     private static Quaternion ToGQuat(Quaterniond q) => new((float)q.X, (float)q.Y, (float)q.Z, (float)q.W);
+
+    private static Basis BuildSurfaceFrame(Exosphere.Simulation.CelestialBody body, Vector3d position)
+    {
+        Vector3d up = (position - body.Position).Normalized;
+        Vector3d east = body.GetEastDirection(position);
+        if (east.MagnitudeSquared < 1e-12)
+        {
+            Vector3d reference = System.Math.Abs(up.X) < 0.9
+                ? Vector3d.Right : Vector3d.Forward;
+            east = reference.Cross(up).Normalized;
+        }
+        Vector3d south = east.Cross(up).Normalized;
+        return new Basis(ToG(east), ToG(up), ToG(south));
+    }
 }

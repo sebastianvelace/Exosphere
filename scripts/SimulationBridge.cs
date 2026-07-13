@@ -59,7 +59,6 @@ public partial class SimulationBridge : Node
     private VesselRenderer?      _vesselRenderer = null;
     private Camera3D?            _camera         = null;
     private LaunchPadController? _launchPad      = null;
-    private Vector3d             _padWorldPos;
 
     // ── Launch site ───────────────────────────────────────────────────────
     /// <summary>Id of the pad every vessel launches from (see data/launch_sites).</summary>
@@ -247,21 +246,27 @@ public partial class SimulationBridge : Node
             }
         }
 
-        // Anchor the LaunchPad to the Earth surface point directly BELOW the vessel,
-        // recomputed each frame (Earth orbits the Sun, so a fixed spawn-time world point
-        // drifts away). Convert the metres offset to render units (1 unit ≈ 2.8 m).
+        // Anchor the launch complex to its fixed geodetic site, not to the point below the
+        // moving vessel. Its local +Y must follow radial up; leaving Basis.Identity makes
+        // the entire tower lean by the site's latitude/axial tilt in render space.
         var padEarth = Universe.GetBody("earth");
         if (_launchPad != null && ActiveVessel != null && padEarth != null)
         {
             const float metresPerUnit = 2.8f;
             double alt = ActiveVessel.GetAltitude(padEarth);
-            var up = (ActiveVessel.Position - padEarth.Position).Normalized;
-            var surfacePos = padEarth.Position + up * padEarth.Radius;
+            var surfacePos = _launchSite?.GetPosition(padEarth)
+                ?? padEarth.GetSurfacePosition(0.0, 0.0);
             var offset = surfacePos - ActiveVessel.Position;          // = -up·alt metres
-            _launchPad.Position = new Godot.Vector3(
+            var position = new Godot.Vector3(
                 (float)(offset.X / metresPerUnit),
                 (float)(offset.Y / metresPerUnit),
                 (float)(offset.Z / metresPerUnit));
+            var frame = _launchSite?.GetLocalFrame(padEarth);
+            var east = frame?.East ?? padEarth.GetEastDirection(surfacePos);
+            var up = frame?.Up ?? (surfacePos - padEarth.Position).Normalized;
+            var south = frame?.South ?? east.Cross(up).Normalized;
+            var basis = new Basis(ToGodotVector(east), ToGodotVector(up), ToGodotVector(south));
+            _launchPad.Transform = new Transform3D(basis, position);
             _launchPad.Visible = alt < 8_000;   // hide above 8 km
         }
     }
@@ -440,6 +445,9 @@ public partial class SimulationBridge : Node
         _         => new Color(0.70f, 0.70f, 0.70f),
     };
 
+    private static Godot.Vector3 ToGodotVector(Vector3d value) => new(
+        (float)value.X, (float)value.Y, (float)value.Z);
+
     // ── Public API ────────────────────────────────────────────────────────
 
     public void SetThrottle(double t) { if (ActiveVessel != null) ActiveVessel.Throttle = t; }
@@ -474,7 +482,6 @@ public partial class SimulationBridge : Node
         vessel.GroundNormal = upDir;
         vessel.GroundOffset = mountHeightM;
 
-        _padWorldPos = padSurface;
     }
 
     /// <summary>

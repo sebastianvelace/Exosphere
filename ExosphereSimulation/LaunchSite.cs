@@ -6,6 +6,16 @@ using System.Text.Json;
 using Exosphere.Simulation.Math;
 
 /// <summary>
+/// Right-handed local render frame for a surface site. Local +X is east, +Y is radial up,
+/// and +Z is south (therefore local -Z is geographic north, matching Godot's -Z forward).
+/// </summary>
+public readonly record struct LaunchSiteFrame(Vector3d East, Vector3d Up, Vector3d South)
+{
+    public Vector3d North => -South;
+    public double Determinant => East.Dot(Up.Cross(South));
+}
+
+/// <summary>
 /// A launch site on a celestial body, loaded from <c>data/launch_sites/*.json</c>.
 ///
 /// Latitude is the physically load-bearing field: it fixes the site's co-latitude from
@@ -42,6 +52,22 @@ public class LaunchSite
     /// <summary>Local vertical (radial up) at the pad.</summary>
     public Vector3d GetUpDirection(CelestialBody body) =>
         (GetPosition(body) - body.Position).Normalized;
+
+    /// <summary>Orthonormal ENU-derived frame used by launch geometry and cameras.</summary>
+    public LaunchSiteFrame GetLocalFrame(CelestialBody body)
+    {
+        Vector3d position = GetPosition(body);
+        Vector3d up = (position - body.Position).Normalized;
+        Vector3d east = body.GetEastDirection(position);
+        if (east.MagnitudeSquared < 1e-12)
+        {
+            Vector3d reference = System.Math.Abs(up.X) < 0.9
+                ? Vector3d.Right : Vector3d.Forward;
+            east = reference.Cross(up).Normalized;
+        }
+        Vector3d south = east.Cross(up).Normalized;
+        return new LaunchSiteFrame(east, up, south);
+    }
 
     /// <summary>
     /// Inertial velocity of the pad itself: the free ride the body's rotation gives a
