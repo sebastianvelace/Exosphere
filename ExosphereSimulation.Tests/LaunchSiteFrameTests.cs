@@ -144,6 +144,54 @@ public class LaunchSiteFrameTests
         Assert.Equal(28.608389, sites["kennedy"].Latitude, 6);
     }
 
+    [Fact]
+    public void KennedyRenderFrameIsOrthonormalRightHandedAndRadiallyUpright()
+    {
+        var earth = LoadBody("earth");
+        var frame = LoadSite("kennedy").GetLocalFrame(earth);
+
+        Assert.Equal(1.0, frame.East.Magnitude, 12);
+        Assert.Equal(1.0, frame.Up.Magnitude, 12);
+        Assert.Equal(1.0, frame.South.Magnitude, 12);
+        Assert.Equal(0.0, frame.East.Dot(frame.Up), 12);
+        Assert.Equal(0.0, frame.Up.Dot(frame.South), 12);
+        Assert.Equal(0.0, frame.South.Dot(frame.East), 12);
+        Assert.Equal(1.0, frame.Determinant, 12);
+        Assert.Equal(frame.North, frame.Up.Cross(frame.East));
+    }
+
+    [Fact]
+    public void PadOriginIsDirectlyBelowGroundHeldVesselInLocalFrame()
+    {
+        var earth = LoadBody("earth");
+        var site = LoadSite("kennedy");
+        var frame = site.GetLocalFrame(earth);
+        var surface = site.GetPosition(earth);
+        var vessel = surface + frame.Up * 12.0;
+        var offset = surface - vessel;
+
+        Assert.Equal(-12.0, offset.Dot(frame.Up), 8);
+        Assert.Equal(0.0, offset.Dot(frame.East), 8);
+        Assert.Equal(0.0, offset.Dot(frame.North), 8);
+    }
+
+    [Theory]
+    [InlineData(-60.0, -170.0)]
+    [InlineData(-28.6, 90.0)]
+    [InlineData(0.0, 0.0)]
+    [InlineData(28.6, -80.6)]
+    [InlineData(60.0, 175.0)]
+    public void SurfaceFramesRemainRightHandedAcrossTheGlobe(double latitude, double longitude)
+    {
+        var earth = LoadBody("earth");
+        var site = new LaunchSite { Latitude = latitude, Longitude = longitude };
+        var frame = site.GetLocalFrame(earth);
+
+        Assert.Equal(1.0, frame.Determinant, 10);
+        Assert.Equal(0.0, frame.East.Dot(frame.Up), 10);
+        Assert.Equal(0.0, frame.Up.Dot(frame.South), 10);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private static CelestialBody LoadBody(string id) =>
