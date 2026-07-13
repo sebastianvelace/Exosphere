@@ -60,11 +60,85 @@ public partial class LaunchPadController : Node3D
         var paint     = Mat(new Color(0.62f, 0.52f, 0.22f), 0.88f, 0.0f);
 
         BuildStarbaseCivilWorks(sandFill, gravel, asphalt, tarmac, concDark, paint);
+        BuildSupportCampus(concrete, darkSteel, asphalt, paint, insul, steel);
         BuildOrbitalLaunchMount(darkSteel, concDark);
         BuildMechazillaTower(steel, darkSteel);
         BuildTankFarm(insul, steel);
         BuildGroundSupport(insul, steel, darkSteel, concrete, concDark);
         BuildNightFloodlights();
+    }
+
+    private void BuildSupportCampus(StandardMaterial3D wall, StandardMaterial3D roof,
+        StandardMaterial3D asphalt, StandardMaterial3D paint,
+        StandardMaterial3D equipment, StandardMaterial3D steel)
+    {
+        // Campus fill is broken into a west support pad and east utilities pad so wetland
+        // strips remain visible instead of covering Boca Chica with one rectangular slab.
+        Spawn("WestSupportFill", new BoxMesh { Size = new Vector3(200f * U, 1.0f * U, 120f * U) },
+            wall, new Vector3(-75f * U, GradeY - 0.5f * U, 75f * U));
+        Spawn("EastUtilityFill", new BoxMesh { Size = new Vector3(125f * U, 1.0f * U, 175f * U) },
+            wall, new Vector3(105f * U, GradeY - 0.5f * U, 18f * U));
+
+        foreach (var b in LaunchSupportCampusSpec.StarbasePostDeluge)
+            BuildMetalBuilding(b, wall, roof, paint);
+
+        // Personnel parking opposite the VLA along the simplified Highway 4 corridor.
+        Spawn("PersonnelParking", new BoxMesh { Size = new Vector3(62f * U, 0.16f * U, 42f * U) },
+            asphalt, new Vector3(-134f * U, GradeY + 0.10f * U, 66f * U));
+        for (int row = 0; row < 4; row++)
+        for (int stall = 0; stall < 10; stall++)
+            Spawn($"ParkingMark{row}_{stall}", new BoxMesh
+                { Size = new Vector3(0.10f * U, 0.03f * U, 5f * U) }, paint,
+                new Vector3((-159f + stall * 5.5f) * U, GradeY + 0.20f * U,
+                    (51f + row * 10f) * U));
+
+        // Electrical substation: shared transformer/bus geometry, visually fenced by rails.
+        Spawn("SubstationSlab", new BoxMesh { Size = new Vector3(30f * U, 0.25f * U, 22f * U) },
+            asphalt, new Vector3(-42f * U, GradeY + 0.12f * U, -62f * U));
+        for (int i = 0; i < 6; i++)
+        {
+            Spawn($"Transformer{i}", new BoxMesh { Size = new Vector3(3.2f * U, 3.0f * U, 2.4f * U) },
+                equipment, new Vector3((-53f + (i % 3) * 10f) * U, GradeY + 1.5f * U,
+                    (-67f + (i / 3) * 10f) * U));
+        }
+
+        // Two process vessels at the documented desalination category (layout estimated).
+        foreach (float south in new[] { -55f, -69f })
+            Spawn("WaterProcessTank", new CylinderMesh
+                { TopRadius = 3.5f * U, BottomRadius = 3.5f * U,
+                    Height = 9f * U, RadialSegments = 20 }, equipment,
+                new Vector3(116f * U, GradeY + 4.5f * U, south * U));
+
+        // Retention pond and raised berm for storm/deluge handling.
+        var water = Mat(new Color(0.08f, 0.20f, 0.24f), 0.30f, 0.05f);
+        Spawn("RetentionPond", new BoxMesh { Size = new Vector3(55f * U, 0.12f * U, 28f * U) },
+            water, new Vector3(112f * U, GradeY - 0.45f * U, -105f * U));
+        foreach (var (x, z, sx, sz) in new[]
+        {
+            (84.5f, -105f, 2f, 32f), (139.5f, -105f, 2f, 32f),
+            (112f, -121f, 57f, 2f), (112f, -89f, 57f, 2f),
+        })
+            Spawn("PondBerm", new BoxMesh { Size = new Vector3(sx * U, 1.2f * U, sz * U) },
+                wall, new Vector3(x * U, GradeY + 0.25f * U, z * U));
+    }
+
+    private void BuildMetalBuilding(CampusBuildingSpec b, StandardMaterial3D wall,
+        StandardMaterial3D roof, StandardMaterial3D accent)
+    {
+        Spawn($"Campus_{b.Id}", new BoxMesh { Size = new Vector3(
+            (float)b.Width * U, (float)b.Height * U, (float)b.Depth * U) }, wall,
+            new Vector3((float)b.East * U, GradeY + (float)b.Height * U * 0.5f,
+                (float)b.South * U));
+        Spawn($"Campus_{b.Id}_Roof", new BoxMesh { Size = new Vector3(
+            ((float)b.Width + 0.8f) * U, 0.35f * U, ((float)b.Depth + 0.8f) * U) }, roof,
+            new Vector3((float)b.East * U, GradeY + ((float)b.Height + 0.18f) * U,
+                (float)b.South * U));
+        Spawn($"Campus_{b.Id}_Door", new BoxMesh
+            { Size = new Vector3(System.Math.Min((float)b.Width * 0.35f, 6f) * U,
+                System.Math.Min((float)b.Height * 0.65f, 4.5f) * U, 0.18f * U) }, accent,
+            new Vector3((float)b.East * U,
+                GradeY + System.Math.Min((float)b.Height * 0.65f, 4.5f) * U * 0.5f,
+                ((float)b.South - (float)b.Depth * 0.5f - 0.10f) * U));
     }
 
     /// <summary>
@@ -445,46 +519,40 @@ public partial class LaunchPadController : Node3D
                 steel, new Vector3(p.X, padY + 0.8f * U, p.Z));
         }
 
-        // ── Water-deluge tank: tall white cylinder on a steel stand, feeding ─
-        // the pad sound-suppression system. Placed off the +X side, clear of
-        // the tower and trench.
+        // ── Deluge header tank and continuous high-flow pipe route ─────
+        // The actual post-2023 system is dominated by ground-level storage and a
+        // pressurised manifold. This compact header tank is deliberately not the
+        // former oversized water-tower silhouette.
         var delugePos = new Vector3(52f * U, padY, -22f * U);
-        const float delH = 30f * U, delR = 7f * U;
+        const float delH = 18f * U, delR = 5f * U, standH = 6f * U;
         // Support stand legs.
         for (int i = 0; i < 4; i++)
         {
             float a  = i * Mathf.Tau / 4f + Mathf.Pi / 4f;
             float lx = delugePos.X + Mathf.Cos(a) * delR * 0.8f;
             float lz = delugePos.Z + Mathf.Sin(a) * delR * 0.8f;
-            Spawn($"DelugeLeg{i}", new BoxMesh { Size = new Vector3(0.9f * U, 14f * U, 0.9f * U) },
-                steel, new Vector3(lx, padY + 7f * U, lz));
+            Spawn($"DelugeLeg{i}", new BoxMesh { Size = new Vector3(0.7f * U, standH, 0.7f * U) },
+                steel, new Vector3(lx, padY + standH * 0.5f, lz));
         }
         Spawn("DelugeTank", new CylinderMesh
             { TopRadius = delR, BottomRadius = delR, Height = delH, RadialSegments = 20 },
-            insul, new Vector3(delugePos.X, padY + 14f * U + delH * 0.5f, delugePos.Z));
+            insul, new Vector3(delugePos.X, padY + standH + delH * 0.5f, delugePos.Z));
         var delDome = new MeshInstance3D
         {
             Name     = "DelugeDome",
             Mesh     = new SphereMesh
                 { Radius = delR, Height = delR, IsHemisphere = true, RadialSegments = 20, Rings = 7 },
-            Position = new Vector3(delugePos.X, padY + 14f * U + delH, delugePos.Z),
+            Position = new Vector3(delugePos.X, padY + standH + delH, delugePos.Z),
         };
         delDome.SetSurfaceOverrideMaterial(0, insul);
         AddChild(delDome);
-        // Deluge downcomer pipe running from the tank toward the pad.
-        Spawn("DelugePipe", new CylinderMesh
-            { TopRadius = 0.8f * U, BottomRadius = 0.8f * U, Height = 28f * U, RadialSegments = 8 },
-            steel, new Vector3(delugePos.X - 14f * U, padY + 1.2f * U, delugePos.Z));
-
-        // ── GSE blockhouse: low reinforced control building, set well back ──
-        var blockPos = new Vector3(-55f * U, padY, 50f * U);
-        Spawn("Blockhouse", new BoxMesh { Size = new Vector3(20f * U, 7f * U, 14f * U) },
-            concrete, new Vector3(blockPos.X, padY + 3.5f * U, blockPos.Z));
-        // Bermed roof slab + lower-profile annex.
-        Spawn("BlockhouseRoof", new BoxMesh { Size = new Vector3(22f * U, 1.2f * U, 16f * U) },
-            concDark, new Vector3(blockPos.X, padY + 7.6f * U, blockPos.Z));
-        Spawn("BlockhouseAnnex", new BoxMesh { Size = new Vector3(9f * U, 4f * U, 8f * U) },
-            concrete, new Vector3(blockPos.X + 13f * U, padY + 2f * U, blockPos.Z - 3f * U));
+        Vector3 tankOutlet = new(delugePos.X, padY + standH + 1.2f * U, delugePos.Z);
+        Vector3 pumpInlet = new(37f * U, padY + 1.2f * U, -22f * U);
+        Vector3 manifold = new(15f * U, padY + 1.2f * U, -10f * U);
+        Vector3 plateFeed = new(7f * U, padY + 0.55f * U, -4f * U);
+        AddPipeBetween("DelugeDowncomer", tankOutlet, pumpInlet, 0.65f * U, steel);
+        AddPipeBetween("DelugeMain", pumpInlet, manifold, 0.72f * U, steel);
+        AddPipeBetween("DelugePlateFeed", manifold, plateFeed, 0.60f * U, steel);
 
         // ── A couple of horizontal GSE / nitrogen bullet tanks near the farm ─
         foreach (var (zoff, tag) in new[] { (0f, "A"), (8f * U, "B") })
@@ -506,7 +574,7 @@ public partial class LaunchPadController : Node3D
                 steel, new Vector3(72f * U, padY + 1.2f * U, 30f * U + zoff));
         }
 
-        // ── Cable / utility tray running from the blockhouse toward the tower ──
+        // ── Cable / utility tray running from the support campus toward the tower ──
         // Elevated tray on short posts (reads as the buried-run riser bringing
         // power and data from the control building to the OLM/OLIT).
         var trayStart = new Vector3(-45f * U, padY, 45f * U);
@@ -765,6 +833,24 @@ public partial class LaunchPadController : Node3D
         Spawn("TowerSpine", new BoxMesh
             { Size = new Vector3(2.0f * U, towerH * 0.96f, towerW * 0.7f) },
             darkSteel, new Vector3(towerX - halfW - 0.6f * U, baseY + towerH * 0.5f, towerZ));
+
+        // Broad dark service cladding is a defining feature of the operational
+        // integration tower. Three separated vertical zones retain readable
+        // lattice bays while giving the tower its real, asymmetric silhouette.
+        for (int zone = 0; zone < 3; zone++)
+        {
+            float panelH = towerH * 0.275f;
+            float panelY = baseY + towerH * (0.17f + zone * 0.315f);
+            Spawn($"OlitCladdingBack{zone}", new BoxMesh
+                { Size = new Vector3(0.32f * U, panelH, towerW * 0.88f) }, darkSteel,
+                new Vector3(towerX - halfW - 0.20f * U, panelY, towerZ));
+            Spawn($"OlitCladdingNorth{zone}", new BoxMesh
+                { Size = new Vector3(towerW * 0.78f, panelH, 0.30f * U) }, darkSteel,
+                new Vector3(towerX - 0.6f * U, panelY, towerZ - halfW - 0.18f * U));
+            Spawn($"OlitCladdingSouth{zone}", new BoxMesh
+                { Size = new Vector3(towerW * 0.78f, panelH, 0.30f * U) }, darkSteel,
+                new Vector3(towerX - 0.6f * U, panelY, towerZ + halfW + 0.18f * U));
+        }
 
         // Clad service-section panels at a few levels on the front face so the
         // tower isn't pure open lattice (equipment rooms / cable trays).
@@ -1076,6 +1162,29 @@ public partial class LaunchPadController : Node3D
         Vector3 axis = up.Cross(dir);
         if (axis.LengthSquared() > 1e-6f)
             node.Quaternion = new Quaternion(axis.Normalized(), Mathf.Acos(Mathf.Clamp(up.Dot(dir), -1f, 1f)));
+        node.SetSurfaceOverrideMaterial(0, mat);
+        AddChild(node);
+    }
+
+    // Straight cylindrical pipe with a true endpoint-to-endpoint connection.
+    private void AddPipeBetween(string name, Vector3 a, Vector3 b, float radius,
+        StandardMaterial3D mat)
+    {
+        Vector3 d = b - a;
+        float len = d.Length();
+        if (len < 0.001f) return;
+        var node = new MeshInstance3D
+        {
+            Name = name,
+            Mesh = new CylinderMesh
+                { TopRadius = radius, BottomRadius = radius, Height = len, RadialSegments = 10 },
+            Position = a + d * 0.5f,
+        };
+        Vector3 dir = d / len;
+        Vector3 axis = Vector3.Up.Cross(dir);
+        if (axis.LengthSquared() > 1e-6f)
+            node.Quaternion = new Quaternion(axis.Normalized(),
+                Mathf.Acos(Mathf.Clamp(Vector3.Up.Dot(dir), -1f, 1f)));
         node.SetSurfaceOverrideMaterial(0, mat);
         AddChild(node);
     }
