@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 using Exosphere.Simulation.Physics;
 
 /// <summary>
@@ -58,8 +59,8 @@ public partial class AudioManager : Node
 
     // Heat-flux gates (W/m²). Deliberately identical to ReentryPlasmaController's
     // FLUX_THRESH / FLUX_PEAK so the roar and the fireball ignite on the same physics.
-    private const double FluxThreshold = 5.0e4;
-    private const double FluxPeak      = 6.0e5;
+    private const double FluxThreshold = VehicleVisualPhysics.VisibleReentryFluxWm2;
+    private const double FluxPeak      = VehicleVisualPhysics.SaturatedReentryFluxWm2;
 
     /// <summary>Density (kg/m³) above which the airborne engine path is fully carried.
     /// Below it the atmosphere is too thin to conduct the roar and the structure-borne

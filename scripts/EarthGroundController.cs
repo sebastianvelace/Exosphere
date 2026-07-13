@@ -33,7 +33,7 @@ public partial class EarthGroundController : Node3D
     // Curvature drop at the edge ≈ 160700² / (2·2.275e6) ≈ 5,680 units (~16 km),
     // so every coordinate stays comfortably float-precise (±~160k horiz).
     private const float PatchHalfUnits = 160_700f;        // half-width in units
-    private const int   Grid           = 160;             // subdivisions per side
+    private const int   Grid           = 96;              // 55k vertices; curvature stays smooth
 
     // ── Altitude fade bands (metres) ─────────────────────────────────────────
     private const double FullAlt = 10_000.0;   // fully opaque at/below this
@@ -53,8 +53,8 @@ public partial class EarthGroundController : Node3D
             _mat = new ShaderMaterial { Shader = shader };
             _mat.SetShaderParameter("fade", 1.0f);
             _mat.SetShaderParameter("earth_radius", 6_371_000.0f);
-            var img = Image.LoadFromFile(ProjectSettings.GlobalizePath("res://assets/textures/earth_day.jpg"));
-            if (img != null) { img.GenerateMipmaps(); _mat.SetShaderParameter("day_tex", ImageTexture.CreateFromImage(img)); }
+            var dayTexture = GD.Load<Texture2D>("res://assets/textures/earth_day.jpg");
+            if (dayTexture != null) _mat.SetShaderParameter("day_tex", dayTexture);
             _mesh.SetSurfaceOverrideMaterial(0, _mat);
         }
         else

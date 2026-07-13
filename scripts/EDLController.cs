@@ -45,6 +45,10 @@ public partial class EDLController : Control
     public override void _Ready()
     {
         Instance = this;
+        // EDL is the final writer of throttle and attitude during entry.  This
+        // must run after ascent guidance and HUD systems so a stale ascent
+        // command cannot cancel a landing ignition in the same frame.
+        ProcessPriority = 200;
         _font = ThemeDB.GetFallbackFont();
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
@@ -79,31 +83,24 @@ public partial class EDLController : Control
 
         RefreshThermalState(vessel, body, density, speed, surfVel);
 
-        // ── Deactivation guard — runs BEFORE the activation check ─────────────
-        // Si salimos de la atmósfera o estamos ascendiendo claramente, reseteamos la
-        // EDL sin importar en qué fase interna estemos. Esto evita que una EDL real
-        // previa deje la máquina de estados atorada cuando el vessel vuelve al espacio.
-        // We only deactivate if we were actually running (not Inactive/Touchdown already
-        // holding the vessel on the ground).
-        if (_phase != Edl.Inactive && _phase != Edl.Touchdown)
-        {
-            bool aboveAtmo = _alt > body.Atmosphere.MaxAltitude * 1.05;
-            // Upward motion aborts an atmospheric entry, but a landing burn can briefly
-            // overshoot through zero vertical speed. Treating that correction as an abort
-            // leaves a powered vehicle without guidance.
-            bool ascending = _phase is Edl.Entry or Edl.Peak or Edl.Aero && _vUp > 5.0;
-            if (aboveAtmo || ascending)
-            {
-                Deactivate();
-                return;
-            }
-        }
+        // Do not disarm after entry has begun.  A lifting skip can briefly climb
+        // back above the nominal atmosphere and a landing burn can cross zero
+        // vertical speed; both are normal trajectory segments, not EDL aborts.
 
         // ── Activation check ───────────────────────────────────────────────────
         if (_phase == Edl.Inactive)
         {
             bool descending = _vUp < -20.0;
             bool inAtmo     = _alt < body.Atmosphere.MaxAltitude * 1.05;
+            bool hasSuperHeavy = vessel.Parts.Parts.Any(
+                p => p.Definition.Id == "super_heavy_booster");
+            if (descending && inAtmo && hasSuperHeavy)
+            {
+                // Defensive recovery for an externally-started/full-stack entry.
+                // Starship cannot perform a belly-flop while still attached.
+                bridge!.TriggerStaging();
+                return;
+            }
             if (descending && inAtmo && speed > EntrySpeed && (mission == null || !mission.InDescent))
             {
                 _phase = Edl.Entry;
@@ -336,14 +333,11 @@ public partial class EDLController : Control
                 > System.Math.Cos(15.0 * MathUtils.DEG_TO_RAD);
             if (!alignedForBurn && _phase == Edl.Retro)
             {
-                // Begin on aerodynamic flaps. Light the three centre engines only for the
-                // last 45° so gimbal assists without spending most of the ignition impulse
-                // prograde/downrange while the Ship is still belly-first.
+                // Flight-proven Starship sequence: ignite three centre Raptors as
+                // the flip begins, then let gimbal authority rotate the vehicle.
                 shipEngines?.SelectEngineCount(3);
-                double axisAlignment = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(aimAxis);
-                vessel.Throttle = axisAlignment > System.Math.Cos(45.0 * MathUtils.DEG_TO_RAD)
-                    ? shipEngines?.ApplyThrottleFloor(flipIgnitionThrottle) ?? flipIgnitionThrottle
-                    : 0.0;
+                vessel.Throttle = shipEngines?.ApplyThrottleFloor(flipIgnitionThrottle)
+                    ?? flipIgnitionThrottle;
             }
             else
             {

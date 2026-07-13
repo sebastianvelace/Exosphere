@@ -59,6 +59,7 @@ uniform float diamond_count : hint_range(2.0, 14.0) = 8.0;
 
 // Master energy multiplier.
 uniform float energy : hint_range(0.0, 10.0) = 3.2;
+uniform float tail_radius : hint_range(0.02, 1.0) = 0.14;
 
 varying float v_axial;   // 0 at nozzle exit → 1 at plume tip (along the mesh -Y)
 varying float v_radial;  // 0 on axis → 1 at mesh skin
@@ -69,8 +70,8 @@ void vertex() {
 	// VERTEX.y = -0.5. Re-derive normalised axial/radial coords so the fragment
 	// stage is scale-independent (PlumeSystem pre-scales the mesh non-uniformly).
 	v_axial  = clamp(0.5 - VERTEX.y, 0.0, 1.0);          // 0 at mouth → 1 at tip
-	// Local skin radius shrinks from 0.5 (mouth) to ~0.05 (tip); normalise by it.
-	float skin = mix(0.5, 0.05, v_axial);
+	// SH uses a contracting merged core; individual Ship plumes expand downstream.
+	float skin = mix(0.5, tail_radius, v_axial);
 	v_radial = clamp(length(VERTEX.xz) / max(skin, 0.02), 0.0, 1.0);
 
 	// Subtle breathing of the skin so the envelope shimmers (cheap, vertex-rate).
@@ -118,6 +119,10 @@ void fragment() {
 	// Tighter gaussian at SL (a pencil core), softer/broader in vacuum.
 	float falloff  = mix(3.6, 2.2, effExpansion);
 	float radial   = exp(-coreR * coreR * falloff);          // gaussian falloff
+	// CylinderMesh exposes the plume envelope, not volume samples through its
+	// axis. Preserve a luminous optically-thin sheath so the whole exhaust does
+	// not disappear when every visible fragment lies close to r=1.
+	radial = max(radial, 0.48 * (1.0 - 0.35 * a));
 
 	// ── Axial envelope: full near the nozzle, fades toward the tip. Vacuum
 	// plumes reach much farther before fading (the long faint core). ─────────
@@ -156,10 +161,10 @@ void fragment() {
 	float hotBase = (1.0 - smoothstep(0.0, 0.18, a)) * (1.0 - effExpansion * 0.85);
 	col = mix(col, edge_color, hotBase * 0.5);
 	// Faint incandescent orange recombination at the plume skin.
-	col = mix(col, edge_color, smoothstep(0.5, 1.0, r) * 0.5);
-	// N7: in vacuum the core picks up a faint bluish-purple haze (thin ionised gas).
-	vec3 vacuumTint = vec3(0.55, 0.65, 1.0);
-	col = mix(col, vacuumTint, effExpansion * (1.0 - coreR) * 0.35);
+	col = mix(col, edge_color, smoothstep(0.62, 1.0, r) * 0.24);
+	// Vacuum methalox remains a pale blue-white, not a solid purple volume.
+	vec3 vacuumTint = vec3(0.78, 0.88, 1.0);
+	col = mix(col, vacuumTint, effExpansion * (1.0 - coreR) * 0.18);
 
 	// N7: brightness — SL core is punchy and brilliant; vacuum core is dim and diffuse.
 	// At sea level: strong over-expanded shock boosts brightness near the throat.
@@ -174,11 +179,11 @@ void fragment() {
 	// N7: vacuum plume dims the core — thin gas, far fewer photons per unit volume.
 	// Kept dimmer than sea level (realistic optically-thin plume) but lifted enough so the
 	// orbital-insertion burn still reads clearly against the bright Earth/space backdrop.
-	float vacuumDim = mix(1.0, 0.74, effExpansion * effExpansion);
+	float vacuumDim = mix(1.0, 0.45, effExpansion * effExpansion);
 
 	// Sea-level plumes are visually punchier per unit length; vacuum a touch
 	// dimmer (very thin gas), but its length makes it dominant in frame.
-	float eScale = mix(1.15, 0.95, effExpansion) * vacuumDim;
+	float eScale = mix(1.15, 0.58, effExpansion) * vacuumDim;
 	float e   = energy * eScale * (0.35 + 0.65 * effThrottle);
 
 	vec3 emission = col * bright * e;
@@ -187,6 +192,6 @@ void fragment() {
 	EMISSION = emission;
 	// N7: alpha — at SL the plume is opaque/bright; in vacuum it is translucent.
 	// Vacuum alpha reduced so the halo reads as diffuse, not solid.
-	float vacuumAlpha = mix(1.0, 0.64, effExpansion);
+	float vacuumAlpha = mix(1.0, 0.42, effExpansion);
 	ALPHA = clamp(bright * (0.55 + 0.45 * effThrottle) * vacuumAlpha, 0.0, 1.0);
 }

@@ -44,6 +44,7 @@ public partial class VesselRenderer : Node3D
     // Windward heat-shield tile materials grouped by zone so belly, nose and flaps
     // char at different rates during re-entry.
     private readonly Dictionary<TileCharZone, List<StandardMaterial3D>> _tileZoneMats = new();
+    private readonly List<ShaderMaterial> _shipSteelMats = new();
     private static readonly Color TileBaseColor = new(0.045f, 0.045f, 0.055f);
 
     // ── Real-scale hull radius ────────────────────────────────────────────
@@ -395,6 +396,7 @@ public partial class VesselRenderer : Node3D
         float skirtTop = o + ShipBodyBase;
 
         var shipSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.16f, weldSpacing: 1.55f);
+        _shipSteelMats.Add(shipSteel);
         _hullMesh = AddMesh("Body",
             new CylinderMesh { TopRadius = BodyR, BottomRadius = BodyR, Height = ShipBodyH, RadialSegments = 64 },
             shipSteel, new Vector3(0, bodyMid, 0));
@@ -416,17 +418,11 @@ public partial class VesselRenderer : Node3D
         const float noseR    = BodyR;
         var noseSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.18f,
             weldSpacing: 1.3f);
+        _shipSteelMats.Add(noseSteel);
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
         // a fuller, more realistic Starship nose than a simple sqrt curve.
         float OgiveR(float u)                // u in [0,1], 0=base 1=tip
-        {
-            // tangent ogive of fineness ~ noseLen/(2*noseR)
-            float rho = (noseR * noseR + noseLen * noseLen) / (2f * noseR);
-            float y   = u * noseLen;
-            float val = rho * rho - (noseLen - y) * (noseLen - y);
-            float r   = Mathf.Sqrt(Mathf.Max(0f, val)) - (rho - noseR);
-            return Mathf.Clamp(r, 0f, noseR);
-        }
+            => (float)VehicleVisualPhysics.TangentOgiveRadius(u, noseR, noseLen);
         for (int i = 0; i < noseSeg; i++)
         {
             float u0 = (float)i       / noseSeg;
@@ -440,27 +436,14 @@ public partial class VesselRenderer : Node3D
                 noseSteel, new Vector3(0, yMid, 0));
         }
 
-        // Tile coverage continues up the windward side of the nose.
-        AddTileBand(o + ShipNoseBase, o + ShipNoseBase + ShipNoseH * 0.67f,
-            TileCharZone.Nose, topRadius: 0.83f * RScale, botRadius: BodyR + 0.01f);
-        AddHeatShieldBorder(o + ShipNoseBase, o + ShipNoseBase + ShipNoseH * 0.67f, BodyR + 0.030f);
+        // Unlike a cylindrical tile band, these short rows follow the local
+        // ogive radius all the way to the tip and preserve the tapered silhouette.
+        AddNoseTileShell(o + ShipNoseBase, ShipNoseH, OgiveR);
 
-        // Dome cap: small hemisphere rounding off the ogive tip at y≈o+43.0
-        var noseDome = new MeshInstance3D
-        {
-            Name     = "NoseDome",
-            Mesh     = new SphereMesh
-            {
-                Radius         = OgiveR((noseSeg - 1f) / noseSeg) + 0.02f,
-                Height         = 0.30f,
-                IsHemisphere   = true,
-                RadialSegments = 48,
-                Rings          = 16,
-            },
-            Position = new Vector3(0, o + noseBase + noseLen * (noseSeg - 1f) / noseSeg, 0),
-        };
-        noseDome.SetSurfaceOverrideMaterial(0, noseSteel);
-        AddChild(noseDome);
+        AddMesh("NoseTip",
+            new SphereMesh { Radius = 0.055f, Height = 0.11f,
+                RadialSegments = 24, Rings = 8 }, noseSteel,
+            new Vector3(0, o + noseBase + noseLen - 0.035f, 0));
 
         AddMesh("Skirt",
             new CylinderMesh { TopRadius = BodyR, BottomRadius = 1.08f * RScale, Height = ShipSkirtH, RadialSegments = 48 },
@@ -481,14 +464,25 @@ public partial class VesselRenderer : Node3D
 
         const float slR  = 0.38f * RScale; // three compact central gimballing engines
         const float vacR = 0.72f * RScale; // three large outer vacuum engines
+        const float vacExitR = 0.43f;
+        const float slExitR = 0.25f;
+        const float vacBellLen = 1.15f;
+        const float slBellLen = 0.72f;
         float bellY = o + ShipSkirtBase - 1.05f;
+        float vacExitY = bellY - 0.30f;
+        float slExitY = bellY + 0.35f;
+
+        AddMesh("ShipThrustPuck", new CylinderMesh
+            { TopRadius = 1.18f, BottomRadius = 1.28f, Height = 0.24f,
+                RadialSegments = 48 }, sootSteel,
+            new Vector3(0, o + ShipSkirtBase - 0.02f, 0));
 
         for (int i = 0; i < 3; i++)
         {
             float a = i * 2.094395f + 1.047198f;
             AddRaptor($"RapVac{i}",
-                new Vector3(vacR * Mathf.Cos(a), bellY - 0.45f, vacR * Mathf.Sin(a)),
-                exitR: 0.46f, throatR: 0.16f, bellLen: 2.2f, bellRings: 6);
+                new Vector3(vacR * Mathf.Cos(a), vacExitY, vacR * Mathf.Sin(a)),
+                exitR: vacExitR, throatR: 0.13f, bellLen: vacBellLen, bellRings: 8);
         }
 
         // 3 sea-level Raptors (central, shorter gimballing bells)
@@ -496,13 +490,13 @@ public partial class VesselRenderer : Node3D
         {
             float a = i * 2.094395f;
             AddRaptor($"RapSL{i}",
-                new Vector3(slR * Mathf.Cos(a), bellY + 0.35f, slR * Mathf.Sin(a)),
-                exitR: 0.34f, throatR: 0.14f, bellLen: 1.5f);
+                new Vector3(slR * Mathf.Cos(a), slExitY, slR * Mathf.Sin(a)),
+                exitR: slExitR, throatR: 0.095f, bellLen: slBellLen, bellRings: 6);
         }
 
         // GPU plumes for Starship engines
         if (_plumes == null) { _plumes = new PlumeSystem { Name = "Plumes" }; AddChild(_plumes); }
-        _plumes.SetupStarship(vacR, slR, o + ShipSkirtBase);
+        _plumes.SetupStarship(vacR, slR, vacExitY, slExitY, vacExitR, slExitR);
 
         if (yOffset == -22f)
         {
@@ -532,30 +526,34 @@ public partial class VesselRenderer : Node3D
         UpdateFlaps(delta, body);
         UpdateLandingGear(delta);
 
-        // Reentry heat glow on hull. The main hull now uses the procedural steel
-        // ShaderMaterial (emit via the `emit_strength` uniform); small detail
-        // parts may still carry a StandardMaterial3D, so handle both.
-        if (_hullMesh == null) return;
-        foreach (var part in TargetVessel.Parts.Parts)
+        // Visible incandescence is a reentry phenomenon, not a generic "warm
+        // skin" indicator. Gate it with the same physical observables as the
+        // plasma system: descending radial velocity and meaningful convective flux.
+        double heatFlux = 0.0;
+        double radialSpeed = 0.0;
+        if (body != null)
         {
-            if (!_partNodes.TryGetValue(part.InstanceId, out var node)) continue;
-            if (node is not MeshInstance3D mesh) continue;
+            Vector3d up = (TargetVessel.Position - body.Position).Normalized;
+            Vector3d surfaceVelocity = TargetVessel.GetSurfaceVelocity(body);
+            radialSpeed = surfaceVelocity.Dot(up);
+            heatFlux = ThermalModel.ComputeHeatFlux(
+                body.GetAtmosphericDensity(TargetVessel.Position), surfaceVelocity.Magnitude);
+        }
+        double hottestSkin = TargetVessel.Parts.Parts.Count > 0
+            ? TargetVessel.Parts.Parts.Max(p => p.SkinTemperature)
+            : 290.0;
+        float glow = (float)VehicleVisualPhysics.ReentryGlow(radialSpeed, heatFlux, hottestSkin);
 
-            // The TPS face is what glows and chars, not the structure it protects — a working
-            // heat shield runs white-hot precisely so the hull behind it does not.
-            float t = (float)System.Math.Clamp((part.SkinTemperature - 290.0) / 2000.0, 0.0, 1.0);
-            var surfMat = mesh.GetSurfaceOverrideMaterial(0);
-
-            if (surfMat is ShaderMaterial sm)
-            {
-                sm.SetShaderParameter("emit_strength", t > 0.05f ? t * t * 2.5f : 0f);
-            }
-            else if (surfMat is StandardMaterial3D mat)
-            {
-                mat.EmissionEnabled = t > 0.05f;
-                if (t > 0.05f)
-                    mat.Emission = new Color(t, t * 0.35f, 0f) * t;
-            }
+        // Bare leeward steel only catches a faint reflected plasma glow. The TPS
+        // materials carry the strong orange-white incandescence.
+        foreach (var steelMat in _shipSteelMats)
+            steelMat.SetShaderParameter("emit_strength", glow * glow * 0.16f);
+        foreach (var mats in _tileZoneMats.Values)
+        foreach (var tileMat in mats)
+        {
+            tileMat.EmissionEnabled = glow > 0.01f;
+            tileMat.Emission = new Color(1.0f, 0.24f + glow * 0.48f, 0.05f) * (glow * 1.8f);
+            tileMat.EmissionEnergyMultiplier = 0.6f + glow * 2.4f;
         }
 
         UpdateTileCharring(body);
@@ -1075,6 +1073,42 @@ public partial class VesselRenderer : Node3D
         }
     }
 
+    // Segmented windward TPS that conforms to the narrowing nose ogive.
+    private void AddNoseTileShell(float yBase, float noseLength, Func<float, float> radiusAt)
+    {
+        var tiles = TileMat();
+        RegisterTileMat(TileCharZone.Nose, tiles);
+        const int rows = 14;
+        const int staves = 12;
+        const float arc = 3.49f;
+        float rowH = noseLength / rows;
+
+        for (int row = 0; row < rows; row++)
+        {
+            float u0 = row / (float)rows;
+            float u1 = (row + 1f) / rows;
+            float um = (u0 + u1) * 0.5f;
+            float r = radiusAt(um) + 0.035f;
+            if (r < 0.08f) continue;
+            float width = Mathf.Max(0.045f, r * arc / staves * 0.985f);
+            float y = yBase + um * noseLength;
+
+            for (int i = 0; i < staves; i++)
+            {
+                float a = Mathf.Pi - arc * 0.5f + arc * (i + 0.5f) / staves;
+                var tile = new MeshInstance3D
+                {
+                    Name = $"NoseTile_{row}_{i}",
+                    Mesh = new BoxMesh { Size = new Vector3(width, rowH * 0.985f, 0.070f) },
+                    Position = new Vector3(r * Mathf.Cos(a), y, r * Mathf.Sin(a)),
+                    RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a) + 90f, 0f),
+                };
+                tile.SetSurfaceOverrideMaterial(0, tiles);
+                AddChild(tile);
+            }
+        }
+    }
+
     // A Starship aerodynamic flap: a tile-covered slab plus a steel root, both
     // mounted on the windward (-X) side and offset around the body by `angOff`
     // radians from the -X axis.
@@ -1153,14 +1187,15 @@ public partial class VesselRenderer : Node3D
     // (warm copper/inconel metallic), a darker recessed throat up inside it, and
     // a cluster of powerhead/turbopump plumbing on top. `pos` is the bell-exit
     // (lowest) point; the engine is built pointing down (-Y).
-    private StandardMaterial3D? _bellMat, _throatMat, _powerMat;
+    private StandardMaterial3D? _bellMat, _throatMat, _powerMat, _bellLipMat;
 
     private void AddRaptor(string name, Vector3 pos, float exitR, float throatR, float bellLen,
         int bellRings = 4)
     {
-        // Warm copper/inconel bell — metallic with a coppery albedo so it catches
-        // light as real engine hardware rather than a flat dark cone.
-        _bellMat   ??= Mat(new Color(0.42f, 0.27f, 0.18f), 0.95f, 0.34f);
+        // Raptor's external nozzle hardware reads as dark Inconel/steel, not as
+        // a uniform copper flowerpot. A brighter lip catches the exit-plane light.
+        _bellMat   ??= Mat(new Color(0.17f, 0.16f, 0.15f), 0.94f, 0.30f);
+        _bellLipMat ??= Mat(new Color(0.38f, 0.35f, 0.32f), 0.96f, 0.24f);
         // Recessed throat: very dark, slightly rough (soot + shadow up the bell).
         _throatMat ??= Mat(new Color(0.06f, 0.055f, 0.05f), 0.55f, 0.70f);
         // Powerhead plumbing: greenish-grey inconel/steel.
@@ -1191,6 +1226,33 @@ public partial class VesselRenderer : Node3D
                 _bellMat, new Vector3(pos.X, yc, pos.Z));
         }
 
+        AddMesh($"{name}ExitLip",
+            new CylinderMesh { TopRadius = exitR * 1.015f, BottomRadius = exitR * 1.015f,
+                Height = 0.055f, RadialSegments = 48, CapTop = false, CapBottom = false },
+            _bellLipMat, new Vector3(pos.X, pos.Y + 0.028f, pos.Z));
+
+        // Thin-wall RVac extensions have conspicuous longitudinal stiffeners.
+        if (bellRings >= 8)
+        {
+            const int stiffeners = 12;
+            for (int i = 0; i < stiffeners; i++)
+            {
+                float a = i * Mathf.Tau / stiffeners;
+                float rr = exitR * 0.89f;
+                var rib = new MeshInstance3D
+                {
+                    Name = $"{name}Stiffener{i}",
+                    Mesh = new BoxMesh
+                        { Size = new Vector3(0.028f, bellLen * 0.66f, 0.045f) },
+                    Position = new Vector3(pos.X + rr * Mathf.Cos(a),
+                        pos.Y + bellLen * 0.34f, pos.Z + rr * Mathf.Sin(a)),
+                    RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a), 0f),
+                };
+                rib.SetSurfaceOverrideMaterial(0, _bellLipMat);
+                AddChild(rib);
+            }
+        }
+
         // Recessed throat plug just inside the top of the bell — gives the dark
         // hollow the eye expects when looking up a nozzle from below.
         AddMesh($"{name}Throat",
@@ -1202,7 +1264,7 @@ public partial class VesselRenderer : Node3D
             new CylinderMesh { TopRadius = topR * 1.15f, BottomRadius = topR * 1.05f, Height = bellLen * 0.30f, RadialSegments = 24 },
             _powerMat, new Vector3(pos.X, pos.Y + bellLen + bellLen * 0.10f, pos.Z));
 
-        // Two small plumbing nubs flanking the powerhead (turbopumps).
+        // Two compact turbopump housings and feed-line risers flank the powerhead.
         float nub = topR * 0.9f;
         AddMesh($"{name}Pump0",
             new SphereMesh { Radius = topR * 0.5f, Height = topR, RadialSegments = 14, Rings = 8 },
@@ -1210,6 +1272,12 @@ public partial class VesselRenderer : Node3D
         AddMesh($"{name}Pump1",
             new SphereMesh { Radius = topR * 0.5f, Height = topR, RadialSegments = 14, Rings = 8 },
             _powerMat, new Vector3(pos.X - nub, pos.Y + bellLen * 1.05f, pos.Z));
+        foreach (float side in new[] { -1f, 1f })
+            AddMesh($"{name}Feed{(side < 0 ? "L" : "R")}",
+                new CylinderMesh { TopRadius = topR * 0.10f, BottomRadius = topR * 0.10f,
+                    Height = bellLen * 0.55f, RadialSegments = 10 },
+                _bellLipMat, new Vector3(pos.X + side * topR * 0.72f,
+                    pos.Y + bellLen * 0.90f, pos.Z + topR * 0.55f));
     }
 
     private void ClearNodes()
@@ -1217,6 +1285,7 @@ public partial class VesselRenderer : Node3D
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
         _tileZoneMats.Clear();
+        _shipSteelMats.Clear();
         _flapRigs.Clear();
         _landingLegRigs.Clear();
         _landingGearDeployment = 0f;

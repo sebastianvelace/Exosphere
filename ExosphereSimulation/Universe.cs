@@ -233,6 +233,29 @@ public class Universe
         {
             if (vessel.IsDestroyed) continue; // frozen at crash point
 
+            if (vessel.IsSurfaceSettled)
+            {
+                var settledBody = GetDominantBody(vessel.Position);
+                if (vessel.Throttle > 0.01 || !vessel.HasDeployedLandingGear)
+                {
+                    vessel.IsSurfaceSettled = false;
+                    vessel.SurfaceSettledDuration = 0.0;
+                }
+                else
+                {
+                    AdvanceGroundHoldFrame(vessel, settledBody, dt);
+                    vessel.Position = settledBody.Position
+                        + vessel.GroundNormal * (settledBody.Radius + vessel.GroundOffset);
+                    vessel.Velocity = settledBody.Velocity
+                        + settledBody.GetSurfaceVelocity(vessel.Position);
+                    vessel.AngularVelocity = Vector3d.Zero;
+                    vessel.PitchYawRoll = Vector3d.Zero;
+                    vessel.IsOnRails = false;
+                    vessel.Tick(dt, settledBody);
+                    continue;
+                }
+            }
+
             if (vessel.IsGroundHeld)
             {
                 // Vessel is clamped to the body surface — follow the body's orbit
@@ -341,6 +364,29 @@ public class Universe
             if (vessel.IsDestroyed) continue; // frozen at crash point
 
             var refBody = GetDominantBody(vessel.Position);
+            if (vessel.IsSurfaceSettled)
+            {
+                // Rigid-body sleep for a landed vehicle.  This is not a launch
+                // clamp: any commanded thrust wakes the solver immediately.
+                if (vessel.Throttle > 0.01 || !vessel.HasDeployedLandingGear)
+                {
+                    vessel.IsSurfaceSettled = false;
+                    vessel.SurfaceSettledDuration = 0.0;
+                }
+                else
+                {
+                    AdvanceGroundHoldFrame(vessel, refBody, dt);
+                    vessel.Position = refBody.Position
+                        + vessel.GroundNormal * (refBody.Radius + vessel.GroundOffset);
+                    vessel.Velocity = refBody.Velocity
+                        + refBody.GetSurfaceVelocity(vessel.Position);
+                    vessel.AngularVelocity = Vector3d.Zero;
+                    vessel.PitchYawRoll = Vector3d.Zero;
+                    vessel.IsOnRails = false;
+                    vessel.Tick(dt, refBody);
+                    continue;
+                }
+            }
             if (vessel.IsGroundHeld)
             {
                 AdvanceGroundHoldFrame(vessel, refBody, dt);
@@ -478,19 +524,29 @@ public class Universe
         double normalSupportAcceleration = vessel.TotalMass > 0.0
             ? contact.ForceWorld.Dot(normal) / vessel.TotalMass
             : 0.0;
-        bool supportedNearWeight = localGravity > 0.0
-            && normalSupportAcceleration > 0.75 * localGravity
-            && normalSupportAcceleration < 1.25 * localGravity;
+        // Penalty contacts can retain a short-lived bump-stop preload after the
+        // landing transient.  Low kinetic state sustained for 0.5 s is the
+        // decisive sleep criterion; overload remains the separate hard failure
+        // gate above, so removing the narrow 1.25 g ceiling cannot hide damage.
+        bool adequatelySupported = localGravity > 0.0
+            && normalSupportAcceleration > 0.65 * localGravity;
         bool settledNow = contact.ContactCount >= 3
             && normalSpeed < 0.25
             && tangentialSpeed < 0.50
             && vessel.AngularVelocity.Magnitude < 0.03
             && upright > System.Math.Cos(10.0 * MathUtils.DEG_TO_RAD)
-            && supportedNearWeight;
+            && adequatelySupported;
         vessel.SurfaceSettledDuration = settledNow
             ? vessel.SurfaceSettledDuration + dt
             : 0.0;
         vessel.IsSurfaceSettled = vessel.SurfaceSettledDuration >= 0.50;
+        if (vessel.IsSurfaceSettled)
+        {
+            vessel.GroundNormal = normal;
+            vessel.GroundOffset = body.GetAltitude(vessel.Position);
+            vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
+            vessel.AngularVelocity = Vector3d.Zero;
+        }
     }
 
     private void TickRails(double dt)
