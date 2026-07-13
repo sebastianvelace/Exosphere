@@ -49,14 +49,22 @@ public class LaunchSite
     public Vector3d GetPosition(CelestialBody body) =>
         body.GetSurfacePosition(Latitude, Longitude, Altitude);
 
+    public Vector3d GetPosition(CelestialBody body, double simulationTime) =>
+        body.GetSurfacePositionAtTime(Latitude, Longitude, simulationTime, Altitude);
+
     /// <summary>Local vertical (radial up) at the pad.</summary>
     public Vector3d GetUpDirection(CelestialBody body) =>
         (GetPosition(body) - body.Position).Normalized;
 
     /// <summary>Orthonormal ENU-derived frame used by launch geometry and cameras.</summary>
     public LaunchSiteFrame GetLocalFrame(CelestialBody body)
+        => BuildLocalFrame(body, GetPosition(body));
+
+    public LaunchSiteFrame GetLocalFrame(CelestialBody body, double simulationTime) =>
+        BuildLocalFrame(body, GetPosition(body, simulationTime));
+
+    private static LaunchSiteFrame BuildLocalFrame(CelestialBody body, Vector3d position)
     {
-        Vector3d position = GetPosition(body);
         Vector3d up = (position - body.Position).Normalized;
         Vector3d east = body.GetEastDirection(position);
         if (east.MagnitudeSquared < 1e-12)
@@ -65,8 +73,7 @@ public class LaunchSite
                 ? Vector3d.Right : Vector3d.Forward;
             east = reference.Cross(up).Normalized;
         }
-        Vector3d south = east.Cross(up).Normalized;
-        return new LaunchSiteFrame(east, up, south);
+        return new LaunchSiteFrame(east, up, east.Cross(up).Normalized);
     }
 
     /// <summary>

@@ -237,6 +237,7 @@ public class Universe
             {
                 // Vessel is clamped to the body surface — follow the body's orbit
                 var heldBody = GetDominantBody(vessel.Position);
+                AdvanceGroundHoldFrame(vessel, heldBody, dt);
                 vessel.Position = heldBody.Position + vessel.GroundNormal * (heldBody.Radius + vessel.GroundOffset);
                 vessel.Velocity = heldBody.Velocity + heldBody.GetSurfaceVelocity(vessel.Position);
                 vessel.Tick(dt, heldBody);  // still drain fuel during ignition sequence
@@ -261,6 +262,15 @@ public class Universe
 
             IntegrateVesselOffRails(vessel, refBody, dt);
         }
+    }
+
+    private static void AdvanceGroundHoldFrame(Vessel vessel, CelestialBody body, double dt)
+    {
+        if (body.AngularSpeed == 0.0 || dt <= 0.0) return;
+        var rotation = Math.Quaterniond.FromAxisAngle(
+            body.RotationAxis, body.AngularSpeed * dt);
+        vessel.GroundNormal = rotation.Rotate(vessel.GroundNormal).Normalized;
+        vessel.Orientation = (rotation * vessel.Orientation).Normalize();
     }
 
     private void ApplyPostIntegrationPhysics(Vessel vessel, CelestialBody refBody, double dt)
@@ -333,6 +343,7 @@ public class Universe
             var refBody = GetDominantBody(vessel.Position);
             if (vessel.IsGroundHeld)
             {
+                AdvanceGroundHoldFrame(vessel, refBody, dt);
                 vessel.Position = refBody.Position
                     + vessel.GroundNormal * (refBody.Radius + vessel.GroundOffset);
                 vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
