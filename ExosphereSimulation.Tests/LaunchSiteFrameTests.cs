@@ -140,8 +140,26 @@ public class LaunchSiteFrameTests
             Path.Combine(FindRepoRoot().FullName, "data", "launch_sites"));
 
         Assert.True(sites.ContainsKey("kennedy"), "kennedy.json should load");
+        Assert.True(sites.ContainsKey("starbase"), "starbase.json should load");
         Assert.Equal("earth", sites["kennedy"].BodyId);
         Assert.Equal(28.608389, sites["kennedy"].Latitude, 6);
+    }
+
+    [Fact]
+    public void StarbaseUsesBocaChicaAndFaaScaleBaseline()
+    {
+        var site = LoadSite("starbase");
+        var spec = LaunchComplexSpec.StarbasePostDeluge;
+
+        Assert.InRange(site.Latitude, 25.99, 26.01);
+        Assert.InRange(site.Longitude, -97.17, -97.14);
+        Assert.Equal("starbase", spec.LaunchSiteId);
+        Assert.Equal(19.812, spec.VehicleInterfaceElevation, 6);
+        Assert.Equal(146.304, spec.OlitHeight, 6);
+        Assert.Equal(3.048, spec.LightningRodHeight, 6);
+        Assert.Equal(15, spec.CommodityTankCount);
+        Assert.Equal(30.48, spec.CommodityTankMaxHeight, 6);
+        Assert.Empty(spec.Validate());
     }
 
     [Fact]

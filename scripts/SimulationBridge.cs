@@ -62,7 +62,7 @@ public partial class SimulationBridge : Node
 
     // ── Launch site ───────────────────────────────────────────────────────
     /// <summary>Id of the pad every vessel launches from (see data/launch_sites).</summary>
-    [Export] public string LaunchSiteId { get; set; } = "kennedy";
+    [Export] public string LaunchSiteId { get; set; } = "starbase";
 
     private LaunchSite? _launchSite;
 
@@ -326,9 +326,9 @@ public partial class SimulationBridge : Node
 
         // Stand the stack on the real launch site. The hull's +Y is rotated onto the local
         // vertical there, so the rocket is upright at the pad's true latitude instead of
-        // being planted on an arbitrary axis. Visual model has stack bottom at y=0, so
-        // spawn altitude = 0 → launch mount height.
-        const double mountHeightM = 12.0;  // OLM height in metres
+        // being planted on an arbitrary axis. The stack bottom is placed at the shared
+        // engineering spec's vehicle-interface elevation above civil grade.
+        double mountHeightM = LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation;
         StandOnPad(vessel, earth, mountHeightM);
 
         Universe.AddVessel(vessel);
@@ -489,7 +489,7 @@ public partial class SimulationBridge : Node
     /// controlled vessel. Used by the VAB/export flow; keeps the same ground-hold contract
     /// as the default Starship stack.
     /// </summary>
-    public void PlaceConstructedVesselOnPad(Vessel vessel, double mountHeightM = 12.0)
+    public void PlaceConstructedVesselOnPad(Vessel vessel, double mountHeightM = -1.0)
     {
         var earth = Universe.GetBody("earth");
         if (earth == null) return;
@@ -497,6 +497,8 @@ public partial class SimulationBridge : Node
         if (ActiveVessel != null)
             Universe.RemoveVessel(ActiveVessel);
 
+        if (mountHeightM < 0.0)
+            mountHeightM = LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation;
         StandOnPad(vessel, earth, mountHeightM);
         vessel.ConfigureLandingContactsFromParts();
 
