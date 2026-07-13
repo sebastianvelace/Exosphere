@@ -1,0 +1,9 @@
+{
+  "id": "starbase",
+  "name": "SpaceX Starbase Orbital Launch Site",
+  "body": "earth",
+  "latitude": 25.9972,
+  "longitude": -97.1566,
+  "altitude": 1.0,
+  "heading": 90.0
+}
