@@ -638,8 +638,29 @@ public partial class SimulationBridge : Node
                 p => p.Definition.Id == "starship_engines"))
             return false;
 
-        Vector3d up = (vessel.Position - earth.Position).Normalized;
-        if (up.MagnitudeSquared < 1e-9) up = Vector3d.Right;
+        Vector3d currentUp = (vessel.Position - earth.Position).Normalized;
+        if (currentUp.MagnitudeSquared < 1e-9) currentUp = Vector3d.Right;
+
+        // Put the demonstration on the daylight side so entry plasma, flaps and landing
+        // attitude remain inspectable instead of inheriting whatever local solar time the
+        // launch pad happens to have at J2000.
+        Vector3d up = currentUp;
+        var sun = Universe.GetBody("sun");
+        if (sun != null)
+        {
+            Vector3d toSun = (sun.Position - earth.Position).Normalized;
+            Vector3d terminatorUp = currentUp - toSun * currentUp.Dot(toSun);
+            if (terminatorUp.MagnitudeSquared < 1e-9)
+            {
+                Vector3d seed = System.Math.Abs(toSun.Dot(Vector3d.Up)) < 0.9
+                    ? Vector3d.Up
+                    : Vector3d.Right;
+                terminatorUp = seed - toSun * seed.Dot(toSun);
+            }
+            const double solarElevation = 25.0 * System.Math.PI / 180.0;
+            up = (terminatorUp.Normalized * System.Math.Cos(solarElevation)
+                + toSun * System.Math.Sin(solarElevation)).Normalized;
+        }
         Vector3d east = earth.RotationAxis.Cross(up).Normalized;
         if (east.MagnitudeSquared < 1e-9) east = Vector3d.Forward;
 

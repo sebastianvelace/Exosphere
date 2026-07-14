@@ -19,6 +19,9 @@ uniform float rayleigh_scale_height = 8000.0;
 uniform float mie_scale_height = 1200.0;
 uniform float ozone_center_altitude = 25000.0;
 uniform float ozone_half_width = 15000.0;
+uniform vec3 airglow_emission = vec3(0.060e-8, 0.144e-8, 0.044e-8);
+uniform float airglow_center_altitude = 97000.0;
+uniform float airglow_scale_height = 6000.0;
 uniform float mie_g = 0.80;
 uniform float sun_illuminance = 20.0;
 uniform float star_energy = 0.9;
@@ -34,6 +37,7 @@ uniform mat3 cloud_world_to_texture;
 uniform float sun_angular_radius = 0.00465;
 uniform float sun_disc_radiance = 32.0;
 uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
+uniform float atmospheric_solar_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform bool solar_occluder_enabled = false;
 uniform vec3 solar_occluder_dir = vec3(0.0, -1.0, 0.0);
 uniform float solar_occluder_angular_radius = 0.0;
@@ -41,10 +45,10 @@ uniform float solar_occluder_angular_radius = 0.0;
 uniform vec3 ground_horizon : source_color = vec3(0.30, 0.55, 0.90);
 uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
 
-const int VIEW_STEPS = 12;
-const int LIGHT_STEPS = 6;
-const int CLOUD_VIEW_STEPS = 10;
-const int CLOUD_LIGHT_STEPS = 2;
+const int VIEW_STEPS = 16;
+const int LIGHT_STEPS = 8;
+const int CLOUD_VIEW_STEPS = 12;
+const int CLOUD_LIGHT_STEPS = 3;
 
 vec2 ray_sphere(vec3 origin, vec3 direction, float radius) {
 	float b = dot(origin, direction);
@@ -55,6 +59,27 @@ vec2 ray_sphere(vec3 origin, vec3 direction, float radius) {
 	return vec2(-b - h, -b + h);
 }
 
+// Density changes by orders of magnitude close to the ray's tangent altitude. Uniform
+// steps can jump over the complete troposphere on long ground-horizon or orbital-limb
+// rays. This warp spends samples around the closest approach while retaining both ends.
+float tangent_warped_boundary(
+	float u, float interval_start, float interval_end, float closest_distance) {
+	float span = max(interval_end - interval_start, 1e-3);
+	float closest = clamp((closest_distance - interval_start) / span, 0.0, 1.0);
+	if (closest <= 0.04) return interval_start + span * u * u;
+	if (closest >= 0.96) {
+		float reverse = 1.0 - u;
+		return interval_end - span * reverse * reverse;
+	}
+	if (u < 0.5) {
+		float q = u * 2.0;
+		float toward_tangent = 1.0 - (1.0 - q) * (1.0 - q);
+		return mix(interval_start, interval_start + span * closest, toward_tangent);
+	}
+	float q = (u - 0.5) * 2.0;
+	return mix(interval_start + span * closest, interval_end, q * q);
+}
+
 vec3 density_at_height(float height) {
 	float h = max(height, 0.0);
 	float rayleigh = exp(-h / max(rayleigh_scale_height, 1.0));
@@ -63,6 +88,12 @@ vec3 density_at_height(float height) {
 		? max(0.0, 1.0 - abs(h - ozone_center_altitude) / ozone_half_width)
 		: 0.0;
 	return vec3(rayleigh, mie, ozone);
+}
+
+float airglow_density_at_height(float height) {
+	float sigma = max(airglow_scale_height, 1.0);
+	float z = (height - airglow_center_altitude) / sigma;
+	return exp(-0.5 * z * z);
 }
 
 vec3 extinction(vec3 density) {
@@ -80,10 +111,15 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 	if (ground_hit.x > 0.0) return vec3(1e6);
 	vec2 atmosphere_hit = ray_sphere(position, direction, outer_radius);
 	float distance_to_space = max(atmosphere_hit.y, 0.0);
-	float step_length = distance_to_space / float(LIGHT_STEPS);
+	float closest = max(-dot(position, direction), 0.0);
 	vec3 depth = vec3(0.0);
 	for (int i = 0; i < LIGHT_STEPS; i++) {
-		float t = (float(i) + 0.5) * step_length;
+		float segment_start = tangent_warped_boundary(
+			float(i) / float(LIGHT_STEPS), 0.0, distance_to_space, closest);
+		float segment_end = tangent_warped_boundary(
+			float(i + 1) / float(LIGHT_STEPS), 0.0, distance_to_space, closest);
+		float step_length = max(segment_end - segment_start, 0.0);
+		float t = 0.5 * (segment_start + segment_end);
 		float height = length(position + direction * t) - planet_radius;
 		depth += extinction(density_at_height(height)) * step_length;
 	}
@@ -124,10 +160,15 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
 	if (sun_is_occluded(position, to_sun)) return 0.0;
 	vec2 outer_hit = ray_sphere(position, to_sun, planet_radius + cloud_top_altitude);
 	float distance_to_edge = max(outer_hit.y, 0.0);
-	float step_length = distance_to_edge / float(CLOUD_LIGHT_STEPS);
+	float closest = max(-dot(position, to_sun), 0.0);
 	float optical_depth = 0.0;
 	for (int i = 0; i < CLOUD_LIGHT_STEPS; i++) {
-		vec3 p = position + to_sun * ((float(i) + 0.5) * step_length);
+		float segment_start = tangent_warped_boundary(float(i) / float(CLOUD_LIGHT_STEPS),
+			0.0, distance_to_edge, closest);
+		float segment_end = tangent_warped_boundary(float(i + 1) / float(CLOUD_LIGHT_STEPS),
+			0.0, distance_to_edge, closest);
+		float step_length = max(segment_end - segment_start, 0.0);
+		vec3 p = position + to_sun * (0.5 * (segment_start + segment_end));
 		optical_depth += cloud_density(p) * cloud_extinction * step_length;
 	}
 	return exp(-min(optical_depth, 80.0));
@@ -161,8 +202,9 @@ void sky() {
 	vec3 optical_depth = vec3(0.0);
 	vec3 in_scatter = vec3(0.0);
 	vec3 diffuse_scatter = vec3(0.0);
+	vec3 airglow_radiance = vec3(0.0);
 	if (crosses_atmosphere && ray_end > ray_start) {
-		float step_length = (ray_end - ray_start) / float(VIEW_STEPS);
+		float closest = max(-dot(origin, view_dir), 0.0);
 		float mu = dot(view_dir, to_sun);
 		float mu2 = mu * mu;
 		float rayleigh_phase = 3.0 * (1.0 + mu2) / (16.0 * PI);
@@ -172,13 +214,19 @@ void sky() {
 			* pow(max(1.0 + g2 - 2.0 * mie_g * mu, 1e-3), 1.5));
 
 		for (int i = 0; i < VIEW_STEPS; i++) {
-			float t = ray_start + (float(i) + 0.5) * step_length;
+			float segment_start = tangent_warped_boundary(float(i) / float(VIEW_STEPS),
+				ray_start, ray_end, closest);
+			float segment_end = tangent_warped_boundary(float(i + 1) / float(VIEW_STEPS),
+				ray_start, ray_end, closest);
+			float step_length = max(segment_end - segment_start, 0.0);
+			float t = 0.5 * (segment_start + segment_end);
 			vec3 sample_position = origin + view_dir * t;
 			float height = length(sample_position) - planet_radius;
 			vec3 density = density_at_height(height);
 			vec3 sample_extinction = extinction(density);
+			vec3 segment_depth = sample_extinction * step_length;
 			vec3 sun_depth = optical_depth_to_sun(sample_position, to_sun, outer_radius);
-			vec3 view_throughput = transmittance(optical_depth);
+			vec3 view_throughput = transmittance(optical_depth + segment_depth * 0.5);
 			vec3 sun_throughput = transmittance(sun_depth);
 			vec3 throughput = view_throughput * sun_throughput;
 			vec3 scattering = rayleigh_scattering * density.x * rayleigh_phase
@@ -195,7 +243,14 @@ void sky() {
 					* (low_order_diffuse_strength / (4.0 * PI));
 				diffuse_scatter += view_throughput * source_2 * step_length;
 			}
-			optical_depth += sample_extinction * step_length;
+
+			// Nightglow is emission, not reflected sunlight. Fade it only where daylight
+			// overwhelms the tenuous 95–100 km O/OH layer; view extinction still applies.
+			float local_solar_elevation = dot(normalize(sample_position), to_sun);
+			float night_visibility = 1.0 - smoothstep(-0.10, 0.08, local_solar_elevation);
+			airglow_radiance += view_throughput * airglow_emission
+				* airglow_density_at_height(height) * night_visibility * step_length;
+			optical_depth += segment_depth;
 		}
 	}
 
@@ -217,13 +272,17 @@ void sky() {
 			cloud_end = ground_hit.x;
 
 		if (cloud_end > cloud_start) {
-			float cloud_step = (cloud_end - cloud_start) / float(CLOUD_VIEW_STEPS);
+			float cloud_closest = max(-dot(origin, view_dir), 0.0);
 			float mu_cloud = dot(view_dir, to_sun);
 			float phase_cloud = 0.82 * hg_phase(mu_cloud, 0.82)
 				+ 0.18 * hg_phase(mu_cloud, -0.20);
 			for (int i = 0; i < CLOUD_VIEW_STEPS; i++) {
-				vec3 p = origin + view_dir
-					* (cloud_start + (float(i) + 0.5) * cloud_step);
+				float segment_start = tangent_warped_boundary(
+					float(i) / float(CLOUD_VIEW_STEPS), cloud_start, cloud_end, cloud_closest);
+				float segment_end = tangent_warped_boundary(
+					float(i + 1) / float(CLOUD_VIEW_STEPS), cloud_start, cloud_end, cloud_closest);
+				float cloud_step = max(segment_end - segment_start, 0.0);
+				vec3 p = origin + view_dir * (0.5 * (segment_start + segment_end));
 				float rho = cloud_density(p);
 				if (rho > 0.001) {
 					float segment_alpha = 1.0
@@ -232,7 +291,7 @@ void sky() {
 					vec3 atmospheric_sun = transmittance(
 						optical_depth_to_sun(p, to_sun, outer_radius));
 					vec3 source = atmospheric_sun
-						* (direct_light * phase_cloud * solar_visibility + 0.018);
+						* (direct_light * phase_cloud * atmospheric_solar_visibility + 0.018);
 					cloud_radiance += cloud_transmittance * source * segment_alpha;
 					cloud_transmittance *= 1.0 - segment_alpha;
 				}
@@ -244,13 +303,18 @@ void sky() {
 	vec3 star_transmittance = crosses_atmosphere ? transmittance(optical_depth) : vec3(1.0);
 	if (hits_ground) stars = vec3(0.0);
 
-	// Exponential filmic response keeps the physical HDR integral bounded for Godot's sky.
-	vec3 atmosphere = vec3(1.0) - exp(
-		-((in_scatter + diffuse_scatter) * solar_visibility + cloud_radiance)
-		* sun_illuminance);
+	// Return one linear HDR radiance domain. Godot's environment applies exposure and
+	// tonemapping exactly once; compressing here previously clipped the limb before the
+	// camera model could adapt and made the photosphere incomparable with the sky.
+	// Observer-level visibility includes the planet below the horizon. The separate
+	// atmospheric value excludes that local planet, because samples above the observer can
+	// still see the Sun and produce twilight. It retains external occultations (Moon, etc.).
+	vec3 atmosphere = ((in_scatter + diffuse_scatter) * atmospheric_solar_visibility
+		+ cloud_radiance) * sun_illuminance;
+	vec3 airglow = airglow_radiance * sun_illuminance;
 	float sky_luminance = dot(atmosphere, vec3(0.2126, 0.7152, 0.0722));
 	float eye_star_visibility = 1.0 - smoothstep(0.002, 0.035, sky_luminance);
-	vec3 color = atmosphere + stars * star_transmittance * cloud_transmittance
+	vec3 color = atmosphere + airglow + stars * star_transmittance * cloud_transmittance
 		* eye_star_visibility * eye_star_gain;
 
 	// Resolved solar photosphere. The radial term approximates visible-band limb
@@ -279,7 +343,12 @@ void sky() {
 	if (hits_ground) {
 		float nadir = clamp(-dot(view_dir, up), 0.0, 1.0);
 		vec3 ground = mix(ground_horizon, ground_bottom, sqrt(nadir));
-		color += ground * transmittance(optical_depth) * 0.12;
+		vec3 ground_position = origin + view_dir * ray_end;
+		float ground_sun = max(dot(normalize(ground_position), to_sun), 0.0);
+		vec3 ground_direct = transmittance(
+			optical_depth_to_sun(ground_position, to_sun, outer_radius));
+		color += ground * transmittance(optical_depth)
+			* (0.012 + 0.24 * ground_sun * ground_direct * solar_visibility);
 	}
 
 	COLOR = max(color, vec3(0.0));

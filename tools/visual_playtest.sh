@@ -27,6 +27,7 @@ Options:
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
   --cockpit     Capture the first-person cockpit optics and interior.
+  --atmosphere  Capture a deterministic day/twilight/night altitude matrix with image metrics.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
   --log FILE    Telemetry log path (default: /tmp/exo_play.log)
@@ -51,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     --launch) MODE="launch"; shift ;;
     --ship) MODE="ship"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
+    --atmosphere) MODE="atmosphere"; shift ;;
     --edl) MODE="edl"; shift ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --log) LOG="$2"; shift 2 ;;
@@ -143,6 +145,37 @@ public partial class _PlaytestShot : Node
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     bool _finished;
 
+    // Atmosphere acceptance is deliberately state-seeded instead of flown.  This makes
+    // every altitude/solar-elevation pair reproducible and keeps the matrix fast enough
+    // to run while tuning the scattering shader.  Cockpit cases are last because the
+    // public camera API intentionally only enters (rather than exits) IVA mode.
+    readonly (string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit)[] _atmosCases =
+    {
+        ("ground_day",       20.0,  45.0, false),
+        ("ground_sunrise",   20.0,  -1.0, false),
+        ("ground_sunset",    20.0,   1.0, false),
+        ("ground_night",     20.0, -35.0, false),
+        ("10km_day",     10_000.0,  35.0, false),
+        ("30km_day",     30_000.0,  35.0, false),
+        ("70km_day",     70_000.0,  35.0, false),
+        ("120km_day",   120_000.0,  35.0, false),
+        ("400km_day",   400_000.0,  35.0, false),
+        ("10km_night",   10_000.0, -35.0, false),
+        ("30km_night",   30_000.0, -35.0, false),
+        ("70km_night",   70_000.0, -35.0, false),
+        ("120km_night", 120_000.0, -35.0, false),
+        ("400km_night", 400_000.0, -35.0, false),
+        ("cockpit_120km_day",   120_000.0,  35.0, true),
+        ("cockpit_120km_night", 120_000.0, -35.0, true),
+    };
+    const int AtmosphereMinimumSettleFrames = 8;
+    const int AtmosphereMaximumSettleFrames = 180;
+    const double AtmosphereSettleSeconds = 1.2;
+    int _atmosIndex = -1;
+    Vector3d _atmosUp = Vector3d.Up, _atmosLook = Vector3d.Forward;
+    double _atmosFrameSeconds, _atmosMaxFrameSeconds;
+    int _atmosPerfFrames, _atmosSlowFrames;
+
     public _PlaytestShot()
     {
         _mode = "${MODE}";
@@ -198,6 +231,12 @@ public partial class _PlaytestShot : Node
         double fluxRatio = flux / FluxPeak;
 
         TryCapturePending();
+
+        if (_mode == "atmosphere")
+        {
+            ProcessAtmosphereMatrix(delta, bridge, vessel, universe, body);
+            return;
+        }
 
         if (_mode == "cockpit")
         {
@@ -397,34 +436,17 @@ public partial class _PlaytestShot : Node
         {
             if (_readyFrames < 30 || EDLController.Instance == null) return;
 
-            // Exercise the same staged ship that the flight scene uses, but begin close enough
-            // to entry to make this a repeatable verification instead of a multi-orbit demo.
-            if (vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster"))
+            // Exercise the exact public entry point used by the HUD button/[R], rather than
+            // maintaining a second private seed that could silently drift from gameplay.
+            if (!bridge.BeginReentryDemonstration())
             {
-                bridge.TriggerStaging();
-                vessel = bridge.ActiveVessel!;
+                _log.WriteLine("GAP HUD reentry demonstration entry point refused the scenario");
+                Finish("EDL_DEMO_START_FAILED");
+                return;
             }
-
+            vessel = bridge.ActiveVessel!;
             body = universe.Bodies.First(b => b.Name == "Earth");
-            Vector3d up = Vector3d.Right;
-            Vector3d horizontal = Vector3d.Forward;
-            Vector3d airVelocity = horizontal * 1800.0 - up * 120.0;
-            Vector3d velocityDirection = airVelocity.Normalized;
-            Vector3d longAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velocityDirection);
-
-            vessel.Position = body.Position + up * (body.Radius + 70_000.0);
-            vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position) + airVelocity;
-            vessel.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(longAxis, velocityDirection);
-            vessel.AngularVelocity = Vector3d.Zero;
-            vessel.PitchYawRoll = Vector3d.Zero;
-            vessel.SASEnabled = false;
-            vessel.IsGroundHeld = false;
-            vessel.IsOnRails = false;
-            vessel.OrbitalState = null;
-            vessel.Throttle = 0.0;
-            DrainToReserve(vessel, 0.12);
-            mission?.EnterPhase(MissionPhase.ORBIT);
-            bridge.SetTimeScale(3.0);
+            bridge.SetTimeScale(3.0); // verification speed only; the HUD button starts at x1
 
             _edlSeeded = true;
             _edlScenarioStart = universe.CurrentTime;
@@ -576,6 +598,149 @@ public partial class _PlaytestShot : Node
         }
     }
 
+    private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
+        Vessel vessel, Universe universe, CelestialBody body)
+    {
+        if (_readyFrames < 60) return;
+
+        if (_atmosIndex < 0)
+        {
+            _atmosIndex = 0;
+            ApplyAtmosphereCase(bridge, vessel, universe, body);
+        }
+
+        _atmosFrameSeconds += delta;
+        _atmosMaxFrameSeconds = System.Math.Max(_atmosMaxFrameSeconds, delta);
+        _atmosPerfFrames++;
+        if (delta > 1.0 / 30.0) _atmosSlowFrames++;
+
+        ApplyAtmosphereCamera();
+        // Wall-clock settling makes the harness practical both on a real GPU (~60 fps)
+        // and CI's llvmpipe renderer (~2 fps).  Always allow several incremental sky
+        // cubemap updates, but never wait hundreds of slow software-rendered frames.
+        bool enoughFrames = _atmosPerfFrames >= AtmosphereMinimumSettleFrames;
+        bool enoughTime = _atmosFrameSeconds >= AtmosphereSettleSeconds;
+        bool safetyLimit = _atmosPerfFrames >= AtmosphereMaximumSettleFrames;
+        if (!safetyLimit && !(enoughFrames && enoughTime)) return;
+
+        var shot = _atmosCases[_atmosIndex];
+        CaptureNow(shot.Slug);
+        LogAtmosphereState(bridge, vessel, universe, body, shot);
+
+        _atmosIndex++;
+        if (_atmosIndex >= _atmosCases.Length)
+        {
+            Finish("ATMOSPHERE_OK");
+            return;
+        }
+        ApplyAtmosphereCase(bridge, vessel, universe, body);
+    }
+
+    private void ApplyAtmosphereCase(SimulationBridge bridge, Vessel vessel,
+        Universe universe, CelestialBody earth)
+    {
+        var shot = _atmosCases[_atmosIndex];
+        var sun = universe.GetBody("sun");
+        Vector3d sunDir = sun == null
+            ? new Vector3d(0.4, 0.5, 0.8).Normalized
+            : (sun.Position - earth.Position).Normalized;
+
+        // Choose a stable vector on the terminator, then tilt it by the requested solar
+        // elevation.  The resulting dot(up,sunDir) is exactly sin(elevation).
+        Vector3d seed = System.Math.Abs(sunDir.Dot(Vector3d.Up)) < 0.92
+            ? Vector3d.Up : Vector3d.Right;
+        Vector3d terminatorUp = (seed - sunDir * seed.Dot(sunDir)).Normalized;
+        double elev = shot.SunElevationDeg * System.Math.PI / 180.0;
+        _atmosUp = (terminatorUp * System.Math.Cos(elev)
+            + sunDir * System.Math.Sin(elev)).Normalized;
+
+        Vector3d projectedSun = sunDir - _atmosUp * sunDir.Dot(_atmosUp);
+        if (projectedSun.MagnitudeSquared < 1e-10)
+            projectedSun = earth.GetEastDirection(earth.Position + _atmosUp * earth.Radius);
+        _atmosLook = projectedSun.Normalized;
+
+        vessel.IsGroundHeld = false;
+        vessel.Position = earth.Position + _atmosUp * (earth.Radius + shot.AltitudeM);
+        // Co-rotate with the sampled surface so q/heat telemetry remains zero.  The matrix
+        // validates optics, not an accidental 350–460 m/s wind caused by inertial rest.
+        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
+        vessel.Throttle = 0.0;
+
+        // Local +Y looks along the horizon; local -Z is radial-up.  This also gives the
+        // cockpit cases a deterministic, level attitude rather than a random roll.
+        Vector3d localXWorld = _atmosLook.Cross(-_atmosUp).Normalized;
+        var basis = new Basis(ToGodot(localXWorld), ToGodot(_atmosLook), ToGodot(-_atmosUp));
+        var q = basis.GetRotationQuaternion();
+        vessel.Orientation = new Quaterniond(q.W, q.X, q.Y, q.Z);
+
+        bridge.SetTimeScale(0.0);
+        if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+            hud.Visible = false;
+        if (shot.Cockpit)
+        {
+            if (CameraController.Instance != null)
+                CameraController.Instance.ProcessMode = ProcessModeEnum.Inherit;
+            CameraController.Instance?.EnterCockpitView();
+        }
+
+        _atmosFrameSeconds = 0.0;
+        _atmosMaxFrameSeconds = 0.0;
+        _atmosPerfFrames = 0;
+        _atmosSlowFrames = 0;
+        _log.WriteLine($"ATMOS_APPLY slug={shot.Slug} targetAlt={shot.AltitudeM:F1} " +
+            $"targetSunElevation={shot.SunElevationDeg:F1} cockpit={shot.Cockpit}");
+        _log.Flush();
+    }
+
+    private void ApplyAtmosphereCamera()
+    {
+        var shot = _atmosCases[_atmosIndex];
+        if (shot.Cockpit) return;
+
+        if (CameraController.Instance != null)
+            CameraController.Instance.ProcessMode = ProcessModeEnum.Disabled;
+        if (GetTree().Root.FindChild("StarshipRenderer", true, false) is Node3D renderer)
+            renderer.Visible = false;
+        if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D cockpit)
+            cockpit.Visible = false;
+
+        if (GetTree().Root.FindChild("Camera3D", true, false) is Camera3D camera)
+        {
+            camera.Position = Vector3.Zero;
+            camera.Near = 0.1f;
+            camera.Fov = 60.0f;
+            camera.LookAt(ToGodot(_atmosLook) * 100.0f, ToGodot(_atmosUp));
+        }
+    }
+
+    private void LogAtmosphereState(SimulationBridge bridge, Vessel vessel,
+        Universe universe, CelestialBody earth,
+        (string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit) shot)
+    {
+        var sun = universe.GetBody("sun");
+        Vector3d up = (vessel.Position - earth.Position).Normalized;
+        Vector3d sunDir = sun == null ? Vector3d.Up : (sun.Position - vessel.Position).Normalized;
+        double solarElevation = System.Math.Asin(System.Math.Clamp(up.Dot(sunDir), -1.0, 1.0))
+            * 180.0 / System.Math.PI;
+        var camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
+        var world = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
+        float exposure = world?.Environment?.TonemapExposure ?? -1.0f;
+        double meanMs = _atmosPerfFrames > 0
+            ? _atmosFrameSeconds * 1000.0 / _atmosPerfFrames : 0.0;
+
+        _log.WriteLine($"ATMOS_STATE slug={shot.Slug} actualAlt={vessel.GetAltitude(earth):F1} " +
+            $"sunElevation={solarElevation:F2} solarVisibility={SunController.SolarVisibility:F3} " +
+            $"cockpit={shot.Cockpit} exposure={exposure:F3} fov={camera?.Fov ?? -1:F2} " +
+            $"near={camera?.Near ?? -1:F3}");
+        _log.WriteLine($"PERF slug={shot.Slug} meanFrameMs={meanMs:F2} " +
+            $"maxFrameMs={_atmosMaxFrameSeconds * 1000.0:F2} slowFrames={_atmosSlowFrames} " +
+            $"sampleFrames={_atmosPerfFrames} reportedFps={Engine.GetFramesPerSecond()}");
+        _log.Flush();
+    }
+
+    private static Vector3 ToGodot(Vector3d value) => new(
+        (float)value.X, (float)value.Y, (float)value.Z);
+
     private void QueueCapture(string slug)
     {
         if (_pendingSlug != null) return;
@@ -598,7 +763,87 @@ public partial class _PlaytestShot : Node
         string path = Path.Combine(_outDir, $"exo_play_{slug}.png");
         img.SavePng(path);
         LogTelemetry(slug, path);
+        LogImageMetrics(slug, img);
         GD.Print($"[Playtest] captured {slug} -> {path}");
+    }
+
+    private void LogImageMetrics(string slug, Image image)
+    {
+        int width = image.GetWidth();
+        int height = image.GetHeight();
+        const int stride = 4;
+        long samples = 0, clipped = 0, dark = 0, starCandidates = 0, starSamples = 0;
+        double sum = 0.0, upperSum = 0.0, lowerSum = 0.0;
+        long upperN = 0, lowerN = 0;
+        int[] histogram = new int[256];
+
+        for (int y = 0; y < height; y += stride)
+        {
+            for (int x = 0; x < width; x += stride)
+            {
+                Color c = image.GetPixel(x, y);
+                double luma = 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+                sum += luma;
+                samples++;
+                histogram[System.Math.Clamp((int)System.Math.Round(luma * 255.0), 0, 255)]++;
+                if (System.Math.Max(c.R, System.Math.Max(c.G, c.B)) >= 0.995f) clipped++;
+                if (luma <= 0.02) dark++;
+
+                if (y < height * 0.42)
+                {
+                    upperSum += luma;
+                    upperN++;
+                }
+                // Local-contrast star proxy, sampled in a central sky ROI that excludes the
+                // corner HUD and top mission banner.  This distinguishes point-like stars
+                // from a uniformly bright daytime sky much better than raw brightness.
+                if (x >= width * 0.20 && x < width * 0.80
+                    && y >= height * 0.15 && y < height * 0.48)
+                {
+                    double neighbours = 0.25 * (
+                        Luma(image.GetPixel(System.Math.Max(0, x - stride), y))
+                        + Luma(image.GetPixel(System.Math.Min(width - 1, x + stride), y))
+                        + Luma(image.GetPixel(x, System.Math.Max(0, y - stride)))
+                        + Luma(image.GetPixel(x, System.Math.Min(height - 1, y + stride))));
+                    starSamples++;
+                    if (luma > 0.10 && luma - neighbours > 0.08) starCandidates++;
+                }
+                if (y > height * 0.58)
+                {
+                    lowerSum += luma;
+                    lowerN++;
+                }
+            }
+        }
+
+        double mean = samples > 0 ? sum / samples : 0.0;
+        double upper = upperN > 0 ? upperSum / upperN : 0.0;
+        double lower = lowerN > 0 ? lowerSum / lowerN : 0.0;
+        _log.WriteLine($"IMAGE slug={slug} width={width} height={height} samples={samples} " +
+            $"mean={mean:F5} p50={HistogramPercentile(histogram, samples, 0.50):F5} " +
+            $"p95={HistogramPercentile(histogram, samples, 0.95):F5} " +
+            $"clippedFrac={(samples > 0 ? (double)clipped / samples : 0.0):F5} " +
+            $"darkFrac={(samples > 0 ? (double)dark / samples : 0.0):F5} " +
+            $"upperMean={upper:F5} lowerMean={lower:F5} " +
+            $"horizonContrast={System.Math.Abs(upper - lower):F5} " +
+            $"starCandidateFrac={(starSamples > 0 ? (double)starCandidates / starSamples : 0.0):F6}");
+        _log.Flush();
+    }
+
+    private static double Luma(Color c) =>
+        0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+
+    private static double HistogramPercentile(int[] histogram, long samples, double fraction)
+    {
+        if (samples <= 0) return 0.0;
+        long target = (long)System.Math.Ceiling(samples * fraction);
+        long count = 0;
+        for (int i = 0; i < histogram.Length; i++)
+        {
+            count += histogram[i];
+            if (count >= target) return i / 255.0;
+        }
+        return 1.0;
     }
 
     private void LogTelemetry(string slug, string path)
@@ -737,6 +982,50 @@ verify_pngs() {
       echo "ERROR: touchdown was not supported by at least three settled physical contacts" >&2
       return 1
     fi
+  elif [[ "$MODE" == "atmosphere" ]]; then
+    local required=(
+      ground_day ground_sunrise ground_sunset ground_night
+      10km_day 30km_day 70km_day 120km_day 400km_day
+      10km_night 30km_night 70km_night 120km_night 400km_night
+      cockpit_120km_day cockpit_120km_night
+    )
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing atmosphere matrix PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+      if ! grep -q "^IMAGE slug=${slug} " "$LOG"; then
+        echo "ERROR: missing image metrics for atmosphere case: ${slug}" >&2
+        return 1
+      fi
+      if ! grep -q "^ATMOS_STATE slug=${slug} " "$LOG"; then
+        echo "ERROR: missing physical state evidence for atmosphere case: ${slug}" >&2
+        return 1
+      fi
+    done
+    if ! grep -q 'SUMMARY reason=ATMOSPHERE_OK' "$LOG"; then
+      echo "ERROR: atmosphere matrix did not finish cleanly" >&2
+      return 1
+    fi
+
+    # Reject only objectively unusable captures here.  Perceptual thresholds belong in
+    # review because a physically valid night frame can intentionally be very dark.
+    if ! awk '
+      /^IMAGE / {
+        mean = clip = -1
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, a, "="); mean = a[2] + 0 }
+          if ($i ~ /^clippedFrac=/) { split($i, a, "="); clip = a[2] + 0 }
+        }
+        if (mean < 0.0005 || mean > 0.9995 || clip > 0.95) {
+          print "ERROR: degenerate atmosphere capture: " $0 > "/dev/stderr"
+          bad = 1
+        }
+      }
+      END { exit bad }
+    ' "$LOG"; then
+      return 1
+    fi
   fi
 
   echo "visual_playtest: verified PNG(s) in $OUT_DIR (min ${min_bytes} bytes)"
@@ -766,6 +1055,8 @@ if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
+elif [[ "$MODE" == "atmosphere" ]]; then
+  echo "visual_playtest: atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
 else
   echo "visual_playtest: full run complete — review $LOG for GAP lines"
 fi

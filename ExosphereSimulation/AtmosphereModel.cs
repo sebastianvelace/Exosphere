@@ -287,6 +287,11 @@ public partial class AtmosphereModel
             MieScattering = new Math.Vector3d(3.996e-6, 3.996e-6, 3.996e-6),
             MieAbsorption = new Math.Vector3d(0.444e-6, 0.444e-6, 0.444e-6),
             OzoneAbsorption = new Math.Vector3d(0.650e-6, 1.881e-6, 0.085e-6),
+            // Atomic oxygen 557.7 nm dominates the visible night limb near 95–100 km;
+            // weak red/OH contributions keep the band from becoming synthetic neon green.
+            AirglowEmission = new Math.Vector3d(0.060e-8, 0.144e-8, 0.044e-8),
+            AirglowCenterAltitude = 97_000.0,
+            AirglowScaleHeight = 6_000.0,
             LowOrderDiffuseStrength = 0.25,
             CloudBaseAltitude = 1_200.0,
             CloudTopAltitude = 12_000.0,

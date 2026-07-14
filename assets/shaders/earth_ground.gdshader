@@ -25,6 +25,7 @@ uniform float horizon_dist = 4000.0;
 // no grey seam (EarthGroundController overrides it with the live sky horizon colour).
 uniform vec3  haze_color : source_color = vec3(0.40, 0.65, 1.0);
 uniform vec3  sun_dir = vec3(0.42, 0.78, 0.46);
+uniform vec3  vertical_optical_depth = vec3(0.0615, 0.1420, 0.2714);
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.14;
 uniform float coastal_grade : hint_range(0.0, 1.0) = 0.62;
 
@@ -88,9 +89,12 @@ void fragment() {
 	float det = fbm(v_patch * 0.0006) + 0.5 * fbm(v_patch * 0.0028);
 	surface *= 1.0 + detail_strength * det;
 
-	// Simple sun diffuse so relief/coast reads.
+	// Spectrally attenuated direct sunlight. The small diffuse floor represents skylight;
+	// unlike the former 0.55 term it does not leave the coast brightly lit at midnight.
 	float ndl = max(dot(N, L), 0.0);
-	vec3 lit = surface * (0.55 + 0.6 * ndl);
+	float air_mass = 1.0 / max(ndl + 0.025 * exp(-11.0 * ndl), 0.025);
+	vec3 direct_transmittance = exp(-vertical_optical_depth * min(air_mass, 40.0));
+	vec3 lit = surface * (0.018 + 1.05 * ndl * direct_transmittance);
 
 	// Atmospheric perspective: distant ground fades toward the SKY-horizon colour and then
 	// dissolves to transparent, so it blends seamlessly into the sky/backdrop with no grey

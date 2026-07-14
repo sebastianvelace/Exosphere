@@ -2,7 +2,9 @@
 // Exosphere — Photoreal Earth from NASA Blue Marble textures.
 // Equirectangular day (natural-colour land/ocean), night (Black Marble city lights)
 // and cloud textures, sampled from the sphere's local position. Day/night blend from
-// `sun_dir`, warm terminator band, and a blue atmospheric Fresnel rim. Unshaded — the
+// `sun_dir` and spectrally attenuated direct sunlight. The atmospheric limb is rendered
+// only by space_sky.gdshader, avoiding a second artistic Fresnel halo on the solid sphere.
+// Unshaded — the
 // shader does its own lighting (so Godot's DirectionalLight does not double-light it).
 // ─────────────────────────────────────────────────────────────────────────────
 shader_type spatial;
@@ -14,10 +16,10 @@ uniform sampler2D day_tex   : source_color, filter_linear_mipmap;
 uniform sampler2D night_tex : source_color, filter_linear_mipmap;
 uniform sampler2D cloud_tex : hint_default_white, filter_linear_mipmap;
 
-uniform vec3  atmosphere_color : source_color = vec3(0.36, 0.58, 1.0);
-uniform float atmosphere_strength : hint_range(0.0, 3.0) = 0.8;
+uniform vec3 vertical_optical_depth = vec3(0.0615, 0.1420, 0.2714);
 uniform float cloud_amount : hint_range(0.0, 1.0) = 0.85;
-uniform float cloud_speed  = 0.0015;
+// ≈15 m/s zonal wind at Earth's equator: v/(2πR) in texture revolutions/s.
+uniform float cloud_speed  = 0.000000375;
 uniform float night_lights : hint_range(0.0, 4.0) = 2.4;
 uniform float day_gain     : hint_range(0.5, 2.0) = 1.15;
 // Fades the whole distant-Earth backdrop in/out. Driven by FloatingOrigin from the CAMERA's
@@ -78,7 +80,6 @@ void fragment() {
 	vec3 p = normalize(v_local);
 	vec3 N = normalize(v_world_normal);
 	vec3 L = normalize(sun_dir);
-	vec3 Vv = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 
 	vec2 uv = equirect(p);
 
@@ -114,9 +115,15 @@ void fragment() {
 	float cloud_alpha = smoothstep(0.1, 0.6, cloud) * cloud_amount * day;
 	vec3 surface = mix(lit_day, cloud_col, cloud_alpha);
 
-	// Lambert-ish day lighting (no harsh hotspot, no wash-out).
+	// Direct solar beam attenuated through the same RGB vertical optical depth as the sky.
+	// Kasten-style curvature guard keeps air mass finite at the terminator without inventing
+	// an orange emissive strip. Twilight itself comes from the volumetric atmosphere.
 	float diff = clamp(ndl, 0.0, 1.0);
-	vec3 lit = surface * (0.03 + day_gain * pow(diff, 0.8));
+	float air_mass = 1.0 / max(diff + 0.025 * exp(-11.0 * diff), 0.025);
+	vec3 direct_transmittance = exp(-vertical_optical_depth * min(air_mass, 40.0));
+	float diffuse_fill = mix(0.012, 0.045, smoothstep(-0.18, 0.30, ndl));
+	vec3 lit = surface * (vec3(diffuse_fill)
+		+ day_gain * pow(diff, 0.8) * direct_transmittance);
 
 	// City lights on the night side (emissive). Threshold on luminance so ONLY genuine
 	// bright lights pass — the Black Marble texture has a dark, blocky data floor in
@@ -126,25 +133,6 @@ void fragment() {
 	float lum    = dot(nightCol, vec3(0.299, 0.587, 0.114));
 	vec3  cities = nightCol * smoothstep(0.07, 0.18, lum) * night * night_lights;
 	lit += cities;
-
-	// Warm sunrise/sunset band at the terminator.
-	float term = exp(-(ndl * ndl) / (0.14 * 0.14));
-	lit += vec3(1.0, 0.45, 0.20) * term * smoothstep(-0.3, 0.2, ndl) * 0.45;
-
-	// ── Blue atmospheric limb halo (Rayleigh airglow) ───────────────────────
-	// Two-lobe Fresnel: a wide soft scattering glow that fills toward the limb,
-	// plus a tight bright rim right at the edge — together they read as a real
-	// atmosphere shell rather than a thin outline. Brightest on the day side,
-	// carrying a faint twilight band a little past the terminator.
-	float ndv  = clamp(dot(N, Vv), 0.0, 1.0);
-	float fresWide = pow(1.0 - ndv, 2.2);   // broad scattering body of the halo
-	float fresEdge = pow(1.0 - ndv, 6.0);   // crisp bright limb line
-	float rim_day  = smoothstep(-0.5, 0.35, ndl);          // fades through terminator
-	float twilight = smoothstep(-0.45, -0.05, ndl) * (1.0 - smoothstep(0.0, 0.3, ndl));
-	vec3 halo = atmosphere_color * atmosphere_strength
-	          * ((fresWide * 0.55 + fresEdge * 1.1) * (0.10 + 0.95 * rim_day)
-	             + fresWide * 0.25 * twilight);
-	lit += halo;
 
 	ALBEDO = lit;
 	EMISSION = cities * 0.6;
