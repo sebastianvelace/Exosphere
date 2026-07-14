@@ -9,6 +9,7 @@ public enum VesselDestructionCause
     None,
     GroundImpact,
     ThermalBreakup,
+    StructuralBreakup,
 }
 
 public class Vessel
@@ -497,22 +498,58 @@ public class Vessel
     // Retorna el vessel separado (debris) si hubo staging, null si no
     public Vessel? Stage()
     {
-        HotStageOverlapRemaining = 0.0;
-        Parts.HotStageOverlapActive = false;
-        HotStageOverlapCompletedPending = false;
+        ClearHotStageOverlapState();
 
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
 
+        return CreateDebrisVessel(detached, Name + " (debris)");
+    }
+
+    /// <summary>
+    /// Structural split at an overloaded joint: detaches the child subtree into a debris
+    /// vessel sharing this vessel's kinematics (plus a small relative push). Clears any
+    /// hot-stage overlap window, same as <see cref="Stage"/>.
+    /// </summary>
+    public Vessel? BreakAtJoint(Joint joint)
+    {
+        ClearHotStageOverlapState();
+
+        var detached = Parts.SplitAtJoint(joint);
+        if (detached == null) return null;
+
+        var debris = CreateDebrisVessel(detached, Name + " (structural debris)");
+
+        // Gentle separation along vessel +Y so fragments do not occupy the same origin.
+        var axis = Orientation.Rotate(Vector3d.Up).Normalized;
+        double mainMass = System.Math.Max(TotalMass, 1.0);
+        double debrisMass = System.Math.Max(debris.TotalMass, 1.0);
+        double totalMass = mainMass + debrisMass;
+        const double relativeOpenMs = 0.5;
+        Velocity += axis * (relativeOpenMs * debrisMass / totalMass);
+        debris.Velocity -= axis * (relativeOpenMs * mainMass / totalMass);
+
+        return debris;
+    }
+
+    private void ClearHotStageOverlapState()
+    {
+        HotStageOverlapRemaining = 0.0;
+        Parts.HotStageOverlapActive = false;
+        HotStageOverlapCompletedPending = false;
+    }
+
+    private Vessel CreateDebrisVessel(PartGraph detached, string name)
+    {
         var debris = new Vessel
         {
-            Name        = Name + " (debris)",
-            Position    = Position,
-            Velocity    = Velocity,
-            Orientation = Orientation,
+            Name            = name,
+            Position        = Position,
+            Velocity        = Velocity,
+            Orientation     = Orientation,
             AngularVelocity = AngularVelocity,
             ReferenceBodyId = ReferenceBodyId,
-            SASEnabled = SASEnabled,
+            SASEnabled      = SASEnabled,
         };
         if (detached.Root != null) debris.Parts.SetRoot(detached.Root);
         foreach (var p in detached.Parts) debris.Parts.AddPart(p);

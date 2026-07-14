@@ -429,13 +429,38 @@ public class PartGraph
             ? separationJoint.Child
             : separationJoint.Parent;
 
-        var detachedParts  = CollectSubtree(separationRoot);
-        var detachedGraph  = new PartGraph();
+        // FireNextStage may reverse-orient the decoupler joint; the structural path always
+        // detaches Child. Reuse the same move once the detached root is known.
+        return DetachSubtree(separationRoot, separationJoint);
+    }
+
+    /// <summary>
+    /// Structural split: remove <paramref name="joint"/> and move its child subtree into a
+    /// new graph. Returns null if the joint is not in this graph, if detaching would remove
+    /// the root, or if the child side cannot form a valid subtree.
+    /// </summary>
+    public PartGraph? SplitAtJoint(Joint joint)
+    {
+        if (joint == null || !_joints.Contains(joint) || _root == null)
+            return null;
+        if (joint.Child == _root)
+            return null;
+
+        HotStageOverlapActive = false;
+        return DetachSubtree(joint.Child, joint);
+    }
+
+    private PartGraph? DetachSubtree(Part separationRoot, Joint separationJoint)
+    {
+        var detachedParts = CollectSubtree(separationRoot);
+        if (detachedParts.Count == 0 || (_root != null && detachedParts.Contains(_root)))
+            return null;
+
+        var detachedGraph = new PartGraph();
         detachedGraph.SetRoot(separationRoot);
         foreach (var p in detachedParts)
             detachedGraph.AddPart(p);
 
-        // Mover los joints del subárbol al nuevo grafo
         foreach (var j in _joints.Where(j => detachedParts.Contains(j.Parent)).ToList())
         {
             detachedGraph.AddJoint(j);

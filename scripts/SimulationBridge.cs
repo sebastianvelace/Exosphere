@@ -214,6 +214,7 @@ public partial class SimulationBridge : Node
         }
 
         Universe.Tick(delta);
+        SyncStructuralDebrisRenderers();
 
         // Hot-stage overlap finished in sim time → mechanical separation this frame.
         if (av != null && av.HotStageOverlapCompletedPending)
@@ -621,21 +622,51 @@ public partial class SimulationBridge : Node
 
         // Rebuild active vessel renderer: SH is now gone → shows standalone Starship
         _vesselRenderer?.BuildFromVessel(ActiveVessel);
-
-        // Spawn a renderer for the SH debris
-        var fo          = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
-        var vesselsNode = GetTree().Root.FindChild("Vessels",        true, false) as Node3D;
-        if (vesselsNode != null)
-        {
-            var debrisRenderer = new VesselRenderer();
-            debrisRenderer.Name = "SHDebris_" + debris.Id[..8];
-            vesselsNode.AddChild(debrisRenderer);
-            debrisRenderer.BuildFromVessel(debris);
-            fo?.RegisterVesselNode(debris.Id, debrisRenderer);
-        }
+        SpawnDebrisRenderer(debris, "SHDebris_");
 
         EmitSignal(SignalName.VesselStaged, debris.Id);
         MissionManager.Instance?.NotifyStaged();
+    }
+
+    /// <summary>
+    /// After each sim tick, spawn renderers for vessels created by structural breakup
+    /// (overload joints). Staging debris is registered in <see cref="TriggerStaging"/>
+    /// and is not listed in the structural pending drain.
+    /// </summary>
+    private void SyncStructuralDebrisRenderers()
+    {
+        var pending = Universe.DrainPendingStructuralDebris();
+        if (pending.Count == 0) return;
+
+        foreach (var debris in pending)
+            SpawnDebrisRenderer(debris, "StructuralDebris_");
+
+        // Parent stack lost parts — rebuild so meshes match the remaining graph.
+        if (ActiveVessel != null)
+            _vesselRenderer?.BuildFromVessel(ActiveVessel);
+
+        foreach (var debris in pending)
+            EmitSignal(SignalName.VesselStaged, debris.Id);
+
+        if (ActiveVessel != null
+            && ActiveVessel.IsDestroyed
+            && ActiveVessel.DestructionCause == VesselDestructionCause.StructuralBreakup)
+        {
+            EmitSignal(SignalName.VesselDestroyed, ActiveVessel.Id);
+        }
+    }
+
+    private void SpawnDebrisRenderer(Vessel debris, string namePrefix)
+    {
+        var fo          = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        var vesselsNode = GetTree().Root.FindChild("Vessels",        true, false) as Node3D;
+        if (vesselsNode == null) return;
+
+        var debrisRenderer = new VesselRenderer();
+        debrisRenderer.Name = namePrefix + debris.Id[..8];
+        vesselsNode.AddChild(debrisRenderer);
+        debrisRenderer.BuildFromVessel(debris);
+        fo?.RegisterVesselNode(debris.Id, debrisRenderer);
     }
 
     public void SetTimeScale(double scale) => Universe.TimeScale = scale;
