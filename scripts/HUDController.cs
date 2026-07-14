@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using System.Linq;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 
 // ── Flight HUD (SpaceX-webcast aesthetic) ────────────────────────────────────
@@ -73,18 +74,14 @@ public partial class HUDController : Control
     private double   _gSmoothed;
     private MissionPhase _lastPhase = MissionPhase.PRE_LAUNCH;
     private bool     _maxqSeen;
+    private bool     _pastEntryInterface;   // latch: RETRO_BURN after ENTRY → landing slot
     private Vector3d _launchSurfacePoint;   // body-relative; captured at liftoff
     private bool     _launchCaptured;
     private readonly System.Collections.Generic.List<string> _events = new();
 
+    /// <summary>Dot track mirrors <see cref="MissionPhaseTrack.Sequence"/> (includes COAST + RETRO_BURN).</summary>
     private static readonly MissionPhase[] PhaseSequence =
-    {
-        MissionPhase.COUNTDOWN, MissionPhase.LIFTOFF, MissionPhase.ASCENT_SH,
-        MissionPhase.MAX_Q, MissionPhase.MECO, MissionPhase.SEPARATION,
-        MissionPhase.ASCENT_SHIP, MissionPhase.ORBIT, MissionPhase.COAST,
-        MissionPhase.ENTRY, MissionPhase.PEAK_HEATING, MissionPhase.AERO_DESCENT,
-        MissionPhase.FINAL_DESCENT, MissionPhase.LANDED, MissionPhase.CRASHED,
-    };
+        MissionPhaseTrack.Sequence.Select(System.Enum.Parse<MissionPhase>).ToArray();
 
     public override void _Ready()
     {
@@ -593,13 +590,16 @@ public partial class HUDController : Control
         _dvValue.Text = FormatDv(vessel, refBody);
 
         bool suborbital = false;
+        double peAlt = double.NaN;
+        double timeToPe = double.NaN;
+        double atmoMax = refBody.Atmosphere?.MaxAltitude ?? double.NaN;
         try
         {
             var relPos = vessel.Position - refBody.Position;
             var relVel = vessel.Velocity - refBody.Velocity;
             var el = Exosphere.Simulation.OrbitalElements.FromStateVector(
                 relPos, relVel, refBody.GM, refBody.Id, universe.CurrentTime);
-            double peAlt = el.Periapsis - refBody.Radius;
+            peAlt = el.Periapsis - refBody.Radius;
             _apValue.Text = FormatDistance(el.Apoapsis - refBody.Radius);
 
             // Periapsis bajo la superficie ⇒ la órbita cruza el cuerpo: trayectoria
@@ -617,6 +617,15 @@ public partial class HUDController : Control
             {
                 _peValue.Text = FormatDistance(peAlt);
                 _peValue.AddThemeColorOverride("font_color", ValueBright);
+            }
+
+            if (!el.IsRadial && !el.IsHyperbolic)
+            {
+                timeToPe = MissionPhaseTrack.ApproximateTimeToPeriapsisSec(
+                    el.SemiMajorAxis,
+                    el.Eccentricity,
+                    el.GetMeanAnomaly(universe.CurrentTime, refBody.GM),
+                    refBody.GM);
             }
         }
         catch
@@ -663,14 +672,73 @@ public partial class HUDController : Control
         // ── Mission phase banner + progress + event log ────────────────────
         if (mission != null)
         {
+            UpdateEntryInterfaceLatch(mission.Phase);
             _phaseLabel.Text = FormatPhase(mission.Phase);
             _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(mission.Phase));
             UpdatePhaseTrack(mission.Phase);
             UpdateEventLog(mission.Phase, universe.CurrentTime);
             UpdateCountdown(mission);
             UpdateLaunchPathCallout(mission, bridge, vessel, refBody);
+            UpdateDeorbitEdlCue(mission, peAlt, atmoMax, timeToPe);
             UpdatePadHelp(mission);
         }
+    }
+
+    private void UpdateEntryInterfaceLatch(MissionPhase phase)
+    {
+        if (phase is MissionPhase.PRE_LAUNCH or MissionPhase.ORBIT
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION)
+        {
+            _pastEntryInterface = false;
+            return;
+        }
+
+        if (phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
+            or MissionPhase.AERO_DESCENT or MissionPhase.FINAL_DESCENT
+            or MissionPhase.LANDED)
+        {
+            _pastEntryInterface = true;
+        }
+    }
+
+    /// <summary>
+    /// C3 actionable cue under the phase title for COAST / RETRO_BURN / ORBIT-with-Pe-in-atmo.
+    /// Skipped while pad callouts own <see cref="_launchPathLabel"/>. THERMAL stays on EDL overlay.
+    /// </summary>
+    private void UpdateDeorbitEdlCue(
+        MissionManager mission,
+        double peAltitudeM,
+        double atmosphereMaxAltitudeM,
+        double timeToPeriapsisSec)
+    {
+        bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
+        if (onPad)
+            return; // UpdateLaunchPathCallout owns the secondary line on the pad.
+
+        bool peInAtmo = MissionPhaseTrack.PeriapsisInAtmosphere(
+            peAltitudeM, atmosphereMaxAltitudeM);
+        string? cue = MissionPhaseTrack.FormatActionableCue(
+            mission.Phase.ToString(),
+            peInAtmo,
+            timeToPeriapsisSec,
+            afterEntryInterface: _pastEntryInterface);
+
+        if (cue == null)
+        {
+            // Clear only when we previously wrote a deorbit/EDL cue (don't blank pad leftovers
+            // after liftoff — those are already cleared by UpdateLaunchPathCallout).
+            if (_launchPathLabel.Text.Contains("ENTRY INTERFACE")
+                || _launchPathLabel.Text.Contains("DEORBIT"))
+                _launchPathLabel.Text = "";
+            return;
+        }
+
+        _launchPathLabel.Text = cue;
+        _launchPathLabel.AddThemeColorOverride("font_color",
+            mission.Phase is MissionPhase.RETRO_BURN or MissionPhase.ENTRY
+                ? WarnCol
+                : Accent);
     }
 
     private void UpdatePadHelp(MissionManager mission)
@@ -814,11 +882,9 @@ public partial class HUDController : Control
 
     private void UpdatePhaseTrack(MissionPhase current)
     {
-        int currentIdx = System.Array.IndexOf(PhaseSequence, current);
-        if (currentIdx < 0 && current == MissionPhase.IGNITION) currentIdx = 0;
-        if (currentIdx < 0 && current == MissionPhase.RETRO_BURN)
-            currentIdx = System.Array.IndexOf(PhaseSequence, MissionPhase.FINAL_DESCENT);
-        if (currentIdx < 0 && current == MissionPhase.PRE_LAUNCH) currentIdx = -1;
+        int currentIdx = MissionPhaseTrack.IndexOf(
+            current.ToString(),
+            afterEntryInterface: _pastEntryInterface && current == MissionPhase.RETRO_BURN);
         for (int i = 0; i < _phaseDots.Count; i++)
         {
             if (currentIdx < 0)        _phaseDots[i].Color = GaugeTrack;

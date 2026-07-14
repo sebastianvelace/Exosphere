@@ -190,6 +190,16 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Acceptance** | Main menu Continue when slots exist. In-flight F5/F9. Reload restores vessel kinematics, fuel, time, phase; ActiveVessel Id stable. |
 | **Realism feel** | Real missions span hours — the player can pause life and resume the same orbit tomorrow. |
 
+### G-P1b. EDL mission-phase UX cues — DONE (C3)
+
+| | |
+| --- | --- |
+| **Evidence** | `MissionPhaseTrack` + HUD dots ORBIT→COAST→RETRO_BURN→ENTRY…; actionable cue “ENTRY INTERFACE in ~Xm” / “DEORBIT BURN”; event log + light SFX for ENTRY/RETRO. `MissionPhaseTrackTests`. |
+| **Owner** | `ExosphereSimulation/Flight/MissionPhaseTrack.cs`, `scripts/HUDController.cs`, `MissionManager.cs`, `AudioManager.cs` |
+| **Acceptance** | Phase track lights deorbit/EDL slots; COAST driven by AutopilotController (unchanged); THERMAL panel untouched. |
+| **Realism feel** | After SECO the player still sees a mission arc through entry — not a silent coast into fire. |
+| **Status** | **DONE** (oleada C3). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap. **Remaining:** control-loss consequences, visual oleada A, R5. |
+
 ### G-P2. VAB pre-launch validation pass
 
 | | |

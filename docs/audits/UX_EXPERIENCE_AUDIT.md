@@ -15,7 +15,7 @@
 2. **UX-010** — EDL is fully autopiloted; player is spectator during belly-flop / flip-and-burn  
 3. **UX-007** — ~~No orbit → deorbit → entry workflow~~ **DONE (C2):** map `[B]` deorbit → ENTRY 
 4. **UX-004** — Main menu mission card is fiction; not wired to VAB craft, site, or destination  
-5. **UX-009** — Phase banner/track stops at ORBIT; EDL arc invisible in primary mission UI  
+5. **UX-009** — ~~Phase banner/track stops at ORBIT~~ **DONE (C3):** COAST/RETRO/ENTRY track + cues 
 
 ---
 
@@ -125,14 +125,14 @@
 
 ## 3. Controls / Input
 
-### UX-009 — Phase progress track omits EDL and COAST
+### UX-009 — Phase progress track omits EDL and COAST — DONE (C3)
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `HUDController.PhaseSequence` ends at `ORBIT`. `MissionPhase` enum includes ENTRY…LANDED/CRASHED (`MissionManager.cs`) but dots don't advance through reentry. |
-| **User pain / realism break** | After SECO, mission UI feels "done" while the hardest phase (EDL) uses a separate overlay (`EDLController`). |
-| **Proposed solution** | Extend phase track: ORBIT → COAST → ENTRY → PEAK HEATING → … → LANDED. Grey upcoming dots pre-landing. |
-| **Acceptance** | Belly-flop harness: phase dots show ≥3 EDL milestones lit sequentially. |
+| **Evidence** | `HUDController` dots driven by `MissionPhaseTrack.Sequence`: ORBIT → COAST → RETRO_BURN → ENTRY → PEAK HEATING → … → LANDED. Landing RETRO remaps to FINAL_DESCENT slot after ENTRY latch. |
+| **User pain / realism break** | ~~After SECO, mission UI feels "done" while the hardest phase (EDL) uses a separate overlay (`EDLController`).~~ |
+| **Proposed solution** | ~~Extend phase track…~~ |
+| **Acceptance** | ✅ Phase dots light COAST / RETRO / ENTRY+; event log lines for COAST, RETRO_BURN, ENTRY; secondary cue "ENTRY INTERFACE in ~Xm" / "DEORBIT BURN". THERMAL panel unchanged. `MissionPhaseTrackTests`. |
 | **Impact** | High |
 | **Effort** | S |
 | **Dependencies** | UX-007 |
@@ -141,7 +141,7 @@
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `EDLController.AdvancePhase`: sets `vessel.Orientation`, zeroes rates, closed-loop `Throttle` for RETRO/FINAL. No `[G]`-style EDL assist or manual override flag. |
+| **Evidence** | `EDLController.AdvancePhase`: sets `vessel.Orientation`, zeroes rates, closed-loop `Throttle` for RETRO/FINAL. No `[G]`-style EDL assist or manual override flag. C3 adds phase-track/cues only — does not add assist mode. |
 | **User pain / realism break** | Player watches belly-flop/flip-and-burn as cinema, not flight. Unlike ascent ([G]/[H]/manual), EDL doesn't match "pilot the ship" fantasy. |
 | **Proposed solution** | EDL assist mode: autopilot attitude only, player throttle; or manual flip timing with tolerance bands. Keep full-auto as default for [G]-parity. |
 | **Acceptance** | Assist mode: player can fail touchdown (>3 m/s) if throttle mismanaged; auto still achieves ≤2 m/s in harness milestone 8. |
@@ -367,7 +367,7 @@ Cockpit-vs-webcast overlay tension is folded into **UX-014** (unified callout + 
 ## Suggested implementation order (UX-only)
 
 1. UX-001, UX-002, UX-004 (flow honesty)  
-2. UX-007, UX-009, UX-010 + PLAN_PLAYTEST harness milestone 7–8  
+2. ~~UX-007, UX-009~~ DONE (C2/C3); UX-010 + PLAN_PLAYTEST harness milestone 7–8  
 3. UX-013, UX-022 (callouts + outcomes)  
 4. UX-015, UX-016 (VAB polish)  
 5. UX-014, UX-020, UX-021 (cockpit/callout/warp/orbit QoL)

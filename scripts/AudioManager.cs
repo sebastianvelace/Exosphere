@@ -485,6 +485,12 @@ public partial class AudioManager : Node
     /// <summary>Plays a stage-separation clunk + burst (short noise envelope).</summary>
     public void PlayStaging() => Trigger(0f, 0.5f, 0.7f);
 
+    /// <summary>Short mid-tone callout when a deorbit / landing retro burn phase starts (C3).</summary>
+    public void PlayRetroBurn() => Trigger(220f, 0.35f, 0.50f);
+
+    /// <summary>Lower sustained tone for atmospheric entry interface (C3).</summary>
+    public void PlayEntryInterface() => Trigger(165f, 0.70f, 0.55f);
+
     /// <summary>Plays the thud of the legs taking the vehicle's weight.</summary>
     public void PlayTouchdown() => Trigger(55f, 0.9f, 0.65f);
 

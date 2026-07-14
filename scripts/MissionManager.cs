@@ -236,11 +236,14 @@ public partial class MissionManager : Node
         Phase = newPhase;
 
         // Audio cues on phase entry (null-safe; AudioManager may not exist yet).
+        // COAST is set by AutopilotController on deorbit arm / post-burn — do not override here.
         switch (newPhase)
         {
-            case MissionPhase.LIFTOFF:    AudioManager.Instance?.PlayLiftoff(); break;
-            case MissionPhase.SEPARATION: AudioManager.Instance?.PlayStaging(); break;
-            case MissionPhase.LANDED:     AudioManager.Instance?.PlayTouchdown(); break;
+            case MissionPhase.LIFTOFF:     AudioManager.Instance?.PlayLiftoff(); break;
+            case MissionPhase.SEPARATION:  AudioManager.Instance?.PlayStaging(); break;
+            case MissionPhase.RETRO_BURN:  AudioManager.Instance?.PlayRetroBurn(); break;
+            case MissionPhase.ENTRY:       AudioManager.Instance?.PlayEntryInterface(); break;
+            case MissionPhase.LANDED:      AudioManager.Instance?.PlayTouchdown(); break;
         }
 
         EmitSignal(SignalName.PhaseChanged, newPhase.ToString());
