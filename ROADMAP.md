@@ -60,8 +60,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
    - Grid fins close-up V1 implementado con placa trapezoidal, hinge/lattice y diagonales.
    - Starship close-up cues V1 implementado con access panels, vent/drain ports,
      markings discretos, flap leading edges y tile seams.
-   - Siguiente: comparacion fina con referencias reales: proporciones de flaps/nariz,
-     densidad de tiles, ubicacion de markings y variacion de acero.
+   - Proporciones finas flaps/nariz V1.1 ✅ (`feat/visual-realism-a`): forward cortos,
+     aft elevons largos, tip redondo, tile seams densos. Pendiente: compare IFT lado-a-lado.
    - Startup/ramp y hot-staging VFX implementados y verificados con trigger local multiframe.
    - Pluma de vacio ahora atenúa smoke/soot con expansion alta.
    - Siguiente: captura de hot-staging en ascenso real, comparacion contra referencia y validacion orbital de pluma vacio limpia.
@@ -69,7 +69,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
    - Primera pasada de glow localizado en nose, belly y flap leading edges ya implementada.
-   - Siguiente: capturas nominal/fallo reales, ajuste de alpha/timing y charring por zonas.
+   - Alpha/timing por fase EDL ✅ (`ReentryPlasmaVisualIntensity`: ENTRY soft → PEAK → AERO fade).
+   - Pendiente: compare IFT captura-a-captura de shock localizado.
 
 3. **Entorno y camaras**
    - Pad costero ya tiene primera pasada visual.

@@ -114,6 +114,9 @@ Mejoras:
 - [x] Close-up cues Starship V1: access panels discretos, vent/drain ports,
   serial-style bars no intrusivos, leading edges y tile seams en flaps. Validado
   con captura Xvfb `/tmp/exosphere_ship_closeup.png`.
+- [x] Proporciones finas flaps/nariz V1.1: forward flaps mas cortos, aft elevons
+  mas largos/profundos, tip de nariz mas redondo, seams de tiles densos; plasma
+  edge glows realineados al layout.
 
 Aceptacion:
 - En pad lateral se identifica inmediatamente una Starship/Super Heavy.
@@ -158,8 +161,8 @@ Mejoras:
   HUD legible. Ver `.atl/agent-hotstaging-log.md`. Pendiente: comparacion lado-a-lado con
   frame IFT T+2:39 para afinar intensidad del flash.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
-- [ ] Validar en capturas si el deluge cloud no tapa en exceso la silueta durante
-  liftoff lateral y no queda flotando al alejarse el pad.
+- [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
+  readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
   opcional si no distrae.
 
@@ -192,7 +195,7 @@ Hecho:
 
 Pendiente:
 - [ ] Afinar shock/plasma localizado con capturas reales de EDL: tamano, alpha,
-  color y timing en nose, leading edges y flap edges.
+  color y timing en nose, leading edges y flap edges (comparacion IFT lado-a-lado).
 - [x] Charring por zonas: nose/flaps/belly no deben degradarse todos al mismo ritmo.
   (`VesselRenderer` `TileCharZone` + part/attitude scaling; verificado visualmente.)
 - [x] Capturas comparativas belly-flop nominal vs mala orientacion.
@@ -200,7 +203,9 @@ Pendiente:
   `/tmp/exosphere_reentry_bad_attitude_1783052211.png`)
 - [x] Verificar que plasma/wake no ocultan HUD, cockpit ni map view.
   (nominal capture: HUD/EDL overlay legible con plasma activo)
-- [ ] Afinar color/alpha por fase: inicio de plasma, peak heating, salida de heating.
+- [x] Afinar color/alpha por fase: inicio de plasma, peak heating, salida de heating.
+  (`VehicleVisualPhysics.ReentryPlasmaVisualIntensity` + `ReentryPlasmaController`;
+  ENTRY soft, PEAK full, AERO fade — unidad testeada).
 
 Aceptacion:
 - Belly-flop nominal se ve protegido y controlado.

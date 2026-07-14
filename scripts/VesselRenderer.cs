@@ -441,19 +441,21 @@ public partial class VesselRenderer : Node3D
         AddNoseTileShell(o + ShipNoseBase, ShipNoseH, OgiveR);
 
         AddMesh("NoseTip",
-            new SphereMesh { Radius = 0.055f, Height = 0.11f,
+            new SphereMesh { Radius = 0.085f, Height = 0.17f,
                 RadialSegments = 24, Rings = 8 }, noseSteel,
-            new Vector3(0, o + noseBase + noseLen - 0.035f, 0));
+            new Vector3(0, o + noseBase + noseLen - 0.055f, 0));
 
         AddMesh("Skirt",
             new CylinderMesh { TopRadius = BodyR, BottomRadius = 1.08f * RScale, Height = ShipSkirtH, RadialSegments = 48 },
             darkSteel, new Vector3(0, skirtMid, 0));
         AddWeldRing("SkirtLip", 1.155f * RScale, skirtTop);
 
-        AddFlap("FwdFlapL", fwdFlapY, 3.0f, 2.0f, -0.62f, fwdFlapTiles);
-        AddFlap("FwdFlapR", fwdFlapY, 3.0f, 2.0f,  0.62f, fwdFlapTiles);
-        AddFlap("AftFlapL", aftFlapY, 5.6f, 3.4f, -0.55f, aftFlapTiles);
-        AddFlap("AftFlapR", aftFlapY, 5.6f, 3.4f,  0.55f, aftFlapTiles);
+        // Flight 7-ish proportions: forward canards shorter/narrower; aft elevons longer
+        // with deeper chord, seated closer to the belly so the silhouette reads Starship.
+        AddFlap("FwdFlapL", fwdFlapY + 0.15f, 2.55f, 1.72f, -0.58f, fwdFlapTiles);
+        AddFlap("FwdFlapR", fwdFlapY + 0.15f, 2.55f, 1.72f,  0.58f, fwdFlapTiles);
+        AddFlap("AftFlapL", aftFlapY - 0.20f, 6.35f, 3.95f, -0.48f, aftFlapTiles);
+        AddFlap("AftFlapR", aftFlapY - 0.20f, 6.35f, 3.95f,  0.48f, aftFlapTiles);
         var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
         AddMesh("ShipBaySoot", new CylinderMesh
             { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
@@ -1147,13 +1149,14 @@ public partial class VesselRenderer : Node3D
         leading.SetSurfaceOverrideMaterial(0, edgeMat);
         blade.AddChild(leading);
 
-        for (int s = -2; s <= 2; s++)
+        // Denser tile seams (∼6 rows) so flaps read as tiled TPS at mid distance.
+        for (int s = -3; s <= 3; s++)
         {
             var seam = new MeshInstance3D
             {
                 Name = $"{name}TileSeam{s}",
-                Mesh = new BoxMesh { Size = new Vector3(chord * 0.70f, 0.030f, 0.060f) },
-                Position = new Vector3(0f, s * length * 0.16f, -0.105f),
+                Mesh = new BoxMesh { Size = new Vector3(chord * 0.72f, 0.028f, 0.055f) },
+                Position = new Vector3(0f, s * length * 0.125f, -0.105f),
             };
             seam.SetSurfaceOverrideMaterial(0, edgeMat);
             blade.AddChild(seam);

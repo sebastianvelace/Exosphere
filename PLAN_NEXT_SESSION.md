@@ -198,7 +198,7 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Owner** | `ExosphereSimulation/Flight/MissionPhaseTrack.cs`, `scripts/HUDController.cs`, `MissionManager.cs`, `AudioManager.cs` |
 | **Acceptance** | Phase track lights deorbit/EDL slots; COAST driven by AutopilotController (unchanged); THERMAL panel untouched. |
 | **Realism feel** | After SECO the player still sees a mission arc through entry — not a silent coast into fire. |
-| **Status** | **DONE** (oleada C3 + control-loss). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. **Remaining:** visual oleada A, R5. |
+| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. **Remaining:** IFT reference compare, R5. |
 
 ### G-P2. VAB pre-launch validation pass
 
