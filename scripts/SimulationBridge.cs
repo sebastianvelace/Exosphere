@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
@@ -213,6 +214,14 @@ public partial class SimulationBridge : Node
         }
 
         Universe.Tick(delta);
+
+        // Hot-stage overlap finished in sim time → mechanical separation this frame.
+        if (av != null && av.HotStageOverlapCompletedPending)
+        {
+            av.HotStageOverlapCompletedPending = false;
+            TriggerStaging();
+            av = ActiveVessel;
+        }
 
         // ── Ignition ramp: sube throttle y suelta hold-down cuando TWR > 1.02 ──────
         if (_ignitionActive && av != null)
@@ -572,9 +581,25 @@ public partial class SimulationBridge : Node
         v.Throttle = System.Math.Max(v.Throttle - 0.5 * dt, 0.0);
     }
 
+    /// <summary>
+    /// Starts the Flight 7 dual-thrust hot-stage window. Ship engines join the burning set
+    /// while Super Heavy remains attached; mechanical stage fires when the window expires.
+    /// </summary>
+    public void BeginHotStageOverlap(double durationSeconds = -1.0)
+    {
+        if (ActiveVessel == null) return;
+        if (ActiveVessel.IsHotStageOverlapping) return;
+        double duration = durationSeconds > 0.0
+            ? durationSeconds
+            : AscentStagingPolicy.HotStageOverlapSeconds;
+        ActiveVessel.BeginHotStageOverlap(duration);
+    }
+
     public void TriggerStaging()
     {
         if (ActiveVessel == null) return;
+        // Instant stage (manual / post-overlap) cancels any remaining overlap cleanly.
+        ActiveVessel.HotStageOverlapCompletedPending = false;
         var debris = ActiveVessel.Stage();
         if (debris == null) return;
 

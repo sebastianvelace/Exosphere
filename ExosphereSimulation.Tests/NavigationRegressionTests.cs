@@ -298,14 +298,16 @@ public sealed class NavigationRegressionTests
         Assert.True(relEnd.Magnitude > rDepart, "Vessel should climb toward the target orbit.");
     }
 
-    // ── No-regression: a normal LEO orbit keeps its Earth reference and shape ──
+    // ── No-regression: a high circular Earth orbit keeps its reference and shape ──
     [Fact]
     public void StableLeoDoesNotSpuriouslyChangeReferenceBody()
     {
         var universe = NewSolarSystem();
         var earth = universe.GetBody("earth")!;
 
-        double r = earth.Radius + 400_000.0;
+        // Above ThermosphereTopAltitude so residual drag (B3) does not force RK4 — this
+        // asserts rails SOI stability, not LEO lifetime.
+        double r = earth.Radius + 1_200_000.0;
         double vCircular = System.Math.Sqrt(earth.GM / r);
         var vessel = new Vessel
         {
@@ -322,15 +324,14 @@ public sealed class NavigationRegressionTests
         // The vessel must NOT spuriously re-reference to another body or be destroyed:
         // it is deep inside Earth's SOI and never approaches a boundary.
         Assert.Equal("earth", vessel.ReferenceBodyId);
+        Assert.True(vessel.IsOnRails);
         Assert.Equal("earth", vessel.OrbitalState!.ReferenceBodyId);
         Assert.False(vessel.IsDestroyed);
 
-        // The orbit stays bounded near LEO. A small (≤ ~200 km) periodic radius variation
-        // is expected and physical: the conic is referenced to Earth, which is itself
-        // accelerating around the Sun (a non-inertial frame), so the Sun's tidal field
-        // forces a tiny oscillation. The point is the orbit does NOT diverge or decay.
+        // The orbit stays bounded. A small periodic radius variation is expected: the
+        // conic is referenced to Earth, which accelerates around the Sun.
         double rEnd = (vessel.Position - earth.Position).Magnitude;
-        Assert.True(System.Math.Abs(rEnd - r) < 250_000.0, $"LEO radius diverged to {rEnd:N1} m (start {r:N1}).");
+        Assert.True(System.Math.Abs(rEnd - r) < 250_000.0, $"orbit radius diverged to {rEnd:N1} m (start {r:N1}).");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

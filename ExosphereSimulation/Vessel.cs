@@ -34,6 +34,19 @@ public class Vessel
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
+    // ── Hot-stage overlap (Ship lit while booster still attached) ─────────
+    /// <summary>Sim seconds remaining in the dual-thrust window. Zero when inactive.</summary>
+    public double HotStageOverlapRemaining { get; private set; }
+
+    /// <summary>True while both stage clusters may produce thrust on one attached stack.</summary>
+    public bool IsHotStageOverlapping => HotStageOverlapRemaining > 0.0 || Parts.HotStageOverlapActive;
+
+    /// <summary>
+    /// Set by <see cref="Tick"/> when the overlap timer expires; the game layer should then
+    /// call mechanical stage and clear the flag.
+    /// </summary>
+    public bool HotStageOverlapCompletedPending { get; set; }
+
     // ── Physical landing contact ─────────────────────────────────────────
     private ContactPointDefinition[] _landingContactPoints = [];
     private Vector3d _landingCenterOfMassFromDatumLocal = Vector3d.Zero;
@@ -59,6 +72,33 @@ public class Vessel
     public Vector3d CrashSimPosition      { get; set; } = Vector3d.Zero; // sim position of impact
 
     public void ReleaseGroundHold() => IsGroundHeld = false;
+
+    /// <summary>
+    /// Opens the dual-thrust hot-stage window: upper engines join <see cref="Parts.ActiveEngines"/>
+    /// and drain their own tanks while the booster remains attached.
+    /// </summary>
+    public void BeginHotStageOverlap(double durationSeconds)
+    {
+        if (durationSeconds <= 0.0) return;
+        HotStageOverlapRemaining = durationSeconds;
+        Parts.HotStageOverlapActive = true;
+        HotStageOverlapCompletedPending = false;
+    }
+
+    /// <summary>Advances the overlap timer. Returns true the first frame the window just ended.</summary>
+    public bool AdvanceHotStageOverlap(double dt)
+    {
+        if (!Parts.HotStageOverlapActive && HotStageOverlapRemaining <= 0.0)
+            return false;
+
+        HotStageOverlapRemaining -= dt;
+        if (HotStageOverlapRemaining > 0.0) return false;
+
+        HotStageOverlapRemaining = 0.0;
+        Parts.HotStageOverlapActive = false;
+        HotStageOverlapCompletedPending = true;
+        return true;
+    }
 
     /// <summary>
     /// Builds the aggregate foot ring declared by the installed landing-gear part. The current
@@ -334,6 +374,7 @@ public class Vessel
         ApplyThrottle(dt);
 
         Parts.ConsumePropellant(dt, pressure);
+        AdvanceHotStageOverlap(dt);
 
         foreach (var crew in Crew)
             crew.TickEVA(dt);
@@ -456,6 +497,10 @@ public class Vessel
     // Retorna el vessel separado (debris) si hubo staging, null si no
     public Vessel? Stage()
     {
+        HotStageOverlapRemaining = 0.0;
+        Parts.HotStageOverlapActive = false;
+        HotStageOverlapCompletedPending = false;
+
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
 
