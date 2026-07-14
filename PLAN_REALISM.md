@@ -168,7 +168,8 @@ equivocada hace la órbita.
   `Vessel.ComputeDragAt` delega ahora en `AerodynamicsModel` (drag + lift; se eliminó la
   duplicación inline del modelo aero). Sim puro + tests.
 - **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs`, `ExosphereSimulation/Vessel.cs`,
-  tests `AerodynamicLiftTests.cs`. (EDL con α<90° para guiado con lift: pendiente game-layer.)
+  tests `AerodynamicLiftTests.cs`. EDL game-layer lift-up ~70° DONE (`EDLController` +
+  `ComputeLiftUpEntryAxis`).
 - **Aceptación:** ✅ lift ⊥ al flujo hacia el lado del morro, cero axial y de costado puro
   (cilindro simétrico), L/D ≈ 0.3 a α=70° (régimen EDL real); el alcance cambia con la actitud.
 

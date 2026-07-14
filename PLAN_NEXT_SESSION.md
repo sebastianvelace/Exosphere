@@ -129,23 +129,15 @@ Each item: **evidence → owner files → acceptance (xvfb) → realism rational
 
 Each item: **evidence → owner files → acceptance (xUnit + telemetry) → realism rationale**.
 
-### P-P1. Landing damage threshold harmonization (R9 tail)
+### P-P1. Landing damage threshold harmonization (R9 tail) — DONE
 
-| | |
-| --- | --- |
-| **Evidence** | `EDLController.TouchdownVel = 3.0`; R13 telemetry ~0–1.5 m/s. `Universe.SoftLandingThreshold` still 5.0 m/s (`.atl/DELEGATION_JUL2026.md:94-95`). |
-| **Owner** | `ExosphereSimulation/Universe.cs`, `scripts/EDLController.cs` |
-| **Acceptance** | Touchdown at 2 m/s = soft; 4 m/s = damage/destruct. xUnit or harness confirms; R13 EDL telemetry unchanged for nominal profile. |
-| **Realism feel** | Starship legs are not magic — a hard splash teaches consequences without arcade forgiveness. |
+`Universe.SoftLandingThreshold` now aliases `AscentStagingPolicy.SoftLandingSpeedMps = 3.0`.
+Covered by `SoftLandingThresholdTests`.
 
-### P-P2. EDL lift-aware guidance (R6 game-layer)
+### P-P2. EDL lift-aware guidance (R6 game-layer) — DONE
 
-| | |
-| --- | --- |
-| **Evidence** | Lift exists in sim (`ComputeLift`, L/D ≈ 0.3 at α=70°) but EDL commands belly-flop ~90° ⇒ lift ≈ 0 (`PLAN_REALISM.md:34-36`). |
-| **Owner** | `scripts/EDLController.cs` only — do not retune `ThermalModel` for VFX |
-| **Acceptance** | Optional α<90° segments during high-altitude glide; telemetry shows cross-range change; R13 nominal belly-flop profile preserved when lift disabled. New test or harness documents glide segment. |
-| **Realism feel** | Real Starship uses body lift for range — the player feels the ship is a lifting body, not a falling cylinder. |
+`EDLController` aims via `AerodynamicsModel.ComputeLiftUpEntryAxis` (~70° AoA lift-up)
+instead of pure broadside. Do not reopen without regression proof against R13 telemetry.
 
 ### P-P3. Long-cruise / warp decay documentation + test
 

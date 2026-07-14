@@ -106,10 +106,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Reentry Fisico/Visual
 
-- Per-piece structural breakup.
+- Per-piece structural breakup (oleada B1).
 - Perdida de control si falla una pieza critica.
-- Lift/AoA en sim ✅ (R6); guiado EDL con lift (α<90°) sigue pendiente en game-layer.
-- Decaimiento orbital LEO ✅ (R7 termosfera residual); on-rails/warp no decae (limite conocido).
+- Lift/AoA en sim ✅ (R6); guiado EDL lift-up ~70° ✅ (`EDLController` + `ComputeLiftUpEntryAxis`).
+- Decaimiento orbital LEO ✅ (R7 termosfera residual); on-rails/warp decay = oleada B3.
 
 ### Interplanetario
 
