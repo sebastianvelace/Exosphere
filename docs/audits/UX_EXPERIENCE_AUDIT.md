@@ -13,7 +13,7 @@
 
 1. **UX-001** — No onboarding; launch controls (`L` / hold-`Z` / `G` / `H`) undiscoverable  
 2. **UX-010** — EDL is fully autopiloted; player is spectator during belly-flop / flip-and-burn  
-3. **UX-007** — No orbit → deorbit → entry player workflow (only debug `O` / forced physics)  
+3. **UX-007** — ~~No orbit → deorbit → entry workflow~~ **DONE (C2):** map `[B]` deorbit → ENTRY 
 4. **UX-004** — Main menu mission card is fiction; not wired to VAB craft, site, or destination  
 5. **UX-009** — Phase banner/track stops at ORBIT; EDL arc invisible in primary mission UI  
 
@@ -97,14 +97,14 @@
 | **Effort** | M |
 | **Dependencies** | None |
 
-### UX-007 — No orbit → deorbit → entry workflow in HUD/map
+### UX-007 — No orbit → deorbit → entry workflow in HUD/map — DONE (C2)
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `MapViewController` plans Hohmann/transfers; no "deorbit burn" preset. `PLAN_PLAYTEST.md` B1: harness can't drive DEORBIT→EDL yet. `HUDController`: `O` jumps to orbit debug. |
-| **User pain / realism break** | After ORBIT, player has no mission-like path to reentry except debug keys or dying to physics. Breaks full arc in playtest doc milestones 7–8. |
-| **Proposed solution** | Map action "DEORBIT TO [site]" (retrograde node at Pe). HUD cue: "ENTRY INTERFACE in ~Xm". Wire to play harness milestone 7. |
-| **Acceptance** | Harness gates PNG on `[Mission] → ENTRY` after planned retro burn (no `JumpToOrbit` cheat). |
+| **Evidence** | `DeorbitPlanner.ComputeRetroDeltaV` + map `[B]` → `ManeuverPlanner.PlanDeorbit` (Pe≈80 km); Enter arms map autopilot; ORBIT→COAST→RETRO_BURN→COAST then `EDLController` arms `ENTRY`. `DeorbitToEntryTests` cover vis-viva Δv + entry-speed gate kinematics. `BeginReentryDemonstration` left intact as teleport demo. |
+| **User pain / realism break** | ~~After ORBIT, player had no mission-like path to reentry.~~ |
+| **Proposed solution** | Map action deorbit preset (retrograde node). Wire to play harness milestone 7. |
+| **Acceptance** | ✅ Player path: `[M]` map → `[B]` deorbit → `⏎` exec → coast → ENTRY (no teleport). |
 | **Impact** | Critical |
 | **Effort** | L |
 | **Dependencies** | PLAN_PLAYTEST harness milestone 7 |

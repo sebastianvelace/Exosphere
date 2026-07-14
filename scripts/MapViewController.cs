@@ -122,6 +122,34 @@ public partial class MapViewController : Control
                     QueueRedraw();
                     break;
 
+                case Key.B when Visible:
+                {
+                    // Deorbit preset: retrograde burn that drops Pe into the atmosphere.
+                    var bridge = SimulationBridge.Instance;
+                    var vessel = bridge?.ActiveVessel;
+                    var universe = bridge?.Universe;
+                    if (vessel != null && universe != null)
+                    {
+                        var earth = universe.GetBody("earth")
+                            ?? universe.GetDominantBody(vessel.Position);
+                        var relPos = vessel.Position - earth.Position;
+                        var relVel = vessel.Velocity - earth.Velocity;
+                        Planner.SetOrbit(relPos, relVel, earth.GM);
+                        if (Planner.PlanDeorbit(earth))
+                        {
+                            _autopilot.Disarm();
+                            GD.Print($"[Map] Deorbit planned: Δv={Planner.DeltaVMagnitude:F1} m/s " +
+                                     $"(pro {Planner.DvPrograde:+0.0;-0.0})");
+                        }
+                        else
+                        {
+                            GD.Print("[Map] Deorbit: no closed orbit to plan from.");
+                        }
+                        QueueRedraw();
+                    }
+                    break;
+                }
+
                 case Key.Delete or Key.Backspace when Visible:
                     Planner.ClearNode();
                     _autopilot.Disarm();
@@ -658,7 +686,7 @@ public partial class MapViewController : Control
 
     private void DrawFooter()
     {
-        DrawText("drag: move node  wheel: ΔV ⇧×10 alt:radial  ⏎ exec  ⌫ clear  1-5 transfer  [/] adj  Tab: sys+encounter",
+        DrawText("drag: node  wheel: ΔV  [B] deorbit  ⏎ exec  ⌫ clear  1-6 transfer  [/] adj  Tab: sys",
                  new Vector2(14, PanelSize - 14), new Color(0.50f, 0.58f, 0.68f, 0.9f), 10);
     }
 

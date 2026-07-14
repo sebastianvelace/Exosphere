@@ -203,9 +203,9 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 
 | | |
 | --- | --- |
-| **Evidence** | `MissionManager.cs` tracks phases (LIFTOFF, MAX_Q, SEPARATION, ORBIT, ENTRY); no win/lose objectives. |
+| **Evidence** | `MissionManager.cs` tracks phases (LIFTOFF…ORBIT…ENTRY); C2 now reaches ENTRY via map deorbit. Still no win/lose objectives. |
 | **Owner** | `scripts/MissionManager.cs`, `HUDController.cs` |
-| **Acceptance** | One scripted mission: "Reach 150 km orbit and deorbit to soft landing." Success/fail banner with phase checklist. Telemetry log exported on completion. |
+| **Acceptance** | One scripted mission: "Reach 150 km orbit and deorbit to soft landing." Success/fail banner with phase checklist. Telemetry log exported on completion. *(Prerequisite path ORBIT→deorbit→ENTRY is C2 DONE.)* |
 | **Realism feel** | A mission has a beginning, middle, and end — like Flight 7's objective, not sandbox forever. |
 
 ### G-P4. Systems tied to mission phases (R11)
