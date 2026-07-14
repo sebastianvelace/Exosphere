@@ -234,7 +234,7 @@ equivocada hace la órbita.
 
 ## Orden de ejecucion actual
 1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
-2. Backlog fisico real pendiente: R5 multi-motor. (R6 lift/AoA ✅ y R7 termosfera/decay ✅ HECHOS)
+2. Backlog fisico real pendiente: R5 multi-motor. (R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
 3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5.
 4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 

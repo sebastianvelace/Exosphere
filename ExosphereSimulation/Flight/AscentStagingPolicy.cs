@@ -23,6 +23,12 @@ public static class AscentStagingPolicy
     public const double SoftLandingSpeedMps = 3.0;
 
     /// <summary>
+    /// Duration (s) of the dual-thrust hot-stage window: Starship Raptors light while Super Heavy
+    /// is still attached, then the mechanical decouple fires (Flight 7 class ≈ 1–2 s).
+    /// </summary>
+    public const double HotStageOverlapSeconds = 1.5;
+
+    /// <summary>
     /// Returns true when the integrated stack should hot-stage: Super Heavy still attached,
     /// staging not yet performed, and either MECO velocity/altitude or booster reserve reached.
     /// </summary>

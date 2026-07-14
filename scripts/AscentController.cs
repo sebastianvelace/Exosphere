@@ -470,7 +470,8 @@ public partial class AscentController : Control
                     _mecoStaged, sh != null, surfSpeed, _alt, frac))
             {
                 MissionManager.Instance?.EnterPhase(MissionPhase.MECO);
-                bridge.TriggerStaging();   // hot-stage: drop SH; Starship continues the insertion
+                // Dual-thrust window: light Ship while SH is still attached, then separate.
+                bridge.BeginHotStageOverlap();
                 _mecoStaged = true;
             }
             return;

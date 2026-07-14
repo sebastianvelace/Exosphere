@@ -1,4 +1,4 @@
-# Hot-stage overlap burn model (P-S01 — deferred)
+# Hot-stage overlap burn model (P-S01 — DONE, B2)
 
 ## Real vehicle behavior
 
@@ -6,55 +6,34 @@ SpaceX hot-stages Starship by igniting the upper-stage Raptors **before** the me
 separation while Super Heavy is still thrusting. Both stages contribute thrust for a short
 overlap window (~1–2 s on Flight 7 class missions).
 
-## Current simulation model
+## Implemented model (B2)
 
-- `PartGraph.ActiveEngines` only includes engines in `CurrentStageParts()` — the bottom
-  stage below the lowest active decoupler.
-- `Vessel.Stage()` / `FireNextStage()` is instantaneous: the decoupler fires, the booster
-  subtree detaches, and only then does the upper stage become the burning stage.
-- Each stage is modeled as **one physical engine part** (Super Heavy cluster, Starship cluster).
+1. `AscentController` opens the window via `SimulationBridge.BeginHotStageOverlap()` when
+   `AscentStagingPolicy.ShouldHotStageSuperHeavy` fires (MECO speed/altitude or booster reserve).
+2. `Vessel.BeginHotStageOverlap(AscentStagingPolicy.HotStageOverlapSeconds)` sets
+   `PartGraph.HotStageOverlapActive` for **1.5 s** sim time.
+3. During overlap:
+   - `ActiveEngines` includes both Super Heavy and Starship engine parts.
+   - `ConsumePropellant` drains booster tanks and Ship tanks independently (no cross-feed).
+   - Throttle/spool still follow `Vessel.Throttle`.
+4. When the timer expires, `Vessel.HotStageOverlapCompletedPending` is set;
+   `SimulationBridge._Process` calls `TriggerStaging()` for the mechanical decouple.
+5. Manual/instant `TriggerStaging()` clears any remaining overlap state.
 
-There is no hook for “upper stage lit while lower stage still attached” without either:
+## Tests
 
-1. Cross-stage engine activation and propellant drain (violates current stage-graph invariant
-   documented in `PartGraph.CurrentStageParts()`), or
-2. The R5 multi-engine / per-cluster rewrite that gives independent throttle per visual bell.
-
-## Why not implemented in P0
-
-Implementing overlap safely requires:
-
-- Temporary dual-stage thrust summation with distinct propellant sinks
-- CoM / TWR / gimbal torque during asymmetric dual burn
-- Staging timing relative to `[G]` MECO authority in `AscentController`
-- Regression tests for insertion profile **and** hot-stage ring thermal loads
-
-That scope exceeds P0 and touches stage-graph invariants explicitly marked out of bounds for
-this pass.
-
-## Proposed future model (sketch)
-
-1. Add an explicit `HotStageOverlapWindow` state on `Vessel` or `SimulationBridge` triggered
-   by `AscentController` **before** `TriggerStaging()`.
-2. During overlap: activate both `super_heavy_booster` and `starship_engines` thrust in
-   `ComputeThrust`, drain both fuel tanks, cap overlap duration (~2 s sim time) or until
-   decoupler fires.
-3. Fire decoupler at overlap end; booster continues on boostback reserve profile (future work).
-
-## Test TODO
-
-- [ ] Unit test: overlap window adds upper-stage thrust while SH still attached without
-      double-counting mass or draining only one tank.
-- [ ] Telemetry harness: `[G]` ascent records SH+Ship combined TWR spike at MECO, separation
-      still at ~61–68 km / ~2.3 km/s.
-- [ ] Assert `PartGraph` invariants restored after overlap ends (single active stage).
+- [x] `HotStageOverlapTests.OverlapAddsUpperStageThrustWhileBoosterStillAttached`
+- [x] `HotStageOverlapTests.OverlapDrainsBothStageTanksIndependently`
+- [x] `HotStageOverlapTests.OverlapEndsWithSingleActiveStageAfterMechanicalSeparation`
+- [x] Staging band still gated by `AscentStagingPolicy` (~2.3 km/s, ≥45 km)
 
 ## MECO authority note (PHYS-01)
 
-`AscentController` is the sole `[G]` authority for MECO/separation via
+`AscentController` remains the sole `[G]` authority for MECO/separation via
 `AscentStagingPolicy.ShouldHotStageSuperHeavy`. `MissionManager` must not cut throttle or
-enter `MissionPhase.MECO` based on fuel depletion — that legacy path fought the velocity-based
-hot-stage profile.
+enter `MissionPhase.MECO` based on fuel depletion.
 
-Manual flight: player retains throttle; staging phase banners follow `NotifyStaged()` from
-manual stage commands.
+## Out of scope
+
+- Boostback / landing burn for the detached booster.
+- R5 per-bell multi-motor / engine-out.
