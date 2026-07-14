@@ -16,7 +16,20 @@ feature agents stay inside ownership locks below.
 | B1 | `feat/physics-structural-breakup` | DONE | `FindBreakingJoints` → `SplitAtJoint` / debris; physics-review CORRECTO CON NOTAS (inherited StressSolver mass-side) |
 | C1 | `feat/gameplay-save-load` | DONE | Usable mission save/load; MissionSaveSerializer + F5/F9 + Continue |
 | C2 | `feat/gameplay-deorbit-entry` | DONE | Orbit → map `[B]` deorbit → COAST/RETRO → ENTRY via EDL |
-| C3 | `feat/ux-edl-mission-phases` | pending | Phase track + EDL cues |
+| C3 | `feat/ux-edl-mission-phases` | DONE | Phase track COAST/RETRO + ENTRY cues; `MissionPhaseTrack` tests |
+
+## B3→C3 summary (oleada complete)
+
+| Lane | Landed | Still open |
+|------|--------|------------|
+| **B3** | LEO warp/on-rails residual-thermosphere decay | — |
+| **B2** | Hot-stage 1.5 s dual-thrust overlap | — |
+| **B1** | Structural breakup from overloaded joints | Control-loss consequences |
+| **C1** | Usable mid-mission save/load (F5/F9 + Continue) | Slot metadata polish |
+| **C2** | Orbit → map deorbit → ENTRY (no teleport) | Mission objectives scaffold |
+| **C3** | HUD phase track + deorbit/EDL cues + light SFX | — |
+
+**Out of this oleada (next):** control-loss consequences, visual oleada A (reference captures / V0.5), R5 multi-motor.
 
 ## File locks
 

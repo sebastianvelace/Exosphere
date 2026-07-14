@@ -123,7 +123,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
   MainMenu Continue; mid-orbit roundtrip tested.
 - Flujo jugable orbita → deorbit → ENTRY (oleada C2) ✅ — mapa `[B]`
   (`DeorbitPlanner` + `ManeuverPlanner.PlanDeorbit`); EDL arma `ENTRY` sin teleport demo.
-- Cues/track de fases EDL (oleada C3).
+- Cues/track de fases EDL (oleada C3) ✅ — `MissionPhaseTrack` + HUD dots
+  ORBIT→COAST→RETRO→ENTRY…; cue “ENTRY INTERFACE in ~Xm” / “DEORBIT BURN”.
 - Misiones/objetivos de progresion.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
