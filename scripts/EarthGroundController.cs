@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 
 /// <summary>
@@ -53,6 +54,9 @@ public partial class EarthGroundController : Node3D
             _mat = new ShaderMaterial { Shader = shader };
             _mat.SetShaderParameter("fade", 1.0f);
             _mat.SetShaderParameter("earth_radius", 6_371_000.0f);
+            var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
+            _mat.SetShaderParameter("vertical_optical_depth", new Vector3(
+                (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
             var dayTexture = GD.Load<Texture2D>("res://assets/textures/earth_day.jpg");
             if (dayTexture != null) _mat.SetShaderParameter("day_tex", dayTexture);
             _mesh.SetSurfaceOverrideMaterial(0, _mat);
@@ -108,7 +112,12 @@ public partial class EarthGroundController : Node3D
         var surfacePos = earth.Position + up * earth.Radius;              // metres
         var offsetM    = surfacePos - vessel.Position;                    // metres
         var renderUp   = new Vector3((float)up.X, (float)up.Y, (float)up.Z);
-        var basis      = AlignUp(renderUp);
+        var rotationAxis = ToGodot(earth.RotationAxis).Normalized();
+        var east = rotationAxis.Cross(renderUp).Normalized();
+        if (east.LengthSquared() < 1e-6f)
+            east = Vector3.Forward.Cross(renderUp).Normalized();
+        var north = renderUp.Cross(east).Normalized();
+        var basis = new Basis(east, renderUp, north);
 
         // metres → units for the render-space translation.
         var offsetU = new Vector3(
@@ -121,6 +130,10 @@ public partial class EarthGroundController : Node3D
         {
             _mat.SetShaderParameter("fade", fade);
             _mat.SetShaderParameter("haze_color", SkyController.CurrentHorizonColor);
+            var sun = universe.GetBody("sun");
+            if (sun != null)
+                _mat.SetShaderParameter("sun_dir", ToGodot(
+                    (sun.Position - vessel.Position).Normalized));
 
             // Map the patch to the real Earth texture: the sub-vessel point and the patch's
             // east/north axes, expressed in the texture/mesh-local frame (undo the planet
@@ -135,7 +148,8 @@ public partial class EarthGroundController : Node3D
 
             // True geometric horizon distance d = sqrt(2·R·h), in render units. Ground
             // beyond this hazes into the sky so the far curvature reads as a flat horizon.
-            double hMetres = System.Math.Sqrt(2.0 * earth.Radius * System.Math.Max(alt, 50.0));
+            double cameraAltitude = System.Math.Max(FloatingOrigin.CameraAltOverEarth, 50.0);
+            double hMetres = System.Math.Sqrt(2.0 * earth.Radius * cameraAltitude);
             _mat.SetShaderParameter("horizon_dist", (float)(hMetres / MetresPerUnit));
         }
     }
@@ -149,6 +163,9 @@ public partial class EarthGroundController : Node3D
         Vector3 z = up.Cross(x).Normalized();
         return new Basis(x, up, z);
     }
+
+    private static Vector3 ToGodot(Vector3d value) => new(
+        (float)value.X, (float)value.Y, (float)value.Z);
 
     private static double Smoothstep(double a, double b, double x)
     {

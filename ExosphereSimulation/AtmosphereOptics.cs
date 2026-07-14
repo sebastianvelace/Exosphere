@@ -17,6 +17,14 @@ public sealed record AtmosphereOptics
     public double MieScaleHeight { get; init; } = 1_200.0;
     public double OzoneCenterAltitude { get; init; } = 25_000.0;
     public double OzoneHalfWidth { get; init; } = 15_000.0;
+    /// <summary>
+    /// Visible upper-atmosphere chemiluminescence at the layer peak, in relative radiance
+    /// emitted per metre.  It is intentionally independent of solar scattering: airglow
+    /// remains present on the night limb after direct sunlight has vanished.
+    /// </summary>
+    public Vector3d AirglowEmission { get; init; } = Vector3d.Zero;
+    public double AirglowCenterAltitude { get; init; } = 97_000.0;
+    public double AirglowScaleHeight { get; init; } = 6_000.0;
     public double MieAnisotropy { get; init; } = 0.80;
     public double SunIlluminanceScale { get; init; } = 20.0;
     /// <summary>Bounded isotropic second-order fill used by the realtime sky integrator.</summary>
@@ -78,6 +86,14 @@ public sealed record AtmosphereOptics
         if (OzoneHalfWidth <= 0.0) return 0.0;
         return System.Math.Max(0.0,
             1.0 - System.Math.Abs(altitude - OzoneCenterAltitude) / OzoneHalfWidth);
+    }
+
+    /// <summary>Gaussian mesospheric/lower-thermospheric airglow layer.</summary>
+    public double AirglowDensity(double altitude)
+    {
+        if (AirglowScaleHeight <= 0.0 || !double.IsFinite(altitude)) return 0.0;
+        double z = (altitude - AirglowCenterAltitude) / AirglowScaleHeight;
+        return System.Math.Exp(-0.5 * z * z);
     }
 
     /// <summary>Vertical optical depth from altitude to space for the RGB bands.</summary>

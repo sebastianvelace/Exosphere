@@ -54,6 +54,19 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(Vector3d.Zero, optics.DirectSolarTransmittance(0.0, -0.01));
     }
 
+    [Fact]
+    public void EarthAirglowIsAThinUpperAtmosphereEmissionLayer()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+
+        Assert.True(optics.AirglowEmission.Y > optics.AirglowEmission.X);
+        Assert.True(optics.AirglowEmission.Y > optics.AirglowEmission.Z);
+        Assert.True(optics.AirglowEmission.X > optics.AirglowEmission.Z);
+        Assert.Equal(1.0, optics.AirglowDensity(optics.AirglowCenterAltitude), 12);
+        Assert.True(optics.AirglowDensity(80_000.0) < 0.03);
+        Assert.True(optics.AirglowDensity(120_000.0) < 0.001);
+    }
+
     [Theory]
     [InlineData("earth")]
     [InlineData("mars")]
@@ -87,6 +100,9 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(preset.MieScattering, json.MieScattering);
         Assert.Equal(preset.MieAbsorption, json.MieAbsorption);
         Assert.Equal(preset.OzoneAbsorption, json.OzoneAbsorption);
+        Assert.Equal(preset.AirglowEmission, json.AirglowEmission);
+        Assert.Equal(preset.AirglowCenterAltitude, json.AirglowCenterAltitude);
+        Assert.Equal(preset.AirglowScaleHeight, json.AirglowScaleHeight);
         Assert.Equal(preset.RayleighScaleHeight, json.RayleighScaleHeight);
         Assert.Equal(preset.MieScaleHeight, json.MieScaleHeight);
         Assert.Equal(preset.LowOrderDiffuseStrength, json.LowOrderDiffuseStrength);

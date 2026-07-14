@@ -5,6 +5,7 @@ using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
 
 [GlobalClass]
 public partial class SimulationBridge : Node
@@ -613,6 +614,104 @@ public partial class SimulationBridge : Node
     }
 
     public void SetTimeScale(double scale) => Universe.TimeScale = scale;
+
+    /// <summary>
+    /// Starts the verified Starship entry-to-landing demonstration used by the HUD and the
+    /// visual regression harness.  This is a real physics state: EDL owns attitude/throttle,
+    /// atmospheric drag and heating run normally, Raptors relight for the powered flip, and
+    /// landing contact is solved by the regular surface-contact model.
+    /// </summary>
+    public bool BeginReentryDemonstration()
+    {
+        var earth = Universe.GetBody("earth");
+        var vessel = ActiveVessel;
+        if (earth == null || vessel == null || vessel.IsDestroyed) return false;
+
+        // The launch scene begins as a full stack. Separate first so EDL controls the Ship
+        // engine cluster and aerodynamic body rather than an impossible attached booster.
+        if (vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster"))
+        {
+            TriggerStaging();
+            vessel = ActiveVessel;
+        }
+        if (vessel == null || !vessel.Parts.Parts.Any(
+                p => p.Definition.Id == "starship_engines"))
+            return false;
+
+        Vector3d currentUp = (vessel.Position - earth.Position).Normalized;
+        if (currentUp.MagnitudeSquared < 1e-9) currentUp = Vector3d.Right;
+
+        // Put the demonstration on the daylight side so entry plasma, flaps and landing
+        // attitude remain inspectable instead of inheriting whatever local solar time the
+        // launch pad happens to have at J2000.
+        Vector3d up = currentUp;
+        var sun = Universe.GetBody("sun");
+        if (sun != null)
+        {
+            Vector3d toSun = (sun.Position - earth.Position).Normalized;
+            Vector3d terminatorUp = currentUp - toSun * currentUp.Dot(toSun);
+            if (terminatorUp.MagnitudeSquared < 1e-9)
+            {
+                Vector3d seed = System.Math.Abs(toSun.Dot(Vector3d.Up)) < 0.9
+                    ? Vector3d.Up
+                    : Vector3d.Right;
+                terminatorUp = seed - toSun * seed.Dot(toSun);
+            }
+            const double solarElevation = 25.0 * System.Math.PI / 180.0;
+            up = (terminatorUp.Normalized * System.Math.Cos(solarElevation)
+                + toSun * System.Math.Sin(solarElevation)).Normalized;
+        }
+        Vector3d east = earth.RotationAxis.Cross(up).Normalized;
+        if (east.MagnitudeSquared < 1e-9) east = Vector3d.Forward;
+
+        // A repeatable suborbital entry state chosen to expose heating, aerodynamic descent,
+        // belly-flop, powered flip and touchdown in one watchable session. It intentionally
+        // starts at the 70 km entry interface instead of pretending to perform a deorbit burn.
+        Vector3d airVelocity = east * 1_800.0 - up * 120.0;
+        Vector3d velocityDirection = airVelocity.Normalized;
+        Vector3d longAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velocityDirection);
+
+        vessel.Position = earth.Position + up * (earth.Radius + 70_000.0);
+        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position) + airVelocity;
+        vessel.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
+            longAxis, velocityDirection);
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        vessel.SASEnabled = false;
+        vessel.IsGroundHeld = false;
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
+        vessel.ReferenceBodyId = earth.Id;
+        vessel.Throttle = 0.0;
+        vessel.ConfigureLandingContactsFromParts();
+
+        foreach (var part in vessel.Parts.Parts)
+        {
+            part.Temperature = 290.0;
+            part.SkinTemperature = 290.0;
+            part.ThermalDamage = 0.0;
+            part.IsBroken = false;
+            part.IsDeployed = false;
+            part.ThrottleLevel = 0.0;
+            part.GimbalOffset = Vector3d.Zero;
+
+            double totalCapacity = part.Definition.FuelCapacityLF
+                + part.Definition.FuelCapacityOx;
+            if (totalCapacity <= 0.0) continue;
+            double target = totalCapacity * 0.12;
+            double mixtureCapacity = totalCapacity > 1e-9
+                ? part.Definition.FuelCapacityLF / totalCapacity
+                : 0.45;
+            part.LiquidFuel = target * mixtureCapacity;
+            part.Oxidizer = target * (1.0 - mixtureCapacity);
+        }
+
+        SetWarpIndex(0);
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+        CameraController.Instance?.EnterShipChaseView();
+        GD.Print("[DEMO] Starship reentry → landing started at 70 km / 1.80 km/s");
+        return true;
+    }
 
     /// DEBUG: drop the active vessel straight into a circular orbit (~200 km) around Earth,
     /// to test orbital features (transfer planner, etc.) without flying the whole ascent.

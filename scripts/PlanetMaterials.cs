@@ -1,13 +1,14 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 
 /// <summary>
 /// Factory for photorealistic, scale-independent planet materials.
 ///
 /// Earth uses a dedicated procedural shader (<c>earth_surface.gdshader</c>) with
-/// continents, clouds, ice caps, a day/night terminator and a blue atmospheric
-/// rim. Other bodies use a shared generic body shader
+/// continents, clouds, ice caps and a day/night terminator. Atmospheric radiance
+/// is owned exclusively by the spherical sky integrator. Other bodies use a shared generic body shader
 /// (<c>planet_body.gdshader</c>) or a tuned <see cref="StandardMaterial3D"/>.
 ///
 /// All shaders sample detail from the *normalized* local vertex position, so the
@@ -37,8 +38,9 @@ public static class PlanetMaterials
         mat.SetShaderParameter("day_tex",   LoadTexture("res://assets/textures/earth_day.jpg"));
         mat.SetShaderParameter("night_tex", LoadTexture("res://assets/textures/earth_night.jpg"));
         mat.SetShaderParameter("cloud_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
-        mat.SetShaderParameter("atmosphere_color", new Color(0.36f, 0.58f, 1.0f));
-        mat.SetShaderParameter("atmosphere_strength", 0.8f);
+        var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
+        mat.SetShaderParameter("vertical_optical_depth", new Vector3(
+            (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
         mat.SetShaderParameter("cloud_amount", 0.85f);
         mat.SetShaderParameter("night_lights", 2.4f);
         mat.SetShaderParameter("day_gain", 1.15f);

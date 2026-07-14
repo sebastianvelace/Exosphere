@@ -14,7 +14,7 @@ dotnet build Exosphere.csproj --no-restore --nologo -v quiet
 run_atmosphere_tests() {
   dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj \
     --no-restore --no-build --nologo \
-    --filter 'FullyQualifiedName~AtmosphereOpticsTests|FullyQualifiedName~StandardAtmosphereTests|FullyQualifiedName~AtmosphereThermosphereTests'
+    --filter 'FullyQualifiedName~AtmosphereOpticsTests|FullyQualifiedName~AtmosphereRaySamplingTests|FullyQualifiedName~AtmosphericReentryEnvelopeTests|FullyQualifiedName~StandardAtmosphereTests|FullyQualifiedName~AtmosphereThermosphereTests'
 }
 run_atmosphere_tests || run_atmosphere_tests
 

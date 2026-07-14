@@ -69,11 +69,14 @@ public partial class SkyController : Node
         double altitude = vessel.GetAltitude(body);
 
         BindAtmosphere(body, altitude, upD, sunD);
-        BindSolarGeometry(vessel.Position, sun);
+        BindSolarGeometry(vessel.Position, sun, body.Id);
         UpdateEnvironment(body, altitude, upD.Dot(sunD));
     }
 
-    private void BindSolarGeometry(Vector3d observer, CelestialBody? sun)
+    private void BindSolarGeometry(
+        Vector3d observer,
+        CelestialBody? sun,
+        string atmosphereBodyId)
     {
         if (_skyMat == null || sun == null || SimulationBridge.Instance?.Universe is not { } universe)
             return;
@@ -84,11 +87,14 @@ public partial class SkyController : Node
 
         CelestialBody? bestOccluder = null;
         double lowestVisibility = 1.0;
+        double atmosphericVisibility = 1.0;
         foreach (var candidate in universe.Bodies)
         {
             if (candidate.Id == "sun") continue;
             double visibility = MissionGeometry.SolarDiscVisibility(
                 observer, candidate.Position, candidate.Radius, sun.Position, sun.Radius);
+            if (candidate.Id != atmosphereBodyId)
+                atmosphericVisibility = System.Math.Min(atmosphericVisibility, visibility);
             if (visibility < lowestVisibility)
             {
                 lowestVisibility = visibility;
@@ -98,6 +104,7 @@ public partial class SkyController : Node
 
         bool enabled = bestOccluder != null && lowestVisibility < 0.999999;
         _skyMat.SetShaderParameter("solar_visibility", (float)lowestVisibility);
+        _skyMat.SetShaderParameter("atmospheric_solar_visibility", (float)atmosphericVisibility);
         _skyMat.SetShaderParameter("solar_occluder_enabled", enabled);
         if (!enabled) return;
 
@@ -132,6 +139,7 @@ public partial class SkyController : Node
             _skyMat.SetShaderParameter("mie_scattering", Vector3.Zero);
             _skyMat.SetShaderParameter("mie_absorption", Vector3.Zero);
             _skyMat.SetShaderParameter("ozone_absorption", Vector3.Zero);
+            _skyMat.SetShaderParameter("airglow_emission", Vector3.Zero);
             _skyMat.SetShaderParameter("low_order_diffuse_strength", 0.0f);
             _skyMat.SetShaderParameter("cloud_enabled", false);
             return;
@@ -141,6 +149,9 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("mie_scattering", ToGodot(optics.MieScattering));
         _skyMat.SetShaderParameter("mie_absorption", ToGodot(optics.MieAbsorption));
         _skyMat.SetShaderParameter("ozone_absorption", ToGodot(optics.OzoneAbsorption));
+        _skyMat.SetShaderParameter("airglow_emission", ToGodot(optics.AirglowEmission));
+        _skyMat.SetShaderParameter("airglow_center_altitude", (float)optics.AirglowCenterAltitude);
+        _skyMat.SetShaderParameter("airglow_scale_height", (float)optics.AirglowScaleHeight);
         _skyMat.SetShaderParameter("rayleigh_scale_height", (float)optics.RayleighScaleHeight);
         _skyMat.SetShaderParameter("mie_scale_height", (float)optics.MieScaleHeight);
         _skyMat.SetShaderParameter("ozone_center_altitude", (float)optics.OzoneCenterAltitude);
@@ -198,10 +209,11 @@ public partial class SkyController : Node
             _ => new Color(0.55f, 0.70f, 1.00f),
         };
         float atmosphericFill = air * Mathf.Lerp(0.025f, 1.0f, daylight);
-        // Near-Earth shadow is not absolute black: the illuminated planet is a
-        // huge blue-white reflector.  Keep a restrained Earthshine floor in LEO.
+        // Approximate visible Earth-reflected fill. The former 0.28 floor was comparable
+        // to direct daylight and kept eclipse scenes implausibly bright; this restrained
+        // term now behaves as secondary bounce rather than another light source.
         float earthshine = body.Id == "earth" && altitude < 1_000_000.0
-            ? 0.28f * Mathf.Lerp(0.25f, 1.0f, daylight)
+            ? 0.035f * Mathf.Lerp(0.10f, 1.0f, daylight)
             : 0.0f;
         _env.AmbientLightColor = ambient * Mathf.Max(atmosphericFill, earthshine);
         _env.BackgroundEnergyMultiplier = 1.0f;

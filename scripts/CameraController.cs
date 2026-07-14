@@ -22,6 +22,17 @@ public partial class CameraController : Node3D
         _padPresetIdx = PadPresets.Length;
     }
 
+    /// <summary>Return to an exterior chase view and frame the standalone Ship.</summary>
+    public void EnterShipChaseView()
+    {
+        _cockpit = false;
+        _padPresetIdx = 0;
+        Mode = CameraMode.Chase;
+        _yaw = 28f;
+        _pitch = 10f;
+        _distance = 48f;
+    }
+
     // ── Chase / orbit state ───────────────────────────────────────────────
     private float _yaw      = 25f;
     private float _pitch    = 12f;

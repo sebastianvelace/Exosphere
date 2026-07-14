@@ -63,6 +63,7 @@ public partial class HUDController : Control
 
     // ── Pad help overlay + launch path callout (UX-001 / UX-002) ─────────────
     private PanelContainer _padHelpRoot = null!;
+    private Button _reentryDemoButton = null!;
     private Label _launchPathLabel = null!;
     private bool _padHelpDismissed;
 
@@ -335,9 +336,9 @@ public partial class HUDController : Control
         _padHelpRoot.OffsetLeft = -290;
         _padHelpRoot.OffsetTop = 40;
         _padHelpRoot.OffsetRight = 290;
-        _padHelpRoot.OffsetBottom = 210;
+        _padHelpRoot.OffsetBottom = 270;
         _padHelpRoot.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.78f, 14, 22, 18));
-        _padHelpRoot.MouseFilter = MouseFilterEnum.Ignore;
+        _padHelpRoot.MouseFilter = MouseFilterEnum.Stop;
         AddChild(_padHelpRoot);
 
         var vbox = new VBoxContainer();
@@ -358,7 +359,17 @@ public partial class HUDController : Control
         vbox.AddChild(MakeHelpLine("[M]  ORBITAL MAP    [Tab]  SOLAR VIEW"));
         vbox.AddChild(MakeHelpLine("[,] / [.]  TIME WARP"));
 
-        var dismiss = new Label { Text = "Dismiss with [F1]  ·  auto-hides after liftoff" };
+        _reentryDemoButton = new Button
+        {
+            Text = "VIEW STARSHIP REENTRY → LANDING",
+            CustomMinimumSize = new Vector2(360, 38),
+            TooltipText = "Start the verified physical EDL demonstration at the 70 km entry interface",
+        };
+        InterfaceTheme.StyleButton(_reentryDemoButton, primary: true);
+        _reentryDemoButton.Pressed += OnReentryDemoPressed;
+        vbox.AddChild(_reentryDemoButton);
+
+        var dismiss = new Label { Text = "[R] reentry demo  ·  [F1] dismiss  ·  auto-hides after liftoff" };
         dismiss.HorizontalAlignment = HorizontalAlignment.Center;
         dismiss.AddThemeFontSizeOverride("font_size", 10);
         dismiss.AddThemeColorOverride("font_color", LabelDim);
@@ -372,6 +383,15 @@ public partial class HUDController : Control
         lbl.AddThemeFontSizeOverride("font_size", 12);
         lbl.AddThemeColorOverride("font_color", LabelDim);
         return lbl;
+    }
+
+    private void OnReentryDemoPressed()
+    {
+        if (SimulationBridge.Instance?.BeginReentryDemonstration() != true) return;
+        _padHelpDismissed = true;
+        _events.Insert(0, $"{FormatClock(SimulationBridge.Instance.Universe.CurrentTime)}  REENTRY DEMO");
+        if (_events.Count > 5) _events.RemoveAt(_events.Count - 1);
+        _eventLog.Text = string.Join("\n", _events);
     }
 
     // ── Widget factories ────────────────────────────────────────────────────
@@ -836,6 +856,10 @@ public partial class HUDController : Control
                     break;
                 case Key.O:
                     bridge.JumpToOrbit();
+                    break;
+                case Key.R:
+                    OnReentryDemoPressed();
+                    GetViewport().SetInputAsHandled();
                     break;
                 case Key.V:
                     GetTree().ChangeSceneToFile("res://scenes/construction/Construction.tscn");
