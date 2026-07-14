@@ -123,6 +123,16 @@ public partial class EDLController : Control
             else return;
         }
 
+        // Structural dead-stick: stop writing guidance. Atmosphere still flies the wreck.
+        if (vessel.StructuralControlLost)
+        {
+            vessel.Throttle = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.SASEnabled = false;
+            QueueRedraw();
+            return;
+        }
+
         AdvancePhase(vessel, body, mission, mass, speed, up, surfVel, delta, universe);
         QueueRedraw();   // live telemetry overlay
     }

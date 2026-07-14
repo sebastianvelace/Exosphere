@@ -45,6 +45,12 @@ public class Vessel
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
+    /// <summary>0..1 attitude authority after structural damage (see <see cref="Flight.ControlAuthority"/>).</summary>
+    public double ControlAuthorityFactor => Flight.ControlAuthority.Evaluate(this);
+
+    /// <summary>True when structural damage left the vehicle without a command path.</summary>
+    public bool StructuralControlLost => Flight.ControlAuthority.IsLost(ControlAuthorityFactor);
+
     // ── Hot-stage overlap (Ship lit while booster still attached) ─────────
     /// <summary>Sim seconds remaining in the dual-thrust window. Zero when inactive.</summary>
     public double HotStageOverlapRemaining { get; private set; }
@@ -390,30 +396,39 @@ public class Vessel
         foreach (var crew in Crew)
             crew.TickEVA(dt);
 
+        // Structural control authority: scale commanded rates after breakup / lost command.
+        double auth = Flight.ControlAuthority.Evaluate(this);
+        if (Flight.ControlAuthority.IsLost(auth))
+        {
+            PitchYawRoll = Vector3d.Zero;
+            SASEnabled = false;
+        }
+
+        var command = PitchYawRoll * auth;
         // Aplicar input de rotación (en espacio local del vessel). El eje longitudinal
         // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
         // pitch → giro local X, yaw → giro local Z, roll → giro local Y.
-        bool hasInput = PitchYawRoll.Magnitude > 0.01;
+        bool hasInput = command.Magnitude > 0.01;
         // Couple the commanded attitude torque to the actual thrust vector. Engines sit
         // below the CoM: +pitch needs -Z deflection; +yaw needs +X deflection. Roll remains
         // differential-cluster torque and has no net lateral force in this aggregate model.
         foreach (var engine in Parts.ActiveEngines)
             engine.GimbalOffset = hasInput
-                ? new Vector3d(PitchYawRoll.Y, 0.0, -PitchYawRoll.X)
+                ? new Vector3d(command.Y, 0.0, -command.X)
                 : Vector3d.Zero;
 
         if (hasInput)
         {
             double pitchYawAuthority = System.Math.Max(
                 ReactionControlAuthority,
-                Parts.GetPitchYawAngularAcceleration(pressure));
+                Parts.GetPitchYawAngularAcceleration(pressure)) * auth;
             double rollAuthority = System.Math.Max(
                 ReactionControlAuthority,
-                Parts.GetRollAngularAcceleration(pressure));
+                Parts.GetRollAngularAcceleration(pressure)) * auth;
             var localAngAccel = new Vector3d(
-                PitchYawRoll.X * pitchYawAuthority,
-                PitchYawRoll.Z * rollAuthority,
-                PitchYawRoll.Y * pitchYawAuthority);
+                command.X * pitchYawAuthority,
+                command.Z * rollAuthority,
+                command.Y * pitchYawAuthority);
             // Convertir de espacio local a mundo
             AngularVelocity = AngularVelocity + Orientation.Rotate(localAngAccel) * dt;
 
@@ -425,7 +440,7 @@ public class Vessel
         }
 
         // SAS: solo amortigua cuando el jugador no está dando input
-        if (SASEnabled && !hasInput)
+        if (SASEnabled && !hasInput && auth > 1e-6)
             AngularVelocity = AngularVelocity * System.Math.Pow(0.005, dt);
 
         // ── Aerodinámica rotacional por torque real ─────────────────────────
@@ -456,14 +471,15 @@ public class Vessel
                 // unpowered entry. Their hinge force scales with q and their physical lever
                 // arm; this replaces the impossible assumption that only lit engines can
                 // hold a lift-producing angle of attack.
-                bool hasBodyFlaps = Parts.Parts.Any(p => p.Definition.Id == "starship_command");
+                bool hasBodyFlaps = Parts.Parts.Any(p =>
+                    p.Definition.Id == "starship_command" && !p.IsBroken);
                 if (hasBodyFlaps && hasInput)
                 {
                     AngularVelocity += AerodynamicsModel.ComputeFlapControlAngularAcceleration(
                         density,
                         surfVel,
                         Orientation,
-                        PitchYawRoll,
+                        command,
                         VehicleLength,
                         MaximumDiameter,
                         Parts.TransverseMomentOfInertia) * dt;

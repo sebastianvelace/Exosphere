@@ -680,7 +680,35 @@ public partial class HUDController : Control
             UpdateCountdown(mission);
             UpdateLaunchPathCallout(mission, bridge, vessel, refBody);
             UpdateDeorbitEdlCue(mission, peAlt, atmoMax, timeToPe);
+            UpdateControlAuthorityCue(vessel, mission);
             UpdatePadHelp(mission);
+        }
+    }
+
+    /// <summary>
+    /// Banner-level control-loss / degraded cue after structural breakup (overrides deorbit line).
+    /// </summary>
+    private void UpdateControlAuthorityCue(
+        Exosphere.Simulation.Vessel vessel, MissionManager mission)
+    {
+        bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
+        if (onPad) return;
+
+        double auth = vessel.ControlAuthorityFactor;
+        if (vessel.StructuralControlLost)
+        {
+            _launchPathLabel.Text = "CONTROL LOST — STRUCTURAL";
+            _launchPathLabel.AddThemeColorOverride("font_color", new Color(1f, 0.25f, 0.22f));
+            return;
+        }
+
+        if (Exosphere.Simulation.Flight.ControlAuthority.IsDegraded(auth))
+        {
+            _launchPathLabel.Text = auth <= Exosphere.Simulation.Flight.ControlAuthority.FlapsOnly + 0.01
+                ? "CONTROL DEGRADED — FLAPS ONLY"
+                : "CONTROL DEGRADED";
+            _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
         }
     }
 

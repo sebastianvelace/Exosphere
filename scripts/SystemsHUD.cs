@@ -47,9 +47,22 @@ public partial class SystemsHUD : Control
         y = DrawBar(14, y, "TEMP", (float)sys.Thermal.ThermalFraction,         sys.Thermal.HotAlert || sys.Thermal.ColdAlert);
         y = DrawBar(14, y, "COMM", (float)sys.Comms.SignalStrength,            sys.Comms.LossOfSignalAlert);
 
-        string mode = sys.ControlLimited ? "CONTROL LIMITED" : "CONTROL NOMINAL";
+        var vessel = SimulationBridge.Instance?.ActiveVessel;
+        string mode;
+        if (vessel?.StructuralControlLost == true)
+            mode = "CONTROL LOST (STRUCT)";
+        else if (vessel != null
+                 && Exosphere.Simulation.Flight.ControlAuthority.IsDegraded(vessel.ControlAuthorityFactor))
+            mode = $"CONTROL DEGRADED ({vessel.ControlAuthorityFactor:P0})";
+        else if (sys.ControlLimited)
+            mode = "CONTROL LIMITED";
+        else
+            mode = "CONTROL NOMINAL";
+        bool alert = sys.ControlLimited || (vessel?.StructuralControlLost ?? false)
+            || (vessel != null && Exosphere.Simulation.Flight.ControlAuthority.IsDegraded(
+                vessel.ControlAuthorityFactor));
         DrawString(_font, new Vector2(10, y + 12), mode,
-            HorizontalAlignment.Left, -1, 10, sys.ControlLimited ? RedBar : LabelDim);
+            HorizontalAlignment.Left, -1, 10, alert ? RedBar : LabelDim);
 
         // Signal delay label
         float delay = (float)sys.Comms.SignalDelaySeconds;
