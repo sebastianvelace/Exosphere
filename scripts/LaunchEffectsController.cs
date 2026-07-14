@@ -165,12 +165,14 @@ public partial class LaunchEffectsController : Node3D
     {
         // Keep Amount fixed after construction. Mutating it rebuilt GPU buffers
         // during spool-up and repeatedly discarded the initial steam cloud.
+        // Cap peak ratios below 1 so the deluge bank does not erase the stack silhouette
+        // in a lateral pad capture (PLAN_VISUAL V2 deluge silhouette gap).
         float ratio = Mathf.Clamp(k, 0.02f, 1f);
-        _steamCore.AmountRatio  = Mathf.Lerp(0.48f, 1.00f, ratio);
-        _steamBoil.AmountRatio  = Mathf.Lerp(0.34f, 1.00f, ratio);
-        _dust.AmountRatio       = ratio;
-        _haze.AmountRatio       = Mathf.Lerp(0.25f, 1.00f, ratio);
-        _dustRadial.AmountRatio = Mathf.Lerp(0.40f, 1.00f, ratio);
+        _steamCore.AmountRatio  = Mathf.Lerp(0.40f, 0.82f, ratio);
+        _steamBoil.AmountRatio  = Mathf.Lerp(0.28f, 0.72f, ratio);
+        _dust.AmountRatio       = Mathf.Lerp(0.20f, 0.70f, ratio);
+        _haze.AmountRatio       = Mathf.Lerp(0.18f, 0.55f, ratio);
+        _dustRadial.AmountRatio = Mathf.Lerp(0.30f, 0.65f, ratio);
     }
 
     private void SetEmitting(bool on)

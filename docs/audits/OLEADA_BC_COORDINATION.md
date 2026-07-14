@@ -29,7 +29,7 @@ feature agents stay inside ownership locks below.
 | **C2** | Orbit → map deorbit → ENTRY (no teleport) | Mission objectives scaffold |
 | **C3** | HUD phase track + deorbit/EDL cues + light SFX | — |
 
-**Follow-on:** control-loss consequences ✅ (`feat/physics-control-loss`). Still open: visual oleada A (reference captures / V0.5), R5 multi-motor.
+**Follow-on:** control-loss ✅; visual oleada A ✅ (plasma phase alpha, flap/nose proportions, deluge silhouette). Still open: IFT side-by-side reference compare, R5 multi-motor.
 
 ## File locks
 

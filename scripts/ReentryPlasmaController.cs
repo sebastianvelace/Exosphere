@@ -114,8 +114,11 @@ public partial class ReentryPlasmaController : Node3D
         double flux     = ThermalModel.ComputeHeatFlux(
             density, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
 
-        double intensity = System.Math.Clamp(
+        double fluxIntensity = System.Math.Clamp(
             (flux - FLUX_THRESH) / (FLUX_PEAK - FLUX_THRESH), 0.0, 1.0);
+        string? phaseName = MissionManager.Instance?.Phase.ToString();
+        double intensity = VehicleVisualPhysics.ReentryPlasmaVisualIntensity(
+            fluxIntensity, phaseName);
 
         if (intensity < 0.01)
         {
@@ -196,15 +199,16 @@ public partial class ReentryPlasmaController : Node3D
         AddEdgeGlow("BellyCenterHeat", new Vector3(-1.72f, 9.8f * shipSpanScale, 0.0f),
             new Vector3(0.11f, 5.4f, 0.11f), weight: 0.52f, delay: 0.05f, kind: EdgeKind.Belly);
 
-        AddEdgeGlow("FwdFlapLeftHeat",  new Vector3(-1.66f, 15.0f * shipSpanScale,  1.20f),
-            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.08f, kind: EdgeKind.Flap);
-        AddEdgeGlow("FwdFlapRightHeat", new Vector3(-1.66f, 15.0f * shipSpanScale, -1.20f),
-            new Vector3(0.16f, 2.25f, 0.16f), weight: 0.82f, delay: 0.11f, kind: EdgeKind.Flap);
+        // Edge anchors track the V1.1 flap layout (smaller forward, longer aft elevons).
+        AddEdgeGlow("FwdFlapLeftHeat",  new Vector3(-1.62f, 15.35f * shipSpanScale,  1.12f),
+            new Vector3(0.14f, 1.95f, 0.14f), weight: 0.80f, delay: 0.10f, kind: EdgeKind.Flap);
+        AddEdgeGlow("FwdFlapRightHeat", new Vector3(-1.62f, 15.35f * shipSpanScale, -1.12f),
+            new Vector3(0.14f, 1.95f, 0.14f), weight: 0.80f, delay: 0.13f, kind: EdgeKind.Flap);
 
-        AddEdgeGlow("AftFlapLeftHeat",   new Vector3(-1.72f, 4.2f * shipSpanScale,  1.10f),
-            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.16f, kind: EdgeKind.Flap);
-        AddEdgeGlow("AftFlapRightHeat",  new Vector3(-1.72f, 4.2f * shipSpanScale, -1.10f),
-            new Vector3(0.20f, 3.55f, 0.20f), weight: 0.72f, delay: 0.19f, kind: EdgeKind.Flap);
+        AddEdgeGlow("AftFlapLeftHeat",   new Vector3(-1.78f, 3.85f * shipSpanScale,  1.25f),
+            new Vector3(0.22f, 4.05f, 0.22f), weight: 0.78f, delay: 0.14f, kind: EdgeKind.Flap);
+        AddEdgeGlow("AftFlapRightHeat",  new Vector3(-1.78f, 3.85f * shipSpanScale, -1.25f),
+            new Vector3(0.22f, 4.05f, 0.22f), weight: 0.78f, delay: 0.17f, kind: EdgeKind.Flap);
     }
 
     private void AddEdgeGlow(string name, Vector3 position, Vector3 baseScale,
