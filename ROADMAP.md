@@ -106,7 +106,7 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Reentry Fisico/Visual
 
-- Per-piece structural breakup (oleada B1).
+- Per-piece structural breakup ✅ (oleada B1: overloaded joints → debris vessels; control-loss consequences still pending).
 - Perdida de control si falla una pieza critica.
 - Lift/AoA en sim ✅ (R6); guiado EDL lift-up ~70° ✅ (`EDLController` + `ComputeLiftUpEntryAxis`).
 - Decaimiento orbital LEO ✅ (R7 termosfera residual + B3: warp/on-rails ya no congela LEO).

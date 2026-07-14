@@ -157,14 +157,15 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Acceptance** | xUnit: Earth→Moon transfer Δv and time within ~10% of patched-conic reference; existing Hohmann tests still pass. |
 | **Realism feel** | Going to the Moon feels like a real transfer window, not a straight line cheat. |
 
-### P-P5. Structural break-up completion (P2-C scaffold)
+### P-P5. Structural break-up completion (P2-C scaffold) — DONE
 
 | | |
 | --- | --- |
-| **Evidence** | `Universe.cs:208-211` computes loads but discards `FindBreakingJoints` result (`.atl/OVERENGINEERING_AUDIT_JUL2026.md:66-71`). |
+| **Evidence** | `Universe.TryStructuralBreakup` consumes `FindBreakingJoints`; `PartGraph.SplitAtJoint` / `Vessel.BreakAtJoint` spawn debris; `StructuralBreakupTests`. |
 | **Owner** | `ExosphereSimulation/Physics/StressSolver.cs`, `Universe.cs`, `ReentryBreakupController.cs` |
 | **Acceptance** | Overload breaks joints; VFX + vessel destruction; xUnit on joint break threshold; R13 nominal EDL unaffected. |
 | **Realism feel** | Max-Q and bad reentry can tear the stack — failure is physical, not a red screen. |
+| **Status** | **DONE** (oleada B1). Control-loss consequences still pending. |
 
 ### P-P6. R5 multi-motor model (LARGE — defer unless physics sprint)
 
