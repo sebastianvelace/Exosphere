@@ -24,7 +24,8 @@
   NRLMSISE-00 (actividad solar media) queda dentro de factor ~2-5 entre 140 y 500 km. Solo
   `GetDensity` tiene cola; presión sigue en vacío sobre 140 km y `MaxAltitude` sigue siendo la
   frontera aerodinámica de los controllers. Test de aceptación: órbita circular de 150 km en RK4
-  decae de forma lenta y monótona (`OrbitalDecayTests`). A warp ≥10 el vessel pasa a on-rails
+  decae de forma lenta y monótona (`OrbitalDecayTests`). A warp ≥10 el vessel solo pasa a on-rails
+  fuera de la termosfera residual; dentro de `ThermosphereTopAltitude` se fuerza RK4 (B3)
   (gate `density < 0.01`) y NO decae — limitación documentada.
 
 - **R6 — sustentación de cuerpo con ángulo de ataque (HECHO).** `AerodynamicsModel.ComputeLift`:
@@ -184,7 +185,9 @@ equivocada hace la órbita.
   `data/bodies/earth.json`, tests `AtmosphereThermosphereTests.cs`.
 - **Aceptación:** ✅ densidad positiva/continua/monótona en LEO bajo (150/200/400 km), vacío sobre
   1000 km (7 tests). Revisado por `physics-reviewer` en contexto fresco: veredicto CORRECTO.
-- **Nota:** el drag sólo se aplica en RK4 (vessel activo); on-rails/Kepler no decae (límite conocido).
+- **Nota (B3):** `RequiresOffRailsPhysics` fuerza RK4 mientras haya densidad residual bajo
+  `ThermosphereTopAltitude`, así el warp ≥10 ya no congela el lifetime de LEO. Sobre el tope
+  termosférico siguen rails/Kepler sin decay espurio.
   Comentario de `AscentController.cs` de parking orbit actualizado (ya no dice "no decae").
 
 ---

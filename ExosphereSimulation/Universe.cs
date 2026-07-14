@@ -184,6 +184,14 @@ public class Universe
 
         double density = body.GetAtmosphericDensity(vessel.Position);
         if (density <= 0.0) return false;
+
+        // Residual thermosphere (R7) above MaxAltitude still exerts drag. Analytic rails
+        // ignore that force, so low LEO would become immortal under warp ≥ 10. Keep RK4
+        // while any modeled density remains below ThermosphereTopAltitude.
+        double thermoTop = body.Atmosphere.ThermosphereTopAltitude;
+        if (thermoTop > body.Atmosphere.MaxAltitude && altitude < thermoTop)
+            return true;
+
         double speed = vessel.GetSurfaceVelocity(body).Magnitude;
         double q = 0.5 * density * speed * speed;
         double heatFlux = Physics.ThermalModel.ComputeHeatFlux(

@@ -109,7 +109,7 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Per-piece structural breakup (oleada B1).
 - Perdida de control si falla una pieza critica.
 - Lift/AoA en sim ✅ (R6); guiado EDL lift-up ~70° ✅ (`EDLController` + `ComputeLiftUpEntryAxis`).
-- Decaimiento orbital LEO ✅ (R7 termosfera residual); on-rails/warp decay = oleada B3.
+- Decaimiento orbital LEO ✅ (R7 termosfera residual + B3: warp/on-rails ya no congela LEO).
 
 ### Interplanetario
 
@@ -119,7 +119,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Gameplay
 
-- Save/load de mision.
+- Save/load de mision (oleada C1).
+- Flujo jugable orbita → deorbit → ENTRY (oleada C2).
+- Cues/track de fases EDL (oleada C3).
 - Misiones/objetivos de progresion.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.

@@ -11,7 +11,7 @@ feature agents stay inside ownership locks below.
 | ID | Branch | Status | Notes |
 |----|--------|--------|-------|
 | Coord | `main` | DONE | This file + stale SoftLanding / EDL-lift sync |
-| B3 | `feat/physics-leo-decay-rails` | WIP | LEO decay under warp/on-rails |
+| B3 | `feat/physics-leo-decay-rails` | DONE | `RequiresOffRailsPhysics` keeps residual thermosphere in RK4 |
 | B2 | `feat/physics-hotstage-overlap` | pending | Dual-thrust overlap window |
 | B1 | `feat/physics-structural-breakup` | pending | Wire `FindBreakingJoints` → split |
 | C1 | `feat/gameplay-save-load` | pending | Usable mission save/load |
