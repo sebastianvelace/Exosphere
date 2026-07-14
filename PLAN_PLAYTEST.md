@@ -65,8 +65,9 @@ each gated on physical state (pseudocode):
 4. **Staging / hot-stage** — capture on `SEPARATION` (booster + Ship split).
 5. **Orbit insertion** — capture on `SECO / ORBIT` (apoapsis ≈ periapsis).
 6. **Orbit beauty** — `JumpToOrbit(250_000)` for a deterministic Earth+ship frame.
-7. **Deorbit + reentry plasma** — drain propellant to reserve, retro-burn, capture
-   while `heatRatio` climbs (watch `ThermalModel` heat / `maxT`).
+7. **Deorbit + reentry plasma** — from ORBIT open map `[M]`, press `[B]` for the
+   deorbit preset (Pe≈80 km), `⏎` to arm/execute; then capture while `heatRatio`
+   climbs (watch `ThermalModel` heat / `maxT`). Prefer this over teleport demo.
 8. **EDL** — belly-flop → flip-and-burn → touchdown (target ≤ 2 m/s).
 
 Record per milestone: `alt, spd, vSpeed, q, g, phase, heatRatio, maxT` → dump to
@@ -116,9 +117,9 @@ bash tools/visual_playtest.sh --smoke
 
 **Known gaps (honest, do not fake success)**
 
-- **Deorbit → EDL tail:** Entry captures, but peak/retro/touchdown need longer wall
-  time or smarter warp through the vacuum coast. Log line:
-  `GAP deorbit→EDL: no ENTRY phase reached within 720s` when deorbit fails entirely.
+- **Deorbit → EDL tail:** Entry captures via map `[B]` deorbit (C2) or harness retro;
+  peak/retro/touchdown need longer wall time or smarter warp through the vacuum coast.
+  Log line: `GAP deorbit→EDL: no ENTRY phase reached within 720s` when deorbit fails.
 - **Ascent duration:** Natural [G] orbit insertion can exceed 480 s sim-time at x1;
   fallback `JumpToOrbit(200 km)` only fires while still in ascent phases.
 - **V-024 belly-flop reference:** Blocked on reliable `peak_heating` + `retro_burn`

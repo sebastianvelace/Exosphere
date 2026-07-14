@@ -34,6 +34,13 @@ public partial class AutopilotController : Node
             IsBurning = false;
             _deliveredDv = 0.0;
             _prevNu = double.NaN;
+
+            // Deorbit-ish retro burn: leave ORBIT into COAST while waiting for ignition.
+            if (_planner.DvPrograde < -50.0
+                && MissionManager.Instance?.Phase == MissionPhase.ORBIT)
+            {
+                MissionManager.Instance.EnterPhase(MissionPhase.COAST);
+            }
         }
     }
 
@@ -118,14 +125,27 @@ public partial class AutopilotController : Node
         _deliveredDv = 0.0;
         _restoreSas = vessel.SASEnabled;
         vessel.SASEnabled = false;
+
+        // Orbital deorbit burn (map preset / large retro Δv): expose RETRO_BURN on the mission track.
+        if (_planner.DvPrograde < -50.0)
+            MissionManager.Instance?.EnterPhase(MissionPhase.RETRO_BURN);
     }
 
     private void FinishBurn(Vessel vessel)
     {
+        bool wasDeorbit = _planner.DvPrograde < -50.0;
         vessel.Throttle = 0.0;
         EndBurn();
         IsArmed = false;
         _planner.ClearNode();
+
+        // After the deorbit burn, coast toward entry interface so EDL can arm ENTRY
+        // (RETRO_BURN alone is also used later for the landing flip and is InDescent).
+        if (wasDeorbit
+            && MissionManager.Instance?.Phase == MissionPhase.RETRO_BURN)
+        {
+            MissionManager.Instance.EnterPhase(MissionPhase.COAST);
+        }
     }
 
     private void EndBurn(Vessel? vessel = null)

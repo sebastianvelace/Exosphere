@@ -826,6 +826,31 @@ public partial class SimulationBridge : Node
         GD.Print($"[DEBUG] JumpToOrbit -> {altitude / 1000:F0} km circular, v={vCirc:F0} m/s");
     }
 
+    /// <summary>
+    /// Map-facing helper: plan a retrograde deorbit burn on the orbital-map planner that
+    /// lowers periapsis into the atmosphere (default Pe altitude 80 km). Does not execute
+    /// the burn — arm with Enter on the map. Leaves <see cref="BeginReentryDemonstration"/>
+    /// alone (that remains a teleport demo).
+    /// </summary>
+    public bool PlanDeorbitForActiveVessel(double targetPeAltitudeM = 80_000.0)
+    {
+        var map = MapViewController.Instance;
+        var vessel = ActiveVessel;
+        var earth = Universe.GetBody("earth");
+        if (map == null || vessel == null || earth == null || vessel.IsDestroyed)
+            return false;
+
+        var relPos = vessel.Position - earth.Position;
+        var relVel = vessel.Velocity - earth.Velocity;
+        map.Planner.SetOrbit(relPos, relVel, earth.GM);
+        if (!map.Planner.PlanDeorbit(earth, targetPeAltitudeM))
+            return false;
+
+        GD.Print($"[Bridge] Deorbit planned: Δv={map.Planner.DeltaVMagnitude:F1} m/s " +
+                 $"(Pe target {targetPeAltitudeM / 1000.0:F0} km)");
+        return true;
+    }
+
     /// DEBUG: jump to a ~300 km circular orbit around an arbitrary body (e.g. the transfer
     /// target), to preview arrival/EDL without flying the whole cruise.
     public void JumpToBody(string bodyId, double altitude = 300_000.0)

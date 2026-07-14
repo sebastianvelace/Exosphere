@@ -15,7 +15,7 @@ feature agents stay inside ownership locks below.
 | B2 | `feat/physics-hotstage-overlap` | DONE | 1.5 s dual-thrust; physics-review CORRECTO CON NOTAS |
 | B1 | `feat/physics-structural-breakup` | DONE | `FindBreakingJoints` → `SplitAtJoint` / debris; physics-review CORRECTO CON NOTAS (inherited StressSolver mass-side) |
 | C1 | `feat/gameplay-save-load` | DONE | Usable mission save/load; MissionSaveSerializer + F5/F9 + Continue |
-| C2 | `feat/gameplay-deorbit-entry` | pending | Orbit → deorbit → ENTRY |
+| C2 | `feat/gameplay-deorbit-entry` | DONE | Orbit → map `[B]` deorbit → COAST/RETRO → ENTRY via EDL |
 | C3 | `feat/ux-edl-mission-phases` | pending | Phase track + EDL cues |
 
 ## File locks

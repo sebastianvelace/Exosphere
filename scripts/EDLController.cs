@@ -101,8 +101,17 @@ public partial class EDLController : Control
                 bridge!.TriggerStaging();
                 return;
             }
-            if (descending && inAtmo && speed > EntrySpeed && (mission == null || !mission.InDescent))
+            if (descending && inAtmo && speed > EntrySpeed)
             {
+                // Arm from ORBIT/COAST, or from a pre-entry deorbit RETRO_BURN.
+                // Block only when already deep in the EDL track (ENTRY onward) so we don't
+                // re-trigger from Inactive while MissionManager still shows a descent phase.
+                bool blockedByMission = mission != null
+                    && mission.InDescent
+                    && mission.Phase is not MissionPhase.RETRO_BURN;
+                if (blockedByMission)
+                    return;
+
                 _phase = Edl.Entry;
                 _legsDeployed = false;
                 _flipInProgress = false;

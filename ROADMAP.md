@@ -121,7 +121,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 - Save/load de mision (oleada C1) — `MissionSaveSerializer` + F5/F9 quicksave +
   MainMenu Continue; mid-orbit roundtrip tested.
-- Flujo jugable orbita → deorbit → ENTRY (oleada C2).
+- Flujo jugable orbita → deorbit → ENTRY (oleada C2) ✅ — mapa `[B]`
+  (`DeorbitPlanner` + `ManeuverPlanner.PlanDeorbit`); EDL arma `ENTRY` sin teleport demo.
 - Cues/track de fases EDL (oleada C3).
 - Misiones/objetivos de progresion.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
