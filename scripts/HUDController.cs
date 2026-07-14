@@ -875,8 +875,31 @@ public partial class HUDController : Control
                     _padHelpDismissed = !_padHelpDismissed;
                     GetViewport().SetInputAsHandled();
                     break;
+                case Key.F5:
+                    SaveSystem.SaveGame("quicksave");
+                    PushToast("QUICKSAVE");
+                    GetViewport().SetInputAsHandled();
+                    break;
+                case Key.F9:
+                    if (SaveSystem.LoadGame("quicksave"))
+                        PushToast("QUICKLOAD");
+                    else
+                        PushToast("NO QUICKSAVE");
+                    GetViewport().SetInputAsHandled();
+                    break;
             }
         }
+    }
+
+    private void PushToast(string message)
+    {
+        GD.Print($"[HUD] {message}");
+        var bridge = SimulationBridge.Instance;
+        double t = bridge?.Universe.CurrentTime ?? 0.0;
+        _events.Insert(0, $"{FormatClock(t)}  {message}");
+        if (_events.Count > 5) _events.RemoveAt(_events.Count - 1);
+        if (_eventLog != null)
+            _eventLog.Text = string.Join("\n", _events);
     }
 
     // ── Formatting helpers ──────────────────────────────────────────────────

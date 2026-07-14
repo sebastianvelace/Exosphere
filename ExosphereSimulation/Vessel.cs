@@ -14,10 +14,20 @@ public enum VesselDestructionCause
 
 public class Vessel
 {
-    public string Id   { get; }    = Guid.NewGuid().ToString();
+    public string Id   { get; private set; } = Guid.NewGuid().ToString();
     public string Name { get; set; } = "Unnamed Vessel";
 
     public PartGraph Parts { get; } = new();
+
+    public Vessel() { }
+
+    /// <summary>Creates a vessel with a stable identity for save/load roundtrips.</summary>
+    public static Vessel CreateWithId(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Vessel id must be non-empty.", nameof(id));
+        return new Vessel { Id = id };
+    }
 
     // ── Estado cinemático (marco inercial, doble precisión) ───────────────
     public Vector3d    Position        { get; set; }

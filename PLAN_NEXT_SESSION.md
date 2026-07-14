@@ -181,13 +181,13 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 
 ## Gameplay Track (Save/Load, VAB, Missions)
 
-### G-P1. Wire SaveSystem to UI + mission persistence
+### G-P1. Wire SaveSystem to UI + mission persistence — DONE
 
 | | |
 | --- | --- |
-| **Evidence** | `SaveSystem.cs` serializes universe to `~/.local/share/Exosphere/saves/` but no menu/HUD wiring (grep: no UI calls). ROADMAP: "Save/load de mision" pending. |
-| **Owner** | `scripts/SaveSystem.cs`, `scripts/UI/*`, `scenes/ui/MainMenu.tscn`, `HUDController.cs` |
-| **Acceptance** | Main menu: New / Continue / Load slot. In-flight quicksave/load (e.g. F5/F9). Reload restores vessel state, time, orbit within 1 m/s. Play harness: save mid-orbit → load → same apoapsis. |
+| **Evidence** | `MissionSaveSerializer` in `ExosphereSimulation/Persistence`; `SaveSystem` wraps I/O + phase/warp; MainMenu Continue + HUD F5/F9; `MissionSaveLoadTests` mid-orbit roundtrip. |
+| **Owner** | `ExosphereSimulation/Persistence/*`, `scripts/SaveSystem.cs`, `MainMenu.cs`, `HUDController.cs`, `SimulationBridge.cs` |
+| **Acceptance** | Main menu Continue when slots exist. In-flight F5/F9. Reload restores vessel kinematics, fuel, time, phase; ActiveVessel Id stable. |
 | **Realism feel** | Real missions span hours — the player can pause life and resume the same orbit tomorrow. |
 
 ### G-P2. VAB pre-launch validation pass

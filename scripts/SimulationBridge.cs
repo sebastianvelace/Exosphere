@@ -165,6 +165,18 @@ public partial class SimulationBridge : Node
 
         SpawnStarshipStack(dataPath);
         SpawnPendingConstructedVessel(dataPath);
+
+        // MainMenu Continue / deferred quickload: replace the pad stack with the saved mission.
+        if (!string.IsNullOrEmpty(SaveSystem.PendingLoadSlot))
+        {
+            string slot = SaveSystem.PendingLoadSlot;
+            SaveSystem.PendingLoadSlot = null;
+            if (SaveSystem.LoadGame(Universe, slot, partsDirectory: System.IO.Path.Combine(dataPath, "parts")))
+                GD.Print($"[Sim] Restored mission from slot '{slot}'");
+            else
+                GD.PushWarning($"[Sim] Pending load slot '{slot}' missing; keeping pad spawn.");
+        }
+
         SpawnPlanets();
         EmitSignal(SignalName.SimulationLoaded);
 
@@ -494,6 +506,27 @@ public partial class SimulationBridge : Node
         vessel.GroundNormal = upDir;
         vessel.GroundOffset = mountHeightM;
 
+    }
+
+    /// <summary>
+    /// Rebuilds the active vessel mesh after a mission load (Id and part graph may be new).
+    /// </summary>
+    public void RebuildActiveVesselRenderer()
+    {
+        var vessel = ActiveVessel;
+        if (vessel == null) return;
+
+        var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
+        if (_vesselRenderer == null && vesselsNode != null)
+        {
+            _vesselRenderer = new VesselRenderer { Name = "StarshipRenderer" };
+            vesselsNode.AddChild(_vesselRenderer);
+        }
+
+        _vesselRenderer?.BuildFromVessel(vessel);
+        var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        if (_vesselRenderer != null)
+            fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
     }
 
     /// <summary>
