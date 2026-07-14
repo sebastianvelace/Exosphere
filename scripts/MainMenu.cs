@@ -1,5 +1,7 @@
 namespace Exosphere.Game;
 
+using System;
+using System.Linq;
 using Godot;
 
 public partial class MainMenu : Control
@@ -137,6 +139,14 @@ public partial class MainMenu : Control
         flight.Pressed += OpenFlight;
         actions.AddChild(flight);
 
+        var continueBtn = new Button { Text = "CONTINUE" };
+        InterfaceTheme.StyleButton(continueBtn);
+        bool hasSaves = SaveSystem.HasSaveSlots();
+        continueBtn.Disabled = !hasSaves;
+        continueBtn.Modulate = hasSaves ? Colors.White : new Color(1f, 1f, 1f, 0.45f);
+        continueBtn.Pressed += OpenContinue;
+        actions.AddChild(continueBtn);
+
         var assembly = new Button { Text = "VEHICLE ASSEMBLY" };
         InterfaceTheme.StyleButton(assembly);
         assembly.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/construction/Construction.tscn");
@@ -210,7 +220,7 @@ public partial class MainMenu : Control
 
         var note = new Label
         {
-            Text = "NEW FLIGHT  /  ASSEMBLY  /  EXIT",
+            Text = "NEW FLIGHT  /  CONTINUE  /  ASSEMBLY  /  EXIT",
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
         note.AddThemeFontSizeOverride("font_size", 10);
@@ -250,4 +260,16 @@ public partial class MainMenu : Control
 
     private void OpenFlight() =>
         GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
+
+    private void OpenContinue()
+    {
+        var slots = SaveSystem.ListSaveSlots();
+        if (slots.Length == 0) return;
+
+        // Prefer quicksave when present; otherwise newest alphabetical fallback.
+        SaveSystem.PendingLoadSlot = slots.Contains("quicksave")
+            ? "quicksave"
+            : slots[0];
+        GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
+    }
 }

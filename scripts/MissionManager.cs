@@ -53,6 +53,12 @@ public partial class MissionManager : Node
             var explosion = new ExplosionController { Name = "ExplosionController" };
             worldNode.CallDeferred("add_child", explosion);
         }
+
+        if (SaveSystem.PendingMissionPhase is MissionPhase pending)
+        {
+            SaveSystem.PendingMissionPhase = null;
+            EnterPhase(pending);
+        }
     }
 
     // ── Public API ────────────────────────────────────────────────────────

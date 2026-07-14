@@ -26,6 +26,17 @@ public class Universe
     public double CurrentTime { get; private set; } = 0.0;
 
     /// <summary>
+    /// Restores simulation time from a save. Re-propagates celestial bodies to
+    /// <paramref name="t"/> so vessel relative state matches the saved epoch.
+    /// </summary>
+    public void SetCurrentTime(double t)
+    {
+        CurrentTime = t;
+        if (_bodies.Count > 0)
+            KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime);
+    }
+
+    /// <summary>
     /// Simulation time scale.
     /// 1 = real-time; 4 = full RK4 physics at 4× speed;
     /// up to 1000 = mixed (active vessel RK4, others on rails);

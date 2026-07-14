@@ -119,7 +119,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Gameplay
 
-- Save/load de mision (oleada C1).
+- Save/load de mision (oleada C1) — `MissionSaveSerializer` + F5/F9 quicksave +
+  MainMenu Continue; mid-orbit roundtrip tested.
 - Flujo jugable orbita → deorbit → ENTRY (oleada C2).
 - Cues/track de fases EDL (oleada C3).
 - Misiones/objetivos de progresion.
