@@ -55,7 +55,10 @@ public class Part
     public double   ThrottleLevel { get; set; }          // [0, 1]
     public Vector3d GimbalOffset  { get; set; } = Vector3d.Zero;  // deflexión normalizada
     private readonly List<EngineInstanceState> _engineStates = new();
+    private readonly List<EngineFailureInjection> _scheduledFailures = new();
     public IReadOnlyList<EngineInstanceState> EngineStates => _engineStates;
+    public IReadOnlyList<EngineFailureInjection> ScheduledEngineFailures =>
+        _scheduledFailures;
     public bool HasEngineRuntime => _engineStates.Count > 0;
     private double _activeEngineFraction = 1.0;
 
@@ -113,16 +116,11 @@ public class Part
             var state = _engineStates[i];
             double command = i < selected ? floored : 0.0;
             state.CommandedThrottle = command;
-            AdvanceEngineState(state, command, dt);
+            if (!ApplyScheduledFailure(state, dt))
+                AdvanceEngineState(state, command, dt);
             AdvanceChamberPressure(state, dt);
             AdvanceGimbal(state, i, i < selected, dt);
-            double thermalTarget = state.ActualThrottle > 1e-3
-                ? 900.0 + 350.0 * state.ActualThrottle
-                : 290.0;
-            double thermalRate = state.ActualThrottle > 1e-3 ? 1.5 : 0.25;
-            state.TemperatureK +=
-                (thermalTarget - state.TemperatureK)
-                * System.Math.Clamp(dt * thermalRate, 0.0, 1.0);
+            AdvanceEngineThermalState(state, dt);
         }
 
         RefreshAggregateThrottle();
@@ -140,6 +138,11 @@ public class Part
         engine.FailureCode = string.IsNullOrWhiteSpace(failureCode)
             ? "INJECTED_FAILURE"
             : failureCode;
+        _scheduledFailures.RemoveAll(injection =>
+            string.Equals(
+                injection.EngineInstanceId,
+                instanceId,
+                StringComparison.Ordinal));
         RefreshAggregateThrottle();
         return true;
     }
@@ -149,6 +152,28 @@ public class Part
         foreach (var engine in _engineStates)
             FailEngine(engine.InstanceId, failureCode);
         RefreshAggregateThrottle();
+    }
+
+    public void ScheduleEngineFailure(EngineFailureInjection injection)
+    {
+        injection.Validate();
+        if (!_engineStates.Any(state =>
+                string.Equals(
+                    state.InstanceId,
+                    injection.EngineInstanceId,
+                    StringComparison.Ordinal)))
+            throw new ArgumentException(
+                $"Unknown engine instance '{injection.EngineInstanceId}'.",
+                nameof(injection));
+        _scheduledFailures.Add(injection);
+    }
+
+    public void RestoreScheduledEngineFailures(
+        IEnumerable<EngineFailureInjection> injections)
+    {
+        _scheduledFailures.Clear();
+        foreach (var injection in injections)
+            ScheduleEngineFailure(injection);
     }
 
     public void RestoreEngineStates(IEnumerable<EngineInstanceState> states)
@@ -166,6 +191,7 @@ public class Part
             target.GimbalVelocityDegPerS = source.GimbalVelocityDegPerS;
             target.ChamberPressureFraction = source.ChamberPressureFraction;
             target.TemperatureK = source.TemperatureK;
+            target.StartAttempts = source.StartAttempts;
             target.StartsCompleted = source.StartsCompleted;
             target.FailureCode = source.FailureCode;
         }
@@ -188,8 +214,63 @@ public class Part
                 Definition.MixtureRatio,
                 state.GimbalDeg,
                 state.TemperatureK,
+                Definition.ResolvedEngineModel?.MaximumSafeTemperatureK
+                    ?? double.PositiveInfinity,
+                state.StartAttempts,
+                state.StartsCompleted,
                 state.FailureCode);
         }
+    }
+
+    private bool ApplyScheduledFailure(EngineInstanceState state, double dt)
+    {
+        int activeAttempt = state.State is
+            EngineLifecycleState.Chill or EngineLifecycleState.SpinPrime
+            ? state.StartAttempts + 1
+            : state.StartAttempts;
+        int index = _scheduledFailures.FindIndex(injection =>
+            string.Equals(
+                injection.EngineInstanceId,
+                state.InstanceId,
+                StringComparison.Ordinal)
+            && injection.TriggerState == state.State
+            && (injection.TriggerStartAttempt == 0
+                || injection.TriggerStartAttempt == activeAttempt)
+            && state.StateElapsedSeconds + dt
+                >= injection.TriggerAfterStateSeconds);
+        if (index < 0) return false;
+        string failureCode = _scheduledFailures[index].FailureCode;
+        _scheduledFailures.RemoveAt(index);
+        return FailEngine(state.InstanceId, failureCode);
+    }
+
+    private void AdvanceEngineThermalState(
+        EngineInstanceState state,
+        double dt)
+    {
+        var model = Definition.ResolvedEngineModel;
+        if (model != null
+            && state.State != EngineLifecycleState.Failed
+            && state.TemperatureK > model.MaximumSafeTemperatureK)
+        {
+            FailEngine(state.InstanceId, "ENGINE_OVERTEMPERATURE");
+            return;
+        }
+        double chamber = state.ChamberPressureFraction;
+        double target = model != null
+            ? 290.0 + (model.NominalOperatingTemperatureK - 290.0) * chamber
+            : chamber > 1e-3 ? 900.0 + 350.0 * chamber : 290.0;
+        double timeConstant = model != null
+            ? chamber > 1e-3
+                ? model.ThermalTimeConstantSeconds
+                : model.CooldownTimeConstantSeconds
+            : chamber > 1e-3 ? 1.0 / 1.5 : 4.0;
+        double alpha = 1.0 - System.Math.Exp(-dt / timeConstant);
+        state.TemperatureK += (target - state.TemperatureK) * alpha;
+        if (model != null
+            && state.State != EngineLifecycleState.Failed
+            && state.TemperatureK > model.MaximumSafeTemperatureK)
+            FailEngine(state.InstanceId, "ENGINE_OVERTEMPERATURE");
     }
 
     public double GetEngineFeedLimitKgS(int engineIndex)
@@ -329,7 +410,17 @@ public class Part
         {
             case EngineLifecycleState.Off:
                 state.ActualThrottle = 0.0;
-                if (command > 1e-3) Transition(state, EngineLifecycleState.Chill);
+                if (command > 1e-3)
+                {
+                    int permittedStarts = Definition.ResolvedEngineModel is { } model
+                        ? model.RestartLimit + 1
+                        : int.MaxValue;
+                    if (state.StartsCompleted >= permittedStarts)
+                        FailEngine(
+                            state.InstanceId, "RESTART_LIMIT_EXCEEDED");
+                    else
+                        Transition(state, EngineLifecycleState.Chill);
+                }
                 break;
             case EngineLifecycleState.Chill:
                 if (state.StateElapsedSeconds >= Definition.EngineChillSeconds)
@@ -337,7 +428,10 @@ public class Part
                 break;
             case EngineLifecycleState.SpinPrime:
                 if (state.StateElapsedSeconds >= Definition.EngineSpinPrimeSeconds)
+                {
+                    state.StartAttempts++;
                     Transition(state, EngineLifecycleState.Ignition);
+                }
                 break;
             case EngineLifecycleState.Ignition:
                 if (state.StateElapsedSeconds >= Definition.EngineIgnitionSeconds)

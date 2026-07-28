@@ -39,6 +39,20 @@
       "uncertainty": "inherits endpoint uncertainty; throttle dependence is an engineering approximation"
     },
     {
+      "dataId": "merlin1d-block5-2025", "field": "restartEnvelope",
+      "status": "estimated", "source": "Falcon 9 Block 5 first-stage operational mission profile",
+      "accessedDate": "2026-07-28", "variant": "Merlin 1D, Falcon 9 Block 5 first stage",
+      "conditions": "one ignition per mission; simulator permits no in-flight restart",
+      "uncertainty": "operational envelope, not a published hardware qualification limit"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Simulator engineering thermal model; no public chamber-wall transient dataset",
+      "accessedDate": "2026-07-28", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "normalized engine assembly temperature used for deterministic failure logic",
+      "uncertainty": "high; temperatures are simulation-state estimates, not proprietary sensor replicas"
+    },
+    {
       "dataId": "merlin1d-block5-2025", "field": "gimbalEnvelope",
       "status": "estimated", "source": "Falcon 9 public imagery and flight-control behavior; engineering estimate",
       "accessedDate": "2026-07-27", "variant": "Merlin 1D octaweb installation",
@@ -92,6 +106,20 @@
       "accessedDate": "2026-07-28", "variant": "Merlin Vacuum, Falcon 9 Block 5",
       "conditions": "vacuum and hypothetical Earth sea-level endpoints; 40–100% simulator envelope",
       "uncertainty": "inherits endpoint uncertainty; throttle dependence is an engineering approximation"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "restartEnvelope",
+      "status": "estimated", "source": "Falcon upper-stage public multi-burn mission profiles",
+      "accessedDate": "2026-07-28", "variant": "Merlin Vacuum, Falcon 9 Block 5 second stage",
+      "conditions": "initial ignition plus up to four simulator restarts",
+      "uncertainty": "restart count is an engineering envelope, not a published qualification limit"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Simulator engineering thermal model; no public chamber-wall transient dataset",
+      "accessedDate": "2026-07-28", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "normalized engine assembly temperature used for deterministic failure logic",
+      "uncertainty": "high; temperatures are simulation-state estimates, not proprietary sensor replicas"
     },
     {
       "dataId": "merlin1d-vac-block5-2025", "field": "gimbalEnvelope",

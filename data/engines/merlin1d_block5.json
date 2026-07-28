@@ -18,6 +18,10 @@
   "startupSeconds": 0.50,
   "shutdownSeconds": 0.35,
   "restartLimit": 0,
+  "nominalOperatingTemperatureK": 1100,
+  "maximumSafeTemperatureK": 1375,
+  "thermalTimeConstantSeconds": 3.0,
+  "cooldownTimeConstantSeconds": 18.0,
   "performanceMap": [
     {
       "ambientPressurePa": 101325,

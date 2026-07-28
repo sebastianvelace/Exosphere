@@ -19,6 +19,28 @@ public enum EngineLifecycleState
     Failed,
 }
 
+public sealed record EngineFailureInjection
+{
+    public string EngineInstanceId { get; init; } = "";
+    public EngineLifecycleState TriggerState { get; init; }
+    public int TriggerStartAttempt { get; init; }
+    public double TriggerAfterStateSeconds { get; init; }
+    public string FailureCode { get; init; } = "INJECTED_FAILURE";
+
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(EngineInstanceId)
+            || !Enum.IsDefined(TriggerState)
+            || TriggerState is EngineLifecycleState.Off
+                or EngineLifecycleState.Failed
+            || TriggerStartAttempt < 0
+            || !double.IsFinite(TriggerAfterStateSeconds)
+            || TriggerAfterStateSeconds < 0.0
+            || string.IsNullOrWhiteSpace(FailureCode))
+            throw new InvalidDataException("Invalid deterministic engine failure injection.");
+    }
+}
+
 public sealed record PressureThrottlePoint
 {
     public double AmbientPressurePa { get; init; }
@@ -48,6 +70,10 @@ public sealed class EngineModelDefinition
     public double StartupSeconds { get; set; }
     public double ShutdownSeconds { get; set; }
     public int RestartLimit { get; set; }
+    public double NominalOperatingTemperatureK { get; set; } = 1_100.0;
+    public double MaximumSafeTemperatureK { get; set; } = 1_400.0;
+    public double ThermalTimeConstantSeconds { get; set; } = 3.0;
+    public double CooldownTimeConstantSeconds { get; set; } = 15.0;
     public double? ExitAreaM2 { get; set; }
     public double? NominalMassFlowKgS { get; set; }
     public double? EffectiveExhaustVelocityMps { get; set; }
@@ -86,6 +112,16 @@ public sealed class EngineModelDefinition
             || GimbalAccelerationDegPerS2 < 0.0
             || RestartLimit < 0)
             throw new InvalidDataException($"Engine model '{Id}' has invalid actuation limits.");
+        if (!double.IsFinite(NominalOperatingTemperatureK)
+            || !double.IsFinite(MaximumSafeTemperatureK)
+            || !double.IsFinite(ThermalTimeConstantSeconds)
+            || !double.IsFinite(CooldownTimeConstantSeconds)
+            || NominalOperatingTemperatureK <= 290.0
+            || MaximumSafeTemperatureK <= NominalOperatingTemperatureK
+            || ThermalTimeConstantSeconds <= 0.0
+            || CooldownTimeConstantSeconds <= 0.0)
+            throw new InvalidDataException(
+                $"Engine model '{Id}' has an invalid thermal envelope.");
         if (ExitAreaM2 is { } area && (!double.IsFinite(area) || area <= 0.0))
             throw new InvalidDataException($"Engine model '{Id}' has an invalid exit area.");
         if (NominalMassFlowKgS is { } flow && (!double.IsFinite(flow) || flow <= 0.0))
@@ -128,6 +164,8 @@ public sealed class EngineModelDefinition
             "specificImpulseVacuumS",
             "minimumThrottle",
             "performanceMap",
+            "restartEnvelope",
+            "thermalEnvelope",
             "gimbalEnvelope",
             "startupTransient",
             "shutdownTransient");
@@ -229,6 +267,7 @@ public sealed class EngineInstanceState
     public Vector3d GimbalVelocityDegPerS { get; set; } = Vector3d.Zero;
     public double ChamberPressureFraction { get; set; }
     public double TemperatureK { get; set; } = 290.0;
+    public int StartAttempts { get; set; }
     public int StartsCompleted { get; set; }
     public string? FailureCode { get; set; }
 }
@@ -244,6 +283,9 @@ public sealed record EngineTelemetry(
     double MixtureRatio,
     Vector3d GimbalDeg,
     double TemperatureK,
+    double MaximumSafeTemperatureK,
+    int StartAttempts,
+    int StartsCompleted,
     string? FailureCode);
 
 public readonly record struct EnginePerformanceSample(

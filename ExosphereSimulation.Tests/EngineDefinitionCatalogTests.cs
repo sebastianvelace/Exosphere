@@ -96,6 +96,8 @@ public sealed class EngineDefinitionCatalogTests
                 "specificImpulseVacuumS",
                 "minimumThrottle",
                 "performanceMap",
+                "restartEnvelope",
+                "thermalEnvelope",
                 "gimbalEnvelope",
                 "startupTransient",
                 "shutdownTransient");
@@ -124,6 +126,9 @@ public sealed class EngineDefinitionCatalogTests
             2.56,
             state.GimbalDeg,
             850.0,
+            1_400.0,
+            1,
+            0,
             null);
 
         Assert.Equal(state.InstanceId, telemetry.InstanceId);

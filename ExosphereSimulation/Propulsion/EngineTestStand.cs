@@ -25,6 +25,7 @@ public sealed class EngineTestProfile
     public double ShutdownSeconds { get; set; } = 1.0;
     public double AmbientPressurePa { get; set; } = 101_325.0;
     public List<ThrottleProgramPoint> ThrottleProgram { get; set; } = new();
+    public List<EngineFailureInjection> FailureInjections { get; set; } = new();
 
     public static EngineTestProfile Merlin1DAcceptance() => new()
     {
@@ -54,7 +55,10 @@ public sealed record EngineTestTelemetry(
     double ActualThrottle,
     double ThrustN,
     double MassFlowKgS,
-    double ChamberPressureFraction);
+    double ChamberPressureFraction,
+    EngineLifecycleState LifecycleState,
+    double TemperatureK,
+    string? FailureCode);
 
 public sealed class EngineTestReport
 {
@@ -64,6 +68,7 @@ public sealed class EngineTestReport
     public double TotalImpulseNs { get; init; }
     public double PropellantConsumedKg { get; init; }
     public double PeakThrustN { get; init; }
+    public IReadOnlyList<string> FailureCodes { get; init; } = [];
     public IReadOnlyList<EngineTestTelemetry> Telemetry { get; init; } = [];
 }
 
@@ -124,6 +129,8 @@ public static class EngineTestStand
             throw new ArgumentException("The throttle program is invalid.", nameof(profile));
 
         var engine = new Part(definition, $"test-stand:{definition.Id}");
+        foreach (var injection in profile.FailureInjections)
+            engine.ScheduleEngineFailure(injection);
         double ignitionAt = profile.PreparationSeconds + profile.ChillSeconds;
         double burnEndsAt = ignitionAt + profile.IgnitionSeconds
             + program[^1].TimeSinceIgnitionSeconds;
@@ -178,6 +185,11 @@ public static class EngineTestStand
                     engine.ApplyThrottleFloor(commanded), stepSeconds);
             double thrust = engine.GetThrustMagnitude(profile.AmbientPressurePa);
             double flow = engine.GetMassFlow(profile.AmbientPressurePa);
+            var states = engine.EngineStates;
+            var failedState = states.FirstOrDefault(
+                state => state.State == EngineLifecycleState.Failed);
+            if (failedState != null)
+                phase = EngineTestPhase.Failed;
             impulse += thrust * stepSeconds;
             propellant += flow * stepSeconds;
             peak = System.Math.Max(peak, thrust);
@@ -189,13 +201,21 @@ public static class EngineTestStand
                     : definition.ThrustSL > 0.0
                         ? thrust / engine.GetRatedFullThrottleThrustMagnitude(
                             profile.AmbientPressurePa)
-                        : engine.ThrottleLevel));
+                        : engine.ThrottleLevel,
+                states.Count > 0
+                    ? states[0].State
+                    : engine.ThrottleLevel > 1e-3
+                        ? EngineLifecycleState.Running
+                        : EngineLifecycleState.Off,
+                states.Count > 0 ? states.Average(state => state.TemperatureK) : 290.0,
+                failedState?.FailureCode));
         }
 
         double rating = engine.GetRatedFullThrottleThrustMagnitude(profile.AmbientPressurePa);
         bool passed = telemetry.Any(t => t.Phase == EngineTestPhase.Running)
             && peak >= rating * 0.995
             && telemetry[^1].ActualThrottle <= 1e-9
+            && !telemetry.Any(t => t.FailureCode != null)
             && propellant > 0.0;
         return new EngineTestReport
         {
@@ -205,6 +225,12 @@ public static class EngineTestStand
             TotalImpulseNs = impulse,
             PropellantConsumedKg = propellant,
             PeakThrustN = peak,
+            FailureCodes = telemetry
+                .Select(t => t.FailureCode)
+                .Where(code => code != null)
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
             Telemetry = telemetry,
         };
     }

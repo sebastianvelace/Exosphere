@@ -70,6 +70,7 @@ public sealed class PartSaveV2
     public VectorSaveV2 GimbalOffset { get; set; } = new();
     public double ActiveEngineFraction { get; set; } = 1.0;
     public List<EngineInstanceSaveV2> EngineInstances { get; set; } = new();
+    public List<EngineFailureInjectionSaveV2> ScheduledEngineFailures { get; set; } = new();
 }
 
 public sealed class EngineInstanceSaveV2
@@ -84,8 +85,18 @@ public sealed class EngineInstanceSaveV2
     public VectorSaveV2 GimbalVelocityDegPerS { get; set; } = new();
     public double? ChamberPressureFraction { get; set; }
     public double TemperatureK { get; set; } = 290.0;
+    public int StartAttempts { get; set; }
     public int StartsCompleted { get; set; }
     public string? FailureCode { get; set; }
+}
+
+public sealed class EngineFailureInjectionSaveV2
+{
+    public string EngineInstanceId { get; set; } = "";
+    public EngineLifecycleState TriggerState { get; set; }
+    public int TriggerStartAttempt { get; set; }
+    public double TriggerAfterStateSeconds { get; set; }
+    public string FailureCode { get; set; } = "";
 }
 
 public sealed class JointSaveV2
@@ -260,9 +271,26 @@ public static class SaveGameV2Codec
                         || engine.ChamberPressureFraction is < 0.0 or > 1.0
                         || engine.StateElapsedSeconds < 0.0
                         || engine.TemperatureK < 0.0
+                        || engine.StartAttempts < 0
                         || engine.StartsCompleted < 0)
                         throw new InvalidDataException(
                             $"Invalid engine state '{engine.InstanceId}'.");
+                }
+                foreach (var injection in part.ScheduledEngineFailures)
+                {
+                    RequireId(injection.EngineInstanceId, "scheduled engine");
+                    RequireId(injection.FailureCode, "scheduled failure");
+                    RequireFinite(
+                        injection.TriggerAfterStateSeconds,
+                        injection.EngineInstanceId);
+                    if (!engineIds.Contains(injection.EngineInstanceId)
+                        || !Enum.IsDefined(injection.TriggerState)
+                        || injection.TriggerState is EngineLifecycleState.Off
+                            or EngineLifecycleState.Failed
+                        || injection.TriggerStartAttempt < 0
+                        || injection.TriggerAfterStateSeconds < 0.0)
+                        throw new InvalidDataException(
+                            $"Invalid scheduled failure for '{injection.EngineInstanceId}'.");
                 }
             }
         }
@@ -398,9 +426,21 @@ public static class SaveGameV2Codec
                 engine.GimbalVelocityDegPerS),
             ChamberPressureFraction = engine.ChamberPressureFraction,
             TemperatureK = engine.TemperatureK,
+            StartAttempts = System.Math.Max(
+                engine.StartAttempts, engine.StartsCompleted),
             StartsCompleted = engine.StartsCompleted,
             FailureCode = engine.FailureCode,
         }).ToList(),
+        ScheduledEngineFailures = part.ScheduledEngineFailures
+            .Select(injection => new EngineFailureInjectionSaveV2
+            {
+                EngineInstanceId = injection.EngineInstanceId,
+                TriggerState = injection.TriggerState,
+                TriggerStartAttempt = injection.TriggerStartAttempt,
+                TriggerAfterStateSeconds = injection.TriggerAfterStateSeconds,
+                FailureCode = injection.FailureCode,
+            })
+            .ToList(),
     };
 
     private static Part RestorePart(PartSaveV2 state, PartDefinition definition)
@@ -435,9 +475,22 @@ public static class SaveGameV2Codec
             ChamberPressureFraction =
                 engine.ChamberPressureFraction ?? engine.ActualThrottle,
             TemperatureK = engine.TemperatureK,
+            StartAttempts = System.Math.Max(
+                engine.StartAttempts, engine.StartsCompleted),
             StartsCompleted = engine.StartsCompleted,
             FailureCode = engine.FailureCode,
         }));
+        part.RestoreScheduledEngineFailures(
+            state.ScheduledEngineFailures.Select(
+                injection => new EngineFailureInjection
+                {
+                    EngineInstanceId = injection.EngineInstanceId,
+                    TriggerState = injection.TriggerState,
+                    TriggerStartAttempt = injection.TriggerStartAttempt,
+                    TriggerAfterStateSeconds =
+                        injection.TriggerAfterStateSeconds,
+                    FailureCode = injection.FailureCode,
+                }));
         return part;
     }
 
