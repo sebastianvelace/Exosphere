@@ -44,6 +44,12 @@ public sealed class SoftLandingThresholdTests
         Assert.Equal(expectDestroyed, vessel.IsDestroyed);
         Assert.True(body.GetAltitude(vessel.Position) >= 0.0);
         Assert.True(vessel.GetSurfaceVelocity(body).Magnitude <= AscentStagingPolicy.SoftLandingSpeedMps + 0.5);
+        Assert.True(vessel.IsSurfaceSettled);
+
+        for (int i = 0; i < 100; i++)
+            universe.Tick(0.1);
+        Assert.InRange(body.GetAltitude(vessel.Position), 0.99, 1.01);
+        Assert.InRange(vessel.GetSurfaceVelocity(body).Magnitude, 0.0, 1e-8);
     }
 
     private static CelestialBody LoadBody(string id) =>

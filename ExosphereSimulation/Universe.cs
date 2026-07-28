@@ -264,6 +264,8 @@ public class Universe
     /// </summary>
     public bool RequiresBoundedWarpPropagation(Vessel vessel)
     {
+        if (vessel.IsDestroyed || vessel.IsSurfaceSettled)
+            return false;
         if (RequiresOffRailsPhysics(vessel)) return true;
         if (_bodies.Count == 0 || vessel.IsDestroyed) return false;
         var body = GetDominantBody(vessel.Position);
@@ -296,26 +298,23 @@ public class Universe
         // Snapshot the list: structural breakup may AddVessel mid-loop.
         foreach (var vessel in _vessels.ToList())
         {
-            if (vessel.IsDestroyed) continue; // frozen at crash point
+            if (vessel.IsDestroyed)
+            {
+                AdvanceAnchoredWreck(vessel, dt);
+                continue;
+            }
 
             if (vessel.IsSurfaceSettled)
             {
-                var settledBody = GetDominantBody(vessel.Position);
-                if (vessel.Throttle > 0.01 || !vessel.HasDeployedLandingGear)
+                var settledBody = ResolveSurfaceBody(vessel);
+                if (vessel.Throttle > 0.01)
                 {
                     vessel.IsSurfaceSettled = false;
                     vessel.SurfaceSettledDuration = 0.0;
                 }
                 else
                 {
-                    AdvanceGroundHoldFrame(vessel, settledBody, dt);
-                    vessel.Position = settledBody.Position
-                        + vessel.GroundNormal * (settledBody.Radius + vessel.GroundOffset);
-                    vessel.Velocity = settledBody.Velocity
-                        + settledBody.GetSurfaceVelocity(vessel.Position);
-                    vessel.AngularVelocity = Vector3d.Zero;
-                    vessel.PitchYawRoll = Vector3d.Zero;
-                    vessel.IsOnRails = false;
+                    AdvanceSurfaceAnchor(vessel, settledBody, dt);
                     vessel.Tick(dt, settledBody);
                     continue;
                 }
@@ -359,6 +358,59 @@ public class Universe
             body.RotationAxis, body.AngularSpeed * dt);
         vessel.GroundNormal = rotation.Rotate(vessel.GroundNormal).Normalized;
         vessel.Orientation = (rotation * vessel.Orientation).Normalize();
+    }
+
+    private CelestialBody ResolveSurfaceBody(Vessel vessel) =>
+        vessel.ReferenceBodyId is { Length: > 0 } bodyId
+            && GetBody(bodyId) is { } referenced
+                ? referenced
+                : GetDominantBody(vessel.Position);
+
+    private static void AdvanceSurfaceAnchor(
+        Vessel vessel,
+        CelestialBody body,
+        double dt)
+    {
+        AdvanceGroundHoldFrame(vessel, body, dt);
+        vessel.Position = body.Position
+            + vessel.GroundNormal * (body.Radius + vessel.GroundOffset);
+        vessel.Velocity = body.Velocity
+            + body.GetSurfaceVelocity(vessel.Position);
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
+    }
+
+    private void AdvanceAnchoredWreck(Vessel vessel, double dt)
+    {
+        if (!vessel.IsSurfaceSettled
+            || vessel.DestructionCause != VesselDestructionCause.GroundImpact)
+            return;
+        AdvanceSurfaceAnchor(vessel, ResolveSurfaceBody(vessel), dt);
+    }
+
+    private static void AnchorToSurface(
+        Vessel vessel,
+        CelestialBody body,
+        Vector3d direction,
+        double offsetM)
+    {
+        vessel.GroundNormal = direction.MagnitudeSquared > 1e-12
+            ? direction.Normalized
+            : Vector3d.Up;
+        vessel.GroundOffset = System.Math.Max(0.0, offsetM);
+        vessel.ReferenceBodyId = body.Id;
+        vessel.IsSurfaceSettled = true;
+        vessel.SurfaceSettledDuration = 0.5;
+        vessel.Position = body.Position
+            + vessel.GroundNormal * (body.Radius + vessel.GroundOffset);
+        vessel.Velocity = body.Velocity
+            + body.GetSurfaceVelocity(vessel.Position);
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
     }
 
     private void ApplyPostIntegrationPhysics(Vessel vessel, CelestialBody refBody, double dt)
@@ -454,8 +506,7 @@ public class Universe
         var dir = (vessel.Position - refBody.Position).Normalized;
         if (softLanding)
         {
-            vessel.Position = refBody.Position + dir * (refBody.Radius + 1.0);
-            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+            AnchorToSurface(vessel, refBody, dir, 1.0);
         }
         else
         {
@@ -463,8 +514,7 @@ public class Universe
             vessel.DestructionCause = VesselDestructionCause.GroundImpact;
             vessel.CrashImpactSpeed = impactSpeed;
             vessel.CrashSimPosition = vessel.Position;
-            vessel.Position = refBody.Position + dir * (refBody.Radius + 0.5);
-            vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+            AnchorToSurface(vessel, refBody, dir, 0.5);
         }
     }
 
@@ -475,28 +525,27 @@ public class Universe
 
         foreach (var vessel in _vessels.ToList())
         {
-            if (vessel.IsDestroyed) continue; // frozen at crash point
+            if (vessel.IsDestroyed)
+            {
+                AdvanceAnchoredWreck(vessel, dt);
+                continue;
+            }
 
-            var refBody = GetDominantBody(vessel.Position);
+            var refBody = vessel.IsSurfaceSettled
+                ? ResolveSurfaceBody(vessel)
+                : GetDominantBody(vessel.Position);
             if (vessel.IsSurfaceSettled)
             {
                 // Rigid-body sleep for a landed vehicle.  This is not a launch
                 // clamp: any commanded thrust wakes the solver immediately.
-                if (vessel.Throttle > 0.01 || !vessel.HasDeployedLandingGear)
+                if (vessel.Throttle > 0.01)
                 {
                     vessel.IsSurfaceSettled = false;
                     vessel.SurfaceSettledDuration = 0.0;
                 }
                 else
                 {
-                    AdvanceGroundHoldFrame(vessel, refBody, dt);
-                    vessel.Position = refBody.Position
-                        + vessel.GroundNormal * (refBody.Radius + vessel.GroundOffset);
-                    vessel.Velocity = refBody.Velocity
-                        + refBody.GetSurfaceVelocity(vessel.Position);
-                    vessel.AngularVelocity = Vector3d.Zero;
-                    vessel.PitchYawRoll = Vector3d.Zero;
-                    vessel.IsOnRails = false;
+                    AdvanceSurfaceAnchor(vessel, refBody, dt);
                     vessel.Tick(dt, refBody);
                     continue;
                 }
@@ -624,8 +673,12 @@ public class Universe
             vessel.DestructionCause = VesselDestructionCause.GroundImpact;
             vessel.CrashImpactSpeed = impactSpeed;
             vessel.CrashSimPosition = vessel.Position;
-            vessel.SurfaceSettledDuration = 0.0;
-            vessel.IsSurfaceSettled = false;
+            var direction = (vessel.Position - body.Position).Normalized;
+            AnchorToSurface(
+                vessel,
+                body,
+                direction,
+                System.Math.Max(0.5, body.GetAltitude(vessel.Position)));
             return;
         }
 
@@ -667,7 +720,29 @@ public class Universe
     {
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
         foreach (var vessel in _vessels)
+        {
+            if (vessel.IsDestroyed)
+            {
+                AdvanceAnchoredWreck(vessel, dt);
+                continue;
+            }
+            if (vessel.IsSurfaceSettled)
+            {
+                if (vessel.Throttle > 0.01)
+                {
+                    vessel.IsSurfaceSettled = false;
+                    vessel.SurfaceSettledDuration = 0.0;
+                }
+                else
+                {
+                    var body = ResolveSurfaceBody(vessel);
+                    AdvanceSurfaceAnchor(vessel, body, dt);
+                    vessel.Tick(dt, body);
+                    continue;
+                }
+            }
             PropagateVesselOnRails(vessel, dt);
+        }
     }
 
     // ── Vessel on-rails propagation ───────────────────────────────────────
@@ -921,12 +996,7 @@ public class Universe
 
         // Clamp to the body's current surface for the renderer, along the true impact direction.
         var dir = relP0.Magnitude > 0.0 ? relP0.Normalized : Vector3d.Up;
-        vessel.Position = reference.Position + dir * (reference.Radius + 0.5);
-        vessel.Velocity = reference.Velocity + reference.GetSurfaceVelocity(vessel.Position);
-
-        // Force off rails so the destroyed state is visible immediately.
-        vessel.IsOnRails    = false;
-        vessel.OrbitalState = null;
+        AnchorToSurface(vessel, reference, dir, 0.5);
     }
 
     // ── Factory ───────────────────────────────────────────────────────────

@@ -40,6 +40,8 @@ public sealed class VesselSaveV2
     public bool IsGroundHeld { get; set; }
     public VectorSaveV2 GroundNormal { get; set; } = new();
     public double GroundOffset { get; set; }
+    public bool IsSurfaceSettled { get; set; }
+    public double SurfaceSettledDuration { get; set; }
     public bool IsDestroyed { get; set; }
     public VesselDestructionCause DestructionCause { get; set; }
     public double CrashImpactSpeed { get; set; }
@@ -372,6 +374,8 @@ public static class SaveGameV2Codec
             IsGroundHeld = vessel.IsGroundHeld,
             GroundNormal = VectorSaveV2.From(vessel.GroundNormal),
             GroundOffset = vessel.GroundOffset,
+            IsSurfaceSettled = vessel.IsSurfaceSettled,
+            SurfaceSettledDuration = vessel.SurfaceSettledDuration,
             IsDestroyed = vessel.IsDestroyed,
             DestructionCause = vessel.DestructionCause,
             CrashImpactSpeed = vessel.CrashImpactSpeed,
@@ -413,6 +417,8 @@ public static class SaveGameV2Codec
             IsGroundHeld = saved.IsGroundHeld,
             GroundNormal = saved.GroundNormal.ToVector(),
             GroundOffset = saved.GroundOffset,
+            IsSurfaceSettled = saved.IsSurfaceSettled,
+            SurfaceSettledDuration = saved.SurfaceSettledDuration,
             IsDestroyed = saved.IsDestroyed,
             DestructionCause = saved.DestructionCause,
             CrashImpactSpeed = saved.CrashImpactSpeed,
@@ -596,6 +602,7 @@ public static class SaveGameV2Codec
         v.AngularVelocity.X, v.AngularVelocity.Y, v.AngularVelocity.Z,
         v.Throttle, v.PitchYawRoll.X, v.PitchYawRoll.Y, v.PitchYawRoll.Z,
         v.GroundNormal.X, v.GroundNormal.Y, v.GroundNormal.Z, v.GroundOffset,
+        v.SurfaceSettledDuration,
         v.CrashImpactSpeed, v.CrashPosition.X, v.CrashPosition.Y, v.CrashPosition.Z,
     ];
 

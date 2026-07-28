@@ -66,6 +66,9 @@ Base tecnica cerrada en `main`:
 - Panel THERMAL en el HUD del EDL: cara del TPS, barra de casco contra tolerancia y
   alineacion del escudo con el flujo (el unico numero accionable), con aviso SHIELD OFF FLOW
   solo cuando hay flujo real detras. Sin el, la reentrada letal mataba a ciegas.
+- Impactos de superficie anclados al cuerpo ✅: un wreck destruido ya no queda
+  congelado en el marco heliocentrico mientras la Tierra se aleja, ni parece
+  rebotar a ~30 km/s. El anclaje rotante persiste en `SaveGameV2` y bajo warp.
 
 ## Prioridad Inmediata
 
