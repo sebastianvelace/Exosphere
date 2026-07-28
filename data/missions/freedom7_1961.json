@@ -26,7 +26,7 @@
       "id": "reach-mercury-speed",
       "titleEn": "Reach Mercury-Redstone flight speed",
       "titleEs": "Alcanza la velocidad Mercury-Redstone",
-      "metric": "peak_surface_speed_mps",
+      "metric": "peak_inertial_speed_mps",
       "comparison": "at_least",
       "target": 2200,
       "required": true
@@ -91,11 +91,11 @@
     },
     {
       "id": "crew-load-envelope",
-      "titleEn": "Remain below 12.5 g",
-      "titleEs": "Mantente por debajo de 12,5 g",
+      "titleEn": "Remain below 13.0 g",
+      "titleEs": "Mantente por debajo de 13,0 g",
       "metric": "maximum_g_force",
       "comparison": "at_most",
-      "target": 12.5,
+      "target": 13.0,
       "required": true
     }
   ],

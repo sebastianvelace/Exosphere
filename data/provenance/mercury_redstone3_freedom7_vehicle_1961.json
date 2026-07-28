@@ -1,0 +1,180 @@
+{
+  "manifestId": "mercury-redstone3-freedom7-vehicle-1961",
+  "records": [
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "ratedThrustSeaLevelN",
+      "status": "published", "source": "NASA Mercury-Redstone Launch Vehicle; NASA Historical Data Book Volume II",
+      "accessedDate": "2026-07-28", "variant": "Rocketdyne NAA 75-110 A-7",
+      "conditions": "rated sea-level thrust, 78,000 lbf converted consistently with NASA's 346,944 N table value",
+      "uncertainty": "published rounded value"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "ratedThrustVacuumN",
+      "status": "estimated", "source": "NASA published sea-level thrust and Exosphere pressure-performance estimate",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "vacuum extrapolation for the sea-level nozzle",
+      "uncertainty": "±8%; no cited NASA vacuum rating"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "NASA thrust and burn-duration publications; Exosphere mass-flow closure",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "Earth sea level at rated thrust",
+      "uncertainty": "±5 s; not published in the cited NASA vehicle summary"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "NASA vehicle performance; Exosphere engineering estimate",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "vacuum at rated thrust",
+      "uncertainty": "±7 s"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "minimumThrottle",
+      "status": "estimated", "source": "NASA Mercury-Redstone flight sequence; Exosphere operating assumption",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "mission burn represented as fixed rated throttle",
+      "uncertainty": "public source does not specify a throttle envelope"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "performanceMap",
+      "status": "derived", "source": "NASA published sea-level thrust plus documented Exosphere vacuum/Isp estimates",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "two-point sea-level/vacuum map at rated throttle",
+      "uncertainty": "inherits the estimated vacuum and Isp uncertainty"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "restartEnvelope",
+      "status": "derived", "source": "NASA single-burn Mercury-Redstone mission sequence",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "no in-flight restart in the MR-3 profile",
+      "uncertainty": "operational mission envelope, not a complete qualification limit"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere deterministic engine-state model",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "simulator-only transient and failure thresholds",
+      "uncertainty": "unknown; no public component temperature record used"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "NASA Redstone guidance descriptions; Exosphere control-authority estimate",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "single-engine pitch/yaw guidance",
+      "uncertainty": "±2 degrees range and ±50% rate"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "startupTransient",
+      "status": "estimated", "source": "NASA Mercury-Redstone countdown sequence; Exosphere transient model",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "two-second commanded startup before hold-down release",
+      "uncertainty": "±1 s"
+    },
+    {
+      "dataId": "redstone-a7-mr3-1961", "field": "shutdownTransient",
+      "status": "estimated", "source": "NASA mission event time and Exosphere transient model",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone A-7",
+      "conditions": "rapid cutoff at the historical MECO event",
+      "uncertainty": "±0.2 s"
+    },
+    {
+      "dataId": "mercury-redstone3-freedom7-1961-05-05", "field": "launchMassKg",
+      "status": "published", "source": "NASA Historical Data Book Volume II",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone",
+      "conditions": "29,931 kg complete launch vehicle",
+      "uncertainty": "published table precision ±1 kg"
+    },
+    {
+      "dataId": "mercury-redstone3-freedom7-1961-05-05", "field": "dimensionsM",
+      "status": "published", "source": "NASA Historical Data Book Volume II",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone",
+      "conditions": "25.3 m complete height and 1.8 m launch-vehicle diameter",
+      "uncertainty": "published table precision ±0.1 m"
+    },
+    {
+      "dataId": "mercury_capsule_freedom7", "field": "massDryKg",
+      "status": "calibrated", "source": "NASA integrated spacecraft mass and Exosphere retro-package allocation",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7 spacecraft 7",
+      "conditions": "1,715.5 kg capsule allocation excluding the attached retro package and its solid propellant",
+      "uncertainty": "component allocation ±15%; integrated spacecraft mass closes exactly to the published value"
+    },
+    {
+      "dataId": "mercury_capsule_freedom7", "field": "integratedSpacecraftMassKg",
+      "status": "published", "source": "NASA Historical Data Book Volume II, Mercury mission table",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7 spacecraft 7",
+      "conditions": "capsule, retro package and loaded retro propellant total 1,832.5 kg",
+      "uncertainty": "published table precision ±0.1 kg"
+    },
+    {
+      "dataId": "mercury_capsule_freedom7", "field": "parachuteSequence",
+      "status": "published", "source": "NASA 60 Years Ago: Alan Shepard Becomes the First American in Space",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7",
+      "conditions": "drogue at 22,000 ft and main parachute at 10,000 ft, converted to SI",
+      "uncertainty": "event altitudes published to the nearest thousand feet"
+    },
+    {
+      "dataId": "mercury_capsule_freedom7", "field": "parachuteDragAreaM2",
+      "status": "calibrated", "source": "NASA published deployment sequence and Freedom 7 splashdown outcome",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7",
+      "conditions": "effective CdA calibrated to a survivable historical descent without replacing the atmosphere model",
+      "uncertainty": "±15%; canopy aerodynamic coefficients are not supplied by the cited mission source"
+    },
+    {
+      "dataId": "mercury_capsule_freedom7", "field": "axialDragCoefficient",
+      "status": "calibrated", "source": "NASA Freedom 7 maximum-load and trajectory records; Exosphere atmosphere model",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7 heat-shield-first entry",
+      "conditions": "effective capsule coefficient calibrated inside the simulator's aggregate axisymmetric aero model",
+      "uncertainty": "model coefficient, not a wind-tunnel reproduction; ±20%"
+    },
+    {
+      "dataId": "mercury_retro_pack_freedom7", "field": "massAndPropellantKg",
+      "status": "estimated", "source": "NASA published integrated spacecraft mass and retrofire event; Exosphere allocation",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7 retrograde package",
+      "conditions": "70 kg dry package plus 47 kg aggregate solid propellant",
+      "uncertainty": "±30%; component split is not published in the cited mission sources"
+    },
+    {
+      "dataId": "mercury_retro_pack_freedom7", "field": "thrustAndBurn",
+      "status": "estimated", "source": "NASA mission retrofire timing; Exosphere public-data reconstruction",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7 three-motor aggregate",
+      "conditions": "13.5 kN aggregate thrust for a ten-second retro sequence",
+      "uncertainty": "±30%; no proprietary motor acceptance data used"
+    },
+    {
+      "dataId": "mercury_escape_tower_freedom7", "field": "axialDragCoefficient",
+      "status": "calibrated", "source": "NASA Mercury-Redstone dimensions and Exosphere headless trajectory closure",
+      "accessedDate": "2026-07-28", "variant": "complete MR-3 launch stack",
+      "conditions": "exposed launch-stack nose coefficient in the aggregate axisymmetric model",
+      "uncertainty": "±25%; simulator effective coefficient"
+    },
+    {
+      "dataId": "mercury_redstone_propellant_stage", "field": "propellantMassKg",
+      "status": "estimated", "source": "NASA launch mass, thrust and burn duration; Exosphere component mass closure",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone 3",
+      "conditions": "23,700 kg combined liquid fuel and oxidizer",
+      "uncertainty": "±4%; detailed loading is not published in the cited summary"
+    },
+    {
+      "dataId": "mercury-redstone3-freedom7-1961-05-05", "field": "componentMassAllocation",
+      "status": "calibrated", "source": "NASA complete launch mass and spacecraft mass; Exosphere component allocation",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone 3",
+      "conditions": "individual tower, adapter, airframe and engine masses close exactly to the 29,931 kg published total",
+      "uncertainty": "individual allocations ±25%; aggregate launch mass exact to source precision"
+    },
+    {
+      "dataId": "cape_canaveral_lc5", "field": "geodeticLocation",
+      "status": "estimated", "source": "NASA identification of LC-5 as the Freedom 7 launch site; public geospatial placement",
+      "accessedDate": "2026-07-28", "variant": "Cape Canaveral Launch Complex 5",
+      "conditions": "WGS84-like latitude/longitude used by the offline Earth model",
+      "uncertainty": "±100 m"
+    },
+    {
+      "dataId": "alan-b-shepard-jr", "field": "crewIdentity",
+      "status": "published", "source": "NASA Alan Shepard biography and Freedom 7 mission record",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7 crew",
+      "conditions": "sole astronaut aboard spacecraft 7 on May 5, 1961",
+      "uncertainty": "official historical identity"
+    }
+  ]
+}

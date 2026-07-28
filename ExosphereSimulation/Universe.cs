@@ -445,7 +445,12 @@ public class Universe
         if (refBody.GetAltitude(vessel.Position) >= 0.0) return;
 
         double impactSpeed = vessel.GetSurfaceVelocity(refBody).Magnitude;
-        bool softLanding = vessel.IsGroundHeld || impactSpeed <= SoftLandingThreshold;
+        double splashdownLimit = vessel.MaximumSplashdownSpeedMps;
+        bool softLanding = vessel.IsGroundHeld
+            || impactSpeed <= SoftLandingThreshold
+            || refBody.Id == "earth"
+                && splashdownLimit > 0.0
+                && impactSpeed <= splashdownLimit;
         var dir = (vessel.Position - refBody.Position).Normalized;
         if (softLanding)
         {

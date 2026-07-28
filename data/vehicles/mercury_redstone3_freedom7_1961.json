@@ -1,0 +1,20 @@
+{
+  "id": "mercury-redstone3-freedom7-1961-05-05",
+  "name": "Mercury-Redstone 3 — Freedom 7",
+  "family": "Mercury-Redstone",
+  "asOfDate": "1961-05-05",
+  "fairingVariant": "none",
+  "primarySource": "https://www.nasa.gov/history/mercury-redstone-launch-vehicle/",
+  "engineClusterIds": [
+    "redstone-a7-single-mr3-1961"
+  ],
+  "stackTopToBottom": [
+    "mercury_escape_tower_freedom7",
+    "mercury_capsule_freedom7",
+    "mercury_retro_pack_freedom7",
+    "mercury_redstone_separation_ring",
+    "mercury_redstone_adapter",
+    "mercury_redstone_propellant_stage",
+    "redstone_a7_engine_mr3"
+  ]
+}

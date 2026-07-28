@@ -1,0 +1,19 @@
+{
+  "id": "mercury_redstone_adapter",
+  "name": "Mercury-Redstone Adapter",
+  "description": "Tapered spacecraft adapter and launch-vehicle instrumentation allocation.",
+  "category": "structure",
+  "vehicle_family": "mercury",
+  "vehicle_role": "adapter",
+  "mass_dry": 162,
+  "length_m": 0.4,
+  "diameter_m": 1.8,
+  "cost": 0,
+  "drag_coefficient": 0.25,
+  "axial_drag_coefficient": 0.24,
+  "heat_tolerance": 900,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.2, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.2, 0], "size": 1, "type": "stack"}
+  ]
+}

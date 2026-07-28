@@ -53,6 +53,9 @@ public partial class CampaignRuntime : Node
         MissionSaveV2? state = restoredMission?.MissionId == missionId
             ? restoredMission : null;
         Director = new MissionDirector(definition, state);
+        SimulationBridge.Instance?.SetActiveFlightProfile(
+            definition.FlightProfileId);
+        AttachHistoricalCrew(dataPath, definition);
         var universe = SimulationBridge.Instance?.Universe;
         _missionStartTime =
             (universe?.CurrentTime ?? 0.0) - Director.Evidence.ElapsedSeconds;
@@ -106,6 +109,8 @@ public partial class CampaignRuntime : Node
             Phase = phase.Value.ToString(),
             AltitudeM = System.Math.Max(0.0, vessel.GetAltitude(body)),
             SurfaceSpeedMps = vessel.GetSurfaceVelocity(body).Magnitude,
+            InertialSpeedMps =
+                (vessel.Velocity - body.Velocity).Magnitude,
             DynamicPressurePa =
                 System.Math.Max(0.0, vessel.GetDynamicPressure(body)),
             GForce = vessel.GetProperAcceleration(body).Magnitude
@@ -152,5 +157,25 @@ public partial class CampaignRuntime : Node
         _launchSurfaceDirection =
             body.ToBodyFixedDirection(up, universe.CurrentTime).Normalized;
         _hasLaunchReference = true;
+    }
+
+    private static void AttachHistoricalCrew(
+        string dataPath,
+        MissionDefinition definition)
+    {
+        var vessel = SimulationBridge.Instance?.ActiveVessel;
+        if (vessel == null || definition.CrewIds.Count == 0) return;
+        var catalog = CrewDefinition.LoadAllFromDirectory(
+            System.IO.Path.Combine(dataPath, "crew"));
+        foreach (string crewId in definition.CrewIds)
+        {
+            if (vessel.Crew.Any(member =>
+                    string.Equals(member.Id, crewId, StringComparison.Ordinal)))
+                continue;
+            if (!catalog.TryGetValue(crewId, out var crew))
+                throw new InvalidDataException(
+                    $"Mission '{definition.Id}' references unknown crew '{crewId}'.");
+            vessel.Crew.Add(crew.CreateMember());
+        }
     }
 }

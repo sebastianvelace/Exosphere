@@ -1,0 +1,11 @@
+{
+  "id": "alan-b-shepard-jr",
+  "firstName": "Alan B.",
+  "lastName": "Shepard Jr.",
+  "agency": "NASA",
+  "asOfDate": "1961-05-05",
+  "pilotLevel": 5,
+  "engineerLevel": 3,
+  "scientistLevel": 2,
+  "primarySource": "https://www.nasa.gov/people/alan-shepard/"
+}

@@ -31,8 +31,9 @@ Base tecnica cerrada en `main`:
 - La campaña histórica tiene manifiesto data-driven de 16 misiones,
   `CampaignService`, `MissionDirector`, `MissionEvaluator`, debrief numérico,
   recompensas idempotentes y persistencia V2. Freedom 7 ya tiene definición
-  bilingüe y procedencia NASA; permanece `VEHICLE PENDING` hasta entregar la
-  variante Mercury-Redstone 3 y LC-5.
+  bilingüe y procedencia NASA. Freedom 7 ya es jugable con Mercury-Redstone 3,
+  spacecraft 7, A-7, Alan Shepard, LC-5, retrofire, separación multi-vessel,
+  reentrada, paracaídas y amerizaje evaluado.
 - Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
   de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
@@ -144,8 +145,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Cues/track de fases EDL (oleada C3) ✅ — `MissionPhaseTrack` + HUD dots
   ORBIT→COAST→RETRO→ENTRY…; cue “ENTRY INTERFACE in ~Xm” / “DEORBIT BURN”.
 - Fundación de misiones/objetivos/progresión ✅ — catálogo estricto, evaluación
-  pura, evidencia persistente, debrief y ledger idempotente. Pendiente: contenido
-  vehicular desde Mercury-Redstone 3 y definiciones 2–16.
+  pura, evidencia persistente, debrief y ledger idempotente.
+- Freedom 7 / Mercury-Redstone 3 ✅ — misión headless completa y capturas de
+  pad/liftoff. Pendiente: Friendship 7 y definiciones 2–16.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 

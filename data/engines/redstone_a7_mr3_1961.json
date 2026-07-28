@@ -1,0 +1,39 @@
+{
+  "id": "redstone-a7-mr3-1961",
+  "name": "Rocketdyne A-7",
+  "variant": "Mercury-Redstone 3, May 1961",
+  "asOfDate": "1961-05-05",
+  "fuel": "RP-1",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 1.30,
+  "ratedThrustSeaLevelN": 346944,
+  "ratedThrustVacuumN": 385000,
+  "specificImpulseSeaLevelS": 215,
+  "specificImpulseVacuumS": 238,
+  "minimumThrottle": 1.0,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 5.0,
+  "gimbalRateDegPerS": 4.0,
+  "gimbalAccelerationDegPerS2": 10.0,
+  "startupSeconds": 2.0,
+  "shutdownSeconds": 0.25,
+  "restartLimit": 0,
+  "nominalOperatingTemperatureK": 1050,
+  "maximumSafeTemperatureK": 1325,
+  "thermalTimeConstantSeconds": 3.0,
+  "cooldownTimeConstantSeconds": 20.0,
+  "performanceMap": [
+    {
+      "ambientPressurePa": 101325,
+      "throttle": 1.0,
+      "thrustN": 346944,
+      "specificImpulseS": 215
+    },
+    {
+      "ambientPressurePa": 0,
+      "throttle": 1.0,
+      "thrustN": 385000,
+      "specificImpulseS": 238
+    }
+  ]
+}

@@ -79,6 +79,13 @@ public class Vessel
     public bool HasSurfaceContact => LastSurfaceContact?.ContactCount > 0;
     public bool HasDeployedLandingGear => _landingContactPoints.Length > 0
         && Parts.Parts.Any(p => p.Definition.Category == PartCategory.Landing && p.IsDeployed);
+    public bool HasDeployedParachute => Parts.Parts.Any(
+        p => p.IsDeployed && p.Definition.DragChute > 0.0);
+    public double MaximumSplashdownSpeedMps => Parts.Parts
+        .Where(p => p.Definition.SplashdownCapable)
+        .Select(p => p.Definition.MaxSplashdownSpeedMps)
+        .DefaultIfEmpty(0.0)
+        .Max();
 
     // ── Ground hold (pre-launch hold-down) ────────────────────────────────
     public bool     IsGroundHeld          { get; set; }
@@ -333,10 +340,76 @@ public class Vessel
         double   temp = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
 
         var drag = AerodynamicsModel.ComputeReentryDrag(
-            density, surfVel, axis, VehicleLength, MaximumDiameter, temp);
+            density,
+            surfVel,
+            axis,
+            VehicleLength,
+            MaximumDiameter,
+            temp,
+            Parts.AxialDragCoefficient);
         var lift = AerodynamicsModel.ComputeLift(
             density, surfVel, axis, VehicleLength, MaximumDiameter);
-        return drag + lift;
+        double parachuteArea = GetDeployedParachuteDragArea(body, pos);
+        var parachuteDrag = parachuteArea > 0.0
+            ? -surfVel.Normalized
+                * (0.5 * density * speed * speed * parachuteArea)
+            : Vector3d.Zero;
+        return drag + lift + parachuteDrag;
+    }
+
+    /// <summary>
+    /// Arms every installed parachute whose declared atmospheric and altitude envelope is
+    /// currently satisfied. Deployment state is persisted on the part instance.
+    /// </summary>
+    public int DeployParachutes(CelestialBody body)
+    {
+        if (body.Atmosphere == null) return 0;
+        double altitude = GetAltitude(body);
+        double pressureFraction = body.Atmosphere.GetPressure(altitude) / 101_325.0;
+        int deployed = 0;
+        foreach (var part in Parts.Parts.Where(p =>
+                     p.Definition.DragChute > 0.0 && !p.IsDeployed))
+        {
+            var definition = part.Definition;
+            double armAltitude = definition.SemiDeployAltitude > 0.0
+                ? definition.SemiDeployAltitude
+                : definition.DeployAltitude;
+            if (armAltitude > 0.0 && altitude > armAltitude) continue;
+            if (pressureFraction + 1e-12 < definition.MinPressureDeploy) continue;
+            part.IsDeployed = true;
+            deployed++;
+        }
+        return deployed;
+    }
+
+    /// <summary>Combined effective CdA (m²) of deployed reefed/full parachutes.</summary>
+    public double GetDeployedParachuteDragArea(
+        CelestialBody body,
+        Vector3d? position = null)
+    {
+        double altitude = body.GetAltitude(position ?? Position);
+        return Parts.Parts.Where(p => p.IsDeployed).Sum(part =>
+        {
+            var definition = part.Definition;
+            if (definition.DragChute <= 0.0) return 0.0;
+            if (definition.DeployAltitude > 0.0
+                && definition.SemiDeployDrag > 0.0)
+            {
+                if (altitude > definition.DeployAltitude)
+                    return definition.SemiDeployDrag;
+                // Reefing lines do not release a full canopy instantaneously. Use a
+                // one-kilometre inflation corridor below the declared main-deploy event;
+                // this avoids a non-physical impulse while preserving the published event.
+                double inflation = System.Math.Clamp(
+                    (definition.DeployAltitude - altitude) / 1_000.0,
+                    0.0,
+                    1.0);
+                double smooth = inflation * inflation * (3.0 - 2.0 * inflation);
+                return definition.SemiDeployDrag
+                    + (definition.DragChute - definition.SemiDeployDrag) * smooth;
+            }
+            return definition.DragChute;
+        });
     }
 
     // Aceleración gravitacional total de todos los cuerpos (m/s²)

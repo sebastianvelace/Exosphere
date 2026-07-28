@@ -79,6 +79,27 @@ public class PartGraph
                 : System.Math.Max(1.0, 2.0 * System.Math.Sqrt(_parts.Count * 0.2));
         }
     }
+    public double AxialDragCoefficient
+    {
+        get
+        {
+            // In an axial stack the exposed nose/root defines the stagnation geometry.
+            // Averaging a blunt capsule hidden behind an escape tower into the launch Cd
+            // made the complete rocket behave as though the capsule were exposed.
+            if (_root?.Definition.AxialDragCoefficient > 0.0)
+                return _root.Definition.AxialDragCoefficient;
+            var declared = _parts
+                .Where(p => p.Definition.AxialDragCoefficient > 0.0)
+                .ToArray();
+            if (declared.Length == 0) return 0.6;
+            double totalLength = declared.Sum(
+                p => System.Math.Max(0.01, p.Definition.LengthM));
+            return declared.Sum(p =>
+                    p.Definition.AxialDragCoefficient
+                    * System.Math.Max(0.01, p.Definition.LengthM))
+                / totalLength;
+        }
+    }
 
     // Parts belonging to the currently-firing stage: the subtree hanging below the
     // lowest still-attached decoupler (the side away from the root command section).

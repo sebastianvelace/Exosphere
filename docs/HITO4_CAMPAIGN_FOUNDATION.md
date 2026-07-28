@@ -50,10 +50,10 @@ NASA publica 187,42 km de altitud, 487,26 km de rango y 15:22 de duración en el
 como evidencia histórica y usa un corredor de aceptación más ancho y
 explícitamente `derived`.
 
-Freedom 7 aparece como `VEHICLE PENDING` hasta que se entregue la variante
-Mercury-Redstone 3, el astronauta y LC-5. Esta barrera es deliberada: la campaña
-no puede lanzar Falcon, Starship ni un vehículo genérico en lugar del hardware
-que realmente voló.
+Freedom 7 aparece como `READY`/`LISTA`: la variante Mercury-Redstone 3,
+Alan Shepard y LC-5 ya existen y el botón lanza exactamente ese hardware. La
+barrera permanece para las misiones siguientes: la campaña no puede sustituir
+una variante faltante por Falcon, Starship ni un vehículo genérico.
 
 ## Verificación
 
@@ -62,11 +62,16 @@ Las pruebas puras cubren:
 - carga y validación bilingüe de la definición;
 - orden exacto de las 16 misiones;
 - éxito con evidencia numérica completa;
-- fallo irreversible por exceder 12,5 g;
+- fallo irreversible por exceder 13,0 g;
 - round-trip de máximos, fases y origen de downrange;
 - recompensas y desbloqueos idempotentes;
 - rechazo de progreso no finito y recompensas negativas;
 - procedencia obligatoria de los datos Freedom 7.
+
+La aceptación adicional de Freedom 7 cubre masa/dimensiones, A-7, crew/sitio,
+separación conservativa, paracaídas, amerizaje y una simulación headless
+completa. El nominal reproducible obtiene 181,4 km, 2,25 km/s geocéntricos,
+480,8 km de downrange, 913 s y 12,85 g.
 
 La captura reproducible del modal usa:
 

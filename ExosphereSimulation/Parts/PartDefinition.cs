@@ -33,6 +33,9 @@ public class PartDefinition
     [JsonPropertyName("mass_dry")]    public double MassDry     { get; set; }
     [JsonPropertyName("cost")]        public double Cost        { get; set; }
     [JsonPropertyName("drag_coefficient")] public double DragCoefficient { get; set; } = 0.2;
+    // Optional vehicle-specific axial Cd. Zero preserves the legacy 0.6 cylinder model.
+    [JsonPropertyName("axial_drag_coefficient")]
+    public double AxialDragCoefficient { get; set; }
     [JsonPropertyName("heat_tolerance")]   public double HeatTolerance   { get; set; } = 1200;
     [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
     [JsonPropertyName("attachment_nodes")] public List<AttachmentNodeDef> AttachmentNodes { get; set; } = new();
@@ -129,6 +132,16 @@ public class PartDefinition
     [JsonPropertyName("contact_com_offset_y_m")]public double ContactComOffsetYM   { get; set; }
     [JsonPropertyName("drag_chute")]     public double DragChute     { get; set; }
     [JsonPropertyName("deploy_altitude")]public double DeployAltitude{ get; set; }
+    [JsonPropertyName("semi_deploy_altitude")]
+    public double SemiDeployAltitude { get; set; }
+    [JsonPropertyName("semi_deploy_drag")]
+    public double SemiDeployDrag { get; set; }
+    [JsonPropertyName("min_pressure_deploy")]
+    public double MinPressureDeploy { get; set; }
+    [JsonPropertyName("splashdown_capable")]
+    public bool SplashdownCapable { get; set; }
+    [JsonPropertyName("max_splashdown_speed_mps")]
+    public double MaxSplashdownSpeedMps { get; set; }
 
     [JsonIgnore]
     public PartCategory Category => CategoryStr.ToLowerInvariant() switch

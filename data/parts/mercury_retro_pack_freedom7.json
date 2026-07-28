@@ -1,0 +1,31 @@
+{
+  "id": "mercury_retro_pack_freedom7",
+  "name": "Mercury Retrograde Package — Freedom 7",
+  "description": "Three-motor retrograde package represented as one aggregate solid-motor part; thrust and propellant split are public-data engineering estimates.",
+  "category": "engine",
+  "vehicle_family": "mercury",
+  "vehicle_role": "retro_pack",
+  "mass_dry": 70,
+  "length_m": 0.0,
+  "diameter_m": 1.8,
+  "cost": 0,
+  "drag_coefficient": 0.3,
+  "axial_drag_coefficient": 0.9,
+  "heat_tolerance": 1200,
+  "thrust_sl": 13500,
+  "thrust_vac": 13500,
+  "isp_sl": 290,
+  "isp_vac": 290,
+  "gimbal_range": 0.0,
+  "fuel_type": "solid",
+  "fuel_capacity_solid": 47,
+  "engine_count": 1,
+  "engine_startup_seconds": 0.05,
+  "engine_shutdown_seconds": 0.05,
+  "min_throttle": 1.0,
+  "thrust_position_y_m": 0.0,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, 0, 0], "size": 1, "type": "stack"}
+  ]
+}

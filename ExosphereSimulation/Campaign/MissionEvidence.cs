@@ -8,6 +8,7 @@ public sealed record MissionTelemetrySnapshot
     public string Phase { get; init; } = "";
     public double AltitudeM { get; init; }
     public double SurfaceSpeedMps { get; init; }
+    public double InertialSpeedMps { get; init; }
     public double DynamicPressurePa { get; init; }
     public double GForce { get; init; }
     public double DownrangeM { get; init; }
@@ -20,6 +21,7 @@ public sealed record MissionTelemetrySnapshot
         foreach (double value in new[]
                  {
                      MissionTimeSeconds, AltitudeM, SurfaceSpeedMps,
+                     InertialSpeedMps,
                      DynamicPressurePa, GForce, DownrangeM,
                  })
             if (!double.IsFinite(value) || value < 0.0)
@@ -36,6 +38,7 @@ public sealed class MissionEvidence
     public double ElapsedSeconds { get; private set; }
     public double PeakAltitudeM { get; private set; }
     public double PeakSurfaceSpeedMps { get; private set; }
+    public double PeakInertialSpeedMps { get; private set; }
     public double MaximumDynamicPressurePa { get; private set; }
     public double MaximumGForce { get; private set; }
     public double MaximumDownrangeM { get; private set; }
@@ -55,6 +58,8 @@ public sealed class MissionEvidence
         PeakAltitudeM = System.Math.Max(PeakAltitudeM, snapshot.AltitudeM);
         PeakSurfaceSpeedMps =
             System.Math.Max(PeakSurfaceSpeedMps, snapshot.SurfaceSpeedMps);
+        PeakInertialSpeedMps =
+            System.Math.Max(PeakInertialSpeedMps, snapshot.InertialSpeedMps);
         MaximumDynamicPressurePa =
             System.Math.Max(MaximumDynamicPressurePa, snapshot.DynamicPressurePa);
         MaximumGForce = System.Math.Max(MaximumGForce, snapshot.GForce);
@@ -70,6 +75,7 @@ public sealed class MissionEvidence
     {
         MissionMetric.PeakAltitudeM => PeakAltitudeM,
         MissionMetric.PeakSurfaceSpeedMps => PeakSurfaceSpeedMps,
+        MissionMetric.PeakInertialSpeedMps => PeakInertialSpeedMps,
         MissionMetric.MaximumDynamicPressurePa => MaximumDynamicPressurePa,
         MissionMetric.MaximumGForce => MaximumGForce,
         MissionMetric.MaximumDownrangeM => MaximumDownrangeM,
@@ -93,6 +99,7 @@ public sealed class MissionEvidence
             ["elapsedSeconds"] = ElapsedSeconds,
             ["peakAltitudeM"] = PeakAltitudeM,
             ["peakSurfaceSpeedMps"] = PeakSurfaceSpeedMps,
+            ["peakInertialSpeedMps"] = PeakInertialSpeedMps,
             ["maximumDynamicPressurePa"] = MaximumDynamicPressurePa,
             ["maximumGForce"] = MaximumGForce,
             ["maximumDownrangeM"] = MaximumDownrangeM,
@@ -116,6 +123,9 @@ public sealed class MissionEvidence
             ElapsedSeconds = Read("elapsedSeconds"),
             PeakAltitudeM = Read("peakAltitudeM"),
             PeakSurfaceSpeedMps = Read("peakSurfaceSpeedMps"),
+            PeakInertialSpeedMps = Read(
+                "peakInertialSpeedMps",
+                Read("peakSurfaceSpeedMps")),
             MaximumDynamicPressurePa = Read("maximumDynamicPressurePa"),
             MaximumGForce = Read("maximumGForce"),
             MaximumDownrangeM = Read("maximumDownrangeM"),

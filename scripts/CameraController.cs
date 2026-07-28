@@ -203,10 +203,8 @@ public partial class CameraController : Node3D
             float vehicleHeight = bridge?.ActiveVessel is { } padVessel
                 ? (float)(padVessel.VehicleLength / 2.8)
                 : 43f;
-            float dist = Mathf.Clamp(
-                (vehicleHeight - groundY) * 1.55f,
-                Mathf.Max(28f, vehicleHeight * 2.2f),
-                850f);
+            float dist = (float)VehicleCameraFraming.PadTrackingDistance(
+                vehicleHeight, groundY);
             float midY = (groundY + vehicleHeight) * 0.5f;
             camPos = new Vector3(dist * Mathf.Sin(yawRad), midY, dist * Mathf.Cos(yawRad));
             lookTarget = new Vector3(0f, midY, 0f);

@@ -70,6 +70,7 @@ public static class MissionEvaluator
                 ["elapsedSeconds"] = evidence.ElapsedSeconds,
                 ["peakAltitudeM"] = evidence.PeakAltitudeM,
                 ["peakSurfaceSpeedMps"] = evidence.PeakSurfaceSpeedMps,
+                ["peakInertialSpeedMps"] = evidence.PeakInertialSpeedMps,
                 ["maximumDynamicPressurePa"] =
                     evidence.MaximumDynamicPressurePa,
                 ["maximumGForce"] = evidence.MaximumGForce,

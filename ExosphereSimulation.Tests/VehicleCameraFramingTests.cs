@@ -27,4 +27,16 @@ public sealed class VehicleCameraFramingTests
         double wide = VehicleCameraFraming.MinimumOrbitDistance(50.0, 9.0, 90.0);
         Assert.True(narrow > wide);
     }
+
+    [Fact]
+    public void HistoricalSmallLauncherUsesCloserPadFramingThanStarship()
+    {
+        double mercury = VehicleCameraFraming.PadTrackingDistance(
+            25.3 / 2.8, -4.0 / 2.8);
+        double starship = VehicleCameraFraming.PadTrackingDistance(
+            121.0 / 2.8, -4.0 / 2.8);
+
+        Assert.InRange(mercury, 15.0, 18.0);
+        Assert.True(starship > mercury * 4.0);
+    }
 }

@@ -14,6 +14,7 @@ public partial class VesselRenderer : Node3D
     public Vessel? TargetVessel { get; set; }
 
     private readonly Dictionary<string, Node3D> _partNodes = new();
+    private readonly Dictionary<string, Node3D> _parachuteVisuals = new();
     private MeshInstance3D? _hullMesh;
     private PlumeSystem?    _plumes;
     private static EngineDefinitionCatalog? _engineCatalog;
@@ -540,6 +541,7 @@ public partial class VesselRenderer : Node3D
         }
         UpdateFlaps(delta, body);
         UpdateLandingGear(delta);
+        UpdateParachutes();
 
         // Visible incandescence is a reentry phenomenon, not a generic "warm
         // skin" indicator. Gate it with the same physical observables as the
@@ -885,6 +887,16 @@ public partial class VesselRenderer : Node3D
     private Node3D CreateGenericPartNode(Part part)
     {
         var definition = part.Definition;
+        if (definition.VehicleFamily.Equals(
+                "mercury", StringComparison.OrdinalIgnoreCase))
+        {
+            if (definition.HasVehicleRole("capsule"))
+                return CreateMercuryCapsuleNode(part);
+            if (definition.HasVehicleRole("escape_tower"))
+                return CreateMercuryEscapeTowerNode(definition);
+            if (definition.HasVehicleRole("adapter"))
+                return CreateMercuryAdapterNode(definition);
+        }
         var node = new MeshInstance3D { Name = definition.Name.Replace(" ", "_") };
         float diameter = (float)System.Math.Max(
             0.2 / MetresPerUnit, definition.DiameterM / MetresPerUnit);
@@ -926,6 +938,190 @@ public partial class VesselRenderer : Node3D
         node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
             { AlbedoColor = GetCategoryColor(definition.Category), Roughness = 0.48f });
         return node;
+    }
+
+    private Node3D CreateMercuryCapsuleNode(Part part)
+    {
+        var definition = part.Definition;
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        var root = new Node3D { Name = "MercuryCapsule" };
+        var silver = Mat(new Color(0.72f, 0.74f, 0.75f), 0.78f, 0.34f);
+        var shield = Mat(new Color(0.10f, 0.075f, 0.055f), 0.05f, 0.92f);
+        var window = Mat(new Color(0.035f, 0.09f, 0.13f), 0.25f, 0.18f);
+
+        var cabin = new MeshInstance3D
+        {
+            Name = "PressureCabin",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius * 0.16f,
+                BottomRadius = radius,
+                Height = height * 0.92f,
+                RadialSegments = 48,
+            },
+            Position = Vector3.Up * (height * 0.04f),
+        };
+        cabin.SetSurfaceOverrideMaterial(0, silver);
+        root.AddChild(cabin);
+
+        var heatShield = new MeshInstance3D
+        {
+            Name = "AblativeHeatShield",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius * 1.03f,
+                Height = 0.10f,
+                RadialSegments = 48,
+            },
+            Position = Vector3.Down * (height * 0.46f),
+        };
+        heatShield.SetSurfaceOverrideMaterial(0, shield);
+        root.AddChild(heatShield);
+
+        var porthole = new MeshInstance3D
+        {
+            Name = "Porthole",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius * 0.12f,
+                BottomRadius = radius * 0.12f,
+                Height = 0.035f,
+                RadialSegments = 24,
+            },
+            Position = new Vector3(0f, height * 0.10f, radius * 0.82f),
+            RotationDegrees = new Vector3(90f, 0f, 0f),
+        };
+        porthole.SetSurfaceOverrideMaterial(0, window);
+        root.AddChild(porthole);
+
+        var canopy = new Node3D
+        {
+            Name = "MainParachute",
+            Position = Vector3.Up * (height * 0.5f + 3.0f),
+            Visible = false,
+        };
+        var canopyMesh = new MeshInstance3D
+        {
+            Name = "Canopy",
+            Mesh = new SphereMesh
+            {
+                Radius = 3.4f,
+                Height = 2.1f,
+                RadialSegments = 48,
+                Rings = 16,
+            },
+        };
+        canopyMesh.SetSurfaceOverrideMaterial(
+            0,
+            Mat(new Color(0.88f, 0.34f, 0.25f), 0.0f, 0.76f));
+        canopy.AddChild(canopyMesh);
+        for (int i = 0; i < 8; i++)
+        {
+            float angle = i * Mathf.Tau / 8f;
+            var line = new MeshInstance3D
+            {
+                Name = $"SuspensionLine{i}",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.008f,
+                    BottomRadius = 0.008f,
+                    Height = 3.0f,
+                    RadialSegments = 8,
+                },
+                Position = new Vector3(
+                    1.8f * Mathf.Cos(angle),
+                    -1.8f,
+                    1.8f * Mathf.Sin(angle)),
+                RotationDegrees = new Vector3(
+                    20f * Mathf.Sin(angle),
+                    0f,
+                    -20f * Mathf.Cos(angle)),
+            };
+            line.SetSurfaceOverrideMaterial(
+                0,
+                Mat(new Color(0.78f, 0.76f, 0.68f), 0.0f, 0.8f));
+            canopy.AddChild(line);
+        }
+        root.AddChild(canopy);
+        _parachuteVisuals[part.InstanceId] = canopy;
+        return root;
+    }
+
+    private Node3D CreateMercuryEscapeTowerNode(PartDefinition definition)
+    {
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        var root = new Node3D { Name = "MercuryEscapeTower" };
+        var red = Mat(new Color(0.66f, 0.16f, 0.10f), 0.35f, 0.55f);
+        for (int i = 0; i < 4; i++)
+        {
+            float angle = i * Mathf.Tau / 4f;
+            var strut = new MeshInstance3D
+            {
+                Name = $"TowerStrut{i}",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.025f,
+                    BottomRadius = 0.025f,
+                    Height = height * 0.78f,
+                    RadialSegments = 10,
+                },
+                Position = new Vector3(
+                    0.10f * Mathf.Cos(angle),
+                    -height * 0.06f,
+                    0.10f * Mathf.Sin(angle)),
+            };
+            strut.SetSurfaceOverrideMaterial(0, red);
+            root.AddChild(strut);
+        }
+        var motor = new MeshInstance3D
+        {
+            Name = "EscapeMotor",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = 0.05f,
+                BottomRadius = 0.16f,
+                Height = height * 0.22f,
+                RadialSegments = 24,
+            },
+            Position = Vector3.Up * (height * 0.42f),
+        };
+        motor.SetSurfaceOverrideMaterial(0, red);
+        root.AddChild(motor);
+        return root;
+    }
+
+    private Node3D CreateMercuryAdapterNode(PartDefinition definition)
+    {
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        var node = new MeshInstance3D
+        {
+            Name = "MercuryAdapter",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius * 0.72f,
+                BottomRadius = radius,
+                Height = Mathf.Max(0.05f, height),
+                RadialSegments = 32,
+            },
+        };
+        node.SetSurfaceOverrideMaterial(
+            0,
+            Mat(new Color(0.76f, 0.77f, 0.74f), 0.45f, 0.48f));
+        return node;
+    }
+
+    private void UpdateParachutes()
+    {
+        if (TargetVessel == null || _parachuteVisuals.Count == 0) return;
+        foreach (var part in TargetVessel.Parts.Parts)
+        {
+            if (!_parachuteVisuals.TryGetValue(part.InstanceId, out var canopy))
+                continue;
+            canopy.Visible = part.IsDeployed;
+        }
     }
 
     private static Color GetCategoryColor(PartCategory cat) => cat switch
@@ -1430,6 +1626,7 @@ public partial class VesselRenderer : Node3D
     {
         foreach (var child in GetChildren()) child.QueueFree();
         _partNodes.Clear();
+        _parachuteVisuals.Clear();
         _tileZoneMats.Clear();
         _shipSteelMats.Clear();
         _flapRigs.Clear();

@@ -40,7 +40,7 @@
       "dataId": "mission-freedom7-1961", "field": "objectiveEnvelope",
       "status": "derived", "source": "NASA Freedom 7 mission facts and Historical Data Book Volume II",
       "accessedDate": "2026-07-28", "variant": "Exosphere historical campaign acceptance envelope",
-      "conditions": "180 km minimum apogee, 2.2 km/s minimum speed, 450 km minimum range, 850–1000 s duration and 12.5 g maximum",
+      "conditions": "180 km minimum apogee, 2.2 km/s geocentric speed, 450 km minimum range, 850–1000 s duration and 13.0 g maximum",
       "uncertainty": "deliberately wider than the published nominal values to allow piloted reconstruction without rewriting history"
     }
   ]

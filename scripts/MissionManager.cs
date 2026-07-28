@@ -177,7 +177,9 @@ public partial class MissionManager : Node
                     EmitSignal(SignalName.LaunchCommitted);
                     // [L] owns the complete automatic mission: guidance and hot
                     // staging must start with the launch, not require a hidden [G].
-                    AscentController.Instance?.Engage();
+                    if (HistoricalFlightProfileController.Instance?
+                            .EngageIfSupported() != true)
+                        AscentController.Instance?.Engage();
                 }
             }
         }

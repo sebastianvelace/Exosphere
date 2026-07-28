@@ -3,6 +3,23 @@ namespace Exosphere.Simulation.Visual;
 /// <summary>Pure camera-fit contract shared by staging tests and the Godot chase camera.</summary>
 public static class VehicleCameraFraming
 {
+    public static double PadTrackingDistance(
+        double vehicleHeightRenderUnits,
+        double groundYRenderUnits)
+    {
+        if (!double.IsFinite(vehicleHeightRenderUnits)
+            || !double.IsFinite(groundYRenderUnits)
+            || vehicleHeightRenderUnits <= 0.0)
+            return 28.0;
+        double span = System.Math.Max(
+            vehicleHeightRenderUnits - groundYRenderUnits,
+            vehicleHeightRenderUnits);
+        double minimum = vehicleHeightRenderUnits < 20.0
+            ? System.Math.Max(12.0, vehicleHeightRenderUnits * 1.7)
+            : vehicleHeightRenderUnits * 2.2;
+        return System.Math.Clamp(span * 1.55, minimum, 850.0);
+    }
+
     public static double MinimumOrbitDistance(
         double vehicleLengthM, double vehicleDiameterM, double verticalFovDegrees,
         double metresPerRenderUnit = 2.8, double margin = 1.25)

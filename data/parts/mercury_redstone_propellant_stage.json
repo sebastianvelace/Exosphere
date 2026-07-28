@@ -1,0 +1,21 @@
+{
+  "id": "mercury_redstone_propellant_stage",
+  "name": "Mercury-Redstone Propellant Stage",
+  "description": "Elongated Redstone LOX/fuel tanks and load-bearing airframe for MR-3.",
+  "category": "fuel_tank",
+  "vehicle_family": "mercury",
+  "vehicle_role": "booster_tank",
+  "mass_dry": 3300,
+  "length_m": 15.8,
+  "diameter_m": 1.8,
+  "cost": 0,
+  "drag_coefficient": 0.22,
+  "axial_drag_coefficient": 0.24,
+  "heat_tolerance": 850,
+  "fuel_capacity_lf": 10304.347826,
+  "fuel_capacity_ox": 13395.652174,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 7.9, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -7.9, 0], "size": 1, "type": "stack"}
+  ]
+}

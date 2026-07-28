@@ -16,6 +16,12 @@ public partial class SimulationBridge : Node
 
     public Universe Universe { get; private set; } = null!;
     public Vessel?  ActiveVessel => Universe.ActiveVessel;
+    public string ActiveFlightProfileId { get; private set; } = "manual";
+    public void SetActiveFlightProfile(string profileId)
+    {
+        if (!string.IsNullOrWhiteSpace(profileId))
+            ActiveFlightProfileId = profileId;
+    }
 
     [Export] public string DataDirectory { get; set; } = "res://data";
 
@@ -86,7 +92,10 @@ public partial class SimulationBridge : Node
 
         var pendingIntent = CraftLaunchRequest.Pop();
         if (pendingIntent != null)
+        {
             LaunchSiteId = pendingIntent.LaunchSiteId;
+            ActiveFlightProfileId = pendingIntent.FlightProfileId;
+        }
         var sites = LaunchSite.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "launch_sites"));
         if (!sites.TryGetValue(LaunchSiteId, out _launchSite))
             GD.PushWarning($"[Sim] Launch site '{LaunchSiteId}' not found; pad will fall back to the equator.");
@@ -130,6 +139,12 @@ public partial class SimulationBridge : Node
 
             var ascent = new AscentController { Name = "AscentController" };
             uiLayer.CallDeferred("add_child", ascent);
+
+            var historical = new HistoricalFlightProfileController
+            {
+                Name = "HistoricalFlightProfileController",
+            };
+            uiLayer.CallDeferred("add_child", historical);
 
             var warpCtrl = new WarpController { Name = "WarpController" };
             uiLayer.CallDeferred("add_child", warpCtrl);
@@ -736,6 +751,43 @@ public partial class SimulationBridge : Node
 
         EmitSignal(SignalName.VesselStaged, debris.Id);
         MissionManager.Instance?.NotifyStaged();
+    }
+
+    /// <summary>
+    /// Detaches an arbitrary part subtree as another persisted vessel while keeping the
+    /// surviving carrier active. Used by historical escape-tower and spacecraft events.
+    /// </summary>
+    public Vessel? DeployPartAsVessel(
+        string rootPartInstanceId,
+        string name,
+        Vector3d separationVelocityLocal)
+    {
+        var carrier = ActiveVessel;
+        if (carrier == null) return null;
+        var detached = carrier.DeployPayload(
+            rootPartInstanceId,
+            name,
+            separationVelocityLocal);
+        if (detached == null) return null;
+        Universe.AddVessel(detached);
+        _vesselRenderer?.BuildFromVessel(carrier);
+        SpawnDebrisRenderer(detached, "Separated_");
+        EmitSignal(SignalName.VesselStaged, detached.Id);
+        return detached;
+    }
+
+    public Vector3d GetLaunchHeadingDirection()
+    {
+        var earth = Universe.GetBody("earth");
+        if (earth == null || ActiveVessel == null) return Vector3d.Forward;
+        var frame = _launchSite?.GetLocalFrame(earth, Universe.CurrentTime);
+        Vector3d east = frame?.East ?? earth.GetEastDirection(ActiveVessel.Position);
+        Vector3d north = frame?.North
+            ?? (ActiveVessel.Position - earth.Position)
+                .Normalized.Cross(east).Normalized;
+        double heading = (_launchSite?.Heading ?? 90.0) * MathUtils.DEG_TO_RAD;
+        return (north * System.Math.Cos(heading)
+            + east * System.Math.Sin(heading)).Normalized;
     }
 
     /// <summary>

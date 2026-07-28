@@ -218,14 +218,17 @@ public static class AerodynamicsModel
         Vector3d longitudinalAxis,
         double vehicleLength,
         double vehicleDiameter,
-        double temperature)
+        double temperature,
+        double axialDragCoefficient = 0.6)
     {
         double speed = surfaceVelocity.Magnitude;
         if (density <= 0.0 || speed < 1e-3) return Vector3d.Zero;
 
         double cosAlpha = System.Math.Abs(longitudinalAxis.Normalized.Dot(surfaceVelocity.Normalized));
         double area     = EffectiveArea(vehicleLength, vehicleDiameter, cosAlpha);
-        double cd       = EffectiveDragCoefficient(cosAlpha);
+        double aa = System.Math.Clamp(cosAlpha * cosAlpha, 0.0, 1.0);
+        double cd = 1.5 + (
+            System.Math.Max(0.05, axialDragCoefficient) - 1.5) * aa;
         double machMul  = GetMachDragMultiplier(ComputeMach(speed, temperature));
 
         double magnitude = 0.5 * density * speed * speed * cd * area * machMul;

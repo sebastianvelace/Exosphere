@@ -8,6 +8,7 @@ public enum MissionMetric
 {
     PeakAltitudeM,
     PeakSurfaceSpeedMps,
+    PeakInertialSpeedMps,
     MaximumDynamicPressurePa,
     MaximumGForce,
     MaximumDownrangeM,

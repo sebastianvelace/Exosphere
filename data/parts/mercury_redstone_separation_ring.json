@@ -1,0 +1,19 @@
+{
+  "id": "mercury_redstone_separation_ring",
+  "name": "Mercury-Redstone Separation Ring",
+  "description": "Spacecraft-to-launch-vehicle separation plane.",
+  "category": "decoupler",
+  "vehicle_family": "mercury",
+  "vehicle_role": "spacecraft_separation",
+  "mass_dry": 38,
+  "length_m": 0.2,
+  "diameter_m": 1.8,
+  "cost": 0,
+  "drag_coefficient": 0.25,
+  "axial_drag_coefficient": 0.24,
+  "heat_tolerance": 900,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.1, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.1, 0], "size": 1, "type": "stack"}
+  ]
+}

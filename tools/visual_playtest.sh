@@ -29,6 +29,7 @@ Options:
   --smoke       Pad-only capture (~30s). Used by CI for pipeline validation.
   --falcon      Seed the Falcon 9 Block 5 / Kennedy scenario before capture.
   --new-glenn   Seed the New Glenn 7x2 / LC-36 scenario before capture.
+  --mercury     Seed Freedom 7 / Mercury-Redstone 3 at LC-5.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --launch      Capture ignition and early vertical liftoff, then exit.
@@ -65,6 +66,11 @@ while [[ $# -gt 0 ]]; do
       VARIANT_FILE="newglenn_7x2_public_2026.json"
       VARIANT_SITE="cape_canaveral_lc36"
       VARIANT_PROFILE="newglenn-7x2-ascent"
+      shift ;;
+    --mercury)
+      VARIANT_FILE="mercury_redstone3_freedom7_1961.json"
+      VARIANT_SITE="cape_canaveral_lc5"
+      VARIANT_PROFILE="mercury-redstone3-suborbital"
       shift ;;
     --flight7)
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -355,7 +361,16 @@ public partial class _PlaytestShot : Node
         }
 
         // ── Ascent autopilot ──────────────────────────────────────────────────
-        if (_pad && !_ascentEngaged && AscentController.Instance != null)
+        if (_pad && !_ascentEngaged
+            && bridge.ActiveFlightProfileId == "mercury-redstone3-suborbital"
+            && MissionManager.Instance != null)
+        {
+            MissionManager.Instance.StartCountdown();
+            _ascentEngaged = true;
+            _log.WriteLine("ACTION start Freedom 7 historical countdown");
+            _log.Flush();
+        }
+        else if (_pad && !_ascentEngaged && AscentController.Instance != null)
         {
             AscentController.Instance.Engage();
             _ascentEngaged = true;

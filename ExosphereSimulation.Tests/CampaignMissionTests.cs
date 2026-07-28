@@ -100,14 +100,14 @@ public sealed class CampaignMissionTests
             140, "ASCENT_SH",
             altitudeM: 50_000,
             speedMps: 1_500,
-            gForce: 13.0));
+            gForce: 13.5));
 
         Assert.Equal(MissionOutcome.Failure, debrief.Outcome);
         var limit = debrief.Limits.Single(
             result => result.Id == "crew-load-envelope");
         Assert.False(limit.Passed);
-        Assert.Equal(13.0, limit.ActualValue);
-        Assert.Equal(12.5, limit.TargetValue);
+        Assert.Equal(13.5, limit.ActualValue);
+        Assert.Equal(13.0, limit.TargetValue);
     }
 
     [Fact]
@@ -145,10 +145,31 @@ public sealed class CampaignMissionTests
         Assert.Equal(500.0, restored.Evidence.ElapsedSeconds);
         Assert.Equal(187_420.0, restored.Evidence.PeakAltitudeM);
         Assert.Equal(2_295.0, restored.Evidence.PeakSurfaceSpeedMps);
+        Assert.Equal(2_295.0, restored.Evidence.PeakInertialSpeedMps);
         Assert.Equal(11.0, restored.Evidence.MaximumGForce);
         Assert.Contains("ASCENT_SH", restored.Evidence.ReachedPhases);
         Assert.Contains("ENTRY", restored.Evidence.ReachedPhases);
         Assert.Equal(1.0, decoded.LaunchSurfaceDirection?.X);
+    }
+
+    [Fact]
+    public void PreInertialMetricMissionSaveFallsBackToPreservedSurfaceSpeed()
+    {
+        var legacy = new MissionSaveV2
+        {
+            MissionId = "mission-freedom7-1961",
+            Phase = "ASCENT_SH",
+            ObjectiveProgress = new Dictionary<string, double>
+            {
+                ["elapsedSeconds"] = 120.0,
+                ["peakSurfaceSpeedMps"] = 2_050.0,
+            },
+        };
+
+        MissionEvidence evidence = MissionEvidence.Restore(legacy);
+
+        Assert.Equal(2_050.0, evidence.PeakSurfaceSpeedMps);
+        Assert.Equal(2_050.0, evidence.PeakInertialSpeedMps);
     }
 
     [Fact]
@@ -251,6 +272,7 @@ public sealed class CampaignMissionTests
         Phase = phase,
         AltitudeM = altitudeM,
         SurfaceSpeedMps = speedMps,
+        InertialSpeedMps = speedMps,
         DynamicPressurePa = dynamicPressurePa,
         GForce = gForce,
         DownrangeM = downrangeM,

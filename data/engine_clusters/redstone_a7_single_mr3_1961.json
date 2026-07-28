@@ -1,0 +1,24 @@
+{
+  "id": "redstone-a7-single-mr3-1961",
+  "name": "Mercury-Redstone A-7 single-engine mount",
+  "engineModelId": "redstone-a7-mr3-1961",
+  "engines": [
+    {
+      "instanceId": "a7-01",
+      "positionM": [0.0, 0.0, 0.0],
+      "thrustDirection": [0.0, 1.0, 0.0],
+      "gimballed": true
+    }
+  ],
+  "feedNetwork": {
+    "fuelResource": "RP-1",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {
+        "engineInstanceId": "a7-01",
+        "maximumFlowKgS": 190
+      }
+    ]
+  }
+}

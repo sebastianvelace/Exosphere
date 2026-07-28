@@ -1,0 +1,31 @@
+{
+  "id": "mercury_capsule_freedom7",
+  "name": "Mercury Spacecraft 7 — Freedom 7",
+  "description": "Crewed Mercury capsule with ablative heat shield, drogue/main parachute sequence and landing bag.",
+  "category": "command",
+  "vehicle_family": "mercury",
+  "vehicle_role": "capsule",
+  "mass_dry": 1715.5,
+  "length_m": 3.4,
+  "diameter_m": 2.1,
+  "cost": 0,
+  "drag_coefficient": 0.9,
+  "axial_drag_coefficient": 2.0,
+  "heat_tolerance": 1900,
+  "has_heat_shield": true,
+  "tps_heat_capacity_per_area": 52000,
+  "tps_conductance": 3.0,
+  "structure_heat_capacity_per_area": 26000,
+  "max_crew": 1,
+  "drag_chute": 300.0,
+  "deploy_altitude": 3048.0,
+  "semi_deploy_altitude": 6705.6,
+  "semi_deploy_drag": 4.0,
+  "min_pressure_deploy": 0.40,
+  "splashdown_capable": true,
+  "max_splashdown_speed_mps": 12.5,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.7, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.7, 0], "size": 1, "type": "stack"}
+  ]
+}
