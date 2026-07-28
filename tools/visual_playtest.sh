@@ -169,12 +169,16 @@ public partial class _PlaytestShot : Node
         ("cockpit_120km_night", 120_000.0, -35.0, true),
     };
     const int AtmosphereMinimumSettleFrames = 8;
-    const int AtmosphereMaximumSettleFrames = 180;
     const double AtmosphereSettleSeconds = 1.2;
+    const double AtmosphereMaximumSettleSeconds = 45.0;
+    const int AtmosphereExposureStableFrames = 4;
+    const double AtmosphereExposureRateTolerance = 0.015;
     int _atmosIndex = -1;
     Vector3d _atmosUp = Vector3d.Up, _atmosLook = Vector3d.Forward;
     double _atmosFrameSeconds, _atmosMaxFrameSeconds;
     int _atmosPerfFrames, _atmosSlowFrames;
+    double _atmosPreviousExposure = -1.0;
+    int _atmosExposureStableFrames;
 
     public _PlaytestShot()
     {
@@ -615,13 +619,27 @@ public partial class _PlaytestShot : Node
         if (delta > 1.0 / 30.0) _atmosSlowFrames++;
 
         ApplyAtmosphereCamera();
-        // Wall-clock settling makes the harness practical both on a real GPU (~60 fps)
-        // and CI's llvmpipe renderer (~2 fps).  Always allow several incremental sky
-        // cubemap updates, but never wait hundreds of slow software-rendered frames.
+        // Exposure adaptation is stateful and asymmetric.  Fixed-delay captures previously
+        // inherited up to 6x night exposure in the following daylight case, making a valid
+        // shader look white-clipped.  Require the measured exposure rate to settle as well
+        // as allowing several incremental sky-cubemap updates.  A wall-time cap, rather
+        // than a frame cap, avoids truncating the 9 s dark-adaptation model on a fast GPU.
+        var world = GetTree().Root.FindChild("WorldEnvironment", true, false)
+            as WorldEnvironment;
+        double exposure = world?.Environment?.TonemapExposure ?? -1.0;
+        if (exposure > 0.0 && _atmosPreviousExposure > 0.0 && delta > 1e-6)
+        {
+            double rate = System.Math.Abs(exposure - _atmosPreviousExposure) / delta;
+            _atmosExposureStableFrames = rate <= AtmosphereExposureRateTolerance
+                ? _atmosExposureStableFrames + 1 : 0;
+        }
+        _atmosPreviousExposure = exposure;
+
         bool enoughFrames = _atmosPerfFrames >= AtmosphereMinimumSettleFrames;
         bool enoughTime = _atmosFrameSeconds >= AtmosphereSettleSeconds;
-        bool safetyLimit = _atmosPerfFrames >= AtmosphereMaximumSettleFrames;
-        if (!safetyLimit && !(enoughFrames && enoughTime)) return;
+        bool stableExposure = _atmosExposureStableFrames >= AtmosphereExposureStableFrames;
+        bool safetyLimit = _atmosFrameSeconds >= AtmosphereMaximumSettleSeconds;
+        if (!safetyLimit && !(enoughFrames && enoughTime && stableExposure)) return;
 
         var shot = _atmosCases[_atmosIndex];
         CaptureNow(shot.Slug);
@@ -687,6 +705,8 @@ public partial class _PlaytestShot : Node
         _atmosMaxFrameSeconds = 0.0;
         _atmosPerfFrames = 0;
         _atmosSlowFrames = 0;
+        _atmosPreviousExposure = -1.0;
+        _atmosExposureStableFrames = 0;
         _log.WriteLine($"ATMOS_APPLY slug={shot.Slug} targetAlt={shot.AltitudeM:F1} " +
             $"targetSunElevation={shot.SunElevationDeg:F1} cockpit={shot.Cockpit}");
         _log.Flush();
@@ -731,10 +751,12 @@ public partial class _PlaytestShot : Node
         _log.WriteLine($"ATMOS_STATE slug={shot.Slug} actualAlt={vessel.GetAltitude(earth):F1} " +
             $"sunElevation={solarElevation:F2} solarVisibility={SunController.SolarVisibility:F3} " +
             $"cockpit={shot.Cockpit} exposure={exposure:F3} fov={camera?.Fov ?? -1:F2} " +
-            $"near={camera?.Near ?? -1:F3}");
+            $"near={camera?.Near ?? -1:F3} " +
+            $"exposureSettled={_atmosExposureStableFrames >= AtmosphereExposureStableFrames}");
         _log.WriteLine($"PERF slug={shot.Slug} meanFrameMs={meanMs:F2} " +
             $"maxFrameMs={_atmosMaxFrameSeconds * 1000.0:F2} slowFrames={_atmosSlowFrames} " +
-            $"sampleFrames={_atmosPerfFrames} reportedFps={Engine.GetFramesPerSecond()}");
+            $"sampleFrames={_atmosPerfFrames} exposureStableFrames={_atmosExposureStableFrames} " +
+            $"reportedFps={Engine.GetFramesPerSecond()}");
         _log.Flush();
     }
 
@@ -772,10 +794,17 @@ public partial class _PlaytestShot : Node
         int width = image.GetWidth();
         int height = image.GetHeight();
         const int stride = 4;
-        long samples = 0, clipped = 0, dark = 0, starCandidates = 0, starSamples = 0;
+        long samples = 0, clipped = 0, dark = 0;
+        long starCandidates = 0, starSamples = 0;
+        long skySamples = 0, skyClipped = 0, skyWhiteClipped = 0, skyBright = 0;
+        long surfaceSamples = 0, surfaceClipped = 0, surfaceWhiteClipped = 0;
+        long horizonSamples = 0, limbSamples = 0, neonGreen = 0, twilightUpperSamples = 0;
         double sum = 0.0, upperSum = 0.0, lowerSum = 0.0;
+        double horizonSum = 0.0, horizonRed = 0.0, horizonBlue = 0.0;
+        double horizonGreenExcess = 0.0, twilightUpperSum = 0.0;
         long upperN = 0, lowerN = 0;
         int[] histogram = new int[256];
+        int[] skyHistogram = new int[256];
 
         for (int y = 0; y < height; y += stride)
         {
@@ -783,10 +812,12 @@ public partial class _PlaytestShot : Node
             {
                 Color c = image.GetPixel(x, y);
                 double luma = 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+                double maxChannel = System.Math.Max(c.R, System.Math.Max(c.G, c.B));
+                double minChannel = System.Math.Min(c.R, System.Math.Min(c.G, c.B));
                 sum += luma;
                 samples++;
                 histogram[System.Math.Clamp((int)System.Math.Round(luma * 255.0), 0, 255)]++;
-                if (System.Math.Max(c.R, System.Math.Max(c.G, c.B)) >= 0.995f) clipped++;
+                if (maxChannel >= 0.995f) clipped++;
                 if (luma <= 0.02) dark++;
 
                 if (y < height * 0.42)
@@ -794,19 +825,88 @@ public partial class _PlaytestShot : Node
                     upperSum += luma;
                     upperN++;
                 }
-                // Local-contrast star proxy, sampled in a central sky ROI that excludes the
-                // corner HUD and top mission banner.  This distinguishes point-like stars
-                // from a uniformly bright daytime sky much better than raw brightness.
-                if (x >= width * 0.20 && x < width * 0.80
-                    && y >= height * 0.15 && y < height * 0.48)
+
+                // Upper-sky ROI.  Keeping it clear of the expected y=0.5 horizon makes a
+                // blown daytime sky distinguishable from a legitimately bright planet limb.
+                if (x >= width * 0.15 && x < width * 0.85
+                    && y >= height * 0.08 && y < height * 0.38)
                 {
-                    double neighbours = 0.25 * (
-                        Luma(image.GetPixel(System.Math.Max(0, x - stride), y))
-                        + Luma(image.GetPixel(System.Math.Min(width - 1, x + stride), y))
-                        + Luma(image.GetPixel(x, System.Math.Max(0, y - stride)))
-                        + Luma(image.GetPixel(x, System.Math.Min(height - 1, y + stride))));
+                    skySamples++;
+                    skyHistogram[System.Math.Clamp((int)System.Math.Round(luma * 255.0), 0, 255)]++;
+                    if (maxChannel >= 0.995f) skyClipped++;
+                    if (minChannel >= 0.985f) skyWhiteClipped++;
+                    if (luma >= 0.90) skyBright++;
+                }
+
+                // The lower central ROI is terrain/planet in exterior horizon views.  This
+                // catches exposure regressions that a whole-frame average hides.
+                if (x >= width * 0.15 && x < width * 0.85
+                    && y >= height * 0.58 && y < height * 0.88)
+                {
+                    surfaceSamples++;
+                    if (maxChannel >= 0.995f) surfaceClipped++;
+                    if (minChannel >= 0.985f) surfaceWhiteClipped++;
+                }
+
+                // Side sectors deliberately omit the solar disc in the centre.  At ±1°
+                // solar elevation, a physical twilight must brighten and warm toward the
+                // horizon even when the disc itself is clipped.
+                bool twilightSide = (x >= width * 0.15 && x < width * 0.42)
+                    || (x >= width * 0.58 && x < width * 0.85);
+                if (twilightSide && y >= height * 0.40 && y < height * 0.49)
+                {
+                    horizonSamples++;
+                    horizonSum += luma;
+                    horizonRed += c.R;
+                    horizonBlue += c.B;
+                }
+                if (twilightSide && y >= height * 0.20 && y < height * 0.32)
+                {
+                    twilightUpperSamples++;
+                    twilightUpperSum += luma;
+                }
+
+                // A real 557.7 nm airglow layer is dim and narrow.  Count only bright,
+                // saturated green pixels across the limb as "neon"; subtle green emission
+                // remains valid and is reported separately as mean green excess.
+                if (x >= width * 0.10 && x < width * 0.90
+                    && y >= height * 0.36 && y < height * 0.62)
+                {
+                    limbSamples++;
+                    double chroma = maxChannel - minChannel;
+                    double greenExcess = System.Math.Max(0.0,
+                        c.G - System.Math.Max(c.R, c.B));
+                    horizonGreenExcess += greenExcess;
+                    if (luma >= 0.12 && c.G >= c.R + 0.04
+                        && c.G >= c.B + 0.025
+                        && maxChannel > 0.0 && chroma / maxChannel >= 0.20)
+                        neonGreen++;
+                }
+
+                // Sharp-star proxy: require a true local maximum against an eight-point
+                // ring, not just one bright pixel on a smooth atmospheric gradient.
+                if (x >= width * 0.20 && x < width * 0.80
+                    && y >= height * 0.08 && y < height * 0.36)
+                {
+                    double left = Luma(image.GetPixel(System.Math.Max(0, x - stride), y));
+                    double right = Luma(image.GetPixel(System.Math.Min(width - 1, x + stride), y));
+                    double above = Luma(image.GetPixel(x, System.Math.Max(0, y - stride)));
+                    double below = Luma(image.GetPixel(x, System.Math.Min(height - 1, y + stride)));
+                    double nw = Luma(image.GetPixel(System.Math.Max(0, x - stride),
+                        System.Math.Max(0, y - stride)));
+                    double ne = Luma(image.GetPixel(System.Math.Min(width - 1, x + stride),
+                        System.Math.Max(0, y - stride)));
+                    double sw = Luma(image.GetPixel(System.Math.Max(0, x - stride),
+                        System.Math.Min(height - 1, y + stride)));
+                    double se = Luma(image.GetPixel(System.Math.Min(width - 1, x + stride),
+                        System.Math.Min(height - 1, y + stride)));
+                    double ringMean = (left + right + above + below + nw + ne + sw + se) / 8.0;
+                    double ringMax = System.Math.Max(
+                        System.Math.Max(System.Math.Max(left, right), System.Math.Max(above, below)),
+                        System.Math.Max(System.Math.Max(nw, ne), System.Math.Max(sw, se)));
                     starSamples++;
-                    if (luma > 0.10 && luma - neighbours > 0.08) starCandidates++;
+                    if (luma >= 0.12 && luma - ringMean >= 0.055
+                        && luma >= ringMax) starCandidates++;
                 }
                 if (y > height * 0.58)
                 {
@@ -819,6 +919,9 @@ public partial class _PlaytestShot : Node
         double mean = samples > 0 ? sum / samples : 0.0;
         double upper = upperN > 0 ? upperSum / upperN : 0.0;
         double lower = lowerN > 0 ? lowerSum / lowerN : 0.0;
+        double horizonMean = horizonSamples > 0 ? horizonSum / horizonSamples : 0.0;
+        double twilightUpperMean = twilightUpperSamples > 0
+            ? twilightUpperSum / twilightUpperSamples : 0.0;
         _log.WriteLine($"IMAGE slug={slug} width={width} height={height} samples={samples} " +
             $"mean={mean:F5} p50={HistogramPercentile(histogram, samples, 0.50):F5} " +
             $"p95={HistogramPercentile(histogram, samples, 0.95):F5} " +
@@ -826,7 +929,20 @@ public partial class _PlaytestShot : Node
             $"darkFrac={(samples > 0 ? (double)dark / samples : 0.0):F5} " +
             $"upperMean={upper:F5} lowerMean={lower:F5} " +
             $"horizonContrast={System.Math.Abs(upper - lower):F5} " +
-            $"starCandidateFrac={(starSamples > 0 ? (double)starCandidates / starSamples : 0.0):F6}");
+            $"skyP95={HistogramPercentile(skyHistogram, skySamples, 0.95):F5} " +
+            $"skyClippedFrac={(skySamples > 0 ? (double)skyClipped / skySamples : 0.0):F5} " +
+            $"skyWhiteClipFrac={(skySamples > 0 ? (double)skyWhiteClipped / skySamples : 0.0):F5} " +
+            $"skyBrightFrac={(skySamples > 0 ? (double)skyBright / skySamples : 0.0):F5} " +
+            $"surfaceClippedFrac={(surfaceSamples > 0 ? (double)surfaceClipped / surfaceSamples : 0.0):F5} " +
+            $"surfaceWhiteClipFrac={(surfaceSamples > 0 ? (double)surfaceWhiteClipped / surfaceSamples : 0.0):F5} " +
+            $"twilightUpperMean={twilightUpperMean:F5} twilightHorizonMean={horizonMean:F5} " +
+            $"twilightGradient={(horizonMean - twilightUpperMean):F5} " +
+            $"twilightWarmth={(horizonSamples > 0 ? (horizonRed - horizonBlue) / horizonSamples : 0.0):F5} " +
+            $"neonGreenFrac={(limbSamples > 0 ? (double)neonGreen / limbSamples : 0.0):F6} " +
+            $"limbGreenExcess={(limbSamples > 0 ? horizonGreenExcess / limbSamples : 0.0):F6} " +
+            $"starCandidateFrac={(starSamples > 0 ? (double)starCandidates / starSamples : 0.0):F6} " +
+            $"sharpStarCount={starCandidates} " +
+            $"sharpStarFrac={(starSamples > 0 ? (double)starCandidates / starSamples : 0.0):F6}");
         _log.Flush();
     }
 
@@ -1007,22 +1123,152 @@ verify_pngs() {
       echo "ERROR: atmosphere matrix did not finish cleanly" >&2
       return 1
     fi
+    if grep '^ATMOS_STATE ' "$LOG" | grep -qv ' exposureSettled=True'; then
+      echo "ERROR: atmosphere capture reached its safety limit before exposure settled" >&2
+      grep '^ATMOS_STATE ' "$LOG" | grep -v ' exposureSettled=True' >&2
+      return 1
+    fi
 
-    # Reject only objectively unusable captures here.  Perceptual thresholds belong in
-    # review because a physically valid night frame can intentionally be very dark.
+    # These are instrumentation/physics guardrails, not a subjective image-quality score.
+    # Each threshold targets a failure mode visible in prior regressions:
+    #   * regional clipping catches a white surface sky hidden by a normal whole-frame mean;
+    #   * true local maxima quantify stars that leak through daylight exposure;
+    #   * bright saturated green distinguishes a neon band from dim 557.7 nm airglow;
+    #   * off-disc horizon/upper-sky ROIs require an actual twilight gradient.
     if ! awk '
+      function remember(slug, key, value) {
+        metric[slug SUBSEP key] = value + 0
+      }
+      function has(slug, key) {
+        return (slug SUBSEP key) in metric
+      }
+      function get(slug, key) {
+        return metric[slug SUBSEP key] + 0
+      }
+      function reject(message) {
+        print "ERROR: atmosphere optics gate: " message > "/dev/stderr"
+        bad = 1
+      }
+      function require_metric(slug, key) {
+        if (!has(slug, key))
+          reject("missing " key " for " slug)
+      }
+      function maximum(slug, key, limit, label, value) {
+        require_metric(slug, key)
+        value = get(slug, key)
+        if (value > limit)
+          reject(label " in " slug ": " key "=" value " > " limit)
+      }
+      function minimum(slug, key, limit, label, value) {
+        require_metric(slug, key)
+        value = get(slug, key)
+        if (value < limit)
+          reject(label " in " slug ": " key "=" value " < " limit)
+      }
       /^IMAGE / {
-        mean = clip = -1
+        slug = ""
         for (i = 1; i <= NF; i++) {
-          if ($i ~ /^mean=/) { split($i, a, "="); mean = a[2] + 0 }
-          if ($i ~ /^clippedFrac=/) { split($i, a, "="); clip = a[2] + 0 }
+          if ($i ~ /^slug=/) {
+            split($i, a, "=")
+            slug = a[2]
+          }
         }
+        if (slug == "") {
+          reject("IMAGE row without slug: " $0)
+          next
+        }
+        for (i = 1; i <= NF; i++) {
+          if (index($i, "=") > 0) {
+            split($i, a, "=")
+            remember(slug, a[1], a[2])
+          }
+        }
+        mean = get(slug, "mean")
+        clip = get(slug, "clippedFrac")
         if (mean < 0.0005 || mean > 0.9995 || clip > 0.95) {
-          print "ERROR: degenerate atmosphere capture: " $0 > "/dev/stderr"
-          bad = 1
+          reject("degenerate capture " slug ": mean=" mean " clippedFrac=" clip)
         }
       }
-      END { exit bad }
+      END {
+        # A small solar disc/bloom may clip; broad white sky or terrain may not.
+        maximum("ground_day", "clippedFrac", 0.20,
+          "surface-level daytime frame is broadly clipped")
+        maximum("ground_day", "skyWhiteClipFrac", 0.10,
+          "daytime sky is white-clipped")
+        maximum("ground_day", "skyBrightFrac", 0.55,
+          "daytime sky has lost too much luminance structure")
+        maximum("ground_day", "surfaceWhiteClipFrac", 0.12,
+          "daytime terrain is white-clipped")
+        maximum("ground_sunrise", "skyWhiteClipFrac", 0.20,
+          "sunrise sky is broadly white-clipped")
+        maximum("ground_sunset", "skyWhiteClipFrac", 0.20,
+          "sunset sky is broadly white-clipped")
+
+        # With exposure adapted to a lit atmosphere/Earth, point stars should be below
+        # framebuffer visibility.  Limits are densities of true local maxima, not raw
+        # bright pixels, and still permit a handful of sensor-scale outliers.
+        maximum("ground_day", "sharpStarFrac", 0.00010,
+          "stars remain visible through daylight")
+        maximum("10km_day", "sharpStarFrac", 0.00015,
+          "stars remain visible through daylight")
+        maximum("30km_day", "sharpStarFrac", 0.00025,
+          "stars remain too prominent at daytime exposure")
+        maximum("70km_day", "sharpStarFrac", 0.00035,
+          "stars remain too prominent beside the lit limb")
+        maximum("120km_day", "sharpStarFrac", 0.00035,
+          "stars remain too prominent beside the lit Earth")
+        maximum("400km_day", "sharpStarFrac", 0.00035,
+          "stars remain too prominent beside the lit Earth")
+
+        # Day/night pairs also guard against a renderer that simply erases the starfield
+        # in both states to satisfy the absolute daytime limits.
+        split("ground 10km 30km 70km 120km 400km", pairNames, " ")
+        for (p = 1; p <= 6; p++) {
+          daySlug = pairNames[p] "_day"
+          nightSlug = pairNames[p] "_night"
+          require_metric(daySlug, "sharpStarFrac")
+          require_metric(nightSlug, "sharpStarFrac")
+          dayStars = get(daySlug, "sharpStarFrac")
+          nightStars = get(nightSlug, "sharpStarFrac")
+          if (nightStars < 0.00008)
+            reject("night starfield is missing for " pairNames[p] \
+              ": sharpStarFrac=" nightStars)
+          if (nightStars >= 0.00010) {
+            ratioLimit = p <= 3 ? 0.45 : 0.65
+            if (dayStars > nightStars * ratioLimit)
+              reject("insufficient day/night star suppression for " pairNames[p] \
+                ": day=" dayStars " night=" nightStars)
+          }
+        }
+
+        # Real night-side airglow may be green, but it is optically thin: a wide,
+        # high-luminance saturated band is a renderer artefact.
+        split("70km_night 120km_night 400km_night", nightLimb, " ")
+        for (p = 1; p <= 3; p++) {
+          maximum(nightLimb[p], "neonGreenFrac", 0.010,
+            "night limb is neon green")
+          maximum(nightLimb[p], "limbGreenExcess", 0.018,
+            "night limb green emission is too intense")
+        }
+
+        # Both ±1° cases look toward the projected Sun.  Side ROIs exclude the solar
+        # disc, so the signal must come from atmospheric path length and spectral
+        # extinction rather than bloom.
+        split("ground_sunrise ground_sunset", twilight, " ")
+        for (p = 1; p <= 2; p++) {
+          minimum(twilight[p], "twilightGradient", 0.010,
+            "twilight lacks a horizon-to-upper-sky luminance gradient")
+          minimum(twilight[p], "twilightWarmth", 0.006,
+            "twilight horizon lacks red/blue spectral separation")
+          require_metric(twilight[p], "twilightHorizonMean")
+          require_metric("ground_night", "twilightHorizonMean")
+          if (get(twilight[p], "twilightHorizonMean")
+              < get("ground_night", "twilightHorizonMean") + 0.012)
+            reject(twilight[p] " horizon is not measurably brighter than full night")
+        }
+
+        exit bad
+      }
     ' "$LOG"; then
       return 1
     fi

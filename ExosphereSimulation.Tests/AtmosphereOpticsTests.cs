@@ -105,6 +105,8 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(preset.AirglowScaleHeight, json.AirglowScaleHeight);
         Assert.Equal(preset.RayleighScaleHeight, json.RayleighScaleHeight);
         Assert.Equal(preset.MieScaleHeight, json.MieScaleHeight);
+        Assert.Equal(preset.MieAnisotropy, json.MieAnisotropy);
+        Assert.Equal(preset.SunIlluminanceScale, json.SunIlluminanceScale);
         Assert.Equal(preset.LowOrderDiffuseStrength, json.LowOrderDiffuseStrength);
         Assert.Equal(preset.CloudBaseAltitude, json.CloudBaseAltitude);
         Assert.Equal(preset.CloudTopAltitude, json.CloudTopAltitude);
