@@ -248,26 +248,26 @@
 
 ## 5. Interplanetary
 
-### P-I01 — Moon transfer uses heliocentric Hohmann radii
+### P-I01 — Moon transfer uses heliocentric Hohmann radii — PARTIAL
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `TransferPlanner.cs:47-60`: `r1`, `r2` = Sun-relative radii. `ROADMAP.md:98`, `CLAUDE.md:127` |
+| **Evidence** | Legacy product route remains `TransferPlanner.cs:47-60`; pure sim route is now `Navigation/LambertSolver.cs` + `Navigation/LunarTransferPlanner.cs` |
 | **Real-world** | Earth departure TLI + lunar SOI capture ≈ patched conic, not Sun Hohmann from 1 AU to 384 Mm |
 | **Root cause** | Simplified planner |
-| **Fix** | **Sim:** `TransferPlanner` in `ExosphereSimulation/Navigation/` with Earth SOI exit + Moon SOI entry |
-| **Acceptance** | xUnit: Earth→Moon Δv **within 10%** of reference (~5.8–6.2 km/s total); time **3–5 days** |
+| **Fix** | **Sim closed:** Earth-centred Lambert, moving lunar ephemeris, SOI entry and focused lunar conic. **Game pending:** route Moon selection through it and schedule LOI |
+| **Acceptance** | xUnit now separates physically distinct burns: TLI **2.8–3.5 km/s**, circular-insertion estimate **0.7–1.5 km/s**, coast **2.5–5 days**, safe perilunium and real `Universe` SOI re-frame. The old ~5.8–6.2 km/s aggregate was not an Apollo 8 reference and has been retired |
 | **Impact** | **High** for Moon missions | **Effort** | L |
 
-### P-I02 — No lunar transfer accuracy tests
+### P-I02 — No lunar transfer accuracy tests — CLOSED
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `NavigationRegressionTests.cs` covers Mars/Venus Hohmann + SOI continuity; **no Moon Δv test** |
+| **Evidence** | `LunarTransferPlannerTests.cs` covers Lambert endpoint closure, Apollo 8-class timing/energy, B-plane focusing and a maximum-warp Earth→Moon SOI transition |
 | **Real-world** | Artemis-class transfers well documented |
-| **Root cause** | Known backlog |
-| **Fix** | Add patched-conic reference tests |
-| **Acceptance** | See P-I01 |
+| **Root cause** | Closed 2026-07-28 |
+| **Fix** | Implemented |
+| **Acceptance** | Green in the shared xUnit suite; see P-I01 |
 | **Impact** | Med | **Effort** | M |
 
 ### P-I03 — Encounter prediction ignores departure SOI burns

@@ -53,7 +53,10 @@ Base tecnica cerrada en `main`:
   flip-and-burn bajo y touchdown sobre seis patas físicas con resorte, damping,
   fricción, torque, límites de carga/recorrido y asentamiento persistente.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
-  prediction, marcador/readout de encuentro y readout de maniobra.
+  prediction, marcador/readout de encuentro y readout de maniobra. La base lunar
+  ya resuelve Lambert geocéntrico contra la efeméride móvil, busca una ventana
+  sobre la órbita de estacionamiento, corrige enfoque gravitatorio en el B-plane
+  y verifica entrada continua a la SOI lunar a warp máximo.
 - Audio de vuelo derivado de física real: airflow por presion dinamica, brillo por
   Mach, buffet transonico/max-Q/entrada, rugido de plasma con el mismo flujo termico
   que la bola de fuego, y motor airborne vs structure-borne segun densidad ambiente.
@@ -140,8 +143,11 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Interplanetario
 
-- Tests de cruise muy largo.
-- Transferencia lunar mas precisa que el Hohmann heliocentrico simplificado.
+- Tests de cruise muy largo ✅ (crucero interplanetario y transición SOI a warp).
+- Fundación de transferencia lunar geocéntrica ✅ (`LambertSolver` +
+  `LunarTransferPlanner`): TLI, encuentro, B-plane, perilunio lunar y prueba
+  end-to-end sin teleport. Pendiente: conectar esta ruta especializada al mapa
+  cuando el target sea `moon`, maniobra LOI ejecutable y dataset lunar fechado.
 - Nodos de maniobra arrastrables con mouse.
 
 ### Gameplay
