@@ -4,8 +4,9 @@ using Godot;
 using Exosphere.Simulation;
 
 /// <summary>
-/// Starbase-inspired orbital launch complex (OLM + Mechazilla tower + tank
-/// farm + lightning towers). This Node3D is positioned each frame by
+/// Site-aware orbital launch complex. Starbase receives its OLM/Mechazilla
+/// reconstruction; Kennedy and LC-36 receive conventional flame-trench pads
+/// sized for their selected vehicle instead of silently reusing Starbase.
 /// SimulationBridge so it stays anchored to the Earth surface directly below
 /// the vessel.
 ///
@@ -17,6 +18,11 @@ using Exosphere.Simulation;
 public partial class LaunchPadController : Node3D
 {
     public static LaunchPadController? Instance { get; private set; }
+    [Export] public string LaunchSiteId { get; set; } = "starbase";
+    public double VehicleInterfaceElevationM =>
+        LaunchSiteId == "starbase"
+            ? LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation
+            : LaunchSiteId == "cape_canaveral_lc36" ? 5.5 : 4.0;
 
     // 1 render unit ≈ 2.8 m. Helper so the code below can read in metres.
     private const float U = 1f / 2.8f;   // metres → render units
@@ -59,6 +65,16 @@ public partial class LaunchPadController : Node3D
         var asphalt   = Mat(new Color(0.08f, 0.085f, 0.08f), 0.96f, 0.0f);
         var paint     = Mat(new Color(0.62f, 0.52f, 0.22f), 0.88f, 0.0f);
 
+        if (LaunchSiteId != "starbase")
+        {
+            BuildConventionalLaunchComplex(
+                LaunchSiteId == "cape_canaveral_lc36",
+                concrete, concDark, burnt, steel, darkSteel, insul,
+                tarmac, asphalt, paint);
+            BuildNightFloodlights();
+            return;
+        }
+
         BuildStarbaseCivilWorks(sandFill, gravel, asphalt, tarmac, concDark, paint);
         BuildSupportCampus(concrete, darkSteel, asphalt, paint, insul, steel);
         BuildOrbitalLaunchMount(darkSteel, concDark);
@@ -66,6 +82,140 @@ public partial class LaunchPadController : Node3D
         BuildTankFarm(insul, steel);
         BuildGroundSupport(insul, steel, darkSteel, concrete, concDark);
         BuildNightFloodlights();
+    }
+
+    private void BuildConventionalLaunchComplex(
+        bool newGlenn,
+        StandardMaterial3D concrete,
+        StandardMaterial3D concDark,
+        StandardMaterial3D burnt,
+        StandardMaterial3D steel,
+        StandardMaterial3D darkSteel,
+        StandardMaterial3D insul,
+        StandardMaterial3D tarmac,
+        StandardMaterial3D asphalt,
+        StandardMaterial3D paint)
+    {
+        float interfaceM = (float)VehicleInterfaceElevationM;
+        float deckRadiusM = newGlenn ? 18f : 13f;
+        float towerHeightM = newGlenn ? 110f : 75f;
+        float towerEastM = newGlenn ? -30f : -22f;
+
+        Spawn("SpaceportApron",
+            new BoxMesh { Size = new Vector3(260f * U, 1.0f * U, 230f * U) },
+            tarmac, new Vector3(0, -0.5f * U, 0));
+        Spawn("RaisedLaunchDeck",
+            new CylinderMesh
+            {
+                TopRadius = deckRadiusM * U,
+                BottomRadius = (deckRadiusM + 2f) * U,
+                Height = interfaceM * U,
+                RadialSegments = 48,
+            },
+            concrete, new Vector3(0, interfaceM * 0.5f * U, 0));
+        Spawn("FlameOpening",
+            new CylinderMesh
+            {
+                TopRadius = (newGlenn ? 5.2f : 3.2f) * U,
+                BottomRadius = (newGlenn ? 6.5f : 4.5f) * U,
+                Height = (interfaceM + 0.3f) * U,
+                RadialSegments = 32,
+            },
+            burnt, new Vector3(0, interfaceM * 0.5f * U + 0.2f * U, 0));
+        Spawn("FlameTrench",
+            new BoxMesh
+            {
+                Size = new Vector3(
+                    (newGlenn ? 15f : 10f) * U,
+                    2.2f * U,
+                    95f * U),
+            },
+            burnt, new Vector3(0, 0.35f * U, 38f * U));
+
+        Spawn("ServiceTower",
+            new BoxMesh
+            {
+                Size = new Vector3(
+                    (newGlenn ? 14f : 10f) * U,
+                    towerHeightM * U,
+                    (newGlenn ? 12f : 9f) * U),
+            },
+            steel,
+            new Vector3(towerEastM * U, towerHeightM * 0.5f * U, 0));
+        for (int level = 1; level <= 8; level++)
+        {
+            float y = towerHeightM * level / 9f;
+            Spawn($"TowerDeck{level}",
+                new BoxMesh
+                {
+                    Size = new Vector3(
+                        (newGlenn ? 19f : 15f) * U,
+                        0.45f * U,
+                        (newGlenn ? 16f : 12f) * U),
+                },
+                darkSteel, new Vector3(towerEastM * U, y * U, 0));
+        }
+        Spawn("CrewAccessArm",
+            new BoxMesh
+            {
+                Size = new Vector3(
+                    System.Math.Abs(towerEastM) * U,
+                    1.1f * U,
+                    2.2f * U),
+            },
+            darkSteel,
+            new Vector3(towerEastM * 0.5f * U, towerHeightM * 0.72f * U, 0));
+
+        for (int i = 0; i < 4; i++)
+        {
+            float angle = Mathf.Pi * 0.5f * i + Mathf.Pi * 0.25f;
+            float radius = newGlenn ? 58f : 48f;
+            Spawn($"LightningMast{i + 1}",
+                new CylinderMesh
+                {
+                    TopRadius = 0.18f * U,
+                    BottomRadius = 0.55f * U,
+                    Height = (newGlenn ? 125f : 95f) * U,
+                    RadialSegments = 10,
+                },
+                steel,
+                new Vector3(
+                    radius * Mathf.Cos(angle) * U,
+                    (newGlenn ? 62.5f : 47.5f) * U,
+                    radius * Mathf.Sin(angle) * U));
+        }
+
+        int tankCount = newGlenn ? 8 : 6;
+        for (int i = 0; i < tankCount; i++)
+        {
+            float row = i / 4;
+            float column = i % 4;
+            Spawn($"CommodityTank{i + 1}",
+                new CylinderMesh
+                {
+                    TopRadius = (newGlenn ? 5.5f : 4.2f) * U,
+                    BottomRadius = (newGlenn ? 5.5f : 4.2f) * U,
+                    Height = (newGlenn ? 17f : 13f) * U,
+                    RadialSegments = 24,
+                },
+                insul,
+                new Vector3(
+                    (52f + column * 15f) * U,
+                    (newGlenn ? 8.5f : 6.5f) * U,
+                    (-25f + row * 22f) * U));
+        }
+
+        Spawn("AccessRoad",
+            new BoxMesh { Size = new Vector3(14f * U, 0.12f * U, 280f * U) },
+            asphalt, new Vector3(-72f * U, 0.08f * U, 40f * U));
+        for (int i = 0; i < 9; i++)
+            Spawn($"RoadMark{i}",
+                new BoxMesh { Size = new Vector3(0.35f * U, 0.04f * U, 9f * U) },
+                paint, new Vector3(-72f * U, 0.16f * U, (-70f + i * 27f) * U));
+
+        Name = newGlenn
+            ? "LaunchPadController_LC36"
+            : "LaunchPadController_Kennedy";
     }
 
     private void BuildSupportCampus(StandardMaterial3D wall, StandardMaterial3D roof,

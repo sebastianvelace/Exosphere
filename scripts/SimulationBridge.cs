@@ -83,6 +83,9 @@ public partial class SimulationBridge : Node
         Universe.TimeScale = 1.0;
         _running = true;
 
+        var pendingIntent = CraftLaunchRequest.Pop();
+        if (pendingIntent != null)
+            LaunchSiteId = pendingIntent.LaunchSiteId;
         var sites = LaunchSite.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "launch_sites"));
         if (!sites.TryGetValue(LaunchSiteId, out _launchSite))
             GD.PushWarning($"[Sim] Launch site '{LaunchSiteId}' not found; pad will fall back to the equator.");
@@ -138,7 +141,7 @@ public partial class SimulationBridge : Node
         var worldNode = GetTree().Root.FindChild("World", true, false) as Node3D;
         if (worldNode != null)
         {
-            _launchPad = new LaunchPadController();
+            _launchPad = new LaunchPadController { LaunchSiteId = LaunchSiteId };
             _launchPad.Name = "LaunchPadController";
             worldNode.CallDeferred("add_child", _launchPad);
 
@@ -164,7 +167,7 @@ public partial class SimulationBridge : Node
         }
 
         SpawnStarshipStack(dataPath);
-        SpawnPendingConstructedVessel(dataPath);
+        SpawnPendingConstructedVessel(dataPath, pendingIntent);
         SpawnPlanets();
         EmitSignal(SignalName.SimulationLoaded);
 
@@ -274,9 +277,10 @@ public partial class SimulationBridge : Node
         }
     }
 
-    private void SpawnPendingConstructedVessel(string dataPath)
+    private void SpawnPendingConstructedVessel(
+        string dataPath,
+        LaunchIntent? intent)
     {
-        var intent = CraftLaunchRequest.Pop();
         if (intent == null) return;
 
         if (!string.IsNullOrWhiteSpace(intent.SaveSlot))
@@ -313,6 +317,8 @@ public partial class SimulationBridge : Node
         GD.Print(
             $"[VAB] Placed {craft.Name} at {intent.LaunchSiteId}; " +
             $"profile={intent.FlightProfileId}, mission={intent.MissionId ?? "sandbox"}");
+        if (intent.FlightProfileId == "starship-reentry-70km")
+            BeginReentryDemonstration();
     }
 
     // ── Starship + Super Heavy stack on Starbase launchpad ────────────────
@@ -322,7 +328,8 @@ public partial class SimulationBridge : Node
         var earth = Universe.GetBody("earth");
         if (earth == null) return;
 
-        var defs = PartDefinition.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "parts"));
+        var defs = PartCatalog.LoadFromDirectory(
+            System.IO.Path.Combine(dataPath, "parts")).Parts;
 
         if (!defs.TryGetValue("starship_command",  out var cmdDef))  return;
         if (!defs.TryGetValue("starship_tank",      out var tankDef)) return;
@@ -586,7 +593,8 @@ public partial class SimulationBridge : Node
             Universe.RemoveVessel(ActiveVessel);
 
         if (mountHeightM < 0.0)
-            mountHeightM = LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation;
+            mountHeightM = _launchPad?.VehicleInterfaceElevationM
+                ?? LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation;
         StandOnPad(vessel, earth, mountHeightM);
         vessel.ConfigureLandingContactsFromParts();
 

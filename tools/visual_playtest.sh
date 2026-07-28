@@ -13,6 +13,9 @@ HARNESS="scripts/_PlaytestShot.cs"
 OUT_DIR="${OUT_DIR:-/tmp/exo_play}"
 LOG="${LOG:-/tmp/exo_play.log}"
 MODE="full"
+VARIANT_FILE=""
+VARIANT_SITE=""
+VARIANT_PROFILE=""
 SKIP_BUILD=0
 PROJECT_BACKUP=""
 
@@ -24,6 +27,9 @@ Runs the Exosphere visual playtest harness (temporary autoload, never committed)
 
 Options:
   --smoke       Pad-only capture (~30s). Used by CI for pipeline validation.
+  --falcon      Seed the Falcon 9 Block 5 / Kennedy scenario before capture.
+  --new-glenn   Seed the New Glenn 7x2 / LC-36 scenario before capture.
+  --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
   --cockpit     Capture the first-person cockpit optics and interior.
@@ -49,6 +55,21 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --smoke) MODE="smoke"; shift ;;
+    --falcon)
+      VARIANT_FILE="falcon9_block5_standard_2025.json"
+      VARIANT_SITE="kennedy"
+      VARIANT_PROFILE="falcon9-block5-ascent"
+      shift ;;
+    --new-glenn)
+      VARIANT_FILE="newglenn_7x2_public_2026.json"
+      VARIANT_SITE="cape_canaveral_lc36"
+      VARIANT_PROFILE="newglenn-7x2-ascent"
+      shift ;;
+    --flight7)
+      VARIANT_FILE="starship_flight7_block2_2025.json"
+      VARIANT_SITE="starbase"
+      VARIANT_PROFILE="starship-flight7-ascent"
+      shift ;;
     --launch) MODE="launch"; shift ;;
     --ship) MODE="ship"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
@@ -113,6 +134,7 @@ using System;
 using System.IO;
 using System.Linq;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Physics;
 
@@ -188,6 +210,24 @@ public partial class _PlaytestShot : Node
 
     public override void _Ready()
     {
+        if ("${VARIANT_FILE}".Length > 0)
+        {
+            string data = ProjectSettings.GlobalizePath("res://data");
+            var catalog = PartCatalog.LoadFromDirectory(
+                Path.Combine(data, "parts"));
+            var variant = VehicleVariantDefinition.LoadFromJson(
+                Path.Combine(data, "vehicles", "${VARIANT_FILE}"));
+            var craft = variant.Build(catalog).ToCraftDocument(variant.Name);
+            craft.VehicleVariantId = variant.Id;
+            CraftLaunchRequest.Set(new LaunchIntent
+            {
+                Mode = "scenario",
+                VehicleVariantId = variant.Id,
+                LaunchSiteId = "${VARIANT_SITE}",
+                FlightProfileId = "${VARIANT_PROFILE}",
+                Craft = craft,
+            });
+        }
         Directory.CreateDirectory(_outDir);
         _log = new StreamWriter("${LOG}", false);
         _log.WriteLine($"=== Exosphere visual playtest {DateTime.UtcNow:O} mode={_mode} ===");
@@ -302,7 +342,7 @@ public partial class _PlaytestShot : Node
         }
 
         // ── Pad ───────────────────────────────────────────────────────────────
-        if (!_pad && _readyFrames >= 45 && alt is > 5.0 and < 40.0)
+        if (!_pad && _readyFrames >= 45 && vessel.IsGroundHeld && alt < 40.0)
         {
             QueueCapture("pad");
             _pad = true;

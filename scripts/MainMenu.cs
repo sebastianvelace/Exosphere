@@ -327,26 +327,23 @@ public partial class MainMenu : Control
     }
 
     private void OpenSandbox()
-    {
-        CraftLaunchRequest.Set(new LaunchIntent
-        {
-            Mode = "sandbox",
-            LaunchSiteId = "starbase",
-            FlightProfileId = "manual",
-        });
-        OpenFlight();
-    }
+        => LaunchVehicleScenario(
+            "starship_flight7_block2_2025.json",
+            "starbase",
+            "manual",
+            mode: "sandbox");
 
     private void OpenReentry()
-    {
-        CraftLaunchRequest.Set(new LaunchIntent
-        {
-            Mode = "scenario",
-            LaunchSiteId = "starbase",
-            FlightProfileId = "starship-reentry-70km",
-        });
-        OpenFlight();
-    }
+        => LaunchVehicleScenario(
+            "starship_flight7_block2_2025.json",
+            "starbase",
+            "starship-reentry-70km");
+
+    private void LaunchStarshipFlight7Scenario()
+        => LaunchVehicleScenario(
+            "starship_flight7_block2_2025.json",
+            "starbase",
+            "starship-flight7-ascent");
 
     private void LaunchFalconScenario()
         => LaunchVehicleScenario(
@@ -363,7 +360,8 @@ public partial class MainMenu : Control
     private void LaunchVehicleScenario(
         string variantFile,
         string launchSiteId,
-        string flightProfileId)
+        string flightProfileId,
+        string mode = "scenario")
     {
         string data = ProjectSettings.GlobalizePath("res://data");
         var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(data, "parts"));
@@ -373,7 +371,7 @@ public partial class MainMenu : Control
         craft.VehicleVariantId = variant.Id;
         CraftLaunchRequest.Set(new LaunchIntent
         {
-            Mode = "scenario",
+            Mode = mode,
             VehicleVariantId = variant.Id,
             LaunchSiteId = launchSiteId,
             FlightProfileId = flightProfileId,
@@ -388,6 +386,9 @@ public partial class MainMenu : Control
         body.AddChild(ModalButton(
             "NEW GLENN 7x2 / CAPE CANAVERAL SLC-36",
             LaunchNewGlennScenario));
+        body.AddChild(ModalButton(
+            "STARSHIP FLIGHT 7 / SHIP 33 + BOOSTER 14",
+            LaunchStarshipFlight7Scenario));
         body.AddChild(ModalButton("STARSHIP / 70 KM ENTRY INTERFACE", OpenReentry));
         body.AddChild(ModalButton("STARSHIP / STARBASE MANUAL LAUNCH", OpenSandbox));
     });
