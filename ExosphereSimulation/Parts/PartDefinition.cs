@@ -36,8 +36,22 @@ public class PartDefinition
     // Optional vehicle-specific axial Cd. Zero preserves the legacy 0.6 cylinder model.
     [JsonPropertyName("axial_drag_coefficient")]
     public double AxialDragCoefficient { get; set; }
+    /// <summary>
+    /// Signed aerodynamic centre offset from the vessel centre of mass along local +Y.
+    /// Null preserves the generic launch-vehicle estimate; capsules use a positive offset
+    /// so their blunt heat-shield end (-Y) is statically stable into the flow.
+    /// </summary>
+    [JsonPropertyName("aerodynamic_center_offset_y_m")]
+    public double? AerodynamicCenterOffsetYM { get; set; }
     [JsonPropertyName("heat_tolerance")]   public double HeatTolerance   { get; set; } = 1200;
     [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
+    /// <summary>
+    /// Outward normal of the protected windward face in vessel-local coordinates.
+    /// The legacy/default value preserves Starship's ventral -X tile orientation;
+    /// capsules can declare an axial shield without vehicle-family branches.
+    /// </summary>
+    [JsonPropertyName("heat_shield_normal")]
+    public double[] HeatShieldNormal { get; set; } = [-1.0, 0.0, 0.0];
     [JsonPropertyName("attachment_nodes")] public List<AttachmentNodeDef> AttachmentNodes { get; set; } = new();
 
     // Thermal protection. The defaults describe Starship's ventral tiles over a stainless
@@ -142,6 +156,12 @@ public class PartDefinition
     public bool SplashdownCapable { get; set; }
     [JsonPropertyName("max_splashdown_speed_mps")]
     public double MaxSplashdownSpeedMps { get; set; }
+    /// <summary>
+    /// When staged, detach the decoupler itself with the subtree below it. This models
+    /// clamp rings that remain on the launch vehicle instead of the spacecraft.
+    /// </summary>
+    [JsonPropertyName("detach_with_lower_stage")]
+    public bool DetachWithLowerStage { get; set; }
 
     [JsonIgnore]
     public PartCategory Category => CategoryStr.ToLowerInvariant() switch

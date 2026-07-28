@@ -152,10 +152,8 @@ public static class ThermalModel
     }
 
     /// <summary>
-    /// Windward alignment ∈ [0,1] of a part's shield with the incoming flow.
-    /// Starship re-enters belly-first: the heat shield is on the ventral face, modelled
-    /// here as the vessel's local <c>-X</c> side. This matches the black tile geometry in
-    /// VesselRenderer instead of treating the engine end as the heat shield.
+    /// Windward alignment ∈ [0,1] of the legacy/default Starship shield with the flow.
+    /// New vehicle definitions should use the overload that accepts their declared normal.
     /// 1 ⇒ the shielded belly is squarely into the flow; 0 ⇒ the bare side leads.
     ///
     /// <paramref name="flowDirLocal"/> is the airflow direction expressed in the vessel's
@@ -163,9 +161,22 @@ public static class ThermalModel
     /// flow when the direction of travel through the air points toward local <c>-X</c>.
     /// </summary>
     public static double WindwardFactor(Vector3d flowDirLocal)
+        => WindwardFactor(flowDirLocal, -Vector3d.Right);
+
+    /// <summary>
+    /// Windward alignment ∈ [0,1] for an arbitrary data-defined protected face.
+    /// Both vectors use vessel-local coordinates. The flow vector follows the simulator's
+    /// velocity-through-air convention, so a shield normal pointing along it is windward.
+    /// </summary>
+    public static double WindwardFactor(
+        Vector3d flowDirLocal,
+        Vector3d shieldNormalLocal)
     {
-        if (flowDirLocal.Magnitude < 1e-9) return 0.0;
-        double along = flowDirLocal.Normalized.Dot(-Vector3d.Right);
+        if (flowDirLocal.Magnitude < 1e-9
+            || shieldNormalLocal.Magnitude < 1e-9)
+            return 0.0;
+        double along = flowDirLocal.Normalized.Dot(
+            shieldNormalLocal.Normalized);
         return System.Math.Clamp(along, 0.0, 1.0);
     }
 }

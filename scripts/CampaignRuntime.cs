@@ -23,6 +23,9 @@ public partial class CampaignRuntime : Node
     private Vector3d _launchSurfaceDirection;
     private bool _hasLaunchReference;
     private double _missionStartTime;
+    private double _orbitalRadians;
+    private Vector3d _lastOrbitalDirection;
+    private bool _hasOrbitalDirection;
     private bool _finalized;
 
     public void Initialize(
@@ -59,6 +62,8 @@ public partial class CampaignRuntime : Node
         var universe = SimulationBridge.Instance?.Universe;
         _missionStartTime =
             (universe?.CurrentTime ?? 0.0) - Director.Evidence.ElapsedSeconds;
+        _orbitalRadians = Director.Evidence.CompletedOrbits
+            * System.Math.Tau;
 
         if (state?.LaunchSurfaceDirection is { } launchDirection)
         {
@@ -92,6 +97,7 @@ public partial class CampaignRuntime : Node
                 currentSurface.Dot(_launchSurfaceDirection), -1.0, 1.0))
                 * body.Radius
             : 0.0;
+        UpdateOrbitProgress(phase.Value, up);
         bool expectedCrewPresent = Director.Definition.CrewIds.Count == 0
             || Director.Definition.CrewIds.All(id =>
                 vessel.Crew.Any(crew =>
@@ -116,6 +122,7 @@ public partial class CampaignRuntime : Node
             GForce = vessel.GetProperAcceleration(body).Magnitude
                 / StandardGravity,
             DownrangeM = downrange,
+            CompletedOrbits = _orbitalRadians / System.Math.Tau,
             CrewAlive = expectedCrewPresent,
             VesselDestroyed = vessel.IsDestroyed,
             Splashdown = landed && body.Id == "earth" && !hasLandingGear,
@@ -157,6 +164,31 @@ public partial class CampaignRuntime : Node
         _launchSurfaceDirection =
             body.ToBodyFixedDirection(up, universe.CurrentTime).Normalized;
         _hasLaunchReference = true;
+    }
+
+    private void UpdateOrbitProgress(MissionPhase phase, Vector3d radialDirection)
+    {
+        bool orbitalPhase = phase is MissionPhase.ORBIT
+            or MissionPhase.COAST
+            or MissionPhase.RETRO_BURN;
+        if (!orbitalPhase)
+        {
+            _hasOrbitalDirection = false;
+            return;
+        }
+
+        if (_hasOrbitalDirection)
+        {
+            double step = System.Math.Acos(System.Math.Clamp(
+                _lastOrbitalDirection.Dot(radialDirection), -1.0, 1.0));
+            // A process frame should never traverse half an orbit. Rejecting a larger
+            // discontinuity prevents a vessel switch or restored frame from fabricating
+            // campaign progress.
+            if (step <= System.Math.PI * 0.5)
+                _orbitalRadians += step;
+        }
+        _lastOrbitalDirection = radialDirection;
+        _hasOrbitalDirection = true;
     }
 
     private static void AttachHistoricalCrew(

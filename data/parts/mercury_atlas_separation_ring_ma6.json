@@ -1,0 +1,20 @@
+{
+  "id": "mercury_atlas_separation_ring_ma6",
+  "name": "Mercury-Atlas 6 Separation Ring",
+  "description": "MA-6 spacecraft-to-Atlas separation plane and clamp allocation.",
+  "category": "decoupler",
+  "vehicle_family": "mercury",
+  "vehicle_role": "spacecraft_separation",
+  "mass_dry": 45,
+  "length_m": 0.2,
+  "diameter_m": 1.89,
+  "cost": 0,
+  "drag_coefficient": 0.25,
+  "axial_drag_coefficient": 0.24,
+  "heat_tolerance": 900,
+  "detach_with_lower_stage": true,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.1, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.1, 0], "size": 1, "type": "stack"}
+  ]
+}

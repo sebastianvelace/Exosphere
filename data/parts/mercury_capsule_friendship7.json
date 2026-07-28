@@ -1,0 +1,33 @@
+{
+  "id": "mercury_capsule_friendship7",
+  "name": "Mercury Spacecraft 13 — Friendship 7",
+  "description": "John Glenn's orbital Mercury capsule with ablative shield, landing bag and 63-foot main parachute.",
+  "category": "command",
+  "vehicle_family": "mercury",
+  "vehicle_role": "capsule",
+  "mass_dry": 1817.7,
+  "length_m": 3.34,
+  "diameter_m": 1.89,
+  "cost": 0,
+  "drag_coefficient": 0.9,
+  "axial_drag_coefficient": 1.82,
+  "aerodynamic_center_offset_y_m": 0.55,
+  "heat_tolerance": 1900,
+  "has_heat_shield": true,
+  "heat_shield_normal": [0, -1, 0],
+  "tps_heat_capacity_per_area": 56000,
+  "tps_conductance": 2.8,
+  "structure_heat_capacity_per_area": 28000,
+  "max_crew": 1,
+  "drag_chute": 335.0,
+  "deploy_altitude": 3291.84,
+  "semi_deploy_altitude": 8534.4,
+  "semi_deploy_drag": 4.5,
+  "min_pressure_deploy": 0.32,
+  "splashdown_capable": true,
+  "max_splashdown_speed_mps": 12.5,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.67, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.67, 0], "size": 1, "type": "stack"}
+  ]
+}

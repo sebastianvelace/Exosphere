@@ -1,0 +1,24 @@
+{
+  "id": "atlas-lr105-single-ma6-1962",
+  "name": "Atlas 109-D center sustainer",
+  "engineModelId": "atlas-lr105-ma6-1962",
+  "engines": [
+    {
+      "instanceId": "lr105-center",
+      "positionM": [0.0, 0.0, 0.0],
+      "thrustDirection": [0.0, 1.0, 0.0],
+      "gimballed": true
+    }
+  ],
+  "feedNetwork": {
+    "fuelResource": "RP-1",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {
+        "engineInstanceId": "lr105-center",
+        "maximumFlowKgS": 200
+      }
+    ]
+  }
+}

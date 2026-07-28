@@ -243,7 +243,13 @@ public partial class SimulationBridge : Node
             }
             else
             {
-                MaxAllowedWarpIndex = forceSensitive ? 2
+                bool historicalOrbitalCoast =
+                    ActiveFlightProfileId == MercuryAtlasFlightProfile.Id
+                    && MissionManager.Instance?.Phase is MissionPhase.ORBIT
+                        or MissionPhase.COAST
+                    && av.GetAltitude(refB) > 120_000.0;
+                MaxAllowedWarpIndex = forceSensitive
+                    ? historicalOrbitalCoast ? 6 : 2
                     : boundedEntry ? 7                         // x1000 bounded coast to entry
                     : WarpLevels.Length - 1;
             }

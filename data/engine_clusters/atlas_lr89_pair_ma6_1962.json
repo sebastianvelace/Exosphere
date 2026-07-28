@@ -1,0 +1,34 @@
+{
+  "id": "atlas-lr89-pair-ma6-1962",
+  "name": "Atlas 109-D jettisonable booster-engine pair",
+  "engineModelId": "atlas-lr89-ma6-1962",
+  "engines": [
+    {
+      "instanceId": "lr89-left",
+      "positionM": [-1.15, 0.0, 0.0],
+      "thrustDirection": [0.0, 1.0, 0.0],
+      "gimballed": true
+    },
+    {
+      "instanceId": "lr89-right",
+      "positionM": [1.15, 0.0, 0.0],
+      "thrustDirection": [0.0, 1.0, 0.0],
+      "gimballed": true
+    }
+  ],
+  "feedNetwork": {
+    "fuelResource": "RP-1",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {
+        "engineInstanceId": "lr89-left",
+        "maximumFlowKgS": 300
+      },
+      {
+        "engineInstanceId": "lr89-right",
+        "maximumFlowKgS": 300
+      }
+    ]
+  }
+}

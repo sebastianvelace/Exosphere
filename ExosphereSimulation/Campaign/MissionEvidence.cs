@@ -12,6 +12,7 @@ public sealed record MissionTelemetrySnapshot
     public double DynamicPressurePa { get; init; }
     public double GForce { get; init; }
     public double DownrangeM { get; init; }
+    public double CompletedOrbits { get; init; }
     public bool CrewAlive { get; init; } = true;
     public bool VesselDestroyed { get; init; }
     public bool Splashdown { get; init; }
@@ -23,6 +24,7 @@ public sealed record MissionTelemetrySnapshot
                      MissionTimeSeconds, AltitudeM, SurfaceSpeedMps,
                      InertialSpeedMps,
                      DynamicPressurePa, GForce, DownrangeM,
+                     CompletedOrbits,
                  })
             if (!double.IsFinite(value) || value < 0.0)
                 throw new ArgumentOutOfRangeException(
@@ -42,6 +44,7 @@ public sealed class MissionEvidence
     public double MaximumDynamicPressurePa { get; private set; }
     public double MaximumGForce { get; private set; }
     public double MaximumDownrangeM { get; private set; }
+    public double CompletedOrbits { get; private set; }
     public bool CrewAlive { get; private set; } = true;
     public bool VesselDestroyed { get; private set; }
     public bool Splashdown { get; private set; }
@@ -65,6 +68,8 @@ public sealed class MissionEvidence
         MaximumGForce = System.Math.Max(MaximumGForce, snapshot.GForce);
         MaximumDownrangeM =
             System.Math.Max(MaximumDownrangeM, snapshot.DownrangeM);
+        CompletedOrbits =
+            System.Math.Max(CompletedOrbits, snapshot.CompletedOrbits);
         CrewAlive &= snapshot.CrewAlive;
         VesselDestroyed |= snapshot.VesselDestroyed;
         Splashdown |= snapshot.Splashdown;
@@ -79,6 +84,7 @@ public sealed class MissionEvidence
         MissionMetric.MaximumDynamicPressurePa => MaximumDynamicPressurePa,
         MissionMetric.MaximumGForce => MaximumGForce,
         MissionMetric.MaximumDownrangeM => MaximumDownrangeM,
+        MissionMetric.CompletedOrbits => CompletedOrbits,
         MissionMetric.ElapsedSeconds => ElapsedSeconds,
         MissionMetric.CrewAlive => CrewAlive ? 1.0 : 0.0,
         MissionMetric.VesselDestroyed => VesselDestroyed ? 1.0 : 0.0,
@@ -103,6 +109,7 @@ public sealed class MissionEvidence
             ["maximumDynamicPressurePa"] = MaximumDynamicPressurePa,
             ["maximumGForce"] = MaximumGForce,
             ["maximumDownrangeM"] = MaximumDownrangeM,
+            ["completedOrbits"] = CompletedOrbits,
             ["crewAlive"] = CrewAlive ? 1.0 : 0.0,
             ["vesselDestroyed"] = VesselDestroyed ? 1.0 : 0.0,
             ["splashdown"] = Splashdown ? 1.0 : 0.0,
@@ -129,6 +136,7 @@ public sealed class MissionEvidence
             MaximumDynamicPressurePa = Read("maximumDynamicPressurePa"),
             MaximumGForce = Read("maximumGForce"),
             MaximumDownrangeM = Read("maximumDownrangeM"),
+            CompletedOrbits = Read("completedOrbits"),
             CrewAlive = Read("crewAlive", 1.0) >= 0.5,
             VesselDestroyed = Read("vesselDestroyed") >= 0.5,
             Splashdown = Read("splashdown") >= 0.5,

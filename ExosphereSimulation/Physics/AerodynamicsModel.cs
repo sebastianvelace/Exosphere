@@ -251,7 +251,8 @@ public static class AerodynamicsModel
         double vehicleLength,
         double vehicleDiameter,
         double transverseMomentOfInertia,
-        double temperature)
+        double temperature,
+        double? aerodynamicCenterOffsetYM = null)
     {
         double speed = surfaceVelocity.Magnitude;
         if (density <= 0.0 || speed < 1.0 || transverseMomentOfInertia <= 0.0)
@@ -264,9 +265,10 @@ public static class AerodynamicsModel
         // A modest static margin. Long launch stacks place their aerodynamic centre farther
         // behind the CoM than the shorter Ship; limiting it avoids an unrealistically violent
         // snap at Max-Q while propellant shifts the actual inertia continuously.
-        double cpOffset = System.Math.Clamp(vehicleLength * 0.08,
+        double defaultOffset = -System.Math.Clamp(vehicleLength * 0.08,
             vehicleDiameter * 0.35, vehicleDiameter * 1.35);
-        var momentArm = axis * (-cpOffset);
+        double cpOffset = aerodynamicCenterOffsetYM ?? defaultOffset;
+        var momentArm = axis * cpOffset;
         var torqueAcceleration = momentArm.Cross(drag) / transverseMomentOfInertia;
 
         // Air damps pitch/yaw rates, but does not directly erase roll about the nearly

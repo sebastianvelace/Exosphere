@@ -548,7 +548,11 @@ public class Vessel
                     VehicleLength,
                     MaximumDiameter,
                     Parts.TransverseMomentOfInertia,
-                    temp);
+                    temp,
+                    Parts.Parts
+                        .Select(part =>
+                            part.Definition.AerodynamicCenterOffsetYM)
+                        .FirstOrDefault(offset => offset.HasValue));
                 AngularVelocity += angularAccel * dt;
 
                 // Starship's four body flaps remain the primary attitude actuators during

@@ -75,6 +75,7 @@ public static class MissionEvaluator
                     evidence.MaximumDynamicPressurePa,
                 ["maximumGForce"] = evidence.MaximumGForce,
                 ["maximumDownrangeM"] = evidence.MaximumDownrangeM,
+                ["completedOrbits"] = evidence.CompletedOrbits,
             });
     }
 

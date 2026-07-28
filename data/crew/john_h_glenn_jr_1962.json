@@ -1,0 +1,11 @@
+{
+  "id": "john-h-glenn-jr",
+  "firstName": "John H.",
+  "lastName": "Glenn Jr.",
+  "agency": "NASA",
+  "asOfDate": "1962-02-20",
+  "pilotLevel": 5,
+  "engineerLevel": 4,
+  "scientistLevel": 3,
+  "primarySource": "https://www.nasa.gov/people/john-glenn/"
+}

@@ -325,9 +325,12 @@ public class Universe
                 // Vessel is clamped to the body surface — follow the body's orbit
                 var heldBody = GetDominantBody(vessel.Position);
                 AdvanceGroundHoldFrame(vessel, heldBody, dt);
-                vessel.Position = heldBody.Position + vessel.GroundNormal * (heldBody.Radius + vessel.GroundOffset);
-                vessel.Velocity = heldBody.Velocity + heldBody.GetSurfaceVelocity(vessel.Position);
-                vessel.Tick(dt, heldBody);  // still drain fuel during ignition sequence
+                vessel.Position = heldBody.Position
+                    + vessel.GroundNormal
+                        * (heldBody.Radius + vessel.GroundOffset);
+                vessel.Velocity = heldBody.Velocity
+                    + heldBody.GetSurfaceVelocity(vessel.Position);
+                vessel.Tick(dt, heldBody);
                 continue;
             }
 
@@ -346,7 +349,6 @@ public class Universe
             }
 
             var refBody = GetDominantBody(vessel.Position);
-
             IntegrateVesselOffRails(vessel, refBody, dt);
         }
     }
@@ -437,15 +439,56 @@ public class Universe
             var burned = Physics.StressSolver.ApplyThermalLoads(
                 vessel.Parts, heatFlux, dt, flowDirLocal);
             if (burned.Count > 0 && !vessel.IsDestroyed)
-            {
-                vessel.IsDestroyed      = true;
-                vessel.DestructionCause = VesselDestructionCause.ThermalBreakup;
-                vessel.CrashImpactSpeed = airspeed;
-                vessel.CrashSimPosition = vessel.Position;
-            }
+                TryThermalBreakup(vessel, burned, airspeed);
         }
 
         HandleSurfaceImpact(vessel, refBody);
+    }
+
+    /// <summary>
+    /// Sheds a thermally failed non-root subtree as debris. A burned command/root part still
+    /// destroys the vessel, but an expendable external package no longer kills an intact
+    /// protected capsule merely because both share one rigid-body graph.
+    /// </summary>
+    private void TryThermalBreakup(
+        Vessel vessel,
+        IReadOnlyCollection<Parts.Part> burned,
+        double airspeed)
+    {
+        var root = vessel.Parts.Root;
+        if (root == null || burned.Contains(root))
+        {
+            MarkThermallyDestroyed(vessel, airspeed);
+            return;
+        }
+
+        var failed = burned.FirstOrDefault(part =>
+            vessel.Parts.Joints.Any(joint => joint.Child == part));
+        if (failed == null)
+        {
+            MarkThermallyDestroyed(vessel, airspeed);
+            return;
+        }
+
+        var joint = vessel.Parts.Joints.First(candidate =>
+            candidate.Child == failed);
+        var debris = vessel.BreakAtJoint(joint);
+        if (debris == null)
+        {
+            MarkThermallyDestroyed(vessel, airspeed);
+            return;
+        }
+
+        AddVessel(debris);
+        _pendingStructuralDebris.Add(debris);
+    }
+
+    private static void MarkThermallyDestroyed(Vessel vessel, double airspeed)
+    {
+        vessel.IsDestroyed = true;
+        vessel.DestructionCause = VesselDestructionCause.ThermalBreakup;
+        vessel.CrashImpactSpeed = airspeed;
+        vessel.CrashSimPosition = vessel.Position;
     }
 
     /// <summary>
@@ -554,8 +597,10 @@ public class Universe
             {
                 AdvanceGroundHoldFrame(vessel, refBody, dt);
                 vessel.Position = refBody.Position
-                    + vessel.GroundNormal * (refBody.Radius + vessel.GroundOffset);
-                vessel.Velocity = refBody.Velocity + refBody.GetSurfaceVelocity(vessel.Position);
+                    + vessel.GroundNormal
+                        * (refBody.Radius + vessel.GroundOffset);
+                vessel.Velocity = refBody.Velocity
+                    + refBody.GetSurfaceVelocity(vessel.Position);
                 vessel.IsOnRails = false;
                 vessel.Tick(dt, refBody);
                 continue;
@@ -607,29 +652,69 @@ public class Universe
 
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
     {
-        var contactBefore = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
+        // Celestial bodies are already at CurrentTime + dt, while the vessel still carries
+        // its CurrentTime state. Integrating those absolute states together injects the
+        // reference body's orbital displacement into low-altitude motion (Earth travels
+        // about 600 m in a 20 ms physics step). Work in the body's translating frame:
+        // preserve the vessel's start-relative state, evaluate forces against the body's
+        // end state, subtract the rail acceleration of that frame, then reconstruct the
+        // inertial end state. This keeps launch, atmosphere and contact at one relative epoch.
+        var (referenceStartPosition, referenceStartVelocity) =
+            BodyStateAt(refBody, CurrentTime);
+        Vector3d relativePosition =
+            vessel.Position - referenceStartPosition;
+        Vector3d relativeVelocity =
+            vessel.Velocity - referenceStartVelocity;
+        Vector3d framedPosition =
+            refBody.Position + relativePosition;
+        Vector3d framedVelocity =
+            refBody.Velocity + relativeVelocity;
+
+        var contactBefore = EvaluateLandingContact(
+            vessel, refBody, framedPosition, framedVelocity);
         vessel.LastContactForceWorld = contactBefore?.ForceWorld ?? Vector3d.Zero;
         vessel.LastContactTorqueWorld = contactBefore?.TorqueWorld ?? Vector3d.Zero;
 
+        vessel.Position = framedPosition;
+        vessel.Velocity = framedVelocity;
         vessel.Tick(dt, refBody, vessel.LastContactTorqueWorld);
-        (vessel.Position, vessel.Velocity) = RK4Integrator.StepPosVel(
-            vessel.Position,
-            vessel.Velocity,
+        Vector3d frameAcceleration =
+            GetReferenceBodyRailAcceleration(refBody);
+        (relativePosition, relativeVelocity) = RK4Integrator.StepPosVel(
+            relativePosition,
+            relativeVelocity,
             CurrentTime,
             dt,
-            (pos, vel, _) =>
+            (relativePos, relativeVel, _) =>
             {
-                var stageContact = EvaluateLandingContact(vessel, refBody, pos, vel);
+                Vector3d position = refBody.Position + relativePos;
+                Vector3d velocity = refBody.Velocity + relativeVel;
+                var stageContact = EvaluateLandingContact(
+                    vessel, refBody, position, velocity);
                 var contactAcceleration = vessel.TotalMass > 0.0
                     ? (stageContact?.ForceWorld ?? Vector3d.Zero) / vessel.TotalMass
                     : Vector3d.Zero;
-                return vessel.ComputeNetAccelerationAt(pos, vel, _bodies, refBody)
+                return vessel.ComputeNetAccelerationAt(
+                        position, velocity, _bodies, refBody)
+                    - frameAcceleration
                     + contactAcceleration;
             });
+        vessel.Position = refBody.Position + relativePosition;
+        vessel.Velocity = refBody.Velocity + relativeVelocity;
 
         var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
         UpdateLandingContactState(vessel, refBody, contactAfter, dt);
         ApplyPostIntegrationPhysics(vessel, refBody, dt);
+    }
+
+    private Vector3d GetReferenceBodyRailAcceleration(
+        CelestialBody reference)
+    {
+        if (reference.OrbitalElements is not { } orbit)
+            return Vector3d.Zero;
+        var parent = GetBody(orbit.ReferenceBodyId);
+        return parent?.GetGravityAt(reference.Position)
+            ?? Vector3d.Zero;
     }
 
     private static Physics.ContactWrench? EvaluateLandingContact(

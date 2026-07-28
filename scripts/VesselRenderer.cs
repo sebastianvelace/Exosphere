@@ -896,6 +896,15 @@ public partial class VesselRenderer : Node3D
                 return CreateMercuryEscapeTowerNode(definition);
             if (definition.HasVehicleRole("adapter"))
                 return CreateMercuryAdapterNode(definition);
+            if (definition.HasVehicleRole("atlas_tank"))
+                return CreateAtlasTankNode(definition);
+            if (definition.HasVehicleRole("sustainer_engine")
+                || definition.HasVehicleRole("booster_engine_package"))
+                return CreateAtlasEngineSectionNode(definition);
+            if (definition.HasVehicleRole("retro_pack"))
+                return CreateMercuryRetroPackNode(definition);
+            if (definition.HasVehicleRole("spacecraft_separation"))
+                return CreateMercurySeparationRingNode(definition);
         }
         var node = new MeshInstance3D { Name = definition.Name.Replace(" ", "_") };
         float diameter = (float)System.Math.Max(
@@ -1111,6 +1120,177 @@ public partial class VesselRenderer : Node3D
             0,
             Mat(new Color(0.76f, 0.77f, 0.74f), 0.45f, 0.48f));
         return node;
+    }
+
+    private Node3D CreateAtlasTankNode(PartDefinition definition)
+    {
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        var root = new Node3D { Name = "AtlasBalloonTank" };
+        var steel = Mat(new Color(0.70f, 0.72f, 0.70f), 0.94f, 0.20f);
+        var seam = Mat(new Color(0.43f, 0.44f, 0.42f), 0.88f, 0.30f);
+
+        var shell = new MeshInstance3D
+        {
+            Name = "PressureStabilizedShell",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius,
+                Height = height,
+                RadialSegments = 64,
+            },
+        };
+        shell.SetSurfaceOverrideMaterial(0, steel);
+        root.AddChild(shell);
+
+        for (int i = 1; i < 9; i++)
+        {
+            float y = -height * 0.5f + height * i / 9f;
+            var weld = new MeshInstance3D
+            {
+                Name = $"BalloonTankWeld{i}",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = radius * 1.004f,
+                    BottomRadius = radius * 1.004f,
+                    Height = 0.018f,
+                    RadialSegments = 64,
+                },
+                Position = Vector3.Up * y,
+            };
+            weld.SetSurfaceOverrideMaterial(0, seam);
+            root.AddChild(weld);
+        }
+
+        void AddNationalMarking(
+            string suffix,
+            Vector3 position,
+            Vector3 rotationDegrees)
+        {
+            var marking = new Label3D
+            {
+                Name = $"UnitedStatesMarking{suffix}",
+                Text = "UNITED STATES",
+                FontSize = 42,
+                PixelSize = 0.0065f,
+                Modulate = new Color(0.045f, 0.045f, 0.04f),
+                OutlineSize = 0,
+                Position = position,
+                RotationDegrees = rotationDegrees,
+            };
+            root.AddChild(marking);
+        }
+
+        // Place the historical marking on the pad-camera face. Keeping a single
+        // inscription avoids doubled text where adjacent cylinder faces converge.
+        float markingY = height * 0.12f;
+        float markingR = radius * 1.012f;
+        AddNationalMarking(
+            "Aft",
+            new Vector3(0.0f, markingY, -markingR),
+            new Vector3(0.0f, 180.0f, -90.0f));
+        return root;
+    }
+
+    private Node3D CreateAtlasEngineSectionNode(
+        PartDefinition definition)
+    {
+        float height = (float)System.Math.Max(
+            0.25, definition.LengthM / MetresPerUnit);
+        float radius = (float)System.Math.Max(
+            0.30, definition.DiameterM * 0.5 / MetresPerUnit);
+        var root = new Node3D
+        {
+            Name = definition.HasVehicleRole("booster_engine_package")
+                ? "AtlasBoosterPackage"
+                : "AtlasSustainerSection",
+        };
+        var skirt = new MeshInstance3D
+        {
+            Name = "EngineSkirt",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius * 0.84f,
+                BottomRadius = radius,
+                Height = height,
+                RadialSegments = 48,
+            },
+        };
+        skirt.SetSurfaceOverrideMaterial(
+            0,
+            Mat(new Color(0.54f, 0.55f, 0.53f), 0.88f, 0.28f));
+        root.AddChild(skirt);
+
+        if (definition.HasVehicleRole("booster_engine_package"))
+        {
+            var dark = Mat(
+                new Color(0.16f, 0.16f, 0.15f), 0.72f, 0.42f);
+            foreach (float x in new[] { -radius * 0.62f, radius * 0.62f })
+            {
+                var pod = new MeshInstance3D
+                {
+                    Name = x < 0 ? "YLR89PodLeft" : "YLR89PodRight",
+                    Mesh = new CylinderMesh
+                    {
+                        TopRadius = radius * 0.22f,
+                        BottomRadius = radius * 0.28f,
+                        Height = height * 0.86f,
+                        RadialSegments = 32,
+                    },
+                    Position = new Vector3(x, -height * 0.08f, 0.0f),
+                };
+                pod.SetSurfaceOverrideMaterial(0, dark);
+                root.AddChild(pod);
+            }
+        }
+        return root;
+    }
+
+    private Node3D CreateMercuryRetroPackNode(
+        PartDefinition definition)
+    {
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        var root = new Node3D { Name = "MercuryRetroPack" };
+        var pack = new MeshInstance3D
+        {
+            Name = "RetroPackage",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius * 0.96f,
+                BottomRadius = radius,
+                Height = 0.12f,
+                RadialSegments = 48,
+            },
+        };
+        pack.SetSurfaceOverrideMaterial(
+            0,
+            Mat(new Color(0.16f, 0.12f, 0.085f), 0.10f, 0.86f));
+        root.AddChild(pack);
+        return root;
+    }
+
+    private Node3D CreateMercurySeparationRingNode(
+        PartDefinition definition)
+    {
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        float height = (float)System.Math.Max(
+            0.08, definition.LengthM / MetresPerUnit);
+        var ring = new MeshInstance3D
+        {
+            Name = "MercuryAtlasSeparationRing",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius * 1.02f,
+                Height = height,
+                RadialSegments = 48,
+            },
+        };
+        ring.SetSurfaceOverrideMaterial(
+            0,
+            Mat(new Color(0.22f, 0.22f, 0.20f), 0.72f, 0.42f));
+        return ring;
     }
 
     private void UpdateParachutes()

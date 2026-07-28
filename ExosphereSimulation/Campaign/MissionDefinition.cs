@@ -12,6 +12,7 @@ public enum MissionMetric
     MaximumDynamicPressurePa,
     MaximumGForce,
     MaximumDownrangeM,
+    CompletedOrbits,
     ElapsedSeconds,
     CrewAlive,
     VesselDestroyed,

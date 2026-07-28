@@ -55,6 +55,18 @@ Alan Shepard y LC-5 ya existen y el botón lanza exactamente ese hardware. La
 barrera permanece para las misiones siguientes: la campaña no puede sustituir
 una variante faltante por Falcon, Starship ni un vehículo genérico.
 
+## Friendship 7
+
+La segunda entrada ya tiene definición, Mercury-Atlas 6 / spacecraft 13,
+John Glenn y LC-14. Aparece `LOCKED`/`BLOQUEADA` hasta completar Freedom 7 y
+entonces pasa a `READY`/`LISTA`. El perfil reproduce la arquitectura
+*stage-and-a-half*, la inserción, tres órbitas, retrofire, reentrada y amerizaje.
+
+La evidencia añade revoluciones acumuladas y persistibles. El escudo térmico,
+centro aerodinámico y retención del anillo durante staging están definidos por
+pieza, no por supuestos exclusivos de Starship. La aceptación completa se
+documenta en `docs/HITO4_FRIENDSHIP7_PLAYABLE.md`.
+
 ## Verificación
 
 Las pruebas puras cubren:
@@ -66,12 +78,17 @@ Las pruebas puras cubren:
 - round-trip de máximos, fases y origen de downrange;
 - recompensas y desbloqueos idempotentes;
 - rechazo de progreso no finito y recompensas negativas;
-- procedencia obligatoria de los datos Freedom 7.
+- procedencia obligatoria de los datos Freedom 7 y Friendship 7;
+- round-trip y evaluación de las tres órbitas de Friendship 7.
 
 La aceptación adicional de Freedom 7 cubre masa/dimensiones, A-7, crew/sitio,
 separación conservativa, paracaídas, amerizaje y una simulación headless
 completa. El nominal reproducible obtiene 181,4 km, 2,25 km/s geocéntricos,
 480,8 km de downrange, 913 s y 12,85 g.
+
+Friendship 7 añade cierre de masas Atlas/Mercury, separación *stage-and-a-half*,
+secuencia histórica, tres órbitas, retrofire, orientación térmica, paracaídas y
+splashdown en una simulación headless completa.
 
 La captura reproducible del modal usa:
 
@@ -88,3 +105,4 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
 
 - <https://www.nasa.gov/mission/mercury-redstone-3-freedom-7/>
 - <https://www.nasa.gov/wp-content/uploads/2023/04/sp-4012v2.pdf>
+- <https://www.nasa.gov/mission/mercury-atlas-6-friendship-7/>

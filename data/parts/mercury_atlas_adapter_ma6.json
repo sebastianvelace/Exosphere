@@ -1,0 +1,19 @@
+{
+  "id": "mercury_atlas_adapter_ma6",
+  "name": "Mercury-Atlas 6 Adapter",
+  "description": "Tapered spacecraft adapter, guidance and abort-sensing allocation for Atlas 109-D.",
+  "category": "structure",
+  "vehicle_family": "mercury",
+  "vehicle_role": "adapter",
+  "mass_dry": 350,
+  "length_m": 0.69,
+  "diameter_m": 3.0,
+  "cost": 0,
+  "drag_coefficient": 0.25,
+  "axial_drag_coefficient": 0.24,
+  "heat_tolerance": 900,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.345, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.345, 0], "size": 1, "type": "stack"}
+  ]
+}

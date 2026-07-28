@@ -523,6 +523,13 @@ public class PartGraph
         HotStageOverlapActive = false;
         decoupler.IsStagingActive = false;
 
+        if (decoupler.Definition.DetachWithLowerStage)
+        {
+            var upperJoint = _joints.FirstOrDefault(j => j.Child == decoupler);
+            if (upperJoint == null) return null;
+            return DetachSubtree(decoupler, upperJoint);
+        }
+
         // Buscamos primero el joint donde decoupler es Parent (separa lo que está DEBAJO).
         // Esto garantiza que SH se detache correctamente en stack command→tank→eng→decoupler→SH.
         var separationJoint = _joints.FirstOrDefault(j => j.Parent == decoupler)

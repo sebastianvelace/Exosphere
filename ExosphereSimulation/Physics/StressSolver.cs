@@ -72,13 +72,30 @@ public static class StressSolver
     /// <summary>
     /// Orientation-aware thermal application. <paramref name="flowDirLocal"/> is the airflow
     /// direction in the vessel's local frame (<c>orientation⁻¹ · surfaceVelocityDir</c>); a
-    /// heat-shielded part is protected only when its windward (belly) face meets that flow.
+    /// heat-shielded part is protected only when its data-defined windward face meets that flow.
     /// A shield turned away from the flow gives no protection — the bare side burns.
     /// Returns the parts that exceeded their tolerance this tick.
     /// </summary>
     public static List<Part> ApplyThermalLoads(
-        PartGraph graph, double heatFlux, double dt, Vector3d flowDirLocal) =>
-        ApplyThermalLoads(graph, heatFlux, dt, ThermalModel.WindwardFactor(flowDirLocal));
+        PartGraph graph, double heatFlux, double dt, Vector3d flowDirLocal)
+    {
+        var destroyed = new List<Part>();
+        foreach (var part in graph.Parts)
+        {
+            double shieldedFraction = part.Definition.HasHeatShield
+                ? ThermalModel.WindwardFactor(
+                    flowDirLocal,
+                    ShieldNormal(part.Definition.HeatShieldNormal))
+                : 0.0;
+            if (ThermalModel.ApplyHeat(
+                    part, heatFlux, dt, shieldedFraction))
+            {
+                part.IsBroken = true;
+                destroyed.Add(part);
+            }
+        }
+        return destroyed;
+    }
 
     /// <summary>
     /// Applies the free-stream flux to every part with a known shielded fraction. The flux is
@@ -99,6 +116,12 @@ public static class StressSolver
         }
         return destroyed;
     }
+
+    private static Vector3d ShieldNormal(double[]? components) =>
+        components is { Length: 3 }
+            && components.All(double.IsFinite)
+            ? new Vector3d(components[0], components[1], components[2])
+            : -Vector3d.Right;
 
     // ── Thermal damage contract (leído por C/Universe para decidir destrucción) ──
 

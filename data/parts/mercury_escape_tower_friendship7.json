@@ -1,0 +1,18 @@
+{
+  "id": "mercury_escape_tower_friendship7",
+  "name": "Mercury Escape Tower — Friendship 7",
+  "description": "MA-6 launch escape tower, released after Atlas booster-engine cutoff.",
+  "category": "structure",
+  "vehicle_family": "mercury",
+  "vehicle_role": "escape_tower",
+  "mass_dry": 460,
+  "length_m": 3.9,
+  "diameter_m": 0.65,
+  "cost": 0,
+  "drag_coefficient": 0.5,
+  "axial_drag_coefficient": 0.54,
+  "heat_tolerance": 900,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -1.95, 0], "size": 1, "type": "stack"}
+  ]
+}

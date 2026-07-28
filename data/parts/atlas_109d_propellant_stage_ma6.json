@@ -1,0 +1,21 @@
+{
+  "id": "atlas_109d_propellant_stage_ma6",
+  "name": "Atlas 109-D Balloon-Tank Stage",
+  "description": "Pressure-stabilized stainless-steel Atlas D LOX/RP-1 airframe allocated to MA-6.",
+  "category": "fuel_tank",
+  "vehicle_family": "mercury",
+  "vehicle_role": "atlas_tank",
+  "mass_dry": 2600,
+  "length_m": 17.8,
+  "diameter_m": 3.0,
+  "cost": 0,
+  "drag_coefficient": 0.2,
+  "axial_drag_coefficient": 0.24,
+  "heat_tolerance": 850,
+  "fuel_capacity_lf": 34795.076923,
+  "fuel_capacity_ox": 78288.923077,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 8.9, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -8.9, 0], "size": 1, "type": "stack"}
+  ]
+}

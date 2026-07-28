@@ -1,0 +1,22 @@
+{
+  "id": "mercury-atlas6-friendship7-1962-02-20",
+  "name": "Mercury-Atlas 6 — Friendship 7",
+  "family": "Mercury-Atlas",
+  "asOfDate": "1962-02-20",
+  "fairingVariant": "none",
+  "primarySource": "https://www.nasa.gov/mission/mercury-atlas-6-friendship-7/",
+  "engineClusterIds": [
+    "atlas-lr89-pair-ma6-1962",
+    "atlas-lr105-single-ma6-1962"
+  ],
+  "stackTopToBottom": [
+    "mercury_escape_tower_friendship7",
+    "mercury_capsule_friendship7",
+    "mercury_retro_pack_friendship7",
+    "mercury_atlas_separation_ring_ma6",
+    "mercury_atlas_adapter_ma6",
+    "atlas_109d_propellant_stage_ma6",
+    "atlas_lr105_sustainer_ma6",
+    "atlas_lr89_booster_package_ma6"
+  ]
+}

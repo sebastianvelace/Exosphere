@@ -1,0 +1,320 @@
+{
+  "manifestId": "mercury-atlas6-friendship7-1962",
+  "records": [
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "ratedThrustSeaLevelN",
+      "status": "published", "source": "NASA Historical Data Book Volume II, Atlas D characteristics",
+      "accessedDate": "2026-07-28", "variant": "Atlas D MA-5 YLR-89",
+      "conditions": "667,200 N sea-level thrust per engine; two engines on Atlas 109-D",
+      "uncertainty": "published rounded SI value"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "ratedThrustVacuumN",
+      "status": "estimated", "source": "NASA published sea-level rating and Exosphere pressure-performance estimate",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "vacuum extrapolation for the booster nozzle",
+      "uncertainty": "±8%; no vacuum rating in the cited NASA table"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "NASA Atlas D mass, thrust and event sequence; Exosphere mass-flow closure",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "Earth sea level at fixed rated throttle",
+      "uncertainty": "±8 s"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "NASA Atlas D performance; Exosphere engineering estimate",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "vacuum at rated throttle",
+      "uncertainty": "±10 s"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "minimumThrottle",
+      "status": "derived", "source": "NASA MA-6 fixed-burn event sequence",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "mission profile uses ignition at rated thrust followed by cutoff",
+      "uncertainty": "operational reconstruction, not full qualification envelope"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "performanceMap",
+      "status": "derived", "source": "NASA published sea-level thrust plus documented Exosphere vacuum and Isp estimates",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "two-point sea-level/vacuum map at rated throttle",
+      "uncertainty": "inherits estimated vacuum/Isp uncertainty"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "restartEnvelope",
+      "status": "derived", "source": "NASA MA-6 single-burn booster-engine sequence",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "no restart after BECO and booster-package jettison",
+      "uncertainty": "mission envelope only"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere deterministic engine-state model",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "simulator transient and failure thresholds",
+      "uncertainty": "unknown; no public component-temperature record used"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "NASA Atlas guidance description; Exosphere control-authority estimate",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "outboard booster pitch/yaw actuation",
+      "uncertainty": "±2 degrees range and ±50% rate"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "startupTransient",
+      "status": "estimated", "source": "NASA MA-6 countdown and liftoff sequence; Exosphere transient model",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "all three Atlas engines start before liftoff",
+      "uncertainty": "±1 s"
+    },
+    {
+      "dataId": "atlas-lr89-ma6-1962", "field": "shutdownTransient",
+      "status": "derived", "source": "NASA MA-6 flight report actual BECO at T+129.6 s",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-89",
+      "conditions": "rapid cutoff before booster-package jettison",
+      "uncertainty": "simulated tailoff ±0.2 s"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "ratedThrustSeaLevelN",
+      "status": "published", "source": "NASA Historical Data Book Volume II, Atlas D characteristics",
+      "accessedDate": "2026-07-28", "variant": "Atlas D MA-5 YLR-105",
+      "conditions": "266,880 N sea-level thrust for the center sustainer",
+      "uncertainty": "published rounded SI value"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "ratedThrustVacuumN",
+      "status": "calibrated", "source": "NASA published sea-level rating, MA-6 insertion state and Exosphere aggregate propulsion model",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "610 kN effective high-altitude thrust closes the public MA-6 trajectory in a model that omits separate verniers, turbopump exhaust and detailed guidance",
+      "uncertainty": "simulator aggregate, not a component acceptance rating; do not interpret as YLR-105 hardware thrust"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "NASA Atlas D mass, thrust and event sequence; Exosphere mass-flow closure",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "sea-level value used only during the shared initial burn",
+      "uncertainty": "±12 s"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "specificImpulseVacuumS",
+      "status": "calibrated", "source": "NASA MA-6 orbital insertion state; Exosphere aggregate propulsion reconstruction",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "343 s effective value used with the calibrated aggregate high-altitude thrust",
+      "uncertainty": "simulator aggregate, not a YLR-105 component acceptance value"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "minimumThrottle",
+      "status": "calibrated", "source": "NASA MA-6 fixed-burn event sequence, published Max-G and Exosphere aggregate propulsion model",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "50% simulator floor permits a late acceleration limiter while preserving fixed-thrust event timing",
+      "uncertainty": "simulation control equivalent, not a hardware throttle capability"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "performanceMap",
+      "status": "derived", "source": "NASA published sea-level thrust plus documented Exosphere vacuum and Isp estimates",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "two-point sea-level/vacuum map at rated throttle",
+      "uncertainty": "inherits estimated vacuum/Isp uncertainty"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "restartEnvelope",
+      "status": "derived", "source": "NASA MA-6 single-burn sustainer sequence",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "no restart after SECO",
+      "uncertainty": "mission envelope only"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere deterministic engine-state model",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "simulator transient and failure thresholds",
+      "uncertainty": "unknown; no public component-temperature record used"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "NASA Atlas guidance description; Exosphere control-authority estimate",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "center sustainer control after booster-package jettison",
+      "uncertainty": "±2 degrees range and ±50% rate"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "startupTransient",
+      "status": "estimated", "source": "NASA MA-6 countdown and liftoff sequence; Exosphere transient model",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "sustainer starts with booster engines before liftoff",
+      "uncertainty": "±1 s"
+    },
+    {
+      "dataId": "atlas-lr105-ma6-1962", "field": "shutdownTransient",
+      "status": "derived", "source": "NASA MA-6 flight report actual SECO at T+301.4 s",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
+      "conditions": "tailoff complete by T+302.0 s",
+      "uncertainty": "event precision ±0.1 s"
+    },
+    {
+      "dataId": "mercury-atlas6-friendship7-1962-02-20", "field": "atlasLaunchMassKg",
+      "status": "published", "source": "NASA Historical Data Book Volume II, Atlas D characteristics",
+      "accessedDate": "2026-07-28", "variant": "Atlas D / Atlas 109-D",
+      "conditions": "117,979 kg Atlas D launch-vehicle mass, excluding spacecraft allocation",
+      "uncertainty": "published table precision ±1 kg"
+    },
+    {
+      "dataId": "mercury-atlas6-friendship7-1962-02-20", "field": "completeStackMassKg",
+      "status": "derived", "source": "NASA Atlas D and MA-6 spacecraft masses plus estimated escape-tower allocation",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Atlas 6 complete launch stack",
+      "conditions": "120,373.7 kg = 117,979 kg Atlas + 1,934.7 kg spacecraft + 460 kg tower",
+      "uncertainty": "aggregate inherits estimated tower boundary/allocation"
+    },
+    {
+      "dataId": "mercury-atlas6-friendship7-1962-02-20", "field": "dimensionsM",
+      "status": "published", "source": "NASA SP-10 Launch Vehicles and Propulsion; NASA Historical Data Book Volume II",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Atlas",
+      "conditions": "95.25 ft complete height, 3 m core diameter and published Atlas base envelope",
+      "uncertainty": "height conversion ±0.02 m; logical-part lengths close to 29.03 m"
+    },
+    {
+      "dataId": "mercury-atlas6-friendship7-1962-02-20", "field": "stageAndHalfSequence",
+      "status": "published", "source": "NASA MA-6 flight report and NASA 60 Years Ago: John Glenn",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D",
+      "conditions": "two YLR-89 booster engines cut off and jettison while the YLR-105 sustainer continues",
+      "uncertainty": "actual event times published to 0.1 s"
+    },
+    {
+      "dataId": "mercury-atlas6-friendship7-1962-02-20", "field": "componentMassAllocation",
+      "status": "calibrated", "source": "NASA published Atlas launch mass; Exosphere component allocation",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D logical part graph",
+      "conditions": "tank, propellant, adapter, ring and engines close exactly to 117,979 kg",
+      "uncertainty": "individual allocations ±30%; Atlas aggregate exact to source precision"
+    },
+    {
+      "dataId": "atlas_109d_propellant_stage_ma6", "field": "propellantMassKg",
+      "status": "estimated", "source": "NASA Atlas mass, thrust and burn events; Exosphere mass-flow closure",
+      "accessedDate": "2026-07-28", "variant": "Atlas 109-D",
+      "conditions": "113,084 kg combined LOX/RP-1 at 2.25 mixture ratio",
+      "uncertainty": "±5%; tank loading split is not published in cited summary"
+    },
+    {
+      "dataId": "mercury_capsule_friendship7", "field": "integratedSpacecraftMassKg",
+      "status": "published", "source": "NASA Historical Data Book Volume II, MA-6 characteristics",
+      "accessedDate": "2026-07-28", "variant": "Mercury spacecraft 13",
+      "conditions": "1,934.7 kg capsule plus loaded retrograde package",
+      "uncertainty": "published table precision ±0.1 kg"
+    },
+    {
+      "dataId": "mercury_capsule_friendship7", "field": "massDryKg",
+      "status": "calibrated", "source": "NASA integrated spacecraft mass and Exosphere retro-package allocation",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 spacecraft 13",
+      "conditions": "1,817.7 kg capsule allocation excluding 70 kg package and 47 kg solid propellant",
+      "uncertainty": "component allocation ±15%; integrated spacecraft mass exact"
+    },
+    {
+      "dataId": "mercury_capsule_friendship7", "field": "parachuteSequence",
+      "status": "published", "source": "NASA MA-6 flight report and NASA Friendship 7 history",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7",
+      "conditions": "drogue at 28,000 ft and main at 10,800 ft, converted to SI",
+      "uncertainty": "event altitude precision follows published report"
+    },
+    {
+      "dataId": "mercury_capsule_friendship7", "field": "parachuteDragAreaM2",
+      "status": "calibrated", "source": "NASA published 63-foot main canopy and MA-6 splashdown; Exosphere atmosphere model",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 recovery system",
+      "conditions": "effective CdA calibrated for survivable splashdown",
+      "uncertainty": "±15%; not a canopy CFD reconstruction"
+    },
+    {
+      "dataId": "mercury_capsule_friendship7", "field": "axialDragCoefficient",
+      "status": "calibrated", "source": "NASA MA-6 entry/load records; Exosphere aggregate axisymmetric aero model",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 heat-shield-first entry",
+      "conditions": "effective capsule coefficient",
+      "uncertainty": "model coefficient ±20%"
+    },
+    {
+      "dataId": "mercury_retro_pack_friendship7", "field": "retainedThroughEntry",
+      "status": "published", "source": "NASA Friendship 7 mission history and MA-6 flight report",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 false heat-shield warning procedure",
+      "conditions": "retro assembly was intentionally not jettisoned before entry",
+      "uncertainty": "official mission event"
+    },
+    {
+      "dataId": "mercury_retro_pack_friendship7", "field": "massAndPropellantKg",
+      "status": "estimated", "source": "NASA integrated spacecraft mass and retro sequence; Exosphere allocation",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 three-motor package",
+      "conditions": "70 kg dry package plus 47 kg aggregate solid propellant",
+      "uncertainty": "±30%"
+    },
+    {
+      "dataId": "mercury_retro_pack_friendship7", "field": "thrustAndBurn",
+      "status": "estimated", "source": "NASA five-second MA-6 retro ignition spacing; Exosphere public-data reconstruction",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 three sequential retro motors",
+      "conditions": "13.5 kN aggregate equivalent over a twenty-second modeled sequence",
+      "uncertainty": "±30%; no proprietary motor data used"
+    },
+    {
+      "dataId": "mercury_escape_tower_friendship7", "field": "massAndDrag",
+      "status": "calibrated", "source": "NASA Mercury-Atlas dimensions/events and Exosphere launch-stack closure",
+      "accessedDate": "2026-07-28", "variant": "MA-6 escape tower",
+      "conditions": "460 kg mass allocation and effective exposed-nose coefficient",
+      "uncertainty": "mass ±25%, coefficient ±25%"
+    },
+    {
+      "dataId": "cape_canaveral_lc14", "field": "geodeticLocation",
+      "status": "estimated", "source": "NASA identification of LC-14 and public geospatial placement",
+      "accessedDate": "2026-07-28", "variant": "Cape Canaveral Launch Complex 14",
+      "conditions": "offline Earth-model latitude/longitude and MA-6 launch azimuth",
+      "uncertainty": "position ±100 m; heading ±1 degree"
+    },
+    {
+      "dataId": "john-h-glenn-jr", "field": "crewIdentity",
+      "status": "published", "source": "NASA John Glenn biography and Friendship 7 mission record",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 crew",
+      "conditions": "sole astronaut aboard spacecraft 13 on February 20, 1962",
+      "uncertainty": "official historical identity"
+    },
+    {
+      "dataId": "mission-friendship7-1962", "field": "missionIdentity",
+      "status": "published", "source": "NASA Mercury-Atlas 6: Friendship 7",
+      "accessedDate": "2026-07-28", "variant": "MA-6",
+      "conditions": "spacecraft 13, Atlas 109-D, John Glenn, LC-14, February 20 1962",
+      "uncertainty": "official mission record"
+    },
+    {
+      "dataId": "mission-friendship7-1962", "field": "historicalOrbit",
+      "status": "published", "source": "NASA MA-6 mission page and Historical Data Book Volume II",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7",
+      "conditions": "261.14 km apogee, 161 km perigee, 32.54 degree inclination, 88:29 period, three orbits",
+      "uncertainty": "published mission-table precision"
+    },
+    {
+      "dataId": "mission-friendship7-1962", "field": "historicalDurationS",
+      "status": "derived", "source": "NASA published 04:55:23 duration",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7",
+      "conditions": "17,723 seconds from liftoff to water impact",
+      "uncertainty": "exact conversion from published timestamp"
+    },
+    {
+      "dataId": "mission-friendship7-1962", "field": "historicalSpeedMps",
+      "status": "derived", "source": "NASA published 17,544 mph space-fixed velocity",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7",
+      "conditions": "7,842.9 m/s after unit conversion",
+      "uncertainty": "inherits source rounding"
+    },
+    {
+      "dataId": "mission-friendship7-1962", "field": "historicalEvents",
+      "status": "published", "source": "NASA MA-6 flight report sequence-of-events table",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7",
+      "conditions": "BECO, tower, SECO, separation, retro motors, drogue, main and impact times",
+      "uncertainty": "actual events published to 0.1 s where available"
+    },
+    {
+      "dataId": "mission-friendship7-1962", "field": "objectiveEnvelope",
+      "status": "derived", "source": "NASA historical orbit, speed, duration, Max-G and mission outcome",
+      "accessedDate": "2026-07-28", "variant": "Friendship 7 campaign objective set",
+      "conditions": "acceptance bands allow simulation/numerical dispersion without changing mission identity",
+      "uncertainty": "designer envelope documented in mission JSON"
+    }
+  ]
+}

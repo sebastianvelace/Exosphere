@@ -1,0 +1,147 @@
+{
+  "id": "mission-friendship7-1962",
+  "sequence": 2,
+  "program": "NASA Project Mercury",
+  "titleEn": "Friendship 7",
+  "titleEs": "Friendship 7",
+  "summaryEn": "Fly John Glenn and Mercury spacecraft 13 through Atlas's stage-and-a-half ascent, three Earth orbits, retrofire and Atlantic recovery.",
+  "summaryEs": "Lleva a John Glenn y la cápsula Mercury 13 por el ascenso de etapa y media del Atlas, tres órbitas terrestres, retroencendido y recuperación en el Atlántico.",
+  "historicalDate": "1962-02-20",
+  "vehicleVariantId": "mercury-atlas6-friendship7-1962-02-20",
+  "launchSiteId": "cape_canaveral_lc14",
+  "flightProfileId": "mercury-atlas6-three-orbit",
+  "crewIds": ["john-h-glenn-jr"],
+  "prerequisiteMissionIds": ["mission-freedom7-1961"],
+  "objectives": [
+    {
+      "id": "reach-ma6-orbit",
+      "titleEn": "Reach the MA-6 orbital altitude corridor",
+      "titleEs": "Alcanza el corredor de altitud orbital MA-6",
+      "metric": "peak_altitude_m",
+      "comparison": "between",
+      "target": 240000,
+      "upperTarget": 285000,
+      "required": true
+    },
+    {
+      "id": "reach-orbital-speed",
+      "titleEn": "Reach Mercury orbital velocity",
+      "titleEs": "Alcanza la velocidad orbital Mercury",
+      "metric": "peak_inertial_speed_mps",
+      "comparison": "at_least",
+      "target": 7700,
+      "required": true
+    },
+    {
+      "id": "complete-three-orbits",
+      "titleEn": "Complete three Earth orbits",
+      "titleEs": "Completa tres órbitas terrestres",
+      "metric": "completed_orbits",
+      "comparison": "at_least",
+      "target": 2.9,
+      "required": true
+    },
+    {
+      "id": "complete-ma6-duration",
+      "titleEn": "Complete the historical mission-duration corridor",
+      "titleEs": "Completa el corredor histórico de duración",
+      "metric": "elapsed_seconds",
+      "comparison": "between",
+      "target": 17200,
+      "upperTarget": 18250,
+      "required": true
+    },
+    {
+      "id": "atlantic-recovery",
+      "titleEn": "Splash down safely in the Atlantic",
+      "titleEs": "Ameriza de forma segura en el Atlántico",
+      "metric": "splashdown",
+      "comparison": "true",
+      "target": 1,
+      "required": true
+    },
+    {
+      "id": "reach-orbit-phase",
+      "titleEn": "Achieve orbital flight",
+      "titleEs": "Alcanza el vuelo orbital",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "ORBIT",
+      "required": true
+    }
+  ],
+  "limits": [
+    {
+      "id": "crew-survival",
+      "titleEn": "Return John Glenn alive",
+      "titleEs": "Regresa con John Glenn con vida",
+      "metric": "crew_alive",
+      "comparison": "true",
+      "target": 1,
+      "required": true
+    },
+    {
+      "id": "vehicle-survival",
+      "titleEn": "Recover Friendship 7",
+      "titleEs": "Recupera Friendship 7",
+      "metric": "vessel_destroyed",
+      "comparison": "false",
+      "target": 0,
+      "required": true
+    },
+    {
+      "id": "crew-load-envelope",
+      "titleEn": "Remain below 8.2 g",
+      "titleEs": "Mantente por debajo de 8,2 g",
+      "metric": "maximum_g_force",
+      "comparison": "at_most",
+      "target": 8.2,
+      "required": true
+    }
+  ],
+  "anomalies": [
+    {
+      "id": "false-heat-shield-warning",
+      "descriptionEn": "A false landing-bag signal requires retaining the retropack through entry.",
+      "descriptionEs": "Una señal falsa de la bolsa de aterrizaje exige conservar el retropack durante la entrada.",
+      "enabledByDefault": true
+    },
+    {
+      "id": "yaw-control-jet-clog",
+      "descriptionEn": "A yaw-control jet fault forces manual attitude control.",
+      "descriptionEs": "Una falla del propulsor de guiñada obliga a controlar la actitud manualmente.",
+      "enabledByDefault": false
+    }
+  ],
+  "rewards": [
+    {
+      "id": "historical-completion",
+      "amount": 150,
+      "unlockIds": [
+        "mission-gemini8-1966",
+        "vehicle-family-gemini-titan"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "nasa-friendship7-mission",
+      "url": "https://www.nasa.gov/mission/mercury-atlas-6-friendship-7/",
+      "accessedDate": "2026-07-28",
+      "description": "NASA mission identity, crew, spacecraft 13, Atlas 109-D, LC-14, orbit, duration, velocity, Max-Q and Max-G."
+    },
+    {
+      "id": "nasa-ma6-flight-report",
+      "url": "https://ntrs.nasa.gov/api/citations/19620004468/downloads/19620004468_Update.pdf",
+      "accessedDate": "2026-07-28",
+      "description": "NASA MA-6 event sequence for BECO, tower release, SECO, separation, three retro motors, parachutes and splashdown."
+    },
+    {
+      "id": "nasa-historical-data-book-v2",
+      "url": "https://www.nasa.gov/wp-content/uploads/2023/04/sp-4012v2.pdf",
+      "accessedDate": "2026-07-28",
+      "description": "NASA Atlas D and MA-6 tables for vehicle mass, thrust, dimensions, spacecraft mass, orbit and recovery."
+    }
+  ]
+}
