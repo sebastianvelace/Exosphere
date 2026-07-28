@@ -479,4 +479,56 @@ public class Vessel
         foreach (var j in detached.Joints) debris.Parts.AddJoint(j);
         return debris;
     }
+
+    /// <summary>
+    /// Deploys a part subtree as a fully independent, controllable vessel. The split uses
+    /// equal-and-opposite impulses and complementary position offsets, conserving total
+    /// mass, centre of mass and linear momentum in the aggregate point-mass model.
+    /// </summary>
+    public Vessel? DeployPayload(
+        string rootPartInstanceId,
+        string? payloadName = null,
+        Vector3d? separationVelocityLocal = null)
+    {
+        var part = Parts.Parts.FirstOrDefault(p => p.InstanceId == rootPartInstanceId);
+        if (part == null) return null;
+
+        var positions = Parts.ComputePartLocalPositions();
+        Vector3d localOffset = positions.TryGetValue(part, out var offset)
+            ? offset - Parts.CenterOfMass
+            : Vector3d.Zero;
+        double combinedMass = TotalMass;
+        var detached = Parts.DetachSubtree(rootPartInstanceId);
+        if (detached == null) return null;
+
+        double payloadMass = detached.TotalMass;
+        double carrierMass = Parts.TotalMass;
+        if (combinedMass <= 0.0 || payloadMass <= 0.0 || carrierMass <= 0.0)
+            throw new InvalidOperationException("Payload separation requires positive masses.");
+
+        Vector3d relativePosition = Orientation.Rotate(localOffset);
+        Vector3d relativeVelocity = Orientation.Rotate(
+            separationVelocityLocal ?? new Vector3d(0.0, 0.25, 0.0));
+        Position -= relativePosition * (payloadMass / combinedMass);
+        var payloadPosition = Position + relativePosition;
+        Velocity -= relativeVelocity * (payloadMass / combinedMass);
+        var payloadVelocity = Velocity + relativeVelocity;
+
+        var payload = new Vessel
+        {
+            Name = payloadName ?? $"{Name} Payload",
+            Position = payloadPosition,
+            Velocity = payloadVelocity,
+            Orientation = Orientation,
+            AngularVelocity = AngularVelocity,
+            ReferenceBodyId = ReferenceBodyId,
+            IsOnRails = IsOnRails,
+            SASEnabled = true,
+        };
+        if (detached.Root != null) payload.Parts.SetRoot(detached.Root);
+        foreach (var detachedPart in detached.Parts) payload.Parts.AddPart(detachedPart);
+        foreach (var joint in detached.Joints) payload.Parts.AddJoint(joint);
+        payload.ConfigureLandingContactsFromParts();
+        return payload;
+    }
 }

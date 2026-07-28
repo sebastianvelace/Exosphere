@@ -1,0 +1,16 @@
+{
+  "id": "falcon9_interstage",
+  "name": "Falcon 9 Pneumatic Stage Interface",
+  "description": "Block 5 interstage and separation plane.",
+  "category": "decoupler",
+  "mass_dry": 1000,
+  "length_m": 4.5,
+  "diameter_m": 3.7,
+  "cost": 750000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 600,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 2.25, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -2.25, 0], "size": 2, "type": "stack"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "falcon9_fairing_standard",
+  "name": "Falcon 9 Standard Fairing",
+  "description": "Two-piece 5.2 m class payload fairing represented by its structural envelope.",
+  "category": "fairing",
+  "mass_dry": 1900,
+  "length_m": 13.1,
+  "diameter_m": 5.2,
+  "cost": 6000000,
+  "drag_coefficient": 0.14,
+  "heat_tolerance": 390,
+  "deployable": true,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 6.55, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -6.55, 0], "size": 2, "type": "stack"}
+  ]
+}

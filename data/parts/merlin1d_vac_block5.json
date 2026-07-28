@@ -1,0 +1,23 @@
+{
+  "id": "merlin1d_vac_block5",
+  "name": "Merlin Vacuum — Block 5",
+  "description": "Single vacuum-optimized Merlin with published 981 kN vacuum thrust.",
+  "category": "engine",
+  "mass_dry": 470,
+  "length_m": 3.0,
+  "diameter_m": 2.8,
+  "cost": 1200000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1400,
+  "thrust_vac": 981000,
+  "thrust_sl": 400000,
+  "isp_vac": 348,
+  "isp_sl": 220,
+  "gimbal_range": 5.0,
+  "fuel_type": "LiquidFuel+Oxidizer",
+  "mixture_ratio": 2.56,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.5, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.5, 0], "size": 2, "type": "stack"}
+  ]
+}

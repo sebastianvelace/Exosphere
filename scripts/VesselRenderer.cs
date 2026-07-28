@@ -99,11 +99,9 @@ public partial class VesselRenderer : Node3D
         bool hasSH       = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
         bool hasStarship  = vessel.Parts.Parts.Any(p =>
             p.Definition.Id == "starship_engines" || p.Definition.Id == "starship_command");
-        bool hasAnyEngine = vessel.Parts.Parts.Any(p => p.Definition.Category == PartCategory.Engine);
-
         if      (hasSH && hasStarship) BuildFullStack(vessel);
         else if (hasSH)                BuildSuperHeavyOnly(vessel);
-        else if (hasAnyEngine)         BuildStarshipSection(vessel, yOffset: -22f);
+        else if (hasStarship)          BuildStarshipSection(vessel, yOffset: -22f);
         else                           BuildGenericVessel(vessel);
     }
 
@@ -770,17 +768,45 @@ public partial class VesselRenderer : Node3D
 
     private Node3D CreateGenericPartNode(Part part)
     {
-        var node = new MeshInstance3D { Name = part.Definition.Name.Replace(" ", "_") };
-        Mesh mesh = part.Definition.Category switch
+        var definition = part.Definition;
+        var node = new MeshInstance3D { Name = definition.Name.Replace(" ", "_") };
+        float diameter = (float)System.Math.Max(0.2, definition.DiameterM);
+        float radius = diameter * 0.5f;
+        float length = (float)System.Math.Max(0.2, definition.LengthM);
+        Mesh mesh = definition.Category switch
         {
-            PartCategory.Engine   => new CylinderMesh { TopRadius = 0.4f, BottomRadius = 0.8f, Height = 2f },
-            PartCategory.FuelTank => new CylinderMesh { TopRadius = 0.625f, BottomRadius = 0.625f, Height = 1.875f },
-            PartCategory.Command  => new SphereMesh   { Radius = 0.625f, Height = 1.25f },
-            _                     => (Mesh)new BoxMesh { Size = new Godot.Vector3(0.5f, 0.5f, 0.5f) },
+            PartCategory.Engine => new CylinderMesh
+            {
+                TopRadius = radius * 0.55f,
+                BottomRadius = radius,
+                Height = length,
+                RadialSegments = 32,
+            },
+            PartCategory.Fairing => new CapsuleMesh
+            {
+                Radius = radius,
+                Height = System.Math.Max(length, diameter),
+                RadialSegments = 32,
+                Rings = 12,
+            },
+            PartCategory.Command => new CapsuleMesh
+            {
+                Radius = System.Math.Min(radius, length * 0.5f),
+                Height = System.Math.Max(length, diameter),
+                RadialSegments = 32,
+                Rings = 10,
+            },
+            _ => new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius,
+                Height = length,
+                RadialSegments = 32,
+            },
         };
         node.Mesh = mesh;
         node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
-            { AlbedoColor = GetCategoryColor(part.Definition.Category) });
+            { AlbedoColor = GetCategoryColor(definition.Category), Roughness = 0.48f });
         return node;
     }
 
@@ -790,6 +816,7 @@ public partial class VesselRenderer : Node3D
         PartCategory.Engine    => new Color(0.6f, 0.6f, 0.65f),
         PartCategory.FuelTank  => new Color(0.8f, 0.85f, 0.9f),
         PartCategory.Decoupler => new Color(1f, 0.8f, 0.2f),
+        PartCategory.Fairing   => new Color(0.94f, 0.94f, 0.92f),
         _                      => new Color(0.7f, 0.7f, 0.7f),
     };
 

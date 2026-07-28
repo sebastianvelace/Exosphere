@@ -1,0 +1,173 @@
+{
+  "manifestId": "falcon9-block5-2025-05",
+  "records": [
+    {
+      "dataId": "merlin1d_cluster9_block5", "field": "thrust_sl",
+      "status": "derived",
+      "source": "SpaceX Falcon User's Guide, May 2025, p. 8; 9 × 845 kN",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5",
+      "conditions": "nine engines at sea level, rated thrust",
+      "uncertainty": "rounding inherited from published per-engine value"
+    },
+    {
+      "dataId": "merlin1d_cluster9_block5", "field": "thrust_vac",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; engineering estimate",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5",
+      "conditions": "nine sea-level Merlin 1D engines in vacuum",
+      "uncertainty": "±3%; not explicitly published in the cited guide"
+    },
+    {
+      "dataId": "merlin1d_cluster9_block5", "field": "isp_sl",
+      "status": "estimated",
+      "source": "SpaceX public Merlin performance summaries; engineering estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D Block 5",
+      "conditions": "Earth sea level, rated mixture and throttle",
+      "uncertainty": "±3 s"
+    },
+    {
+      "dataId": "merlin1d_cluster9_block5", "field": "isp_vac",
+      "status": "estimated",
+      "source": "SpaceX public Merlin performance summaries; engineering estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D Block 5",
+      "conditions": "vacuum, rated mixture and throttle",
+      "uncertainty": "±3 s"
+    },
+    {
+      "dataId": "merlin1d_cluster9_block5", "field": "mass_dry",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator mass allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 octaweb",
+      "conditions": "nine engines without stage tank structure",
+      "uncertainty": "±20%; not published"
+    },
+    {
+      "dataId": "merlin1d_vac_block5", "field": "thrust_vac",
+      "status": "published",
+      "source": "SpaceX Falcon User's Guide, May 2025, p. 8",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 second stage",
+      "conditions": "vacuum rated thrust",
+      "uncertainty": "not stated by publisher"
+    },
+    {
+      "dataId": "merlin1d_vac_block5", "field": "thrust_sl",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator back-pressure estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum Block 5",
+      "conditions": "hypothetical Earth sea-level operation",
+      "uncertainty": "±25%; not an operational rating"
+    },
+    {
+      "dataId": "merlin1d_vac_block5", "field": "isp_vac",
+      "status": "estimated",
+      "source": "SpaceX public Merlin performance summaries",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum Block 5",
+      "conditions": "vacuum, rated mixture and throttle",
+      "uncertainty": "±2 s"
+    },
+    {
+      "dataId": "merlin1d_vac_block5", "field": "mass_dry",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator mass allocation",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum Block 5",
+      "conditions": "engine assembly only",
+      "uncertainty": "±25%; not published"
+    },
+    {
+      "dataId": "falcon9_first_stage_tank", "field": "propellant_mass",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator stage allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 first stage",
+      "conditions": "fully loaded RP-1 and LOX",
+      "uncertainty": "±3%; component loading not published"
+    },
+    {
+      "dataId": "falcon9_first_stage_tank", "field": "mass_dry",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator stage allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 first stage",
+      "conditions": "tank and structure excluding engine cluster/interstage",
+      "uncertainty": "±15%; component mass not published"
+    },
+    {
+      "dataId": "falcon9_second_stage_tank", "field": "propellant_mass",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator stage allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 second stage",
+      "conditions": "fully loaded RP-1 and LOX",
+      "uncertainty": "±5%; component loading not published"
+    },
+    {
+      "dataId": "falcon9_second_stage_tank", "field": "mass_dry",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator stage allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 second stage",
+      "conditions": "tank and structure excluding MVac",
+      "uncertainty": "±20%; component mass not published"
+    },
+    {
+      "dataId": "falcon9_fairing_standard", "field": "envelope",
+      "status": "published",
+      "source": "SpaceX Falcon User's Guide, May 2025, payload environments section",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 standard fairing",
+      "conditions": "payload dynamic envelope",
+      "uncertainty": "diagram resolution; simulator uses rounded external dimensions"
+    },
+    {
+      "dataId": "falcon9_fairing_standard", "field": "mass_dry",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator mass allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 standard fairing",
+      "conditions": "both halves and separation hardware",
+      "uncertainty": "±20%; not published"
+    },
+    {
+      "dataId": "falcon9_fairing_extended", "field": "envelope",
+      "status": "published",
+      "source": "SpaceX Falcon User's Guide, May 2025, extended fairing envelope",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 extended fairing",
+      "conditions": "payload dynamic envelope",
+      "uncertainty": "diagram resolution; simulator uses rounded external dimensions"
+    },
+    {
+      "dataId": "falcon9_fairing_extended", "field": "mass_dry",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator mass allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 extended fairing",
+      "conditions": "both halves and separation hardware",
+      "uncertainty": "±25%; not published"
+    },
+    {
+      "dataId": "falcon9_interstage", "field": "mass_dry",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator mass allocation",
+      "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5",
+      "conditions": "interstage and pneumatic separation hardware",
+      "uncertainty": "±25%; not published"
+    },
+    {
+      "dataId": "falcon9_payload_simulator", "field": "mass_dry",
+      "status": "estimated",
+      "source": "Exosphere test article specification",
+      "accessedDate": "2026-07-27", "variant": "generic payload simulator",
+      "conditions": "fully integrated test payload",
+      "uncertainty": "user-selectable; exact for this simulator article"
+    },
+    {
+      "dataId": "engine_liquid_sl", "field": "thrust_sl",
+      "status": "published",
+      "source": "SpaceX Falcon User's Guide, May 2025, p. 8",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D Block 5 equivalent",
+      "conditions": "Earth sea level, rated thrust",
+      "uncertainty": "not stated by publisher"
+    },
+    {
+      "dataId": "engine_liquid_sl", "field": "thrust_vac",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide, May 2025; simulator pressure correction",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D Block 5 equivalent",
+      "conditions": "vacuum extrapolation for sea-level nozzle",
+      "uncertainty": "±3%; not explicitly published"
+    }
+  ]
+}

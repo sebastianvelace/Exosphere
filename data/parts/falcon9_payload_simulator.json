@@ -1,0 +1,16 @@
+{
+  "id": "falcon9_payload_simulator",
+  "name": "Falcon 9 Payload Simulator",
+  "description": "Instrumented 5 t payload simulator for Block 5 integration and deployment tests.",
+  "category": "command",
+  "mass_dry": 5000,
+  "length_m": 3.0,
+  "diameter_m": 3.2,
+  "cost": 0,
+  "drag_coefficient": 0.25,
+  "heat_tolerance": 400,
+  "ec_capacity": 100,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -1.5, 0], "size": 2, "type": "stack"}
+  ]
+}

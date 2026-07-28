@@ -1,0 +1,24 @@
+{
+  "id": "merlin1d_cluster9_block5",
+  "name": "Nine Merlin 1D — Block 5",
+  "description": "Octaweb cluster with nine individually accounted Merlin 1D engines.",
+  "category": "engine",
+  "mass_dry": 4230,
+  "length_m": 3.2,
+  "diameter_m": 3.7,
+  "cost": 9000000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1600,
+  "thrust_vac": 8226000,
+  "thrust_sl": 7605000,
+  "isp_vac": 311,
+  "isp_sl": 282,
+  "gimbal_range": 5.0,
+  "fuel_type": "LiquidFuel+Oxidizer",
+  "mixture_ratio": 2.56,
+  "engine_count": 9,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.6, 0], "size": 2, "type": "stack"},
+    {"id": "engine_bell", "position": [0, -1.6, 0], "size": 0, "type": "engine_bell"}
+  ]
+}

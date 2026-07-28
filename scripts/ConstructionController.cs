@@ -184,6 +184,18 @@ public partial class ConstructionController : Control
         starship.Pressed += OnStarshipTemplate;
         buttons.AddChild(starship);
 
+        var falcon9 = new Button { Text = "Falcon 9 B5" };
+        falcon9.TooltipText = "Dated May 2025 preset with standard fairing";
+        falcon9.Pressed += () => OnVehicleVariant(
+            "falcon9_block5_standard_2025.json");
+        buttons.AddChild(falcon9);
+
+        var falcon9Extended = new Button { Text = "F9 Extended" };
+        falcon9Extended.TooltipText = "Dated May 2025 preset with extended fairing";
+        falcon9Extended.Pressed += () => OnVehicleVariant(
+            "falcon9_block5_extended_2025.json");
+        buttons.AddChild(falcon9Extended);
+
         _undoButton = new Button { Text = "Undo" };
         _undoButton.Pressed += OnUndo;
         buttons.AddChild(_undoButton);
@@ -764,6 +776,29 @@ public partial class ConstructionController : Control
         "starship_landing_gear",
         "decoupler_heavy",
         "super_heavy_booster");
+
+    private void OnVehicleVariant(string fileName)
+    {
+        if (_catalog == null) return;
+        try
+        {
+            if (_assembly != null) RecordUndo();
+            string path = ProjectSettings.GlobalizePath($"res://data/vehicles/{fileName}");
+            var variant = VehicleVariantDefinition.LoadFromJson(path);
+            _assembly = variant.Build(_catalog);
+            _craftName.Text = variant.Name;
+            ClearSelection();
+            Refresh();
+            SelectInstance(_assembly.Parts[^1].InstanceId, syncList: true);
+            SetStatus(
+                $"Loaded dated preset {variant.Id} ({variant.AsOfDate:yyyy-MM-dd}). " +
+                "Estimated values are identified in data/provenance.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
 
     private void BuildTemplate(string name, params string[] definitionIds)
     {

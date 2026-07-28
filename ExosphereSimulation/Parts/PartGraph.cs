@@ -427,6 +427,46 @@ public class PartGraph
         return detachedGraph;
     }
 
+    /// <summary>
+    /// Detaches an arbitrary non-root subtree, used for payload, capsule and rover
+    /// deployment. Part objects and their stable IDs move to the new graph unchanged.
+    /// </summary>
+    public PartGraph? DetachSubtree(string rootInstanceId)
+    {
+        var separationRoot = _parts.FirstOrDefault(p => p.InstanceId == rootInstanceId);
+        if (separationRoot == null) return null;
+        if (separationRoot == _root)
+        {
+            var rootChildren = GetChildren(separationRoot).ToList();
+            if (rootChildren.Count != 1) return null;
+            var rootJoint = GetJoint(separationRoot, rootChildren[0]);
+            if (rootJoint == null) return null;
+            var detachedRoot = new PartGraph();
+            detachedRoot.SetRoot(separationRoot);
+            _joints.Remove(rootJoint);
+            _parts.Remove(separationRoot);
+            _root = rootChildren[0];
+            return detachedRoot;
+        }
+        var separationJoint = _joints.FirstOrDefault(j => j.Child == separationRoot);
+        if (separationJoint == null) return null;
+
+        var detachedParts = CollectSubtree(separationRoot);
+        var detachedGraph = new PartGraph();
+        detachedGraph.SetRoot(separationRoot);
+        foreach (var part in detachedParts) detachedGraph.AddPart(part);
+        foreach (var joint in _joints
+                     .Where(j => detachedParts.Contains(j.Parent) && detachedParts.Contains(j.Child))
+                     .ToList())
+        {
+            detachedGraph.AddJoint(joint);
+            _joints.Remove(joint);
+        }
+        _joints.Remove(separationJoint);
+        foreach (var part in detachedParts) _parts.Remove(part);
+        return detachedGraph;
+    }
+
     // ── Posiciones locales de piezas (para CoM y renderizado) ─────────────
     public Dictionary<Part, Vector3d> ComputePartLocalPositions()
     {

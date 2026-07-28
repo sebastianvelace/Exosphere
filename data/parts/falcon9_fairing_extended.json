@@ -1,0 +1,17 @@
+{
+  "id": "falcon9_fairing_extended",
+  "name": "Falcon 9 Extended Fairing",
+  "description": "Extended payload fairing envelope from the May 2025 Falcon user's guide.",
+  "category": "fairing",
+  "mass_dry": 2300,
+  "length_m": 18.7,
+  "diameter_m": 5.2,
+  "cost": 7000000,
+  "drag_coefficient": 0.14,
+  "heat_tolerance": 390,
+  "deployable": true,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 9.35, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -9.35, 0], "size": 2, "type": "stack"}
+  ]
+}

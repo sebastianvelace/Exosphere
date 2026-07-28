@@ -1,0 +1,18 @@
+{
+  "id": "falcon9_first_stage_tank",
+  "name": "Falcon 9 Block 5 First Stage",
+  "description": "RP-1/LOX first-stage tank and structure; unpublished allocations are engineering estimates.",
+  "category": "fuel_tank",
+  "mass_dry": 21370,
+  "length_m": 40.9,
+  "diameter_m": 3.7,
+  "cost": 20000000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 750,
+  "fuel_capacity_lf": 115449,
+  "fuel_capacity_ox": 295551,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 20.45, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -20.45, 0], "size": 2, "type": "stack"}
+  ]
+}

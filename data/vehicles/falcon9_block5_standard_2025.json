@@ -1,0 +1,17 @@
+{
+  "id": "falcon9-block5-standard-2025-05",
+  "name": "Falcon 9 Block 5 — Standard Fairing",
+  "family": "Falcon 9",
+  "asOfDate": "2025-05-09",
+  "fairingVariant": "standard",
+  "primarySource": "https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf",
+  "stackTopToBottom": [
+    "falcon9_payload_simulator",
+    "falcon9_fairing_standard",
+    "falcon9_second_stage_tank",
+    "merlin1d_vac_block5",
+    "falcon9_interstage",
+    "falcon9_first_stage_tank",
+    "merlin1d_cluster9_block5"
+  ]
+}

@@ -52,6 +52,7 @@ public partial class VabPickingLayer : Node3D
         "super_heavy_booster" => 1.7f,
         "starship_engines"    => 1.7f,
         "starship_command"    => 1.7f,
+        _ when def.DiameterM > 0.0 => (float)def.DiameterM * 0.5f,
         _ => def.Category switch
         {
             PartCategory.FuelTank => 0.75f,
@@ -67,6 +68,7 @@ public partial class VabPickingLayer : Node3D
         "super_heavy_booster" => 11f,   // SH body spans ~y=2..20
         "starship_engines"    => 8f,    // ship section spans ~16 u
         "starship_command"    => 8f,
+        _ when def.LengthM > 0.0 => (float)def.LengthM * 0.5f,
         _ => def.Category switch
         {
             PartCategory.FuelTank => MaxStackHalf(def, 1.8f),
