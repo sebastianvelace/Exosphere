@@ -4,6 +4,7 @@ using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Data;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Propulsion;
 
 public sealed class Falcon9Block5Tests
 {
@@ -96,6 +97,29 @@ public sealed class Falcon9Block5Tests
         universe.AddVessel(payload);
         Assert.True(universe.SetActiveVessel(payload.Id));
         Assert.Same(payload, universe.ActiveVessel);
+    }
+
+    [Fact]
+    public void MerlinAcceptanceStandIsDeterministicAndPreservesThrustFlowIspIdentity()
+    {
+        var definition = LoadCatalog()["merlin1d_cluster9_block5"];
+        var profile = EngineTestProfile.Merlin1DAcceptance();
+
+        var first = EngineTestStand.Run(definition, profile, 0.02);
+        var second = EngineTestStand.Run(definition, profile, 0.02);
+
+        Assert.True(first.Passed);
+        Assert.Equal(first.TotalImpulseNs, second.TotalImpulseNs);
+        Assert.Equal(first.PropellantConsumedKg, second.PropellantConsumedKg);
+        Assert.Equal(definition.ThrustSL, first.PeakThrustN, 6);
+        Assert.Contains(first.Telemetry, t => t.Phase == EngineTestPhase.Preparation);
+        Assert.Contains(first.Telemetry, t => t.Phase == EngineTestPhase.Chill);
+        Assert.Contains(first.Telemetry, t => t.Phase == EngineTestPhase.Ignition);
+        Assert.Contains(first.Telemetry, t => t.Phase == EngineTestPhase.Shutdown);
+        Assert.Equal(
+            definition.IspSL,
+            first.TotalImpulseNs / (first.PropellantConsumedKg * 9.80665),
+            8);
     }
 
     private static PartCatalog LoadCatalog() =>

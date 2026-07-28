@@ -275,13 +275,21 @@ public partial class SimulationBridge : Node
 
     private void SpawnPendingConstructedVessel(string dataPath)
     {
-        var craft = CraftLaunchRequest.Pop();
-        if (craft == null) return;
+        var intent = CraftLaunchRequest.Pop();
+        var craft = intent?.Craft;
+        if (intent == null || craft == null) return;
 
         var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(dataPath, "parts"));
+        var sites = LaunchSite.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "launch_sites"));
+        if (!sites.TryGetValue(intent.LaunchSiteId, out _launchSite))
+            throw new InvalidOperationException(
+                $"Launch intent references unknown site '{intent.LaunchSiteId}'.");
+        LaunchSiteId = intent.LaunchSiteId;
         var assembly = VesselAssembly.FromCraft(catalog, craft);
         PlaceConstructedVesselOnPad(assembly.ToVessel(craft.Name));
-        GD.Print($"[VAB] Placed constructed craft on pad: {craft.Name}");
+        GD.Print(
+            $"[VAB] Placed {craft.Name} at {intent.LaunchSiteId}; " +
+            $"profile={intent.FlightProfileId}, mission={intent.MissionId ?? "sandbox"}");
     }
 
     // ── Starship + Super Heavy stack on Starbase launchpad ────────────────

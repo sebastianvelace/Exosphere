@@ -1,0 +1,47 @@
+{
+  "manifestVersion": 1,
+  "commercialReleaseBlockedUntilReviewed": true,
+  "assets": [
+    {
+      "path": "assets/textures/*.jpg",
+      "category": "texture",
+      "license": "unknown",
+      "source": "repository pre-existing assets",
+      "commercialUse": "review_required",
+      "notes": "Replace or document original source and license before commercial distribution."
+    },
+    {
+      "path": "assets/shaders/*.gdshader",
+      "category": "source_code",
+      "license": "project_license",
+      "source": "Exosphere repository",
+      "commercialUse": "project_policy",
+      "notes": "Confirm contributor assignments before release."
+    },
+    {
+      "path": "icon.svg",
+      "category": "artwork",
+      "license": "project_license",
+      "source": "Exosphere repository",
+      "commercialUse": "project_policy",
+      "notes": "Confirm authorship before release."
+    }
+  ],
+  "fonts": [],
+  "models": [],
+  "audio": [],
+  "marks": [
+    {
+      "name": "NASA",
+      "owner": "National Aeronautics and Space Administration",
+      "usage": "historical identification",
+      "status": "legal_review_required"
+    },
+    {
+      "name": "SpaceX, Falcon, Merlin, Dragon, Starship and Raptor",
+      "owner": "Space Exploration Technologies Corp.",
+      "usage": "historical and technical identification",
+      "status": "legal_review_required"
+    }
+  ]
+}

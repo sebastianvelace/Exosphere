@@ -11,6 +11,7 @@ public partial class ConstructionController : Control
 
     private PartCatalog? _catalog;
     private VesselAssembly? _assembly;
+    private string? _vehicleVariantId;
 
     private ItemList _catalogList = null!;
     private ItemList _stackList = null!;
@@ -418,7 +419,8 @@ public partial class ConstructionController : Control
             string dir = CraftDirectory();
             System.IO.Directory.CreateDirectory(dir);
             string path = System.IO.Path.Combine(dir, $"{SafeCraftFileName()}.json");
-            var craft = _assembly.ToCraft(CraftName());
+            var craft = _assembly.ToCraftDocument(CraftName());
+            craft.VehicleVariantId = _vehicleVariantId;
             System.IO.File.WriteAllText(path, JsonSerializer.Serialize(craft, JsonOptions));
             RefreshCraftBrowser();
             SetStatus($"Saved craft: {path}");
@@ -446,15 +448,9 @@ public partial class ConstructionController : Control
         if (_catalog == null) return false;
         try
         {
-            var craft = JsonSerializer.Deserialize<VesselCraftDefinition>(
-                System.IO.File.ReadAllText(path), JsonOptions);
-            if (craft == null)
-            {
-                SetStatus("Craft file is empty or invalid.");
-                return false;
-            }
-
+            var craft = ReadCraftDocument(path);
             _assembly = VesselAssembly.FromCraft(_catalog, craft);
+            _vehicleVariantId = craft.VehicleVariantId;
             _undo.Clear();
             _redo.Clear();
             _craftName.Text = craft.Name;
@@ -506,9 +502,7 @@ public partial class ConstructionController : Control
         string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
         try
         {
-            var craft = JsonSerializer.Deserialize<VesselCraftDefinition>(
-                System.IO.File.ReadAllText(path), JsonOptions);
-            if (craft == null) return $"{fileName}  [invalid]";
+            var craft = ReadCraftDocument(path);
 
             string detail = $"{craft.Parts.Count} parts";
             if (_catalog != null && craft.Parts.Count > 0)
@@ -530,6 +524,20 @@ public partial class ConstructionController : Control
         {
             return $"{fileName}  [unreadable]";
         }
+    }
+
+    private static CraftDocumentV2 ReadCraftDocument(string path)
+    {
+        string json = System.IO.File.ReadAllText(path);
+        using var parsed = JsonDocument.Parse(json);
+        if (parsed.RootElement.TryGetProperty("FormatVersion", out _))
+        {
+            return JsonSerializer.Deserialize<CraftDocumentV2>(json, JsonOptions)
+                ?? throw new InvalidDataException("Craft document is empty.");
+        }
+        var legacy = JsonSerializer.Deserialize<VesselCraftDefinition>(json, JsonOptions)
+            ?? throw new InvalidDataException("Legacy craft document is empty.");
+        return CraftDocumentMigration.FromLegacy(legacy);
     }
 
     private void OnCraftBrowserActivated(long index) => LoadCraftAt((int)index);
@@ -560,7 +568,18 @@ public partial class ConstructionController : Control
                 SetStatus(validation.Errors[0]);
                 return;
             }
-            CraftLaunchRequest.Set(_assembly.ToCraft(CraftName()));
+            bool falcon = _vehicleVariantId?.StartsWith(
+                "falcon9-", StringComparison.OrdinalIgnoreCase) == true;
+            var launchCraft = _assembly.ToCraftDocument(CraftName());
+            launchCraft.VehicleVariantId = _vehicleVariantId;
+            CraftLaunchRequest.Set(new LaunchIntent
+            {
+                Mode = "sandbox",
+                VehicleVariantId = _vehicleVariantId,
+                LaunchSiteId = falcon ? "kennedy" : "starbase",
+                FlightProfileId = falcon ? "falcon9-block5-ascent" : "manual",
+                Craft = launchCraft,
+            });
             GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
         }
         catch (Exception ex)
@@ -756,6 +775,7 @@ public partial class ConstructionController : Control
         if (_assembly != null && _assembly.Parts.Count > 0)
             RecordUndo();
         _assembly = new VesselAssembly(_catalog);
+        _vehicleVariantId = null;
         _craftName.Text = "Constructed Vessel";
         ClearSelection();
         Refresh();
@@ -786,6 +806,7 @@ public partial class ConstructionController : Control
             string path = ProjectSettings.GlobalizePath($"res://data/vehicles/{fileName}");
             var variant = VehicleVariantDefinition.LoadFromJson(path);
             _assembly = variant.Build(_catalog);
+            _vehicleVariantId = variant.Id;
             _craftName.Text = variant.Name;
             ClearSelection();
             Refresh();
@@ -807,6 +828,7 @@ public partial class ConstructionController : Control
         {
             if (_assembly != null) RecordUndo();
             var next = new VesselAssembly(_catalog);
+            _vehicleVariantId = null;
             var current = next.AddRoot(definitionIds[0]);
             foreach (string definitionId in definitionIds.Skip(1))
                 current = next.AttachPartAutomatically(current.InstanceId, definitionId);
@@ -848,6 +870,7 @@ public partial class ConstructionController : Control
     {
         if (_catalog == null) return;
         _assembly = VesselAssembly.FromCraft(_catalog, craft);
+        _vehicleVariantId = null;
         _craftName.Text = craft.Name;
         ClearSelection();
         Refresh();
