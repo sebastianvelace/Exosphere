@@ -22,6 +22,10 @@ Base tecnica cerrada en `main`:
 - `CraftDocumentV2`, `SaveGameV2`, IDs estables, multi-vessel y
   `SetActiveVessel` preservan crafts, sistemas, navegación, payloads y estado de
   campaña; los payloads desplegados se vuelven vehículos controlables.
+- Docking físico one-to-one ya tiene puertos data-driven, captura limitada por
+  distancia/velocidad/alineación, conservación de momento, vínculo rígido,
+  desacople y round-trip en `SaveGameV2`. Es la base de Gemini 8; estaciones
+  multimódulo e inercia agregada permanecen en su hito posterior.
 - Falcon 9 Block 5 y New Glenn 7x2 tienen presets fechados, motores/clusters
   data-driven, procedencia obligatoria y escenarios propios.
 - Starship Flight 7 Block 2/Raptor 2 y Flight 12 V3/Raptor 3 son variantes
@@ -155,6 +159,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Friendship 7 / Mercury-Atlas 6 ✅ — misión headless de tres órbitas, retrofire,
   reentrada, splashdown y capturas de pad/liftoff. Pendiente: Gemini 8 y
   definiciones 3–16.
+- Fundación de docking Gemini 8 ✅ — puertos data-driven, hard dock conservativo,
+  desacople y persistencia V2. Pendiente: hardware Titan II/Gemini/Agena e
+  incidente OAMS de la misión.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 

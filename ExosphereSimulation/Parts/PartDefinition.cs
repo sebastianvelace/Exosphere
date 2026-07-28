@@ -163,6 +163,21 @@ public class PartDefinition
     [JsonPropertyName("detach_with_lower_stage")]
     public bool DetachWithLowerStage { get; set; }
 
+    // Docking. A docking part names an attachment node whose local position is
+    // resolved through the same graph geometry used by VAB and centre-of-mass.
+    [JsonPropertyName("is_docking_port")]
+    public bool IsDockingPort { get; set; }
+    [JsonPropertyName("docking_node_id")]
+    public string DockingNodeId { get; set; } = "dock";
+    [JsonPropertyName("docking_axis_local")]
+    public double[] DockingAxisLocal { get; set; } = [0.0, 1.0, 0.0];
+    [JsonPropertyName("docking_capture_range_m")]
+    public double DockingCaptureRangeM { get; set; } = 0.5;
+    [JsonPropertyName("docking_max_capture_speed_mps")]
+    public double DockingMaxCaptureSpeedMps { get; set; } = 0.3;
+    [JsonPropertyName("docking_alignment_tolerance_deg")]
+    public double DockingAlignmentToleranceDeg { get; set; } = 15.0;
+
     [JsonIgnore]
     public PartCategory Category => CategoryStr.ToLowerInvariant() switch
     {
@@ -195,8 +210,35 @@ public class PartDefinition
     public static PartDefinition LoadFromJson(string jsonPath)
     {
         var text = File.ReadAllText(jsonPath);
-        return JsonSerializer.Deserialize<PartDefinition>(text, _opts)
-               ?? throw new InvalidOperationException($"Failed to parse part JSON: {jsonPath}");
+        var definition = JsonSerializer.Deserialize<PartDefinition>(text, _opts)
+            ?? throw new InvalidOperationException(
+                $"Failed to parse part JSON: {jsonPath}");
+        definition.ValidateDockingDefinition(jsonPath);
+        return definition;
+    }
+
+    private void ValidateDockingDefinition(string source)
+    {
+        if (!IsDockingPort) return;
+        bool finiteAxis = DockingAxisLocal is { Length: >= 3 }
+            && DockingAxisLocal.Take(3).All(double.IsFinite);
+        double axisMagnitudeSquared = finiteAxis
+            ? DockingAxisLocal.Take(3).Sum(value => value * value)
+            : 0.0;
+        if (string.IsNullOrWhiteSpace(DockingNodeId)
+            || AttachmentNodes.All(node =>
+                !string.Equals(
+                    node.Id, DockingNodeId, StringComparison.Ordinal))
+            || !finiteAxis
+            || axisMagnitudeSquared < 0.5
+            || !double.IsFinite(DockingCaptureRangeM)
+            || DockingCaptureRangeM <= 0.0
+            || !double.IsFinite(DockingMaxCaptureSpeedMps)
+            || DockingMaxCaptureSpeedMps <= 0.0
+            || !double.IsFinite(DockingAlignmentToleranceDeg)
+            || DockingAlignmentToleranceDeg is <= 0.0 or > 90.0)
+            throw new InvalidDataException(
+                $"Invalid docking port definition '{Id}' in '{source}'.");
     }
 
     public static Dictionary<string, PartDefinition> LoadAllFromDirectory(string dirPath)

@@ -633,6 +633,32 @@ public class PartGraph
         return positions;
     }
 
+    /// <summary>
+    /// Resolves one attachment node into vessel-local coordinates using the same
+    /// topology and dimensions that drive centre-of-mass and rendering.
+    /// </summary>
+    public bool TryGetAttachmentNodeLocalPosition(
+        string partInstanceId,
+        string nodeId,
+        out Vector3d position)
+    {
+        position = Vector3d.Zero;
+        var part = _parts.FirstOrDefault(candidate =>
+            candidate.InstanceId == partInstanceId);
+        if (part == null) return false;
+        var node = part.Definition.AttachmentNodes.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, nodeId, StringComparison.Ordinal));
+        if (node?.Position is not { Length: >= 3 }) return false;
+        var partPositions = ComputePartLocalPositions();
+        if (!partPositions.TryGetValue(part, out var partPosition))
+            return false;
+        position = partPosition + new Vector3d(
+            node.Position[0], node.Position[1], node.Position[2]);
+        return double.IsFinite(position.X)
+            && double.IsFinite(position.Y)
+            && double.IsFinite(position.Z);
+    }
+
     private void AssignPositions(Part part, Vector3d pos, Dictionary<Part, Vector3d> map)
     {
         map[part] = pos;

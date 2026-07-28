@@ -5,6 +5,7 @@
 
 namespace Exosphere.Simulation;
 
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Integrators;
 using Exosphere.Simulation.Math;
 
@@ -18,9 +19,12 @@ public class Universe
     private readonly List<CelestialBody> _bodies  = new();
     private readonly List<Vessel>        _vessels = new();
     private readonly List<Vessel>        _pendingStructuralDebris = new();
+    private readonly List<DockingConnection> _dockingConnections = new();
 
     public IReadOnlyList<CelestialBody> Bodies  => _bodies.AsReadOnly();
     public IReadOnlyList<Vessel>        Vessels => _vessels.AsReadOnly();
+    public IReadOnlyList<DockingConnection> DockingConnections =>
+        _dockingConnections.AsReadOnly();
 
     /// <summary>Current simulation time (seconds since J2000).</summary>
     public double CurrentTime { get; private set; } = 0.0;
@@ -126,9 +130,292 @@ public class Universe
     /// <summary>Removes a vessel from the universe.</summary>
     public void RemoveVessel(Vessel vessel)
     {
+        _dockingConnections.RemoveAll(connection =>
+            connection.PrimaryVesselId == vessel.Id
+            || connection.SecondaryVesselId == vessel.Id);
         _vessels.Remove(vessel);
         if (ReferenceEquals(ActiveVessel, vessel))
             ActiveVessel = null;
+    }
+
+    public DockingAttempt TryDock(
+        string primaryVesselId,
+        string primaryPortPartId,
+        string secondaryVesselId,
+        string secondaryPortPartId,
+        string? connectionId = null)
+    {
+        if (primaryVesselId == secondaryVesselId)
+            return FailedDocking(DockingFailure.SameVessel);
+        if (!string.IsNullOrWhiteSpace(connectionId)
+            && _dockingConnections.Any(connection =>
+                connection.Id == connectionId))
+            return FailedDocking(DockingFailure.ConnectionIdConflict);
+        var primary = _vessels.FirstOrDefault(v => v.Id == primaryVesselId);
+        var secondary = _vessels.FirstOrDefault(v => v.Id == secondaryVesselId);
+        if (primary == null || secondary == null)
+            return FailedDocking(DockingFailure.VesselMissing);
+        if (_dockingConnections.Any(connection =>
+                connection.PrimaryVesselId == primaryVesselId
+                || connection.SecondaryVesselId == primaryVesselId
+                || connection.PrimaryVesselId == secondaryVesselId
+                || connection.SecondaryVesselId == secondaryVesselId))
+            return FailedDocking(DockingFailure.VesselAlreadyDocked);
+
+        var primaryPort = primary.Parts.Parts.FirstOrDefault(part =>
+            part.InstanceId == primaryPortPartId);
+        var secondaryPort = secondary.Parts.Parts.FirstOrDefault(part =>
+            part.InstanceId == secondaryPortPartId);
+        if (primaryPort == null || secondaryPort == null)
+            return FailedDocking(DockingFailure.PortMissing);
+        if (!primaryPort.Definition.IsDockingPort
+            || !secondaryPort.Definition.IsDockingPort
+            || primaryPort.IsBroken
+            || secondaryPort.IsBroken)
+            return FailedDocking(DockingFailure.PortUnavailable);
+        if (_dockingConnections.Any(connection =>
+                connection.PrimaryPortPartId == primaryPortPartId
+                || connection.SecondaryPortPartId == primaryPortPartId
+                || connection.PrimaryPortPartId == secondaryPortPartId
+                || connection.SecondaryPortPartId == secondaryPortPartId))
+            return FailedDocking(DockingFailure.PortUnavailable);
+        if (!TryGetDockingFrame(
+                primary, primaryPort, out var primaryPosition,
+                out var primaryAxis, out var primaryVelocity)
+            || !TryGetDockingFrame(
+                secondary, secondaryPort, out var secondaryPosition,
+                out var secondaryAxis, out var secondaryVelocity))
+            return FailedDocking(DockingFailure.PortMissing);
+
+        double distance = (secondaryPosition - primaryPosition).Magnitude;
+        double relativeSpeed = (secondaryVelocity - primaryVelocity).Magnitude;
+        double alignmentError = System.Math.Acos(System.Math.Clamp(
+            primaryAxis.Dot(-secondaryAxis), -1.0, 1.0))
+            * MathUtils.RAD_TO_DEG;
+        double captureRange = System.Math.Min(
+            primaryPort.Definition.DockingCaptureRangeM,
+            secondaryPort.Definition.DockingCaptureRangeM);
+        double maximumSpeed = System.Math.Min(
+            primaryPort.Definition.DockingMaxCaptureSpeedMps,
+            secondaryPort.Definition.DockingMaxCaptureSpeedMps);
+        double alignmentTolerance = System.Math.Min(
+            primaryPort.Definition.DockingAlignmentToleranceDeg,
+            secondaryPort.Definition.DockingAlignmentToleranceDeg);
+        if (distance > captureRange)
+            return FailedDocking(
+                DockingFailure.OutsideCaptureRange,
+                distance, relativeSpeed, alignmentError);
+        if (relativeSpeed > maximumSpeed)
+            return FailedDocking(
+                DockingFailure.ExcessiveClosingSpeed,
+                distance, relativeSpeed, alignmentError);
+        if (alignmentError > alignmentTolerance)
+            return FailedDocking(
+                DockingFailure.Misaligned,
+                distance, relativeSpeed, alignmentError);
+
+        var connection = new DockingConnection
+        {
+            Id = string.IsNullOrWhiteSpace(connectionId)
+                ? Guid.NewGuid().ToString()
+                : connectionId,
+            PrimaryVesselId = primary.Id,
+            SecondaryVesselId = secondary.Id,
+            PrimaryPortPartId = primaryPort.InstanceId,
+            SecondaryPortPartId = secondaryPort.InstanceId,
+            PrimaryPortNodeId = primaryPort.Definition.DockingNodeId,
+            SecondaryPortNodeId = secondaryPort.Definition.DockingNodeId,
+            SecondaryPositionPrimaryLocal = primary.Orientation.Inverse().Rotate(
+                secondary.Position - primary.Position),
+            SecondaryOrientationPrimaryLocal =
+                (primary.Orientation.Inverse() * secondary.Orientation).Normalize(),
+        };
+        CaptureDockingMomentum(primary, secondary);
+        primary.IsOnRails = false;
+        primary.OrbitalState = null;
+        secondary.IsOnRails = false;
+        secondary.OrbitalState = null;
+        _dockingConnections.Add(connection);
+        ApplyDockingConstraint(connection);
+        return new DockingAttempt(
+            true, DockingFailure.None, connection,
+            distance, relativeSpeed, alignmentError);
+    }
+
+    public bool Undock(string connectionId, double separationSpeedMps = 0.0)
+    {
+        var connection = _dockingConnections.FirstOrDefault(candidate =>
+            candidate.Id == connectionId);
+        if (connection == null || separationSpeedMps < 0.0
+            || !double.IsFinite(separationSpeedMps))
+            return false;
+        var primary = _vessels.FirstOrDefault(
+            v => v.Id == connection.PrimaryVesselId);
+        var secondary = _vessels.FirstOrDefault(
+            v => v.Id == connection.SecondaryVesselId);
+        _dockingConnections.Remove(connection);
+        if (primary == null || secondary == null || separationSpeedMps == 0.0)
+            return true;
+
+        Vector3d direction = (secondary.Position - primary.Position).Normalized;
+        if (direction.MagnitudeSquared < 0.5)
+            direction = primary.Orientation.Rotate(Vector3d.Up);
+        double totalMass = primary.TotalMass + secondary.TotalMass;
+        if (totalMass <= 0.0) return true;
+        primary.Velocity -= direction
+            * (separationSpeedMps * secondary.TotalMass / totalMass);
+        secondary.Velocity += direction
+            * (separationSpeedMps * primary.TotalMass / totalMass);
+        return true;
+    }
+
+    public void RestoreDockingConnection(DockingConnection connection)
+    {
+        if (string.IsNullOrWhiteSpace(connection.Id)
+            || _dockingConnections.Any(candidate =>
+                candidate.Id == connection.Id))
+            throw new InvalidDataException(
+                $"Invalid or duplicate docking connection '{connection.Id}'.");
+        var primary = _vessels.FirstOrDefault(
+            v => v.Id == connection.PrimaryVesselId);
+        var secondary = _vessels.FirstOrDefault(
+            v => v.Id == connection.SecondaryVesselId);
+        if (primary == null || secondary == null
+            || primary.Parts.Parts.All(part =>
+                part.InstanceId != connection.PrimaryPortPartId
+                || !part.Definition.IsDockingPort)
+            || secondary.Parts.Parts.All(part =>
+                part.InstanceId != connection.SecondaryPortPartId
+                || !part.Definition.IsDockingPort)
+            || _dockingConnections.Any(candidate =>
+                candidate.PrimaryVesselId == primary.Id
+                || candidate.SecondaryVesselId == primary.Id
+                || candidate.PrimaryVesselId == secondary.Id
+                || candidate.SecondaryVesselId == secondary.Id
+                || candidate.PrimaryPortPartId
+                    == connection.PrimaryPortPartId
+                || candidate.SecondaryPortPartId
+                    == connection.PrimaryPortPartId
+                || candidate.PrimaryPortPartId
+                    == connection.SecondaryPortPartId
+                || candidate.SecondaryPortPartId
+                    == connection.SecondaryPortPartId))
+            throw new InvalidDataException(
+                $"Docking connection '{connection.Id}' has invalid references.");
+        _dockingConnections.Add(connection);
+        ApplyDockingConstraint(connection);
+    }
+
+    private static DockingAttempt FailedDocking(
+        DockingFailure failure,
+        double distance = double.NaN,
+        double relativeSpeed = double.NaN,
+        double alignmentError = double.NaN) =>
+        new(false, failure, null, distance, relativeSpeed, alignmentError);
+
+    private static bool TryGetDockingFrame(
+        Vessel vessel,
+        Parts.Part part,
+        out Vector3d position,
+        out Vector3d axis,
+        out Vector3d velocity)
+    {
+        position = vessel.Position;
+        axis = Vector3d.Zero;
+        velocity = vessel.Velocity;
+        var definition = part.Definition;
+        if (definition.DockingAxisLocal is not { Length: >= 3 }
+            || !vessel.Parts.TryGetAttachmentNodeLocalPosition(
+                part.InstanceId, definition.DockingNodeId, out var localPosition))
+            return false;
+        Vector3d offset = vessel.Orientation.Rotate(localPosition);
+        Vector3d localAxis = new(
+            definition.DockingAxisLocal[0],
+            definition.DockingAxisLocal[1],
+            definition.DockingAxisLocal[2]);
+        if (!double.IsFinite(localAxis.X)
+            || !double.IsFinite(localAxis.Y)
+            || !double.IsFinite(localAxis.Z)
+            || localAxis.MagnitudeSquared < 0.5)
+            return false;
+        position += offset;
+        axis = vessel.Orientation.Rotate(localAxis.Normalized);
+        velocity += vessel.AngularVelocity.Cross(offset);
+        return true;
+    }
+
+    private static void CaptureDockingMomentum(
+        Vessel primary,
+        Vessel secondary)
+    {
+        double primaryMass = primary.TotalMass;
+        double secondaryMass = secondary.TotalMass;
+        double totalMass = primaryMass + secondaryMass;
+        if (totalMass <= 0.0) return;
+        Vector3d centre = (
+            primary.Position * primaryMass
+            + secondary.Position * secondaryMass) / totalMass;
+        Vector3d commonVelocity = (
+            primary.Velocity * primaryMass
+            + secondary.Velocity * secondaryMass) / totalMass;
+        Vector3d primaryArm = primary.Position - centre;
+        Vector3d secondaryArm = secondary.Position - centre;
+        double primaryInertia = primary.Parts.TransverseMomentOfInertia;
+        double secondaryInertia = secondary.Parts.TransverseMomentOfInertia;
+        Vector3d angularMomentum =
+            primary.AngularVelocity * primaryInertia
+            + secondary.AngularVelocity * secondaryInertia
+            + primaryArm.Cross(
+                (primary.Velocity - commonVelocity) * primaryMass)
+            + secondaryArm.Cross(
+                (secondary.Velocity - commonVelocity) * secondaryMass);
+        double combinedInertia = primaryInertia + secondaryInertia
+            + primaryMass * primaryArm.MagnitudeSquared
+            + secondaryMass * secondaryArm.MagnitudeSquared;
+        Vector3d commonAngularVelocity = combinedInertia > 0.0
+            ? angularMomentum / combinedInertia
+            : Vector3d.Zero;
+        primary.AngularVelocity = commonAngularVelocity;
+        secondary.AngularVelocity = commonAngularVelocity;
+        primary.Velocity = commonVelocity
+            + commonAngularVelocity.Cross(primaryArm);
+        secondary.Velocity = commonVelocity
+            + commonAngularVelocity.Cross(secondaryArm);
+    }
+
+    private bool IsDockedSecondary(Vessel vessel) =>
+        _dockingConnections.Any(connection =>
+            connection.SecondaryVesselId == vessel.Id);
+
+    private void ApplyDockingConstraints()
+    {
+        _dockingConnections.RemoveAll(connection =>
+            _vessels.All(v =>
+                v.Id != connection.PrimaryVesselId || v.IsDestroyed)
+            || _vessels.All(v =>
+                v.Id != connection.SecondaryVesselId || v.IsDestroyed));
+        foreach (var connection in _dockingConnections)
+            ApplyDockingConstraint(connection);
+    }
+
+    private void ApplyDockingConstraint(DockingConnection connection)
+    {
+        var primary = _vessels.FirstOrDefault(
+            v => v.Id == connection.PrimaryVesselId);
+        var secondary = _vessels.FirstOrDefault(
+            v => v.Id == connection.SecondaryVesselId);
+        if (primary == null || secondary == null) return;
+        Vector3d offset = primary.Orientation.Rotate(
+            connection.SecondaryPositionPrimaryLocal);
+        secondary.Position = primary.Position + offset;
+        secondary.Orientation = (
+            primary.Orientation
+            * connection.SecondaryOrientationPrimaryLocal).Normalize();
+        secondary.Velocity = primary.Velocity
+            + primary.AngularVelocity.Cross(offset);
+        secondary.AngularVelocity = primary.AngularVelocity;
+        secondary.IsOnRails = false;
+        secondary.OrbitalState = null;
     }
 
     /// <summary>Finds a celestial body by its <see cref="CelestialBody.Id"/>.</summary>
@@ -298,6 +585,7 @@ public class Universe
         // Snapshot the list: structural breakup may AddVessel mid-loop.
         foreach (var vessel in _vessels.ToList())
         {
+            if (IsDockedSecondary(vessel)) continue;
             if (vessel.IsDestroyed)
             {
                 AdvanceAnchoredWreck(vessel, dt);
@@ -351,6 +639,7 @@ public class Universe
             var refBody = GetDominantBody(vessel.Position);
             IntegrateVesselOffRails(vessel, refBody, dt);
         }
+        ApplyDockingConstraints();
     }
 
     private static void AdvanceGroundHoldFrame(Vessel vessel, CelestialBody body, double dt)
@@ -568,6 +857,7 @@ public class Universe
 
         foreach (var vessel in _vessels.ToList())
         {
+            if (IsDockedSecondary(vessel)) continue;
             if (vessel.IsDestroyed)
             {
                 AdvanceAnchoredWreck(vessel, dt);
@@ -648,6 +938,7 @@ public class Universe
                 PropagateVesselOnRails(vessel, dt);
             }
         }
+        ApplyDockingConstraints();
     }
 
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
@@ -806,6 +1097,7 @@ public class Universe
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
         foreach (var vessel in _vessels)
         {
+            if (IsDockedSecondary(vessel)) continue;
             if (vessel.IsDestroyed)
             {
                 AdvanceAnchoredWreck(vessel, dt);
@@ -828,6 +1120,7 @@ public class Universe
             }
             PropagateVesselOnRails(vessel, dt);
         }
+        ApplyDockingConstraints();
     }
 
     // ── Vessel on-rails propagation ───────────────────────────────────────

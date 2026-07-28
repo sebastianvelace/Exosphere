@@ -1,6 +1,7 @@
 namespace Exosphere.Simulation.Persistence;
 
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Propulsion;
@@ -16,11 +17,26 @@ public sealed class SaveGameV2
     public double TimeScale { get; set; } = 1.0;
     public string? ActiveVesselId { get; set; }
     public List<VesselSaveV2> Vessels { get; set; } = new();
+    public List<DockingConnectionSaveV2> DockingConnections { get; set; } = new();
     public MissionSaveV2 Mission { get; set; } = new();
     public NavigationSaveV2 Navigation { get; set; } = new();
     public CampaignSaveV2 Campaign { get; set; } = new();
     public List<PersistentAssetSaveV2> PersistentAssets { get; set; } = new();
     public Dictionary<string, JsonElement> Systems { get; set; } = new();
+}
+
+public sealed class DockingConnectionSaveV2
+{
+    public string Id { get; set; } = "";
+    public string PrimaryVesselId { get; set; } = "";
+    public string SecondaryVesselId { get; set; } = "";
+    public string PrimaryPortPartId { get; set; } = "";
+    public string SecondaryPortPartId { get; set; } = "";
+    public string PrimaryPortNodeId { get; set; } = "";
+    public string SecondaryPortNodeId { get; set; } = "";
+    public VectorSaveV2 SecondaryPositionPrimaryLocal { get; set; } = new();
+    public QuaternionSaveV2 SecondaryOrientationPrimaryLocal { get; set; } =
+        QuaternionSaveV2.Identity;
 }
 
 public sealed class VesselSaveV2
@@ -212,6 +228,9 @@ public static class SaveGameV2Codec
         save.TimeScale = universe.TimeScale;
         save.ActiveVesselId = universe.ActiveVessel?.Id;
         save.Vessels = universe.Vessels.Select(CaptureVessel).ToList();
+        save.DockingConnections = universe.DockingConnections
+            .Select(CaptureDockingConnection)
+            .ToList();
         Validate(save);
         return save;
     }
@@ -225,10 +244,30 @@ public static class SaveGameV2Codec
         // Build the complete replacement first. A bad definition or joint cannot leave the
         // live universe half-cleared.
         var replacements = save.Vessels.Select(v => RestoreVessel(v, catalog)).ToList();
+        var replacementDockingConnections = save.DockingConnections
+            .Select(RestoreDockingConnection)
+            .ToList();
+        foreach (var connection in replacementDockingConnections)
+        {
+            var primary = replacements.Single(
+                vessel => vessel.Id == connection.PrimaryVesselId);
+            var secondary = replacements.Single(
+                vessel => vessel.Id == connection.SecondaryVesselId);
+            var primaryPort = primary.Parts.Parts.Single(
+                part => part.InstanceId == connection.PrimaryPortPartId);
+            var secondaryPort = secondary.Parts.Parts.Single(
+                part => part.InstanceId == connection.SecondaryPortPartId);
+            if (!primaryPort.Definition.IsDockingPort
+                || !secondaryPort.Definition.IsDockingPort)
+                throw new InvalidDataException(
+                    $"Docking connection '{connection.Id}' references a non-docking part.");
+        }
         foreach (var existing in universe.Vessels.ToArray())
             universe.RemoveVessel(existing);
         foreach (var vessel in replacements)
             universe.AddVessel(vessel);
+        foreach (var connection in replacementDockingConnections)
+            universe.RestoreDockingConnection(connection);
 
         universe.SetSimulationTime(save.SimulationTime);
         universe.TimeScale = save.TimeScale;
@@ -247,11 +286,15 @@ public static class SaveGameV2Codec
 
         var vesselIds = new HashSet<string>(StringComparer.Ordinal);
         var partIds = new HashSet<string>(StringComparer.Ordinal);
+        var vesselPartIds =
+            new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var vessel in save.Vessels)
         {
             RequireId(vessel.Id, "vessel");
             if (!vesselIds.Add(vessel.Id))
                 throw new InvalidDataException($"Duplicate vessel id '{vessel.Id}'.");
+            var ownedPartIds = new HashSet<string>(StringComparer.Ordinal);
+            vesselPartIds.Add(vessel.Id, ownedPartIds);
             foreach (double value in VesselFiniteValues(vessel)) RequireFinite(value, vessel.Id);
             foreach (var part in vessel.Parts)
             {
@@ -259,6 +302,7 @@ public static class SaveGameV2Codec
                 RequireId(part.DefinitionId, "definition");
                 if (!partIds.Add(part.InstanceId))
                     throw new InvalidDataException($"Duplicate global part id '{part.InstanceId}'.");
+                ownedPartIds.Add(part.InstanceId);
                 foreach (double value in PartFiniteValues(part)) RequireFinite(value, part.InstanceId);
                 var engineIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var engine in part.EngineInstances)
@@ -300,6 +344,51 @@ public static class SaveGameV2Codec
         }
         if (save.ActiveVesselId != null && !vesselIds.Contains(save.ActiveVesselId))
             throw new InvalidDataException($"Active vessel '{save.ActiveVesselId}' is missing.");
+
+        var dockingIds = new HashSet<string>(StringComparer.Ordinal);
+        var dockedVesselIds = new HashSet<string>(StringComparer.Ordinal);
+        var occupiedDockingPortIds =
+            new HashSet<string>(StringComparer.Ordinal);
+        foreach (var connection in save.DockingConnections)
+        {
+            RequireId(connection.Id, "docking connection");
+            RequireId(connection.PrimaryVesselId, "docked primary vessel");
+            RequireId(connection.SecondaryVesselId, "docked secondary vessel");
+            RequireId(connection.PrimaryPortPartId, "primary docking port");
+            RequireId(connection.SecondaryPortPartId, "secondary docking port");
+            RequireId(connection.PrimaryPortNodeId, "primary docking node");
+            RequireId(connection.SecondaryPortNodeId, "secondary docking node");
+            if (!dockingIds.Add(connection.Id)
+                || connection.PrimaryVesselId == connection.SecondaryVesselId
+                || !vesselIds.Contains(connection.PrimaryVesselId)
+                || !vesselIds.Contains(connection.SecondaryVesselId)
+                || !vesselPartIds[connection.PrimaryVesselId]
+                    .Contains(connection.PrimaryPortPartId)
+                || !vesselPartIds[connection.SecondaryVesselId]
+                    .Contains(connection.SecondaryPortPartId)
+                || !dockedVesselIds.Add(connection.PrimaryVesselId)
+                || !dockedVesselIds.Add(connection.SecondaryVesselId)
+                || !occupiedDockingPortIds.Add(
+                    connection.PrimaryPortPartId)
+                || !occupiedDockingPortIds.Add(
+                    connection.SecondaryPortPartId))
+                throw new InvalidDataException(
+                    $"Invalid docking connection '{connection.Id}'.");
+            foreach (double value in DockingFiniteValues(connection))
+                RequireFinite(value, connection.Id);
+            double orientationNorm =
+                connection.SecondaryOrientationPrimaryLocal.W
+                    * connection.SecondaryOrientationPrimaryLocal.W
+                + connection.SecondaryOrientationPrimaryLocal.X
+                    * connection.SecondaryOrientationPrimaryLocal.X
+                + connection.SecondaryOrientationPrimaryLocal.Y
+                    * connection.SecondaryOrientationPrimaryLocal.Y
+                + connection.SecondaryOrientationPrimaryLocal.Z
+                    * connection.SecondaryOrientationPrimaryLocal.Z;
+            if (orientationNorm < 0.99 || orientationNorm > 1.01)
+                throw new InvalidDataException(
+                    $"Docking connection '{connection.Id}' orientation is not normalized.");
+        }
 
         if (save.Mission.MissionId is { } missionId)
             RequireId(missionId, "mission");
@@ -398,6 +487,38 @@ public static class SaveGameV2Codec
         };
         return result;
     }
+
+    private static DockingConnectionSaveV2 CaptureDockingConnection(
+        DockingConnection connection) => new()
+    {
+        Id = connection.Id,
+        PrimaryVesselId = connection.PrimaryVesselId,
+        SecondaryVesselId = connection.SecondaryVesselId,
+        PrimaryPortPartId = connection.PrimaryPortPartId,
+        SecondaryPortPartId = connection.SecondaryPortPartId,
+        PrimaryPortNodeId = connection.PrimaryPortNodeId,
+        SecondaryPortNodeId = connection.SecondaryPortNodeId,
+        SecondaryPositionPrimaryLocal = VectorSaveV2.From(
+            connection.SecondaryPositionPrimaryLocal),
+        SecondaryOrientationPrimaryLocal = QuaternionSaveV2.From(
+            connection.SecondaryOrientationPrimaryLocal),
+    };
+
+    private static DockingConnection RestoreDockingConnection(
+        DockingConnectionSaveV2 connection) => new()
+    {
+        Id = connection.Id,
+        PrimaryVesselId = connection.PrimaryVesselId,
+        SecondaryVesselId = connection.SecondaryVesselId,
+        PrimaryPortPartId = connection.PrimaryPortPartId,
+        SecondaryPortPartId = connection.SecondaryPortPartId,
+        PrimaryPortNodeId = connection.PrimaryPortNodeId,
+        SecondaryPortNodeId = connection.SecondaryPortNodeId,
+        SecondaryPositionPrimaryLocal =
+            connection.SecondaryPositionPrimaryLocal.ToVector(),
+        SecondaryOrientationPrimaryLocal =
+            connection.SecondaryOrientationPrimaryLocal.ToQuaternion(),
+    };
 
     private static Vessel RestoreVessel(VesselSaveV2 saved, PartCatalog catalog)
     {
@@ -626,6 +747,18 @@ public static class SaveGameV2Codec
         e.GimbalVelocityDegPerS.Z,
         e.ChamberPressureFraction ?? e.ActualThrottle,
         e.TemperatureK,
+    ];
+
+    private static IEnumerable<double> DockingFiniteValues(
+        DockingConnectionSaveV2 connection) =>
+    [
+        connection.SecondaryPositionPrimaryLocal.X,
+        connection.SecondaryPositionPrimaryLocal.Y,
+        connection.SecondaryPositionPrimaryLocal.Z,
+        connection.SecondaryOrientationPrimaryLocal.W,
+        connection.SecondaryOrientationPrimaryLocal.X,
+        connection.SecondaryOrientationPrimaryLocal.Y,
+        connection.SecondaryOrientationPrimaryLocal.Z,
     ];
 
     private static void RequireFinite(double value, string field)

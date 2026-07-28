@@ -1,0 +1,24 @@
+{
+  "id": "docking_port_standard",
+  "name": "Standard Orbital Docking Port",
+  "description": "Generic androgynous docking fixture for sandbox rendezvous testing.",
+  "category": "structure",
+  "vehicle_family": "generic",
+  "vehicle_role": "docking_port",
+  "mass_dry": 100,
+  "cost": 850,
+  "drag_coefficient": 0.25,
+  "heat_tolerance": 900,
+  "length_m": 0.35,
+  "diameter_m": 1.25,
+  "is_docking_port": true,
+  "docking_node_id": "dock",
+  "docking_axis_local": [0, 1, 0],
+  "docking_capture_range_m": 0.5,
+  "docking_max_capture_speed_mps": 0.3,
+  "docking_alignment_tolerance_deg": 15,
+  "attachment_nodes": [
+    {"id": "dock", "position": [0, 0, 0], "size": 1, "type": "docking"},
+    {"id": "bottom", "position": [0, -0.175, 0], "size": 1, "type": "stack"}
+  ]
+}
