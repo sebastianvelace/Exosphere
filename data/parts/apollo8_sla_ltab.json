@@ -1,0 +1,17 @@
+{
+  "id": "apollo8_sla_ltab",
+  "name": "Apollo 8 SLA / LTA-B",
+  "description": "Spacecraft-lunar-module adapter containing the 19,900 lb lunar test article LTA-B.",
+  "category": "structure",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sla_lunar_test_article",
+  "mass_dry": 10726.488163,
+  "length_m": 8.4,
+  "diameter_m": 6.6,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 950,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 4.2, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -4.2, 0], "size": 3, "type": "stack"}
+  ]
+}

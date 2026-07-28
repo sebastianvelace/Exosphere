@@ -1,0 +1,24 @@
+{
+  "id": "f1-five-as503-1968",
+  "name": "AS-503 S-IC five-engine cluster",
+  "engineModelId": "f1-as503-1968",
+  "engines": [
+    {"instanceId": "f1-center", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": false},
+    {"instanceId": "f1-a", "positionM": [3.27, 0, 3.27], "thrustDirection": [0, 1, 0], "gimballed": true},
+    {"instanceId": "f1-b", "positionM": [-3.27, 0, 3.27], "thrustDirection": [0, 1, 0], "gimballed": true},
+    {"instanceId": "f1-c", "positionM": [-3.27, 0, -3.27], "thrustDirection": [0, 1, 0], "gimballed": true},
+    {"instanceId": "f1-d", "positionM": [3.27, 0, -3.27], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "RP-1",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "f1-center", "maximumFlowKgS": 2700},
+      {"engineInstanceId": "f1-a", "maximumFlowKgS": 2700},
+      {"engineInstanceId": "f1-b", "maximumFlowKgS": 2700},
+      {"engineInstanceId": "f1-c", "maximumFlowKgS": 2700},
+      {"engineInstanceId": "f1-d", "maximumFlowKgS": 2700}
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "j2-five-sii-as503-1968",
+  "name": "AS-503 S-II five-engine cluster",
+  "engineModelId": "j2-sii-as503-1968",
+  "engines": [
+    {"instanceId": "j2-center", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": false},
+    {"instanceId": "j2-a", "positionM": [1.85, 0, 1.85], "thrustDirection": [0, 1, 0], "gimballed": true},
+    {"instanceId": "j2-b", "positionM": [-1.85, 0, 1.85], "thrustDirection": [0, 1, 0], "gimballed": true},
+    {"instanceId": "j2-c", "positionM": [-1.85, 0, -1.85], "thrustDirection": [0, 1, 0], "gimballed": true},
+    {"instanceId": "j2-d", "positionM": [1.85, 0, -1.85], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "LH2",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "j2-center", "maximumFlowKgS": 260},
+      {"engineInstanceId": "j2-a", "maximumFlowKgS": 260},
+      {"engineInstanceId": "j2-b", "maximumFlowKgS": 260},
+      {"engineInstanceId": "j2-c", "maximumFlowKgS": 260},
+      {"engineInstanceId": "j2-d", "maximumFlowKgS": 260}
+    ]
+  }
+}

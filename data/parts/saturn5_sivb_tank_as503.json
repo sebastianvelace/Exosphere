@@ -1,0 +1,19 @@
+{
+  "id": "saturn5_sivb_tank_as503",
+  "name": "Saturn V AS-503 S-IVB Stage",
+  "description": "Third-stage airframe and propellant allocation for Earth parking-orbit insertion and TLI.",
+  "category": "fuel_tank",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sivb_tank",
+  "mass_dry": 10005.40162,
+  "length_m": 10.7,
+  "diameter_m": 6.6,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 18177.350894907,
+  "fuel_capacity_ox": 89614.339911893,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 5.35, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -5.35, 0], "size": 3, "type": "stack"}
+  ]
+}

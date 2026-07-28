@@ -1,0 +1,11 @@
+{
+  "id": "frank-f-borman-ii",
+  "firstName": "Frank",
+  "lastName": "Borman",
+  "agency": "NASA",
+  "asOfDate": "1968-12-21",
+  "pilotLevel": 5,
+  "engineerLevel": 4,
+  "scientistLevel": 2,
+  "primarySource": "https://www.nasa.gov/people/frank-borman/"
+}

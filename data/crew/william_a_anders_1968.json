@@ -1,0 +1,11 @@
+{
+  "id": "william-a-anders",
+  "firstName": "William",
+  "lastName": "Anders",
+  "agency": "NASA",
+  "asOfDate": "1968-12-21",
+  "pilotLevel": 4,
+  "engineerLevel": 4,
+  "scientistLevel": 4,
+  "primarySource": "https://www.nasa.gov/people/william-a-anders/"
+}

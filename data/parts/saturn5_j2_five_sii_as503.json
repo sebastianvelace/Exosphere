@@ -1,0 +1,29 @@
+{
+  "id": "saturn5_j2_five_sii_as503",
+  "name": "Saturn V AS-503 S-II J-2 Cluster",
+  "description": "Five J-2 engines represented individually by the AS-503 high-mixture-ratio reconstruction.",
+  "category": "engine",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sii_engine_cluster",
+  "mass_dry": 7900,
+  "length_m": 3.4,
+  "diameter_m": 8.8,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 1450,
+  "thrust_sl": 4000000,
+  "thrust_vac": 5004249,
+  "isp_sl": 300,
+  "isp_vac": 423.7,
+  "gimbal_range": 7,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 5,
+  "engine_model_id": "j2-sii-as503-1968",
+  "engine_cluster_id": "j2-five-sii-as503-1968",
+  "mixture_ratio": 5.5,
+  "min_throttle": 1,
+  "thrust_position_y_m": -1.7,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.7, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.7, 0], "size": 3, "type": "stack"}
+  ]
+}

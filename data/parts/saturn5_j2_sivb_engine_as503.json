@@ -1,0 +1,29 @@
+{
+  "id": "saturn5_j2_sivb_engine_as503",
+  "name": "Saturn V AS-503 S-IVB J-2",
+  "description": "Restartable S-IVB J-2 represented by the AS-503 first-burn reconstruction.",
+  "category": "engine",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sivb_engine",
+  "mass_dry": 1788,
+  "length_m": 2.5,
+  "diameter_m": 3.0,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 1450,
+  "thrust_sl": 720000,
+  "thrust_vac": 903225,
+  "isp_sl": 300,
+  "isp_vac": 428.8,
+  "gimbal_range": 7,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 1,
+  "engine_model_id": "j2-sivb-as503-1968",
+  "engine_cluster_id": "j2-single-sivb-as503-1968",
+  "mixture_ratio": 4.93,
+  "min_throttle": 1,
+  "thrust_position_y_m": -1.25,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.25, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.25, 0], "size": 3, "type": "stack"}
+  ]
+}

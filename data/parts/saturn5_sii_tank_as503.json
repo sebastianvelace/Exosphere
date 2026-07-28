@@ -1,0 +1,19 @@
+{
+  "id": "saturn5_sii_tank_as503",
+  "name": "Saturn V AS-503 S-II Stage",
+  "description": "Second-stage airframe and hydrogen/oxygen allocation from the Apollo 8 prelaunch weight table.",
+  "category": "fuel_tank",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sii_tank",
+  "mass_dry": 32288.283982,
+  "length_m": 15.9,
+  "diameter_m": 10.1,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 66239.838377138,
+  "fuel_capacity_ox": 364319.111074262,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 7.95, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -7.95, 0], "size": 3, "type": "stack"}
+  ]
+}

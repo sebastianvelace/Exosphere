@@ -1,0 +1,19 @@
+{
+  "id": "saturn5_sic_tank_as503",
+  "name": "Saturn V AS-503 S-IC Stage",
+  "description": "First-stage airframe and RP-1/LOX allocation from the Apollo 8 prelaunch weight table.",
+  "category": "fuel_tank",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sic_tank",
+  "mass_dry": 96640.5078905,
+  "length_m": 36.3,
+  "diameter_m": 10.1,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 622841.970713089,
+  "fuel_capacity_ox": 1413851.273518711,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 18.15, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -18.15, 0], "size": 3, "type": "stack"}
+  ]
+}

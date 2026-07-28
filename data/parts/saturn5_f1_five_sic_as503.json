@@ -1,0 +1,29 @@
+{
+  "id": "saturn5_f1_five_sic_as503",
+  "name": "Saturn V AS-503 S-IC F-1 Cluster",
+  "description": "Five individually mounted F-1 engines at the published AS-503 nominal sea-level rating.",
+  "category": "engine",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sic_engine_cluster",
+  "mass_dry": 42000,
+  "length_m": 5.8,
+  "diameter_m": 10.1,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 1500,
+  "thrust_sl": 33850000,
+  "thrust_vac": 38850000,
+  "isp_sl": 265.26,
+  "isp_vac": 304,
+  "gimbal_range": 6,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 5,
+  "engine_model_id": "f1-as503-1968",
+  "engine_cluster_id": "f1-five-as503-1968",
+  "mixture_ratio": 2.27,
+  "min_throttle": 1,
+  "thrust_position_y_m": -2.9,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 2.9, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -2.9, 0], "size": 3, "type": "engine_bell"}
+  ]
+}

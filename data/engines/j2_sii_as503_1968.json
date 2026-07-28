@@ -1,0 +1,29 @@
+{
+  "id": "j2-sii-as503-1968",
+  "name": "Rocketdyne J-2",
+  "variant": "AS-503 S-II flight-reconstructed engine",
+  "asOfDate": "1968-12-21",
+  "fuel": "LH2",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 5.5,
+  "ratedThrustSeaLevelN": 800000,
+  "ratedThrustVacuumN": 1000849.8,
+  "specificImpulseSeaLevelS": 300,
+  "specificImpulseVacuumS": 423.7,
+  "minimumThrottle": 1.0,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 7.0,
+  "gimbalRateDegPerS": 2.5,
+  "gimbalAccelerationDegPerS2": 6.0,
+  "startupSeconds": 5.0,
+  "shutdownSeconds": 0.8,
+  "restartLimit": 0,
+  "nominalOperatingTemperatureK": 1080,
+  "maximumSafeTemperatureK": 1380,
+  "thermalTimeConstantSeconds": 3.5,
+  "cooldownTimeConstantSeconds": 25.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 800000, "specificImpulseS": 300},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 1000849.8, "specificImpulseS": 423.7}
+  ]
+}

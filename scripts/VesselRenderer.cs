@@ -922,6 +922,9 @@ public partial class VesselRenderer : Node3D
         if (definition.VehicleFamily.Equals(
                 "agena", StringComparison.OrdinalIgnoreCase))
             return CreateAgenaNode(definition);
+        if (definition.VehicleFamily.Equals(
+                "apollo", StringComparison.OrdinalIgnoreCase))
+            return CreateApolloPartNode(part);
         var node = new MeshInstance3D { Name = definition.Name.Replace(" ", "_") };
         float diameter = (float)System.Math.Max(
             0.2 / MetresPerUnit, definition.DiameterM / MetresPerUnit);
@@ -963,6 +966,177 @@ public partial class VesselRenderer : Node3D
         node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
             { AlbedoColor = GetCategoryColor(definition.Category), Roughness = 0.48f });
         return node;
+    }
+
+    private Node3D CreateApolloPartNode(Part part)
+    {
+        var definition = part.Definition;
+        float height = (float)System.Math.Max(
+            0.08, definition.LengthM / MetresPerUnit);
+        float radius = (float)System.Math.Max(
+            0.08, definition.DiameterM * 0.5 / MetresPerUnit);
+        var root = new Node3D
+        {
+            Name = definition.Name.Replace(" ", "_"),
+        };
+        var white = Mat(new Color(0.88f, 0.88f, 0.84f), 0.10f, 0.62f);
+        var black = Mat(new Color(0.025f, 0.028f, 0.03f), 0.06f, 0.80f);
+        var metal = Mat(new Color(0.58f, 0.59f, 0.57f), 0.84f, 0.34f);
+        var shield = Mat(new Color(0.13f, 0.085f, 0.045f), 0.02f, 0.93f);
+
+        if (definition.HasVehicleRole("launch_escape_system"))
+        {
+            var cover = new MeshInstance3D
+            {
+                Name = "BoostProtectiveCover",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = radius * 0.22f,
+                    BottomRadius = radius,
+                    Height = height * 0.43f,
+                    RadialSegments = 48,
+                },
+                Position = Vector3.Down * (height * 0.285f),
+            };
+            cover.SetSurfaceOverrideMaterial(0, white);
+            root.AddChild(cover);
+
+            var tower = new MeshInstance3D
+            {
+                Name = "EscapeTower",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = radius * 0.075f,
+                    BottomRadius = radius * 0.12f,
+                    Height = height * 0.57f,
+                    RadialSegments = 20,
+                },
+                Position = Vector3.Up * (height * 0.215f),
+            };
+            tower.SetSurfaceOverrideMaterial(0, black);
+            root.AddChild(tower);
+            return root;
+        }
+
+        if (definition.HasVehicleRole("command_module"))
+        {
+            var cabin = new MeshInstance3D
+            {
+                Name = "CommandModuleCabin",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = radius * 0.12f,
+                    BottomRadius = radius,
+                    Height = height * 0.94f,
+                    RadialSegments = 56,
+                },
+            };
+            cabin.SetSurfaceOverrideMaterial(0, metal);
+            root.AddChild(cabin);
+            var heatShield = new MeshInstance3D
+            {
+                Name = "CommandModuleHeatShield",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = radius,
+                    BottomRadius = radius * 1.015f,
+                    Height = Mathf.Max(0.04f, height * 0.06f),
+                    RadialSegments = 56,
+                },
+                Position = Vector3.Down * (height * 0.49f),
+            };
+            heatShield.SetSurfaceOverrideMaterial(0, shield);
+            root.AddChild(heatShield);
+            return root;
+        }
+
+        if (definition.HasVehicleRole("service_module"))
+        {
+            var module = new MeshInstance3D
+            {
+                Name = "ServiceModule",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = radius,
+                    BottomRadius = radius,
+                    Height = height,
+                    RadialSegments = 48,
+                },
+            };
+            module.SetSurfaceOverrideMaterial(0, metal);
+            root.AddChild(module);
+            for (int panel = 0; panel < 4; panel++)
+            {
+                float angle = panel * Mathf.Pi * 0.5f;
+                var seam = new MeshInstance3D
+                {
+                    Name = $"ServiceModulePanelSeam{panel}",
+                    Mesh = new BoxMesh
+                    {
+                        Size = new Vector3(0.018f, height * 0.94f, 0.018f),
+                    },
+                    Position = new Vector3(
+                        radius * Mathf.Cos(angle), 0f,
+                        radius * Mathf.Sin(angle)),
+                };
+                seam.SetSurfaceOverrideMaterial(0, black);
+                root.AddChild(seam);
+            }
+            return root;
+        }
+
+        bool adapter = definition.HasVehicleRole("sla_lunar_test_article");
+        bool engineSection = definition.HasVehicleRole("sic_engine_cluster")
+            || definition.HasVehicleRole("sii_engine_cluster")
+            || definition.HasVehicleRole("sivb_engine");
+        var barrel = new MeshInstance3D
+        {
+            Name = adapter ? "SpacecraftLunarModuleAdapter"
+                : engineSection ? "EngineThrustStructure" : "SaturnAirframe",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = adapter
+                    ? (float)(3.91 * 0.5 / MetresPerUnit)
+                    : engineSection ? radius * 0.72f : radius,
+                BottomRadius = radius,
+                Height = height,
+                RadialSegments = 56,
+            },
+        };
+        barrel.SetSurfaceOverrideMaterial(
+            0,
+            definition.HasVehicleRole("instrument_unit")
+                || engineSection ? black : white);
+        root.AddChild(barrel);
+
+        bool stageTank = definition.HasVehicleRole("sic_tank")
+            || definition.HasVehicleRole("sii_tank")
+            || definition.HasVehicleRole("sivb_tank");
+        if (stageTank)
+        {
+            int bands = definition.HasVehicleRole("sic_tank") ? 2 : 1;
+            for (int bandIndex = 0; bandIndex < bands; bandIndex++)
+            {
+                float y = bands == 1
+                    ? -height * 0.32f
+                    : Mathf.Lerp(-height * 0.38f, height * 0.30f, bandIndex);
+                var band = new MeshInstance3D
+                {
+                    Name = $"SaturnIdentificationBand{bandIndex}",
+                    Mesh = new CylinderMesh
+                    {
+                        TopRadius = radius * 1.006f,
+                        BottomRadius = radius * 1.006f,
+                        Height = Mathf.Max(0.045f, height * 0.045f),
+                        RadialSegments = 56,
+                    },
+                    Position = Vector3.Up * y,
+                };
+                band.SetSurfaceOverrideMaterial(0, black);
+                root.AddChild(band);
+            }
+        }
+        return root;
     }
 
     private Node3D CreateTitanTankNode(PartDefinition definition)

@@ -1,0 +1,16 @@
+{
+  "id": "j2-single-sivb-as503-1968",
+  "name": "AS-503 S-IVB single-engine installation",
+  "engineModelId": "j2-sivb-as503-1968",
+  "engines": [
+    {"instanceId": "j2-sivb", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "LH2",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "j2-sivb", "maximumFlowKgS": 230}
+    ]
+  }
+}

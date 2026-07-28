@@ -1,0 +1,29 @@
+{
+  "id": "f1-as503-1968",
+  "name": "Rocketdyne F-1",
+  "variant": "AS-503 / Apollo 8 sea-level engine",
+  "asOfDate": "1968-12-21",
+  "fuel": "RP-1",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 2.27,
+  "ratedThrustSeaLevelN": 6770000,
+  "ratedThrustVacuumN": 7770000,
+  "specificImpulseSeaLevelS": 265.26,
+  "specificImpulseVacuumS": 304,
+  "minimumThrottle": 1.0,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 6.0,
+  "gimbalRateDegPerS": 2.0,
+  "gimbalAccelerationDegPerS2": 5.0,
+  "startupSeconds": 8.9,
+  "shutdownSeconds": 1.2,
+  "restartLimit": 0,
+  "nominalOperatingTemperatureK": 1120,
+  "maximumSafeTemperatureK": 1420,
+  "thermalTimeConstantSeconds": 4.0,
+  "cooldownTimeConstantSeconds": 28.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 6770000, "specificImpulseS": 265.26},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 7770000, "specificImpulseS": 304}
+  ]
+}

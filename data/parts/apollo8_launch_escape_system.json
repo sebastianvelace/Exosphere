@@ -1,0 +1,17 @@
+{
+  "id": "apollo8_launch_escape_system",
+  "name": "Apollo 8 Launch Escape System",
+  "description": "AS-503 boost protective cover and launch escape tower, represented as a jettisonable root assembly.",
+  "category": "structure",
+  "vehicle_family": "apollo",
+  "vehicle_role": "launch_escape_system",
+  "mass_dry": 4027.75476976,
+  "length_m": 5.51,
+  "diameter_m": 3.91,
+  "drag_coefficient": 0.25,
+  "axial_drag_coefficient": 0.25,
+  "heat_tolerance": 1300,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -2.755, 0], "size": 3, "type": "stack"}
+  ]
+}

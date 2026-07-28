@@ -33,6 +33,7 @@ Options:
   --friendship  Seed Friendship 7 / Mercury-Atlas 6 at LC-14.
   --gemini      Seed Gemini 8 / Titan II GLV-8 at LC-19.
   --gemini-docking  Seed and capture Gemini 8 docked to Agena 5003.
+  --apollo8     Seed Apollo 8 / Saturn V AS-503 at LC-39A.
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
@@ -91,6 +92,11 @@ while [[ $# -gt 0 ]]; do
       VARIANT_FILE="gemini8_titan2_1966.json"
       VARIANT_SITE="cape_canaveral_lc19"
       VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
+      shift ;;
+    --apollo8)
+      VARIANT_FILE="apollo8_saturn5_as503_1968.json"
+      VARIANT_SITE="kennedy"
+      VARIANT_PROFILE="apollo8-lunar-orbit-return"
       shift ;;
     --lunar-map) MODE="lunar_map"; shift ;;
     --flight7)
