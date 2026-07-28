@@ -922,6 +922,17 @@ public partial class HUDController : Control
                         _presenter.AcknowledgeAlert(alert.Code);
                     GetViewport().SetInputAsHandled();
                     break;
+                case Key.F8:
+                    if (bridge.InjectActiveEngineFailure())
+                    {
+                        _events.Insert(
+                            0,
+                            $"{FormatClock(bridge.Universe.CurrentTime)}  ENGINE OUT TEST");
+                        if (_events.Count > 5)
+                            _events.RemoveAt(_events.Count - 1);
+                    }
+                    GetViewport().SetInputAsHandled();
+                    break;
             }
         }
     }

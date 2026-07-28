@@ -3,9 +3,11 @@ namespace Exosphere.Game;
 using Godot;
 using System.Linq;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Data;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
+using Exosphere.Simulation.Propulsion;
 
 public partial class VesselRenderer : Node3D
 {
@@ -14,6 +16,8 @@ public partial class VesselRenderer : Node3D
     private readonly Dictionary<string, Node3D> _partNodes = new();
     private MeshInstance3D? _hullMesh;
     private PlumeSystem?    _plumes;
+    private static EngineDefinitionCatalog? _engineCatalog;
+    private static bool _engineCatalogLoadAttempted;
 
     private sealed class FlapRig
     {
@@ -521,6 +525,12 @@ public partial class VesselRenderer : Node3D
             .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 6;
 
         _plumes?.Update(throttle, shPresent, alt, pressureRatio, selectedShipEngines);
+        if (_plumes != null)
+        {
+            var perEngineThrottle = TargetVessel.GetEngineReadouts(body)
+                .ToDictionary(row => row.InstanceId, row => row.Throttle);
+            _plumes.UpdateGeneric(perEngineThrottle, alt, pressureRatio);
+        }
         UpdateFlaps(delta, body);
         UpdateLandingGear(delta);
 
@@ -757,22 +767,123 @@ public partial class VesselRenderer : Node3D
     private void BuildGenericVessel(Vessel vessel)
     {
         var positions = vessel.Parts.ComputePartLocalPositions();
+        double minimumY = positions.Count == 0
+            ? 0.0
+            : positions.Min(pair =>
+                pair.Value.Y - pair.Key.Definition.LengthM * 0.5);
+        double datumShiftY = -minimumY;
         foreach (var (part, localPos) in positions)
         {
             var node = CreateGenericPartNode(part);
-            node.Position = ToV3(localPos);
+            node.Position = new Vector3(
+                (float)(localPos.X / MetresPerUnit),
+                (float)((localPos.Y + datumShiftY) / MetresPerUnit),
+                (float)(localPos.Z / MetresPerUnit));
             AddChild(node);
             _partNodes[part.InstanceId] = node;
         }
+
+        var catalog = GetEngineCatalog();
+        if (catalog == null) return;
+        var plumeMounts = new List<PlumeSystem.EnginePlumeMount>();
+        foreach (var enginePart in vessel.Parts.Parts.Where(p =>
+                     p.HasEngineRuntime
+                     && !string.IsNullOrWhiteSpace(p.Definition.EngineClusterId)))
+        {
+            if (!positions.TryGetValue(enginePart, out var partPosition)
+                || !catalog.Clusters.TryGetValue(
+                    enginePart.Definition.EngineClusterId, out var cluster))
+                continue;
+
+            int count = System.Math.Min(
+                enginePart.EngineStates.Count, cluster.Engines.Count);
+            float exitRadius = enginePart.Definition.EngineCount > 1
+                ? (float)System.Math.Clamp(
+                    enginePart.Definition.DiameterM
+                    / (2.0 * System.Math.Sqrt(enginePart.Definition.EngineCount)),
+                    0.22,
+                    0.62)
+                : (float)System.Math.Clamp(
+                    enginePart.Definition.DiameterM * 0.32, 0.35, 0.95);
+            bool vacuum = enginePart.Definition.IspVac
+                - enginePart.Definition.IspSL > 60.0;
+            double exitY = partPosition.Y - enginePart.Definition.LengthM * 0.5;
+            for (int i = 0; i < count; i++)
+            {
+                var local = cluster.Engines[i].Position;
+                var position = new Vector3(
+                    (float)((partPosition.X + local.X) / MetresPerUnit),
+                    (float)((exitY + local.Y + datumShiftY) / MetresPerUnit),
+                    (float)((partPosition.Z + local.Z) / MetresPerUnit));
+                string id = enginePart.EngineStates[i].InstanceId;
+                plumeMounts.Add(new PlumeSystem.EnginePlumeMount(
+                    id, position, exitRadius / MetresPerUnit, vacuum));
+                AddGenericEngineBell(
+                    id, position, exitRadius / MetresPerUnit, vacuum);
+            }
+        }
+
+        if (plumeMounts.Count > 0)
+        {
+            _plumes = new PlumeSystem { Name = "EnginePlumes" };
+            AddChild(_plumes);
+            _plumes.SetupGenericCluster(plumeMounts);
+        }
+    }
+
+    private void AddGenericEngineBell(
+        string instanceId,
+        Vector3 exitPosition,
+        float exitRadius,
+        bool vacuum)
+    {
+        var material = Mat(new Color(0.20f, 0.19f, 0.18f), 0.91f, 0.32f);
+        float length = vacuum ? exitRadius * 2.4f : exitRadius * 1.65f;
+        AddMesh(
+            $"Bell_{instanceId.Replace(':', '_')}",
+            new CylinderMesh
+            {
+                TopRadius = exitRadius * 0.42f,
+                BottomRadius = exitRadius,
+                Height = length,
+                RadialSegments = 28,
+                CapTop = false,
+                CapBottom = false,
+            },
+            material,
+            exitPosition + Vector3.Up * (length * 0.5f));
+    }
+
+    private static EngineDefinitionCatalog? GetEngineCatalog()
+    {
+        if (_engineCatalogLoadAttempted) return _engineCatalog;
+        _engineCatalogLoadAttempted = true;
+        try
+        {
+            string data = ProjectSettings.GlobalizePath("res://data");
+            var provenance = DataProvenanceRegistry.LoadFromDirectory(
+                System.IO.Path.Combine(data, "provenance"));
+            _engineCatalog = EngineDefinitionCatalog.Load(
+                System.IO.Path.Combine(data, "engines"),
+                System.IO.Path.Combine(data, "engine_clusters"),
+                provenance);
+        }
+        catch (System.Exception error)
+        {
+            GD.PushWarning($"Engine visual catalog unavailable: {error.Message}");
+        }
+        return _engineCatalog;
     }
 
     private Node3D CreateGenericPartNode(Part part)
     {
         var definition = part.Definition;
         var node = new MeshInstance3D { Name = definition.Name.Replace(" ", "_") };
-        float diameter = (float)System.Math.Max(0.2, definition.DiameterM);
+        float diameter = (float)System.Math.Max(
+            0.2 / MetresPerUnit, definition.DiameterM / MetresPerUnit);
         float radius = diameter * 0.5f;
-        float length = (float)System.Math.Max(0.2, definition.LengthM);
+        float length = (float)System.Math.Max(
+            0.2 / MetresPerUnit, definition.LengthM / MetresPerUnit);
         Mesh mesh = definition.Category switch
         {
             PartCategory.Engine => new CylinderMesh

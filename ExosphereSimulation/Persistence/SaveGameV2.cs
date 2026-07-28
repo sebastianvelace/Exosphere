@@ -3,6 +3,7 @@ namespace Exosphere.Simulation.Persistence;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Propulsion;
 using System.Text.Json;
 
 public sealed class SaveGameV2
@@ -68,6 +69,21 @@ public sealed class PartSaveV2
     public double ThrottleLevel { get; set; }
     public VectorSaveV2 GimbalOffset { get; set; } = new();
     public double ActiveEngineFraction { get; set; } = 1.0;
+    public List<EngineInstanceSaveV2> EngineInstances { get; set; } = new();
+}
+
+public sealed class EngineInstanceSaveV2
+{
+    public string InstanceId { get; set; } = "";
+    public string EngineModelId { get; set; } = "";
+    public EngineLifecycleState State { get; set; }
+    public double StateElapsedSeconds { get; set; }
+    public double CommandedThrottle { get; set; }
+    public double ActualThrottle { get; set; }
+    public VectorSaveV2 GimbalDeg { get; set; } = new();
+    public double TemperatureK { get; set; } = 290.0;
+    public int StartsCompleted { get; set; }
+    public string? FailureCode { get; set; }
 }
 
 public sealed class JointSaveV2
@@ -227,6 +243,24 @@ public static class SaveGameV2Codec
                 if (!partIds.Add(part.InstanceId))
                     throw new InvalidDataException($"Duplicate global part id '{part.InstanceId}'.");
                 foreach (double value in PartFiniteValues(part)) RequireFinite(value, part.InstanceId);
+                var engineIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var engine in part.EngineInstances)
+                {
+                    RequireId(engine.InstanceId, "engine");
+                    RequireId(engine.EngineModelId, "engine model");
+                    if (!engineIds.Add(engine.InstanceId))
+                        throw new InvalidDataException(
+                            $"Duplicate engine id '{engine.InstanceId}'.");
+                    foreach (double value in EngineFiniteValues(engine))
+                        RequireFinite(value, engine.InstanceId);
+                    if (engine.CommandedThrottle is < 0.0 or > 1.0
+                        || engine.ActualThrottle is < 0.0 or > 1.0
+                        || engine.StateElapsedSeconds < 0.0
+                        || engine.TemperatureK < 0.0
+                        || engine.StartsCompleted < 0)
+                        throw new InvalidDataException(
+                            $"Invalid engine state '{engine.InstanceId}'.");
+                }
             }
         }
         if (save.ActiveVesselId != null && !vesselIds.Contains(save.ActiveVesselId))
@@ -348,26 +382,55 @@ public static class SaveGameV2Codec
         ThrottleLevel = part.ThrottleLevel,
         GimbalOffset = VectorSaveV2.From(part.GimbalOffset),
         ActiveEngineFraction = part.ActiveEngineFraction,
+        EngineInstances = part.EngineStates.Select(engine => new EngineInstanceSaveV2
+        {
+            InstanceId = engine.InstanceId,
+            EngineModelId = engine.EngineModelId,
+            State = engine.State,
+            StateElapsedSeconds = engine.StateElapsedSeconds,
+            CommandedThrottle = engine.CommandedThrottle,
+            ActualThrottle = engine.ActualThrottle,
+            GimbalDeg = VectorSaveV2.From(engine.GimbalDeg),
+            TemperatureK = engine.TemperatureK,
+            StartsCompleted = engine.StartsCompleted,
+            FailureCode = engine.FailureCode,
+        }).ToList(),
     };
 
-    private static Part RestorePart(PartSaveV2 state, PartDefinition definition) => new Part(
-        definition, state.InstanceId)
+    private static Part RestorePart(PartSaveV2 state, PartDefinition definition)
     {
-        LiquidFuel = state.LiquidFuel,
-        Oxidizer = state.Oxidizer,
-        SolidFuel = state.SolidFuel,
-        Monopropellant = state.Monopropellant,
-        ElectricCharge = state.ElectricCharge,
-        Temperature = state.Temperature,
-        SkinTemperature = state.SkinTemperature,
-        ThermalDamage = state.ThermalDamage,
-        IsBroken = state.IsBroken,
-        IsDeployed = state.IsDeployed,
-        IsStagingActive = state.IsStagingActive,
-        ThrottleLevel = state.ThrottleLevel,
-        GimbalOffset = state.GimbalOffset.ToVector(),
-        ActiveEngineFraction = state.ActiveEngineFraction,
-    };
+        var part = new Part(definition, state.InstanceId)
+        {
+            LiquidFuel = state.LiquidFuel,
+            Oxidizer = state.Oxidizer,
+            SolidFuel = state.SolidFuel,
+            Monopropellant = state.Monopropellant,
+            ElectricCharge = state.ElectricCharge,
+            Temperature = state.Temperature,
+            SkinTemperature = state.SkinTemperature,
+            ThermalDamage = state.ThermalDamage,
+            IsBroken = state.IsBroken,
+            IsDeployed = state.IsDeployed,
+            IsStagingActive = state.IsStagingActive,
+            ThrottleLevel = state.ThrottleLevel,
+            GimbalOffset = state.GimbalOffset.ToVector(),
+            ActiveEngineFraction = state.ActiveEngineFraction,
+        };
+        part.RestoreEngineStates(state.EngineInstances.Select(engine => new EngineInstanceState
+        {
+            InstanceId = engine.InstanceId,
+            EngineModelId = engine.EngineModelId,
+            State = engine.State,
+            StateElapsedSeconds = engine.StateElapsedSeconds,
+            CommandedThrottle = engine.CommandedThrottle,
+            ActualThrottle = engine.ActualThrottle,
+            GimbalDeg = engine.GimbalDeg.ToVector(),
+            TemperatureK = engine.TemperatureK,
+            StartsCompleted = engine.StartsCompleted,
+            FailureCode = engine.FailureCode,
+        }));
+        return part;
+    }
 
     private static CrewSaveV2 CaptureCrew(CrewMember crew) => new()
     {
@@ -424,6 +487,17 @@ public static class SaveGameV2Codec
         p.LiquidFuel, p.Oxidizer, p.SolidFuel, p.Monopropellant, p.ElectricCharge,
         p.Temperature, p.SkinTemperature, p.ThermalDamage, p.ThrottleLevel,
         p.GimbalOffset.X, p.GimbalOffset.Y, p.GimbalOffset.Z, p.ActiveEngineFraction,
+    ];
+
+    private static IEnumerable<double> EngineFiniteValues(EngineInstanceSaveV2 e) =>
+    [
+        e.StateElapsedSeconds,
+        e.CommandedThrottle,
+        e.ActualThrottle,
+        e.GimbalDeg.X,
+        e.GimbalDeg.Y,
+        e.GimbalDeg.Z,
+        e.TemperatureK,
     ];
 
     private static void RequireFinite(double value, string field)

@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Presentation;
@@ -83,6 +84,38 @@ public sealed class FlightHudPresenterTests
         var cleared = presenter.Capture(
             universe, vessel, "ASCENT_SH", FlightHudViewMode.Exterior);
         Assert.DoesNotContain(cleared.Alerts, a => a.Code == "FUEL-LOW");
+    }
+
+    [Fact]
+    public void EngineFailure_ProducesActionableEngineOutAlert()
+    {
+        var root = FindRepoRoot();
+        var catalog = PartCatalog.LoadFromDirectory(
+            Path.Combine(root.FullName, "data", "parts"));
+        var body = CelestialBody.LoadFromJson(
+            Path.Combine(root.FullName, "data", "bodies", "earth.json"));
+        var engine = new Part(catalog["merlin1d_cluster9_block5"], "alert-octaweb");
+        var vessel = new Vessel("alert-vessel")
+        {
+            Position = body.Position + Vector3d.Right * (body.Radius + 1_000.0),
+            ReferenceBodyId = body.Id,
+        };
+        vessel.Parts.SetRoot(engine);
+        var universe = new Universe { ActiveVessel = vessel };
+        universe.AddBody(body);
+        universe.AddVessel(vessel);
+        for (int i = 0; i < 100; i++) engine.AdvanceEngineRuntime(1.0, 0.02);
+        engine.FailEngine(engine.EngineStates[5].InstanceId, "TURBOPUMP");
+
+        var snapshot = new FlightHudPresenter().Capture(
+            universe, vessel, "ASCENT_SH", FlightHudViewMode.Exterior);
+        var alert = Assert.Single(snapshot.Alerts, a => a.Code == "ENGINE-OUT");
+
+        Assert.Equal(9, snapshot.NominalEngineCount);
+        Assert.Equal(8, snapshot.ActiveEngineCount);
+        Assert.Equal(1, snapshot.FailedEngineCount);
+        Assert.Equal(FlightAlertSeverity.Caution, alert.Severity);
+        Assert.Contains("guidance", alert.RecommendedAction, StringComparison.OrdinalIgnoreCase);
     }
 
     private static (Universe universe, CelestialBody body, Vessel vessel, Part tank)

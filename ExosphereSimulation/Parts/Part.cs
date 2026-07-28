@@ -1,6 +1,7 @@
 namespace Exosphere.Simulation.Parts;
 
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Propulsion;
 
 public class Part
 {
@@ -14,6 +15,7 @@ public class Part
             ? Guid.NewGuid().ToString()
             : instanceId;
         ResetResources();
+        InitializeEngineStates();
     }
 
     // ── Recursos actuales ─────────────────────────────────────────────────
@@ -52,6 +54,9 @@ public class Part
     // ── Control del motor ─────────────────────────────────────────────────
     public double   ThrottleLevel { get; set; }          // [0, 1]
     public Vector3d GimbalOffset  { get; set; } = Vector3d.Zero;  // deflexión normalizada
+    private readonly List<EngineInstanceState> _engineStates = new();
+    public IReadOnlyList<EngineInstanceState> EngineStates => _engineStates;
+    public bool HasEngineRuntime => _engineStates.Count > 0;
     private double _activeEngineFraction = 1.0;
 
     /// <summary>
@@ -73,6 +78,230 @@ public class Part
     {
         int total = System.Math.Max(1, Definition.EngineCount);
         ActiveEngineFraction = System.Math.Clamp(count, 0, total) / (double)total;
+    }
+
+    private void InitializeEngineStates()
+    {
+        if (Definition.Category != PartCategory.Engine
+            || string.IsNullOrWhiteSpace(Definition.EngineModelId))
+            return;
+        int count = System.Math.Max(1, Definition.EngineCount);
+        for (int i = 0; i < count; i++)
+        {
+            _engineStates.Add(new EngineInstanceState
+            {
+                InstanceId = $"{InstanceId}:engine:{i + 1:00}",
+                EngineModelId = Definition.EngineModelId,
+            });
+        }
+    }
+
+    public void AdvanceEngineRuntime(double commandedThrottle, double dt)
+    {
+        if (!HasEngineRuntime)
+        {
+            SpoolToward(commandedThrottle, dt);
+            return;
+        }
+        if (!double.IsFinite(commandedThrottle) || !double.IsFinite(dt) || dt < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(commandedThrottle));
+
+        int selected = SelectedEngineCount;
+        double floored = ApplyThrottleFloor(commandedThrottle);
+        for (int i = 0; i < _engineStates.Count; i++)
+        {
+            var state = _engineStates[i];
+            double command = i < selected ? floored : 0.0;
+            state.CommandedThrottle = command;
+            AdvanceEngineState(state, command, dt);
+            double gimbalRange = Definition.GimbalRange;
+            state.GimbalDeg = i < selected
+                ? new Vector3d(
+                    System.Math.Clamp(GimbalOffset.X, -1.0, 1.0) * gimbalRange,
+                    0.0,
+                    System.Math.Clamp(GimbalOffset.Z, -1.0, 1.0) * gimbalRange)
+                : Vector3d.Zero;
+            double thermalTarget = state.ActualThrottle > 1e-3
+                ? 900.0 + 350.0 * state.ActualThrottle
+                : 290.0;
+            double thermalRate = state.ActualThrottle > 1e-3 ? 1.5 : 0.25;
+            state.TemperatureK +=
+                (thermalTarget - state.TemperatureK)
+                * System.Math.Clamp(dt * thermalRate, 0.0, 1.0);
+        }
+
+        RefreshAggregateThrottle();
+    }
+
+    public bool FailEngine(string instanceId, string failureCode)
+    {
+        var engine = _engineStates.FirstOrDefault(
+            e => string.Equals(e.InstanceId, instanceId, StringComparison.Ordinal));
+        if (engine == null || engine.State == EngineLifecycleState.Failed) return false;
+        engine.State = EngineLifecycleState.Failed;
+        engine.StateElapsedSeconds = 0.0;
+        engine.ActualThrottle = 0.0;
+        engine.FailureCode = string.IsNullOrWhiteSpace(failureCode)
+            ? "INJECTED_FAILURE"
+            : failureCode;
+        RefreshAggregateThrottle();
+        return true;
+    }
+
+    public void FailAllEngines(string failureCode)
+    {
+        foreach (var engine in _engineStates)
+            FailEngine(engine.InstanceId, failureCode);
+        RefreshAggregateThrottle();
+    }
+
+    public void RestoreEngineStates(IEnumerable<EngineInstanceState> states)
+    {
+        if (!HasEngineRuntime) return;
+        var restored = states.ToDictionary(s => s.InstanceId, StringComparer.Ordinal);
+        foreach (var target in _engineStates)
+        {
+            if (!restored.TryGetValue(target.InstanceId, out var source)) continue;
+            target.State = source.State;
+            target.StateElapsedSeconds = source.StateElapsedSeconds;
+            target.CommandedThrottle = source.CommandedThrottle;
+            target.ActualThrottle = source.ActualThrottle;
+            target.GimbalDeg = source.GimbalDeg;
+            target.TemperatureK = source.TemperatureK;
+            target.StartsCompleted = source.StartsCompleted;
+            target.FailureCode = source.FailureCode;
+        }
+    }
+
+    public IEnumerable<EngineTelemetry> GetEngineTelemetry(double ambientPressure)
+    {
+        if (!HasEngineRuntime) yield break;
+        double ratedPerEngine =
+            GetRatedFullThrottleThrustMagnitude(ambientPressure) / _engineStates.Count;
+        double isp = GetIsp(ambientPressure);
+        foreach (var state in _engineStates)
+        {
+            double thrust = ratedPerEngine * state.ActualThrottle;
+            double flow = isp > 1.0 ? thrust / (isp * 9.80665) : 0.0;
+            yield return new EngineTelemetry(
+                state.InstanceId,
+                state.State,
+                state.CommandedThrottle,
+                state.ActualThrottle,
+                thrust,
+                flow,
+                state.ActualThrottle,
+                Definition.MixtureRatio,
+                state.GimbalDeg,
+                state.TemperatureK,
+                state.FailureCode);
+        }
+    }
+
+    private void AdvanceEngineState(
+        EngineInstanceState state,
+        double command,
+        double dt)
+    {
+        if (state.State == EngineLifecycleState.Failed)
+        {
+            state.ActualThrottle = 0.0;
+            return;
+        }
+
+        state.StateElapsedSeconds += dt;
+        if (command <= 1e-3
+            && state.State is not (
+                EngineLifecycleState.Off
+                or EngineLifecycleState.Shutdown
+                or EngineLifecycleState.Purge))
+            Transition(state, EngineLifecycleState.Shutdown);
+
+        switch (state.State)
+        {
+            case EngineLifecycleState.Off:
+                state.ActualThrottle = 0.0;
+                if (command > 1e-3) Transition(state, EngineLifecycleState.Chill);
+                break;
+            case EngineLifecycleState.Chill:
+                if (state.StateElapsedSeconds >= Definition.EngineChillSeconds)
+                    Transition(state, EngineLifecycleState.SpinPrime);
+                break;
+            case EngineLifecycleState.SpinPrime:
+                if (state.StateElapsedSeconds >= Definition.EngineSpinPrimeSeconds)
+                    Transition(state, EngineLifecycleState.Ignition);
+                break;
+            case EngineLifecycleState.Ignition:
+                if (state.StateElapsedSeconds >= Definition.EngineIgnitionSeconds)
+                {
+                    state.StartsCompleted++;
+                    Transition(state, EngineLifecycleState.Ramp);
+                }
+                break;
+            case EngineLifecycleState.Ramp:
+                MoveThrottle(
+                    state,
+                    command,
+                    System.Math.Max(Definition.EngineStartupSeconds, 1e-6),
+                    dt);
+                if (System.Math.Abs(state.ActualThrottle - command) <= 1e-6)
+                    Transition(state, EngineLifecycleState.Running);
+                break;
+            case EngineLifecycleState.Running:
+                MoveThrottle(
+                    state,
+                    command,
+                    command >= state.ActualThrottle
+                        ? System.Math.Max(Definition.EngineStartupSeconds, 1e-6)
+                        : System.Math.Max(Definition.EngineShutdownSeconds, 1e-6),
+                    dt);
+                break;
+            case EngineLifecycleState.Shutdown:
+                MoveThrottle(
+                    state,
+                    0.0,
+                    System.Math.Max(Definition.EngineShutdownSeconds, 1e-6),
+                    dt);
+                if (state.ActualThrottle <= 1e-6)
+                    Transition(state, EngineLifecycleState.Purge);
+                break;
+            case EngineLifecycleState.Purge:
+                state.ActualThrottle = 0.0;
+                if (command > 1e-3)
+                    Transition(state, EngineLifecycleState.Chill);
+                else if (state.StateElapsedSeconds >= Definition.EnginePurgeSeconds)
+                    Transition(state, EngineLifecycleState.Off);
+                break;
+        }
+    }
+
+    private static void MoveThrottle(
+        EngineInstanceState state,
+        double target,
+        double fullRangeSeconds,
+        double dt)
+    {
+        double maximumStep = dt / fullRangeSeconds;
+        double delta = target - state.ActualThrottle;
+        state.ActualThrottle = System.Math.Abs(delta) <= maximumStep
+            ? target
+            : state.ActualThrottle + System.Math.Sign(delta) * maximumStep;
+    }
+
+    private static void Transition(
+        EngineInstanceState state,
+        EngineLifecycleState next)
+    {
+        state.State = next;
+        state.StateElapsedSeconds = 0.0;
+    }
+
+    private void RefreshAggregateThrottle()
+    {
+        int selected = SelectedEngineCount;
+        ThrottleLevel = selected > 0
+            ? _engineStates.Take(selected).Sum(s => s.ActualThrottle) / selected
+            : 0.0;
     }
 
     // ── Masa actual (seca + propelante) ───────────────────────────────────

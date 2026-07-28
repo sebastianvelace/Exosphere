@@ -199,8 +199,14 @@ public partial class CameraController : Node3D
             // rocket climbs so BOTH the stationary pad and the rocket stay in frame — the
             // growing gap between them is the clear, readable cue that the rocket is rising.
             float groundY = -(float)(trackAlt / 2.8f);            // render-space ground level
-            float dist    = Mathf.Clamp((43f - groundY) * 1.05f, 70f, 850f);
-            float midY    = (groundY + 43f) * 0.5f;               // halfway pad→rocket-top
+            float vehicleHeight = bridge?.ActiveVessel is { } padVessel
+                ? (float)(padVessel.VehicleLength / 2.8)
+                : 43f;
+            float dist = Mathf.Clamp(
+                (vehicleHeight - groundY) * 1.55f,
+                Mathf.Max(28f, vehicleHeight * 2.2f),
+                850f);
+            float midY = (groundY + vehicleHeight) * 0.5f;
             camPos = new Vector3(dist * Mathf.Sin(yawRad), midY, dist * Mathf.Cos(yawRad));
             lookTarget = new Vector3(0f, midY, 0f);
         }

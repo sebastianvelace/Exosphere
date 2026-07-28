@@ -486,6 +486,28 @@ public partial class SimulationBridge : Node
     public void SetSAS(bool on)       { if (ActiveVessel != null) ActiveVessel.SASEnabled = on; }
     public void ReleaseGroundHold()   { ActiveVessel?.ReleaseGroundHold(); }
 
+    public bool InjectActiveEngineFailure(
+        int ordinal = 0,
+        string failureCode = "INJECTED_ENGINE_OUT")
+    {
+        var vessel = ActiveVessel;
+        if (vessel == null) return false;
+        var candidates = vessel.Parts.ActiveEngines
+            .SelectMany(part => part.EngineStates)
+            .Where(engine => engine.FailureCode == null)
+            .OrderBy(engine => engine.InstanceId, StringComparer.Ordinal)
+            .ToArray();
+        if (candidates.Length == 0) return false;
+        int index = System.Math.Clamp(ordinal, 0, candidates.Length - 1);
+        bool injected = vessel.InjectEngineFailure(
+            candidates[index].InstanceId, failureCode);
+        if (injected)
+            GD.Print(
+                $"[PROPULSION] Engine out injected: {candidates[index].InstanceId} " +
+                $"({failureCode})");
+        return injected;
+    }
+
     /// <summary>
     /// Stands <paramref name="vessel"/> on the launch pad: at the launch site's real
     /// geodetic position, upright along the local vertical, and already moving with the

@@ -75,6 +75,14 @@ public class PartDefinition
     [JsonPropertyName("fuel_type")]    public string FuelTypeStr { get; set; } = "";
     [JsonPropertyName("is_rcs")]       public bool IsRCS         { get; set; }
     [JsonPropertyName("engine_count")] public int EngineCount    { get; set; } = 1;
+    [JsonPropertyName("engine_model_id")] public string EngineModelId { get; set; } = "";
+    [JsonPropertyName("engine_cluster_id")] public string EngineClusterId { get; set; } = "";
+    [JsonPropertyName("engine_chill_seconds")] public double EngineChillSeconds { get; set; } = 0.15;
+    [JsonPropertyName("engine_spin_prime_seconds")] public double EngineSpinPrimeSeconds { get; set; } = 0.15;
+    [JsonPropertyName("engine_ignition_seconds")] public double EngineIgnitionSeconds { get; set; } = 0.10;
+    [JsonPropertyName("engine_purge_seconds")] public double EnginePurgeSeconds { get; set; } = 0.20;
+    [JsonPropertyName("engine_startup_seconds")] public double EngineStartupSeconds { get; set; } = 0.50;
+    [JsonPropertyName("engine_shutdown_seconds")] public double EngineShutdownSeconds { get; set; } = 0.20;
     [JsonPropertyName("mixture_ratio")] public double MixtureRatio { get; set; }
     // Axial location of the effective thrust plane relative to this part's centre.
     [JsonPropertyName("thrust_position_y_m")] public double ThrustPositionYM { get; set; }

@@ -36,6 +36,9 @@ public partial class EngineGridHUD : Control
     private double _ispEff;
     private double _massFlow;     // t/s
     private bool   _twrValid;
+    private readonly List<double> _engineThrottles = new();
+    private readonly List<bool> _engineFailures = new();
+    private int _drawEngineIndex;
 
     public override void _Ready()
     {
@@ -68,6 +71,14 @@ public partial class EngineGridHUD : Control
         // Engine count is discrete. Throttle changes dot brightness and telemetry, never the
         // number of lit chambers; EDL can genuinely select 1/2/3 of Starship's six Raptors.
         _litEngines = System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
+        _engineThrottles.Clear();
+        _engineFailures.Clear();
+        var readouts = vessel.GetEngineReadouts(body).ToList();
+        if (readouts.Count == _nominalEngines)
+        {
+            _engineThrottles.AddRange(readouts.Select(row => row.Throttle));
+            _engineFailures.AddRange(readouts.Select(row => row.FailureCode != null));
+        }
 
         double thrustN = vessel.GetCurrentThrust(body);
         _thrustKN = thrustN / 1000.0;
@@ -94,6 +105,7 @@ public partial class EngineGridHUD : Control
         float cy = 78f;
         float rOuter = 50f, rMid = 32f, rInner = 13f;
         int litRemaining = _litEngines;
+        _drawEngineIndex = 0;
         if (_nominalEngines == 33)
         {
             // Super Heavy: 3 rings (3 inner + 10 mid + 20 outer)
@@ -136,12 +148,27 @@ public partial class EngineGridHUD : Control
             var p = new Vector2(cx + radius * (float)System.Math.Cos(a),
                                 cy + radius * (float)System.Math.Sin(a));
             bool on = lit > 0;
-            if (on) lit--;
-            Color c = on
-                ? (_throttle >= 0.85 ? DotOnHot : DotOn)
-                : DotOff;
+            bool failed = false;
+            double throttle = _throttle;
+            if (_engineThrottles.Count == _nominalEngines)
+            {
+                throttle = _engineThrottles[_drawEngineIndex];
+                failed = _engineFailures[_drawEngineIndex];
+                on = throttle > 1e-3;
+            }
+            else if (on)
+            {
+                lit--;
+            }
+            _drawEngineIndex++;
+            Color c = failed
+                ? InterfaceTheme.Alert
+                : on
+                    ? (throttle >= 0.85 ? DotOnHot : DotOn)
+                    : DotOff;
             DrawCircle(p, 3.4f, c);
-            if (on) DrawArc(p, 4.6f, 0, Mathf.Tau, 12, new Color(c, 0.35f), 1.4f, true);
+            if (on || failed)
+                DrawArc(p, 4.6f, 0, Mathf.Tau, 12, new Color(c, 0.35f), 1.4f, true);
         }
         return lit;
     }

@@ -213,6 +213,14 @@ public class Vessel
     public IEnumerable<EngineReadout> GetEngineReadouts(CelestialBody? body) =>
         Parts.GetEngineReadouts(GetAmbientPressure(body));
 
+    public bool InjectEngineFailure(string engineInstanceId, string failureCode)
+    {
+        foreach (var part in Parts.Parts.Where(p => p.HasEngineRuntime))
+            if (part.FailEngine(engineInstanceId, failureCode))
+                return true;
+        return false;
+    }
+
     /// <summary>Δv (m/s) of the current stage as loaded, at the current effective Isp.</summary>
     public double GetCurrentStageDeltaV(CelestialBody? body) =>
         Parts.GetCurrentStageDeltaV(GetAmbientPressure(body));
@@ -230,7 +238,7 @@ public class Vessel
     private void ApplyThrottle(double dt)
     {
         foreach (var engine in Parts.ActiveEngines)
-            engine.SpoolToward(Throttle, dt);
+            engine.AdvanceEngineRuntime(Throttle, dt);
     }
 
     // Empuje total en world space (N) — empuje de vacío (compatibilidad).

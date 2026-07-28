@@ -37,6 +37,14 @@ public sealed class EngineDefinitionCatalogTests
             Assert.True(double.IsFinite(engine.Position.Magnitude));
             Assert.InRange(engine.Direction.Normalized.Magnitude, 0.999999, 1.000001);
         });
+        var partCatalog = PartCatalog.LoadFromDirectory(
+            Path.Combine(Root.FullName, "data", "parts"));
+        Assert.Equal(
+            octaweb.Id,
+            partCatalog["merlin1d_cluster9_block5"].EngineClusterId);
+        Assert.Equal(
+            merlin.Id,
+            partCatalog["merlin1d_cluster9_block5"].EngineModelId);
 
         var vehicle = VehicleVariantDefinition.LoadFromJson(
             Path.Combine(

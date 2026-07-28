@@ -24,6 +24,12 @@ using System.Collections.Generic;
 /// </summary>
 public partial class PlumeSystem : Node3D
 {
+    public readonly record struct EnginePlumeMount(
+        string InstanceId,
+        Vector3 Position,
+        float ExitRadius,
+        bool VacuumOptimized);
+
     // One render unit ≈ 2.8 metres in this project. Plume sizing below is in
     // render units, scaled relative to the engine bell radii VesselRenderer passes.
 
@@ -40,10 +46,12 @@ public partial class PlumeSystem : Node3D
         public float BaseRadius;                    // plume mouth radius at the nozzle
         public float BaseEnergy;
         public bool  IsSuperHeavy;
+        public string InstanceId = "";
     }
 
     private readonly List<PlumeUnit> _shUnits   = new();
     private readonly List<PlumeUnit> _shipUnits = new();
+    private readonly List<PlumeUnit> _genericUnits = new();
 
     private static Shader? _plumeShader;
     private static Shader PlumeShader =>
@@ -105,6 +113,29 @@ public partial class PlumeSystem : Node3D
         }
     }
 
+    public void SetupGenericCluster(IEnumerable<EnginePlumeMount> mounts)
+    {
+        foreach (var mount in mounts)
+        {
+            var unit = BuildUnit(
+                $"Engine_{mount.InstanceId.Replace(':', '_')}",
+                mount.Position.Y,
+                mount.ExitRadius,
+                length: mount.VacuumOptimized ? 8.5f : 5.8f,
+                count: 1,
+                core: mount.VacuumOptimized
+                    ? new Color(0.82f, 0.91f, 1.00f)
+                    : new Color(0.90f, 0.95f, 1.00f),
+                withLight: _genericUnits.Count == 0,
+                sh: false,
+                xPos: mount.Position.X,
+                zPos: mount.Position.Z,
+                tailRadius: mount.VacuumOptimized ? 0.22f : 0.10f);
+            unit.InstanceId = mount.InstanceId;
+            _genericUnits.Add(unit);
+        }
+    }
+
     // ── Per-frame update ──────────────────────────────────────────────────
 
     /// <summary>Update emitters from vessel state. Call in VesselRenderer._Process().</summary>
@@ -146,6 +177,35 @@ public partial class PlumeSystem : Node3D
             UpdateGroup(_shipUnits, firing && !shPresent && slActive > 0,
                 throttle, expansion, pressRatio, altitude, 1f,
                 start: 3, count: 3, activeCount: slActive);
+    }
+
+    public void UpdateGeneric(
+        IReadOnlyDictionary<string, double> engineThrottles,
+        double altitude,
+        double ambientPressureRatio)
+    {
+        float pressureRatio = (float)System.Math.Clamp(
+            ambientPressureRatio, 0.0, 1.0);
+        float expansion = 1f - pressureRatio;
+        expansion = expansion * expansion * (3f - 2f * expansion);
+        for (int i = 0; i < _genericUnits.Count; i++)
+        {
+            var unit = _genericUnits[i];
+            float throttle = engineThrottles.TryGetValue(unit.InstanceId, out double value)
+                ? (float)System.Math.Clamp(value, 0.0, 1.0)
+                : 0f;
+            UpdateGroup(
+                _genericUnits,
+                throttle > 0.01f,
+                throttle,
+                expansion,
+                pressureRatio,
+                altitude,
+                1f,
+                start: i,
+                count: 1,
+                activeCount: throttle > 0.01f ? 1 : 0);
+        }
     }
 
     private static void UpdateGroup(List<PlumeUnit> units,
@@ -251,8 +311,11 @@ public partial class PlumeSystem : Node3D
 
     private PlumeUnit BuildUnit(string name, float yPos, float mouthR,
         float length, int count, Color core, bool withLight, bool sh,
-        float xPos = 0f, float zPos = 0f)
+        float xPos = 0f, float zPos = 0f, float tailRadius = -1f)
     {
+        float resolvedTailRadius = tailRadius >= 0f
+            ? tailRadius
+            : sh ? 0.14f : 0.90f;
         var unit = new PlumeUnit
         {
             BaseLength   = length,
@@ -273,7 +336,7 @@ public partial class PlumeSystem : Node3D
         var coneMesh = new CylinderMesh
         {
             TopRadius      = 0.5f,
-            BottomRadius   = sh ? 0.14f : 0.90f,
+            BottomRadius   = resolvedTailRadius,
             Height         = 1.0f,
             RadialSegments = 20,
             Rings          = 24,
@@ -285,7 +348,7 @@ public partial class PlumeSystem : Node3D
         mat.SetShaderParameter("core_color",     core);
         mat.SetShaderParameter("edge_color",    new Color(1.0f, 0.45f, 0.12f));
         mat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
-        mat.SetShaderParameter("tail_radius", sh ? 0.14f : 0.90f);
+        mat.SetShaderParameter("tail_radius", resolvedTailRadius);
         // Master brightness — the merged 33-engine column reads brighter against the daytime
         // sky than a single ring; bumped so liftoff/ascent exhaust actually glows.
         mat.SetShaderParameter("energy",        unit.BaseEnergy);

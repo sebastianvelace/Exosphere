@@ -17,6 +17,14 @@
   "fuel_type": "LiquidFuel+Oxidizer",
   "mixture_ratio": 2.56,
   "engine_count": 9,
+  "engine_model_id": "merlin1d-block5-2025",
+  "engine_cluster_id": "falcon9-block5-octaweb-2025",
+  "engine_chill_seconds": 0.15,
+  "engine_spin_prime_seconds": 0.15,
+  "engine_ignition_seconds": 0.10,
+  "engine_purge_seconds": 0.20,
+  "engine_startup_seconds": 0.50,
+  "engine_shutdown_seconds": 0.35,
   "attachment_nodes": [
     {"id": "top", "position": [0, 1.6, 0], "size": 2, "type": "stack"},
     {"id": "engine_bell", "position": [0, -1.6, 0], "size": 0, "type": "engine_bell"}

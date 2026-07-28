@@ -1,13 +1,20 @@
 namespace Exosphere.Simulation.Parts;
 
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Propulsion;
 
 /// <summary>
 /// Immutable per-engine telemetry row for the HUD. Thrust is in newtons (pressure-corrected),
 /// MassFlow in kg/s, Throttle in [0,1]. Built by <see cref="PartGraph.GetEngineReadouts"/>.
 /// </summary>
 public readonly record struct EngineReadout(
-    string InstanceId, string Name, double Throttle, double ThrustN, double MassFlowKgS);
+    string InstanceId,
+    string Name,
+    double Throttle,
+    double ThrustN,
+    double MassFlowKgS,
+    EngineLifecycleState State,
+    string? FailureCode);
 
 public class PartGraph
 {
@@ -207,8 +214,9 @@ public class PartGraph
     /// <summary>Number of engines in the current stage that are lit (firing).</summary>
     public int ActiveEngineCount =>
         ActiveEngines
-            .Where(e => e.ThrottleLevel > 1e-3)
-            .Sum(e => e.SelectedEngineCount);
+            .Sum(e => e.HasEngineRuntime
+                ? e.EngineStates.Count(s => s.ActualThrottle > 1e-3)
+                : e.ThrottleLevel > 1e-3 ? e.SelectedEngineCount : 0);
 
     /// <summary>Total pressure-corrected thrust magnitude (N) of the current stage now.</summary>
     public double GetCurrentThrust(double ambientPressure) =>
@@ -235,12 +243,28 @@ public class PartGraph
 
     /// <summary>Per-engine snapshot for the current stage (one row per engine part).</summary>
     public IEnumerable<EngineReadout> GetEngineReadouts(double ambientPressure) =>
-        ActiveEngines.Select(e => new EngineReadout(
-            e.InstanceId,
-            e.Definition.Name,
-            e.ThrottleLevel,
-            e.GetThrustMagnitude(ambientPressure),
-            e.GetMassFlow(ambientPressure)));
+        ActiveEngines.SelectMany(e => e.HasEngineRuntime
+            ? e.GetEngineTelemetry(ambientPressure).Select(t => new EngineReadout(
+                t.InstanceId,
+                e.Definition.Name,
+                t.ActualThrottle,
+                t.ThrustN,
+                t.MassFlowKgS,
+                t.State,
+                t.FailureCode))
+            : new[]
+            {
+                new EngineReadout(
+                    e.InstanceId,
+                    e.Definition.Name,
+                    e.ThrottleLevel,
+                    e.GetThrustMagnitude(ambientPressure),
+                    e.GetMassFlow(ambientPressure),
+                    e.ThrottleLevel > 1e-3
+                        ? EngineLifecycleState.Running
+                        : EngineLifecycleState.Off,
+                    e.IsBroken ? "PART_BROKEN" : null),
+            });
 
     /// <summary>
     /// Ideal rocket-equation Δv (m/s) for a stage burning from <paramref name="wetMass"/> to
@@ -384,8 +408,15 @@ public class PartGraph
         }
 
         if (flameOut)
+        {
             foreach (var engine in engines)
-                engine.IsStagingActive = false;
+            {
+                if (engine.HasEngineRuntime)
+                    engine.FailAllEngines("PROPELLANT_STARVATION");
+                else
+                    engine.IsStagingActive = false;
+            }
+        }
     }
 
     // ── Staging: dispara el primer desacoplador disponible ────────────────

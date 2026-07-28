@@ -60,6 +60,9 @@ public sealed record FlightHudSnapshot
     public required double ThrustToWeightRatio { get; init; }
     public required double Throttle { get; init; }
     public required bool IsGroundHeld { get; init; }
+    public required int NominalEngineCount { get; init; }
+    public required int ActiveEngineCount { get; init; }
+    public required int FailedEngineCount { get; init; }
     public required double LiquidFuelKg { get; init; }
     public required double LiquidFuelFraction { get; init; }
     public required double OxidizerKg { get; init; }
@@ -153,6 +156,10 @@ public sealed class FlightHudPresenter
         double oxidizerCapacity = vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityOx);
         double liquidFraction = liquidCapacity > 0.0 ? liquidFuel / liquidCapacity : 0.0;
         double oxidizerFraction = oxidizerCapacity > 0.0 ? oxidizer / oxidizerCapacity : 0.0;
+        var engineReadouts = vessel.GetEngineReadouts(body).ToArray();
+        int nominalEngines = engineReadouts.Length;
+        int activeEngines = engineReadouts.Count(e => e.Throttle > 1e-3);
+        int failedEngines = engineReadouts.Count(e => e.FailureCode != null);
 
         var alerts = BuildAlerts(
             missionPhase,
@@ -164,7 +171,9 @@ public sealed class FlightHudPresenter
             liquidFraction,
             oxidizerCapacity,
             oxidizerFraction,
-            impactTrajectory);
+            impactTrajectory,
+            nominalEngines,
+            failedEngines);
 
         return new FlightHudSnapshot
         {
@@ -193,6 +202,9 @@ public sealed class FlightHudPresenter
             ThrustToWeightRatio = vessel.GetThrustToWeightRatio(body),
             Throttle = vessel.Throttle,
             IsGroundHeld = vessel.IsGroundHeld,
+            NominalEngineCount = nominalEngines,
+            ActiveEngineCount = activeEngines,
+            FailedEngineCount = failedEngines,
             LiquidFuelKg = liquidFuel,
             LiquidFuelFraction = liquidFraction,
             OxidizerKg = oxidizer,
@@ -230,7 +242,9 @@ public sealed class FlightHudPresenter
         double liquidFraction,
         double oxidizerCapacity,
         double oxidizerFraction,
-        bool impactTrajectory)
+        bool impactTrajectory,
+        int nominalEngines,
+        int failedEngines)
     {
         var alerts = new List<FlightAlertSnapshot>();
 
@@ -268,6 +282,21 @@ public sealed class FlightHudPresenter
                 "PERIAPSIS 0 m",
                 "Raise periapsis or prepare for entry",
                 _acknowledgedAlerts.Contains("TRAJECTORY")));
+        }
+
+        SetLatch("ENGINE-OUT", failedEngines > 0, failedEngines == 0);
+        if (_latchedAlerts.Contains("ENGINE-OUT"))
+        {
+            alerts.Add(new FlightAlertSnapshot(
+                "ENGINE-OUT",
+                failedEngines >= System.Math.Max(2, nominalEngines / 3)
+                    ? FlightAlertSeverity.Critical
+                    : FlightAlertSeverity.Caution,
+                "ENGINE OUT",
+                $"{failedEngines} FAILED / {nominalEngines} INSTALLED",
+                "0 FAILED",
+                "Verify guidance authority and remaining performance",
+                _acknowledgedAlerts.Contains("ENGINE-OUT")));
         }
 
         return alerts

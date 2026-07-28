@@ -207,6 +207,7 @@ public sealed class EngineInstanceState
     public double CommandedThrottle { get; set; }
     public double ActualThrottle { get; set; }
     public Vector3d GimbalDeg { get; set; } = Vector3d.Zero;
+    public double TemperatureK { get; set; } = 290.0;
     public int StartsCompleted { get; set; }
     public string? FailureCode { get; set; }
 }

@@ -16,6 +16,15 @@
   "gimbal_range": 5.0,
   "fuel_type": "LiquidFuel+Oxidizer",
   "mixture_ratio": 2.56,
+  "engine_count": 1,
+  "engine_model_id": "merlin1d-vac-block5-2025",
+  "engine_cluster_id": "falcon9-block5-second-stage-2025",
+  "engine_chill_seconds": 0.20,
+  "engine_spin_prime_seconds": 0.20,
+  "engine_ignition_seconds": 0.15,
+  "engine_purge_seconds": 0.25,
+  "engine_startup_seconds": 0.75,
+  "engine_shutdown_seconds": 0.50,
   "attachment_nodes": [
     {"id": "top", "position": [0, 1.5, 0], "size": 2, "type": "stack"},
     {"id": "bottom", "position": [0, -1.5, 0], "size": 2, "type": "stack"}
