@@ -1,0 +1,31 @@
+{
+  "id": "raptor3-starship-vac-flight12",
+  "name": "Raptor 3 Vacuum",
+  "variant": "Starship Flight 12 / V3 vacuum engine",
+  "asOfDate": "2026-05-22",
+  "fuel": "CH4",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 3.55,
+  "ratedThrustSeaLevelN": 2300000,
+  "ratedThrustVacuumN": 3100000,
+  "specificImpulseSeaLevelS": 302,
+  "specificImpulseVacuumS": 372,
+  "minimumThrottle": 0.40,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 0.0,
+  "gimbalRateDegPerS": 0.0,
+  "gimbalAccelerationDegPerS2": 0.0,
+  "startupSeconds": 0.42,
+  "shutdownSeconds": 0.18,
+  "restartLimit": 2,
+  "nominalOperatingTemperatureK": 1140,
+  "maximumSafeTemperatureK": 1450,
+  "thermalTimeConstantSeconds": 2.8,
+  "cooldownTimeConstantSeconds": 17.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 0.4, "thrustN": 920000, "specificImpulseS": 302},
+    {"ambientPressurePa": 0, "throttle": 0.4, "thrustN": 1240000, "specificImpulseS": 372},
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 2300000, "specificImpulseS": 302},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 3100000, "specificImpulseS": 372}
+  ]
+}

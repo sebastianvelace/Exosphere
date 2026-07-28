@@ -1,0 +1,31 @@
+{
+  "id": "raptor3-superheavy-flight12",
+  "name": "Raptor 3 Booster",
+  "variant": "Starship Flight 12 / Super Heavy V3",
+  "asOfDate": "2026-05-22",
+  "fuel": "CH4",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 3.55,
+  "ratedThrustSeaLevelN": 2800000,
+  "ratedThrustVacuumN": 3000000,
+  "specificImpulseSeaLevelS": 330,
+  "specificImpulseVacuumS": 356,
+  "minimumThrottle": 0.40,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 7.0,
+  "gimbalRateDegPerS": 9.0,
+  "gimbalAccelerationDegPerS2": 27.0,
+  "startupSeconds": 0.42,
+  "shutdownSeconds": 0.18,
+  "restartLimit": 2,
+  "nominalOperatingTemperatureK": 1160,
+  "maximumSafeTemperatureK": 1470,
+  "thermalTimeConstantSeconds": 2.6,
+  "cooldownTimeConstantSeconds": 15.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 0.4, "thrustN": 1120000, "specificImpulseS": 330},
+    {"ambientPressurePa": 0, "throttle": 0.4, "thrustN": 1200000, "specificImpulseS": 356},
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 2800000, "specificImpulseS": 330},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 3000000, "specificImpulseS": 356}
+  ]
+}

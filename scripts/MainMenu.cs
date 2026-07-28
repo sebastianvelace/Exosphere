@@ -345,6 +345,12 @@ public partial class MainMenu : Control
             "starbase",
             "starship-flight7-ascent");
 
+    private void LaunchStarshipFlight12Scenario()
+        => LaunchVehicleScenario(
+            "starship_flight12_v3_2026.json",
+            "starbase_pad2",
+            "starship-flight12-ascent");
+
     private void LaunchFalconScenario()
         => LaunchVehicleScenario(
             "falcon9_block5_standard_2025.json",
@@ -389,6 +395,9 @@ public partial class MainMenu : Control
         body.AddChild(ModalButton(
             "STARSHIP FLIGHT 7 / SHIP 33 + BOOSTER 14",
             LaunchStarshipFlight7Scenario));
+        body.AddChild(ModalButton(
+            "STARSHIP FLIGHT 12 / V3 + RAPTOR 3",
+            LaunchStarshipFlight12Scenario));
         body.AddChild(ModalButton("STARSHIP / 70 KM ENTRY INTERFACE", OpenReentry));
         body.AddChild(ModalButton("STARSHIP / STARBASE MANUAL LAUNCH", OpenSandbox));
     });

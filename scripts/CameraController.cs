@@ -139,7 +139,8 @@ public partial class CameraController : Node3D
         {
             var body = bridge.Universe.GetDominantBody(bridge.ActiveVessel.Position);
             bool hasBooster = bridge.ActiveVessel.Parts.Parts.Any(
-                p => p.Definition.Id == "super_heavy_booster");
+                p => p.Definition.IsStarshipFamily
+                    && p.Definition.HasVehicleRole("booster"));
             if (_trackedVehicleInitialized && _trackedHadBooster && !hasBooster
                 && _distance is > 70f and < 105f)
             {
@@ -287,9 +288,12 @@ public partial class CameraController : Node3D
         // y≈18. Move both interior and eye down by the 25.36-unit separation-plane shift
         // (36 → 10.64) after staging; otherwise the astronaut
         // camera floats ~50 m above the separated Ship.
-        bool hasSuperHeavy = v.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool hasSuperHeavy = v.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
         bool isStarship = v.Parts.Parts.Any(p =>
-            p.Definition.Id == "starship_command" || p.Definition.Id == "starship_engines");
+            p.Definition.IsStarshipFamily
+            && (p.Definition.HasVehicleRole("command")
+                || p.Definition.HasVehicleRole("ship_engines")));
         float eyeLocalY = hasSuperHeavy ? CockpitRenderer.AuthoredEyeY
             : isStarship ? 10.64f
             : Mathf.Max(1.2f, (float)(v.VehicleLength / 2.8 * 0.72));

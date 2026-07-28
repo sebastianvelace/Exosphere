@@ -94,9 +94,12 @@ public partial class HotStageFlashController : Node3D
             return;
 
         var debris = bridge.Universe.Vessels.FirstOrDefault(v => v.Id == detachedVesselId);
-        bool detachedBooster = debris?.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster") ?? false;
+        bool detachedBooster = debris?.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster")) ?? false;
         bool activeShip = bridge.ActiveVessel?.Parts.Parts.Any(p =>
-            p.Definition.Id == "starship_engines" || p.Definition.Id == "starship_command") ?? false;
+            p.Definition.IsStarshipFamily
+            && (p.Definition.HasVehicleRole("ship_engines")
+                || p.Definition.HasVehicleRole("command"))) ?? false;
 
         if (!detachedBooster || !activeShip)
             return;

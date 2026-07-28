@@ -40,7 +40,8 @@ public partial class EngineStartupController : Node3D
             return;
         }
 
-        bool hasBooster = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool hasBooster = vessel.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
         double altitude = vessel.GetAltitude(body);
         bool startup = hasBooster
             && vessel.IsGroundHeld

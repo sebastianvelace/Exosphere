@@ -76,7 +76,8 @@ public partial class MaxQRingController : Node3D
 
         // Ring follows vessel (at render origin); position at Starship body midpoint
         // Rough heuristic: standalone Starship CoM is at y≈8; full stack is at y≈30.
-        bool hasSH = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool hasSH = vessel.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
         _ring.Position = new Vector3(0, hasSH ? 30f : 8f, 0);
 
         // Flicker to simulate condensation turbulence

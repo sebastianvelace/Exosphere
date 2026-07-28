@@ -3,6 +3,8 @@
   "name": "TD-30 Heavy Stack Decoupler",
   "description": "Flight 7 hot-stage ring and mechanical stage interface. Its 5 t engineering allocation is included in the 200 t dry Super Heavy stage baseline.",
   "category": "decoupler",
+  "vehicle_family": "starship",
+  "vehicle_role": "hotstage",
   "mass_dry": 5000,
   "length_m": 3.5,
   "diameter_m": 9.0,

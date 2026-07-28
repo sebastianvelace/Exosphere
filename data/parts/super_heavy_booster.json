@@ -3,6 +3,8 @@
   "name": "Super Heavy Booster",
   "description": "Flight 7 Super Heavy Booster 14 with 33 individually simulated Raptor 2 engineering models. Propellant loading, dry mass and engine performance remain explicitly estimated.",
   "category": "engine",
+  "vehicle_family": "starship",
+  "vehicle_role": "booster",
   "mass_dry": 195000,
   "length_m": 67.5,
   "diameter_m": 9.0,

@@ -1,0 +1,20 @@
+{
+  "id": "starship_v3_hotstage_flight12",
+  "name": "Super Heavy V3 Hot-Stage",
+  "description": "Flight 12 V3 hot-stage ring and mechanical interface. Geometry and mass are simulator estimates.",
+  "category": "decoupler",
+  "vehicle_family": "starship",
+  "vehicle_role": "hotstage",
+  "mass_dry": 6000,
+  "length_m": 3.5,
+  "diameter_m": 9.0,
+  "cost": 1000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1800,
+  "has_heat_shield": true,
+  "ejection_force": 1000,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.75, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.75, 0], "size": 3, "type": "stack"}
+  ]
+}

@@ -11,18 +11,30 @@ Base tecnica cerrada en `main`:
 
 - Builds .NET/Godot esperados: 0 warnings, 0 errores.
 - `ExosphereSimulation.Tests` cubre gravedad, RK4, Kepler, radial/suborbital,
-  rails-impact, motores, termica de escudo, aerodinamica, SOI, navegacion y VAB.
+  rails-impact, motores individuales, termica de escudo, aerodinamica, SOI,
+  navegacion, persistencia V2, payloads, variantes y VAB.
 - Godot headless carga la escena principal y la escena de construccion.
 - CI descarga Godot 4.6.3 mono, compila la capa Godot C#, corre smoke headless y
   mantiene un guard contra harnesses temporales commiteados.
-- VAB V1.6 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click auto-attach,
-  plantillas Starter/Starship, preview/picking 3D, undo/redo, checklist de lanzamiento,
-  save/load, navegador de crafts y launch al pad.
-- Starship/Super Heavy tiene malla procedural con diametro real de 9 m, hot-stage
+- VAB 2.0 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click y
+  drag/ghost auto-attach, snap, rotación, simetría, preview/picking 3D, undo/redo,
+  timeline de etapas, analizador, payload bay, checklist, save/load y launch al pad.
+- `CraftDocumentV2`, `SaveGameV2`, IDs estables, multi-vessel y
+  `SetActiveVessel` preservan crafts, sistemas, navegación, payloads y estado de
+  campaña; los payloads desplegados se vuelven vehículos controlables.
+- Falcon 9 Block 5 y New Glenn 7x2 tienen presets fechados, motores/clusters
+  data-driven, procedencia obligatoria y escenarios propios.
+- Starship Flight 7 Block 2/Raptor 2 y Flight 12 V3/Raptor 3 son variantes
+  históricas separadas. Flight 12 usa 33+6 motores según SpaceX; empuje, Isp,
+  masas y transitorios no publicados están marcados como modelo de ingeniería
+  restringido. El sobre FAA futuro 35+9 permanece `regulatory_envelope`.
+- Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
+  de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
   charring termico, bordes de heat shield, patron de tiles, payload-door cues,
   seams longitudinales, pluma liftoff mas densa y Super Heavy separado con anillo
-  expuesto/quemado.
+  expuesto/quemado. Los motores 33/6 tienen estado, feed, gimbal, telemetría,
+  fallos y pluma individual; ya no son solamente una multiplicación visual.
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
@@ -93,17 +105,16 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### VAB / Construccion
 
-- Menu principal dedicado.
-- Drag-and-drop con ghost, simetría radial y gizmos de arrastre/rotación.
-- Mejor feedback visual de nodos compatibles/incompatibles.
-- Validacion visual de crafts guardados antes de launch.
+- Mejorar el feedback visual de nodos compatibles/incompatibles.
+- Completar navegación con mando en cada modal y edición avanzada de action groups.
+- Añadir goldens de crafts guardados y migrados antes de launch.
 
 ### Visual Starship/Super Heavy
 
 - Plan detallado: `PLAN_VISUAL_REALISM.md`.
 - Capturas de aceptacion con framebuffer real.
-- Engine-out real queda fuera de esta etapa porque rompe el contrato actual de
-  una parte-motor fisica por etapa.
+- Engine-out por instancia y plumas individuales están implementados. Pendiente:
+  benchmark/golden sostenido con 39 motores y comparación visual de Raptor 3.
 
 ### Reentry Fisico/Visual
 
@@ -121,8 +132,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Gameplay
 
-- Save/load de mision (oleada C1) — `MissionSaveSerializer` + F5/F9 quicksave +
-  MainMenu Continue; mid-orbit roundtrip tested.
+- Save/load V2 de misión y multi-vessel — `SaveGameV2` + F5/F9 quicksave +
+  MainMenu Continue; round-trip y migración probados.
 - Flujo jugable orbita → deorbit → ENTRY (oleada C2) ✅ — mapa `[B]`
   (`DeorbitPlanner` + `ManeuverPlanner.PlanDeorbit`); EDL arma `ENTRY` sin teleport demo.
 - Cues/track de fases EDL (oleada C3) ✅ — `MissionPhaseTrack` + HUD dots
@@ -133,9 +144,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### CI / Visual Testing
 
-- Captura PNG end-to-end en CI usando Xvfb.
-- Comparacion minima de screenshots para detectar pantallas negras, UI rota o
-  render sin nave.
+- Captura PNG end-to-end con Xvfb y harness temporal para menú, VAB, Falcon 9,
+  New Glenn, Flight 7, Flight 12, launch, ship, cockpit, atmósfera y EDL.
+- Métricas mínimas de screenshots detectan pantallas negras, UI rota o render sin nave.
 - Mantener el guard anti-harness: no commitear `scripts/_*Shot.cs`,
   `scripts/*VerifyShot.cs`, `scenes/*VerifyShot.tscn` ni autoloads temporales.
 

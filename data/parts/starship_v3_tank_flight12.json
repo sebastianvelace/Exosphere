@@ -1,0 +1,21 @@
+{
+  "id": "starship_v3_tank_flight12",
+  "name": "Starship V3 Propellant Tank",
+  "description": "Flight 12 V3 common-bulkhead tank model. The 1,400 t loading and component dry mass are simulator estimates, not SpaceX acceptance data.",
+  "category": "fuel_tank",
+  "vehicle_family": "starship",
+  "vehicle_role": "tank",
+  "mass_dry": 57000,
+  "length_m": 30.5,
+  "diameter_m": 9.0,
+  "cost": 24000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1800,
+  "has_heat_shield": true,
+  "fuel_capacity_lf": 308000,
+  "fuel_capacity_ox": 1092000,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 15.25, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -15.25, 0], "size": 3, "type": "stack"}
+  ]
+}

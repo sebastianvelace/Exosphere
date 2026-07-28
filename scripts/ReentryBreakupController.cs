@@ -95,7 +95,8 @@ public partial class ReentryBreakupController : Node3D
         Vector3 flow   = new((float)surfVel.X, (float)surfVel.Y, (float)surfVel.Z);
         flow = flow.LengthSquared() > 1e-6f ? flow.Normalized() : Vector3.Up;
 
-        bool hasSH = vessel!.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool hasSH = vessel!.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
         Vector3 centre = new(0f, hasSH ? 26f : 8f, 0f);
         float   spread = hasSH ? 10f : 5f;
 

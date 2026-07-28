@@ -483,7 +483,9 @@ public class Vessel
                 // arm; this replaces the impossible assumption that only lit engines can
                 // hold a lift-producing angle of attack.
                 bool hasBodyFlaps = Parts.Parts.Any(p =>
-                    p.Definition.Id == "starship_command" && !p.IsBroken);
+                    p.Definition.IsStarshipFamily
+                    && p.Definition.HasVehicleRole("command")
+                    && !p.IsBroken);
                 if (hasBodyFlaps && hasInput)
                 {
                     AngularVelocity += AerodynamicsModel.ComputeFlapControlAngularAcceleration(

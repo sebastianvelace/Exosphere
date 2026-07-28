@@ -1,0 +1,26 @@
+{
+  "id": "starship-flight12-ship-six",
+  "name": "Flight 12 V3 Ship — 3 Raptor 3 + 3 Raptor 3 Vacuum",
+  "engineModelId": "raptor3-starship-sl-flight12",
+  "engines": [
+    {"instanceId": "f12-ship-sl-01", "engineModelId": "raptor3-starship-sl-flight12", "positionM": [0.0, 0.0, 0.55], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "f12-ship-sl-02", "engineModelId": "raptor3-starship-sl-flight12", "positionM": [-0.4763, 0.0, -0.275], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "f12-ship-sl-03", "engineModelId": "raptor3-starship-sl-flight12", "positionM": [0.4763, 0.0, -0.275], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "f12-ship-vac-01", "engineModelId": "raptor3-starship-vac-flight12", "positionM": [2.65, 0.0, 0.0], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": false},
+    {"instanceId": "f12-ship-vac-02", "engineModelId": "raptor3-starship-vac-flight12", "positionM": [-1.325, 0.0, 2.2949], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": false},
+    {"instanceId": "f12-ship-vac-03", "engineModelId": "raptor3-starship-vac-flight12", "positionM": [-1.325, 0.0, -2.2949], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": false}
+  ],
+  "feedNetwork": {
+    "fuelResource": "CH4",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "f12-ship-sl-01", "maximumFlowKgS": 950},
+      {"engineInstanceId": "f12-ship-sl-02", "maximumFlowKgS": 950},
+      {"engineInstanceId": "f12-ship-sl-03", "maximumFlowKgS": 950},
+      {"engineInstanceId": "f12-ship-vac-01", "maximumFlowKgS": 950},
+      {"engineInstanceId": "f12-ship-vac-02", "maximumFlowKgS": 950},
+      {"engineInstanceId": "f12-ship-vac-03", "maximumFlowKgS": 950}
+    ]
+  }
+}

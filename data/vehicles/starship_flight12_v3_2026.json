@@ -1,0 +1,19 @@
+{
+  "id": "starship-flight-12-v3-2026-05-22",
+  "name": "Starship Flight 12 — V3 / Raptor 3",
+  "family": "Starship",
+  "asOfDate": "2026-05-22",
+  "fairingVariant": "integrated-ship",
+  "primarySource": "https://www.spacex.com/launches/starship-flight-12",
+  "engineClusterIds": [
+    "starship-flight12-superheavy-33",
+    "starship-flight12-ship-six"
+  ],
+  "stackTopToBottom": [
+    "starship_v3_command_flight12",
+    "starship_v3_tank_flight12",
+    "starship_v3_engines_flight12",
+    "starship_v3_hotstage_flight12",
+    "super_heavy_v3_booster_flight12"
+  ]
+}

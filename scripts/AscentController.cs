@@ -473,7 +473,8 @@ public partial class AscentController : Control
     {
         Part? sh = null;
         foreach (var p in vessel.Parts.Parts)
-            if (p.Definition.Id == "super_heavy_booster") { sh = p; break; }
+            if (p.Definition.IsStarshipFamily
+                && p.Definition.HasVehicleRole("booster")) { sh = p; break; }
 
         if (sh != null)
         {

@@ -100,9 +100,12 @@ public partial class VesselRenderer : Node3D
         TargetVessel = vessel;
         ClearNodes();
 
-        bool hasSH       = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
-        bool hasStarship  = vessel.Parts.Parts.Any(p =>
-            p.Definition.Id == "starship_engines" || p.Definition.Id == "starship_command");
+        bool hasSH = vessel.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
+        bool hasStarship = vessel.Parts.Parts.Any(p =>
+            p.Definition.IsStarshipFamily
+            && (p.Definition.HasVehicleRole("ship_engines")
+                || p.Definition.HasVehicleRole("command")));
         if      (hasSH && hasStarship) BuildFullStack(vessel);
         else if (hasSH)                BuildSuperHeavyOnly(vessel);
         else if (hasStarship)          BuildStarshipSection(vessel, yOffset: -22f);
@@ -516,7 +519,8 @@ public partial class VesselRenderer : Node3D
         if (TargetVessel == null) return;
 
         float  throttle  = (float)TargetVessel.Throttle;
-        bool   shPresent = TargetVessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool shPresent = TargetVessel.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
         var universe = SimulationBridge.Instance?.Universe;
         var body = universe?.GetDominantBody(TargetVessel.Position);
         double alt = body != null ? TargetVessel.GetAltitude(body) : 0.0;
@@ -524,7 +528,8 @@ public partial class VesselRenderer : Node3D
             ? System.Math.Clamp(TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
             : 0.0;
         int selectedShipEngines = TargetVessel.Parts.Parts
-            .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 6;
+            .FirstOrDefault(p => p.Definition.IsStarshipFamily
+                && p.Definition.HasVehicleRole("ship_engines"))?.SelectedEngineCount ?? 6;
 
         _plumes?.Update(throttle, shPresent, alt, pressureRatio, selectedShipEngines);
         if (_plumes != null)
@@ -614,13 +619,13 @@ public partial class VesselRenderer : Node3D
         double tankDamage = 0.0, tankTemp = 0.0;
         foreach (var part in TargetVessel.Parts.Parts)
         {
-            switch (part.Definition.Id)
+            switch (part.Definition.VehicleRole)
             {
-                case "starship_command":
+                case "command" when part.Definition.IsStarshipFamily:
                     if (part.ThermalDamage   > cmdDamage) cmdDamage = part.ThermalDamage;
                     if (part.SkinTemperature > cmdTemp)   cmdTemp   = part.SkinTemperature;
                     break;
-                case "starship_tank":
+                case "tank" when part.Definition.IsStarshipFamily:
                     if (part.ThermalDamage   > tankDamage) tankDamage = part.ThermalDamage;
                     if (part.SkinTemperature > tankTemp)   tankTemp   = part.SkinTemperature;
                     break;

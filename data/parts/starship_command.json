@@ -3,6 +3,8 @@
   "name": "Starship Command Section",
   "description": "Flight 7 Block 2 nose, payload section, avionics and forward flaps. The 35 t dry mass is an engineering allocation within a 100 t dry Starship stage; SpaceX does not publish a component mass breakdown.",
   "category": "command",
+  "vehicle_family": "starship",
+  "vehicle_role": "command",
   "mass_dry": 35000,
   "length_m": 18.5,
   "diameter_m": 9.0,

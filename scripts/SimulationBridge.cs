@@ -167,7 +167,11 @@ public partial class SimulationBridge : Node
             worldNode.CallDeferred("add_child", hotStageFx);
         }
 
-        SpawnStarshipStack(dataPath);
+        bool needsDefaultStack = pendingIntent == null
+            || pendingIntent.Craft == null
+                && string.IsNullOrWhiteSpace(pendingIntent.SaveSlot);
+        if (needsDefaultStack)
+            SpawnStarshipStack(dataPath);
         SpawnPendingConstructedVessel(dataPath, pendingIntent);
         SpawnPlanets();
         EmitSignal(SignalName.SimulationLoaded);
@@ -297,14 +301,7 @@ public partial class SimulationBridge : Node
         {
             if (!SaveSystem.LoadGame(intent.SaveSlot))
                 throw new InvalidDataException($"Could not continue save '{intent.SaveSlot}'.");
-            if (ActiveVessel != null)
-            {
-                _vesselRenderer?.BuildFromVessel(ActiveVessel);
-                var floating = GetTree().Root.FindChild("FloatingOrigin", true, false)
-                    as FloatingOrigin;
-                if (_vesselRenderer != null)
-                    floating?.RegisterVesselNode(ActiveVessel.Id, _vesselRenderer);
-            }
+            RebuildActiveVesselRenderer();
             return;
         }
 
@@ -384,32 +381,7 @@ public partial class SimulationBridge : Node
         Universe.AddVessel(vessel);
         Universe.SetActiveVessel(vessel.Id);
 
-        // Build renderer
-        var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
-        if (vesselsNode != null)
-        {
-            _vesselRenderer = new VesselRenderer();
-            _vesselRenderer.Name = "StarshipRenderer";
-            vesselsNode.AddChild(_vesselRenderer);
-            _vesselRenderer.BuildFromVessel(vessel);
-
-            // First-person cockpit interior — a SIBLING of the rocket model (at the render origin)
-            // so the CameraController can hide the rocket and show only the cockpit in Cockpit mode.
-            // CameraController orients it to the vessel each frame.
-            vesselsNode.AddChild(new CockpitRenderer { Name = "CockpitRenderer" });
-            AddChild(new CockpitInstruments { Name = "CockpitInstruments" });
-
-            // MaxQ condensation ring — tracks active vessel (always at render origin)
-            var maxQ = new MaxQRingController { Name = "MaxQRing" };
-            vesselsNode.AddChild(maxQ);
-
-            // Re-entry plasma glow — driven by the real convective heat flux (ρ·v³)
-            var plasma = new ReentryPlasmaController { Name = "ReentryPlasma" };
-            vesselsNode.AddChild(plasma);
-
-            var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
-            fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
-        }
+        EnsureActiveVesselPresentation(vessel);
     }
 
     // ── Planets ───────────────────────────────────────────────────────────
@@ -596,18 +568,7 @@ public partial class SimulationBridge : Node
     {
         var vessel = ActiveVessel;
         if (vessel == null) return;
-
-        var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
-        if (_vesselRenderer == null && vesselsNode != null)
-        {
-            _vesselRenderer = new VesselRenderer { Name = "StarshipRenderer" };
-            vesselsNode.AddChild(_vesselRenderer);
-        }
-
-        _vesselRenderer?.BuildFromVessel(vessel);
-        var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
-        if (_vesselRenderer != null)
-            fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
+        EnsureActiveVesselPresentation(vessel);
     }
 
     /// <summary>
@@ -632,17 +593,35 @@ public partial class SimulationBridge : Node
         Universe.AddVessel(vessel);
         Universe.SetActiveVessel(vessel.Id);
 
-        var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
-        if (_vesselRenderer == null && vesselsNode != null)
+        EnsureActiveVesselPresentation(vessel);
+    }
+
+    private void EnsureActiveVesselPresentation(Vessel vessel)
+    {
+        var root = GetTree().Root;
+        var vesselsNode = root.FindChild("Vessels", true, false) as Node3D;
+        if (vesselsNode == null) return;
+
+        if (_vesselRenderer == null)
         {
-            _vesselRenderer = new VesselRenderer { Name = "StarshipRenderer" };
+            _vesselRenderer = new VesselRenderer { Name = "ActiveVesselRenderer" };
             vesselsNode.AddChild(_vesselRenderer);
         }
+        _vesselRenderer.BuildFromVessel(vessel);
 
-        _vesselRenderer?.BuildFromVessel(vessel);
-        var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
-        if (_vesselRenderer != null)
-            fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
+        // These consumers follow the active vessel and are independent of vehicle identity.
+        if (root.FindChild("CockpitRenderer", true, false) == null)
+            vesselsNode.AddChild(new CockpitRenderer { Name = "CockpitRenderer" });
+        if (root.FindChild("CockpitInstruments", true, false) == null)
+            AddChild(new CockpitInstruments { Name = "CockpitInstruments" });
+        if (root.FindChild("MaxQRing", true, false) == null)
+            vesselsNode.AddChild(new MaxQRingController { Name = "MaxQRing" });
+        if (root.FindChild("ReentryPlasma", true, false) == null)
+            vesselsNode.AddChild(
+                new ReentryPlasmaController { Name = "ReentryPlasma" });
+
+        var floating = root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        floating?.RegisterVesselNode(vessel.Id, _vesselRenderer);
     }
 
     // ── Ignition / throttle contracts (consumed by HUDController / Agente E) ─
@@ -800,13 +779,16 @@ public partial class SimulationBridge : Node
 
         // The launch scene begins as a full stack. Separate first so EDL controls the Ship
         // engine cluster and aerodynamic body rather than an impossible attached booster.
-        if (vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster"))
+        if (vessel.Parts.Parts.Any(
+                p => p.Definition.IsStarshipFamily
+                    && p.Definition.HasVehicleRole("booster")))
         {
             TriggerStaging();
             vessel = ActiveVessel;
         }
         if (vessel == null || !vessel.Parts.Parts.Any(
-                p => p.Definition.Id == "starship_engines"))
+                p => p.Definition.IsStarshipFamily
+                    && p.Definition.HasVehicleRole("ship_engines")))
             return false;
 
         Vector3d currentUp = (vessel.Position - earth.Position).Normalized;

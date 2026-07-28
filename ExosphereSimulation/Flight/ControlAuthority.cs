@@ -40,7 +40,8 @@ public static class ControlAuthority
             {
                 hasCommand = true;
                 // Starship flaps live on the command section in this data model.
-                if (part.Definition.Id == "starship_command")
+                if (part.Definition.IsStarshipFamily
+                    && part.Definition.HasVehicleRole("command"))
                 {
                     hasFlaps = true;
                     usesStarshipFlapModel = true;

@@ -3,6 +3,8 @@
   "name": "Starship Raptor Engine Cluster",
   "description": "Flight 7 cluster of three individually simulated sea-level and three vacuum Raptor 2 engineering models. Public sources establish the six-engine configuration but do not publish Flight 7 acceptance data.",
   "category": "engine",
+  "vehicle_family": "starship",
+  "vehicle_role": "ship_engines",
   "mass_dry": 15000,
   "length_m": 4.0,
   "diameter_m": 9.0,

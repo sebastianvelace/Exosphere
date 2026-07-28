@@ -28,6 +28,8 @@ public class PartDefinition
     [JsonPropertyName("name")]        public string Name        { get; set; } = "";
     [JsonPropertyName("description")] public string Description { get; set; } = "";
     [JsonPropertyName("category")]    public string CategoryStr { get; set; } = "structure";
+    [JsonPropertyName("vehicle_family")] public string VehicleFamily { get; set; } = "";
+    [JsonPropertyName("vehicle_role")] public string VehicleRole { get; set; } = "";
     [JsonPropertyName("mass_dry")]    public double MassDry     { get; set; }
     [JsonPropertyName("cost")]        public double Cost        { get; set; }
     [JsonPropertyName("drag_coefficient")] public double DragCoefficient { get; set; } = 0.2;
@@ -142,6 +144,13 @@ public class PartDefinition
         "rcs"         => PartCategory.RCS,
         _             => PartCategory.Structure
     };
+
+    [JsonIgnore]
+    public bool IsStarshipFamily =>
+        string.Equals(VehicleFamily, "starship", StringComparison.OrdinalIgnoreCase);
+
+    public bool HasVehicleRole(string role) =>
+        string.Equals(VehicleRole, role, StringComparison.OrdinalIgnoreCase);
 
     private static readonly JsonSerializerOptions _opts = new()
     {

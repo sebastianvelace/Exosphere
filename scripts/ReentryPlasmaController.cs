@@ -148,7 +148,8 @@ public partial class ReentryPlasmaController : Node3D
 
         // Vessel body centre in render space. The plasma controller is a sibling of
         // the renderer, so it must apply the vessel orientation itself.
-        bool hasSH = vessel.Parts.Parts.Any(p => p.Definition.Id == "super_heavy_booster");
+        bool hasSH = vessel.Parts.Parts.Any(
+            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
         Vector3 bodyCentre = ToGodot(vessel.Orientation.Rotate(new Vector3d(0.0, hasSH ? 30.0 : 8.0, 0.0)));
 
         // Shock sits on the windward (leading) face; wake streams out behind.

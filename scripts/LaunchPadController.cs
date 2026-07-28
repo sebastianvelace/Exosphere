@@ -19,8 +19,10 @@ public partial class LaunchPadController : Node3D
 {
     public static LaunchPadController? Instance { get; private set; }
     [Export] public string LaunchSiteId { get; set; } = "starbase";
+    private bool IsStarbaseSite =>
+        LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase);
     public double VehicleInterfaceElevationM =>
-        LaunchSiteId == "starbase"
+        IsStarbaseSite
             ? LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation
             : LaunchSiteId == "cape_canaveral_lc36" ? 5.5 : 4.0;
 
@@ -65,7 +67,7 @@ public partial class LaunchPadController : Node3D
         var asphalt   = Mat(new Color(0.08f, 0.085f, 0.08f), 0.96f, 0.0f);
         var paint     = Mat(new Color(0.62f, 0.52f, 0.22f), 0.88f, 0.0f);
 
-        if (LaunchSiteId != "starbase")
+        if (!IsStarbaseSite)
         {
             BuildConventionalLaunchComplex(
                 LaunchSiteId == "cape_canaveral_lc36",

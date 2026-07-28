@@ -1,0 +1,9 @@
+{
+  "id": "starbase_pad2",
+  "name": "SpaceX Starbase Pad 2",
+  "body": "earth",
+  "latitude": 25.9976,
+  "longitude": -97.1573,
+  "altitude": 1.0,
+  "heading": 90.0
+}

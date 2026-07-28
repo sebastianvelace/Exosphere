@@ -1,0 +1,19 @@
+{
+  "id": "starship_v3_command_flight12",
+  "name": "Starship V3 Command Section",
+  "description": "Flight 12 V3 nose, payload section, avionics and forward flaps. Geometry and mass allocation are restricted public-data engineering estimates.",
+  "category": "command",
+  "vehicle_family": "starship",
+  "vehicle_role": "command",
+  "mass_dry": 38000,
+  "length_m": 19.0,
+  "diameter_m": 9.0,
+  "cost": 54000,
+  "drag_coefficient": 0.25,
+  "heat_tolerance": 2800,
+  "has_heat_shield": true,
+  "max_crew": 100,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -9.5, 0], "size": 3, "type": "stack"}
+  ]
+}

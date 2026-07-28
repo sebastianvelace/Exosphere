@@ -93,7 +93,8 @@ public partial class EDLController : Control
             bool descending = _vUp < -20.0;
             bool inAtmo     = _alt < body.Atmosphere.MaxAltitude * 1.05;
             bool hasSuperHeavy = vessel.Parts.Parts.Any(
-                p => p.Definition.Id == "super_heavy_booster");
+                p => p.Definition.IsStarshipFamily
+                    && p.Definition.HasVehicleRole("booster"));
             if (descending && inAtmo && hasSuperHeavy)
             {
                 // Defensive recovery for an externally-started/full-stack entry.
@@ -147,7 +148,8 @@ public partial class EDLController : Control
         Vector3d velDir = surfVel.Magnitude > 1e-3 ? surfVel.Normalized : -up;
         Quaterniond retroTarget = ShortestArc(Vector3d.Up, -velDir);
         Part? shipEngines = vessel.Parts.Parts.FirstOrDefault(
-            p => p.Definition.Id == "starship_engines");
+            p => p.Definition.IsStarshipFamily
+                && p.Definition.HasVehicleRole("ship_engines"));
         bool aeroPhase = _phase is Edl.Entry or Edl.Peak or Edl.Aero;
         if (aeroPhase)
             shipEngines?.SelectEngineCount(System.Math.Min(3,

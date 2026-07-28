@@ -197,6 +197,13 @@ public partial class ConstructionController : Control
             "falcon9_block5_extended_2025.json");
         buttons.AddChild(falcon9Extended);
 
+        var flight12 = new Button { Text = "Starship F12" };
+        flight12.TooltipText =
+            "Dated May 2026 V3/Raptor 3 restricted public-data model";
+        flight12.Pressed += () => OnVehicleVariant(
+            "starship_flight12_v3_2026.json");
+        buttons.AddChild(flight12);
+
         _undoButton = new Button { Text = "Undo" };
         _undoButton.Pressed += OnUndo;
         buttons.AddChild(_undoButton);
@@ -570,13 +577,19 @@ public partial class ConstructionController : Control
             }
             bool falcon = _vehicleVariantId?.StartsWith(
                 "falcon9-", StringComparison.OrdinalIgnoreCase) == true;
+            bool flight12 = string.Equals(
+                _vehicleVariantId,
+                "starship-flight-12-v3-2026-05-22",
+                StringComparison.OrdinalIgnoreCase);
             var launchCraft = _assembly.ToCraftDocument(CraftName());
             launchCraft.VehicleVariantId = _vehicleVariantId;
             CraftLaunchRequest.Set(new LaunchIntent
             {
                 Mode = "sandbox",
                 VehicleVariantId = _vehicleVariantId,
-                LaunchSiteId = falcon ? "kennedy" : "starbase",
+                LaunchSiteId = falcon ? "kennedy"
+                    : flight12 ? "starbase_pad2"
+                    : "starbase",
                 FlightProfileId = falcon ? "falcon9-block5-ascent" : "manual",
                 Craft = launchCraft,
             });

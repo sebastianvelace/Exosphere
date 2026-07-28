@@ -30,6 +30,7 @@ Options:
   --falcon      Seed the Falcon 9 Block 5 / Kennedy scenario before capture.
   --new-glenn   Seed the New Glenn 7x2 / LC-36 scenario before capture.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
+  --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
   --cockpit     Capture the first-person cockpit optics and interior.
@@ -69,6 +70,11 @@ while [[ $# -gt 0 ]]; do
       VARIANT_FILE="starship_flight7_block2_2025.json"
       VARIANT_SITE="starbase"
       VARIANT_PROFILE="starship-flight7-ascent"
+      shift ;;
+    --flight12)
+      VARIANT_FILE="starship_flight12_v3_2026.json"
+      VARIANT_SITE="starbase_pad2"
+      VARIANT_PROFILE="starship-flight12-ascent"
       shift ;;
     --launch) MODE="launch"; shift ;;
     --ship) MODE="ship"; shift ;;
@@ -505,7 +511,9 @@ public partial class _PlaytestShot : Node
             Vector3d up = (vessel.Position - body.Position).Normalized;
             double vUp = surfVel.Dot(up);
             double horizontal = (surfVel - up * vUp).Magnitude;
-            var cluster = vessel.Parts.Parts.FirstOrDefault(p => p.Definition.Id == "starship_engines");
+            var cluster = vessel.Parts.Parts.FirstOrDefault(
+                p => p.Definition.IsStarshipFamily
+                    && p.Definition.HasVehicleRole("ship_engines"));
             double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
             int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
             double maxStroke = vessel.LastSurfaceContact?.Points.Max(p => p.PenetrationM) ?? 0.0;
@@ -550,7 +558,9 @@ public partial class _PlaytestShot : Node
                 QueueCapture("flip_complete");
                 _flipComplete = true;
                 int engines = vessel.Parts.Parts
-                    .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 0;
+                    .FirstOrDefault(p => p.Definition.IsStarshipFamily
+                        && p.Definition.HasVehicleRole("ship_engines"))
+                    ?.SelectedEngineCount ?? 0;
                 _log.WriteLine($"CHECK finite_flip duration={universe.CurrentTime - _retroStart:F2}s " +
                     $"alignment={alignment:F5} omega={vessel.AngularVelocity.Magnitude:F4} engines={engines}");
                 _log.Flush();
@@ -1026,7 +1036,9 @@ public partial class _PlaytestShot : Node
         double density = body.GetAtmosphericDensity(vessel.Position);
         double flux = ThermalModel.ComputeHeatFlux(density, spd);
         int selectedEngines = vessel.Parts.Parts
-            .FirstOrDefault(p => p.Definition.Id == "starship_engines")?.SelectedEngineCount ?? 0;
+            .FirstOrDefault(p => p.Definition.IsStarshipFamily
+                && p.Definition.HasVehicleRole("ship_engines"))
+            ?.SelectedEngineCount ?? 0;
         int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
         double maxStroke = vessel.LastSurfaceContact?.Points.Max(p => p.PenetrationM) ?? 0.0;
         double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
