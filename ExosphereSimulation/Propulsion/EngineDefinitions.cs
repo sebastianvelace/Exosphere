@@ -226,6 +226,12 @@ public sealed class EngineModelDefinition
 public sealed record EngineMountDefinition
 {
     public string InstanceId { get; init; } = "";
+    /// <summary>
+    /// Optional per-mount override. Empty mounts use the cluster's default model.
+    /// This permits physically mixed clusters such as Starship's three sea-level
+    /// and three vacuum Raptors without collapsing them into an average engine.
+    /// </summary>
+    public string EngineModelId { get; init; } = "";
     public double[] PositionM { get; init; } = [0.0, 0.0, 0.0];
     public double[] ThrustDirection { get; init; } = [0.0, 1.0, 0.0];
     public bool Gimballed { get; init; } = true;
@@ -259,7 +265,9 @@ public sealed class EngineClusterDefinition
             throw new InvalidDataException($"Engine cluster '{Id}' has invalid instance ids.");
         foreach (var mount in Engines)
         {
-            if (mount.PositionM.Length != 3
+            if (!string.IsNullOrWhiteSpace(mount.EngineModelId)
+                    && !models.ContainsKey(mount.EngineModelId)
+                || mount.PositionM.Length != 3
                 || mount.ThrustDirection.Length != 3
                 || mount.PositionM.Any(v => !double.IsFinite(v))
                 || mount.ThrustDirection.Any(v => !double.IsFinite(v))

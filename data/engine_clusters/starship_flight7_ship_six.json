@@ -1,0 +1,26 @@
+{
+  "id": "starship-flight7-ship-six",
+  "name": "Flight 7 Ship — 3 Raptor 2 + 3 Raptor Vacuum",
+  "engineModelId": "raptor2-starship-sl-flight7",
+  "engines": [
+    {"instanceId": "ship-sl-01", "engineModelId": "raptor2-starship-sl-flight7", "positionM": [0.0, 0.0, 0.55], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "ship-sl-02", "engineModelId": "raptor2-starship-sl-flight7", "positionM": [-0.4763, 0.0, -0.275], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "ship-sl-03", "engineModelId": "raptor2-starship-sl-flight7", "positionM": [0.4763, 0.0, -0.275], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "ship-vac-01", "engineModelId": "raptor2-starship-vac-flight7", "positionM": [2.65, 0.0, 0.0], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": false},
+    {"instanceId": "ship-vac-02", "engineModelId": "raptor2-starship-vac-flight7", "positionM": [-1.325, 0.0, 2.2949], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": false},
+    {"instanceId": "ship-vac-03", "engineModelId": "raptor2-starship-vac-flight7", "positionM": [-1.325, 0.0, -2.2949], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": false}
+  ],
+  "feedNetwork": {
+    "fuelResource": "CH4",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "ship-sl-01", "maximumFlowKgS": 850},
+      {"engineInstanceId": "ship-sl-02", "maximumFlowKgS": 850},
+      {"engineInstanceId": "ship-sl-03", "maximumFlowKgS": 850},
+      {"engineInstanceId": "ship-vac-01", "maximumFlowKgS": 850},
+      {"engineInstanceId": "ship-vac-02", "maximumFlowKgS": 850},
+      {"engineInstanceId": "ship-vac-03", "maximumFlowKgS": 850}
+    ]
+  }
+}

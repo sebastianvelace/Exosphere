@@ -86,6 +86,9 @@ public class PartDefinition
     [JsonPropertyName("engine_shutdown_seconds")] public double EngineShutdownSeconds { get; set; } = 0.20;
     [JsonPropertyName("mixture_ratio")] public double MixtureRatio { get; set; }
     [JsonIgnore] public EngineModelDefinition? ResolvedEngineModel { get; set; }
+    [JsonIgnore] public IReadOnlyDictionary<string, EngineModelDefinition>
+        ResolvedEngineModels { get; set; } =
+            new Dictionary<string, EngineModelDefinition>(StringComparer.Ordinal);
     [JsonIgnore] public EngineClusterDefinition? ResolvedEngineCluster { get; set; }
     // Axial location of the effective thrust plane relative to this part's centre.
     [JsonPropertyName("thrust_position_y_m")] public double ThrustPositionYM { get; set; }

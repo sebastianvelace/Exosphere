@@ -1,0 +1,31 @@
+{
+  "id": "raptor2-superheavy-flight7",
+  "name": "Raptor 2 Booster",
+  "variant": "Starship Flight 7 / Super Heavy Booster 14",
+  "asOfDate": "2025-01-16",
+  "fuel": "CH4",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 3.55,
+  "ratedThrustSeaLevelN": 2254545.454545,
+  "ratedThrustVacuumN": 2530303.030303,
+  "specificImpulseSeaLevelS": 327,
+  "specificImpulseVacuumS": 356,
+  "minimumThrottle": 0.40,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 7.0,
+  "gimbalRateDegPerS": 8.0,
+  "gimbalAccelerationDegPerS2": 24.0,
+  "startupSeconds": 0.50,
+  "shutdownSeconds": 0.20,
+  "restartLimit": 2,
+  "nominalOperatingTemperatureK": 1150,
+  "maximumSafeTemperatureK": 1450,
+  "thermalTimeConstantSeconds": 2.8,
+  "cooldownTimeConstantSeconds": 16.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 0.4, "thrustN": 901818.181818, "specificImpulseS": 327},
+    {"ambientPressurePa": 0, "throttle": 0.4, "thrustN": 1012121.212121, "specificImpulseS": 356},
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 2254545.454545, "specificImpulseS": 327},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 2530303.030303, "specificImpulseS": 356}
+  ]
+}

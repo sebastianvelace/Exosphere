@@ -1,0 +1,248 @@
+{
+  "manifestId": "starship-flight-7-block-2-2025-01-16",
+  "records": [
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "ratedThrustSeaLevelN",
+      "status": "calibrated", "source": "Exosphere pre-existing Flight 7 aggregate model divided across the 33 engines confirmed by SpaceX",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Super Heavy Booster 14",
+      "conditions": "Earth sea level, rated throttle", "uncertainty": "±10%; Flight 7 per-engine acceptance thrust is not public"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "ratedThrustVacuumN",
+      "status": "calibrated", "source": "Exosphere pre-existing Flight 7 aggregate pressure model",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Super Heavy Booster 14",
+      "conditions": "vacuum, rated throttle", "uncertainty": "±10%; not published for this flown variant"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Public Raptor 2 performance reporting and simulator calibration",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "Earth sea level", "uncertainty": "±4%; not published by SpaceX for Flight 7"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "Public Raptor 2 performance reporting and simulator calibration",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "vacuum", "uncertainty": "±4%; not published by SpaceX for Flight 7"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "minimumThrottle",
+      "status": "estimated", "source": "Public Raptor 2 engineering reporting",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "stable combustion floor", "uncertainty": "±10 percentage points"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "performanceMap",
+      "status": "calibrated", "source": "Exosphere pressure-throttle model constrained to the Flight 7 stack baseline",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "0–101325 Pa and 40–100% throttle", "uncertainty": "engineering model; no public acceptance map"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "restartEnvelope",
+      "status": "calibrated", "source": "SpaceX Flight 7 mission timeline confirms ascent, boostback and landing ignition sequences",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Booster 14",
+      "conditions": "up to three starts in the simulated mission", "uncertainty": "mission sequence known; detailed acceptance limits unknown"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere reusable methane-engine thermal model",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "internal normalized engine temperature", "uncertainty": "not a published metal or chamber temperature"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "Public Super Heavy engine-layout observations and simulator control calibration",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster center and middle engines",
+      "conditions": "inner 13 mounts movable; outer 20 fixed in the cluster definition", "uncertainty": "±2 degrees; rates unpublished"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "startupTransient",
+      "status": "calibrated", "source": "SpaceX Flight 7 webcast ignition timing and Exosphere startup model",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "command to rated chamber-pressure ramp", "uncertainty": "±0.25 s"
+    },
+    {
+      "dataId": "raptor2-superheavy-flight7", "field": "shutdownTransient",
+      "status": "calibrated", "source": "SpaceX Flight 7 webcast cutoff timing and Exosphere shutdown model",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "rated chamber pressure to cutoff", "uncertainty": "±0.15 s"
+    },
+
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "ratedThrustSeaLevelN",
+      "status": "estimated", "source": "Exosphere Flight 7 engineering allocation",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "Earth sea level, rated throttle", "uncertainty": "±10%; acceptance thrust unpublished"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "ratedThrustVacuumN",
+      "status": "estimated", "source": "Exosphere Flight 7 engineering allocation",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "vacuum, rated throttle", "uncertainty": "±10%; acceptance thrust unpublished"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Public Raptor 2 performance reporting and simulator calibration",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "Earth sea level", "uncertainty": "±4%"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "Public Raptor 2 performance reporting and simulator calibration",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "vacuum", "uncertainty": "±4%"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "minimumThrottle",
+      "status": "estimated", "source": "Public Raptor 2 engineering reporting",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "stable combustion floor", "uncertainty": "±10 percentage points"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "performanceMap",
+      "status": "calibrated", "source": "Exosphere Flight 7 pressure-throttle model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "0–101325 Pa and 40–100% throttle", "uncertainty": "engineering model"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "restartEnvelope",
+      "status": "regulatory_envelope", "source": "FAA Flight 7 authorization listed in-space and landing-burn engine demonstrations",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Ship 33",
+      "conditions": "initial ascent plus up to two planned relights", "uncertainty": "authorization is not proof that the complete sequence flew"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere reusable methane-engine thermal model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "internal normalized engine temperature", "uncertainty": "not a published material temperature"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "Public Starship engine-layout observations",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "three center mounts gimballed", "uncertainty": "±2 degrees; rates unpublished"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "startupTransient",
+      "status": "calibrated", "source": "SpaceX Flight 7 mission timeline and Exosphere startup model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "hot-stage ignition ramp", "uncertainty": "±0.25 s"
+    },
+    {
+      "dataId": "raptor2-starship-sl-flight7", "field": "shutdownTransient",
+      "status": "calibrated", "source": "SpaceX Flight 7 mission timeline and Exosphere shutdown model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
+      "conditions": "ascent cutoff", "uncertainty": "±0.15 s"
+    },
+
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "ratedThrustSeaLevelN",
+      "status": "estimated", "source": "Exosphere back-pressure allocation for the Flight 7 mixed six-engine cluster",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±20%; non-operational condition"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "ratedThrustVacuumN",
+      "status": "estimated", "source": "Exosphere Flight 7 engineering allocation",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "vacuum, rated throttle", "uncertainty": "±10%; acceptance thrust unpublished"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Exosphere back-pressure model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±10%; non-operational condition"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "Public Raptor Vacuum performance reporting and simulator calibration",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "vacuum", "uncertainty": "±4%"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "minimumThrottle",
+      "status": "estimated", "source": "Raptor 2 sea-level model inherited for unavailable vacuum acceptance data",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "stable combustion floor", "uncertainty": "±10 percentage points"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "performanceMap",
+      "status": "calibrated", "source": "Exosphere Flight 7 mixed-cluster pressure-throttle model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "0–101325 Pa and 40–100% throttle", "uncertainty": "engineering model"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "restartEnvelope",
+      "status": "regulatory_envelope", "source": "FAA Flight 7 authorization listed an in-space engine demonstration",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Ship 33",
+      "conditions": "initial ascent plus one simulated relight", "uncertainty": "authorization is not proof that the demonstration flew"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere reusable methane-engine thermal model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "internal normalized engine temperature", "uncertainty": "not a published material temperature"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "gimbalEnvelope",
+      "status": "published", "source": "SpaceX public Starship engine-layout imagery",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "three fixed vacuum mounts", "uncertainty": "mount topology visible; internal tolerances unpublished"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "startupTransient",
+      "status": "calibrated", "source": "SpaceX Flight 7 mission timeline and Exosphere startup model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "hot-stage ignition ramp", "uncertainty": "±0.25 s"
+    },
+    {
+      "dataId": "raptor2-starship-vac-flight7", "field": "shutdownTransient",
+      "status": "calibrated", "source": "SpaceX Flight 7 mission timeline and Exosphere shutdown model",
+      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "ascent cutoff", "uncertainty": "±0.15 s"
+    },
+
+    {
+      "dataId": "starship_engines", "field": "engineConfiguration",
+      "status": "published", "source": "SpaceX Starship's Seventh Flight Test",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Ship 33",
+      "conditions": "all six Ship engines lit after hot-stage separation", "uncertainty": "engine count published; detailed ratings unpublished"
+    },
+    {
+      "dataId": "super_heavy_booster", "field": "engineConfiguration",
+      "status": "published", "source": "SpaceX Starship's Seventh Flight Test",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Super Heavy Booster 14",
+      "conditions": "all 33 engines lit at launch", "uncertainty": "engine count and flown event published"
+    },
+    {
+      "dataId": "super_heavy_booster", "field": "massAndPropellant",
+      "status": "estimated", "source": "Exosphere Flight 7 stack performance baseline",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Super Heavy Booster 14",
+      "conditions": "fully loaded CH4/LOX at O/F 3.55", "uncertainty": "±15%; flight loading and dry mass unpublished"
+    },
+    {
+      "dataId": "starship_engines", "field": "massAndPerformance",
+      "status": "estimated", "source": "Exosphere Flight 7 stack performance baseline",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Ship 33",
+      "conditions": "mixed three sea-level and three vacuum engine section", "uncertainty": "±15%; component mass and ratings unpublished"
+    },
+    {
+      "dataId": "starship-flight-7-block-2-2025-01-16", "field": "missionIdentity",
+      "status": "published", "source": "SpaceX Starship's Seventh Flight Test",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Ship 33 / Booster 14",
+      "conditions": "launch from Starbase on January 16, 2025", "uncertainty": "flown mission identity"
+    },
+    {
+      "dataId": "starship-flight-7-block-2-2025-01-16", "field": "vehicleEnvelope",
+      "status": "estimated", "source": "Exosphere Flight 7 Block 2 geometry baseline and public vehicle imagery",
+      "accessedDate": "2026-07-28", "variant": "Flight 7 Ship 33 / Booster 14",
+      "conditions": "123.1 m logical stack, 9 m diameter", "uncertainty": "±2 m length; Flight 7-specific dimensions not published by SpaceX"
+    },
+    {
+      "dataId": "starbase", "field": "flight7MissionUse",
+      "status": "published", "source": "SpaceX Starship's Seventh Flight Test",
+      "accessedDate": "2026-07-28", "variant": "Flight 7",
+      "conditions": "Starbase, Texas launch and Super Heavy tower catch", "uncertainty": "flown mission event"
+    }
+  ]
+}

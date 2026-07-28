@@ -1,0 +1,31 @@
+{
+  "id": "raptor2-starship-vac-flight7",
+  "name": "Raptor 2 Vacuum",
+  "variant": "Starship Flight 7 / Ship 33 vacuum engine",
+  "asOfDate": "2025-01-16",
+  "fuel": "CH4",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 3.55,
+  "ratedThrustSeaLevelN": 1666666.666667,
+  "ratedThrustVacuumN": 2250000,
+  "specificImpulseSeaLevelS": 300,
+  "specificImpulseVacuumS": 370,
+  "minimumThrottle": 0.40,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 0.0,
+  "gimbalRateDegPerS": 0.0,
+  "gimbalAccelerationDegPerS2": 0.0,
+  "startupSeconds": 0.50,
+  "shutdownSeconds": 0.20,
+  "restartLimit": 1,
+  "nominalOperatingTemperatureK": 1130,
+  "maximumSafeTemperatureK": 1430,
+  "thermalTimeConstantSeconds": 3.0,
+  "cooldownTimeConstantSeconds": 18.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 0.4, "thrustN": 666666.666667, "specificImpulseS": 300},
+    {"ambientPressurePa": 0, "throttle": 0.4, "thrustN": 900000, "specificImpulseS": 370},
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 1666666.666667, "specificImpulseS": 300},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 2250000, "specificImpulseS": 370}
+  ]
+}

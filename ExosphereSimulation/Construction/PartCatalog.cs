@@ -65,6 +65,15 @@ public sealed class PartCatalog
             if (cluster.Engines.Count != System.Math.Max(1, part.EngineCount))
                 throw new InvalidDataException(
                     $"Part '{part.Id}' engine count does not match cluster '{cluster.Id}'.");
+            var modelIds = cluster.Engines
+                .Select(mount => string.IsNullOrWhiteSpace(mount.EngineModelId)
+                    ? cluster.EngineModelId
+                    : mount.EngineModelId)
+                .Distinct(StringComparer.Ordinal);
+            part.ResolvedEngineModels = modelIds.ToDictionary(
+                id => id,
+                id => catalog.Models[id],
+                StringComparer.Ordinal);
             part.ResolvedEngineCluster = cluster;
         }
     }

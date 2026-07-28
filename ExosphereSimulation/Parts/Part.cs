@@ -86,15 +86,23 @@ public class Part
     private void InitializeEngineStates()
     {
         if (Definition.Category != PartCategory.Engine
-            || string.IsNullOrWhiteSpace(Definition.EngineModelId))
+            || string.IsNullOrWhiteSpace(Definition.EngineModelId)
+            || Definition.ResolvedEngineModel == null)
             return;
         int count = System.Math.Max(1, Definition.EngineCount);
         for (int i = 0; i < count; i++)
         {
+            var mount = Definition.ResolvedEngineCluster?.Engines
+                .ElementAtOrDefault(i);
+            string modelId = !string.IsNullOrWhiteSpace(mount?.EngineModelId)
+                ? mount.EngineModelId
+                : Definition.EngineModelId;
             _engineStates.Add(new EngineInstanceState
             {
+                // Preserve the save/test-stand identity contract. Mount ids describe
+                // physical topology; runtime ids remain scoped to the part instance.
                 InstanceId = $"{InstanceId}:engine:{i + 1:00}",
-                EngineModelId = Definition.EngineModelId,
+                EngineModelId = modelId,
             });
         }
     }
@@ -214,7 +222,7 @@ public class Part
                 Definition.MixtureRatio,
                 state.GimbalDeg,
                 state.TemperatureK,
-                Definition.ResolvedEngineModel?.MaximumSafeTemperatureK
+                ResolveEngineModel(state)?.MaximumSafeTemperatureK
                     ?? double.PositiveInfinity,
                 state.StartAttempts,
                 state.StartsCompleted,
@@ -248,7 +256,7 @@ public class Part
         EngineInstanceState state,
         double dt)
     {
-        var model = Definition.ResolvedEngineModel;
+        var model = ResolveEngineModel(state);
         if (model != null
             && state.State != EngineLifecycleState.Failed
             && state.TemperatureK > model.MaximumSafeTemperatureK)
@@ -288,7 +296,7 @@ public class Part
         double effectiveThrottle = state.State == EngineLifecycleState.Failed
             ? 0.0
             : state.ChamberPressureFraction;
-        if (Definition.ResolvedEngineModel is { } model)
+        if (ResolveEngineModel(state) is { } model)
             return EnginePerformanceEvaluator.Evaluate(
                 model, ambientPressure, effectiveThrottle);
 
@@ -326,7 +334,7 @@ public class Part
         bool selected,
         double dt)
     {
-        var model = Definition.ResolvedEngineModel;
+        var model = ResolveEngineModel(state);
         double range = model?.GimbalRangeDeg ?? Definition.GimbalRange;
         bool mountCanGimbal =
             Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(engineIndex)
@@ -412,7 +420,7 @@ public class Part
                 state.ActualThrottle = 0.0;
                 if (command > 1e-3)
                 {
-                    int permittedStarts = Definition.ResolvedEngineModel is { } model
+                    int permittedStarts = ResolveEngineModel(state) is { } model
                         ? model.RestartLimit + 1
                         : int.MaxValue;
                     if (state.StartsCompleted >= permittedStarts)
@@ -626,19 +634,37 @@ public class Part
 
     /// <summary>Pressure-corrected thrust of the selected engines at 100% throttle (N).</summary>
     public double GetFullThrottleThrustMagnitude(double ambientPressure = 0.0)
-        => HasEngineRuntime && Definition.ResolvedEngineModel is { } model
-            ? EnginePerformanceEvaluator.Evaluate(
-                model, ambientPressure, model.MaximumThrottle).ThrustN
-                * SelectedEngineCount
+        => HasEngineRuntime
+            ? _engineStates.Take(SelectedEngineCount).Sum(state =>
+                {
+                    var model = ResolveEngineModel(state);
+                    return model == null
+                        ? 0.0
+                        : EnginePerformanceEvaluator.Evaluate(
+                            model, ambientPressure, model.MaximumThrottle).ThrustN;
+                })
             : GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
 
     /// <summary>Pressure-corrected rated thrust of the complete represented cluster.</summary>
     public double GetRatedFullThrottleThrustMagnitude(double ambientPressure = 0.0)
-        => HasEngineRuntime && Definition.ResolvedEngineModel is { } model
-            ? EnginePerformanceEvaluator.Evaluate(
-                model, ambientPressure, model.MaximumThrottle).ThrustN
-                * _engineStates.Count
+        => HasEngineRuntime
+            ? _engineStates.Sum(state =>
+                {
+                    var model = ResolveEngineModel(state);
+                    return model == null
+                        ? 0.0
+                        : EnginePerformanceEvaluator.Evaluate(
+                            model, ambientPressure, model.MaximumThrottle).ThrustN;
+                })
             : GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure);
+
+    private EngineModelDefinition? ResolveEngineModel(EngineInstanceState state)
+    {
+        if (Definition.ResolvedEngineModels.TryGetValue(
+                state.EngineModelId, out var model))
+            return model;
+        return Definition.ResolvedEngineModel;
+    }
 
     private double GetLegacyRatedFullThrottleThrustMagnitude(double ambientPressure)
     {

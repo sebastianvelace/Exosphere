@@ -1,0 +1,19 @@
+{
+  "id": "starship-flight-7-block-2-2025-01-16",
+  "name": "Starship Flight 7 — Ship 33 / Booster 14",
+  "family": "Starship",
+  "asOfDate": "2025-01-16",
+  "fairingVariant": "integrated-ship",
+  "primarySource": "https://www.spacex.com/launches/starship-flight-7",
+  "engineClusterIds": [
+    "starship-flight7-superheavy-33",
+    "starship-flight7-ship-six"
+  ],
+  "stackTopToBottom": [
+    "starship_command",
+    "starship_tank",
+    "starship_engines",
+    "decoupler_heavy",
+    "super_heavy_booster"
+  ]
+}
