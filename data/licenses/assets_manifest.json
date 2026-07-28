@@ -25,9 +25,41 @@
       "source": "Exosphere repository",
       "commercialUse": "project_policy",
       "notes": "Confirm authorship before release."
+    },
+    {
+      "path": "assets/textures/menu_orbital_dossier.png",
+      "category": "generated_artwork",
+      "license": "project_generated_asset",
+      "source": "OpenAI image generation tool; generated for Exosphere on 2026-07-27",
+      "commercialUse": "project_policy",
+      "notes": "Original prompt requested a scientific low-Earth-orbit view with no logos, text, spacecraft or third-party characters."
     }
   ],
-  "fonts": [],
+  "fonts": [
+    {
+      "family": "Barlow Condensed",
+      "paths": [
+        "assets/fonts/barlow/BarlowCondensed-Regular.ttf",
+        "assets/fonts/barlow/BarlowCondensed-SemiBold.ttf"
+      ],
+      "license": "SIL Open Font License 1.1",
+      "licenseFile": "assets/fonts/barlow/OFL.txt",
+      "source": "https://github.com/jpt/barlow",
+      "commercialUse": "permitted_under_license"
+    },
+    {
+      "family": "IBM Plex Sans and IBM Plex Mono",
+      "paths": [
+        "assets/fonts/ibm-plex/IBMPlexSans-Regular.ttf",
+        "assets/fonts/ibm-plex/IBMPlexSans-Medium.ttf",
+        "assets/fonts/ibm-plex/IBMPlexMono-Regular.ttf"
+      ],
+      "license": "SIL Open Font License 1.1",
+      "licenseFile": "assets/fonts/ibm-plex/OFL.txt",
+      "source": "https://github.com/IBM/plex",
+      "commercialUse": "permitted_under_license"
+    }
+  ],
   "models": [],
   "audio": [],
   "marks": [

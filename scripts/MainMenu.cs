@@ -1,75 +1,118 @@
 namespace Exosphere.Game;
 
+using Exosphere.Simulation.Construction;
 using Godot;
 
 public partial class MainMenu : Control
 {
+    private VBoxContainer _navigation = null!;
+    private PanelContainer _dossier = null!;
+    private Control? _modal;
+    private Button? _firstButton;
+
     public override void _Ready()
     {
+        UserInterfaceSettings.Load();
+        GetWindow().ContentScaleFactor = UserInterfaceSettings.UiScale;
         SetAnchorsPreset(LayoutPreset.FullRect);
         BuildBackground();
         BuildHeader();
-        BuildHero();
-        BuildMissionCard();
+        BuildBody();
         BuildFooter();
+        ApplyEntrance();
+        Resized += UpdateResponsiveLayout;
+        UpdateResponsiveLayout();
+        _firstButton?.CallDeferred(Control.MethodName.GrabFocus);
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Enter })
-            OpenFlight();
+        if (@event.IsActionPressed("ui_cancel") && _modal != null)
+        {
+            CloseModal();
+            GetViewport().SetInputAsHandled();
+        }
     }
 
     private void BuildBackground()
     {
         var background = new TextureRect
         {
-            Texture = GD.Load<Texture2D>("res://assets/textures/starmap_milkyway_8k.jpg"),
+            Name = "OrbitalEarth",
+            Texture = GD.Load<Texture2D>("res://assets/textures/menu_orbital_dossier.png"),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
             MouseFilter = MouseFilterEnum.Ignore,
         };
         background.SetAnchorsPreset(LayoutPreset.FullRect);
-        background.Modulate = new Color(0.47f, 0.50f, 0.58f, 1f);
         AddChild(background);
 
-        var scrim = new ColorRect
+        var leftScrim = new TextureRect
         {
-            Color = new Color(0.01f, 0.012f, 0.018f, 0.58f),
+            Name = "ReadabilityScrim",
+            Texture = BuildScrimTexture(),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = MouseFilterEnum.Ignore,
         };
-        scrim.SetAnchorsPreset(LayoutPreset.FullRect);
-        AddChild(scrim);
+        leftScrim.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(leftScrim);
 
+        var trace = new OrbitalDossierTrace
+        {
+            Name = "CharacteristicOrbit",
+            MouseFilter = MouseFilterEnum.Ignore,
+            ReducedMotion = UserInterfaceSettings.ReducedMotion,
+        };
+        trace.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(trace);
+    }
+
+    private static GradientTexture2D BuildScrimTexture()
+    {
+        var gradient = new Gradient
+        {
+            Colors =
+            [
+                new Color(0.008f, 0.010f, 0.014f, 0.99f),
+                new Color(0.008f, 0.010f, 0.014f, 0.92f),
+                new Color(0.008f, 0.010f, 0.014f, 0.28f),
+                new Color(0.008f, 0.010f, 0.014f, 0.08f),
+            ],
+            Offsets = [0f, 0.34f, 0.66f, 1f],
+        };
+        return new GradientTexture2D
+        {
+            Gradient = gradient,
+            Width = 1024,
+            Height = 2,
+            FillFrom = Vector2.Zero,
+            FillTo = Vector2.Right,
+        };
     }
 
     private void BuildHeader()
     {
-        var header = new MarginContainer();
-        header.SetAnchorsPreset(LayoutPreset.TopWide);
-        header.OffsetLeft = 48;
-        header.OffsetTop = 34;
-        header.OffsetRight = -48;
-        AddChild(header);
+        var margin = new MarginContainer();
+        margin.SetAnchorsPreset(LayoutPreset.TopWide);
+        margin.OffsetLeft = 54;
+        margin.OffsetTop = 30;
+        margin.OffsetRight = -54;
+        AddChild(margin);
 
         var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 12);
-        header.AddChild(row);
+        row.AddThemeConstantOverride("separation", 14);
+        margin.AddChild(row);
 
-        var mark = new PanelContainer
+        var mark = new Label
         {
-            CustomMinimumSize = new Vector2(34, 34),
-            MouseFilter = MouseFilterEnum.Ignore,
+            Text = "EXO",
+            CustomMinimumSize = new Vector2(48, 34),
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        var markStyle = InterfaceTheme.GlassPanel(0.72f, 10, 0, 0);
-        markStyle.BorderColor = InterfaceTheme.EdgeStrong;
-        mark.AddThemeStyleboxOverride("panel", markStyle);
+        InterfaceTheme.ApplyDisplay(mark, 18);
+        mark.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
         row.AddChild(mark);
-
-        var markText = new Label { Text = "E", HorizontalAlignment = HorizontalAlignment.Center };
-        markText.AddThemeFontSizeOverride("font_size", 15);
-        markText.AddThemeColorOverride("font_color", InterfaceTheme.Text);
-        mark.AddChild(markText);
 
         var brand = new Label
         {
@@ -77,131 +120,173 @@ public partial class MainMenu : Control
             VerticalAlignment = VerticalAlignment.Center,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        brand.AddThemeFontSizeOverride("font_size", 14);
+        InterfaceTheme.ApplyBody(brand, 13, medium: true);
         brand.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         row.AddChild(brand);
 
-        var build = new Label
+        var language = new Button
         {
-            Text = "SOLAR SYSTEM SIMULATION",
-            VerticalAlignment = VerticalAlignment.Center,
+            Text = UserInterfaceSettings.Language == InterfaceLanguage.English ? "ES" : "EN",
+            CustomMinimumSize = new Vector2(52, 36),
+            TooltipText = "English / Español",
         };
-        build.AddThemeFontSizeOverride("font_size", 11);
-        build.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        row.AddChild(build);
+        InterfaceTheme.StyleDossierButton(language);
+        language.CustomMinimumSize = new Vector2(52, 36);
+        language.Pressed += ToggleLanguage;
+        row.AddChild(language);
     }
 
-    private void BuildHero()
+    private void BuildBody()
     {
-        var hero = new VBoxContainer();
-        hero.SetAnchorsPreset(LayoutPreset.CenterLeft);
-        hero.OffsetLeft = 118;
-        hero.OffsetTop = -225;
-        hero.OffsetRight = 690;
-        hero.OffsetBottom = 250;
-        hero.AddThemeConstantOverride("separation", 18);
-        AddChild(hero);
+        var margin = new MarginContainer();
+        margin.SetAnchorsPreset(LayoutPreset.FullRect);
+        margin.OffsetLeft = 70;
+        margin.OffsetTop = 112;
+        margin.OffsetRight = -70;
+        margin.OffsetBottom = -74;
+        AddChild(margin);
 
-        var eyebrow = new Label { Text = "FLIGHT SYSTEMS ONLINE" };
-        eyebrow.AddThemeFontSizeOverride("font_size", 12);
-        eyebrow.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        hero.AddChild(eyebrow);
+        var split = new HBoxContainer();
+        split.AddThemeConstantOverride("separation", 72);
+        margin.AddChild(split);
+
+        var left = new VBoxContainer
+        {
+            Name = "PrimaryNavigation",
+            CustomMinimumSize = new Vector2(430, 0),
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        left.AddThemeConstantOverride("separation", 16);
+        split.AddChild(left);
+
+        var classification = new Label { Text = "FLIGHT OPERATIONS" };
+        InterfaceTheme.ApplyMono(classification, 11);
+        classification.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
+        left.AddChild(classification);
 
         var title = new Label
         {
-            Text = "BEYOND\nTHE HORIZON",
+            Text = UiText.Get("dossier"),
             AutowrapMode = TextServer.AutowrapMode.Off,
         };
-        title.AddThemeFontSizeOverride("font_size", 62);
+        InterfaceTheme.ApplyDisplay(title, 55);
         title.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         title.AddThemeConstantOverride("line_spacing", -8);
-        hero.AddChild(title);
+        left.AddChild(title);
 
-        var description = new Label
+        var subtitle = new Label
         {
-            Text = "Build, launch and navigate through a physically simulated solar system.",
+            Text = UiText.Get("subtitle"),
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            CustomMinimumSize = new Vector2(430, 0),
+            CustomMinimumSize = new Vector2(390, 54),
         };
-        description.AddThemeFontSizeOverride("font_size", 16);
-        description.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        description.AddThemeConstantOverride("line_spacing", 5);
-        hero.AddChild(description);
+        InterfaceTheme.ApplyBody(subtitle, 14);
+        subtitle.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        left.AddChild(subtitle);
 
-        var actions = new VBoxContainer();
-        actions.AddThemeConstantOverride("separation", 10);
-        hero.AddChild(actions);
+        _navigation = new VBoxContainer();
+        _navigation.AddThemeConstantOverride("separation", 7);
+        left.AddChild(_navigation);
 
-        var flight = new Button { Text = "START FLIGHT" };
-        InterfaceTheme.StyleButton(flight, primary: true);
-        flight.Pressed += OpenFlight;
-        actions.AddChild(flight);
+        string[] saves = SaveSystem.ListSaveSlots();
+        AddNavButton(UiText.Get("continue"), () => ContinueSave(saves), primary: true,
+            disabled: saves.Length == 0,
+            tooltip: saves.Length == 0 ? UiText.Get("no_saves") : "");
+        AddNavButton(UiText.Get("campaign"), ShowCampaign);
+        AddNavButton(UiText.Get("sandbox"), OpenSandbox);
+        AddNavButton(UiText.Get("vab"),
+            () => GetTree().ChangeSceneToFile("res://scenes/construction/Construction.tscn"));
+        AddNavButton(UiText.Get("scenarios"), ShowScenarios);
+        AddNavButton(UiText.Get("reentry"), OpenReentry);
+        AddNavButton(UiText.Get("saves"), ShowSaves);
+        AddNavButton(UiText.Get("settings"), ShowSettings);
 
-        var assembly = new Button { Text = "VEHICLE ASSEMBLY" };
-        InterfaceTheme.StyleButton(assembly);
-        assembly.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/construction/Construction.tscn");
-        actions.AddChild(assembly);
+        var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        split.AddChild(spacer);
 
-        var quit = new Button { Text = "QUIT" };
-        InterfaceTheme.StyleButton(quit);
-        quit.Pressed += () => GetTree().Quit();
-        actions.AddChild(quit);
+        _dossier = BuildDossier();
+        split.AddChild(_dossier);
     }
 
-    private void BuildMissionCard()
+    private void AddNavButton(
+        string text,
+        Action action,
+        bool primary = false,
+        bool disabled = false,
+        string tooltip = "")
     {
-        var card = new PanelContainer();
-        card.SetAnchorsPreset(LayoutPreset.CenterRight);
-        card.GrowHorizontal = GrowDirection.Begin;
-        card.OffsetLeft = -442;
-        card.OffsetTop = -128;
-        card.OffsetRight = -88;
-        card.OffsetBottom = 198;
-        card.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.72f, 14, 22, 20));
-        AddChild(card);
+        var button = new Button
+        {
+            Text = text,
+            Alignment = HorizontalAlignment.Left,
+            Disabled = disabled,
+            TooltipText = tooltip,
+            FocusMode = FocusModeEnum.All,
+        };
+        InterfaceTheme.StyleDossierButton(button, primary);
+        button.CustomMinimumSize = new Vector2(360, 43);
+        button.Pressed += action;
+        _navigation.AddChild(button);
+        _firstButton ??= button.Disabled ? null : button;
+    }
+
+    private static PanelContainer BuildDossier()
+    {
+        var panel = new PanelContainer
+        {
+            Name = "SelectedDossier",
+            CustomMinimumSize = new Vector2(390, 410),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        var style = InterfaceTheme.GlassPanel(0.88f, 0, 28, 25);
+        style.BorderColor = new Color(InterfaceTheme.Orbital, 0.34f);
+        panel.AddThemeStyleboxOverride("panel", style);
 
         var content = new VBoxContainer();
-        content.AddThemeConstantOverride("separation", 14);
-        card.AddChild(content);
+        content.AddThemeConstantOverride("separation", 15);
+        panel.AddChild(content);
 
-        var title = new Label { Text = "CURRENT VEHICLE" };
-        title.AddThemeFontSizeOverride("font_size", 11);
-        title.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        content.AddChild(title);
+        var label = new Label { Text = UiText.Get("mission") };
+        InterfaceTheme.ApplyMono(label, 10);
+        label.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
+        content.AddChild(label);
 
-        var vessel = new Label { Text = "STARSHIP IFT-7" };
-        vessel.AddThemeFontSizeOverride("font_size", 25);
-        vessel.AddThemeColorOverride("font_color", InterfaceTheme.Text);
-        content.AddChild(vessel);
-
+        var mission = new Label { Text = "FALCON 9 BLOCK 5\nPAYLOAD DEPLOYMENT" };
+        InterfaceTheme.ApplyDisplay(mission, 30);
+        mission.AddThemeColorOverride("font_color", InterfaceTheme.Text);
+        content.AddChild(mission);
         content.AddChild(Divider());
-        content.AddChild(Metric("LAUNCH SITE", "STARBASE"));
-        content.AddChild(Metric("DESTINATION", "LOW EARTH ORBIT"));
-        content.AddChild(Metric("SIMULATION", "REAL-TIME PHYSICS"));
+        content.AddChild(Metric(UiText.Get("vehicle"), "F9 B5 / STANDARD FAIRING"));
+        content.AddChild(Metric(UiText.Get("site"), "KENNEDY LC-39A"));
+        content.AddChild(Metric(UiText.Get("objective"), "200 KM PARKING ORBIT"));
+        content.AddChild(Metric(UiText.Get("physics"), "FULL / ASSISTS AVAILABLE"));
         content.AddChild(Divider());
 
-        var controls = new Label
+        var note = new Label
         {
-            Text = "Pad: [L] auto sequence  ·  [hold Z] manual ignition\nFlight: [G] guidance  ·  [H] pitch assist  ·  [M] map",
+            Text = "Published performance values remain distinct from simulator estimates. " +
+                   "Open Vehicle Assembly to inspect the dated preset and its sources.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        controls.AddThemeFontSizeOverride("font_size", 11);
-        controls.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        content.AddChild(controls);
+        InterfaceTheme.ApplyBody(note, 12);
+        note.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        content.AddChild(note);
 
-        var hint = new Label { Text = "Press Enter to begin flight" };
-        hint.AddThemeFontSizeOverride("font_size", 12);
-        hint.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        content.AddChild(hint);
+        var profile = new Label { Text = "PROFILE  F9-B5-2025-05" };
+        InterfaceTheme.ApplyMono(profile, 10);
+        profile.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
+        content.AddChild(profile);
+        return panel;
     }
 
     private void BuildFooter()
     {
         var footer = new MarginContainer();
         footer.SetAnchorsPreset(LayoutPreset.BottomWide);
-        footer.OffsetLeft = 48;
-        footer.OffsetRight = -48;
-        footer.OffsetBottom = -32;
+        footer.OffsetLeft = 54;
+        footer.OffsetRight = -54;
+        footer.OffsetBottom = -26;
         footer.GrowVertical = GrowDirection.Begin;
         AddChild(footer);
 
@@ -210,44 +295,289 @@ public partial class MainMenu : Control
 
         var note = new Label
         {
-            Text = "NEW FLIGHT  /  ASSEMBLY  /  EXIT",
+            Text = "ENTER  SELECT     ESC  BACK",
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        note.AddThemeFontSizeOverride("font_size", 10);
+        InterfaceTheme.ApplyMono(note, 10);
         note.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
         row.AddChild(note);
 
-        var status = new Label { Text = "READY" };
-        status.AddThemeFontSizeOverride("font_size", 10);
+        var status = new Label { Text = "PHYSICS CORE READY" };
+        InterfaceTheme.ApplyMono(status, 10);
         status.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         row.AddChild(status);
     }
 
-    private static Control Divider()
+    private void ApplyEntrance()
     {
-        return new ColorRect
-        {
-            Color = InterfaceTheme.Edge,
-            CustomMinimumSize = new Vector2(0, 1),
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
+        if (UserInterfaceSettings.ReducedMotion) return;
+        _navigation.Modulate = new Color(1, 1, 1, 0);
+        _dossier.Modulate = new Color(1, 1, 1, 0);
+        var tween = CreateTween().SetParallel();
+        tween.SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
+        tween.TweenProperty(_navigation, "modulate:a", 1.0f, 0.42f);
+        tween.TweenProperty(_dossier, "modulate:a", 1.0f, 0.55f).SetDelay(0.08f);
     }
+
+    private void ContinueSave(string[] saves)
+    {
+        if (saves.Length == 0) return;
+        CraftLaunchRequest.Set(new LaunchIntent { Mode = "continue", SaveSlot = saves[^1] });
+        OpenFlight();
+    }
+
+    private void OpenSandbox()
+    {
+        CraftLaunchRequest.Set(new LaunchIntent
+        {
+            Mode = "sandbox",
+            LaunchSiteId = "starbase",
+            FlightProfileId = "manual",
+        });
+        OpenFlight();
+    }
+
+    private void OpenReentry()
+    {
+        CraftLaunchRequest.Set(new LaunchIntent
+        {
+            Mode = "scenario",
+            LaunchSiteId = "starbase",
+            FlightProfileId = "starship-reentry-70km",
+        });
+        OpenFlight();
+    }
+
+    private void LaunchFalconScenario()
+    {
+        string data = ProjectSettings.GlobalizePath("res://data");
+        var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(data, "parts"));
+        var variant = VehicleVariantDefinition.LoadFromJson(
+            System.IO.Path.Combine(data, "vehicles", "falcon9_block5_standard_2025.json"));
+        var craft = variant.Build(catalog).ToCraftDocument(variant.Name);
+        craft.VehicleVariantId = variant.Id;
+        CraftLaunchRequest.Set(new LaunchIntent
+        {
+            Mode = "scenario",
+            VehicleVariantId = variant.Id,
+            LaunchSiteId = "kennedy",
+            FlightProfileId = "falcon9-block5-ascent",
+            Craft = craft,
+        });
+        OpenFlight();
+    }
+
+    private void ShowScenarios() => ShowModal(UiText.Get("scenario_title"), body =>
+    {
+        body.AddChild(ModalButton("FALCON 9 BLOCK 5 / KENNEDY", LaunchFalconScenario, true));
+        body.AddChild(ModalButton("STARSHIP / 70 KM ENTRY INTERFACE", OpenReentry));
+        body.AddChild(ModalButton("STARSHIP / STARBASE MANUAL LAUNCH", OpenSandbox));
+    });
+
+    private void ShowCampaign() => ShowModal(UiText.Get("campaign_preview"), body =>
+    {
+        foreach (string mission in new[]
+                 {
+                     "Freedom 7", "Friendship 7", "Gemini 8", "Apollo 8",
+                     "Apollo 11", "STS-1", "STS-88 / ISS", "Falcon 1 Flight 4",
+                 })
+        {
+            var label = new Label { Text = mission };
+            InterfaceTheme.ApplyBody(label, 15, medium: true);
+            label.AddThemeColorOverride("font_color", InterfaceTheme.Text);
+            body.AddChild(label);
+        }
+        var note = new Label
+        {
+            Text = "Mission execution and progression unlock in Hito 4. " +
+                   "Historical variants will remain fixed to the hardware that flew.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        InterfaceTheme.ApplyBody(note, 12);
+        note.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        body.AddChild(note);
+    });
+
+    private void ShowSaves() => ShowModal(UiText.Get("saves"), body =>
+    {
+        string[] saves = SaveSystem.ListSaveSlots();
+        if (saves.Length == 0)
+        {
+            var empty = new Label { Text = UiText.Get("no_saves") };
+            InterfaceTheme.ApplyBody(empty, 14);
+            empty.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+            body.AddChild(empty);
+            return;
+        }
+        foreach (string slot in saves)
+        {
+            string selected = slot;
+            body.AddChild(ModalButton(selected.ToUpperInvariant(), () =>
+            {
+                CraftLaunchRequest.Set(new LaunchIntent { Mode = "continue", SaveSlot = selected });
+                OpenFlight();
+            }));
+        }
+    });
+
+    private void ShowSettings() => ShowModal(UiText.Get("settings_title"), body =>
+    {
+        body.AddChild(SettingRow(UiText.Get("language"),
+            UserInterfaceSettings.Language == InterfaceLanguage.English ? "ENGLISH" : "ESPAÑOL",
+            ToggleLanguage));
+        body.AddChild(SettingRow(UiText.Get("motion"),
+            UserInterfaceSettings.ReducedMotion ? "ON" : "OFF", () =>
+            {
+                UserInterfaceSettings.SetReducedMotion(!UserInterfaceSettings.ReducedMotion);
+                Rebuild();
+            }));
+        body.AddChild(SettingRow(UiText.Get("scale"),
+            $"{UserInterfaceSettings.UiScale * 100:F0}%", () =>
+            {
+                float next = UserInterfaceSettings.UiScale switch
+                {
+                    < 1.24f => 1.25f,
+                    < 1.49f => 1.5f,
+                    _ => 1.0f,
+                };
+                UserInterfaceSettings.SetUiScale(next);
+                GetWindow().ContentScaleFactor = next;
+                Rebuild();
+            }));
+    });
+
+    private static Control SettingRow(string label, string value, Action action)
+    {
+        var row = new HBoxContainer();
+        var key = new Label { Text = label, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        InterfaceTheme.ApplyBody(key, 13);
+        key.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        row.AddChild(key);
+        row.AddChild(ModalButton(value, action));
+        return row;
+    }
+
+    private void ShowModal(string titleText, Action<VBoxContainer> populate)
+    {
+        CloseModal();
+        var shade = new ColorRect
+        {
+            Color = new Color(0.004f, 0.006f, 0.009f, 0.72f),
+            MouseFilter = MouseFilterEnum.Stop,
+        };
+        shade.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(shade);
+        _modal = shade;
+
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(LayoutPreset.FullRect);
+        shade.AddChild(center);
+
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(540, 0) };
+        panel.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.97f, 0, 28, 25));
+        center.AddChild(panel);
+
+        var body = new VBoxContainer();
+        body.AddThemeConstantOverride("separation", 12);
+        panel.AddChild(body);
+
+        var title = new Label { Text = titleText.ToUpperInvariant() };
+        InterfaceTheme.ApplyDisplay(title, 30);
+        title.AddThemeColorOverride("font_color", InterfaceTheme.Text);
+        body.AddChild(title);
+        body.AddChild(Divider());
+        populate(body);
+        body.AddChild(Divider());
+        var close = ModalButton(UiText.Get("close"), CloseModal);
+        body.AddChild(close);
+        close.CallDeferred(Control.MethodName.GrabFocus);
+    }
+
+    private static Button ModalButton(string text, Action action, bool primary = false)
+    {
+        var button = new Button { Text = text, Alignment = HorizontalAlignment.Left };
+        InterfaceTheme.StyleDossierButton(button, primary);
+        button.CustomMinimumSize = new Vector2(320, 42);
+        button.Pressed += action;
+        return button;
+    }
+
+    private void CloseModal()
+    {
+        _modal?.QueueFree();
+        _modal = null;
+        _firstButton?.CallDeferred(Control.MethodName.GrabFocus);
+    }
+
+    private void ToggleLanguage()
+    {
+        UserInterfaceSettings.SetLanguage(
+            UserInterfaceSettings.Language == InterfaceLanguage.English
+                ? InterfaceLanguage.Spanish : InterfaceLanguage.English);
+        Rebuild();
+    }
+
+    private void Rebuild() => GetTree().ReloadCurrentScene();
+    private void OpenFlight() => GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
+
+    private void UpdateResponsiveLayout()
+    {
+        if (_dossier == null) return;
+        float effectiveWidth = Size.X / System.Math.Max(1.0f, UserInterfaceSettings.UiScale);
+        _dossier.Visible = effectiveWidth >= 1380f;
+    }
+
+    private static Control Divider() => new ColorRect
+    {
+        Color = InterfaceTheme.Edge,
+        CustomMinimumSize = new Vector2(0, 1),
+        MouseFilter = MouseFilterEnum.Ignore,
+    };
 
     private static Control Metric(string label, string value)
     {
         var row = new HBoxContainer();
         var key = new Label { Text = label, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        key.AddThemeFontSizeOverride("font_size", 11);
+        InterfaceTheme.ApplyMono(key, 10);
         key.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         row.AddChild(key);
-
         var val = new Label { Text = value, HorizontalAlignment = HorizontalAlignment.Right };
-        val.AddThemeFontSizeOverride("font_size", 12);
+        InterfaceTheme.ApplyMono(val, 10);
         val.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         row.AddChild(val);
         return row;
     }
+}
 
-    private void OpenFlight() =>
-        GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
+public partial class OrbitalDossierTrace : Control
+{
+    public bool ReducedMotion { get; set; }
+    private float _phase;
+
+    public override void _Process(double delta)
+    {
+        if (ReducedMotion) return;
+        _phase = (_phase + (float)delta * 0.08f) % 1f;
+        QueueRedraw();
+    }
+
+    public override void _Draw()
+    {
+        var center = new Vector2(Size.X * 0.79f, Size.Y * 0.51f);
+        var points = new Vector2[121];
+        float rx = Size.X * 0.235f;
+        float ry = Size.Y * 0.115f;
+        float tilt = -0.28f;
+        for (int i = 0; i < points.Length; i++)
+        {
+            float angle = Mathf.Tau * i / (points.Length - 1);
+            var local = new Vector2(Mathf.Cos(angle) * rx, Mathf.Sin(angle) * ry);
+            points[i] = center + local.Rotated(tilt);
+        }
+        DrawPolyline(points, new Color(InterfaceTheme.Orbital, 0.46f), 1.15f, true);
+
+        int marker = Mathf.Clamp((int)(_phase * (points.Length - 1)), 0, points.Length - 1);
+        DrawCircle(points[marker], 3.2f, InterfaceTheme.Orbital);
+        DrawCircle(points[marker], 7.5f, new Color(InterfaceTheme.Orbital, 0.14f));
+    }
 }

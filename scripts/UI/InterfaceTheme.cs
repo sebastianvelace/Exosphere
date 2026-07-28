@@ -20,6 +20,34 @@ public static class InterfaceTheme
     public static readonly Color Track = new(0.13f, 0.15f, 0.19f, 0.94f);
     public static readonly Color Alert = new(1.00f, 0.40f, 0.34f, 1f);
     public static readonly Color Warning = new(1.00f, 0.73f, 0.28f, 1f);
+    public static readonly Color Orbital = new(0.24f, 0.76f, 0.88f, 1f);
+
+    public static Font DisplayFont =>
+        GD.Load<Font>("res://assets/fonts/barlow/BarlowCondensed-SemiBold.ttf");
+    public static Font BodyFont =>
+        GD.Load<Font>("res://assets/fonts/ibm-plex/IBMPlexSans-Regular.ttf");
+    public static Font BodyMediumFont =>
+        GD.Load<Font>("res://assets/fonts/ibm-plex/IBMPlexSans-Medium.ttf");
+    public static Font MonoFont =>
+        GD.Load<Font>("res://assets/fonts/ibm-plex/IBMPlexMono-Regular.ttf");
+
+    public static void ApplyDisplay(Label label, int size)
+    {
+        label.AddThemeFontOverride("font", DisplayFont);
+        label.AddThemeFontSizeOverride("font_size", size);
+    }
+
+    public static void ApplyBody(Label label, int size, bool medium = false)
+    {
+        label.AddThemeFontOverride("font", medium ? BodyMediumFont : BodyFont);
+        label.AddThemeFontSizeOverride("font_size", size);
+    }
+
+    public static void ApplyMono(Label label, int size)
+    {
+        label.AddThemeFontOverride("font", MonoFont);
+        label.AddThemeFontSizeOverride("font_size", size);
+    }
 
     public static StyleBoxFlat GlassPanel(
         float opacity = 0.78f,
@@ -90,6 +118,7 @@ public static class InterfaceTheme
     public static void StyleButton(Button button, bool primary = false)
     {
         button.CustomMinimumSize = new Vector2(238, 50);
+        button.AddThemeFontOverride("font", BodyMediumFont);
         button.AddThemeFontSizeOverride("font_size", 14);
         button.AddThemeColorOverride("font_color", primary ? Void : Text);
         button.AddThemeColorOverride("font_hover_color", primary ? Void : Text);
@@ -99,5 +128,19 @@ public static class InterfaceTheme
         button.AddThemeStyleboxOverride("hover", Button(primary, hover: true));
         button.AddThemeStyleboxOverride("pressed", Button(primary, hover: true, pressed: true));
         button.AddThemeStyleboxOverride("focus", Button(primary, hover: true));
+    }
+
+    public static void StyleDossierButton(Button button, bool primary = false)
+    {
+        StyleButton(button, primary);
+        foreach (string state in new[] { "normal", "hover", "pressed", "focus" })
+        {
+            var source = Button(
+                primary,
+                hover: state is "hover" or "focus" or "pressed",
+                pressed: state == "pressed");
+            source.SetCornerRadiusAll(0);
+            button.AddThemeStyleboxOverride(state, source);
+        }
     }
 }

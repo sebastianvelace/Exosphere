@@ -276,8 +276,30 @@ public partial class SimulationBridge : Node
     private void SpawnPendingConstructedVessel(string dataPath)
     {
         var intent = CraftLaunchRequest.Pop();
-        var craft = intent?.Craft;
-        if (intent == null || craft == null) return;
+        if (intent == null) return;
+
+        if (!string.IsNullOrWhiteSpace(intent.SaveSlot))
+        {
+            if (!SaveSystem.LoadGame(intent.SaveSlot))
+                throw new InvalidDataException($"Could not continue save '{intent.SaveSlot}'.");
+            if (ActiveVessel != null)
+            {
+                _vesselRenderer?.BuildFromVessel(ActiveVessel);
+                var floating = GetTree().Root.FindChild("FloatingOrigin", true, false)
+                    as FloatingOrigin;
+                if (_vesselRenderer != null)
+                    floating?.RegisterVesselNode(ActiveVessel.Id, _vesselRenderer);
+            }
+            return;
+        }
+
+        var craft = intent.Craft;
+        if (craft == null)
+        {
+            if (intent.FlightProfileId == "starship-reentry-70km")
+                BeginReentryDemonstration();
+            return;
+        }
 
         var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(dataPath, "parts"));
         var sites = LaunchSite.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "launch_sites"));
@@ -342,7 +364,7 @@ public partial class SimulationBridge : Node
         StandOnPad(vessel, earth, mountHeightM);
 
         Universe.AddVessel(vessel);
-        Universe.ActiveVessel = vessel;
+        Universe.SetActiveVessel(vessel.Id);
 
         // Build renderer
         var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
@@ -513,7 +535,7 @@ public partial class SimulationBridge : Node
         vessel.ConfigureLandingContactsFromParts();
 
         Universe.AddVessel(vessel);
-        Universe.ActiveVessel = vessel;
+        Universe.SetActiveVessel(vessel.Id);
 
         var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
         if (_vesselRenderer == null && vesselsNode != null)
