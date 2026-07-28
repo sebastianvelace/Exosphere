@@ -95,6 +95,10 @@ public static class EngineTestStand
             MixtureRatio = definition.MixtureRatioOxidizerToFuel,
             MinThrottle = definition.MinimumThrottle,
             EngineCount = 1,
+            EngineModelId = definition.Id,
+            EngineStartupSeconds = definition.StartupSeconds,
+            EngineShutdownSeconds = definition.ShutdownSeconds,
+            ResolvedEngineModel = definition,
         }, profile, stepSeconds);
     }
 
@@ -167,7 +171,11 @@ public static class EngineTestStand
                 commanded = 0.0;
             }
 
-            engine.SpoolToward(engine.ApplyThrottleFloor(commanded), stepSeconds);
+            if (engine.HasEngineRuntime)
+                engine.AdvanceEngineRuntime(commanded, stepSeconds);
+            else
+                engine.SpoolToward(
+                    engine.ApplyThrottleFloor(commanded), stepSeconds);
             double thrust = engine.GetThrustMagnitude(profile.AmbientPressurePa);
             double flow = engine.GetMassFlow(profile.AmbientPressurePa);
             impulse += thrust * stepSeconds;
@@ -175,9 +183,13 @@ public static class EngineTestStand
             peak = System.Math.Max(peak, thrust);
             telemetry.Add(new EngineTestTelemetry(
                 time, phase, commanded, engine.ThrottleLevel, thrust, flow,
-                definition.ThrustSL > 0.0
-                    ? thrust / engine.GetRatedFullThrottleThrustMagnitude(profile.AmbientPressurePa)
-                    : engine.ThrottleLevel));
+                engine.HasEngineRuntime
+                    ? engine.EngineStates.Average(
+                        state => state.ChamberPressureFraction)
+                    : definition.ThrustSL > 0.0
+                        ? thrust / engine.GetRatedFullThrottleThrustMagnitude(
+                            profile.AmbientPressurePa)
+                        : engine.ThrottleLevel));
         }
 
         double rating = engine.GetRatedFullThrottleThrustMagnitude(profile.AmbientPressurePa);

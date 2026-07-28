@@ -81,6 +81,8 @@ public sealed class EngineInstanceSaveV2
     public double CommandedThrottle { get; set; }
     public double ActualThrottle { get; set; }
     public VectorSaveV2 GimbalDeg { get; set; } = new();
+    public VectorSaveV2 GimbalVelocityDegPerS { get; set; } = new();
+    public double? ChamberPressureFraction { get; set; }
     public double TemperatureK { get; set; } = 290.0;
     public int StartsCompleted { get; set; }
     public string? FailureCode { get; set; }
@@ -255,6 +257,7 @@ public static class SaveGameV2Codec
                         RequireFinite(value, engine.InstanceId);
                     if (engine.CommandedThrottle is < 0.0 or > 1.0
                         || engine.ActualThrottle is < 0.0 or > 1.0
+                        || engine.ChamberPressureFraction is < 0.0 or > 1.0
                         || engine.StateElapsedSeconds < 0.0
                         || engine.TemperatureK < 0.0
                         || engine.StartsCompleted < 0)
@@ -391,6 +394,9 @@ public static class SaveGameV2Codec
             CommandedThrottle = engine.CommandedThrottle,
             ActualThrottle = engine.ActualThrottle,
             GimbalDeg = VectorSaveV2.From(engine.GimbalDeg),
+            GimbalVelocityDegPerS = VectorSaveV2.From(
+                engine.GimbalVelocityDegPerS),
+            ChamberPressureFraction = engine.ChamberPressureFraction,
             TemperatureK = engine.TemperatureK,
             StartsCompleted = engine.StartsCompleted,
             FailureCode = engine.FailureCode,
@@ -425,6 +431,9 @@ public static class SaveGameV2Codec
             CommandedThrottle = engine.CommandedThrottle,
             ActualThrottle = engine.ActualThrottle,
             GimbalDeg = engine.GimbalDeg.ToVector(),
+            GimbalVelocityDegPerS = engine.GimbalVelocityDegPerS.ToVector(),
+            ChamberPressureFraction =
+                engine.ChamberPressureFraction ?? engine.ActualThrottle,
             TemperatureK = engine.TemperatureK,
             StartsCompleted = engine.StartsCompleted,
             FailureCode = engine.FailureCode,
@@ -497,6 +506,10 @@ public static class SaveGameV2Codec
         e.GimbalDeg.X,
         e.GimbalDeg.Y,
         e.GimbalDeg.Z,
+        e.GimbalVelocityDegPerS.X,
+        e.GimbalVelocityDegPerS.Y,
+        e.GimbalVelocityDegPerS.Z,
+        e.ChamberPressureFraction ?? e.ActualThrottle,
         e.TemperatureK,
     ];
 

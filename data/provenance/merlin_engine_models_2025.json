@@ -32,6 +32,13 @@
       "conditions": "steady-state simulator operating floor", "uncertainty": "±10 percentage points"
     },
     {
+      "dataId": "merlin1d-block5-2025", "field": "performanceMap",
+      "status": "derived", "source": "Rated endpoint data with linear throttle scaling",
+      "accessedDate": "2026-07-28", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "vacuum and Earth sea-level endpoints; 40–100% simulator envelope",
+      "uncertainty": "inherits endpoint uncertainty; throttle dependence is an engineering approximation"
+    },
+    {
       "dataId": "merlin1d-block5-2025", "field": "gimbalEnvelope",
       "status": "estimated", "source": "Falcon 9 public imagery and flight-control behavior; engineering estimate",
       "accessedDate": "2026-07-27", "variant": "Merlin 1D octaweb installation",
@@ -78,6 +85,13 @@
       "status": "estimated", "source": "Public Falcon 9 mission throttle timelines; engineering estimate",
       "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
       "conditions": "steady-state simulator operating floor", "uncertainty": "±10 percentage points"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "performanceMap",
+      "status": "derived", "source": "Rated endpoint data with linear throttle scaling",
+      "accessedDate": "2026-07-28", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "vacuum and hypothetical Earth sea-level endpoints; 40–100% simulator envelope",
+      "uncertainty": "inherits endpoint uncertainty; throttle dependence is an engineering approximation"
     },
     {
       "dataId": "merlin1d-vac-block5-2025", "field": "gimbalEnvelope",

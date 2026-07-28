@@ -21,6 +21,18 @@
   "performanceMap": [
     {
       "ambientPressurePa": 101325,
+      "throttle": 0.4,
+      "thrustN": 338000,
+      "specificImpulseS": 282
+    },
+    {
+      "ambientPressurePa": 0,
+      "throttle": 0.4,
+      "thrustN": 365600,
+      "specificImpulseS": 311
+    },
+    {
+      "ambientPressurePa": 101325,
       "throttle": 1.0,
       "thrustN": 845000,
       "specificImpulseS": 282

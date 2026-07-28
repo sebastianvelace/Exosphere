@@ -84,6 +84,7 @@ public sealed class EngineRuntimeTests
         var catalog = LoadCatalog();
         var vessel = new Vessel("engine-save-vessel");
         var engine = new Part(catalog["merlin1d_cluster9_block5"], "engine-save-part");
+        engine.GimbalOffset = new(0.6, 0.0, -0.4);
         vessel.Parts.SetRoot(engine);
         var universe = new Universe();
         universe.AddVessel(vessel);
@@ -107,6 +108,11 @@ public sealed class EngineRuntimeTests
         Assert.Equal("PUMP_FAILURE", failed.FailureCode);
         Assert.Contains(restored.EngineStates,
             e => e.State is EngineLifecycleState.Ramp or EngineLifecycleState.Running);
+        Assert.Contains(restored.EngineStates,
+            e => e.ChamberPressureFraction > 0.0);
+        Assert.Contains(restored.EngineStates,
+            e => e.GimbalDeg.Magnitude > 0.0
+                 && e.GimbalVelocityDegPerS.Magnitude > 0.0);
     }
 
     private static Part CreateMerlinCluster(string instanceId) =>

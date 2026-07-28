@@ -18,6 +18,12 @@ public readonly record struct EngineReadout(
 
 public class PartGraph
 {
+    private readonly record struct LiquidEngineDemand(
+        Part EnginePart,
+        string EngineInstanceId,
+        double MassFlowKgS,
+        double MixtureRatio);
+
     private readonly List<Part>  _parts  = new();
     private readonly List<Joint> _joints = new();
     private Part? _root;
@@ -215,7 +221,7 @@ public class PartGraph
     public int ActiveEngineCount =>
         ActiveEngines
             .Sum(e => e.HasEngineRuntime
-                ? e.EngineStates.Count(s => s.ActualThrottle > 1e-3)
+                ? e.EngineStates.Count(s => s.ChamberPressureFraction > 1e-3)
                 : e.ThrottleLevel > 1e-3 ? e.SelectedEngineCount : 0);
 
     /// <summary>Total pressure-corrected thrust magnitude (N) of the current stage now.</summary>
@@ -247,7 +253,7 @@ public class PartGraph
             ? e.GetEngineTelemetry(ambientPressure).Select(t => new EngineReadout(
                 t.InstanceId,
                 e.Definition.Name,
-                t.ActualThrottle,
+                t.ChamberPressureFraction,
                 t.ThrustN,
                 t.MassFlowKgS,
                 t.State,
@@ -325,8 +331,8 @@ public class PartGraph
         if (engines.Count == 0) return;
 
         // Calcular flujo de masa total de todos los motores activos
-        double totalLiquidRate = 0, totalSolidRate = 0, totalMonoRate = 0;
-        double methaneRate = 0, oxidizerRate = 0;
+        double totalSolidRate = 0, totalMonoRate = 0;
+        var liquidDemands = new List<LiquidEngineDemand>();
         foreach (var engine in engines)
         {
             var def = engine.Definition;
@@ -338,53 +344,93 @@ public class PartGraph
 
             // ṁ = F(p)/(Isp·g₀) con el empuje corregido por presión (coherente con
             // GetThrustMagnitude), no el empuje de vacío bruto.
-            double massFlow = engine.GetThrustMagnitude(ambientPressure) / (isp * 9.80665);
             var fuelType = def.FuelTypeStr.ToLowerInvariant();
 
             if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel"))
             {
-                totalLiquidRate += massFlow;
-                if (def.MixtureRatio > 0.0)
+                if (engine.HasEngineRuntime)
                 {
-                    double fuelFraction = 1.0 / (1.0 + def.MixtureRatio);
-                    methaneRate += massFlow * fuelFraction;
-                    oxidizerRate += massFlow * (1.0 - fuelFraction);
+                    var telemetry = engine.GetEngineTelemetry(ambientPressure).ToArray();
+                    for (int i = 0; i < telemetry.Length; i++)
+                    {
+                        var row = telemetry[i];
+                        if (row.MassFlowKgS <= 1e-12) continue;
+                        if (row.MassFlowKgS
+                            > engine.GetEngineFeedLimitKgS(i) + 1e-9)
+                        {
+                            engine.FailEngine(
+                                row.InstanceId, "FEED_BRANCH_FLOW_LIMIT");
+                            continue;
+                        }
+                        liquidDemands.Add(new LiquidEngineDemand(
+                            engine,
+                            row.InstanceId,
+                            row.MassFlowKgS,
+                            def.MixtureRatio));
+                    }
                 }
+                else
+                    liquidDemands.Add(new LiquidEngineDemand(
+                        engine,
+                        engine.InstanceId,
+                        engine.GetMassFlow(ambientPressure),
+                        def.MixtureRatio));
             }
             else if (fuelType.Contains("solid"))
-                totalSolidRate += massFlow;
+                totalSolidRate += engine.GetMassFlow(ambientPressure);
             else if (fuelType.Contains("mono"))
-                totalMonoRate += massFlow;
+                totalMonoRate += engine.GetMassFlow(ambientPressure);
         }
 
         // Consumir de los tanques de la etapa activa (cross-feed dentro de la etapa)
-        bool flameOut = false;
+        bool nonLiquidFlameOut = false;
 
-        if (totalLiquidRate > 0)
+        if (liquidDemands.Count > 0)
         {
             double totalLF   = stage.Sum(p => p.LiquidFuel);
             double totalOx   = stage.Sum(p => p.Oxidizer);
-            // Prefer the engine's declared oxidizer/fuel ratio. Falling back to the loaded
-            // tank ratio preserves compatibility with old parts that do not declare one.
-            double declaredRate = methaneRate + oxidizerRate;
-            double inv = totalLF + totalOx;
-            double lfFrac = declaredRate > 1e-9
-                ? methaneRate / declaredRate
-                : inv > 1e-9 ? totalLF / inv : 0.45;
-            double lfNeeded = totalLiquidRate * lfFrac * dt;
-            double oxNeeded = totalLiquidRate * (1.0 - lfFrac) * dt;
+            double remainingLF = totalLF;
+            double remainingOx = totalOx;
+            double fundedLF = 0.0;
+            double fundedOx = 0.0;
+            double loadedTotal = totalLF + totalOx;
+            double fallbackFuelFraction = loadedTotal > 1e-9
+                ? totalLF / loadedTotal
+                : 0.45;
 
-            if (totalLF < lfNeeded || totalOx < oxNeeded)
+            foreach (var demand in liquidDemands
+                         .OrderBy(item => item.EngineInstanceId, StringComparer.Ordinal))
             {
-                flameOut = true;
+                double fuelFraction = demand.MixtureRatio > 0.0
+                    ? 1.0 / (1.0 + demand.MixtureRatio)
+                    : fallbackFuelFraction;
+                double lfNeeded = demand.MassFlowKgS * fuelFraction * dt;
+                double oxNeeded = demand.MassFlowKgS * (1.0 - fuelFraction) * dt;
+                if (remainingLF + 1e-9 >= lfNeeded
+                    && remainingOx + 1e-9 >= oxNeeded)
+                {
+                    remainingLF -= lfNeeded;
+                    remainingOx -= oxNeeded;
+                    fundedLF += lfNeeded;
+                    fundedOx += oxNeeded;
+                    continue;
+                }
+
+                if (demand.EnginePart.HasEngineRuntime)
+                    demand.EnginePart.FailEngine(
+                        demand.EngineInstanceId, "PROPELLANT_STARVATION");
+                else
+                    demand.EnginePart.IsStagingActive = false;
             }
-            else
+
+            if (fundedLF > 0.0 || fundedOx > 0.0)
             {
-                // Drenar proporcionalmente de cada tanque que tenga combustible
                 foreach (var p in stage)
                 {
-                    if (totalLF > 0) p.LiquidFuel -= lfNeeded * (p.LiquidFuel / totalLF);
-                    if (totalOx > 0) p.Oxidizer   -= oxNeeded * (p.Oxidizer   / totalOx);
+                    if (totalLF > 0.0)
+                        p.LiquidFuel -= fundedLF * (p.LiquidFuel / totalLF);
+                    if (totalOx > 0.0)
+                        p.Oxidizer -= fundedOx * (p.Oxidizer / totalOx);
                 }
             }
         }
@@ -393,7 +439,7 @@ public class PartGraph
         {
             double solidNeeded = totalSolidRate * dt;
             double totalSolid  = stage.Sum(p => p.SolidFuel);
-            if (totalSolid < solidNeeded) flameOut = true;
+            if (totalSolid < solidNeeded) nonLiquidFlameOut = true;
             else foreach (var p in stage.Where(p2 => p2.SolidFuel > 0))
                 p.SolidFuel -= solidNeeded * (p.SolidFuel / totalSolid);
         }
@@ -402,12 +448,12 @@ public class PartGraph
         {
             double monoNeeded = totalMonoRate * dt;
             double totalMono  = stage.Sum(p => p.Monopropellant);
-            if (totalMono < monoNeeded) flameOut = true;
+            if (totalMono < monoNeeded) nonLiquidFlameOut = true;
             else foreach (var p in stage.Where(p2 => p2.Monopropellant > 0))
                 p.Monopropellant -= monoNeeded * (p.Monopropellant / totalMono);
         }
 
-        if (flameOut)
+        if (nonLiquidFlameOut)
         {
             foreach (var engine in engines)
             {

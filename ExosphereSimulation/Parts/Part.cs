@@ -114,13 +114,8 @@ public class Part
             double command = i < selected ? floored : 0.0;
             state.CommandedThrottle = command;
             AdvanceEngineState(state, command, dt);
-            double gimbalRange = Definition.GimbalRange;
-            state.GimbalDeg = i < selected
-                ? new Vector3d(
-                    System.Math.Clamp(GimbalOffset.X, -1.0, 1.0) * gimbalRange,
-                    0.0,
-                    System.Math.Clamp(GimbalOffset.Z, -1.0, 1.0) * gimbalRange)
-                : Vector3d.Zero;
+            AdvanceChamberPressure(state, dt);
+            AdvanceGimbal(state, i, i < selected, dt);
             double thermalTarget = state.ActualThrottle > 1e-3
                 ? 900.0 + 350.0 * state.ActualThrottle
                 : 290.0;
@@ -141,6 +136,7 @@ public class Part
         engine.State = EngineLifecycleState.Failed;
         engine.StateElapsedSeconds = 0.0;
         engine.ActualThrottle = 0.0;
+        engine.ChamberPressureFraction = 0.0;
         engine.FailureCode = string.IsNullOrWhiteSpace(failureCode)
             ? "INJECTED_FAILURE"
             : failureCode;
@@ -167,6 +163,8 @@ public class Part
             target.CommandedThrottle = source.CommandedThrottle;
             target.ActualThrottle = source.ActualThrottle;
             target.GimbalDeg = source.GimbalDeg;
+            target.GimbalVelocityDegPerS = source.GimbalVelocityDegPerS;
+            target.ChamberPressureFraction = source.ChamberPressureFraction;
             target.TemperatureK = source.TemperatureK;
             target.StartsCompleted = source.StartsCompleted;
             target.FailureCode = source.FailureCode;
@@ -176,26 +174,136 @@ public class Part
     public IEnumerable<EngineTelemetry> GetEngineTelemetry(double ambientPressure)
     {
         if (!HasEngineRuntime) yield break;
-        double ratedPerEngine =
-            GetRatedFullThrottleThrustMagnitude(ambientPressure) / _engineStates.Count;
-        double isp = GetIsp(ambientPressure);
         foreach (var state in _engineStates)
         {
-            double thrust = ratedPerEngine * state.ActualThrottle;
-            double flow = isp > 1.0 ? thrust / (isp * 9.80665) : 0.0;
+            var performance = EvaluateEnginePerformance(state, ambientPressure);
             yield return new EngineTelemetry(
                 state.InstanceId,
                 state.State,
                 state.CommandedThrottle,
                 state.ActualThrottle,
-                thrust,
-                flow,
-                state.ActualThrottle,
+                performance.ThrustN,
+                performance.MassFlowKgS,
+                state.ChamberPressureFraction,
                 Definition.MixtureRatio,
                 state.GimbalDeg,
                 state.TemperatureK,
                 state.FailureCode);
         }
+    }
+
+    public double GetEngineFeedLimitKgS(int engineIndex)
+    {
+        var branches = Definition.ResolvedEngineCluster?.FeedNetwork.Branches;
+        return branches != null && engineIndex >= 0 && engineIndex < branches.Count
+            ? branches[engineIndex].MaximumFlowKgS
+            : double.PositiveInfinity;
+    }
+
+    private EnginePerformanceSample EvaluateEnginePerformance(
+        EngineInstanceState state,
+        double ambientPressure)
+    {
+        double effectiveThrottle = state.State == EngineLifecycleState.Failed
+            ? 0.0
+            : state.ChamberPressureFraction;
+        if (Definition.ResolvedEngineModel is { } model)
+            return EnginePerformanceEvaluator.Evaluate(
+                model, ambientPressure, effectiveThrottle);
+
+        double ratedPerEngine =
+            GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure)
+            / System.Math.Max(1, _engineStates.Count);
+        double isp = GetLegacyIsp(ambientPressure);
+        double thrust = ratedPerEngine * effectiveThrottle;
+        double flow = isp > 1.0 ? thrust / (isp * 9.80665) : 0.0;
+        return new EnginePerformanceSample(
+            thrust, isp, flow, state.ChamberPressureFraction);
+    }
+
+    private void AdvanceChamberPressure(EngineInstanceState state, double dt)
+    {
+        double target = state.State == EngineLifecycleState.Failed
+            ? 0.0
+            : state.ActualThrottle;
+        double seconds = target >= state.ChamberPressureFraction
+            ? System.Math.Max(Definition.EngineStartupSeconds * 1.25, 1e-6)
+            : System.Math.Max(Definition.EngineShutdownSeconds * 1.25, 1e-6);
+        double step = dt / seconds;
+        double delta = target - state.ChamberPressureFraction;
+        state.ChamberPressureFraction = System.Math.Clamp(
+            System.Math.Abs(delta) <= step
+                ? target
+                : state.ChamberPressureFraction + System.Math.Sign(delta) * step,
+            0.0,
+            1.0);
+    }
+
+    private void AdvanceGimbal(
+        EngineInstanceState state,
+        int engineIndex,
+        bool selected,
+        double dt)
+    {
+        var model = Definition.ResolvedEngineModel;
+        double range = model?.GimbalRangeDeg ?? Definition.GimbalRange;
+        bool mountCanGimbal =
+            Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(engineIndex)
+                ?.Gimballed ?? true;
+        var target = selected && mountCanGimbal
+            ? new Vector3d(
+                System.Math.Clamp(GimbalOffset.X, -1.0, 1.0) * range,
+                0.0,
+                System.Math.Clamp(GimbalOffset.Z, -1.0, 1.0) * range)
+            : Vector3d.Zero;
+        if (model == null
+            || model.GimbalRateDegPerS <= 0.0
+            || model.GimbalAccelerationDegPerS2 <= 0.0)
+        {
+            state.GimbalDeg = target;
+            state.GimbalVelocityDegPerS = Vector3d.Zero;
+            return;
+        }
+
+        var x = AdvanceGimbalAxis(
+            state.GimbalDeg.X,
+            state.GimbalVelocityDegPerS.X,
+            target.X,
+            model.GimbalRateDegPerS,
+            model.GimbalAccelerationDegPerS2,
+            dt);
+        var z = AdvanceGimbalAxis(
+            state.GimbalDeg.Z,
+            state.GimbalVelocityDegPerS.Z,
+            target.Z,
+            model.GimbalRateDegPerS,
+            model.GimbalAccelerationDegPerS2,
+            dt);
+        state.GimbalDeg = new Vector3d(x.position, 0.0, z.position);
+        state.GimbalVelocityDegPerS = new Vector3d(x.velocity, 0.0, z.velocity);
+    }
+
+    private static (double position, double velocity) AdvanceGimbalAxis(
+        double position,
+        double velocity,
+        double target,
+        double maximumRate,
+        double maximumAcceleration,
+        double dt)
+    {
+        if (dt <= 0.0) return (position, velocity);
+        double error = target - position;
+        double desiredVelocity = System.Math.Clamp(
+            error / dt, -maximumRate, maximumRate);
+        double velocityStep = maximumAcceleration * dt;
+        double newVelocity = velocity
+            + System.Math.Clamp(
+                desiredVelocity - velocity, -velocityStep, velocityStep);
+        double movement = newVelocity * dt;
+        if (System.Math.Abs(movement) >= System.Math.Abs(error)
+            && System.Math.Sign(movement) == System.Math.Sign(error))
+            return (target, 0.0);
+        return (position + movement, newVelocity);
     }
 
     private void AdvanceEngineState(
@@ -368,6 +476,23 @@ public class Part
     /// </summary>
     public double GetIsp(double ambientPressure = 0.0)
     {
+        if (HasEngineRuntime)
+        {
+            double thrust = 0.0;
+            double flow = 0.0;
+            foreach (var state in _engineStates)
+            {
+                var sample = EvaluateEnginePerformance(state, ambientPressure);
+                thrust += sample.ThrustN;
+                flow += sample.MassFlowKgS;
+            }
+            return flow > 1e-12 ? thrust / (flow * 9.80665) : 0.0;
+        }
+        return GetLegacyIsp(ambientPressure);
+    }
+
+    private double GetLegacyIsp(double ambientPressure)
+    {
         double pf = System.Math.Max(0.0, ambientPressure / SeaLevelPressurePa);
         return System.Math.Max(0.0,
             Definition.IspVac + (Definition.IspSL - Definition.IspVac) * pf);
@@ -380,8 +505,12 @@ public class Part
     public double GetMassFlow(double ambientPressure = 0.0)
     {
         if (Definition.Category != PartCategory.Engine
-            || IsBroken || !IsStagingActive || ThrottleLevel <= 0.0)
+            || IsBroken || !IsStagingActive)
             return 0.0;
+        if (HasEngineRuntime)
+            return _engineStates.Sum(
+                state => EvaluateEnginePerformance(state, ambientPressure).MassFlowKgS);
+        if (ThrottleLevel <= 0.0) return 0.0;
         double isp = GetIsp(ambientPressure);
         if (isp < 1.0) return 0.0;
         return GetThrustMagnitude(ambientPressure) / (isp * 9.80665);
@@ -396,14 +525,28 @@ public class Part
     /// Falls back to vacuum thrust when no sea-level figure is provided.
     /// </summary>
     public double GetThrustMagnitude(double ambientPressure = 0.0)
-        => GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
+        => HasEngineRuntime
+            ? _engineStates.Sum(
+                state => EvaluateEnginePerformance(state, ambientPressure).ThrustN)
+            : GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
 
     /// <summary>Pressure-corrected thrust of the selected engines at 100% throttle (N).</summary>
     public double GetFullThrottleThrustMagnitude(double ambientPressure = 0.0)
-        => GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
+        => HasEngineRuntime && Definition.ResolvedEngineModel is { } model
+            ? EnginePerformanceEvaluator.Evaluate(
+                model, ambientPressure, model.MaximumThrottle).ThrustN
+                * SelectedEngineCount
+            : GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
 
     /// <summary>Pressure-corrected rated thrust of the complete represented cluster.</summary>
     public double GetRatedFullThrottleThrustMagnitude(double ambientPressure = 0.0)
+        => HasEngineRuntime && Definition.ResolvedEngineModel is { } model
+            ? EnginePerformanceEvaluator.Evaluate(
+                model, ambientPressure, model.MaximumThrottle).ThrustN
+                * _engineStates.Count
+            : GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure);
+
+    private double GetLegacyRatedFullThrottleThrustMagnitude(double ambientPressure)
     {
         double fVac = Definition.ThrustVac;
         double fSL  = Definition.ThrustSL > 0.0 ? Definition.ThrustSL : fVac;
@@ -424,7 +567,8 @@ public class Part
     public Vector3d GetThrustVector(double ambientPressure)
     {
         if (Definition.Category != PartCategory.Engine
-            || IsBroken || !IsStagingActive || ThrottleLevel <= 0.0)
+            || IsBroken || !IsStagingActive
+            || (!HasEngineRuntime && ThrottleLevel <= 0.0))
             return Vector3d.Zero;
 
         double thrust = GetThrustMagnitude(ambientPressure);
@@ -433,9 +577,25 @@ public class Part
         // Gimbal: GimbalOffset.{X,Z} ∈ [-1,1] is the normalized deflection of each axis.
         // The actual deflection angle is (offset · GimbalRange) in degrees; the thrust
         // direction is the unit vector tilted off +Y by that angle.
-        double gimbalRad = Definition.GimbalRange * MathUtils.DEG_TO_RAD;
-        double ax = System.Math.Clamp(GimbalOffset.X, -1.0, 1.0) * gimbalRad;
-        double az = System.Math.Clamp(GimbalOffset.Z, -1.0, 1.0) * gimbalRad;
+        double gimbalRange = Definition.GimbalRange;
+        double normalizedX = System.Math.Clamp(GimbalOffset.X, -1.0, 1.0);
+        double normalizedZ = System.Math.Clamp(GimbalOffset.Z, -1.0, 1.0);
+        if (HasEngineRuntime)
+        {
+            var live = _engineStates.Where(
+                state => state.ChamberPressureFraction > 1e-3).ToArray();
+            if (live.Length > 0)
+            {
+                double actualX = live.Average(state => state.GimbalDeg.X);
+                double actualZ = live.Average(state => state.GimbalDeg.Z);
+                gimbalRange = 1.0;
+                normalizedX = actualX;
+                normalizedZ = actualZ;
+            }
+        }
+        double gimbalRad = gimbalRange * MathUtils.DEG_TO_RAD;
+        double ax = normalizedX * gimbalRad;
+        double az = normalizedZ * gimbalRad;
         var dir = new Vector3d(System.Math.Sin(ax), 1.0, System.Math.Sin(az)).Normalized;
         return dir * thrust;
     }

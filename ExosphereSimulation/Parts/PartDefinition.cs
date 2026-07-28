@@ -2,6 +2,7 @@ namespace Exosphere.Simulation.Parts;
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Exosphere.Simulation.Propulsion;
 
 public enum PartCategory
 {
@@ -84,6 +85,8 @@ public class PartDefinition
     [JsonPropertyName("engine_startup_seconds")] public double EngineStartupSeconds { get; set; } = 0.50;
     [JsonPropertyName("engine_shutdown_seconds")] public double EngineShutdownSeconds { get; set; } = 0.20;
     [JsonPropertyName("mixture_ratio")] public double MixtureRatio { get; set; }
+    [JsonIgnore] public EngineModelDefinition? ResolvedEngineModel { get; set; }
+    [JsonIgnore] public EngineClusterDefinition? ResolvedEngineCluster { get; set; }
     // Axial location of the effective thrust plane relative to this part's centre.
     [JsonPropertyName("thrust_position_y_m")] public double ThrustPositionYM { get; set; }
 

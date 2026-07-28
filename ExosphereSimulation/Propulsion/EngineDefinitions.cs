@@ -50,6 +50,8 @@ public sealed class EngineModelDefinition
     public int RestartLimit { get; set; }
     public double? ExitAreaM2 { get; set; }
     public double? NominalMassFlowKgS { get; set; }
+    public double? EffectiveExhaustVelocityMps { get; set; }
+    public double? EffectiveExitPressurePa { get; set; }
     public List<PressureThrottlePoint> PerformanceMap { get; set; } = new();
 
     public void Validate(DataProvenanceRegistry? provenance = null)
@@ -88,6 +90,22 @@ public sealed class EngineModelDefinition
             throw new InvalidDataException($"Engine model '{Id}' has an invalid exit area.");
         if (NominalMassFlowKgS is { } flow && (!double.IsFinite(flow) || flow <= 0.0))
             throw new InvalidDataException($"Engine model '{Id}' has an invalid mass flow.");
+        if (EffectiveExhaustVelocityMps is { } velocity
+            && (!double.IsFinite(velocity) || velocity <= 0.0))
+            throw new InvalidDataException(
+                $"Engine model '{Id}' has an invalid effective exhaust velocity.");
+        if (EffectiveExitPressurePa is { } pressure
+            && (!double.IsFinite(pressure) || pressure < 0.0))
+            throw new InvalidDataException(
+                $"Engine model '{Id}' has an invalid effective exit pressure.");
+        int equationParameterCount =
+            (ExitAreaM2.HasValue ? 1 : 0)
+            + (NominalMassFlowKgS.HasValue ? 1 : 0)
+            + (EffectiveExhaustVelocityMps.HasValue ? 1 : 0)
+            + (EffectiveExitPressurePa.HasValue ? 1 : 0);
+        if (equationParameterCount is > 0 and < 4)
+            throw new InvalidDataException(
+                $"Engine model '{Id}' must define every nozzle-equation parameter or none.");
 
         foreach (var point in PerformanceMap)
         {
@@ -109,6 +127,7 @@ public sealed class EngineModelDefinition
             "specificImpulseSeaLevelS",
             "specificImpulseVacuumS",
             "minimumThrottle",
+            "performanceMap",
             "gimbalEnvelope",
             "startupTransient",
             "shutdownTransient");
@@ -207,6 +226,8 @@ public sealed class EngineInstanceState
     public double CommandedThrottle { get; set; }
     public double ActualThrottle { get; set; }
     public Vector3d GimbalDeg { get; set; } = Vector3d.Zero;
+    public Vector3d GimbalVelocityDegPerS { get; set; } = Vector3d.Zero;
+    public double ChamberPressureFraction { get; set; }
     public double TemperatureK { get; set; } = 290.0;
     public int StartsCompleted { get; set; }
     public string? FailureCode { get; set; }
@@ -224,6 +245,130 @@ public sealed record EngineTelemetry(
     Vector3d GimbalDeg,
     double TemperatureK,
     string? FailureCode);
+
+public readonly record struct EnginePerformanceSample(
+    double ThrustN,
+    double SpecificImpulseS,
+    double MassFlowKgS,
+    double ChamberPressureFraction);
+
+public static class EnginePerformanceEvaluator
+{
+    private const double StandardGravity = 9.80665;
+
+    public static EnginePerformanceSample Evaluate(
+        EngineModelDefinition model,
+        double ambientPressurePa,
+        double throttle)
+    {
+        if (!double.IsFinite(ambientPressurePa)
+            || !double.IsFinite(throttle))
+            throw new ArgumentOutOfRangeException(nameof(throttle));
+        double pressure = System.Math.Max(0.0, ambientPressurePa);
+        double command = System.Math.Clamp(throttle, 0.0, model.MaximumThrottle);
+        if (command <= 1e-9)
+            return new EnginePerformanceSample(0.0, 0.0, 0.0, 0.0);
+
+        if (HasNozzleEquation(model))
+        {
+            double flow = model.NominalMassFlowKgS!.Value * command;
+            double momentum = flow * model.EffectiveExhaustVelocityMps!.Value;
+            double pressureThrust = model.ExitAreaM2!.Value
+                * (model.EffectiveExitPressurePa!.Value - pressure)
+                * command;
+            double thrust = System.Math.Max(0.0, momentum + pressureThrust);
+            double isp = flow > 1e-12 ? thrust / (flow * StandardGravity) : 0.0;
+            return new EnginePerformanceSample(thrust, isp, flow, command);
+        }
+
+        if (model.PerformanceMap.Count > 0)
+        {
+            var throttleCurves = model.PerformanceMap
+                .GroupBy(point => point.Throttle)
+                .OrderBy(group => group.Key)
+                .Select(group => (
+                    throttle: group.Key,
+                    sample: InterpolatePressure(group, pressure)))
+                .ToArray();
+            var mapped = InterpolateThrottle(throttleCurves, command);
+            double mapThrottle = System.Math.Max(mapped.referenceThrottle, 1e-9);
+            double scale = command / mapThrottle;
+            double thrust = System.Math.Max(0.0, mapped.thrust * scale);
+            double isp = System.Math.Max(0.0, mapped.isp);
+            double flow = isp > 1e-12 ? thrust / (isp * StandardGravity) : 0.0;
+            return new EnginePerformanceSample(thrust, isp, flow, command);
+        }
+
+        double pressureFraction = pressure / 101_325.0;
+        double ratedThrust = System.Math.Max(
+            0.0,
+            model.RatedThrustVacuumN
+            + (model.RatedThrustSeaLevelN - model.RatedThrustVacuumN)
+            * pressureFraction);
+        double specificImpulse = System.Math.Max(
+            0.0,
+            model.SpecificImpulseVacuumS
+            + (model.SpecificImpulseSeaLevelS - model.SpecificImpulseVacuumS)
+            * pressureFraction);
+        double actualThrust = ratedThrust * command;
+        double massFlow = specificImpulse > 1e-12
+            ? actualThrust / (specificImpulse * StandardGravity)
+            : 0.0;
+        return new EnginePerformanceSample(
+            actualThrust, specificImpulse, massFlow, command);
+    }
+
+    private static bool HasNozzleEquation(EngineModelDefinition model) =>
+        model.ExitAreaM2.HasValue
+        && model.NominalMassFlowKgS.HasValue
+        && model.EffectiveExhaustVelocityMps.HasValue
+        && model.EffectiveExitPressurePa.HasValue;
+
+    private static (double thrust, double isp) InterpolatePressure(
+        IEnumerable<PressureThrottlePoint> curve,
+        double pressure)
+    {
+        var points = curve.OrderBy(point => point.AmbientPressurePa).ToArray();
+        if (points.Length == 1)
+            return (points[0].ThrustN, points[0].SpecificImpulseS);
+        int upper = Array.FindIndex(
+            points, point => point.AmbientPressurePa >= pressure);
+        if (upper < 0) upper = points.Length - 1;
+        if (upper == 0) upper = 1;
+        var a = points[upper - 1];
+        var b = points[upper];
+        double span = b.AmbientPressurePa - a.AmbientPressurePa;
+        double t = span > 1e-12
+            ? (pressure - a.AmbientPressurePa) / span
+            : 0.0;
+        return (
+            a.ThrustN + (b.ThrustN - a.ThrustN) * t,
+            a.SpecificImpulseS + (b.SpecificImpulseS - a.SpecificImpulseS) * t);
+    }
+
+    private static (double thrust, double isp, double referenceThrottle)
+        InterpolateThrottle(
+            (double throttle, (double thrust, double isp) sample)[] curves,
+            double throttle)
+    {
+        if (curves.Length == 1)
+            return (
+                curves[0].sample.thrust,
+                curves[0].sample.isp,
+                curves[0].throttle);
+        int upper = Array.FindIndex(curves, curve => curve.throttle >= throttle);
+        if (upper < 0) upper = curves.Length - 1;
+        if (upper == 0) upper = 1;
+        var a = curves[upper - 1];
+        var b = curves[upper];
+        double span = b.throttle - a.throttle;
+        double t = span > 1e-12 ? (throttle - a.throttle) / span : 0.0;
+        return (
+            a.sample.thrust + (b.sample.thrust - a.sample.thrust) * t,
+            a.sample.isp + (b.sample.isp - a.sample.isp) * t,
+            throttle);
+    }
+}
 
 public sealed record PartVisualDescriptor(
     string PartInstanceId,

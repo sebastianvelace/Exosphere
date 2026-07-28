@@ -45,6 +45,12 @@ public sealed class EngineDefinitionCatalogTests
         Assert.Equal(
             merlin.Id,
             partCatalog["merlin1d_cluster9_block5"].EngineModelId);
+        Assert.Equal(
+            merlin.Id,
+            partCatalog["merlin1d_cluster9_block5"].ResolvedEngineModel?.Id);
+        Assert.Equal(
+            octaweb.Id,
+            partCatalog["merlin1d_cluster9_block5"].ResolvedEngineCluster?.Id);
 
         var vehicle = VehicleVariantDefinition.LoadFromJson(
             Path.Combine(
@@ -89,6 +95,7 @@ public sealed class EngineDefinitionCatalogTests
                 "specificImpulseSeaLevelS",
                 "specificImpulseVacuumS",
                 "minimumThrottle",
+                "performanceMap",
                 "gimbalEnvelope",
                 "startupTransient",
                 "shutdownTransient");
