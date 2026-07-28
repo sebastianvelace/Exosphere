@@ -82,5 +82,10 @@ public partial class WarpController : Control
         }
     }
 
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        Visible = CameraController.Instance?.IsCockpitView != true
+            && MapViewController.Instance?.Visible != true;
+        if (Visible) QueueRedraw();
+    }
 }

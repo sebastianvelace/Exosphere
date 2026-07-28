@@ -16,6 +16,8 @@ public partial class MapViewController : Control
     public static MapViewController? Instance { get; private set; }
 
     public ManeuverPlanner Planner { get; } = new();
+    public bool HasNavigationTarget =>
+        _selectedTarget != null || Planner.HasNode || TransferPlanner.Instance?.CurrentNode != null;
     private AutopilotController _autopilot = null!;
 
     // ── Transfer planner state ────────────────────────────────────────────────

@@ -1,18 +1,19 @@
 namespace Exosphere.Game;
 
 using Godot;
-using System.Linq;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Presentation;
 
 // ── Flight HUD (SpaceX-webcast aesthetic) ────────────────────────────────────
 // Dark translucent panels, thin lines, condensed type, cyan/white accents. A big
 // centred bottom telemetry band (SPEED / ALTITUDE / T+), a milestone countdown, a
 // left "loads & trajectory" panel and a right "stages & Δv + event log" panel.
 // The engine board (EngineGridHUD) and navball (NavballController) are spawned as
-// children here. Reads ONLY existing public getters; all derived values (G-force,
-// Δv, downrange, TWR, vertical speed) are computed in this HUD layer.
+// children here. All physics-derived values arrive through FlightHudSnapshot.
 public partial class HUDController : Control
 {
+    public static FlightHudSnapshot? LatestSnapshot { get; private set; }
+
     // ── Palette ─────────────────────────────────────────────────────────────
     private static readonly Color PanelBg     = InterfaceTheme.Glass;
     private static readonly Color PanelBorder = InterfaceTheme.Edge;
@@ -60,6 +61,17 @@ public partial class HUDController : Control
     private readonly System.Collections.Generic.List<ColorRect> _phaseDots = new();
     private Label _countdownLabel = null!;
     private Label _countdownMilestone = null!;
+    private Label _alertLabel = null!;
+    private Label _alertAction = null!;
+    private readonly System.Collections.Generic.Dictionary<FlightNavigationMode, Label> _navLabels = new();
+
+    private Control _leftRoot = null!;
+    private Control _rightRoot = null!;
+    private Control _phaseRoot = null!;
+    private Control _bottomRoot = null!;
+    private Control _timeRoot = null!;
+    private Node _engineGrid = null!;
+    private Node _navball = null!;
 
     // ── Pad help overlay + launch path callout (UX-001 / UX-002) ─────────────
     private PanelContainer _padHelpRoot = null!;
@@ -67,14 +79,11 @@ public partial class HUDController : Control
     private Label _launchPathLabel = null!;
     private bool _padHelpDismissed;
 
-    // ── Derived-state tracking ──────────────────────────────────────────────
-    private Vector3d _lastVel;
-    private double   _lastT = -1;
-    private double   _gSmoothed;
+    // ── Presentation state ─────────────────────────────────────────────────
+    private readonly FlightHudPresenter _presenter = new();
+    private FlightHudSnapshot? _snapshot;
     private MissionPhase _lastPhase = MissionPhase.PRE_LAUNCH;
     private bool     _maxqSeen;
-    private Vector3d _launchSurfacePoint;   // body-relative; captured at liftoff
-    private bool     _launchCaptured;
     private readonly System.Collections.Generic.List<string> _events = new();
 
     private static readonly MissionPhase[] PhaseSequence =
@@ -96,8 +105,15 @@ public partial class HUDController : Control
         BuildPadHelpOverlay();
 
         // Spawn the engine board and navball as children.
-        AddChild(new EngineGridHUD  { Name = "EngineGridHUD" });
-        AddChild(new AttitudeNavball { Name = "Navball" });
+        _engineGrid = new EngineGridHUD  { Name = "EngineGridHUD" };
+        _navball = new AttitudeNavball { Name = "Navball" };
+        AddChild(_engineGrid);
+        AddChild(_navball);
+    }
+
+    public override void _ExitTree()
+    {
+        LatestSnapshot = null;
     }
 
     // ── Panel construction ──────────────────────────────────────────────────
@@ -105,6 +121,7 @@ public partial class HUDController : Control
     private void BuildLeftPanel()
     {
         var panel = MakePanel();
+        _leftRoot = panel;
         panel.OffsetLeft = 18; panel.OffsetTop = 18;
         AddChild(panel);
 
@@ -131,6 +148,7 @@ public partial class HUDController : Control
     private void BuildRightPanel()
     {
         var panel = MakePanel();
+        _rightRoot = panel;
         panel.SetAnchorsPreset(LayoutPreset.TopRight);
         panel.GrowHorizontal = GrowDirection.Begin;
         panel.OffsetRight = -18; panel.OffsetTop = 18;
@@ -160,9 +178,9 @@ public partial class HUDController : Control
 
         _warpValue = AddRow(vbox, "TIME WARP", "Real Time");
 
-        vbox.AddChild(MakeGaugeLabel("LIQUID CH4"));
+        vbox.AddChild(MakeGaugeLabel("LIQUID FUEL"));
         (_lfFill, _lfValue, _lfTrackW) = AddGauge(vbox, FuelCol);
-        vbox.AddChild(MakeGaugeLabel("LIQUID O2"));
+        vbox.AddChild(MakeGaugeLabel("OXIDIZER"));
         (_oxFill, _oxValue, _oxTrackW) = AddGauge(vbox, OxCol);
 
         vbox.AddChild(MakeHeader("EVENT LOG"));
@@ -177,6 +195,7 @@ public partial class HUDController : Control
     private void BuildPhaseBanner()
     {
         var center = new PanelContainer();
+        _phaseRoot = center;
         center.SetAnchorsPreset(LayoutPreset.CenterTop);
         center.GrowHorizontal = GrowDirection.Both;
         center.OffsetLeft = -320;
@@ -207,6 +226,36 @@ public partial class HUDController : Control
         _launchPathLabel.CustomMinimumSize = new Vector2(580, 0);
         vbox.AddChild(_launchPathLabel);
 
+        var nav = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        nav.AddThemeConstantOverride("separation", 12);
+        vbox.AddChild(nav);
+        foreach (FlightNavigationMode mode in System.Enum.GetValues<FlightNavigationMode>())
+        {
+            var label = new Label { Text = mode.ToString().ToUpperInvariant() };
+            label.AddThemeFontSizeOverride("font_size", 10);
+            label.AddThemeColorOverride("font_color", LabelDim);
+            InterfaceTheme.ApplyMono(label, 10);
+            nav.AddChild(label);
+            _navLabels[mode] = label;
+        }
+
+        _alertLabel = new Label
+        {
+            Text = "",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        _alertLabel.AddThemeFontSizeOverride("font_size", 12);
+        vbox.AddChild(_alertLabel);
+
+        _alertAction = new Label
+        {
+            Text = "",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        _alertAction.AddThemeFontSizeOverride("font_size", 10);
+        _alertAction.AddThemeColorOverride("font_color", LabelDim);
+        vbox.AddChild(_alertAction);
+
         _phaseTrack = new HBoxContainer();
         _phaseTrack.Alignment = BoxContainer.AlignmentMode.Center;
         _phaseTrack.AddThemeConstantOverride("separation", 4);
@@ -232,6 +281,7 @@ public partial class HUDController : Control
         // SPEED and ALTITUDE flank the centre-bottom navball (~190 px wide) with a wide gap;
         // the T+ clock is a separate label ABOVE the navball so the disc never covers it.
         var center = new CenterContainer();
+        _bottomRoot = center;
         center.SetAnchorsPreset(LayoutPreset.BottomWide);
         center.GrowVertical = GrowDirection.Begin;
         center.OffsetBottom = -32;
@@ -248,6 +298,7 @@ public partial class HUDController : Control
 
         // T+ clock — centred, above the navball disc.
         var timeCenter = new CenterContainer();
+        _timeRoot = timeCenter;
         timeCenter.SetAnchorsPreset(LayoutPreset.BottomWide);
         timeCenter.GrowVertical = GrowDirection.Begin;
         timeCenter.OffsetBottom = -220;
@@ -361,7 +412,7 @@ public partial class HUDController : Control
 
         _reentryDemoButton = new Button
         {
-            Text = "VIEW STARSHIP REENTRY → LANDING",
+            Text = "VIEW REENTRY → LANDING",
             CustomMinimumSize = new Vector2(360, 38),
             TooltipText = "Start the verified physical EDL demonstration at the 70 km entry interface",
         };
@@ -516,117 +567,69 @@ public partial class HUDController : Control
             bridge.ThrottleDown(delta);
         }
 
-        var refBody = universe.GetDominantBody(vessel.Position);
-        double alt   = vessel.GetAltitude(refBody);
-        var surfVel  = vessel.GetSurfaceVelocity(refBody);
-        double speed = surfVel.Magnitude;
-        var up       = (vessel.Position - refBody.Position).Normalized;
-        double vspeed = surfVel.Dot(up);                  // climb rate (m/s)
+        var viewMode = MapViewController.Instance?.Visible == true
+            ? FlightHudViewMode.Map
+            : CameraController.Instance?.IsCockpitView == true
+                ? FlightHudViewMode.Cockpit
+                : FlightHudViewMode.Exterior;
+        string phaseName = (mission?.Phase ?? MissionPhase.PRE_LAUNCH).ToString();
+        _snapshot = _presenter.Capture(
+            universe,
+            vessel,
+            phaseName,
+            viewMode,
+            MapViewController.Instance?.HasNavigationTarget == true);
+        var snapshot = _snapshot;
+        LatestSnapshot = snapshot;
 
-        // ── Proper acceleration felt by the crew (gravity-free in orbit) ───
-        double gNow = vessel.GetProperAcceleration(refBody).Magnitude / 9.80665;
-        _lastVel = vessel.Velocity;
-        _lastT   = universe.CurrentTime;
-        _gSmoothed = _gSmoothed + (gNow - _gSmoothed) * 0.2;
+        _altValue.Text = FormatDistance(snapshot.AltitudeM);
+        _vspeedValue.Text = $"{snapshot.VerticalSpeedMps:+0.0;-0.0} m/s";
+        _gValue.Text = $"{snapshot.ProperAccelerationG:F2} g";
+        _gValue.AddThemeColorOverride(
+            "font_color", snapshot.ProperAccelerationG > 4.0 ? WarnCol : ValueBright);
+        _qValue.Text = $"{snapshot.DynamicPressurePa / 1000.0:F1} kPa";
+        _pitchValue.Text = snapshot.SurfaceSpeedMps > 0.5
+            ? $"{snapshot.FlightPathAngleDeg:F0}°"
+            : "---";
+        _hdgValue.Text = snapshot.SurfaceSpeedMps > 0.5
+            ? $"{snapshot.HeadingDeg:F0}°"
+            : "---";
+        _downrangeValue.Text = snapshot.HasDownrangeReference
+            ? FormatDistance(snapshot.DownrangeM)
+            : "---";
 
-        // ── Dynamic pressure ───────────────────────────────────────────────
-        double q = vessel.GetDynamicPressure(refBody);
-
-        // ── Flight pitch / heading (velocity-vector based) ─────────────────
-        double flightPitch = 0, heading = 0;
-        if (speed > 0.5)
+        if (mission?.Phase == MissionPhase.MAX_Q)
         {
-            var vdir = surfVel.Normalized;
-            flightPitch = System.Math.Asin(System.Math.Clamp(vdir.Dot(up), -1, 1)) * 180.0 / System.Math.PI;
-            var spinAxis = refBody.RotationAxis;
-            var north = spinAxis - up * spinAxis.Dot(up);
-            if (north.MagnitudeSquared > 1e-9)
-            {
-                north = north.Normalized;
-                var east = north.Cross(up).Normalized;
-                var vh = vdir - up * vdir.Dot(up);
-                if (vh.MagnitudeSquared > 1e-9)
-                {
-                    vh = vh.Normalized;
-                    heading = (System.Math.Atan2(vh.Dot(east), vh.Dot(north)) * 180.0 / System.Math.PI + 360.0) % 360.0;
-                }
-            }
+            _maxqFlag.Text = "◆ MAX-Q ◆";
+            _maxqSeen = true;
         }
-
-        // ── Downrange (great-circle from launch surface point) ─────────────
-        if (!_launchCaptured && (mission?.Phase is MissionPhase.LIFTOFF or MissionPhase.ASCENT_SH) && alt > 30)
-        {
-            var inertial = (vessel.Position - refBody.Position).Normalized;
-            _launchSurfacePoint = refBody.ToBodyFixedDirection(
-                inertial, universe.CurrentTime).Normalized;
-            _launchCaptured = true;
-        }
-        double downrange = 0;
-        if (_launchCaptured)
-        {
-            var inertialNow = (vessel.Position - refBody.Position).Normalized;
-            var now = refBody.ToBodyFixedDirection(
-                inertialNow, universe.CurrentTime).Normalized;
-            double cosAng = System.Math.Clamp(now.Dot(_launchSurfacePoint), -1, 1);
-            downrange = System.Math.Acos(cosAng) * refBody.Radius;
-        }
-
-        // ── Left panel ──────────────────────────────────────────────────────
-        _altValue.Text    = FormatDistance(alt);
-        _vspeedValue.Text = $"{vspeed:+0.0;-0.0} m/s";
-        _gValue.Text      = $"{_gSmoothed:F2} g";
-        _gValue.AddThemeColorOverride("font_color", _gSmoothed > 4.0 ? WarnCol : ValueBright);
-        _qValue.Text      = $"{q / 1000.0:F1} kPa";
-        _pitchValue.Text  = speed > 0.5 ? $"{flightPitch:F0}°" : "---";
-        _hdgValue.Text    = speed > 0.5 ? $"{heading:F0}°" : "---";
-        _downrangeValue.Text = _launchCaptured ? FormatDistance(downrange) : "---";
-
-        // MAX-Q flag: latch once q peaks and starts falling in atmosphere.
-        if (mission?.Phase == MissionPhase.MAX_Q) { _maxqFlag.Text = "◆ MAX-Q ◆"; _maxqSeen = true; }
         else if (_maxqSeen) _maxqFlag.Text = "max-q passed";
         else _maxqFlag.Text = "";
 
-        // ── Right panel: mass, Δv, orbit ───────────────────────────────────
-        _massValue.Text = $"{vessel.TotalMass / 1000.0:F1} t";
-
-        // Stage Δv = Isp·g0·ln(m0/m1) for the current stage's engines & propellant.
-        _dvValue.Text = FormatDv(vessel, refBody);
-
-        bool suborbital = false;
-        try
+        _massValue.Text = $"{snapshot.TotalMassKg / 1000.0:F1} t";
+        _dvValue.Text = snapshot.StageDeltaVMps > 0.0
+            ? $"{snapshot.StageDeltaVMps:N0} m/s"
+            : "---";
+        _apValue.Text = snapshot.ApoapsisAltitudeM is { } apoapsis
+            ? FormatDistance(apoapsis)
+            : "---";
+        if (snapshot.IsImpactTrajectory)
         {
-            var relPos = vessel.Position - refBody.Position;
-            var relVel = vessel.Velocity - refBody.Velocity;
-            var el = Exosphere.Simulation.OrbitalElements.FromStateVector(
-                relPos, relVel, refBody.GM, refBody.Id, universe.CurrentTime);
-            double peAlt = el.Periapsis - refBody.Radius;
-            _apValue.Text = FormatDistance(el.Apoapsis - refBody.Radius);
-
-            // Periapsis bajo la superficie ⇒ la órbita cruza el cuerpo: trayectoria
-            // suborbital/radial que va a impactar. Mostramos un aviso en rojo en lugar de
-            // un número negativo confuso (que no comunica que vas a estrellarte).
-            // Periapsis below the surface ⇒ the orbit crosses the body: a suborbital/radial
-            // impact trajectory. Show a red warning instead of a confusing negative number.
-            suborbital = peAlt < 0;
-            if (suborbital)
-            {
-                _peValue.Text = "IMPACT";
-                _peValue.AddThemeColorOverride("font_color", FuelLowCol);
-            }
-            else
-            {
-                _peValue.Text = FormatDistance(peAlt);
-                _peValue.AddThemeColorOverride("font_color", ValueBright);
-            }
+            _peValue.Text = "IMPACT";
+            _peValue.AddThemeColorOverride("font_color", FuelLowCol);
         }
-        catch
+        else
         {
-            _apValue.Text = "---"; _peValue.Text = "---";
+            _peValue.Text = snapshot.PeriapsisAltitudeM is { } periapsis
+                ? FormatDistance(periapsis)
+                : "---";
             _peValue.AddThemeColorOverride("font_color", ValueBright);
         }
-        _suborbitalWarn.Text = suborbital ? "SUBORBITAL / IMPACT TRAJECTORY" : "";
+        _suborbitalWarn.Text = snapshot.Alerts.Any(a => a.Code == "TRAJECTORY")
+            ? "SUBORBITAL / IMPACT TRAJECTORY"
+            : "";
 
-        double ts = universe.TimeScale;
+        double ts = snapshot.TimeScale;
         if (universe.CurrentTime < bridge.WarpClampReasonUntil && bridge.WarpClampReason != null)
         {
             _warpValue.Text = ts <= 1.0
@@ -640,27 +643,24 @@ public partial class HUDController : Control
             _warpValue.AddThemeColorOverride("font_color", ts > 1.0 ? Accent : ValueBright);
         }
 
-        // ── Propellant bars (fuel vs oxidizer fractions) ───────────────────
-        double lf = vessel.Parts.TotalLiquidFuel;
-        double ox = vessel.Parts.TotalOxidizer;
-        double lfCap = vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityLF);
-        double oxCap = vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityOx);
-        double lfFrac = lfCap > 0 ? lf / lfCap : 0;
-        double oxFrac = oxCap > 0 ? ox / oxCap : 0;
-        _lfValue.Text = $"{lf / 1000.0:F1} t";
-        _oxValue.Text = $"{ox / 1000.0:F1} t";
-        _lfFill.Size = new Vector2(_lfTrackW * (float)System.Math.Clamp(lfFrac, 0, 1), 8);
-        _oxFill.Size = new Vector2(_oxTrackW * (float)System.Math.Clamp(oxFrac, 0, 1), 8);
-        _lfFill.Color = lfFrac < 0.12 ? FuelLowCol : FuelCol;
-        _oxFill.Color = oxFrac < 0.12 ? FuelLowCol : OxCol;
+        _lfValue.Text = $"{snapshot.LiquidFuelKg / 1000.0:F1} t";
+        _oxValue.Text = $"{snapshot.OxidizerKg / 1000.0:F1} t";
+        _lfFill.Size = new Vector2(
+            _lfTrackW * (float)System.Math.Clamp(snapshot.LiquidFuelFraction, 0, 1), 8);
+        _oxFill.Size = new Vector2(
+            _oxTrackW * (float)System.Math.Clamp(snapshot.OxidizerFraction, 0, 1), 8);
+        _lfFill.Color = snapshot.LiquidFuelFraction < 0.12 ? FuelLowCol : FuelCol;
+        _oxFill.Color = snapshot.OxidizerFraction < 0.12 ? FuelLowCol : OxCol;
 
-        // ── Big bottom band ────────────────────────────────────────────────
-        _bigSpeed.Text = $"{speed * 3.6:N0}";
-        _bigAlt.Text   = alt >= 1000 ? $"{alt / 1000.0:F1}" : $"{alt:F0}";
-        ((Label)_bigAlt.GetParent().GetChild(2)).Text = alt >= 1000 ? "KM" : "M";
-        _bigTime.Text  = FormatClock(universe.CurrentTime);
+        _bigSpeed.Text = $"{snapshot.SurfaceSpeedMps * 3.6:N0}";
+        _bigAlt.Text = snapshot.AltitudeM >= 1000
+            ? $"{snapshot.AltitudeM / 1000.0:F1}"
+            : $"{snapshot.AltitudeM:F0}";
+        ((Label)_bigAlt.GetParent().GetChild(2)).Text =
+            snapshot.AltitudeM >= 1000 ? "KM" : "M";
+        _bigTime.Text = FormatClock(snapshot.MissionTimeS);
+        RenderNavigationAndAlerts(snapshot);
 
-        // ── Mission phase banner + progress + event log ────────────────────
         if (mission != null)
         {
             _phaseLabel.Text = FormatPhase(mission.Phase);
@@ -668,9 +668,58 @@ public partial class HUDController : Control
             UpdatePhaseTrack(mission.Phase);
             UpdateEventLog(mission.Phase, universe.CurrentTime);
             UpdateCountdown(mission);
-            UpdateLaunchPathCallout(mission, bridge, vessel, refBody);
+            UpdateLaunchPathCallout(mission, bridge, snapshot);
             UpdatePadHelp(mission);
         }
+        ApplyViewMode(snapshot.ViewMode);
+    }
+
+    private void RenderNavigationAndAlerts(FlightHudSnapshot snapshot)
+    {
+        foreach (var (mode, label) in _navLabels)
+        {
+            bool active = mode == snapshot.NavigationMode;
+            label.AddThemeColorOverride("font_color", active ? InterfaceTheme.Orbital : LabelDim);
+            label.AddThemeFontSizeOverride("font_size", active ? 11 : 10);
+        }
+
+        var alert = snapshot.Alerts.FirstOrDefault();
+        if (alert == null)
+        {
+            _alertLabel.Text = "";
+            _alertAction.Text = "";
+            return;
+        }
+
+        string acknowledgement = alert.Acknowledged ? "  ACK" : "  F2 ACK";
+        _alertLabel.Text =
+            $"{alert.Severity.ToString().ToUpperInvariant()}  {alert.Title}  " +
+            $"{alert.Value} / LIMIT {alert.Limit}{acknowledgement}";
+        _alertLabel.AddThemeColorOverride(
+            "font_color",
+            alert.Severity == FlightAlertSeverity.Critical ? FuelLowCol : WarnCol);
+        _alertAction.Text = $"ACTION: {alert.RecommendedAction}";
+    }
+
+    private void ApplyViewMode(FlightHudViewMode viewMode)
+    {
+        bool exterior = viewMode == FlightHudViewMode.Exterior;
+        bool cockpit = viewMode == FlightHudViewMode.Cockpit;
+
+        _leftRoot.Visible = exterior;
+        _rightRoot.Visible = exterior;
+        _bottomRoot.Visible = exterior;
+        _timeRoot.Visible = exterior;
+        _phaseRoot.Visible = exterior || cockpit;
+        _countdownRoot.Visible &= exterior || cockpit;
+        _engineGrid.ProcessMode = exterior
+            ? ProcessModeEnum.Inherit
+            : ProcessModeEnum.Disabled;
+        _navball.ProcessMode = exterior
+            ? ProcessModeEnum.Inherit
+            : ProcessModeEnum.Disabled;
+        if (_engineGrid is CanvasItem engineCanvas) engineCanvas.Visible = exterior;
+        if (_navball is CanvasItem navCanvas) navCanvas.Visible = exterior;
     }
 
     private void UpdatePadHelp(MissionManager mission)
@@ -680,14 +729,15 @@ public partial class HUDController : Control
 
         bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
             or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
-        _padHelpRoot.Visible = onPad && !_padHelpDismissed;
+        _padHelpRoot.Visible = onPad
+            && !_padHelpDismissed
+            && _snapshot?.ViewMode == FlightHudViewMode.Exterior;
     }
 
     private void UpdateLaunchPathCallout(
         MissionManager mission,
         SimulationBridge bridge,
-        Exosphere.Simulation.Vessel vessel,
-        Exosphere.Simulation.CelestialBody refBody)
+        FlightHudSnapshot snapshot)
     {
         bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
             or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
@@ -706,46 +756,38 @@ public partial class HUDController : Control
 
         if (bridge.IsIgnitionActive && !mission.IsCountingDown)
         {
-            double twr = vessel.GetThrustToWeightRatio(refBody);
+            double twr = snapshot.ThrustToWeightRatio;
             _launchPathLabel.Text = twr <= 1.02
-                ? $"MANUAL STARTUP — HOLD (TWR {twr:F2} < 1.02)"
-                : "MANUAL STARTUP — RELEASING CLAMPS";
+                ? $"MANUAL STARTUP / HOLD (TWR {twr:F2} < 1.02)"
+                : "MANUAL STARTUP / RELEASING CLAMPS";
             _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
             return;
         }
 
         if (mission.IsCountingDown)
         {
-            double twr = vessel.GetThrustToWeightRatio(refBody);
-            if (mission.Phase == MissionPhase.IGNITION && vessel.IsGroundHeld && twr <= 1.02)
+            double twr = snapshot.ThrustToWeightRatio;
+            if (mission.Phase == MissionPhase.IGNITION
+                && snapshot.IsGroundHeld
+                && twr <= 1.02)
             {
                 _launchPathLabel.Text = mission.CountdownTimer <= 0.0
-                    ? $"AUTO SEQUENCE — HOLD (TWR {twr:F2} < 1.02)"
-                    : "AUTO SEQUENCE — ENGINE START";
+                    ? $"AUTO SEQUENCE / HOLD (TWR {twr:F2} < 1.02)"
+                    : "AUTO SEQUENCE / ENGINE START";
                 _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
             }
             else if (mission.Phase == MissionPhase.COUNTDOWN)
             {
                 int secs = (int)System.Math.Ceiling(mission.CountdownTimer);
-                _launchPathLabel.Text = $"AUTO SEQUENCE — T- {secs:00}";
+                _launchPathLabel.Text = $"AUTO SEQUENCE / T- {secs:00}";
                 _launchPathLabel.AddThemeColorOverride("font_color", LabelDim);
             }
             else
             {
-                _launchPathLabel.Text = "AUTO SEQUENCE — ENGINE START";
+                _launchPathLabel.Text = "AUTO SEQUENCE / ENGINE START";
                 _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
             }
         }
-    }
-
-    // Stage Δv (rocket equation): m0 = total mass, m1 = total − current-stage propellant.
-    private static string FormatDv(
-        Exosphere.Simulation.Vessel vessel,
-        Exosphere.Simulation.CelestialBody body)
-    {
-        double dv = vessel.GetCurrentStageDeltaV(body);
-        if (dv <= 0.0) return "---";
-        return $"{dv:N0} m/s";
     }
 
     private void UpdateCountdown(MissionManager mission)
@@ -875,6 +917,11 @@ public partial class HUDController : Control
                     _padHelpDismissed = !_padHelpDismissed;
                     GetViewport().SetInputAsHandled();
                     break;
+                case Key.F2:
+                    if (_snapshot?.Alerts.FirstOrDefault(a => !a.Acknowledged) is { } alert)
+                        _presenter.AcknowledgeAlert(alert.Code);
+                    GetViewport().SetInputAsHandled();
+                    break;
             }
         }
     }
@@ -887,7 +934,7 @@ public partial class HUDController : Control
         MissionPhase.ASCENT_SH   => "ASCENT / SUPER HEAVY",
         MissionPhase.MAX_Q       => "MAX-Q",
         MissionPhase.MECO        => "MECO",
-        MissionPhase.ASCENT_SHIP => "ASCENT / STARSHIP",
+        MissionPhase.ASCENT_SHIP => "ASCENT / UPPER STAGE",
         MissionPhase.AERO_DESCENT => "AERO DESCENT",
         MissionPhase.PEAK_HEATING => "PEAK HEATING",
         MissionPhase.FINAL_DESCENT => "FINAL DESCENT",
