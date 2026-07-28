@@ -8,7 +8,7 @@
     {"missionId": "mission-freedom7-1961", "sequence": 1, "title": "Freedom 7", "definitionId": "mission-freedom7-1961"},
     {"missionId": "mission-friendship7-1962", "sequence": 2, "title": "Friendship 7", "definitionId": "mission-friendship7-1962"},
     {"missionId": "mission-gemini8-1966", "sequence": 3, "title": "Gemini 8", "definitionId": "mission-gemini8-1966"},
-    {"missionId": "mission-apollo8-1968", "sequence": 4, "title": "Apollo 8"},
+    {"missionId": "mission-apollo8-1968", "sequence": 4, "title": "Apollo 8", "definitionId": "mission-apollo8-1968"},
     {"missionId": "mission-apollo11-1969", "sequence": 5, "title": "Apollo 11"},
     {"missionId": "mission-sts1-1981", "sequence": 6, "title": "STS-1"},
     {"missionId": "mission-sts88-1998", "sequence": 7, "title": "STS-88 / ISS"},

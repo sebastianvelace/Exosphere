@@ -1,0 +1,100 @@
+{
+  "id": "mission-apollo8-1968",
+  "sequence": 4,
+  "program": "NASA Apollo Program",
+  "titleEn": "Apollo 8",
+  "titleEs": "Apollo 8",
+  "summaryEn": "Launch AS-503, perform TLI, enter lunar orbit for ten revolutions, execute TEI and return CSM-103 safely to Earth.",
+  "summaryEs": "Lanza AS-503, realiza TLI, entra en órbita lunar durante diez revoluciones, ejecuta TEI y regresa CSM-103 a salvo a la Tierra.",
+  "historicalDate": "1968-12-21",
+  "vehicleVariantId": "apollo8-saturn5-as503-csm103-1968-12-21",
+  "launchSiteId": "kennedy",
+  "flightProfileId": "apollo8-lunar-orbit-return",
+  "crewIds": ["frank-f-borman-ii", "james-a-lovell-jr", "william-a-anders"],
+  "prerequisiteMissionIds": ["mission-gemini8-1966"],
+  "objectives": [
+    {
+      "id": "earth-parking-orbit", "titleEn": "Reach the Earth parking orbit",
+      "titleEs": "Alcanza la órbita de estacionamiento terrestre",
+      "metric": "phase_reached", "comparison": "reached",
+      "target": 0, "expectedText": "ORBIT", "required": true
+    },
+    {
+      "id": "translunar-injection", "titleEn": "Complete translunar injection",
+      "titleEs": "Completa la inyección translunar",
+      "metric": "phase_reached", "comparison": "reached",
+      "target": 0, "expectedText": "TLI", "required": true
+    },
+    {
+      "id": "lunar-orbit-insertion", "titleEn": "Enter lunar orbit",
+      "titleEs": "Entra en órbita lunar",
+      "metric": "phase_reached", "comparison": "reached",
+      "target": 0, "expectedText": "LUNAR_ORBIT", "required": true
+    },
+    {
+      "id": "ten-lunar-revolutions", "titleEn": "Complete ten lunar revolutions",
+      "titleEs": "Completa diez revoluciones lunares",
+      "metric": "completed_lunar_orbits", "comparison": "at_least",
+      "target": 10, "required": true
+    },
+    {
+      "id": "transearth-injection", "titleEn": "Complete transearth injection",
+      "titleEs": "Completa la inyección transterrestre",
+      "metric": "phase_reached", "comparison": "reached",
+      "target": 0, "expectedText": "TEI", "required": true
+    },
+    {
+      "id": "pacific-splashdown", "titleEn": "Return by Pacific splashdown",
+      "titleEs": "Regresa mediante amerizaje en el Pacífico",
+      "metric": "splashdown", "comparison": "true",
+      "target": 1, "required": true
+    },
+    {
+      "id": "historical-duration", "titleEn": "Close the historical mission-duration corridor",
+      "titleEs": "Cierra el corredor histórico de duración",
+      "metric": "elapsed_seconds", "comparison": "between",
+      "target": 528900, "upperTarget": 529500, "required": true
+    }
+  ],
+  "limits": [
+    {
+      "id": "crew-survival", "titleEn": "Return all three crew alive",
+      "titleEs": "Regresa con los tres tripulantes vivos",
+      "metric": "crew_alive", "comparison": "true",
+      "target": 1, "required": true
+    },
+    {
+      "id": "command-module-survival", "titleEn": "Recover Command Module 103",
+      "titleEs": "Recupera el módulo de mando 103",
+      "metric": "vessel_destroyed", "comparison": "false",
+      "target": 0, "required": true
+    },
+    {
+      "id": "entry-load-envelope", "titleEn": "Keep entry load below 8 g",
+      "titleEs": "Mantén la carga de entrada por debajo de 8 g",
+      "metric": "maximum_g_force", "comparison": "at_most",
+      "target": 8, "required": true
+    }
+  ],
+  "anomalies": [],
+  "rewards": [
+    {
+      "id": "historical-completion", "amount": 225,
+      "unlockIds": ["mission-apollo11-1969", "vehicle-family-saturn-v"]
+    }
+  ],
+  "sources": [
+    {
+      "id": "apollo8-mission-report",
+      "url": "https://ntrs.nasa.gov/citations/19700033031",
+      "accessedDate": "2026-07-28",
+      "description": "MSC-PA-R-69-1 mission identity, event schedule, trajectories, maneuvers, crew and landing."
+    },
+    {
+      "id": "as503-flight-evaluation",
+      "url": "https://ntrs.nasa.gov/search.jsp?R=19690015314",
+      "accessedDate": "2026-07-28",
+      "description": "AS-503 launch-vehicle performance and actual propulsion reconstruction."
+    }
+  ]
+}

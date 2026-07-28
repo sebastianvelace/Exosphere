@@ -24,8 +24,10 @@ public partial class CampaignRuntime : Node
     private bool _hasLaunchReference;
     private double _missionStartTime;
     private double _orbitalRadians;
+    private double _lunarOrbitalRadians;
     private Vector3d _lastOrbitalDirection;
     private bool _hasOrbitalDirection;
+    private string _orbitReferenceBodyId = "";
     private bool _finalized;
 
     public void Initialize(
@@ -64,6 +66,8 @@ public partial class CampaignRuntime : Node
             (universe?.CurrentTime ?? 0.0) - Director.Evidence.ElapsedSeconds;
         _orbitalRadians = Director.Evidence.CompletedOrbits
             * System.Math.Tau;
+        _lunarOrbitalRadians = Director.Evidence.CompletedLunarOrbits
+            * System.Math.Tau;
 
         if (state?.LaunchSurfaceDirection is { } launchDirection)
         {
@@ -97,7 +101,7 @@ public partial class CampaignRuntime : Node
                 currentSurface.Dot(_launchSurfaceDirection), -1.0, 1.0))
                 * body.Radius
             : 0.0;
-        UpdateOrbitProgress(phase.Value, up);
+        UpdateOrbitProgress(phase.Value, body.Id, up);
         bool expectedCrewPresent = Director.Definition.CrewIds.Count == 0
             || Director.Definition.CrewIds.All(id =>
                 vessel.Crew.Any(crew =>
@@ -123,6 +127,8 @@ public partial class CampaignRuntime : Node
                 / StandardGravity,
             DownrangeM = downrange,
             CompletedOrbits = _orbitalRadians / System.Math.Tau,
+            CompletedLunarOrbits =
+                _lunarOrbitalRadians / System.Math.Tau,
             DockingAchieved = universe.DockingConnections.Any(connection =>
                 connection.PrimaryVesselId == vessel.Id
                 || connection.SecondaryVesselId == vessel.Id),
@@ -171,15 +177,30 @@ public partial class CampaignRuntime : Node
         _hasLaunchReference = true;
     }
 
-    private void UpdateOrbitProgress(MissionPhase phase, Vector3d radialDirection)
+    private void UpdateOrbitProgress(
+        MissionPhase phase,
+        string referenceBodyId,
+        Vector3d radialDirection)
     {
         bool orbitalPhase = phase is MissionPhase.ORBIT
             or MissionPhase.COAST
-            or MissionPhase.RETRO_BURN;
+            or MissionPhase.RETRO_BURN
+            or MissionPhase.LOI
+            or MissionPhase.LUNAR_ORBIT;
         if (!orbitalPhase)
         {
             _hasOrbitalDirection = false;
+            _orbitReferenceBodyId = "";
             return;
+        }
+
+        if (!string.Equals(
+                _orbitReferenceBodyId,
+                referenceBodyId,
+                StringComparison.Ordinal))
+        {
+            _hasOrbitalDirection = false;
+            _orbitReferenceBodyId = referenceBodyId;
         }
 
         if (_hasOrbitalDirection)
@@ -190,7 +211,15 @@ public partial class CampaignRuntime : Node
             // discontinuity prevents a vessel switch or restored frame from fabricating
             // campaign progress.
             if (step <= System.Math.PI * 0.5)
-                _orbitalRadians += step;
+            {
+                if (string.Equals(
+                        referenceBodyId,
+                        "moon",
+                        StringComparison.OrdinalIgnoreCase))
+                    _lunarOrbitalRadians += step;
+                else
+                    _orbitalRadians += step;
+            }
         }
         _lastOrbitalDirection = radialDirection;
         _hasOrbitalDirection = true;

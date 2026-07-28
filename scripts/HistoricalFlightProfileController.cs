@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Navigation;
 using Godot;
 
 /// <summary>
@@ -16,6 +17,7 @@ public partial class HistoricalFlightProfileController : Node
     private bool _active;
     private bool _atlasProfile;
     private bool _geminiProfile;
+    private bool _apolloProfile;
     private double _startTime;
     private bool _meco;
     private bool _boosterPackageJettisoned;
@@ -32,6 +34,19 @@ public partial class HistoricalFlightProfileController : Node
     private bool _failureAnnounced;
     private bool _controlRecovered;
     private bool _adapterSeparated;
+    private bool _apolloSicSeparated;
+    private bool _apolloSiiSeparated;
+    private bool _apolloParkingOrbit;
+    private bool _apolloTliStarted;
+    private bool _apolloTliComplete;
+    private bool _apolloCsmSeparated;
+    private bool _apolloLoiComplete;
+    private bool _apolloCircularized;
+    private bool _apolloTeiComplete;
+    private bool _apolloSmSeparated;
+    private double _apolloTliStartTime;
+    private double _apolloLoiTime;
+    private LunarTransferPlan? _apolloLunarPlan;
 
     public override void _Ready()
     {
@@ -42,6 +57,7 @@ public partial class HistoricalFlightProfileController : Node
         if (profileId is MercuryRedstoneFlightProfile.Id
                 or MercuryAtlasFlightProfile.Id
                 or Gemini8FlightProfile.Id
+                or Apollo8FlightProfile.Id
             && runtime?.Director != null
             && phase is not null
             && phase is not MissionPhase.PRE_LAUNCH
@@ -51,7 +67,9 @@ public partial class HistoricalFlightProfileController : Node
                 and not MissionPhase.CRASHED)
         {
             double elapsed = runtime.Director.Evidence.ElapsedSeconds;
-            if (profileId == Gemini8FlightProfile.Id)
+            if (profileId == Apollo8FlightProfile.Id)
+                ResumeApollo8(elapsed);
+            else if (profileId == Gemini8FlightProfile.Id)
                 ResumeGemini(elapsed);
             else
                 Resume(
@@ -66,7 +84,8 @@ public partial class HistoricalFlightProfileController : Node
         if (bridge?.ActiveFlightProfileId is not (
                 MercuryRedstoneFlightProfile.Id
                 or MercuryAtlasFlightProfile.Id
-                or Gemini8FlightProfile.Id))
+                or Gemini8FlightProfile.Id
+                or Apollo8FlightProfile.Id))
             return false;
         var vessel = bridge.ActiveVessel;
         if (vessel == null) return false;
@@ -76,6 +95,8 @@ public partial class HistoricalFlightProfileController : Node
             bridge.ActiveFlightProfileId == MercuryAtlasFlightProfile.Id;
         _geminiProfile =
             bridge.ActiveFlightProfileId == Gemini8FlightProfile.Id;
+        _apolloProfile =
+            bridge.ActiveFlightProfileId == Apollo8FlightProfile.Id;
         _startTime = bridge.Universe.CurrentTime;
         _meco = false;
         _boosterPackageJettisoned = false;
@@ -92,9 +113,26 @@ public partial class HistoricalFlightProfileController : Node
         _failureAnnounced = false;
         _controlRecovered = false;
         _adapterSeparated = false;
+        _apolloSicSeparated = false;
+        _apolloSiiSeparated = false;
+        _apolloParkingOrbit = false;
+        _apolloTliStarted = false;
+        _apolloTliComplete = false;
+        _apolloCsmSeparated = false;
+        _apolloLoiComplete = false;
+        _apolloCircularized = false;
+        _apolloTeiComplete = false;
+        _apolloSmSeparated = false;
+        _apolloTliStartTime = 0.0;
+        _apolloLoiTime = 0.0;
+        _apolloLunarPlan = null;
         vessel.SASEnabled = false;
         bridge.SetWarpIndex(0);
-        if (_geminiProfile)
+        if (_apolloProfile)
+            GD.Print(
+                "[HISTORICAL] Apollo 8 lunar-orbit and Earth-return "
+                + "sequence engaged.");
+        else if (_geminiProfile)
         {
             bridge.EnsureGemini8AgenaTarget();
             GD.Print(
@@ -184,6 +222,49 @@ public partial class HistoricalFlightProfileController : Node
             + $"T+{elapsedSeconds:F1}s.");
     }
 
+    private void ResumeApollo8(double elapsedSeconds)
+    {
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        if (bridge == null || vessel == null) return;
+        _active = true;
+        _atlasProfile = false;
+        _geminiProfile = false;
+        _apolloProfile = true;
+        _startTime = bridge.Universe.CurrentTime
+            - System.Math.Max(0.0, elapsedSeconds);
+        _apolloSicSeparated = !vessel.Parts.Parts.Any(part =>
+            part.Definition.HasVehicleRole("sic_engine_cluster"));
+        _apolloSiiSeparated = !vessel.Parts.Parts.Any(part =>
+            part.Definition.HasVehicleRole("sii_engine_cluster"));
+        _towerJettisoned = !vessel.Parts.Parts.Any(part =>
+            part.Definition.HasVehicleRole("launch_escape_system"));
+        _apolloParkingOrbit =
+            elapsedSeconds >= Apollo8FlightProfile.ParkingOrbitInsertionSeconds;
+        _apolloTliStarted =
+            elapsedSeconds >= Apollo8FlightProfile.TliIgnitionSeconds;
+        _apolloTliComplete =
+            elapsedSeconds >= Apollo8FlightProfile.TliCutoffSeconds;
+        _apolloCsmSeparated = !vessel.Parts.Parts.Any(part =>
+            part.Definition.HasVehicleRole("csm_separation"));
+        _apolloLoiComplete =
+            elapsedSeconds >= Apollo8FlightProfile.LoiCutoffSeconds;
+        _apolloCircularized =
+            elapsedSeconds >= Apollo8FlightProfile.CircularizationCutoffSeconds;
+        _apolloTeiComplete =
+            elapsedSeconds >= Apollo8FlightProfile.TeiCutoffSeconds;
+        _apolloSmSeparated = !vessel.Parts.Parts.Any(part =>
+            part.Definition.HasVehicleRole("service_module"));
+        _apolloTliStartTime = _startTime
+            + Apollo8FlightProfile.TliIgnitionSeconds;
+        _apolloLoiTime = _startTime
+            + Apollo8FlightProfile.LoiIgnitionSeconds;
+        vessel.SASEnabled = false;
+        GD.Print(
+            $"[HISTORICAL] Apollo 8 sequence resumed at "
+            + $"T+{elapsedSeconds:F1}s.");
+    }
+
     public override void _Process(double delta)
     {
         if (!_active) return;
@@ -199,6 +280,11 @@ public partial class HistoricalFlightProfileController : Node
         var earth = universe.GetBody("earth");
         if (earth == null) return;
         double elapsed = universe.CurrentTime - _startTime;
+        if (_apolloProfile)
+        {
+            ProcessApollo8(bridge, vessel, earth, elapsed);
+            return;
+        }
         if (_geminiProfile)
         {
             ProcessGemini8(bridge, vessel, earth, elapsed);
@@ -331,6 +417,544 @@ public partial class HistoricalFlightProfileController : Node
             _active = false;
             bridge.SetWarpIndex(0);
             GD.Print("[HISTORICAL] Freedom 7 splashdown.");
+        }
+    }
+
+    private void ProcessApollo8(
+        SimulationBridge bridge,
+        Vessel vessel,
+        CelestialBody earth,
+        double elapsed)
+    {
+        var universe = bridge.Universe;
+        var moon = universe.GetBody("moon");
+        if (moon == null) return;
+
+        CelestialBody dominant = universe.GetDominantBody(vessel.Position);
+        Vector3d earthUp = (vessel.Position - earth.Position).Normalized;
+        Vector3d downrange = bridge.GetLaunchHeadingDirection();
+
+        if (!_apolloSicSeparated)
+        {
+            GuideApolloAscent(vessel, earthUp, downrange, elapsed, 2.5);
+            var sicEngines = vessel.Parts.Parts.FirstOrDefault(part =>
+                part.Definition.HasVehicleRole("sic_engine_cluster"));
+            sicEngines?.SelectEngineCount(
+                elapsed >= Apollo8FlightProfile.SicCenterEngineCutoffSeconds
+                    ? 4 : 5);
+            vessel.Throttle = elapsed
+                < Apollo8FlightProfile.SicOutboardCutoffSeconds ? 1.0 : 0.0;
+            if (elapsed >= Apollo8FlightProfile.SicSeparationSeconds)
+            {
+                bridge.TriggerStaging();
+                _apolloSicSeparated = true;
+                vessel = bridge.ActiveVessel ?? vessel;
+                vessel.Throttle = 1.0;
+                MissionManager.Instance?.EnterPhase(MissionPhase.SEPARATION);
+                GD.Print("[HISTORICAL] AS-503 S-IC separation; S-II ignition.");
+            }
+            return;
+        }
+
+        if (!_apolloSiiSeparated)
+        {
+            GuideApolloAscent(vessel, earthUp, downrange, elapsed, 2.3);
+            vessel.Throttle = elapsed
+                < Apollo8FlightProfile.SiiCutoffSeconds ? 1.0 : 0.0;
+            if (!_towerJettisoned
+                && elapsed >= Apollo8FlightProfile.EscapeTowerJettisonSeconds)
+            {
+                string? towerId = vessel.Parts.Parts.FirstOrDefault(part =>
+                    part.Definition.HasVehicleRole(
+                        "launch_escape_system"))?.InstanceId;
+                if (towerId != null)
+                    bridge.DeployPartAsVessel(
+                        towerId,
+                        "Apollo 8 Launch Escape System",
+                        new Vector3d(0.0, 1.5, 0.0));
+                _towerJettisoned = true;
+                vessel = bridge.ActiveVessel ?? vessel;
+                GD.Print("[HISTORICAL] Apollo 8 launch escape tower jettisoned.");
+            }
+            if (elapsed >= Apollo8FlightProfile.SiiSeparationSeconds)
+            {
+                bridge.TriggerStaging();
+                _apolloSiiSeparated = true;
+                vessel = bridge.ActiveVessel ?? vessel;
+                vessel.Throttle = 1.0;
+                GD.Print("[HISTORICAL] AS-503 S-II separation; S-IVB ignition.");
+            }
+            return;
+        }
+
+        if (!_apolloParkingOrbit)
+        {
+            GuideApolloAscent(vessel, earthUp, downrange, elapsed, 2.1);
+            vessel.Throttle = elapsed
+                < Apollo8FlightProfile.SivbFirstCutoffSeconds ? 1.0 : 0.0;
+            if (elapsed >= Apollo8FlightProfile.ParkingOrbitInsertionSeconds)
+            {
+                PlaceInEarthParkingOrbit(
+                    vessel, earth, moon, downrange, universe.CurrentTime);
+                _apolloParkingOrbit = true;
+                MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+                _apolloLunarPlan = PlanApolloLunarTransfer(
+                    universe,
+                    vessel,
+                    earth,
+                    moon,
+                    _startTime + Apollo8FlightProfile.TliIgnitionSeconds);
+                bridge.SetWarpIndex(7);
+                GD.Print(
+                    "[HISTORICAL] Apollo 8 Earth parking orbit; "
+                    + "TLI solution loaded.");
+            }
+            return;
+        }
+
+        if (!_apolloTliStarted)
+        {
+            _apolloLunarPlan ??= PlanApolloLunarTransfer(
+                universe,
+                vessel,
+                earth,
+                moon,
+                _startTime + Apollo8FlightProfile.TliIgnitionSeconds);
+            double burnTime = _apolloLunarPlan.BurnTime;
+            if (universe.CurrentTime < burnTime - 45.0)
+            {
+                bridge.SetWarpIndex(7);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            if (universe.CurrentTime < burnTime) return;
+
+            vessel.Position =
+                earth.Position + _apolloLunarPlan.DeparturePosition;
+            vessel.Velocity =
+                earth.Velocity + _apolloLunarPlan.PreBurnVelocity;
+            Vector3d burnDirection =
+                _apolloLunarPlan.InjectionDeltaV.Normalized;
+            vessel.Orientation =
+                Quaterniond.FromTo(Vector3d.Up, burnDirection);
+            vessel.AngularVelocity = Vector3d.Zero;
+            vessel.IsOnRails = false;
+            vessel.OrbitalState = null;
+            vessel.ReferenceBodyId = earth.Id;
+            vessel.Throttle = 1.0;
+            _apolloTliStartTime = universe.CurrentTime;
+            _apolloTliStarted = true;
+            MissionManager.Instance?.EnterPhase(MissionPhase.TLI);
+            GD.Print(
+                $"[HISTORICAL] Apollo 8 TLI ignition; planned Δv "
+                + $"{_apolloLunarPlan.InjectionDeltaVMag:F0} m/s.");
+            return;
+        }
+
+        if (!_apolloTliComplete)
+        {
+            double burnDuration = Apollo8FlightProfile.TliCutoffSeconds
+                - Apollo8FlightProfile.TliIgnitionSeconds;
+            if (universe.CurrentTime - _apolloTliStartTime < burnDuration)
+            {
+                vessel.Throttle = 1.0;
+                return;
+            }
+
+            vessel.Throttle = 0.0;
+            var state = _apolloLunarPlan!.EarthTransferOrbit.GetStateAtTime(
+                universe.CurrentTime, earth.GM);
+            vessel.Position = earth.Position + state.position;
+            vessel.Velocity = earth.Velocity + state.velocity;
+            vessel.OrbitalState = OrbitalElements.FromStateVector(
+                state.position,
+                state.velocity,
+                earth.GM,
+                earth.Id,
+                universe.CurrentTime);
+            vessel.ReferenceBodyId = earth.Id;
+            vessel.IsOnRails = true;
+            _apolloTliComplete = true;
+            bridge.SetWarpIndex(7);
+            GD.Print("[HISTORICAL] Apollo 8 TLI cutoff; translunar coast.");
+            return;
+        }
+
+        if (!_apolloCsmSeparated
+            && universe.CurrentTime - _apolloTliStartTime
+                >= Apollo8FlightProfile.CsmSivbSeparationSeconds
+                   - Apollo8FlightProfile.TliIgnitionSeconds)
+        {
+            bridge.SetWarpIndex(0);
+            bridge.TriggerStaging();
+            _apolloCsmSeparated = true;
+            vessel = bridge.ActiveVessel ?? vessel;
+            vessel.Throttle = 0.0;
+            vessel.IsOnRails = true;
+            MissionManager.Instance?.EnterPhase(MissionPhase.LUNAR_APPROACH);
+            bridge.SetWarpIndex(8);
+            GD.Print("[HISTORICAL] CSM-103 separated from S-IVB/LTA-B.");
+        }
+        if (!_apolloCsmSeparated) return;
+
+        dominant = universe.GetDominantBody(vessel.Position);
+        if (!_apolloLoiComplete)
+        {
+            if (dominant.Id != moon.Id)
+            {
+                bridge.SetWarpIndex(8);
+                return;
+            }
+
+            double altitude = vessel.GetAltitude(moon);
+            Vector3d moonUp = (vessel.Position - moon.Position).Normalized;
+            double radialSpeed =
+                (vessel.Velocity - moon.Velocity).Dot(moonUp);
+            if (altitude > 600_000.0)
+            {
+                bridge.SetWarpIndex(5);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            if (altitude > 180_000.0 && radialSpeed < 0.0) return;
+
+            Vector3d retrograde =
+                -(vessel.Velocity - moon.Velocity).Normalized;
+            vessel.Velocity += retrograde * Apollo8FlightProfile.LoiDeltaVMps;
+            ConsumeApolloSpsPropellant(
+                vessel, Apollo8FlightProfile.LoiDeltaVMps);
+            PlaceInLunarOrbit(
+                vessel,
+                moon,
+                Apollo8FlightProfile.InitialLunarPeriluneAltitudeM,
+                Apollo8FlightProfile.InitialLunarApoluneAltitudeM,
+                universe.CurrentTime);
+            _apolloLoiComplete = true;
+            _apolloLoiTime = universe.CurrentTime;
+            MissionManager.Instance?.EnterPhase(MissionPhase.LOI);
+            bridge.SetWarpIndex(7);
+            GD.Print(
+                "[HISTORICAL] Apollo 8 LOI complete; "
+                + "60.0 × 168.5 nmi lunar orbit.");
+            return;
+        }
+
+        if (!_apolloCircularized)
+        {
+            double circularizationDelay =
+                Apollo8FlightProfile.CircularizationIgnitionSeconds
+                - Apollo8FlightProfile.LoiIgnitionSeconds;
+            if (universe.CurrentTime - _apolloLoiTime
+                < circularizationDelay)
+            {
+                bridge.SetWarpIndex(7);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            Vector3d retrograde =
+                -(vessel.Velocity - moon.Velocity).Normalized;
+            vessel.Velocity += retrograde
+                * Apollo8FlightProfile.CircularizationDeltaVMps;
+            ConsumeApolloSpsPropellant(
+                vessel, Apollo8FlightProfile.CircularizationDeltaVMps);
+            PlaceInLunarOrbit(
+                vessel,
+                moon,
+                Apollo8FlightProfile.CircularLunarOrbitAltitudeM,
+                Apollo8FlightProfile.CircularLunarOrbitAltitudeM,
+                universe.CurrentTime);
+            _apolloCircularized = true;
+            MissionManager.Instance?.EnterPhase(MissionPhase.LUNAR_ORBIT);
+            bridge.SetWarpIndex(8);
+            GD.Print("[HISTORICAL] Apollo 8 lunar orbit circularized.");
+            return;
+        }
+
+        if (!_apolloTeiComplete)
+        {
+            double lunarOrbits =
+                CampaignRuntime.Instance?.Director?.Evidence
+                    .CompletedLunarOrbits ?? 0.0;
+            if (lunarOrbits + 1e-6
+                < Apollo8FlightProfile.HistoricalLunarRevolutions)
+            {
+                bridge.SetWarpIndex(8);
+                return;
+            }
+
+            bridge.SetWarpIndex(0);
+            ApplyApolloTransearthInjection(
+                vessel, earth, moon, universe.CurrentTime);
+            ConsumeApolloSpsPropellant(
+                vessel, Apollo8FlightProfile.TeiDeltaVMps);
+            _apolloTeiComplete = true;
+            MissionManager.Instance?.EnterPhase(MissionPhase.TEI);
+            bridge.SetWarpIndex(8);
+            GD.Print(
+                "[HISTORICAL] Apollo 8 TEI complete after ten lunar revolutions.");
+            return;
+        }
+
+        dominant = universe.GetDominantBody(vessel.Position);
+        if (dominant.Id != earth.Id)
+        {
+            bridge.SetWarpIndex(8);
+            return;
+        }
+
+        double earthAltitude = vessel.GetAltitude(earth);
+        Vector3d returnUp = (vessel.Position - earth.Position).Normalized;
+        Vector3d returnVelocity = vessel.Velocity - earth.Velocity;
+        double returnRadialSpeed = returnVelocity.Dot(returnUp);
+        if (earthAltitude > 5_000_000.0)
+        {
+            bridge.SetWarpIndex(8);
+            return;
+        }
+        if (earthAltitude > 800_000.0)
+        {
+            bridge.SetWarpIndex(5);
+            return;
+        }
+
+        bridge.SetWarpIndex(0);
+        if (!_apolloSmSeparated && returnRadialSpeed < 0.0)
+        {
+            string? serviceModuleId = vessel.Parts.Parts.FirstOrDefault(part =>
+                part.Definition.HasVehicleRole("service_module"))?.InstanceId;
+            if (serviceModuleId != null)
+                bridge.DeployPartAsVessel(
+                    serviceModuleId,
+                    "Apollo 8 Service Module",
+                    new Vector3d(0.0, -0.5, 0.0));
+            _apolloSmSeparated = true;
+            vessel = bridge.ActiveVessel ?? vessel;
+            GD.Print("[HISTORICAL] Apollo 8 CM/SM separation.");
+        }
+
+        if (returnVelocity.MagnitudeSquared > 1e-12)
+        {
+            vessel.Orientation = Quaterniond.FromTo(
+                Vector3d.Up, -returnVelocity.Normalized);
+            vessel.AngularVelocity = Vector3d.Zero;
+        }
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
+        vessel.ReferenceBodyId = earth.Id;
+
+        if (returnRadialSpeed < 0.0
+            && earthAltitude <= Apollo8FlightProfile.EntryInterfaceAltitudeM)
+            MissionManager.Instance?.EnterPhase(MissionPhase.ENTRY);
+        if (earthAltitude < 25_000.0)
+            MissionManager.Instance?.EnterPhase(MissionPhase.AERO_DESCENT);
+        if (!_chutesDeployed
+            && returnRadialSpeed < 0.0
+            && earthAltitude <= 7_300.0)
+        {
+            _chutesDeployed = vessel.DeployParachutes(earth) > 0;
+            if (_chutesDeployed)
+                GD.Print("[HISTORICAL] Apollo 8 parachute sequence armed.");
+        }
+        if (earthAltitude <= 1.1
+            && !vessel.IsDestroyed
+            && vessel.GetSurfaceVelocity(earth).Magnitude < 1.0)
+        {
+            vessel.AngularVelocity = Vector3d.Zero;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            MissionManager.Instance?.EnterPhase(MissionPhase.LANDED);
+            _active = false;
+            bridge.SetWarpIndex(0);
+            GD.Print("[HISTORICAL] Apollo 8 Pacific splashdown.");
+        }
+    }
+
+    private static void GuideApolloAscent(
+        Vessel vessel,
+        Vector3d up,
+        Vector3d downrange,
+        double elapsed,
+        double gain)
+    {
+        double elevation = Apollo8FlightProfile
+            .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
+        Vector3d desired = (
+            downrange * System.Math.Cos(elevation)
+            + up * System.Math.Sin(elevation)).Normalized;
+        vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
+            vessel.Orientation,
+            Vector3d.Up,
+            desired,
+            vessel.AngularVelocity,
+            proportionalGain: gain,
+            dampingGain: 1.2);
+    }
+
+    private static void PlaceInEarthParkingOrbit(
+        Vessel vessel,
+        CelestialBody earth,
+        CelestialBody moon,
+        Vector3d requestedTangent,
+        double epoch)
+    {
+        Vector3d up = (vessel.Position - earth.Position).Normalized;
+        Vector3d lunarPlaneNormal = (
+            moon.Position - earth.Position).Cross(
+                moon.Velocity - earth.Velocity).Normalized;
+        Vector3d planeUp = (
+            up - lunarPlaneNormal * up.Dot(lunarPlaneNormal)).Normalized;
+        if (planeUp.MagnitudeSquared > 1e-9)
+            up = planeUp;
+        Vector3d tangent = lunarPlaneNormal.Cross(up).Normalized;
+        if (tangent.MagnitudeSquared < 1e-9)
+            tangent = (
+                requestedTangent - up * requestedTangent.Dot(up)).Normalized;
+        double radius =
+            earth.Radius + Apollo8FlightProfile.ParkingOrbitAltitudeM;
+        vessel.Position = earth.Position + up * radius;
+        vessel.Velocity = earth.Velocity
+            + tangent * System.Math.Sqrt(earth.GM / radius);
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.IsOnRails = true;
+        vessel.OrbitalState = OrbitalElements.FromStateVector(
+            vessel.Position - earth.Position,
+            vessel.Velocity - earth.Velocity,
+            earth.GM,
+            earth.Id,
+            epoch);
+        vessel.ReferenceBodyId = earth.Id;
+        vessel.Throttle = 0.0;
+    }
+
+    private static LunarTransferPlan PlanApolloLunarTransfer(
+        Universe universe,
+        Vessel vessel,
+        CelestialBody earth,
+        CelestialBody moon,
+        double historicalTliTime)
+    {
+        if (moon.OrbitalElements == null)
+            throw new InvalidOperationException(
+                "Apollo 8 requires the offline lunar ephemeris.");
+        OrbitalElements parking = OrbitalElements.FromStateVector(
+            vessel.Position - earth.Position,
+            vessel.Velocity - earth.Velocity,
+            earth.GM,
+            earth.Id,
+            universe.CurrentTime);
+        double historicalTimeOfFlight =
+            Apollo8FlightProfile.LoiIgnitionSeconds
+            - Apollo8FlightProfile.TliIgnitionSeconds;
+        LunarTransferPlan plan = LunarTransferPlanner.Compute(
+            earth.GM,
+            moon.GM,
+            moon.Radius,
+            moon.SphereOfInfluence,
+            parking,
+            moon.OrbitalElements,
+            System.Math.Max(
+                universe.CurrentTime + 60.0,
+                historicalTliTime),
+            historicalTimeOfFlight,
+            Apollo8FlightProfile.InitialLunarPeriluneAltitudeM,
+            windowSamples: 60);
+        if (plan.InjectionDeltaVMag > 4_500.0)
+            throw new InvalidOperationException(
+                $"Apollo 8 TLI solution exceeds the public mission envelope "
+                + $"({plan.InjectionDeltaVMag:F0} m/s).");
+        return plan;
+    }
+
+    private static void PlaceInLunarOrbit(
+        Vessel vessel,
+        CelestialBody moon,
+        double periluneAltitudeM,
+        double apoluneAltitudeM,
+        double epoch)
+    {
+        Vector3d up = (vessel.Position - moon.Position).Normalized;
+        Vector3d velocity = vessel.Velocity - moon.Velocity;
+        Vector3d tangent =
+            (velocity - up * velocity.Dot(up)).Normalized;
+        if (tangent.MagnitudeSquared < 1e-9)
+            tangent = moon.RotationAxis.Cross(up).Normalized;
+        double radius = moon.Radius + periluneAltitudeM;
+        double apolune = moon.Radius + apoluneAltitudeM;
+        double semiMajorAxis = (radius + apolune) * 0.5;
+        double speed = System.Math.Sqrt(
+            moon.GM * (2.0 / radius - 1.0 / semiMajorAxis));
+        vessel.Position = moon.Position + up * radius;
+        vessel.Velocity = moon.Velocity + tangent * speed;
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.IsOnRails = true;
+        vessel.OrbitalState = OrbitalElements.FromStateVector(
+            vessel.Position - moon.Position,
+            vessel.Velocity - moon.Velocity,
+            moon.GM,
+            moon.Id,
+            epoch);
+        vessel.ReferenceBodyId = moon.Id;
+        vessel.Throttle = 0.0;
+    }
+
+    private static void ApplyApolloTransearthInjection(
+        Vessel vessel,
+        CelestialBody earth,
+        CelestialBody moon,
+        double departureTime)
+    {
+        Vector3d departure = vessel.Position - earth.Position;
+        Vector3d planeNormal =
+            departure.Cross(vessel.Velocity - earth.Velocity).Normalized;
+        if (planeNormal.MagnitudeSquared < 1e-9)
+            planeNormal = earth.RotationAxis;
+        Vector3d targetDirection =
+            planeNormal.Cross(departure.Normalized).Normalized;
+        Vector3d target = targetDirection
+            * (earth.Radius + 60_000.0);
+        double returnTime =
+            Apollo8FlightProfile.EntryInterfaceSeconds
+            - Apollo8FlightProfile.TeiCutoffSeconds;
+        LambertSolution solution = LambertSolver.Solve(
+            earth.GM,
+            departure,
+            target,
+            returnTime,
+            planeNormal);
+        vessel.Velocity = earth.Velocity + solution.DepartureVelocity;
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
+        vessel.ReferenceBodyId = moon.Id;
+        vessel.Throttle = 0.0;
+    }
+
+    private static void ConsumeApolloSpsPropellant(
+        Vessel vessel,
+        double deltaVMps)
+    {
+        const double ispSeconds = 314.8;
+        const double standardGravity = 9.80665;
+        double initialMass = vessel.TotalMass;
+        double propellant = initialMass * (
+            1.0 - System.Math.Exp(
+                -deltaVMps / (ispSeconds * standardGravity)));
+        var tanks = vessel.Parts.Parts
+            .Where(part => part.Definition.HasVehicleRole("service_module"))
+            .ToArray();
+        double available = tanks.Sum(part =>
+            part.LiquidFuel + part.Oxidizer);
+        if (available <= 0.0) return;
+        double consumed = System.Math.Min(propellant, available);
+        foreach (var tank in tanks)
+        {
+            double tankAvailable = tank.LiquidFuel + tank.Oxidizer;
+            double tankShare = consumed * tankAvailable / available;
+            double fuelShare = tankAvailable > 0.0
+                ? tank.LiquidFuel / tankAvailable : 0.0;
+            tank.LiquidFuel = System.Math.Max(
+                0.0, tank.LiquidFuel - tankShare * fuelShare);
+            tank.Oxidizer = System.Math.Max(
+                0.0, tank.Oxidizer - tankShare * (1.0 - fuelShare));
         }
     }
 

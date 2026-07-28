@@ -37,6 +37,13 @@ public static class MissionPhaseTrack
         if (phaseName == "IGNITION")
             return IndexOf("COUNTDOWN");
 
+        if (phaseName is "TLI" or "LUNAR_APPROACH"
+            or "LOI" or "LUNAR_ORBIT")
+            return IndexOf("ORBIT");
+
+        if (phaseName == "TEI")
+            return IndexOf("COAST");
+
         if (phaseName == "RETRO_BURN" && afterEntryInterface)
             return System.Array.IndexOf(Sequence, "FINAL_DESCENT");
 

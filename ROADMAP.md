@@ -174,11 +174,12 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
   rendezvous, docking, anomalía OAMS-8, desacople, recuperación de control y
   retorno de emergencia. Evidencia, procedencia, prueba headless y captura
   orbital de tasa angular están automatizadas.
-- Hardware Apollo 8 ✅ — AS-503/CSM-103/LTA-B, tripulación, LC-39A, tres
-  clusters fechados y once motores individuales cierran masas, dimensiones,
-  staging, empuje, reinicio S-IVB y procedencia. Capturas de pad/despegue
-  automatizadas con `--apollo8`. Pendiente: director Apollo 8 con TLI,
-  LOI/TEI ejecutables, diez órbitas lunares, retorno y debrief; después,
+- Apollo 8 ✅ — AS-503/CSM-103/LTA-B, tripulación, LC-39A, doce motores
+  individuales y SPS cierran masas, staging, empuje y procedencia. El director
+  ejecuta TLI Lambert geocéntrico, cruce patched-conic de SOI, LOI,
+  circularización, diez órbitas lunares, TEI Lambert, entrada y splashdown.
+  Evidencia lunar persistente, debrief, captura de launch y CSM en órbita lunar
+  están automatizados con `--apollo8` / `--apollo8-lunar`. Pendiente:
   definiciones 5–16.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.

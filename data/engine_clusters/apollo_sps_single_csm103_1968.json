@@ -1,0 +1,16 @@
+{
+  "id": "apollo-sps-single-csm103-1968",
+  "name": "Apollo 8 CSM-103 single SPS",
+  "engineModelId": "apollo-sps-csm103-1968",
+  "engines": [
+    {"instanceId": "sps-csm103", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "Aerozine 50",
+    "oxidizerResource": "N2O4",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "sps-csm103", "maximumFlowKgS": 35}
+    ]
+  }
+}

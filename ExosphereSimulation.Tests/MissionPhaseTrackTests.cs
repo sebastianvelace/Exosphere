@@ -46,6 +46,12 @@ public sealed class MissionPhaseTrackTests
     {
         Assert.Equal(-1, MissionPhaseTrack.IndexOf("PRE_LAUNCH"));
         Assert.Equal(MissionPhaseTrack.IndexOf("COUNTDOWN"), MissionPhaseTrack.IndexOf("IGNITION"));
+        Assert.Equal(
+            MissionPhaseTrack.IndexOf("ORBIT"),
+            MissionPhaseTrack.IndexOf("LUNAR_ORBIT"));
+        Assert.Equal(
+            MissionPhaseTrack.IndexOf("COAST"),
+            MissionPhaseTrack.IndexOf("TEI"));
     }
 
     [Fact]

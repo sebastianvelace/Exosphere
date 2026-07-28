@@ -16,6 +16,11 @@ public enum MissionPhase
     ASCENT_SHIP,
     ORBIT,
     COAST,
+    TLI,
+    LUNAR_APPROACH,
+    LOI,
+    LUNAR_ORBIT,
+    TEI,
     // ── Entry, Descent & Landing (driven by EDLController) ──
     ENTRY,
     PEAK_HEATING,

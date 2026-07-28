@@ -3,7 +3,11 @@ namespace ExosphereSimulation.Tests;
 using System.Text.Json;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Campaign;
 using Exosphere.Simulation.Data;
+using Exosphere.Simulation.Flight;
+using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Navigation;
 using Exosphere.Simulation.Propulsion;
 
 public sealed class Apollo8DataTests
@@ -28,7 +32,7 @@ public sealed class Apollo8DataTests
         Assert.InRange(metrics.SeaLevelTwr, 1.223, 1.225);
 
         double spacecraftMass = assembly.Parts
-            .Take(5)
+            .Take(6)
             .Sum(part => WetMass(parts[part.DefinitionId]));
         Assert.Equal(43_668.24464464, spacecraftMass, 6);
     }
@@ -77,6 +81,11 @@ public sealed class Apollo8DataTests
 
         Assert.Equal(5, engines.Clusters["f1-five-as503-1968"].Engines.Count);
         Assert.Equal(
+            "f1-center",
+            engines.Clusters["f1-five-as503-1968"].Engines[^1].InstanceId);
+        Assert.False(
+            engines.Clusters["f1-five-as503-1968"].Engines[^1].Gimballed);
+        Assert.Equal(
             33_850_000.0,
             engines.Clusters["f1-five-as503-1968"].Engines.Sum(mount =>
                 engines.Models[string.IsNullOrWhiteSpace(mount.EngineModelId)
@@ -95,6 +104,13 @@ public sealed class Apollo8DataTests
         Assert.Equal(428.8,
             engines.Models["j2-sivb-as503-1968"].SpecificImpulseVacuumS, 8);
         Assert.Equal(1, engines.Models["j2-sivb-as503-1968"].RestartLimit);
+        Assert.Single(
+            engines.Clusters["apollo-sps-single-csm103-1968"].Engines);
+        Assert.Equal(91_185.0,
+            engines.Models["apollo-sps-csm103-1968"].RatedThrustVacuumN,
+            8);
+        Assert.True(
+            engines.Models["apollo-sps-csm103-1968"].RestartLimit >= 3);
     }
 
     [Fact]
@@ -116,8 +132,8 @@ public sealed class Apollo8DataTests
         Assert.Equal(
             original.Parts.Select(part => part.InstanceId).Order(),
             restored.Parts.Select(part => part.InstanceId).Order());
-        Assert.Equal(14, restored.Parts.Count);
-        Assert.Equal(13, restored.Connections.Count);
+        Assert.Equal(15, restored.Parts.Count);
+        Assert.Equal(14, restored.Connections.Count);
     }
 
     [Fact]
@@ -157,6 +173,7 @@ public sealed class Apollo8DataTests
         provenance.RequireFields("f1-as503-1968", operationalFields);
         provenance.RequireFields("j2-sii-as503-1968", operationalFields);
         provenance.RequireFields("j2-sivb-as503-1968", operationalFields);
+        provenance.RequireFields("apollo-sps-csm103-1968", operationalFields);
         provenance.RequireFields(
             "apollo8-saturn5-as503-csm103-1968-12-21",
             "completeStackIgnitionMassKg",
@@ -167,11 +184,142 @@ public sealed class Apollo8DataTests
             "csmMassClosure",
             "lunarTestArticleMassKg",
             "launchSite");
+        provenance.RequireFields(
+            "mission-apollo8-1968",
+            "missionIdentity",
+            "historicalEarthParkingOrbit",
+            "tliSchedule",
+            "lunarOrbitSequence",
+            "teiReturn",
+            "entryLanding",
+            "objectiveEnvelope");
         Assert.Equal(
             ProvenanceStatus.Published,
             provenance.Require(
                 "apollo8-saturn5-as503-csm103-1968-12-21",
                 "spacecraftLaunchMassKg").Status);
+    }
+
+    [Fact]
+    public void MissionScheduleAndEvaluatorRequireTenLunarRevolutions()
+    {
+        MissionDefinition mission = LoadMission();
+        var director = new MissionDirector(mission);
+
+        director.Observe(Snapshot(0.0, "PRE_LAUNCH"));
+        director.Observe(Snapshot(
+            Apollo8FlightProfile.ParkingOrbitInsertionSeconds,
+            "ORBIT",
+            altitudeM: Apollo8FlightProfile.ParkingOrbitAltitudeM));
+        director.Observe(Snapshot(
+            Apollo8FlightProfile.TliCutoffSeconds,
+            "TLI",
+            altitudeM: 330_000.0));
+        director.Observe(Snapshot(
+            Apollo8FlightProfile.LoiCutoffSeconds,
+            "LUNAR_ORBIT",
+            altitudeM: Apollo8FlightProfile.InitialLunarPeriluneAltitudeM,
+            completedLunarOrbits: 0.1));
+        director.Observe(Snapshot(
+            Apollo8FlightProfile.TeiIgnitionSeconds,
+            "LUNAR_ORBIT",
+            altitudeM: Apollo8FlightProfile.CircularLunarOrbitAltitudeM,
+            completedLunarOrbits: 10.0));
+
+        var restored = new MissionDirector(
+            mission, director.CaptureState());
+        restored.Observe(Snapshot(
+            Apollo8FlightProfile.TeiCutoffSeconds,
+            "TEI",
+            altitudeM: Apollo8FlightProfile.CircularLunarOrbitAltitudeM,
+            completedLunarOrbits: 10.0));
+        restored.Observe(Snapshot(
+            Apollo8FlightProfile.SplashdownSeconds,
+            "LANDED",
+            completedLunarOrbits: 10.0,
+            gForce: 6.8,
+            splashdown: true));
+
+        MissionDebrief debrief = restored.FinalizeMission();
+
+        Assert.Equal(4, mission.Sequence);
+        Assert.Equal(
+            ["mission-gemini8-1966"],
+            mission.PrerequisiteMissionIds);
+        Assert.Equal(10.0, restored.Evidence.CompletedLunarOrbits, 8);
+        Assert.Equal(
+            MissionOutcome.Success,
+            debrief.Outcome);
+        Assert.True(debrief.Objectives.Single(result =>
+            result.Id == "ten-lunar-revolutions").Passed);
+        Assert.Equal(529_242.0,
+            Apollo8FlightProfile.SplashdownSeconds, 8);
+    }
+
+    [Fact]
+    public void MissionCannotPassWithoutLunarOrbitOrTeiEvidence()
+    {
+        var director = new MissionDirector(LoadMission());
+        director.Observe(Snapshot(
+            Apollo8FlightProfile.SplashdownSeconds,
+            "LANDED",
+            completedLunarOrbits: 0.0,
+            splashdown: true));
+
+        MissionDebrief debrief = director.FinalizeMission();
+
+        Assert.Equal(MissionOutcome.Failure, debrief.Outcome);
+        Assert.False(debrief.Objectives.Single(result =>
+            result.Id == "ten-lunar-revolutions").Passed);
+        Assert.False(debrief.Objectives.Single(result =>
+            result.Id == "transearth-injection").Passed);
+    }
+
+    [Fact]
+    public void HistoricalParkingOrbitProducesSafeEphemerisTargetedTli()
+    {
+        string data = Path.Combine(Root.FullName, "data");
+        Universe universe = Universe.LoadFromDataDirectory(data);
+        CelestialBody earth = universe.GetBody("earth")!;
+        CelestialBody moon = universe.GetBody("moon")!;
+        Assert.NotNull(moon.OrbitalElements);
+
+        var parking = new OrbitalElements
+        {
+            SemiMajorAxis =
+                earth.Radius + Apollo8FlightProfile.ParkingOrbitAltitudeM,
+            Eccentricity = 0.00049,
+            Inclination = moon.OrbitalElements!.Inclination,
+            LongitudeOfAscendingNode =
+                moon.OrbitalElements.LongitudeOfAscendingNode,
+            ArgumentOfPeriapsis = 0.0,
+            MeanAnomalyAtEpoch = 0.0,
+            Epoch = 0.0,
+            ReferenceBodyId = earth.Id,
+        };
+        LunarTransferPlan plan = LunarTransferPlanner.Compute(
+            earth.GM,
+            moon.GM,
+            moon.Radius,
+            moon.SphereOfInfluence,
+            parking,
+            moon.OrbitalElements!,
+            Apollo8FlightProfile.TliIgnitionSeconds,
+            Apollo8FlightProfile.LoiIgnitionSeconds
+                - Apollo8FlightProfile.TliIgnitionSeconds,
+            Apollo8FlightProfile.InitialLunarPeriluneAltitudeM,
+            windowSamples: 60);
+
+        Assert.True(plan.Encounter.HasEncounter);
+        Assert.InRange(plan.InjectionDeltaVMag, 3_000.0, 4_500.0);
+        Assert.InRange(
+            plan.PredictedLunarPeriapsisRadius - moon.Radius,
+            80_000.0,
+            160_000.0);
+        Assert.InRange(
+            plan.EstimatedCircularInsertionDeltaV,
+            700.0,
+            1_200.0);
     }
 
     private static double WetMass(Exosphere.Simulation.Parts.PartDefinition part) =>
@@ -186,6 +334,28 @@ public sealed class Apollo8DataTests
         VehicleVariantDefinition.LoadFromJson(Path.Combine(
             Root.FullName, "data", "vehicles",
             "apollo8_saturn5_as503_1968.json"));
+
+    private static MissionDefinition LoadMission() =>
+        MissionDefinition.LoadFromJson(Path.Combine(
+            Root.FullName, "data", "missions", "apollo8_1968.json"));
+
+    private static MissionTelemetrySnapshot Snapshot(
+        double time,
+        string phase,
+        double altitudeM = 0.0,
+        double completedLunarOrbits = 0.0,
+        double gForce = 0.0,
+        bool splashdown = false) => new()
+    {
+        MissionTimeSeconds = time,
+        Phase = phase,
+        AltitudeM = altitudeM,
+        SurfaceSpeedMps = altitudeM > 100_000.0 ? 7_800.0 : 0.0,
+        InertialSpeedMps = altitudeM > 100_000.0 ? 7_800.0 : 0.0,
+        CompletedLunarOrbits = completedLunarOrbits,
+        GForce = gForce,
+        Splashdown = splashdown,
+    };
 
     private static EngineDefinitionCatalog LoadEngines()
     {

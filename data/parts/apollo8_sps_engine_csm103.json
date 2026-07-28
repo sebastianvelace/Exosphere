@@ -1,0 +1,29 @@
+{
+  "id": "apollo8_sps_engine_csm103",
+  "name": "Apollo 8 CSM-103 SPS Engine",
+  "description": "Single restartable AJ10-137 used for lunar-orbit insertion, circularization and transearth injection.",
+  "category": "engine",
+  "vehicle_family": "apollo",
+  "vehicle_role": "service_propulsion_engine",
+  "mass_dry": 300,
+  "length_m": 1.0,
+  "diameter_m": 2.5,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 1400,
+  "thrust_sl": 70000,
+  "thrust_vac": 91185,
+  "isp_sl": 285,
+  "isp_vac": 314.8,
+  "gimbal_range": 4.5,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 1,
+  "engine_model_id": "apollo-sps-csm103-1968",
+  "engine_cluster_id": "apollo-sps-single-csm103-1968",
+  "mixture_ratio": 1.6,
+  "min_throttle": 1,
+  "thrust_position_y_m": -0.5,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.5, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.5, 0], "size": 3, "type": "stack"}
+  ]
+}

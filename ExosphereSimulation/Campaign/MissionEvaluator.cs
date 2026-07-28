@@ -76,6 +76,8 @@ public static class MissionEvaluator
                 ["maximumGForce"] = evidence.MaximumGForce,
                 ["maximumDownrangeM"] = evidence.MaximumDownrangeM,
                 ["completedOrbits"] = evidence.CompletedOrbits,
+                ["completedLunarOrbits"] =
+                    evidence.CompletedLunarOrbits,
                 ["dockingAchieved"] =
                     evidence.DockingAchieved ? 1.0 : 0.0,
                 ["maximumAngularRateDegPerS"] =

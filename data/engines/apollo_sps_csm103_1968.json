@@ -1,0 +1,29 @@
+{
+  "id": "apollo-sps-csm103-1968",
+  "name": "AJ10-137 Service Propulsion System",
+  "variant": "Apollo 8 CSM-103 SPS",
+  "asOfDate": "1968-12-21",
+  "fuel": "Aerozine 50",
+  "oxidizer": "N2O4",
+  "mixtureRatioOxidizerToFuel": 1.6,
+  "ratedThrustSeaLevelN": 70000,
+  "ratedThrustVacuumN": 91185,
+  "specificImpulseSeaLevelS": 285,
+  "specificImpulseVacuumS": 314.8,
+  "minimumThrottle": 1.0,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 4.5,
+  "gimbalRateDegPerS": 2.0,
+  "gimbalAccelerationDegPerS2": 5.0,
+  "startupSeconds": 0.5,
+  "shutdownSeconds": 0.5,
+  "restartLimit": 35,
+  "nominalOperatingTemperatureK": 1020,
+  "maximumSafeTemperatureK": 1320,
+  "thermalTimeConstantSeconds": 3.0,
+  "cooldownTimeConstantSeconds": 20.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 70000, "specificImpulseS": 285},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 91185, "specificImpulseS": 314.8}
+  ]
+}

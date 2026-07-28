@@ -34,6 +34,7 @@ Options:
   --gemini      Seed Gemini 8 / Titan II GLV-8 at LC-19.
   --gemini-docking  Seed and capture Gemini 8 docked to Agena 5003.
   --apollo8     Seed Apollo 8 / Saturn V AS-503 at LC-39A.
+  --apollo8-lunar  Seed CSM-103 in its historical low lunar orbit.
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
@@ -94,6 +95,12 @@ while [[ $# -gt 0 ]]; do
       VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
       shift ;;
     --apollo8)
+      VARIANT_FILE="apollo8_saturn5_as503_1968.json"
+      VARIANT_SITE="kennedy"
+      VARIANT_PROFILE="apollo8-lunar-orbit-return"
+      shift ;;
+    --apollo8-lunar)
+      MODE="apollo8_lunar"
       VARIANT_FILE="apollo8_saturn5_as503_1968.json"
       VARIANT_SITE="kennedy"
       VARIANT_PROFILE="apollo8-lunar-orbit-return"
@@ -174,6 +181,7 @@ using System.IO;
 using System.Linq;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Physics;
 
@@ -512,6 +520,59 @@ public partial class _PlaytestShot : Node
             return;
         }
 
+        if (_mode == "apollo8_lunar")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                string? lesId = vessel.Parts.Parts.FirstOrDefault(part =>
+                    part.Definition.HasVehicleRole(
+                        "launch_escape_system"))?.InstanceId;
+                if (lesId != null)
+                    bridge.DeployPartAsVessel(
+                        lesId,
+                        "Apollo 8 Launch Escape System",
+                        new Vector3d(0.0, 1.0, 0.0));
+                bridge.TriggerStaging();
+                bridge.TriggerStaging();
+                bridge.TriggerStaging();
+                vessel = bridge.ActiveVessel!;
+                var moon = universe.GetBody("moon")!;
+                var sun = universe.GetBody("sun");
+                Vector3d lunarUp = sun != null
+                    ? (sun.Position - moon.Position).Normalized
+                    : Vector3d.Right;
+                Vector3d tangent =
+                    moon.RotationAxis.Cross(lunarUp).Normalized;
+                double radius = moon.Radius
+                    + Apollo8FlightProfile.CircularLunarOrbitAltitudeM;
+                vessel.Position = moon.Position + lunarUp * radius;
+                vessel.Velocity = moon.Velocity
+                    + tangent * System.Math.Sqrt(moon.GM / radius);
+                vessel.Orientation =
+                    Quaterniond.FromTo(Vector3d.Up, tangent);
+                vessel.AngularVelocity = Vector3d.Zero;
+                vessel.ReleaseGroundHold();
+                vessel.ReferenceBodyId = moon.Id;
+                vessel.IsOnRails = false;
+                vessel.OrbitalState = null;
+                MissionManager.Instance?.EnterPhase(
+                    MissionPhase.LUNAR_ORBIT);
+                CameraController.Instance?.EnterShipChaseView();
+                _shipSeeded = true;
+                _readyFrames = 0;
+                return;
+            }
+            if (_shipSeeded && _readyFrames >= 75
+                && !_orbitBeauty && _pendingSlug == null)
+            {
+                QueueCapture("apollo8_lunar_orbit");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("APOLLO8_LUNAR_OK");
+            return;
+        }
+
         // ── Pad ───────────────────────────────────────────────────────────────
         if (!_pad && _readyFrames >= 45 && vessel.IsGroundHeld && alt < 40.0)
         {
@@ -525,6 +586,7 @@ public partial class _PlaytestShot : Node
                 "mercury-redstone3-suborbital"
                 or "mercury-atlas6-three-orbit"
                 or "gemini8-rendezvous-emergency-return"
+                or "apollo8-lunar-orbit-return"
             && MissionManager.Instance != null)
         {
             MissionManager.Instance.StartCountdown();

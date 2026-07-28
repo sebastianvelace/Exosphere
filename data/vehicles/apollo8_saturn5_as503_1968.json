@@ -8,12 +8,14 @@
   "engineClusterIds": [
     "f1-five-as503-1968",
     "j2-five-sii-as503-1968",
-    "j2-single-sivb-as503-1968"
+    "j2-single-sivb-as503-1968",
+    "apollo-sps-single-csm103-1968"
   ],
   "stackTopToBottom": [
     "apollo8_launch_escape_system",
     "apollo8_command_module_csm103",
     "apollo8_service_module_csm103",
+    "apollo8_sps_engine_csm103",
     "apollo8_csm_sivb_separation_ring",
     "apollo8_sla_ltab",
     "saturn5_instrument_unit_as503",

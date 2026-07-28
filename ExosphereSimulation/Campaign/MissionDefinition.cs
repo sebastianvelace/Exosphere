@@ -13,6 +13,7 @@ public enum MissionMetric
     MaximumGForce,
     MaximumDownrangeM,
     CompletedOrbits,
+    CompletedLunarOrbits,
     DockingAchieved,
     MaximumAngularRateDegPerS,
     EmergencyControlRecovered,
