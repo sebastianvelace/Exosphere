@@ -1,0 +1,31 @@
+{
+  "id": "apollo11-saturn5-as506-csm107-lm5-1969-07-16",
+  "name": "Apollo 11 / Saturn V AS-506 / CSM-107 / LM-5",
+  "family": "Apollo-Saturn V",
+  "asOfDate": "1969-07-16",
+  "fairingVariant": "SLA with LM-5 Eagle",
+  "primarySource": "https://www.nasa.gov/wp-content/uploads/static/apollo50th/pdf/A11_PressKit.pdf",
+  "engineClusterIds": [
+    "f1-five-as506-1969",
+    "j2-five-sii-as506-1969",
+    "j2-single-sivb-as506-1969",
+    "apollo-sps-single-csm107-1969"
+  ],
+  "stackTopToBottom": [
+    "apollo11_launch_escape_system",
+    "apollo11_command_module_csm107",
+    "apollo11_service_module_csm107",
+    "apollo11_sps_engine_csm107",
+    "apollo11_csm_sla_separation_ring",
+    "apollo11_sla_lm5",
+    "saturn5_instrument_unit_as506",
+    "saturn5_sivb_tank_as506",
+    "saturn5_j2_sivb_engine_as506",
+    "saturn5_sii_sivb_interstage_as506",
+    "saturn5_sii_tank_as506",
+    "saturn5_j2_five_sii_as506",
+    "saturn5_sic_sii_interstage_as506",
+    "saturn5_sic_tank_as506",
+    "saturn5_f1_five_sic_as506"
+  ]
+}

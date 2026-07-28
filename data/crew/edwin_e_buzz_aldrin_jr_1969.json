@@ -1,0 +1,11 @@
+{
+  "id": "edwin-e-buzz-aldrin-jr",
+  "firstName": "Buzz",
+  "lastName": "Aldrin",
+  "agency": "NASA",
+  "asOfDate": "1969-07-16",
+  "pilotLevel": 5,
+  "engineerLevel": 4,
+  "scientistLevel": 3,
+  "primarySource": "https://www.nasa.gov/former-astronaut-edwin-buzz-aldrin/"
+}

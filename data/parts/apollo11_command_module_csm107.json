@@ -1,0 +1,30 @@
+{
+  "id": "apollo11_command_module_csm107",
+  "name": "Apollo 11 Command Module 107 Columbia",
+  "description": "Crewed CM-107 pressure vessel, ablative heat shield and recovery systems; NASA published 12,250 lb at launch.",
+  "category": "command",
+  "vehicle_family": "apollo",
+  "vehicle_role": "command_module",
+  "mass_dry": 5556.5065325,
+  "length_m": 3.39,
+  "diameter_m": 3.91,
+  "drag_coefficient": 0.92,
+  "axial_drag_coefficient": 0.82,
+  "aerodynamic_center_offset_y_m": 0.8,
+  "heat_tolerance": 3100,
+  "has_heat_shield": true,
+  "heat_shield_normal": [0, -1, 0],
+  "max_crew": 3,
+  "deployable": true,
+  "drag_chute": 1250,
+  "semi_deploy_altitude": 7300,
+  "semi_deploy_drag": 95,
+  "deploy_altitude": 3000,
+  "min_pressure_deploy": 1800,
+  "splashdown_capable": true,
+  "max_splashdown_speed_mps": 11,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.695, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.695, 0], "size": 3, "type": "stack"}
+  ]
+}

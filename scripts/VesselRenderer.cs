@@ -1085,7 +1085,8 @@ public partial class VesselRenderer : Node3D
             return root;
         }
 
-        bool adapter = definition.HasVehicleRole("sla_lunar_test_article");
+        bool adapter = definition.HasVehicleRole("sla_lunar_test_article")
+            || definition.HasVehicleRole("sla_lunar_module");
         bool engineSection = definition.HasVehicleRole("sic_engine_cluster")
             || definition.HasVehicleRole("sii_engine_cluster")
             || definition.HasVehicleRole("sivb_engine");

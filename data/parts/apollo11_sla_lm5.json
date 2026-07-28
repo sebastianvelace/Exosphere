@@ -1,0 +1,17 @@
+{
+  "id": "apollo11_sla_lm5",
+  "name": "Apollo 11 SLA / LM-5 Eagle",
+  "description": "Launch-envelope representation of the 33,205 lb LM-5 inside its 4,009 lb SLA; remaining dry mass closes NASA's ignition total and is explicitly tracked as a derived allocation.",
+  "category": "structure",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sla_lunar_module",
+  "mass_dry": 21227.45964503,
+  "length_m": 8.4,
+  "diameter_m": 6.6,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 950,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 4.2, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -4.2, 0], "size": 3, "type": "stack"}
+  ]
+}

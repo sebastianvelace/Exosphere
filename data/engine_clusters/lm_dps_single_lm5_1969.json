@@ -1,0 +1,16 @@
+{
+  "id": "lm-dps-single-lm5-1969",
+  "name": "Apollo 11 LM-5 descent engine",
+  "engineModelId": "lm-dps-lm5-1969",
+  "engines": [
+    {"instanceId": "dps", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "Aerozine 50",
+    "oxidizerResource": "N2O4",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "dps", "maximumFlowKgS": 16}
+    ]
+  }
+}

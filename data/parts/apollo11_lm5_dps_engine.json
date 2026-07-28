@@ -1,0 +1,28 @@
+{
+  "id": "apollo11_lm5_dps_engine",
+  "name": "Apollo 11 LM-5 Descent Engine",
+  "description": "Throttleable, gimballed LM descent engine with NASA's published 9,870 lbf maximum rating.",
+  "category": "engine",
+  "vehicle_family": "apollo",
+  "vehicle_role": "lunar_module_descent_engine",
+  "mass_dry": 179,
+  "length_m": 0.25,
+  "diameter_m": 1.5,
+  "heat_tolerance": 1300,
+  "thrust_sl": 34000,
+  "thrust_vac": 43903.94734262113,
+  "isp_sl": 282,
+  "isp_vac": 311,
+  "gimbal_range": 6,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 1,
+  "engine_model_id": "lm-dps-lm5-1969",
+  "engine_cluster_id": "lm-dps-single-lm5-1969",
+  "mixture_ratio": 1.6,
+  "min_throttle": 0.10638297872340426,
+  "thrust_position_y_m": -0.125,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.125, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.125, 0], "size": 2, "type": "engine_bell"}
+  ]
+}

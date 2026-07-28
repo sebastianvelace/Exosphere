@@ -1,0 +1,16 @@
+{
+  "id": "apollo-sps-single-csm107-1969",
+  "name": "Apollo 11 CSM-107 SPS",
+  "engineModelId": "apollo-sps-csm107-1969",
+  "engines": [
+    {"instanceId": "sps", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "Aerozine 50",
+    "oxidizerResource": "N2O4",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "sps", "maximumFlowKgS": 35}
+    ]
+  }
+}

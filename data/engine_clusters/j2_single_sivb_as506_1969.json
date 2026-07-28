@@ -1,0 +1,16 @@
+{
+  "id": "j2-single-sivb-as506-1969",
+  "name": "AS-506 S-IVB single J-2",
+  "engineModelId": "j2-sivb-as506-1969",
+  "engines": [
+    {"instanceId": "j2-sivb", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "LH2",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "j2-sivb", "maximumFlowKgS": 260}
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "apollo11_csm_sla_separation_ring",
+  "name": "Apollo 11 CSM / SLA Separation Ring",
+  "description": "Post-TLI CSM separation interface used before transposition and docking.",
+  "category": "decoupler",
+  "vehicle_family": "apollo",
+  "vehicle_role": "csm_separation",
+  "mass_dry": 100,
+  "length_m": 0.1,
+  "diameter_m": 3.91,
+  "heat_tolerance": 1050,
+  "detach_with_lower_stage": true,
+  "stage_priority": 10,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.05, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.05, 0], "size": 3, "type": "stack"}
+  ]
+}

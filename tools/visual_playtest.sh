@@ -18,6 +18,7 @@ VARIANT_SITE=""
 VARIANT_PROFILE=""
 SKIP_BUILD=0
 PROJECT_BACKUP=""
+APOLLO11_HARDWARE=0
 
 usage() {
   cat <<'EOF'
@@ -35,6 +36,7 @@ Options:
   --gemini-docking  Seed and capture Gemini 8 docked to Agena 5003.
   --apollo8     Seed Apollo 8 / Saturn V AS-503 at LC-39A.
   --apollo8-lunar  Seed CSM-103 in its historical low lunar orbit.
+  --apollo11    Validate Apollo 11 / AS-506 hardware at LC-39A (launch mode by default).
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
@@ -105,6 +107,12 @@ while [[ $# -gt 0 ]]; do
       VARIANT_SITE="kennedy"
       VARIANT_PROFILE="apollo8-lunar-orbit-return"
       shift ;;
+    --apollo11)
+      VARIANT_FILE="apollo11_saturn5_as506_1969.json"
+      VARIANT_SITE="kennedy"
+      VARIANT_PROFILE="apollo11-lunar-landing-return"
+      APOLLO11_HARDWARE=1
+      shift ;;
     --lunar-map) MODE="lunar_map"; shift ;;
     --flight7)
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -128,6 +136,13 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+# Apollo 11 currently ships as a dated hardware preset, not yet as the full
+# historical lunar-landing profile. Keep its default visual acceptance honest:
+# pad-to-liftoff only, while still allowing an explicitly requested mode.
+if [[ $APOLLO11_HARDWARE -eq 1 && "$MODE" == "full" ]]; then
+  MODE="launch"
+fi
 
 cleanup() {
   local ec=$?

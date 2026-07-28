@@ -34,11 +34,11 @@ Base tecnica cerrada en `main`:
   restringido. El sobre FAA futuro 35+9 permanece `regulatory_envelope`.
 - La campaña histórica tiene manifiesto data-driven de 16 misiones,
   `CampaignService`, `MissionDirector`, `MissionEvaluator`, debrief numérico,
-  recompensas idempotentes y persistencia V2. Freedom 7 y Friendship 7 tienen
-  definiciones bilingües, procedencia NASA y variantes históricas jugables.
-  Mercury-Redstone 3 cubre la misión suborbital; Mercury-Atlas 6 añade
-  *stage-and-a-half*, inserción, tres órbitas persistibles, retrofire, reentrada,
-  paracaídas y amerizaje evaluado.
+  recompensas idempotentes y persistencia V2. Freedom 7, Friendship 7, Gemini 8
+  y Apollo 8 tienen variantes históricas jugables. Apollo 11 ya dispone del
+  hardware fechado AS-506/CSM-107/LM-5 y de Eagle como vehículo operativo;
+  transposición/docking, descenso lunar y evaluación de misión son el siguiente
+  corte jugable.
 - Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
   de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
@@ -180,7 +180,13 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
   circularización, diez órbitas lunares, TEI Lambert, entrada y splashdown.
   Evidencia lunar persistente, debrief, captura de launch y CSM en órbita lunar
   están automatizados con `--apollo8` / `--apollo8-lunar`. Pendiente:
-  definiciones 5–16.
+  misiones jugables 5–16.
+- Apollo 11 hardware ✅ — AS-506, Columbia CSM-107 y Eagle LM-5 cierran las
+  6.484.280 lb de ignición y las 33.205 lb del LM con procedencia NASA. F-1,
+  J-2, SPS, DPS y APS son modelos fechados separados; Eagle conserva masa al
+  separar descenso y activa APS tras DPS. `--apollo11` valida pad/liftoff.
+  Pendiente: TD&E multi-vessel, docking CSM/LM, perfil de alunizaje, ascenso,
+  rendezvous, TEI, entrada y objetivos de campaña.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 

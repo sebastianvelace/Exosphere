@@ -1,0 +1,19 @@
+{
+  "id": "apollo11_service_module_csm107",
+  "name": "Apollo 11 Service Module 107",
+  "description": "SM-107 structure and logical SPS propellant allocation closing NASA's published 51,243 lb launch mass.",
+  "category": "fuel_tank",
+  "vehicle_family": "apollo",
+  "vehicle_role": "service_module",
+  "mass_dry": 8539.15451419,
+  "length_m": 6.5,
+  "diameter_m": 3.91,
+  "drag_coefficient": 0.24,
+  "heat_tolerance": 1050,
+  "fuel_capacity_lf": 5540.107423738,
+  "fuel_capacity_ox": 8864.171877982,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 3.25, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -3.25, 0], "size": 3, "type": "stack"}
+  ]
+}

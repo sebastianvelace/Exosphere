@@ -1,0 +1,17 @@
+{
+  "id": "saturn5_instrument_unit_as506",
+  "name": "Saturn V AS-506 Instrument Unit",
+  "description": "Operational-configuration guidance and telemetry ring; NASA published 4,306 lb.",
+  "category": "electrical",
+  "vehicle_family": "apollo",
+  "vehicle_role": "instrument_unit",
+  "mass_dry": 1953.16874522,
+  "length_m": 0.9,
+  "diameter_m": 6.6,
+  "heat_tolerance": 950,
+  "ec_capacity": 1200,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.45, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.45, 0], "size": 3, "type": "stack"}
+  ]
+}

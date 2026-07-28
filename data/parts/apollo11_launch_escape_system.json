@@ -1,0 +1,17 @@
+{
+  "id": "apollo11_launch_escape_system",
+  "name": "Apollo 11 Launch Escape System",
+  "description": "AS-506 boost protective cover and launch escape tower; NASA published 8,910 lb.",
+  "category": "structure",
+  "vehicle_family": "apollo",
+  "vehicle_role": "launch_escape_system",
+  "mass_dry": 4041.5080167,
+  "length_m": 5.51,
+  "diameter_m": 3.91,
+  "drag_coefficient": 0.25,
+  "axial_drag_coefficient": 0.25,
+  "heat_tolerance": 1300,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -2.755, 0], "size": 3, "type": "stack"}
+  ]
+}

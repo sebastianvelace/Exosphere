@@ -1,0 +1,18 @@
+{
+  "id": "apollo11_lm5_stage_separation",
+  "name": "Apollo 11 LM-5 Stage Separation",
+  "description": "Structural and pyrotechnic interface that leaves the descent stage on the Moon.",
+  "category": "decoupler",
+  "vehicle_family": "apollo",
+  "vehicle_role": "lunar_module_stage_separation",
+  "mass_dry": 45,
+  "length_m": 0.1,
+  "diameter_m": 4.2,
+  "heat_tolerance": 850,
+  "detach_with_lower_stage": true,
+  "stage_priority": 10,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.05, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.05, 0], "size": 2, "type": "stack"}
+  ]
+}

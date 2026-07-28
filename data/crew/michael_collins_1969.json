@@ -1,0 +1,11 @@
+{
+  "id": "michael-collins",
+  "firstName": "Michael",
+  "lastName": "Collins",
+  "agency": "NASA",
+  "asOfDate": "1969-07-16",
+  "pilotLevel": 5,
+  "engineerLevel": 3,
+  "scientistLevel": 2,
+  "primarySource": "https://www.nasa.gov/people/michael-collins/"
+}

@@ -1,0 +1,31 @@
+{
+  "id": "lm-dps-lm5-1969",
+  "name": "LM Descent Propulsion System",
+  "variant": "Apollo 11 LM-5 Eagle",
+  "asOfDate": "1969-07-16",
+  "fuel": "Aerozine 50",
+  "oxidizer": "N2O4",
+  "mixtureRatioOxidizerToFuel": 1.6,
+  "ratedThrustSeaLevelN": 34000,
+  "ratedThrustVacuumN": 43903.94734262113,
+  "specificImpulseSeaLevelS": 282.0,
+  "specificImpulseVacuumS": 311.0,
+  "minimumThrottle": 0.10638297872340426,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 6.0,
+  "gimbalRateDegPerS": 2.0,
+  "gimbalAccelerationDegPerS2": 4.0,
+  "startupSeconds": 0.8,
+  "shutdownSeconds": 0.5,
+  "restartLimit": 6,
+  "nominalOperatingTemperatureK": 980,
+  "maximumSafeTemperatureK": 1280,
+  "thermalTimeConstantSeconds": 3.0,
+  "cooldownTimeConstantSeconds": 20.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 0.10638297872340426, "thrustN": 3600, "specificImpulseS": 282.0},
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 34000, "specificImpulseS": 282.0},
+    {"ambientPressurePa": 0, "throttle": 0.10638297872340426, "thrustN": 4670.632696023525, "specificImpulseS": 311.0},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 43903.94734262113, "specificImpulseS": 311.0}
+  ]
+}

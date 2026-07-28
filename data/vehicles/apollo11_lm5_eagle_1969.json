@@ -1,0 +1,19 @@
+{
+  "id": "apollo11-lm5-eagle-1969-07-16",
+  "name": "Apollo 11 LM-5 Eagle",
+  "family": "Apollo Lunar Module",
+  "asOfDate": "1969-07-16",
+  "fairingVariant": "none",
+  "primarySource": "https://www.nasa.gov/wp-content/uploads/static/apollo50th/pdf/A11_PressKit.pdf",
+  "engineClusterIds": [
+    "lm-dps-single-lm5-1969",
+    "lm-aps-single-lm5-1969"
+  ],
+  "stackTopToBottom": [
+    "apollo11_lm5_ascent_stage",
+    "apollo11_lm5_aps_engine",
+    "apollo11_lm5_stage_separation",
+    "apollo11_lm5_descent_stage",
+    "apollo11_lm5_dps_engine"
+  ]
+}

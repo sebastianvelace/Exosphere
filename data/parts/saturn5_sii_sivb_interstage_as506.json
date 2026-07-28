@@ -1,0 +1,18 @@
+{
+  "id": "saturn5_sii_sivb_interstage_as506",
+  "name": "Saturn V AS-506 S-II / S-IVB Interstage",
+  "description": "Second mechanical staging interface; NASA published 8,081 lb.",
+  "category": "decoupler",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sii_sivb_interstage",
+  "mass_dry": 3665.47994197,
+  "length_m": 4.8,
+  "diameter_m": 6.6,
+  "heat_tolerance": 1050,
+  "detach_with_lower_stage": true,
+  "stage_priority": 20,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 2.4, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -2.4, 0], "size": 3, "type": "stack"}
+  ]
+}

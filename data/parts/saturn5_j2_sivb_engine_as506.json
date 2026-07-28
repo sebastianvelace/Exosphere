@@ -1,0 +1,29 @@
+{
+  "id": "saturn5_j2_sivb_engine_as506",
+  "name": "Saturn V AS-506 S-IVB J-2",
+  "description": "Restartable S-IVB J-2 at the Apollo 11 published thrust envelope.",
+  "category": "engine",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sivb_engine",
+  "mass_dry": 1788,
+  "length_m": 2.5,
+  "diameter_m": 3.0,
+  "drag_coefficient": 0.22,
+  "heat_tolerance": 1450,
+  "thrust_sl": 720000,
+  "thrust_vac": 906454.1525361694,
+  "isp_sl": 300,
+  "isp_vac": 421,
+  "gimbal_range": 7,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 1,
+  "engine_model_id": "j2-sivb-as506-1969",
+  "engine_cluster_id": "j2-single-sivb-as506-1969",
+  "mixture_ratio": 5,
+  "min_throttle": 1,
+  "thrust_position_y_m": -1.25,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.25, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.25, 0], "size": 3, "type": "stack"}
+  ]
+}

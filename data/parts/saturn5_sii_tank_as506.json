@@ -1,0 +1,19 @@
+{
+  "id": "saturn5_sii_tank_as506",
+  "name": "Saturn V AS-506 S-II Stage",
+  "description": "Second-stage airframe and published Apollo 11 LH2/LOX allocation; 10 lb is assigned to dry miscellaneous mass to close the separately published wet total.",
+  "category": "fuel_tank",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sii_tank",
+  "mass_dry": 28354.73094936,
+  "length_m": 15.9,
+  "diameter_m": 10.1,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 71767.83837377,
+  "fuel_capacity_ox": 372409.31480214,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 7.95, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -7.95, 0], "size": 3, "type": "stack"}
+  ]
+}

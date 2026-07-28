@@ -1,0 +1,19 @@
+{
+  "id": "saturn5_sic_tank_as506",
+  "name": "Saturn V AS-506 S-IC Stage",
+  "description": "First-stage airframe and published Apollo 11 RP-1/LOX allocation.",
+  "category": "fuel_tank",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sic_tank",
+  "mass_dry": 88974.7968375,
+  "length_m": 36.3,
+  "diameter_m": 10.1,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 646854.01749353,
+  "fuel_capacity_ox": 1500417.78906635,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 18.15, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -18.15, 0], "size": 3, "type": "stack"}
+  ]
+}

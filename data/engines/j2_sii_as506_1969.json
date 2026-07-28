@@ -1,0 +1,29 @@
+{
+  "id": "j2-sii-as506-1969",
+  "name": "Rocketdyne J-2",
+  "variant": "AS-506 S-II mission engine",
+  "asOfDate": "1969-07-16",
+  "fuel": "LH2",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 5.0,
+  "ratedThrustSeaLevelN": 800000,
+  "ratedThrustVacuumN": 1009746.3066641334,
+  "specificImpulseSeaLevelS": 300.0,
+  "specificImpulseVacuumS": 421.0,
+  "minimumThrottle": 1.0,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 7.0,
+  "gimbalRateDegPerS": 2.5,
+  "gimbalAccelerationDegPerS2": 6.0,
+  "startupSeconds": 5.0,
+  "shutdownSeconds": 0.8,
+  "restartLimit": 0,
+  "nominalOperatingTemperatureK": 1080,
+  "maximumSafeTemperatureK": 1380,
+  "thermalTimeConstantSeconds": 3.5,
+  "cooldownTimeConstantSeconds": 25.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 800000, "specificImpulseS": 300.0},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 1009746.3066641334, "specificImpulseS": 421.0}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "apollo11_lm5_aps_engine",
+  "name": "Apollo 11 LM-5 Ascent Engine",
+  "description": "Fixed-thrust, non-gimballed 3,500 lbf ascent engine used to leave Tranquility Base.",
+  "category": "engine",
+  "vehicle_family": "apollo",
+  "vehicle_role": "lunar_module_ascent_engine",
+  "mass_dry": 90,
+  "length_m": 0.5,
+  "diameter_m": 1.0,
+  "heat_tolerance": 1300,
+  "thrust_sl": 12000,
+  "thrust_vac": 15568.775653411749,
+  "isp_sl": 282,
+  "isp_vac": 311,
+  "gimbal_range": 0,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 1,
+  "engine_model_id": "lm-aps-lm5-1969",
+  "engine_cluster_id": "lm-aps-single-lm5-1969",
+  "mixture_ratio": 1.6,
+  "min_throttle": 1,
+  "thrust_position_y_m": -0.25,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.25, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.25, 0], "size": 2, "type": "stack"}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "apollo11_lm5_ascent_stage",
+  "name": "Apollo 11 LM-5 Eagle Ascent Stage",
+  "description": "Crew cabin, ascent-stage systems, APS propellant and the published aggregate RCS load for LM-5.",
+  "category": "command",
+  "vehicle_family": "apollo",
+  "vehicle_role": "lunar_module_ascent_stage",
+  "mass_dry": 2089.05774548,
+  "length_m": 3.76,
+  "diameter_m": 4.29,
+  "drag_coefficient": 1.05,
+  "heat_tolerance": 800,
+  "fuel_capacity_lf": 1015.000157176923,
+  "fuel_capacity_ox": 1624.000251483077,
+  "max_crew": 2,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.88, 0], "size": 2, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.88, 0], "size": 2, "type": "stack"}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "lm-aps-single-lm5-1969",
+  "name": "Apollo 11 LM-5 ascent engine",
+  "engineModelId": "lm-aps-lm5-1969",
+  "engines": [
+    {"instanceId": "aps", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": false}
+  ],
+  "feedNetwork": {
+    "fuelResource": "Aerozine 50",
+    "oxidizerResource": "N2O4",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "aps", "maximumFlowKgS": 6}
+    ]
+  }
+}

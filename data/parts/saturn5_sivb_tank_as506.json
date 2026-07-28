@@ -1,0 +1,19 @@
+{
+  "id": "saturn5_sivb_tank_as506",
+  "name": "Saturn V AS-506 S-IVB Stage",
+  "description": "Third-stage airframe and published Apollo 11 LH2/LOX allocation for parking-orbit insertion and TLI.",
+  "category": "fuel_tank",
+  "vehicle_family": "apollo",
+  "vehicle_role": "sivb_tank",
+  "mass_dry": 9551.80925,
+  "length_m": 10.7,
+  "diameter_m": 6.6,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 19731.268095,
+  "fuel_capacity_ox": 87100.16766451,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 5.35, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -5.35, 0], "size": 3, "type": "stack"}
+  ]
+}
