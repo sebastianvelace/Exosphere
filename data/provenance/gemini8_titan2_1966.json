@@ -1,0 +1,222 @@
+{
+  "manifestId": "gemini8-titan2-1966",
+  "records": [
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "ratedThrustSeaLevelN",
+      "status": "published", "source": "NASA Gemini launch-vehicle fact sheet reproduced in NASA NTRS 19760066765",
+      "accessedDate": "2026-07-28", "variant": "Gemini Titan II Stage I",
+      "conditions": "430,000 lbf published aggregate two-chamber Stage I thrust",
+      "uncertainty": "source rounding to 1,000 lbf"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "ratedThrustVacuumN",
+      "status": "estimated", "source": "Published Stage I thrust and Exosphere pressure-map estimate",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I aggregate",
+      "conditions": "vacuum extrapolation used only near BECO",
+      "uncertainty": "plus or minus 8 percent"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Gemini VIII mission-report mass and event closure",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I aggregate",
+      "conditions": "effective sea-level mass-flow model",
+      "uncertainty": "plus or minus 8 seconds"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "Gemini VIII mission-report ascent reconstruction",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I aggregate",
+      "conditions": "effective high-altitude mass-flow model",
+      "uncertainty": "plus or minus 10 seconds"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "minimumThrottle",
+      "status": "derived", "source": "Gemini VIII fixed-thrust launch sequence",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I",
+      "conditions": "single rated-thrust burn followed by BECO",
+      "uncertainty": "mission envelope, not qualification envelope"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "performanceMap",
+      "status": "derived", "source": "Published sea-level thrust and documented Exosphere estimates",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I aggregate",
+      "conditions": "two-point sea-level and vacuum map",
+      "uncertainty": "inherits thrust and Isp estimates"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "restartEnvelope",
+      "status": "derived", "source": "Gemini VIII Mission Report actual BECO at 154.61 seconds",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I",
+      "conditions": "no restart after staging",
+      "uncertainty": "mission envelope only"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere deterministic engine-state model",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I aggregate",
+      "conditions": "simulator temperatures and failure threshold",
+      "uncertainty": "no public component temperature record used"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "Gemini VIII guidance description and simulator control reconstruction",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I aggregate",
+      "conditions": "pitch, yaw and roll steering authority",
+      "uncertainty": "plus or minus 2 degrees and 50 percent rate"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "startupTransient",
+      "status": "derived", "source": "Gemini VIII Mission Report ignition signals before liftoff",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I",
+      "conditions": "hypergolic ignition sequence ending before T zero",
+      "uncertainty": "simulator ramp plus or minus 0.5 seconds"
+    },
+    {
+      "dataId": "titan2-lr87-glv8-1966", "field": "shutdownTransient",
+      "status": "derived", "source": "Gemini VIII Mission Report BECO and staging sequence",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I",
+      "conditions": "rapid shutdown at 154.61 seconds",
+      "uncertainty": "simulator tailoff plus or minus 0.2 seconds"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "ratedThrustSeaLevelN",
+      "status": "estimated", "source": "NASA published 100,000 lbf Stage II rating and Exosphere pressure estimate",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II aggregate",
+      "conditions": "sea-level extrapolation; Stage II ignites at altitude",
+      "uncertainty": "plus or minus 10 percent"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "ratedThrustVacuumN",
+      "status": "published", "source": "NASA Gemini launch-vehicle fact sheet reproduced in NASA NTRS 19760066765",
+      "accessedDate": "2026-07-28", "variant": "Gemini Titan II Stage II",
+      "conditions": "100,000 lbf published Stage II thrust",
+      "uncertainty": "source rounding to 1,000 lbf"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Gemini VIII mission-report mass and event closure",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II aggregate",
+      "conditions": "effective sea-level extrapolation",
+      "uncertainty": "plus or minus 12 seconds"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "Gemini VIII insertion mass, cutoff time and orbit reconstruction",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II aggregate",
+      "conditions": "effective ascent mass-flow model",
+      "uncertainty": "plus or minus 10 seconds"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "minimumThrottle",
+      "status": "derived", "source": "Gemini VIII fixed-thrust Stage II sequence",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II",
+      "conditions": "single burn from staging to SECO",
+      "uncertainty": "mission envelope, not qualification envelope"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "performanceMap",
+      "status": "derived", "source": "Published thrust and documented Exosphere estimates",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II aggregate",
+      "conditions": "two-point pressure map",
+      "uncertainty": "inherits thrust and Isp estimates"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "restartEnvelope",
+      "status": "derived", "source": "Gemini VIII Mission Report actual SECO at 337.54 seconds",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II",
+      "conditions": "no restart after orbital insertion",
+      "uncertainty": "mission envelope only"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere deterministic engine-state model",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II aggregate",
+      "conditions": "simulator temperatures and failure threshold",
+      "uncertainty": "no public component temperature record used"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "Gemini VIII guidance description and simulator control reconstruction",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II aggregate",
+      "conditions": "upper-stage pitch and yaw steering",
+      "uncertainty": "plus or minus 2 degrees and 50 percent rate"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "startupTransient",
+      "status": "derived", "source": "Gemini VIII Mission Report Stage II ignition at 154.61 seconds",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II",
+      "conditions": "air-start during staging",
+      "uncertainty": "simulator ramp plus or minus 0.3 seconds"
+    },
+    {
+      "dataId": "titan2-lr91-glv8-1966", "field": "shutdownTransient",
+      "status": "derived", "source": "Gemini VIII Mission Report SECO at 337.54 seconds",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage II",
+      "conditions": "rapid cutoff before spacecraft separation",
+      "uncertainty": "simulator tailoff plus or minus 0.2 seconds"
+    },
+    {
+      "dataId": "gemini8-titan2-glv8-1966-03-16", "field": "completeStackMassKg",
+      "status": "published", "source": "Gemini VIII Mission Report section 3.6",
+      "accessedDate": "2026-07-28", "variant": "Gemini Space Vehicle 8 at liftoff",
+      "conditions": "341,671 lb converted to 154,980 kg",
+      "uncertainty": "report precision plus or minus 0.5 lb"
+    },
+    {
+      "dataId": "gemini8-titan2-glv8-1966-03-16", "field": "spacecraftLaunchMassKg",
+      "status": "published", "source": "Gemini VIII Mission Report Spacecraft 8 weight and balance table",
+      "accessedDate": "2026-07-28", "variant": "Spacecraft 8 launch gross",
+      "conditions": "8,351.31 lb, represented as 3,788 kg to NASA mission-page precision",
+      "uncertainty": "plus or minus 1 kg"
+    },
+    {
+      "dataId": "gemini8-titan2-glv8-1966-03-16", "field": "stageMassAllocation",
+      "status": "derived", "source": "Gemini VIII Mission Report weight at liftoff, BECO, Stage II steady state and SECO",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 logical stages",
+      "conditions": "propellant and dry allocations close the four published aggregate weights",
+      "uncertainty": "component boundaries are simulator allocations, not contractor part masses"
+    },
+    {
+      "dataId": "gemini8-titan2-glv8-1966-03-16", "field": "dimensionsM",
+      "status": "published", "source": "NASA Gemini launch-vehicle fact sheet reproduced in NASA NTRS 19760066765",
+      "accessedDate": "2026-07-28", "variant": "Gemini spacecraft and Titan II complete stack",
+      "conditions": "109 ft overall height, 10 ft GLV diameter, Stage I 63 ft and Stage II 27 ft",
+      "uncertainty": "source dimensions rounded to whole feet"
+    },
+    {
+      "dataId": "gemini8-titan2-glv8-1966-03-16", "field": "eventSchedule",
+      "status": "published", "source": "Gemini VIII Mission Report table 4.2-I",
+      "accessedDate": "2026-07-28", "variant": "actual Gemini VIII ascent",
+      "conditions": "BECO 154.61 s, Stage II ignition 154.61 s, separation 155.29 s, SECO 337.54 s, spacecraft separation 365.66 s",
+      "uncertainty": "report timing precision 0.01 second"
+    },
+    {
+      "dataId": "gemini8-titan2-glv8-1966-03-16", "field": "aerothermalAndParachuteModel",
+      "status": "calibrated", "source": "Gemini VIII Mission Report landing sequence and Exosphere capsule solver",
+      "accessedDate": "2026-07-28", "variant": "Spacecraft 8 reentry module",
+      "conditions": "heat shield, aerodynamic center and parachute CdA close nominal emergency return",
+      "uncertainty": "simulator aggregate; no claim of exact Gemini aerodynamics"
+    },
+    {
+      "dataId": "agena-target-5003-gemini8-1966-03-16", "field": "insertionMassKg",
+      "status": "published", "source": "Gemini VIII Mission Report section 3.6 GATV weight and balance",
+      "accessedDate": "2026-07-28", "variant": "GATV 5003 in-orbit insertion",
+      "conditions": "7,116 lb converted and rounded to 3,228 kg",
+      "uncertainty": "plus or minus 1 kg"
+    },
+    {
+      "dataId": "agena-target-5003-gemini8-1966-03-16", "field": "dimensionsM",
+      "status": "estimated", "source": "NASA Gemini VIII imagery and Agena envelope references",
+      "accessedDate": "2026-07-28", "variant": "GATV 5003 after launch fairing separation",
+      "conditions": "7.7 m logical target bus and adapter, 1.52 m maximum body diameter",
+      "uncertainty": "plus or minus 0.5 m length and 0.1 m diameter"
+    },
+    {
+      "dataId": "agena-target-5003-gemini8-1966-03-16", "field": "dockingCaptureEnvelope",
+      "status": "calibrated", "source": "Gemini VIII Mission Report final approach and Exosphere docking solver",
+      "accessedDate": "2026-07-28", "variant": "Spacecraft 8 to TDA 5003",
+      "conditions": "0.65 m capture corridor, 0.32 m/s maximum relative speed and 12 degree alignment tolerance",
+      "uncertainty": "gameplay capture envelope; historical contact was approximately 0.23 m/s"
+    }
+  ]
+}

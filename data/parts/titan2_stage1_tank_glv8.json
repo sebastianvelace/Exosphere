@@ -1,0 +1,20 @@
+{
+  "id": "titan2_stage1_tank_glv8",
+  "name": "Titan II GLV-8 Stage I",
+  "description": "Hypergolic first-stage tanks and strengthened Gemini launch-vehicle airframe.",
+  "category": "fuel_tank",
+  "vehicle_family": "gemini",
+  "vehicle_role": "titan_stage1_tank",
+  "mass_dry": 3809,
+  "length_m": 16.7,
+  "diameter_m": 3.048,
+  "drag_coefficient": 0.22,
+  "axial_drag_coefficient": 0.25,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 40103,
+  "fuel_capacity_ox": 76197,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 8.35, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -8.35, 0], "size": 1, "type": "stack"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "gemini8_retro_module",
+  "name": "Gemini VIII Retrograde Section",
+  "description": "Four solid retrorockets and jettisonable retrograde structure.",
+  "category": "rcs",
+  "vehicle_family": "gemini",
+  "vehicle_role": "gemini_retro_module",
+  "mass_dry": 389,
+  "length_m": 0.55,
+  "diameter_m": 3.05,
+  "drag_coefficient": 0.4,
+  "heat_tolerance": 1700,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.275, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.275, 0], "size": 1, "type": "stack"}
+  ]
+}

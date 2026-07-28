@@ -516,8 +516,12 @@ public class PartGraph
     // Retorna el PartGraph separado (la sección inferior), o null si nada
     public PartGraph? FireNextStage()
     {
-        var decoupler = _parts.FirstOrDefault(
-            p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive);
+        var decoupler = _parts
+            .Where(p =>
+                p.Definition.Category == PartCategory.Decoupler
+                && p.IsStagingActive)
+            .OrderByDescending(p => p.Definition.StagePriority)
+            .FirstOrDefault();
         if (decoupler == null) return null;
 
         HotStageOverlapActive = false;

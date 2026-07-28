@@ -1,0 +1,24 @@
+{
+  "id": "gemini8-titan2-glv8-1966-03-16",
+  "name": "Gemini VIII / Titan II GLV-8",
+  "family": "Gemini-Titan II",
+  "asOfDate": "1966-03-16",
+  "fairingVariant": "none",
+  "primarySource": "https://www.nasa.gov/mission/gemini-viii/",
+  "engineClusterIds": [
+    "titan2-lr87-glv8-1966",
+    "titan2-lr91-glv8-1966"
+  ],
+  "stackTopToBottom": [
+    "gemini8_docking_nose",
+    "gemini8_reentry_module",
+    "gemini8_retro_module",
+    "gemini8_equipment_adapter",
+    "gemini8_titan_separation_ring",
+    "titan2_stage2_tank_glv8",
+    "titan2_lr91_engine_glv8",
+    "titan2_interstage_glv8",
+    "titan2_stage1_tank_glv8",
+    "titan2_lr87_engine_glv8"
+  ]
+}

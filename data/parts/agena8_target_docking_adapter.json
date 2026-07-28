@@ -1,0 +1,23 @@
+{
+  "id": "agena8_target_docking_adapter",
+  "name": "Gemini Agena Target Docking Adapter 5003",
+  "description": "Conical target docking adapter and rigidization interface flown for Gemini VIII.",
+  "category": "structure",
+  "vehicle_family": "agena",
+  "vehicle_role": "agena_target_docking_port",
+  "mass_dry": 450,
+  "length_m": 1.5,
+  "diameter_m": 1.52,
+  "drag_coefficient": 0.25,
+  "heat_tolerance": 900,
+  "is_docking_port": true,
+  "docking_node_id": "dock",
+  "docking_axis_local": [0, -1, 0],
+  "docking_capture_range_m": 0.65,
+  "docking_max_capture_speed_mps": 0.32,
+  "docking_alignment_tolerance_deg": 12,
+  "attachment_nodes": [
+    {"id": "dock", "position": [0, -0.75, 0], "size": 1, "type": "docking"},
+    {"id": "top", "position": [0, 0.75, 0], "size": 1, "type": "stack"}
+  ]
+}

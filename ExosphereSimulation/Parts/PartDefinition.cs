@@ -162,6 +162,12 @@ public class PartDefinition
     /// </summary>
     [JsonPropertyName("detach_with_lower_stage")]
     public bool DetachWithLowerStage { get; set; }
+    /// <summary>
+    /// Explicit mechanical-stage order. Higher values fire first; equal/default
+    /// values preserve stack order for legacy crafts.
+    /// </summary>
+    [JsonPropertyName("stage_priority")]
+    public int StagePriority { get; set; }
 
     // Docking. A docking part names an attachment node whose local position is
     // resolved through the same graph geometry used by VAB and centre-of-mass.

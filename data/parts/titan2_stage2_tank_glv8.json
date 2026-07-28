@@ -1,0 +1,20 @@
+{
+  "id": "titan2_stage2_tank_glv8",
+  "name": "Titan II GLV-8 Stage II",
+  "description": "Pressure-fed hypergolic second-stage tanks and airframe.",
+  "category": "fuel_tank",
+  "vehicle_family": "gemini",
+  "vehicle_role": "titan_stage2_tank",
+  "mass_dry": 2110,
+  "length_m": 7.0,
+  "diameter_m": 3.048,
+  "drag_coefficient": 0.22,
+  "axial_drag_coefficient": 0.25,
+  "heat_tolerance": 950,
+  "fuel_capacity_lf": 9301,
+  "fuel_capacity_ox": 17672,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 3.5, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -3.5, 0], "size": 1, "type": "stack"}
+  ]
+}

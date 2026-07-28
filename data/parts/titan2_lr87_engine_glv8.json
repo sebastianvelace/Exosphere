@@ -1,0 +1,29 @@
+{
+  "id": "titan2_lr87_engine_glv8",
+  "name": "Titan II GLV-8 LR87 Stage I Engine",
+  "description": "Twin-chamber Aerojet first-stage propulsion represented by the dated GLV-8 aggregate model.",
+  "category": "engine",
+  "vehicle_family": "gemini",
+  "vehicle_role": "titan_stage1_engine",
+  "mass_dry": 1200,
+  "length_m": 2.302,
+  "diameter_m": 3.048,
+  "drag_coefficient": 0.25,
+  "heat_tolerance": 1450,
+  "thrust_sl": 1912740,
+  "thrust_vac": 2100000,
+  "isp_sl": 258,
+  "isp_vac": 296,
+  "gimbal_range": 5,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 2,
+  "engine_model_id": "titan2-lr87-glv8-1966",
+  "engine_cluster_id": "titan2-lr87-glv8-1966",
+  "mixture_ratio": 1.9,
+  "min_throttle": 1,
+  "thrust_position_y_m": -1.151,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.151, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.151, 0], "size": 1, "type": "engine_bell"}
+  ]
+}

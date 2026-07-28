@@ -1,0 +1,18 @@
+{
+  "id": "gemini8_titan_separation_ring",
+  "name": "Gemini-Titan Spacecraft Separation Ring",
+  "description": "Shape-charge separation interface between Spacecraft 8 and GLV-8 Stage II.",
+  "category": "decoupler",
+  "vehicle_family": "gemini",
+  "vehicle_role": "spacecraft_separation",
+  "mass_dry": 200,
+  "length_m": 0.2,
+  "diameter_m": 3.05,
+  "heat_tolerance": 1000,
+  "detach_with_lower_stage": true,
+  "stage_priority": 10,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.1, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.1, 0], "size": 1, "type": "stack"}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "titan2-lr87-glv8-1966",
+  "name": "GLV-8 Stage I twin chambers",
+  "engineModelId": "titan2-lr87-glv8-1966",
+  "engines": [
+    {"instanceId": "lr87-left", "positionM": [-0.7, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true},
+    {"instanceId": "lr87-right", "positionM": [0.7, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "Aerozine 50",
+    "oxidizerResource": "N2O4",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "lr87-left", "maximumFlowKgS": 370},
+      {"engineInstanceId": "lr87-right", "maximumFlowKgS": 370}
+    ]
+  }
+}

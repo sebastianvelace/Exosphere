@@ -1,0 +1,18 @@
+{
+  "id": "gemini8_equipment_adapter",
+  "name": "Gemini VIII Equipment Section",
+  "description": "OAMS, electrical, life-support and mission equipment adapter for Spacecraft 8.",
+  "category": "fuel_tank",
+  "vehicle_family": "gemini",
+  "vehicle_role": "gemini_equipment_adapter",
+  "mass_dry": 900,
+  "length_m": 2.841,
+  "diameter_m": 3.05,
+  "drag_coefficient": 0.35,
+  "heat_tolerance": 1050,
+  "fuel_capacity_mono": 286,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 1.4205, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.4205, 0], "size": 1, "type": "stack"}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "titan2-lr91-glv8-1966",
+  "name": "GLV-8 Stage II engine",
+  "engineModelId": "titan2-lr91-glv8-1966",
+  "engines": [
+    {"instanceId": "lr91-center", "positionM": [0, 0, 0], "thrustDirection": [0, 1, 0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "Aerozine 50",
+    "oxidizerResource": "N2O4",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "lr91-center", "maximumFlowKgS": 150}
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "titan2-lr91-glv8-1966",
+  "name": "Aerojet LR91 Stage II",
+  "variant": "Gemini Launch Vehicle 8 aggregate",
+  "asOfDate": "1966-03-16",
+  "fuel": "Aerozine 50",
+  "oxidizer": "N2O4",
+  "mixtureRatioOxidizerToFuel": 1.9,
+  "ratedThrustSeaLevelN": 400000,
+  "ratedThrustVacuumN": 444822,
+  "specificImpulseSeaLevelS": 290,
+  "specificImpulseVacuumS": 316,
+  "minimumThrottle": 1.0,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 5.0,
+  "gimbalRateDegPerS": 4.0,
+  "gimbalAccelerationDegPerS2": 10.0,
+  "startupSeconds": 0.7,
+  "shutdownSeconds": 0.3,
+  "restartLimit": 0,
+  "nominalOperatingTemperatureK": 1050,
+  "maximumSafeTemperatureK": 1350,
+  "thermalTimeConstantSeconds": 3.0,
+  "cooldownTimeConstantSeconds": 24.0,
+  "performanceMap": [
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 400000, "specificImpulseS": 290},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 444822, "specificImpulseS": 316}
+  ]
+}

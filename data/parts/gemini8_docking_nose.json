@@ -1,0 +1,24 @@
+{
+  "id": "gemini8_docking_nose",
+  "name": "Gemini VIII Rendezvous and Recovery Section",
+  "description": "Spacecraft 8 nose section with rendezvous radar, docking interface and reentry-control hardware.",
+  "category": "structure",
+  "vehicle_family": "gemini",
+  "vehicle_role": "gemini_docking_port",
+  "mass_dry": 243,
+  "length_m": 0.45,
+  "diameter_m": 0.95,
+  "drag_coefficient": 0.3,
+  "axial_drag_coefficient": 0.38,
+  "heat_tolerance": 1400,
+  "is_docking_port": true,
+  "docking_node_id": "dock",
+  "docking_axis_local": [0, 1, 0],
+  "docking_capture_range_m": 0.65,
+  "docking_max_capture_speed_mps": 0.32,
+  "docking_alignment_tolerance_deg": 12,
+  "attachment_nodes": [
+    {"id": "dock", "position": [0, 0.225, 0], "size": 1, "type": "docking"},
+    {"id": "bottom", "position": [0, -0.225, 0], "size": 1, "type": "stack"}
+  ]
+}

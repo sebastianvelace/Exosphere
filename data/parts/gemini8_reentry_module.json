@@ -1,0 +1,30 @@
+{
+  "id": "gemini8_reentry_module",
+  "name": "Gemini VIII Reentry Module",
+  "description": "Two-seat Spacecraft 8 pressure vessel, ablative heat shield and landing system.",
+  "category": "command",
+  "vehicle_family": "gemini",
+  "vehicle_role": "gemini_reentry_capsule",
+  "mass_dry": 1970,
+  "length_m": 1.75,
+  "diameter_m": 3.05,
+  "drag_coefficient": 0.72,
+  "axial_drag_coefficient": 0.42,
+  "aerodynamic_center_offset_y_m": 0.62,
+  "heat_tolerance": 2800,
+  "has_heat_shield": true,
+  "heat_shield_normal": [0, -1, 0],
+  "max_crew": 2,
+  "deployable": true,
+  "drag_chute": 1100,
+  "semi_deploy_altitude": 12192,
+  "semi_deploy_drag": 80,
+  "deploy_altitude": 3200,
+  "min_pressure_deploy": 1800,
+  "splashdown_capable": true,
+  "max_splashdown_speed_mps": 11,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.875, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.875, 0], "size": 1, "type": "stack"}
+  ]
+}

@@ -162,6 +162,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Fundación de docking Gemini 8 ✅ — puertos data-driven, hard dock conservativo,
   desacople y persistencia V2. Pendiente: hardware Titan II/Gemini/Agena e
   incidente OAMS de la misión.
+- Hardware Gemini 8 ✅ — Spacecraft 8, Titan II GLV-8, LC-19, Armstrong/Scott y
+  Agena 5003 cierran las masas/dimensiones publicadas y tienen motores y
+  procedencia data-driven. Pendiente: perfil de rendezvous, docking, anomalía
+  OAMS, aborto, reentrada y capturas visuales.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 

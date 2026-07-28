@@ -1,0 +1,29 @@
+{
+  "id": "titan2_lr91_engine_glv8",
+  "name": "Titan II GLV-8 LR91 Stage II Engine",
+  "description": "Single Aerojet second-stage engine represented by the dated GLV-8 aggregate model.",
+  "category": "engine",
+  "vehicle_family": "gemini",
+  "vehicle_role": "titan_stage2_engine",
+  "mass_dry": 400,
+  "length_m": 1.23,
+  "diameter_m": 2.2,
+  "drag_coefficient": 0.25,
+  "heat_tolerance": 1450,
+  "thrust_sl": 400000,
+  "thrust_vac": 444822,
+  "isp_sl": 290,
+  "isp_vac": 316,
+  "gimbal_range": 5,
+  "fuel_type": "liquid_fuel",
+  "engine_count": 1,
+  "engine_model_id": "titan2-lr91-glv8-1966",
+  "engine_cluster_id": "titan2-lr91-glv8-1966",
+  "mixture_ratio": 1.9,
+  "min_throttle": 1,
+  "thrust_position_y_m": -0.615,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 0.615, 0], "size": 1, "type": "stack"},
+    {"id": "bottom", "position": [0, -0.615, 0], "size": 1, "type": "stack"}
+  ]
+}

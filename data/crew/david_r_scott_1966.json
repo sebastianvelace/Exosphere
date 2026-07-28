@@ -1,0 +1,11 @@
+{
+  "id": "david-r-scott",
+  "firstName": "David",
+  "lastName": "Scott",
+  "agency": "NASA",
+  "asOfDate": "1966-03-16",
+  "pilotLevel": 4,
+  "engineerLevel": 3,
+  "scientistLevel": 2,
+  "primarySource": "https://www.nasa.gov/mission/gemini-viii/"
+}

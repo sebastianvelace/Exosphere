@@ -1,0 +1,13 @@
+{
+  "id": "agena-target-5003-gemini8-1966-03-16",
+  "name": "Gemini Agena Target Vehicle 5003",
+  "family": "Gemini-Agena",
+  "asOfDate": "1966-03-16",
+  "fairingVariant": "target-docking-adapter",
+  "primarySource": "https://www.nasa.gov/history/SP-4002/p3b.htm",
+  "engineClusterIds": [],
+  "stackTopToBottom": [
+    "agena8_target_docking_adapter",
+    "agena8_target_vehicle_bus"
+  ]
+}
