@@ -1,0 +1,35 @@
+{
+  "id": "merlin1d-vac-block5-2025",
+  "name": "Merlin Vacuum",
+  "variant": "Falcon 9 Block 5 second stage, May 2025",
+  "asOfDate": "2025-05-09",
+  "fuel": "RP-1",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 2.56,
+  "ratedThrustSeaLevelN": 400000,
+  "ratedThrustVacuumN": 981000,
+  "specificImpulseSeaLevelS": 220,
+  "specificImpulseVacuumS": 348,
+  "minimumThrottle": 0.40,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 5.0,
+  "gimbalRateDegPerS": 4.0,
+  "gimbalAccelerationDegPerS2": 12.0,
+  "startupSeconds": 0.75,
+  "shutdownSeconds": 0.50,
+  "restartLimit": 4,
+  "performanceMap": [
+    {
+      "ambientPressurePa": 101325,
+      "throttle": 1.0,
+      "thrustN": 400000,
+      "specificImpulseS": 220
+    },
+    {
+      "ambientPressurePa": 0,
+      "throttle": 1.0,
+      "thrustN": 981000,
+      "specificImpulseS": 348
+    }
+  ]
+}

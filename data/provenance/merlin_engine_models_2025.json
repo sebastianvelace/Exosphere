@@ -1,0 +1,101 @@
+{
+  "manifestId": "merlin-engine-models-2025-05",
+  "records": [
+    {
+      "dataId": "merlin1d-block5-2025", "field": "ratedThrustSeaLevelN",
+      "status": "published", "source": "SpaceX Falcon User's Guide, May 2025, p. 8",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "Earth sea level, rated thrust", "uncertainty": "not stated by publisher"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "ratedThrustVacuumN",
+      "status": "estimated", "source": "SpaceX Falcon User's Guide, May 2025; simulator pressure correction",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "vacuum, rated throttle", "uncertainty": "±3%; not explicitly published in the cited guide"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "SpaceX public Merlin performance summaries",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "Earth sea level, rated mixture and throttle", "uncertainty": "±3 s"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "SpaceX public Merlin performance summaries",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "vacuum, rated mixture and throttle", "uncertainty": "±3 s"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "minimumThrottle",
+      "status": "estimated", "source": "Public Falcon 9 mission throttle timelines; engineering estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "steady-state simulator operating floor", "uncertainty": "±10 percentage points"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "Falcon 9 public imagery and flight-control behavior; engineering estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D octaweb installation",
+      "conditions": "range, rate and acceleration limits", "uncertainty": "range ±2 deg; dynamics not published"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "startupTransient",
+      "status": "calibrated", "source": "Public Falcon 9 launch countdown timelines",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "command to rated-thrust simulator transient", "uncertainty": "±0.25 s"
+    },
+    {
+      "dataId": "merlin1d-block5-2025", "field": "shutdownTransient",
+      "status": "calibrated", "source": "Public Falcon 9 launch webcast timelines",
+      "accessedDate": "2026-07-27", "variant": "Merlin 1D, Falcon 9 Block 5",
+      "conditions": "shutdown command to zero-thrust simulator transient", "uncertainty": "±0.20 s"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "ratedThrustSeaLevelN",
+      "status": "estimated", "source": "SpaceX Falcon User's Guide, May 2025; simulator back-pressure estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±25%; not an operational rating"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "ratedThrustVacuumN",
+      "status": "published", "source": "SpaceX Falcon User's Guide, May 2025, p. 8",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "vacuum rated thrust", "uncertainty": "not stated by publisher"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Simulator back-pressure model",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±20 s; not an operational rating"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "SpaceX public Merlin performance summaries",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "vacuum, rated mixture and throttle", "uncertainty": "±2 s"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "minimumThrottle",
+      "status": "estimated", "source": "Public Falcon 9 mission throttle timelines; engineering estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "steady-state simulator operating floor", "uncertainty": "±10 percentage points"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "Falcon 9 public imagery and flight-control behavior; engineering estimate",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum second-stage installation",
+      "conditions": "range, rate and acceleration limits", "uncertainty": "range ±2 deg; dynamics not published"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "startupTransient",
+      "status": "calibrated", "source": "Public Falcon 9 staging timelines",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "command to rated-thrust simulator transient", "uncertainty": "±0.30 s"
+    },
+    {
+      "dataId": "merlin1d-vac-block5-2025", "field": "shutdownTransient",
+      "status": "calibrated", "source": "Public Falcon 9 mission timelines",
+      "accessedDate": "2026-07-27", "variant": "Merlin Vacuum, Falcon 9 Block 5",
+      "conditions": "shutdown command to zero-thrust simulator transient", "uncertainty": "±0.25 s"
+    }
+  ]
+}

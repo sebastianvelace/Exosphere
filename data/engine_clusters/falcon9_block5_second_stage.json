@@ -1,0 +1,21 @@
+{
+  "id": "falcon9-block5-second-stage-2025",
+  "name": "Falcon 9 Block 5 Second Stage",
+  "engineModelId": "merlin1d-vac-block5-2025",
+  "engines": [
+    {
+      "instanceId": "mvac-01",
+      "positionM": [0.0, 0.0, 0.0],
+      "thrustDirection": [0.0, 1.0, 0.0],
+      "gimballed": true
+    }
+  ],
+  "feedNetwork": {
+    "fuelResource": "RP-1",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": false,
+    "branches": [
+      {"engineInstanceId": "mvac-01", "maximumFlowKgS": 320}
+    ]
+  }
+}

@@ -74,6 +74,31 @@ public sealed class EngineTestReport
 public static class EngineTestStand
 {
     public static EngineTestReport Run(
+        EngineModelDefinition definition,
+        EngineTestProfile profile,
+        double stepSeconds = 0.01)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        definition.Validate();
+        return Run(new PartDefinition
+        {
+            Id = definition.Id,
+            Name = definition.Name,
+            CategoryStr = "engine",
+            MassDry = 1.0,
+            ThrustSL = definition.RatedThrustSeaLevelN,
+            ThrustVac = definition.RatedThrustVacuumN,
+            IspSL = definition.SpecificImpulseSeaLevelS,
+            IspVac = definition.SpecificImpulseVacuumS,
+            GimbalRange = definition.GimbalRangeDeg,
+            FuelTypeStr = $"{definition.Fuel}+{definition.Oxidizer}",
+            MixtureRatio = definition.MixtureRatioOxidizerToFuel,
+            MinThrottle = definition.MinimumThrottle,
+            EngineCount = 1,
+        }, profile, stepSeconds);
+    }
+
+    public static EngineTestReport Run(
         PartDefinition definition,
         EngineTestProfile profile,
         double stepSeconds = 0.01)

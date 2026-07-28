@@ -5,6 +5,10 @@
   "asOfDate": "2025-05-09",
   "fairingVariant": "extended",
   "primarySource": "https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf",
+  "engineClusterIds": [
+    "falcon9-block5-octaweb-2025",
+    "falcon9-block5-second-stage-2025"
+  ],
   "stackTopToBottom": [
     "falcon9_payload_simulator",
     "falcon9_fairing_extended",

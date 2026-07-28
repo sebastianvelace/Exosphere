@@ -1,0 +1,35 @@
+{
+  "id": "merlin1d-block5-2025",
+  "name": "Merlin 1D",
+  "variant": "Falcon 9 Block 5, May 2025",
+  "asOfDate": "2025-05-09",
+  "fuel": "RP-1",
+  "oxidizer": "LOX",
+  "mixtureRatioOxidizerToFuel": 2.56,
+  "ratedThrustSeaLevelN": 845000,
+  "ratedThrustVacuumN": 914000,
+  "specificImpulseSeaLevelS": 282,
+  "specificImpulseVacuumS": 311,
+  "minimumThrottle": 0.40,
+  "maximumThrottle": 1.0,
+  "gimbalRangeDeg": 5.0,
+  "gimbalRateDegPerS": 6.0,
+  "gimbalAccelerationDegPerS2": 18.0,
+  "startupSeconds": 0.50,
+  "shutdownSeconds": 0.35,
+  "restartLimit": 0,
+  "performanceMap": [
+    {
+      "ambientPressurePa": 101325,
+      "throttle": 1.0,
+      "thrustN": 845000,
+      "specificImpulseS": 282
+    },
+    {
+      "ambientPressurePa": 0,
+      "throttle": 1.0,
+      "thrustN": 914000,
+      "specificImpulseS": 311
+    }
+  ]
+}

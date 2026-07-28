@@ -11,6 +11,7 @@ public sealed class VehicleVariantDefinition
     public string FairingVariant { get; set; } = "standard";
     public string PrimarySource { get; set; } = "";
     public List<string> StackTopToBottom { get; set; } = new();
+    public List<string> EngineClusterIds { get; set; } = new();
 
     public static VehicleVariantDefinition LoadFromJson(string path)
     {
@@ -33,6 +34,10 @@ public sealed class VehicleVariantDefinition
             throw new InvalidDataException($"Vehicle variant '{Id}' is incomplete.");
         if (StackTopToBottom.Any(string.IsNullOrWhiteSpace))
             throw new InvalidDataException($"Vehicle variant '{Id}' contains an empty part id.");
+        if (EngineClusterIds.Any(string.IsNullOrWhiteSpace)
+            || EngineClusterIds.Distinct(StringComparer.Ordinal).Count() != EngineClusterIds.Count)
+            throw new InvalidDataException(
+                $"Vehicle variant '{Id}' contains invalid engine cluster ids.");
     }
 
     public VesselAssembly Build(PartCatalog catalog)
