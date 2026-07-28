@@ -146,8 +146,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Tests de cruise muy largo ✅ (crucero interplanetario y transición SOI a warp).
 - Fundación de transferencia lunar geocéntrica ✅ (`LambertSolver` +
   `LunarTransferPlanner`): TLI, encuentro, B-plane, perilunio lunar y prueba
-  end-to-end sin teleport. Pendiente: conectar esta ruta especializada al mapa
-  cuando el target sea `moon`, maniobra LOI ejecutable y dataset lunar fechado.
+  end-to-end sin teleport. El mapa ya selecciona esta ruta para `moon`, centra
+  la quema TLI finita sobre su época impulsiva, muestra la trayectoria Tierra–Luna, SOI, perilunio y
+  estimación LOI, y rechaza ventanas de plano que exigirían TLI >4,5 km/s.
+  Pendiente: maniobra LOI ejecutable, ventana multi-día y dataset lunar fechado.
 - Nodos de maniobra arrastrables con mouse.
 
 ### Gameplay

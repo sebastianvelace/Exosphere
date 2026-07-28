@@ -97,7 +97,11 @@ public static class LambertSolver
         // broad universal-anomaly range first, then bisect the first finite sign change.
         // Sampling instead of assuming z=0 brackets both fast hyperbolic and slow
         // elliptic transfers without a fragile Newton starter.
-        const int samples = 8192;
+        // 1024 samples bracket the single physical branch comfortably; the subsequent
+        // bisection provides the precision. The former 8192-point scan made interactive
+        // lunar-window searches spend most of their time evaluating already-bracketed
+        // residuals without improving the terminal state.
+        const int samples = 1024;
         double zMin = -4.0 * System.Math.PI * System.Math.PI;
         double zMax =  4.0 * System.Math.PI * System.Math.PI;
         double previousZ = zMin;

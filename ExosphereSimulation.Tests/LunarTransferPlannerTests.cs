@@ -65,7 +65,7 @@ public sealed class LunarTransferPlannerTests
             earliestBurnTime: tliTime,
             timeOfFlight: coast,
             targetPeriluneAltitude: 60.0 * 1852.0,
-            windowSamples: 180);
+            windowSamples: 90);
 
         Assert.True(plan.Encounter.HasEncounter);
         Assert.InRange(
@@ -82,6 +82,41 @@ public sealed class LunarTransferPlannerTests
         Assert.InRange(plan.InjectionDeltaVMag, 2_800.0, 3_500.0);
         Assert.InRange(plan.EstimatedCircularInsertionDeltaV, 700.0, 1_500.0);
         Assert.Equal("earth", plan.EarthTransferOrbit.ReferenceBodyId);
+
+        LunarEncounterAnalysis analysis = LunarTransferPlanner.AnalyzeEncounter(
+            EarthGm,
+            MoonGm,
+            MoonRadius,
+            MoonSoi,
+            plan.EarthTransferOrbit,
+            moon,
+            plan.BurnTime,
+            plan.TimeOfFlight * 1.12);
+        Assert.True(analysis.HasEncounter);
+        Assert.False(analysis.IsImpact);
+        Assert.Equal(
+            plan.PredictedLunarPeriapsisRadius,
+            analysis.PredictedPeriapsisRadius,
+            precision: 3);
+
+        // The UI's lower adjustment bound must not keep displaying the nominal
+        // encounter: halving TLI energy leaves the spacecraft far short of lunar SOI.
+        OrbitalElements underBurnOrbit = OrbitalElements.FromStateVector(
+            plan.DeparturePosition,
+            plan.PreBurnVelocity + plan.InjectionDeltaV * 0.5,
+            EarthGm,
+            "earth",
+            plan.BurnTime);
+        LunarEncounterAnalysis underBurn = LunarTransferPlanner.AnalyzeEncounter(
+            EarthGm,
+            MoonGm,
+            MoonRadius,
+            MoonSoi,
+            underBurnOrbit,
+            moon,
+            plan.BurnTime,
+            plan.TimeOfFlight * 1.12);
+        Assert.False(underBurn.HasEncounter);
 
         // End-to-end guard: install the planned post-burn state in the real Universe
         // and coast under maximum rails warp. The ordinary SOI transition must reframe

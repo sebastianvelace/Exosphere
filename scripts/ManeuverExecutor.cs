@@ -15,10 +15,17 @@ public partial class ManeuverExecutor : Node
 
     public bool   IsExecuting  { get; private set; }
     public double RemainingDv  { get; private set; }
+    public double TimeToBurn =>
+        _node is null || SimulationBridge.Instance?.Universe is not { } universe
+            ? 0.0
+            : System.Math.Max(0.0, _ignitionTime - universe.CurrentTime);
+    public string BurnLabel => _node?.BurnLabel ?? "BURN";
+    public double EstimatedBurnDuration { get; private set; }
 
     private ManeuverNode? _node;
     private bool          _orientationLocked;
     private bool          _restoreSas;
+    private double        _ignitionTime;
 
     public override void _Ready() => Instance = this;
 
@@ -35,10 +42,26 @@ public partial class ManeuverExecutor : Node
         {
             _restoreSas       = vessel.SASEnabled;
             vessel.SASEnabled = false;
+
+            double maximumThrust = vessel.Parts.GetMaximumThrust(0.0);
+            EstimatedBurnDuration =
+                maximumThrust > 0.0 && vessel.TotalMass > 0.0
+                    ? RemainingDv / (maximumThrust / vessel.TotalMass)
+                    : 0.0;
+        }
+        else
+        {
+            EstimatedBurnDuration = 0.0;
         }
 
+        // Lambert/Hohmann nodes are impulsive epochs. Centre the finite burn on that
+        // epoch using the current full-throttle acceleration estimate instead of
+        // starting a multi-minute TLI only after the planned state has passed.
+        _ignitionTime = node.BurnTime - 0.5 * EstimatedBurnDuration;
+
         GD.Print($"[ManeuverExecutor] Executing burn Δv={RemainingDv:F0} m/s " +
-                 $"for {node.TargetBodyId}");
+                 $"for {node.TargetBodyId}; ignition T=" +
+                 $"{_ignitionTime:F1}, duration≈{EstimatedBurnDuration:F1} s");
     }
 
     /// <summary>Cancela el burn en curso.</summary>
@@ -91,6 +114,15 @@ public partial class ManeuverExecutor : Node
         if (alignment < 0.95)
         {
             _orientationLocked = false;
+            vessel.Throttle = 0.0;
+            return;
+        }
+
+        // Transfer nodes may live in a future orbital window. Enter arms and aligns
+        // the vehicle, but engines remain inhibited until the absolute burn time instead
+        // of applying the correct Lambert vector at the wrong orbital phase.
+        if (universe.CurrentTime < _ignitionTime)
+        {
             vessel.Throttle = 0.0;
             return;
         }

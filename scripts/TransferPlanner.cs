@@ -6,15 +6,25 @@ using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Navigation;
 
 /// <summary>
-/// Calcula nodos de maniobra de transferencia Hohmann a un cuerpo destino.
+/// Calcula nodos de transferencia: Lambert geocéntrico para la Luna y Hohmann
+/// heliocéntrico para destinos planetarios.
 /// Se instancia como hijo de MapViewController y se registra como singleton.
 /// </summary>
 public partial class TransferPlanner : Node
 {
+    private const double LunarCoastSeconds =
+        66.0 * 3600.0 + 17.0 * 60.0 + 43.3;
+    private const double LunarTargetAltitude = 100_000.0;
+    private const double MaximumPracticalTliDeltaV = 4_500.0;
+
     public static TransferPlanner? Instance { get; private set; }
 
     public string? TargetBodyId  { get; private set; }
     public ManeuverNode? CurrentNode { get; private set; }
+    public LunarTransferPlan? LunarPlan { get; private set; }
+    public EncounterResult? EarthFrameEncounter { get; private set; }
+    public OrbitalElements? CurrentTransferOrbit { get; private set; }
+    public string? LastPlanningError { get; private set; }
 
     /// <summary>
     /// Última predicción de encuentro con el destino (entrada a SOI o máxima aproximación),
@@ -33,6 +43,11 @@ public partial class TransferPlanner : Node
     {
         TargetBodyId = targetBodyId;
         CurrentNode  = null;
+        LunarPlan    = null;
+        EarthFrameEncounter = null;
+        CurrentTransferOrbit = null;
+        LastPlanningError = null;
+        Encounter = null;
 
         var bridge   = SimulationBridge.Instance;
         var vessel   = bridge?.ActiveVessel;
@@ -42,6 +57,9 @@ public partial class TransferPlanner : Node
         var targetBody = universe.GetBody(targetBodyId);
         var sunBody    = universe.GetBody("sun");
         if (targetBody == null || sunBody == null) return null;
+
+        if (targetBodyId == "moon")
+            return PlanLunarTransfer(vessel, universe, targetBody, sunBody);
 
         // Posiciones heliocentricas
         var r1Vec = vessel.Position     - sunBody.Position;   // vessel desde el Sol
@@ -78,6 +96,10 @@ public partial class TransferPlanner : Node
             SecondBurnDv = plan.SecondBurnDeltaV,
             TransferSma  = plan.TransferSemiMajorAxis,
             RequiredPhaseAngle = plan.RequiredPhaseAngle,
+            ReferenceBodyId = "sun",
+            TransferKind = TransferKind.HeliocentricHohmann,
+            BurnLabel = "DV1",
+            ArrivalBurnLabel = "DV2",
         };
 
         GD.Print($"[TransferPlanner] Hohmann to {targetBodyId}: Δv1={plan.FirstBurnDeltaV:F0} m/s, " +
@@ -86,6 +108,116 @@ public partial class TransferPlanner : Node
 
         PredictEncounter();
         return CurrentNode;
+    }
+
+    private ManeuverNode? PlanLunarTransfer(
+        Vessel vessel,
+        Universe universe,
+        CelestialBody moon,
+        CelestialBody sun)
+    {
+        var moonEphemeris = moon.OrbitalElements;
+        var earth = moonEphemeris is null
+            ? null
+            : universe.GetBody(moonEphemeris.ReferenceBodyId);
+        if (earth == null || moonEphemeris == null || earth.Id != "earth")
+            return FailLunarPlan("Moon ephemeris is not Earth-relative.");
+
+        var dominant = universe.GetDominantBody(vessel.Position);
+        if (dominant.Id != earth.Id)
+            return FailLunarPlan("TLI requires an Earth parking orbit.");
+
+        Vector3d relPosition = vessel.Position - earth.Position;
+        Vector3d relVelocity = vessel.Velocity - earth.Velocity;
+        OrbitalElements parkingOrbit = OrbitalElements.FromStateVector(
+            relPosition,
+            relVelocity,
+            earth.GM,
+            earth.Id,
+            universe.CurrentTime);
+
+        if (parkingOrbit.IsHyperbolic ||
+            parkingOrbit.IsRadial ||
+            parkingOrbit.Periapsis <= earth.Radius + 80_000.0)
+        {
+            return FailLunarPlan(
+                "TLI requires a stable Earth orbit with periapsis above 80 km.");
+        }
+
+        LunarTransferPlan plan;
+        try
+        {
+            plan = LunarTransferPlanner.Compute(
+                earth.GM,
+                moon.GM,
+                moon.Radius,
+                moon.SphereOfInfluence,
+                parkingOrbit,
+                moonEphemeris,
+                universe.CurrentTime,
+                LunarCoastSeconds,
+                LunarTargetAltitude,
+                windowSamples: 90);
+        }
+        catch (ArgumentException exception)
+        {
+            return FailLunarPlan(exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return FailLunarPlan(exception.Message);
+        }
+
+        if (plan.InjectionDeltaVMag > MaximumPracticalTliDeltaV)
+        {
+            return FailLunarPlan(
+                $"No practical TLI window from this orbital plane " +
+                $"({plan.InjectionDeltaVMag / 1000.0:F2} km/s required).");
+        }
+
+        LunarPlan = plan;
+        EarthFrameEncounter = plan.Encounter;
+        CurrentTransferOrbit = plan.EarthTransferOrbit;
+        CurrentNode = new ManeuverNode
+        {
+            BurnTime = plan.BurnTime,
+            DeltaV = plan.InjectionDeltaV,
+            DvMagnitude = plan.InjectionDeltaVMag,
+            TargetBodyId = moon.Id,
+            TimeOfFlight = plan.TimeOfFlight,
+            SecondBurnDv = plan.EstimatedCircularInsertionDeltaV,
+            TransferSma = plan.EarthTransferOrbit.SemiMajorAxis,
+            ReferenceBodyId = earth.Id,
+            TransferKind = TransferKind.LunarLambert,
+            BurnLabel = "TLI",
+            ArrivalBurnLabel = "LOI",
+            PlannedDeparturePosition = plan.DeparturePosition,
+            PlannedPreBurnVelocity = plan.PreBurnVelocity,
+            TargetPeriapsisAltitude =
+                plan.TargetPeriluneRadius - moon.Radius,
+            PredictedPeriapsisAltitude =
+                plan.PredictedLunarPeriapsisRadius - moon.Radius,
+            BPlaneAimRadius = plan.BPlaneAimRadius,
+        };
+
+        Encounter = ToHeliocentricEncounter(
+            plan.Encounter, earth, universe, sun);
+
+        GD.Print(
+            $"[TransferPlanner] Lunar Lambert: TLI={plan.InjectionDeltaVMag:F0} m/s, " +
+            $"LOI≈{plan.EstimatedCircularInsertionDeltaV:F0} m/s, " +
+            $"T-burn={(plan.BurnTime - universe.CurrentTime) / 60.0:F1} min, " +
+            $"ToF={plan.TimeOfFlight / 86400.0:F2} d, " +
+            $"Pe={CurrentNode.PredictedPeriapsisAltitude / 1000.0:F0} km");
+
+        return CurrentNode;
+    }
+
+    private ManeuverNode? FailLunarPlan(string message)
+    {
+        LastPlanningError = message;
+        GD.PushWarning($"[TransferPlanner] Lunar plan unavailable: {message}");
+        return null;
     }
 
     /// <summary>
@@ -105,6 +237,13 @@ public partial class TransferPlanner : Node
         var sun      = universe?.GetBody("sun");
         var target   = universe?.GetBody(node.TargetBodyId);
         if (universe == null || vessel == null || sun == null || target == null) return;
+
+        if (node.TransferKind == TransferKind.LunarLambert)
+        {
+            PredictLunarEncounter(node, universe, target, sun);
+            return;
+        }
+
         if (sun.GM <= 0.0) return;
 
         // Estado heliocéntrico post-burn: aplicamos el Δv (con su factor de ajuste) a la
@@ -139,6 +278,51 @@ public partial class TransferPlanner : Node
         }
     }
 
+    private void PredictLunarEncounter(
+        ManeuverNode node,
+        Universe universe,
+        CelestialBody moon,
+        CelestialBody sun)
+    {
+        var moonEphemeris = moon.OrbitalElements;
+        var earth = universe.GetBody(node.ReferenceBodyId);
+        if (earth == null || moonEphemeris == null || earth.GM <= 0.0)
+            return;
+
+        Vector3d dvDirection = node.DeltaV.Magnitude > 1e-6
+            ? node.DeltaV.Normalized
+            : Vector3d.Zero;
+        Vector3d postBurnVelocity =
+            node.PlannedPreBurnVelocity
+            + dvDirection * (node.DvMagnitude * node.DvAdjustFactor);
+        OrbitalElements transferOrbit = OrbitalElements.FromStateVector(
+            node.PlannedDeparturePosition,
+            postBurnVelocity,
+            earth.GM,
+            earth.Id,
+            node.BurnTime);
+        CurrentTransferOrbit = transferOrbit;
+
+        LunarEncounterAnalysis analysis = LunarTransferPlanner.AnalyzeEncounter(
+            earth.GM,
+            moon.GM,
+            moon.Radius,
+            moon.SphereOfInfluence,
+            transferOrbit,
+            moonEphemeris,
+            node.BurnTime,
+            System.Math.Max(node.TimeOfFlight * 1.12, 3600.0));
+
+        Encounter = ToHeliocentricEncounter(
+            analysis.Encounter, earth, universe, sun);
+        EarthFrameEncounter = analysis.Encounter;
+        node.ArrivalImpact = analysis.IsImpact;
+        node.PredictedPeriapsisAltitude =
+            analysis.PredictedPeriapsisRadius - moon.Radius;
+        node.SecondBurnDv =
+            analysis.EstimatedCircularInsertionDeltaV;
+    }
+
     /// <summary>
     /// Posición INERCIAL (mundo) de <paramref name="body"/> en el tiempo <paramref name="t"/>,
     /// propagando su cónica Kepler y componiendo recursivamente la de su cuerpo padre.
@@ -158,12 +342,40 @@ public partial class TransferPlanner : Node
         return parentPos + relPos;
     }
 
+    private static EncounterResult ToHeliocentricEncounter(
+        EncounterResult encounter,
+        CelestialBody earth,
+        Universe universe,
+        CelestialBody sun)
+    {
+        double markerTime = encounter.HasEncounter
+            ? encounter.TimeOfSoiEntry
+            : encounter.TimeOfClosestApproach;
+        Vector3d earthHeliocentric =
+            HelioPositionAt(earth, markerTime, universe, sun) - sun.Position;
+        return encounter with
+        {
+            EncounterPosition =
+                earthHeliocentric + encounter.EncounterPosition,
+        };
+    }
+
     public void ClearNode()
     {
         CurrentNode  = null;
         TargetBodyId = null;
         Encounter    = null;
+        LunarPlan    = null;
+        EarthFrameEncounter = null;
+        CurrentTransferOrbit = null;
+        LastPlanningError = null;
     }
+}
+
+public enum TransferKind
+{
+    HeliocentricHohmann,
+    LunarLambert,
 }
 
 /// <summary>Representa un nodo de maniobra de transferencia calculado.</summary>
@@ -195,4 +407,15 @@ public class ManeuverNode
 
     /// <summary>Factor de ajuste manual del usuario (±10% por pasos de 5%).</summary>
     public double   DvAdjustFactor { get; set; } = 1.0;
+
+    public string ReferenceBodyId { get; set; } = "sun";
+    public TransferKind TransferKind { get; set; }
+    public string BurnLabel { get; set; } = "DV1";
+    public string ArrivalBurnLabel { get; set; } = "DV2";
+    public Vector3d PlannedDeparturePosition { get; set; }
+    public Vector3d PlannedPreBurnVelocity { get; set; }
+    public double TargetPeriapsisAltitude { get; set; }
+    public double PredictedPeriapsisAltitude { get; set; }
+    public double BPlaneAimRadius { get; set; }
+    public bool ArrivalImpact { get; set; }
 }

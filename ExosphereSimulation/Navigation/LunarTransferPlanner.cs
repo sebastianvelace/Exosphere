@@ -26,6 +26,17 @@ public sealed record LunarTransferPlan(
 }
 
 /// <summary>
+/// Moon-centred interpretation of an Earth-relative transfer conic.
+/// </summary>
+public readonly record struct LunarEncounterAnalysis(
+    EncounterResult Encounter,
+    bool             HasEncounter,
+    bool             IsImpact,
+    double           PredictedPeriapsisRadius,
+    double           HyperbolicExcessSpeed,
+    double           EstimatedCircularInsertionDeltaV);
+
+/// <summary>
 /// Plans a translunar injection against the Moon's moving ephemeris.
 ///
 /// Unlike a heliocentric Hohmann shortcut, this searches a real burn window on the
@@ -61,7 +72,6 @@ public static class LunarTransferPlanner
         LunarTransferPlan? best = null;
         double bestScore = double.PositiveInfinity;
         double closestAltitudeSeen = double.PositiveInfinity;
-        int encounterCount = 0;
 
         for (int sample = 0; sample < windowSamples; sample++)
         {
@@ -142,42 +152,41 @@ public static class LunarTransferPlanner
                         parkingOrbit.ReferenceBodyId,
                         burnTime);
 
-                    EncounterResult encounter = TrajectoryPrediction.FindEncounter(
-                        transferOrbit,
-                        earthGm,
-                        t => moonEphemeris.GetStateAtTime(t, earthGm).position,
-                        moonSoiRadius,
-                        burnTime,
-                        timeOfFlight * 1.12,
-                        coarseSteps: 720);
-
-                    closestAltitudeSeen = System.Math.Min(
-                        closestAltitudeSeen,
-                        encounter.ClosestApproachDistance - moonRadius);
-                    if (encounter.HasEncounter)
-                        encounterCount++;
-                    if (!encounter.HasEncounter)
+                    if (!TryFindInboundSoiEntry(
+                            transferOrbit,
+                            moonEphemeris,
+                            earthGm,
+                            moonSoiRadius,
+                            burnTime,
+                            arrivalTime,
+                            out double candidateEntryTime))
                         continue;
 
-                    double entryTime = encounter.TimeOfSoiEntry;
-                    var (entryPosition, entryVelocity) =
-                        transferOrbit.GetStateAtTime(entryTime, earthGm);
-                    var (moonEntryPosition, moonEntryVelocity) =
-                        moonEphemeris.GetStateAtTime(entryTime, earthGm);
+                    var (candidateEntryPosition, candidateEntryVelocity) =
+                        transferOrbit.GetStateAtTime(candidateEntryTime, earthGm);
+                    var (candidateMoonPosition, candidateMoonVelocity) =
+                        moonEphemeris.GetStateAtTime(candidateEntryTime, earthGm);
+
+                    // Rank candidates from the Moon-centred conic at the actual inbound
+                    // SOI boundary. This includes lunar gravitational focusing while
+                    // avoiding a full coarse encounter scan for every B-plane sample.
                     OrbitalElements lunarApproach = OrbitalElements.FromStateVector(
-                        entryPosition - moonEntryPosition,
-                        entryVelocity - moonEntryVelocity,
+                        candidateEntryPosition - candidateMoonPosition,
+                        candidateEntryVelocity - candidateMoonVelocity,
                         moonGm,
                         "moon",
-                        entryTime);
+                        candidateEntryTime);
                     double predictedPerilune = lunarApproach.Periapsis;
+                    closestAltitudeSeen = System.Math.Min(
+                        closestAltitudeSeen,
+                        predictedPerilune - moonRadius);
                     if (!double.IsFinite(predictedPerilune) ||
                         predictedPerilune <= moonRadius)
                         continue;
 
                     double lunarEnergy =
-                        (entryVelocity - moonEntryVelocity).MagnitudeSquared * 0.5
-                        - moonGm / (entryPosition - moonEntryPosition).Magnitude;
+                        (candidateEntryVelocity - candidateMoonVelocity).MagnitudeSquared * 0.5
+                        - moonGm / (candidateEntryPosition - candidateMoonPosition).Magnitude;
                     double vInfinity = lunarEnergy > 0.0
                         ? System.Math.Sqrt(2.0 * lunarEnergy)
                         : 0.0;
@@ -206,7 +215,7 @@ public static class LunarTransferPlanner
                         solution.DepartureVelocity,
                         injectionDeltaV,
                         transferOrbit,
-                        encounter,
+                        default,
                         vInfinity,
                         circularInsertion,
                         targetRadius,
@@ -216,12 +225,179 @@ public static class LunarTransferPlanner
             }
         }
 
-        return best ?? throw new InvalidOperationException(
-            $"No safe lunar SOI encounter was found in the requested parking-orbit window " +
-            $"({encounterCount} SOI crossings; closest altitude {closestAltitudeSeen:G6} m).");
+        if (best is null)
+            throw new InvalidOperationException(
+                $"No safe lunar SOI encounter was found in the requested parking-orbit window " +
+                $"(closest predicted altitude {closestAltitudeSeen:G6} m).");
+
+        LunarEncounterAnalysis finalAnalysis = AnalyzeEncounter(
+            earthGm,
+            moonGm,
+            moonRadius,
+            moonSoiRadius,
+            best.EarthTransferOrbit,
+            moonEphemeris,
+            best.BurnTime,
+            best.TimeOfFlight * 1.12);
+        if (!finalAnalysis.HasEncounter)
+            throw new InvalidOperationException(
+                "The selected lunar transfer did not cross the Moon sphere of influence.");
+        if (finalAnalysis.IsImpact)
+            throw new InvalidOperationException(
+                $"The selected lunar transfer intersects the Moon " +
+                $"(rₚ={finalAnalysis.PredictedPeriapsisRadius:G6} m).");
+
+        return best with
+        {
+            Encounter = finalAnalysis.Encounter,
+            PredictedLunarRelativeSpeed =
+                finalAnalysis.HyperbolicExcessSpeed,
+            EstimatedCircularInsertionDeltaV =
+                finalAnalysis.EstimatedCircularInsertionDeltaV,
+            PredictedLunarPeriapsisRadius =
+                finalAnalysis.PredictedPeriapsisRadius,
+        };
     }
 
     private const double TwoPi = 2.0 * System.Math.PI;
+
+    /// <summary>
+    /// Evaluates a post-burn Earth conic against the moving Moon and converts its
+    /// inbound SOI state into a focused Moon-centred hyperbola.
+    /// </summary>
+    public static LunarEncounterAnalysis AnalyzeEncounter(
+        double          earthGm,
+        double          moonGm,
+        double          moonRadius,
+        double          moonSoiRadius,
+        OrbitalElements earthTransferOrbit,
+        OrbitalElements moonEphemeris,
+        double          burnTime,
+        double          searchWindow)
+    {
+        if (!double.IsFinite(earthGm) || earthGm <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(earthGm));
+        if (!double.IsFinite(moonGm) || moonGm <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(moonGm));
+        if (!double.IsFinite(moonRadius) || moonRadius <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(moonRadius));
+        if (!double.IsFinite(moonSoiRadius) || moonSoiRadius <= moonRadius)
+            throw new ArgumentOutOfRangeException(nameof(moonSoiRadius));
+        if (earthTransferOrbit is null)
+            throw new ArgumentNullException(nameof(earthTransferOrbit));
+        if (moonEphemeris is null)
+            throw new ArgumentNullException(nameof(moonEphemeris));
+        if (!double.IsFinite(burnTime))
+            throw new ArgumentOutOfRangeException(nameof(burnTime));
+        if (!double.IsFinite(searchWindow) || searchWindow <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(searchWindow));
+
+        EncounterResult encounter = TrajectoryPrediction.FindEncounter(
+            earthTransferOrbit,
+            earthGm,
+            t => moonEphemeris.GetStateAtTime(t, earthGm).position,
+            moonSoiRadius,
+            burnTime,
+            searchWindow,
+            coarseSteps: 1440);
+        if (!encounter.HasEncounter)
+        {
+            return new LunarEncounterAnalysis(
+                encounter,
+                HasEncounter: false,
+                IsImpact: false,
+                PredictedPeriapsisRadius: double.PositiveInfinity,
+                HyperbolicExcessSpeed: 0.0,
+                EstimatedCircularInsertionDeltaV: 0.0);
+        }
+
+        double entryTime = encounter.TimeOfSoiEntry;
+        var (entryPosition, entryVelocity) =
+            earthTransferOrbit.GetStateAtTime(entryTime, earthGm);
+        var (moonPosition, moonVelocity) =
+            moonEphemeris.GetStateAtTime(entryTime, earthGm);
+        Vector3d lunarPosition = entryPosition - moonPosition;
+        Vector3d lunarVelocity = entryVelocity - moonVelocity;
+        OrbitalElements lunarApproach = OrbitalElements.FromStateVector(
+            lunarPosition,
+            lunarVelocity,
+            moonGm,
+            "moon",
+            entryTime);
+        double perilune = lunarApproach.Periapsis;
+        bool impact = !double.IsFinite(perilune) || perilune <= moonRadius;
+        if (impact)
+        {
+            return new LunarEncounterAnalysis(
+                encounter,
+                HasEncounter: true,
+                IsImpact: true,
+                PredictedPeriapsisRadius: perilune,
+                HyperbolicExcessSpeed: 0.0,
+                EstimatedCircularInsertionDeltaV: 0.0);
+        }
+
+        double energy =
+            lunarVelocity.MagnitudeSquared * 0.5
+            - moonGm / lunarPosition.Magnitude;
+        double vInfinity = energy > 0.0
+            ? System.Math.Sqrt(2.0 * energy)
+            : 0.0;
+        double periluneSpeed = System.Math.Sqrt(
+            vInfinity * vInfinity + 2.0 * moonGm / perilune);
+        double circularSpeed = System.Math.Sqrt(moonGm / perilune);
+
+        return new LunarEncounterAnalysis(
+            encounter,
+            HasEncounter: true,
+            IsImpact: false,
+            PredictedPeriapsisRadius: perilune,
+            HyperbolicExcessSpeed: vInfinity,
+            EstimatedCircularInsertionDeltaV:
+                System.Math.Max(0.0, periluneSpeed - circularSpeed));
+    }
+
+    private static bool TryFindInboundSoiEntry(
+        OrbitalElements transferOrbit,
+        OrbitalElements moonEphemeris,
+        double          earthGm,
+        double          moonSoiRadius,
+        double          burnTime,
+        double          arrivalTime,
+        out double      entryTime)
+    {
+        double Separation(double t)
+        {
+            Vector3d vesselPosition =
+                transferOrbit.GetStateAtTime(t, earthGm).position;
+            Vector3d moonPosition =
+                moonEphemeris.GetStateAtTime(t, earthGm).position;
+            return (vesselPosition - moonPosition).Magnitude;
+        }
+
+        double lower = burnTime;
+        double upper = arrivalTime;
+        if (Separation(lower) <= moonSoiRadius ||
+            Separation(upper) > moonSoiRadius)
+        {
+            entryTime = double.PositiveInfinity;
+            return false;
+        }
+
+        // A direct zero-revolution translunar arc has one inbound SOI crossing.
+        // Bisect that outside→inside transition to millisecond-scale timing.
+        for (int i = 0; i < 60; i++)
+        {
+            double middle = 0.5 * (lower + upper);
+            if (Separation(middle) <= moonSoiRadius)
+                upper = middle;
+            else
+                lower = middle;
+        }
+
+        entryTime = upper;
+        return true;
+    }
 
     private static void Validate(
         double earthGm,

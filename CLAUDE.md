@@ -95,7 +95,7 @@ Important implemented systems:
 - heat-shield flag from part JSON
 - hard impact destruction
 - VAB catalog/assembly/export in `ExosphereSimulation/Construction`
-- Hohmann transfer math, encounter prediction, and patched-conic SOI transitions in `ExosphereSimulation/Navigation` and `Universe`
+- Hohmann planetary transfers, Earth–Moon Lambert/B-plane planning, encounter prediction, and patched-conic SOI transitions in `ExosphereSimulation/Navigation` and `Universe`
 
 ## Game Layer Rules
 
@@ -144,7 +144,10 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - Reentry has physics basis and tests plus windward plasma, tile charring, survivable belly-flop EDL, thermal break-up VFX, and per-piece structural breakup (overloaded joints split the part graph into debris vessels). Control-loss consequences and richer shock/plasma rendering are still pending.
 - Mission UX: usable save/load (C1), orbit→deorbit→ENTRY without teleport (C2), and EDL phase-track/cues (C3) are landed this oleada. LEO warp decay (B3), hot-stage thrust overlap (B2), structural breakup (B1) and control-loss authority (`ControlAuthority`) are landed. Visual oleada A (plasma phase alpha, flap/nose V1.1, deluge silhouette) is landed. Remaining: IFT side-by-side reference compare, R5 multi-motor.
 - Patched-conic SOI transitions are implemented for on-rails vessels (warp-resolution-independent); inside on-rails propagation use `BodyStateAt(body, t)` for body state at the epoch/crossing time, not the end-of-tick global position.
-- Interplanetary planning has a tested Hohmann core, patched-conic SOI transitions, encounter prediction, and maneuver readouts. It still needs long-cruise validation, a better Moon-transfer model, and draggable maneuver nodes.
+- Interplanetary planning has tested Hohmann planetary transfers, an ephemeris-targeted
+  geocentric Moon route, patched-conic SOI transitions, encounter/perilunium prediction
+  and TLI/LOI readouts. It still needs executable LOI sequencing, dated lunar ephemerides
+  and timeline maneuver nodes.
 - CI builds/tests the sim, builds the Godot C# layer, downloads Godot 4.6.3 mono in GitHub Actions, and runs strict headless smoke checks. Local `tools/ci_check.sh` runs Godot smoke only when `GODOT_BIN` or the default local Godot path exists.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 - Current product priority after documentation cleanup: visual fidelity against real Starship/Super Heavy references. Prefer scoped improvements to `VesselRenderer`, `ReentryPlasmaController`, `PlumeSystem`, camera/lighting, and visual capture before broad new gameplay systems.

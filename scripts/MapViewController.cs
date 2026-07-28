@@ -21,7 +21,7 @@ public partial class MapViewController : Control
     private AutopilotController _autopilot = null!;
 
     // ── Transfer planner state ────────────────────────────────────────────────
-    private string? _selectedTarget;   // body ID selected for Hohmann transfer
+    private string? _selectedTarget;   // body ID selected for the appropriate transfer model
     private bool    _solarView;        // top-down whole-solar-system overview (toggle [Tab])
 
     // Planets available for transfer, in keyboard order (keys 1–6)
@@ -87,6 +87,33 @@ public partial class MapViewController : Control
     }
 
     public void ToggleVisible() => Visible = !Visible;
+
+    /// <summary>
+    /// Selects and plans a supported transfer target through the same path used by
+    /// keyboard input. Exposed for controller UI and deterministic visual acceptance.
+    /// </summary>
+    public ManeuverNode? SelectTransferTarget(string bodyId)
+    {
+        bool supported = false;
+        foreach (var (id, _, _) in TransferTargets)
+        {
+            if (id != bodyId) continue;
+            supported = true;
+            break;
+        }
+        if (!supported) return null;
+
+        _selectedTarget = bodyId;
+        ManeuverNode? node = TransferPlanner.Instance?.PlanTransfer(bodyId);
+        if (node != null)
+        {
+            GD.Print($"[Map] Transfer to {bodyId}: " +
+                     $"Δv={node.DvMagnitude:F0} m/s, " +
+                     $"ToF={node.TimeOfFlight / 86400.0:F1} days");
+        }
+        QueueRedraw();
+        return node;
+    }
 
     // ── Input ─────────────────────────────────────────────────────────────────
 
@@ -193,13 +220,7 @@ public partial class MapViewController : Control
                         {
                             if (key.Keycode == tKey)
                             {
-                                _selectedTarget = id;
-                                var node = TransferPlanner.Instance?.PlanTransfer(id);
-                                if (node != null)
-                                    GD.Print($"[Map] Transfer to {id}: " +
-                                             $"Δv={node.DvMagnitude:F0} m/s, " +
-                                             $"ToF={node.TimeOfFlight / 86400.0:F1} days");
-                                QueueRedraw();
+                                SelectTransferTarget(id);
                                 break;
                             }
                         }
@@ -286,6 +307,16 @@ public partial class MapViewController : Control
         if (_solarView)
         {
             DrawSolarSystem(universe, refBody);
+            DrawTransferPanel();
+            DrawFooter();
+            return;
+        }
+
+        if (TransferPlanner.Instance?.CurrentNode is
+            { TransferKind: TransferKind.LunarLambert } lunarNode
+            && refBody.Id == "earth")
+        {
+            DrawLunarTransferView(universe, refBody, vessel, lunarNode);
             DrawTransferPanel();
             DrawFooter();
             return;
@@ -442,6 +473,103 @@ public partial class MapViewController : Control
                 DrawLine(ep + new Vector2(-5, 5),  ep + new Vector2(5, -5), ecol, 1.2f);
             }
         }
+    }
+
+    private void DrawLunarTransferView(
+        Universe universe,
+        CelestialBody earth,
+        Vessel vessel,
+        ManeuverNode node)
+    {
+        var moon = universe.GetBody("moon");
+        var moonOrbit = moon?.OrbitalElements;
+        var transfer = TransferPlanner.Instance?.CurrentTransferOrbit;
+        if (moon == null || moonOrbit == null || transfer == null)
+        {
+            DrawText("LUNAR SOLUTION UNAVAILABLE", new Vector2(14, 48), TextDim, 11);
+            return;
+        }
+
+        DrawText("EARTH–MOON · PATCHED CONIC", new Vector2(14, 46), TextDim, 11);
+
+        Vector3d planeX = node.PlannedDeparturePosition.Normalized;
+        Vector3d postBurnVelocity =
+            node.PlannedPreBurnVelocity
+            + node.DeltaV.Normalized
+              * (node.DvMagnitude * node.DvAdjustFactor);
+        Vector3d planeNormal =
+            node.PlannedDeparturePosition.Cross(postBurnVelocity).Normalized;
+        Vector3d planeY = planeNormal.Cross(planeX).Normalized;
+        if (planeX.Magnitude < 1e-9 || planeY.Magnitude < 1e-9)
+            return;
+
+        Vector2 origin = new(164f, 244f);
+        double lunarExtent =
+            moonOrbit.SemiMajorAxis * (1.0 + moonOrbit.Eccentricity)
+            + moon.SphereOfInfluence;
+        double metresPerPixel = lunarExtent / 142.0;
+
+        Vector2 Project(Vector3d position) => origin + new Vector2(
+            (float)(position.Dot(planeX) / metresPerPixel),
+            (float)(-position.Dot(planeY) / metresPerPixel));
+
+        // Moving lunar ephemeris in the selected transfer plane.
+        double lunarPeriod = 2.0 * System.Math.PI * System.Math.Sqrt(
+            System.Math.Pow(moonOrbit.SemiMajorAxis, 3.0) / earth.GM);
+        var lunarCurve = new Vector2[129];
+        for (int i = 0; i < lunarCurve.Length; i++)
+        {
+            double t = universe.CurrentTime + lunarPeriod * i / (lunarCurve.Length - 1.0);
+            lunarCurve[i] = Project(moonOrbit.GetStateAtTime(t, earth.GM).position);
+        }
+        DrawPolyline(lunarCurve, new Color(0.48f, 0.58f, 0.72f, 0.42f), 1.1f, true);
+
+        // Planned Earth-centred transfer, from TLI through the intended LOI epoch.
+        var transferCurve = new Vector2[161];
+        for (int i = 0; i < transferCurve.Length; i++)
+        {
+            double t = node.BurnTime + node.TimeOfFlight * i / (transferCurve.Length - 1.0);
+            transferCurve[i] = Project(transfer.GetStateAtTime(t, earth.GM).position);
+        }
+        DrawPolyline(transferCurve, ProjCol, 2.0f, true);
+
+        DrawCircle(origin, 7f, BodyCol);
+        DrawArc(origin, 10f, 0f, Mathf.Tau, 24, new Color(BodyCol, 0.42f), 1.2f);
+        DrawText("EARTH", origin + new Vector2(10, -7), BodyCol, 10);
+
+        Vector3d currentMoonPosition =
+            moonOrbit.GetStateAtTime(universe.CurrentTime, earth.GM).position;
+        Vector3d arrivalMoonPosition =
+            moonOrbit.GetStateAtTime(node.BurnTime + node.TimeOfFlight, earth.GM).position;
+        Vector2 currentMoonPx = Project(currentMoonPosition);
+        Vector2 arrivalMoonPx = Project(arrivalMoonPosition);
+        DrawCircle(currentMoonPx, 3.5f, Accentify("moon"));
+        DrawText("MOON NOW", currentMoonPx + new Vector2(6, -5), TextDim, 9);
+
+        float lunarSoiPx = (float)(moon.SphereOfInfluence / metresPerPixel);
+        DrawArc(arrivalMoonPx, lunarSoiPx, 0f, Mathf.Tau, 48,
+                new Color(GreenCol, 0.32f), 1.2f);
+        DrawCircle(arrivalMoonPx, 4.5f, Accentify("moon"));
+        DrawText("MOON · LOI", arrivalMoonPx + new Vector2(7, -6),
+                 Accentify("moon"), 10);
+
+        Vector2 burnPx = Project(node.PlannedDeparturePosition);
+        DrawNodeDiamond(burnPx, NodeCol);
+        DrawText("TLI", burnPx + new Vector2(7, -6), NodeCol, 10);
+
+        if (TransferPlanner.Instance?.EarthFrameEncounter is { } encounter)
+        {
+            Vector2 encounterPx = Project(encounter.EncounterPosition);
+            Color encounterColor = node.ArrivalImpact
+                ? new Color(1f, 0.35f, 0.30f)
+                : encounter.HasEncounter ? GreenCol : ProjCol;
+            DrawArc(encounterPx, 5f, 0f, Mathf.Tau, 20, encounterColor, 1.5f);
+            DrawText(encounter.HasEncounter ? "SOI" : "MISS",
+                     encounterPx + new Vector2(6, 10), encounterColor, 9);
+        }
+
+        Vector2 vesselPx = Project(vessel.Position - earth.Position);
+        DrawVesselTriangle(vesselPx, VesselCol);
     }
 
     private static bool IsMoon(CelestialBody b)
@@ -649,12 +777,19 @@ public partial class MapViewController : Control
         {
             y += 4f;
             Color tCol = Accentify(node.TargetBodyId ?? "");
-            DrawText($"Δv1 {node.DvMagnitude * node.DvAdjustFactor:F0} m/s", new Vector2(x, y), tCol, 11);
+            DrawText($"{node.BurnLabel} {node.DvMagnitude * node.DvAdjustFactor:F0} m/s", new Vector2(x, y), tCol, 11);
             y += 13f;
-            DrawText($"Δv2 {node.SecondBurnDv:F0} m/s", new Vector2(x, y), TextDim, 11);
+            DrawText($"{node.ArrivalBurnLabel} {node.SecondBurnDv:F0} m/s", new Vector2(x, y), TextDim, 11);
             y += 13f;
             DrawText($"ToF {node.TimeOfFlight / 86400.0:F1} d", new Vector2(x, y), TextDim, 11);
             y += 13f;
+            double timeToBurn =
+                node.BurnTime - (SimulationBridge.Instance?.Universe.CurrentTime ?? node.BurnTime);
+            if (timeToBurn > 1.0)
+            {
+                DrawText($"T-{FmtTime(timeToBurn)}", new Vector2(x, y), NodeCol, 11);
+                y += 13f;
+            }
             string adjPct = $"{node.DvAdjustFactor * 100.0:F0}%";
             DrawText($"adj {adjPct}", new Vector2(x, y), TextDim, 11);
             y += 13f;
@@ -664,9 +799,24 @@ public partial class MapViewController : Control
             {
                 y += 3f;
                 Color ecol = enc.HasEncounter ? GreenCol : new Color(1f, 0.65f, 0.30f);
-                DrawText(enc.HasEncounter ? "ENCOUNTER" : "miss", new Vector2(x, y), ecol, 10);
+                string encounterLabel = node.ArrivalImpact
+                    ? "IMPACT"
+                    : enc.HasEncounter ? "ENCOUNTER" : "miss";
+                if (node.ArrivalImpact)
+                    ecol = new Color(1f, 0.35f, 0.30f);
+                DrawText(encounterLabel, new Vector2(x, y), ecol, 10);
                 y += 12f;
-                DrawText($"appr {Fmt(enc.ClosestApproachDistance)}", new Vector2(x, y), ecol, 11);
+                if (node.TransferKind == TransferKind.LunarLambert &&
+                    double.IsFinite(node.PredictedPeriapsisAltitude))
+                {
+                    DrawText($"Pe Moon {Fmt(node.PredictedPeriapsisAltitude)}",
+                             new Vector2(x, y), ecol, 11);
+                }
+                else
+                {
+                    DrawText($"appr {Fmt(enc.ClosestApproachDistance)}",
+                             new Vector2(x, y), ecol, 11);
+                }
                 y += 13f;
                 double eta = enc.TimeOfClosestApproach - node.BurnTime;
                 DrawText($"ETA {FmtTime(eta)}", new Vector2(x, y), TextDim, 11);
@@ -676,13 +826,27 @@ public partial class MapViewController : Control
             // Executor status
             if (ManeuverExecutor.Instance is { IsExecuting: true } exec)
             {
-                DrawText($"BURN {exec.RemainingDv:F0} m/s", new Vector2(x, y),
-                         new Color(1f, 0.4f, 0.4f, 1f), 11);
+                string status = exec.TimeToBurn > 1.0
+                    ? $"{exec.BurnLabel} ARMED T-{FmtTime(exec.TimeToBurn)}"
+                    : $"{exec.BurnLabel} {exec.RemainingDv:F0} m/s";
+                DrawText(status, new Vector2(x, y),
+                         exec.TimeToBurn > 1.0
+                            ? NodeCol
+                            : new Color(1f, 0.4f, 0.4f, 1f), 11);
             }
             else
             {
                 DrawText("⏎ EXECUTE", new Vector2(x, y), GreenCol, 11);
             }
+        }
+        else if (_selectedTarget == "moon"
+                 && TransferPlanner.Instance?.LastPlanningError != null)
+        {
+            y += 5f;
+            DrawText("NO TLI WINDOW", new Vector2(x, y),
+                     new Color(1f, 0.65f, 0.30f), 10);
+            y += 13f;
+            DrawText("check orbit plane", new Vector2(x, y), TextDim, 10);
         }
     }
 

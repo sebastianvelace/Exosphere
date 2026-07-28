@@ -33,6 +33,7 @@ Options:
   --friendship  Seed Friendship 7 / Mercury-Atlas 6 at LC-14.
   --gemini      Seed Gemini 8 / Titan II GLV-8 at LC-19.
   --gemini-docking  Seed and capture Gemini 8 docked to Agena 5003.
+  --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --launch      Capture ignition and early vertical liftoff, then exit.
@@ -91,6 +92,7 @@ while [[ $# -gt 0 ]]; do
       VARIANT_SITE="cape_canaveral_lc19"
       VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
       shift ;;
+    --lunar-map) MODE="lunar_map"; shift ;;
     --flight7)
       VARIANT_FILE="starship_flight7_block2_2025.json"
       VARIANT_SITE="starbase"
@@ -331,6 +333,70 @@ public partial class _PlaytestShot : Node
             }
             if (_orbitBeauty && _pendingSlug == null)
                 Finish("COCKPIT_OK");
+            return;
+        }
+
+        if (_mode == "lunar_map")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                bridge.JumpToOrbit(200_000.0);
+                var earth = universe.GetBody("earth")!;
+                var moon = universe.GetBody("moon")!;
+                var moonOrbit = moon.OrbitalElements!;
+                var parking = new OrbitalElements
+                {
+                    SemiMajorAxis = earth.Radius + 200_000.0,
+                    Eccentricity = 0.0,
+                    Inclination = moonOrbit.Inclination,
+                    LongitudeOfAscendingNode = moonOrbit.LongitudeOfAscendingNode,
+                    ArgumentOfPeriapsis = 0.0,
+                    MeanAnomalyAtEpoch = 0.0,
+                    Epoch = universe.CurrentTime,
+                    ReferenceBodyId = earth.Id,
+                };
+                var (parkingPosition, parkingVelocity) =
+                    parking.GetStateAtTime(universe.CurrentTime, earth.GM);
+                vessel.Position = earth.Position + parkingPosition;
+                vessel.Velocity = earth.Velocity + parkingVelocity;
+                vessel.ReferenceBodyId = earth.Id;
+                vessel.IsOnRails = false;
+                vessel.OrbitalState = null;
+                var map = MapViewController.Instance;
+                if (map == null)
+                {
+                    Finish("LUNAR_MAP_MISSING");
+                    return;
+                }
+                if (!map.Visible) map.ToggleVisible();
+                var node = map.SelectTransferTarget("moon");
+                var encounter = TransferPlanner.Instance?.Encounter;
+                if (node == null || encounter == null)
+                {
+                    _log.WriteLine(
+                        $"LUNAR_MAP_FAIL error={TransferPlanner.Instance?.LastPlanningError ?? "unknown"}");
+                    _log.Flush();
+                    Finish("LUNAR_PLAN_FAILED");
+                    return;
+                }
+                _log.WriteLine(
+                    $"LUNAR_MAP model={node.TransferKind} encounter={encounter.Value.HasEncounter} " +
+                    $"tli={node.DvMagnitude:F1} loi={node.SecondBurnDv:F1} " +
+                    $"pe={node.PredictedPeriapsisAltitude:F1} " +
+                    $"tBurn={node.BurnTime - universe.CurrentTime:F1}");
+                _log.Flush();
+                _shipSeeded = true;
+                _readyFrames = 0;
+                return;
+            }
+            if (_shipSeeded && _readyFrames >= 90
+                && !_orbitBeauty && _pendingSlug == null)
+            {
+                QueueCapture("lunar_transfer_map");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("LUNAR_MAP_OK");
             return;
         }
 
@@ -1472,12 +1538,23 @@ if [[ "$MODE" == "gemini_docking" ]]; then
   fi
 fi
 
+if [[ "$MODE" == "lunar_map" ]]; then
+  if ! grep -Eq \
+      'LUNAR_MAP model=LunarLambert encounter=True tli=[0-9.]+ loi=[0-9.]+ pe=[1-9][0-9.]* tBurn=[1-9][0-9.]*' \
+      "$LOG"; then
+    echo "ERROR: lunar map capture did not validate Lambert encounter telemetry." >&2
+    exit 1
+  fi
+fi
+
 if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
 elif [[ "$MODE" == "atmosphere" ]]; then
   echo "visual_playtest: atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
+elif [[ "$MODE" == "lunar_map" ]]; then
+  echo "visual_playtest: lunar Lambert map verification OK"
 else
   echo "visual_playtest: full run complete — review $LOG for GAP lines"
 fi

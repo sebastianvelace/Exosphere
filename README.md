@@ -21,7 +21,7 @@ Implemented and working:
 - Orientation-dependent drag, reentry heating, progressive part thermal damage, heat-shield orientation handling and destruction causes
 - Time warp levels: `1,2,3,5,10,50,100,1000,10000,100000`
 - HUD, navball, map view, transfer planning helpers, cockpit, systems HUD, launch/crash/reentry visual effects
-- Pure Hohmann transfer calculator in `ExosphereSimulation/Navigation` with Earth-Mars and Earth-Venus regression tests
+- Pure Hohmann planetary transfers plus an ephemeris-targeted Earth–Moon Lambert/B-plane planner with maximum-warp SOI regressions
 - Patched-conic SOI transitions and encounter prediction for on-rails interplanetary coast
 - Starship/Super Heavy procedural mesh with hot-stage ring, grid-fin lattice, windward tiles, flaps, Raptor clusters and stainless steel shader
 - Survivable Starship EDL profile: belly-flop reentry, low-altitude flip-and-burn and soft touchdown
@@ -208,7 +208,10 @@ The Starship default stack currently uses:
 - Reentry has windward plasma glow, progressive heat-shield tile charring, survivable belly-flop EDL, and a thermal break-up VFX when a vessel burns up. Still limited: per-piece structural break-up, control-loss consequences, and richer plasma/shock visuals.
 - Starship hull is modelled at the real 9 m diameter with procedural steel, weld seams, windward tiles, heat-shield borders, flaps, raceways, payload-door cues, access panels, vent/drain ports, flap leading-edge/tile-seam cues, Raptor clusters, denser liftoff plume/smoke, and refined Super Heavy grid fins with hinge/lattice detail. Engine startup now has pre-release glow/vapor/flicker, hot-staging has flash/plume VFX, vacuum burns suppress pad-like smoke, and reentry plasma uses heat-flux-driven cap/wake plus first-pass localized nose/belly/flap glow. Remaining visual work is fine reference matching, EDL/reference captures, lighting/camera polish, and verified screenshots.
 - CI provisions Godot in the workflow and runs the headless smoke checks strictly, with an anti-harness guard; full PNG capture in CI is still a follow-up.
-- Interplanetary planning has a tested Hohmann core, patched-conic SOI transitions, encounter prediction, and better node readouts. It still needs long-cruise validation, a more accurate Moon-transfer model, and draggable maneuver nodes.
+- Interplanetary planning has tested Hohmann planetary transfers, a geocentric
+  Lambert/B-plane Moon route, patched-conic SOI transitions, encounter prediction,
+  TLI/LOI readouts and future-window burn arming. Remaining work includes executable
+  LOI sequencing, dated lunar ephemerides and timeline maneuver nodes.
 - Automated visual screenshots need a real framebuffer; current headless smoke tests only validate load/runtime.
 
 ## Working Rules

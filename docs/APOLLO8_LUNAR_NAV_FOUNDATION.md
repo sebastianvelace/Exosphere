@@ -77,9 +77,25 @@ insertion separate so every comparison has a defined physical boundary.
 - maximum-warp propagation reaches the lunar SOI through `Universe` and
   re-references the vessel to `moon` without destruction.
 
-## Next integration step
+## Product integration
 
-The map's `scripts/TransferPlanner.cs` must route `moon` to
-`LunarTransferPlanner`, expose TLI and LOI as distinct maneuver nodes, and show
-the target perilunium. After that, Apollo 8 hardware and mission data can consume
-the same plan without embedding guidance constants in Godot UI code.
+The map now routes `moon` to `LunarTransferPlanner`, labels TLI and LOI
+separately, centres the estimated finite TLI burn on its absolute impulsive
+epoch and draws the Earth–Moon conic, lunar SOI and focused perilunium. Manual
+Δv adjustment calls the same pure
+`AnalyzeEncounter` contract used by tests, including miss and impact states.
+
+Framebuffer acceptance:
+
+```bash
+bash tools/visual_playtest.sh --lunar-map
+```
+
+The accepted 200 km, ephemeris-plane case produced TLI `3.180 km/s`, LOI
+estimate `0.959 km/s`, coast `2.76 d` and perilunium `115 km`. The map rejects
+one-orbit solutions above `4.5 km/s` rather than presenting a datum/plane
+mismatch as a useful transfer.
+
+Next: create an executable LOI node, expand the search beyond one parking orbit,
+replace the generic epoch with dated Horizons/SPICE state, then let Apollo 8
+hardware and mission data consume the same contracts.

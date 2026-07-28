@@ -7,13 +7,15 @@
 
 ## Executive summary
 
-Hohmann core, patched-conic SOI transitions, encounter prediction, and map autopilot execution are **implemented and tested**. Gaps: **lunar transfer model**, **second burn orchestration**, **long-cruise soak tests**, **timeline maneuver nodes**.
+Hohmann core, patched-conic SOI transitions, encounter prediction, lunar Lambert
+planning and map execution are **implemented and tested**. Remaining gaps:
+**second-burn orchestration**, **multi-day lunar window search** and
+**timeline maneuver nodes**.
 
-**Update 2026-07-28:** the Godot-free lunar transfer core and its accuracy/warp
-regressions are now implemented. `LunarTransferPlanner` solves a moving-target,
-Earth-centred Lambert arc and a focused lunar approach. The remaining NV-01 gap
-is product wiring: `scripts/TransferPlanner.cs` must select this path for `moon`
-instead of its generic heliocentric Hohmann branch.
+**Update 2026-07-28:** the Godot-free lunar transfer core, accuracy/warp
+regressions and product wiring are implemented. Selecting `moon` now produces a
+moving-target Earth-centred Lambert arc, focused lunar approach, TLI window and
+LOI estimate instead of entering the heliocentric Hohmann branch.
 
 | Priority | Count |
 |----------|-------|
@@ -26,13 +28,13 @@ instead of its generic heliocentric Hohmann branch.
 
 ## Findings
 
-### NV-01 — Hohmann uses instantaneous heliocentric radii
+### NV-01 — Hohmann uses instantaneous heliocentric radii — CLOSED
 | | |
 |---|---|
 | **Priority** | P2 |
 | **Score** | I=4 R=4 F=3 → **48** |
-| **Evidence** | `TransferPlanner.cs:47-51` (`r1 = |vessel−sun|`, `r2 = |target−sun|`); `HohmannTransferPlan.cs:14-44` |
-| **Gap** | **Partially closed:** `LambertSolver.cs` + `LunarTransferPlanner.cs` provide the patched Earth–Moon model; map/UI selection still routes Moon through the old Sun-centred snapshot |
+| **Evidence** | `TransferPlanner.PlanTransfer` dispatches `moon` before the heliocentric branch; `LunarTransferPlanner`, `LunarTransferPlannerTests`, `visual_playtest.sh --lunar-map` |
+| **Gap** | Closed. The map shows the Earth-relative conic, lunar SOI, focused perilunium and TLI/LOI dossier. A 4.5 km/s practical-window guard prevents datum/plane mismatches from being presented as valid transfers |
 | **Realism filter** | `LunarTransferPlannerTests`: Apollo-class TLI 2.8–3.5 km/s, lunar insertion estimate 0.7–1.5 km/s, SOI arrival 2–3.5 days and safe lunar perilunium |
 
 ### NV-02 — Second Hohmann burn not orchestrated
@@ -67,6 +69,7 @@ instead of its generic heliocentric Hohmann branch.
   `LunarTransferPlanner.cs`, `LunarTransferPlannerTests.cs`
 - On-rails SOI: `Universe.cs:381+`, `NavigationRegressionTests.cs`
 - Map execution: `MapViewController.cs`, `AutopilotController.cs`
+- Lunar map framebuffer acceptance: `tools/visual_playtest.sh --lunar-map`
 
 ---
 
