@@ -40,4 +40,44 @@ public static class VehicleVisualPhysics
         double thermal = System.Math.Clamp((hottestSkinK - 750.0) / 1_250.0, 0.0, 1.0);
         return System.Math.Max(flux, thermal);
     }
+
+    /// <summary>
+    /// Phase-aware multiplier for plasma alpha/timing (oleada visual A). Soft onset at
+    /// ENTRY, full at PEAK_HEATING, quick fade through aero/final descent. Unknown /
+    /// orbital phases leave flux-driven intensity unchanged (×1).
+    /// </summary>
+    public static double ReentryPlasmaPhaseScale(string? missionPhase)
+    {
+        if (string.IsNullOrEmpty(missionPhase)) return 1.0;
+        return missionPhase.ToUpperInvariant() switch
+        {
+            "ENTRY"         => 0.55,
+            "PEAK_HEATING"  => 1.00,
+            "AERO_DESCENT"  => 0.42,
+            "FINAL_DESCENT" => 0.12,
+            "RETRO_BURN"    => 0.08,
+            "LANDED" or "CRASHED" => 0.0,
+            _               => 1.0,
+        };
+    }
+
+    /// <summary>
+    /// Combines flux intensity [0,1] with <see cref="ReentryPlasmaPhaseScale"/>. Peak
+    /// heating keeps the raw intensity; entry uses a soft power curve so plasma grows in.
+    /// </summary>
+    public static double ReentryPlasmaVisualIntensity(double fluxIntensity01, string? missionPhase)
+    {
+        if (!double.IsFinite(fluxIntensity01)) return 0.0;
+        double flux = System.Math.Clamp(fluxIntensity01, 0.0, 1.0);
+        string phase = missionPhase?.ToUpperInvariant() ?? "";
+        double scaled = phase switch
+        {
+            // Soft rise: intensity^1.35 early so plasma does not pop at interface.
+            "ENTRY" => System.Math.Pow(flux, 1.35) * ReentryPlasmaPhaseScale(phase),
+            // Exit of heating: square-root so residual glow lingers briefly as flux drops.
+            "AERO_DESCENT" => System.Math.Sqrt(flux) * ReentryPlasmaPhaseScale(phase),
+            _ => flux * ReentryPlasmaPhaseScale(phase),
+        };
+        return System.Math.Clamp(scaled, 0.0, 1.0);
+    }
 }

@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Navigation;
 
 /// <summary>
 /// Shared maneuver-planning model. Holds a single maneuver node (true anomaly +
@@ -93,6 +94,36 @@ public sealed class ManeuverPlanner
     {
         HasNode = false;
         DvPrograde = DvNormal = DvRadial = 0.0;
+    }
+
+    /// <summary>
+    /// Map preset: place a retrograde deorbit node that lowers periapsis into the
+    /// atmosphere (default Pe altitude 80 km). Near-circular orbits (e &lt; 0.01) burn
+    /// immediately at the current true anomaly; otherwise the node is at apoapsis (ν=π).
+    /// Requires a prior <see cref="SetOrbit"/> snapshot. Returns false if no orbit.
+    /// </summary>
+    public bool PlanDeorbit(CelestialBody body, double targetPeAltitudeM = 80_000.0)
+    {
+        if (!HasOrbit || body == null) return false;
+
+        // Circular LEO: burn now so the player does not wait half a period for apoapsis.
+        // Eccentric: burn at apoapsis — that is where lowering Pe is cheapest.
+        double nu = Eccentricity < 0.01 ? TrueAnomalyNow : System.Math.PI;
+        CreateNodeAt(nu);
+
+        double radiusAtNode = PositionAt(NodeTrueAnomaly).Magnitude;
+        double targetPeRadius = body.Radius + targetPeAltitudeM;
+        double atmoMax = body.Atmosphere != null
+            ? body.Atmosphere.MaxAltitude
+            : double.NaN;
+
+        double dv = DeorbitPlanner.ComputeRetroDeltaV(
+            Mu, radiusAtNode, targetPeRadius, body.Radius, atmoMax);
+
+        DvPrograde = -dv;
+        DvNormal   = 0.0;
+        DvRadial   = 0.0;
+        return dv > 0.0;
     }
 
     // ── Perifocal sampling for drawing ────────────────────────────────────────

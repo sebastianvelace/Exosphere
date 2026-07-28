@@ -30,4 +30,29 @@ public sealed class VehicleVisualPhysicsTests
         if (radial < -20.0 && flux >= VehicleVisualPhysics.VisibleReentryFluxWm2) Assert.True(glow > 0.0);
         else Assert.Equal(0.0, glow);
     }
+
+    [Fact]
+    public void PlasmaPhaseScalePeaksAtPeakHeatingAndFadesThroughAero()
+    {
+        Assert.Equal(1.00, VehicleVisualPhysics.ReentryPlasmaPhaseScale("PEAK_HEATING"), 6);
+        Assert.True(VehicleVisualPhysics.ReentryPlasmaPhaseScale("ENTRY")
+            < VehicleVisualPhysics.ReentryPlasmaPhaseScale("PEAK_HEATING"));
+        Assert.True(VehicleVisualPhysics.ReentryPlasmaPhaseScale("AERO_DESCENT")
+            < VehicleVisualPhysics.ReentryPlasmaPhaseScale("ENTRY"));
+        Assert.Equal(0.0, VehicleVisualPhysics.ReentryPlasmaPhaseScale("LANDED"), 6);
+    }
+
+    [Fact]
+    public void PlasmaVisualIntensitySoftensEntryAndSurvivesAeroWithFlux()
+    {
+        double midFlux = 0.50;
+        double entry = VehicleVisualPhysics.ReentryPlasmaVisualIntensity(midFlux, "ENTRY");
+        double peak  = VehicleVisualPhysics.ReentryPlasmaVisualIntensity(midFlux, "PEAK_HEATING");
+        double aero  = VehicleVisualPhysics.ReentryPlasmaVisualIntensity(midFlux, "AERO_DESCENT");
+
+        Assert.True(entry < peak, $"entry {entry} should be softer than peak {peak}");
+        Assert.True(aero < peak, $"aero {aero} should be below peak {peak}");
+        Assert.True(entry > 0.05);
+        Assert.InRange(peak, 0.49, 0.51);
+    }
 }

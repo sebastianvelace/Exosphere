@@ -60,8 +60,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
    - Grid fins close-up V1 implementado con placa trapezoidal, hinge/lattice y diagonales.
    - Starship close-up cues V1 implementado con access panels, vent/drain ports,
      markings discretos, flap leading edges y tile seams.
-   - Siguiente: comparacion fina con referencias reales: proporciones de flaps/nariz,
-     densidad de tiles, ubicacion de markings y variacion de acero.
+   - Proporciones finas flaps/nariz V1.1 ✅ (`feat/visual-realism-a`): forward cortos,
+     aft elevons largos, tip redondo, tile seams densos. Pendiente: compare IFT lado-a-lado.
    - Startup/ramp y hot-staging VFX implementados y verificados con trigger local multiframe.
    - Pluma de vacio ahora atenúa smoke/soot con expansion alta.
    - Siguiente: captura de hot-staging en ascenso real, comparacion contra referencia y validacion orbital de pluma vacio limpia.
@@ -69,7 +69,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
    - Primera pasada de glow localizado en nose, belly y flap leading edges ya implementada.
-   - Siguiente: capturas nominal/fallo reales, ajuste de alpha/timing y charring por zonas.
+   - Alpha/timing por fase EDL ✅ (`ReentryPlasmaVisualIntensity`: ENTRY soft → PEAK → AERO fade).
+   - Pendiente: compare IFT captura-a-captura de shock localizado.
 
 3. **Entorno y camaras**
    - Pad costero ya tiene primera pasada visual.
@@ -106,10 +107,11 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Reentry Fisico/Visual
 
-- Per-piece structural breakup.
+- Per-piece structural breakup ✅ (oleada B1: overloaded joints → debris vessels).
+- Control-loss consequences ✅ (`ControlAuthority`: dead-stick / flaps-only / engines-only; HUD + EDL/ascent abort).
 - Perdida de control si falla una pieza critica.
-- Lift/AoA en sim ✅ (R6); guiado EDL con lift (α<90°) sigue pendiente en game-layer.
-- Decaimiento orbital LEO ✅ (R7 termosfera residual); on-rails/warp no decae (limite conocido).
+- Lift/AoA en sim ✅ (R6); guiado EDL lift-up ~70° ✅ (`EDLController` + `ComputeLiftUpEntryAxis`).
+- Decaimiento orbital LEO ✅ (R7 termosfera residual + B3: warp/on-rails ya no congela LEO).
 
 ### Interplanetario
 
@@ -119,7 +121,12 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Gameplay
 
-- Save/load de mision.
+- Save/load de mision (oleada C1) — `MissionSaveSerializer` + F5/F9 quicksave +
+  MainMenu Continue; mid-orbit roundtrip tested.
+- Flujo jugable orbita → deorbit → ENTRY (oleada C2) ✅ — mapa `[B]`
+  (`DeorbitPlanner` + `ManeuverPlanner.PlanDeorbit`); EDL arma `ENTRY` sin teleport demo.
+- Cues/track de fases EDL (oleada C3) ✅ — `MissionPhaseTrack` + HUD dots
+  ORBIT→COAST→RETRO→ENTRY…; cue “ENTRY INTERFACE in ~Xm” / “DEORBIT BURN”.
 - Misiones/objetivos de progresion.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.

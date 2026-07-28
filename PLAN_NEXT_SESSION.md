@@ -129,23 +129,15 @@ Each item: **evidence → owner files → acceptance (xvfb) → realism rational
 
 Each item: **evidence → owner files → acceptance (xUnit + telemetry) → realism rationale**.
 
-### P-P1. Landing damage threshold harmonization (R9 tail)
+### P-P1. Landing damage threshold harmonization (R9 tail) — DONE
 
-| | |
-| --- | --- |
-| **Evidence** | `EDLController.TouchdownVel = 3.0`; R13 telemetry ~0–1.5 m/s. `Universe.SoftLandingThreshold` still 5.0 m/s (`.atl/DELEGATION_JUL2026.md:94-95`). |
-| **Owner** | `ExosphereSimulation/Universe.cs`, `scripts/EDLController.cs` |
-| **Acceptance** | Touchdown at 2 m/s = soft; 4 m/s = damage/destruct. xUnit or harness confirms; R13 EDL telemetry unchanged for nominal profile. |
-| **Realism feel** | Starship legs are not magic — a hard splash teaches consequences without arcade forgiveness. |
+`Universe.SoftLandingThreshold` now aliases `AscentStagingPolicy.SoftLandingSpeedMps = 3.0`.
+Covered by `SoftLandingThresholdTests`.
 
-### P-P2. EDL lift-aware guidance (R6 game-layer)
+### P-P2. EDL lift-aware guidance (R6 game-layer) — DONE
 
-| | |
-| --- | --- |
-| **Evidence** | Lift exists in sim (`ComputeLift`, L/D ≈ 0.3 at α=70°) but EDL commands belly-flop ~90° ⇒ lift ≈ 0 (`PLAN_REALISM.md:34-36`). |
-| **Owner** | `scripts/EDLController.cs` only — do not retune `ThermalModel` for VFX |
-| **Acceptance** | Optional α<90° segments during high-altitude glide; telemetry shows cross-range change; R13 nominal belly-flop profile preserved when lift disabled. New test or harness documents glide segment. |
-| **Realism feel** | Real Starship uses body lift for range — the player feels the ship is a lifting body, not a falling cylinder. |
+`EDLController` aims via `AerodynamicsModel.ComputeLiftUpEntryAxis` (~70° AoA lift-up)
+instead of pure broadside. Do not reopen without regression proof against R13 telemetry.
 
 ### P-P3. Long-cruise / warp decay documentation + test
 
@@ -165,14 +157,15 @@ Each item: **evidence → owner files → acceptance (xUnit + telemetry) → rea
 | **Acceptance** | xUnit: Earth→Moon transfer Δv and time within ~10% of patched-conic reference; existing Hohmann tests still pass. |
 | **Realism feel** | Going to the Moon feels like a real transfer window, not a straight line cheat. |
 
-### P-P5. Structural break-up completion (P2-C scaffold)
+### P-P5. Structural break-up completion (P2-C scaffold) — DONE
 
 | | |
 | --- | --- |
-| **Evidence** | `Universe.cs:208-211` computes loads but discards `FindBreakingJoints` result (`.atl/OVERENGINEERING_AUDIT_JUL2026.md:66-71`). |
+| **Evidence** | `Universe.TryStructuralBreakup` consumes `FindBreakingJoints`; `PartGraph.SplitAtJoint` / `Vessel.BreakAtJoint` spawn debris; `StructuralBreakupTests`. |
 | **Owner** | `ExosphereSimulation/Physics/StressSolver.cs`, `Universe.cs`, `ReentryBreakupController.cs` |
 | **Acceptance** | Overload breaks joints; VFX + vessel destruction; xUnit on joint break threshold; R13 nominal EDL unaffected. |
 | **Realism feel** | Max-Q and bad reentry can tear the stack — failure is physical, not a red screen. |
+| **Status** | **DONE** (oleada B1). Control-loss consequences still pending. |
 
 ### P-P6. R5 multi-motor model (LARGE — defer unless physics sprint)
 
@@ -188,14 +181,24 @@ Each item: **evidence → owner files → acceptance (xUnit + telemetry) → rea
 
 ## Gameplay Track (Save/Load, VAB, Missions)
 
-### G-P1. Wire SaveSystem to UI + mission persistence
+### G-P1. Wire SaveSystem to UI + mission persistence — DONE
 
 | | |
 | --- | --- |
-| **Evidence** | `SaveSystem.cs` serializes universe to `~/.local/share/Exosphere/saves/` but no menu/HUD wiring (grep: no UI calls). ROADMAP: "Save/load de mision" pending. |
-| **Owner** | `scripts/SaveSystem.cs`, `scripts/UI/*`, `scenes/ui/MainMenu.tscn`, `HUDController.cs` |
-| **Acceptance** | Main menu: New / Continue / Load slot. In-flight quicksave/load (e.g. F5/F9). Reload restores vessel state, time, orbit within 1 m/s. Play harness: save mid-orbit → load → same apoapsis. |
+| **Evidence** | `MissionSaveSerializer` in `ExosphereSimulation/Persistence`; `SaveSystem` wraps I/O + phase/warp; MainMenu Continue + HUD F5/F9; `MissionSaveLoadTests` mid-orbit roundtrip. |
+| **Owner** | `ExosphereSimulation/Persistence/*`, `scripts/SaveSystem.cs`, `MainMenu.cs`, `HUDController.cs`, `SimulationBridge.cs` |
+| **Acceptance** | Main menu Continue when slots exist. In-flight F5/F9. Reload restores vessel kinematics, fuel, time, phase; ActiveVessel Id stable. |
 | **Realism feel** | Real missions span hours — the player can pause life and resume the same orbit tomorrow. |
+
+### G-P1b. EDL mission-phase UX cues — DONE (C3)
+
+| | |
+| --- | --- |
+| **Evidence** | `MissionPhaseTrack` + HUD dots ORBIT→COAST→RETRO_BURN→ENTRY…; actionable cue “ENTRY INTERFACE in ~Xm” / “DEORBIT BURN”; event log + light SFX for ENTRY/RETRO. `MissionPhaseTrackTests`. |
+| **Owner** | `ExosphereSimulation/Flight/MissionPhaseTrack.cs`, `scripts/HUDController.cs`, `MissionManager.cs`, `AudioManager.cs` |
+| **Acceptance** | Phase track lights deorbit/EDL slots; COAST driven by AutopilotController (unchanged); THERMAL panel untouched. |
+| **Realism feel** | After SECO the player still sees a mission arc through entry — not a silent coast into fire. |
+| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. **Remaining:** IFT reference compare, R5. |
 
 ### G-P2. VAB pre-launch validation pass
 
@@ -210,9 +213,9 @@ Each item: **evidence → owner files → acceptance (xUnit + telemetry) → rea
 
 | | |
 | --- | --- |
-| **Evidence** | `MissionManager.cs` tracks phases (LIFTOFF, MAX_Q, SEPARATION, ORBIT, ENTRY); no win/lose objectives. |
+| **Evidence** | `MissionManager.cs` tracks phases (LIFTOFF…ORBIT…ENTRY); C2 now reaches ENTRY via map deorbit. Still no win/lose objectives. |
 | **Owner** | `scripts/MissionManager.cs`, `HUDController.cs` |
-| **Acceptance** | One scripted mission: "Reach 150 km orbit and deorbit to soft landing." Success/fail banner with phase checklist. Telemetry log exported on completion. |
+| **Acceptance** | One scripted mission: "Reach 150 km orbit and deorbit to soft landing." Success/fail banner with phase checklist. Telemetry log exported on completion. *(Prerequisite path ORBIT→deorbit→ENTRY is C2 DONE.)* |
 | **Realism feel** | A mission has a beginning, middle, and end — like Flight 7's objective, not sandbox forever. |
 
 ### G-P4. Systems tied to mission phases (R11)

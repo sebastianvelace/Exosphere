@@ -55,34 +55,48 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/godot
-          key: godot-mono-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux-x86_64
+          # binv2: archive folder is *_linux_x86_64 but the binary is *_linux.x86_64
+          key: godot-mono-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux-x86_64-binv2
 
       # Descarga oficial: github.com/godotengine/godot releases (mono, linux x86_64).
       # Official download from the godotengine/godot releases (mono, linux x86_64).
+      # Zip layout: Godot_vX.Y.Z-stable_mono_linux_x86_64/Godot_vX.Y.Z-stable_mono_linux.x86_64
       - name: Download Godot (mono, linux x86_64)
         if: steps.cache-godot.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
           tag="${GODOT_VERSION}-${GODOT_RELEASE}"
-          base="Godot_v${tag}_mono_linux_x86_64"
-          url="https://github.com/godotengine/godot/releases/download/${tag}/${base}.zip"
+          folder="Godot_v${tag}_mono_linux_x86_64"
+          binary="Godot_v${tag}_mono_linux.x86_64"
+          url="https://github.com/godotengine/godot/releases/download/${tag}/${folder}.zip"
           mkdir -p ~/godot
           echo "Downloading $url"
           curl -fL --retry 3 -o /tmp/godot.zip "$url"
           unzip -q /tmp/godot.zip -d ~/godot
-          # El zip extrae a una carpeta homónima que contiene el ejecutable.
-          # The zip extracts to a same-named folder containing the executable.
-          chmod +x ~/godot/"${base}"/"${base}".x86_64
+          bin="$HOME/godot/${folder}/${binary}"
+          if [ ! -f "$bin" ]; then
+            echo "ERROR: expected Godot binary missing after unzip: $bin"
+            find "$HOME/godot" -maxdepth 2 -type f | head -40
+            exit 1
+          fi
+          chmod +x "$bin"
 
       - name: Export GODOT_BIN
         shell: bash
         run: |
           set -euo pipefail
-          base="Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_mono_linux_x86_64"
-          bin="$HOME/godot/${base}/${base}.x86_64"
+          tag="${GODOT_VERSION}-${GODOT_RELEASE}"
+          folder="Godot_v${tag}_mono_linux_x86_64"
+          binary="Godot_v${tag}_mono_linux.x86_64"
+          bin="$HOME/godot/${folder}/${binary}"
           if [ ! -x "$bin" ]; then
-            echo "ERROR: Godot binary not found at $bin"
+            # Fallback: discover any mono linux binary under ~/godot (cache layout drift).
+            bin="$(find "$HOME/godot" -type f -name 'Godot_v*_mono_linux.x86_64' | head -n 1 || true)"
+          fi
+          if [ -z "${bin:-}" ] || [ ! -x "$bin" ]; then
+            echo "ERROR: Godot binary not found under ~/godot"
+            find "$HOME/godot" -maxdepth 2 -type f | head -40
             exit 1
           fi
           echo "GODOT_BIN=$bin" >> "$GITHUB_ENV"

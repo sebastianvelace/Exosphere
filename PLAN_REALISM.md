@@ -24,7 +24,8 @@
   NRLMSISE-00 (actividad solar media) queda dentro de factor ~2-5 entre 140 y 500 km. Solo
   `GetDensity` tiene cola; presión sigue en vacío sobre 140 km y `MaxAltitude` sigue siendo la
   frontera aerodinámica de los controllers. Test de aceptación: órbita circular de 150 km en RK4
-  decae de forma lenta y monótona (`OrbitalDecayTests`). A warp ≥10 el vessel pasa a on-rails
+  decae de forma lenta y monótona (`OrbitalDecayTests`). A warp ≥10 el vessel solo pasa a on-rails
+  fuera de la termosfera residual; dentro de `ThermosphereTopAltitude` se fuerza RK4 (B3)
   (gate `density < 0.01`) y NO decae — limitación documentada.
 
 - **R6 — sustentación de cuerpo con ángulo de ataque (HECHO).** `AerodynamicsModel.ComputeLift`:
@@ -168,7 +169,8 @@ equivocada hace la órbita.
   `Vessel.ComputeDragAt` delega ahora en `AerodynamicsModel` (drag + lift; se eliminó la
   duplicación inline del modelo aero). Sim puro + tests.
 - **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs`, `ExosphereSimulation/Vessel.cs`,
-  tests `AerodynamicLiftTests.cs`. (EDL con α<90° para guiado con lift: pendiente game-layer.)
+  tests `AerodynamicLiftTests.cs`. EDL game-layer lift-up ~70° DONE (`EDLController` +
+  `ComputeLiftUpEntryAxis`).
 - **Aceptación:** ✅ lift ⊥ al flujo hacia el lado del morro, cero axial y de costado puro
   (cilindro simétrico), L/D ≈ 0.3 a α=70° (régimen EDL real); el alcance cambia con la actitud.
 
@@ -183,7 +185,9 @@ equivocada hace la órbita.
   `data/bodies/earth.json`, tests `AtmosphereThermosphereTests.cs`.
 - **Aceptación:** ✅ densidad positiva/continua/monótona en LEO bajo (150/200/400 km), vacío sobre
   1000 km (7 tests). Revisado por `physics-reviewer` en contexto fresco: veredicto CORRECTO.
-- **Nota:** el drag sólo se aplica en RK4 (vessel activo); on-rails/Kepler no decae (límite conocido).
+- **Nota (B3):** `RequiresOffRailsPhysics` fuerza RK4 mientras haya densidad residual bajo
+  `ThermosphereTopAltitude`, así el warp ≥10 ya no congela el lifetime de LEO. Sobre el tope
+  termosférico siguen rails/Kepler sin decay espurio.
   Comentario de `AscentController.cs` de parking orbit actualizado (ya no dice "no decae").
 
 ---
@@ -230,7 +234,7 @@ equivocada hace la órbita.
 
 ## Orden de ejecucion actual
 1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
-2. Backlog fisico real pendiente: R5 multi-motor. (R6 lift/AoA ✅ y R7 termosfera/decay ✅ HECHOS)
+2. Backlog fisico real pendiente: R5 multi-motor. (R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
 3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5.
 4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 

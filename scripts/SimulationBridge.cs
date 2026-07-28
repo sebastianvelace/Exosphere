@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
@@ -217,6 +218,15 @@ public partial class SimulationBridge : Node
         }
 
         Universe.Tick(delta);
+        SyncStructuralDebrisRenderers();
+
+        // Hot-stage overlap finished in sim time → mechanical separation this frame.
+        if (av != null && av.HotStageOverlapCompletedPending)
+        {
+            av.HotStageOverlapCompletedPending = false;
+            TriggerStaging();
+            av = ActiveVessel;
+        }
 
         // ── Ignition ramp: sube throttle y suelta hold-down cuando TWR > 1.02 ──────
         if (_ignitionActive && av != null)
@@ -580,6 +590,27 @@ public partial class SimulationBridge : Node
     }
 
     /// <summary>
+    /// Rebuilds the active vessel mesh after a mission load (Id and part graph may be new).
+    /// </summary>
+    public void RebuildActiveVesselRenderer()
+    {
+        var vessel = ActiveVessel;
+        if (vessel == null) return;
+
+        var vesselsNode = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
+        if (_vesselRenderer == null && vesselsNode != null)
+        {
+            _vesselRenderer = new VesselRenderer { Name = "StarshipRenderer" };
+            vesselsNode.AddChild(_vesselRenderer);
+        }
+
+        _vesselRenderer?.BuildFromVessel(vessel);
+        var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        if (_vesselRenderer != null)
+            fo?.RegisterVesselNode(vessel.Id, _vesselRenderer);
+    }
+
+    /// <summary>
     /// Places an externally constructed vessel on the active launch pad and makes it the
     /// controlled vessel. Used by the VAB/export flow; keeps the same ground-hold contract
     /// as the default Starship stack.
@@ -666,9 +697,25 @@ public partial class SimulationBridge : Node
         v.Throttle = System.Math.Max(v.Throttle - 0.5 * dt, 0.0);
     }
 
+    /// <summary>
+    /// Starts the Flight 7 dual-thrust hot-stage window. Ship engines join the burning set
+    /// while Super Heavy remains attached; mechanical stage fires when the window expires.
+    /// </summary>
+    public void BeginHotStageOverlap(double durationSeconds = -1.0)
+    {
+        if (ActiveVessel == null) return;
+        if (ActiveVessel.IsHotStageOverlapping) return;
+        double duration = durationSeconds > 0.0
+            ? durationSeconds
+            : AscentStagingPolicy.HotStageOverlapSeconds;
+        ActiveVessel.BeginHotStageOverlap(duration);
+    }
+
     public void TriggerStaging()
     {
         if (ActiveVessel == null) return;
+        // Instant stage (manual / post-overlap) cancels any remaining overlap cleanly.
+        ActiveVessel.HotStageOverlapCompletedPending = false;
         var debris = ActiveVessel.Stage();
         if (debris == null) return;
 
@@ -690,21 +737,51 @@ public partial class SimulationBridge : Node
 
         // Rebuild active vessel renderer: SH is now gone → shows standalone Starship
         _vesselRenderer?.BuildFromVessel(ActiveVessel);
-
-        // Spawn a renderer for the SH debris
-        var fo          = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
-        var vesselsNode = GetTree().Root.FindChild("Vessels",        true, false) as Node3D;
-        if (vesselsNode != null)
-        {
-            var debrisRenderer = new VesselRenderer();
-            debrisRenderer.Name = "SHDebris_" + debris.Id[..8];
-            vesselsNode.AddChild(debrisRenderer);
-            debrisRenderer.BuildFromVessel(debris);
-            fo?.RegisterVesselNode(debris.Id, debrisRenderer);
-        }
+        SpawnDebrisRenderer(debris, "SHDebris_");
 
         EmitSignal(SignalName.VesselStaged, debris.Id);
         MissionManager.Instance?.NotifyStaged();
+    }
+
+    /// <summary>
+    /// After each sim tick, spawn renderers for vessels created by structural breakup
+    /// (overload joints). Staging debris is registered in <see cref="TriggerStaging"/>
+    /// and is not listed in the structural pending drain.
+    /// </summary>
+    private void SyncStructuralDebrisRenderers()
+    {
+        var pending = Universe.DrainPendingStructuralDebris();
+        if (pending.Count == 0) return;
+
+        foreach (var debris in pending)
+            SpawnDebrisRenderer(debris, "StructuralDebris_");
+
+        // Parent stack lost parts — rebuild so meshes match the remaining graph.
+        if (ActiveVessel != null)
+            _vesselRenderer?.BuildFromVessel(ActiveVessel);
+
+        foreach (var debris in pending)
+            EmitSignal(SignalName.VesselStaged, debris.Id);
+
+        if (ActiveVessel != null
+            && ActiveVessel.IsDestroyed
+            && ActiveVessel.DestructionCause == VesselDestructionCause.StructuralBreakup)
+        {
+            EmitSignal(SignalName.VesselDestroyed, ActiveVessel.Id);
+        }
+    }
+
+    private void SpawnDebrisRenderer(Vessel debris, string namePrefix)
+    {
+        var fo          = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        var vesselsNode = GetTree().Root.FindChild("Vessels",        true, false) as Node3D;
+        if (vesselsNode == null) return;
+
+        var debrisRenderer = new VesselRenderer();
+        debrisRenderer.Name = namePrefix + debris.Id[..8];
+        vesselsNode.AddChild(debrisRenderer);
+        debrisRenderer.BuildFromVessel(debris);
+        fo?.RegisterVesselNode(debris.Id, debrisRenderer);
     }
 
     public void SetTimeScale(double scale) => Universe.TimeScale = scale;
@@ -829,6 +906,31 @@ public partial class SimulationBridge : Node
 
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
         GD.Print($"[DEBUG] JumpToOrbit -> {altitude / 1000:F0} km circular, v={vCirc:F0} m/s");
+    }
+
+    /// <summary>
+    /// Map-facing helper: plan a retrograde deorbit burn on the orbital-map planner that
+    /// lowers periapsis into the atmosphere (default Pe altitude 80 km). Does not execute
+    /// the burn — arm with Enter on the map. Leaves <see cref="BeginReentryDemonstration"/>
+    /// alone (that remains a teleport demo).
+    /// </summary>
+    public bool PlanDeorbitForActiveVessel(double targetPeAltitudeM = 80_000.0)
+    {
+        var map = MapViewController.Instance;
+        var vessel = ActiveVessel;
+        var earth = Universe.GetBody("earth");
+        if (map == null || vessel == null || earth == null || vessel.IsDestroyed)
+            return false;
+
+        var relPos = vessel.Position - earth.Position;
+        var relVel = vessel.Velocity - earth.Velocity;
+        map.Planner.SetOrbit(relPos, relVel, earth.GM);
+        if (!map.Planner.PlanDeorbit(earth, targetPeAltitudeM))
+            return false;
+
+        GD.Print($"[Bridge] Deorbit planned: Δv={map.Planner.DeltaVMagnitude:F1} m/s " +
+                 $"(Pe target {targetPeAltitudeM / 1000.0:F0} km)");
+        return true;
     }
 
     /// DEBUG: jump to a ~300 km circular orbit around an arbitrary body (e.g. the transfer

@@ -6,20 +6,20 @@ using System.Linq;
 using Exosphere.Simulation.Physics;
 
 /// <summary>
-/// Visual break-up sequence for a vessel that burns up on re-entry. When the active
-/// vessel becomes <see cref="Exosphere.Simulation.Vessel.IsDestroyed"/> AND the cause
-/// is thermal (a part has burned through, or the worst heat ratio crossed 1.0), this
-/// spawns a shower of glowing, tumbling debris fragments that fan out along the airflow
-/// and fade — instead of the model simply freezing in place.
+/// Visual break-up sequence when the active vessel is destroyed by re-entry heating
+/// or catastrophic structural overload. On the rising edge of
+/// <see cref="Exosphere.Simulation.Vessel.IsDestroyed"/> with a thermal or structural
+/// cause, this spawns a shower of glowing, tumbling debris fragments that fan out
+/// along the airflow and fade — instead of the model simply freezing in place.
 ///
 /// The simulation owns the destruction decision (Universe sets IsDestroyed); this
 /// controller only READS the vessel state on the rising edge and plays the effect.
-/// A pure thermal gate keeps a normal touchdown (the surface "soft-rest" also flips
-/// IsDestroyed) from ever triggering a fireball.
+/// Ground impact (soft-rest / hard crash) does NOT trigger a fireball. Partial
+/// structural splits that leave the active vessel alive are rendered via staging
+/// debris spawn in <c>SimulationBridge</c>, not here.
 ///
-/// Secuencia visual de breakup cuando la nave se quema en reentrada: lee IsDestroyed +
-/// causa térmica y dispara fragmentos encendidos que se dispersan y se apagan. Solo LEE
-/// el sim; la destrucción la decide Universe.
+/// Secuencia visual de breakup: lee IsDestroyed + causa térmica/estructural y dispara
+/// fragmentos. Solo LEE el sim; la destrucción la decide Universe.
 /// </summary>
 [GlobalClass]
 public partial class ReentryBreakupController : Node3D
@@ -61,7 +61,7 @@ public partial class ReentryBreakupController : Node3D
         if (vessel != null && !_played)
         {
             bool destroyedNow = vessel.IsDestroyed;
-            if (destroyedNow && !_wasDestroyed && IsThermalCause(vessel))
+            if (destroyedNow && !_wasDestroyed && ShouldPlayBreakup(vessel))
             {
                 SpawnBreakup(vessel);
                 _played = true;
@@ -73,11 +73,14 @@ public partial class ReentryBreakupController : Node3D
     }
 
     // ── Cause discrimination ──────────────────────────────────────────────
-    // Only a thermal death plays the fireball. A part that has burned through, or a
-    // worst-case heat ratio at/over 1.0, marks re-entry incineration; a plain ground
-    // impact (also flips IsDestroyed via the surface soft-rest) does NOT qualify.
-    private static bool IsThermalCause(Exosphere.Simulation.Vessel vessel)
+    // Thermal incineration or structural total-loss plays the fireball. A plain
+    // ground impact (soft-rest / hard crash) does NOT qualify.
+    private static bool ShouldPlayBreakup(Exosphere.Simulation.Vessel vessel)
     {
+        if (vessel.DestructionCause == Exosphere.Simulation.VesselDestructionCause.StructuralBreakup)
+            return true;
+        if (vessel.DestructionCause == Exosphere.Simulation.VesselDestructionCause.ThermalBreakup)
+            return true;
         foreach (var part in vessel.Parts.Parts)
             if (part.IsThermallyBurned) return true;
         return StressSolver.WorstHeatRatio(vessel.Parts) >= 1.0;

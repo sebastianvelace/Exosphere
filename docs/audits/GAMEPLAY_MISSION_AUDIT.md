@@ -139,13 +139,13 @@
 | **Recommendation** | Either implement minimal script host bound to `SimulationBridge` or move script to documented pseudocode / retire folder. |
 | **Owner** | New `scripts/ScriptHost.cs` or docs cleanup |
 
-### G-011 — `MissionPhase.COAST` defined but never driven (P2)
+### G-011 — `MissionPhase.COAST` defined but never driven (P2) — partially closed by C2/C3
 
 | | |
 |---|---|
-| **Evidence** | `MissionPhase.COAST` in enum (`MissionManager.cs:18`). `MissionManager._Process` never sets it. `AscentController` uses internal `Phase.Coast` for banner only (`AscentController.cs:489`). HUD phase track omits COAST (`HUDController.cs:74-78`). |
-| **Gap** | Coast-to-apoapsis is invisible to mission FSM/objectives. |
-| **Recommendation** | Set `COAST` between MECO/SEPARATION and circularization; tie objective checkpoint. |
+| **Evidence** | C2: `AutopilotController` sets `COAST` on deorbit arm and post-burn. C3: HUD track includes COAST + cues. Ascent coast-to-apoapsis still uses `AscentController` internal banner only. |
+| **Gap** | Coast-to-apoapsis between MECO and circularization remains invisible to mission FSM. |
+| **Recommendation** | Optionally set `COAST` between MECO/SEPARATION and circularization; tie objective checkpoint. |
 | **Owner** | `MissionManager.cs`, `AscentController.cs` |
 
 ### G-012 — Constructed craft spawn always boots default stack first (P2)

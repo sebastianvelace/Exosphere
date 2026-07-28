@@ -65,7 +65,9 @@ public sealed class WarpPhysicsParityTests
         universe.AddBody(earth);
         universe.AddVessel(vessel);
 
-        Assert.False(universe.RequiresOffRailsPhysics(vessel));
+        // 300 km still sits inside Earth's residual thermosphere, so LEO drag keeps the
+        // vessel off rails (B3); bounded-warp is redundant but still true.
+        Assert.True(universe.RequiresOffRailsPhysics(vessel));
         Assert.True(universe.RequiresBoundedWarpPropagation(vessel));
     }
 

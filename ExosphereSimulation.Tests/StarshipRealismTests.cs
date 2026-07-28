@@ -309,10 +309,11 @@ public sealed class StarshipRealismTests
     private static Vessel VesselWithPointMass(double mass, Vector3d position)
     {
         var vessel = new Vessel { Position = position };
+        // Command root so Tick retains RCS attitude authority (structure-only = dead-stick).
         vessel.Parts.SetRoot(new Part(new PartDefinition
         {
             Id = $"mass-{mass}",
-            CategoryStr = "structure",
+            CategoryStr = "command",
             MassDry = mass,
             LengthM = 1.0,
             DiameterM = 1.0,

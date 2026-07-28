@@ -17,12 +17,24 @@ public class Universe
 {
     private readonly List<CelestialBody> _bodies  = new();
     private readonly List<Vessel>        _vessels = new();
+    private readonly List<Vessel>        _pendingStructuralDebris = new();
 
     public IReadOnlyList<CelestialBody> Bodies  => _bodies.AsReadOnly();
     public IReadOnlyList<Vessel>        Vessels => _vessels.AsReadOnly();
 
     /// <summary>Current simulation time (seconds since J2000).</summary>
     public double CurrentTime { get; private set; } = 0.0;
+
+    /// <summary>
+    /// Restores simulation time from a save. Re-propagates celestial bodies to
+    /// <paramref name="t"/> so vessel relative state matches the saved epoch.
+    /// </summary>
+    public void SetCurrentTime(double t)
+    {
+        CurrentTime = t;
+        if (_bodies.Count > 0)
+            KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime);
+    }
 
     /// <summary>
     /// Simulation time scale.
@@ -96,6 +108,19 @@ public class Universe
         if (_vessels.Any(v => v.Id == vessel.Id && !ReferenceEquals(v, vessel)))
             throw new InvalidOperationException($"Duplicate vessel id '{vessel.Id}'.");
         if (!_vessels.Contains(vessel)) _vessels.Add(vessel);
+    }
+
+    /// <summary>
+    /// Structural-break debris spawned since the last drain. The game layer uses this to
+    /// spawn renderers without double-counting intentional staging debris.
+    /// </summary>
+    public IReadOnlyList<Vessel> DrainPendingStructuralDebris()
+    {
+        if (_pendingStructuralDebris.Count == 0)
+            return System.Array.Empty<Vessel>();
+        var copy = _pendingStructuralDebris.ToList();
+        _pendingStructuralDebris.Clear();
+        return copy;
     }
 
     /// <summary>Removes a vessel from the universe.</summary>
@@ -215,6 +240,14 @@ public class Universe
 
         double density = body.GetAtmosphericDensity(vessel.Position);
         if (density <= 0.0) return false;
+
+        // Residual thermosphere (R7) above MaxAltitude still exerts drag. Analytic rails
+        // ignore that force, so low LEO would become immortal under warp ≥ 10. Keep RK4
+        // while any modeled density remains below ThermosphereTopAltitude.
+        double thermoTop = body.Atmosphere.ThermosphereTopAltitude;
+        if (thermoTop > body.Atmosphere.MaxAltitude && altitude < thermoTop)
+            return true;
+
         double speed = vessel.GetSurfaceVelocity(body).Magnitude;
         double q = 0.5 * density * speed * speed;
         double heatFlux = Physics.ThermalModel.ComputeHeatFlux(
@@ -259,8 +292,9 @@ public class Universe
         // 1. Propagate celestial bodies on Keplerian rails
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
 
-        // 2. Integrate each active vessel with RK4
-        foreach (var vessel in _vessels)
+        // 2. Integrate each active vessel with RK4.
+        // Snapshot the list: structural breakup may AddVessel mid-loop.
+        foreach (var vessel in _vessels.ToList())
         {
             if (vessel.IsDestroyed) continue; // frozen at crash point
 
@@ -336,7 +370,7 @@ public class Universe
             : Vector3d.Zero;
         var nonGrav   = netAccel - gravAccel + contactAccel;
         Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation);
-        _ = Physics.StressSolver.FindBreakingJoints(vessel.Parts).ToList();
+        TryStructuralBreakup(vessel, nonGrav.Magnitude);
 
         double density = refBody.GetAtmosphericDensity(vessel.Position);
         if (density > 0.0 && !vessel.IsGroundHeld)
@@ -360,6 +394,50 @@ public class Universe
         }
 
         HandleSurfaceImpact(vessel, refBody);
+    }
+
+    /// <summary>
+    /// Split at most one overloaded joint per tick (highest load ratio first). Detaches the
+    /// child subtree as debris; only marks the parent vessel destroyed if it loses its root
+    /// or all parts.
+    /// </summary>
+    private void TryStructuralBreakup(Vessel vessel, double nonGravAccelMagnitude)
+    {
+        if (vessel.IsDestroyed || vessel.Parts.Joints.Count == 0) return;
+
+        var breaking = Physics.StressSolver.FindBreakingJoints(vessel.Parts)
+            .OrderByDescending(OverloadRatio)
+            .ToList();
+        if (breaking.Count == 0) return;
+
+        var joint = breaking[0];
+        var debris = vessel.BreakAtJoint(joint);
+        if (debris == null) return;
+
+        AddVessel(debris);
+        _pendingStructuralDebris.Add(debris);
+
+        bool lostRoot = vessel.Parts.Root == null
+            || vessel.Parts.Parts.Count == 0
+            || !vessel.Parts.Parts.Contains(vessel.Parts.Root);
+        if (lostRoot)
+        {
+            vessel.IsDestroyed = true;
+            vessel.DestructionCause = VesselDestructionCause.StructuralBreakup;
+            vessel.CrashImpactSpeed = System.Math.Max(vessel.CrashImpactSpeed, nonGravAccelMagnitude);
+            vessel.CrashSimPosition = vessel.Position;
+        }
+    }
+
+    private static double OverloadRatio(Parts.Joint joint)
+    {
+        double tensile = joint.TensileStrength > 0.0
+            ? joint.CurrentTensileLoad / joint.TensileStrength
+            : 0.0;
+        double shear = joint.ShearStrength > 0.0
+            ? joint.CurrentShearLoad / joint.ShearStrength
+            : 0.0;
+        return System.Math.Max(tensile, shear);
     }
 
     private static void HandleSurfaceImpact(Vessel vessel, CelestialBody refBody)
@@ -390,7 +468,7 @@ public class Universe
         // All celestial bodies on rails
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
 
-        foreach (var vessel in _vessels)
+        foreach (var vessel in _vessels.ToList())
         {
             if (vessel.IsDestroyed) continue; // frozen at crash point
 

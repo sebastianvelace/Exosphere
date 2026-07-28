@@ -337,6 +337,16 @@ public partial class AscentController : Control
             }
         }
 
+        if (vessel.StructuralControlLost)
+        {
+            _active = false;
+            _assist = false;
+            vessel.Throttle = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            QueueRedraw();
+            return;
+        }
+
         if (warp != universe.TimeScale) universe.TimeScale = warp;
         CommandAttitude(vessel, dir);
         vessel.Throttle        = throttle;
@@ -358,6 +368,13 @@ public partial class AscentController : Control
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
         if (vessel == null || universe == null) { DisengageAssist(); return; }
+        if (vessel.StructuralControlLost)
+        {
+            DisengageAssist();
+            vessel.Throttle = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            return;
+        }
 
         var body = universe.GetDominantBody(vessel.Position);
         Vector3d rel  = vessel.Position - body.Position;
@@ -470,7 +487,8 @@ public partial class AscentController : Control
                     _mecoStaged, sh != null, surfSpeed, _alt, frac))
             {
                 MissionManager.Instance?.EnterPhase(MissionPhase.MECO);
-                bridge.TriggerStaging();   // hot-stage: drop SH; Starship continues the insertion
+                // Dual-thrust window: light Ship while SH is still attached, then separate.
+                bridge.BeginHotStageOverlap();
                 _mecoStaged = true;
             }
             return;

@@ -1,6 +1,8 @@
 namespace Exosphere.Game;
 
 using Godot;
+using System.Linq;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Presentation;
 
@@ -84,16 +86,12 @@ public partial class HUDController : Control
     private FlightHudSnapshot? _snapshot;
     private MissionPhase _lastPhase = MissionPhase.PRE_LAUNCH;
     private bool     _maxqSeen;
+    private bool     _pastEntryInterface;   // latch: RETRO_BURN after ENTRY → landing slot
     private readonly System.Collections.Generic.List<string> _events = new();
 
+    /// <summary>Dot track mirrors <see cref="MissionPhaseTrack.Sequence"/> (includes COAST + RETRO_BURN).</summary>
     private static readonly MissionPhase[] PhaseSequence =
-    {
-        MissionPhase.COUNTDOWN, MissionPhase.LIFTOFF, MissionPhase.ASCENT_SH,
-        MissionPhase.MAX_Q, MissionPhase.MECO, MissionPhase.SEPARATION,
-        MissionPhase.ASCENT_SHIP, MissionPhase.ORBIT, MissionPhase.COAST,
-        MissionPhase.ENTRY, MissionPhase.PEAK_HEATING, MissionPhase.AERO_DESCENT,
-        MissionPhase.FINAL_DESCENT, MissionPhase.LANDED, MissionPhase.CRASHED,
-    };
+        MissionPhaseTrack.Sequence.Select(System.Enum.Parse<MissionPhase>).ToArray();
 
     public override void _Ready()
     {
@@ -541,6 +539,7 @@ public partial class HUDController : Control
         var universe = bridge?.Universe;
         var mission  = MissionManager.Instance;
         if (bridge == null || vessel == null || universe == null) return;
+        var refBody = universe.GetDominantBody(vessel.Position);
 
         // ── Rotation controls ──────────────────────────────────────────────
         double pitchIn = 0, yawIn = 0, rollIn = 0;
@@ -629,6 +628,31 @@ public partial class HUDController : Control
             ? "SUBORBITAL / IMPACT TRAJECTORY"
             : "";
 
+        double peAlt = snapshot.PeriapsisAltitudeM ?? double.NaN;
+        double atmoMax = refBody.Atmosphere?.MaxAltitude ?? double.NaN;
+        double timeToPe = double.NaN;
+        try
+        {
+            var elements = Exosphere.Simulation.OrbitalElements.FromStateVector(
+                vessel.Position - refBody.Position,
+                vessel.Velocity - refBody.Velocity,
+                refBody.GM,
+                refBody.Id,
+                universe.CurrentTime);
+            if (!elements.IsRadial && !elements.IsHyperbolic)
+                timeToPe = MissionPhaseTrack.ApproximateTimeToPeriapsisSec(
+                    elements.SemiMajorAxis,
+                    elements.Eccentricity,
+                    elements.GetMeanAnomaly(
+                        universe.CurrentTime, refBody.GM),
+                    refBody.GM);
+        }
+        catch (System.ArgumentException)
+        {
+            // Presenter values remain authoritative when a radial pad state
+            // cannot produce conventional orbital elements.
+        }
+
         double ts = snapshot.TimeScale;
         if (universe.CurrentTime < bridge.WarpClampReasonUntil && bridge.WarpClampReason != null)
         {
@@ -663,12 +687,15 @@ public partial class HUDController : Control
 
         if (mission != null)
         {
+            UpdateEntryInterfaceLatch(mission.Phase);
             _phaseLabel.Text = FormatPhase(mission.Phase);
             _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(mission.Phase));
             UpdatePhaseTrack(mission.Phase);
             UpdateEventLog(mission.Phase, universe.CurrentTime);
             UpdateCountdown(mission);
             UpdateLaunchPathCallout(mission, bridge, snapshot);
+            UpdateDeorbitEdlCue(mission, peAlt, atmoMax, timeToPe);
+            UpdateControlAuthorityCue(vessel, mission);
             UpdatePadHelp(mission);
         }
         ApplyViewMode(snapshot.ViewMode);
@@ -720,6 +747,90 @@ public partial class HUDController : Control
             : ProcessModeEnum.Disabled;
         if (_engineGrid is CanvasItem engineCanvas) engineCanvas.Visible = exterior;
         if (_navball is CanvasItem navCanvas) navCanvas.Visible = exterior;
+    }
+
+    /// <summary>
+    /// Banner-level control-loss / degraded cue after structural breakup (overrides deorbit line).
+    /// </summary>
+    private void UpdateControlAuthorityCue(
+        Exosphere.Simulation.Vessel vessel, MissionManager mission)
+    {
+        bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
+        if (onPad) return;
+
+        double auth = vessel.ControlAuthorityFactor;
+        if (vessel.StructuralControlLost)
+        {
+            _launchPathLabel.Text = "CONTROL LOST — STRUCTURAL";
+            _launchPathLabel.AddThemeColorOverride("font_color", new Color(1f, 0.25f, 0.22f));
+            return;
+        }
+
+        if (Exosphere.Simulation.Flight.ControlAuthority.IsDegraded(auth))
+        {
+            _launchPathLabel.Text = auth <= Exosphere.Simulation.Flight.ControlAuthority.FlapsOnly + 0.01
+                ? "CONTROL DEGRADED — FLAPS ONLY"
+                : "CONTROL DEGRADED";
+            _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
+        }
+    }
+
+    private void UpdateEntryInterfaceLatch(MissionPhase phase)
+    {
+        if (phase is MissionPhase.PRE_LAUNCH or MissionPhase.ORBIT
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION)
+        {
+            _pastEntryInterface = false;
+            return;
+        }
+
+        if (phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
+            or MissionPhase.AERO_DESCENT or MissionPhase.FINAL_DESCENT
+            or MissionPhase.LANDED)
+        {
+            _pastEntryInterface = true;
+        }
+    }
+
+    /// <summary>
+    /// C3 actionable cue under the phase title for COAST / RETRO_BURN / ORBIT-with-Pe-in-atmo.
+    /// Skipped while pad callouts own <see cref="_launchPathLabel"/>. THERMAL stays on EDL overlay.
+    /// </summary>
+    private void UpdateDeorbitEdlCue(
+        MissionManager mission,
+        double peAltitudeM,
+        double atmosphereMaxAltitudeM,
+        double timeToPeriapsisSec)
+    {
+        bool onPad = mission.Phase is MissionPhase.PRE_LAUNCH
+            or MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
+        if (onPad)
+            return; // UpdateLaunchPathCallout owns the secondary line on the pad.
+
+        bool peInAtmo = MissionPhaseTrack.PeriapsisInAtmosphere(
+            peAltitudeM, atmosphereMaxAltitudeM);
+        string? cue = MissionPhaseTrack.FormatActionableCue(
+            mission.Phase.ToString(),
+            peInAtmo,
+            timeToPeriapsisSec,
+            afterEntryInterface: _pastEntryInterface);
+
+        if (cue == null)
+        {
+            // Clear only when we previously wrote a deorbit/EDL cue (don't blank pad leftovers
+            // after liftoff — those are already cleared by UpdateLaunchPathCallout).
+            if (_launchPathLabel.Text.Contains("ENTRY INTERFACE")
+                || _launchPathLabel.Text.Contains("DEORBIT"))
+                _launchPathLabel.Text = "";
+            return;
+        }
+
+        _launchPathLabel.Text = cue;
+        _launchPathLabel.AddThemeColorOverride("font_color",
+            mission.Phase is MissionPhase.RETRO_BURN or MissionPhase.ENTRY
+                ? WarnCol
+                : Accent);
     }
 
     private void UpdatePadHelp(MissionManager mission)
@@ -856,11 +967,9 @@ public partial class HUDController : Control
 
     private void UpdatePhaseTrack(MissionPhase current)
     {
-        int currentIdx = System.Array.IndexOf(PhaseSequence, current);
-        if (currentIdx < 0 && current == MissionPhase.IGNITION) currentIdx = 0;
-        if (currentIdx < 0 && current == MissionPhase.RETRO_BURN)
-            currentIdx = System.Array.IndexOf(PhaseSequence, MissionPhase.FINAL_DESCENT);
-        if (currentIdx < 0 && current == MissionPhase.PRE_LAUNCH) currentIdx = -1;
+        int currentIdx = MissionPhaseTrack.IndexOf(
+            current.ToString(),
+            afterEntryInterface: _pastEntryInterface && current == MissionPhase.RETRO_BURN);
         for (int i = 0; i < _phaseDots.Count; i++)
         {
             if (currentIdx < 0)        _phaseDots[i].Color = GaugeTrack;
@@ -933,8 +1042,31 @@ public partial class HUDController : Control
                     }
                     GetViewport().SetInputAsHandled();
                     break;
+                case Key.F5:
+                    SaveSystem.SaveGame("quicksave");
+                    PushToast("QUICKSAVE");
+                    GetViewport().SetInputAsHandled();
+                    break;
+                case Key.F9:
+                    if (SaveSystem.LoadGame("quicksave"))
+                        PushToast("QUICKLOAD");
+                    else
+                        PushToast("NO QUICKSAVE");
+                    GetViewport().SetInputAsHandled();
+                    break;
             }
         }
+    }
+
+    private void PushToast(string message)
+    {
+        GD.Print($"[HUD] {message}");
+        var bridge = SimulationBridge.Instance;
+        double t = bridge?.Universe.CurrentTime ?? 0.0;
+        _events.Insert(0, $"{FormatClock(t)}  {message}");
+        if (_events.Count > 5) _events.RemoveAt(_events.Count - 1);
+        if (_eventLog != null)
+            _eventLog.Text = string.Join("\n", _events);
     }
 
     // ── Formatting helpers ──────────────────────────────────────────────────

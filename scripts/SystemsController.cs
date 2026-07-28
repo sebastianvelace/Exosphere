@@ -72,7 +72,9 @@ public partial class SystemsController : Node
 
     private void ApplyGameplayConsequences(Exosphere.Simulation.Vessel vessel)
     {
-        ControlLimited = Power.NoPowerAlert || !Comms.HasSignal || !LifeSupport.CrewAlive;
+        bool structuralLost = vessel.StructuralControlLost;
+        ControlLimited = Power.NoPowerAlert || !Comms.HasSignal || !LifeSupport.CrewAlive
+            || structuralLost;
 
         if (ControlLimited)
         {
@@ -83,6 +85,11 @@ public partial class SystemsController : Node
 
             if (GetTree().Root.FindChild("AutopilotController", true, false) is AutopilotController ap)
                 ap.Disarm();
+
+            // Structural dead-stick: cut commanded throttle so a tumbling wreck does not
+            // keep burning propellant under a stuck autopilot setpoint.
+            if (structuralLost)
+                vessel.Throttle = 0.0;
         }
     }
 

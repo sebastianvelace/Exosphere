@@ -9,6 +9,7 @@ public enum VesselDestructionCause
     None,
     GroundImpact,
     ThermalBreakup,
+    StructuralBreakup,
 }
 
 public class Vessel
@@ -21,6 +22,14 @@ public class Vessel
     public Vessel(string? id = null)
     {
         Id = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString() : id;
+    }
+
+    /// <summary>Creates a vessel with a stable identity for save/load roundtrips.</summary>
+    public static Vessel CreateWithId(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Vessel id must be non-empty.", nameof(id));
+        return new Vessel(id);
     }
 
     // ── Estado cinemático (marco inercial, doble precisión) ───────────────
@@ -38,6 +47,25 @@ public class Vessel
     public double    Throttle      { get; set; }           // [0, 1]
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
+
+    /// <summary>0..1 attitude authority after structural damage (see <see cref="Flight.ControlAuthority"/>).</summary>
+    public double ControlAuthorityFactor => Flight.ControlAuthority.Evaluate(this);
+
+    /// <summary>True when structural damage left the vehicle without a command path.</summary>
+    public bool StructuralControlLost => Flight.ControlAuthority.IsLost(ControlAuthorityFactor);
+
+    // ── Hot-stage overlap (Ship lit while booster still attached) ─────────
+    /// <summary>Sim seconds remaining in the dual-thrust window. Zero when inactive.</summary>
+    public double HotStageOverlapRemaining { get; private set; }
+
+    /// <summary>True while both stage clusters may produce thrust on one attached stack.</summary>
+    public bool IsHotStageOverlapping => HotStageOverlapRemaining > 0.0 || Parts.HotStageOverlapActive;
+
+    /// <summary>
+    /// Set by <see cref="Tick"/> when the overlap timer expires; the game layer should then
+    /// call mechanical stage and clear the flag.
+    /// </summary>
+    public bool HotStageOverlapCompletedPending { get; set; }
 
     // ── Physical landing contact ─────────────────────────────────────────
     private ContactPointDefinition[] _landingContactPoints = [];
@@ -64,6 +92,33 @@ public class Vessel
     public Vector3d CrashSimPosition      { get; set; } = Vector3d.Zero; // sim position of impact
 
     public void ReleaseGroundHold() => IsGroundHeld = false;
+
+    /// <summary>
+    /// Opens the dual-thrust hot-stage window: upper engines join <see cref="Parts.ActiveEngines"/>
+    /// and drain their own tanks while the booster remains attached.
+    /// </summary>
+    public void BeginHotStageOverlap(double durationSeconds)
+    {
+        if (durationSeconds <= 0.0) return;
+        HotStageOverlapRemaining = durationSeconds;
+        Parts.HotStageOverlapActive = true;
+        HotStageOverlapCompletedPending = false;
+    }
+
+    /// <summary>Advances the overlap timer. Returns true the first frame the window just ended.</summary>
+    public bool AdvanceHotStageOverlap(double dt)
+    {
+        if (!Parts.HotStageOverlapActive && HotStageOverlapRemaining <= 0.0)
+            return false;
+
+        HotStageOverlapRemaining -= dt;
+        if (HotStageOverlapRemaining > 0.0) return false;
+
+        HotStageOverlapRemaining = 0.0;
+        Parts.HotStageOverlapActive = false;
+        HotStageOverlapCompletedPending = true;
+        return true;
+    }
 
     /// <summary>
     /// Builds the aggregate foot ring declared by the installed landing-gear part. The current
@@ -347,34 +402,44 @@ public class Vessel
         ApplyThrottle(dt);
 
         Parts.ConsumePropellant(dt, pressure);
+        AdvanceHotStageOverlap(dt);
 
         foreach (var crew in Crew)
             crew.TickEVA(dt);
 
+        // Structural control authority: scale commanded rates after breakup / lost command.
+        double auth = Flight.ControlAuthority.Evaluate(this);
+        if (Flight.ControlAuthority.IsLost(auth))
+        {
+            PitchYawRoll = Vector3d.Zero;
+            SASEnabled = false;
+        }
+
+        var command = PitchYawRoll * auth;
         // Aplicar input de rotación (en espacio local del vessel). El eje longitudinal
         // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
         // pitch → giro local X, yaw → giro local Z, roll → giro local Y.
-        bool hasInput = PitchYawRoll.Magnitude > 0.01;
+        bool hasInput = command.Magnitude > 0.01;
         // Couple the commanded attitude torque to the actual thrust vector. Engines sit
         // below the CoM: +pitch needs -Z deflection; +yaw needs +X deflection. Roll remains
         // differential-cluster torque and has no net lateral force in this aggregate model.
         foreach (var engine in Parts.ActiveEngines)
             engine.GimbalOffset = hasInput
-                ? new Vector3d(PitchYawRoll.Y, 0.0, -PitchYawRoll.X)
+                ? new Vector3d(command.Y, 0.0, -command.X)
                 : Vector3d.Zero;
 
         if (hasInput)
         {
             double pitchYawAuthority = System.Math.Max(
                 ReactionControlAuthority,
-                Parts.GetPitchYawAngularAcceleration(pressure));
+                Parts.GetPitchYawAngularAcceleration(pressure)) * auth;
             double rollAuthority = System.Math.Max(
                 ReactionControlAuthority,
-                Parts.GetRollAngularAcceleration(pressure));
+                Parts.GetRollAngularAcceleration(pressure)) * auth;
             var localAngAccel = new Vector3d(
-                PitchYawRoll.X * pitchYawAuthority,
-                PitchYawRoll.Z * rollAuthority,
-                PitchYawRoll.Y * pitchYawAuthority);
+                command.X * pitchYawAuthority,
+                command.Z * rollAuthority,
+                command.Y * pitchYawAuthority);
             // Convertir de espacio local a mundo
             AngularVelocity = AngularVelocity + Orientation.Rotate(localAngAccel) * dt;
 
@@ -386,7 +451,7 @@ public class Vessel
         }
 
         // SAS: solo amortigua cuando el jugador no está dando input
-        if (SASEnabled && !hasInput)
+        if (SASEnabled && !hasInput && auth > 1e-6)
             AngularVelocity = AngularVelocity * System.Math.Pow(0.005, dt);
 
         // ── Aerodinámica rotacional por torque real ─────────────────────────
@@ -417,14 +482,15 @@ public class Vessel
                 // unpowered entry. Their hinge force scales with q and their physical lever
                 // arm; this replaces the impossible assumption that only lit engines can
                 // hold a lift-producing angle of attack.
-                bool hasBodyFlaps = Parts.Parts.Any(p => p.Definition.Id == "starship_command");
+                bool hasBodyFlaps = Parts.Parts.Any(p =>
+                    p.Definition.Id == "starship_command" && !p.IsBroken);
                 if (hasBodyFlaps && hasInput)
                 {
                     AngularVelocity += AerodynamicsModel.ComputeFlapControlAngularAcceleration(
                         density,
                         surfVel,
                         Orientation,
-                        PitchYawRoll,
+                        command,
                         VehicleLength,
                         MaximumDiameter,
                         Parts.TransverseMomentOfInertia) * dt;
@@ -469,18 +535,58 @@ public class Vessel
     // Retorna el vessel separado (debris) si hubo staging, null si no
     public Vessel? Stage()
     {
+        ClearHotStageOverlapState();
+
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
 
+        return CreateDebrisVessel(detached, Name + " (debris)");
+    }
+
+    /// <summary>
+    /// Structural split at an overloaded joint: detaches the child subtree into a debris
+    /// vessel sharing this vessel's kinematics (plus a small relative push). Clears any
+    /// hot-stage overlap window, same as <see cref="Stage"/>.
+    /// </summary>
+    public Vessel? BreakAtJoint(Joint joint)
+    {
+        ClearHotStageOverlapState();
+
+        var detached = Parts.SplitAtJoint(joint);
+        if (detached == null) return null;
+
+        var debris = CreateDebrisVessel(detached, Name + " (structural debris)");
+
+        // Gentle separation along vessel +Y so fragments do not occupy the same origin.
+        var axis = Orientation.Rotate(Vector3d.Up).Normalized;
+        double mainMass = System.Math.Max(TotalMass, 1.0);
+        double debrisMass = System.Math.Max(debris.TotalMass, 1.0);
+        double totalMass = mainMass + debrisMass;
+        const double relativeOpenMs = 0.5;
+        Velocity += axis * (relativeOpenMs * debrisMass / totalMass);
+        debris.Velocity -= axis * (relativeOpenMs * mainMass / totalMass);
+
+        return debris;
+    }
+
+    private void ClearHotStageOverlapState()
+    {
+        HotStageOverlapRemaining = 0.0;
+        Parts.HotStageOverlapActive = false;
+        HotStageOverlapCompletedPending = false;
+    }
+
+    private Vessel CreateDebrisVessel(PartGraph detached, string name)
+    {
         var debris = new Vessel
         {
-            Name        = Name + " (debris)",
-            Position    = Position,
-            Velocity    = Velocity,
-            Orientation = Orientation,
+            Name            = name,
+            Position        = Position,
+            Velocity        = Velocity,
+            Orientation     = Orientation,
             AngularVelocity = AngularVelocity,
             ReferenceBodyId = ReferenceBodyId,
-            SASEnabled = SASEnabled,
+            SASEnabled      = SASEnabled,
         };
         if (detached.Root != null) debris.Parts.SetRoot(detached.Root);
         foreach (var p in detached.Parts) debris.Parts.AddPart(p);

@@ -101,8 +101,17 @@ public partial class EDLController : Control
                 bridge!.TriggerStaging();
                 return;
             }
-            if (descending && inAtmo && speed > EntrySpeed && (mission == null || !mission.InDescent))
+            if (descending && inAtmo && speed > EntrySpeed)
             {
+                // Arm from ORBIT/COAST, or from a pre-entry deorbit RETRO_BURN.
+                // Block only when already deep in the EDL track (ENTRY onward) so we don't
+                // re-trigger from Inactive while MissionManager still shows a descent phase.
+                bool blockedByMission = mission != null
+                    && mission.InDescent
+                    && mission.Phase is not MissionPhase.RETRO_BURN;
+                if (blockedByMission)
+                    return;
+
                 _phase = Edl.Entry;
                 _legsDeployed = false;
                 _flipInProgress = false;
@@ -112,6 +121,16 @@ public partial class EDLController : Control
                 mission?.EnterPhase(MissionPhase.ENTRY);
             }
             else return;
+        }
+
+        // Structural dead-stick: stop writing guidance. Atmosphere still flies the wreck.
+        if (vessel.StructuralControlLost)
+        {
+            vessel.Throttle = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.SASEnabled = false;
+            QueueRedraw();
+            return;
         }
 
         AdvancePhase(vessel, body, mission, mass, speed, up, surfVel, delta, universe);

@@ -7,10 +7,12 @@ public class Joint
     public string ParentNodeId { get; }
     public string ChildNodeId  { get; }
 
-    // Tolerancias estructurales (N)
-    public double TensileStrength     { get; set; } = 1_000_000.0;
-    public double CompressiveStrength { get; set; } = 2_000_000.0;
-    public double ShearStrength       { get; set; } = 500_000.0;
+    // Structural load limits (N). Defaults leave headroom for a Flight 7-class stack at
+    // Max-Q / near-MECO accel: size-3 nodes scale by size² → ~450 MN tensile / ~225 MN shear.
+    // Nominal [G] ascent and belly-flop EDL must not break; overload tests lower these or apply absurd accel.
+    public double TensileStrength     { get; set; } = 50_000_000.0;
+    public double CompressiveStrength { get; set; } = 100_000_000.0;
+    public double ShearStrength       { get; set; } = 25_000_000.0;
 
     // Cargas actuales (actualizadas por StressSolver cada tick)
     public double CurrentTensileLoad { get; set; }

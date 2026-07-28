@@ -32,6 +32,12 @@ public class PartGraph
     public IReadOnlyList<Joint> Joints => _joints.AsReadOnly();
     public Part? Root => _root;
 
+    /// <summary>
+    /// When true, upper-stage engines may fire and drain their own tanks while the booster
+    /// stage is still attached (hot-stage overlap). Cleared automatically at mechanical stage.
+    /// </summary>
+    public bool HotStageOverlapActive { get; set; }
+
     public void SetRoot(Part part) { _root = part; if (!_parts.Contains(part)) _parts.Add(part); }
     public void AddPart(Part part) { if (!_parts.Contains(part)) _parts.Add(part); }
     public void AddJoint(Joint joint)
@@ -103,8 +109,10 @@ public class PartGraph
     {
         get
         {
-            var stage = CurrentStageParts();
-            return stage.Where(p => p.Definition.Category == PartCategory.Engine
+            // Hot-stage overlap deliberately lights both the booster and ship clusters while
+            // the stack is still one graph. Outside that window only CurrentStageParts burn.
+            IEnumerable<Part> pool = HotStageOverlapActive ? _parts : CurrentStageParts();
+            return pool.Where(p => p.Definition.Category == PartCategory.Engine
                                  && p.IsStagingActive && !p.IsBroken);
         }
     }
@@ -323,11 +331,31 @@ public class PartGraph
     // Cross-feed dentro de la etapa: los motores extraen combustible de los tanques de
     // su propia etapa (los motores no tienen capacidad propia), pero NO a través de un
     // desacoplador activo — así la etapa superior conserva su propelante hasta separarse.
+    // During hot-stage overlap both stage pools burn, each into its own tanks.
     public void ConsumePropellant(double dt, double ambientPressure)
     {
-        var stage   = CurrentStageParts();
-        var engines = stage.Where(p => p.Definition.Category == PartCategory.Engine
-                                    && p.IsStagingActive && !p.IsBroken).ToList();
+        if (HotStageOverlapActive)
+        {
+            var bottom = CurrentStageParts();
+            var bottomSet = new HashSet<Part>(bottom);
+            var upper = _parts.Where(p => !bottomSet.Contains(p)).ToList();
+            ConsumePropellantFromPool(bottom, bottom, dt, ambientPressure);
+            ConsumePropellantFromPool(upper, upper, dt, ambientPressure);
+            return;
+        }
+
+        var stage = CurrentStageParts();
+        ConsumePropellantFromPool(stage, stage, dt, ambientPressure);
+    }
+
+    private static void ConsumePropellantFromPool(
+        IReadOnlyList<Part> enginePool,
+        IReadOnlyList<Part> tankPool,
+        double dt,
+        double ambientPressure)
+    {
+        var engines = enginePool.Where(p => p.Definition.Category == PartCategory.Engine
+                                         && p.IsStagingActive && !p.IsBroken).ToList();
         if (engines.Count == 0) return;
 
         // Calcular flujo de masa total de todos los motores activos
@@ -336,8 +364,6 @@ public class PartGraph
         foreach (var engine in engines)
         {
             var def = engine.Definition;
-            // Isp corregido por presión. No se recorta en 1 atm: mundos densos pueden
-            // reducir el rendimiento hasta impedir que el motor produzca empuje neto.
             double pf  = System.Math.Max(0.0, ambientPressure / 101325.0);
             double isp = System.Math.Max(0.0, def.IspVac + (def.IspSL - def.IspVac) * pf);
             if (isp < 1.0) continue;
@@ -387,8 +413,8 @@ public class PartGraph
 
         if (liquidDemands.Count > 0)
         {
-            double totalLF   = stage.Sum(p => p.LiquidFuel);
-            double totalOx   = stage.Sum(p => p.Oxidizer);
+            double totalLF   = tankPool.Sum(p => p.LiquidFuel);
+            double totalOx   = tankPool.Sum(p => p.Oxidizer);
             double remainingLF = totalLF;
             double remainingOx = totalOx;
             double fundedLF = 0.0;
@@ -425,7 +451,7 @@ public class PartGraph
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
             {
-                foreach (var p in stage)
+                foreach (var p in tankPool)
                 {
                     if (totalLF > 0.0)
                         p.LiquidFuel -= fundedLF * (p.LiquidFuel / totalLF);
@@ -438,18 +464,18 @@ public class PartGraph
         if (totalSolidRate > 0)
         {
             double solidNeeded = totalSolidRate * dt;
-            double totalSolid  = stage.Sum(p => p.SolidFuel);
+            double totalSolid  = tankPool.Sum(p => p.SolidFuel);
             if (totalSolid < solidNeeded) nonLiquidFlameOut = true;
-            else foreach (var p in stage.Where(p2 => p2.SolidFuel > 0))
+            else foreach (var p in tankPool.Where(p2 => p2.SolidFuel > 0))
                 p.SolidFuel -= solidNeeded * (p.SolidFuel / totalSolid);
         }
 
         if (totalMonoRate > 0)
         {
             double monoNeeded = totalMonoRate * dt;
-            double totalMono  = stage.Sum(p => p.Monopropellant);
+            double totalMono  = tankPool.Sum(p => p.Monopropellant);
             if (totalMono < monoNeeded) nonLiquidFlameOut = true;
-            else foreach (var p in stage.Where(p2 => p2.Monopropellant > 0))
+            else foreach (var p in tankPool.Where(p2 => p2.Monopropellant > 0))
                 p.Monopropellant -= monoNeeded * (p.Monopropellant / totalMono);
         }
 
@@ -473,6 +499,7 @@ public class PartGraph
             p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive);
         if (decoupler == null) return null;
 
+        HotStageOverlapActive = false;
         decoupler.IsStagingActive = false;
 
         // Buscamos primero el joint donde decoupler es Parent (separa lo que está DEBAJO).
@@ -486,13 +513,38 @@ public class PartGraph
             ? separationJoint.Child
             : separationJoint.Parent;
 
-        var detachedParts  = CollectSubtree(separationRoot);
-        var detachedGraph  = new PartGraph();
+        // FireNextStage may reverse-orient the decoupler joint; the structural path always
+        // detaches Child. Reuse the same move once the detached root is known.
+        return DetachSubtree(separationRoot, separationJoint);
+    }
+
+    /// <summary>
+    /// Structural split: remove <paramref name="joint"/> and move its child subtree into a
+    /// new graph. Returns null if the joint is not in this graph, if detaching would remove
+    /// the root, or if the child side cannot form a valid subtree.
+    /// </summary>
+    public PartGraph? SplitAtJoint(Joint joint)
+    {
+        if (joint == null || !_joints.Contains(joint) || _root == null)
+            return null;
+        if (joint.Child == _root)
+            return null;
+
+        HotStageOverlapActive = false;
+        return DetachSubtree(joint.Child, joint);
+    }
+
+    private PartGraph? DetachSubtree(Part separationRoot, Joint separationJoint)
+    {
+        var detachedParts = CollectSubtree(separationRoot);
+        if (detachedParts.Count == 0 || (_root != null && detachedParts.Contains(_root)))
+            return null;
+
+        var detachedGraph = new PartGraph();
         detachedGraph.SetRoot(separationRoot);
         foreach (var p in detachedParts)
             detachedGraph.AddPart(p);
 
-        // Mover los joints del subárbol al nuevo grafo
         foreach (var j in _joints.Where(j => detachedParts.Contains(j.Parent)).ToList())
         {
             detachedGraph.AddJoint(j);
