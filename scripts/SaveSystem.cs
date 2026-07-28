@@ -32,6 +32,10 @@ public static class SaveSystem
         System.IO.Directory.CreateDirectory(DefaultSaveDirectory);
         var save = SaveGameV2Codec.Capture(
             bridge.Universe, LastLoadedMetadata);
+        if (CampaignRuntime.Instance?.CaptureMissionState() is { } mission)
+            save.Mission = mission;
+        if (CampaignRuntime.Instance?.Campaign?.State is { } campaign)
+            save.Campaign = campaign;
         save.Mission.Phase =
             MissionManager.Instance?.Phase.ToString()
             ?? save.Mission.Phase;
@@ -112,6 +116,30 @@ public static class SaveSystem
 
     public static bool HasSaveSlots(string? saveDirectory = null) =>
         ListSaveSlots(saveDirectory).Length > 0;
+
+    public static CampaignSaveV2 ReadMostRecentCampaignState(
+        string? saveDirectory = null)
+    {
+        string directory = saveDirectory ?? DefaultSaveDirectory;
+        if (!System.IO.Directory.Exists(directory))
+            return new CampaignSaveV2();
+        foreach (string path in System.IO.Directory.GetFiles(
+                     directory, "*.json")
+                 .OrderByDescending(System.IO.File.GetLastWriteTimeUtc))
+        {
+            try
+            {
+                var save = SaveGameV2Json.DeserializeOrMigrate(
+                    System.IO.File.ReadAllText(path));
+                return save.Campaign;
+            }
+            catch
+            {
+                // A corrupt unrelated slot must not hide a valid campaign profile.
+            }
+        }
+        return new CampaignSaveV2();
+    }
 
     private static string NormalizeSlotName(string slotName)
     {

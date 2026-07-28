@@ -173,6 +173,22 @@ public partial class SimulationBridge : Node
         if (needsDefaultStack)
             SpawnStarshipStack(dataPath);
         SpawnPendingConstructedVessel(dataPath, pendingIntent);
+        var campaignRuntime = new CampaignRuntime
+        {
+            Name = "CampaignRuntime",
+        };
+        AddChild(campaignRuntime);
+        bool continuingSave =
+            !string.IsNullOrWhiteSpace(pendingIntent?.SaveSlot);
+        campaignRuntime.Initialize(
+            dataPath,
+            pendingIntent?.MissionId
+                ?? (continuingSave
+                    ? SaveSystem.LastLoadedMetadata?.Mission.MissionId
+                    : null),
+            pendingIntent?.CampaignState
+                ?? SaveSystem.LastLoadedMetadata?.Campaign,
+            continuingSave ? SaveSystem.LastLoadedMetadata?.Mission : null);
         SpawnPlanets();
         EmitSignal(SignalName.SimulationLoaded);
 

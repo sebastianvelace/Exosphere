@@ -146,8 +146,10 @@ public sealed class MissionSaveV2
 {
     public string? MissionId { get; set; }
     public string Phase { get; set; } = "";
+    public VectorSaveV2? LaunchSurfaceDirection { get; set; }
     public Dictionary<string, double> ObjectiveProgress { get; set; } = new();
     public HashSet<string> CompletedObjectives { get; set; } = new();
+    public HashSet<string> ReachedPhases { get; set; } = new();
 }
 
 public sealed class NavigationSaveV2
@@ -296,6 +298,59 @@ public static class SaveGameV2Codec
         }
         if (save.ActiveVesselId != null && !vesselIds.Contains(save.ActiveVesselId))
             throw new InvalidDataException($"Active vessel '{save.ActiveVesselId}' is missing.");
+
+        if (save.Mission.MissionId is { } missionId)
+            RequireId(missionId, "mission");
+        if (save.Mission.LaunchSurfaceDirection is { } launchDirection)
+        {
+            foreach (double value in new[]
+                     {
+                         launchDirection.X,
+                         launchDirection.Y,
+                         launchDirection.Z,
+                     })
+                RequireFinite(value, "mission launch surface direction");
+            double magnitudeSquared =
+                launchDirection.X * launchDirection.X
+                + launchDirection.Y * launchDirection.Y
+                + launchDirection.Z * launchDirection.Z;
+            if (magnitudeSquared < 0.99 || magnitudeSquared > 1.01)
+                throw new InvalidDataException(
+                    "Mission launch surface direction must be normalized.");
+        }
+        RequireUniqueIds(save.Mission.CompletedObjectives, "completed objective");
+        RequireUniqueIds(save.Mission.ReachedPhases, "reached phase");
+        foreach (var (key, value) in save.Mission.ObjectiveProgress)
+        {
+            RequireId(key, "objective progress");
+            RequireFinite(value, key);
+        }
+
+        RequireId(save.Campaign.ProfileId, "campaign profile");
+        RequireUniqueIds(save.Campaign.UnlockedIds, "campaign unlock");
+        RequireUniqueIds(
+            save.Campaign.CompletedMissionIds, "completed campaign mission");
+        foreach (var (key, amount) in save.Campaign.RewardLedger)
+        {
+            RequireId(key, "campaign reward");
+            if (amount < 0)
+                throw new InvalidDataException(
+                    $"Campaign reward '{key}' cannot be negative.");
+        }
+    }
+
+    private static void RequireUniqueIds(
+        IEnumerable<string> values,
+        string kind)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string value in values)
+        {
+            RequireId(value, kind);
+            if (!seen.Add(value))
+                throw new InvalidDataException(
+                    $"Duplicate {kind} id '{value}'.");
+        }
     }
 
     private static VesselSaveV2 CaptureVessel(Vessel vessel)

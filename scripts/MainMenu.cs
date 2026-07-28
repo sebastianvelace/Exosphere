@@ -1,6 +1,8 @@
 namespace Exosphere.Game;
 
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Campaign;
+using Exosphere.Simulation.Persistence;
 using Godot;
 
 public partial class MainMenu : Control
@@ -404,27 +406,133 @@ public partial class MainMenu : Control
 
     private void ShowCampaign() => ShowModal(UiText.Get("campaign_preview"), body =>
     {
-        foreach (string mission in new[]
-                 {
-                     "Freedom 7", "Friendship 7", "Gemini 8", "Apollo 8",
-                     "Apollo 11", "STS-1", "STS-88 / ISS", "Falcon 1 Flight 4",
-                 })
+        string data = ProjectSettings.GlobalizePath("res://data");
+        var campaignDefinition = CampaignDefinition.LoadFromJson(
+            System.IO.Path.Combine(
+                data, "campaigns", "historical_nasa_spacex.json"));
+        var missionCatalog = MissionDefinitionCatalog.LoadFromDirectory(
+            System.IO.Path.Combine(data, "missions"));
+        CampaignSaveV2 state = SaveSystem.ReadMostRecentCampaignState();
+        var service = new CampaignService(state, missionCatalog.Ordered);
+        bool spanish =
+            UserInterfaceSettings.Language == InterfaceLanguage.Spanish;
+
+        var description = new Label
         {
-            var label = new Label { Text = mission };
-            InterfaceTheme.ApplyBody(label, 15, medium: true);
-            label.AddThemeColorOverride("font_color", InterfaceTheme.Text);
-            body.AddChild(label);
-        }
-        var note = new Label
-        {
-            Text = "Mission execution and progression unlock in Hito 4. " +
-                   "Historical variants will remain fixed to the hardware that flew.",
+            Text = spanish
+                ? campaignDefinition.DescriptionEs
+                : campaignDefinition.DescriptionEn,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        InterfaceTheme.ApplyBody(note, 12);
-        note.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        body.AddChild(note);
+        InterfaceTheme.ApplyBody(description, 12);
+        description.AddThemeColorOverride(
+            "font_color", InterfaceTheme.TextMuted);
+        body.AddChild(description);
+
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(0, 500),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        body.AddChild(scroll);
+        var list = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        list.AddThemeConstantOverride("separation", 6);
+        scroll.AddChild(list);
+
+        foreach (var entry in campaignDefinition.Missions.OrderBy(item => item.Sequence))
+        {
+            MissionDefinition? mission = null;
+            if (entry.DefinitionId != null
+                && missionCatalog.Definitions.TryGetValue(
+                    entry.DefinitionId, out var foundMission))
+                mission = foundMission;
+            bool hasDefinition = mission != null;
+            string? variantFile = hasDefinition
+                ? FindVehicleVariantFile(data, mission!.VehicleVariantId)
+                : null;
+            bool launchSiteExists = hasDefinition
+                && System.IO.File.Exists(System.IO.Path.Combine(
+                    data, "launch_sites", $"{mission!.LaunchSiteId}.json"));
+            bool unlocked = hasDefinition && service.CanStart(mission!.Id);
+            bool playable = unlocked && variantFile != null && launchSiteExists;
+            string status = playable
+                ? (spanish ? "LISTA" : "READY")
+                : hasDefinition && !unlocked
+                    ? (spanish ? "BLOQUEADA" : "LOCKED")
+                    : hasDefinition
+                        ? (spanish ? "VEHÍCULO PENDIENTE" : "VEHICLE PENDING")
+                        : (spanish ? "PLANIFICADA" : "PLANNED");
+            string buttonText =
+                $"{entry.Sequence:00}  {entry.Title.ToUpperInvariant()}   /   {status}";
+            MissionDefinition? selectedMission = hasDefinition ? mission : null;
+            string? selectedVariantFile = variantFile;
+            list.AddChild(ModalButton(
+                buttonText,
+                () =>
+                {
+                    if (selectedMission != null && selectedVariantFile != null)
+                        LaunchCampaignMission(
+                            selectedMission, selectedVariantFile, state);
+                },
+                primary: entry.Sequence == 1,
+                disabled: !playable,
+                tooltip: hasDefinition
+                    ? (spanish ? mission!.SummaryEs : mission!.SummaryEn)
+                    : (spanish
+                        ? "La definición histórica llegará con su vehículo."
+                        : "Historical definition arrives with its vehicle.")));
+        }
     });
+
+    private static string? FindVehicleVariantFile(
+        string dataPath,
+        string vehicleVariantId)
+    {
+        string directory = System.IO.Path.Combine(dataPath, "vehicles");
+        foreach (string path in System.IO.Directory.GetFiles(directory, "*.json"))
+        {
+            try
+            {
+                if (string.Equals(
+                        VehicleVariantDefinition.LoadFromJson(path).Id,
+                        vehicleVariantId,
+                        StringComparison.Ordinal))
+                    return path;
+            }
+            catch
+            {
+                // The strict data tests report malformed variants with better context.
+            }
+        }
+        return null;
+    }
+
+    private void LaunchCampaignMission(
+        MissionDefinition mission,
+        string variantPath,
+        CampaignSaveV2 campaignState)
+    {
+        string data = ProjectSettings.GlobalizePath("res://data");
+        var catalog = PartCatalog.LoadFromDirectory(
+            System.IO.Path.Combine(data, "parts"));
+        var variant = VehicleVariantDefinition.LoadFromJson(variantPath);
+        var craft = variant.Build(catalog).ToCraftDocument(variant.Name);
+        craft.VehicleVariantId = variant.Id;
+        CraftLaunchRequest.Set(new LaunchIntent
+        {
+            Mode = "campaign",
+            MissionId = mission.Id,
+            VehicleVariantId = variant.Id,
+            LaunchSiteId = mission.LaunchSiteId,
+            FlightProfileId = mission.FlightProfileId,
+            Craft = craft,
+            CampaignState = campaignState,
+        });
+        OpenFlight();
+    }
 
     private void ShowSaves() => ShowModal(UiText.Get("saves"), body =>
     {
@@ -521,9 +629,20 @@ public partial class MainMenu : Control
         close.CallDeferred(Control.MethodName.GrabFocus);
     }
 
-    private static Button ModalButton(string text, Action action, bool primary = false)
+    private static Button ModalButton(
+        string text,
+        Action action,
+        bool primary = false,
+        bool disabled = false,
+        string tooltip = "")
     {
-        var button = new Button { Text = text, Alignment = HorizontalAlignment.Left };
+        var button = new Button
+        {
+            Text = text,
+            Alignment = HorizontalAlignment.Left,
+            Disabled = disabled,
+            TooltipText = tooltip,
+        };
         InterfaceTheme.StyleDossierButton(button, primary);
         button.CustomMinimumSize = new Vector2(320, 42);
         button.Pressed += action;

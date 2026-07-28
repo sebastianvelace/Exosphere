@@ -28,6 +28,11 @@ Base tecnica cerrada en `main`:
   históricas separadas. Flight 12 usa 33+6 motores según SpaceX; empuje, Isp,
   masas y transitorios no publicados están marcados como modelo de ingeniería
   restringido. El sobre FAA futuro 35+9 permanece `regulatory_envelope`.
+- La campaña histórica tiene manifiesto data-driven de 16 misiones,
+  `CampaignService`, `MissionDirector`, `MissionEvaluator`, debrief numérico,
+  recompensas idempotentes y persistencia V2. Freedom 7 ya tiene definición
+  bilingüe y procedencia NASA; permanece `VEHICLE PENDING` hasta entregar la
+  variante Mercury-Redstone 3 y LC-5.
 - Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
   de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
@@ -138,7 +143,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
   (`DeorbitPlanner` + `ManeuverPlanner.PlanDeorbit`); EDL arma `ENTRY` sin teleport demo.
 - Cues/track de fases EDL (oleada C3) ✅ — `MissionPhaseTrack` + HUD dots
   ORBIT→COAST→RETRO→ENTRY…; cue “ENTRY INTERFACE in ~Xm” / “DEORBIT BURN”.
-- Misiones/objetivos de progresion.
+- Fundación de misiones/objetivos/progresión ✅ — catálogo estricto, evaluación
+  pura, evidencia persistente, debrief y ledger idempotente. Pendiente: contenido
+  vehicular desde Mercury-Redstone 3 y definiciones 2–16.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 

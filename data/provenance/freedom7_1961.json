@@ -1,0 +1,47 @@
+{
+  "manifestId": "freedom7-historical-mission-1961",
+  "records": [
+    {
+      "dataId": "mission-freedom7-1961", "field": "missionIdentity",
+      "status": "published", "source": "NASA Mercury-Redstone 3: Freedom 7",
+      "accessedDate": "2026-07-28", "variant": "Mercury-Redstone 3 / spacecraft 7",
+      "conditions": "May 5 1961 crewed suborbital mission from LC-5 with Alan B. Shepard Jr.",
+      "uncertainty": "official NASA mission record"
+    },
+    {
+      "dataId": "mission-freedom7-1961", "field": "historicalApogeeM",
+      "status": "published", "source": "NASA Historical Data Book Volume II, Mercury mission table",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7",
+      "conditions": "maximum altitude 187.42 km",
+      "uncertainty": "published precision ±0.01 km"
+    },
+    {
+      "dataId": "mission-freedom7-1961", "field": "historicalRangeM",
+      "status": "published", "source": "NASA Historical Data Book Volume II, Mercury mission table",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7",
+      "conditions": "suborbital range 487.26 km",
+      "uncertainty": "published precision ±0.01 km"
+    },
+    {
+      "dataId": "mission-freedom7-1961", "field": "historicalDurationS",
+      "status": "published", "source": "NASA Historical Data Book Volume II, Mercury mission table",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7",
+      "conditions": "launch to splashdown duration 00:15:22",
+      "uncertainty": "±1 s"
+    },
+    {
+      "dataId": "mission-freedom7-1961", "field": "historicalSpeedMps",
+      "status": "derived", "source": "NASA Freedom 7 mission page; 5,134 mph converted to SI",
+      "accessedDate": "2026-07-28", "variant": "Freedom 7",
+      "conditions": "published maximum speed converted with exact international mile",
+      "uncertainty": "inherits published rounding; approximately ±0.5 mph"
+    },
+    {
+      "dataId": "mission-freedom7-1961", "field": "objectiveEnvelope",
+      "status": "derived", "source": "NASA Freedom 7 mission facts and Historical Data Book Volume II",
+      "accessedDate": "2026-07-28", "variant": "Exosphere historical campaign acceptance envelope",
+      "conditions": "180 km minimum apogee, 2.2 km/s minimum speed, 450 km minimum range, 850–1000 s duration and 12.5 g maximum",
+      "uncertainty": "deliberately wider than the published nominal values to allow piloted reconstruction without rewriting history"
+    }
+  ]
+}

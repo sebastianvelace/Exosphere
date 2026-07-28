@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Persistence;
 
 public sealed class LaunchIntent
 {
@@ -11,6 +12,7 @@ public sealed class LaunchIntent
     public string FlightProfileId { get; init; } = "manual";
     public string? SaveSlot { get; init; }
     public CraftDocumentV2? Craft { get; init; }
+    public CampaignSaveV2? CampaignState { get; init; }
 }
 
 /// <summary>One-shot scene transition payload; replaces implicit Starship/Starbase globals.</summary>

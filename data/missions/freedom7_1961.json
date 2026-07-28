@@ -1,0 +1,127 @@
+{
+  "id": "mission-freedom7-1961",
+  "sequence": 1,
+  "program": "NASA Project Mercury",
+  "titleEn": "Freedom 7",
+  "titleEs": "Freedom 7",
+  "summaryEn": "Recreate Alan Shepard's first U.S. human spaceflight: a controlled Mercury-Redstone suborbital arc followed by safe Atlantic splashdown.",
+  "summaryEs": "Recrea el primer vuelo espacial humano de Estados Unidos de Alan Shepard: un arco suborbital controlado Mercury-Redstone y amerizaje seguro en el Atlántico.",
+  "historicalDate": "1961-05-05",
+  "vehicleVariantId": "mercury-redstone3-freedom7-1961-05-05",
+  "launchSiteId": "cape_canaveral_lc5",
+  "flightProfileId": "mercury-redstone3-suborbital",
+  "crewIds": ["alan-b-shepard-jr"],
+  "prerequisiteMissionIds": [],
+  "objectives": [
+    {
+      "id": "reach-suborbital-apogee",
+      "titleEn": "Reach the historical suborbital corridor",
+      "titleEs": "Alcanza el corredor suborbital histórico",
+      "metric": "peak_altitude_m",
+      "comparison": "at_least",
+      "target": 180000,
+      "required": true
+    },
+    {
+      "id": "reach-mercury-speed",
+      "titleEn": "Reach Mercury-Redstone flight speed",
+      "titleEs": "Alcanza la velocidad Mercury-Redstone",
+      "metric": "peak_surface_speed_mps",
+      "comparison": "at_least",
+      "target": 2200,
+      "required": true
+    },
+    {
+      "id": "cover-suborbital-range",
+      "titleEn": "Travel at least 450 km downrange",
+      "titleEs": "Recorre al menos 450 km",
+      "metric": "maximum_downrange_m",
+      "comparison": "at_least",
+      "target": 450000,
+      "required": true
+    },
+    {
+      "id": "complete-flight-window",
+      "titleEn": "Complete the flight in the historical duration corridor",
+      "titleEs": "Completa el vuelo en el corredor de duración histórico",
+      "metric": "elapsed_seconds",
+      "comparison": "between",
+      "target": 850,
+      "upperTarget": 1000,
+      "required": true
+    },
+    {
+      "id": "atlantic-splashdown",
+      "titleEn": "Splash down safely",
+      "titleEs": "Ameriza de forma segura",
+      "metric": "splashdown",
+      "comparison": "true",
+      "target": 1,
+      "required": true
+    },
+    {
+      "id": "reach-landed-phase",
+      "titleEn": "Complete recovery phase",
+      "titleEs": "Completa la fase de recuperación",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "LANDED",
+      "required": true
+    }
+  ],
+  "limits": [
+    {
+      "id": "crew-survival",
+      "titleEn": "Return Alan Shepard alive",
+      "titleEs": "Regresa con Alan Shepard con vida",
+      "metric": "crew_alive",
+      "comparison": "true",
+      "target": 1,
+      "required": true
+    },
+    {
+      "id": "vehicle-survival",
+      "titleEn": "Avoid vehicle loss",
+      "titleEs": "Evita la pérdida del vehículo",
+      "metric": "vessel_destroyed",
+      "comparison": "false",
+      "target": 0,
+      "required": true
+    },
+    {
+      "id": "crew-load-envelope",
+      "titleEn": "Remain below 12.5 g",
+      "titleEs": "Mantente por debajo de 12,5 g",
+      "metric": "maximum_g_force",
+      "comparison": "at_most",
+      "target": 12.5,
+      "required": true
+    }
+  ],
+  "anomalies": [],
+  "rewards": [
+    {
+      "id": "historical-completion",
+      "amount": 100,
+      "unlockIds": [
+        "mission-friendship7-1962",
+        "vehicle-family-mercury-atlas"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "nasa-freedom7-mission",
+      "url": "https://www.nasa.gov/mission/mercury-redstone-3-freedom-7/",
+      "accessedDate": "2026-07-28",
+      "description": "NASA mission identity, crew, vehicle, LC-5, altitude, duration, range, velocity, Max-Q and Max-G."
+    },
+    {
+      "id": "nasa-historical-data-book-v2",
+      "url": "https://www.nasa.gov/wp-content/uploads/2023/04/sp-4012v2.pdf",
+      "accessedDate": "2026-07-28",
+      "description": "NASA historical table for Mercury capsule 7, mission events, 187.42 km apogee, 487.26 km range and 15:22 duration."
+    }
+  ]
+}

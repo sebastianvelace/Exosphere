@@ -30,7 +30,7 @@ The update script only runs `dotnet restore`; the SDK/Godot/Xvfb are pre-install
 ### Build / test / run
 
 Standard commands are in `README.md` and `CLAUDE.md` (build both csproj, run xUnit, or
-`bash tools/ci_check.sh`). All 308 xUnit tests pass. Expected standard: 0 warnings, 0 errors.
+`bash tools/ci_check.sh`). All 316 xUnit tests pass. Expected standard: 0 warnings, 0 errors.
 
 - Headless smoke (boot a scene + quit): see `README.md` "Godot smoke test". Use
   `"$GODOT_BIN"` in place of the hardcoded path.

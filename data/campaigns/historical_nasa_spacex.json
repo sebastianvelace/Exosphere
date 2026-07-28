@@ -1,0 +1,25 @@
+{
+  "id": "historical-nasa-spacex",
+  "titleEn": "NASA + SpaceX Historical Campaign",
+  "titleEs": "Campaña histórica NASA + SpaceX",
+  "descriptionEn": "A chronological campaign whose missions remain fixed to the hardware variant that actually flew.",
+  "descriptionEs": "Una campaña cronológica cuyas misiones permanecen fijadas a la variante de hardware que realmente voló.",
+  "missions": [
+    {"missionId": "mission-freedom7-1961", "sequence": 1, "title": "Freedom 7", "definitionId": "mission-freedom7-1961"},
+    {"missionId": "mission-friendship7-1962", "sequence": 2, "title": "Friendship 7"},
+    {"missionId": "mission-gemini8-1966", "sequence": 3, "title": "Gemini 8"},
+    {"missionId": "mission-apollo8-1968", "sequence": 4, "title": "Apollo 8"},
+    {"missionId": "mission-apollo11-1969", "sequence": 5, "title": "Apollo 11"},
+    {"missionId": "mission-sts1-1981", "sequence": 6, "title": "STS-1"},
+    {"missionId": "mission-sts88-1998", "sequence": 7, "title": "STS-88 / ISS"},
+    {"missionId": "mission-falcon1-flight4-2008", "sequence": 8, "title": "Falcon 1 Flight 4"},
+    {"missionId": "mission-dragon-c2plus-2012", "sequence": 9, "title": "Dragon C2+"},
+    {"missionId": "mission-crs8-2016", "sequence": 10, "title": "CRS-8 / Droneship Landing"},
+    {"missionId": "mission-demo2-2020", "sequence": 11, "title": "Demo-2"},
+    {"missionId": "mission-starship-sn15-2021", "sequence": 12, "title": "Starship SN15"},
+    {"missionId": "mission-artemis1-2022", "sequence": 13, "title": "Artemis I"},
+    {"missionId": "mission-starship-flight5-2024", "sequence": 14, "title": "Starship Flight 5"},
+    {"missionId": "mission-artemis2", "sequence": 15, "title": "Artemis II"},
+    {"missionId": "mission-starship-flight12-2026", "sequence": 16, "title": "Starship Flight 12 / V3"}
+  ]
+}
