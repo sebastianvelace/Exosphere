@@ -1,0 +1,32 @@
+{
+  "id": "be3u_cluster2_newglenn_2026",
+  "name": "Twin BE-3U — New Glenn 7x2",
+  "description": "Two individually simulated BE-3U engines using the July 2026 public upgrade envelope.",
+  "category": "engine",
+  "mass_dry": 5000,
+  "length_m": 5.0,
+  "diameter_m": 7.0,
+  "cost": 12000000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1450,
+  "thrust_vac": 1780000,
+  "thrust_sl": 400000,
+  "isp_vac": 450,
+  "isp_sl": 250,
+  "gimbal_range": 5.0,
+  "fuel_type": "LiquidFuel+Oxidizer",
+  "mixture_ratio": 5.5,
+  "engine_count": 2,
+  "engine_model_id": "be3u-newglenn-public-2026",
+  "engine_cluster_id": "newglenn-7x2-be3u-two-2026",
+  "engine_chill_seconds": 0.5,
+  "engine_spin_prime_seconds": 0.5,
+  "engine_ignition_seconds": 0.3,
+  "engine_purge_seconds": 0.6,
+  "engine_startup_seconds": 3.0,
+  "engine_shutdown_seconds": 1.0,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 2.5, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -2.5, 0], "size": 3, "type": "stack"}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "newglenn_payload_simulator",
+  "name": "New Glenn Payload Simulator",
+  "description": "Instrumented 10 t payload simulator for the dated New Glenn public configuration.",
+  "category": "command",
+  "mass_dry": 10000,
+  "length_m": 3.0,
+  "diameter_m": 5.0,
+  "cost": 0,
+  "drag_coefficient": 0.24,
+  "heat_tolerance": 400,
+  "ec_capacity": 150,
+  "attachment_nodes": [
+    {"id": "bottom", "position": [0, -1.5, 0], "size": 3, "type": "stack"}
+  ]
+}

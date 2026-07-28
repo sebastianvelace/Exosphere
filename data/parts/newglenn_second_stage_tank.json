@@ -1,0 +1,18 @@
+{
+  "id": "newglenn_second_stage_tank",
+  "name": "New Glenn GS2 Tank and Structure",
+  "description": "LOX/LH2 upper-stage tank allocation within the published 26.8 m stage envelope.",
+  "category": "fuel_tank",
+  "mass_dry": 25000,
+  "length_m": 22.0,
+  "diameter_m": 7.0,
+  "cost": 25000000,
+  "drag_coefficient": 0.18,
+  "heat_tolerance": 500,
+  "fuel_capacity_lf": 26923,
+  "fuel_capacity_ox": 148077,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 11.0, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -11.0, 0], "size": 3, "type": "stack"}
+  ]
+}

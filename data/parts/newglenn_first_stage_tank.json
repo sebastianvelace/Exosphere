@@ -1,0 +1,18 @@
+{
+  "id": "newglenn_first_stage_tank",
+  "name": "New Glenn GS1 Reusable Booster",
+  "description": "Reusable LOX/LNG booster tank and structure; component masses and loading are engineering estimates.",
+  "category": "fuel_tank",
+  "mass_dry": 70000,
+  "length_m": 42.0,
+  "diameter_m": 7.0,
+  "cost": 70000000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 800,
+  "fuel_capacity_lf": 206522,
+  "fuel_capacity_ox": 743478,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 21.0, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -21.0, 0], "size": 3, "type": "stack"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "newglenn_fairing_7m",
+  "name": "New Glenn Seven-Meter Fairing",
+  "description": "Seven-meter-class payload fairing; external length and mass are engineering estimates.",
+  "category": "fairing",
+  "mass_dry": 5000,
+  "length_m": 17.0,
+  "diameter_m": 7.0,
+  "cost": 9000000,
+  "drag_coefficient": 0.14,
+  "heat_tolerance": 400,
+  "deployable": true,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 8.5, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -8.5, 0], "size": 3, "type": "stack"}
+  ]
+}

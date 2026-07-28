@@ -1,0 +1,18 @@
+{
+  "id": "newglenn-7x2-be3u-two-2026",
+  "name": "New Glenn Twin BE-3U Upper-Stage Cluster",
+  "engineModelId": "be3u-newglenn-public-2026",
+  "engines": [
+    {"instanceId": "be3u-01", "positionM": [-1.4, 0.0, 0.0], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "be3u-02", "positionM": [1.4, 0.0, 0.0], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "LH2",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "be3u-01", "maximumFlowKgS": 220},
+      {"engineInstanceId": "be3u-02", "maximumFlowKgS": 220}
+    ]
+  }
+}

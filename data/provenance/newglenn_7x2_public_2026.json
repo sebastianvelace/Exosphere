@@ -1,0 +1,107 @@
+{
+  "manifestId": "newglenn-7x2-public-2026-07",
+  "records": [
+    {
+      "dataId": "be4_cluster7_newglenn_2026", "field": "thrust_sl",
+      "status": "derived", "source": "Blue Origin New Glenn page; 7 × 2,846 kN",
+      "accessedDate": "2026-07-28", "variant": "New Glenn advertised upgraded 7x2 configuration",
+      "conditions": "seven BE-4 engines at Earth sea level", "uncertainty": "inherits published per-engine rounding and upgrade condition"
+    },
+    {
+      "dataId": "be4_cluster7_newglenn_2026", "field": "thrust_vac",
+      "status": "estimated", "source": "BE-4 simulator pressure map",
+      "accessedDate": "2026-07-28", "variant": "seven-engine New Glenn booster",
+      "conditions": "vacuum rated throttle", "uncertainty": "±5%"
+    },
+    {
+      "dataId": "be4_cluster7_newglenn_2026", "field": "mass_dry",
+      "status": "estimated", "source": "Simulator component allocation",
+      "accessedDate": "2026-07-28", "variant": "seven BE-4 engines and thrust structure",
+      "conditions": "excluding stage tanks", "uncertainty": "±30%; component masses unpublished"
+    },
+    {
+      "dataId": "be3u_cluster2_newglenn_2026", "field": "thrust_vac",
+      "status": "derived", "source": "Blue Origin New Glenn page; 2 × 890 kN",
+      "accessedDate": "2026-07-28", "variant": "advertised upgraded twin BE-3U stage",
+      "conditions": "vacuum rated thrust", "uncertainty": "inherits published per-engine rounding"
+    },
+    {
+      "dataId": "be3u_cluster2_newglenn_2026", "field": "thrust_sl",
+      "status": "estimated", "source": "Simulator back-pressure model",
+      "accessedDate": "2026-07-28", "variant": "twin BE-3U",
+      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±50%; non-operational condition"
+    },
+    {
+      "dataId": "be3u_cluster2_newglenn_2026", "field": "mass_dry",
+      "status": "estimated", "source": "Simulator component allocation",
+      "accessedDate": "2026-07-28", "variant": "two BE-3U engines and thrust structure",
+      "conditions": "excluding GS2 tanks", "uncertainty": "±35%; component masses unpublished"
+    },
+    {
+      "dataId": "newglenn_first_stage_tank", "field": "propellant_mass",
+      "status": "estimated", "source": "Published New Glenn geometry and simulator launch-mass calibration",
+      "accessedDate": "2026-07-28", "variant": "7x2 upgraded public configuration",
+      "conditions": "fully loaded LNG/LOX at O/F 3.6", "uncertainty": "±15%; loading is not published"
+    },
+    {
+      "dataId": "newglenn_first_stage_tank", "field": "mass_dry",
+      "status": "estimated", "source": "Reusable booster structural allocation",
+      "accessedDate": "2026-07-28", "variant": "New Glenn GS1",
+      "conditions": "tank and reusable structure excluding engines/interstage", "uncertainty": "±30%; not published"
+    },
+    {
+      "dataId": "newglenn_second_stage_tank", "field": "envelope",
+      "status": "published", "source": "Blue Origin GS2 hotfire announcement",
+      "accessedDate": "2026-07-28", "variant": "New Glenn GS2",
+      "conditions": "published stage is roughly 26.8 m tall and 7 m diameter; tank logical part excludes engine section", "uncertainty": "rounded public dimensions"
+    },
+    {
+      "dataId": "newglenn_second_stage_tank", "field": "propellant_mass",
+      "status": "estimated", "source": "Published GS2 envelope and simulator performance calibration",
+      "accessedDate": "2026-07-28", "variant": "New Glenn GS2",
+      "conditions": "fully loaded LH2/LOX at O/F 5.5", "uncertainty": "±20%; loading is not published"
+    },
+    {
+      "dataId": "newglenn_second_stage_tank", "field": "mass_dry",
+      "status": "estimated", "source": "Simulator upper-stage structural allocation",
+      "accessedDate": "2026-07-28", "variant": "New Glenn GS2",
+      "conditions": "tank and structure excluding BE-3U cluster", "uncertainty": "±35%; not published"
+    },
+    {
+      "dataId": "newglenn_fairing_7m", "field": "envelope",
+      "status": "published", "source": "Blue Origin New Glenn page",
+      "accessedDate": "2026-07-28", "variant": "New Glenn seven-meter fairing",
+      "conditions": "7 m class external diameter; logical length estimated", "uncertainty": "diameter published, length ±2 m"
+    },
+    {
+      "dataId": "newglenn_fairing_7m", "field": "mass_dry",
+      "status": "estimated", "source": "Simulator fairing structural allocation",
+      "accessedDate": "2026-07-28", "variant": "New Glenn fairing",
+      "conditions": "both halves and separation hardware", "uncertainty": "±35%; not published"
+    },
+    {
+      "dataId": "newglenn_interstage", "field": "mass_dry",
+      "status": "estimated", "source": "Simulator stage-interface allocation",
+      "accessedDate": "2026-07-28", "variant": "New Glenn 7x2",
+      "conditions": "interstage and separation hardware", "uncertainty": "±40%; not published"
+    },
+    {
+      "dataId": "newglenn_payload_simulator", "field": "mass_dry",
+      "status": "estimated", "source": "Exosphere test article specification",
+      "accessedDate": "2026-07-28", "variant": "generic New Glenn integration payload",
+      "conditions": "fully integrated 10 t simulator article", "uncertainty": "exact for this simulator-defined payload"
+    },
+    {
+      "dataId": "newglenn-7x2-public-2026-07", "field": "vehicleEnvelope",
+      "status": "published", "source": "Blue Origin New Glenn product page",
+      "accessedDate": "2026-07-28", "variant": "current public 7x2 configuration",
+      "conditions": "more than 98 m tall, 7 m fairing, seven BE-4 and two BE-3U", "uncertainty": "logical part stack is rounded to 98 m"
+    },
+    {
+      "dataId": "cape_canaveral_lc36", "field": "geodeticLocation",
+      "status": "estimated", "source": "FAA Blue Origin orbital launch-site environmental assessment and public LC-36 geospatial mapping",
+      "accessedDate": "2026-07-28", "variant": "rebuilt SLC-36 launch pad",
+      "conditions": "WGS84 simulator launch origin, eastward heading", "uncertainty": "approximately ±100 m; official sources identify the complex but do not publish a pad-center coordinate"
+    }
+  ]
+}

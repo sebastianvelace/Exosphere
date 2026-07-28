@@ -1,0 +1,156 @@
+{
+  "manifestId": "blue-origin-engine-models-2026-07",
+  "records": [
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "ratedThrustSeaLevelN",
+      "status": "published", "source": "Blue Origin BE-4 and New Glenn product pages",
+      "accessedDate": "2026-07-28", "variant": "BE-4, advertised New Glenn upgrade",
+      "conditions": "Earth sea level, 640,000 lbf advertised rating", "uncertainty": "publisher rounds conversion to 2,846 kN"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "ratedThrustVacuumN",
+      "status": "estimated", "source": "Blue Origin sea-level rating; simulator pressure extrapolation",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn nozzle",
+      "conditions": "vacuum rated throttle", "uncertainty": "±5%; vacuum thrust is not published"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Public oxygen-rich staged-combustion performance envelope",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn",
+      "conditions": "Earth sea level, rated mixture", "uncertainty": "±10 s; Blue Origin does not publish Isp"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "Public oxygen-rich staged-combustion performance envelope",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn",
+      "conditions": "vacuum, rated mixture", "uncertainty": "±12 s; Blue Origin does not publish Isp"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "minimumThrottle",
+      "status": "published", "source": "Blue Origin Engines page",
+      "accessedDate": "2026-07-28", "variant": "BE-4 current product page",
+      "conditions": "220,000 lbf minimum versus 640,000 lbf rated", "uncertainty": "ratio derived from rounded published endpoints"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "performanceMap",
+      "status": "derived", "source": "Published sea-level endpoints plus estimated vacuum endpoint",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn",
+      "conditions": "34.36–100% throttle at sea level and vacuum", "uncertainty": "linear throttle scaling; inherits endpoint uncertainty"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "restartEnvelope",
+      "status": "estimated", "source": "Blue Origin New Glenn reusable-booster mission description",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn booster",
+      "conditions": "initial ascent plus recovery burns", "uncertainty": "restart qualification count is not published"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere reusable-engine thermal model",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn",
+      "conditions": "normalized assembly temperature", "uncertainty": "high; not a replica of proprietary sensors"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "New Glenn public imagery and simulator control-authority calibration",
+      "accessedDate": "2026-07-28", "variant": "seven-engine BE-4 booster cluster",
+      "conditions": "range, rate and acceleration", "uncertainty": "range ±2 deg; dynamics unpublished"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "startupTransient",
+      "status": "estimated", "source": "Blue Origin integrated seven-engine hotfire timeline",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn",
+      "conditions": "command to rated simulator thrust", "uncertainty": "±1 s"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "shutdownTransient",
+      "status": "estimated", "source": "Blue Origin integrated hotfire video timing",
+      "accessedDate": "2026-07-28", "variant": "BE-4, New Glenn",
+      "conditions": "cutoff to zero simulator thrust", "uncertainty": "±0.5 s"
+    },
+    {
+      "dataId": "be4-newglenn-public-2026", "field": "publicThrustEnvelope",
+      "status": "published", "source": "Blue Origin New Glenn Update, Nov. 20 2025; current BE-4 product page",
+      "accessedDate": "2026-07-28", "variant": "New Glenn BE-4 before and after subcooled-propellant upgrade",
+      "conditions": "550,000 lbf existing condition through 640,000 lbf advertised target", "uncertainty": "condition-dependent interval, not statistical uncertainty"
+    },
+
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "ratedThrustSeaLevelN",
+      "status": "estimated", "source": "Simulator back-pressure model for a vacuum-only engine",
+      "accessedDate": "2026-07-28", "variant": "BE-3U, New Glenn",
+      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±50%; not an operational rating"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "ratedThrustVacuumN",
+      "status": "published", "source": "Blue Origin BE-3U and New Glenn product pages",
+      "accessedDate": "2026-07-28", "variant": "BE-3U advertised upgrade",
+      "conditions": "vacuum rated thrust, 200,000 lbf", "uncertainty": "publisher rounds conversion to 890 kN"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "specificImpulseSeaLevelS",
+      "status": "estimated", "source": "Simulator back-pressure model",
+      "accessedDate": "2026-07-28", "variant": "BE-3U",
+      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±40 s; not an operational rating"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "specificImpulseVacuumS",
+      "status": "estimated", "source": "Public open-expander hydrolox performance envelope",
+      "accessedDate": "2026-07-28", "variant": "BE-3U, New Glenn",
+      "conditions": "vacuum, rated mixture", "uncertainty": "±10 s; Blue Origin states high Isp but does not publish a value"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "minimumThrottle",
+      "status": "published", "source": "Blue Origin BE-3U product page and Engines page",
+      "accessedDate": "2026-07-28", "variant": "BE-3U current public pages",
+      "conditions": "specific page states 140,000 lbf; engines overview states 100,000 lbf", "uncertainty": "official conflict gives a 50–70% throttle-floor interval; simulator uses conservative 70%"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "performanceMap",
+      "status": "derived", "source": "Published vacuum endpoints plus estimated sea-level endpoint",
+      "accessedDate": "2026-07-28", "variant": "BE-3U advertised upgrade",
+      "conditions": "70–100% throttle at sea level and vacuum", "uncertainty": "linear throttle scaling; inherits endpoint uncertainty"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "restartEnvelope",
+      "status": "estimated", "source": "Blue Origin states BE-3U is restartable for direct high-energy injection",
+      "accessedDate": "2026-07-28", "variant": "BE-3U, New Glenn upper stage",
+      "conditions": "initial ignition plus four simulator restarts", "uncertainty": "exact qualified restart count is not published"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "thermalEnvelope",
+      "status": "estimated", "source": "Exosphere hydrolox upper-stage thermal model",
+      "accessedDate": "2026-07-28", "variant": "BE-3U, New Glenn",
+      "conditions": "normalized assembly temperature", "uncertainty": "high; not a replica of proprietary sensors"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "gimbalEnvelope",
+      "status": "estimated", "source": "New Glenn GS2 public imagery and simulator calibration",
+      "accessedDate": "2026-07-28", "variant": "twin BE-3U upper stage",
+      "conditions": "range, rate and acceleration", "uncertainty": "range ±2 deg; dynamics unpublished"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "startupTransient",
+      "status": "estimated", "source": "Blue Origin GS2 hotfire description",
+      "accessedDate": "2026-07-28", "variant": "BE-3U, New Glenn",
+      "conditions": "command to rated simulator thrust", "uncertainty": "±1.5 s"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "shutdownTransient",
+      "status": "estimated", "source": "Blue Origin GS2 hotfire public timeline",
+      "accessedDate": "2026-07-28", "variant": "BE-3U, New Glenn",
+      "conditions": "cutoff to zero simulator thrust", "uncertainty": "±0.7 s"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "publicThrustEnvelope",
+      "status": "published", "source": "Blue Origin NG-1 GS2 hotfire, Nov. 2025 upgrade announcement, and current BE-3U page",
+      "accessedDate": "2026-07-28", "variant": "New Glenn BE-3U original, NG-1 and advertised upgrade",
+      "conditions": "160,000 lbf original design, 173,000 lbf NG-1, 200,000 lbf current advertised rating", "uncertainty": "variant-dependent interval, not statistical uncertainty"
+    },
+    {
+      "dataId": "be3u-newglenn-public-2026", "field": "publicThrottleEnvelope",
+      "status": "published", "source": "Blue Origin Engines overview and BE-3U product page",
+      "accessedDate": "2026-07-28", "variant": "BE-3U current public pages",
+      "conditions": "100,000–140,000 lbf minimum against 200,000 lbf rated thrust", "uncertainty": "official-page conflict represented as a 50–70% interval"
+    }
+  ]
+}

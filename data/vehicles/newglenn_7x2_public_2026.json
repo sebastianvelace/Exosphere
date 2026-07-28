@@ -1,0 +1,21 @@
+{
+  "id": "newglenn-7x2-public-2026-07",
+  "name": "New Glenn 7x2 — Public Upgrade Configuration",
+  "family": "New Glenn",
+  "asOfDate": "2026-07-28",
+  "fairingVariant": "seven-meter",
+  "primarySource": "https://www.blueorigin.com/new-glenn",
+  "engineClusterIds": [
+    "newglenn-7x2-be4-seven-2026",
+    "newglenn-7x2-be3u-two-2026"
+  ],
+  "stackTopToBottom": [
+    "newglenn_payload_simulator",
+    "newglenn_fairing_7m",
+    "newglenn_second_stage_tank",
+    "be3u_cluster2_newglenn_2026",
+    "newglenn_interstage",
+    "newglenn_first_stage_tank",
+    "be4_cluster7_newglenn_2026"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "be4_cluster7_newglenn_2026",
+  "name": "Seven BE-4 — New Glenn 7x2",
+  "description": "Seven individually simulated BE-4 engines at the July 2026 advertised public rating.",
+  "category": "engine",
+  "mass_dry": 21000,
+  "length_m": 4.0,
+  "diameter_m": 7.0,
+  "cost": 35000000,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 1550,
+  "thrust_vac": 21700000,
+  "thrust_sl": 19922000,
+  "isp_vac": 340,
+  "isp_sl": 310,
+  "gimbal_range": 5.0,
+  "fuel_type": "LiquidFuel+Oxidizer",
+  "mixture_ratio": 3.6,
+  "engine_count": 7,
+  "engine_model_id": "be4-newglenn-public-2026",
+  "engine_cluster_id": "newglenn-7x2-be4-seven-2026",
+  "engine_chill_seconds": 0.4,
+  "engine_spin_prime_seconds": 0.5,
+  "engine_ignition_seconds": 0.3,
+  "engine_purge_seconds": 0.5,
+  "engine_startup_seconds": 2.0,
+  "engine_shutdown_seconds": 0.8,
+  "attachment_nodes": [
+    {"id": "top", "position": [0, 2.0, 0], "size": 3, "type": "stack"},
+    {"id": "engine_bell", "position": [0, -2.0, 0], "size": 0, "type": "engine_bell"}
+  ]
+}

@@ -60,10 +60,16 @@ public sealed class EngineModelDefinition
     public double MixtureRatioOxidizerToFuel { get; set; }
     public double RatedThrustSeaLevelN { get; set; }
     public double RatedThrustVacuumN { get; set; }
+    public double? PublishedThrustLowerN { get; set; }
+    public double? PublishedThrustUpperN { get; set; }
+    public string PublishedThrustEnvelopeCondition { get; set; } = "";
     public double SpecificImpulseSeaLevelS { get; set; }
     public double SpecificImpulseVacuumS { get; set; }
     public double MinimumThrottle { get; set; }
     public double MaximumThrottle { get; set; } = 1.0;
+    public double? PublishedMinimumThrottleLower { get; set; }
+    public double? PublishedMinimumThrottleUpper { get; set; }
+    public string PublishedThrottleEnvelopeCondition { get; set; } = "";
     public double GimbalRangeDeg { get; set; }
     public double GimbalRateDegPerS { get; set; }
     public double GimbalAccelerationDegPerS2 { get; set; }
@@ -99,11 +105,44 @@ public sealed class EngineModelDefinition
             (MaximumThrottle, nameof(MaximumThrottle)),
             (StartupSeconds, nameof(StartupSeconds)),
             (ShutdownSeconds, nameof(ShutdownSeconds)));
+        if (PublishedThrustLowerN.HasValue != PublishedThrustUpperN.HasValue
+            || PublishedThrustLowerN is { } lower
+                && (!double.IsFinite(lower) || lower <= 0.0)
+            || PublishedThrustUpperN is { } upper
+                && (!double.IsFinite(upper) || upper <= 0.0)
+            || PublishedThrustLowerN is { } intervalLower
+                && PublishedThrustUpperN is { } intervalUpper
+                && (intervalUpper < intervalLower
+                    || string.IsNullOrWhiteSpace(
+                        PublishedThrustEnvelopeCondition)
+                    || (RatedThrustSeaLevelN < intervalLower
+                        || RatedThrustSeaLevelN > intervalUpper)
+                       && (RatedThrustVacuumN < intervalLower
+                           || RatedThrustVacuumN > intervalUpper)))
+            throw new InvalidDataException(
+                $"Engine model '{Id}' has an invalid public thrust envelope.");
         if (!double.IsFinite(MinimumThrottle)
             || MinimumThrottle < 0.0
             || MinimumThrottle > MaximumThrottle
             || MaximumThrottle > 1.0)
             throw new InvalidDataException($"Engine model '{Id}' has an invalid throttle range.");
+        if (PublishedMinimumThrottleLower.HasValue
+                != PublishedMinimumThrottleUpper.HasValue
+            || PublishedMinimumThrottleLower is { } throttleLower
+                && (!double.IsFinite(throttleLower)
+                    || throttleLower is < 0.0 or > 1.0)
+            || PublishedMinimumThrottleUpper is { } throttleUpper
+                && (!double.IsFinite(throttleUpper)
+                    || throttleUpper is < 0.0 or > 1.0)
+            || PublishedMinimumThrottleLower is { } lowerThrottle
+                && PublishedMinimumThrottleUpper is { } upperThrottle
+                && (upperThrottle < lowerThrottle
+                    || MinimumThrottle < lowerThrottle
+                    || MinimumThrottle > upperThrottle
+                    || string.IsNullOrWhiteSpace(
+                        PublishedThrottleEnvelopeCondition)))
+            throw new InvalidDataException(
+                $"Engine model '{Id}' has an invalid public throttle envelope.");
         if (!double.IsFinite(GimbalRangeDeg)
             || !double.IsFinite(GimbalRateDegPerS)
             || !double.IsFinite(GimbalAccelerationDegPerS2)
@@ -169,6 +208,10 @@ public sealed class EngineModelDefinition
             "gimbalEnvelope",
             "startupTransient",
             "shutdownTransient");
+        if (PublishedThrustLowerN.HasValue)
+            provenance?.RequireFields(Id, "publicThrustEnvelope");
+        if (PublishedMinimumThrottleLower.HasValue)
+            provenance?.RequireFields(Id, "publicThrottleEnvelope");
 
         void RequireFinitePositive(params (double value, string field)[] values)
         {

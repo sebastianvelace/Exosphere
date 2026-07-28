@@ -1,0 +1,28 @@
+{
+  "id": "newglenn-7x2-be4-seven-2026",
+  "name": "New Glenn Seven-Engine BE-4 Booster Cluster",
+  "engineModelId": "be4-newglenn-public-2026",
+  "engines": [
+    {"instanceId": "be4-center", "positionM": [0.0, 0.0, 0.0], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "be4-ring-01", "positionM": [2.2, 0.0, 0.0], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "be4-ring-02", "positionM": [1.1, 0.0, 1.9053], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "be4-ring-03", "positionM": [-1.1, 0.0, 1.9053], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "be4-ring-04", "positionM": [-2.2, 0.0, 0.0], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "be4-ring-05", "positionM": [-1.1, 0.0, -1.9053], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true},
+    {"instanceId": "be4-ring-06", "positionM": [1.1, 0.0, -1.9053], "thrustDirection": [0.0, 1.0, 0.0], "gimballed": true}
+  ],
+  "feedNetwork": {
+    "fuelResource": "LNG",
+    "oxidizerResource": "LOX",
+    "crossfeedEnabled": true,
+    "branches": [
+      {"engineInstanceId": "be4-center", "maximumFlowKgS": 1000},
+      {"engineInstanceId": "be4-ring-01", "maximumFlowKgS": 1000},
+      {"engineInstanceId": "be4-ring-02", "maximumFlowKgS": 1000},
+      {"engineInstanceId": "be4-ring-03", "maximumFlowKgS": 1000},
+      {"engineInstanceId": "be4-ring-04", "maximumFlowKgS": 1000},
+      {"engineInstanceId": "be4-ring-05", "maximumFlowKgS": 1000},
+      {"engineInstanceId": "be4-ring-06", "maximumFlowKgS": 1000}
+    ]
+  }
+}

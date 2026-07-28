@@ -349,19 +349,34 @@ public partial class MainMenu : Control
     }
 
     private void LaunchFalconScenario()
+        => LaunchVehicleScenario(
+            "falcon9_block5_standard_2025.json",
+            "kennedy",
+            "falcon9-block5-ascent");
+
+    private void LaunchNewGlennScenario()
+        => LaunchVehicleScenario(
+            "newglenn_7x2_public_2026.json",
+            "cape_canaveral_lc36",
+            "newglenn-7x2-ascent");
+
+    private void LaunchVehicleScenario(
+        string variantFile,
+        string launchSiteId,
+        string flightProfileId)
     {
         string data = ProjectSettings.GlobalizePath("res://data");
         var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(data, "parts"));
         var variant = VehicleVariantDefinition.LoadFromJson(
-            System.IO.Path.Combine(data, "vehicles", "falcon9_block5_standard_2025.json"));
+            System.IO.Path.Combine(data, "vehicles", variantFile));
         var craft = variant.Build(catalog).ToCraftDocument(variant.Name);
         craft.VehicleVariantId = variant.Id;
         CraftLaunchRequest.Set(new LaunchIntent
         {
             Mode = "scenario",
             VehicleVariantId = variant.Id,
-            LaunchSiteId = "kennedy",
-            FlightProfileId = "falcon9-block5-ascent",
+            LaunchSiteId = launchSiteId,
+            FlightProfileId = flightProfileId,
             Craft = craft,
         });
         OpenFlight();
@@ -370,6 +385,9 @@ public partial class MainMenu : Control
     private void ShowScenarios() => ShowModal(UiText.Get("scenario_title"), body =>
     {
         body.AddChild(ModalButton("FALCON 9 BLOCK 5 / KENNEDY", LaunchFalconScenario, true));
+        body.AddChild(ModalButton(
+            "NEW GLENN 7x2 / CAPE CANAVERAL SLC-36",
+            LaunchNewGlennScenario));
         body.AddChild(ModalButton("STARSHIP / 70 KM ENTRY INTERFACE", OpenReentry));
         body.AddChild(ModalButton("STARSHIP / STARBASE MANUAL LAUNCH", OpenSandbox));
     });
