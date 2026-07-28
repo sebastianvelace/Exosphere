@@ -13,10 +13,15 @@ public enum VesselDestructionCause
 
 public class Vessel
 {
-    public string Id   { get; }    = Guid.NewGuid().ToString();
+    public string Id   { get; }
     public string Name { get; set; } = "Unnamed Vessel";
 
     public PartGraph Parts { get; } = new();
+
+    public Vessel(string? id = null)
+    {
+        Id = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString() : id;
+    }
 
     // ── Estado cinemático (marco inercial, doble precisión) ───────────────
     public Vector3d    Position        { get; set; }

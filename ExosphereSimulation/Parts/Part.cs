@@ -4,12 +4,15 @@ using Exosphere.Simulation.Math;
 
 public class Part
 {
-    public string InstanceId { get; } = Guid.NewGuid().ToString();
+    public string InstanceId { get; }
     public PartDefinition Definition { get; }
 
-    public Part(PartDefinition def)
+    public Part(PartDefinition def, string? instanceId = null)
     {
-        Definition = def;
+        Definition = def ?? throw new ArgumentNullException(nameof(def));
+        InstanceId = string.IsNullOrWhiteSpace(instanceId)
+            ? Guid.NewGuid().ToString()
+            : instanceId;
         ResetResources();
     }
 

@@ -85,6 +85,39 @@ public sealed class ConstructionRegressionTests
     }
 
     [Fact]
+    public void CraftDocumentV2IsAuthoritativeAndPreservesPartIdsIntoFlight()
+    {
+        var original = BuildStarshipLikeAssembly();
+        var document = original.ToCraftDocument("V2 Round Trip");
+        document.VehicleVariantId = "starship-flight-7-block-2";
+        document.Stages.Add(new CraftStageV2
+        {
+            Sequence = 0,
+            Actions =
+            [
+                new CraftActionV2
+                {
+                    Kind = CraftActionKind.EngineStart,
+                    TargetInstanceId = document.Parts[^1].InstanceId,
+                },
+            ],
+        });
+
+        string json = JsonSerializer.Serialize(document);
+        var decoded = JsonSerializer.Deserialize<CraftDocumentV2>(json)!;
+        var restored = VesselAssembly.FromCraft(LoadCatalog(), decoded);
+        var vessel = restored.ToVessel(decoded.Name);
+
+        Assert.Equal(2, decoded.FormatVersion);
+        Assert.Equal("m", decoded.LengthUnit);
+        Assert.Equal("kg", decoded.MassUnit);
+        Assert.Single(decoded.Stages);
+        Assert.Equal(
+            decoded.Parts.Select(p => p.InstanceId).Order(),
+            vessel.Parts.Parts.Select(p => p.InstanceId).Order());
+    }
+
+    [Fact]
     public void DeletingPartRemovesItsSubtreeAndFreesParentNode()
     {
         var assembly = new VesselAssembly(LoadCatalog());

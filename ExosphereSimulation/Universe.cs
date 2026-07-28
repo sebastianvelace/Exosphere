@@ -35,6 +35,27 @@ public class Universe
     /// <summary>The vessel the player is currently controlling.</summary>
     public Vessel? ActiveVessel { get; set; }
 
+    /// <summary>
+    /// Selects the controlled vessel by stable identifier. Payloads, capsules, boosters,
+    /// rovers and docked craft all use the same path instead of renderer-specific references.
+    /// </summary>
+    public bool SetActiveVessel(string vesselId)
+    {
+        if (string.IsNullOrWhiteSpace(vesselId)) return false;
+        var vessel = _vessels.FirstOrDefault(v => v.Id == vesselId);
+        if (vessel == null) return false;
+        ActiveVessel = vessel;
+        return true;
+    }
+
+    /// <summary>Restores the authoritative simulation clock from a validated save.</summary>
+    public void SetSimulationTime(double secondsSinceJ2000)
+    {
+        if (!double.IsFinite(secondsSinceJ2000))
+            throw new ArgumentOutOfRangeException(nameof(secondsSinceJ2000));
+        CurrentTime = secondsSinceJ2000;
+    }
+
     /// <summary>Maximum physics sub-step (s) used in full-physics mode (50 Hz).</summary>
     private const double MaxPhysicsStep = 0.02;
     private const double MaxContactStep = 0.005;
@@ -70,10 +91,20 @@ public class Universe
     public void AddBody(CelestialBody body)   { if (!_bodies.Contains(body))   _bodies.Add(body); }
 
     /// <summary>Adds a vessel to the universe (no-op if already present).</summary>
-    public void AddVessel(Vessel vessel)      { if (!_vessels.Contains(vessel)) _vessels.Add(vessel); }
+    public void AddVessel(Vessel vessel)
+    {
+        if (_vessels.Any(v => v.Id == vessel.Id && !ReferenceEquals(v, vessel)))
+            throw new InvalidOperationException($"Duplicate vessel id '{vessel.Id}'.");
+        if (!_vessels.Contains(vessel)) _vessels.Add(vessel);
+    }
 
     /// <summary>Removes a vessel from the universe.</summary>
-    public void RemoveVessel(Vessel vessel)   { _vessels.Remove(vessel); }
+    public void RemoveVessel(Vessel vessel)
+    {
+        _vessels.Remove(vessel);
+        if (ReferenceEquals(ActiveVessel, vessel))
+            ActiveVessel = null;
+    }
 
     /// <summary>Finds a celestial body by its <see cref="CelestialBody.Id"/>.</summary>
     public CelestialBody? GetBody(string id)  => _bodies.FirstOrDefault(b => b.Id == id);

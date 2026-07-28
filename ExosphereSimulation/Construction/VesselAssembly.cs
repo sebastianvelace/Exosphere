@@ -223,7 +223,7 @@ public sealed class VesselAssembly
         var liveParts = new Dictionary<string, Part>();
         foreach (var item in _parts)
         {
-            liveParts[item.InstanceId] = new Part(RequirePart(item.DefinitionId));
+            liveParts[item.InstanceId] = new Part(RequirePart(item.DefinitionId), item.InstanceId);
         }
 
         var root = RootInstanceId ?? _parts[0].InstanceId;
@@ -269,6 +269,12 @@ public sealed class VesselAssembly
         Parts = _parts.ToList(),
         Connections = _connections.ToList(),
     };
+
+    public CraftDocumentV2 ToCraftDocument(string name = "Constructed Vessel") =>
+        CraftDocumentMigration.FromLegacy(ToCraft(name));
+
+    public static VesselAssembly FromCraft(PartCatalog catalog, CraftDocumentV2 craft) =>
+        FromCraft(catalog, CraftDocumentMigration.ToLegacy(craft));
 
     public static VesselAssembly FromCraft(PartCatalog catalog, VesselCraftDefinition craft)
     {
