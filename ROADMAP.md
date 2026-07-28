@@ -157,15 +157,16 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Freedom 7 / Mercury-Redstone 3 ✅ — misión headless completa y capturas de
   pad/liftoff.
 - Friendship 7 / Mercury-Atlas 6 ✅ — misión headless de tres órbitas, retrofire,
-  reentrada, splashdown y capturas de pad/liftoff. Pendiente: Gemini 8 y
-  definiciones 3–16.
+  reentrada, splashdown y capturas de pad/liftoff.
 - Fundación de docking Gemini 8 ✅ — puertos data-driven, hard dock conservativo,
   desacople y persistencia V2. Pendiente: hardware Titan II/Gemini/Agena e
   incidente OAMS de la misión.
-- Hardware Gemini 8 ✅ — Spacecraft 8, Titan II GLV-8, LC-19, Armstrong/Scott y
-  Agena 5003 cierran las masas/dimensiones publicadas y tienen motores y
-  procedencia data-driven. Pendiente: perfil de rendezvous, docking, anomalía
-  OAMS, aborto, reentrada y capturas visuales.
+- Gemini 8 ✅ — Spacecraft 8, Titan II GLV-8, LC-19, Armstrong/Scott y Agena
+  5003 cierran las masas/dimensiones publicadas; el perfil ejecuta staging,
+  rendezvous, docking, anomalía OAMS-8, desacople, recuperación de control y
+  retorno de emergencia. Evidencia, procedencia, prueba headless y captura
+  orbital de tasa angular están automatizadas. Pendiente: Apollo 8 y
+  definiciones 4–16.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 

@@ -30,7 +30,14 @@ public partial class CameraController : Node3D
         Mode = CameraMode.Chase;
         _yaw = 28f;
         _pitch = 10f;
-        _distance = 48f;
+        // Frame the active geometry instead of assuming a 50 m Starship. Capsules,
+        // payloads and rovers otherwise become sub-pixel dots at the old fixed distance.
+        double lengthM = SimulationBridge.Instance?.ActiveVessel?.VehicleLength
+            ?? 50.0;
+        _distance = Mathf.Clamp(
+            (float)(lengthM / 2.8 * 2.5),
+            8f,
+            48f);
     }
 
     // ── Chase / orbit state ───────────────────────────────────────────────

@@ -467,6 +467,11 @@ public class Vessel
     private const double ReactionControlAuthority = 0.01;
     public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
+        // A failure or an impact can legitimately leave the rigid body above the normal
+        // actuator envelope. Preserve that incoming rate while ordinary controls/aero
+        // work it down; the 20°/s envelope must prevent commanded acceleration, not
+        // erase externally generated angular momentum on the next tick.
+        double incomingAngularRate = AngularVelocity.Magnitude;
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
 
         // Avanzar el spool de motores UNA VEZ por tick (antes del consumo de propelante
@@ -581,9 +586,11 @@ public class Vessel
         // Clamping earlier allowed a high-q aerodynamic moment to bypass the limit in the same
         // integration step and produce a numerically explosive snap.
         const double maximumAngularRate = 0.35;
+        double controlledRateEnvelope = System.Math.Max(
+            maximumAngularRate, incomingAngularRate);
         double finalAngularRate = AngularVelocity.Magnitude;
-        if (finalAngularRate > maximumAngularRate)
-            AngularVelocity *= maximumAngularRate / finalAngularRate;
+        if (finalAngularRate > controlledRateEnvelope)
+            AngularVelocity *= controlledRateEnvelope / finalAngularRate;
 
         // Ground contact is an external physical torque, not an actuator command. Apply it
         // after the vehicle-control rate envelope so an impact can genuinely rotate/tip the

@@ -31,6 +31,8 @@ Options:
   --new-glenn   Seed the New Glenn 7x2 / LC-36 scenario before capture.
   --mercury     Seed Freedom 7 / Mercury-Redstone 3 at LC-5.
   --friendship  Seed Friendship 7 / Mercury-Atlas 6 at LC-14.
+  --gemini      Seed Gemini 8 / Titan II GLV-8 at LC-19.
+  --gemini-docking  Seed and capture Gemini 8 docked to Agena 5003.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --launch      Capture ignition and early vertical liftoff, then exit.
@@ -77,6 +79,17 @@ while [[ $# -gt 0 ]]; do
       VARIANT_FILE="mercury_atlas6_friendship7_1962.json"
       VARIANT_SITE="cape_canaveral_lc14"
       VARIANT_PROFILE="mercury-atlas6-three-orbit"
+      shift ;;
+    --gemini)
+      VARIANT_FILE="gemini8_titan2_1966.json"
+      VARIANT_SITE="cape_canaveral_lc19"
+      VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
+      shift ;;
+    --gemini-docking)
+      MODE="gemini_docking"
+      VARIANT_FILE="gemini8_titan2_1966.json"
+      VARIANT_SITE="cape_canaveral_lc19"
+      VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
       shift ;;
     --flight7)
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -359,6 +372,74 @@ public partial class _PlaytestShot : Node
             return;
         }
 
+        if (_mode == "gemini_docking")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                bridge.TriggerStaging();
+                bridge.TriggerStaging();
+                vessel = bridge.ActiveVessel!;
+                var target = bridge.EnsureGemini8AgenaTarget()!;
+                var earth = universe.GetBody("earth")!;
+                var sun = universe.GetBody("sun");
+                var dockingUp = sun != null
+                    ? (sun.Position - earth.Position).Normalized
+                    : (vessel.Position - earth.Position).Normalized;
+                var tangent =
+                    earth.RotationAxis.Cross(dockingUp).Normalized;
+                double radius = earth.Radius + 298_730.0;
+                var position = earth.Position + dockingUp * radius;
+                var velocity = earth.Velocity
+                    + tangent * System.Math.Sqrt(earth.GM / radius);
+                var orientation = Quaterniond.FromTo(Vector3d.Up, tangent);
+                var axis = orientation.Rotate(Vector3d.Up);
+                target.Position = position;
+                target.Velocity = velocity;
+                target.Orientation = orientation;
+                target.ReferenceBodyId = earth.Id;
+                target.IsOnRails = false;
+                target.OrbitalState = null;
+                vessel.Position = position - axis * 1.075;
+                vessel.Velocity = velocity + axis * 0.10;
+                vessel.Orientation = orientation;
+                vessel.ReleaseGroundHold();
+                vessel.ReferenceBodyId = earth.Id;
+                vessel.IsOnRails = false;
+                vessel.OrbitalState = null;
+                string geminiPort = vessel.Parts.Parts.Single(part =>
+                    part.Definition.HasVehicleRole(
+                        "gemini_docking_port")).InstanceId;
+                string targetPort = target.Parts.Parts.Single(part =>
+                    part.Definition.HasVehicleRole(
+                        "agena_target_docking_port")).InstanceId;
+                var result = universe.TryDock(
+                    vessel.Id, geminiPort,
+                    target.Id, targetPort,
+                    "gemini8-agena-docking");
+                if (!result.Succeeded)
+                    throw new InvalidOperationException(
+                        $"Gemini visual docking failed: {result.Failure}");
+                vessel.SASEnabled = false;
+                target.SASEnabled = false;
+                vessel.AngularVelocity =
+                    axis * (20.0 * System.Math.PI / 180.0);
+                MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+                CameraController.Instance?.EnterShipChaseView();
+                _shipSeeded = true;
+                _readyFrames = 0;
+                return;
+            }
+            if (_shipSeeded && _readyFrames >= 75
+                && !_orbitBeauty && _pendingSlug == null)
+            {
+                QueueCapture("gemini_docked_anomaly");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("GEMINI_DOCKING_OK");
+            return;
+        }
+
         // ── Pad ───────────────────────────────────────────────────────────────
         if (!_pad && _readyFrames >= 45 && vessel.IsGroundHeld && alt < 40.0)
         {
@@ -371,6 +452,7 @@ public partial class _PlaytestShot : Node
             && bridge.ActiveFlightProfileId is
                 "mercury-redstone3-suborbital"
                 or "mercury-atlas6-three-orbit"
+                or "gemini8-rendezvous-emergency-return"
             && MissionManager.Instance != null)
         {
             MissionManager.Instance.StartCountdown();
@@ -1372,6 +1454,23 @@ xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
   res://scenes/flight/Flight.tscn 2>&1 | tee -a "$LOG"
 
 verify_pngs
+
+if [[ "$MODE" == "gemini_docking" ]]; then
+  omega="$(awk '
+    /CAPTURE gemini_docked_anomaly/ {
+      for (i = 1; i <= NF; i++)
+        if ($i ~ /^omega=/) {
+          split($i, pair, "=")
+          print pair[2]
+          exit
+        }
+    }' "$LOG")"
+  if [[ -z "$omega" ]] || ! awk -v value="$omega" '
+      BEGIN { exit !(value >= 0.30 && value <= 0.36) }'; then
+    echo "ERROR: Gemini anomaly capture requires 20 deg/s (omega=${omega:-missing} rad/s)." >&2
+    exit 1
+  fi
+fi
 
 if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"

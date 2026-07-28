@@ -76,6 +76,12 @@ public static class MissionEvaluator
                 ["maximumGForce"] = evidence.MaximumGForce,
                 ["maximumDownrangeM"] = evidence.MaximumDownrangeM,
                 ["completedOrbits"] = evidence.CompletedOrbits,
+                ["dockingAchieved"] =
+                    evidence.DockingAchieved ? 1.0 : 0.0,
+                ["maximumAngularRateDegPerS"] =
+                    evidence.MaximumAngularRateDegPerS,
+                ["emergencyControlRecovered"] =
+                    evidence.EmergencyControlRecovered ? 1.0 : 0.0,
             });
     }
 
@@ -122,6 +128,7 @@ public static class MissionEvaluator
     private static bool IsIrreversible(MissionRuleDefinition rule) =>
         rule.Metric is MissionMetric.MaximumDynamicPressurePa
             or MissionMetric.MaximumGForce
+            or MissionMetric.MaximumAngularRateDegPerS
             or MissionMetric.CrewAlive
             or MissionMetric.VesselDestroyed
         || rule.Metric == MissionMetric.ElapsedSeconds

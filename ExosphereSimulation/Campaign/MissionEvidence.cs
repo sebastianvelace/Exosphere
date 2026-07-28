@@ -13,6 +13,8 @@ public sealed record MissionTelemetrySnapshot
     public double GForce { get; init; }
     public double DownrangeM { get; init; }
     public double CompletedOrbits { get; init; }
+    public bool DockingAchieved { get; init; }
+    public double AngularRateDegPerS { get; init; }
     public bool CrewAlive { get; init; } = true;
     public bool VesselDestroyed { get; init; }
     public bool Splashdown { get; init; }
@@ -25,6 +27,7 @@ public sealed record MissionTelemetrySnapshot
                      InertialSpeedMps,
                      DynamicPressurePa, GForce, DownrangeM,
                      CompletedOrbits,
+                     AngularRateDegPerS,
                  })
             if (!double.IsFinite(value) || value < 0.0)
                 throw new ArgumentOutOfRangeException(
@@ -45,6 +48,9 @@ public sealed class MissionEvidence
     public double MaximumGForce { get; private set; }
     public double MaximumDownrangeM { get; private set; }
     public double CompletedOrbits { get; private set; }
+    public bool DockingAchieved { get; private set; }
+    public double MaximumAngularRateDegPerS { get; private set; }
+    public bool EmergencyControlRecovered { get; private set; }
     public bool CrewAlive { get; private set; } = true;
     public bool VesselDestroyed { get; private set; }
     public bool Splashdown { get; private set; }
@@ -70,6 +76,13 @@ public sealed class MissionEvidence
             System.Math.Max(MaximumDownrangeM, snapshot.DownrangeM);
         CompletedOrbits =
             System.Math.Max(CompletedOrbits, snapshot.CompletedOrbits);
+        DockingAchieved |= snapshot.DockingAchieved;
+        MaximumAngularRateDegPerS = System.Math.Max(
+            MaximumAngularRateDegPerS,
+            snapshot.AngularRateDegPerS);
+        EmergencyControlRecovered |=
+            MaximumAngularRateDegPerS >= 60.0
+            && snapshot.AngularRateDegPerS <= 2.0;
         CrewAlive &= snapshot.CrewAlive;
         VesselDestroyed |= snapshot.VesselDestroyed;
         Splashdown |= snapshot.Splashdown;
@@ -85,6 +98,11 @@ public sealed class MissionEvidence
         MissionMetric.MaximumGForce => MaximumGForce,
         MissionMetric.MaximumDownrangeM => MaximumDownrangeM,
         MissionMetric.CompletedOrbits => CompletedOrbits,
+        MissionMetric.DockingAchieved => DockingAchieved ? 1.0 : 0.0,
+        MissionMetric.MaximumAngularRateDegPerS =>
+            MaximumAngularRateDegPerS,
+        MissionMetric.EmergencyControlRecovered =>
+            EmergencyControlRecovered ? 1.0 : 0.0,
         MissionMetric.ElapsedSeconds => ElapsedSeconds,
         MissionMetric.CrewAlive => CrewAlive ? 1.0 : 0.0,
         MissionMetric.VesselDestroyed => VesselDestroyed ? 1.0 : 0.0,
@@ -110,6 +128,10 @@ public sealed class MissionEvidence
             ["maximumGForce"] = MaximumGForce,
             ["maximumDownrangeM"] = MaximumDownrangeM,
             ["completedOrbits"] = CompletedOrbits,
+            ["dockingAchieved"] = DockingAchieved ? 1.0 : 0.0,
+            ["maximumAngularRateDegPerS"] = MaximumAngularRateDegPerS,
+            ["emergencyControlRecovered"] =
+                EmergencyControlRecovered ? 1.0 : 0.0,
             ["crewAlive"] = CrewAlive ? 1.0 : 0.0,
             ["vesselDestroyed"] = VesselDestroyed ? 1.0 : 0.0,
             ["splashdown"] = Splashdown ? 1.0 : 0.0,
@@ -137,6 +159,11 @@ public sealed class MissionEvidence
             MaximumGForce = Read("maximumGForce"),
             MaximumDownrangeM = Read("maximumDownrangeM"),
             CompletedOrbits = Read("completedOrbits"),
+            DockingAchieved = Read("dockingAchieved") >= 0.5,
+            MaximumAngularRateDegPerS =
+                Read("maximumAngularRateDegPerS"),
+            EmergencyControlRecovered =
+                Read("emergencyControlRecovered") >= 0.5,
             CrewAlive = Read("crewAlive", 1.0) >= 0.5,
             VesselDestroyed = Read("vesselDestroyed") >= 0.5,
             Splashdown = Read("splashdown") >= 0.5,

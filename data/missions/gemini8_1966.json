@@ -1,0 +1,101 @@
+{
+  "id": "mission-gemini8-1966",
+  "sequence": 3,
+  "program": "NASA Project Gemini",
+  "titleEn": "Gemini 8",
+  "titleEs": "Gemini 8",
+  "summaryEn": "Launch Spacecraft 8, rendezvous and achieve the first docking with Agena 5003, survive the stuck OAMS thruster and return by emergency splashdown.",
+  "summaryEs": "Lanza la nave 8, realiza el rendezvous y primer docking con Agena 5003, sobrevive al propulsor OAMS atascado y regresa en un amerizaje de emergencia.",
+  "historicalDate": "1966-03-16",
+  "vehicleVariantId": "gemini8-titan2-glv8-1966-03-16",
+  "launchSiteId": "cape_canaveral_lc19",
+  "flightProfileId": "gemini8-rendezvous-emergency-return",
+  "crewIds": ["neil-a-armstrong", "david-r-scott"],
+  "prerequisiteMissionIds": ["mission-friendship7-1962"],
+  "objectives": [
+    {
+      "id": "gemini-orbit", "titleEn": "Insert Spacecraft 8 into its rendezvous orbit",
+      "titleEs": "Inserta la nave 8 en su órbita de rendezvous",
+      "metric": "peak_altitude_m", "comparison": "between",
+      "target": 250000, "upperTarget": 310000, "required": true
+    },
+    {
+      "id": "first-docking", "titleEn": "Achieve the first orbital docking",
+      "titleEs": "Logra el primer docking orbital",
+      "metric": "docking_achieved", "comparison": "true",
+      "target": 1, "required": true
+    },
+    {
+      "id": "survive-tumble", "titleEn": "Regain control after the OAMS failure",
+      "titleEs": "Recupera el control tras la falla OAMS",
+      "metric": "emergency_control_recovered", "comparison": "true",
+      "target": 1, "required": true
+    },
+    {
+      "id": "emergency-return", "titleEn": "Splash down in the Pacific contingency area",
+      "titleEs": "Ameriza en el área de contingencia del Pacífico",
+      "metric": "splashdown", "comparison": "true",
+      "target": 1, "required": true
+    },
+    {
+      "id": "historical-duration", "titleEn": "Complete the emergency mission-duration corridor",
+      "titleEs": "Completa el corredor de duración de la misión de emergencia",
+      "metric": "elapsed_seconds", "comparison": "between",
+      "target": 37800, "upperTarget": 39200, "required": true
+    }
+  ],
+  "limits": [
+    {
+      "id": "crew-survival", "titleEn": "Return both pilots alive",
+      "titleEs": "Regresa con ambos pilotos vivos",
+      "metric": "crew_alive", "comparison": "true",
+      "target": 1, "required": true
+    },
+    {
+      "id": "capsule-survival", "titleEn": "Recover Spacecraft 8",
+      "titleEs": "Recupera la nave 8",
+      "metric": "vessel_destroyed", "comparison": "false",
+      "target": 0, "required": true
+    },
+    {
+      "id": "tumble-envelope", "titleEn": "Keep the tumble below the documented envelope",
+      "titleEs": "Mantén el giro bajo el sobre documentado",
+      "metric": "maximum_angular_rate_deg_per_s", "comparison": "at_most",
+      "target": 310, "required": true
+    }
+  ],
+  "anomalies": [
+    {
+      "id": "oams-thruster-8-stuck-on",
+      "descriptionEn": "OAMS thruster 8 electrically fails on after docking and drives a rapidly accelerating tumble.",
+      "descriptionEs": "El propulsor OAMS 8 falla eléctricamente encendido tras el docking y provoca un giro acelerado.",
+      "enabledByDefault": true
+    }
+  ],
+  "rewards": [
+    {
+      "id": "historical-completion", "amount": 175,
+      "unlockIds": ["mission-apollo8-1968", "vehicle-family-apollo"]
+    }
+  ],
+  "sources": [
+    {
+      "id": "nasa-gemini8-mission",
+      "url": "https://www.nasa.gov/mission/gemini-viii/",
+      "accessedDate": "2026-07-28",
+      "description": "NASA mission identity, crew, mass, orbit, docking, anomaly, recovery and duration."
+    },
+    {
+      "id": "nasa-gemini8-report",
+      "url": "https://apollojournals.org/alsj/43455667-Gemini-Program-Mission-Report-Gemini-Viii.pdf",
+      "accessedDate": "2026-07-28",
+      "description": "NASA MSC-G-R-66-4 actual event sequence, weights, trajectory, thruster-8 failure and landing."
+    },
+    {
+      "id": "nasa-gemini-chronology",
+      "url": "https://www.nasa.gov/history/SP-4002/p3b.htm",
+      "accessedDate": "2026-07-28",
+      "description": "NASA chronology of GATV launch, rendezvous, docking, abort and recovery."
+    }
+  ]
+}

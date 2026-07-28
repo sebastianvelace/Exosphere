@@ -67,6 +67,21 @@ centro aerodinámico y retención del anillo durante staging están definidos po
 pieza, no por supuestos exclusivos de Starship. La aceptación completa se
 documenta en `docs/HITO4_FRIENDSHIP7_PLAYABLE.md`.
 
+## Gemini 8
+
+La tercera entrada se desbloquea tras Friendship 7 y lanza únicamente Spacecraft
+8 sobre Titan II GLV-8 desde LC-19. Agena 5003 nace como un segundo vehículo con
+ID estable en su órbita publicada; el rendezvous usa una reconstrucción OAMS
+calibrada y la captura pasa por el solver conservativo de docking.
+
+La evidencia persiste el primer docking, la máxima velocidad angular y la
+recuperación después de superar 60°/s. El propulsor OAMS-8 atascado alcanza los
+296°/s publicados como momento externo, separado del límite de 20°/s de los
+actuadores normales. Después del desacople se consume la reserva OAMS, se
+ejecuta el impulso retro calibrado y el retorno entra en un periapsis
+atmosférico verificable. La aceptación completa está en
+`docs/HITO4_GEMINI8_PLAYABLE.md`.
+
 ## Verificación
 
 Las pruebas puras cubren:
@@ -78,7 +93,7 @@ Las pruebas puras cubren:
 - round-trip de máximos, fases y origen de downrange;
 - recompensas y desbloqueos idempotentes;
 - rechazo de progreso no finito y recompensas negativas;
-- procedencia obligatoria de los datos Freedom 7 y Friendship 7;
+- procedencia obligatoria de los datos Freedom 7, Friendship 7 y Gemini 8;
 - round-trip y evaluación de las tres órbitas de Friendship 7.
 
 La aceptación adicional de Freedom 7 cubre masa/dimensiones, A-7, crew/sitio,
@@ -89,6 +104,10 @@ completa. El nominal reproducible obtiene 181,4 km, 2,25 km/s geocéntricos,
 Friendship 7 añade cierre de masas Atlas/Mercury, separación *stage-and-a-half*,
 secuencia histórica, tres órbitas, retrofire, orientación térmica, paracaídas y
 splashdown en una simulación headless completa.
+
+Gemini 8 añade dos separaciones Titan, docking real con Agena, conservación del
+hard dock, tasa externa de 296°/s, desacople, recuperación y un impulso retro
+cuyo periapsis se valida dentro del corredor atmosférico.
 
 La captura reproducible del modal usa:
 

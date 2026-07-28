@@ -243,9 +243,11 @@ public sealed class VesselAssembly
         return graph;
     }
 
-    public Vessel ToVessel(string name = "Constructed Vessel")
+    public Vessel ToVessel(
+        string name = "Constructed Vessel",
+        string? stableId = null)
     {
-        var vessel = new Vessel
+        var vessel = new Vessel(stableId)
         {
             Name = name,
             Orientation = Quaterniond.Identity,

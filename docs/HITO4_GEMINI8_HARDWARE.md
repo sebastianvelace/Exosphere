@@ -21,10 +21,12 @@ anillo spacecraft/Stage II aunque este último aparezca antes en la topología.
 Ambas separaciones conservan masa y dejan 33.471 kg tras Stage I y 3.788 kg de
 spacecraft tras Stage II.
 
-Los modelos de propulsión son contratos independientes para el agregado LR87
-de dos cámaras y el LR91 de Stage II. NASA publica 430.000 y 100.000 lbf; Isp,
-empuje fuera de la condición publicada, gimbal, térmica y transitorios se
-mantienen `estimated` o `derived`.
+Los modelos de propulsión son contratos independientes para las dos cámaras
+runtime del LR87 y el LR91 de Stage II. Cada cámara LR87 recibe la mitad
+`derived` del agregado publicado, y el cluster vuelve a cerrar exactamente
+430.000 lbf; esto evita duplicar empuje y caudal al representarlas por separado.
+NASA publica 430.000 y 100.000 lbf; Isp, empuje fuera de la condición publicada,
+gimbal, térmica y transitorios se mantienen `estimated` o `derived`.
 
 ## Agena 5003
 

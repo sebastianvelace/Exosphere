@@ -244,7 +244,9 @@ public partial class SimulationBridge : Node
             else
             {
                 bool historicalOrbitalCoast =
-                    ActiveFlightProfileId == MercuryAtlasFlightProfile.Id
+                    ActiveFlightProfileId is
+                        MercuryAtlasFlightProfile.Id
+                        or Gemini8FlightProfile.Id
                     && MissionManager.Instance?.Phase is MissionPhase.ORBIT
                         or MissionPhase.COAST
                     && av.GetAltitude(refB) > 120_000.0;
@@ -780,6 +782,56 @@ public partial class SimulationBridge : Node
         SpawnDebrisRenderer(detached, "Separated_");
         EmitSignal(SignalName.VesselStaged, detached.Id);
         return detached;
+    }
+
+    /// <summary>
+    /// Creates the already-orbiting Agena 5003 target for the Gemini VIII campaign.
+    /// Its stable identity and ordinary PartGraph make it saveable, targetable and
+    /// dockable through the same multi-vessel path as player-deployed payloads.
+    /// </summary>
+    public Vessel? EnsureGemini8AgenaTarget()
+    {
+        const string targetId = "gemini8-agena-5003";
+        var existing = Universe.Vessels.FirstOrDefault(v => v.Id == targetId);
+        if (existing != null) return existing;
+
+        var earth = Universe.GetBody("earth");
+        var carrier = ActiveVessel;
+        if (earth == null || carrier == null) return null;
+        string dataPath = ProjectSettings.GlobalizePath(DataDirectory);
+        var catalog = PartCatalog.LoadFromDirectory(
+            System.IO.Path.Combine(dataPath, "parts"));
+        var variant = VehicleVariantDefinition.LoadFromJson(
+            System.IO.Path.Combine(
+                dataPath, "vehicles", "agena8_target_5003_1966.json"));
+        var target = variant.Build(catalog).ToVessel(
+            "Gemini Agena Target Vehicle 5003", targetId);
+
+        Vector3d up = (carrier.Position - earth.Position).Normalized;
+        if (up.MagnitudeSquared < 1e-9) up = Vector3d.Right;
+        Vector3d tangent = GetLaunchHeadingDirection();
+        tangent = (tangent - up * tangent.Dot(up)).Normalized;
+        if (tangent.MagnitudeSquared < 1e-9)
+            tangent = earth.RotationAxis.Cross(up).Normalized;
+        double radius = earth.Radius
+            + Gemini8FlightProfile.HistoricalTargetOrbitM;
+        target.Position = earth.Position + up * radius;
+        target.Velocity = earth.Velocity
+            + tangent * System.Math.Sqrt(earth.GM / radius);
+        target.Orientation = Quaterniond.FromTo(Vector3d.Up, tangent);
+        target.ReferenceBodyId = earth.Id;
+        target.IsOnRails = true;
+        target.OrbitalState = OrbitalElements.FromStateVector(
+            target.Position - earth.Position,
+            target.Velocity - earth.Velocity,
+            earth.GM,
+            earth.Id,
+            Universe.CurrentTime);
+        target.SASEnabled = true;
+        Universe.AddVessel(target);
+        SpawnDebrisRenderer(target, "Target_");
+        GD.Print("[HISTORICAL] Agena 5003 acquired in its 161.3 nmi target orbit.");
+        return target;
     }
 
     public Vector3d GetLaunchHeadingDirection()

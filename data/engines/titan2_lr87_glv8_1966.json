@@ -1,13 +1,13 @@
 {
   "id": "titan2-lr87-glv8-1966",
-  "name": "Aerojet LR87 twin-chamber Stage I",
-  "variant": "Gemini Launch Vehicle 8 aggregate",
+  "name": "Aerojet LR87 Stage I thrust chamber",
+  "variant": "Gemini Launch Vehicle 8 per-chamber runtime",
   "asOfDate": "1966-03-16",
   "fuel": "Aerozine 50",
   "oxidizer": "N2O4",
   "mixtureRatioOxidizerToFuel": 1.9,
-  "ratedThrustSeaLevelN": 1912740,
-  "ratedThrustVacuumN": 2100000,
+  "ratedThrustSeaLevelN": 956370,
+  "ratedThrustVacuumN": 1050000,
   "specificImpulseSeaLevelS": 258,
   "specificImpulseVacuumS": 296,
   "minimumThrottle": 1.0,
@@ -23,7 +23,7 @@
   "thermalTimeConstantSeconds": 3.0,
   "cooldownTimeConstantSeconds": 24.0,
   "performanceMap": [
-    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 1912740, "specificImpulseS": 258},
-    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 2100000, "specificImpulseS": 296}
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 956370, "specificImpulseS": 258},
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 1050000, "specificImpulseS": 296}
   ]
 }

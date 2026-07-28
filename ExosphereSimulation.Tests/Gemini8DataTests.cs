@@ -1,8 +1,11 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Campaign;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Data;
+using Exosphere.Simulation.Flight;
+using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Propulsion;
 
 public sealed class Gemini8DataTests
@@ -36,7 +39,7 @@ public sealed class Gemini8DataTests
 
         var engines = LoadEngines();
         Assert.Equal(
-            1_912_740.0,
+            956_370.0,
             engines.Models["titan2-lr87-glv8-1966"]
                 .RatedThrustSeaLevelN);
         Assert.Equal(
@@ -46,6 +49,13 @@ public sealed class Gemini8DataTests
         Assert.Equal(
             2,
             engines.Clusters["titan2-lr87-glv8-1966"].Engines.Count);
+        Assert.Equal(
+            1_912_740.0,
+            engines.Clusters["titan2-lr87-glv8-1966"].Engines.Sum(mount =>
+                engines.Models[string.IsNullOrWhiteSpace(mount.EngineModelId)
+                    ? engines.Clusters["titan2-lr87-glv8-1966"].EngineModelId
+                    : mount.EngineModelId].RatedThrustSeaLevelN),
+            6);
     }
 
     [Fact]
@@ -75,6 +85,27 @@ public sealed class Gemini8DataTests
             8);
         Assert.DoesNotContain(vessel.Parts.Parts, part =>
             part.Definition.HasVehicleRole("spacecraft_separation"));
+    }
+
+    [Fact]
+    public void TitanHypergolicRuntimeClearsHoldDownThrustMargin()
+    {
+        string data = Path.Combine(Root.FullName, "data");
+        var universe = Universe.LoadFromDataDirectory(data);
+        var earth = universe.GetBody("earth")!;
+        var vessel = LoadVariant("gemini8_titan2_1966.json")
+            .Build(LoadParts())
+            .ToVessel("Gemini VIII");
+        vessel.Position = earth.Position
+            + Vector3d.Right * (earth.Radius + 4.0);
+        vessel.Throttle = 1.0;
+
+        for (int step = 0; step < 250; step++)
+            vessel.Tick(0.02, earth);
+
+        Assert.InRange(vessel.GetThrustToWeightRatio(earth), 1.22, 1.30);
+        Assert.All(vessel.Parts.ActiveEngines, engine =>
+            Assert.True(engine.ThrottleLevel > 0.99));
     }
 
     [Fact]
@@ -140,7 +171,220 @@ public sealed class Gemini8DataTests
             "insertionMassKg",
             "dimensionsM",
             "dockingCaptureEnvelope");
+        provenance.RequireFields(
+            "mission-gemini8-1966",
+            "missionIdentity",
+            "historicalOrbit",
+            "historicalDurationS",
+            "historicalEvents",
+            "thrusterFailure",
+            "retrofireDeltaV",
+            "objectiveEnvelope");
+        Assert.Equal(
+            ProvenanceStatus.Published,
+            provenance.Require(
+                "mission-gemini8-1966", "thrusterFailure").Status);
     }
+
+    [Fact]
+    public void MissionEvidencePersistsFirstDockingTumbleAndControlRecovery()
+    {
+        MissionDefinition mission = MissionDefinition.LoadFromJson(
+            Path.Combine(Root.FullName, "data", "missions",
+                "gemini8_1966.json"));
+        var director = new MissionDirector(mission);
+
+        director.Observe(Snapshot(0.0, "PRE_LAUNCH"));
+        director.Observe(Snapshot(
+            Gemini8FlightProfile.DockingSeconds,
+            "ORBIT",
+            altitudeM: 271_900.0,
+            dockingAchieved: true));
+        director.Observe(Snapshot(
+            Gemini8FlightProfile.ThrusterIsolationSeconds,
+            "ORBIT",
+            altitudeM: 271_900.0,
+            angularRateDegPerS:
+                Gemini8FlightProfile.HistoricalPeakAngularRateDegPerS));
+
+        var restored = new MissionDirector(
+            mission, director.CaptureState());
+        restored.Observe(Snapshot(
+            Gemini8FlightProfile.ControlRecoveredSeconds,
+            "ORBIT",
+            altitudeM: 271_900.0,
+            angularRateDegPerS: 1.5));
+        restored.Observe(Snapshot(
+            Gemini8FlightProfile.SplashdownSeconds,
+            "LANDED",
+            altitudeM: 271_900.0,
+            splashdown: true));
+        MissionDebrief debrief = restored.FinalizeMission();
+
+        Assert.True(restored.Evidence.DockingAchieved);
+        Assert.True(restored.Evidence.EmergencyControlRecovered);
+        Assert.Equal(
+            Gemini8FlightProfile.HistoricalPeakAngularRateDegPerS,
+            restored.Evidence.MaximumAngularRateDegPerS);
+        Assert.Equal(MissionOutcome.Success, debrief.Outcome);
+        Assert.True(debrief.Objectives.Single(result =>
+            result.Id == "first-docking").Passed);
+        Assert.True(debrief.Objectives.Single(result =>
+            result.Id == "survive-tumble").Passed);
+    }
+
+    [Fact]
+    public void MissionCannotPassWithoutDockingOrARealHighRateRecovery()
+    {
+        MissionDefinition mission = MissionDefinition.LoadFromJson(
+            Path.Combine(Root.FullName, "data", "missions",
+                "gemini8_1966.json"));
+        var director = new MissionDirector(mission);
+        director.Observe(Snapshot(
+            Gemini8FlightProfile.SplashdownSeconds,
+            "LANDED",
+            altitudeM: 271_900.0,
+            angularRateDegPerS: 0.0,
+            splashdown: true));
+
+        MissionDebrief debrief = director.FinalizeMission();
+
+        Assert.Equal(MissionOutcome.Failure, debrief.Outcome);
+        Assert.False(debrief.Objectives.Single(result =>
+            result.Id == "first-docking").Passed);
+        Assert.False(debrief.Objectives.Single(result =>
+            result.Id == "survive-tumble").Passed);
+    }
+
+    [Fact]
+    public void OamsFailureEnvelopeReachesPublishedRateAndRecovers()
+    {
+        Assert.Equal(
+            0.0,
+            Gemini8FlightProfile.AnomalyAngularRateDegPerS(
+                Gemini8FlightProfile.ThrusterAnomalySeconds));
+        Assert.Equal(
+            Gemini8FlightProfile.DockedTumbleRateDegPerS,
+            Gemini8FlightProfile.AnomalyAngularRateDegPerS(
+                Gemini8FlightProfile.UndockingSeconds),
+            8);
+        Assert.Equal(
+            Gemini8FlightProfile.HistoricalPeakAngularRateDegPerS,
+            Gemini8FlightProfile.AnomalyAngularRateDegPerS(
+                Gemini8FlightProfile.ThrusterIsolationSeconds),
+            8);
+        Assert.Equal(
+            0.0,
+            Gemini8FlightProfile.AnomalyAngularRateDegPerS(
+                Gemini8FlightProfile.ControlRecoveredSeconds),
+            8);
+    }
+
+    [Fact]
+    public void HeadlessMissionStagesDocksSurvivesFailureAndCommitsToEntry()
+    {
+        string data = Path.Combine(Root.FullName, "data");
+        var universe = Universe.LoadFromDataDirectory(data);
+        var earth = universe.GetBody("earth")!;
+        var gemini = LoadVariant("gemini8_titan2_1966.json")
+            .Build(LoadParts())
+            .ToVessel("Gemini VIII", "gemini8-spacecraft");
+        Assert.NotNull(gemini.Stage());
+        Assert.NotNull(gemini.Stage());
+        var target = LoadVariant("agena8_target_5003_1966.json")
+            .Build(LoadParts())
+            .ToVessel("Agena 5003", "gemini8-agena-5003");
+
+        Vector3d up = Vector3d.Right;
+        Vector3d tangent = Vector3d.Forward;
+        double radius = earth.Radius
+            + Gemini8FlightProfile.HistoricalTargetOrbitM;
+        Vector3d orbitalPosition = earth.Position + up * radius;
+        Vector3d orbitalVelocity = earth.Velocity
+            + tangent * System.Math.Sqrt(earth.GM / radius);
+        Quaterniond orientation =
+            Quaterniond.FromTo(Vector3d.Up, tangent);
+        Vector3d dockingAxis = orientation.Rotate(Vector3d.Up);
+        target.Position = orbitalPosition;
+        target.Velocity = orbitalVelocity;
+        target.Orientation = orientation;
+        gemini.Position = orbitalPosition
+            - dockingAxis * (0.975 + 0.10);
+        gemini.Velocity = orbitalVelocity + dockingAxis * 0.10;
+        gemini.Orientation = orientation;
+        gemini.SASEnabled = false;
+        target.SASEnabled = false;
+        universe.AddVessel(gemini);
+        universe.AddVessel(target);
+        universe.SetActiveVessel(gemini.Id);
+
+        string geminiPort = gemini.Parts.Parts.Single(part =>
+            part.Definition.HasVehicleRole(
+                "gemini_docking_port")).InstanceId;
+        string targetPort = target.Parts.Parts.Single(part =>
+            part.Definition.HasVehicleRole(
+                "agena_target_docking_port")).InstanceId;
+        DockingAttempt docking = universe.TryDock(
+            gemini.Id,
+            geminiPort,
+            target.Id,
+            targetPort,
+            "gemini8-agena-docking");
+        Assert.True(docking.Succeeded);
+        Assert.Equal(0.10, docking.DistanceM, 8);
+
+        double dockedRate = Gemini8FlightProfile.DockedTumbleRateDegPerS
+            * MathUtils.DEG_TO_RAD;
+        gemini.AngularVelocity = dockingAxis * dockedRate;
+        universe.Tick(0.02);
+        Assert.Equal(
+            gemini.AngularVelocity,
+            target.AngularVelocity);
+        Assert.True(universe.Undock("gemini8-agena-docking", 0.25));
+
+        double peakRate =
+            Gemini8FlightProfile.HistoricalPeakAngularRateDegPerS
+            * MathUtils.DEG_TO_RAD;
+        gemini.AngularVelocity = dockingAxis * peakRate;
+        universe.Tick(0.02);
+        Assert.Equal(peakRate, gemini.AngularVelocity.Magnitude, 5);
+        gemini.AngularVelocity = Vector3d.Zero;
+
+        Vector3d relativeVelocity = gemini.Velocity - earth.Velocity;
+        gemini.Velocity -= relativeVelocity.Normalized
+            * Gemini8FlightProfile.CalibratedEmergencyRetroDeltaVMps;
+        OrbitalElements returnOrbit = OrbitalElements.FromStateVector(
+            gemini.Position - earth.Position,
+            gemini.Velocity - earth.Velocity,
+            earth.GM,
+            earth.Id,
+            universe.CurrentTime);
+
+        Assert.InRange(
+            returnOrbit.PeriapsisRadius - earth.Radius,
+            40_000.0,
+            140_000.0);
+        Assert.Empty(universe.DockingConnections);
+        Assert.False(gemini.IsDestroyed);
+    }
+
+    private static MissionTelemetrySnapshot Snapshot(
+        double time,
+        string phase,
+        double altitudeM = 0.0,
+        bool dockingAchieved = false,
+        double angularRateDegPerS = 0.0,
+        bool splashdown = false) => new()
+    {
+        MissionTimeSeconds = time,
+        Phase = phase,
+        AltitudeM = altitudeM,
+        SurfaceSpeedMps = altitudeM > 100_000.0 ? 7_800.0 : 0.0,
+        InertialSpeedMps = altitudeM > 100_000.0 ? 7_800.0 : 0.0,
+        DockingAchieved = dockingAchieved,
+        AngularRateDegPerS = angularRateDegPerS,
+        Splashdown = splashdown,
+    };
 
     private static double WetMass(Exosphere.Simulation.Parts.PartDefinition part) =>
         part.MassDry

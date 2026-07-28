@@ -3,16 +3,16 @@
   "records": [
     {
       "dataId": "titan2-lr87-glv8-1966", "field": "ratedThrustSeaLevelN",
-      "status": "published", "source": "NASA Gemini launch-vehicle fact sheet reproduced in NASA NTRS 19760066765",
-      "accessedDate": "2026-07-28", "variant": "Gemini Titan II Stage I",
-      "conditions": "430,000 lbf published aggregate two-chamber Stage I thrust",
-      "uncertainty": "source rounding to 1,000 lbf"
+      "status": "derived", "source": "NASA NTRS 19760066765 published aggregate divided across two runtime thrust chambers",
+      "accessedDate": "2026-07-28", "variant": "Gemini Titan II Stage I per-chamber runtime",
+      "conditions": "956,370 N per chamber; the two-mount cluster closes the published 430,000 lbf aggregate",
+      "uncertainty": "equal chamber split; source aggregate rounded to 1,000 lbf"
     },
     {
       "dataId": "titan2-lr87-glv8-1966", "field": "ratedThrustVacuumN",
-      "status": "estimated", "source": "Published Stage I thrust and Exosphere pressure-map estimate",
-      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I aggregate",
-      "conditions": "vacuum extrapolation used only near BECO",
+      "status": "estimated", "source": "Published aggregate Stage I thrust and Exosphere pressure-map estimate divided across two chambers",
+      "accessedDate": "2026-07-28", "variant": "GLV-8 Stage I per-chamber runtime",
+      "conditions": "1,050,000 N per chamber vacuum extrapolation used only near BECO",
       "uncertainty": "plus or minus 8 percent"
     },
     {
@@ -217,6 +217,55 @@
       "accessedDate": "2026-07-28", "variant": "Spacecraft 8 to TDA 5003",
       "conditions": "0.65 m capture corridor, 0.32 m/s maximum relative speed and 12 degree alignment tolerance",
       "uncertainty": "gameplay capture envelope; historical contact was approximately 0.23 m/s"
+    },
+    {
+      "dataId": "mission-gemini8-1966", "field": "missionIdentity",
+      "status": "published", "source": "NASA Gemini VIII mission page and Mission Report MSC-G-R-66-4",
+      "accessedDate": "2026-07-28", "variant": "Gemini VIII / Spacecraft 8",
+      "conditions": "launch date, crew, launch vehicle, Agena 5003 and mission purpose",
+      "uncertainty": "none beyond source transcription"
+    },
+    {
+      "dataId": "mission-gemini8-1966", "field": "historicalOrbit",
+      "status": "published", "source": "Gemini VIII Mission Report trajectory summary",
+      "accessedDate": "2026-07-28", "variant": "Spacecraft 8 insertion and GATV target orbit",
+      "conditions": "159.9 by 271.9 km spacecraft orbit; 161.3 nmi GATV orbit",
+      "uncertainty": "converted from source units and displayed precision"
+    },
+    {
+      "dataId": "mission-gemini8-1966", "field": "historicalDurationS",
+      "status": "published", "source": "Gemini VIII Mission Report actual event times",
+      "accessedDate": "2026-07-28", "variant": "launch through landing",
+      "conditions": "10 h 41 min 26 s, represented as 38,486 seconds",
+      "uncertainty": "one second"
+    },
+    {
+      "dataId": "mission-gemini8-1966", "field": "historicalEvents",
+      "status": "published", "source": "Gemini VIII Mission Report tables 4.2-I and 5.1-I",
+      "accessedDate": "2026-07-28", "variant": "actual ascent, docking, anomaly, retrofire and recovery",
+      "conditions": "event times are seconds from liftoff",
+      "uncertainty": "0.01 second for ascent events; 0.1 to 1 second after insertion"
+    },
+    {
+      "dataId": "mission-gemini8-1966", "field": "thrusterFailure",
+      "status": "published", "source": "Gemini VIII Mission Report flight-control-system analysis",
+      "accessedDate": "2026-07-28", "variant": "OAMS thruster 8 failed electrically on",
+      "conditions": "maximum recorded roll rate 296 degrees per second before isolation",
+      "uncertainty": "rate sampled from mission telemetry"
+    },
+    {
+      "dataId": "mission-gemini8-1966", "field": "retrofireDeltaV",
+      "status": "calibrated", "source": "Gemini VIII emergency retrofire event and Exosphere two-body return reconstruction",
+      "accessedDate": "2026-07-28", "variant": "Spacecraft 8 emergency return",
+      "conditions": "70 m/s aggregate instantaneous burn closes an atmospheric periapsis from the simulator rendezvous orbit",
+      "uncertainty": "aggregate gameplay impulse; not a claim for individual retrorocket performance"
+    },
+    {
+      "dataId": "mission-gemini8-1966", "field": "objectiveEnvelope",
+      "status": "regulatory_envelope", "source": "Published Gemini VIII results interpreted as Exosphere mission acceptance limits",
+      "accessedDate": "2026-07-28", "variant": "historical campaign mission",
+      "conditions": "orbit, docking, control recovery, crew survival, angular-rate and duration corridors",
+      "uncertainty": "gameplay acceptance envelope rather than a historical qualification requirement"
     }
   ]
 }

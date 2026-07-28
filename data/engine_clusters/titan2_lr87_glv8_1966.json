@@ -11,8 +11,8 @@
     "oxidizerResource": "N2O4",
     "crossfeedEnabled": true,
     "branches": [
-      {"engineInstanceId": "lr87-left", "maximumFlowKgS": 370},
-      {"engineInstanceId": "lr87-right", "maximumFlowKgS": 370}
+      {"engineInstanceId": "lr87-left", "maximumFlowKgS": 400},
+      {"engineInstanceId": "lr87-right", "maximumFlowKgS": 400}
     ]
   }
 }

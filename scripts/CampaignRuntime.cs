@@ -123,6 +123,11 @@ public partial class CampaignRuntime : Node
                 / StandardGravity,
             DownrangeM = downrange,
             CompletedOrbits = _orbitalRadians / System.Math.Tau,
+            DockingAchieved = universe.DockingConnections.Any(connection =>
+                connection.PrimaryVesselId == vessel.Id
+                || connection.SecondaryVesselId == vessel.Id),
+            AngularRateDegPerS = vessel.AngularVelocity.Magnitude
+                * MathUtils.RAD_TO_DEG,
             CrewAlive = expectedCrewPresent,
             VesselDestroyed = vessel.IsDestroyed,
             Splashdown = landed && body.Id == "earth" && !hasLandingGear,

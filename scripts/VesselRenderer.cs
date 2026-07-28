@@ -906,6 +906,22 @@ public partial class VesselRenderer : Node3D
             if (definition.HasVehicleRole("spacecraft_separation"))
                 return CreateMercurySeparationRingNode(definition);
         }
+        if (definition.VehicleFamily.Equals(
+                "gemini", StringComparison.OrdinalIgnoreCase))
+        {
+            if (definition.HasVehicleRole("gemini_reentry_capsule"))
+                return CreateGeminiCapsuleNode(part);
+            if (definition.HasVehicleRole("titan_stage1_tank")
+                || definition.HasVehicleRole("titan_stage2_tank"))
+                return CreateTitanTankNode(definition);
+            if (definition.HasVehicleRole("titan_stage1_engine")
+                || definition.HasVehicleRole("titan_stage2_engine"))
+                return CreateTitanEngineNode(definition);
+            return CreateGeminiAdapterNode(definition);
+        }
+        if (definition.VehicleFamily.Equals(
+                "agena", StringComparison.OrdinalIgnoreCase))
+            return CreateAgenaNode(definition);
         var node = new MeshInstance3D { Name = definition.Name.Replace(" ", "_") };
         float diameter = (float)System.Math.Max(
             0.2 / MetresPerUnit, definition.DiameterM / MetresPerUnit);
@@ -946,6 +962,199 @@ public partial class VesselRenderer : Node3D
         node.Mesh = mesh;
         node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
             { AlbedoColor = GetCategoryColor(definition.Category), Roughness = 0.48f });
+        return node;
+    }
+
+    private Node3D CreateTitanTankNode(PartDefinition definition)
+    {
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        var root = new Node3D { Name = definition.Name.Replace(" ", "_") };
+        var white = Mat(new Color(0.82f, 0.84f, 0.82f), 0.14f, 0.54f);
+        var black = Mat(new Color(0.035f, 0.04f, 0.045f), 0.05f, 0.75f);
+        var barrel = new MeshInstance3D
+        {
+            Name = "TitanAirframe",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius,
+                Height = height,
+                RadialSegments = 48,
+            },
+        };
+        barrel.SetSurfaceOverrideMaterial(0, white);
+        root.AddChild(barrel);
+        int bands = definition.HasVehicleRole("titan_stage1_tank") ? 3 : 2;
+        for (int i = 0; i < bands; i++)
+        {
+            float fraction = (i + 1f) / (bands + 1f);
+            var band = new MeshInstance3D
+            {
+                Name = $"IdentificationBand{i}",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = radius * 1.008f,
+                    BottomRadius = radius * 1.008f,
+                    Height = Mathf.Max(0.035f, height * 0.035f),
+                    RadialSegments = 48,
+                },
+                Position = Vector3.Up * (-height * 0.5f + height * fraction),
+            };
+            band.SetSurfaceOverrideMaterial(0, black);
+            root.AddChild(band);
+        }
+        return root;
+    }
+
+    private Node3D CreateTitanEngineNode(PartDefinition definition)
+    {
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        var node = new MeshInstance3D
+        {
+            Name = definition.Name.Replace(" ", "_"),
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius * 0.72f,
+                BottomRadius = radius,
+                Height = height,
+                RadialSegments = 40,
+            },
+        };
+        node.SetSurfaceOverrideMaterial(
+            0, Mat(new Color(0.16f, 0.17f, 0.18f), 0.78f, 0.46f));
+        return node;
+    }
+
+    private Node3D CreateGeminiCapsuleNode(Part part)
+    {
+        var definition = part.Definition;
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        var root = new Node3D { Name = "GeminiReentryModule" };
+        var black = Mat(new Color(0.055f, 0.06f, 0.065f), 0.22f, 0.72f);
+        var shield = Mat(new Color(0.18f, 0.13f, 0.08f), 0.02f, 0.92f);
+        var glass = Mat(new Color(0.03f, 0.10f, 0.14f), 0.32f, 0.16f);
+        var cabin = new MeshInstance3D
+        {
+            Name = "BlackPressureCabin",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius * 0.38f,
+                BottomRadius = radius,
+                Height = height,
+                RadialSegments = 48,
+            },
+        };
+        cabin.SetSurfaceOverrideMaterial(0, black);
+        root.AddChild(cabin);
+        var heatShield = new MeshInstance3D
+        {
+            Name = "AblativeHeatShield",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius * 1.015f,
+                Height = 0.10f,
+                RadialSegments = 48,
+            },
+            Position = Vector3.Down * (height * 0.5f),
+        };
+        heatShield.SetSurfaceOverrideMaterial(0, shield);
+        root.AddChild(heatShield);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            var window = new MeshInstance3D
+            {
+                Name = side < 0 ? "LeftWindow" : "RightWindow",
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(
+                        radius * 0.28f, height * 0.20f, 0.025f),
+                },
+                Position = new Vector3(
+                    side * radius * 0.34f,
+                    height * 0.12f,
+                    radius * 0.73f),
+            };
+            window.SetSurfaceOverrideMaterial(0, glass);
+            root.AddChild(window);
+        }
+        var canopy = new Node3D
+        {
+            Name = "GeminiMainParachute",
+            Position = Vector3.Up * (height * 0.5f + 3.0f),
+            Visible = false,
+        };
+        var canopyMesh = new MeshInstance3D
+        {
+            Mesh = new SphereMesh
+            {
+                Radius = 3.8f,
+                Height = 2.2f,
+                RadialSegments = 48,
+                Rings = 16,
+            },
+        };
+        canopyMesh.SetSurfaceOverrideMaterial(
+            0, Mat(new Color(0.90f, 0.42f, 0.20f), 0.0f, 0.78f));
+        canopy.AddChild(canopyMesh);
+        root.AddChild(canopy);
+        _parachuteVisuals[part.InstanceId] = canopy;
+        return root;
+    }
+
+    private Node3D CreateGeminiAdapterNode(PartDefinition definition)
+    {
+        float height = (float)System.Math.Max(
+            0.08, definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        bool nose = definition.HasVehicleRole("gemini_docking_port");
+        var node = new MeshInstance3D
+        {
+            Name = definition.Name.Replace(" ", "_"),
+            Mesh = new CylinderMesh
+            {
+                TopRadius = nose ? radius * 0.48f : radius * 0.88f,
+                BottomRadius = radius,
+                Height = height,
+                RadialSegments = 40,
+            },
+        };
+        node.SetSurfaceOverrideMaterial(
+            0,
+            Mat(nose
+                ? new Color(0.76f, 0.77f, 0.75f)
+                : new Color(0.88f, 0.88f, 0.84f),
+                nose ? 0.62f : 0.18f,
+                0.48f));
+        return node;
+    }
+
+    private Node3D CreateAgenaNode(PartDefinition definition)
+    {
+        float height = (float)(definition.LengthM / MetresPerUnit);
+        float radius = (float)(definition.DiameterM * 0.5 / MetresPerUnit);
+        bool port = definition.HasVehicleRole("agena_target_docking_port");
+        var node = new MeshInstance3D
+        {
+            Name = definition.Name.Replace(" ", "_"),
+            Mesh = new CylinderMesh
+            {
+                TopRadius = port ? radius : radius * 0.88f,
+                BottomRadius = port ? radius * 0.34f : radius,
+                Height = height,
+                RadialSegments = 40,
+            },
+        };
+        node.SetSurfaceOverrideMaterial(
+            0,
+            Mat(port
+                ? new Color(0.74f, 0.72f, 0.67f)
+                : new Color(0.20f, 0.23f, 0.25f),
+                port ? 0.72f : 0.42f,
+                port ? 0.35f : 0.62f));
         return node;
     }
 
