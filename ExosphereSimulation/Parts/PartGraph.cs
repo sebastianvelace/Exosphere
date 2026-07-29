@@ -240,6 +240,55 @@ public class PartGraph
     public Vector3d GetTotalThrust(double ambientPressure) =>
         ActiveEngines.Aggregate(Vector3d.Zero, (sum, e) => sum + e.GetThrustVector(ambientPressure));
 
+    /// <summary>
+    /// Genuine geometric torque (N·m) about the vessel's centre of mass: τ = Σ r_i × F_i
+    /// over every live engine instance of every active engine part, where r_i is that
+    /// instance's real 3D mount position (part-local position + mount offset) minus the
+    /// current centre of mass, and F_i is its actual gimballed, pressure-corrected thrust
+    /// vector. Unlike <see cref="GetPitchYawAngularAcceleration(double)"/> and
+    /// <see cref="GetRollAngularAcceleration(double)"/> (which use a single scalar lever
+    /// per part), this sums real per-engine moment arms, so an asymmetric engine failure or
+    /// gimbal deflection produces genuine, correctly-signed torque instead of only reducing
+    /// total thrust proportionally.
+    /// </summary>
+    public Vector3d GetTotalTorque(double ambientPressure)
+    {
+        var positions = ComputePartLocalPositions();
+        var com = CenterOfMass;
+        var torque = Vector3d.Zero;
+        foreach (var engine in ActiveEngines)
+        {
+            if (!positions.TryGetValue(engine, out var partPosition)) continue;
+            foreach (var (mountPosition, thrustVector) in
+                     engine.GetEngineInstanceThrustGeometry(ambientPressure))
+            {
+                var r = partPosition + mountPosition - com;
+                torque += r.Cross(thrustVector);
+            }
+        }
+        return torque;
+    }
+
+    /// <summary>
+    /// Genuine geometric angular acceleration (rad/s²) about all three vessel axes, derived
+    /// from <see cref="GetTotalTorque(double)"/> divided component-wise by the appropriate
+    /// moment of inertia: X/Z (pitch/yaw) by <see cref="TransverseMomentOfInertia"/>, Y
+    /// (roll) by <see cref="AxialMomentOfInertia"/> — the same two inertia properties the
+    /// existing scalar <see cref="GetPitchYawAngularAcceleration(double)"/> and
+    /// <see cref="GetRollAngularAcceleration(double)"/> already use. Each component is 0
+    /// when its inertia is non-positive.
+    /// </summary>
+    public Vector3d GetPitchYawRollAngularAcceleration(double ambientPressure)
+    {
+        var torque = GetTotalTorque(ambientPressure);
+        double transverse = TransverseMomentOfInertia;
+        double axial = AxialMomentOfInertia;
+        double pitch = transverse > 0.0 ? torque.X / transverse : 0.0;
+        double roll = axial > 0.0 ? torque.Y / axial : 0.0;
+        double yaw = transverse > 0.0 ? torque.Z / transverse : 0.0;
+        return new Vector3d(pitch, roll, yaw);
+    }
+
     // ── Read-only telemetry getters (consumed by the HUD) ─────────────────
     // These never mutate the sim; they report what the engines of the CURRENT stage are
     // doing at the given ambient pressure (Pa). Pass the live atmospheric pressure to get

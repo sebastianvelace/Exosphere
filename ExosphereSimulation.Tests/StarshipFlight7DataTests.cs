@@ -101,6 +101,29 @@ public sealed class StarshipFlight7DataTests
     }
 
     [Fact]
+    public void BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss()
+    {
+        var catalog = LoadPartCatalog();
+        var booster = new Part(catalog["super_heavy_booster"], "booster-torque-14");
+        var graph = new PartGraph();
+        graph.SetRoot(booster);
+
+        for (int i = 0; i < 250; i++)
+            booster.AdvanceEngineRuntime(1.0, 0.02);
+        Assert.Equal(0.0, graph.GetTotalTorque(SeaLevelPressure).Z, 3);
+
+        Assert.True(booster.FailEngine(
+            booster.EngineStates[7].InstanceId,
+            "FLIGHT7_ENGINE_OUT_TEST"));
+
+        // The scalar-lever approximation only reduces total thrust proportionally and
+        // reports zero torque; the real per-mount geometry must show a nonzero moment
+        // once an off-axis engine drops out.
+        var torque = graph.GetTotalTorque(SeaLevelPressure);
+        Assert.False(torque.X == 0.0 && torque.Y == 0.0 && torque.Z == 0.0);
+    }
+
+    [Fact]
     public void FlightConfigurationAndEveryOperationalModelFieldAreTraced()
     {
         var provenance = LoadProvenance();

@@ -720,6 +720,76 @@ public class Part
         return dir * thrust;
     }
 
+    /// <summary>
+    /// Per-engine-instance thrust geometry in the part's local frame (+Y = up): mount
+    /// position and gimballed thrust vector for every live engine instance, pressure-
+    /// corrected at <paramref name="ambientPressure"/>. Unlike <see cref="GetThrustVector"/>
+    /// (which collapses the whole part into a single averaged-gimbal force), this exposes
+    /// each mount's real 3D position and direction so a caller can compute genuine torque
+    /// (τ = r×F) instead of a scalar lever approximation. Legacy (non-cluster) parts yield
+    /// exactly one tuple built from <see cref="GetThrustVector"/> so behaviour is unchanged
+    /// for every part that has no engine cluster data.
+    /// </summary>
+    public IEnumerable<(Vector3d PositionM, Vector3d ThrustVectorN)>
+        GetEngineInstanceThrustGeometry(double ambientPressure)
+    {
+        if (!HasEngineRuntime)
+        {
+            yield return (
+                new Vector3d(0.0, Definition.ThrustPositionYM, 0.0),
+                GetThrustVector(ambientPressure));
+            yield break;
+        }
+
+        for (int i = 0; i < _engineStates.Count; i++)
+        {
+            var state = _engineStates[i];
+            var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(i);
+            var position = mount != null
+                ? mount.Position
+                : new Vector3d(0.0, Definition.ThrustPositionYM, 0.0);
+            var baseDirection = mount != null
+                ? mount.Direction
+                : Vector3d.Up;
+
+            double thrust = EvaluateEnginePerformance(state, ambientPressure).ThrustN;
+            var direction = TiltDirection(baseDirection, state.GimbalDeg.X, state.GimbalDeg.Z);
+            yield return (position, direction * thrust);
+        }
+    }
+
+    /// <summary>
+    /// Tilts <paramref name="baseDirection"/> by (<paramref name="gimbalXDeg"/>,
+    /// <paramref name="gimbalZDeg"/>) degrees. For the vertical case (<c>baseDirection ≈
+    /// (0,1,0)</c>, true of every mount in every current data file) this reproduces the
+    /// exact expression <see cref="GetThrustVector"/> already uses, so the two stay
+    /// bit-for-bit consistent at zero deflection. For a general (non-vertical) base
+    /// direction — untested by real data today, but must not crash or misbehave — an
+    /// orthonormal basis is built around it and the same sine tilt is applied within the
+    /// plane perpendicular to it; this branch is synthetic/general-purpose.
+    /// </summary>
+    private static Vector3d TiltDirection(
+        Vector3d baseDirection, double gimbalXDeg, double gimbalZDeg)
+    {
+        double ax = gimbalXDeg * MathUtils.DEG_TO_RAD;
+        double az = gimbalZDeg * MathUtils.DEG_TO_RAD;
+        var up = baseDirection.Normalized;
+        if (up == Vector3d.Zero) up = Vector3d.Up;
+
+        // Vertical fast path: identical formula to GetThrustVector's tilt.
+        if ((up - Vector3d.Up).MagnitudeSquared < 1e-12)
+            return new Vector3d(
+                System.Math.Sin(ax), 1.0, System.Math.Sin(az)).Normalized;
+
+        // General case: build an orthonormal basis (right, up, fwd) around the base
+        // direction and apply the same sine tilt within that local frame.
+        var reference = System.Math.Abs(up.Y) < 0.999 ? Vector3d.Up : Vector3d.Right;
+        var right = reference.Cross(up).Normalized;
+        if (right == Vector3d.Zero) right = Vector3d.Right;
+        var fwd = up.Cross(right).Normalized;
+        return (right * System.Math.Sin(ax) + up + fwd * System.Math.Sin(az)).Normalized;
+    }
+
     // ── Consumir propelante por dt segundos. Retorna false si se agota. ──
     public bool ConsumePropellant(double dt, double ambientPressure = 0.0)
     {
