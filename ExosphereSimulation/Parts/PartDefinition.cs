@@ -86,6 +86,14 @@ public class PartDefinition
     [JsonPropertyName("length_m")]   public double LengthM   { get; set; }
     [JsonPropertyName("diameter_m")] public double DiameterM { get; set; }
 
+    /// <summary>
+    /// Radius of curvature (m) of the part's forward stagnation region, for the
+    /// Sutton-Graves stagnation-point correlation. 0 (default) means "not a nose":
+    /// the aggregate falls back to the hull radius.
+    /// </summary>
+    [JsonPropertyName("nose_radius_m")]
+    public double NoseRadiusM { get; set; }
+
     // Engine
     [JsonPropertyName("thrust_vac")]   public double ThrustVac   { get; set; }
     [JsonPropertyName("thrust_sl")]    public double ThrustSL    { get; set; }

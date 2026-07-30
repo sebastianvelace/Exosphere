@@ -35,6 +35,28 @@ public static class ThermalModel
         return k * System.Math.Sqrt(density / noseRadius) * System.Math.Pow(velocity, 3);
     }
 
+    /// <summary>
+    /// Effective Sutton-Graves nose radius (m) for a cylindrical vehicle at an axial
+    /// alignment cosAlpha = |axis·flow| (1 = nose/tail-on, 0 = broadside).
+    ///
+    /// Sutton-Graves is a SPHERE stagnation-point correlation. A cylinder presents two
+    /// different curvatures to the flow: broadside, the stagnation line runs along the
+    /// hull radius; nose-on, the flow stagnates on the much sharper nosecone cap.
+    /// Because q is proportional to Rn^(-1/2), the nose-on case is materially hotter —
+    /// physics the single fixed hull-radius value could not express.
+    ///
+    /// Blended in cos^2(alpha), matching the area/Cd blend in AerodynamicsModel so the
+    /// thermal and aerodynamic models agree on what "broadside" means.
+    /// </summary>
+    public static double EffectiveNoseRadius(double hullRadius, double noseRadius, double cosAlpha)
+    {
+        double rBroadside = System.Math.Max(0.1, hullRadius);
+        double rAxial = System.Math.Clamp(
+            noseRadius > 0.0 ? noseRadius : rBroadside, 0.05, rBroadside);
+        double aa = System.Math.Clamp(cosAlpha * cosAlpha, 0.0, 1.0);
+        return rBroadside + (rAxial - rBroadside) * aa;
+    }
+
     // ── Temperature integration ────────────────────────────────────────────────
 
     /// <summary>Grey-body emissivity of the outer surface.</summary>

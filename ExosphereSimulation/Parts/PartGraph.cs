@@ -79,6 +79,19 @@ public class PartGraph
                 : System.Math.Max(1.0, 2.0 * System.Math.Sqrt(_parts.Count * 0.2));
         }
     }
+    /// <summary>Forward stagnation radius of curvature (m); hull radius when undeclared.</summary>
+    public double NoseRadius
+    {
+        get
+        {
+            double declared = _parts
+                .Select(p => p.Definition.NoseRadiusM)
+                .Where(r => r > 0.0)
+                .DefaultIfEmpty(0.0)
+                .Min();
+            return declared > 0.0 ? declared : MaximumDiameter * 0.5;
+        }
+    }
     public double AxialDragCoefficient
     {
         get

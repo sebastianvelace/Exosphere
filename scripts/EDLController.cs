@@ -501,8 +501,7 @@ public partial class EDLController : Control
     private void RefreshThermalState(
         Vessel vessel, CelestialBody body, double density, double speed, Vector3d surfVel)
     {
-        _fluxNow = ThermalModel.ComputeHeatFlux(
-            density, speed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+        _fluxNow = vessel.ComputeStagnationHeatFlux(density, surfVel);
 
         var flowLocal = speed > 1e-6
             ? vessel.Orientation.Inverse().Rotate(surfVel.Normalized)

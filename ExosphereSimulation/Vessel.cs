@@ -201,6 +201,7 @@ public class Vessel
     public Vector3d  CenterOfMass  => Position + Orientation.Rotate(Parts.CenterOfMass);
     public double    VehicleLength => Parts.VehicleLength;
     public double    MaximumDiameter => Parts.MaximumDiameter;
+    public double    NoseRadius      => Parts.NoseRadius;
 
     public double GetAltitude(CelestialBody body) =>
         (Position - body.Position).Magnitude - body.Radius;
@@ -362,6 +363,26 @@ public class Vessel
                 * (0.5 * density * speed * speed * parachuteArea)
             : Vector3d.Zero;
         return drag + lift + parachuteDrag;
+    }
+
+    /// <summary>
+    /// Convective stagnation-point heat flux (W/m²) for this vessel at the given local
+    /// atmospheric density and surface-relative velocity, using the Sutton-Graves
+    /// correlation with an attitude-dependent effective nose radius: sharp (this vessel's
+    /// declared <see cref="NoseRadius"/>) nose/tail-on, blunt (the hull radius) broadside.
+    /// Every existing call site computed the broadside-only version of this by hand
+    /// (<c>ComputeHeatFlux(density, speed, MaximumDiameter * 0.5)</c>); this centralises the
+    /// attitude blend so callers do not each duplicate the cosAlpha computation.
+    /// </summary>
+    public double ComputeStagnationHeatFlux(double density, Vector3d surfaceVelocity)
+    {
+        double speed = surfaceVelocity.Magnitude;
+        double hullRadius = System.Math.Max(0.1, MaximumDiameter * 0.5);
+        double cosAlpha = speed > 1e-6
+            ? System.Math.Abs(Orientation.Rotate(Vector3d.Up).Normalized.Dot(surfaceVelocity.Normalized))
+            : 0.0;
+        double effectiveNoseRadius = ThermalModel.EffectiveNoseRadius(hullRadius, NoseRadius, cosAlpha);
+        return ThermalModel.ComputeHeatFlux(density, speed, effectiveNoseRadius);
     }
 
     /// <summary>

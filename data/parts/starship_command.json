@@ -8,6 +8,7 @@
   "mass_dry": 35000,
   "length_m": 18.5,
   "diameter_m": 9.0,
+  "nose_radius_m": 3.0,
   "cost": 50000,
   "drag_coefficient": 0.25,
   "heat_tolerance": 2800,

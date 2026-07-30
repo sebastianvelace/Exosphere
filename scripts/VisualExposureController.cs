@@ -47,9 +47,8 @@ public partial class VisualExposureController : Node
         double directLuminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
 
         double density = body.GetAtmosphericDensity(vessel.Position);
-        double speed = vessel.GetSurfaceVelocity(body).Magnitude;
-        double heatFlux = ThermalModel.ComputeHeatFlux(
-            density, speed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+        var    surfVel = vessel.GetSurfaceVelocity(body);
+        double heatFlux = vessel.ComputeStagnationHeatFlux(density, surfVel);
         double plasma = Smoothstep(VehicleVisualPhysics.VisibleReentryFluxWm2,
             VehicleVisualPhysics.SaturatedReentryFluxWm2, heatFlux);
 

@@ -221,7 +221,8 @@ public partial class AudioManager : Node
 
             double alt      = body.GetAltitude(vessel.Position);
             double rho      = body.GetAtmosphericDensity(vessel.Position);
-            double airspeed = vessel.GetSurfaceVelocity(body).Magnitude;
+            var    surfVel  = vessel.GetSurfaceVelocity(body);
+            double airspeed = surfVel.Magnitude;
             double q        = vessel.GetDynamicPressure(body);
 
             // Mach needs the local air temperature; a body with no atmosphere model has
@@ -231,8 +232,7 @@ public partial class AudioManager : Node
                 : 0.0;
 
             // Same convective flux — and the same nose radius — the fireball is drawn from.
-            double flux = ThermalModel.ComputeHeatFlux(
-                rho, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+            double flux = vessel.ComputeStagnationHeatFlux(rho, surfVel);
 
             // How much of the engine sound the air can still carry. This is the whole
             // airborne/structure-borne split: in vacuum it is zero.

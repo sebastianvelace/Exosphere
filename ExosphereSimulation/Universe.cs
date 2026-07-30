@@ -726,8 +726,7 @@ public class Universe
         {
             var surfVel = vessel.GetSurfaceVelocity(refBody);
             double airspeed = surfVel.Magnitude;
-            double heatFlux = Physics.ThermalModel.ComputeHeatFlux(
-                density, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+            double heatFlux = vessel.ComputeStagnationHeatFlux(density, surfVel);
             var flowDirLocal = airspeed > 1e-6
                 ? vessel.Orientation.Inverse().Rotate(surfVel.Normalized)
                 : Vector3d.Zero;

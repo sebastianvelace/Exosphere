@@ -122,9 +122,8 @@ public partial class PhaseLightingController : Node
         CelestialBody body, double alt)
     {
         double density  = body.GetAtmosphericDensity(av.Position);
-        double airspeed = av.GetSurfaceVelocity(body).Magnitude;
-        double flux     = ThermalModel.ComputeHeatFlux(
-            density, airspeed, System.Math.Max(0.1, av.MaximumDiameter * 0.5));
+        var    surfVel  = av.GetSurfaceVelocity(body);
+        double flux     = av.ComputeStagnationHeatFlux(density, surfVel);
         float fluxFactor  = (float)System.Math.Clamp(
             (flux - FluxThresh) / (FluxPeak - FluxThresh), 0.0, 1.0);
 
