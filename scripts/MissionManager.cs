@@ -2,6 +2,8 @@ namespace Exosphere.Game;
 
 using Godot;
 using System.Linq;
+using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 
 public enum MissionPhase
 {
@@ -193,7 +195,6 @@ public partial class MissionManager : Node
 
         var refBody   = universe.GetDominantBody(vessel.Position);
         double alt    = vessel.GetAltitude(refBody);
-        double speed  = (vessel.Velocity - refBody.Velocity).Magnitude;
 
         // ── Phase auto-transitions ─────────────────────────────────────────
         switch (Phase)
@@ -230,8 +231,22 @@ public partial class MissionManager : Node
                 }
                 break;
 
-            case MissionPhase.ASCENT_SHIP when alt > 150_000 && speed > 7_500:
-                SetPhase(MissionPhase.ORBIT);
+            case MissionPhase.ASCENT_SHIP:
+                // Altitude + speed is not an orbit test: a vehicle near apoapsis can meet
+                // both while its periapsis still intersects Earth.  Require a bound conic
+                // whose complete path clears the modeled atmosphere.
+                var trajectory = OrbitalElements.FromStateVector(
+                    vessel.Position - refBody.Position,
+                    vessel.Velocity - refBody.Velocity,
+                    refBody.GM,
+                    refBody.Id,
+                    universe.CurrentTime);
+                double atmosphereTop = refBody.Atmosphere?.MaxAltitude ?? 0.0;
+                if (OrbitQualificationPolicy.HasSafePeriapsis(
+                        trajectory,
+                        refBody.Radius,
+                        atmosphereTop))
+                    SetPhase(MissionPhase.ORBIT);
                 break;
         }
     }

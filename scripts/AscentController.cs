@@ -257,9 +257,10 @@ public partial class AscentController : Control
         Vector3d tang = prograde - up * prograde.Dot(up);
         tang = tang.Magnitude > 1e-3 ? tang.Normalized : east;
 
-        // Latch into the insertion phase once apoapsis reaches target — it only decreases
-        // after apoapsis, so this must not flip back to "ascending".
-        if (_phase == Phase.Ascent && _apo >= _apoTarget) _phase = Phase.Insert;
+        // Once apoapsis reaches target, leave the powered gravity turn and enter a short
+        // ballistic coast.  Coast is a real state: once insertion starts it is latched and
+        // must never flip back to Coast merely because radial thrust raises vUp again.
+        if (_phase == Phase.Ascent && _apo >= _apoTarget) _phase = Phase.Coast;
 
         Vector3d dir;
         double throttle;
@@ -303,10 +304,15 @@ public partial class AscentController : Control
             // duration (~8-9 min) and is actually experienced — no fast-forward through it.
             warp = 1.0;
         }
-        else if (vUp > 25.0)
+        else if (_phase == Phase.Coast
+            && !AscentInsertionPolicy.ShouldBeginInsertion(
+                oe,
+                universe.CurrentTime,
+                body.GM,
+                vUp))
         {
-            // Coast to apoapsis before the circularization burn.
-            _phase = Phase.Coast;
+            // Coast close to apoapsis, but reserve enough time for attitude guidance and
+            // engine startup so radial support exists before vertical speed crosses zero.
             dir = prograde; throttle = 0.0; warp = 4.0;
         }
         else
@@ -314,6 +320,8 @@ public partial class AscentController : Control
             // PEG-lite insertion: thrust angle whose vertical component cancels (gravity −
             // centrifugal) holds altitude exactly while the horizontal component builds
             // orbital velocity; the required pitch falls to zero as speed reaches circular.
+            // Latching this state prevents an insertion/coast throttle oscillation when
+            // the commanded radial support temporarily lifts vUp above the old threshold.
             _phase = Phase.Insert;
             double r = rel.Magnitude;
             double gLocal = body.GM / (r * r);
