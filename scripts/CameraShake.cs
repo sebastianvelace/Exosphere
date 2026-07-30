@@ -27,12 +27,23 @@ public sealed class CameraShake
     private const float MaxBuffetRot   = 0.55f;  // degrees
     private const float MaxFovKick     = 4.0f;   // degrees of extra FOV under high g
 
+    // Entry deceleration shake. A hypersonic entry is not the same event as Max-Q: the load
+    // is an order of magnitude longer-lived and far lower in frequency, so it gets its own
+    // envelope and its own oscillator band rather than being folded into the buffet term.
+    private const float MaxEntryTrans  = 2.0f;   // render units at the full-scale entry load
+    private const float MaxEntryRot    = 0.70f;  // degrees
+
     // Reference dynamic pressure for normalising buffet (Pa). Earth ascent Max-Q
     // is roughly 30-35 kPa; we saturate a little above that.
     private const float MaxQReference  = 32_000f;
 
     // g-force (above 1g) at which the FOV kick saturates.
     private const float FovGReference  = 3.5f;
+
+    // Aerodynamic deceleration (g) at which the entry shake saturates. Chosen to match the
+    // real orbital-entry wall: a nominal Mercury/Gemini/Soyuz entry peaks at 4-5 g, so
+    // saturating at 4 g means the player is pinned exactly when the crew would be.
+    private const float EntryGReference = 4.0f;
 
     // IVA represents a restrained head, not an external chase camera: cap at ~0.23° and
     // centimetre-scale translation (render scale 2.8 m/u).
@@ -43,6 +54,7 @@ public sealed class CameraShake
     private float _thrustEnv;   // 0..1
     private float _buffetEnv;   // 0..1
     private float _fovEnv;      // 0..1
+    private float _entryEnv;    // 0..1, aerodynamic deceleration load
 
     // ── Noise phase accumulators ─────────────────────────────────────────────
     private float _t;
@@ -84,6 +96,7 @@ public sealed class CameraShake
         float throttleActivity = 0f;   // throttle × engines firing
         float qNorm            = 0f;   // dynamic pressure, normalised 0..1 (peaks at Max-Q)
         float gNorm            = 0f;   // (g − 1) above gravity, normalised 0..1
+        float entryNorm        = 0f;   // aerodynamic deceleration, normalised 0..1
 
         if (vessel != null && universe != null && !vessel.IsOnRails)
         {
@@ -116,6 +129,12 @@ public sealed class CameraShake
                     double accel = (thrust + drag).Magnitude / mass;
                     double g = accel / 9.81;
                     gNorm = Mathf.Clamp((float)(g / FovGReference), 0f, 1f);
+
+                    // Aerodynamic deceleration ALONE — the entry load. Isolating drag from
+                    // thrust is what makes this read as "the atmosphere is stopping us" and
+                    // not as "the engines are pushing us"; the two never coincide in EDL.
+                    double aeroG = drag.Magnitude / mass / 9.80665;
+                    entryNorm = Mathf.Clamp((float)(aeroG / EntryGReference), 0f, 1f);
                 }
             }
         }
@@ -124,10 +143,17 @@ public sealed class CameraShake
         _thrustEnv = Damp(_thrustEnv, throttleActivity, dt, 8f, 3f);
         _buffetEnv = Damp(_buffetEnv, Mathf.Min(qNorm, 1f), dt, 6f, 2.5f);
         _fovEnv    = Damp(_fovEnv,    gNorm,                dt, 4f, 2f);
+        // Entry load builds and decays over tens of seconds, so damp it much more slowly
+        // than the engine/buffet envelopes — it should swell, not flicker.
+        _entryEnv  = Damp(_entryEnv,  entryNorm,            dt, 2.5f, 1.2f);
 
         // Zoom attenuation: at ~80 units full strength, fading with distance so a
         // wide/zoomed-out view stays calm and readable.
         float zoom = Mathf.Clamp(90f / Mathf.Max(distance, 1f), 0.15f, 1f);
+
+        // Accessibility: reduced motion suppresses every cosmetic camera offset. The
+        // envelopes are still integrated above so re-enabling mid-flight does not pop.
+        if (UserInterfaceSettings.ReducedMotion) zoom = 0f;
 
         // ── Translational rumble (engine) — layered sines ~15-30 Hz feel ─────
         float eAmp = _thrustEnv * MaxThrustTrans * zoom;
@@ -143,16 +169,29 @@ public sealed class CameraShake
             Osc(7.6f,  _seedY + 7f) * 0.7f + Osc(12.1f, _seedY + 9f) * 0.3f,
             Osc(10.8f, _seedZ + 7f) * 0.7f + Osc(14.9f, _seedZ + 9f) * 0.3f) * bAmp;
 
-        PositionOffset = engineTrans + buffetTrans;
+        // ── Entry deceleration — the slowest, heaviest band (~3-7 Hz) ────────
+        // Low frequency and large throw: a hypersonic entry reads as the whole vehicle
+        // being shoved and wallowing, not as the high-frequency rattle of a live engine.
+        float rAmp = _entryEnv * MaxEntryTrans * zoom;
+        var entryTrans = new Vector3(
+            Osc(3.4f, _seedX + 21f) * 0.75f + Osc(6.9f, _seedX + 23f) * 0.25f,
+            Osc(4.1f, _seedY + 21f) * 0.75f + Osc(7.6f, _seedY + 23f) * 0.25f,
+            Osc(2.9f, _seedZ + 21f) * 0.75f + Osc(6.2f, _seedZ + 23f) * 0.25f) * rAmp;
+
+        PositionOffset = engineTrans + buffetTrans + entryTrans;
         CockpitPositionOffset = ClampLength(PositionOffset * 0.006f, CockpitTransCap);
 
         // ── Rotational shake (radians) ───────────────────────────────────────
         float eRot = Mathf.DegToRad(_thrustEnv * MaxThrustRot * zoom);
         float bRot = Mathf.DegToRad(_buffetEnv * MaxBuffetRot * zoom);
+        float rRot = Mathf.DegToRad(_entryEnv * MaxEntryRot * zoom);
         RotationOffset = new Vector3(
-            Osc(19.4f, _seedY + 13f) * eRot + Osc(8.3f,  _seedY + 17f) * bRot, // pitch
-            Osc(22.6f, _seedX + 13f) * eRot + Osc(9.7f,  _seedX + 17f) * bRot, // yaw
-            Osc(16.2f, _seedZ + 13f) * eRot + Osc(11.4f, _seedZ + 17f) * bRot); // roll
+            Osc(19.4f, _seedY + 13f) * eRot + Osc(8.3f,  _seedY + 17f) * bRot
+                + Osc(3.1f, _seedY + 27f) * rRot,  // pitch
+            Osc(22.6f, _seedX + 13f) * eRot + Osc(9.7f,  _seedX + 17f) * bRot
+                + Osc(2.6f, _seedX + 27f) * rRot,  // yaw
+            Osc(16.2f, _seedZ + 13f) * eRot + Osc(11.4f, _seedZ + 17f) * bRot
+                + Osc(3.7f, _seedZ + 27f) * rRot); // roll
 
         // Cockpit variant: clamp each axis so interior buffeting stays readable.
         CockpitRotationOffset = new Vector3(

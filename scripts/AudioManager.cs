@@ -252,9 +252,17 @@ public partial class AudioManager : Node
             // Brightness follows Mach: subsonic is a dull rush, hypersonic a hard shear hiss.
             brightTarget = Mathf.Clamp((float)mach / MachRef, 0f, 1f);
 
-            // Plasma roar rides the flux gate the visuals already use.
-            plasmaTarget = Mathf.Clamp(
-                (float)((flux - FluxThreshold) / (FluxPeak - FluxThreshold)), 0f, 1f) * 0.7f;
+            // Plasma roar rides the flux gate the visuals already use — INCLUDING the
+            // descending gate. Flux alone crosses 25 kW/m² during ascent above ~40 km, so
+            // gating on flux only made the audio roar while the fireball was correctly
+            // suppressed, which is the opposite of the "audio and visuals ignite together"
+            // contract this class documents. Reuse the shared predicate so they cannot drift.
+            double radialSpeed = vessel.GetSurfaceVelocity(body).Dot(
+                (vessel.Position - body.Position).Normalized);
+            plasmaTarget = VehicleVisualPhysics.IsVisibleReentryHeating(radialSpeed, flux)
+                ? Mathf.Clamp(
+                    (float)((flux - FluxThreshold) / (FluxPeak - FluxThreshold)), 0f, 1f) * 0.7f
+                : 0f;
 
             // Buffet has three sources, all gated on q because nothing shakes an airframe
             // in vacuum: the transonic band (roughest), the aerodynamic load itself (so

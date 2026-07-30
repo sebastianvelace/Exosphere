@@ -6,6 +6,7 @@ using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
+using Exosphere.Simulation.Systems;
 
 /// <summary>
 /// Entry, Descent and Landing director + HUD overlay. Activates when the active
@@ -34,6 +35,16 @@ public partial class EDLController : Control
     private double _thermalDamage;   // irreversible char, 0..1
     private double _shieldAlign;     // 0..1 — how squarely the tiles meet the flow
     private double _fluxNow;         // W/m², free-stream convective flux
+
+    /// <summary>
+    /// Sim-side peak-g bookkeeping. Lives in <c>ExosphereSimulation</c> so the peak-load
+    /// contract is unit-testable and Godot-free; this controller only samples and draws it.
+    /// </summary>
+    private readonly EntryLoadTracker _load = new();
+
+    /// <summary>Blackout state read back from the simulation's comms system (never written here).</summary>
+    private bool _blackout;
+    private double _blackoutSeconds;
 
     private Font _font = null!;
     private bool _legsDeployed;
@@ -76,7 +87,15 @@ public partial class EDLController : Control
         _bodyName = body.Name;
 
         double mass = vessel.TotalMass;
-        _gForce = vessel.GetProperAcceleration(body).Magnitude / 9.80665;
+        _gForce = vessel.GetProperAcceleration(body).Magnitude / EntryLoadTracker.StandardGravity;
+        // Track the peak only once the EDL track is armed, so an ascent's 3 g does not
+        // pre-poison the entry readout.
+        if (_phase != Edl.Inactive)
+            _load.Update(delta, _gForce);
+
+        var comms = SystemsController.Instance?.Comms;
+        _blackout = comms?.PlasmaBlackout ?? false;
+        _blackoutSeconds = comms?.PlasmaBlackoutSeconds ?? 0.0;
 
         double density = body.Atmosphere.GetDensity(_alt);
         double speed   = surfVel.Magnitude;
@@ -120,6 +139,7 @@ public partial class EDLController : Control
                 _landingCutoffCommitted = false;
                 _landingEngineCount = 3;
                 _flipElapsed = 0.0;
+                _load.Reset();
                 Visible = true;
                 mission?.EnterPhase(MissionPhase.ENTRY);
             }
@@ -433,7 +453,8 @@ public partial class EDLController : Control
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero)
             DrawThermal(vp);
 
-        DrawPhaseBanner(vp);
+        if (_blackout)
+            DrawBlackoutBanner(vp);
     }
 
     private void DrawPlasma(Vector2 vp, float k)
@@ -561,41 +582,88 @@ public partial class EDLController : Control
         Text($"{vDown:+0;-0} m/s", new Vector2(x, y + 20), vsCol, 22);
         Text("HORIZONTAL", new Vector2(x, y + 52), new Color(0.6f, 0.7f, 0.82f), 13);
         Text($"{_horiz:F0} m/s", new Vector2(x, y + 72), new Color(0.9f, 0.95f, 1f), 20);
-        Text("G-FORCE",    new Vector2(x, y + 104), new Color(0.6f, 0.7f, 0.82f), 13);
-        Color gCol = _gForce > 4 ? new Color(1f, 0.4f, 0.3f) : new Color(0.85f, 0.9f, 1f);
-        Text($"{_gForce:F1} g", new Vector2(x, y + 124), gCol, 20);
+        DrawGLoad(new Vector2(x, y + 104));
     }
 
-    private void DrawPhaseBanner(Vector2 vp)
+    /// <summary>
+    /// Instantaneous load, the held peak, and a bar that escalates through the bands a real
+    /// entry walks up. The 4–5 g wall is the whole point, so the bar is scaled to
+    /// <see cref="EntryLoadTracker.SevereG"/> and switches to the shared Warning / Alert
+    /// tokens exactly at the band edges instead of fading continuously.
+    /// </summary>
+    private void DrawGLoad(Vector2 origin)
     {
-        string label = _phase switch
-        {
-            Edl.Entry => "ATMOSPHERIC ENTRY",
-            Edl.Peak  => "PEAK HEATING",
-            Edl.Aero  => "AERODYNAMIC DESCENT",
-            Edl.Retro => "RETRO BURN",
-            Edl.Final => "FINAL DESCENT",
-            Edl.Touchdown => "TOUCHDOWN",
-            _ => "",
-        };
-        var col = _phase switch
-        {
-            Edl.Entry => new Color(1f, 0.6f, 0.3f),
-            Edl.Peak  => new Color(1f, 0.35f, 0.2f),
-            Edl.Aero  => new Color(1f, 0.78f, 0.4f),
-            Edl.Retro => new Color(0.5f, 0.85f, 1f),
-            Edl.Final => new Color(0.6f, 0.9f, 1f),
-            Edl.Touchdown => new Color(0.45f, 1f, 0.6f),
-            _ => Colors.White,
-        };
-        var size = _font.GetStringSize(label, HorizontalAlignment.Center, -1, 30);
-        var pos  = new Vector2((vp.X - size.X) * 0.5f, vp.Y * 0.16f);
-        DrawString(_font, pos + new Vector2(2, 2), label, HorizontalAlignment.Left, -1, 30, new Color(0, 0, 0, 0.7f));
-        DrawString(_font, pos, label, HorizontalAlignment.Left, -1, 30, col);
+        float x = origin.X, y = origin.Y;
+        var label = new Color(0.6f, 0.7f, 0.82f);
+        Color gCol = BandColor(_load.Band);
 
-        string sub = $"EDL · {_bodyName.ToUpperInvariant()}" + (_legsDeployed ? "   LEGS DOWN" : "");
-        Text(sub, new Vector2((vp.X - _font.GetStringSize(sub, HorizontalAlignment.Center, -1, 14).X) * 0.5f, vp.Y * 0.16f + 34), new Color(0.7f, 0.78f, 0.88f), 14);
+        Text("G-FORCE", new Vector2(x, y), label, 13);
+        Text($"{_gForce:F1} g", new Vector2(x, y + 20), gCol, 20);
+
+        // Escalation bar: full scale is the severe band, with a tick at the 4 g wall.
+        const float barW = 130f, barH = 8f;
+        float barY = y + 28f;
+        float frac = (float)System.Math.Clamp(_gForce / EntryLoadTracker.SevereG, 0.0, 1.0);
+        DrawRect(new Rect2(x, barY, barW, barH), new Color(0.05f, 0.07f, 0.10f, 0.8f));
+        DrawRect(new Rect2(x, barY, barW * frac, barH), gCol);
+        float wallX = x + barW * (float)(EntryLoadTracker.HighG / EntryLoadTracker.SevereG);
+        DrawLine(new Vector2(wallX, barY - 2), new Vector2(wallX, barY + barH + 2),
+            InterfaceTheme.Alert, 1.4f);
+        DrawRect(new Rect2(x, barY, barW, barH), new Color(0.45f, 0.65f, 0.95f, 0.45f), false, 1.1f);
+
+        // The held peak is what the crew debriefs on, so it never disappears once recorded.
+        if (_load.HasSample && _load.PeakG > 0.05)
+        {
+            Color peakCol = BandColor(_load.PeakBand);
+            Text($"PEAK {_load.PeakG:F1} g", new Vector2(x, barY + barH + 16), peakCol, 15);
+            // Only shout while the wall is actually being felt.
+            if (_load.Band >= GLoadBand.High)
+                Text("HIGH G", new Vector2(x + barW - 34, y + 20), InterfaceTheme.Alert, 15);
+        }
     }
+
+    private static Color BandColor(GLoadBand band) => band switch
+    {
+        GLoadBand.Severe => InterfaceTheme.Alert,
+        GLoadBand.High => InterfaceTheme.Alert,
+        GLoadBand.Elevated => InterfaceTheme.Warning,
+        _ => InterfaceTheme.Text,
+    };
+
+    /// <summary>
+    /// Comms blackout callout. The state itself is owned by the simulation
+    /// (<c>CommsSystem.PlasmaBlackout</c>); this only renders it, centred low on the screen
+    /// so it stays clear of the phase/telemetry blocks the rest of the HUD owns.
+    /// </summary>
+    private void DrawBlackoutBanner(Vector2 vp)
+    {
+        const string headline = "SIGNAL LOST — PLASMA BLACKOUT";
+        string sub = $"IONISED SHEATH · T+{_blackoutSeconds:F0}s · SIGNAL RETURNS AS SPEED BLEEDS OFF";
+
+        var headSize = _font.GetStringSize(headline, HorizontalAlignment.Center, -1, 24);
+        var subSize = _font.GetStringSize(sub, HorizontalAlignment.Center, -1, 13);
+        float cx = vp.X * 0.5f;
+        float top = vp.Y * 0.74f;
+
+        DrawRect(new Rect2(cx - headSize.X * 0.5f - 22f, top - 26f,
+            headSize.X + 44f, 60f), new Color(0.04f, 0.06f, 0.09f, 0.72f));
+        DrawRect(new Rect2(cx - headSize.X * 0.5f - 22f, top - 26f,
+            headSize.X + 44f, 60f), new Color(InterfaceTheme.Alert, 0.55f), false, 1.2f);
+
+        DrawString(_font, new Vector2(cx - headSize.X * 0.5f, top), headline,
+            HorizontalAlignment.Left, -1, 24, InterfaceTheme.Alert);
+        DrawString(_font, new Vector2(cx - subSize.X * 0.5f, top + 22f), sub,
+            HorizontalAlignment.Left, -1, 13, InterfaceTheme.TextMuted);
+    }
+
+    /// <summary>
+    /// UX-014: the EDL phase title duplicated the HUD's mission-phase banner, so this
+    /// controller no longer draws one. It publishes the EDL-only remainder and
+    /// <see cref="HUDController"/> renders it inside the single banner.
+    /// </summary>
+    public string? BannerStatus => _phase == Edl.Inactive
+        ? null
+        : $"EDL · {_bodyName.ToUpperInvariant()}" + (_legsDeployed ? "  ·  LEGS DOWN" : "");
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 

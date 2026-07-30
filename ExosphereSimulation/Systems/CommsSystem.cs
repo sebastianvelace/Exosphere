@@ -13,8 +13,32 @@ public class CommsSystem
     private const double MaxDSNRangeM = 3.0e11;  // ~2 AU
     private const double SpeedOfLight = 3e8;     // m/s
 
+    private readonly PlasmaBlackoutModel _blackout = new();
+
+    /// <summary>
+    /// True while the ionised shock layer of a hypersonic entry is reflecting the downlink.
+    /// This is a DIFFERENT failure from geometric loss of signal: the antenna and the relay
+    /// are both fine, the sheath is simply opaque, and it clears on its own as the vehicle
+    /// decelerates. See <see cref="PlasmaBlackoutModel"/> for the thresholds and their basis.
+    /// </summary>
+    public bool PlasmaBlackout => _blackout.IsBlackedOut;
+
+    /// <summary>Seconds elapsed inside the current plasma blackout (0 when not blacked out).</summary>
+    public double PlasmaBlackoutSeconds => _blackout.ElapsedSeconds;
+
+    /// <summary>Longest plasma blackout observed since the last <see cref="ResetPlasmaBlackout"/>.</summary>
+    public double LongestPlasmaBlackoutSeconds => _blackout.LongestBlackoutSeconds;
+
+    /// <summary>Clears blackout state — call on a new flight or after loading a save.</summary>
+    public void ResetPlasmaBlackout() => _blackout.Reset();
+
+    /// <summary>Ticks comms with no atmospheric entry condition (vacuum / on-orbit).</summary>
     public void Tick(double dt, Vector3d vesselPosition, Vector3d earthPosition,
                      IReadOnlyList<CelestialBody> bodies)
+        => Tick(dt, vesselPosition, earthPosition, bodies, PlasmaBlackoutInput.None);
+
+    public void Tick(double dt, Vector3d vesselPosition, Vector3d earthPosition,
+                     IReadOnlyList<CelestialBody> bodies, in PlasmaBlackoutInput entryCondition)
     {
         double distToEarth = (vesselPosition - earthPosition).Magnitude;
         double earthRadius = 0.0;
@@ -30,6 +54,15 @@ public class CommsSystem
             vesselPosition, earthPosition, SpeedOfLight, earthRadius);
         SignalStrength     = los ? System.Math.Clamp(1.0 - distToEarth / MaxDSNRangeM, 0.0, 1.0) : 0.0;
         HasSignal          = los && SignalStrength > 0.05;
+
+        // The sheath is opaque, so it overrides an otherwise perfect link.
+        _blackout.Tick(dt, entryCondition);
+        if (_blackout.IsBlackedOut)
+        {
+            SignalStrength = 0.0;
+            HasSignal      = false;
+        }
+
         LossOfSignalAlert  = !HasSignal;
     }
 

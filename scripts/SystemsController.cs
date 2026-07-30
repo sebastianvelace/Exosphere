@@ -65,7 +65,19 @@ public partial class SystemsController : Node
         Thermal.Tick(delta, solarVisibility, inAtmo, atmoTemp);
 
         Vector3d earthPos = earthBody?.Position ?? Vector3d.Zero;
-        Comms.Tick(delta, vessel.Position, earthPos, universe.Bodies);
+
+        // Feed comms the free-stream entry condition so it can model plasma blackout.
+        // These are read-only samples of state the physics already integrated.
+        double airspeed = vessel.GetSurfaceVelocity(refBody).Magnitude;
+        double airDensity = refBody.GetAtmosphericDensity(vessel.Position);
+        var entryCondition = new PlasmaBlackoutInput
+        {
+            HeatFluxWm2 = Exosphere.Simulation.Physics.ThermalModel.ComputeHeatFlux(
+                airDensity, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5)),
+            DensityKgM3 = airDensity,
+            AirspeedMs  = airspeed,
+        };
+        Comms.Tick(delta, vessel.Position, earthPos, universe.Bodies, entryCondition);
 
         ApplyGameplayConsequences(vessel);
     }
@@ -73,7 +85,12 @@ public partial class SystemsController : Node
     private void ApplyGameplayConsequences(Exosphere.Simulation.Vessel vessel)
     {
         bool structuralLost = vessel.StructuralControlLost;
-        ControlLimited = Power.NoPowerAlert || !Comms.HasSignal || !LifeSupport.CrewAlive
+        // A plasma blackout is a comms outage, not a control outage: entry guidance is flown
+        // onboard precisely BECAUSE the ground link is unavailable through the sheath. Every
+        // real orbital entry is flown with the radio dead. Excluding it here also keeps the
+        // blackout purely presentational, so it cannot perturb the EDL trajectory.
+        bool commsLost = !Comms.HasSignal && !Comms.PlasmaBlackout;
+        ControlLimited = Power.NoPowerAlert || commsLost || !LifeSupport.CrewAlive
             || structuralLost;
 
         if (ControlLimited)
