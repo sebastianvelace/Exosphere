@@ -3,6 +3,15 @@
 > Plan sync audit: 2026-07-03. Source of truth after this pass: code + tests, then these plan docs.
 > Audited by grep/read against `main`-era codebase on branch `docs/plan-sync-jul2026`.
 
+> Plan sync update: 2026-07-29 (branch `docs/plan-sync-aug2026`). Two commits landed on `main`:
+> `feat(physics): compute real per-engine torque from mount geometry` (closes R5 torque; opens
+> R5b/R5c as smaller follow-ups) and `feat(tooling): add hot-staging and reentry-compare capture
+> milestones` (adds `--hotstage`/`--reentry-compare` to `tools/visual_playtest.sh`, unblocking V2
+> hot-stage ref compare and V3 reentry VFX tuning — tooling only, tuning itself still open).
+> Also corrected: V0/V5 rows below wrongly said CI has "no PNG artifacts" — `.github/workflows/ci.yml`
+> already uploads a `visual-smoke-pad` artifact from `tools/visual_playtest.sh --smoke`; this was
+> stale before this session's two commits and is fixed here regardless.
+
 ---
 
 ## 1. Verified plan status
@@ -13,14 +22,17 @@
 | --- | --- | --- | --- |
 | R1–R3 | Ascent gravity turn + hot-staging at MECO | `AscentController.cs` MECO by speed/reserve, `TriggerStaging` | ✅ Done |
 | R4 | Unified 9 m aero area | `AerodynamicsModel.EstimateReferenceArea` + `EffectiveArea`; `Vessel.ComputeDragAt` | ✅ Done (section was stale → fixed) |
-| R5 | Multi-motor model | Still 1 engine part/stage per CLAUDE.md | ⬜ Pending (large) |
+| R5 | Multi-motor model — lifecycle | Per-engine lifecycle/gimbal/thermal/feed/failure state modeled per instance (already true before this pass) | ✅ Done |
+| R5 | Multi-motor model — torque | `feat(physics): compute real per-engine torque from mount geometry`: `Part.GetEngineInstanceThrustGeometry`, `PartGraph.GetTotalTorque`, `PartGraph.GetPitchYawRollAngularAcceleration`; `EngineTorqueTests.cs` (6 tests), `StarshipFlight7DataTests.BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss`; suite 369/369 | ✅ Done |
+| R5b | Differential per-mount TVC | `Vessel.Tick` still mirrors one gimbal command to every gimballed mount in a part | ⬜ Pending |
+| R5c | Torque wired as unconditional attitude disturbance | `Vessel.Tick`'s angular-acceleration block still gated behind `hasInput`; `GetTotalTorque` exists but isn't consumed there | ⬜ Pending |
 | R6 | Body lift / AoA | `ComputeLift`, `AerodynamicLiftTests.cs` (4 tests) | ✅ Done |
 | R7 | Thermosphere / orbital decay | `AtmosphereModel` tail, `AtmosphereThermosphereTests`, `OrbitalDecayTests` | ✅ Done |
 | R8 | `has_heat_shield` data-driven | `PartDefinition.HasHeatShield`, `ThermalModel`, `PhysicsRegressionTests` | ✅ Done (section was stale → fixed) |
 | R9 | Touchdown ≤2 m/s | `EDLController.TouchdownVel = 3.0`; R13 telemetry ~0–1.5 m/s | ✅ Done (`SoftLandingThreshold` still 5.0 — damage gate, optional tighten) |
 | R10 | ISP cluster ~363 s | `starship_engines.json` `isp_vac: 363` | ✅ Done (section was stale → fixed) |
 | R11 | Systems tied to mission phases | `Systems/*` exist, not phase-wired | ⬜ Pending |
-| R12 | Boostback / tower catch | Depends on R5 | ⬜ Blocked |
+| R12 | Boostback / tower catch | Depends on R5b/R5c | ⬜ Blocked |
 | R13 | Survivable belly-flop EDL | `EDLController` belly-flop until ~800 m flip; R13 telemetry in plan header | ✅ Done |
 
 **Discrepancies fixed this session:** R4/R8/R9/R10 detail sections still read as open fixes despite header marking them done. `ROADMAP.md` still listed R6 lift and R7 thermosphere as pending — corrected.
@@ -30,13 +42,13 @@
 | Track | Status | Evidence |
 | --- | --- | --- |
 | V0 capture harness | ✅ Working locally | `xvfb-run` + temp autoload pattern documented |
-| V0 CI PNG artifacts | ⬜ Pending | CI has Xvfb smoke only, no PNG harness/artifacts |
+| V0 CI PNG artifacts | ✅ Done | `.github/workflows/ci.yml` step "Visual playtest smoke (pad capture)" runs `tools/visual_playtest.sh --smoke --skip-build` and uploads `visual-smoke-pad` (`exo_play_pad.png`) via `actions/upload-artifact@v4` |
 | V1 exterior | ✅ First pass + close-ups | `VesselRenderer.cs` grid fins, serial bars, tiles, engine bay |
 | V2 plumes / pad | ✅ Mostly done | `PlumeSystem`, `LaunchEffectsController`, `EngineStartupController`, `HotStageFlashController` |
-| V2 hot-stage ref compare | ⬜ Pending | Code + local multiframe; no IFT reference compare in real ascent |
-| V3 reentry VFX | ✅ Partial | `ReentryPlasmaController` flux-driven + localized glows; tuning/captures pending |
+| V2 hot-stage ref compare | 🟡 Harness ready, comparison pending | `feat(tooling): add hot-staging and reentry-compare capture milestones` added `--hotstage` mode to `tools/visual_playtest.sh` (flies real `[G]` Flight 7 ascent, gates capture on `Vessel.IsHotStageOverlapping`, verified with real xvfb run → `exo_play_hotstage.png`); actual IFT reference-image comparison/tuning still not done |
+| V3 reentry VFX | 🟡 Harness ready, tuning pending | `ReentryPlasmaController` flux-driven + localized glows; new `--reentry-compare` mode in `tools/visual_playtest.sh` captures nominal belly-flop vs. forced bad-attitude EDL side by side via `SimulationBridge.BeginReentryDemonstration(bellyFirst:...)`, verified with real xvfb runs → `exo_play_reentry_nominal.png`, `exo_play_reentry_bad_attitude.png`; alpha/timing/zone-charring tuning still pending |
 | V4 phase lighting | ✅ Space blend | `PhaseLightingController` altitude 70→130 km; reentry/cockpit overlay pending |
-| V5 CI visual automation | ⬜ Pending | `.github/workflows/ci.yml` guard + Xvfb smoke, no capture artifacts |
+| V5 CI visual automation | ✅ Done | `.github/workflows/ci.yml` runs `tools/visual_playtest.sh --smoke --skip-build` under Xvfb and uploads the `visual-smoke-pad` PNG artifact on every run |
 
 ### Playtest (`PLAN_PLAYTEST.md`)
 
@@ -88,10 +100,10 @@ Use **one agent per row** per session. Fetch before push; rebase if behind `main
 
 Ranked by impact × evidence × not already closed:
 
-1. **Hot-staging + startup reference compare (V2)** — Code exists; highest visual ROI. Real ascent multiframe capture vs IFT T+2:39/T+2:40. Owner: visual-hotstage + capture harness.
+1. **Hot-staging + startup reference compare (V2)** — Capture harness unblocked: `--hotstage` mode landed in `tools/visual_playtest.sh` and verified end-to-end (`exo_play_hotstage.png`). Remaining work is the actual reference-image comparison vs IFT T+2:39/T+2:40, not the tooling. Owner: visual-hotstage.
 2. **DEORBIT→EDL playtest harness (PLAYTEST §1 milestone 7)** — Unblocks reentry lighting overlay and V3 nominal/failure captures. Owner: visual-capture (temp harness only).
-3. **Reentry VFX tuning vs real EDL (V3)** — Flux-driven plasma works; pending alpha/timing/zone charring. Owner: visual-reentry. Requires harness from #2.
-4. **R5 multi-motor (physics backlog)** — Largest remaining physics simplification; blocks R12 boostback. Defer until visual tranche stabilizes unless explicitly prioritizing physics.
+3. **Reentry VFX tuning vs real EDL (V3)** — Capture harness unblocked: `--reentry-compare` mode landed in `tools/visual_playtest.sh`, verified end-to-end (`exo_play_reentry_nominal.png`, `exo_play_reentry_bad_attitude.png`). Flux-driven plasma works; alpha/timing/zone-charring tuning against the captured references is still pending. Owner: visual-reentry.
+4. **R5b/R5c multi-motor TVC + torque wiring (physics backlog)** — R5 torque-from-geometry is closed (`feat(physics): compute real per-engine torque from mount geometry`); remaining scope is differential per-mount TVC (R5b) and wiring `GetTotalTorque` as an unconditional attitude disturbance in `Vessel.Tick` (R5c), both smaller than the original R5. Blocks R12 boostback. Defer until visual tranche stabilizes unless explicitly prioritizing physics.
 5. **Harmonize landing damage threshold (R9 tail)** — Optional: lower `Universe.SoftLandingThreshold` from 5.0→~3.0 m/s to match EDL setpoint; needs regression test only if touched.
 
 **Explicitly NOT next:** VAB rewrite, engine-out gameplay, global tonemap experiments, retuning R13 EDL without telemetry.

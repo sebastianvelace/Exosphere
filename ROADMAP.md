@@ -45,7 +45,10 @@ Base tecnica cerrada en `main`:
   charring termico, bordes de heat shield, patron de tiles, payload-door cues,
   seams longitudinales, pluma liftoff mas densa y Super Heavy separado con anillo
   expuesto/quemado. Los motores 33/6 tienen estado, feed, gimbal, telemetría,
-  fallos y pluma individual; ya no son solamente una multiplicación visual.
+  fallos y pluma individual; ya no son solamente una multiplicación visual. El
+  torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`);
+  falta TVC diferencial por motor y wirear ese torque como disturbio no gateado en
+  `Vessel.Tick` (ver R5b/R5c en `PLAN_REALISM.md`).
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
@@ -93,13 +96,20 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      aft elevons largos, tip redondo, tile seams densos. Pendiente: compare IFT lado-a-lado.
    - Startup/ramp y hot-staging VFX implementados y verificados con trigger local multiframe.
    - Pluma de vacio ahora atenúa smoke/soot con expansion alta.
-   - Siguiente: captura de hot-staging en ascenso real, comparacion contra referencia y validacion orbital de pluma vacio limpia.
+   - Harness de captura de hot-staging en ascenso real ya existe (`tools/visual_playtest.sh --hotstage`,
+     vuela un ascenso `[G]` Flight 7 real y captura la ventana de overlap gateada en
+     `Vessel.IsHotStageOverlapping`; verificado con xvfb → `exo_play_hotstage.png`). Siguiente:
+     la comparacion contra referencia y la validacion orbital de pluma vacio limpia, que ya no
+     dependen de tooling.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
    - Primera pasada de glow localizado en nose, belly y flap leading edges ya implementada.
    - Alpha/timing por fase EDL ✅ (`ReentryPlasmaVisualIntensity`: ENTRY soft → PEAK → AERO fade).
-   - Pendiente: compare IFT captura-a-captura de shock localizado.
+   - Harness de comparacion ya existe (`tools/visual_playtest.sh --reentry-compare`, captura
+     belly-flop nominal vs EDL con mala actitud forzada via `SimulationBridge.BeginReentryDemonstration(bellyFirst:...)`;
+     verificado con xvfb → `exo_play_reentry_nominal.png` / `exo_play_reentry_bad_attitude.png`).
+     Pendiente: el ajuste/comparacion visual en si (alpha, timing, zone charring) contra IFT.
 
 3. **Entorno y camaras**
    - Pad costero ya tiene primera pasada visual.
@@ -109,6 +119,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 4. **Capturas de aceptacion**
    - Automatizar capturas con framebuffer real para pad, liftoff, Max-Q, staging,
      orbit/map, belly-flop reentry, flip-and-burn, touchdown/crash y cockpit.
+   - `--hotstage` y `--reentry-compare` ya cubren hot-stage overlap y comparacion
+     nominal/mala-actitud de EDL; falta el resto de la matriz de capturas listada arriba.
 
 ## Sistemas Cerrados Que No Se Deben Rehacer Sin Motivo
 
@@ -202,11 +214,13 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 1. Ejecutar `bash tools/ci_check.sh` antes de tocar visuales.
 2. Cerrar el siguiente bloque visual real:
-   - captura de hot-staging en ascenso real y comparacion contra referencia;
+   - comparacion contra referencia del hot-staging en ascenso real (harness `--hotstage`
+     ya listo; falta el juicio de comparacion/ajuste);
    - comparacion de startup/ramp contra referencia real;
    - validacion de pluma de vacio contra captura orbital;
    - reentry visual avanzado solo en lo pendiente: nose/leading edges, capturas
-     nominal/fallo y legibilidad HUD.
+     nominal/fallo y legibilidad HUD (harness `--reentry-compare` ya listo; falta el
+     ajuste de alpha/timing/zone charring).
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
 5. Recien despues volver a gameplay grande: misiones, save/load, recursos o

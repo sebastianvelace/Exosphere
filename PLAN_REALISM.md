@@ -152,14 +152,47 @@ equivocada hace la órbita.
 - **Archivos:** `ExosphereSimulation/Physics/AerodynamicsModel.cs`, `ExosphereSimulation/Vessel.cs`.
 - **Aceptación:** ✅ Max-Q realista; ascenso y reingreso comparten modelo de área.
 
-### R5. Modelo "1 parte-motor por etapa" (la mayor simplificación)
-- **Hoy:** Super Heavy = 1 parte ≈74 MN; Starship = 1 parte. No hay engine-out, throttling por
-  motor, gimbal individual ni empuje asimétrico. Es contrato declarado en CLAUDE.md.
-- **Fix (esfuerzo grande, ola propia):** modelar N motores como sub-partes con estado propio
-  (encendido/apagado, gimbal, fallo). Habilita engine-out, hot-staging real, boostback.
-- **Archivos:** `ExosphereSimulation/Parts/*` (PartGraph, Part, PartDefinition), `data/parts/*.json`.
-- **Aceptación:** apagar un motor reduce empuje proporcional y desplaza el centro de empuje; tests.
-- **Nota:** romper este contrato impacta render (los 33/6 visuales) y staging; planear aparte.
+### R5. Modelo "1 parte-motor por etapa" (la mayor simplificación) — ✅ HECHO (lifecycle) / ✅ HECHO (torque)
+- **Estado real (previo a esta sesión):** el estado por motor (lifecycle encendido/apagado, gimbal,
+  térmico, feed, fallo) ya existía por instancia, antes de este cambio. Lo que faltaba era que un
+  fallo asimétrico o una deflexión de gimbal produjeran torque real: los métodos de torque/actitud
+  de `PartGraph` usaban una única palanca escalar por parte en vez de la posición 3D real de cada
+  mount de motor.
+- **Fix aplicado:** `feat(physics): compute real per-engine torque from mount geometry` — nuevo
+  `Part.GetEngineInstanceThrustGeometry`, `PartGraph.GetTotalTorque`,
+  `PartGraph.GetPitchYawRollAngularAcceleration` (aditivos; los escalares existentes
+  `GetTotalThrust`/`GetPitchYawAngularAcceleration`/`GetRollAngularAcceleration` quedan intactos).
+- **Archivos:** `ExosphereSimulation/Parts/*` (PartGraph, Part, PartDefinition),
+  `ExosphereSimulation.Tests/EngineTorqueTests.cs` (6 tests:
+  `NominalSymmetricCluster_ProducesZeroNetTorque`,
+  `FailingOffCenterOuterMount_ProducesExactYawTorqueTowardOppositeSide`,
+  `FailingDiametricallyOppositeOuterMounts_CancelToNearZeroTorque`,
+  `IsolatedGimbalDeflectionOnSingleGimballedMount_ProducesTorqueMatchingCrossProductSign`,
+  `GetEngineInstanceThrustGeometry_TiltDirectionGeneralizesForNonVerticalMount`,
+  `RegressionSafety_ScalarPitchYawAndRollAuthorityUnchangedByNewTorqueApi`), más el hecho
+  `BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss` en
+  `ExosphereSimulation.Tests/StarshipFlight7DataTests.cs`.
+- **Aceptación:** ✅ suite 369/369 (antes 362); un motor fuera de eje produce torque neto, no sólo
+  pérdida de empuje proporcional; el fallo de un motor diametralmente opuesto cancela a ~cero.
+
+### R5b. TVC diferencial por motor — pendiente (abierto)
+- **Hoy:** `Vessel.Tick` sigue reflejando UN comando de gimbal a todos los mounts gimballed de una
+  parte; no hay TVC diferencial real (cada motor gimballando de forma independiente para anular un
+  torque deseado).
+- **Aceptación:** cada mount gimballed recibe su propio comando derivado del torque objetivo.
+
+### R5c. Torque como disturbio no wireado en `Vessel.Tick` — pendiente (abierto)
+- **Hoy:** `GetTotalTorque` ya es correcto y testeado, pero no está conectado en `Vessel.Tick` como
+  disturbio de actitud incondicional: el bloque de aceleración angular sigue gateado detrás de
+  `hasInput` (piloto/SAS activo). Hoy un engine-out no produce efecto de actitud en idle, aunque el
+  torque real ya es computable.
+- **Aceptación:** un engine-out sin input del piloto produce rotación observable vía RK4.
+
+### R5d. Magnitud de empuje promediada en cluster mixto bajo steering activo — pendiente (abierto)
+- **Hoy:** `Part.GetThrustVector` sigue promediando la deflexión de gimbal entre un cluster mixto
+  gimballed/fijo bajo steering activo. Aproximación más chica que la de torque, ya cerrada por R5.
+- **Aceptación:** la magnitud de empuje por motor no se ve alterada artificialmente por el promedio
+  de gimbal de otros motores del mismo cluster.
 
 ### R6. Sin sustentación aerodinámica / ángulo de ataque ✅ HECHO
 - **Hoy (antes):** el aero era sólo drag (orientación-dependiente). Starship reentra con **lift de
@@ -227,15 +260,17 @@ equivocada hace la órbita.
 - **Archivos:** `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`.
 - **Aceptación:** en sombra cae la energía; el retardo de comms crece con la distancia.
 
-### R12. Boostback + captura en torre (Mechazilla) — depende de R5
-- Secuencia real de flip + boostback del Super Heavy y captura. Requiere el modelo multi-motor (R5).
+### R12. Boostback + captura en torre (Mechazilla) — depende de R5b/R5c
+- Secuencia real de flip + boostback del Super Heavy y captura. El torque por motor (R5) ya está;
+  requiere TVC diferencial (R5b) y el torque wireado como disturbio no gateado (R5c).
 
 ---
 
 ## Orden de ejecucion actual
 1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
-2. Backlog fisico real pendiente: R5 multi-motor. (R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
-3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5.
+2. Backlog fisico real pendiente: R5b TVC diferencial, R5c torque como disturbio no gateado, R5d
+   empuje promediado en cluster mixto. (R5 torque por geometria ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
+3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5b/R5c.
 4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)

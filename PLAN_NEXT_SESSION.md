@@ -18,7 +18,7 @@ The next session should **not** open large new systems. Highest ROI is:
 2. **Close the V0.5 audit gap** — compare hot-staging, startup, and reentry captures against real IFT/Flight 7 references; tune only what the diff shows.
 3. **Ship reentry lighting + zone charring** — blocked today because the harness cannot produce a belly-flop EDL frame for before/after verification.
 
-Physics backlog (R5 multi-motor, R11 systems, R12 boostback) stays deferred until the visual tranche is reference-stable. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
+Physics backlog: R5 torque-from-mount-geometry is now closed (see Completed This Session); R5b (differential per-mount TVC), R11 systems, R12 boostback stay deferred until the visual tranche is reference-stable. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
 
 ---
 
@@ -43,7 +43,14 @@ Evidence from git log and plan audits (no `.atl/agent-*-log.md` files existed at
 | Docs | Plan sync audit | `.atl/DELEGATION_JUL2026.md` — verified R1–R13 status vs code |
 | Refactor | Over-engineering audit | `.atl/OVERENGINEERING_AUDIT_JUL2026.md` — P1 dead NavBall + duplicate warp identified |
 
-**Already closed (do not reopen without regression proof):** R1–R4, R6–R10, R13 ascent/EDL, V1 exterior first pass, V2 plume/pad first pass.
+**Session 2026-07-29 (`docs/plan-sync-aug2026` audit):**
+
+| Area | Deliverable | Evidence |
+| --- | --- | --- |
+| Physics | R5 torque from real mount geometry | `feat(physics): compute real per-engine torque from mount geometry` — `Part.GetEngineInstanceThrustGeometry`, `PartGraph.GetTotalTorque`, `PartGraph.GetPitchYawRollAngularAcceleration` (existing scalar `GetTotalThrust`/`GetPitchYawAngularAcceleration`/`GetRollAngularAcceleration` untouched); `EngineTorqueTests.cs` (6 tests), `StarshipFlight7DataTests.BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss`; suite 369/369 (was 362) |
+| Tooling | Hot-stage + reentry-compare capture modes | `feat(tooling): add hot-staging and reentry-compare capture milestones` — `tools/visual_playtest.sh` gains `--hotstage` (real `[G]` Flight 7 ascent, gated on `Vessel.IsHotStageOverlapping`) and `--reentry-compare` (nominal belly-flop vs forced bad-attitude EDL via new `bellyFirst` param on `SimulationBridge.BeginReentryDemonstration`); verified end-to-end with xvfb → `exo_play_hotstage.png`, `exo_play_reentry_nominal.png`, `exo_play_reentry_bad_attitude.png`; `bash tools/ci_check.sh` green |
+
+**Already closed (do not reopen without regression proof):** R1–R4, R6–R10, R13 ascent/EDL, V1 exterior first pass, V2 plume/pad first pass, R5 torque-from-geometry (2026-07-29).
 
 ---
 
@@ -68,6 +75,7 @@ Each item: **evidence → owner files → acceptance (xvfb) → realism rational
 | **Owner** | `scripts/HotStageFlashController.cs`, `scripts/PlumeSystem.cs`, `scripts/VesselRenderer.cs`, `scripts/SimulationBridge.cs` (VFX hooks only) |
 | **Acceptance** | Multiframe capture during `[G]` ascent at `SEPARATION`: flash/plume between stages visible; booster ring scorched; Ship engines lit; HUD legible. Side-by-side notes vs IFT reference (link in `PLAN_VISUAL_REALISM.md:60-61`). Tune only flash intensity, soot ring, encuadre. |
 | **Realism feel** | Hot-staging is Starship's signature maneuver — the moment the player knows this is not Kerbal staging. |
+| **Status** | **Unblocked.** `tools/visual_playtest.sh --hotstage` now flies a real `[G]` Flight 7 ascent and captures the dual-thrust overlap window gated on `Vessel.IsHotStageOverlapping`, verified end-to-end (`exo_play_hotstage.png`). The tool exists; the actual reference-image comparison/tuning against IFT is next-session work, not attempted this session. |
 
 ### V-P3. Startup/ramp reference compare
 
@@ -95,6 +103,7 @@ Each item: **evidence → owner files → acceptance (xvfb) → realism rational
 | **Owner** | `scripts/ReentryPlasmaController.cs`, `scripts/VesselRenderer.cs` (tile charring), `ReentryBreakupController.cs` |
 | **Acceptance** | Two captures: (a) belly-flop nominal — protected, controlled; (b) forced bad attitude — localized nose/flap heating before breakup. Nose/flaps/belly char at different rates tied to `Part.ThermalDamage` zones. Plasma/wake do not obscure navball/HUD. |
 | **Realism feel** | Flight 4–6 tile damage showed that orientation *matters* — the player should read danger before telemetry screams. |
+| **Status** | **Unblocked.** `tools/visual_playtest.sh --reentry-compare` now captures nominal belly-flop vs forced bad-attitude EDL side by side via the new `bellyFirst` parameter on `SimulationBridge.BeginReentryDemonstration`, verified end-to-end (`exo_play_reentry_nominal.png`, `exo_play_reentry_bad_attitude.png`, two independent Godot launches per attitude). The capture tool exists; the actual alpha/timing/zone-charring tuning is next-session work, not attempted this session. |
 
 ### V-P6. V0.5 reference audit sweep (remaining matrix rows)
 
@@ -105,13 +114,13 @@ Each item: **evidence → owner files → acceptance (xvfb) → realism rational
 | **Acceptance** | Fill the matrix diff column for: pad lateral, liftoff, orbit burn, orbit/map beauty, touchdown/flip. Each row gets before/after PNG + one-sentence diff. |
 | **Realism feel** | Stops "looks good to me" drift — the ship reads as 9 m × 121 m at every phase. |
 
-### V-P7. CI visual artifacts (V5)
+### V-P7. CI visual artifacts (V5) — DONE (this row was stale)
 
 | | |
 | --- | --- |
-| **Evidence** | CI has Xvfb smoke only; no PNG artifacts (`.atl/DELEGATION_JUL2026.md:33,39`). |
+| **Evidence** | This row previously claimed CI has "Xvfb smoke only, no PNG artifacts" — that was already stale before this session: `.github/workflows/ci.yml` runs `tools/visual_playtest.sh --smoke --skip-build` and uploads the `visual-smoke-pad` artifact (`exo_play_pad.png`) via `actions/upload-artifact@v4`. Corrected in `.atl/DELEGATION_JUL2026.md` (2026-07-29 audit). |
 | **Owner** | `.github/workflows/ci.yml`, `tools/ci_check.sh` |
-| **Acceptance** | CI job produces downloadable PNG artifacts; heuristic fails on >95% black frame or zero non-background pixels in vessel bbox. Harness stays untracked — CI invokes ephemeral script. |
+| **Acceptance** | Met: CI job produces a downloadable PNG artifact today. Remaining stretch (not blocking): add the >95%-black-frame / zero-non-background-pixel heuristic gate described in the original acceptance criterion. |
 | **Realism feel** | Regressions that make the rocket invisible ship before players do. |
 
 ### V-P8. Camera / atmosphere polish (V4 tail)
@@ -167,15 +176,35 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Realism feel** | Max-Q and bad reentry can tear the stack — failure is physical, not a red screen. |
 | **Status** | **DONE** (oleada B1). Control-loss consequences still pending. |
 
-### P-P6. R5 multi-motor model (LARGE — defer unless physics sprint)
+### P-P6. R5 multi-motor model — torque from mount geometry — DONE
 
 | | |
 | --- | --- |
-| **Evidence** | CLAUDE.md contract: 1 physical engine part/stage. Flight 7 adds `EngineCount` for thrust scaling but not per-engine state. |
-| **Owner** | `ExosphereSimulation/Parts/*`, `data/parts/*.json`, render sync |
-| **Acceptance** | Shutting one engine reduces thrust proportionally and shifts TCE; engine-out test; staging unchanged for nominal 33/6. |
-| **Realism feel** | Enables engine-out, asymmetric thrust, real boostback — the next leap in "this could fail like real life." |
-| **Status** | **Defer** until visual tranche stable (`.atl/DELEGATION_JUL2026.md:94`). |
+| **Evidence** | `feat(physics): compute real per-engine torque from mount geometry` — `Part.GetEngineInstanceThrustGeometry`, `PartGraph.GetTotalTorque`, `PartGraph.GetPitchYawRollAngularAcceleration` (additive; existing scalar `GetTotalThrust`/`GetPitchYawAngularAcceleration`/`GetRollAngularAcceleration` untouched). Per-engine lifecycle/gimbal/thermal/feed/failure state already existed per instance before this change; the closed gap was that an asymmetric failure or gimbal deflection produced zero torque (only proportional thrust loss). |
+| **Owner** | `ExosphereSimulation/Parts/*` (PartGraph, Part, PartDefinition) |
+| **Acceptance** | `EngineTorqueTests.cs` (6 tests: `NominalSymmetricCluster_ProducesZeroNetTorque`, `FailingOffCenterOuterMount_ProducesExactYawTorqueTowardOppositeSide`, `FailingDiametricallyOppositeOuterMounts_CancelToNearZeroTorque`, `IsolatedGimbalDeflectionOnSingleGimballedMount_ProducesTorqueMatchingCrossProductSign`, `GetEngineInstanceThrustGeometry_TiltDirectionGeneralizesForNonVerticalMount`, `RegressionSafety_ScalarPitchYawAndRollAuthorityUnchangedByNewTorqueApi`); `StarshipFlight7DataTests.BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss`; suite 369/369 (was 362). |
+| **Realism feel** | An engine-out failure now has a real, geometry-correct torque signature instead of just less thrust — the first building block for engine-out, asymmetric thrust, and real boostback. |
+| **Status** | **DONE** this session. Remaining scope split into P-P6b/P-P6c below (both smaller than the original "LARGE" estimate). |
+
+### P-P6b. Differential per-mount TVC commanding — NEW (open)
+
+| | |
+| --- | --- |
+| **Evidence** | `Vessel.Tick` still mirrors ONE gimbal command to every gimballed mount in a part; real differential TVC (each engine gimballing independently to null a desired torque) is not implemented. Identified as follow-up during P-P6 design, not implemented. |
+| **Owner** | `ExosphereSimulation/Vessel.cs` (Tick gimbal-command dispatch), `ExosphereSimulation/Parts/*` |
+| **Acceptance** | Given a target torque, each gimballed mount receives its own deflection command (not a shared scalar); xUnit shows differential commands null a synthetic disturbance torque; nominal symmetric-cluster steering unchanged. |
+| **Realism feel** | Enables real boostback/hover-slam attitude control instead of one shared gimbal angle across a whole cluster. |
+| **Status** | Open — smaller, separate follow-up from P-P6. Blocks R12 boostback + tower catch alongside P-P6c. |
+
+### P-P6c. Wire `GetTotalTorque` as unconditional attitude disturbance — NEW (open)
+
+| | |
+| --- | --- |
+| **Evidence** | `GetTotalTorque` is correct and tested but not consumed in `Vessel.Tick`; the angular-acceleration block there is still gated behind `hasInput` (active pilot/SAS steering), so today an engine-out produces zero attitude effect while idle even though genuine torque is now computable. |
+| **Owner** | `ExosphereSimulation/Vessel.cs` (Tick angular-acceleration block) |
+| **Acceptance** | An idle vessel (no pilot/SAS input) with an asymmetric engine failure rotates under RK4 per `GetTotalTorque`; existing `hasInput` steering paths unchanged; R13 nominal EDL/ascent telemetry unaffected. |
+| **Realism feel** | An engine-out should visibly tumble an unpiloted stage, not silently do nothing until the player touches the stick. |
+| **Status** | Open — smaller, separate follow-up from P-P6. |
 
 ---
 
@@ -198,7 +227,7 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Owner** | `ExosphereSimulation/Flight/MissionPhaseTrack.cs`, `scripts/HUDController.cs`, `MissionManager.cs`, `AudioManager.cs` |
 | **Acceptance** | Phase track lights deorbit/EDL slots; COAST driven by AutopilotController (unchanged); THERMAL panel untouched. |
 | **Realism feel** | After SECO the player still sees a mission arc through entry — not a silent coast into fire. |
-| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. **Remaining:** IFT reference compare, R5. |
+| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. **Remaining:** IFT reference compare (harness now exists via `--hotstage`/`--reentry-compare`), R5b/R5c TVC + torque wiring. |
 
 ### G-P2. VAB pre-launch validation pass
 
@@ -256,8 +285,8 @@ From `.atl/OVERENGINEERING_AUDIT_JUL2026.md`. Safe parallel lane — does not ch
 
 | Non-goal | Why |
 | --- | --- |
-| **R5 full multi-motor / engine-out gameplay** | Largest sim contract break; blocks on visual stability; 33/6 remain visual-only |
-| **R12 boostback + Mechazilla catch** | Depends on R5 |
+| **R5b/R5c differential TVC + torque wiring, engine-out gameplay** | R5 torque-from-geometry is closed; TVC/wiring is smaller but still deferred until visual tranche is stable |
+| **R12 boostback + Mechazilla catch** | Depends on R5b/R5c |
 | **VAB rewrite** | V1.5 works; gizmos are incremental |
 | **Global tonemap / ACES experiments** | Proven to subexpose orbit (`PLAN_PLAYTEST.md` B1) |
 | **Retune drag/heating for VFX** | Physics serves telemetry, not screenshots |
@@ -284,6 +313,9 @@ One agent per row; fetch + rebase before push. See `.atl/DELEGATION_JUL2026.md` 
 | **Refactor** | `refactor/simplify-*` | P1-A, P1-B dead code | — | `ci_check.sh` |
 | **Gameplay** | `feat/gameplay-*` | G-P1 save UI (if visual tranche done) | — | Save/load roundtrip |
 | **Docs** | `docs/*` | Plan checkbox updates with evidence | Any agent | PR links to PNG/test names |
+| **Physics (precedent)** | `feat/physics-engine-torque` | P-P6 R5 torque from mount geometry (landed 2026-07-29) | — | `EngineTorqueTests.cs`, `StarshipFlight7DataTests.cs`, suite 369/369 |
+| **Capture (precedent)** | `feat/visual-capture-hotstage-reentry` | V-P2/V-P5 harness modes `--hotstage`/`--reentry-compare` (landed 2026-07-29) | Capture lead pattern (V-P1) | xvfb PNGs: `exo_play_hotstage.png`, `exo_play_reentry_nominal.png`, `exo_play_reentry_bad_attitude.png` |
+| **Docs (precedent)** | `docs/plan-sync-aug2026` | This plan-sync pass (landed 2026-07-29) | Physics + capture rows above | Grep for stale claims across the 5 plan docs |
 
 **Coordination:** `SimulationBridge.cs` is shared boundary — announce new signals before merge.
 
