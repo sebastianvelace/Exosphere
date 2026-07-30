@@ -44,6 +44,7 @@ Evidence from git log and plan audits (no `.atl/agent-*-log.md` files existed at
 | Refactor | Over-engineering audit | `.atl/OVERENGINEERING_AUDIT_JUL2026.md` — P1 dead NavBall + duplicate warp identified |
 | Tooling / gameplay | V-P1 full mission acceptance | `tools/visual_playtest.sh --flight7 --run-id vp1-acceptance --skip-build` — natural pad→orbit path, real hot-stage overlap, RK4 entry/peak heating, fourth center-Raptor start, monotonic 3→2→1 landing burn and physical gearless soft landing; 11 PNGs + `SUMMARY reason=LANDED`; `--verify-only` gate PASS |
 | Tooling | Agent-safe visual harness | `--run-id`, `--max-runtime`, `--verify-only`, persistent `run-summary.txt`, automatic last-state/failure/capture diagnostics, mode-aware landing contract; temporary autoload cleanup verified |
+| Tooling | Focused ascent diagnostics V2 | `--ascent` exits at natural stable orbit; dense `TRACE_ASCENT` + guidance transitions + engine/propellant/warp/invariant evidence; isolated telemetry/console writers; exclusive process lock, per-run Godot token and owner-only cleanup; reusable log contract with 1 valid + 11 rejected synthetic fixtures in CI. Flight 7 evidence: `/tmp/exo_play-ascent-diagnostics-v4/`, orbit ≈186×147 km, 46 samples, max insertion descent 28.5 m/s, `--verify-only` PASS. |
 
 **Session 2026-07-29 (`docs/plan-sync-aug2026` audit):**
 

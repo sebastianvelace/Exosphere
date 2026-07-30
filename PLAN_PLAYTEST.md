@@ -90,6 +90,9 @@ bash tools/visual_playtest.sh --flight7 --run-id agent-vp1
 # CI / quick pipeline check (pad capture only, ~60 s)
 bash tools/visual_playtest.sh --smoke --run-id agent-smoke
 
+# Focused physics diagnosis (pad → natural stable orbit; no EDL or teleport)
+bash tools/visual_playtest.sh --ascent --flight7 --run-id agent-ascent
+
 # Re-run gates against preserved artifacts without launching Godot
 bash tools/visual_playtest.sh --flight7 --run-id agent-vp1 --verify-only
 
@@ -101,8 +104,20 @@ bash tools/visual_playtest.sh --flight7 --run-id agent-vp1 --verify-only
 | File | Content |
 | --- | --- |
 | `/tmp/exo_play/exo_play_<milestone>.png` | Viewport PNG per milestone |
-| `/tmp/exo_play.log` | `CAPTURE` telemetry lines + `SUMMARY` / `GAP` |
+| `/tmp/exo_play.log` | Structured `CAPTURE` / `TRACE_ASCENT` / transition / invariant evidence |
+| `/tmp/exo_play.log.console` | Separate Godot stdout/stderr; never shares a writer with telemetry |
 | `/tmp/exo_play/run-summary.txt` | Compact PASS/FAIL, milestones and terminal diagnostics |
+
+The focused ascent contract requires Coast and Insert transitions, at least five diagnostic
+samples, finite state, intact vehicle/control, continuous insertion thrust, measurable physics
+progress, no fallback, and an orbit capture whose periapsis clears the modeled atmosphere.
+`tools/tests/visual_playtest_contract_test.sh` exercises one valid and eleven invalid synthetic
+logs (false orbit, missing insertion, non-finite/destroyed/stalled state, fallback, writer
+corruption and duplicate run boundaries). `tools/ci_check.sh` runs this contract test.
+
+Harness ownership is exclusive: `flock` prevents two scripts from mutating the temporary
+autoload simultaneously, a per-process environment token makes unrelated Godot instances
+ignore it, and only the lock owner may restore/delete generated resources.
 
 **Milestone status (verified Jul 2026 on `integrate/jul2026-realism-loop`)**
 
