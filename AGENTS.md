@@ -43,6 +43,17 @@ Standard commands are in `README.md` and `CLAUDE.md` (build both csproj, run xUn
   and always cleans up the harness + restores `project.godot` on exit. Never commit the
   harness (`scripts/_*Shot.cs`, capture autoloads in `project.godot`); a CI guard and
   `.claude/hooks/build-check.sh` enforce this.
+- Concurrent agents must isolate artifacts with a caller-stable id, for example
+  `bash tools/visual_playtest.sh --flight7 --run-id agent-vp1 --skip-build`. This writes
+  `/tmp/exo_play-agent-vp1/`, `/tmp/exo_play-agent-vp1.log`, and a compact
+  `run-summary.txt`. On failure the tool prints the last state-gated telemetry, any
+  GAP/FALLBACK/failure evidence, and the captures that survived; inspect the summary before
+  rerunning a several-minute full mission. Full mode has a 3600 s wall budget; other modes
+  default to 1800 s. Override with `--max-runtime SEC` only when telemetry shows continued
+  physical progress, not to conceal a stalled state machine. Do not wrap the command in
+  another `xvfb-run`: the harness owns its display lifecycle. If a run completed but its
+  gate or the agent session was interrupted, re-evaluate preserved evidence with the same
+  mode/id plus `--verify-only`; this never builds, launches Godot, or deletes captures.
 
 ### Gotchas
 

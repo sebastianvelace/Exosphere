@@ -39,6 +39,7 @@ public partial class EDLController : Control
     private bool _legsDeployed;
     private bool _flipInProgress;
     private bool _landingCutoffCommitted;
+    private int _landingEngineCount;
     private double _flipElapsed;
     private double _attitudeErrorDeg;
 
@@ -117,6 +118,7 @@ public partial class EDLController : Control
                 _legsDeployed = false;
                 _flipInProgress = false;
                 _landingCutoffCommitted = false;
+                _landingEngineCount = 3;
                 _flipElapsed = 0.0;
                 Visible = true;
                 mission?.EnterPhase(MissionPhase.ENTRY);
@@ -343,9 +345,12 @@ public partial class EDLController : Control
             // the velocity can pass through zero while the engine remains upright; using
             // -velocity there creates a singular 5 g command and launches the vehicle upward.
             double thrustUpComponent = System.Math.Max(0.20, aimAxis.Dot(up));
-            // A small bounded descent bias prevents an endless hover when below the target
-            // rate, while retaining at least ~0.85 g of support (no free-fall/relight cycle).
-            double descentBias = System.Math.Clamp(0.35 * verticalError, -1.5, 0.0);
+            // Keep tracking the commanded descent instead of asymptotically hovering above
+            // the pad.  The previous 0.35 gain settled near zero vertical speed at ~45 m
+            // because one Raptor's minimum useful thrust nearly balanced gravity.  A stronger
+            // bounded bias gives the controller enough downward acceleration to rejoin the
+            // profile, while retaining at least ~0.69 g of support (no free-fall/relight).
+            double descentBias = System.Math.Clamp(0.90 * verticalError, -3.0, 0.0);
             double aCmd = 1.6 * brakingError
                 + g / thrustUpComponent
                 + descentBias
@@ -401,6 +406,7 @@ public partial class EDLController : Control
             _phase = Edl.Inactive;
             _flipInProgress = false;
             _landingCutoffCommitted = false;
+            _landingEngineCount = 0;
             Visible = false;
         }
     }
@@ -614,7 +620,7 @@ public partial class EDLController : Control
         return rated * landingCount / represented / mass;
     }
 
-    private static void CommandLandingEngines(
+    private void CommandLandingEngines(
         Vessel vessel, CelestialBody body, Part? engineCluster, double accelerationCmd, double mass)
     {
         if (engineCluster == null || mass <= 0.0)
@@ -636,16 +642,33 @@ public partial class EDLController : Control
             return;
         }
 
-        int selected = maxLandingEngines;
+        int requested = maxLandingEngines;
         for (int count = 1; count <= maxLandingEngines; count++)
         {
             if (desiredThrust <= perEngine * count)
             {
-                selected = count;
+                requested = count;
                 break;
             }
         }
 
+        // A landing burn is a monotonic engine-out sequence, not a bank that may chatter
+        // on and off with every guidance correction. Start all three centre Raptors during
+        // the flip. Once final descent has genuinely reduced the demand, step down 3→2→1
+        // with margin; never relight an engine during this same burn.
+        if (_landingEngineCount <= 0)
+            _landingEngineCount = maxLandingEngines;
+        int selected = System.Math.Min(_landingEngineCount, maxLandingEngines);
+        if (_phase == Edl.Final)
+        {
+            const double StepDownCapacityFraction = 0.75;
+            while (selected > 1
+                   && requested < selected
+                   && desiredThrust <= perEngine * (selected - 1)
+                       * StepDownCapacityFraction)
+                selected--;
+        }
+        _landingEngineCount = selected;
         engineCluster.SelectEngineCount(selected);
         double throttle = desiredThrust / (perEngine * selected);
         vessel.Throttle = engineCluster.ApplyThrottleFloor(

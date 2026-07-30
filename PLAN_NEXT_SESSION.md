@@ -42,6 +42,8 @@ Evidence from git log and plan audits (no `.atl/agent-*-log.md` files existed at
 | Docs / ops | Playtest harness design | `c0b9559`, `4906dfd` — `PLAN_PLAYTEST.md` reentry lighting design + deorbit unblock |
 | Docs | Plan sync audit | `.atl/DELEGATION_JUL2026.md` — verified R1–R13 status vs code |
 | Refactor | Over-engineering audit | `.atl/OVERENGINEERING_AUDIT_JUL2026.md` — P1 dead NavBall + duplicate warp identified |
+| Tooling / gameplay | V-P1 full mission acceptance | `tools/visual_playtest.sh --flight7 --run-id vp1-acceptance --skip-build` — natural pad→orbit path, real hot-stage overlap, RK4 entry/peak heating, fourth center-Raptor start, monotonic 3→2→1 landing burn and physical gearless soft landing; 11 PNGs + `SUMMARY reason=LANDED`; `--verify-only` gate PASS |
+| Tooling | Agent-safe visual harness | `--run-id`, `--max-runtime`, `--verify-only`, persistent `run-summary.txt`, automatic last-state/failure/capture diagnostics, mode-aware landing contract; temporary autoload cleanup verified |
 
 **Session 2026-07-29 (`docs/plan-sync-aug2026` audit):**
 
@@ -66,6 +68,7 @@ Each item: **evidence → owner files → acceptance (xvfb) → realism rational
 | **Owner** | Temp `scripts/_PlaytestShot.cs` (untracked), `SimulationBridge.cs` (read-only API), launch via `res://scenes/flight/Flight.tscn` |
 | **Acceptance** | `/tmp/exo_play.log` + PNGs for: pad, liftoff (alt 80–350 m), Max-Q (phase `MAX_Q`), SEPARATION/hot-stage, ORBIT, deorbit heat rise, EDL belly-flop, touchdown. Each line records `alt, spd, q, heatRatio, phase`. Harness deleted; `git status` clean. |
 | **Realism feel** | The team (and player) can *see* the same mission arc SpaceX webcasts — not infer it from logs. Unblocks every remaining visual item. |
+| **Status** | **DONE (2026-07-30).** Strict full mode requires 11 state-gated captures (`pad`, `liftoff`, `maxq`, `hotstage`, `separation`, `orbit`, `orbit_beauty`, `entry`, `peak_heating`, `retro_burn`, `touchdown`), rejects ascent fallback, and requires `SUMMARY reason=LANDED`. Flight 7 evidence: `/tmp/exo_play-vp1-acceptance/` + `/tmp/exo_play-vp1-acceptance.log`; natural orbit occurred before the deterministic beauty framing, center Raptors completed four starts, landing burn stepped 3→2→1, and the historical gearless vehicle crossed the core soft-landing path at 0.7 m/s. `bash tools/visual_playtest.sh --flight7 --run-id vp1-acceptance --verify-only` passes. |
 
 ### V-P2. Hot-staging reference compare (real ascent)
 
@@ -303,7 +306,7 @@ One agent per row; fetch + rebase before push. See `.atl/DELEGATION_JUL2026.md` 
 
 | Agent slot | Branch prefix | Primary deliverable | Depends on | Verification |
 | --- | --- | --- | --- | --- |
-| **Capture lead** | `feat/visual-capture-*` | V-P1 play harness + milestone PNG/log | — | xvfb `/tmp/exo_play.*`; clean git status |
+| **Capture lead (done)** | `feat/visual-capture-*` | V-P1 play harness + milestone PNG/log | — | 11 state-gated PNGs; LANDED; clean harness teardown |
 | **Hot-stage visual** | `feat/visual-hotstage-*` | V-P2 reference compare + tune | Capture lead (real ascent frame) | Multiframe vs IFT |
 | **Plume/launch visual** | `feat/visual-plume-*` | V-P3 startup compare | Capture lead | Startup multiframe |
 | **Reentry visual** | `feat/visual-reentry-*` | V-P4 + V-P5 lighting + charring | Capture lead (EDL frame) | Nominal + bad-attitude PNGs |
@@ -325,7 +328,7 @@ One agent per row; fetch + rebase before push. See `.atl/DELEGATION_JUL2026.md` 
 
 ## Recommended Session Order
 
-1. **Capture lead** ships V-P1 (unblocks everything visual).
+1. **V-P1 is closed.** Preserve its full-flight gate when changing mission physics or controllers.
 2. **Hot-stage + plume** agents run V-P2/V-P3 in parallel against harness output.
 3. **Reentry visual** ships V-P4/V-P5 once milestone 7 exists.
 4. **Refactor** agent lands P1-A/P1-B if CI bandwidth allows (orthogonal).

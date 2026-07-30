@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # State-gated pad→orbit→EDL visual play harness for Exosphere.
 # Generates a temporary scripts/_PlaytestShot.cs autoload, runs Godot under xvfb,
-# writes PNG milestones + /tmp/exo_play.log, and always cleans up on exit.
+# writes PNG milestones + telemetry, and always cleans up on exit.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -10,8 +10,15 @@ cd "$ROOT"
 DEFAULT_GODOT="/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64"
 GODOT="${GODOT_BIN:-$DEFAULT_GODOT}"
 HARNESS="scripts/_PlaytestShot.cs"
+OUT_DIR_SET=0
+LOG_SET=0
+if [[ -n "${OUT_DIR:-}" ]]; then OUT_DIR_SET=1; fi
+if [[ -n "${LOG:-}" ]]; then LOG_SET=1; fi
 OUT_DIR="${OUT_DIR:-/tmp/exo_play}"
 LOG="${LOG:-/tmp/exo_play.log}"
+RUN_ID=""
+MAX_RUNTIME_SEC="${PLAYTEST_MAX_RUNTIME_SEC:-}"
+VERIFY_ONLY=0
 MODE="full"
 HARNESS_MODE=""
 REENTRY_BELLY_FIRST=""
@@ -53,6 +60,9 @@ Options:
                 (IsHotStageOverlapping), not a frame count.
   --reentry-compare  Capture nominal belly-flop vs. forced bad-attitude (nose-first,
                 tumbling) EDL, gated on PEAK_HEATING/destruction, for VFX/thermal comparison.
+  --run-id ID    Isolate default artifacts as /tmp/exo_play-ID{,.log}; recommended for agents.
+  --max-runtime SEC  Wall-clock budget (default: 3600 full mission, 1800 other modes).
+  --verify-only  Re-run artifact/log gates without building or launching Godot.
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
   --log FILE    Telemetry log path (default: /tmp/exo_play.log)
   --skip-build  Skip the simulation-library prebuild (the Godot project is still built)
@@ -60,9 +70,11 @@ Options:
 
 Environment:
   GODOT_BIN     Path to Godot 4.6 mono binary
+  PLAYTEST_MAX_RUNTIME_SEC  Same override as --max-runtime
 
 Outputs:
   ${OUT_DIR}/exo_play_<milestone>.png
+  ${OUT_DIR}/run-summary.txt
   ${LOG}         One telemetry line per captured milestone + summary
 
 Cleanup on exit (success or failure):
@@ -144,13 +156,25 @@ while [[ $# -gt 0 ]]; do
       VARIANT_PROFILE="starship-flight7-ascent"
       shift ;;
     --reentry-compare) MODE="reentry_compare"; shift ;;
-    --out-dir) OUT_DIR="$2"; shift 2 ;;
-    --log) LOG="$2"; shift 2 ;;
+    --run-id) RUN_ID="$2"; shift 2 ;;
+    --max-runtime) MAX_RUNTIME_SEC="$2"; shift 2 ;;
+    --verify-only) VERIFY_ONLY=1; shift ;;
+    --out-dir) OUT_DIR="$2"; OUT_DIR_SET=1; shift 2 ;;
+    --log) LOG="$2"; LOG_SET=1; shift 2 ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ -n "$RUN_ID" ]]; then
+  if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "ERROR: --run-id accepts only letters, digits, dot, underscore and dash" >&2
+    exit 2
+  fi
+  if [[ "$OUT_DIR_SET" -eq 0 ]]; then OUT_DIR="/tmp/exo_play-${RUN_ID}"; fi
+  if [[ "$LOG_SET" -eq 0 ]]; then LOG="/tmp/exo_play-${RUN_ID}.log"; fi
+fi
 
 # Apollo 11 currently ships as a dated hardware preset, not yet as the full
 # historical lunar-landing profile. Keep its default visual acceptance honest:
@@ -159,15 +183,69 @@ if [[ $APOLLO11_HARDWARE -eq 1 && "$MODE" == "full" ]]; then
   MODE="launch"
 fi
 
+if [[ -z "$MAX_RUNTIME_SEC" ]]; then
+  if [[ "$MODE" == "full" ]]; then
+    MAX_RUNTIME_SEC=3600
+  else
+    MAX_RUNTIME_SEC=1800
+  fi
+fi
+if [[ ! "$MAX_RUNTIME_SEC" =~ ^[0-9]+$ ]] \
+  || (( MAX_RUNTIME_SEC < 60 || MAX_RUNTIME_SEC > 7200 )); then
+  echo "ERROR: --max-runtime must be an integer between 60 and 7200 seconds" >&2
+  exit 2
+fi
+
+write_run_summary() {
+  local status="$1"
+  [[ -d "$OUT_DIR" ]] || return 0
+  {
+    echo "status=$status"
+    echo "mode=$MODE"
+    echo "run_id=${RUN_ID:-default}"
+    echo "log=$LOG"
+    echo "artifacts=$OUT_DIR"
+    if [[ -f "$LOG" ]]; then
+      echo "milestones=$(awk '/^CAPTURE / { printf "%s%s", separator, $2; separator="," } END { print "" }' "$LOG")"
+      grep -E '^(SUMMARY|FAIL|GAP|FALLBACK) ' "$LOG" | tail -20 || true
+      grep -E 'failures=[^ ]*[A-Z][A-Z_]+:[1-9]' "$LOG" | tail -1 || true
+    fi
+  } > "$OUT_DIR/run-summary.txt"
+}
+
+print_failure_diagnostics() {
+  echo "visual_playtest: diagnostics mode=$MODE out=$OUT_DIR log=$LOG" >&2
+  if [[ -f "$LOG" ]]; then
+    echo "visual_playtest: last state evidence:" >&2
+    grep -E '^(CAPTURE|TRACE_FULL|TRACE |FAIL|GAP|FALLBACK|SUMMARY)' "$LOG" \
+      | tail -15 >&2 || true
+  else
+    echo "visual_playtest: telemetry log was not created" >&2
+  fi
+  if [[ -d "$OUT_DIR" ]]; then
+    local captures
+    captures="$(find "$OUT_DIR" -maxdepth 1 -type f -name 'exo_play_*.png' \
+      -printf '%f\n' 2>/dev/null | sort | paste -sd, -)"
+    echo "visual_playtest: captures=${captures:-none}" >&2
+  fi
+}
+
 cleanup() {
   local ec=$?
+  set +e
+  if [[ $ec -eq 0 ]]; then
+    write_run_summary "PASS"
+  else
+    write_run_summary "FAIL"
+    print_failure_diagnostics
+  fi
   rm -f "$HARNESS" "${HARNESS}.uid" 2>/dev/null || true
   if [[ -n "$PROJECT_BACKUP" && -f "$PROJECT_BACKUP" ]]; then
     cp "$PROJECT_BACKUP" project.godot
     rm -f "$PROJECT_BACKUP"
   fi
   if [[ $ec -ne 0 ]]; then
-    echo "visual_playtest: failed (exit $ec). Harness cleaned; project.godot restored." >&2
+    echo "visual_playtest: failed (exit $ec). Harness cleaned; project.godot restored; see $OUT_DIR/run-summary.txt." >&2
   fi
   exit "$ec"
 }
@@ -213,6 +291,7 @@ using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
 
 /// <summary>
@@ -222,8 +301,8 @@ public partial class _PlaytestShot : Node
 {
     const double FluxPeak = 6.0e5;
     const int SettleFrames = 4;
-    const double MaxRuntimeSec = 1800.0;
-    const double AscentFallbackSec = 480.0;
+    const double MaxRuntimeSec = ${MAX_RUNTIME_SEC}.0;
+    const double AscentFallbackSec = 720.0;
 
     readonly string _mode;
     readonly string _outDir;
@@ -242,6 +321,8 @@ public partial class _PlaytestShot : Node
     int _beautyWaitFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded;
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
+    double _nextFullTelemetry;
+    double _lastApproachSpeed = double.NaN;
     bool _finished;
 
     // ── hotstage mode ────────────────────────────────────────────────────
@@ -327,7 +408,16 @@ public partial class _PlaytestShot : Node
         _frame++;
 
         double elapsed = Time.GetTicksMsec() / 1000.0 - _t0;
-        if (elapsed > MaxRuntimeSec) { Finish("TIMEOUT"); return; }
+        if (elapsed > MaxRuntimeSec)
+        {
+            _log.WriteLine(
+                $"FAIL wall-clock timeout elapsed={elapsed:F0}s budget={MaxRuntimeSec:F0}s " +
+                $"mode={_mode}; rerun with --max-runtime or PLAYTEST_MAX_RUNTIME_SEC only " +
+                "after confirming TRACE evidence still shows physical progress");
+            _log.Flush();
+            Finish("TIMEOUT");
+            return;
+        }
 
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
@@ -348,6 +438,8 @@ public partial class _PlaytestShot : Node
         double spd = surfVel.Magnitude;
         double vSpeed = surfVel.Dot(up);
         double q = vessel.GetDynamicPressure(body);
+        if (!vessel.IsSurfaceSettled && alt < 100.0)
+            _lastApproachSpeed = spd;
         double mass = System.Math.Max(vessel.TotalMass, 1.0);
         Vector3d nonGrav = (vessel.ComputeThrust(body) + vessel.ComputeDrag(body)) / mass;
         double g = nonGrav.Magnitude / 9.80665;
@@ -650,7 +742,10 @@ public partial class _PlaytestShot : Node
         // ── Hot-staging: gate on the real dual-thrust overlap state (booster still
         // attached, Ship engines already lit), not on the SEPARATION phase — that phase
         // only fires once mechanical staging completes, i.e. *after* the overlap window.
-        if (_mode == "hotstage" && !_hotstage && bridge.ActiveVessel?.IsHotStageOverlapping == true)
+        if (_mode is "full" or "hotstage"
+            && !_hotstage
+            && _pendingSlug == null
+            && bridge.ActiveVessel?.IsHotStageOverlapping == true)
         {
             QueueCapture("hotstage");
             _hotstage = true;
@@ -682,10 +777,19 @@ public partial class _PlaytestShot : Node
             _maxq = true;
         }
 
-        if (!_separation && mission?.Phase is MissionPhase.SEPARATION or MissionPhase.MECO or MissionPhase.ASCENT_SHIP)
+        if (!_separation
+            && _pendingSlug == null
+            && mission?.Phase is MissionPhase.SEPARATION or MissionPhase.MECO or MissionPhase.ASCENT_SHIP)
         {
             QueueCapture("separation");
             _separation = true;
+        }
+
+        if (_mode == "full" && _separation && _pendingSlug == null && !_orbit)
+        {
+            // Hot-stage and separation are already captured.  Continue the same RK4
+            // trajectory at x2 so natural insertion fits the local acceptance budget.
+            bridge.SetTimeScale(2.0);
         }
 
         if (!_orbit && mission?.Phase == MissionPhase.ORBIT)
@@ -730,7 +834,10 @@ public partial class _PlaytestShot : Node
 
         // ── Deorbit → EDL (best effort) ───────────────────────────────────────
         if (_orbitBeauty && _pendingSlug == null && !_landed && !vessel.IsDestroyed)
+        {
             ProcessDeorbit(bridge, vessel, universe, body, mission, alt);
+            LogFullMissionProgress(vessel, body, universe, phase);
+        }
 
         if (!_entry && mission?.Phase == MissionPhase.ENTRY)
         {
@@ -843,6 +950,7 @@ public partial class _PlaytestShot : Node
 
         if (!_retro && mission?.Phase is MissionPhase.RETRO_BURN or MissionPhase.FINAL_DESCENT)
         {
+            bridge.SetTimeScale(1.0);
             QueueCapture("retro_burn");
             _retro = true;
             _retroStart = universe.CurrentTime;
@@ -1018,10 +1126,10 @@ public partial class _PlaytestShot : Node
     {
         if (!_deorbitStarted)
         {
-            DrainToReserve(vessel, 0.08);
+            DrainToReserve(vessel, 0.12);
             bridge.SetTimeScale(1.0);
             _deorbitStarted = true;
-            _log.WriteLine("ACTION deorbit: drained to ~8% reserve, starting retro burn");
+            _log.WriteLine("ACTION deorbit: capped propellant at 12% landing reserve, starting retro burn");
             _log.Flush();
         }
 
@@ -1049,19 +1157,84 @@ public partial class _PlaytestShot : Node
                 _log.Flush();
             }
         }
-        else if (alt > 120_000.0 && vessel.Throttle < 0.01 && mission?.InDescent != true)
+        else if (alt > 120_000.0 && vessel.Throttle < 0.01 && !_entry)
         {
-            // Coast to the entry interface fast regardless of the exact mission-phase label.
-            // The old gate required Phase==ORBIT, but the deorbit burn can leave ORBIT while
-            // apoapsis is still high, stranding a ~90 min coast at 1x and blowing the wall budget.
+            // Coast quickly until EDL declares ENTRY.  On the next frame the harness drops
+            // to x1 and queues the state-gated entry capture before accelerating again.
             bridge.SetTimeScale(200.0);
+        }
+        else if (alt > 90_000.0 && vessel.Throttle < 0.01 && _entry)
+        {
+            // The controller is already armed, but meaningful aero/heating has not started.
+            // Warp 5 remains on the RK4 path (unlike on-rails warp >= 10) and closes the long
+            // 140→90 km coast without skipping the physical entry solution.
+            bridge.SetTimeScale(5.0);
         }
         else
         {
-            // Entry interface reached (below 120 km or descent armed): real-time so RK4 aero/
-            // heating runs and ENTRY/PEAK_HEATING/RETRO_BURN/LANDED phases fire for capture.
-            bridge.SetTimeScale(1.0);
+            // Dense entry uses the same x3 RK4 path as the independently verified --edl
+            // acceptance mode.  Return to x1 before powered descent: the orbital-entry
+            // trajectory reaches the flip faster than the deterministic demo, and landing
+            // guidance/contact resolution need full temporal fidelity there.
+            bool poweredDescent = mission?.Phase is MissionPhase.RETRO_BURN
+                or MissionPhase.FINAL_DESCENT
+                or MissionPhase.LANDED;
+            bridge.SetTimeScale(_entry && !poweredDescent ? 3.0 : 1.0);
         }
+    }
+
+    private void LogFullMissionProgress(Vessel vessel, CelestialBody body,
+        Universe universe, string phase)
+    {
+        if (!_deorbitStarted || universe.CurrentTime < _nextFullTelemetry) return;
+
+        Vector3d surfVel = vessel.GetSurfaceVelocity(body);
+        Vector3d up = (vessel.Position - body.Position).Normalized;
+        double alt = vessel.GetAltitude(body);
+        double vSpeed = surfVel.Dot(up);
+        double maxT = vessel.Parts.Parts.Count > 0
+            ? vessel.Parts.Parts.Max(p => p.Temperature)
+            : 0.0;
+        double heatRatio = vessel.Parts.Parts.Count > 0
+            ? vessel.Parts.Parts.Max(p => p.ThermalRatio)
+            : 0.0;
+        Part? engineCluster = vessel.Parts.Parts.FirstOrDefault(
+            p => p.Definition.IsStarshipFamily
+                && p.Definition.HasVehicleRole("ship_engines"));
+        string engineRuntime = engineCluster == null
+            ? "none"
+            : string.Join(",", engineCluster.EngineStates
+                .GroupBy(state => state.State)
+                .OrderBy(group => group.Key)
+                .Select(group => $"{group.Key}:{group.Count()}"));
+        string engineFailures = engineCluster == null
+            ? "none"
+            : string.Join(",", engineCluster.EngineStates
+                .Where(state => !string.IsNullOrWhiteSpace(state.FailureCode))
+                .GroupBy(state => state.FailureCode)
+                .OrderBy(group => group.Key)
+                .Select(group => $"{group.Key}:{group.Count()}"));
+        int completedStarts = engineCluster?.EngineStates
+            .Take(engineCluster.SelectedEngineCount)
+            .Select(state => state.StartsCompleted)
+            .DefaultIfEmpty(0)
+            .Min() ?? 0;
+        double liquidFuel = vessel.Parts.Parts.Sum(p => p.LiquidFuel);
+        double oxidizer = vessel.Parts.Parts.Sum(p => p.Oxidizer);
+        double propellant = liquidFuel + oxidizer;
+        double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
+        _log.WriteLine(
+            $"TRACE_FULL t={universe.CurrentTime:F1} alt={alt:F1} " +
+            $"spd={surfVel.Magnitude:F1} vSpeed={vSpeed:F1} phase={phase} " +
+            $"warp={universe.TimeScale:F1} heatRatio={heatRatio:F3} maxT={maxT:F0} " +
+            $"propellant={propellant:F0} throttle={vessel.Throttle:F3} " +
+            $"spool={engineCluster?.ThrottleLevel ?? 0.0:F3} " +
+            $"engines={engineCluster?.SelectedEngineCount ?? 0} " +
+            $"runtime={engineRuntime} failures={engineFailures} starts={completedStarts} " +
+            $"lf={liquidFuel:F0} ox={oxidizer:F0} " +
+            $"upright={upright:F4} authority={vessel.ControlAuthorityFactor:F2}");
+        _log.Flush();
+        _nextFullTelemetry = universe.CurrentTime + 20.0;
     }
 
     private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
@@ -1451,6 +1624,8 @@ public partial class _PlaytestShot : Node
             .FirstOrDefault(p => p.Definition.IsStarshipFamily
                 && p.Definition.HasVehicleRole("ship_engines"))
             ?.SelectedEngineCount ?? 0;
+        int landingParts = vessel.Parts.Parts.Count(
+            p => p.Definition.Category == PartCategory.Landing);
         int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
         double maxStroke = vessel.LastSurfaceContact?.Points.Max(p => p.PenetrationM) ?? 0.0;
         double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
@@ -1459,6 +1634,7 @@ public partial class _PlaytestShot : Node
             $"CAPTURE {slug} path={path} alt={alt:F1} spd={spd:F1} vSpeed={vSpeed:F1} q={q:F0} g={g:F2} " +
             $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2} " +
             $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines} " +
+            $"landingParts={landingParts} approachSpeed={_lastApproachSpeed:F2} " +
             $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
             $"settled={vessel.IsSurfaceSettled}");
         _log.Flush();
@@ -1539,13 +1715,74 @@ verify_pngs() {
   fi
 
   if [[ "$MODE" == "full" ]]; then
-    local required=(pad liftoff maxq orbit)
+    local required=(
+      pad liftoff maxq hotstage separation orbit orbit_beauty
+      entry peak_heating retro_burn touchdown
+    )
     for slug in "${required[@]}"; do
       if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
         echo "ERROR: missing required milestone PNG: exo_play_${slug}.png" >&2
         return 1
       fi
     done
+    if grep -q '^FALLBACK ' "$LOG"; then
+      echo "ERROR: full mission used a fallback instead of natural orbit insertion" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=LANDED' "$LOG"; then
+      echo "ERROR: full mission did not end in a verified landing" >&2
+      return 1
+    fi
+    # Historical Flight 7/12 intentionally has no fictional landing gear. Those variants
+    # use Universe.HandleSurfaceImpact's physical soft-landing path (<=3 m/s) and therefore
+    # have no multi-foot ContactWrench. Other full-mission craft still require >=3 contacts.
+    local gearless_historical=0
+    if [[ "$VARIANT_FILE" == "starship_flight7_block2_2025.json" \
+      || "$VARIANT_FILE" == "starship_flight12_v3_2026.json" ]]; then
+      gearless_historical=1
+    fi
+    if ! awk -v gearless_historical="$gearless_historical" '
+      function value(prefix,    i, pair) {
+        for (i = 1; i <= NF; i++)
+          if ($i ~ ("^" prefix "=")) {
+            split($i, pair, "=")
+            return pair[2]
+          }
+        return ""
+      }
+      /^TRACE_FULL / {
+        altitude = value("alt") + 0
+        if (altitude < 100.0)
+          tracedApproachSpeed = value("spd") + 0
+      }
+      /^CAPTURE touchdown / {
+        found = 1
+        contacts = value("contacts") + 0
+        settled = value("settled")
+        landingParts = value("landingParts")
+        capturedApproachSpeed = value("approachSpeed")
+      }
+      END {
+        if (!found || settled != "True")
+          exit 1
+        if (contacts >= 3)
+          exit 0
+        if (!gearless_historical)
+          exit 1
+        # New logs carry both fields. For artifacts produced immediately before this
+        # instrumentation landed, fall back to the last sub-100 m TRACE_FULL speed.
+        if (landingParts != "" && landingParts + 0 != 0)
+          exit 1
+        if (capturedApproachSpeed != "")
+          approachSpeed = capturedApproachSpeed + 0
+        else
+          approachSpeed = tracedApproachSpeed
+        exit !(contacts == 0 && approachSpeed <= 3.0)
+      }
+    ' "$LOG"; then
+      echo "ERROR: full-mission touchdown is neither a 3-contact gear landing nor a <=3 m/s settled historical gearless landing" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "edl" ]]; then
     local required=(entry retro_burn flip_complete touchdown)
     for slug in "${required[@]}"; do
@@ -1770,6 +2007,13 @@ verify_pngs() {
   echo "visual_playtest: verified PNG(s) in $OUT_DIR (min ${min_bytes} bytes)"
 }
 
+if [[ "$VERIFY_ONLY" -eq 1 ]]; then
+  echo "visual_playtest: verify-only mode=$MODE out=$OUT_DIR log=$LOG"
+  verify_pngs
+  echo "visual_playtest: verify-only OK"
+  exit 0
+fi
+
 register_autoload
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
@@ -1780,7 +2024,7 @@ mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR"/exo_play_*.png 2>/dev/null || true
 : > "$LOG"
 
-echo "visual_playtest: mode=$MODE out=$OUT_DIR log=$LOG"
+echo "visual_playtest: mode=$MODE max_runtime=${MAX_RUNTIME_SEC}s out=$OUT_DIR log=$LOG"
 
 if [[ "$MODE" == "reentry_compare" ]]; then
   # Two independent Godot launches — one per attitude — appending into the same combined

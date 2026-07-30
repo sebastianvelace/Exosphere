@@ -84,13 +84,16 @@ under `xvfb-run`, captures state-gated PNGs, writes `/tmp/exo_play.log`, and
 **always** removes the harness + restores `project.godot` on exit (trap).
 
 ```bash
-# Full acceptance run (pad → ascent → orbit beauty → deorbit attempt; ~15–20 min wall)
-bash tools/visual_playtest.sh
+# Full Flight 7 acceptance (pad → natural orbit → entry → landing; CPU rendering is slow)
+bash tools/visual_playtest.sh --flight7 --run-id agent-vp1
 
 # CI / quick pipeline check (pad capture only, ~60 s)
-bash tools/visual_playtest.sh --smoke
+bash tools/visual_playtest.sh --smoke --run-id agent-smoke
 
-# Options: --out-dir DIR  --log FILE  --skip-build
+# Re-run gates against preserved artifacts without launching Godot
+bash tools/visual_playtest.sh --flight7 --run-id agent-vp1 --verify-only
+
+# Useful options: --run-id ID  --max-runtime SEC  --out-dir DIR  --log FILE  --skip-build
 ```
 
 **Outputs**
@@ -99,6 +102,7 @@ bash tools/visual_playtest.sh --smoke
 | --- | --- |
 | `/tmp/exo_play/exo_play_<milestone>.png` | Viewport PNG per milestone |
 | `/tmp/exo_play.log` | `CAPTURE` telemetry lines + `SUMMARY` / `GAP` |
+| `/tmp/exo_play/run-summary.txt` | Compact PASS/FAIL, milestones and terminal diagnostics |
 
 **Milestone status (verified Jul 2026 on `integrate/jul2026-realism-loop`)**
 
@@ -107,23 +111,28 @@ bash tools/visual_playtest.sh --smoke
 | Pad pre-launch | `pad` | ✅ state-gated (alt ≈ 12 m) |
 | Liftoff plume | `liftoff` | ✅ alt 80–350 m + LIFTOFF/ASCENT_SH |
 | Max-Q | `maxq` | ✅ `MissionPhase.MAX_Q` |
-| Hot-stage / separation | `separation` | ✅ MECO / SEPARATION / ASCENT_SHIP |
-| Orbit insertion | `orbit` | ✅ natural [G] autopilot or 480 s fallback teleport |
+| Hot-stage overlap | `hotstage` | ✅ `Vessel.IsHotStageOverlapping` while both stages remain attached |
+| Mechanical separation | `separation` | ✅ SEPARATION / ASCENT_SHIP after overlap |
+| Orbit insertion | `orbit` | ✅ natural [G] autopilot; full gate rejects fallback |
 | Orbit beauty | `orbit_beauty` | ✅ `JumpToOrbit(250 km)` |
 | Entry interface | `entry` | ✅ after retro burn (peri ≈ 80 km) |
-| Peak heating | `peak_heating` | ⚠️ **GAP** — often times out before PEAK_HEATING |
-| Retro burn | `retro_burn` | ⚠️ **GAP** — same |
-| Touchdown | `touchdown` | ⚠️ **GAP** — full belly-flop EDL not completing in 1200 s wall |
+| Peak heating | `peak_heating` | ✅ real `MissionPhase.PEAK_HEATING`, RK4 dense entry |
+| Retro burn | `retro_burn` | ✅ low-altitude physical flip ignition, ×1 powered descent |
+| Touchdown | `touchdown` | ✅ `SUMMARY reason=LANDED`; six-foot contact in `--edl`, ≤3 m/s core impact path for historical gearless Flight 7/12 |
 
-**Known gaps (honest, do not fake success)**
+**Resolved tail and remaining visual findings (2026-07-30)**
 
-- **Deorbit → EDL tail:** Entry captures via map `[B]` deorbit (C2) or harness retro;
-  peak/retro/touchdown need longer wall time or smarter warp through the vacuum coast.
-  Log line: `GAP deorbit→EDL: no ENTRY phase reached within 720s` when deorbit fails.
-- **Ascent duration:** Natural [G] orbit insertion can exceed 480 s sim-time at x1;
-  fallback `JumpToOrbit(200 km)` only fires while still in ascent phases.
-- **V-024 belly-flop reference:** Blocked on reliable `peak_heating` + `retro_burn`
-  captures — unblocks VS-12 / reentry lighting overlay verification.
+- **Deorbit → EDL is closed:** full Flight 7 generated all 11 captures and LANDED.
+  Dense entry remains RK4 at ×3, powered descent returns to ×1, and full mode has a
+  3600 s wall budget. A timeout now prints last-state diagnostics rather than a bare failure.
+- **Engine lifecycle regression is closed:** the simulated mission needs four center-Raptor
+  starts (hot-stage, insertion after coast, deorbit, landing). Flight 7 SL restart envelope
+  and a data regression test cover it; landing selection is monotonic 3→2→1.
+- **Historical landing contract is explicit:** Flight 7/12 intentionally contain no fictional
+  landing gear. Full mode verifies the core physical soft-impact path (≤3 m/s and settled);
+  deterministic `--edl` continues to require at least three persistent foot contacts.
+- **V-024 is unblocked:** `peak_heating`, `retro_burn` and touchdown frames now exist.
+  Reference comparison/tuning remains V-P4/V-P5 work, not part of V-P1.
 
 **CI:** `build-test` job runs `--smoke` under Xvfb and uploads `exo_play_pad.png`
 as an artifact. Full PNG matrix remains a **local acceptance** step until CC-01
@@ -191,11 +200,23 @@ tower (camera angle + plume column height). Consider a taller/brighter sea-level
 plume column, or a liftoff-tracking camera that frames the engine exhaust. Belongs
 to V2 in `PLAN_VISUAL_REALISM.md` (plumes), not lighting.
 
-### B3. (seed more here as future loops find them)
+### B3. Full-flight visual/HUD findings — NEW
 
-Keep this list append-only and evidence-backed: each item needs a concrete
-observation (a capture, a telemetry number, a `file:line`) and an acceptance
-criterion, so the next loop can act without guessing.
+- **Hot-stage framing is too distant.** Evidence:
+  `/tmp/exo_play-vp1-acceptance/exo_play_hotstage.png` shows the state-correct overlap,
+  but the vehicle occupies too few pixels for IFT plume/ring comparison. Acceptance:
+  a state-gated close chase/telephoto capture shows attached booster + Ship, interstage
+  plume and soot ring without clipping the stack or HUD.
+- **Expected vacuum-engine retirement is reported as a critical failure.** Evidence:
+  peak-heating/retro/touchdown frames display `CRITICAL ENGINE OUT 3 FAILED / 6
+  INSTALLED / LIMIT 0 FAILED`; telemetry proves those are the three unselected vacuum
+  Raptors after their mission-use restart envelope, while all three center Raptors reach
+  `Running` with `starts=4`. Acceptance: phase-aware HUD distinguishes unavailable/
+  intentionally retired engines from unexpected loss of required landing authority.
+- **Gearless Flight 7 says “LEGS DOWN.”** Evidence:
+  `exo_play_touchdown.png` plus `StarshipFlight7DataTests.HistoricalVariantIsDatedAndDoesNotIncludeFictionalLandingGear`.
+  Acceptance: EDL copy derives from actual `Landing` parts/deployment; historical gearless
+  touchdown never claims legs, while the deterministic six-foot demo still does.
 
 ---
 

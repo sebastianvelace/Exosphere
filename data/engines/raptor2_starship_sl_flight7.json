@@ -17,7 +17,7 @@
   "gimbalAccelerationDegPerS2": 27.0,
   "startupSeconds": 0.50,
   "shutdownSeconds": 0.20,
-  "restartLimit": 2,
+  "restartLimit": 3,
   "nominalOperatingTemperatureK": 1150,
   "maximumSafeTemperatureK": 1450,
   "thermalTimeConstantSeconds": 2.8,

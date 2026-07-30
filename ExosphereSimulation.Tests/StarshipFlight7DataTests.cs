@@ -74,6 +74,34 @@ public sealed class StarshipFlight7DataTests
     }
 
     [Fact]
+    public void CenterRaptorsSupportAscentInsertionDeorbitAndLandingSequence()
+    {
+        var part = new Part(
+            LoadPartCatalog()["starship_engines"],
+            "ship-engine-restart-sequence");
+
+        // The simulator's Flight 7 profile has four distinct starts: hot-stage ascent,
+        // post-coast insertion, deorbit and the landing burn. Vacuum Raptors are not
+        // selected for landing; the three gimballed sea-level engines must remain usable.
+        RunEngineCycle(part, selectedEngines: 6);
+        RunEngineCycle(part, selectedEngines: 6);
+        RunEngineCycle(part, selectedEngines: 6);
+
+        part.SelectEngineCount(3);
+        Advance(part, 1.0, 100);
+
+        Assert.All(part.EngineStates.Take(3), state =>
+        {
+            Assert.Equal(EngineLifecycleState.Running, state.State);
+            Assert.Equal(4, state.StartsCompleted);
+            Assert.Null(state.FailureCode);
+            Assert.True(state.ChamberPressureFraction > 0.99);
+        });
+        Assert.Equal(6_000_000.0,
+            part.GetThrustMagnitude(SeaLevelPressure), 4);
+    }
+
+    [Fact]
     public void BoosterRuntimeRepresentsAllThirtyThreeMountsAndEngineOut()
     {
         var catalog = LoadPartCatalog();
@@ -170,6 +198,19 @@ public sealed class StarshipFlight7DataTests
             "data",
             "vehicles",
             "starship_flight7_block2_2025.json"));
+
+    private static void RunEngineCycle(Part part, int selectedEngines)
+    {
+        part.SelectEngineCount(selectedEngines);
+        Advance(part, 1.0, 100);
+        Advance(part, 0.0, 100);
+    }
+
+    private static void Advance(Part part, double throttle, int steps)
+    {
+        for (int i = 0; i < steps; i++)
+            part.AdvanceEngineRuntime(throttle, 0.02);
+    }
 
     private static PartCatalog LoadPartCatalog() =>
         PartCatalog.LoadFromDirectory(
