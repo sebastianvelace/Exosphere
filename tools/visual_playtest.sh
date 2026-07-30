@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+source "$ROOT/tools/lib/playtest_contracts.sh"
 
 DEFAULT_GODOT="/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64"
 GODOT="${GODOT_BIN:-$DEFAULT_GODOT}"
@@ -16,7 +17,9 @@ if [[ -n "${OUT_DIR:-}" ]]; then OUT_DIR_SET=1; fi
 if [[ -n "${LOG:-}" ]]; then LOG_SET=1; fi
 OUT_DIR="${OUT_DIR:-/tmp/exo_play}"
 LOG="${LOG:-/tmp/exo_play.log}"
+CONSOLE_LOG=""
 RUN_ID=""
+RUN_TOKEN=""
 MAX_RUNTIME_SEC="${PLAYTEST_MAX_RUNTIME_SEC:-}"
 VERIFY_ONLY=0
 MODE="full"
@@ -29,6 +32,7 @@ VARIANT_PROFILE=""
 SKIP_BUILD=0
 PROJECT_BACKUP=""
 APOLLO11_HARDWARE=0
+OWNS_HARNESS=0
 
 usage() {
   cat <<'EOF'
@@ -50,6 +54,7 @@ Options:
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
+  --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
   --cockpit     Capture the first-person cockpit optics and interior.
@@ -144,6 +149,7 @@ while [[ $# -gt 0 ]]; do
       VARIANT_SITE="starbase_pad2"
       VARIANT_PROFILE="starship-flight12-ascent"
       shift ;;
+    --ascent) MODE="ascent"; shift ;;
     --launch) MODE="launch"; shift ;;
     --ship) MODE="ship"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
@@ -167,6 +173,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$MODE" == "ascent" && -z "$VARIANT_FILE" ]]; then
+  VARIANT_FILE="starship_flight7_block2_2025.json"
+  VARIANT_SITE="starbase"
+  VARIANT_PROFILE="starship-flight7-ascent"
+fi
+
 if [[ -n "$RUN_ID" ]]; then
   if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
     echo "ERROR: --run-id accepts only letters, digits, dot, underscore and dash" >&2
@@ -175,6 +187,8 @@ if [[ -n "$RUN_ID" ]]; then
   if [[ "$OUT_DIR_SET" -eq 0 ]]; then OUT_DIR="/tmp/exo_play-${RUN_ID}"; fi
   if [[ "$LOG_SET" -eq 0 ]]; then LOG="/tmp/exo_play-${RUN_ID}.log"; fi
 fi
+CONSOLE_LOG="${LOG}.console"
+RUN_TOKEN="exo-${RUN_ID:-default}-$$"
 
 # Apollo 11 currently ships as a dated hardware preset, not yet as the full
 # historical lunar-landing profile. Keep its default visual acceptance honest:
@@ -186,6 +200,8 @@ fi
 if [[ -z "$MAX_RUNTIME_SEC" ]]; then
   if [[ "$MODE" == "full" ]]; then
     MAX_RUNTIME_SEC=3600
+  elif [[ "$MODE" == "ascent" ]]; then
+    MAX_RUNTIME_SEC=1200
   else
     MAX_RUNTIME_SEC=1800
   fi
@@ -204,11 +220,14 @@ write_run_summary() {
     echo "mode=$MODE"
     echo "run_id=${RUN_ID:-default}"
     echo "log=$LOG"
+    echo "console_log=$CONSOLE_LOG"
     echo "artifacts=$OUT_DIR"
     if [[ -f "$LOG" ]]; then
       echo "milestones=$(awk '/^CAPTURE / { printf "%s%s", separator, $2; separator="," } END { print "" }' "$LOG")"
-      grep -E '^(SUMMARY|FAIL|GAP|FALLBACK) ' "$LOG" | tail -20 || true
-      grep -E 'failures=[^ ]*[A-Z][A-Z_]+:[1-9]' "$LOG" | tail -1 || true
+      grep -aE '^(SUMMARY|FAIL|GAP|FALLBACK) ' "$LOG" | tail -20 || true
+      grep -aE '^(ASCENT_METRICS|TRANSITION_ASCENT) ' "$LOG" | tail -8 || true
+      grep -a '^TRACE_ASCENT ' "$LOG" | tail -1 || true
+      grep -aE 'failures=[^ ]*[A-Z][A-Z_]+:[1-9]' "$LOG" | tail -1 || true
     fi
   } > "$OUT_DIR/run-summary.txt"
 }
@@ -217,10 +236,14 @@ print_failure_diagnostics() {
   echo "visual_playtest: diagnostics mode=$MODE out=$OUT_DIR log=$LOG" >&2
   if [[ -f "$LOG" ]]; then
     echo "visual_playtest: last state evidence:" >&2
-    grep -E '^(CAPTURE|TRACE_FULL|TRACE |FAIL|GAP|FALLBACK|SUMMARY)' "$LOG" \
-      | tail -15 >&2 || true
+    grep -aE '^(CAPTURE|TRACE_ASCENT|TRANSITION_ASCENT|ASCENT_METRICS|TRACE_FULL|TRACE |FAIL|GAP|FALLBACK|SUMMARY)' "$LOG" \
+      | tail -25 >&2 || true
   else
     echo "visual_playtest: telemetry log was not created" >&2
+  fi
+  if [[ -s "$CONSOLE_LOG" ]]; then
+    echo "visual_playtest: last Godot console lines:" >&2
+    tail -12 "$CONSOLE_LOG" >&2 || true
   fi
   if [[ -d "$OUT_DIR" ]]; then
     local captures
@@ -239,13 +262,19 @@ cleanup() {
     write_run_summary "FAIL"
     print_failure_diagnostics
   fi
-  rm -f "$HARNESS" "${HARNESS}.uid" 2>/dev/null || true
-  if [[ -n "$PROJECT_BACKUP" && -f "$PROJECT_BACKUP" ]]; then
-    cp "$PROJECT_BACKUP" project.godot
-    rm -f "$PROJECT_BACKUP"
+  if [[ "$OWNS_HARNESS" -eq 1 ]]; then
+    rm -f "$HARNESS" "${HARNESS}.uid" 2>/dev/null || true
+    if [[ -n "$PROJECT_BACKUP" && -f "$PROJECT_BACKUP" ]]; then
+      cp "$PROJECT_BACKUP" project.godot
+      rm -f "$PROJECT_BACKUP"
+    fi
   fi
   if [[ $ec -ne 0 ]]; then
-    echo "visual_playtest: failed (exit $ec). Harness cleaned; project.godot restored; see $OUT_DIR/run-summary.txt." >&2
+    if [[ "$OWNS_HARNESS" -eq 1 ]]; then
+      echo "visual_playtest: failed (exit $ec). Owner resources cleaned; project.godot restored; see $OUT_DIR/run-summary.txt." >&2
+    else
+      echo "visual_playtest: failed (exit $ec) before acquiring harness ownership; see $OUT_DIR/run-summary.txt." >&2
+    fi
   fi
   exit "$ec"
 }
@@ -293,6 +322,7 @@ using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
+using Exosphere.Simulation.Propulsion;
 
 /// <summary>
 /// Temporary visual playtest autoload — generated by tools/visual_playtest.sh; never commit.
@@ -324,6 +354,20 @@ public partial class _PlaytestShot : Node
     double _nextFullTelemetry;
     double _lastApproachSpeed = double.NaN;
     bool _finished;
+    bool _authorized;
+
+    // ── ascent diagnostics ─────────────────────────────────────────────────
+    double _nextAscentTelemetry;
+    double _insertStartedAt = double.NaN;
+    double _minimumInsertionVSpeed = double.PositiveInfinity;
+    double _maximumInsertionDescent = 0.0;
+    string _lastGuidancePhase = "Unavailable";
+    bool _insertObserved;
+    int _ascentTraceCount;
+    double _lastProgressAt = double.NaN;
+    double _lastProgressAltitude = double.NaN;
+    double _lastProgressSpeed = double.NaN;
+    double _lastProgressPeriapsis = double.NaN;
 
     // ── hotstage mode ────────────────────────────────────────────────────
     bool _hotstage;
@@ -376,6 +420,18 @@ public partial class _PlaytestShot : Node
 
     public override void _Ready()
     {
+        // project.godot temporarily exposes this autoload to every process using the
+        // checkout. Only the Godot child launched by this script receives the token;
+        // editors or manually running games must never touch this run's artifacts.
+        if (System.Environment.GetEnvironmentVariable("EXOSPHERE_PLAYTEST_TOKEN")
+            != "${RUN_TOKEN}")
+        {
+            ProcessMode = ProcessModeEnum.Disabled;
+            QueueFree();
+            return;
+        }
+        _authorized = true;
+
         if ("${VARIANT_FILE}".Length > 0)
         {
             string data = ProjectSettings.GlobalizePath("res://data");
@@ -400,11 +456,14 @@ public partial class _PlaytestShot : Node
         _log.Flush();
         _t0 = Time.GetTicksMsec() / 1000.0;
         ProcessMode = ProcessModeEnum.Always;
+        // Controllers run at priority 100. Diagnostics run later so their requested
+        // bounded RK4 x2 acceleration is not immediately overwritten back to real time.
+        ProcessPriority = 200;
     }
 
     public override void _Process(double delta)
     {
-        if (_finished) return;
+        if (!_authorized || _finished) return;
         _frame++;
 
         double elapsed = Time.GetTicksMsec() / 1000.0 - _t0;
@@ -739,10 +798,25 @@ public partial class _PlaytestShot : Node
             _log.Flush();
         }
 
+        if (_mode is ("full" or "ascent")
+            && _separation && _pendingSlug == null && !_orbit)
+        {
+            // Bounded RK4 acceleration for the long upper-stage insertion. This harness
+            // runs after guidance, so the request survives into the next physics tick.
+            bridge.SetTimeScale(2.0);
+        }
+
+        if (_ascentEngaged && !_orbit
+            && _mode is ("full" or "ascent" or "hotstage"))
+        {
+            MonitorAscent(vessel, body, universe, phase, alt, spd, vSpeed, q, g);
+            if (_finished) return;
+        }
+
         // ── Hot-staging: gate on the real dual-thrust overlap state (booster still
         // attached, Ship engines already lit), not on the SEPARATION phase — that phase
         // only fires once mechanical staging completes, i.e. *after* the overlap window.
-        if (_mode is "full" or "hotstage"
+        if (_mode is "full" or "ascent" or "hotstage"
             && !_hotstage
             && _pendingSlug == null
             && bridge.ActiveVessel?.IsHotStageOverlapping == true)
@@ -785,21 +859,21 @@ public partial class _PlaytestShot : Node
             _separation = true;
         }
 
-        if (_mode == "full" && _separation && _pendingSlug == null && !_orbit)
-        {
-            // Hot-stage and separation are already captured.  Continue the same RK4
-            // trajectory at x2 so natural insertion fits the local acceptance budget.
-            bridge.SetTimeScale(2.0);
-        }
-
         if (!_orbit && mission?.Phase == MissionPhase.ORBIT)
         {
             QueueCapture("orbit");
             _orbit = true;
         }
 
+        if (_mode == "ascent" && _orbit && _pendingSlug == null)
+        {
+            Finish("ASCENT_ORBIT_OK");
+            return;
+        }
+
         // Fallback: if ascent takes too long, teleport to orbit for downstream milestones.
-        if (!_orbit && !_ascentFallbackUsed && elapsed > AscentFallbackSec &&
+        if (_mode == "full"
+            && !_orbit && !_ascentFallbackUsed && elapsed > AscentFallbackSec &&
             mission?.Phase is MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN or MissionPhase.IGNITION
                 or MissionPhase.LIFTOFF or MissionPhase.ASCENT_SH or MissionPhase.MAX_Q or MissionPhase.MECO
                 or MissionPhase.SEPARATION or MissionPhase.ASCENT_SHIP)
@@ -811,7 +885,6 @@ public partial class _PlaytestShot : Node
             _log.WriteLine("FALLBACK JumpToOrbit(200km) — ascent did not reach ORBIT in time");
             _log.Flush();
         }
-
         // ── Orbit beauty shot ─────────────────────────────────────────────────
         if (_orbit && !_beautyJumped && _pendingSlug == null)
         {
@@ -1181,6 +1254,190 @@ public partial class _PlaytestShot : Node
                 or MissionPhase.LANDED;
             bridge.SetTimeScale(_entry && !poweredDescent ? 3.0 : 1.0);
         }
+    }
+
+    private void MonitorAscent(
+        Vessel vessel,
+        CelestialBody body,
+        Universe universe,
+        string missionPhase,
+        double altitude,
+        double surfaceSpeed,
+        double verticalSpeed,
+        double dynamicPressure,
+        double properAccelerationG)
+    {
+        var controller = AscentController.Instance;
+        string guidance = controller?.GuidancePhase ?? "Unavailable";
+        var trajectory = OrbitalElements.FromStateVector(
+            vessel.Position - body.Position,
+            vessel.Velocity - body.Velocity,
+            body.GM,
+            body.Id,
+            universe.CurrentTime);
+        double apo = trajectory.Apoapsis - body.Radius;
+        double pe = trajectory.Periapsis - body.Radius;
+        double atmosphereTop = body.Atmosphere?.MaxAltitude ?? 0.0;
+        bool finite = double.IsFinite(altitude)
+            && double.IsFinite(surfaceSpeed)
+            && double.IsFinite(verticalSpeed)
+            && double.IsFinite(vessel.Position.X)
+            && double.IsFinite(vessel.Position.Y)
+            && double.IsFinite(vessel.Position.Z)
+            && double.IsFinite(vessel.Velocity.X)
+            && double.IsFinite(vessel.Velocity.Y)
+            && double.IsFinite(vessel.Velocity.Z);
+
+        Part? engineCluster = vessel.Parts.Parts.FirstOrDefault(
+            p => p.Definition.IsStarshipFamily
+                && p.Definition.HasVehicleRole("ship_engines"));
+        int runningEngines = engineCluster?.EngineStates.Count(state =>
+            state.State is EngineLifecycleState.Ignition
+                or EngineLifecycleState.Running) ?? 0;
+        int failedEngines = engineCluster?.EngineStates.Count(state =>
+            !string.IsNullOrWhiteSpace(state.FailureCode)) ?? 0;
+        double propellant = vessel.Parts.Parts.Sum(
+            part => part.LiquidFuel + part.Oxidizer);
+
+        if (guidance != _lastGuidancePhase)
+        {
+            _log.WriteLine(
+                $"TRANSITION_ASCENT t={universe.CurrentTime:F1} " +
+                $"from={_lastGuidancePhase} guidance={guidance} mission={missionPhase} " +
+                $"alt={altitude:F1} spd={surfaceSpeed:F1} vSpeed={verticalSpeed:F1} " +
+                $"apo={apo:F1} pe={pe:F1} throttle={vessel.Throttle:F3} " +
+                $"runningEngines={runningEngines}");
+            if (_insertObserved && guidance == "Coast")
+            {
+                FailAscentInvariant(
+                    "insert_to_coast",
+                    $"t={universe.CurrentTime:F1} from={_lastGuidancePhase} guidance={guidance}");
+                return;
+            }
+            _lastGuidancePhase = guidance;
+        }
+
+        if (guidance == "Insert")
+        {
+            if (!_insertObserved)
+            {
+                _insertObserved = true;
+                _insertStartedAt = universe.CurrentTime;
+            }
+            _minimumInsertionVSpeed = System.Math.Min(
+                _minimumInsertionVSpeed,
+                verticalSpeed);
+            _maximumInsertionDescent = System.Math.Max(
+                _maximumInsertionDescent,
+                -verticalSpeed);
+        }
+
+        if (!finite)
+        {
+            FailAscentInvariant(
+                "non_finite_state",
+                $"t={universe.CurrentTime:F1} alt={altitude} spd={surfaceSpeed} vSpeed={verticalSpeed}");
+            return;
+        }
+        if (vessel.IsDestroyed)
+        {
+            FailAscentInvariant(
+                "vehicle_destroyed",
+                $"t={universe.CurrentTime:F1} cause={vessel.DestructionCause}");
+            return;
+        }
+        if (vessel.StructuralControlLost)
+        {
+            FailAscentInvariant(
+                "structural_control_lost",
+                $"t={universe.CurrentTime:F1} alt={altitude:F1} q={dynamicPressure:F1}");
+            return;
+        }
+        if (failedEngines > 0)
+        {
+            FailAscentInvariant(
+                "engine_failure",
+                $"t={universe.CurrentTime:F1} failedEngines={failedEngines} guidance={guidance}");
+            return;
+        }
+        if (missionPhase == nameof(MissionPhase.ORBIT)
+            && !OrbitQualificationPolicy.HasSafePeriapsis(
+                trajectory,
+                body.Radius,
+                atmosphereTop))
+        {
+            FailAscentInvariant(
+                "unsafe_orbit_phase",
+                $"t={universe.CurrentTime:F1} pe={pe:F1} atmoTop={atmosphereTop:F1}");
+            return;
+        }
+        if (guidance == "Insert"
+            && missionPhase != nameof(MissionPhase.ORBIT)
+            && universe.CurrentTime - _insertStartedAt > 3.0
+            && (vessel.Throttle < 0.05 || runningEngines == 0))
+        {
+            FailAscentInvariant(
+                "insertion_thrust_lost",
+                $"t={universe.CurrentTime:F1} throttle={vessel.Throttle:F3} " +
+                $"runningEngines={runningEngines} propellant={propellant:F1}");
+            return;
+        }
+        if (guidance == "Insert"
+            && universe.CurrentTime - _insertStartedAt > 20.0
+            && verticalSpeed < -100.0
+            && pe < atmosphereTop)
+        {
+            FailAscentInvariant(
+                "insertion_descent_unrecovered",
+                $"t={universe.CurrentTime:F1} vSpeed={verticalSpeed:F1} " +
+                $"apo={apo:F1} pe={pe:F1} atmoTop={atmosphereTop:F1}");
+            return;
+        }
+
+        bool meaningfulProgress = !double.IsFinite(_lastProgressAt)
+            || System.Math.Abs(altitude - _lastProgressAltitude) >= 100.0
+            || System.Math.Abs(surfaceSpeed - _lastProgressSpeed) >= 10.0
+            || System.Math.Abs(pe - _lastProgressPeriapsis) >= 1_000.0;
+        if (meaningfulProgress)
+        {
+            _lastProgressAt = universe.CurrentTime;
+            _lastProgressAltitude = altitude;
+            _lastProgressSpeed = surfaceSpeed;
+            _lastProgressPeriapsis = pe;
+        }
+        else if (universe.CurrentTime - _lastProgressAt > 60.0)
+        {
+            FailAscentInvariant(
+                "physics_stalled",
+                $"t={universe.CurrentTime:F1} noProgressFor={universe.CurrentTime - _lastProgressAt:F1} " +
+                $"guidance={guidance} alt={altitude:F1} spd={surfaceSpeed:F1} pe={pe:F1}");
+            return;
+        }
+
+        if (universe.CurrentTime + 1e-9 < _nextAscentTelemetry)
+            return;
+
+        _ascentTraceCount++;
+        _log.WriteLine(
+            $"TRACE_ASCENT t={universe.CurrentTime:F1} mission={missionPhase} " +
+            $"guidance={guidance} active={controller?.IsEngaged ?? false} " +
+            $"alt={altitude:F1} spd={surfaceSpeed:F1} vSpeed={verticalSpeed:F1} " +
+            $"apo={apo:F1} pe={pe:F1} atmoTop={atmosphereTop:F1} " +
+            $"q={dynamicPressure:F1} g={properAccelerationG:F2} " +
+            $"throttle={vessel.Throttle:F3} spool={engineCluster?.ThrottleLevel ?? 0.0:F3} " +
+            $"runningEngines={runningEngines} failedEngines={failedEngines} " +
+            $"propellant={propellant:F1} warp={universe.TimeScale:F1} " +
+            $"finite={finite} destroyed={vessel.IsDestroyed} " +
+            $"structuralLost={vessel.StructuralControlLost}");
+        _log.Flush();
+        _nextAscentTelemetry = universe.CurrentTime + 10.0;
+    }
+
+    private void FailAscentInvariant(string code, string evidence)
+    {
+        _log.WriteLine($"FAIL invariant={code} {evidence}");
+        _log.Flush();
+        Finish("ASCENT_INVARIANT_FAILED");
     }
 
     private void LogFullMissionProgress(Vessel vessel, CelestialBody body,
@@ -1628,6 +1885,7 @@ public partial class _PlaytestShot : Node
             universe.CurrentTime);
         double apo = trajectory.Apoapsis - body.Radius;
         double pe = trajectory.Periapsis - body.Radius;
+        double atmosphereTop = body.Atmosphere?.MaxAltitude ?? 0.0;
         int selectedEngines = vessel.Parts.Parts
             .FirstOrDefault(p => p.Definition.IsStarshipFamily
                 && p.Definition.HasVehicleRole("ship_engines"))
@@ -1640,7 +1898,7 @@ public partial class _PlaytestShot : Node
 
         _log.WriteLine(
             $"CAPTURE {slug} path={path} alt={alt:F1} spd={spd:F1} vSpeed={vSpeed:F1} " +
-            $"apo={apo:F1} pe={pe:F1} q={q:F0} g={g:F2} " +
+            $"apo={apo:F1} pe={pe:F1} atmoTop={atmosphereTop:F1} q={q:F0} g={g:F2} " +
             $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2} " +
             $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines} " +
             $"landingParts={landingParts} approachSpeed={_lastApproachSpeed:F2} " +
@@ -1684,6 +1942,16 @@ public partial class _PlaytestShot : Node
     {
         if (_finished) return;
         _finished = true;
+        if (_ascentTraceCount > 0)
+        {
+            string minimumVSpeed = double.IsFinite(_minimumInsertionVSpeed)
+                ? $"{_minimumInsertionVSpeed:F1}"
+                : "n/a";
+            _log.WriteLine(
+                $"ASCENT_METRICS samples={_ascentTraceCount} insertObserved={_insertObserved} " +
+                $"minInsertionVSpeed={minimumVSpeed} " +
+                $"maxInsertionDescent={_maximumInsertionDescent:F1}");
+        }
         _log.WriteLine($"SUMMARY reason={reason} frames={_frame}");
         _log.Flush();
         _log.Dispose();
@@ -1693,6 +1961,7 @@ public partial class _PlaytestShot : Node
 
     public override void _ExitTree()
     {
+        if (!_authorized) return;
         if (!_finished)
         {
             _log?.WriteLine("SUMMARY reason=ABORT");
@@ -1734,26 +2003,8 @@ verify_pngs() {
         return 1
       fi
     done
-    if grep -q '^FALLBACK ' "$LOG"; then
-      echo "ERROR: full mission used a fallback instead of natural orbit insertion" >&2
-      return 1
-    fi
-    if ! awk '
-      /^CAPTURE orbit / {
-        found = 1
-        for (i = 1; i <= NF; i++)
-          if ($i ~ /^pe=/) {
-            split($i, pair, "=")
-            periapsis = pair[2] + 0
-          }
-      }
-      END { exit !(found && periapsis >= 140000.0) }
-    ' "$LOG"; then
-      echo "ERROR: orbit milestone was suborbital (periapsis below the atmosphere)" >&2
-      return 1
-    fi
-    if ! grep -q 'SUMMARY reason=LANDED' "$LOG"; then
-      echo "ERROR: full mission did not end in a verified landing" >&2
+    if ! verify_ascent_log_contract "$LOG" "LANDED"; then
+      echo "ERROR: full mission failed its pad-to-stable-orbit contract" >&2
       return 1
     fi
     # Historical Flight 7/12 intentionally has no fictional landing gear. Those variants
@@ -1804,6 +2055,18 @@ verify_pngs() {
       }
     ' "$LOG"; then
       echo "ERROR: full-mission touchdown is neither a 3-contact gear landing nor a <=3 m/s settled historical gearless landing" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "ascent" ]]; then
+    local required=(pad liftoff maxq hotstage separation orbit)
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing required ascent milestone PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+    done
+    if ! verify_ascent_log_contract "$LOG" "ASCENT_ORBIT_OK"; then
+      echo "ERROR: focused ascent did not reach a verified stable orbit" >&2
       return 1
     fi
   elif [[ "$MODE" == "edl" ]]; then
@@ -2037,6 +2300,14 @@ if [[ "$VERIFY_ONLY" -eq 1 ]]; then
   exit 0
 fi
 
+PLAYTEST_LOCK="/tmp/exosphere-visual-playtest.lock"
+exec {PLAYTEST_LOCK_FD}>"$PLAYTEST_LOCK"
+if ! flock -n "$PLAYTEST_LOCK_FD"; then
+  echo "ERROR: another visual_playtest process is already using the temporary autoload" >&2
+  exit 1
+fi
+OWNS_HARNESS=1
+
 register_autoload
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
@@ -2046,6 +2317,7 @@ fi
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR"/exo_play_*.png 2>/dev/null || true
 : > "$LOG"
+: > "$CONSOLE_LOG"
 
 echo "visual_playtest: mode=$MODE max_runtime=${MAX_RUNTIME_SEC}s out=$OUT_DIR log=$LOG"
 
@@ -2061,28 +2333,35 @@ if [[ "$MODE" == "reentry_compare" ]]; then
   # first launch's telemetry if both wrote directly to $LOG. Give each launch its own temp
   # log instead, then append that into the combined $LOG after the launch exits.
   COMBINED_LOG="$LOG"
+  COMBINED_CONSOLE_LOG="$CONSOLE_LOG"
   for pair in "true:reentry_nominal" "false:reentry_bad_attitude"; do
     REENTRY_BELLY_FIRST="${pair%%:*}"
     REENTRY_SLUG="${pair##*:}"
     HARNESS_MODE="reentry_variant"
     LOG="${COMBINED_LOG}.${REENTRY_SLUG}"
+    CONSOLE_LOG="${LOG}.console"
     : > "$LOG"
+    : > "$CONSOLE_LOG"
     write_harness
     dotnet build Exosphere.csproj --nologo -v quiet
+    EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
     xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
       --path . --rendering-driver opengl3 \
-      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$LOG"
+      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
     cat "$LOG" >> "$COMBINED_LOG"
-    rm -f "$LOG"
+    cat "$CONSOLE_LOG" >> "$COMBINED_CONSOLE_LOG"
+    rm -f "$LOG" "$CONSOLE_LOG"
   done
   LOG="$COMBINED_LOG"
+  CONSOLE_LOG="$COMBINED_CONSOLE_LOG"
 else
   HARNESS_MODE="$MODE"
   write_harness
   dotnet build Exosphere.csproj --nologo -v quiet
+  EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
   xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
     --path . --rendering-driver opengl3 \
-    res://scenes/flight/Flight.tscn 2>&1 | tee -a "$LOG"
+    res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
 fi
 
 verify_pngs
@@ -2115,6 +2394,8 @@ fi
 
 if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"
+elif [[ "$MODE" == "ascent" ]]; then
+  echo "visual_playtest: focused ascent diagnostics OK — stable orbit verified"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
 elif [[ "$MODE" == "hotstage" ]]; then

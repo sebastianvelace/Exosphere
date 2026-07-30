@@ -18,6 +18,9 @@ if grep -Eq '(_[A-Za-z0-9]*Shot|[A-Za-z0-9]*VerifyShot)' project.godot; then
   exit 1
 fi
 
+bash -n tools/visual_playtest.sh
+bash tools/tests/visual_playtest_contract_test.sh
+
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 dotnet build Exosphere.csproj --nologo -v quiet
 dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
