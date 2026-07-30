@@ -14,7 +14,7 @@ public partial class WarpController : Control
 
     public override void _Ready()
     {
-        _font = ThemeDB.FallbackFont;
+        _font = InterfaceTheme.MonoFont;
         _panelStyle = InterfaceTheme.GlassPanel(0.68f, 12, 0, 0);
         SetAnchorsPreset(LayoutPreset.TopLeft);
         CustomMinimumSize = new Vector2(178, 50);
@@ -84,8 +84,29 @@ public partial class WarpController : Control
 
     public override void _Process(double delta)
     {
-        Visible = CameraController.Instance?.IsCockpitView != true
+        bool viewAllows = CameraController.Instance?.IsCockpitView != true
             && MapViewController.Instance?.Visible != true;
+        Visible = viewAllows && DensityAllows();
         if (Visible) QueueRedraw();
+    }
+
+    /// <summary>
+    /// C3 density gate. FULL always shows the box; MINIMAL only when the clock is not
+    /// running at real time (or a clamp is being explained), so the one datum this widget
+    /// owns still appears exactly when it matters; CLEAN never.
+    /// </summary>
+    private static bool DensityAllows()
+    {
+        var bridge = SimulationBridge.Instance;
+        return UserInterfaceSettings.HudDensity switch
+        {
+            HudDensity.Full => true,
+            HudDensity.Clean => false,
+            _ => bridge != null
+                && (bridge.WarpIndex > 0
+                    || bridge.WarpClampReason != null
+                        && bridge.Universe is { } universe
+                        && universe.CurrentTime < bridge.WarpClampReasonUntil),
+        };
     }
 }

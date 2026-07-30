@@ -57,7 +57,7 @@ public partial class AttitudeNavball : Control
 
     public override void _Ready()
     {
-        _font = ThemeDB.FallbackFont;
+        _font = InterfaceTheme.MonoFont;
         SetAnchorsPreset(LayoutPreset.CenterBottom);
         GrowHorizontal = GrowDirection.Both;
         GrowVertical   = GrowDirection.Begin;

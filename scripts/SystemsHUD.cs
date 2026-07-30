@@ -15,7 +15,7 @@ public partial class SystemsHUD : Control
 
     public override void _Ready()
     {
-        _font = ThemeDB.FallbackFont;
+        _font = InterfaceTheme.MonoFont;
         _panelStyle = InterfaceTheme.GlassPanel(0.76f, 12, 0, 0);
         // Secondary health information sits below the orbit block on the right.
         SetAnchorsPreset(LayoutPreset.TopRight);
@@ -28,8 +28,10 @@ public partial class SystemsHUD : Control
 
     public override void _Process(double delta)
     {
+        // C3: consumables and comms are reference data, not fly-the-vehicle data — FULL only.
         Visible = CameraController.Instance?.IsCockpitView != true
-            && MapViewController.Instance?.Visible != true;
+            && MapViewController.Instance?.Visible != true
+            && UserInterfaceSettings.HudDensity == HudDensity.Full;
         if (Visible) QueueRedraw();
     }
 

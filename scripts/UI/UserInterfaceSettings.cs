@@ -4,12 +4,19 @@ using Godot;
 
 public enum InterfaceLanguage { English, Spanish }
 
+/// <summary>
+/// How much of the in-flight HUD is drawn. <see cref="HudDensity.Minimal"/> is the
+/// default: one authoritative readout per datum, no secondary panels.
+/// </summary>
+public enum HudDensity { Full, Minimal, Clean }
+
 public static class UserInterfaceSettings
 {
     private const string Path = "user://interface.cfg";
     public static InterfaceLanguage Language { get; private set; } = InterfaceLanguage.English;
     public static bool ReducedMotion { get; private set; }
     public static float UiScale { get; private set; } = 1.0f;
+    public static HudDensity HudDensity { get; private set; } = HudDensity.Minimal;
 
     public static void Load()
     {
@@ -20,6 +27,10 @@ public static class UserInterfaceSettings
         ReducedMotion = (bool)config.GetValue("interface", "reduced_motion", false);
         UiScale = System.Math.Clamp(
             (float)config.GetValue("interface", "ui_scale", 1.0f), 1.0f, 1.5f);
+        HudDensity = (HudDensity)System.Math.Clamp(
+            (int)config.GetValue("interface", "hud_density", (int)HudDensity.Minimal),
+            (int)HudDensity.Full,
+            (int)HudDensity.Clean);
     }
 
     public static void SetLanguage(InterfaceLanguage language)
@@ -40,12 +51,31 @@ public static class UserInterfaceSettings
         Save();
     }
 
+    public static void SetHudDensity(HudDensity value)
+    {
+        HudDensity = value;
+        Save();
+    }
+
+    /// <summary>Advances Minimal → Full → Clean → Minimal and persists the result.</summary>
+    public static HudDensity CycleHudDensity()
+    {
+        SetHudDensity(HudDensity switch
+        {
+            HudDensity.Minimal => HudDensity.Full,
+            HudDensity.Full => HudDensity.Clean,
+            _ => HudDensity.Minimal,
+        });
+        return HudDensity;
+    }
+
     private static void Save()
     {
         var config = new ConfigFile();
         config.SetValue("interface", "language", (int)Language);
         config.SetValue("interface", "reduced_motion", ReducedMotion);
         config.SetValue("interface", "ui_scale", UiScale);
+        config.SetValue("interface", "hud_density", (int)HudDensity);
         config.Save(Path);
     }
 }

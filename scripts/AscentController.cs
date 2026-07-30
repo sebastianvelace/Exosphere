@@ -13,7 +13,8 @@ using Exosphere.Simulation.Parts;
 /// PEG-lite insertion burn that holds altitude (pointing the thrust at the angle whose
 /// vertical component cancels gravity minus the centrifugal term) while building orbital
 /// velocity — the correct profile for a TWR~1 upper stage that cannot circularize
-/// impulsively. Auto-stages spent boosters. Draws a compact status banner.
+/// impulsively. Auto-stages spent boosters. Publishes <see cref="BannerStatus"/> for the
+/// single HUD phase banner instead of drawing its own.
 ///
 /// A lighter <b>assist mode</b> (toggle with <b>H</b>) provides ONLY the gravity-turn
 /// pitch guidance — steering the nose along the same program via PitchYawRoll — while
@@ -76,12 +77,10 @@ public partial class AscentController : Control
 
     // Live readout.
     private double _apo, _per, _ecc, _alt;
-    private Font   _font = null!;
 
     public override void _Ready()
     {
         Instance = this;
-        _font = ThemeDB.GetFallbackFont();
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
         Visible = false;
@@ -519,51 +518,36 @@ public partial class AscentController : Control
     }
 
     // ── HUD ───────────────────────────────────────────────────────────────────
-    public override void _Draw()
+    // UX-014: this controller no longer draws its own banner. It publishes the guidance
+    // status and HUDController renders it inside the single phase banner.
+
+    /// <summary>Guidance status line for the HUD phase banner, or null when idle.</summary>
+    public string? BannerStatus
     {
-        if (!_active && !_assist && _phase != Phase.Done) return;
-        var vp = GetViewportRect().Size;
-
-        // Assist banner: distinct copy — the player still flies the throttle.
-        if (_assist && !_active)
+        get
         {
-            const string al = "GRAVITY-TURN ASSIST — PITCH GUIDANCE";
-            var ac = new Color(0.6f, 0.95f, 0.7f);
-            var asz = _font.GetStringSize(al, HorizontalAlignment.Left, -1, 24);
-            var apos = new Vector2((vp.X - asz.X) * 0.5f, vp.Y * 0.215f);
-            DrawString(_font, apos + new Vector2(2, 2), al, HorizontalAlignment.Left, -1, 24, new Color(0, 0, 0, 0.7f));
-            DrawString(_font, apos, al, HorizontalAlignment.Left, -1, 24, ac);
+            if (!_active && !_assist && _phase != Phase.Done) return null;
+            if (_assist && !_active)
+                return "GRAVITY-TURN ASSIST — PITCH GUIDANCE  ·  THROTTLE [Z]/[X]  ·  "
+                    + $"Ap {_apo / 1000:F0} km  Pe {_per / 1000:F0} km  e {_ecc:F3}";
 
-            string asub = $"THROTTLE: YOU ([Z]/[X])   {_bodyName.ToUpperInvariant()}   "
-                        + $"Ap {_apo/1000:F0} km   Pe {_per/1000:F0} km   e {_ecc:F3}";
-            var assz = _font.GetStringSize(asub, HorizontalAlignment.Left, -1, 14);
-            DrawString(_font, new Vector2((vp.X - assz.X) * 0.5f, vp.Y * 0.215f + 26f), asub,
-                       HorizontalAlignment.Left, -1, 14, new Color(0.7f, 0.85f, 0.78f));
-            return;
+            string label = _phase switch
+            {
+                Phase.Ignition => "IGNITION — ENGINE START",
+                Phase.Ascent => "ASCENT — GRAVITY TURN",
+                Phase.Coast => "ASCENT — COAST TO APOAPSIS",
+                Phase.Insert => "ASCENT — ORBITAL INSERTION",
+                Phase.Done => "ORBIT ACHIEVED",
+                _ => "",
+            };
+            string detail = _phase == Phase.Ignition
+                ? $"TWR {_twr:F2}  ·  {(_twr > 1.02 ? "▲ LIFTOFF" : "HOLD-DOWN CLAMPED")}"
+                : $"Ap {_apo / 1000:F0} km  Pe {_per / 1000:F0} km  e {_ecc:F3}"
+                    + (_phase == Phase.Ascent && _q > 15_000
+                        ? $"  ·  q {_q / 1000:F0} kPa"
+                        : $"  →  {_holdAlt / 1000:F0} km");
+            return $"AUTOPILOT · {label}  ·  {_bodyName.ToUpperInvariant()}  ·  {detail}";
         }
-
-        string label = _phase switch
-        {
-            Phase.Ignition => "IGNITION — ENGINE START",
-            Phase.Ascent => "ASCENT — GRAVITY TURN",
-            Phase.Coast  => "ASCENT — COAST TO APOAPSIS",
-            Phase.Insert => "ASCENT — ORBITAL INSERTION",
-            Phase.Done   => "ORBIT ACHIEVED",
-            _ => "",
-        };
-        var col = _phase == Phase.Done ? new Color(0.45f, 1f, 0.6f) : new Color(0.5f, 0.85f, 1f);
-        var size = _font.GetStringSize(label, HorizontalAlignment.Left, -1, 24);
-        var pos  = new Vector2((vp.X - size.X) * 0.5f, vp.Y * 0.215f);
-        DrawString(_font, pos + new Vector2(2, 2), label, HorizontalAlignment.Left, -1, 24, new Color(0, 0, 0, 0.7f));
-        DrawString(_font, pos, label, HorizontalAlignment.Left, -1, 24, col);
-
-        string sub = _phase == Phase.Ignition
-            ? $"AUTOPILOT · {_bodyName.ToUpperInvariant()}   ENGINE SPOOL-UP   TWR {_twr:F2}   {(_twr > 1.02 ? "▲ LIFTOFF" : "HOLD-DOWN CLAMPED")}"
-            : $"AUTOPILOT · {_bodyName.ToUpperInvariant()}   Ap {_apo/1000:F0} km   Pe {_per/1000:F0} km   e {_ecc:F3}"
-              + (_phase == Phase.Ascent && _q > 15_000 ? $"   q {_q/1000:F0} kPa" : $"   →  {_holdAlt/1000:F0} km");
-        var ssz = _font.GetStringSize(sub, HorizontalAlignment.Left, -1, 14);
-        DrawString(_font, new Vector2((vp.X - ssz.X) * 0.5f, vp.Y * 0.215f + 26f), sub,
-                   HorizontalAlignment.Left, -1, 14, new Color(0.7f, 0.78f, 0.88f));
     }
 
     private static Quaterniond ShortestArc(Vector3d from, Vector3d to)

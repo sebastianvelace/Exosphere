@@ -24,8 +24,10 @@ public partial class EngineGridHUD : Control
     private static readonly Color Accent      = InterfaceTheme.Text;
     private static readonly Color RedTwr      = InterfaceTheme.Alert;
 
-    private Font _font = null!;
+    private Font _labelFont = null!;
+    private Font _valueFont = null!;
     private StyleBoxFlat _panelStyle = null!;
+    private bool _compact;
 
     // Cached telemetry computed each frame in _Process, rendered in _Draw.
     private int    _litEngines;
@@ -42,20 +44,37 @@ public partial class EngineGridHUD : Control
 
     public override void _Ready()
     {
-        _font = ThemeDB.FallbackFont;
+        _labelFont = InterfaceTheme.BodyFont;
+        _valueFont = InterfaceTheme.MonoFont;
         _panelStyle = InterfaceTheme.GlassPanel(0.76f, 12, 0, 0);
         // Bottom-LEFT, above the money/controls band — frees the bottom-right for the MAP.
         SetAnchorsPreset(LayoutPreset.BottomLeft);
         GrowHorizontal = GrowDirection.End;
         GrowVertical   = GrowDirection.Begin;
-        CustomMinimumSize = new Vector2(194, 224);
-        OffsetLeft = 18; OffsetTop = -340;
-        OffsetRight = 212; OffsetBottom = -116;
+        OffsetLeft = 18;
+        OffsetRight = 212;
+        OffsetBottom = -116;
         MouseFilter = MouseFilterEnum.Ignore;
+        ApplyDensityLayout();
+    }
+
+    /// <summary>
+    /// C3: MINIMAL keeps the engine ring — which chamber is lit is genuinely spatial
+    /// information no text row replaces — and drops the THRUST / TWR / Isp / ṁ rows.
+    /// </summary>
+    private void ApplyDensityLayout()
+    {
+        bool compact = UserInterfaceSettings.HudDensity != HudDensity.Full;
+        if (compact == _compact && CustomMinimumSize.Y > 0f) return;
+        _compact = compact;
+        float height = compact ? 118f : 224f;
+        CustomMinimumSize = new Vector2(194, height);
+        OffsetTop = OffsetBottom - height;
     }
 
     public override void _Process(double delta)
     {
+        ApplyDensityLayout();
         var vessel = SimulationBridge.Instance?.ActiveVessel;
         var universe = SimulationBridge.Instance?.Universe;
         if (vessel == null || universe == null) return;
@@ -97,8 +116,8 @@ public partial class EngineGridHUD : Control
         var size = Size;
         DrawPanel(new Rect2(Vector2.Zero, size));
 
-        DrawString(_font, new Vector2(12, 18), "PROPULSION",
-            HorizontalAlignment.Left, -1, 13, Accent);
+        DrawString(_labelFont, new Vector2(12, 18), "PROPULSION",
+            HorizontalAlignment.Left, -1, 12, Accent);
 
         // Engine board (concentric rings).
         float cx = size.X * 0.5f;
@@ -121,10 +140,12 @@ public partial class EngineGridHUD : Control
 
         // Lit / total tally in the centre.
         string tally = $"{_litEngines}/{_nominalEngines}";
-        var tw = _font.GetStringSize(tally, HorizontalAlignment.Center, -1, 13);
-        DrawString(_font, new Vector2(cx - tw.X * 0.5f, cy + 4), tally,
+        var tw = _valueFont.GetStringSize(tally, HorizontalAlignment.Center, -1, 13);
+        DrawString(_valueFont, new Vector2(cx - tw.X * 0.5f, cy + 4), tally,
             HorizontalAlignment.Left, -1, 13,
             _litEngines > 0 ? DotOnHot : LabelDim);
+
+        if (_compact) return;
 
         // Readout rows.
         float ry = 150f;
@@ -175,11 +196,11 @@ public partial class EngineGridHUD : Control
 
     private float DrawReadout(float x, float y, string label, string value, Color valCol)
     {
-        DrawString(_font, new Vector2(x, y), label,
-            HorizontalAlignment.Left, -1, 12, LabelDim);
-        var vw = _font.GetStringSize(value, HorizontalAlignment.Right, -1, 14);
-        DrawString(_font, new Vector2(Size.X - 12 - vw.X, y), value,
-            HorizontalAlignment.Left, -1, 14, valCol);
+        DrawString(_labelFont, new Vector2(x, y), label,
+            HorizontalAlignment.Left, -1, 11, LabelDim);
+        var vw = _valueFont.GetStringSize(value, HorizontalAlignment.Right, -1, 13);
+        DrawString(_valueFont, new Vector2(Size.X - 12 - vw.X, y), value,
+            HorizontalAlignment.Left, -1, 13, valCol);
         return y + 19f;
     }
 

@@ -21,6 +21,8 @@ public static class InterfaceTheme
     public static readonly Color Alert = new(1.00f, 0.40f, 0.34f, 1f);
     public static readonly Color Warning = new(1.00f, 0.73f, 0.28f, 1f);
     public static readonly Color Orbital = new(0.24f, 0.76f, 0.88f, 1f);
+    /// Pale green reserved for a passed check / nominal terminal state.
+    public static readonly Color Success = new(0.55f, 0.95f, 0.65f, 1f);
 
     public static Font DisplayFont =>
         GD.Load<Font>("res://assets/fonts/barlow/BarlowCondensed-SemiBold.ttf");
