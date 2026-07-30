@@ -29,6 +29,10 @@ public partial class AscentController : Control
     private Phase _phase = Phase.Idle;
     private bool  _active;
 
+    /// <summary>Read-only diagnostic state consumed by the playtest harness.</summary>
+    public string GuidancePhase => _phase.ToString();
+    public bool IsEngaged => _active;
+
     // ── Assist mode ([H]) ───────────────────────────────────────────────────────
     // Pilot-in-the-loop helper: applies ONLY the gravity-turn PITCH GUIDANCE (commanded
     // through PitchYawRoll, NOT by overriding Orientation), leaving THROTTLE to the player
