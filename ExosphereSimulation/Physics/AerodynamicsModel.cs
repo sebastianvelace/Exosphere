@@ -38,13 +38,35 @@ public static class AerodynamicsModel
         return speed / sos;
     }
 
-    /// <summary>Cd multiplier across the transonic drag-rise peak (≈2× near Mach 1).</summary>
-    public static double GetMachDragMultiplier(double mach) =>
-        mach < 0.8 ? 1.0
-        : mach < 1.0 ? 1.0 + (mach - 0.8) * 5.0
-        : mach < 1.2 ? 2.0
-        : mach < 5.0 ? 2.0 - (mach - 1.2) * 0.25
-        : 1.0;
+    /// <summary>
+    /// Cd multiplier across the transonic drag-rise peak (≈2× near Mach 1), decaying through
+    /// the supersonic band and settling to a hypersonic plateau. The transonic rise is real
+    /// wave drag on a slender body as local flow goes sonic over the surface. The hypersonic
+    /// plateau is real too: past roughly Mach 5-6 the normal-shock density ratio asymptotes
+    /// (Oswatitsch's Mach-independence principle), so pressure coefficients stop varying with
+    /// Mach and the multiplier has nowhere left to go — it is ramped smoothly from the M5
+    /// value down to exactly 1.0 over 5.0 ≤ mach &lt; 8.0 rather than dropping there in a step.
+    /// The plateau is 1.0 by construction, not by omission: the caller's base coefficient
+    /// (<see cref="ComputeReentryDrag"/>'s broadside cd = 1.5) is already the Newtonian
+    /// blunt-body value, so an additional bluffness multiplier here would double-count drag
+    /// and push Cd past the flat-plate Newtonian maximum of 2.0 — physically impossible for
+    /// any convex body. Do not reintroduce a hypersonic plateau multiplier above 1.0.
+    /// </summary>
+    public static double GetMachDragMultiplier(double mach)
+    {
+        const double hypersonicPlateau = 1.0;
+        if (mach < 0.8) return 1.0;
+        if (mach < 1.0) return 1.0 + (mach - 0.8) * 5.0;
+        if (mach < 1.2) return 2.0;
+        if (mach < 5.0) return 2.0 - (mach - 1.2) * 0.25;
+        if (mach < 8.0)
+        {
+            const double atFive = 2.0 - 3.8 * 0.25;  // 1.05, matches the mach<5 branch's limit
+            return atFive + (hypersonicPlateau - atFive) * ((mach - 5.0) / 3.0);
+        }
+
+        return hypersonicPlateau;
+    }
 
     /// <summary>Axial reference area (m²) from the declared physical envelope.</summary>
     public static double EstimateReferenceArea(PartGraph graph)
