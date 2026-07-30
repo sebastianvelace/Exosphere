@@ -181,12 +181,21 @@ equivocada hace la órbita.
   torque deseado).
 - **Aceptación:** cada mount gimballed recibe su propio comando derivado del torque objetivo.
 
-### R5c. Torque como disturbio no wireado en `Vessel.Tick` — pendiente (abierto)
-- **Hoy:** `GetTotalTorque` ya es correcto y testeado, pero no está conectado en `Vessel.Tick` como
-  disturbio de actitud incondicional: el bloque de aceleración angular sigue gateado detrás de
-  `hasInput` (piloto/SAS activo). Hoy un engine-out no produce efecto de actitud en idle, aunque el
-  torque real ya es computable.
-- **Aceptación:** un engine-out sin input del piloto produce rotación observable vía RK4.
+### R5c. Torque como disturbio no wireado en `Vessel.Tick` — ✅ HECHO (parcial, adrede)
+- **Fix aplicado:** `Vessel.Tick` ahora aplica `GetPitchYawRollAngularAcceleration` como
+  disturbio real, pero SOLO en la rama `!hasInput`, no incondicionalmente en ambas ramas.
+  Motivo: `GetTotalTorque` lee el `GimbalDeg` real de cada instancia, que el servo de gimbal
+  ya mueve hacia el `GimbalOffset` comandado por el piloto en la rama `hasInput` — esa rama
+  ya aplica una estimación idealizada de autoridad máxima para esa misma deflexión
+  (`GetPitchYawAngularAcceleration`/`GetRollAngularAcceleration` con `GimbalRange` máximo).
+  Sumar el torque real por mount ahí también habría contado dos veces la misma cadena causal
+  (piloto comanda gimbal → empuje se desvía → torque neto).
+- **Archivos:** `ExosphereSimulation/Vessel.cs`, `ExosphereSimulation.Tests/UnpilotedEngineOutTests.cs`.
+- **Aceptación:** ✅ empuje simétrico sin input no rota; una falla de motor asimétrica sin
+  input produce rotación observable y con signo correcto; la autoridad de actitud pilotada
+  existente quedó sin cambios (pin test verificado con comparación real antes/después vía
+  `git stash`). Gates `--ascent`/`--edl` sostenidos (ninguno inyecta fallas de motor, así
+  que el cambio es inerte en ambos por construcción, confirmado).
 
 ### R5d. Magnitud de empuje promediada en cluster mixto bajo steering activo — pendiente (abierto)
 - **Hoy:** `Part.GetThrustVector` sigue promediando la deflexión de gimbal entre un cluster mixto
@@ -260,17 +269,17 @@ equivocada hace la órbita.
 - **Archivos:** `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`.
 - **Aceptación:** en sombra cae la energía; el retardo de comms crece con la distancia.
 
-### R12. Boostback + captura en torre (Mechazilla) — depende de R5b/R5c
-- Secuencia real de flip + boostback del Super Heavy y captura. El torque por motor (R5) ya está;
-  requiere TVC diferencial (R5b) y el torque wireado como disturbio no gateado (R5c).
+### R12. Boostback + captura en torre (Mechazilla) — depende de R5b
+- Secuencia real de flip + boostback del Super Heavy y captura. El torque por motor (R5) y su
+  wireado como disturbio (R5c) ya están; requiere TVC diferencial (R5b).
 
 ---
 
 ## Orden de ejecucion actual
 1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
-2. Backlog fisico real pendiente: R5b TVC diferencial, R5c torque como disturbio no gateado, R5d
-   empuje promediado en cluster mixto. (R5 torque por geometria ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
-3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5b/R5c.
+2. Backlog fisico real pendiente: R5b TVC diferencial, R5d empuje promediado en cluster mixto.
+   (R5 torque por geometria ✅, R5c torque wireado como disturbio ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
+3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5b.
 4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)

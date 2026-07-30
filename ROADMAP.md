@@ -46,9 +46,9 @@ Base tecnica cerrada en `main`:
   seams longitudinales, pluma liftoff mas densa y Super Heavy separado con anillo
   expuesto/quemado. Los motores 33/6 tienen estado, feed, gimbal, telemetría,
   fallos y pluma individual; ya no son solamente una multiplicación visual. El
-  torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`);
-  falta TVC diferencial por motor y wirear ese torque como disturbio no gateado en
-  `Vessel.Tick` (ver R5b/R5c en `PLAN_REALISM.md`).
+  torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`) y ya
+  está wireado como disturbio de actitud cuando no hay input del piloto; falta TVC
+  diferencial por motor (ver R5b en `PLAN_REALISM.md`).
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
