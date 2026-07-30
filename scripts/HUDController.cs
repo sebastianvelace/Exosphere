@@ -291,7 +291,7 @@ public partial class HUDController : Control
         hbox.Alignment = BoxContainer.AlignmentMode.Center;
         center.AddChild(hbox);
 
-        _bigSpeed = AddBigStat(hbox, "SPEED", "0", "KM/H");
+        _bigSpeed = AddBigStat(hbox, "SURFACE SPEED", "0", "KM/H · VERT — 0 M/S");
         _bigAlt   = AddBigStat(hbox, "ALTITUDE", "0.0", "KM");
 
         // T+ clock — centred, above the navball disc.
@@ -677,6 +677,14 @@ public partial class HUDController : Control
         _oxFill.Color = snapshot.OxidizerFraction < 0.12 ? FuelLowCol : OxCol;
 
         _bigSpeed.Text = $"{snapshot.SurfaceSpeedMps * 3.6:N0}";
+        string verticalDirection = snapshot.VerticalSpeedMps switch
+        {
+            > 0.05 => "↑",
+            < -0.05 => "↓",
+            _ => "—",
+        };
+        ((Label)_bigSpeed.GetParent().GetChild(2)).Text =
+            $"KM/H · VERT {verticalDirection} {System.Math.Abs(snapshot.VerticalSpeedMps):N0} M/S";
         _bigAlt.Text = snapshot.AltitudeM >= 1000
             ? $"{snapshot.AltitudeM / 1000.0:F1}"
             : $"{snapshot.AltitudeM:F0}";

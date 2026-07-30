@@ -1620,6 +1620,14 @@ public partial class _PlaytestShot : Node
         double heatRatio = vessel.Parts.Parts.Max(p => p.ThermalRatio);
         double density = body.GetAtmosphericDensity(vessel.Position);
         double flux = ThermalModel.ComputeHeatFlux(density, spd);
+        var trajectory = OrbitalElements.FromStateVector(
+            vessel.Position - body.Position,
+            vessel.Velocity - body.Velocity,
+            body.GM,
+            body.Id,
+            universe.CurrentTime);
+        double apo = trajectory.Apoapsis - body.Radius;
+        double pe = trajectory.Periapsis - body.Radius;
         int selectedEngines = vessel.Parts.Parts
             .FirstOrDefault(p => p.Definition.IsStarshipFamily
                 && p.Definition.HasVehicleRole("ship_engines"))
@@ -1631,7 +1639,8 @@ public partial class _PlaytestShot : Node
         double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
 
         _log.WriteLine(
-            $"CAPTURE {slug} path={path} alt={alt:F1} spd={spd:F1} vSpeed={vSpeed:F1} q={q:F0} g={g:F2} " +
+            $"CAPTURE {slug} path={path} alt={alt:F1} spd={spd:F1} vSpeed={vSpeed:F1} " +
+            $"apo={apo:F1} pe={pe:F1} q={q:F0} g={g:F2} " +
             $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2} " +
             $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines} " +
             $"landingParts={landingParts} approachSpeed={_lastApproachSpeed:F2} " +
@@ -1727,6 +1736,20 @@ verify_pngs() {
     done
     if grep -q '^FALLBACK ' "$LOG"; then
       echo "ERROR: full mission used a fallback instead of natural orbit insertion" >&2
+      return 1
+    fi
+    if ! awk '
+      /^CAPTURE orbit / {
+        found = 1
+        for (i = 1; i <= NF; i++)
+          if ($i ~ /^pe=/) {
+            split($i, pair, "=")
+            periapsis = pair[2] + 0
+          }
+      }
+      END { exit !(found && periapsis >= 140000.0) }
+    ' "$LOG"; then
+      echo "ERROR: orbit milestone was suborbital (periapsis below the atmosphere)" >&2
       return 1
     fi
     if ! grep -q 'SUMMARY reason=LANDED' "$LOG"; then
