@@ -555,6 +555,36 @@ public class Vessel
             if (mag > maxAngVel)
                 AngularVelocity = AngularVelocity * (maxAngVel / mag);
         }
+        else
+        {
+            // ── Disturbance torque from real engine-mount geometry (engine-out, mount
+            // asymmetry) ─────────────────────────────────────────────────────────────
+            // Genuinely unconditional physics: an unpiloted vessel does not become
+            // magically inert just because nobody is commanding attitude. τ = Σ r×F is
+            // exactly zero for a nominal symmetric firing cluster (see
+            // EngineTorqueTests.NominalSymmetricCluster_ProducesZeroNetTorque), so this is
+            // a no-op for every currently-passing nominal scenario, and only produces
+            // rotation when the cluster is actually asymmetric (engine failure, isolated
+            // gimbal fault).
+            //
+            // This is deliberately scoped to !hasInput rather than being wired in for
+            // both branches: GetTotalTorque/GetPitchYawRollAngularAcceleration read each
+            // live engine instance's actual EngineInstanceState.GimbalDeg (see
+            // Part.GetEngineInstanceThrustGeometry), which the gimbal servo model
+            // (Part.AdvanceGimbal) drives toward the commanded GimbalOffset set above
+            // whenever hasInput is true. The pilot-authority block above already applies
+            // an idealized full-authority estimate for that same commanded deflection
+            // (GetPitchYawAngularAcceleration/GetRollAngularAcceleration, which use the
+            // engine's maximum GimbalRange, not live servo state). Adding the real
+            // per-mount torque on top of that in the hasInput branch would apply the same
+            // causal effect (pilot commands gimbal → thrust vector shifts → net torque)
+            // twice through two different models. Restricting the unconditional term to
+            // !hasInput avoids that double-count while still closing the actual gap: an
+            // idle/no-input vessel with a failed engine now genuinely tumbles.
+            var disturbanceLocal = Parts.GetPitchYawRollAngularAcceleration(pressure);
+            if (disturbanceLocal.MagnitudeSquared > 0.0)
+                AngularVelocity = AngularVelocity + Orientation.Rotate(disturbanceLocal) * dt;
+        }
 
         // SAS: solo amortigua cuando el jugador no está dando input
         if (SASEnabled && !hasInput && auth > 1e-6)
