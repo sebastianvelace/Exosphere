@@ -13,6 +13,9 @@ HARNESS="scripts/_PlaytestShot.cs"
 OUT_DIR="${OUT_DIR:-/tmp/exo_play}"
 LOG="${LOG:-/tmp/exo_play.log}"
 MODE="full"
+HARNESS_MODE=""
+REENTRY_BELLY_FIRST=""
+REENTRY_SLUG=""
 VARIANT_FILE=""
 VARIANT_SITE=""
 VARIANT_PROFILE=""
@@ -45,6 +48,11 @@ Options:
   --cockpit     Capture the first-person cockpit optics and interior.
   --atmosphere  Capture a deterministic day/twilight/night altitude matrix with image metrics.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
+  --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
+                real hot-staging dual-thrust overlap window, gated on vessel state
+                (IsHotStageOverlapping), not a frame count.
+  --reentry-compare  Capture nominal belly-flop vs. forced bad-attitude (nose-first,
+                tumbling) EDL, gated on PEAK_HEATING/destruction, for VFX/thermal comparison.
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
   --log FILE    Telemetry log path (default: /tmp/exo_play.log)
   --skip-build  Skip the simulation-library prebuild (the Godot project is still built)
@@ -129,6 +137,13 @@ while [[ $# -gt 0 ]]; do
     --cockpit) MODE="cockpit"; shift ;;
     --atmosphere) MODE="atmosphere"; shift ;;
     --edl) MODE="edl"; shift ;;
+    --hotstage)
+      MODE="hotstage"
+      VARIANT_FILE="starship_flight7_block2_2025.json"
+      VARIANT_SITE="starbase"
+      VARIANT_PROFILE="starship-flight7-ascent"
+      shift ;;
+    --reentry-compare) MODE="reentry_compare"; shift ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --log) LOG="$2"; shift 2 ;;
     --skip-build) SKIP_BUILD=1; shift ;;
@@ -229,6 +244,14 @@ public partial class _PlaytestShot : Node
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     bool _finished;
 
+    // ── hotstage mode ────────────────────────────────────────────────────
+    bool _hotstage;
+
+    // ── reentry_variant mode (one attitude per process; --reentry-compare drives two
+    // separate Godot launches — see tools/visual_playtest.sh orchestration below) ──────
+    bool _reentrySeeded, _reentryQueued;
+    double _reentryScenarioStart;
+
     // Atmosphere acceptance is deliberately state-seeded instead of flown.  This makes
     // every altitude/solar-elevation pair reproducible and keeps the matrix fast enough
     // to run while tuning the scattering shader.  Cockpit cases are last because the
@@ -266,7 +289,7 @@ public partial class _PlaytestShot : Node
 
     public _PlaytestShot()
     {
-        _mode = "${MODE}";
+        _mode = "${HARNESS_MODE:-$MODE}";
         _outDir = "${OUT_DIR}";
     }
 
@@ -467,6 +490,12 @@ public partial class _PlaytestShot : Node
             return;
         }
 
+        if (_mode == "reentry_variant")
+        {
+            ProcessReentryVariant(bridge, universe, mission);
+            return;
+        }
+
         if (_mode == "gemini_docking")
         {
             if (!_shipSeeded && _readyFrames >= 45)
@@ -616,6 +645,22 @@ public partial class _PlaytestShot : Node
             _ascentEngaged = true;
             _log.WriteLine("ACTION engage AscentController [G] autopilot");
             _log.Flush();
+        }
+
+        // ── Hot-staging: gate on the real dual-thrust overlap state (booster still
+        // attached, Ship engines already lit), not on the SEPARATION phase — that phase
+        // only fires once mechanical staging completes, i.e. *after* the overlap window.
+        if (_mode == "hotstage" && !_hotstage && bridge.ActiveVessel?.IsHotStageOverlapping == true)
+        {
+            QueueCapture("hotstage");
+            _hotstage = true;
+            _log.WriteLine($"ACTION hot-stage overlap detected phase={phase} alt={alt:F0} spd={spd:F0}");
+            _log.Flush();
+        }
+        if (_mode == "hotstage" && _hotstage && _pendingSlug == null)
+        {
+            Finish("HOTSTAGE_OK");
+            return;
         }
 
         if (!_liftoff && alt is >= 80.0 and <= 350.0 &&
@@ -854,6 +899,118 @@ public partial class _PlaytestShot : Node
 
         if (simElapsed > 900.0)
             Finish("EDL_TIMEOUT");
+    }
+
+    // Reuses the exact same deterministic-70km-entry seeding as ProcessEdlVerification
+    // (SimulationBridge.BeginReentryDemonstration) for exactly one attitude. --reentry-compare
+    // runs this mode twice as two separate Godot launches (see the bash orchestration at the
+    // bottom of this file) rather than seeding twice inside one process: EDLController keeps
+    // its own private phase state and BeginReentryDemonstration intentionally does not reset
+    // it (that reset belongs to EDL/Ascent guidance, which this capture harness must not
+    // touch), so a second in-process seed would leave EDL stuck past Inactive and never re-arm.
+    private void ProcessReentryVariant(SimulationBridge bridge, Universe universe, MissionManager? mission)
+    {
+        const double PeakHeatingTimeoutSec = 240.0;
+        bool bellyFirst = "${REENTRY_BELLY_FIRST}" == "true";
+        string slug = "${REENTRY_SLUG}";
+
+        if (!_reentrySeeded)
+        {
+            if (_readyFrames < 30 || EDLController.Instance == null) return;
+            if (!bridge.BeginReentryDemonstration(bellyFirst: bellyFirst))
+            {
+                _log.WriteLine($"GAP HUD reentry demonstration entry point refused the {slug} scenario");
+                Finish("REENTRY_COMPARE_START_FAILED");
+                return;
+            }
+            bridge.SetTimeScale(3.0); // verification speed only; the HUD button starts at x1
+            _reentrySeeded = true;
+            _reentryScenarioStart = universe.CurrentTime;
+            _log.WriteLine($"ACTION seeded {(bellyFirst ? "nominal belly-flop" : "forced broadside bad-attitude")} " +
+                $"entry for compare (slug={slug})");
+            _log.Flush();
+            return;
+        }
+
+        var vessel = bridge.ActiveVessel;
+        var body = universe.Bodies.First(b => b.Name == "Earth");
+        if (vessel == null)
+        {
+            Finish("REENTRY_COMPARE_NO_VESSEL");
+            return;
+        }
+        double simElapsed = universe.CurrentTime - _reentryScenarioStart;
+
+        // Never gates on a frame count. The primary gate is MissionPhase.PEAK_HEATING (the
+        // moment thermal/VFX divergence between attitudes is most visible). A bad, low-drag
+        // attitude can have a materially different aero/heating profile than the protected
+        // belly-flop and can drive the mission FSM straight past PEAK_HEATING into
+        // RETRO_BURN/FINAL_DESCENT/LANDED without ever reporting it as the current phase — in
+        // that case capture the next EDL phase reached instead of waiting on one that will not
+        // recur. Vessel destruction is captured directly. A generous simulated-time bound
+        // (mirroring ProcessEdlVerification's own EDL_TIMEOUT pattern) exists only to catch
+        // genuine no-progress stalls, never to gate a normal capture.
+        if (!_reentryQueued)
+        {
+            if (mission?.Phase == MissionPhase.PEAK_HEATING)
+            {
+                LogReentryCompareState(slug, vessel, body, mission, simElapsed, "PEAK_HEATING");
+                QueueCapture(slug);
+                _reentryQueued = true;
+            }
+            else if (vessel.IsDestroyed)
+            {
+                LogReentryCompareState(slug, vessel, body, mission, simElapsed,
+                    $"DESTROYED cause={vessel.DestructionCause}");
+                QueueCapture(slug);
+                _reentryQueued = true;
+            }
+            else if (mission?.Phase is MissionPhase.RETRO_BURN or MissionPhase.FINAL_DESCENT
+                or MissionPhase.LANDED)
+            {
+                LogReentryCompareState(slug, vessel, body, mission, simElapsed,
+                    $"POST_HEATING_FALLBACK phase={mission?.Phase}");
+                QueueCapture(slug);
+                _reentryQueued = true;
+            }
+            else if (simElapsed > PeakHeatingTimeoutSec)
+            {
+                if (mission?.InDescent == true)
+                {
+                    // Made real descent progress (e.g. stuck in ENTRY/AERO_DESCENT) but never
+                    // reached one of the sharper states above — capture what we have rather
+                    // than fail a run that is clearly not stalled.
+                    LogReentryCompareState(slug, vessel, body, mission, simElapsed,
+                        $"TIMEOUT_FALLBACK phase={mission?.Phase}");
+                    QueueCapture(slug);
+                    _reentryQueued = true;
+                }
+                else
+                {
+                    _log.WriteLine($"GAP {slug}: entry state machine made no descent progress " +
+                        $"within timeout (phase={mission?.Phase})");
+                    _log.Flush();
+                    Finish("REENTRY_COMPARE_TIMEOUT");
+                    return;
+                }
+            }
+        }
+
+        if (_reentryQueued && _pendingSlug == null)
+            Finish("REENTRY_VARIANT_OK");
+    }
+
+    private void LogReentryCompareState(string slug, Vessel vessel, CelestialBody body,
+        MissionManager? mission, double simElapsed, string trigger)
+    {
+        Vector3d up = (vessel.Position - body.Position).Normalized;
+        double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
+        double maxT = vessel.Parts.Parts.Count > 0 ? vessel.Parts.Parts.Max(p => p.Temperature) : 0.0;
+        double heatRatio = vessel.Parts.Parts.Count > 0 ? vessel.Parts.Parts.Max(p => p.ThermalRatio) : 0.0;
+        _log.WriteLine($"REENTRY_COMPARE slug={slug} trigger={trigger} t={simElapsed:F1} " +
+            $"phase={mission?.Phase} upright={upright:F4} maxT={maxT:F0} heatRatio={heatRatio:F3} " +
+            $"omega={vessel.AngularVelocity.Magnitude:F4}");
+        _log.Flush();
     }
 
     private void ProcessDeorbit(SimulationBridge bridge, Vessel vessel, Universe universe,
@@ -1405,6 +1562,35 @@ verify_pngs() {
       echo "ERROR: touchdown was not supported by at least three settled physical contacts" >&2
       return 1
     fi
+  elif [[ "$MODE" == "hotstage" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_hotstage.png" ]]; then
+      echo "ERROR: missing required hot-stage milestone PNG: exo_play_hotstage.png" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=HOTSTAGE_OK' "$LOG"; then
+      echo "ERROR: hot-stage capture did not confirm the dual-thrust overlap state" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "reentry_compare" ]]; then
+    local required=(reentry_nominal reentry_bad_attitude)
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing required reentry-compare milestone PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+      if ! grep -q "^REENTRY_COMPARE slug=${slug} " "$LOG"; then
+        echo "ERROR: missing REENTRY_COMPARE state evidence for ${slug}" >&2
+        return 1
+      fi
+    done
+    # Two independent Godot launches (nominal, bad-attitude) share this one $LOG file, so a
+    # successful compare shows exactly one REENTRY_VARIANT_OK finish per launch.
+    local ok_count
+    ok_count="$(grep -c 'SUMMARY reason=REENTRY_VARIANT_OK' "$LOG" || true)"
+    if [[ "${ok_count:-0}" -ne 2 ]]; then
+      echo "ERROR: reentry compare did not finish cleanly in both launches (found ${ok_count:-0}/2 REENTRY_VARIANT_OK, see GAP/timeout lines)" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "atmosphere" ]]; then
     local required=(
       ground_day ground_sunrise ground_sunset ground_night
@@ -1585,12 +1771,10 @@ verify_pngs() {
 }
 
 register_autoload
-write_harness
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
   dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 fi
-dotnet build Exosphere.csproj --nologo -v quiet
 
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR"/exo_play_*.png 2>/dev/null || true
@@ -1598,9 +1782,41 @@ rm -f "$OUT_DIR"/exo_play_*.png 2>/dev/null || true
 
 echo "visual_playtest: mode=$MODE out=$OUT_DIR log=$LOG"
 
-xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
-  --path . --rendering-driver opengl3 \
-  res://scenes/flight/Flight.tscn 2>&1 | tee -a "$LOG"
+if [[ "$MODE" == "reentry_compare" ]]; then
+  # Two independent Godot launches — one per attitude — appending into the same combined
+  # $LOG/$OUT_DIR. EDLController keeps its own private phase state and (correctly) is never
+  # reset by a second in-process BeginReentryDemonstration seed, so a single-process two-seed
+  # attempt left EDL stuck past Inactive on the second seed. A fresh process per attitude is
+  # exactly --edl's own single-shot pattern, just run twice with a different seeded orientation.
+  #
+  # Each launch's harness opens its log with StreamWriter(path, append: false) — correct for
+  # every other (single-launch) mode, but it means the second launch would truncate away the
+  # first launch's telemetry if both wrote directly to $LOG. Give each launch its own temp
+  # log instead, then append that into the combined $LOG after the launch exits.
+  COMBINED_LOG="$LOG"
+  for pair in "true:reentry_nominal" "false:reentry_bad_attitude"; do
+    REENTRY_BELLY_FIRST="${pair%%:*}"
+    REENTRY_SLUG="${pair##*:}"
+    HARNESS_MODE="reentry_variant"
+    LOG="${COMBINED_LOG}.${REENTRY_SLUG}"
+    : > "$LOG"
+    write_harness
+    dotnet build Exosphere.csproj --nologo -v quiet
+    xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
+      --path . --rendering-driver opengl3 \
+      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$LOG"
+    cat "$LOG" >> "$COMBINED_LOG"
+    rm -f "$LOG"
+  done
+  LOG="$COMBINED_LOG"
+else
+  HARNESS_MODE="$MODE"
+  write_harness
+  dotnet build Exosphere.csproj --nologo -v quiet
+  xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
+    --path . --rendering-driver opengl3 \
+    res://scenes/flight/Flight.tscn 2>&1 | tee -a "$LOG"
+fi
 
 verify_pngs
 
@@ -1634,6 +1850,10 @@ if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
+elif [[ "$MODE" == "hotstage" ]]; then
+  echo "visual_playtest: hot-stage overlap capture OK"
+elif [[ "$MODE" == "reentry_compare" ]]; then
+  echo "visual_playtest: reentry attitude compare OK — see REENTRY_COMPARE rows in $LOG"
 elif [[ "$MODE" == "atmosphere" ]]; then
   echo "visual_playtest: atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "lunar_map" ]]; then

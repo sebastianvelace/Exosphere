@@ -897,7 +897,14 @@ public partial class SimulationBridge : Node
     /// atmospheric drag and heating run normally, Raptors relight for the powered flip, and
     /// landing contact is solved by the regular surface-contact model.
     /// </summary>
-    public bool BeginReentryDemonstration()
+    /// <param name="bellyFirst">
+    /// True (default) seeds the protected heat-shield-forward belly-flop attitude used by the
+    /// HUD button. False seeds a deliberately wrong nose-first attitude with a tumble rate,
+    /// solely so the visual capture harness (tools/visual_playtest.sh --reentry-compare) can
+    /// show the VFX/thermal difference against a bad attitude. EDL guidance itself is
+    /// untouched — this only changes the initial state handed to it.
+    /// </param>
+    public bool BeginReentryDemonstration(bool bellyFirst = true)
     {
         var earth = Universe.GetBody("earth");
         var vessel = ActiveVessel;
@@ -952,9 +959,25 @@ public partial class SimulationBridge : Node
 
         vessel.Position = earth.Position + up * (earth.Radius + 70_000.0);
         vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position) + airVelocity;
-        vessel.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
-            longAxis, velocityDirection);
-        vessel.AngularVelocity = Vector3d.Zero;
+        if (bellyFirst)
+        {
+            vessel.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
+                longAxis, velocityDirection);
+            vessel.AngularVelocity = Vector3d.Zero;
+        }
+        else
+        {
+            // Deliberately wrong entry attitude for capture comparison only: broadside to
+            // the airflow (nose pointed radially outward, perpendicular to velocity) instead
+            // of the protected belly-flop. Left at zero initial spin — imposing an explicit
+            // tumble rate here previously destabilized the linear velocity state that
+            // EDLController's activation check depends on (_vUp < -20) in a non-deterministic
+            // way; a fixed wrong orientation is deterministic, and any tumble should emerge
+            // physically from aerodynamic instability once EDLController/aero take over.
+            // Capture-only — does not touch EDLController/AscentController guidance.
+            vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, up);
+            vessel.AngularVelocity = Vector3d.Zero;
+        }
         vessel.PitchYawRoll = Vector3d.Zero;
         vessel.SASEnabled = false;
         vessel.IsGroundHeld = false;
@@ -988,7 +1011,8 @@ public partial class SimulationBridge : Node
         SetWarpIndex(0);
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
         CameraController.Instance?.EnterShipChaseView();
-        GD.Print("[DEMO] Starship reentry → landing started at 70 km / 1.80 km/s");
+        GD.Print($"[DEMO] Starship reentry → landing started at 70 km / 1.80 km/s " +
+            $"(bellyFirst={bellyFirst})");
         return true;
     }
 
