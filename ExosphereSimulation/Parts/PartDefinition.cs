@@ -169,6 +169,14 @@ public class PartDefinition
     [JsonPropertyName("stage_priority")]
     public int StagePriority { get; set; }
 
+    /// <summary>
+    /// Total separation impulse (N·s) the decoupler's pushers/springs deliver along the
+    /// stack axis. Applied equal-and-opposite, so the relative opening rate is J/μ with
+    /// μ the reduced mass. 0 (default) falls back to Vessel.DefaultSeparationOpeningMs.
+    /// </summary>
+    [JsonPropertyName("separation_impulse_ns")]
+    public double SeparationImpulseNs { get; set; }
+
     // Docking. A docking part names an attachment node whose local position is
     // resolved through the same graph geometry used by VAB and centre-of-mass.
     [JsonPropertyName("is_docking_port")]

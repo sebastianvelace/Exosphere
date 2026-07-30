@@ -14,6 +14,13 @@ public enum VesselDestructionCause
 
 public class Vessel
 {
+    /// <summary>
+    /// Fallback relative separation opening rate (m/s) used when a decoupler part does not
+    /// declare <see cref="Parts.PartDefinition.SeparationImpulseNs"/>. Reproduces the legacy
+    /// 1.0 m/s stage-opening behaviour.
+    /// </summary>
+    public const double DefaultSeparationOpeningMs = 1.0;
+
     public string Id   { get; }
     public string Name { get; set; } = "Unnamed Vessel";
 
@@ -623,16 +630,40 @@ public class Vessel
     {
         ClearHotStageOverlapState();
 
+        // Capture the declared separation impulse from the decoupler FireNextStage is about
+        // to consume — it clears IsStagingActive internally, so this must run first.
+        var decoupler = Parts.Parts
+            .Where(p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive)
+            .OrderByDescending(p => p.Definition.StagePriority)
+            .FirstOrDefault();
+        double impulseNs = decoupler?.Definition.SeparationImpulseNs ?? 0.0;
+
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
 
-        return CreateDebrisVessel(detached, Name + " (debris)");
+        var debris = CreateDebrisVessel(detached, Name + " (debris)");
+
+        // Rebase the remaining vessel from the old stack-base datum to the physical
+        // separation plane, split by mass ratio so both fragments move (not just this one),
+        // conserving the combined centre of mass. Without this, both vessels occupy the same
+        // world point while their renderers use different local origins, producing total
+        // interpenetration.
+        var axis = Orientation.Rotate(Vector3d.Up).Normalized;
+        double gap = System.Math.Max(1.0, debris.VehicleLength);
+        double opening = impulseNs > 0.0
+            ? impulseNs * (TotalMass + debris.TotalMass)
+                / System.Math.Max(1.0, TotalMass * debris.TotalMass)
+            : DefaultSeparationOpeningMs;
+        ApplyMassSplitKinematics(debris, axis, gap, opening);
+
+        return debris;
     }
 
     /// <summary>
     /// Structural split at an overloaded joint: detaches the child subtree into a debris
-    /// vessel sharing this vessel's kinematics (plus a small relative push). Clears any
-    /// hot-stage overlap window, same as <see cref="Stage"/>.
+    /// vessel sharing this vessel's kinematics (plus a small relative push and a
+    /// mass-weighted geometric offset). Clears any hot-stage overlap window, same as
+    /// <see cref="Stage"/>.
     /// </summary>
     public Vessel? BreakAtJoint(Joint joint)
     {
@@ -645,14 +676,37 @@ public class Vessel
 
         // Gentle separation along vessel +Y so fragments do not occupy the same origin.
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
-        double mainMass = System.Math.Max(TotalMass, 1.0);
-        double debrisMass = System.Math.Max(debris.TotalMass, 1.0);
-        double totalMass = mainMass + debrisMass;
+        double gap = System.Math.Max(1.0, debris.VehicleLength);
         const double relativeOpenMs = 0.5;
-        Velocity += axis * (relativeOpenMs * debrisMass / totalMass);
-        debris.Velocity -= axis * (relativeOpenMs * mainMass / totalMass);
+        ApplyMassSplitKinematics(debris, axis, gap, relativeOpenMs);
 
         return debris;
+    }
+
+    /// <summary>
+    /// Splits kinematics between this vessel and <paramref name="other"/> about their shared
+    /// centre of mass. Conserves linear momentum (equal-and-opposite impulse), the centre of
+    /// mass (complementary, mass-weighted offsets) and angular momentum exactly — the latter
+    /// requires transporting each fragment's CoM velocity by ω × r, which a naive "both
+    /// inherit ω" split silently drops.
+    /// </summary>
+    private void ApplyMassSplitKinematics(
+        Vessel other, Vector3d separationAxis, double separationDistanceM, double relativeOpeningMs)
+    {
+        double mThis = System.Math.Max(TotalMass, 1.0);
+        double mOther = System.Math.Max(other.TotalMass, 1.0);
+        double mTotal = mThis + mOther;
+
+        var rThis = separationAxis * (separationDistanceM * mOther / mTotal);
+        var rOther = -separationAxis * (separationDistanceM * mThis / mTotal);
+        Position += rThis;
+        other.Position += rOther;
+
+        Velocity += AngularVelocity.Cross(rThis);
+        other.Velocity += AngularVelocity.Cross(rOther);
+
+        Velocity += separationAxis * (relativeOpeningMs * mOther / mTotal);
+        other.Velocity -= separationAxis * (relativeOpeningMs * mThis / mTotal);
     }
 
     private void ClearHotStageOverlapState()
@@ -683,7 +737,11 @@ public class Vessel
     /// <summary>
     /// Deploys a part subtree as a fully independent, controllable vessel. The split uses
     /// equal-and-opposite impulses and complementary position offsets, conserving total
-    /// mass, centre of mass and linear momentum in the aggregate point-mass model.
+    /// mass, centre of mass, linear momentum and (via <see cref="ApplyMassSplitKinematics"/>)
+    /// angular momentum in the aggregate point-mass model. The geometric offset and the
+    /// commanded separation velocity are generally not parallel (a radial payload offsets
+    /// one way, its eject velocity fires another), so each is split through the shared
+    /// helper independently.
     /// </summary>
     public Vessel? DeployPayload(
         string rootPartInstanceId,
@@ -697,28 +755,23 @@ public class Vessel
         Vector3d localOffset = positions.TryGetValue(part, out var offset)
             ? offset - Parts.CenterOfMass
             : Vector3d.Zero;
-        double combinedMass = TotalMass;
         var detached = Parts.DetachSubtree(rootPartInstanceId);
         if (detached == null) return null;
 
         double payloadMass = detached.TotalMass;
         double carrierMass = Parts.TotalMass;
-        if (combinedMass <= 0.0 || payloadMass <= 0.0 || carrierMass <= 0.0)
+        if (payloadMass <= 0.0 || carrierMass <= 0.0)
             throw new InvalidOperationException("Payload separation requires positive masses.");
 
         Vector3d relativePosition = Orientation.Rotate(localOffset);
         Vector3d relativeVelocity = Orientation.Rotate(
             separationVelocityLocal ?? new Vector3d(0.0, 0.25, 0.0));
-        Position -= relativePosition * (payloadMass / combinedMass);
-        var payloadPosition = Position + relativePosition;
-        Velocity -= relativeVelocity * (payloadMass / combinedMass);
-        var payloadVelocity = Velocity + relativeVelocity;
 
         var payload = new Vessel
         {
             Name = payloadName ?? $"{Name} Payload",
-            Position = payloadPosition,
-            Velocity = payloadVelocity,
+            Position = Position,
+            Velocity = Velocity,
             Orientation = Orientation,
             AngularVelocity = AngularVelocity,
             ReferenceBodyId = ReferenceBodyId,
@@ -728,6 +781,17 @@ public class Vessel
         if (detached.Root != null) payload.Parts.SetRoot(detached.Root);
         foreach (var detachedPart in detached.Parts) payload.Parts.AddPart(detachedPart);
         foreach (var joint in detached.Joints) payload.Parts.AddJoint(joint);
+
+        Vector3d positionAxis = relativePosition.Magnitude > 1e-9
+            ? -relativePosition.Normalized
+            : Vector3d.Up;
+        ApplyMassSplitKinematics(payload, positionAxis, relativePosition.Magnitude, 0.0);
+
+        Vector3d velocityAxis = relativeVelocity.Magnitude > 1e-9
+            ? -relativeVelocity.Normalized
+            : Vector3d.Up;
+        ApplyMassSplitKinematics(payload, velocityAxis, 0.0, relativeVelocity.Magnitude);
+
         payload.ConfigureLandingContactsFromParts();
         return payload;
     }

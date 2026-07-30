@@ -381,9 +381,6 @@ public sealed class MercuryFriendship7Tests
                 secoMass = vessel.TotalMass;
                 Vessel? atlas = vessel.Stage();
                 Assert.NotNull(atlas);
-                Vector3d axis =
-                    vessel.Orientation.Rotate(Vector3d.Up).Normalized;
-                vessel.Position += axis * atlas!.VehicleLength;
                 spacecraftSeparated = true;
                 Assert.Equal(1_934.7, vessel.TotalMass, 5);
                 Assert.DoesNotContain(vessel.Parts.Parts, part =>

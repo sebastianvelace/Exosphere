@@ -94,14 +94,47 @@ public sealed class StarshipRealismTests
         vessel.Orientation = Quaterniond.FromEuler(12.0, -8.0, 4.0);
         vessel.ReferenceBodyId = "earth";
 
+        Vector3d comBefore = vessel.Position;
+        Vector3d momentumBefore = vessel.Velocity * vessel.TotalMass;
+
+        double shipMassBefore = vessel.TotalMass;
         var detached = vessel.Stage();
 
         Assert.NotNull(detached);
-        Assert.Equal(vessel.Position, detached!.Position);
-        Assert.Equal(vessel.Velocity, detached.Velocity);
-        Assert.Equal(vessel.AngularVelocity, detached.AngularVelocity);
+        // Rigid-body kinematics: both fragments share orientation, spin rate and reference
+        // frame — a mechanical stage separation does not tumble or relocate the vehicle.
+        Assert.Equal(vessel.AngularVelocity, detached!.AngularVelocity);
         Assert.Equal(vessel.Orientation, detached.Orientation);
         Assert.Equal(vessel.ReferenceBodyId, detached.ReferenceBodyId);
+
+        // Position/velocity are NOT identical post-split — the old bug pinned this test to
+        // exact equality, which is only possible if the surviving stage is teleported by the
+        // debris's full length with no complementary offset (injecting potential energy) and
+        // with zero relative separation velocity (making the split untestable/undetectable).
+        // The physically correct invariants are conservation of centre of mass and momentum.
+        double shipMassAfter = vessel.TotalMass;
+        double debrisMass = detached.TotalMass;
+        Vector3d comAfter =
+            (vessel.Position * shipMassAfter + detached.Position * debrisMass)
+            / (shipMassAfter + debrisMass);
+        AssertVectorClose(comBefore, comAfter, 1e-9);
+
+        Vector3d momentumAfter = vessel.Velocity * shipMassAfter + detached.Velocity * debrisMass;
+        AssertVectorClose(momentumBefore, momentumAfter, 1e-6);
+
+        Assert.NotEqual(vessel.Position, detached.Position);
+        Assert.NotEqual(vessel.Velocity, detached.Velocity);
+        AssertClose(shipMassBefore, shipMassAfter + debrisMass, 1e-12);
+    }
+
+    private static void AssertVectorClose(Vector3d expected, Vector3d actual, double absoluteTolerance)
+    {
+        Assert.True(System.Math.Abs(expected.X - actual.X) <= absoluteTolerance,
+            $"X: expected {expected.X:R}, got {actual.X:R}.");
+        Assert.True(System.Math.Abs(expected.Y - actual.Y) <= absoluteTolerance,
+            $"Y: expected {expected.Y:R}, got {actual.Y:R}.");
+        Assert.True(System.Math.Abs(expected.Z - actual.Z) <= absoluteTolerance,
+            $"Z: expected {expected.Z:R}, got {actual.Z:R}.");
     }
 
     [Theory]

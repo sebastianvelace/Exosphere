@@ -284,8 +284,6 @@ public sealed class MercuryFreedom7Tests
             {
                 Vessel? booster = vessel.Stage();
                 Assert.NotNull(booster);
-                Vector3d axis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
-                vessel.Position += axis * booster!.VehicleLength;
                 staged = true;
             }
             if (!towerJettisoned
