@@ -43,11 +43,48 @@ public static class ThermalModel
     /// <summary>Stefan-Boltzmann constant, W/(m²·K⁴).</summary>
     public const double StefanBoltzmann = 5.67e-8;
 
-    /// <summary>Largest sub-step the stiff T⁴ radiation term stays stable at (s).</summary>
-    private const double MaxSubStep = 0.02;
+    /// <summary>
+    /// Sub-step (s) the two-node integration is walked at, chosen for ACCURACY, not stability.
+    ///
+    /// <para>Explicit Euler on the radiative term is stable while h &lt; 2c/(4εσT³). With the
+    /// default TPS capacity of 7000 J/(m²·K) at a peak-entry skin temperature of 2000 K the
+    /// radiative slope is 4·0.9·5.67e-8·8e9 ≈ 1.63e3 W/(m²·K), so h_crit ≈ 8.6 s. At 0.02 s
+    /// the margin against instability is ~430×; the step is this small so the seconds-long
+    /// climb to radiative equilibrium is resolved smoothly, not because T⁴ would blow up.</para>
+    /// </summary>
+    public const double MaxSubStep = 0.02;
 
-    /// <summary>Cap on sub-steps per call, so a long warp tick cannot stall the sim.</summary>
-    private const int MaxSubSteps = 256;
+    /// <summary>
+    /// Cap on sub-steps per call. It exists so the coupling to the scheduler fails LOUDLY.
+    ///
+    /// <para><see cref="StepTwoNode"/> is only ever reached through
+    /// <c>StressSolver.ApplyThermalLoads</c> ← <c>Universe.ApplyPostIntegrationPhysics</c> ←
+    /// <c>Universe.IntegrateVesselOffRails</c>, and every path into those slices the tick by
+    /// one of <c>Universe</c>'s step caps. The loosest of them is <c>MaxCoastStep</c> = 2.0 s,
+    /// so the largest dt that can arrive here is 2.0 s ⇒ 100 sub-steps of exactly
+    /// <see cref="MaxSubStep"/>. 2048 leaves the exact-h path intact up to a 40 s tick.</para>
+    ///
+    /// <para>Above the ceiling the clamp would silently STRETCH h past <see cref="MaxSubStep"/>
+    /// instead of refusing, degrading the integration with no error. The headroom means a
+    /// future scheduler change that raises <c>MaxCoastStep</c> trips
+    /// <c>ThermalSubstepTests</c> long before it can quietly coarsen entry heating.</para>
+    /// </summary>
+    public const int MaxSubSteps = 2048;
+
+    /// <summary>
+    /// The sub-step (s) <see cref="StepTwoNode"/> will actually integrate <paramref name="dt"/>
+    /// at. Equals <see cref="MaxSubStep"/> or less for every dt up to
+    /// <see cref="MaxSubStep"/> · <see cref="MaxSubSteps"/>; beyond that the sub-step count
+    /// saturates and this grows, which is the degradation the ceiling is sized to prevent.
+    /// </summary>
+    public static double EffectiveSubStep(double dt)
+    {
+        if (dt <= 0.0) return 0.0;
+        return dt / SubStepCount(dt);
+    }
+
+    private static int SubStepCount(double dt) =>
+        System.Math.Clamp((int)System.Math.Ceiling(dt / MaxSubStep), 1, MaxSubSteps);
 
     /// <summary>Radiative-equilibrium temperature (K) of a surface under <paramref name="flux"/>.</summary>
     public static double RadiativeEquilibrium(double flux) =>
@@ -93,8 +130,7 @@ public static class ThermalModel
         double cStr = System.Math.Max(1.0, structureCapacityPerArea);
         double u    = System.Math.Max(0.0, tpsConductance);
 
-        int steps = (int)System.Math.Ceiling(dt / MaxSubStep);
-        steps = System.Math.Clamp(steps, 1, MaxSubSteps);
+        int steps = SubStepCount(dt);
         double h = dt / steps;
 
         double ts = skinTemp;

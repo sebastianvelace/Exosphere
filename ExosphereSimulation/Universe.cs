@@ -85,8 +85,14 @@ public class Universe
     /// at 2 s a LEO vessel advances ~16 km/step, so it cannot tunnel through a planet
     /// or jump across an SOI boundary undetected. At warp 1000 (≈16.7 s of sim time per
     /// frame) this is ~8 sub-steps, which is negligible since only one vessel integrates.
+    ///
+    /// <para>This is the LOOSEST of the step caps, so it is also the largest dt any
+    /// post-integration physics can be handed. <c>ThermalModel</c> sizes its sub-step
+    /// ceiling against this value; raising it past
+    /// <c>ThermalModel.MaxSubStep · ThermalModel.MaxSubSteps</c> silently coarsens entry
+    /// heating, which is why it is public and asserted in <c>ThermalSubstepTests</c>.</para>
     /// </summary>
-    private const double MaxCoastStep = 2.0;
+    public const double MaxCoastStep = 2.0;
 
     /// <summary>Max RK4 sub-step (s) while the active vessel is THRUSTING under warp — kept
     /// small so a powered burn stays accurate (≈2 steps/frame at x10).</summary>

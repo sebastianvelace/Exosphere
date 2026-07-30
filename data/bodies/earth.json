@@ -108,7 +108,6 @@
     "geopotential_radius": 6356766.0,
     "thermosphere_scale_height_growth": 0.16
   },
-  "surface_gravity": 9.807,
   "gm": 398600441800000.0,
   "orbital_elements": {
     "semi_major_axis": 149600000000.0,
@@ -116,7 +115,7 @@
     "inclination": 0.0,
     "longitude_of_node": -11.26064,
     "argument_of_periapsis": 114.20783,
-    "mean_anomaly_at_epoch": 358.617,
+    "mean_anomaly_at_epoch": 357.517,
     "epoch": 0.0,
     "reference_body": "sun"
   }
