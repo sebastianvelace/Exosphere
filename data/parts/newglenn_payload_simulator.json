@@ -3,6 +3,7 @@
   "name": "New Glenn Payload Simulator",
   "description": "Instrumented 10 t payload simulator for the dated New Glenn public configuration.",
   "category": "command",
+  "vehicle_family": "newglenn",
   "mass_dry": 10000,
   "length_m": 3.0,
   "diameter_m": 5.0,

@@ -3,6 +3,7 @@
   "name": "Falcon 9 Block 5 Second Stage",
   "description": "RP-1/LOX second-stage tank and structure; unpublished allocations are engineering estimates.",
   "category": "fuel_tank",
+  "vehicle_family": "falcon9",
   "mass_dry": 3530,
   "length_m": 12.6,
   "diameter_m": 3.7,

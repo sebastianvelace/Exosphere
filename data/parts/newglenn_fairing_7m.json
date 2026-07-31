@@ -3,6 +3,7 @@
   "name": "New Glenn Seven-Meter Fairing",
   "description": "Seven-meter-class payload fairing; external length and mass are engineering estimates.",
   "category": "fairing",
+  "vehicle_family": "newglenn",
   "mass_dry": 5000,
   "length_m": 17.0,
   "diameter_m": 7.0,

@@ -3,6 +3,7 @@
   "name": "Mk1 Command Pod",
   "description": "A single-occupant command capsule with integrated heat shield for atmospheric reentry. The workhorse of early crewed missions.",
   "category": "command",
+  "vehicle_family": "generic",
   "mass_dry": 840,
   "cost": 600,
   "drag_coefficient": 0.2,

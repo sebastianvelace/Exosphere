@@ -3,6 +3,7 @@
   "name": "Starship EDL Landing Gear",
   "description": "Experimental six-foot landing system for the simulator's reusable EDL variant. It is an explicit gameplay engineering model, not hardware flown on Flight 7.",
   "category": "landing",
+  "vehicle_family": "starship",
   "mass_dry": 3000,
   "length_m": 0.0,
   "diameter_m": 9.0,

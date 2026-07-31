@@ -3,6 +3,7 @@
   "name": "New Glenn GS1 Reusable Booster",
   "description": "Reusable LOX/LNG booster tank and structure; component masses and loading are engineering estimates.",
   "category": "fuel_tank",
+  "vehicle_family": "newglenn",
   "mass_dry": 70000,
   "length_m": 42.0,
   "diameter_m": 7.0,

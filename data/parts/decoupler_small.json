@@ -3,6 +3,7 @@
   "name": "TR-18A Stack Decoupler",
   "description": "A small stack decoupler for separating stages. Provides a brief ejection impulse to ensure clean separation.",
   "category": "decoupler",
+  "vehicle_family": "generic",
   "mass_dry": 38,
   "cost": 150,
   "drag_coefficient": 0.2,

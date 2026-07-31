@@ -3,6 +3,7 @@
   "name": "LT-05 Micro Landing Strut",
   "description": "A deployable landing leg for surface landings. Absorbs landing impact loads and provides stable ground support.",
   "category": "landing",
+  "vehicle_family": "generic",
   "mass_dry": 50,
   "cost": 440,
   "drag_coefficient": 0.3,

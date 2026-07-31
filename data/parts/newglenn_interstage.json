@@ -3,6 +3,7 @@
   "name": "New Glenn Stage Interface",
   "description": "Seven-meter stage separation structure; dimensions and mass allocation are estimated.",
   "category": "decoupler",
+  "vehicle_family": "newglenn",
   "mass_dry": 8000,
   "length_m": 5.0,
   "diameter_m": 7.0,

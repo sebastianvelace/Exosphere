@@ -3,6 +3,7 @@
   "name": "Seven BE-4 — New Glenn 7x2",
   "description": "Seven individually simulated BE-4 engines at the July 2026 advertised public rating.",
   "category": "engine",
+  "vehicle_family": "newglenn",
   "mass_dry": 21000,
   "length_m": 4.0,
   "diameter_m": 7.0,

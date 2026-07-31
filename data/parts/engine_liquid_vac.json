@@ -3,6 +3,7 @@
   "name": "Pax-V Vacuum Engine",
   "description": "A high-performance vacuum-optimized liquid fuel engine. Expanded nozzle maximizes specific impulse in vacuum conditions. Equivalent to a Merlin Vacuum.",
   "category": "engine",
+  "vehicle_family": "generic",
   "mass_dry": 490,
   "cost": 4400,
   "drag_coefficient": 0.2,

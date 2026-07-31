@@ -3,6 +3,7 @@
   "name": "FL-T800 Fuel Tank",
   "description": "A medium-capacity liquid fuel tank. The standard choice for medium-lift launch vehicles and orbital stages.",
   "category": "fuel_tank",
+  "vehicle_family": "generic",
   "mass_dry": 500,
   "cost": 800,
   "drag_coefficient": 0.2,

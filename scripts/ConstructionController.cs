@@ -40,6 +40,18 @@ public partial class ConstructionController : Control
     private StandardMaterial3D? _highlightMat;
     private string?             _selectedInstanceId;
 
+    // ── Orbit camera (RMB-drag rotate, wheel zoom, auto-frame on rebuild) ─────
+    // The preview camera used to be pinned at one fixed pose with no way to look at
+    // what you just built — the Flight scene has free orbit/zoom, the VAB had none.
+    private float _camYawDeg = 12f;
+    private float _camPitchDeg = 14f;
+    private float _camDistance = 90f;
+    private float _camTargetY = 20f;
+    private bool  _camDragging;
+    private Vector2 _camLastMouse;
+    private const float CamMinDistance = 2.5f;
+    private const float CamMaxDistance = 320f;
+
     public override void _Ready()
     {
         BuildUi();
@@ -62,29 +74,49 @@ public partial class ConstructionController : Control
         SetStatus("Catalog loaded.");
     }
 
+    // Índice 1 en el dropdown de categoría es el filtro sintético "Generic" (por
+    // vehicle_family, no por category) — todo lo demás mapea 1:1 a una categoría real.
+    // Dropdown index 1 is the synthetic "Generic" filter (by vehicle_family, not
+    // category) — everything else maps 1:1 to a real category.
+    private static readonly string[] CategoryFilterValues =
+        { "", "", "command", "fuel_tank", "engine", "decoupler", "landing",
+          "structure", "fairing", "electrical", "rcs" };
+
     private void PopulateCatalogList()
     {
         if (_catalogList == null || _catalog == null) return;
         string search = _catalogSearch?.Text.Trim() ?? "";
-        string category = _categoryFilter?.Selected switch
-        {
-            1 => "command",
-            2 => "fuel_tank",
-            3 => "engine",
-            4 => "decoupler",
-            5 => "landing",
-            _ => "",
-        };
+        int selected = _categoryFilter?.Selected ?? 0;
+        bool genericOnly = selected == 1;
+        string category = selected >= 0 && selected < CategoryFilterValues.Length
+            ? CategoryFilterValues[selected] : "";
+
+        // Genéricas primero (piezas reutilizables, sin vehículo específico), luego el
+        // resto agrupado por familia de vehículo — así una búsqueda no mezcla al azar
+        // un tanque genérico con el Saturno V AS-503 y el New Glenn en la misma lista
+        // sin ninguna distinción visual.
+        // Generic parts first (reusable, not tied to a specific vehicle), then
+        // everything else grouped by vehicle family — so a search doesn't randomly
+        // interleave a generic tank with the Saturn V AS-503 and New Glenn with no
+        // visual distinction at all.
+        var ordered = _catalog.AllParts
+            .Where(part =>
+                (category.Length == 0 || part.CategoryStr.Equals(category, StringComparison.OrdinalIgnoreCase))
+                && (!genericOnly || part.VehicleFamily.Equals("generic", StringComparison.OrdinalIgnoreCase))
+                && (search.Length == 0
+                    || part.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                    || part.Id.Contains(search, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(part => part.VehicleFamily.Equals("generic", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(part => part.VehicleFamily, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(part => part.Name, StringComparer.OrdinalIgnoreCase);
 
         _catalogList.Clear();
-        foreach (var part in _catalog.AllParts.Where(part =>
-                     (category.Length == 0 || part.CategoryStr.Equals(category, StringComparison.OrdinalIgnoreCase))
-                     && (search.Length == 0
-                         || part.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
-                         || part.Id.Contains(search, StringComparison.OrdinalIgnoreCase))))
+        foreach (var part in ordered)
         {
+            bool generic = part.VehicleFamily.Equals("generic", StringComparison.OrdinalIgnoreCase);
+            string tag = generic ? "generic" : part.VehicleFamily;
             int idx = _catalogList.AddItem(
-                $"{part.Name}   |   {part.MassDry / 1000.0:F1} t · {part.CategoryStr.Replace('_', ' ')}");
+                $"{part.Name}   |   {part.MassDry / 1000.0:F1} t · {part.CategoryStr.Replace('_', ' ')} · {tag}");
             _catalogList.SetItemMetadata(idx, part.Id);
         }
     }
@@ -114,8 +146,12 @@ public partial class ConstructionController : Control
         _catalogSearch = new LineEdit { PlaceholderText = "Search parts…", SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _catalogSearch.TextChanged += _ => PopulateCatalogList();
         filters.AddChild(_catalogSearch);
-        _categoryFilter = new OptionButton { CustomMinimumSize = new Vector2(120, 0) };
-        foreach (string category in new[] { "All", "Command", "Fuel tank", "Engine", "Decoupler", "Landing" })
+        _categoryFilter = new OptionButton { CustomMinimumSize = new Vector2(140, 0) };
+        foreach (string category in new[]
+                 {
+                     "All", "Generic only", "Command", "Fuel tank", "Engine", "Decoupler",
+                     "Landing", "Structure", "Fairing", "Electrical", "RCS",
+                 })
             _categoryFilter.AddItem(category);
         _categoryFilter.ItemSelected += _ => PopulateCatalogList();
         filters.AddChild(_categoryFilter);
@@ -297,8 +333,8 @@ public partial class ConstructionController : Control
             Current = true,
         };
         previewRoot.AddChild(camera);
-        camera.LookAtFromPosition(new Vector3(0f, 28f, 86f), new Vector3(0f, 20f, 0f), Vector3.Up);
         _previewCamera = camera;
+        ApplyCameraOrbit();
         _previewRenderer = new VesselRenderer { Name = "PreviewVessel" };
         previewRoot.AddChild(_previewRenderer);
 
@@ -330,7 +366,8 @@ public partial class ConstructionController : Control
             Name = "Hint",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Text = "Preview: click a part to select. With a catalog part chosen, "
-                 + "click a green node marker to attach. [Del] removes the selection.",
+                 + "click a green node marker to attach (red = wrong size/type). "
+                 + "Right-drag orbits, wheel zooms. [Del] removes the selection.",
         };
         info.AddChild(hint);
     }
@@ -462,6 +499,7 @@ public partial class ConstructionController : Control
             _redo.Clear();
             _craftName.Text = craft.Name;
             Refresh();
+            AutoFrameCamera();
             SetStatus($"Loaded craft: {craft.Name} ({craft.Parts.Count} parts)");
             return true;
         }
@@ -792,6 +830,8 @@ public partial class ConstructionController : Control
         _craftName.Text = "Constructed Vessel";
         ClearSelection();
         Refresh();
+        _camYawDeg = 12f; _camPitchDeg = 14f; _camTargetY = 20f; _camDistance = 90f;
+        ApplyCameraOrbit();
         SetStatus("New vehicle. Double-click a command part to begin.");
     }
 
@@ -823,6 +863,7 @@ public partial class ConstructionController : Control
             _craftName.Text = variant.Name;
             ClearSelection();
             Refresh();
+            AutoFrameCamera();
             SelectInstance(_assembly.Parts[^1].InstanceId, syncList: true);
             SetStatus(
                 $"Loaded dated preset {variant.Id} ({variant.AsOfDate:yyyy-MM-dd}). " +
@@ -849,6 +890,7 @@ public partial class ConstructionController : Control
             _craftName.Text = name;
             ClearSelection();
             Refresh();
+            AutoFrameCamera();
             SelectInstance(current.InstanceId, syncList: true);
             SetStatus($"Loaded {name} template. Edit any part before launch.");
         }
@@ -910,10 +952,105 @@ public partial class ConstructionController : Control
     // bodies. Hit a node marker → attach; hit a part → select; miss → deselect.
     private void OnPreviewGuiInput(InputEvent ev)
     {
-        if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        if (ev is InputEventMouseButton mb)
         {
-            HandlePreviewClick(mb.Position);
+            if (mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+            {
+                HandlePreviewClick(mb.Position);
+            }
+            else if (mb.ButtonIndex == MouseButton.Right)
+            {
+                // RMB drag orbits — mirrors the Flight scene's camera convention
+                // (right-drag orbit, left click reserved for selection/interaction)
+                // instead of the VAB's previous fixed, uncontrollable camera.
+                _camDragging = mb.Pressed;
+                _camLastMouse = mb.Position;
+            }
+            else if (mb.ButtonIndex == MouseButton.WheelUp)
+            {
+                _camDistance = Mathf.Clamp(_camDistance * 0.88f, CamMinDistance, CamMaxDistance);
+                ApplyCameraOrbit();
+            }
+            else if (mb.ButtonIndex == MouseButton.WheelDown)
+            {
+                _camDistance = Mathf.Clamp(_camDistance * 1.12f, CamMinDistance, CamMaxDistance);
+                ApplyCameraOrbit();
+            }
         }
+        else if (ev is InputEventMouseMotion mm && _camDragging)
+        {
+            Vector2 delta = mm.Position - _camLastMouse;
+            _camLastMouse = mm.Position;
+            _camYawDeg -= delta.X * 0.35f;
+            _camPitchDeg = Mathf.Clamp(_camPitchDeg - delta.Y * 0.35f, -5f, 80f);
+            ApplyCameraOrbit();
+        }
+    }
+
+    /// <summary>Positions the preview camera from the current yaw/pitch/distance/target
+    /// orbit state. Called on every orbit/zoom input and after auto-framing.</summary>
+    private void ApplyCameraOrbit()
+    {
+        if (_previewCamera == null) return;
+        float yaw = Mathf.DegToRad(_camYawDeg);
+        float pitch = Mathf.DegToRad(_camPitchDeg);
+        var target = new Vector3(0f, _camTargetY, 0f);
+        var offset = new Vector3(
+            Mathf.Sin(yaw) * Mathf.Cos(pitch),
+            Mathf.Sin(pitch),
+            Mathf.Cos(yaw) * Mathf.Cos(pitch)) * _camDistance;
+        _previewCamera.LookAtFromPosition(target + offset, target, Vector3.Up);
+    }
+
+    /// <summary>
+    /// Frames the whole current assembly in view: centers the orbit target on the
+    /// vehicle's vertical midpoint and sets a distance that fits its full height,
+    /// derived from the camera's vertical FOV. Called after every rebuild
+    /// (template load, variant load, craft load, attach/delete) so a freshly loaded
+    /// Starship stack doesn't render tiny and off-center in the corner of the preview.
+    /// Leaves yaw/pitch alone so a manual orbit isn't reset by every edit.
+    /// </summary>
+    /// <summary>
+    /// Frames the whole current assembly in view. Measures the ACTUAL rendered mesh
+    /// bounds (every <see cref="VisualInstance3D"/> under <see cref="_previewRenderer"/>)
+    /// rather than recomputing node-offset positions independently — the picking
+    /// layer's own node positions are authored in real meters (e.g. Super Heavy is
+    /// ~67.5 m), which does not match the coordinate space the renderer actually draws
+    /// in, so an independent meter-based bounds estimate put the camera nowhere near
+    /// the visible geometry. Measuring the real drawn AABB sidesteps that mismatch
+    /// entirely: it frames exactly what is on screen, whatever scale it's drawn at.
+    /// </summary>
+    private void AutoFrameCamera()
+    {
+        if (_previewCamera == null || _previewRenderer == null) return;
+
+        Aabb? bounds = null;
+        void Visit(Node node, Transform3D parentXform)
+        {
+            Transform3D xform = node is Node3D n3 ? parentXform * n3.Transform : parentXform;
+            if (node is VisualInstance3D vi)
+            {
+                var local = vi.GetAabb();
+                var world = xform * local;
+                bounds = bounds == null ? world : bounds.Value.Merge(world);
+            }
+            foreach (var child in node.GetChildren())
+                Visit(child, xform);
+        }
+        Visit(_previewRenderer, Transform3D.Identity);
+        if (bounds == null) return;
+
+        var box = bounds.Value;
+        float height = Mathf.Max(box.Size.Y, 1f);
+        float radius = Mathf.Max(box.Size.X, box.Size.Z) * 0.5f;
+        _camTargetY = box.Position.Y + box.Size.Y * 0.5f;
+
+        float halfFov = Mathf.DegToRad(_previewCamera.Fov * 0.5f);
+        float byHeight = (height * 0.52f) / Mathf.Max(0.05f, Mathf.Tan(halfFov));
+        float byRadius = (radius * 1.05f) / Mathf.Max(0.05f, Mathf.Tan(halfFov));
+        _camDistance = Mathf.Clamp(Mathf.Max(byHeight, byRadius), CamMinDistance, CamMaxDistance);
+
+        ApplyCameraOrbit();
     }
 
     private void HandlePreviewClick(Vector2 localPos)
@@ -989,7 +1126,17 @@ public partial class ConstructionController : Control
 
         var childNode = childDef.AttachmentNodes
             .FirstOrDefault(n => VesselAssembly.NodesAreCompatible(parentNode, n));
-        if (childNode == null) { SetStatus("No compatible node on the catalog part."); return; }
+        if (childNode == null)
+        {
+            // Name the actual rule instead of a bare "doesn't fit" — this is the
+            // exact numeric compatibility rule (stack size, node type) a player is
+            // otherwise expected to infer from raw integers in a dropdown.
+            string reason = parentNode.Type.Equals("stack", StringComparison.OrdinalIgnoreCase)
+                ? $"needs a stack node of size {parentNode.Size}"
+                : $"needs a {parentNode.Type} node";
+            SetStatus($"{childDef.Name} can't attach here — this node {reason}.");
+            return;
+        }
 
         try
         {

@@ -3,6 +3,7 @@
   "name": "Falcon 9 Extended Fairing",
   "description": "Extended payload fairing envelope from the May 2025 Falcon user's guide.",
   "category": "fairing",
+  "vehicle_family": "falcon9",
   "mass_dry": 2300,
   "length_m": 18.7,
   "diameter_m": 5.2,

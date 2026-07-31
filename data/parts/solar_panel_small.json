@@ -3,6 +3,7 @@
   "name": "OX-STAT Photovoltaic Panel",
   "description": "A deployable solar panel that converts sunlight into electrical charge. Must be deployed before generating power.",
   "category": "electrical",
+  "vehicle_family": "generic",
   "mass_dry": 18,
   "cost": 75,
   "drag_coefficient": 0.5,

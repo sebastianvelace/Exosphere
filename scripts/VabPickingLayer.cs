@@ -129,8 +129,14 @@ public partial class VabPickingLayer : Node3D
 
         foreach (var node in _assembly.AvailableNodes(selectedInstanceId))
         {
-            // Solo nodos donde la pieza de catálogo realmente encaja.
-            // Only nodes where the catalog part actually fits.
+            // Marca TODO nodo disponible: verde si la pieza de catálogo encaja, rojo si
+            // no. Antes solo se dibujaban los verdes, así que un nodo incompatible no
+            // mostraba nada — el jugador no tenía forma de saber "por qué no puedo pegar
+            // acá" sin ya haber intentado el click.
+            // Marks EVERY available node: green if the catalog part fits, red if not.
+            // Previously only the fitting ones were drawn, so an incompatible node showed
+            // nothing at all — the player had no way to see "why can't I attach here"
+            // without already having tried the click.
             bool fits = false;
             foreach (var childNode in childDef.AttachmentNodes)
             {
@@ -140,10 +146,9 @@ public partial class VabPickingLayer : Node3D
                     break;
                 }
             }
-            if (!fits) continue;
 
             var local = new Vector3((float)node.Position[0], (float)node.Position[1], (float)node.Position[2]);
-            AddNodeMarker(selectedInstanceId, node.Id, parentPos + local);
+            AddNodeMarker(selectedInstanceId, node.Id, parentPos + local, fits);
         }
     }
 
@@ -167,6 +172,40 @@ public partial class VabPickingLayer : Node3D
         radius     = PartRadius(def);
         halfHeight = PartHalfHeight(def);
         return true;
+    }
+
+    /// <summary>
+    /// Vertical extent (render units) and largest part radius across the whole current
+    /// assembly, for the preview camera to auto-frame the full vehicle instead of a
+    /// fixed pose that clips a tall stack or leaves a short one tiny in the corner.
+    /// </summary>
+    public bool TryGetAssemblyBounds(out float minY, out float maxY, out float maxRadius)
+    {
+        minY = 0f; maxY = 0f; maxRadius = 0f;
+        if (_assembly == null || _catalog == null || _assembly.Parts.Count == 0) return false;
+
+        var map = BuildPositionMap();
+        bool any = false;
+        foreach (var part in _assembly.Parts)
+        {
+            if (!map.TryGetValue(part.InstanceId, out var pos)) continue;
+            var def = _catalog[part.DefinitionId];
+            float r = PartRadius(def);
+            float h = PartHalfHeight(def);
+            if (!any)
+            {
+                minY = pos.Y - h;
+                maxY = pos.Y + h;
+                any = true;
+            }
+            else
+            {
+                minY = Mathf.Min(minY, pos.Y - h);
+                maxY = Mathf.Max(maxY, pos.Y + h);
+            }
+            maxRadius = Mathf.Max(maxRadius, r);
+        }
+        return any;
     }
 
     public void ClearNodeMarkers()
@@ -210,7 +249,11 @@ public partial class VabPickingLayer : Node3D
         AddChild(body);
     }
 
-    private void AddNodeMarker(string instanceId, string nodeId, Vector3 pos)
+    /// <summary>Meta key read back by ConstructionController to explain a click on a
+    /// red (incompatible) marker instead of attempting the attach and throwing.</summary>
+    public const string MetaCompatible = "compatible";
+
+    private void AddNodeMarker(string instanceId, string nodeId, Vector3 pos, bool compatible)
     {
         var body = new StaticBody3D
         {
@@ -223,23 +266,32 @@ public partial class VabPickingLayer : Node3D
         body.SetMeta(MetaKind, KindNode);
         body.SetMeta(MetaInstance, instanceId);
         body.SetMeta(MetaNode, nodeId);
+        body.SetMeta(MetaCompatible, compatible);
 
         var shape = new CollisionShape3D { Shape = new SphereShape3D { Radius = 0.9f } };
         body.AddChild(shape);
 
-        // Marcador visible: una pequeña esfera verde semitransparente.
-        // Visible marker: a small translucent green sphere.
+        // Marcador visible: verde y opaco si la pieza elegida encaja acá, rojo y más
+        // tenue si no — así el jugador ve el "no" antes de hacer click, no después.
+        // Visible marker: green and opaque where the chosen part fits, dim red where it
+        // doesn't — so the player sees the "no" before clicking, not after.
         var mesh = new MeshInstance3D
         {
             Mesh = new SphereMesh { Radius = 0.55f, Height = 1.1f, RadialSegments = 16, Rings = 8 },
         };
+        var color = compatible
+            ? new Color(0.30f, 1.0f, 0.40f, 0.65f)
+            : new Color(1.0f, 0.30f, 0.30f, 0.40f);
+        var emission = compatible
+            ? new Color(0.20f, 0.9f, 0.30f)
+            : new Color(0.9f, 0.20f, 0.20f);
         mesh.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
         {
-            AlbedoColor     = new Color(0.30f, 1.0f, 0.40f, 0.65f),
+            AlbedoColor     = color,
             Transparency    = BaseMaterial3D.TransparencyEnum.Alpha,
             ShadingMode     = BaseMaterial3D.ShadingModeEnum.Unshaded,
             EmissionEnabled = true,
-            Emission        = new Color(0.20f, 0.9f, 0.30f),
+            Emission        = emission,
         });
         body.AddChild(mesh);
         AddChild(body);

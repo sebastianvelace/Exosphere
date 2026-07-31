@@ -3,6 +3,7 @@
   "name": "Nine Merlin 1D — Block 5",
   "description": "Octaweb cluster with nine individually accounted Merlin 1D engines.",
   "category": "engine",
+  "vehicle_family": "falcon9",
   "mass_dry": 4230,
   "length_m": 3.2,
   "diameter_m": 3.7,

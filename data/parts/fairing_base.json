@@ -3,6 +3,7 @@
   "name": "PF-2.5 Payload Fairing Base",
   "description": "A 2.5-meter fairing base for enclosing payloads during atmospheric ascent. Fairings are jettisoned once aerodynamic pressure drops sufficiently.",
   "category": "fairing",
+  "vehicle_family": "generic",
   "mass_dry": 250,
   "cost": 500,
   "drag_coefficient": 0.2,

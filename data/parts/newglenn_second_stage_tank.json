@@ -3,6 +3,7 @@
   "name": "New Glenn GS2 Tank and Structure",
   "description": "LOX/LH2 upper-stage tank allocation within the published 26.8 m stage envelope.",
   "category": "fuel_tank",
+  "vehicle_family": "newglenn",
   "mass_dry": 25000,
   "length_m": 22.0,
   "diameter_m": 7.0,

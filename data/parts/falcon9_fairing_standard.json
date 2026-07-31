@@ -3,6 +3,7 @@
   "name": "Falcon 9 Standard Fairing",
   "description": "Two-piece 5.2 m class payload fairing represented by its structural envelope.",
   "category": "fairing",
+  "vehicle_family": "falcon9",
   "mass_dry": 1900,
   "length_m": 13.1,
   "diameter_m": 5.2,

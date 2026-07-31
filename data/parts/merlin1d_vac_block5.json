@@ -3,6 +3,7 @@
   "name": "Merlin Vacuum — Block 5",
   "description": "Single vacuum-optimized Merlin with published 981 kN vacuum thrust.",
   "category": "engine",
+  "vehicle_family": "falcon9",
   "mass_dry": 470,
   "length_m": 3.0,
   "diameter_m": 2.8,
