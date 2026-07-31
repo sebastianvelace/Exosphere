@@ -43,6 +43,23 @@
   deorbit desde 150 km): aero-frena a ~70 m/s → **aterriza ~0 m/s, sin destruirse**, peakHeat 0.10.
   Commit `93228af`. + decoupler/hot-stage ring con escudo (acero, tol 1700 K).
 
+- **R15-R19 — auditoría física Jul 2026 (motores, staging, movimiento terrestre, reingreso),
+  HECHO.** Cinco hallazgos, todos gateados por `--ascent --flight7` + `--edl`: (1) fase orbital
+  J2000 de la Tierra corregida — `mean_anomaly_at_epoch` tenía 1.1° de error de fase (~1.1 día),
+  único planeta interior fuera de la convención `M = L − ϖ`; (2) cap de sub-step térmico revisado
+  y **descartado como bug real** — es inalcanzable por 2.5× dado `MaxCoastStep = 2.0 s` (headroom
+  subido igual, 256→2048, con test que falla si algo lo vuelve alcanzable); (3) separación de
+  etapas ahora conserva CoM y momento angular — antes teletransportaba la nave sobreviviente hacia
+  arriba la longitud completa del booster sin offset complementario en el debris, e ignoraba el
+  término de transporte `ω × r`; (4) Sutton-Graves ahora usa un radio de estancamiento
+  dependiente de actitud (mezclado en `cos²α` igual que el área/Cd aerodinámico) — el error
+  original estaba **al revés de lo esperado**: de costado el modelo YA sobre-estimaba el flujo
+  ~1.41×, el hueco real era solo en la actitud de morro/cola; (5) discontinuidad de drag
+  hipersónico de 4.8% en Mach 5 suavizada con una rampa lineal 5≤M<8, rechazando una meseta
+  Newtoniana de ~1.7 que habría excedido el límite Newtoniano de placa plana y roto
+  `AerodynamicLiftTests`. Detalle completo, evidencia `archivo:línea` y las tres premisas de diseño
+  refutadas durante esta pasada: `docs/audits/PHYSICS_AUDIT_JUL2026.md`.
+
 ---
 
 ### R13 (resuelto — detalle del root cause). La Starship NO sobrevivía el reingreso — la EDL no la mantenía en belly-flop
@@ -261,6 +278,128 @@ equivocada hace la órbita.
 
 ---
 
+## OLA JUL2026 — Auditoría de motores, staging, movimiento terrestre y reingreso
+
+> Auditoría separada de la ola original (motores/staging/Tierra/reingreso), ejecutada y cerrada en
+> `docs/audits/PHYSICS_AUDIT_JUL2026.md`. Los cinco ítems abajo están **HECHOS y gateados** por
+> `--ascent --flight7` + `--edl`; el backlog abierto que dejó esta pasada queda al final.
+
+### R15. Fase orbital J2000 de la Tierra ✅ HECHO
+- **Evidencia:** `data/bodies/earth.json` tenía `mean_anomaly_at_epoch: 358.617`; con
+  `longitude_of_node + argument_of_periapsis = 102.94719` (= ϖ de Standish para la Tierra/EMB), el
+  valor correcto por convención `M = L − ϖ` es `357.517`. Error real: 1.100° (~1.116 días de fase).
+  Único planeta interior fuera de convención (Mercurio/Venus/Marte están a <0.05°).
+- **Fix:** `357.517` en `data/bodies/earth.json`; se borró además una `surface_gravity: 9.807` raíz
+  muerta (nadie la lee; la que sí se lee es `atmosphere.surface_gravity: 9.80665`).
+- **Test:** `EphemerisPhaseTests.cs` — `M₀ ≈ L − ϖ` para los 4 planetas interiores, tolerancia 0.05°.
+- **Fuera de alcance, dejado así:** Júpiter (~0.35°) y Saturno (~0.33°) exceden la tolerancia y se
+  excluyeron explícitamente en vez de aflojar el test — necesitan su propia corrección.
+- **Límite conocido no tocado:** sin corrección baricéntrica (Tierra sin masa relativa al Sol, Luna
+  sin masa relativa a la Tierra) y sin fase sideral real de rotación en t=0 (ver R18 abajo).
+
+### R16. Cap de sub-step térmico — premisa descartada, no era un bug ✅ REVISADO
+- **Preocupación original:** el cap de 256 sub-steps a 0.02 s parecía alcanzable sobre un tick de
+  integración >5.12 s.
+- **Lo que el código realmente hace:** el `dt` que llega a `StressSolver.ApplyThermalLoads` está
+  acotado por `Universe.MaxCoastStep = 2.0 s` — 5.12 s es inalcanzable por un factor de 2.5×. El
+  propio sub-step además tiene margen de estabilidad de ~430× (`h < 2c/(4εσT³) ≈ 8.6 s` vs 0.02 s
+  real).
+- **Veredicto:** no era un bug vivo; construir un clamp de warp para esto habría sido resolver un
+  problema inexistente. Se subió igual `MaxSubSteps` 256→2048 (headroom barato) y se agregó
+  `ThermalSubstepTests.cs`, que falla si algún cambio futuro sube `Universe.MaxCoastStep` por
+  encima de lo que el integrador térmico puede absorber con seguridad.
+
+### R17. Separación de etapas: teletransporte de CoM y momento angular faltante ✅ HECHO
+- **Evidencia:** `TriggerStaging` teletransportaba la nave sobreviviente hacia arriba la longitud
+  completa de la etapa desprendida (`ActiveVessel.Position += axis * separationHeight`), sin
+  ningún offset complementario en el debris — inyectando energía potencial (~70 m en el booster de
+  Flight 7) y sin término de transporte `ω × r`, filtrando momento angular respecto del CoM
+  combinado. Tres rutas de split inconsistentes (`Stage`, `BreakAtJoint`, `DeployPayload`), una de
+  ellas viviendo parcialmente en la capa Godot — por eso el bug era intesteable desde xUnit puro
+  (producía velocidad de separación cero).
+- **Fix:** helper único `Vessel.ApplyMassSplitKinematics`, usado por las tres rutas: reparte el
+  offset geométrico y el impulso de apertura por razón de masa (preserva el hueco exacto del
+  renderer: `L·m_d/M + L·m_s/M = L`) y agrega el término `ω × r` faltante. Nueva propiedad
+  `PartDefinition.SeparationImpulseNs`, sin poblar en ninguna pieza actual — así todo vehículo
+  sigue tomando el mismo fallback de 1.0 m/s que ya usaba el código viejo.
+- **Test que habría cazado el bug original:**
+  `StageSeparationConservationTests.StagingConservesAngularMomentumAboutTheCombinedCentreOfMass`.
+- **Aserción corregida (fijaba el bug):** `StarshipRealismTests.StagingPreservesDetachedStageRigidBodyMotion`
+  afirmaba `Assert.Equal(vessel.Position, detached.Position)`; ahora afirma lo que su nombre dice:
+  orientación/velocidad angular/cuerpo de referencia compartidos, momento **conservado** (no idéntico).
+- **Magnitud en Flight 7:** nave ~1.5×10⁶ kg, booster ~3.3×10⁶ kg. Split viejo: nave +67.5 m,
+  booster +0. Split nuevo: nave +46.4 m, booster −21.1 m (el hueco de 70.9 m del renderer no
+  cambia). Perturbación relativa contra energía orbital de escala LEO: ~2×10⁻⁵.
+- **Harness:** `--ascent --flight7` → `ASCENT_ORBIT_OK` (189×145–192×148 km). `--edl` → `LANDED`
+  (inmune por construcción: `BeginReentryDemonstration` sobrescribe posición/velocidad después de
+  `TriggerStaging`).
+
+### R18. Radio de estancamiento de Sutton-Graves dependiente de actitud ✅ HECHO
+- **Preocupación original:** todo llamador de `ThermalModel.ComputeHeatFlux` pasaba
+  `MaximumDiameter / 2` (4.5 m en Starship) sin importar actitud, asumiendo que esto
+  **sub**-estimaba el flujo pico de un cilindro en belly-flop.
+- **Lo que es realmente cierto:** Sutton-Graves es una correlación de punto de estancamiento
+  esférico. Para un cilindro en flujo cruzado (de costado — la actitud real que vuela todo camino
+  con contrato), la correlación de línea de estancamiento 2-D (Reshotko–Beckwith) predice ~1/√2
+  del valor esférico a igual radio — o sea el radio de casco fijo **sobre**-estima el calentamiento
+  de costado ~1.41×, no lo sub-estima. El hueco real está solo en la actitud de morro/cola (radio
+  real ~3 m de la punta del cono, no los 4.5 m del casco).
+- **Fix, acotado:** nueva `PartDefinition.NoseRadiusM` (3.0 m en `starship_command.json`) +
+  `ThermalModel.EffectiveNoseRadius(hullRadius, noseRadius, cosAlpha)`, mezclado en `cos²α` igual
+  que el blend de área/Cd de `AerodynamicsModel` — a `cosAlpha = 0` devuelve el radio de casco
+  bit-a-bit.
+- **Explícitamente NO hecho, y por qué:** la corrección 1/√2 de costado NO se aplicó — enfriaría
+  la entrada de panza ~8% (ayuda `PeakStructure < 900 K`) pero angostaría la brecha
+  panza-vs-cola que usan los tests de destrucción (`tail − belly > 800 K`). Necesita su propio
+  re-baseline medido, no un bundle con este fix de blend por actitud. Queda como follow-up (cita:
+  Reshotko & Beckwith, transferencia de calor de línea de estancamiento 2-D/axisimétrica).
+- **Verificación medida:** ambos escenarios de `OrbitalReentrySurvivalTests` (belly-first,
+  tail-first) reproducidos con instrumentación de `max(|cosAlpha|)` en toda la entrada (~900 s):
+  <1e-9 en ambos — ningún número `PeakSkin`/`PeakStructure`/`Damage` existente cambió.
+- **Bug preexistente encontrado y dejado a propósito:** la llamada de heat-flux en
+  `scripts/VesselRenderer.cs` no pasa argumento de radio, cayendo por defecto a `noseRadius = 1.0`
+  m — más agudo que los 3 m declarados de Starship, inconsistente con el resto de call sites.
+  Cablearlo en el blend movería un valor de costado (Rn 1.0→4.5, ~mitad de flujo en ese call site)
+  — fuera de alcance de un fix aditivo. Follow-up abierto.
+
+### R19. Discontinuidad de drag hipersónico en Mach 5 ✅ HECHO
+- **Evidencia:** `AerodynamicsModel.GetMachDragMultiplier` llegaba a 1.05 acercándose a Mach 5 por
+  abajo y caía a exactamente 1.0 en Mach 5 — un escalón real de 4.8%, no una transición física.
+- **Fix rechazado durante el diseño:** una meseta Newtoniana hipersónica de ~1.7 parecía la
+  completación obvia de la curva. Está mal: el coeficiente broadside de `ComputeReentryDrag` ya es
+  `cd = 1.5`, que **ya excede** el límite Newtoniano real de flujo cruzado de un cilindro
+  (`4/3 ≈ 1.33`). Multiplicar por ~1.7 daría `Cd = 2.55` — por encima del máximo Newtoniano de
+  placa plana (2.0), físicamente imposible — y rompería `AerodynamicLiftTests` (`0.2 < L/D < 0.45`,
+  que codifica el L/D ≈ 0.3 real de Starship). Ese test tenía razón; la meseta no.
+- **Fix real:** rampa lineal solo en la banda `5.0 ≤ Mach < 8.0` (que además es aprox. donde el
+  principio de independencia de Mach de Oswatitsch predice que los coeficientes de presión dejan
+  de variar con Mach de verdad). Cambio máximo en toda la curva: 5%, confinado a esa banda; fuera
+  de ella, bit-idéntico a antes. La meseta en exactamente 1.0 queda documentada en el propio método
+  como intencional ("por construcción, no por omisión").
+- **Harness:** `--edl` siembra la entrada a ~M6.1, dentro de la banda cambiada, y llegó a `LANDED`
+  (6 contactos asentados) en corridas repetidas. `--ascent --flight7` pasa brevemente por la misma
+  banda durante el ascenso y llegó a `ASCENT_ORBIT_OK` en cada corrida. Ninguna aserción numérica
+  de `OrbitalReentrySurvivalTests`/`AerodynamicLiftTests` necesitó cambiar.
+
+### Backlog abierto dejado por esta auditoría (Jul 2026)
+- **R18b.** Corrección broadside 1/√2 de Sutton-Graves — necesita su propio re-baseline medido de
+  `PeakStructure`/`tail−belly` antes de aplicarse (ver R18).
+- **R18c.** `scripts/VesselRenderer.cs` pasa `noseRadius = 1.0` por defecto en su llamada de
+  heat-flux — inconsistente con el resto de call sites (deberían pasar el radio de casco real).
+- **R15b.** Fase orbital J2000 de Júpiter/Saturno (~0.3-0.5° off) — excluida a propósito de
+  `EphemerisPhaseTests`, necesita su propia corrección, no aflojar la tolerancia.
+- **Limitaciones conocidas, no tocadas esta pasada** (registradas para no "redescubrirlas" como
+  bugs nuevos — detalle completo en `docs/audits/PHYSICS_AUDIT_JUL2026.md` §7): sin oblatez J2 (sin
+  regresión nodal, sin órbitas heliosíncronas); sin fase sideral real de rotación en t=0 (longitud
+  medida desde un meridiano arbitrario — por eso `BeginReentryDemonstration` reubica manualmente el
+  reingreso al lado diurno); sin corrección baricéntrica; Luna en cónica osculante fija (ya
+  flagueado en `CLAUDE.md` como "dated lunar ephemerides"); termosfera sin variabilidad solar
+  (F10.7/bulge diurno); sin fallo estructural por presión dinámica pura (`GetDynamicPressure` se
+  calcula pero nada rompe solo por q); EDL es autopiloto scripteado, no ley de guiado (sin
+  modulación de bank para cross-range, sin sitio de aterrizaje objetivo).
+
+---
+
 ## OLA 4 — Sistemas / UX (realismo de misión, backlog)
 
 ### R11. Sistemas de vida/energía/comms desconectados de las fases
@@ -276,11 +415,17 @@ equivocada hace la órbita.
 ---
 
 ## Orden de ejecucion actual
-1. No reabrir R1-R4, R8-R10 ni R13 salvo regresion demostrada por telemetria.
+1. No reabrir R1-R4, R8-R10, R13 ni R15-R19 salvo regresion demostrada por telemetria/harness.
 2. Backlog fisico real pendiente: R5b TVC diferencial, R5d empuje promediado en cluster mixto.
    (R5 torque por geometria ✅, R5c torque wireado como disturbio ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
-3. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5b.
-4. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
+3. Backlog de la auditoria Jul 2026 (motores/staging/Tierra/reingreso, ver seccion "OLA JUL2026"
+   arriba): R18b correccion broadside 1/√2 de Sutton-Graves (necesita re-baseline propio), R18c
+   `VesselRenderer.cs` con `noseRadius=1.0` por defecto, R15b fase J2000 de Jupiter/Saturno. Mas
+   limitaciones conocidas sin tocar: sin J2, sin fase sideral en epoch, sin correccion baricentrica,
+   Luna en conica fija, termosfera sin variabilidad solar, sin fallo estructural por presion
+   dinamica pura, EDL sin ley de guiado real.
+4. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5b.
+5. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)
 - Build 0/0 (sim + juego) + `dotnet test` verde; tests nuevos donde se toque física.
