@@ -109,10 +109,13 @@ public partial class VesselRenderer : Node3D
                 || p.Definition.HasVehicleRole("command")));
         bool hasFalcon9 = vessel.Parts.Parts.Any(p => string.Equals(
             p.Definition.VehicleFamily, "falcon9", StringComparison.OrdinalIgnoreCase));
+        bool hasNewGlenn = vessel.Parts.Parts.Any(p => string.Equals(
+            p.Definition.VehicleFamily, "newglenn", StringComparison.OrdinalIgnoreCase));
         if      (hasSH && hasStarship) BuildFullStack(vessel);
         else if (hasSH)                BuildSuperHeavyOnly(vessel);
         else if (hasStarship)          BuildStarshipSection(vessel, yOffset: -22f);
         else if (hasFalcon9)           BuildFalcon9Section(vessel);
+        else if (hasNewGlenn)          BuildNewGlennSection(vessel);
         else                           BuildGenericVessel(vessel);
     }
 
@@ -520,7 +523,7 @@ public partial class VesselRenderer : Node3D
     //
     // Reuses the same helper toolkit as Starship/Super Heavy — SteelMat/Mat,
     // AddWeldRing(s), AddHullRing, AddSurfaceBox, and the AddRaptor
-    // stacked-frusta bell technique (adapted below into AddMerlin) — instead
+    // stacked-frusta bell technique (adapted below into AddSimpleEngineBell) — instead
     // of falling through the flat-cylinder generic path. Falcon 9's first
     // stage is painted white/off-white bare aluminum with visible welds and
     // stringer rings, not Starship's raw brushed steel, so the hull uses a
@@ -682,6 +685,12 @@ public partial class VesselRenderer : Node3D
         // invented layout.
         var catalog = GetEngineCatalog();
         if (catalog == null) return;
+        // Sea-level Merlin bells read as brushed steel/silver; the vacuum
+        // Merlin's larger niobium-alloy extension oxidizes to a duller,
+        // warmer bronze-brown.
+        var merlinSlMat  = Mat(new Color(0.55f, 0.55f, 0.57f), 0.85f, 0.32f);
+        var merlinVacMat = Mat(new Color(0.44f, 0.34f, 0.24f), 0.55f, 0.55f);
+        var merlinNubMat = Mat(new Color(0.30f, 0.31f, 0.29f), 0.82f, 0.42f);
         var plumeMounts = new List<PlumeSystem.EnginePlumeMount>();
         foreach (var enginePart in vessel.Parts.Parts.Where(p =>
                      p.HasEngineRuntime
@@ -716,9 +725,10 @@ public partial class VesselRenderer : Node3D
                 string id = enginePart.EngineStates[i].InstanceId;
                 plumeMounts.Add(new PlumeSystem.EnginePlumeMount(
                     id, position, exitRadius / MetresPerUnit, vacuum));
-                AddMerlin(
+                AddSimpleEngineBell(
                     $"Merlin_{id.Replace(':', '_')}", position,
-                    exitRadius, throatRadius, bellLen, vacuum);
+                    exitRadius, throatRadius, bellLen,
+                    vacuum ? merlinVacMat : merlinSlMat, merlinNubMat);
             }
         }
 
@@ -812,23 +822,18 @@ public partial class VesselRenderer : Node3D
         }
     }
 
-    // Merlin engine bell: a single regeneratively-cooled bell-to-throat
-    // taper (no separate throat plug/lattice like Raptor) plus a small
-    // gimbal-actuator/turbopump nub. Modeled on AddRaptor's structure with
-    // Merlin-appropriate proportions — one clean frustum instead of stacked
-    // rings, since a sea-level Merlin's bell contour is far less pronounced.
-    private StandardMaterial3D? _merlinSlMat, _merlinVacMat, _merlinNubMat;
-    private void AddMerlin(
-        string name, Vector3 pos, float exitR, float throatR, float bellLen, bool vacuum)
+    // Single-frustum engine bell: a clean bell-to-throat taper (no separate
+    // throat plug/lattice like Raptor) plus a small gimbal-actuator/turbopump
+    // nub. Modeled on AddRaptor's structure but simplified to one frustum
+    // instead of stacked rings, since neither a Merlin nor a BE-4/BE-3U bell
+    // has Raptor's pronounced contoured shape. Takes its bell/nub materials as
+    // parameters rather than hardcoding a Merlin-specific palette, so Falcon 9
+    // and New Glenn (different engines, different colors) can share the same
+    // geometry without one family's engines rendering in the other's finish.
+    private void AddSimpleEngineBell(
+        string name, Vector3 pos, float exitR, float throatR, float bellLen,
+        Material bellMat, Material nubMat)
     {
-        // Sea-level Merlin bells read as brushed steel/silver; the vacuum
-        // Merlin's larger niobium-alloy extension oxidizes to a duller,
-        // warmer bronze-brown.
-        _merlinSlMat  ??= Mat(new Color(0.55f, 0.55f, 0.57f), 0.85f, 0.32f);
-        _merlinVacMat ??= Mat(new Color(0.44f, 0.34f, 0.24f), 0.55f, 0.55f);
-        _merlinNubMat ??= Mat(new Color(0.30f, 0.31f, 0.29f), 0.82f, 0.42f);
-        var bellMat = vacuum ? _merlinVacMat : _merlinSlMat;
-
         float topR = throatR * 1.15f;
         AddMesh($"{name}Bell",
             new CylinderMesh
@@ -852,12 +857,289 @@ public partial class VesselRenderer : Node3D
                 TopRadius = throatR * 0.8f, BottomRadius = throatR,
                 Height = bellLen * 0.35f, RadialSegments = 20,
             },
-            _merlinNubMat, pos + Vector3.Up * (bellLen + bellLen * 0.16f));
+            nubMat, pos + Vector3.Up * (bellLen + bellLen * 0.16f));
 
         // Compact gimbal actuator / turbopump nub above the throat.
         AddMesh($"{name}Actuator",
             new SphereMesh { Radius = topR * 0.65f, Height = topR * 1.3f, RadialSegments = 12, Rings = 8 },
-            _merlinNubMat, pos + Vector3.Up * (bellLen + bellLen * 0.42f));
+            nubMat, pos + Vector3.Up * (bellLen + bellLen * 0.42f));
+    }
+
+    // ── New Glenn dedicated visual path ────────────────────────────────────
+    //
+    // Same toolkit and same seam-avoidance discipline as BuildFalcon9Section —
+    // continuous per-part barrels, panel-line rings instead of Starship's
+    // brushed-steel weld bands (New Glenn's airframe is composite, not exposed
+    // metal), a flared dark boattail around the 7-engine BE-4 cluster, and
+    // fixed reentry strakes instead of Falcon 9's grid fins (New Glenn does
+    // not use a grid-fin descent system). 7 m diameter throughout — unlike
+    // Falcon 9, the fairing does not step out from the booster diameter, so
+    // no diameter transition geometry is needed at that joint.
+    //
+    // Mismo set de herramientas y misma disciplina anti-costura que
+    // BuildFalcon9Section. El fuselaje de New Glenn es compuesto (paneles,
+    // no soldaduras de metal expuesto) y usa strakes fijos en vez de rejillas.
+    private void BuildNewGlennSection(Vessel vessel)
+    {
+        var positions = vessel.Parts.ComputePartLocalPositions();
+        double minimumY = positions.Count == 0
+            ? 0.0
+            : positions.Min(pair => pair.Value.Y - pair.Key.Definition.LengthM * 0.5);
+        double datumShiftY = -minimumY;
+        float ToU(double m) => (float)(m / MetresPerUnit);
+        float YOf(Vector3d local) => ToU(local.Y + datumShiftY);
+
+        var hullWhite       = Mat(new Color(0.87f, 0.89f, 0.92f), 0.22f, 0.40f);
+        var darkTrim        = Mat(new Color(0.38f, 0.39f, 0.42f), 0.80f, 0.42f);
+        var interstageBlack = Mat(new Color(0.04f, 0.04f, 0.045f), 0.24f, 0.52f);
+        var fairingWhite    = Mat(new Color(0.95f, 0.95f, 0.95f), 0.05f, 0.26f);
+        var sootMat         = Mat(new Color(0.10f, 0.095f, 0.09f), 0.30f, 0.68f);
+        var boattailMat     = Mat(new Color(0.14f, 0.14f, 0.16f), 0.55f, 0.55f);
+
+        MeshInstance3D? firstStageMesh = null;
+
+        foreach (var (part, localPos) in positions)
+        {
+            var definition = part.Definition;
+            float y = YOf(localPos);
+            float halfH = ToU(definition.LengthM * 0.5);
+            float radius = ToU(definition.DiameterM * 0.5);
+
+            switch (definition.Id)
+            {
+                case "newglenn_first_stage_tank":
+                {
+                    firstStageMesh = AddMesh("NGFirstStage",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 56,
+                            // Top butts the interstage at the same radius —
+                            // suppress this cap (same coincident-cap fix as
+                            // Falcon 9's first stage).
+                            CapTop = false,
+                        },
+                        hullWhite, new Vector3(0, y, 0));
+                    // Composite panel-line rings (not weld seams — New Glenn's
+                    // airframe is carbon composite, not machined metal).
+                    AddWeldRings("NGPanelLine", radius + 0.012f,
+                        y - halfH + 1.6f, y + halfH - 1.8f, 7);
+                    AddSurfaceBox("NGRaceway", angle: 0f, y: y,
+                        height: halfH * 1.82f, width: 0.10f, depth: 0.16f,
+                        mat: darkTrim, radius: radius + 0.012f);
+                    AddNGStrakes(y + halfH * 0.30f, radius);
+                    break;
+                }
+                case "newglenn_interstage":
+                {
+                    AddMesh("NGInterstage",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius * 0.90f, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 48,
+                            CapTop = false,
+                        },
+                        interstageBlack, new Vector3(0, y, 0));
+                    break;
+                }
+                case "newglenn_second_stage_tank":
+                {
+                    AddMesh("NGSecondStage",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 48,
+                        },
+                        hullWhite, new Vector3(0, y, 0));
+                    AddWeldRings("NGUpperPanelLine", radius + 0.012f,
+                        y - halfH + 0.8f, y + halfH - 0.8f, 3);
+                    break;
+                }
+                case "be4_cluster7_newglenn_2026":
+                {
+                    // Flared boattail around the 7-engine BE-4 cluster — New
+                    // Glenn's aft section widens slightly toward the engines,
+                    // unlike Falcon 9's flat octaweb disc.
+                    AddMesh("NGBoattail",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius * 1.08f,
+                            Height = halfH * 2f, RadialSegments = 48,
+                            CapTop = false,
+                        },
+                        boattailMat, new Vector3(0, y, 0));
+                    AddHullRing("NGBoattailSoot", radius * 1.085f,
+                        y - halfH * 0.5f, halfH * 0.85f, sootMat);
+                    break;
+                }
+                case "newglenn_fairing_7m":
+                {
+                    BuildNewGlennFairing(y, halfH * 2f, radius, fairingWhite, darkTrim);
+                    break;
+                }
+                case "be3u_cluster2_newglenn_2026":
+                {
+                    AddMesh("NGSecondStageMount",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius * 0.92f,
+                            Height = halfH * 2f, RadialSegments = 40,
+                            CapTop = false,
+                        },
+                        boattailMat, new Vector3(0, y, 0));
+                    break;
+                }
+                default:
+                {
+                    // Payload simulator and anything unanticipated.
+                    AddMesh($"NG_{definition.Id}",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 32,
+                        },
+                        darkTrim, new Vector3(0, y, 0));
+                    break;
+                }
+            }
+        }
+
+        _hullMesh = firstStageMesh;
+        Node3D fallbackNode = (Node3D?)_hullMesh ?? this;
+        foreach (var part in vessel.Parts.Parts)
+            _partNodes[part.InstanceId] = fallbackNode;
+
+        // BE-4/BE-3U bells, positioned from the real engine-cluster JSON
+        // mount data (1 centre + 6 ring BE-4s, 2 BE-3Us) — not an invented
+        // layout.
+        var catalog = GetEngineCatalog();
+        if (catalog == null) return;
+        // BE-4 (methalox, sea level) regen-cooled bells read as coppery
+        // bronze in flight footage; BE-3U's much larger hydrolox vacuum
+        // extension is a dull, unpolished silver-grey.
+        var be4Mat  = Mat(new Color(0.52f, 0.34f, 0.22f), 0.60f, 0.42f);
+        var be3uMat = Mat(new Color(0.72f, 0.73f, 0.75f), 0.50f, 0.55f);
+        var beNubMat = Mat(new Color(0.28f, 0.29f, 0.30f), 0.80f, 0.44f);
+        var plumeMounts = new List<PlumeSystem.EnginePlumeMount>();
+        foreach (var enginePart in vessel.Parts.Parts.Where(p =>
+                     p.HasEngineRuntime
+                     && !string.IsNullOrWhiteSpace(p.Definition.EngineClusterId)))
+        {
+            if (!positions.TryGetValue(enginePart, out var partPosition)
+                || !catalog.Clusters.TryGetValue(
+                    enginePart.Definition.EngineClusterId, out var cluster))
+                continue;
+
+            bool vacuum = enginePart.Definition.Id == "be3u_cluster2_newglenn_2026";
+            float exitRadius = enginePart.Definition.EngineCount > 1
+                ? (float)System.Math.Clamp(
+                    enginePart.Definition.DiameterM
+                    / (2.0 * System.Math.Sqrt(enginePart.Definition.EngineCount)),
+                    0.28, 0.85)
+                : (float)System.Math.Clamp(
+                    enginePart.Definition.DiameterM * 0.32, 0.35, 0.95);
+            // BE-3U is hydrolox with a large expansion-ratio vacuum bell —
+            // proportionally longer/wider than the BE-4's methalox sea-level bell.
+            float throatRadius = vacuum ? exitRadius * 0.14f : exitRadius * 0.32f;
+            float bellLen = vacuum ? exitRadius * 3.1f : exitRadius * 1.30f;
+            float exitY = YOf(partPosition) - ToU(enginePart.Definition.LengthM * 0.5);
+
+            int count = System.Math.Min(
+                enginePart.EngineStates.Count, cluster.Engines.Count);
+            for (int i = 0; i < count; i++)
+            {
+                var local = cluster.Engines[i].Position;
+                var position = new Vector3(
+                    ToU(partPosition.X + local.X),
+                    exitY + ToU(local.Y),
+                    ToU(partPosition.Z + local.Z));
+                string id = enginePart.EngineStates[i].InstanceId;
+                plumeMounts.Add(new PlumeSystem.EnginePlumeMount(
+                    id, position, exitRadius / MetresPerUnit, vacuum));
+                AddSimpleEngineBell(
+                    $"BE_{id.Replace(':', '_')}", position,
+                    exitRadius, throatRadius, bellLen,
+                    vacuum ? be3uMat : be4Mat, beNubMat);
+            }
+        }
+
+        if (plumeMounts.Count > 0)
+        {
+            _plumes = new PlumeSystem { Name = "EnginePlumes" };
+            AddChild(_plumes);
+            _plumes.SetupGenericCluster(plumeMounts);
+        }
+    }
+
+    // Same tangent-ogive nose construction as BuildFalcon9Fairing, but no
+    // barrel-diameter step from the booster (New Glenn is 7 m throughout),
+    // so the ogive rises directly off the same radius as the second stage.
+    private void BuildNewGlennFairing(
+        float centerY, float totalHeight, float radius,
+        Material hullMat, Material seamMat)
+    {
+        float bottom = centerY - totalHeight * 0.5f;
+        float barrelH = totalHeight * 0.38f;
+        float noseH   = totalHeight - barrelH;
+        float barrelTop = bottom + barrelH;
+
+        AddMesh("NGFairingBarrel",
+            new CylinderMesh
+            {
+                TopRadius = radius, BottomRadius = radius,
+                Height = barrelH, RadialSegments = 48,
+                CapBottom = false,
+            },
+            hullMat, new Vector3(0, bottom + barrelH * 0.5f, 0));
+
+        const int noseSeg = 14;
+        float NoseR(float u) =>
+            (float)VehicleVisualPhysics.TangentOgiveRadius(u, radius, noseH);
+        for (int i = 0; i < noseSeg; i++)
+        {
+            float u0 = (float)i / noseSeg;
+            float u1 = (float)(i + 1) / noseSeg;
+            float rBot = NoseR(u0);
+            float rTop = NoseR(u1);
+            float segH = noseH / noseSeg;
+            float yMid = barrelTop + (u0 + u1) * 0.5f * noseH;
+            AddMesh($"NGFairingNose{i}",
+                new CylinderMesh
+                {
+                    TopRadius = rTop, BottomRadius = rBot,
+                    Height = segH * 1.05f, RadialSegments = 48,
+                    CapTop = i == noseSeg - 1, CapBottom = false,
+                },
+                hullMat, new Vector3(0, yMid, 0));
+        }
+
+        AddHullRing("NGFairingRing", radius + 0.01f, barrelTop, 0.05f, seamMat);
+        foreach (float angle in new[] { 0f, Mathf.Pi })
+            AddSurfaceBox($"NGFairingSeam{(int)Mathf.RadToDeg(angle)}", angle, centerY,
+                totalHeight * 0.98f, 0.02f, 0.08f, seamMat, radius + 0.012f);
+    }
+
+    // Fixed reentry strakes near the top of the first stage — flat vertical
+    // blades, NOT a grid-fin lattice like Falcon 9/Starship (New Glenn's
+    // published descent-control system is strake-based, not grid fins).
+    private void AddNGStrakes(float y, float bodyRadius)
+    {
+        var strakeMat = Mat(new Color(0.30f, 0.30f, 0.33f), 0.60f, 0.50f);
+        for (int i = 0; i < 4; i++)
+        {
+            float a = i * Mathf.Pi * 0.5f;
+            float cos = Mathf.Cos(a);
+            float sin = Mathf.Sin(a);
+            var strake = new MeshInstance3D
+            {
+                Name = $"NGStrake{i}",
+                Mesh = new BoxMesh { Size = new Vector3(0.05f, 1.6f, 0.55f) },
+                Position = new Vector3((bodyRadius + 0.03f) * cos, y, (bodyRadius + 0.03f) * sin),
+                RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a), 0f),
+            };
+            strake.SetSurfaceOverrideMaterial(0, strakeMat);
+            AddChild(strake);
+        }
     }
 
     // ── Per-frame visual updates ──────────────────────────────────────────
