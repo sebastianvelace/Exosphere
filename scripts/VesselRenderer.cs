@@ -107,9 +107,12 @@ public partial class VesselRenderer : Node3D
             p.Definition.IsStarshipFamily
             && (p.Definition.HasVehicleRole("ship_engines")
                 || p.Definition.HasVehicleRole("command")));
+        bool hasFalcon9 = vessel.Parts.Parts.Any(p => string.Equals(
+            p.Definition.VehicleFamily, "falcon9", StringComparison.OrdinalIgnoreCase));
         if      (hasSH && hasStarship) BuildFullStack(vessel);
         else if (hasSH)                BuildSuperHeavyOnly(vessel);
         else if (hasStarship)          BuildStarshipSection(vessel, yOffset: -22f);
+        else if (hasFalcon9)           BuildFalcon9Section(vessel);
         else                           BuildGenericVessel(vessel);
     }
 
@@ -513,6 +516,350 @@ public partial class VesselRenderer : Node3D
         }
     }
 
+    // ── Falcon 9 Block 5 dedicated visual path ────────────────────────────
+    //
+    // Reuses the same helper toolkit as Starship/Super Heavy — SteelMat/Mat,
+    // AddWeldRing(s), AddHullRing, AddSurfaceBox, and the AddRaptor
+    // stacked-frusta bell technique (adapted below into AddMerlin) — instead
+    // of falling through the flat-cylinder generic path. Falcon 9's first
+    // stage is painted white/off-white bare aluminum with visible welds and
+    // stringer rings, not Starship's raw brushed steel, so the hull uses a
+    // plain Mat() white material with weld-ring/raceway accents rather than
+    // SteelMat's brushed-anisotropy shader (that shader's look is tuned for
+    // exposed stainless, which would read wrong for a painted booster).
+    //
+    // Reutiliza el mismo set de helpers de Starship/Super Heavy en vez de
+    // caer al camino genérico de cilindros planos. La primera etapa de
+    // Falcon 9 es aluminio pintado blanco, no acero crudo como Starship, así
+    // que usamos Mat() blanco liso en vez del shader de acero.
+    private void BuildFalcon9Section(Vessel vessel)
+    {
+        var positions = vessel.Parts.ComputePartLocalPositions();
+        double minimumY = positions.Count == 0
+            ? 0.0
+            : positions.Min(pair => pair.Value.Y - pair.Key.Definition.LengthM * 0.5);
+        double datumShiftY = -minimumY;
+        float ToU(double m) => (float)(m / MetresPerUnit);
+        float YOf(Vector3d local) => ToU(local.Y + datumShiftY);
+
+        var hullWhite       = Mat(new Color(0.90f, 0.90f, 0.87f), 0.20f, 0.42f);
+        var darkTrim        = Mat(new Color(0.40f, 0.40f, 0.43f), 0.85f, 0.40f);
+        var interstageBlack = Mat(new Color(0.035f, 0.035f, 0.04f), 0.22f, 0.55f);
+        var fairingWhite    = Mat(new Color(0.94f, 0.94f, 0.93f), 0.05f, 0.28f);
+        var sootMat         = Mat(new Color(0.11f, 0.10f, 0.095f), 0.32f, 0.70f);
+        var octawebMat      = Mat(new Color(0.24f, 0.24f, 0.26f), 0.80f, 0.46f);
+
+        MeshInstance3D? firstStageMesh = null;
+
+        foreach (var (part, localPos) in positions)
+        {
+            var definition = part.Definition;
+            float y = YOf(localPos);
+            float halfH = ToU(definition.LengthM * 0.5);
+            float radius = ToU(definition.DiameterM * 0.5);
+
+            switch (definition.Id)
+            {
+                case "falcon9_first_stage_tank":
+                {
+                    firstStageMesh = AddMesh("F9FirstStage",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 56,
+                            // Top butts against the interstage below the same
+                            // radius — suppress this cap so the two coincident
+                            // discs don't z-fight into a bright seam line.
+                            CapTop = false,
+                        },
+                        hullWhite, new Vector3(0, y, 0));
+                    // Visible stringer/ring frames along the barrel.
+                    AddWeldRings("F9Stringer", radius + 0.012f,
+                        y - halfH + 1.2f, y + halfH - 1.4f, 9);
+                    // The single iconic vertical raceway duct.
+                    AddSurfaceBox("F9Raceway", angle: 0f, y: y,
+                        height: halfH * 1.86f, width: 0.085f, depth: 0.15f,
+                        mat: darkTrim, radius: radius + 0.012f);
+                    // Static scorch/soot gradient near the octaweb base — a
+                    // short darker band blended with the white paint rather
+                    // than Starship's live thermal charring.
+                    AddHullRing("F9SootBand", radius + 0.006f,
+                        y - halfH + 0.55f, 1.05f, sootMat);
+                    break;
+                }
+                case "falcon9_interstage":
+                {
+                    // Real interstage is a black composite shroud, subtly
+                    // tapered rather than a flat cylinder.
+                    AddMesh("F9Interstage",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius * 0.86f, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 48,
+                            // Same seam fix: top meets the second stage's
+                            // bottom cap, bottom meets the first stage's
+                            // (already-suppressed) top — only one side of
+                            // each junction may keep a cap.
+                            CapTop = false,
+                        },
+                        interstageBlack, new Vector3(0, y, 0));
+                    AddF9GridFins(y - halfH * 0.35f, radius);
+                    break;
+                }
+                case "falcon9_second_stage_tank":
+                {
+                    AddMesh("F9SecondStage",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 48,
+                        },
+                        hullWhite, new Vector3(0, y, 0));
+                    AddWeldRings("F9UpperStringer", radius + 0.012f,
+                        y - halfH + 0.6f, y + halfH - 0.6f, 3);
+                    break;
+                }
+                case "merlin1d_cluster9_block5":
+                {
+                    // Octaweb thrust structure: a dark, wide disc the nine
+                    // Merlins mount to, scorched at its rim.
+                    AddMesh("F9Octaweb",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius * 1.03f,
+                            Height = halfH * 2f, RadialSegments = 48,
+                            CapTop = false,
+                        },
+                        octawebMat, new Vector3(0, y, 0));
+                    AddHullRing("F9OctawebSoot", radius * 1.035f,
+                        y - halfH * 0.55f, halfH * 0.9f, sootMat);
+                    break;
+                }
+                case "falcon9_fairing_standard":
+                case "falcon9_fairing_extended":
+                {
+                    BuildFalcon9Fairing(y, halfH * 2f, radius, fairingWhite, darkTrim);
+                    break;
+                }
+                case "merlin1d_vac_block5":
+                {
+                    // Simple mount plate; the vacuum bell itself is added
+                    // below alongside the octaweb engines, from cluster data.
+                    AddMesh("F9SecondStageMount",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius * 0.9f,
+                            Height = halfH * 2f, RadialSegments = 40,
+                            CapTop = false,
+                        },
+                        octawebMat, new Vector3(0, y, 0));
+                    break;
+                }
+                default:
+                {
+                    // Payload simulator and anything unanticipated: keep a
+                    // plain neutral cylinder rather than inventing new detail.
+                    AddMesh($"F9_{definition.Id}",
+                        new CylinderMesh
+                        {
+                            TopRadius = radius, BottomRadius = radius,
+                            Height = halfH * 2f, RadialSegments = 32,
+                        },
+                        darkTrim, new Vector3(0, y, 0));
+                    break;
+                }
+            }
+        }
+
+        _hullMesh = firstStageMesh;
+        Node3D fallbackNode = (Node3D?)_hullMesh ?? this;
+        foreach (var part in vessel.Parts.Parts)
+            _partNodes[part.InstanceId] = fallbackNode;
+
+        // Merlin engine bells, positioned from the same engine-cluster JSON
+        // data the physics/torque model already uses (real octaweb layout —
+        // 1 centre + 8 outer — and the single second-stage MVac), not an
+        // invented layout.
+        var catalog = GetEngineCatalog();
+        if (catalog == null) return;
+        var plumeMounts = new List<PlumeSystem.EnginePlumeMount>();
+        foreach (var enginePart in vessel.Parts.Parts.Where(p =>
+                     p.HasEngineRuntime
+                     && !string.IsNullOrWhiteSpace(p.Definition.EngineClusterId)))
+        {
+            if (!positions.TryGetValue(enginePart, out var partPosition)
+                || !catalog.Clusters.TryGetValue(
+                    enginePart.Definition.EngineClusterId, out var cluster))
+                continue;
+
+            bool vacuum = enginePart.Definition.Id == "merlin1d_vac_block5";
+            float exitRadius = enginePart.Definition.EngineCount > 1
+                ? (float)System.Math.Clamp(
+                    enginePart.Definition.DiameterM
+                    / (2.0 * System.Math.Sqrt(enginePart.Definition.EngineCount)),
+                    0.22, 0.62)
+                : (float)System.Math.Clamp(
+                    enginePart.Definition.DiameterM * 0.32, 0.35, 0.95);
+            float throatRadius = vacuum ? exitRadius * 0.12f : exitRadius * 0.30f;
+            float bellLen = vacuum ? exitRadius * 2.7f : exitRadius * 1.35f;
+            float exitY = YOf(partPosition) - ToU(enginePart.Definition.LengthM * 0.5);
+
+            int count = System.Math.Min(
+                enginePart.EngineStates.Count, cluster.Engines.Count);
+            for (int i = 0; i < count; i++)
+            {
+                var local = cluster.Engines[i].Position;
+                var position = new Vector3(
+                    ToU(partPosition.X + local.X),
+                    exitY + ToU(local.Y),
+                    ToU(partPosition.Z + local.Z));
+                string id = enginePart.EngineStates[i].InstanceId;
+                plumeMounts.Add(new PlumeSystem.EnginePlumeMount(
+                    id, position, exitRadius / MetresPerUnit, vacuum));
+                AddMerlin(
+                    $"Merlin_{id.Replace(':', '_')}", position,
+                    exitRadius, throatRadius, bellLen, vacuum);
+            }
+        }
+
+        if (plumeMounts.Count > 0)
+        {
+            _plumes = new PlumeSystem { Name = "EnginePlumes" };
+            AddChild(_plumes);
+            _plumes.SetupGenericCluster(plumeMounts);
+        }
+    }
+
+    // A proper tangent-ogive nose over a cylindrical barrel (not a rounded
+    // CapsuleMesh) with a visible longitudinal separation line for the
+    // two-piece clamshell fairing.
+    private void BuildFalcon9Fairing(
+        float centerY, float totalHeight, float radius,
+        Material hullMat, Material seamMat)
+    {
+        float bottom = centerY - totalHeight * 0.5f;
+        float barrelH = totalHeight * 0.42f;
+        float noseH   = totalHeight - barrelH;
+        float barrelTop = bottom + barrelH;
+
+        AddMesh("F9FairingBarrel",
+            new CylinderMesh
+            {
+                TopRadius = radius, BottomRadius = radius,
+                Height = barrelH, RadialSegments = 48,
+                CapBottom = false,
+            },
+            hullMat, new Vector3(0, bottom + barrelH * 0.5f, 0));
+
+        const int noseSeg = 14;
+        float NoseR(float u) =>
+            (float)VehicleVisualPhysics.TangentOgiveRadius(u, radius, noseH);
+        for (int i = 0; i < noseSeg; i++)
+        {
+            float u0 = (float)i / noseSeg;
+            float u1 = (float)(i + 1) / noseSeg;
+            float rBot = NoseR(u0);
+            float rTop = NoseR(u1);
+            float segH = noseH / noseSeg;
+            float yMid = barrelTop + (u0 + u1) * 0.5f * noseH;
+            AddMesh($"F9FairingNose{i}",
+                new CylinderMesh
+                {
+                    TopRadius = rTop, BottomRadius = rBot,
+                    Height = segH * 1.05f, RadialSegments = 48,
+                    CapTop = i == noseSeg - 1, CapBottom = false,
+                },
+                hullMat, new Vector3(0, yMid, 0));
+        }
+
+        // Circumferential seam at the barrel/ogive transition.
+        AddHullRing("F9FairingRing", radius + 0.01f, barrelTop, 0.05f, seamMat);
+        // Two longitudinal separation lines (the real clamshell split plane).
+        foreach (float angle in new[] { 0f, Mathf.Pi })
+            AddSurfaceBox($"F9FairingSeam{(int)Mathf.RadToDeg(angle)}", angle, centerY,
+                totalHeight * 0.98f, 0.02f, 0.08f, seamMat, radius + 0.012f);
+    }
+
+    // Four fixed grid fins near the top of the first stage — smaller and a
+    // simpler solid/perforated titanium grid than Starship's larger hinged
+    // fins, adapted from the same BuildGridFinPlateMesh geometry.
+    private void AddF9GridFins(float y, float bodyRadius)
+    {
+        var finMat = Mat(new Color(0.52f, 0.52f, 0.54f), 0.55f, 0.55f);
+        var mountMat = Mat(new Color(0.30f, 0.30f, 0.32f), 0.80f, 0.45f);
+        for (int i = 0; i < 4; i++)
+        {
+            float a = i * Mathf.Pi * 0.5f + Mathf.Pi * 0.25f;
+            float cos = Mathf.Cos(a);
+            float sin = Mathf.Sin(a);
+            float deg = -Mathf.RadToDeg(a);
+
+            AddMesh($"F9GridMount{i}",
+                new BoxMesh { Size = new Vector3(0.22f, 0.45f, 0.30f) },
+                mountMat, new Vector3((bodyRadius + 0.01f) * cos, y, (bodyRadius + 0.01f) * sin));
+
+            var fin = new MeshInstance3D
+            {
+                Name = $"F9GridFin{i}",
+                Mesh = BuildGridFinPlateMesh(
+                    rootChord: 0.62f, tipChord: 0.48f, height: 0.68f, thickness: 0.06f),
+                Position = new Vector3(
+                    (bodyRadius + 0.30f) * cos, y + 0.05f, (bodyRadius + 0.30f) * sin),
+                RotationDegrees = new Vector3(0f, deg, 0f),
+            };
+            fin.SetSurfaceOverrideMaterial(0, finMat);
+            AddChild(fin);
+        }
+    }
+
+    // Merlin engine bell: a single regeneratively-cooled bell-to-throat
+    // taper (no separate throat plug/lattice like Raptor) plus a small
+    // gimbal-actuator/turbopump nub. Modeled on AddRaptor's structure with
+    // Merlin-appropriate proportions — one clean frustum instead of stacked
+    // rings, since a sea-level Merlin's bell contour is far less pronounced.
+    private StandardMaterial3D? _merlinSlMat, _merlinVacMat, _merlinNubMat;
+    private void AddMerlin(
+        string name, Vector3 pos, float exitR, float throatR, float bellLen, bool vacuum)
+    {
+        // Sea-level Merlin bells read as brushed steel/silver; the vacuum
+        // Merlin's larger niobium-alloy extension oxidizes to a duller,
+        // warmer bronze-brown.
+        _merlinSlMat  ??= Mat(new Color(0.55f, 0.55f, 0.57f), 0.85f, 0.32f);
+        _merlinVacMat ??= Mat(new Color(0.44f, 0.34f, 0.24f), 0.55f, 0.55f);
+        _merlinNubMat ??= Mat(new Color(0.30f, 0.31f, 0.29f), 0.82f, 0.42f);
+        var bellMat = vacuum ? _merlinVacMat : _merlinSlMat;
+
+        float topR = throatR * 1.15f;
+        AddMesh($"{name}Bell",
+            new CylinderMesh
+            {
+                TopRadius = topR, BottomRadius = exitR, Height = bellLen,
+                RadialSegments = 32, CapTop = false, CapBottom = false,
+            },
+            bellMat, pos + Vector3.Up * (bellLen * 0.5f));
+
+        AddMesh($"{name}ExitLip",
+            new CylinderMesh
+            {
+                TopRadius = exitR * 1.02f, BottomRadius = exitR * 1.02f,
+                Height = 0.04f, RadialSegments = 32, CapTop = false, CapBottom = false,
+            },
+            bellMat, pos + Vector3.Up * 0.02f);
+
+        AddMesh($"{name}Throat",
+            new CylinderMesh
+            {
+                TopRadius = throatR * 0.8f, BottomRadius = throatR,
+                Height = bellLen * 0.35f, RadialSegments = 20,
+            },
+            _merlinNubMat, pos + Vector3.Up * (bellLen + bellLen * 0.16f));
+
+        // Compact gimbal actuator / turbopump nub above the throat.
+        AddMesh($"{name}Actuator",
+            new SphereMesh { Radius = topR * 0.65f, Height = topR * 1.3f, RadialSegments = 12, Rings = 8 },
+            _merlinNubMat, pos + Vector3.Up * (bellLen + bellLen * 0.42f));
+    }
+
     // ── Per-frame visual updates ──────────────────────────────────────────
 
     public override void _Process(double delta)
@@ -783,7 +1130,8 @@ public partial class VesselRenderer : Node3D
         double datumShiftY = -minimumY;
         foreach (var (part, localPos) in positions)
         {
-            var node = CreateGenericPartNode(part);
+            var (hasAbove, hasBelow) = GetStackNeighborCaps(vessel, part, positions);
+            var node = CreateGenericPartNode(part, hasAbove, hasBelow);
             node.Position = new Vector3(
                 (float)(localPos.X / MetresPerUnit),
                 (float)((localPos.Y + datumShiftY) / MetresPerUnit),
@@ -840,6 +1188,37 @@ public partial class VesselRenderer : Node3D
         }
     }
 
+    // Coincident-cap seam fix: a part butting against a same-radius neighbour
+    // (parent or child, connected through the same stack-node joint system used
+    // to position every node) must not draw a flat end-cap disc on that face —
+    // two independent opposite-facing caps sharing the exact same world-space
+    // plane z-fight and read as a bright angle-dependent seam line. Only a face
+    // with no neighbour (a genuinely exposed end: the stack's very top or the
+    // engine end at the very bottom) keeps its cap.
+    // Fix del seam de tapas coincidentes: si una pieza empalma con un vecino del
+    // mismo radio no dibujamos la tapa de esa cara (si no, dos discos opuestos
+    // en el mismo plano generan z-fighting = línea blanca según el ángulo).
+    private static (bool hasAbove, bool hasBelow) GetStackNeighborCaps(
+        Vessel vessel, Part part, Dictionary<Part, Vector3d> positions)
+    {
+        bool hasAbove = false, hasBelow = false;
+        if (!positions.TryGetValue(part, out var partPos)) return (false, false);
+
+        var parentJoint = vessel.Parts.Joints.FirstOrDefault(j => j.Child == part);
+        if (parentJoint != null && positions.TryGetValue(parentJoint.Parent, out var parentPos))
+        {
+            if (parentPos.Y > partPos.Y) hasAbove = true;
+            else if (parentPos.Y < partPos.Y) hasBelow = true;
+        }
+        foreach (var child in vessel.Parts.GetChildren(part))
+        {
+            if (!positions.TryGetValue(child, out var childPos)) continue;
+            if (childPos.Y > partPos.Y) hasAbove = true;
+            else if (childPos.Y < partPos.Y) hasBelow = true;
+        }
+        return (hasAbove, hasBelow);
+    }
+
     private void AddGenericEngineBell(
         string instanceId,
         Vector3 exitPosition,
@@ -884,7 +1263,8 @@ public partial class VesselRenderer : Node3D
         return _engineCatalog;
     }
 
-    private Node3D CreateGenericPartNode(Part part)
+    private Node3D CreateGenericPartNode(
+        Part part, bool hasNeighborAbove = false, bool hasNeighborBelow = false)
     {
         var definition = part.Definition;
         if (definition.VehicleFamily.Equals(
@@ -924,7 +1304,7 @@ public partial class VesselRenderer : Node3D
             return CreateAgenaNode(definition);
         if (definition.VehicleFamily.Equals(
                 "apollo", StringComparison.OrdinalIgnoreCase))
-            return CreateApolloPartNode(part);
+            return CreateApolloPartNode(part, hasNeighborAbove, hasNeighborBelow);
         var node = new MeshInstance3D { Name = definition.Name.Replace(" ", "_") };
         float diameter = (float)System.Math.Max(
             0.2 / MetresPerUnit, definition.DiameterM / MetresPerUnit);
@@ -939,6 +1319,8 @@ public partial class VesselRenderer : Node3D
                 BottomRadius = radius,
                 Height = length,
                 RadialSegments = 32,
+                CapTop = !hasNeighborAbove,
+                CapBottom = !hasNeighborBelow,
             },
             PartCategory.Fairing => new CapsuleMesh
             {
@@ -960,6 +1342,8 @@ public partial class VesselRenderer : Node3D
                 BottomRadius = radius,
                 Height = length,
                 RadialSegments = 32,
+                CapTop = !hasNeighborAbove,
+                CapBottom = !hasNeighborBelow,
             },
         };
         node.Mesh = mesh;
@@ -968,7 +1352,8 @@ public partial class VesselRenderer : Node3D
         return node;
     }
 
-    private Node3D CreateApolloPartNode(Part part)
+    private Node3D CreateApolloPartNode(
+        Part part, bool hasNeighborAbove = false, bool hasNeighborBelow = false)
     {
         var definition = part.Definition;
         float height = (float)System.Math.Max(
@@ -1102,6 +1487,8 @@ public partial class VesselRenderer : Node3D
                 BottomRadius = radius,
                 Height = height,
                 RadialSegments = 56,
+                CapTop = !hasNeighborAbove,
+                CapBottom = !hasNeighborBelow,
             },
         };
         barrel.SetSurfaceOverrideMaterial(
