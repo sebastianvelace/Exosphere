@@ -112,7 +112,8 @@ public partial class SystemsController : Node
 
     private static SystemsMissionPhase MapMissionPhase(MissionPhase phase) => phase switch
     {
-        MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN or MissionPhase.LANDED => SystemsMissionPhase.Idle,
+        MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN
+            or MissionPhase.LANDED or MissionPhase.CAUGHT => SystemsMissionPhase.Idle,
         _ => SystemsMissionPhase.Active,
     };
 }

@@ -107,7 +107,6 @@ public partial class CampaignRuntime : Node
                 vessel.Crew.Any(crew =>
                     string.Equals(crew.Id, id, StringComparison.Ordinal)
                     && crew.Status != CrewStatus.Dead));
-        bool landed = phase == MissionPhase.LANDED;
         bool hasLandingGear = vessel.Parts.Parts.Any(
             part => part.Definition.Category
                 == Exosphere.Simulation.Parts.PartCategory.Landing);
@@ -136,10 +135,12 @@ public partial class CampaignRuntime : Node
                 * MathUtils.RAD_TO_DEG,
             CrewAlive = expectedCrewPresent,
             VesselDestroyed = vessel.IsDestroyed,
-            Splashdown = landed && body.Id == "earth" && !hasLandingGear,
+            // A tower catch is never a splashdown even on a gearless V3 ship — that check
+            // exists to flag an unintentional water landing, not a deliberate tower catch.
+            Splashdown = phase == MissionPhase.LANDED && body.Id == "earth" && !hasLandingGear,
         });
 
-        if (phase is MissionPhase.LANDED or MissionPhase.CRASHED)
+        if (phase is MissionPhase.LANDED or MissionPhase.CAUGHT or MissionPhase.CRASHED)
             FinalizeMission();
     }
 

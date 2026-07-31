@@ -30,6 +30,7 @@ public enum MissionPhase
     RETRO_BURN,
     FINAL_DESCENT,
     LANDED,
+    CAUGHT,   // tower catch — distinct terminal state from a leg touchdown
     CRASHED,  // hard impact — vehicle lost
 }
 
@@ -114,7 +115,8 @@ public partial class MissionManager : Node
     /// True once an interplanetary/descent profile has begun — pauses ascent logic.
     public bool InDescent => Phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
         or MissionPhase.AERO_DESCENT or MissionPhase.RETRO_BURN
-        or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED or MissionPhase.CRASHED;
+        or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED or MissionPhase.CAUGHT
+        or MissionPhase.CRASHED;
 
     // ── Process ───────────────────────────────────────────────────────────
 
@@ -266,6 +268,7 @@ public partial class MissionManager : Node
             case MissionPhase.RETRO_BURN:  AudioManager.Instance?.PlayRetroBurn(); break;
             case MissionPhase.ENTRY:       AudioManager.Instance?.PlayEntryInterface(); break;
             case MissionPhase.LANDED:      AudioManager.Instance?.PlayTouchdown(); break;
+            case MissionPhase.CAUGHT:      AudioManager.Instance?.PlayTouchdown(); break;
         }
 
         EmitSignal(SignalName.PhaseChanged, newPhase.ToString());

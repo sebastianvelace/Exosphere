@@ -996,7 +996,7 @@ public partial class HUDController : Control
 
         if (phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
             or MissionPhase.AERO_DESCENT or MissionPhase.FINAL_DESCENT
-            or MissionPhase.LANDED)
+            or MissionPhase.LANDED or MissionPhase.CAUGHT)
         {
             _pastEntryInterface = true;
         }
@@ -1162,6 +1162,7 @@ public partial class HUDController : Control
                 MissionPhase.RETRO_BURN  => "RETRO BURN",
                 MissionPhase.FINAL_DESCENT => "FINAL DESCENT",
                 MissionPhase.LANDED      => "TOUCHDOWN",
+                MissionPhase.CAUGHT      => "CAUGHT",
                 MissionPhase.CRASHED     => "VEHICLE LOST",
                 _ => null!,
             };
@@ -1300,7 +1301,7 @@ public partial class HUDController : Control
     {
         MissionPhase.COUNTDOWN or MissionPhase.IGNITION => WarnCol,
         MissionPhase.MAX_Q or MissionPhase.PEAK_HEATING or MissionPhase.CRASHED => FuelLowCol,
-        MissionPhase.LANDED => InterfaceTheme.Success,
+        MissionPhase.LANDED or MissionPhase.CAUGHT => InterfaceTheme.Success,
         _ => ValueBright,
     };
 

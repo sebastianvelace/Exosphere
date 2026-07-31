@@ -327,7 +327,34 @@ public partial class SimulationBridge : Node
             var basis = new Basis(ToGodotVector(east), ToGodotVector(up), ToGodotVector(south));
             _launchPad.Transform = new Transform3D(basis, position);
             _launchPad.Visible = alt < 8_000;   // hide above 8 km
+
+            // While a catch approach is armed, refresh the sim-side cradle target every
+            // frame from the same site/spec data the render tower uses — the tower is
+            // bolted to a rotating body, so a target computed once at arm time would drift
+            // away under it exactly like the render pad would without this same refresh.
+            if (ActiveVessel!.IsAttemptingTowerCatch && _launchSite != null)
+            {
+                var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
+                    _launchSite, padEarth, time);
+                ActiveVessel.CatchTargetPositionWorld = cradle;
+                ActiveVessel.CatchTargetUpWorld = up;
+                ActiveVessel.CatchTargetVelocityWorld =
+                    padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
+            }
         }
+    }
+
+    /// <summary>
+    /// Arms a return-to-launch-site tower catch for the active ship. No-ops (and returns
+    /// false) if the vessel does not carry catch-pin hardpoints — most vehicles, and every
+    /// non-V3 Starship, always fall through to the normal leg landing untouched.
+    /// </summary>
+    public bool ArmTowerCatchApproach()
+    {
+        var vessel = ActiveVessel;
+        if (vessel == null || !vessel.HasCatchPins) return false;
+        vessel.IsAttemptingTowerCatch = true;
+        return true;
     }
 
     private void SpawnPendingConstructedVessel(
@@ -409,6 +436,7 @@ public partial class SimulationBridge : Node
         vessel.Parts.AddJoint(new Joint(gear,      decoupler, "bottom", "top"));
         vessel.Parts.AddJoint(new Joint(decoupler, sh,        "bottom", "top"));
         vessel.ConfigureLandingContactsFromParts();
+        vessel.ConfigureCatchContactsFromParts();
 
         // Stand the stack on the real launch site. The hull's +Y is rotated onto the local
         // vertical there, so the rocket is upright at the pad's true latitude instead of
@@ -628,6 +656,7 @@ public partial class SimulationBridge : Node
                 ?? LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation;
         StandOnPad(vessel, earth, mountHeightM);
         vessel.ConfigureLandingContactsFromParts();
+        vessel.ConfigureCatchContactsFromParts();
 
         Universe.AddVessel(vessel);
         Universe.SetActiveVessel(vessel.Id);
@@ -972,6 +1001,7 @@ public partial class SimulationBridge : Node
         vessel.ReferenceBodyId = earth.Id;
         vessel.Throttle = 0.0;
         vessel.ConfigureLandingContactsFromParts();
+        vessel.ConfigureCatchContactsFromParts();
 
         foreach (var part in vessel.Parts.Parts)
         {

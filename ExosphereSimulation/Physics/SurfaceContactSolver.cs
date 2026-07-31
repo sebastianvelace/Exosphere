@@ -21,6 +21,32 @@ public readonly record struct SurfaceSample(
         var velocity = body.Velocity + body.GetSurfaceVelocity(point);
         return new SurfaceSample(point, normal, velocity);
     }
+
+    /// <summary>
+    /// Samples a tower catch cradle: a fixed point in space (the midpoint between the two
+    /// chopstick arms) rather than an infinite ground plane, so a pin can only "land" on it
+    /// while genuinely close in every direction, not merely at the right altitude anywhere
+    /// on the planet. Within <paramref name="captureRadiusM"/> of the cradle (measured in
+    /// the plane perpendicular to <paramref name="upWorld"/>) the surface behaves like a flat
+    /// horizontal deck at the cradle's height; outside it, the returned point is pushed far
+    /// below so the contact solver always sees zero penetration there.
+    /// </summary>
+    public static SurfaceSample FromCatchCradle(
+        Vector3d cradlePositionWorld,
+        Vector3d upWorld,
+        Vector3d cradleVelocityWorld,
+        double captureRadiusM,
+        Vector3d queryWorld)
+    {
+        var up = upWorld.Normalized;
+        var offset = queryWorld - cradlePositionWorld;
+        var horizontalOffset = offset - up * offset.Dot(up);
+        bool withinCaptureEnvelope = horizontalOffset.MagnitudeSquared <= captureRadiusM * captureRadiusM;
+        var point = withinCaptureEnvelope
+            ? cradlePositionWorld + horizontalOffset
+            : queryWorld - up * 1.0e6;
+        return new SurfaceSample(point, up, cradleVelocityWorld);
+    }
 }
 
 /// <summary>

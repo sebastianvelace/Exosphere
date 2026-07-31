@@ -968,8 +968,11 @@ public class Universe
 
         var contactBefore = EvaluateLandingContact(
             vessel, refBody, framedPosition, framedVelocity);
-        vessel.LastContactForceWorld = contactBefore?.ForceWorld ?? Vector3d.Zero;
-        vessel.LastContactTorqueWorld = contactBefore?.TorqueWorld ?? Vector3d.Zero;
+        var catchContactBefore = EvaluateCatchContact(vessel, framedPosition, framedVelocity);
+        vessel.LastContactForceWorld =
+            (contactBefore?.ForceWorld ?? Vector3d.Zero) + (catchContactBefore?.ForceWorld ?? Vector3d.Zero);
+        vessel.LastContactTorqueWorld =
+            (contactBefore?.TorqueWorld ?? Vector3d.Zero) + (catchContactBefore?.TorqueWorld ?? Vector3d.Zero);
 
         vessel.Position = framedPosition;
         vessel.Velocity = framedVelocity;
@@ -987,8 +990,10 @@ public class Universe
                 Vector3d velocity = refBody.Velocity + relativeVel;
                 var stageContact = EvaluateLandingContact(
                     vessel, refBody, position, velocity);
+                var stageCatchContact = EvaluateCatchContact(vessel, position, velocity);
                 var contactAcceleration = vessel.TotalMass > 0.0
-                    ? (stageContact?.ForceWorld ?? Vector3d.Zero) / vessel.TotalMass
+                    ? ((stageContact?.ForceWorld ?? Vector3d.Zero)
+                        + (stageCatchContact?.ForceWorld ?? Vector3d.Zero)) / vessel.TotalMass
                     : Vector3d.Zero;
                 return vessel.ComputeNetAccelerationAt(
                         position, velocity, _bodies, refBody)
@@ -1000,7 +1005,70 @@ public class Universe
 
         var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
         UpdateLandingContactState(vessel, refBody, contactAfter, dt);
+        var catchContactAfter = EvaluateCatchContact(vessel, vessel.Position, vessel.Velocity);
+        UpdateCatchContactState(vessel, catchContactAfter, dt);
         ApplyPostIntegrationPhysics(vessel, refBody, dt);
+    }
+
+    // Cheap range gate evaluated before the full penalty-contact solve: the tower is a
+    // single fixed point, and a catch-flagged flight spends almost all of its time nowhere
+    // near it (deorbit, entry, aero descent). Generous enough to cover final-approach
+    // maneuvering error without ever gating out a genuine catch attempt.
+    private const double CatchRangeGateM = 500.0;
+    private const double CatchCaptureRadiusM = 5.0;
+
+    private static Physics.ContactWrench? EvaluateCatchContact(
+        Vessel vessel, Vector3d position, Vector3d velocity)
+    {
+        if (!vessel.IsAttemptingTowerCatch || !vessel.HasCatchPins)
+            return null;
+        if ((position - vessel.CatchTargetPositionWorld).MagnitudeSquared
+            > CatchRangeGateM * CatchRangeGateM)
+            return null;
+
+        var input = vessel.GetContactInput(position, velocity);
+        Vector3d cradlePosition = vessel.CatchTargetPositionWorld;
+        Vector3d up = vessel.CatchTargetUpWorld;
+        Vector3d cradleVelocity = vessel.CatchTargetVelocityWorld;
+        return Physics.SurfaceContactSolver.Evaluate(
+            input,
+            vessel.CatchContactPoints,
+            point => Physics.SurfaceSample.FromCatchCradle(
+                cradlePosition, up, cradleVelocity, CatchCaptureRadiusM, point));
+    }
+
+    /// <summary>
+    /// Settle criterion for a tower catch — deliberately separate from
+    /// <see cref="UpdateLandingContactState"/> rather than a branch inside it: that method
+    /// reasons about "upright against the local ground normal" and "≥3 feet sharing load",
+    /// neither of which describes two pins resting in a fixed horizontal cradle. A missed
+    /// catch is not treated as a failure here; it simply never settles, and the game layer's
+    /// EDL guidance is responsible for having already diverted to a normal leg landing well
+    /// before the vessel is close enough for a slow miss to mean a structural collision with
+    /// the tower.
+    /// </summary>
+    private static void UpdateCatchContactState(
+        Vessel vessel, Physics.ContactWrench? contact, double dt)
+    {
+        vessel.LastCatchContact = contact;
+        if (contact == null || contact.ContactCount == 0)
+        {
+            vessel.CatchSettledDuration = 0.0;
+            vessel.IsCaught = false;
+            return;
+        }
+
+        double relativeSpeed = (vessel.Velocity - vessel.CatchTargetVelocityWorld).Magnitude;
+        bool settledNow = contact.ContactCount == 2
+            && relativeSpeed < 0.50
+            && vessel.AngularVelocity.Magnitude < 0.05;
+        vessel.CatchSettledDuration = settledNow ? vessel.CatchSettledDuration + dt : 0.0;
+        vessel.IsCaught = vessel.CatchSettledDuration >= 0.50;
+        if (vessel.IsCaught)
+        {
+            vessel.Velocity = vessel.CatchTargetVelocityWorld;
+            vessel.AngularVelocity = Vector3d.Zero;
+        }
     }
 
     private Vector3d GetReferenceBodyRailAcceleration(

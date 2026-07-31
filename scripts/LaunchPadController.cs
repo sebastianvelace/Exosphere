@@ -36,6 +36,12 @@ public partial class LaunchPadController : Node3D
     private const float VesselBodyR = 1.607f;
     private readonly List<SpotLight3D> _nightFloodlights = new();
 
+    // ── Mechazilla catch feedback (cosmetic only — the sim decides the catch, see
+    // Vessel.IsCaught / Universe.EvaluateCatchContact; this only animates the render) ──
+    private readonly List<(Node3D node, float offsetFromCenterZ)> _chopstickArmNodes = new();
+    private float _towerCenterZ;
+    private float _chopstickCloseAmount;   // 0 = open/idle, 1 = fully closed on a caught ship
+
     public override void _Ready()
     {
         Instance = this;
@@ -47,6 +53,36 @@ public partial class LaunchPadController : Node3D
         bool night = SunController.SolarVisibility < 0.20f;
         foreach (var light in _nightFloodlights)
             light.Visible = night;
+
+        UpdateChopstickCatchFeedback(delta);
+    }
+
+    /// <summary>
+    /// Purely cosmetic: eases the two chopstick arms toward a closed pose while
+    /// <see cref="Vessel.IsCaught"/> is true, and back open otherwise. The sim already
+    /// decided the catch itself (<see cref="Universe.EvaluateCatchContact"/>); this only
+    /// gives the player something to see happen at the tower.
+    /// </summary>
+    private void UpdateChopstickCatchFeedback(double delta)
+    {
+        if (_chopstickArmNodes.Count == 0) return;
+
+        bool caught = SimulationBridge.Instance?.ActiveVessel?.IsCaught ?? false;
+        float target = caught ? 1f : 0f;
+        const float closeSpeedPerSecond = 0.8f;   // ~1.25 s for a full open<->close sweep
+        _chopstickCloseAmount = Mathf.MoveToward(
+            _chopstickCloseAmount, target, closeSpeedPerSecond * (float)delta);
+
+        // Close by shrinking each node's offset from the tower centreline — the two arms
+        // visibly swing together without needing per-part rotation pivots for a first pass.
+        const float closedFraction = 0.55f;
+        float scale = 1f - _chopstickCloseAmount * closedFraction;
+        foreach (var (node, offsetFromCenterZ) in _chopstickArmNodes)
+        {
+            var pos = node.Position;
+            pos.Z = _towerCenterZ + offsetFromCenterZ * scale;
+            node.Position = pos;
+        }
     }
 
     private void BuildEnvironment()
@@ -1051,11 +1087,12 @@ public partial class LaunchPadController : Node3D
     private void BuildChopstickArms(float towerX, float towerZ, float halfW, float baseY,
                                     StandardMaterial3D armMat, StandardMaterial3D pivotMat)
     {
-        const float armY    = 55f * U;                       // height up the tower
-        const float armLen  = 30f * U;                       // 30 m reconstruction estimate
-        const float armGap  = 6.25f * U;                     // centres: 10 m clear opening
+        float armY   = (float)Spec.ArmHeightM * U;           // height up the tower
+        float armLen = (float)Spec.ArmReachM * U;            // reconstruction estimate
+        float armGap = (float)Spec.ArmGapM * U;              // half-spacing either side
         float armBaseX      = towerX + halfW;                // arms exit the +X face toward OLM
         float armMidX       = armBaseX + armLen * 0.5f;
+        _towerCenterZ = towerZ;
 
         // Carriage that rides up/down the tower (the arms' mount).
         Spawn("ArmCarriage", new BoxMesh
@@ -1065,12 +1102,12 @@ public partial class LaunchPadController : Node3D
         // Two parallel chopstick arms.
         foreach (var (zoff, tag) in new[] { (-armGap, "L"), (armGap, "R") })
         {
-            Spawn($"Chopstick{tag}", new BoxMesh
+            var chopstick = Spawn($"Chopstick{tag}", new BoxMesh
                 { Size = new Vector3(armLen, 2.5f * U, 2.5f * U) },
                 armMat, new Vector3(armMidX, baseY + armY, towerZ + zoff));
 
             // Cradle pad on the inner top edge of each arm.
-            Spawn($"ChopstickPad{tag}", new BoxMesh
+            var pad = Spawn($"ChopstickPad{tag}", new BoxMesh
                 { Size = new Vector3(armLen * 0.7f, 0.6f * U, 1.2f * U) },
                 pivotMat, new Vector3(armMidX, baseY + armY + 1.5f * U,
                     towerZ + zoff + (zoff < 0 ? 1.2f * U : -1.2f * U)));
@@ -1078,7 +1115,7 @@ public partial class LaunchPadController : Node3D
             // Dark elastomer/rub rail and nose roller at the catch end. These
             // small high-contrast shapes make the arms read as catch hardware,
             // not just two rectangular beams.
-            Spawn($"ChopstickRubRail{tag}", new BoxMesh
+            var rubRail = Spawn($"ChopstickRubRail{tag}", new BoxMesh
                 { Size = new Vector3(armLen * 0.58f, 0.35f * U, 0.45f * U) },
                 armMat, new Vector3(armMidX + armLen * 0.08f, baseY + armY + 1.75f * U,
                     towerZ + zoff + (zoff < 0 ? 1.85f * U : -1.85f * U)));
@@ -1092,6 +1129,13 @@ public partial class LaunchPadController : Node3D
             };
             roller.SetSurfaceOverrideMaterial(0, pivotMat);
             AddChild(roller);
+
+            // Catch feedback: these four meshes are the ones that visibly "close" on a
+            // caught ship (see UpdateChopstickCatchFeedback). Struts/cables/carriage stay
+            // put — animating every part of the assembly for a cosmetic tween isn't worth
+            // the complexity this pass.
+            foreach (var node in new Node3D[] { chopstick, pad, rubRail, roller })
+                _chopstickArmNodes.Add((node, node.Position.Z - towerZ));
         }
 
         // Tilt linkage struts from the carriage out to the arm tips.

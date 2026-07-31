@@ -94,6 +94,21 @@ public class PartDefinition
     [JsonPropertyName("nose_radius_m")]
     public double NoseRadiusM { get; set; }
 
+    /// <summary>
+    /// Declares this part as carrying a pair of tower catch-pin hardpoints (real-world
+    /// example: Starship V3's planned ship-catch fittings near the nose flare). Zero (the
+    /// default) means "no catch pins" — the same "0 = not applicable" convention already
+    /// used by <see cref="NoseRadiusM"/>, so most parts need no new field at all.
+    /// </summary>
+    [JsonPropertyName("catch_pin_lateral_offset_m")]
+    public double CatchPinLateralOffsetM { get; set; }
+    /// <summary>Offset along local +Y from this part's own datum to the pin pair (m).</summary>
+    [JsonPropertyName("catch_pin_offset_y_m")]
+    public double CatchPinOffsetYM { get; set; }
+    /// <summary>Physical radius of one catch pin, for the contact-penetration test (m).</summary>
+    [JsonPropertyName("catch_pin_radius_m")]
+    public double CatchPinRadiusM { get; set; } = 0.4;
+
     // Engine
     [JsonPropertyName("thrust_vac")]   public double ThrustVac   { get; set; }
     [JsonPropertyName("thrust_sl")]    public double ThrustSL    { get; set; }

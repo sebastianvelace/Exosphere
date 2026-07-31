@@ -19,8 +19,17 @@ public partial class EDLController : Control
 {
     public static EDLController? Instance { get; private set; }
 
-    private enum Edl { Inactive, Entry, Peak, Aero, Retro, Final, Touchdown }
+    private enum Edl { Inactive, Entry, Peak, Aero, Retro, Catch, Final, Caught, Touchdown }
     private Edl _phase = Edl.Inactive;
+
+    // ── Tower catch (Mechazilla) ───────────────────────────────────────────
+    // Abort decision: below this altitude, a catch attempt still outside tolerance must
+    // divert to a normal leg landing rather than risk a low, slow collision with tower
+    // structure. Above it there is still room to keep closing the position error.
+    private const double CatchAbortDecisionAltitudeM = 300.0;
+    private const double CatchAbortHorizontalMissToleranceM = 8.0;
+    private const double CatchAbortHorizontalSpeedToleranceMps = 3.0;
+    private bool _towerCatchAborted;
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
     private const double EntrySpeed   = 1200.0;   // m/s surface speed to arm entry
@@ -139,6 +148,7 @@ public partial class EDLController : Control
                 _landingCutoffCommitted = false;
                 _landingEngineCount = 3;
                 _flipElapsed = 0.0;
+                _towerCatchAborted = false;
                 _load.Reset();
                 Visible = true;
                 mission?.EnterPhase(MissionPhase.ENTRY);
@@ -210,6 +220,23 @@ public partial class EDLController : Control
         double flipAlt = aBrake > 0.5
             ? System.Math.Clamp(stopDist * 2.2 + vDown * (flipTime + 3.0), 3_000.0, FlipCeiling)
             : 0.0;   // can't brake yet (still hypersonic) — keep belly-flop
+
+        // Tower-catch horizontal guidance: simple proportional homing on the position error
+        // against the cradle, not a full cross-range guidance law (see the EDL scope note in
+        // the Mechazilla plan — this only has to null a final-approach miss of tens of
+        // metres). Computed once here so both the attitude cant and the throttle's braking
+        // term below read the same error instead of two independently-derived vectors.
+        Vector3d catchLateralVelocityError = Vector3d.Zero;
+        if (_phase == Edl.Catch)
+        {
+            Vector3d offsetFromTarget = vessel.Position - vessel.CatchTargetPositionWorld;
+            Vector3d horizontalOffset = offsetFromTarget - up * offsetFromTarget.Dot(up);
+            double missDistance = horizontalOffset.Magnitude;
+            double closingSpeed = System.Math.Clamp(missDistance * 0.35, 0.0, 6.0);
+            Vector3d towardTarget = missDistance > 1e-3 ? -horizontalOffset.Normalized : Vector3d.Zero;
+            Vector3d desiredHorizontalVelocity = towardTarget * closingSpeed;
+            catchLateralVelocityError = (surfVel - up * _vUp) - desiredHorizontalVelocity;
+        }
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero && vDown > 5.0 && _alt <= flipAlt)
         {
             _phase = Edl.Retro;
@@ -230,8 +257,42 @@ public partial class EDLController : Control
             case Edl.Aero:
                 break;   // retro ignition handled by the physics gate above
             case Edl.Retro:
-                if (_alt < 1500.0) { _phase = Edl.Final; mission?.EnterPhase(MissionPhase.FINAL_DESCENT); }
+                if (_alt < 1500.0)
+                {
+                    bool attemptCatch = vessel.IsAttemptingTowerCatch
+                        && !_towerCatchAborted && vessel.HasCatchPins;
+                    _phase = attemptCatch ? Edl.Catch : Edl.Final;
+                    mission?.EnterPhase(MissionPhase.FINAL_DESCENT);
+                }
                 break;
+            case Edl.Catch:
+            {
+                Vector3d offset = vessel.Position - vessel.CatchTargetPositionWorld;
+                double missDistance = (offset - up * offset.Dot(up)).Magnitude;
+                if (_alt < CatchAbortDecisionAltitudeM
+                    && (missDistance > CatchAbortHorizontalMissToleranceM
+                        || _horiz > CatchAbortHorizontalSpeedToleranceMps))
+                {
+                    // Diverting rather than forcing the catch: a miss this low and slow is
+                    // exactly the case a real abort-to-legs guards against — see the EDL scope
+                    // note in the Mechazilla plan. The vessel keeps whatever legs it has;
+                    // a V3 ship built catch-only would still need its own legs data to survive
+                    // this path, which is a known gap, not one this pass papers over.
+                    _towerCatchAborted = true;
+                    vessel.IsAttemptingTowerCatch = false;
+                    _phase = Edl.Final;
+                    GD.Print($"[EDL] tower catch aborted at {_alt:F0} m " +
+                        $"(miss={missDistance:F1} m, horiz={_horiz:F1} m/s) — diverting to leg landing");
+                    break;
+                }
+                if (vessel.IsCaught)
+                {
+                    _phase = Edl.Caught;
+                    Caught(vessel, body, mission);
+                    return;
+                }
+                break;
+            }
             case Edl.Final:
                 if (_alt < 500.0)
                 {
@@ -247,6 +308,7 @@ public partial class EDLController : Control
                     return;
                 }
                 break;
+            case Edl.Caught:
             case Edl.Touchdown:
                 return;
         }
@@ -263,20 +325,24 @@ public partial class EDLController : Control
             // target retains nearly all projected drag while generating Starship-like L/D.
             aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
         }
-        else if (_phase == Edl.Final && _horiz < 12.0)
+        else if (_phase == Edl.Catch || (_phase == Edl.Final && _horiz < 12.0))
         {
-            // Stay primarily upright but cant into the lateral velocity so the same thrust
-            // command can actually remove drift. A perfectly vertical axis cannot satisfy a
-            // horizontal-speed error and otherwise turns that error into an endless hover.
+            // Stay primarily upright but cant into the lateral error so the same thrust
+            // command can actually remove it. A perfectly vertical axis cannot satisfy a
+            // horizontal error and otherwise turns that error into an endless hover.
             // In the last 30 m above the feet, blend that cant back to vertical: arriving
             // tilted consumes suspension stroke geometrically before impact and overloads the
-            // downhill foot even at a gentle vertical speed.
-            Vector3d lateralVelocity = surfVel - up * _vUp;
+            // downhill foot even at a gentle vertical speed. A catch approach reuses the same
+            // shape of blend even though it has no feet, so the final metres still arrive
+            // upright into the cradle rather than canted.
+            Vector3d lateralVelocity = _phase == Edl.Catch
+                ? catchLateralVelocityError
+                : surfVel - up * _vUp;
             const double contactDatumAlt = 7.85;
             double flareBlend = System.Math.Clamp(
                 (_alt - contactDatumAlt) / 30.0, 0.0, 1.0);
             double tiltRatio = System.Math.Min(
-                System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD), _horiz * 0.04)
+                System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD), lateralVelocity.Magnitude * 0.04)
                 * flareBlend;
             aimAxis = lateralVelocity.Magnitude > 1e-3
                 ? (up - lateralVelocity.Normalized * tiltRatio).Normalized
@@ -328,7 +394,7 @@ public partial class EDLController : Control
         // of thrust for the profile) so the closed loop has headroom and the engine spool can keep
         // up — the old minimum-energy "stop exactly at the ground" burn commanded almost no thrust
         // until the last instant and touched down hot.
-        if (_phase is Edl.Retro or Edl.Final)
+        if (_phase is Edl.Retro or Edl.Catch or Edl.Final)
         {
             // Once a foot has touched, commit to the compliant gear: shut the engines down
             // and let spring/damper/friction settle the body. Relighting against a loaded foot
@@ -345,20 +411,28 @@ public partial class EDLController : Control
 
             const double contactDatumAlt = 7.85; // 7.50 m leg offset + 0.35 m foot radius
             const double touchdownRate = 1.20;
+            // A catch approach's "ground" is the cradle's height up the tower, not the planet
+            // surface below it — the descent profile must arrest at the arms, not fly through
+            // them toward the ground the tower stands on.
+            double effectiveContactDatumAlt = _phase == Edl.Catch
+                ? body.GetAltitude(vessel.CatchTargetPositionWorld)
+                : contactDatumAlt;
             // Target descent rate: a gentle LINEAR profile that eases to 1.2 m/s at first
             // physical foot contact and
             // is already below the post-belly-flop terminal velocity (~70 m/s) at the flip, so the
             // burn starts braking immediately. Cap it by a constant-deceleration limit so a faster
             // arrival is still braked hard enough. Close the loop with gravity feed-forward.
-            double heightToContact = System.Math.Max(0.0, _alt - contactDatumAlt);
+            double heightToContact = System.Math.Max(0.0, _alt - effectiveContactDatumAlt);
             double vTargetLin = touchdownRate + heightToContact * 0.035;
             double vTargetMax = System.Math.Sqrt(2.0 * 0.60 * aThrustFull * heightToContact)
                 + touchdownRate;
             double vTarget    = System.Math.Min(vTargetLin, vTargetMax);
             double horizontalTarget = System.Math.Max(0.5, _alt * 0.02);
             double verticalError = vDown - vTarget;
-            double horizontalError = _horiz - horizontalTarget;
-            double coupledHorizontalError = _phase == Edl.Retro ? horizontalError : 0.0;
+            double horizontalError = _phase == Edl.Catch
+                ? catchLateralVelocityError.Magnitude
+                : _horiz - horizontalTarget;
+            double coupledHorizontalError = _phase is Edl.Retro or Edl.Catch ? horizontalError : 0.0;
             double brakingError = System.Math.Max(0.0,
                 System.Math.Max(verticalError, coupledHorizontalError));
             // Divide by the commanded thrust axis, not by -velocity. In final vertical flight
@@ -403,6 +477,15 @@ public partial class EDLController : Control
         mission?.EnterPhase(MissionPhase.LANDED);
         GD.Print($"[EDL] TOUCHDOWN settled on {body.Name}  vUp={_vUp:F1} m/s " +
             $"contacts={vessel.LastSurfaceContact?.ContactCount ?? 0}");
+    }
+
+    private void Caught(Vessel vessel, CelestialBody body, MissionManager? mission)
+    {
+        vessel.Throttle = 0.0;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        mission?.EnterPhase(MissionPhase.CAUGHT);
+        GD.Print($"[EDL] CAUGHT by the tower at {_bodyName}  vUp={_vUp:F1} m/s " +
+            $"contacts={vessel.LastCatchContact?.ContactCount ?? 0}");
     }
 
     private void Deactivate()

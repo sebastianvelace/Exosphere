@@ -86,6 +86,28 @@ public class Vessel
     public bool HasSurfaceContact => LastSurfaceContact?.ContactCount > 0;
     public bool HasDeployedLandingGear => _landingContactPoints.Length > 0
         && Parts.Parts.Any(p => p.Definition.Category == PartCategory.Landing && p.IsDeployed);
+
+    // ── Tower catch (Mechazilla chopstick pins) ───────────────────────────
+    private ContactPointDefinition[] _catchContactPoints = [];
+    public IReadOnlyList<ContactPointDefinition> CatchContactPoints => _catchContactPoints;
+    /// <summary>True when this vessel carries tower catch-pin hardpoints at all — a
+    /// vehicle without them (every part but the V3 ship's catch-equipped nose) can never
+    /// be caught, regardless of mission mode or approach quality.</summary>
+    public bool HasCatchPins => _catchContactPoints.Length > 0;
+    public ContactWrench? LastCatchContact { get; internal set; }
+    public double CatchSettledDuration { get; internal set; }
+    public bool IsCaught { get; internal set; }
+    /// <summary>Set by the game layer when this vessel is flying a return-to-launch-site
+    /// catch approach. Gates both the EDL guidance's position-error term and the (cheap)
+    /// per-frame catch-contact evaluation, so an ordinary reentry never pays for either.</summary>
+    public bool IsAttemptingTowerCatch { get; set; }
+    /// <summary>Inertial position of the catch cradle right now, refreshed each frame by the
+    /// game layer from <c>LaunchComplexSpec.GetCatchCradlePosition</c> — <see cref="Universe"/>
+    /// stays free of any launch-site/JSON lookup this way, matching the boundary already
+    /// drawn for every other sim/game-layer interaction.</summary>
+    public Vector3d CatchTargetPositionWorld { get; set; }
+    public Vector3d CatchTargetUpWorld { get; set; } = Vector3d.Up;
+    public Vector3d CatchTargetVelocityWorld { get; set; }
     public bool HasDeployedParachute => Parts.Parts.Any(
         p => p.IsDeployed && p.Definition.DragChute > 0.0);
     public double MaximumSplashdownSpeedMps => Parts.Parts
@@ -184,6 +206,70 @@ public class Vessel
             0.0,
             def.ContactOffsetYM - def.ContactComOffsetYM,
             0.0);
+    }
+
+    // Contact tuning for a mechanical tower catch: much stiffer/less compliant than a
+    // landing leg's suspension, because the arms are a rigid grab, not a spring strut.
+    // These are first-order constants (not per-part JSON) since the compliance being
+    // modelled belongs to the tower's catch mechanism, not the vessel.
+    private const double CatchPinSpringStiffnessNPerM = 1.2e6;
+    private const double CatchPinDampingNsPerM = 5.0e5;
+    private const double CatchPinTangentialDampingNsPerM = 1.0e5;
+    private const double CatchPinFrictionCoefficient = 0.6;
+    private const double CatchPinMaxCompressionM = 0.6;
+    private const double CatchPinMaxLoadN = 3.0e6;
+
+    /// <summary>
+    /// Builds the two catch-pin contact points from whichever part declares
+    /// <see cref="PartDefinition.CatchPinLateralOffsetM"/> &gt; 0 (today, only the V3 ship's
+    /// nose section). Reuses <see cref="PartGraph.ComputePartLocalPositions"/> — the same
+    /// vessel-datum-relative positions already used for CoM and rendering — so the pins
+    /// track that part's real position in the assembled stack instead of a hardcoded offset
+    /// that would break the moment a different vehicle configuration is flown.
+    /// </summary>
+    public void ConfigureCatchContactsFromParts()
+    {
+        var pinPart = Parts.Parts.FirstOrDefault(p => p.Definition.CatchPinLateralOffsetM > 0.0);
+        if (pinPart == null)
+        {
+            _catchContactPoints = [];
+            return;
+        }
+
+        var positions = Parts.ComputePartLocalPositions();
+        if (!positions.TryGetValue(pinPart, out var partPosition))
+        {
+            _catchContactPoints = [];
+            return;
+        }
+
+        var def = pinPart.Definition;
+        double y = partPosition.Y + def.CatchPinOffsetYM;
+        double lateral = def.CatchPinLateralOffsetM;
+        double radius = System.Math.Max(0.0, def.CatchPinRadiusM);
+        _catchContactPoints =
+        [
+            new ContactPointDefinition(
+                Name: $"{def.Id}-catch-pin-left",
+                LocalPositionFromDatum: new Vector3d(0.0, y, -lateral),
+                ContactRadiusM: radius,
+                SpringStiffnessNPerM: CatchPinSpringStiffnessNPerM,
+                DampingNsPerM: CatchPinDampingNsPerM,
+                TangentialDampingNsPerM: CatchPinTangentialDampingNsPerM,
+                FrictionCoefficient: CatchPinFrictionCoefficient,
+                MaxCompressionM: CatchPinMaxCompressionM,
+                MaxLoadN: CatchPinMaxLoadN),
+            new ContactPointDefinition(
+                Name: $"{def.Id}-catch-pin-right",
+                LocalPositionFromDatum: new Vector3d(0.0, y, lateral),
+                ContactRadiusM: radius,
+                SpringStiffnessNPerM: CatchPinSpringStiffnessNPerM,
+                DampingNsPerM: CatchPinDampingNsPerM,
+                TangentialDampingNsPerM: CatchPinTangentialDampingNsPerM,
+                FrictionCoefficient: CatchPinFrictionCoefficient,
+                MaxCompressionM: CatchPinMaxCompressionM,
+                MaxLoadN: CatchPinMaxLoadN),
+        ];
     }
 
     public RigidBodyContactInput GetContactInput(Vector3d position, Vector3d velocity) => new(
@@ -844,6 +930,7 @@ public class Vessel
         ApplyMassSplitKinematics(payload, velocityAxis, 0.0, relativeVelocity.Magnitude);
 
         payload.ConfigureLandingContactsFromParts();
+        payload.ConfigureCatchContactsFromParts();
         return payload;
     }
 }
