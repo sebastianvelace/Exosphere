@@ -339,11 +339,14 @@ public class Part
         bool mountCanGimbal =
             Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(engineIndex)
                 ?.Gimballed ?? true;
+        // A differential-TVC command (R5b) for this specific instance takes priority over
+        // the part-wide GimbalOffset every other mount of this part still shares.
+        var commanded = state.GimbalCommandOverride ?? GimbalOffset;
         var target = selected && mountCanGimbal
             ? new Vector3d(
-                System.Math.Clamp(GimbalOffset.X, -1.0, 1.0) * range,
+                System.Math.Clamp(commanded.X, -1.0, 1.0) * range,
                 0.0,
-                System.Math.Clamp(GimbalOffset.Z, -1.0, 1.0) * range)
+                System.Math.Clamp(commanded.Z, -1.0, 1.0) * range)
             : Vector3d.Zero;
         if (model == null
             || model.GimbalRateDegPerS <= 0.0
@@ -755,6 +758,56 @@ public class Part
             double thrust = EvaluateEnginePerformance(state, ambientPressure).ThrustN;
             var direction = TiltDirection(baseDirection, state.GimbalDeg.X, state.GimbalDeg.Z);
             yield return (position, direction * thrust);
+        }
+    }
+
+    /// <summary>
+    /// Clears every live engine instance's <see cref="EngineInstanceState.GimbalCommandOverride"/>
+    /// back to <c>null</c>. Called once per tick before a differential-TVC solve (R5b)
+    /// re-populates it, so a command from a previous tick — or from a tick where the pilot
+    /// stopped commanding attitude — never lingers on an instance the current tick doesn't
+    /// touch.
+    /// </summary>
+    public void ClearGimbalCommandOverrides()
+    {
+        foreach (var state in _engineStates)
+            state.GimbalCommandOverride = null;
+    }
+
+    /// <summary>
+    /// Per-engine-instance ingredients for differential gimbal allocation (R5b): mount
+    /// position, zero-deflection thrust magnitude and this instance's own gimbal range —
+    /// the same raw data <see cref="GetEngineInstanceThrustGeometry"/> uses, but without the
+    /// live <see cref="EngineInstanceState.GimbalDeg"/> baked in, so a caller can linearize
+    /// "how much lateral force a unit normalized gimbal command would add" instead of reading
+    /// the already-deflected thrust vector. Skips instances that cannot presently gimbal
+    /// (unselected, ungimballed mount, zero thrust) — a caller allocates torque only across
+    /// instances that can actually receive a command.
+    /// </summary>
+    public IEnumerable<(EngineInstanceState State, Vector3d PositionM, double ThrustN, double GimbalRangeDeg)>
+        GetEngineInstanceGimbalAuthority(double ambientPressure)
+    {
+        if (!HasEngineRuntime || IsBroken || !IsStagingActive) yield break;
+
+        int selected = SelectedEngineCount;
+        for (int i = 0; i < _engineStates.Count; i++)
+        {
+            if (i >= selected) continue;
+            var state = _engineStates[i];
+            var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(i);
+            bool gimballed = mount?.Gimballed ?? true;
+            if (!gimballed) continue;
+
+            var position = mount != null
+                ? mount.Position
+                : new Vector3d(0.0, Definition.ThrustPositionYM, 0.0);
+            double thrust = EvaluateEnginePerformance(state, ambientPressure).ThrustN;
+            if (thrust <= 0.0) continue;
+
+            double range = ResolveEngineModel(state)?.GimbalRangeDeg ?? Definition.GimbalRange;
+            if (range <= 0.0) continue;
+
+            yield return (state, position, thrust, range);
         }
     }
 

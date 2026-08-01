@@ -316,6 +316,16 @@ public sealed class EngineInstanceState
     public double ActualThrottle { get; set; }
     public Vector3d GimbalDeg { get; set; } = Vector3d.Zero;
     public Vector3d GimbalVelocityDegPerS { get; set; } = Vector3d.Zero;
+
+    /// <summary>
+    /// Per-instance normalized gimbal command (X,Z ∈ [-1,1]) set by
+    /// <see cref="Parts.PartGraph.SolveDifferentialGimbal"/> for differential per-mount TVC.
+    /// When set, <see cref="Part.AdvanceGimbal"/> servos this instance toward it instead of
+    /// the part-wide <see cref="Part.GimbalOffset"/>. Reset to <c>null</c> every tick by
+    /// <see cref="Part.ClearGimbalCommandOverrides"/> so a stale differential command never
+    /// outlives the tick that computed it.
+    /// </summary>
+    public Vector3d? GimbalCommandOverride { get; set; }
     public double ChamberPressureFraction { get; set; }
     public double TemperatureK { get; set; } = 290.0;
     public int StartAttempts { get; set; }
