@@ -18,7 +18,7 @@ The next session should **not** open large new systems. Highest ROI is:
 2. **Close the V0.5 audit gap** — compare hot-staging, startup, and reentry captures against real IFT/Flight 7 references; tune only what the diff shows.
 3. **Ship reentry lighting + zone charring** — blocked today because the harness cannot produce a belly-flop EDL frame for before/after verification.
 
-Physics backlog: R5 torque-from-mount-geometry is now closed (see Completed This Session); R5b (differential per-mount TVC), R11 systems, R12 boostback stay deferred until the visual tranche is reference-stable. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
+Physics backlog: R5 torque-from-mount-geometry and R5c (torque as unpiloted attitude disturbance) are now closed. The Ship's tower catch shipped (`ffaa1e4`) using the pre-existing idealized full-authority estimate, not R5b — it did not wait on R5b/R5c. R5b (differential per-mount TVC) and R12 (booster boostback + catch) are now an active, explicitly prioritized tranche — terminar Mechazilla by finishing the booster's half of the tower catch — rather than deferred non-goals. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
 
 ---
 
@@ -231,7 +231,7 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Owner** | `ExosphereSimulation/Flight/MissionPhaseTrack.cs`, `scripts/HUDController.cs`, `MissionManager.cs`, `AudioManager.cs` |
 | **Acceptance** | Phase track lights deorbit/EDL slots; COAST driven by AutopilotController (unchanged); THERMAL panel untouched. |
 | **Realism feel** | After SECO the player still sees a mission arc through entry — not a silent coast into fire. |
-| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. **Remaining:** IFT reference compare (harness now exists via `--hotstage`/`--reentry-compare`), R5b/R5c TVC + torque wiring. |
+| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. Ship tower catch also landed (`ffaa1e4`), on the pre-existing idealized gimbal authority. **Remaining:** IFT reference compare (harness now exists via `--hotstage`/`--reentry-compare`); R5b differential TVC (R5c is done) and R12 booster boostback/catch are in progress, not blocked. |
 
 ### G-P2. VAB pre-launch validation pass
 
@@ -289,8 +289,8 @@ From `.atl/OVERENGINEERING_AUDIT_JUL2026.md`. Safe parallel lane — does not ch
 
 | Non-goal | Why |
 | --- | --- |
-| **R5b/R5c differential TVC + torque wiring, engine-out gameplay** | R5 torque-from-geometry is closed; TVC/wiring is smaller but still deferred until visual tranche is stable |
-| **R12 boostback + Mechazilla catch** | Depends on R5b/R5c |
+| ~~**R5b/R5c differential TVC + torque wiring, engine-out gameplay**~~ | Superseded: R5c is done; R5b + R12 are now an actively prioritized tranche (Ship catch already shipped without waiting on either) |
+| ~~**R12 boostback + Mechazilla catch**~~ | Superseded: does not depend on R5b/R5c — the Ship half of the catch shipped first; the booster half (boostback + catch) is now in progress after R5b |
 | **VAB rewrite** | V1.5 works; gizmos are incremental |
 | **Global tonemap / ACES experiments** | Proven to subexpose orbit (`PLAN_PLAYTEST.md` B1) |
 | **Retune drag/heating for VFX** | Physics serves telemetry, not screenshots |

@@ -189,13 +189,13 @@
 | **Recommendation** | After G-002 scaffold, add `MissionType.Interplanetary` with SOI-crossing checkpoints. |
 | **Owner** | `MissionManager.cs`, `TransferPlanner.cs` |
 
-### G-017 — Booster return / tower catch absent (P2, blocked)
+### G-017 — Booster return / tower catch absent (P2, in progress)
 
 | | |
 |---|---|
-| **Evidence** | ROADMAP + R12: depends on R5 multi-motor. Debris SH has renderer (`VesselRenderer.cs` standalone SH) but no guidance. |
-| **Recommendation** | Track as post-R5 epic; until then document as known limit in mission briefing. |
-| **Owner** | Deferred |
+| **Evidence** | The Ship half of the tower catch shipped (`ffaa1e4`): `EDLController` `Catch`/`Caught` phases, `Vessel.IsCaught`/`CatchContactPoints`, `SurfaceContactSolver.FromCatchCradle`. The booster still separates as inert debris — no boostback, no controlled reentry, no catch. R5 multi-motor lifecycle/torque is closed; only R5b (differential per-mount TVC) remains as a real prerequisite, for the asymmetric-thrust hover-slam the booster needs. |
+| **Recommendation** | R5b then R12-booster is an actively scheduled tranche (reusing the Ship's catch infrastructure), not deferred. |
+| **Owner** | `scripts/BoosterReturnController.cs` (new), `ExosphereSimulation/Parts/PartGraph.cs`, `LaunchComplexSpec.cs` |
 
 ### G-018 — Craft persistence separate from mission persistence (P1)
 
