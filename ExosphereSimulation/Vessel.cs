@@ -579,6 +579,16 @@ public class Vessel
     // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor
     // gimbal authority is computed from thrust, lever arm, CoM and moment of inertia.
     private const double ReactionControlAuthority = 0.01;
+
+    /// <summary>
+    /// Returns whichever of <paramref name="value"/>/<paramref name="floor"/> has the larger
+    /// magnitude — a component-wise Math.Max-by-magnitude used to apply
+    /// <see cref="ReactionControlAuthority"/> as a genuine floor under real engine authority
+    /// rather than an unconditional addition on top of it.
+    /// </summary>
+    private static double FloorByMagnitude(double value, double floor) =>
+        System.Math.Abs(value) >= System.Math.Abs(floor) ? value : floor;
+
     public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
         // A failure or an impact can legitimately leave the rigid body above the normal
@@ -630,14 +640,20 @@ public class Vessel
 
         if (hasInput)
         {
-            // R5b — differential per-mount TVC: size a desired torque from the same
-            // idealized per-axis authority estimate this branch used to apply directly
-            // (kept here only to size the target, not the applied physics — see below),
-            // then let PartGraph.SolveDifferentialGimbal command each live engine
-            // instance's own gimbal toward it instead of mirroring one shared deflection
-            // to every mount.
-            double pitchYawAuthority = Parts.GetPitchYawAngularAcceleration(pressure) * auth;
-            double rollAuthority = Parts.GetRollAngularAcceleration(pressure) * auth;
+            // R5b — differential per-mount TVC: size a desired torque from the envelope
+            // SolveDifferentialGimbal can actually deliver (only live, selected, gimballed
+            // instances — see GetDifferentialTVCAngularAccelerationEnvelope), not the legacy
+            // GetPitchYawAngularAcceleration/GetRollAngularAcceleration estimate, which scales
+            // every active engine's full thrust by its part-wide GimbalRange regardless of
+            // whether that specific mount can gimbal (e.g. Super Heavy's ungimballed outer
+            // ring) — that over-counting chronically saturated the allocator's request.
+            // ReactionControlAuthority stays as a floor so a command still sizes a viable
+            // target even when the live cluster's own authority momentarily reads near zero.
+            var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
+            double pitchYawAuthority =
+                System.Math.Max(ReactionControlAuthority, envelope.X) * auth;
+            double rollAuthority =
+                System.Math.Max(ReactionControlAuthority, envelope.Y) * auth;
             var desiredLocalAngAccel = new Vector3d(
                 command.X * pitchYawAuthority,
                 command.Z * rollAuthority,
@@ -666,15 +682,22 @@ public class Vessel
 
         // RCS floor: idealized attitude-thruster authority (ReactionControlAuthority),
         // independent of engine gimbal — real spacecraft carry separate RCS jets that fire
-        // whether or not the main engines do, so this adds to the engine term rather than
-        // replacing it. This is what keeps a coasting, zero-throttle vessel (no active
-        // engine torque at all) able to hold attitude, exactly as the pre-R5b idealized
-        // estimate's `Math.Max(ReactionControlAuthority, ...)` floor did.
+        // whether or not the main engines do. This must stay a FLOOR (component-wise
+        // Math.Max by magnitude), exactly as the pre-R5b idealized estimate's
+        // `Math.Max(ReactionControlAuthority, ...)` did — simply adding it on top of the
+        // real per-mount torque would make it the dominant actuator on a large vehicle
+        // (ReactionControlAuthority is a fixed angular acceleration, so summing it scales
+        // the equivalent RCS torque with the vessel's own moment of inertia, easily
+        // exceeding what a real gimballed cluster delivers on something the size of a
+        // Super Heavy). Only fills the gap when the real engine term reads below the floor.
         var rcsFloorAngAccel = hasInput
             ? new Vector3d(command.X, command.Z, command.Y) * ReactionControlAuthority * auth
             : Vector3d.Zero;
 
-        var appliedAngAccel = engineAngAccel + rcsFloorAngAccel;
+        var appliedAngAccel = new Vector3d(
+            FloorByMagnitude(engineAngAccel.X, rcsFloorAngAccel.X),
+            FloorByMagnitude(engineAngAccel.Y, rcsFloorAngAccel.Y),
+            FloorByMagnitude(engineAngAccel.Z, rcsFloorAngAccel.Z));
         if (appliedAngAccel.MagnitudeSquared > 0.0)
             AngularVelocity = AngularVelocity + Orientation.Rotate(appliedAngAccel) * dt;
 

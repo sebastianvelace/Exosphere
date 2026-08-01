@@ -748,8 +748,13 @@ public class Part
         {
             var state = _engineStates[i];
             var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(i);
+            // mount.Position is the engine's position within the cluster's own thrust plane
+            // (every current data/engine_clusters/*.json has y=0 there); ThrustPositionYM is
+            // the separate offset of that plane from the part's local origin (its geometric
+            // centre) — both must be summed to get the mount's real position in part-local
+            // space, exactly like the legacy scalar lever in GetPitchYawAngularAcceleration.
             var position = mount != null
-                ? mount.Position
+                ? mount.Position + new Vector3d(0.0, Definition.ThrustPositionYM, 0.0)
                 : new Vector3d(0.0, Definition.ThrustPositionYM, 0.0);
             var baseDirection = mount != null
                 ? mount.Direction
@@ -798,8 +803,11 @@ public class Part
             bool gimballed = mount?.Gimballed ?? true;
             if (!gimballed) continue;
 
+            // Same ThrustPositionYM offset as GetEngineInstanceThrustGeometry above — this
+            // must stay in sync with it, since SolveDifferentialGimbal's lever arm and
+            // GetTotalTorque's lever arm need to agree on where each mount actually is.
             var position = mount != null
-                ? mount.Position
+                ? mount.Position + new Vector3d(0.0, Definition.ThrustPositionYM, 0.0)
                 : new Vector3d(0.0, Definition.ThrustPositionYM, 0.0);
             double thrust = EvaluateEnginePerformance(state, ambientPressure).ThrustN;
             if (thrust <= 0.0) continue;

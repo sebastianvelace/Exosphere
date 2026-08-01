@@ -245,6 +245,51 @@ public class PartGraph
         return torque / inertia;
     }
 
+    /// <summary>
+    /// R5b — pitch/yaw and roll angular-acceleration envelope actually deliverable by
+    /// <see cref="SolveDifferentialGimbal"/>: unlike <see cref="GetPitchYawAngularAcceleration(double)"/>
+    /// and <see cref="GetRollAngularAcceleration(double)"/> (which scale every active engine's
+    /// full thrust by its part-wide <c>GimbalRange</c>, regardless of whether that specific
+    /// mount can gimbal at all — e.g. Super Heavy's 20 ungimballed outer-ring Raptors), this
+    /// sums only over <see cref="Part.GetEngineInstanceGimbalAuthority"/>'s live, selected,
+    /// gimballed instances, using each one's own real lever arm (the same mount geometry
+    /// <see cref="SolveDifferentialGimbal"/> and <see cref="GetTotalTorque"/> read). Sizing the
+    /// differential-TVC target from this instead of the legacy scalar estimate keeps the
+    /// commanded torque within what the allocator can actually deliver, instead of chronically
+    /// over-demanding it into full saturation.
+    /// </summary>
+    public Vector3d GetDifferentialTVCAngularAccelerationEnvelope(double ambientPressure)
+    {
+        double transverse = TransverseMomentOfInertia;
+        double axial = AxialMomentOfInertia;
+        if (transverse <= 0.0 && axial <= 0.0) return Vector3d.Zero;
+
+        var positions = ComputePartLocalPositions();
+        double comY = CenterOfMass.Y;
+        double rollRadius = MaximumDiameter * 0.5 * 0.65;
+        double pitchYawTorque = 0.0;
+        double rollTorque = 0.0;
+
+        foreach (var engine in ActiveEngines)
+        {
+            if (!positions.TryGetValue(engine, out var partPosition)) continue;
+            bool countsForRoll = engine.Definition.EngineCount >= 2;
+            foreach (var (_, mountPosition, thrustN, gimbalRangeDeg)
+                     in engine.GetEngineInstanceGimbalAuthority(ambientPressure))
+            {
+                double gimbalRad = gimbalRangeDeg * MathUtils.DEG_TO_RAD;
+                double lever = System.Math.Abs(partPosition.Y + mountPosition.Y - comY);
+                pitchYawTorque += thrustN * lever * System.Math.Sin(gimbalRad);
+                if (countsForRoll)
+                    rollTorque += thrustN * rollRadius * System.Math.Sin(gimbalRad);
+            }
+        }
+
+        double pitchYaw = transverse > 0.0 ? pitchYawTorque / transverse : 0.0;
+        double roll = axial > 0.0 ? rollTorque / axial : 0.0;
+        return new Vector3d(pitchYaw, roll, pitchYaw);
+    }
+
     // ── Empuje total en espacio local ─────────────────────────────────────
     // Overload sin presión: empuje de vacío (compatibilidad).
     public Vector3d GetTotalThrust() => GetTotalThrust(0.0);
