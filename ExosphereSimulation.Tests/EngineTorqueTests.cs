@@ -115,7 +115,13 @@ public sealed class EngineTorqueTests
         var dir = new Vector3d(System.Math.Sin(ax), 1.0, 0.0).Normalized;
         var fNew = dir * perEngineThrust;
         var fOld = new Vector3d(0.0, perEngineThrust, 0.0);
-        var r = new Vector3d(0.0, 0.0, 0.55);
+        // r's Y component is the engine plane's real offset from the part's local origin
+        // (Definition.ThrustPositionYM, -33.75 m for super_heavy_booster) plus the mount's
+        // own PositionM.Y (0 for every current cluster) — the same sum
+        // GetEngineInstanceThrustGeometry now adds to mount.Position (see Part.cs). With no
+        // gimbal deflection this Y offset is invisible (Fx=Fz=0 for every other mount), but
+        // it does enter here through the -r.Y*Fx term once this mount's own gimbal tilts.
+        var r = new Vector3d(0.0, -33.75, 0.55);
         // Nominal (undeflected) net torque is ~0, so the new total equals just this one
         // instance's delta contribution: r x (Fnew - Fold).
         var expected = r.Cross(fNew - fOld);

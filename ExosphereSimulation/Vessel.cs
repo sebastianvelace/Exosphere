@@ -579,6 +579,16 @@ public class Vessel
     // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor
     // gimbal authority is computed from thrust, lever arm, CoM and moment of inertia.
     private const double ReactionControlAuthority = 0.01;
+
+    /// <summary>
+    /// Returns whichever of <paramref name="value"/>/<paramref name="floor"/> has the larger
+    /// magnitude — a component-wise Math.Max-by-magnitude used to apply
+    /// <see cref="ReactionControlAuthority"/> as a genuine floor under real engine authority
+    /// rather than an unconditional addition on top of it.
+    /// </summary>
+    private static double FloorByMagnitude(double value, double floor) =>
+        System.Math.Abs(value) >= System.Math.Abs(floor) ? value : floor;
+
     public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
         // A failure or an impact can legitimately leave the rigid body above the normal
@@ -615,61 +625,91 @@ public class Vessel
         // Couple the commanded attitude torque to the actual thrust vector. Engines sit
         // below the CoM: +pitch needs -Z deflection; +yaw needs +X deflection. Roll remains
         // differential-cluster torque and has no net lateral force in this aggregate model.
+        // GimbalOffset stays the shared fallback target for any engine SolveDifferentialGimbal
+        // below does not reach (legacy parts with no engine runtime, still averaged directly
+        // in Part.GetThrustVector); GimbalCommandOverride is cleared every tick so a stale
+        // per-instance command from a previous tick — or from a tick where the pilot let go of
+        // the stick — never lingers on an instance the current tick doesn't recompute.
         foreach (var engine in Parts.ActiveEngines)
+        {
             engine.GimbalOffset = hasInput
                 ? new Vector3d(command.Y, 0.0, -command.X)
                 : Vector3d.Zero;
+            engine.ClearGimbalCommandOverrides();
+        }
 
         if (hasInput)
         {
-            double pitchYawAuthority = System.Math.Max(
-                ReactionControlAuthority,
-                Parts.GetPitchYawAngularAcceleration(pressure)) * auth;
-            double rollAuthority = System.Math.Max(
-                ReactionControlAuthority,
-                Parts.GetRollAngularAcceleration(pressure)) * auth;
-            var localAngAccel = new Vector3d(
+            // R5b — differential per-mount TVC: size a desired torque from the envelope
+            // SolveDifferentialGimbal can actually deliver (only live, selected, gimballed
+            // instances — see GetDifferentialTVCAngularAccelerationEnvelope), not the legacy
+            // GetPitchYawAngularAcceleration/GetRollAngularAcceleration estimate, which scales
+            // every active engine's full thrust by its part-wide GimbalRange regardless of
+            // whether that specific mount can gimbal (e.g. Super Heavy's ungimballed outer
+            // ring) — that over-counting chronically saturated the allocator's request.
+            // ReactionControlAuthority stays as a floor so a command still sizes a viable
+            // target even when the live cluster's own authority momentarily reads near zero.
+            var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
+            double pitchYawAuthority =
+                System.Math.Max(ReactionControlAuthority, envelope.X) * auth;
+            double rollAuthority =
+                System.Math.Max(ReactionControlAuthority, envelope.Y) * auth;
+            var desiredLocalAngAccel = new Vector3d(
                 command.X * pitchYawAuthority,
                 command.Z * rollAuthority,
                 command.Y * pitchYawAuthority);
-            // Convertir de espacio local a mundo
-            AngularVelocity = AngularVelocity + Orientation.Rotate(localAngAccel) * dt;
+            var desiredTorque = new Vector3d(
+                desiredLocalAngAccel.X * Parts.TransverseMomentOfInertia,
+                desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia,
+                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia);
+            Parts.SolveDifferentialGimbal(desiredTorque, pressure);
+        }
 
-            // Limitar velocidad angular máxima (20°/s = 0.35 rad/s)
+        // ── Real per-mount torque, from genuine engine-mount geometry (R5/R5b/R5c) ──────
+        // τ = Σ r×F over every live engine instance's actual gimballed thrust vector — the
+        // instance's real EngineInstanceState.GimbalDeg, whatever Part.AdvanceGimbal has
+        // servoed it toward: SolveDifferentialGimbal's per-mount command above when the
+        // pilot is commanding attitude, or its resting/asymmetric state (engine-out, mount
+        // asymmetry) when nobody is. This used to be split into a `hasInput` branch that
+        // applied an idealized full-authority estimate (engine's maximum GimbalRange, not
+        // live servo state) and a separate `!hasInput` branch that read this same real
+        // geometry, restricted to !hasInput specifically to avoid double-counting the
+        // pilot's own commanded deflection through two different models. Now that R5b
+        // routes the pilot's command through this exact real per-mount geometry instead of
+        // an idealized shortcut, both branches are the same physical quantity, so there is
+        // only one term, applied unconditionally.
+        var engineAngAccel = Parts.GetPitchYawRollAngularAcceleration(pressure);
+
+        // RCS floor: idealized attitude-thruster authority (ReactionControlAuthority),
+        // independent of engine gimbal — real spacecraft carry separate RCS jets that fire
+        // whether or not the main engines do. This must stay a FLOOR (component-wise
+        // Math.Max by magnitude), exactly as the pre-R5b idealized estimate's
+        // `Math.Max(ReactionControlAuthority, ...)` did — simply adding it on top of the
+        // real per-mount torque would make it the dominant actuator on a large vehicle
+        // (ReactionControlAuthority is a fixed angular acceleration, so summing it scales
+        // the equivalent RCS torque with the vessel's own moment of inertia, easily
+        // exceeding what a real gimballed cluster delivers on something the size of a
+        // Super Heavy). Only fills the gap when the real engine term reads below the floor.
+        var rcsFloorAngAccel = hasInput
+            ? new Vector3d(command.X, command.Z, command.Y) * ReactionControlAuthority * auth
+            : Vector3d.Zero;
+
+        var appliedAngAccel = new Vector3d(
+            FloorByMagnitude(engineAngAccel.X, rcsFloorAngAccel.X),
+            FloorByMagnitude(engineAngAccel.Y, rcsFloorAngAccel.Y),
+            FloorByMagnitude(engineAngAccel.Z, rcsFloorAngAccel.Z));
+        if (appliedAngAccel.MagnitudeSquared > 0.0)
+            AngularVelocity = AngularVelocity + Orientation.Rotate(appliedAngAccel) * dt;
+
+        // Limitar velocidad angular máxima (20°/s = 0.35 rad/s) — solo mientras se pilota
+        // activamente; un disturbio no comandado (motor caído) no está sujeto a este límite
+        // de autoridad de control.
+        if (hasInput)
+        {
             double maxAngVel = 0.35;
             double mag = AngularVelocity.Magnitude;
             if (mag > maxAngVel)
                 AngularVelocity = AngularVelocity * (maxAngVel / mag);
-        }
-        else
-        {
-            // ── Disturbance torque from real engine-mount geometry (engine-out, mount
-            // asymmetry) ─────────────────────────────────────────────────────────────
-            // Genuinely unconditional physics: an unpiloted vessel does not become
-            // magically inert just because nobody is commanding attitude. τ = Σ r×F is
-            // exactly zero for a nominal symmetric firing cluster (see
-            // EngineTorqueTests.NominalSymmetricCluster_ProducesZeroNetTorque), so this is
-            // a no-op for every currently-passing nominal scenario, and only produces
-            // rotation when the cluster is actually asymmetric (engine failure, isolated
-            // gimbal fault).
-            //
-            // This is deliberately scoped to !hasInput rather than being wired in for
-            // both branches: GetTotalTorque/GetPitchYawRollAngularAcceleration read each
-            // live engine instance's actual EngineInstanceState.GimbalDeg (see
-            // Part.GetEngineInstanceThrustGeometry), which the gimbal servo model
-            // (Part.AdvanceGimbal) drives toward the commanded GimbalOffset set above
-            // whenever hasInput is true. The pilot-authority block above already applies
-            // an idealized full-authority estimate for that same commanded deflection
-            // (GetPitchYawAngularAcceleration/GetRollAngularAcceleration, which use the
-            // engine's maximum GimbalRange, not live servo state). Adding the real
-            // per-mount torque on top of that in the hasInput branch would apply the same
-            // causal effect (pilot commands gimbal → thrust vector shifts → net torque)
-            // twice through two different models. Restricting the unconditional term to
-            // !hasInput avoids that double-count while still closing the actual gap: an
-            // idle/no-input vessel with a failed engine now genuinely tumbles.
-            var disturbanceLocal = Parts.GetPitchYawRollAngularAcceleration(pressure);
-            if (disturbanceLocal.MagnitudeSquared > 0.0)
-                AngularVelocity = AngularVelocity + Orientation.Rotate(disturbanceLocal) * dt;
         }
 
         // SAS: solo amortigua cuando el jugador no está dando input

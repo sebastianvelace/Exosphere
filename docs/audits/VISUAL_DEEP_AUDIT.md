@@ -152,12 +152,18 @@
 - **Acceptance test:** Top-down/lateral pad: booster skirt fills OLM hole without clipping or huge gap.
 - **Impact:** 4 | **Effort:** S | **Dependencies:** None | **Risk:** None
 
-### V-018 — Mechazilla/chopsticks static
-- **Evidence:** `LaunchPadController.cs:631-746` procedural tower; no animation/state.
-- **Realism gap:** Starbase identity includes chopsticks; static is acceptable V1 but reads diorama.
-- **Proposed solution:** Defer motion; add subtle night lighting + cable detail pass only.
-- **Acceptance test:** Pad dawn capture: tower scale plausible vs ~121 m stack (tower ~145 m).
-- **Impact:** 2 | **Effort:** M | **Dependencies:** None | **Risk:** None
+### V-018 — Mechazilla/chopsticks now animate on catch (was: static)
+- **Evidence:** `LaunchPadController.cs:631-746` procedural tower. `UpdateChopstickCatchFeedback`
+  (`LaunchPadController.cs:66-80`) now eases the two arms toward a closed pose when
+  `Vessel.IsCaught` is true, cosmetic only (physics is `Universe.EvaluateCatchContact`).
+  Still driven off `ActiveVessel.IsCaught` only (`LaunchPadController.cs:70`) — a booster catch
+  after Ship/booster staging, where the booster is no longer the active vessel, will not
+  trigger this until that check is widened to "any caught vessel" (tracked with R12-booster).
+- **Realism gap:** Closed for the Ship catch; still open for the booster catch.
+- **Proposed solution:** No further motion work needed beyond the any-vessel fix above; night
+  lighting + cable detail pass remains optional polish.
+- **Acceptance test:** Catch approach capture: arms visibly close once `IsCaught` flips.
+- **Impact:** 2 | **Effort:** S (remaining any-vessel fix) | **Dependencies:** None | **Risk:** None
 
 ### V-019 — No human/vehicle scale cues on apron
 - **Evidence:** Coastal site roads/berms `LaunchPadController.cs:128-197`; no figures/vehicles.

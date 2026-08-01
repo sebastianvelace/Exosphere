@@ -245,6 +245,51 @@ public class PartGraph
         return torque / inertia;
     }
 
+    /// <summary>
+    /// R5b — pitch/yaw and roll angular-acceleration envelope actually deliverable by
+    /// <see cref="SolveDifferentialGimbal"/>: unlike <see cref="GetPitchYawAngularAcceleration(double)"/>
+    /// and <see cref="GetRollAngularAcceleration(double)"/> (which scale every active engine's
+    /// full thrust by its part-wide <c>GimbalRange</c>, regardless of whether that specific
+    /// mount can gimbal at all — e.g. Super Heavy's 20 ungimballed outer-ring Raptors), this
+    /// sums only over <see cref="Part.GetEngineInstanceGimbalAuthority"/>'s live, selected,
+    /// gimballed instances, using each one's own real lever arm (the same mount geometry
+    /// <see cref="SolveDifferentialGimbal"/> and <see cref="GetTotalTorque"/> read). Sizing the
+    /// differential-TVC target from this instead of the legacy scalar estimate keeps the
+    /// commanded torque within what the allocator can actually deliver, instead of chronically
+    /// over-demanding it into full saturation.
+    /// </summary>
+    public Vector3d GetDifferentialTVCAngularAccelerationEnvelope(double ambientPressure)
+    {
+        double transverse = TransverseMomentOfInertia;
+        double axial = AxialMomentOfInertia;
+        if (transverse <= 0.0 && axial <= 0.0) return Vector3d.Zero;
+
+        var positions = ComputePartLocalPositions();
+        double comY = CenterOfMass.Y;
+        double rollRadius = MaximumDiameter * 0.5 * 0.65;
+        double pitchYawTorque = 0.0;
+        double rollTorque = 0.0;
+
+        foreach (var engine in ActiveEngines)
+        {
+            if (!positions.TryGetValue(engine, out var partPosition)) continue;
+            bool countsForRoll = engine.Definition.EngineCount >= 2;
+            foreach (var (_, mountPosition, thrustN, gimbalRangeDeg)
+                     in engine.GetEngineInstanceGimbalAuthority(ambientPressure))
+            {
+                double gimbalRad = gimbalRangeDeg * MathUtils.DEG_TO_RAD;
+                double lever = System.Math.Abs(partPosition.Y + mountPosition.Y - comY);
+                pitchYawTorque += thrustN * lever * System.Math.Sin(gimbalRad);
+                if (countsForRoll)
+                    rollTorque += thrustN * rollRadius * System.Math.Sin(gimbalRad);
+            }
+        }
+
+        double pitchYaw = transverse > 0.0 ? pitchYawTorque / transverse : 0.0;
+        double roll = axial > 0.0 ? rollTorque / axial : 0.0;
+        return new Vector3d(pitchYaw, roll, pitchYaw);
+    }
+
     // ── Empuje total en espacio local ─────────────────────────────────────
     // Overload sin presión: empuje de vacío (compatibilidad).
     public Vector3d GetTotalThrust() => GetTotalThrust(0.0);
@@ -300,6 +345,95 @@ public class PartGraph
         double roll = axial > 0.0 ? torque.Y / axial : 0.0;
         double yaw = transverse > 0.0 ? torque.Z / transverse : 0.0;
         return new Vector3d(pitch, roll, yaw);
+    }
+
+    /// <summary>
+    /// R5b — differential per-mount TVC. Commands each live, gimballed engine instance's own
+    /// normalized gimbal (X,Z ∈ [-1,1]) so the vessel's real thrust cluster targets
+    /// <paramref name="desiredTorque"/> (N·m, pitch=X/roll=Y/yaw=Z about the CoM) instead of
+    /// every mount mirroring one shared command
+    /// (the pre-R5b behaviour <see cref="Vessel"/> still falls back to when this produces no
+    /// contributions). Every engine's share is proportional to its own lever-arm/thrust
+    /// authority: for each instance, linearize its lateral-force Jacobian at zero deflection —
+    /// <c>J_x = r × (F₀·range_rad·X̂)</c>, <c>J_z = r × (F₀·range_rad·Ẑ)</c>, where r is the
+    /// mount's position relative to the CoM (same geometry <see cref="GetTotalTorque"/> reads)
+    /// — then solve the minimum-norm least-squares command via the 3×3 Gramian
+    /// <c>M = Σ(J_xJ_xᵀ + J_zJ_zᵀ)</c>: <c>Mλ = desiredTorque</c>, <c>g_i = (J_x·λ, J_z·λ)</c>.
+    /// This is the standard closed-form Moore-Penrose control-allocation solve — proportional
+    /// distribution by authority, not a full constrained optimal-control redistribution after
+    /// clamping (each instance's command is independently clamped to [-1,1] at the end, with
+    /// no rebalancing of the others). A Tikhonov term keeps the Gramian solve stable when the
+    /// cluster's geometry is degenerate (e.g. a single engine, or two engines coincident on an
+    /// axis) instead of producing NaN/exploding commands.
+    /// </summary>
+    public void SolveDifferentialGimbal(Vector3d desiredTorque, double ambientPressure)
+    {
+        var positions = ComputePartLocalPositions();
+        var com = CenterOfMass;
+
+        var contributions = new List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>();
+        double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
+
+        foreach (var engine in ActiveEngines)
+        {
+            if (!positions.TryGetValue(engine, out var partPosition)) continue;
+            foreach (var (state, mountPosition, thrustN, gimbalRangeDeg)
+                     in engine.GetEngineInstanceGimbalAuthority(ambientPressure))
+            {
+                var r = partPosition + mountPosition - com;
+                double authority = thrustN * (gimbalRangeDeg * MathUtils.DEG_TO_RAD);
+                var jx = r.Cross(new Vector3d(authority, 0.0, 0.0));
+                var jz = r.Cross(new Vector3d(0.0, 0.0, authority));
+                contributions.Add((state, jx, jz));
+
+                m00 += jx.X * jx.X + jz.X * jz.X;
+                m01 += jx.X * jx.Y + jz.X * jz.Y;
+                m02 += jx.X * jx.Z + jz.X * jz.Z;
+                m11 += jx.Y * jx.Y + jz.Y * jz.Y;
+                m12 += jx.Y * jx.Z + jz.Y * jz.Z;
+                m22 += jx.Z * jx.Z + jz.Z * jz.Z;
+            }
+        }
+
+        if (contributions.Count == 0) return;
+
+        // Tikhonov regularization: without it, a Gramian built from fewer than three
+        // independent lever-arm directions (e.g. one engine, or engines coincident on an
+        // axis) is singular and unsolvable. εI keeps the solve well-posed and damps the
+        // allocation toward zero for axes the cluster genuinely cannot influence, instead of
+        // failing outright.
+        double epsilon = 1e-6 * System.Math.Max(1.0, m00 + m11 + m22);
+        var lambda = SolveSymmetric3x3(
+            m00 + epsilon, m01, m02,
+            m11 + epsilon, m12,
+            m22 + epsilon,
+            desiredTorque);
+
+        foreach (var (state, jx, jz) in contributions)
+        {
+            state.GimbalCommandOverride = new Vector3d(
+                System.Math.Clamp(jx.Dot(lambda), -1.0, 1.0),
+                0.0,
+                System.Math.Clamp(jz.Dot(lambda), -1.0, 1.0));
+        }
+    }
+
+    /// <summary>
+    /// Solves the symmetric 3×3 system [[a,b,c],[b,d,e],[c,e,f]]·x = rhs via Cramer's rule.
+    /// Returns zero for a (near-)singular matrix rather than dividing by ~0 — the caller
+    /// already adds a Tikhonov term, so this only guards residual numerical degeneracy.
+    /// </summary>
+    private static Vector3d SolveSymmetric3x3(
+        double a, double b, double c, double d, double e, double f, Vector3d rhs)
+    {
+        double det = a * (d * f - e * e) - b * (b * f - e * c) + c * (b * e - d * c);
+        if (System.Math.Abs(det) < 1e-15) return Vector3d.Zero;
+
+        double rx = rhs.X, ry = rhs.Y, rz = rhs.Z;
+        double x = (rx * (d * f - e * e) - b * (ry * f - e * rz) + c * (ry * e - d * rz)) / det;
+        double y = (a * (ry * f - e * rz) - rx * (b * f - e * c) + c * (b * rz - ry * c)) / det;
+        double z = (a * (d * rz - ry * e) - b * (b * rz - ry * c) + rx * (b * e - d * c)) / det;
+        return new Vector3d(x, y, z);
     }
 
     // ── Read-only telemetry getters (consumed by the HUD) ─────────────────

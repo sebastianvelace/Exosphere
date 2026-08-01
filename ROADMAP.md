@@ -128,7 +128,14 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Guardas radial/suborbital y destruccion por impacto.
 - Heat-shield data-driven con orientacion de flujo.
 - Ascenso [G] y EDL R13. Cualquier cambio debe preservar sus telemetrias.
-- VAB catalog/assembly/export y picking actual.
+- VAB catalog/assembly/export y picking actual, incluido el rediseño de UI con
+  el tema glass compartido.
+- Detalle visual dedicado de Falcon 9 Block 5 y New Glenn 7x2 (`rocket-visual-design`).
+- Catch de la torre (Mechazilla) para la etapa superior (Ship): fase `Catch`/`Caught`
+  en `EDLController`, contacto de dos pines vía `SurfaceContactSolver`, guiado de
+  aproximación y `MissionPhase.CAUGHT`. Usa la autoridad de actitud idealizada
+  existente, no TVC diferencial — el catch del booster (R12, pendiente) reutiliza
+  esta misma infraestructura de torre/cuna/contacto.
 
 ## Pendientes Reales
 

@@ -24,15 +24,15 @@
 | R4 | Unified 9 m aero area | `AerodynamicsModel.EstimateReferenceArea` + `EffectiveArea`; `Vessel.ComputeDragAt` | ✅ Done (section was stale → fixed) |
 | R5 | Multi-motor model — lifecycle | Per-engine lifecycle/gimbal/thermal/feed/failure state modeled per instance (already true before this pass) | ✅ Done |
 | R5 | Multi-motor model — torque | `feat(physics): compute real per-engine torque from mount geometry`: `Part.GetEngineInstanceThrustGeometry`, `PartGraph.GetTotalTorque`, `PartGraph.GetPitchYawRollAngularAcceleration`; `EngineTorqueTests.cs` (6 tests), `StarshipFlight7DataTests.BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss`; suite 369/369 | ✅ Done |
-| R5b | Differential per-mount TVC | `Vessel.Tick` still mirrors one gimbal command to every gimballed mount in a part | ⬜ Pending |
-| R5c | Torque wired as unconditional attitude disturbance | `Vessel.Tick`'s angular-acceleration block still gated behind `hasInput`; `GetTotalTorque` exists but isn't consumed there | ⬜ Pending |
+| R5b | Differential per-mount TVC | `Vessel.Tick` still mirrors one gimbal command to every gimballed mount in a part | ⬜ Pending (now actively scheduled, prerequisite for R12 booster catch) |
+| R5c | Torque wired as unconditional attitude disturbance | `feat(physics): wire engine torque as an unpiloted attitude disturbance` (`f68ca7c`): `Vessel.Tick`'s `!hasInput` branch now consumes `GetPitchYawRollAngularAcceleration` unconditionally | ✅ Done |
 | R6 | Body lift / AoA | `ComputeLift`, `AerodynamicLiftTests.cs` (4 tests) | ✅ Done |
 | R7 | Thermosphere / orbital decay | `AtmosphereModel` tail, `AtmosphereThermosphereTests`, `OrbitalDecayTests` | ✅ Done |
 | R8 | `has_heat_shield` data-driven | `PartDefinition.HasHeatShield`, `ThermalModel`, `PhysicsRegressionTests` | ✅ Done (section was stale → fixed) |
 | R9 | Touchdown ≤2 m/s | `EDLController.TouchdownVel = 3.0`; R13 telemetry ~0–1.5 m/s | ✅ Done (`SoftLandingThreshold` still 5.0 — damage gate, optional tighten) |
 | R10 | ISP cluster ~363 s | `starship_engines.json` `isp_vac: 363` | ✅ Done (section was stale → fixed) |
 | R11 | Systems tied to mission phases | `Systems/*` exist, not phase-wired | ⬜ Pending |
-| R12 | Boostback / tower catch | Depends on R5b/R5c | ⬜ Blocked |
+| R12 | Boostback / tower catch | Ship half shipped (`ffaa1e4`: `EDLController` `Catch`/`Caught` phases, `Vessel.IsCaught`/`CatchContactPoints`, `SurfaceContactSolver.FromCatchCradle`) on the pre-existing idealized gimbal authority, not R5b. Booster half (boostback burn, reentry, catch) still open, scheduled after R5b. | 🟡 Partial — Ship done, booster in progress |
 | R13 | Survivable belly-flop EDL | `EDLController` belly-flop until ~800 m flip; R13 telemetry in plan header | ✅ Done |
 
 **Discrepancies fixed this session:** R4/R8/R9/R10 detail sections still read as open fixes despite header marking them done. `ROADMAP.md` still listed R6 lift and R7 thermosphere as pending — corrected.
@@ -103,7 +103,7 @@ Ranked by impact × evidence × not already closed:
 1. **Hot-staging + startup reference compare (V2)** — Capture harness unblocked: `--hotstage` mode landed in `tools/visual_playtest.sh` and verified end-to-end (`exo_play_hotstage.png`). Remaining work is the actual reference-image comparison vs IFT T+2:39/T+2:40, not the tooling. Owner: visual-hotstage.
 2. **DEORBIT→EDL playtest harness (PLAYTEST §1 milestone 7)** — Unblocks reentry lighting overlay and V3 nominal/failure captures. Owner: visual-capture (temp harness only).
 3. **Reentry VFX tuning vs real EDL (V3)** — Capture harness unblocked: `--reentry-compare` mode landed in `tools/visual_playtest.sh`, verified end-to-end (`exo_play_reentry_nominal.png`, `exo_play_reentry_bad_attitude.png`). Flux-driven plasma works; alpha/timing/zone-charring tuning against the captured references is still pending. Owner: visual-reentry.
-4. **R5b/R5c multi-motor TVC + torque wiring (physics backlog)** — R5 torque-from-geometry is closed (`feat(physics): compute real per-engine torque from mount geometry`); remaining scope is differential per-mount TVC (R5b) and wiring `GetTotalTorque` as an unconditional attitude disturbance in `Vessel.Tick` (R5c), both smaller than the original R5. Blocks R12 boostback. Defer until visual tranche stabilizes unless explicitly prioritizing physics.
+4. **R5b differential per-mount TVC (physics backlog)** — R5 torque-from-geometry and R5c (`GetTotalTorque` wired as an unconditional attitude disturbance, `f68ca7c`) are closed. Remaining scope is only differential per-mount TVC (R5b): commanding each mount toward a target torque, not just sensing one. Prerequisite for R12 booster boostback/catch (the Ship half of the tower catch already shipped without it) — actively scheduled, not deferred.
 5. **Harmonize landing damage threshold (R9 tail)** — Optional: lower `Universe.SoftLandingThreshold` from 5.0→~3.0 m/s to match EDL setpoint; needs regression test only if touched.
 
 **Explicitly NOT next:** VAB rewrite, engine-out gameplay, global tonemap experiments, retuning R13 EDL without telemetry.
