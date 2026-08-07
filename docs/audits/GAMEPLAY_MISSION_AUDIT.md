@@ -117,14 +117,12 @@
 | **Recommendation** | `VesselAssembly.ComputeMetrics` gate: TWR ≥ 1.0, ≥1 engine, decoupler if multi-stage; block launch with readable errors. |
 | **Owner** | `ConstructionController.cs`, `VesselAssembly.cs` |
 
-### G-009 — Systems partially phase-wired; R11 still open (P1)
+### G-009 — Systems partially phase-wired; R11 still open (P1) — ✅ (R11)
 
 | | |
 |---|---|
-| **Evidence** | Eclipse→solar cut tested (`SystemsMissionPhaseTests.cs:34-46`). Life-support idle vs active by `MissionPhase` (`SystemsController.cs:81-85`). `DELEGATION_JUL2026.md:22` still marks R11 ⬜. Thermal not phase-aware; comms not gameplay (G-004). |
-| **Gap** | Reentry heating does not drive cabin thermal alerts; long coast does not force power budgeting decisions beyond passive drain. |
-| **Impact** | Systems HUD is monitoring, not mission-critical resource management. |
-| **Recommendation** | Phase hooks: `PEAK_HEATING` → thermal spike; `ORBIT` coast → eclipse power puzzles; mission fail on prolonged `NoPowerAlert` if objective requires comms. |
+| **Evidence** | `SystemsMissionPhase` Idle/Active/HighLoad/Entry/PeakHeating; LS+avionics EC; aero→cabin thermal; eclipse power; `SystemsMissionPhaseTests`. |
+| **Remaining** | Mission-fail on prolonged `NoPowerAlert` still optional; RTG/fuel-cell not modeled. |
 | **Owner** | `SystemsController.cs`, `ExosphereSimulation/Systems/*` |
 
 ### G-010 — Lua autopilot script is documentation only (P2)
