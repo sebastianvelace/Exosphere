@@ -37,10 +37,10 @@ public partial class PhaseLightingController : Node
 
     private const double FluxThresh = VehicleVisualPhysics.VisibleReentryFluxWm2;
     private const double FluxPeak   = VehicleVisualPhysics.SaturatedReentryFluxWm2;
-    private const float AmbientEnergyReentry = 0.10f;
-    private const float SunEnergyReentry     = 0.90f;
-    private const float GlowIntensityReentry = 0.80f;
-    private static readonly Color AmbientColorReentry = new(0.82f, 0.42f, 0.20f);
+    private const float AmbientEnergyReentry = 0.08f;
+    private const float SunEnergyReentry     = 0.72f;
+    private const float GlowIntensityReentry = 0.95f;
+    private static readonly Color AmbientColorReentry = new(0.88f, 0.38f, 0.16f);
 
     private const float CockpitAmbientBoost  = 0.08f;
     private const float CockpitGlowReduction = 0.18f;
@@ -137,9 +137,9 @@ public partial class PhaseLightingController : Node
             {
                 phaseFactor = mission.Phase switch
                 {
-                    MissionPhase.ENTRY         => 0.30f,
-                    MissionPhase.PEAK_HEATING    => 0.50f,
-                    MissionPhase.AERO_DESCENT    => 0.20f,
+                    MissionPhase.ENTRY         => 0.35f,
+                    MissionPhase.PEAK_HEATING    => 0.70f,
+                    MissionPhase.AERO_DESCENT    => 0.22f,
                     MissionPhase.FINAL_DESCENT   => 0.12f,
                     _                            => 0f,
                 };
