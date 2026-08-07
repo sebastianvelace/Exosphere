@@ -159,8 +159,9 @@ Mejoras:
 - [x] Hot-staging comparado contra referencia: captura multiframe en ascenso real `[G]`
   bajo xvfb (`/tmp/exosphere_hotstage_ascent_00..13.png`, jul 2026). Criterio cumplido:
   flash/pluma entre etapas, ring chamuscado en booster, Ship encendida antes de separarse,
-  HUD legible. Ver `.atl/agent-hotstaging-log.md`. Pendiente: comparacion lado-a-lado con
-  frame IFT T+2:39 para afinar intensidad del flash.
+  HUD legible. Ver `.atl/agent-hotstaging-log.md`. Flash/anillo/hollín reforzados esta
+  tanda (`HotStageFlashController`) para legibilidad en captura estática; juicio IFT
+  T+2:39 lado-a-lado sigue abierto como comparación humana de referencia.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
 - [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
