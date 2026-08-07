@@ -866,6 +866,54 @@ public partial class SimulationBridge : Node
         return target;
     }
 
+    /// <summary>
+    /// After CSM/S-IVB separation, extract LM-5 Eagle from the opaque SLA envelope,
+    /// carve its wet mass out of the SLA dry mass, and spawn Eagle as a dockable vessel.
+    /// </summary>
+    public Vessel? EnsureApollo11EagleExtracted()
+    {
+        const string eagleId = Exosphere.Simulation.Flight.Apollo11FlightProfile.EagleVesselId;
+        var existing = Universe.Vessels.FirstOrDefault(v => v.Id == eagleId);
+        if (existing != null) return existing;
+
+        var slaHost = Universe.Vessels.FirstOrDefault(v =>
+            v.Parts.Parts.Any(part =>
+                part.Definition.HasVehicleRole("sla_lunar_module")));
+        if (slaHost == null) return null;
+
+        var sla = slaHost.Parts.Parts.First(part =>
+            part.Definition.HasVehicleRole("sla_lunar_module"));
+        sla.MassDryOffset =
+            Exosphere.Simulation.Flight.Apollo11FlightProfile.EmptySlaDryMassKg
+            - sla.Definition.MassDry;
+
+        string dataPath = ProjectSettings.GlobalizePath(DataDirectory);
+        var catalog = PartCatalog.LoadFromDirectory(
+            System.IO.Path.Combine(dataPath, "parts"));
+        var variant = VehicleVariantDefinition.LoadFromJson(
+            System.IO.Path.Combine(
+                dataPath, "vehicles", "apollo11_lm5_eagle_1969.json"));
+        var eagle = variant.Build(catalog).ToVessel("LM-5 Eagle", eagleId);
+
+        // Place Eagle just ahead of the SLA nose along the host +Y thrust/stack axis.
+        Vector3d forward = slaHost.Orientation.Rotate(Vector3d.Up).Normalized;
+        eagle.Position = slaHost.Position + forward * 12.0;
+        eagle.Velocity = slaHost.Velocity;
+        eagle.Orientation = slaHost.Orientation;
+        eagle.AngularVelocity = Vector3d.Zero;
+        eagle.ReferenceBodyId = slaHost.ReferenceBodyId;
+        eagle.IsOnRails = false;
+        eagle.OrbitalState = null;
+        eagle.SASEnabled = true;
+        eagle.Throttle = 0.0;
+        Universe.AddVessel(eagle);
+        SpawnDebrisRenderer(eagle, "Eagle_");
+        GD.Print(
+            $"[HISTORICAL] LM-5 Eagle extracted from SLA "
+            + $"(SLA shell {Exosphere.Simulation.Flight.Apollo11FlightProfile.EmptySlaDryMassKg:F0} kg).");
+        return eagle;
+    }
+
     public Vector3d GetLaunchHeadingDirection()
     {
         var earth = Universe.GetBody("earth");

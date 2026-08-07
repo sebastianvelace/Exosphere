@@ -3,9 +3,8 @@
 > Plan sync audit: 2026-07-03. Source of truth after this pass: code + tests, then these plan docs.
 > Audited by grep/read against `main`-era codebase on branch `docs/plan-sync-jul2026`.
 
-> Plan sync update: 2026-08-07 (branch `cursor/r12-booster-entry-burn-hud-fdaf`). Closed R12
-> polish: outbound boostback cutoff, dedicated entry burn (13→3), booster HUD line, IFT Δv
-> budget gate on Flight 7 Super Heavy masses.
+> Plan sync update: 2026-08-07 (branch `cursor/apollo11-tde-playable-fdaf`). Apollo 11
+> TD&E playable: mission JSON, docking ports, Eagle extract, Columbia hard-dock, campaign finalize.
 
 ---
 

@@ -519,7 +519,16 @@ public class Part
 
     // ── Masa actual (seca + propelante) ───────────────────────────────────
     public double CurrentMass =>
-        Definition.MassDry + LiquidFuel + Oxidizer + SolidFuel + Monopropellant;
+        EffectiveMassDry + LiquidFuel + Oxidizer + SolidFuel + Monopropellant;
+
+    /// <summary>
+    /// Optional correction applied on top of <see cref="PartDefinition.MassDry"/>
+    /// (e.g. LM extracted from an opaque SLA envelope). Negative removes dry mass.
+    /// </summary>
+    public double MassDryOffset { get; set; }
+
+    public double EffectiveMassDry =>
+        System.Math.Max(0.0, Definition.MassDry + MassDryOffset);
 
     // ── Deep-throttle floor (Raptor 2 ≈ 40 %) ─────────────────────────────
     /// <summary>

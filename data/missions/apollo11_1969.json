@@ -1,0 +1,102 @@
+{
+  "id": "mission-apollo11-1969",
+  "sequence": 5,
+  "program": "NASA Apollo Program",
+  "titleEn": "Apollo 11 — Transposition and Docking",
+  "titleEs": "Apollo 11 — Transposición y acoplamiento",
+  "summaryEn": "Launch AS-506, reach Earth parking orbit, complete TLI, separate CSM-107, extract LM-5 Eagle from the SLA and hard-dock Columbia to Eagle. Lunar landing is deferred to a later slice.",
+  "summaryEs": "Lanza AS-506, alcanza la órbita de estacionamiento, completa TLI, separa CSM-107, extrae el LM-5 Eagle del SLA y acopla Columbia con Eagle. El alunizaje queda para una tanda posterior.",
+  "historicalDate": "1969-07-16",
+  "vehicleVariantId": "apollo11-saturn5-as506-csm107-lm5-1969-07-16",
+  "launchSiteId": "kennedy",
+  "flightProfileId": "apollo11-lunar-landing-return",
+  "crewIds": [
+    "neil-a-armstrong",
+    "edwin-e-buzz-aldrin-jr",
+    "michael-collins"
+  ],
+  "prerequisiteMissionIds": ["mission-apollo8-1968"],
+  "objectives": [
+    {
+      "id": "earth-parking-orbit",
+      "titleEn": "Reach the Earth parking orbit",
+      "titleEs": "Alcanza la órbita de estacionamiento terrestre",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "ORBIT",
+      "required": true
+    },
+    {
+      "id": "translunar-injection",
+      "titleEn": "Complete translunar injection",
+      "titleEs": "Completa la inyección translunar",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "TLI",
+      "required": true
+    },
+    {
+      "id": "lunar-approach",
+      "titleEn": "Separate CSM-107 for transposition",
+      "titleEs": "Separa CSM-107 para la transposición",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "LUNAR_APPROACH",
+      "required": true
+    },
+    {
+      "id": "columbia-eagle-docking",
+      "titleEn": "Hard-dock Columbia to Eagle",
+      "titleEs": "Acopla Columbia con Eagle",
+      "metric": "docking_achieved",
+      "comparison": "true",
+      "target": 1,
+      "required": true
+    }
+  ],
+  "limits": [
+    {
+      "id": "crew-survival",
+      "titleEn": "Keep all three crew alive",
+      "titleEs": "Mantén vivos a los tres tripulantes",
+      "metric": "crew_alive",
+      "comparison": "true",
+      "target": 1,
+      "required": true
+    },
+    {
+      "id": "command-module-survival",
+      "titleEn": "Recover Command Module 107",
+      "titleEs": "Recupera el módulo de mando 107",
+      "metric": "vessel_destroyed",
+      "comparison": "false",
+      "target": 0,
+      "required": true
+    }
+  ],
+  "anomalies": [],
+  "rewards": [
+    {
+      "id": "historical-completion",
+      "amount": 250,
+      "unlockIds": ["mission-sts1-1981", "vehicle-family-apollo-lm"]
+    }
+  ],
+  "sources": [
+    {
+      "id": "apollo11-press-kit",
+      "url": "https://www.nasa.gov/wp-content/uploads/static/apollo50th/pdf/A11_PressKit.pdf",
+      "accessedDate": "2026-08-07",
+      "description": "AS-506 / CSM-107 / LM-5 identity, masses and TD&E overview."
+    },
+    {
+      "id": "apollo11-mission-report",
+      "url": "https://www.nasa.gov/history/alsj/a11/A11_MissionReport.pdf",
+      "accessedDate": "2026-08-07",
+      "description": "Apollo 11 mission report — transposition, docking and subsequent lunar ops."
+    }
+  ]
+}

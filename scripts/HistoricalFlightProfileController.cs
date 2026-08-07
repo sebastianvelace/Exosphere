@@ -18,6 +18,8 @@ public partial class HistoricalFlightProfileController : Node
     private bool _atlasProfile;
     private bool _geminiProfile;
     private bool _apolloProfile;
+    private bool _apollo11Tde;
+    private bool _apollo11EagleExtracted;
     private double _startTime;
     private bool _meco;
     private bool _boosterPackageJettisoned;
@@ -58,6 +60,7 @@ public partial class HistoricalFlightProfileController : Node
                 or MercuryAtlasFlightProfile.Id
                 or Gemini8FlightProfile.Id
                 or Apollo8FlightProfile.Id
+                or Apollo11FlightProfile.Id
             && runtime?.Director != null
             && phase is not null
             && phase is not MissionPhase.PRE_LAUNCH
@@ -67,7 +70,9 @@ public partial class HistoricalFlightProfileController : Node
                 and not MissionPhase.CRASHED)
         {
             double elapsed = runtime.Director.Evidence.ElapsedSeconds;
-            if (profileId == Apollo8FlightProfile.Id)
+            if (profileId == Apollo11FlightProfile.Id)
+                ResumeApollo11(elapsed);
+            else if (profileId == Apollo8FlightProfile.Id)
                 ResumeApollo8(elapsed);
             else if (profileId == Gemini8FlightProfile.Id)
                 ResumeGemini(elapsed);
@@ -85,7 +90,8 @@ public partial class HistoricalFlightProfileController : Node
                 MercuryRedstoneFlightProfile.Id
                 or MercuryAtlasFlightProfile.Id
                 or Gemini8FlightProfile.Id
-                or Apollo8FlightProfile.Id))
+                or Apollo8FlightProfile.Id
+                or Apollo11FlightProfile.Id))
             return false;
         var vessel = bridge.ActiveVessel;
         if (vessel == null) return false;
@@ -95,8 +101,11 @@ public partial class HistoricalFlightProfileController : Node
             bridge.ActiveFlightProfileId == MercuryAtlasFlightProfile.Id;
         _geminiProfile =
             bridge.ActiveFlightProfileId == Gemini8FlightProfile.Id;
+        _apollo11Tde =
+            bridge.ActiveFlightProfileId == Apollo11FlightProfile.Id;
         _apolloProfile =
-            bridge.ActiveFlightProfileId == Apollo8FlightProfile.Id;
+            bridge.ActiveFlightProfileId == Apollo8FlightProfile.Id
+            || _apollo11Tde;
         _startTime = bridge.Universe.CurrentTime;
         _meco = false;
         _boosterPackageJettisoned = false;
@@ -123,12 +132,17 @@ public partial class HistoricalFlightProfileController : Node
         _apolloCircularized = false;
         _apolloTeiComplete = false;
         _apolloSmSeparated = false;
+        _apollo11EagleExtracted = false;
         _apolloTliStartTime = 0.0;
         _apolloLoiTime = 0.0;
         _apolloLunarPlan = null;
         vessel.SASEnabled = false;
         bridge.SetWarpIndex(0);
-        if (_apolloProfile)
+        if (_apollo11Tde)
+            GD.Print(
+                "[HISTORICAL] Apollo 11 transposition-and-docking "
+                + "sequence engaged (lunar landing deferred).");
+        else if (_apolloProfile)
             GD.Print(
                 "[HISTORICAL] Apollo 8 lunar-orbit and Earth-return "
                 + "sequence engaged.");
@@ -231,6 +245,7 @@ public partial class HistoricalFlightProfileController : Node
         _atlasProfile = false;
         _geminiProfile = false;
         _apolloProfile = true;
+        _apollo11Tde = false;
         _startTime = bridge.Universe.CurrentTime
             - System.Math.Max(0.0, elapsedSeconds);
         _apolloSicSeparated = !vessel.Parts.Parts.Any(part =>
@@ -262,6 +277,23 @@ public partial class HistoricalFlightProfileController : Node
         vessel.SASEnabled = false;
         GD.Print(
             $"[HISTORICAL] Apollo 8 sequence resumed at "
+            + $"T+{elapsedSeconds:F1}s.");
+    }
+
+    private void ResumeApollo11(double elapsedSeconds)
+    {
+        ResumeApollo8(elapsedSeconds);
+        _apollo11Tde = true;
+        _apolloLoiComplete = true; // never run A8 lunar path on A11 TD&E
+        _apolloCircularized = true;
+        _apolloTeiComplete = true;
+        _apolloSmSeparated = true;
+        _apollo11EagleExtracted = SimulationBridge.Instance?.Universe.Vessels
+            .Any(v => v.Id == Apollo11FlightProfile.EagleVesselId) == true;
+        _docked = SimulationBridge.Instance?.Universe.DockingConnections
+            .Any(c => c.Id == Apollo11FlightProfile.DockingConnectionId) == true;
+        GD.Print(
+            $"[HISTORICAL] Apollo 11 TD&E sequence resumed at "
             + $"T+{elapsedSeconds:F1}s.");
     }
 
@@ -592,10 +624,24 @@ public partial class HistoricalFlightProfileController : Node
             vessel.Throttle = 0.0;
             vessel.IsOnRails = true;
             MissionManager.Instance?.EnterPhase(MissionPhase.LUNAR_APPROACH);
-            bridge.SetWarpIndex(8);
-            GD.Print("[HISTORICAL] CSM-103 separated from S-IVB/LTA-B.");
+            if (_apollo11Tde)
+            {
+                bridge.SetWarpIndex(0);
+                GD.Print("[HISTORICAL] CSM-107 separated from S-IVB/SLA; TD&E begins.");
+            }
+            else
+            {
+                bridge.SetWarpIndex(8);
+                GD.Print("[HISTORICAL] CSM-103 separated from S-IVB/LTA-B.");
+            }
         }
         if (!_apolloCsmSeparated) return;
+
+        if (_apollo11Tde)
+        {
+            ProcessApollo11TranspositionAndDocking(bridge, vessel, elapsed);
+            return;
+        }
 
         dominant = universe.GetDominantBody(vessel.Position);
         if (!_apolloLoiComplete)
@@ -1189,6 +1235,136 @@ public partial class HistoricalFlightProfileController : Node
             bridge.SetWarpIndex(0);
             GD.Print("[HISTORICAL] Gemini VIII emergency splashdown.");
         }
+    }
+
+    private void ProcessApollo11TranspositionAndDocking(
+        SimulationBridge bridge,
+        Vessel columbia,
+        double elapsed)
+    {
+        if (_docked)
+        {
+            bridge.SetWarpIndex(0);
+            return;
+        }
+
+        Vessel? eagle = bridge.EnsureApollo11EagleExtracted();
+        if (eagle == null)
+        {
+            // CSM sep debris with SLA may take a frame to register.
+            return;
+        }
+        _apollo11EagleExtracted = true;
+
+        if (!_rendezvousConfigured
+            && elapsed >= Apollo11FlightProfile.EagleExtractSeconds)
+        {
+            ConfigureApollo11FinalApproach(columbia, eagle);
+            _rendezvousConfigured = true;
+            bridge.SetWarpIndex(0);
+            GD.Print("[HISTORICAL] Columbia on final approach to Eagle.");
+            return;
+        }
+
+        if (!_rendezvousConfigured) return;
+
+        if (elapsed < Apollo11FlightProfile.DockingSeconds) return;
+
+        DockingAttempt attempt = CaptureApollo11Docking(bridge, columbia, eagle);
+        if (!attempt.Succeeded)
+        {
+            GD.PrintErr(
+                $"[HISTORICAL] Apollo 11 docking failed: {attempt.Failure} "
+                + $"d={attempt.DistanceM:F2} m v={attempt.RelativeSpeedMps:F2} m/s "
+                + $"align={attempt.AlignmentErrorDeg:F1}°");
+            _active = false;
+            return;
+        }
+
+        _docked = true;
+        _active = false;
+        bridge.SetWarpIndex(0);
+        GD.Print(
+            "[HISTORICAL] Columbia hard-docked to Eagle — TD&E complete "
+            + "(lunar landing deferred).");
+        CampaignRuntime.Instance?.RequestFinalize();
+    }
+
+    private static void ConfigureApollo11FinalApproach(
+        Vessel columbia,
+        Vessel eagle)
+    {
+        eagle.IsOnRails = false;
+        eagle.OrbitalState = null;
+        // Same orientation on both craft (Gemini pattern): CM +Y probe faces LM -Y drogue.
+        Vector3d dockingAxis =
+            eagle.Orientation.Rotate(Vector3d.Up).Normalized;
+        const double initialPortSeparationM = 180.0;
+        double centreToPortsM = Apollo11FlightProfile.DockingCentreToPortsM;
+        double coastTime = System.Math.Max(
+            30.0,
+            Apollo11FlightProfile.DockingSeconds
+                - Apollo11FlightProfile.EagleExtractSeconds);
+        columbia.Position = eagle.Position
+            - dockingAxis * (initialPortSeparationM + centreToPortsM);
+        columbia.Velocity = eagle.Velocity
+            + dockingAxis * (initialPortSeparationM / coastTime);
+        columbia.Orientation = eagle.Orientation;
+        columbia.AngularVelocity = Vector3d.Zero;
+        columbia.IsOnRails = false;
+        columbia.OrbitalState = null;
+    }
+
+    private static DockingAttempt CaptureApollo11Docking(
+        SimulationBridge bridge,
+        Vessel columbia,
+        Vessel eagle)
+    {
+        string? columbiaPort = columbia.Parts.Parts.FirstOrDefault(part =>
+            part.Definition.IsDockingPort
+            && part.Definition.HasVehicleRole("command_module"))?.InstanceId;
+        string? eaglePort = eagle.Parts.Parts.FirstOrDefault(part =>
+            part.Definition.IsDockingPort
+            && part.Definition.HasVehicleRole(
+                "lunar_module_ascent_stage"))?.InstanceId;
+        if (columbiaPort == null || eaglePort == null)
+            return new DockingAttempt(
+                false,
+                DockingFailure.PortMissing,
+                null,
+                double.NaN,
+                double.NaN,
+                double.NaN);
+
+        // Match Universe.TryGetDockingFrame: Position + R*portLocal (root frame).
+        if (!columbia.Parts.TryGetAttachmentNodeLocalPosition(
+                columbiaPort, "top", out var cmPortLocal)
+            || !eagle.Parts.TryGetAttachmentNodeLocalPosition(
+                eaglePort, "top", out var lmPortLocal))
+            return new DockingAttempt(
+                false,
+                DockingFailure.PortMissing,
+                null,
+                double.NaN,
+                double.NaN,
+                double.NaN);
+
+        Vector3d axis = eagle.Orientation.Rotate(Vector3d.Up).Normalized;
+        const double captureGapM = 0.12;
+        columbia.Orientation = eagle.Orientation;
+        columbia.Position = eagle.Position
+            + eagle.Orientation.Rotate(lmPortLocal - cmPortLocal)
+            - axis * captureGapM;
+        columbia.Velocity = eagle.Velocity + axis * 0.08;
+        columbia.AngularVelocity = Vector3d.Zero;
+        eagle.AngularVelocity = Vector3d.Zero;
+
+        return bridge.Universe.TryDock(
+            columbia.Id,
+            columbiaPort,
+            eagle.Id,
+            eaglePort,
+            Apollo11FlightProfile.DockingConnectionId);
     }
 
     private static void ConfigureGeminiFinalApproach(

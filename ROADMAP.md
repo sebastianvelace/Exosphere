@@ -36,9 +36,8 @@ Base tecnica cerrada en `main`:
   `CampaignService`, `MissionDirector`, `MissionEvaluator`, debrief numérico,
   recompensas idempotentes y persistencia V2. Freedom 7, Friendship 7, Gemini 8
   y Apollo 8 tienen variantes históricas jugables. Apollo 11 ya dispone del
-  hardware fechado AS-506/CSM-107/LM-5 y de Eagle como vehículo operativo;
-  transposición/docking, descenso lunar y evaluación de misión son el siguiente
-  corte jugable.
+  hardware fechado AS-506/CSM-107/LM-5, Eagle operativo, y TD&E jugable
+  (extract + hard-dock Columbia↔Eagle); alunizaje/retorno son el siguiente corte.
 - Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
   de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
@@ -206,8 +205,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
   6.484.280 lb de ignición y las 33.205 lb del LM con procedencia NASA. F-1,
   J-2, SPS, DPS y APS son modelos fechados separados; Eagle conserva masa al
   separar descenso y activa APS tras DPS. `--apollo11` valida pad/liftoff.
-  Pendiente: TD&E multi-vessel, docking CSM/LM, perfil de alunizaje, ascenso,
-  rendezvous, TEI, entrada y objetivos de campaña.
+- Apollo 11 TD&E ✅ — `apollo11-lunar-landing-return` + `mission-apollo11-1969`:
+  parking→TLI→CSM sep→extract Eagle→hard-dock; `CampaignRuntime.RequestFinalize`
+  sin splashdown. Ver `docs/HITO4_APOLLO11_TDE.md`. Pendiente: DOI, alunizaje,
+  ascenso LM, rendezvous, TEI, entrada y amerizaje.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 
@@ -232,5 +233,5 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      ajuste de alpha/timing/zone charring).
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
-5. Recien despues volver a gameplay grande: Apollo 11 jugable (TD&E/alunizaje).
-   (R11 sistemas/fases/delay ✅; R12 booster entry burn + HUD ✅)
+5. Recien despues: Apollo 11 alunizaje (DOI→surface→APS→rendezvous→TEI).
+   (R11 ✅; R12 ✅; Apollo 11 TD&E ✅)

@@ -20,7 +20,8 @@ The next session should **not** open large new systems. Highest ROI is:
 
 Physics backlog: R5/R5b/R5c/R5d are closed. Mechazilla Ship catch + booster return (R12
 boostback/entry/catch + HUD) are landed. Over-engineering cleanup (dead NavBall, duplicate
-warp) is a low-risk parallel lane. Next large gameplay slice: Apollo 11 TD&E.
+warp) is a low-risk parallel lane. Apollo 11 TD&E (transposition + Columbia↔Eagle
+dock) is landed — next large gameplay slice is lunar landing / return.
 
 ---
 

@@ -20,6 +20,12 @@ public partial class CampaignRuntime : Node
     public MissionDebrief? LastDebrief { get; private set; }
     public bool HasActiveMission => Director != null && !_finalized;
 
+    /// <summary>
+    /// Finalize the active mission without requiring LANDED/CAUGHT/CRASHED
+    /// (e.g. Apollo 11 TD&amp;E success after hard-dock).
+    /// </summary>
+    public void RequestFinalize() => FinalizeMission();
+
     private Vector3d _launchSurfaceDirection;
     private bool _hasLaunchReference;
     private double _missionStartTime;

@@ -54,7 +54,7 @@ public class PartGraph
 
     // ── Propiedades calculadas ────────────────────────────────────────────
     public double TotalMass        => _parts.Sum(p => p.CurrentMass);
-    public double DryMass          => _parts.Sum(p => p.Definition.MassDry);
+    public double DryMass          => _parts.Sum(p => p.EffectiveMassDry);
     public double TotalLiquidFuel  => _parts.Sum(p => p.LiquidFuel);
     public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer);
     public double TotalElectricCharge => _parts.Sum(p => p.ElectricCharge);
