@@ -75,6 +75,9 @@ public partial class SimulationBridge : Node
 
     private LaunchSite? _launchSite;
 
+    /// <summary>Active launch site, if the configured id resolved from data.</summary>
+    public LaunchSite? LaunchSiteOrNull => _launchSite;
+
     // ── Ignition ramp state ───────────────────────────────────────────────
     // True while Ignite() is spooling up and waiting for TWR > 1.02 to release the hold-down.
     private bool   _ignitionActive  = false;
@@ -139,6 +142,9 @@ public partial class SimulationBridge : Node
 
             var ascent = new AscentController { Name = "AscentController" };
             uiLayer.CallDeferred("add_child", ascent);
+
+            var boosterReturn = new BoosterReturnController { Name = "BoosterReturnController" };
+            uiLayer.CallDeferred("add_child", boosterReturn);
 
             var historical = new HistoricalFlightProfileController
             {
@@ -332,14 +338,20 @@ public partial class SimulationBridge : Node
             // frame from the same site/spec data the render tower uses — the tower is
             // bolted to a rotating body, so a target computed once at arm time would drift
             // away under it exactly like the render pad would without this same refresh.
-            if (ActiveVessel!.IsAttemptingTowerCatch && _launchSite != null)
+            // R12: refresh EVERY vessel attempting a catch (Ship or returning booster),
+            // not only ActiveVessel — the booster return flies while Ship stays active.
+            if (_launchSite != null)
             {
                 var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
                     _launchSite, padEarth, time);
-                ActiveVessel.CatchTargetPositionWorld = cradle;
-                ActiveVessel.CatchTargetUpWorld = up;
-                ActiveVessel.CatchTargetVelocityWorld =
-                    padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
+                var cradleVel = padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
+                foreach (var vessel in Universe.Vessels)
+                {
+                    if (!vessel.IsAttemptingTowerCatch) continue;
+                    vessel.CatchTargetPositionWorld = cradle;
+                    vessel.CatchTargetUpWorld = up;
+                    vessel.CatchTargetVelocityWorld = cradleVel;
+                }
             }
         }
     }
@@ -349,9 +361,14 @@ public partial class SimulationBridge : Node
     /// false) if the vessel does not carry catch-pin hardpoints — most vehicles, and every
     /// non-V3 Starship, always fall through to the normal leg landing untouched.
     /// </summary>
-    public bool ArmTowerCatchApproach()
+    public bool ArmTowerCatchApproach() => ArmTowerCatchApproach(ActiveVessel);
+
+    /// <summary>
+    /// Arms a tower catch for an explicit vessel (R12 booster return while Ship remains
+    /// the active/piloted vessel).
+    /// </summary>
+    public bool ArmTowerCatchApproach(Vessel? vessel)
     {
-        var vessel = ActiveVessel;
         if (vessel == null || !vessel.HasCatchPins) return false;
         vessel.IsAttemptingTowerCatch = true;
         return true;

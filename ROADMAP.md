@@ -133,11 +133,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - VAB catalog/assembly/export y picking actual, incluido el rediseño de UI con
   el tema glass compartido.
 - Detalle visual dedicado de Falcon 9 Block 5 y New Glenn 7x2 (`rocket-visual-design`).
-- Catch de la torre (Mechazilla) para la etapa superior (Ship): fase `Catch`/`Caught`
-  en `EDLController`, contacto de dos pines vía `SurfaceContactSolver`, guiado de
-  aproximación y `MissionPhase.CAUGHT`. El TVC diferencial (R5b) ya está en
-  `Vessel.Tick`; el catch del booster (R12, pendiente) reutiliza esta misma
-  infraestructura de torre/cuna/contacto.
+- Catch de la torre (Mechazilla): Ship (`EDLController` Catch/Caught) y booster V1
+  (`BoosterReturnController` boostback→approach→catch) reutilizan cuna/pines/
+  `Universe.EvaluateCatchContact`. Cradle refresh y chopsticks son multi-vessel
+  (el booster puede atraparse mientras Ship sigue activo).
 
 ## Pendientes Reales
 

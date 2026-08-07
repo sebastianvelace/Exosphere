@@ -64,16 +64,21 @@ public sealed class CatchContactTests
     }
 
     [Fact]
-    public void CatchPinDataIsScopedToTheV3ShipsCatchEquippedNose()
+    public void CatchPinDataIsScopedToCatchEquippedVehicles()
     {
         var v3 = PartDefinition.LoadFromJson(Path.Combine(
             FindRepoRoot().FullName, "data", "parts", "starship_v3_command_flight12.json"));
         var legacy = PartDefinition.LoadFromJson(Path.Combine(
             FindRepoRoot().FullName, "data", "parts", "starship_command.json"));
+        var booster = PartDefinition.LoadFromJson(Path.Combine(
+            FindRepoRoot().FullName, "data", "parts", "super_heavy_booster.json"));
 
         Assert.True(v3.CatchPinLateralOffsetM > 0.0);
         Assert.True(v3.CatchPinRadiusM > 0.0);
         Assert.Equal(0.0, legacy.CatchPinLateralOffsetM);
+        // R12: Super Heavy declares its own catch-pin hardpoints near the hot-stage ring.
+        Assert.True(booster.CatchPinLateralOffsetM > 0.0);
+        Assert.True(booster.CatchPinRadiusM > 0.0);
     }
 
     private static (Universe universe, Vessel vessel) CreateCatchCase(

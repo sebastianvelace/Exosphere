@@ -189,13 +189,13 @@
 | **Recommendation** | After G-002 scaffold, add `MissionType.Interplanetary` with SOI-crossing checkpoints. |
 | **Owner** | `MissionManager.cs`, `TransferPlanner.cs` |
 
-### G-017 — Booster return / tower catch absent (P2, in progress)
+### G-017 — Booster return / tower catch (P2, V1 landed)
 
 | | |
 |---|---|
-| **Evidence** | The Ship half of the tower catch shipped (`ffaa1e4`): `EDLController` `Catch`/`Caught` phases, `Vessel.IsCaught`/`CatchContactPoints`, `SurfaceContactSolver.FromCatchCradle`. The booster still separates as inert debris — no boostback, no controlled reentry, no catch. R5/R5b/R5c multi-motor lifecycle, differential TVC and torque wiring are closed (`aa408e7` / `f68ca7c`); the remaining gap is gameplay/controller work for the booster return itself. |
-| **Recommendation** | R12-booster is an actively scheduled tranche reusing the Ship's catch infrastructure. |
-| **Owner** | `scripts/BoosterReturnController.cs` (new), `ExosphereSimulation/Parts/PartGraph.cs`, `LaunchComplexSpec.cs` |
+| **Evidence** | Ship catch (`ffaa1e4`) + booster V1 (`BoosterReturnController` / `BoosterReturnGuidance`): boostback after `VesselStaged`, multi-vessel cradle refresh, chopsticks any-`IsCaught`, catch pins on Super Heavy JSON, debris inherits `ConfigureCatchContactsFromParts`. |
+| **Recommendation** | Tighten boostback Δv vs IFT telemetry; dedicated entry burn; booster status on HUD without stealing Ship mission phase. |
+| **Owner** | `scripts/BoosterReturnController.cs`, `ExosphereSimulation/Flight/BoosterReturnGuidance.cs` |
 
 ### G-018 — Craft persistence separate from mission persistence (P1)
 

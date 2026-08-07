@@ -417,10 +417,15 @@ equivocada hace la órbita.
 - **Archivos:** `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`.
 - **Aceptación:** en sombra cae la energía; el retardo de comms crece con la distancia.
 
-### R12. Boostback + captura en torre (Mechazilla) — parcial (Ship ✅ / booster pendiente)
-- Catch de la etapa superior (Ship) ya cerrado: fases `Catch`/`Caught`, cuna de dos pines,
-  `MissionPhase.CAUGHT`. R5/R5b/R5c están cerrados. Falta la mitad del booster: boostback,
-  reentrada controlada y catch en torre reutilizando la misma infraestructura.
+### R12. Boostback + captura en torre (Mechazilla) — ✅ parcial jugable (Ship + booster V1)
+- Catch de la etapa superior (Ship) cerrado: fases `Catch`/`Caught`, cuna de dos pines,
+  `MissionPhase.CAUGHT`.
+- Booster V1 (`BoosterReturnController` + `BoosterReturnGuidance`): tras `VesselStaged`
+  arma boostback (13 motores, corta a h&lt;80 m/s o reserva), costa, arma catch multi-vessel
+  (cuna refresca todos los `IsAttemptingTowerCatch`, chopsticks cierran con cualquier
+  `IsCaught`), pines en `super_heavy_booster` / V3. Evidencia: `BoosterReturnGuidanceTests`,
+  `CatchContactTests`. Pendiente fino: boostback→RTLS real medido vs IFT, entry burn
+  dedicado, HUD de estado del booster.
 
 ---
 
