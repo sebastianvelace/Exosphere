@@ -3,11 +3,9 @@
 > Plan sync audit: 2026-07-03. Source of truth after this pass: code + tests, then these plan docs.
 > Audited by grep/read against `main`-era codebase on branch `docs/plan-sync-jul2026`.
 
-> Plan sync update: 2026-08-07 (branch `cursor/docs-r5b-plan-sync-fdaf`). Closed the
-> remaining R5b doc drift after `aa408e7` landed `SolveDifferentialGimbal` on `main` while
-> `ROADMAP.md`, `PLAN_REALISM.md`, `CLAUDE.md`, and this matrix still claimed TVC was open.
-> R12 now correctly reads as Ship ✅ / booster open. R5d closed in the
-> visual-then-physics tranche (`MixedClusterThrustVectorTests`).
+> Plan sync update: 2026-08-07 (branch `cursor/r11-systems-command-delay-fdaf`). Closed R11:
+> phase loads (HighLoad/Entry/PeakHeating), cabin aero thermal coupling, and ground-link
+> command delay via `GroundCommandRelay` (HUD stick/throttle; onboard guidance bypasses).
 
 ---
 
@@ -28,7 +26,7 @@
 | R8 | `has_heat_shield` data-driven | `PartDefinition.HasHeatShield`, `ThermalModel`, `PhysicsRegressionTests` | ✅ Done (section was stale → fixed) |
 | R9 | Touchdown ≤2 m/s | `EDLController.TouchdownVel = 3.0`; R13 telemetry ~0–1.5 m/s | ✅ Done (`SoftLandingThreshold` still 5.0 — damage gate, optional tighten) |
 | R10 | ISP cluster ~363 s | `starship_engines.json` `isp_vac: 363` | ✅ Done (section was stale → fixed) |
-| R11 | Systems tied to mission phases | `Systems/*` exist, not phase-wired | ⬜ Pending |
+| R11 | Systems tied to mission phases | Phase loads + thermal aero + `GroundCommandRelay` delay gameplay; `SystemsMissionPhaseTests` | ✅ Done |
 | R12 | Boostback / tower catch | Ship (`ffaa1e4`) + booster V1 (`BoosterReturnController` / `BoosterReturnGuidance`, catch pins on SH JSON, multi-vessel cradle/chopsticks) | 🟡 Partial — V1 landed, IFT polish open |
 | R13 | Survivable belly-flop EDL | `EDLController` belly-flop until ~800 m flip; R13 telemetry in plan header | ✅ Done |
 

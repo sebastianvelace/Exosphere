@@ -411,11 +411,18 @@ equivocada hace la órbita.
 
 ## OLA 4 — Sistemas / UX (realismo de misión, backlog)
 
-### R11. Sistemas de vida/energía/comms desconectados de las fases
-- **Hoy:** `Systems/*` existen (LifeSupport, Power, Comms, Thermal) pero no atados a eventos:
-  eclipse → sin solar; comms con retardo por distancia; consumo por fase.
-- **Archivos:** `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`.
-- **Aceptación:** en sombra cae la energía; el retardo de comms crece con la distancia.
+### R11. Sistemas de vida/energía/comms atados a fases — ✅ jugable
+- Eclipse → solar a 0 (penumbra proporcional); delay de comms ∝ distancia; LS Idle vs Active+.
+- Fases de sistemas: `Idle` / `Active` / `HighLoad` / `Entry` / `PeakHeating` (mapa desde
+  `MissionPhase` en `SystemsController.MapMissionPhase`).
+- EC: LS por fase + `SystemsPhaseLoads.AvionicsExtraKw` (boost en HighLoad/Entry/Peak).
+- Térmica: acoplamiento de flujo aero → cabina (`ThermalSystem` + área por fase).
+- Retardo de mando en tierra: `GroundCommandRelay` retrasa stick/throttle del HUD por
+  `SignalDelaySeconds`; uplink cae en LOS/blackout; guiado a bordo (Ascent/EDL) no pasa
+  por el relay. HUD: `GROUND DELAY` / `BLACKOUT` / `LOS`.
+- Tests: `SystemsMissionPhaseTests` (eclipse, delay, LS, thermal aero, relay).
+- Archivos: `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`,
+  `scripts/HUDController.cs`, `scripts/SystemsHUD.cs`.
 
 ### R12. Boostback + captura en torre (Mechazilla) — ✅ parcial jugable (Ship + booster V1)
 - Catch de la etapa superior (Ship) cerrado: fases `Catch`/`Caught`, cuna de dos pines,
@@ -439,7 +446,7 @@ equivocada hace la órbita.
    limitaciones conocidas sin tocar: sin J2, sin fase sideral en epoch, sin correccion baricentrica,
    Luna en conica fija, termosfera sin variabilidad solar, sin fallo estructural por presion
    dinamica pura, EDL sin ley de guiado real.
-4. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 booster boostback/captura (Ship catch ✅).
+4. Backlog mision/sistemas: R11 ✅; R12 booster boostback/captura (Ship catch ✅, booster V1 ✅, pulido IFT abierto).
 5. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)

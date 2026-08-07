@@ -249,13 +249,13 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Acceptance** | One scripted mission: "Reach 150 km orbit and deorbit to soft landing." Success/fail banner with phase checklist. Telemetry log exported on completion. *(Prerequisite path ORBIT→deorbit→ENTRY is C2 DONE.)* |
 | **Realism feel** | A mission has a beginning, middle, and end — like Flight 7's objective, not sandbox forever. |
 
-### G-P4. Systems tied to mission phases (R11)
+### G-P4. Systems tied to mission phases (R11) — ✅
 
 | | |
 | --- | --- |
-| **Evidence** | `SystemsController.cs` simulates life/power/comms/thermal; not phase-wired (`.atl/DELEGATION_JUL2026.md:22`). |
-| **Owner** | `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs` |
-| **Acceptance** | Eclipse → solar power drop; comms delay scales with distance; HUD shows consequences. xUnit on power in shadow. |
+| **Evidence** | Phase map Idle/Active/HighLoad/Entry/PeakHeating; eclipse→solar; LS+avionics EC by phase; aero→cabin thermal; `GroundCommandRelay` delays HUD stick/throttle; SystemsHUD ground-delay/blackout cues. |
+| **Owner** | `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`, `HUDController.cs`, `SystemsHUD.cs` |
+| **Acceptance** | Eclipse → solar power drop; comms delay scales with distance and delays ground commands; HUD shows consequences. xUnit on power/thermal/relay. |
 | **Realism feel** | Orbital ops have constraints — the player manages power and comms like a real flight director. |
 
 ### G-P5. VAB UX backlog (lower priority)

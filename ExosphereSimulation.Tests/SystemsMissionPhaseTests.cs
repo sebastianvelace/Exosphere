@@ -202,4 +202,147 @@ public sealed class SystemsMissionPhaseTests
 
         Assert.True(ls.OxygenKg < startO2);
     }
+
+    [Fact]
+    public void LifeSupport_PeakHeatingDrawsMoreEcThanActive()
+    {
+        var ls = new LifeSupportSystem();
+        int crew = 4;
+
+        double active = ls.GetEcLoadKw(crew, SystemsMissionPhase.Active);
+        double high   = ls.GetEcLoadKw(crew, SystemsMissionPhase.HighLoad);
+        double entry  = ls.GetEcLoadKw(crew, SystemsMissionPhase.Entry);
+        double peak   = ls.GetEcLoadKw(crew, SystemsMissionPhase.PeakHeating);
+
+        Assert.True(high > active);
+        Assert.True(entry > high);
+        Assert.True(peak > entry);
+        Assert.Equal(0.45 * 1.5 * crew, peak, precision: 6);
+    }
+
+    [Fact]
+    public void SystemsPhaseLoads_PeakHeatingIsHottestAndHungriest()
+    {
+        Assert.True(SystemsPhaseLoads.AvionicsExtraKw(SystemsMissionPhase.PeakHeating)
+            > SystemsPhaseLoads.AvionicsExtraKw(SystemsMissionPhase.Entry));
+        Assert.True(SystemsPhaseLoads.AvionicsExtraKw(SystemsMissionPhase.Entry)
+            > SystemsPhaseLoads.AvionicsExtraKw(SystemsMissionPhase.Active));
+        Assert.Equal(0.0, SystemsPhaseLoads.AvionicsExtraKw(SystemsMissionPhase.Idle));
+
+        Assert.True(SystemsPhaseLoads.ThermalCouplingAreaM2(SystemsMissionPhase.PeakHeating)
+            > SystemsPhaseLoads.ThermalCouplingAreaM2(SystemsMissionPhase.Entry));
+        Assert.True(SystemsPhaseLoads.ThermalCouplingAreaM2(SystemsMissionPhase.Entry)
+            > SystemsPhaseLoads.ThermalCouplingAreaM2(SystemsMissionPhase.Active));
+    }
+
+    [Fact]
+    public void ThermalSystem_AeroHeatFluxRaisesCabinTemperature()
+    {
+        var cool = new ThermalSystem();
+        var hot  = new ThermalSystem();
+
+        // Vacuum, no solar — isolate the aero leak path.
+        cool.Tick(30.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 0.0, phase: SystemsMissionPhase.PeakHeating);
+        hot.Tick(30.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 1.0e6, phase: SystemsMissionPhase.PeakHeating);
+
+        Assert.True(hot.TemperatureK > cool.TemperatureK + 5.0);
+    }
+
+    [Fact]
+    public void ThermalSystem_PeakPhaseCouplesMoreHeatThanCruise()
+    {
+        var cruise = new ThermalSystem();
+        var peak   = new ThermalSystem();
+
+        cruise.Tick(20.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 2.0e5, phase: SystemsMissionPhase.Active);
+        peak.Tick(20.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 2.0e5, phase: SystemsMissionPhase.PeakHeating);
+
+        Assert.True(peak.TemperatureK > cruise.TemperatureK);
+    }
+
+    [Fact]
+    public void GroundCommandRelay_AppliesImmediatelyBelowThreshold()
+    {
+        var relay = new GroundCommandRelay();
+        Vector3d applied = Vector3d.Zero;
+        var cmd = new Vector3d(1, 0, 0);
+
+        relay.SubmitAttitude(now: 0.0, delaySeconds: 0.01, pyr: cmd, linkUp: true,
+            applyNow: v => applied = v);
+
+        Assert.Equal(cmd, applied);
+        Assert.False(relay.HasPending);
+    }
+
+    [Fact]
+    public void GroundCommandRelay_DelaysAttitudeByLightTime()
+    {
+        var relay = new GroundCommandRelay();
+        Vector3d applied = Vector3d.Zero;
+        var cmd = new Vector3d(0, 1, 0);
+
+        relay.SubmitAttitude(now: 10.0, delaySeconds: 1.3, pyr: cmd, linkUp: true,
+            applyNow: v => applied = v);
+
+        Assert.Equal(Vector3d.Zero, applied);
+        Assert.Equal(1, relay.PendingAttitudeCount);
+
+        relay.Tick(11.2, applyAttitude: v => applied = v);
+        Assert.Equal(Vector3d.Zero, applied); // not yet
+
+        relay.Tick(11.3, applyAttitude: v => applied = v);
+        Assert.Equal(cmd, applied);
+        Assert.False(relay.HasPending);
+    }
+
+    [Fact]
+    public void GroundCommandRelay_DropsUplinkWhenLinkIsDown()
+    {
+        var relay = new GroundCommandRelay();
+        bool applied = false;
+
+        relay.SubmitAttitude(now: 0.0, delaySeconds: 1.0, pyr: new Vector3d(1, 0, 0),
+            linkUp: false, applyNow: _ => applied = true);
+        relay.SubmitThrottleDelta(now: 0.0, delaySeconds: 1.0, delta: 0.1,
+            linkUp: false, applyNow: _ => applied = true);
+
+        Assert.False(applied);
+        Assert.False(relay.HasPending);
+    }
+
+    [Fact]
+    public void GroundCommandRelay_ThrottleDeltaAppliesAfterDelay()
+    {
+        var relay = new GroundCommandRelay();
+        double throttle = 0.2;
+
+        relay.SubmitThrottleDelta(now: 5.0, delaySeconds: 0.5, delta: 0.1, linkUp: true,
+            applyNow: d => throttle += d);
+
+        Assert.Equal(0.2, throttle, precision: 6);
+        relay.Tick(5.4, applyThrottleDelta: d => throttle += d);
+        Assert.Equal(0.2, throttle, precision: 6);
+        relay.Tick(5.5, applyThrottleDelta: d => throttle += d);
+        Assert.Equal(0.3, throttle, precision: 6);
+    }
+
+    [Fact]
+    public void PowerSystem_PhaseAvionicsLoadDrainsFasterThanCruise()
+    {
+        var cruise = new PowerSystem();
+        var peak   = new PowerSystem();
+        var sun = new Vector3d(150_000_000_000.0, 0.0, 0.0);
+        var vesselPos = new Vector3d(EarthRadius + 400_000.0, 0.0, 0.0);
+
+        double ls = 1.8;
+        cruise.Tick(1800.0, vesselPos, sun, inEclipse: true, extraLoadKw: ls);
+        peak.Tick(1800.0, vesselPos, sun, inEclipse: true,
+            extraLoadKw: ls + SystemsPhaseLoads.AvionicsExtraKw(SystemsMissionPhase.PeakHeating));
+
+        Assert.True(peak.BatteryKwh < cruise.BatteryKwh);
+    }
 }

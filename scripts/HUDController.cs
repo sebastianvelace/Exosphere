@@ -684,7 +684,10 @@ public partial class HUDController : Control
         if (bridge == null || vessel == null || universe == null) return;
         var refBody = universe.GetDominantBody(vessel.Position);
 
-        // ── Rotation controls ──────────────────────────────────────────────
+        // ── Rotation controls (ground link) ────────────────────────────────
+        // Routed through SystemsController so cis-lunar light time delays the
+        // stick. Onboard guidance (Ascent/EDL/etc.) still writes PitchYawRoll
+        // directly later in the frame and is unaffected by blackout/delay.
         double pitchIn = 0, yawIn = 0, rollIn = 0;
         if (Input.IsKeyPressed(Key.W)) pitchIn += 1.0;
         if (Input.IsKeyPressed(Key.S)) pitchIn -= 1.0;
@@ -692,21 +695,32 @@ public partial class HUDController : Control
         if (Input.IsKeyPressed(Key.D)) yawIn   += 1.0;
         if (Input.IsKeyPressed(Key.Q)) rollIn  -= 1.0;
         if (Input.IsKeyPressed(Key.E)) rollIn  += 1.0;
-        vessel.PitchYawRoll = new Vector3d(pitchIn, yawIn, rollIn);
+        var groundAttitude = new Vector3d(pitchIn, yawIn, rollIn);
+        if (SystemsController.Instance != null)
+            SystemsController.Instance.SubmitGroundAttitude(groundAttitude);
+        else
+            vessel.PitchYawRoll = groundAttitude;
 
         // ── Hold-throttle (despegue manual) ─────────────────────────────────
         // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al TWR>1.02);
         // ya en vuelo, sube el throttle de forma progresiva. [X] mantenida lo baja.
         // Hold [Z]: on the pad starts ignition (releases the hold-down at TWR>1.02);
         // already flying, spools the throttle up. Hold [X] spools it down.
+        // Throttle rate is ground-uplinked (delayed past LEO); pad ignition stays local.
         if (Input.IsPhysicalKeyPressed(Key.Z))
         {
             if (vessel.IsGroundHeld || bridge.IsIgnitionActive) bridge.Ignite();
-            else                                                 bridge.ThrottleUp(delta);
+            else if (SystemsController.Instance != null)
+                SystemsController.Instance.SubmitGroundThrottleDelta(0.5 * delta);
+            else
+                bridge.ThrottleUp(delta);
         }
         else if (Input.IsPhysicalKeyPressed(Key.X))
         {
-            bridge.ThrottleDown(delta);
+            if (SystemsController.Instance != null)
+                SystemsController.Instance.SubmitGroundThrottleDelta(-0.5 * delta);
+            else
+                bridge.ThrottleDown(delta);
         }
 
         var viewMode = MapViewController.Instance?.Visible == true

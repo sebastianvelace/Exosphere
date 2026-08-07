@@ -20,9 +20,9 @@ public partial class SystemsHUD : Control
         // Secondary health information sits below the orbit block on the right.
         SetAnchorsPreset(LayoutPreset.TopRight);
         GrowHorizontal = GrowDirection.Begin;
-        CustomMinimumSize = new Vector2(278, 190);
+        CustomMinimumSize = new Vector2(278, 200);
         OffsetLeft = -296; OffsetTop = 340;
-        OffsetRight = -18; OffsetBottom = 530;
+        OffsetRight = -18; OffsetBottom = 540;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
@@ -71,13 +71,40 @@ public partial class SystemsHUD : Control
         DrawString(_font, new Vector2(10, y + 12), mode,
             HorizontalAlignment.Left, -1, 10, alert ? RedBar : LabelDim);
 
-        // Signal delay label
+        // Comms / ground-link cue (blackout ≠ control loss; delay is gameplay)
         float delay = (float)sys.Comms.SignalDelaySeconds;
-        if (delay > 0.01f)
+        string linkCue;
+        Color linkColor = LabelDim;
+        if (sys.Comms.PlasmaBlackout)
+        {
+            linkCue = $"BLACKOUT {sys.Comms.PlasmaBlackoutSeconds:F0}s";
+            linkColor = RedBar;
+        }
+        else if (!sys.Comms.HasSignal)
+        {
+            linkCue = "LOS — GROUND UPLINK DEAD";
+            linkColor = RedBar;
+        }
+        else if (sys.GroundDelayActive)
         {
             string delayStr = delay < 1.0f ? $"{delay * 1000:F0} ms" : $"{delay:F1} s";
-            DrawString(_font, new Vector2(10, size.Y - 8), $"Dt {delayStr}",
-                HorizontalAlignment.Left, -1, 10, LabelDim);
+            linkCue = $"GROUND DELAY Dt {delayStr}";
+            linkColor = YellowBar;
+        }
+        else if (delay > 0.01f)
+        {
+            string delayStr = delay < 1.0f ? $"{delay * 1000:F0} ms" : $"{delay:F1} s";
+            linkCue = $"Dt {delayStr}";
+        }
+        else
+        {
+            linkCue = "";
+        }
+
+        if (linkCue.Length > 0)
+        {
+            DrawString(_font, new Vector2(10, size.Y - 8), linkCue,
+                HorizontalAlignment.Left, -1, 10, linkColor);
         }
     }
 

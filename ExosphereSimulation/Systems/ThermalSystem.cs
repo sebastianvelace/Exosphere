@@ -17,10 +17,21 @@ public class ThermalSystem
     private const double ThermalMass   = 50000.0; // J/K
     private const double Boltzmann     = 5.67e-8;
 
+    /// <summary>
+    /// Fraction of free-stream aero heat flux that leaks past TPS into the cabin
+    /// thermal mass. Real vehicles are far better sealed; this is a gameplay dial
+    /// so peak heating can drive HotAlert without requiring multi-hour soaks.
+    /// </summary>
+    private const double AeroCabinLeakFraction = 0.015;
+
     public void Tick(double dt, bool inEclipse, bool inAtmosphere, double atmosphericTemp)
         => Tick(dt, inEclipse ? 0.0 : 1.0, inAtmosphere, atmosphericTemp);
 
     public void Tick(double dt, double solarVisibility, bool inAtmosphere, double atmosphericTemp)
+        => Tick(dt, solarVisibility, inAtmosphere, atmosphericTemp, aeroHeatFluxWm2: 0.0);
+
+    public void Tick(double dt, double solarVisibility, bool inAtmosphere, double atmosphericTemp,
+        double aeroHeatFluxWm2, SystemsMissionPhase phase = SystemsMissionPhase.Active)
     {
         double solarIn = System.Math.Clamp(solarVisibility, 0.0, 1.0)
             * SolarHeatFlux * SolarAbsorb * VehicleArea * 0.5;
@@ -33,7 +44,11 @@ public class ThermalSystem
             ? (atmosphericTemp - TemperatureK) * 200.0  // simple convection
             : 0.0;
 
-        double netHeat = solarIn - radOut + convective;
+        // TPS leak: free-stream stagnation flux × coupling area × tiny fraction.
+        double couplingArea = SystemsPhaseLoads.ThermalCouplingAreaM2(phase);
+        double aeroIn = System.Math.Max(0.0, aeroHeatFluxWm2) * couplingArea * AeroCabinLeakFraction;
+
+        double netHeat = solarIn - radOut + convective + aeroIn;
         TemperatureK = System.Math.Max(SpaceBgTemp, TemperatureK + netHeat * dt / ThermalMass);
 
         HotAlert  = TemperatureK > MaxSafeTemp;

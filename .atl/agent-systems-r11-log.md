@@ -1,60 +1,29 @@
-# R11 Agent Log — Systems Connected to Mission Phases
+# R11 Agent Log — Systems Connected to Mission Phases (follow-up)
 
-**Branch:** `feat/physics-systems-mission-phases`  
-**Date:** 2026-07-02
+**Branch:** `cursor/r11-systems-command-delay-fdaf`  
+**Date:** 2026-08-07
 
-## Audit (before)
+## Prior minimum (already on main)
 
-| Component | Status |
-|-----------|--------|
-| `PowerSystem` | Solar + battery model existed; eclipse passed as bool from game layer |
-| `CommsSystem` | Delay = distance/c, LOS check, signal strength — implemented but untested |
-| `LifeSupportSystem` | O2/CO2/H2O/food per crew; no phase gating, no EC tie-in |
-| `SystemsController` | Wired tick loop; eclipse math inline in Godot layer |
-| `SystemsHUD` | Already shows COMM bar + `Dt` delay label |
+Eclipse→solar, Idle/Active LS, comms delay display, ControlLimited on geometric LOS / power / crew.
 
-## Implemented (R11 minimum slice)
+## This tranche
 
-1. **`MissionGeometry`** (sim): Earth umbra cone test + shared signal-delay helper.
-2. **`SystemsMissionPhase`** (sim): `Idle` vs `Active`; mapped from `MissionPhase` in controller.
-3. **Power**: `extraLoadKw` from life support; solar forced to 0 in eclipse.
-4. **Life support**: EC load scales with crew × phase; resource drain only in `Active`.
-5. **Comms**: delay uses `MissionGeometry.SignalDelaySeconds` (HUD unchanged).
-6. **Controller**: uses sim geometry; passes phase + LS EC load to power tick.
+1. **`SystemsMissionPhase`** expanded: `HighLoad`, `Entry`, `PeakHeating` (+ legacy `Idle`/`Active`).
+2. **`SystemsPhaseLoads`**: avionics kW + thermal coupling area by phase.
+3. **`ThermalSystem`**: free-stream aero heat flux leaks into cabin (phase-scaled area).
+4. **`GroundCommandRelay`**: queues HUD attitude/throttle by `SignalDelaySeconds`; drops uplink when `!HasSignal` (includes plasma blackout); onboard guidance bypasses.
+5. **`SystemsController`**: richer `MapMissionPhase`, early `ProcessPriority`, flush relay, phase EC to Power.
+6. **`HUDController`**: routes WASDQE / ZX through ground relay.
+7. **`SystemsHUD`**: `GROUND DELAY` / `BLACKOUT` / `LOS` cues.
 
-## Approximations (documented)
+## Approximations
 
-- Earth umbra only (point Sun, no Moon penumbra).
-- Fixed panel area/efficiency; no body-attitude solar pointing.
-- Comms delay is one-way slant range to Earth surface (nadir) / c when radius known; geocenter fallback otherwise.
-- Life support EC: 0.45 kW/crew active, 0.15 kW standby (not ISS-calibrated).
+- Cabin aero leak fraction (1.5%) is a gameplay dial, not a TPS model.
+- Avionics extra loads are order-of-magnitude, not vehicle budgets.
+- Delayed throttle under high time-warp may coalesce deltas when many samples flush at once.
+- Pad ignition (`Ignite`) stays local (not light-time delayed).
 
-## Tests added
+## Tests
 
-`ExosphereSimulation.Tests/SystemsMissionPhaseTests.cs`:
-
-- `EarthUmbra_DetectsVesselInShadow`
-- `EarthUmbra_SunlitSideHasNoShadow`
-- `PowerSystem_EclipseZeroesSolarOutput`
-- `PowerSystem_LifeSupportLoadDrainsBatteryInEclipse`
-- `CommsDelay_ScalesWithEarthDistance`
-- `CommsSystem_ReportsRoundTripDelayFromPosition`
-- `LifeSupport_ActivePhaseDrawsMoreEcThanIdle`
-- `LifeSupport_IdlePhaseDoesNotConsumeOxygen`
-- `LifeSupport_ActivePhaseConsumesOxygen`
-
-## Deferred
-
-- Night-side-only gate without full umbra (umbra chosen instead).
-- Moon/other-body eclipse on solar.
-- Two-way comms delay gameplay (read-only HUD sufficient for V1).
-- Per-phase thermal/comms degradation beyond existing models.
-- RTG / fuel-cell power sources.
-
-## Self-grade
-
-| Criterion | Score | Notes |
-|-----------|-------|-------|
-| Realism | 7/10 | Core constraints wired; simplified geometry |
-| Tests | 9/10 | 9 focused xUnit tests on new sim contracts |
-| Scope | 9/10 | No framework; 3 clear behaviors + geometry helper |
+Extended `SystemsMissionPhaseTests`: phase EC ordering, thermal aero, relay immediate/delay/drop, power drain with peak avionics.

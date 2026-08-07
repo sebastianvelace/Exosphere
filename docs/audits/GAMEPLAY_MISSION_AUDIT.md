@@ -69,15 +69,13 @@
 | **Recommendation** | Populate crew from mission JSON or Starship command part; crew panel in HUD; mission fail on crew loss for crewed missions. |
 | **Owner** | `CrewMember.cs`, `Vessel.cs`, `SimulationBridge.SpawnStarshipStack`, `SystemsController.cs` |
 
-### G-004 — Comms delay and LOS are display-only, not gameplay (P1)
+### G-004 — Comms delay and LOS are display-only, not gameplay (P1) — ✅ partial (R11)
 
 | | |
 |---|---|
-| **Evidence** | `CommsSystem` computes `SignalDelaySeconds`, LOS, strength (`CommsSystem.cs:16-34`). `SystemsHUD` shows delay label (`SystemsHUD.cs:55-60`). `ControlLimited` triggers on `!Comms.HasSignal` (`SystemsController.cs:67-77`) — binary SAS/autopilot abort, not delayed commands. |
-| **Gap** | Player input is instant at Moon distance; delay never affects throttle/attitude commands. No ground-station window, no reentry blackout as distinct comms phase. R11 partially done (eclipse→power) but comms gameplay deferred per `DELEGATION_JUL2026.md:22`. |
-| **Impact** | Flight-director tension (one-way light time, blackout) missing. |
-| **Recommendation** | Command queue with `SignalDelaySeconds` latency for non-critical inputs; optional "ground assist" mode requiring `HasSignal`; reentry comms fade tied to plasma phase. |
-| **Owner** | `CommsSystem.cs`, `SystemsController.cs`, `SimulationBridge.cs` input path |
+| **Evidence** | `GroundCommandRelay` delays HUD attitude/throttle by `SignalDelaySeconds`; uplink drops when `!HasSignal` (LOS + plasma blackout). Onboard Ascent/EDL bypass the relay. SystemsHUD shows `GROUND DELAY` / `BLACKOUT` / `LOS`. Geometric LOS still trips `ControlLimited`; blackout does not. |
+| **Remaining** | No discrete ground-station window scheduling; blackout is still not a separate mission phase banner beyond SystemsHUD. |
+| **Owner** | `GroundCommandRelay.cs`, `SystemsController.cs`, `HUDController.cs` |
 
 ### G-005 — Failure states lack durable mission consequences (P1)
 
