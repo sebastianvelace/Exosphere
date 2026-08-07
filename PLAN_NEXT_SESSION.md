@@ -18,7 +18,9 @@ The next session should **not** open large new systems. Highest ROI is:
 2. **Close the V0.5 audit gap** — compare hot-staging, startup, and reentry captures against real IFT/Flight 7 references; tune only what the diff shows.
 3. **Ship reentry lighting + zone charring** — blocked today because the harness cannot produce a belly-flop EDL frame for before/after verification.
 
-Physics backlog: R5/R5b/R5c/R5d are closed. Mechazilla Ship catch + booster return V1 (R12) are landed — polish boostback vs IFT and booster HUD next. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
+Physics backlog: R5/R5b/R5c/R5d are closed. Mechazilla Ship catch + booster return (R12
+boostback/entry/catch + HUD) are landed. Over-engineering cleanup (dead NavBall, duplicate
+warp) is a low-risk parallel lane. Next large gameplay slice: Apollo 11 TD&E.
 
 ---
 

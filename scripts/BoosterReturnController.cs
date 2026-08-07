@@ -8,9 +8,10 @@ using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 
 /// <summary>
-/// R12 — Super Heavy return after staging: boostback burn toward the pad, then a
-/// simplified catch approach that reuses the Ship Mechazilla cradle contact path.
-/// Does not own Ship EDL; Ship remains <see cref="SimulationBridge.ActiveVessel"/>.
+/// R12 — Super Heavy return after staging: boostback toward the pad, coast, dedicated
+/// entry/landing burn (13 engines), then a 3-engine chopsticks catch. Reuses the Ship
+/// Mechazilla cradle contact path. Does not own Ship EDL; Ship remains
+/// <see cref="SimulationBridge.ActiveVessel"/>.
 /// </summary>
 [GlobalClass]
 public partial class BoosterReturnController : Node
@@ -20,25 +21,38 @@ public partial class BoosterReturnController : Node
         Idle,
         Boostback,
         Coast,
-        Approach,
+        EntryBurn,
         Catch,
         Caught,
         Done,
     }
 
+    public static BoosterReturnController? Instance { get; private set; }
+
     public Phase CurrentPhase { get; private set; } = Phase.Idle;
     public Vessel? Booster { get; private set; }
     public string? StatusLine { get; private set; }
 
+    /// <summary>
+    /// |Δv| of the inertial velocity change across the boostback burn (m/s).
+    /// Updated at boostback cutoff for HUD / telemetry.
+    /// </summary>
+    public double LastBoostbackDeltaVMps { get; private set; }
+
     private bool _wired;
-    private const double ApproachArmAltitudeM = 8_000.0;
-    private const double CatchPhaseAltitudeM = 1_500.0;
+    private Vector3d _boostbackStartVelocity;
     private const double CatchAbortMissM = 80.0;
 
     public override void _Ready()
     {
         Name = "BoosterReturnController";
+        Instance = this;
         TryWire();
+    }
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
     }
 
     public override void _Process(double delta)
@@ -68,40 +82,49 @@ public partial class BoosterReturnController : Node
         double vHoriz = (surfVel - up * surfVel.Dot(up)).Magnitude;
 
         var pad = ResolvePadPosition(bridge, body);
+        double outbound = BoosterReturnGuidance.OutboundHorizontalSpeedMps(
+            surfVel, up, pad, Booster.Position);
         RefreshCatchCradle(bridge, Booster, body);
 
         switch (CurrentPhase)
         {
             case Phase.Boostback:
-                DriveBoostback(Booster, body, surfVel, up, pad, vHoriz);
+                DriveBoostback(Booster, body, surfVel, up, pad, vHoriz, outbound);
                 break;
             case Phase.Coast:
                 IdleBooster(Booster);
-                StatusLine = $"BOOSTER COAST  h={vHoriz:F0} m/s  alt={alt / 1000.0:F0} km";
-                if (alt < ApproachArmAltitudeM && Booster.HasCatchPins)
+                StatusLine = $"BOOSTER COAST  out={outbound:F0} m/s  alt={alt / 1000.0:F0} km";
+                if (BoosterReturnGuidance.ShouldArmEntryBurn(alt, Booster.HasCatchPins))
                 {
                     bridge.ArmTowerCatchApproach(Booster);
-                    CurrentPhase = Phase.Approach;
+                    CurrentPhase = Phase.EntryBurn;
+                    StatusLine = "BOOSTER ENTRY BURN";
+                    GD.Print($"[R12] entry burn armed alt={alt:F0} m");
                 }
                 break;
-            case Phase.Approach:
-                DriveCatchApproach(Booster, body, surfVel, up, pad, alt, vHoriz, catchPhase: false);
-                if (alt < CatchPhaseAltitudeM)
+            case Phase.EntryBurn:
+                if (Booster.IsCaught)
+                {
+                    FinishCaught();
+                    break;
+                }
+                DriveLandingBurn(Booster, body, surfVel, up, pad, alt, vHoriz,
+                    BoosterReturnGuidance.EntryBurnEngineCount, catchPhase: false);
+                if (!BoosterReturnGuidance.ShouldContinueEntryBurn(alt))
                     CurrentPhase = Phase.Catch;
                 break;
             case Phase.Catch:
                 if (Booster.IsCaught)
                 {
-                    CurrentPhase = Phase.Caught;
-                    IdleBooster(Booster);
-                    StatusLine = "BOOSTER CAUGHT";
+                    FinishCaught();
                     break;
                 }
-                DriveCatchApproach(Booster, body, surfVel, up, pad, alt, vHoriz, catchPhase: true);
+                DriveLandingBurn(Booster, body, surfVel, up, pad, alt, vHoriz,
+                    BoosterReturnGuidance.CatchEngineCount, catchPhase: true);
                 break;
             case Phase.Caught:
                 IdleBooster(Booster);
-                StatusLine = "BOOSTER CAUGHT";
+                StatusLine = FormatCaughtStatus();
                 break;
         }
     }
@@ -131,6 +154,8 @@ public partial class BoosterReturnController : Node
         var engines = BoosterReturnGuidance.FindBoosterEnginePart(debris);
         engines?.SelectEngineCount(BoosterReturnGuidance.BoostbackEngineCount);
 
+        _boostbackStartVelocity = debris.Velocity;
+        LastBoostbackDeltaVMps = 0.0;
         CurrentPhase = Phase.Boostback;
         StatusLine = "BOOSTER BOOSTBACK";
         GD.Print($"[R12] booster return armed on '{debris.Name}' ({debris.Id})");
@@ -138,19 +163,23 @@ public partial class BoosterReturnController : Node
 
     private void DriveBoostback(
         Vessel booster, CelestialBody body, Vector3d surfVel, Vector3d up,
-        Vector3d pad, double vHoriz)
+        Vector3d pad, double vHoriz, double outbound)
     {
         var engines = BoosterReturnGuidance.FindBoosterEnginePart(booster);
         double fuelFrac = engines != null
             ? BoosterReturnGuidance.RemainingFuelFraction(engines)
             : 0.0;
 
-        if (!BoosterReturnGuidance.ShouldContinueBoostback(vHoriz, fuelFrac))
+        if (!BoosterReturnGuidance.ShouldContinueBoostback(outbound, fuelFrac))
         {
             IdleBooster(booster);
+            LastBoostbackDeltaVMps = (booster.Velocity - _boostbackStartVelocity).Magnitude;
             CurrentPhase = Phase.Coast;
-            StatusLine = $"BOOSTER COAST  h={vHoriz:F0} m/s";
-            GD.Print($"[R12] boostback cutoff h={vHoriz:F0} m/s fuel={fuelFrac:P1}");
+            StatusLine =
+                $"BOOSTER COAST  out={outbound:F0} m/s  Δv={LastBoostbackDeltaVMps:F0} m/s";
+            GD.Print(
+                $"[R12] boostback cutoff out={outbound:F0} m/s fuel={fuelFrac:P1} " +
+                $"Δv={LastBoostbackDeltaVMps:F0} m/s");
             return;
         }
 
@@ -159,6 +188,7 @@ public partial class BoosterReturnController : Node
         if (thrustDir.Magnitude < 1e-6)
         {
             IdleBooster(booster);
+            LastBoostbackDeltaVMps = (booster.Velocity - _boostbackStartVelocity).Magnitude;
             CurrentPhase = Phase.Coast;
             return;
         }
@@ -167,12 +197,13 @@ public partial class BoosterReturnController : Node
         AimThrustAxis(booster, thrustDir);
         engines?.SelectEngineCount(BoosterReturnGuidance.BoostbackEngineCount);
         booster.Throttle = 1.0;
-        StatusLine = $"BOOSTER BOOSTBACK  h={vHoriz:F0} m/s  fuel={fuelFrac:P0}";
+        StatusLine =
+            $"BOOSTER BOOSTBACK  out={outbound:F0} m/s  fuel={fuelFrac:P0}";
     }
 
-    private void DriveCatchApproach(
+    private void DriveLandingBurn(
         Vessel booster, CelestialBody body, Vector3d surfVel, Vector3d up,
-        Vector3d pad, double alt, double vHoriz, bool catchPhase)
+        Vector3d pad, double alt, double vHoriz, int enginesLit, bool catchPhase)
     {
         Vector3d offset = booster.Position - booster.CatchTargetPositionWorld;
         Vector3d horizOff = offset - up * offset.Dot(up);
@@ -205,16 +236,30 @@ public partial class BoosterReturnController : Node
         double twr = System.Math.Max(0.1, EstimateTwr(booster, body, engines));
         double aBrake = (twr - 1.0) * body.GetSurfaceGravity();
         double stopDist = aBrake > 0.5 ? (vDown * vDown) / (2.0 * aBrake) : 0.0;
-        double throttle = alt < stopDist * 1.4 || alt < 800.0 ? 1.0 : 0.0;
+        double throttle = alt < stopDist * 1.4 || alt < 800.0 ? 1.0 : 0.35;
+        // Entry burn always holds meaningful thrust once armed — IFT lights 13 at ~2 km
+        // while still fast; our arm is slightly higher so keep a floor.
+        if (!catchPhase) throttle = System.Math.Max(throttle, 0.7);
         if (vHoriz > 40.0) throttle = System.Math.Max(throttle, 0.6);
 
-        int enginesLit = catchPhase ? 3 : 13;
         engines?.SelectEngineCount(enginesLit);
         booster.Throttle = throttle;
         StatusLine = catchPhase
             ? $"BOOSTER CATCH  miss={miss:F0} m  alt={alt:F0} m"
-            : $"BOOSTER APPROACH  miss={miss:F0} m  alt={alt / 1000.0:F1} km";
+            : $"BOOSTER ENTRY  miss={miss:F0} m  alt={alt / 1000.0:F1} km";
     }
+
+    private void FinishCaught()
+    {
+        if (Booster != null) IdleBooster(Booster);
+        CurrentPhase = Phase.Caught;
+        StatusLine = FormatCaughtStatus();
+    }
+
+    private string FormatCaughtStatus() =>
+        LastBoostbackDeltaVMps > 1.0
+            ? $"BOOSTER CAUGHT  boostback Δv={LastBoostbackDeltaVMps:F0} m/s"
+            : "BOOSTER CAUGHT";
 
     private static void IdleBooster(Vessel booster)
     {

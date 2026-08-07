@@ -185,12 +185,12 @@
 | **Recommendation** | After G-002 scaffold, add `MissionType.Interplanetary` with SOI-crossing checkpoints. |
 | **Owner** | `MissionManager.cs`, `TransferPlanner.cs` |
 
-### G-017 — Booster return / tower catch (P2, V1 landed)
+### G-017 — Booster return / tower catch (P2) — ✅ R12
 
 | | |
 |---|---|
-| **Evidence** | Ship catch (`ffaa1e4`) + booster V1 (`BoosterReturnController` / `BoosterReturnGuidance`): boostback after `VesselStaged`, multi-vessel cradle refresh, chopsticks any-`IsCaught`, catch pins on Super Heavy JSON, debris inherits `ConfigureCatchContactsFromParts`. |
-| **Recommendation** | Tighten boostback Δv vs IFT telemetry; dedicated entry burn; booster status on HUD without stealing Ship mission phase. |
+| **Evidence** | Ship catch + booster boostback → entry burn (13) → catch (3); HUD `BOOSTER` line; outbound cutoff + IFT Δv budget gate in `BoosterReturnGuidanceTests`. |
+| **Remaining** | Optional: divert-to-Gulf abort; wall-clock boostback vs IFT timeline compare in playtest harness. |
 | **Owner** | `scripts/BoosterReturnController.cs`, `ExosphereSimulation/Flight/BoosterReturnGuidance.cs` |
 
 ### G-018 — Craft persistence separate from mission persistence (P1)

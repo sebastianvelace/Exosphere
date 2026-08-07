@@ -3,9 +3,9 @@
 > Plan sync audit: 2026-07-03. Source of truth after this pass: code + tests, then these plan docs.
 > Audited by grep/read against `main`-era codebase on branch `docs/plan-sync-jul2026`.
 
-> Plan sync update: 2026-08-07 (branch `cursor/r11-systems-command-delay-fdaf`). Closed R11:
-> phase loads (HighLoad/Entry/PeakHeating), cabin aero thermal coupling, and ground-link
-> command delay via `GroundCommandRelay` (HUD stick/throttle; onboard guidance bypasses).
+> Plan sync update: 2026-08-07 (branch `cursor/r12-booster-entry-burn-hud-fdaf`). Closed R12
+> polish: outbound boostback cutoff, dedicated entry burn (13→3), booster HUD line, IFT Δv
+> budget gate on Flight 7 Super Heavy masses.
 
 ---
 
@@ -27,7 +27,7 @@
 | R9 | Touchdown ≤2 m/s | `EDLController.TouchdownVel = 3.0`; R13 telemetry ~0–1.5 m/s | ✅ Done (`SoftLandingThreshold` still 5.0 — damage gate, optional tighten) |
 | R10 | ISP cluster ~363 s | `starship_engines.json` `isp_vac: 363` | ✅ Done (section was stale → fixed) |
 | R11 | Systems tied to mission phases | Phase loads + thermal aero + `GroundCommandRelay` delay gameplay; `SystemsMissionPhaseTests` | ✅ Done |
-| R12 | Boostback / tower catch | Ship (`ffaa1e4`) + booster V1 (`BoosterReturnController` / `BoosterReturnGuidance`, catch pins on SH JSON, multi-vessel cradle/chopsticks) | 🟡 Partial — V1 landed, IFT polish open |
+| R12 | Boostback / tower catch | Ship catch + booster boostback/entry/catch + HUD `BOOSTER` line; Δv budget vs IFT band in `BoosterReturnGuidanceTests` | ✅ Done |
 | R13 | Survivable belly-flop EDL | `EDLController` belly-flop until ~800 m flip; R13 telemetry in plan header | ✅ Done |
 
 **Discrepancies fixed this session:** R4/R8/R9/R10 detail sections still read as open fixes despite header marking them done. `ROADMAP.md` still listed R6 lift and R7 thermosphere as pending — corrected.

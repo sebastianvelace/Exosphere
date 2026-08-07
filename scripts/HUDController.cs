@@ -66,6 +66,7 @@ public partial class HUDController : Control
     private Label _countdownLabel = null!;
     private Label _countdownMilestone = null!;
     private Label _guidanceLabel = null!;
+    private Label _boosterLabel = null!;
     private Label _densityToast = null!;
     private double _densityToastTimer;
     private Label _alertLabel = null!;
@@ -262,6 +263,16 @@ public partial class HUDController : Control
         _guidanceLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _guidanceLabel.CustomMinimumSize = new Vector2(580, 0);
         vbox.AddChild(_guidanceLabel);
+
+        // R12: booster return is a parallel vehicle — keep Ship mission phase intact
+        // and publish Super Heavy status on its own line under Ship guidance.
+        _boosterLabel = new Label { Text = "" };
+        _boosterLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        InterfaceTheme.ApplyMono(_boosterLabel, 10);
+        _boosterLabel.AddThemeColorOverride("font_color", InterfaceTheme.Warning);
+        _boosterLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _boosterLabel.CustomMinimumSize = new Vector2(580, 0);
+        vbox.AddChild(_boosterLabel);
 
         var nav = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         nav.AddThemeConstantOverride("separation", 12);
@@ -849,6 +860,7 @@ public partial class HUDController : Control
             UpdatePadHelp(mission);
         }
         UpdateGuidanceLine();
+        UpdateBoosterLine();
         UpdateDensityToast(delta);
         ApplyViewMode(snapshot.ViewMode);
     }
@@ -862,6 +874,12 @@ public partial class HUDController : Control
         _guidanceLabel.Text = EDLController.Instance?.BannerStatus
             ?? AscentController.Instance?.BannerStatus
             ?? "";
+
+    private void UpdateBoosterLine()
+    {
+        string? line = BoosterReturnController.Instance?.StatusLine;
+        _boosterLabel.Text = string.IsNullOrEmpty(line) ? "" : line!;
+    }
 
     private void UpdateDensityToast(double delta)
     {
@@ -933,6 +951,7 @@ public partial class HUDController : Control
         _phaseLabel.Visible = banner;
         _launchPathLabel.Visible = banner;
         _guidanceLabel.Visible = banner && _guidanceLabel.Text.Length > 0;
+        _boosterLabel.Visible = banner && _boosterLabel.Text.Length > 0;
         _navRow.Visible = banner && full;
         _phaseTrack.Visible = banner;
         _countdownRoot.Visible &= (exterior || cockpit) && !clean;

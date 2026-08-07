@@ -133,10 +133,11 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - VAB catalog/assembly/export y picking actual, incluido el rediseño de UI con
   el tema glass compartido.
 - Detalle visual dedicado de Falcon 9 Block 5 y New Glenn 7x2 (`rocket-visual-design`).
-- Catch de la torre (Mechazilla): Ship (`EDLController` Catch/Caught) y booster V1
-  (`BoosterReturnController` boostback→approach→catch) reutilizan cuna/pines/
+- Catch de la torre (Mechazilla): Ship (`EDLController` Catch/Caught) y booster
+  (`BoosterReturnController` boostback→entry burn→catch) reutilizan cuna/pines/
   `Universe.EvaluateCatchContact`. Cradle refresh y chopsticks son multi-vessel
-  (el booster puede atraparse mientras Ship sigue activo).
+  (el booster puede atraparse mientras Ship sigue activo). HUD muestra `BOOSTER …`
+  sin alterar `MissionPhase` del Ship.
 
 ## Pendientes Reales
 
@@ -231,5 +232,5 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      ajuste de alpha/timing/zone charring).
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
-5. Recien despues volver a gameplay grande: Apollo 11 jugable (TD&E/alunizaje),
-   o pulido R12 boostback vs telemetria IFT. (R11 sistemas/fases/delay ✅)
+5. Recien despues volver a gameplay grande: Apollo 11 jugable (TD&E/alunizaje).
+   (R11 sistemas/fases/delay ✅; R12 booster entry burn + HUD ✅)

@@ -30,13 +30,74 @@ public sealed class BoosterReturnGuidanceTests
     }
 
     [Fact]
-    public void BoostbackCutoffWhenHorizontalSpeedAndFuelCrossThresholds()
+    public void OutboundHorizontalSpeedIsPositiveWhenFleeingPad()
+    {
+        var up = Vector3d.Up;
+        var pad = new Vector3d(0.0, 6_400_000.0, 0.0);
+        var vessel = new Vector3d(50_000.0, 6_400_000.0, 0.0);
+        var eastbound = new Vector3d(2000.0, 0.0, 0.0);
+        var inbound = new Vector3d(-500.0, 0.0, 0.0);
+
+        double outbound = BoosterReturnGuidance.OutboundHorizontalSpeedMps(
+            eastbound, up, pad, vessel);
+        double returning = BoosterReturnGuidance.OutboundHorizontalSpeedMps(
+            inbound, up, pad, vessel);
+
+        Assert.True(outbound > 1500.0, $"expected strong outbound, got {outbound}");
+        Assert.True(returning < 0.0, $"expected inbound (negative), got {returning}");
+    }
+
+    [Fact]
+    public void BoostbackCutoffWhenOutboundAndFuelCrossThresholds()
     {
         Assert.True(BoosterReturnGuidance.ShouldContinueBoostback(500.0, 0.05));
         Assert.False(BoosterReturnGuidance.ShouldContinueBoostback(
-            BoosterReturnGuidance.BoostbackCutoffHorizontalMps - 1.0, 0.05));
+            BoosterReturnGuidance.BoostbackCutoffOutboundMps - 1.0, 0.05));
         Assert.False(BoosterReturnGuidance.ShouldContinueBoostback(
             500.0, BoosterReturnGuidance.BoostbackMinFuelFraction - 0.001));
+    }
+
+    [Fact]
+    public void EntryBurnArmsBelowThresholdAndHandsOffToCatchAltitude()
+    {
+        Assert.False(BoosterReturnGuidance.ShouldArmEntryBurn(
+            BoosterReturnGuidance.EntryBurnArmAltitudeM + 100.0, hasCatchPins: true));
+        Assert.True(BoosterReturnGuidance.ShouldArmEntryBurn(
+            BoosterReturnGuidance.EntryBurnArmAltitudeM - 1.0, hasCatchPins: true));
+        Assert.False(BoosterReturnGuidance.ShouldArmEntryBurn(1000.0, hasCatchPins: false));
+
+        Assert.True(BoosterReturnGuidance.ShouldContinueEntryBurn(
+            BoosterReturnGuidance.CatchBurnAltitudeM + 10.0));
+        Assert.False(BoosterReturnGuidance.ShouldContinueEntryBurn(
+            BoosterReturnGuidance.CatchBurnAltitudeM - 1.0));
+    }
+
+    [Fact]
+    public void Flight7BoosterBoostbackBudgetMatchesIftDeltaVBand()
+    {
+        var catalog = PartCatalog.LoadFromDirectory(Path.Combine(Root.FullName, "data", "parts"));
+        var def = catalog["super_heavy_booster"];
+        double propellant = def.FuelCapacityLF + def.FuelCapacityOx;
+
+        double dv = BoosterReturnGuidance.EstimateBoostbackBudgetDeltaVMps(
+            def.MassDry, propellant, def.IspVac);
+
+        Assert.InRange(dv,
+            BoosterReturnGuidance.IftBoostbackDeltaVMinMps,
+            BoosterReturnGuidance.IftBoostbackDeltaVMaxMps);
+        // Sanity: MECO reserve window must leave catch propellant (end < start).
+        Assert.True(BoosterReturnGuidance.BoostbackMinFuelFraction
+            < AscentStagingPolicy.BoosterReserveFraction);
+    }
+
+    [Fact]
+    public void EntryBurnUsesThirteenEnginesThenCatchUsesThree()
+    {
+        Assert.Equal(13, BoosterReturnGuidance.EntryBurnEngineCount);
+        Assert.Equal(13, BoosterReturnGuidance.BoostbackEngineCount);
+        Assert.Equal(3, BoosterReturnGuidance.CatchEngineCount);
+        Assert.True(BoosterReturnGuidance.EntryBurnArmAltitudeM
+            > BoosterReturnGuidance.CatchBurnAltitudeM);
     }
 
     [Fact]

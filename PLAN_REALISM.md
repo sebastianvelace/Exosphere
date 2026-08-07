@@ -424,15 +424,17 @@ equivocada hace la órbita.
 - Archivos: `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`,
   `scripts/HUDController.cs`, `scripts/SystemsHUD.cs`.
 
-### R12. Boostback + captura en torre (Mechazilla) — ✅ parcial jugable (Ship + booster V1)
+### R12. Boostback + captura en torre (Mechazilla) — ✅ jugable (Ship + booster + entry burn)
 - Catch de la etapa superior (Ship) cerrado: fases `Catch`/`Caught`, cuna de dos pines,
   `MissionPhase.CAUGHT`.
-- Booster V1 (`BoosterReturnController` + `BoosterReturnGuidance`): tras `VesselStaged`
-  arma boostback (13 motores, corta a h&lt;80 m/s o reserva), costa, arma catch multi-vessel
-  (cuna refresca todos los `IsAttemptingTowerCatch`, chopsticks cierran con cualquier
-  `IsCaught`), pines en `super_heavy_booster` / V3. Evidencia: `BoosterReturnGuidanceTests`,
-  `CatchContactTests`. Pendiente fino: boostback→RTLS real medido vs IFT, entry burn
-  dedicado, HUD de estado del booster.
+- Booster (`BoosterReturnController` + `BoosterReturnGuidance`): tras `VesselStaged`
+  arma boostback (13 motores, corta cuando el componente outbound &lt; 100 m/s o reserva),
+  costa, **entry burn** a &lt;5 km (13 motores) → catch a &lt;1.5 km (3 motores), multi-vessel
+  cradle/chopsticks, pines en `super_heavy_booster` / V3. HUD: línea `BOOSTER …` bajo la
+  guía del Ship (no roba `MissionPhase`). Δv budget 6%→2.5% anclado a banda IFT
+  (800–1800 m/s) en xUnit. Evidencia: `BoosterReturnGuidanceTests`, `CatchContactTests`.
+- Pendiente fino opcional: telemetría de boostback en vuelo real vs IFT wall-clock,
+  divert-to-Gulf abort path.
 
 ---
 
@@ -446,7 +448,7 @@ equivocada hace la órbita.
    limitaciones conocidas sin tocar: sin J2, sin fase sideral en epoch, sin correccion baricentrica,
    Luna en conica fija, termosfera sin variabilidad solar, sin fallo estructural por presion
    dinamica pura, EDL sin ley de guiado real.
-4. Backlog mision/sistemas: R11 ✅; R12 booster boostback/captura (Ship catch ✅, booster V1 ✅, pulido IFT abierto).
+4. Backlog mision/sistemas: R11 ✅; R12 ✅ (Ship catch + booster boostback/entry/catch + HUD).
 5. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)
