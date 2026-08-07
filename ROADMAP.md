@@ -231,5 +231,5 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      ajuste de alpha/timing/zone charring).
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
-5. Recien despues volver a gameplay grande: R12 booster boostback/catch, Apollo 11
-   jugable (TD&E/alunizaje), o R11 sistemas atados a fases.
+5. Recien despues volver a gameplay grande: Apollo 11 jugable (TD&E/alunizaje),
+   R11 sistemas atados a fases, o pulido R12 boostback vs telemetria IFT.

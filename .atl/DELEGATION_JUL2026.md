@@ -29,7 +29,7 @@
 | R9 | Touchdown ≤2 m/s | `EDLController.TouchdownVel = 3.0`; R13 telemetry ~0–1.5 m/s | ✅ Done (`SoftLandingThreshold` still 5.0 — damage gate, optional tighten) |
 | R10 | ISP cluster ~363 s | `starship_engines.json` `isp_vac: 363` | ✅ Done (section was stale → fixed) |
 | R11 | Systems tied to mission phases | `Systems/*` exist, not phase-wired | ⬜ Pending |
-| R12 | Boostback / tower catch | Ship half shipped (`ffaa1e4`). R5b closed (`aa408e7`). Booster half (boostback burn, reentry, catch) still open. | 🟡 Partial — Ship done, booster open |
+| R12 | Boostback / tower catch | Ship (`ffaa1e4`) + booster V1 (`BoosterReturnController` / `BoosterReturnGuidance`, catch pins on SH JSON, multi-vessel cradle/chopsticks) | 🟡 Partial — V1 landed, IFT polish open |
 | R13 | Survivable belly-flop EDL | `EDLController` belly-flop until ~800 m flip; R13 telemetry in plan header | ✅ Done |
 
 **Discrepancies fixed this session:** R4/R8/R9/R10 detail sections still read as open fixes despite header marking them done. `ROADMAP.md` still listed R6 lift and R7 thermosphere as pending — corrected.
