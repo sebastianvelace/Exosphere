@@ -46,9 +46,11 @@ Base tecnica cerrada en `main`:
   seams longitudinales, pluma liftoff mas densa y Super Heavy separado con anillo
   expuesto/quemado. Los motores 33/6 tienen estado, feed, gimbal, telemetría,
   fallos y pluma individual; ya no son solamente una multiplicación visual. El
-  torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`) y ya
-  está wireado como disturbio de actitud cuando no hay input del piloto; falta TVC
-  diferencial por motor (ver R5b en `PLAN_REALISM.md`).
+  torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`) y
+  el TVC diferencial por motor (R5b: `PartGraph.SolveDifferentialGimbal`) comanda cada
+  mount gimballed hacia el torque pedido; el torque real por mount se aplica tanto con
+  input como sin él (R5c). Pendiente de física de cluster: R5d (magnitud de empuje
+  promediada en cluster mixto).
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
@@ -133,9 +135,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - Detalle visual dedicado de Falcon 9 Block 5 y New Glenn 7x2 (`rocket-visual-design`).
 - Catch de la torre (Mechazilla) para la etapa superior (Ship): fase `Catch`/`Caught`
   en `EDLController`, contacto de dos pines vía `SurfaceContactSolver`, guiado de
-  aproximación y `MissionPhase.CAUGHT`. Usa la autoridad de actitud idealizada
-  existente, no TVC diferencial — el catch del booster (R12, pendiente) reutiliza
-  esta misma infraestructura de torre/cuna/contacto.
+  aproximación y `MissionPhase.CAUGHT`. El TVC diferencial (R5b) ya está en
+  `Vessel.Tick`; el catch del booster (R12, pendiente) reutiliza esta misma
+  infraestructura de torre/cuna/contacto.
 
 ## Pendientes Reales
 
@@ -230,5 +232,5 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      ajuste de alpha/timing/zone charring).
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
-5. Recien despues volver a gameplay grande: misiones, save/load, recursos o
-   engine-out real.
+5. Recien despues volver a gameplay grande: R12 booster boostback/catch, Apollo 11
+   jugable (TD&E/alunizaje), R11 sistemas atados a fases, o R5d empuje de cluster mixto.

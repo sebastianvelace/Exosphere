@@ -193,8 +193,8 @@
 
 | | |
 |---|---|
-| **Evidence** | The Ship half of the tower catch shipped (`ffaa1e4`): `EDLController` `Catch`/`Caught` phases, `Vessel.IsCaught`/`CatchContactPoints`, `SurfaceContactSolver.FromCatchCradle`. The booster still separates as inert debris — no boostback, no controlled reentry, no catch. R5 multi-motor lifecycle/torque is closed; only R5b (differential per-mount TVC) remains as a real prerequisite, for the asymmetric-thrust hover-slam the booster needs. |
-| **Recommendation** | R5b then R12-booster is an actively scheduled tranche (reusing the Ship's catch infrastructure), not deferred. |
+| **Evidence** | The Ship half of the tower catch shipped (`ffaa1e4`): `EDLController` `Catch`/`Caught` phases, `Vessel.IsCaught`/`CatchContactPoints`, `SurfaceContactSolver.FromCatchCradle`. The booster still separates as inert debris — no boostback, no controlled reentry, no catch. R5/R5b/R5c multi-motor lifecycle, differential TVC and torque wiring are closed (`aa408e7` / `f68ca7c`); the remaining gap is gameplay/controller work for the booster return itself. |
+| **Recommendation** | R12-booster is an actively scheduled tranche reusing the Ship's catch infrastructure. |
 | **Owner** | `scripts/BoosterReturnController.cs` (new), `ExosphereSimulation/Parts/PartGraph.cs`, `LaunchComplexSpec.cs` |
 
 ### G-018 — Craft persistence separate from mission persistence (P1)

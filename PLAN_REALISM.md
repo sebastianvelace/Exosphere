@@ -192,11 +192,17 @@ equivocada hace la órbita.
 - **Aceptación:** ✅ suite 369/369 (antes 362); un motor fuera de eje produce torque neto, no sólo
   pérdida de empuje proporcional; el fallo de un motor diametralmente opuesto cancela a ~cero.
 
-### R5b. TVC diferencial por motor — pendiente (abierto)
-- **Hoy:** `Vessel.Tick` sigue reflejando UN comando de gimbal a todos los mounts gimballed de una
-  parte; no hay TVC diferencial real (cada motor gimballando de forma independiente para anular un
-  torque deseado).
-- **Aceptación:** cada mount gimballed recibe su propio comando derivado del torque objetivo.
+### R5b. TVC diferencial por motor — ✅ HECHO
+- **Fix aplicado:** `PartGraph.SolveDifferentialGimbal` asigna un comando de gimbal por mount
+  (mínimo-norma sobre el Jacobiano de palanca/empuje de cada instancia viva y gimballed,
+  regularizado). `Vessel.Tick` dimensiona el torque deseado con
+  `GetDifferentialTVCAngularAccelerationEnvelope` (solo mounts que el solver puede comandar)
+  y aplica el torque real por geometría en ambas ramas (con y sin input), con suelo RCS.
+  Suite: `DifferentialTVCTests.cs` + regresiones de autoridad en stack Flight 7 ensamblado.
+- **Archivos:** `ExosphereSimulation/Parts/PartGraph.cs`, `Part.cs`, `Vessel.cs`,
+  `ExosphereSimulation.Tests/DifferentialTVCTests.cs`.
+- **Aceptación:** ✅ cada mount gimballed recibe su propio comando; un torque de disturbio
+  sintético se anula diferencialmente; `[G]` ascent y EDL flip siguen verdes.
 
 ### R5c. Torque como disturbio no wireado en `Vessel.Tick` — ✅ HECHO (parcial, adrede)
 - **Fix aplicado:** `Vessel.Tick` ahora aplica `GetPitchYawRollAngularAcceleration` como
@@ -408,23 +414,24 @@ equivocada hace la órbita.
 - **Archivos:** `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`.
 - **Aceptación:** en sombra cae la energía; el retardo de comms crece con la distancia.
 
-### R12. Boostback + captura en torre (Mechazilla) — depende de R5b
-- Secuencia real de flip + boostback del Super Heavy y captura. El torque por motor (R5) y su
-  wireado como disturbio (R5c) ya están; requiere TVC diferencial (R5b).
+### R12. Boostback + captura en torre (Mechazilla) — parcial (Ship ✅ / booster pendiente)
+- Catch de la etapa superior (Ship) ya cerrado: fases `Catch`/`Caught`, cuna de dos pines,
+  `MissionPhase.CAUGHT`. R5/R5b/R5c están cerrados. Falta la mitad del booster: boostback,
+  reentrada controlada y catch en torre reutilizando la misma infraestructura.
 
 ---
 
 ## Orden de ejecucion actual
-1. No reabrir R1-R4, R8-R10, R13 ni R15-R19 salvo regresion demostrada por telemetria/harness.
-2. Backlog fisico real pendiente: R5b TVC diferencial, R5d empuje promediado en cluster mixto.
-   (R5 torque por geometria ✅, R5c torque wireado como disturbio ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
+1. No reabrir R1-R4, R5/R5b/R5c, R8-R10, R13 ni R15-R19 salvo regresion demostrada por telemetria/harness.
+2. Backlog fisico real pendiente: R5d empuje promediado en cluster mixto.
+   (R5 torque por geometria ✅, R5b TVC diferencial ✅, R5c torque wireado ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
 3. Backlog de la auditoria Jul 2026 (motores/staging/Tierra/reingreso, ver seccion "OLA JUL2026"
    arriba): R18b correccion broadside 1/√2 de Sutton-Graves (necesita re-baseline propio), R18c
    `VesselRenderer.cs` con `noseRadius=1.0` por defecto, R15b fase J2000 de Jupiter/Saturno. Mas
    limitaciones conocidas sin tocar: sin J2, sin fase sideral en epoch, sin correccion baricentrica,
    Luna en conica fija, termosfera sin variabilidad solar, sin fallo estructural por presion
    dinamica pura, EDL sin ley de guiado real.
-4. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5b.
+4. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 booster boostback/captura (Ship catch ✅).
 5. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)
