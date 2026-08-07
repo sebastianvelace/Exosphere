@@ -6,7 +6,8 @@
 > Plan sync update: 2026-08-07 (branch `cursor/docs-r5b-plan-sync-fdaf`). Closed the
 > remaining R5b doc drift after `aa408e7` landed `SolveDifferentialGimbal` on `main` while
 > `ROADMAP.md`, `PLAN_REALISM.md`, `CLAUDE.md`, and this matrix still claimed TVC was open.
-> R12 now correctly reads as Ship ✅ / booster open; next physics gap called out is R5d.
+> R12 now correctly reads as Ship ✅ / booster open. R5d closed in the
+> visual-then-physics tranche (`MixedClusterThrustVectorTests`).
 
 ---
 

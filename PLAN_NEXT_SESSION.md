@@ -18,7 +18,7 @@ The next session should **not** open large new systems. Highest ROI is:
 2. **Close the V0.5 audit gap** — compare hot-staging, startup, and reentry captures against real IFT/Flight 7 references; tune only what the diff shows.
 3. **Ship reentry lighting + zone charring** — blocked today because the harness cannot produce a belly-flop EDL frame for before/after verification.
 
-Physics backlog: R5 torque-from-mount-geometry, R5b differential per-mount TVC (`SolveDifferentialGimbal`, `aa408e7`), and R5c (torque as attitude disturbance) are closed. The Ship's tower catch shipped (`ffaa1e4`); the remaining Mechazilla tranche is R12 booster boostback + catch. R5d (mixed-cluster thrust magnitude averaging) stays open. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
+Physics backlog: R5/R5b/R5c/R5d are closed (`GetThrustVector` now sums per-mount geometry). The Ship's tower catch shipped (`ffaa1e4`); the remaining Mechazilla tranche is R12 booster boostback + catch. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
 
 ---
 
@@ -229,7 +229,7 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Owner** | `ExosphereSimulation/Flight/MissionPhaseTrack.cs`, `scripts/HUDController.cs`, `MissionManager.cs`, `AudioManager.cs` |
 | **Acceptance** | Phase track lights deorbit/EDL slots; COAST driven by AutopilotController (unchanged); THERMAL panel untouched. |
 | **Realism feel** | After SECO the player still sees a mission arc through entry — not a silent coast into fire. |
-| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. Ship tower catch landed (`ffaa1e4`); R5b differential TVC landed (`aa408e7`). **Remaining:** IFT reference compare (harness via `--hotstage`/`--reentry-compare`); R12 booster boostback/catch; R5d mixed-cluster thrust averaging. |
+| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. Ship tower catch landed (`ffaa1e4`); R5b/R5d landed. **Remaining:** deeper IFT side-by-side reference judgment; R12 booster boostback/catch. |
 
 ### G-P2. VAB pre-launch validation pass
 

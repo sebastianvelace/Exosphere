@@ -686,6 +686,9 @@ public class Part
 
     /// <summary>
     /// Thrust vector in the part's local frame (+Y = up), pressure-corrected and gimballed.
+    /// With per-engine runtime (R5d), this is the vector sum of each mount's own thrust
+    /// direction × magnitude — fixed engines are no longer diluted by averaging gimbal
+    /// across the whole cluster.
     /// </summary>
     public Vector3d GetThrustVector(double ambientPressure)
     {
@@ -694,28 +697,25 @@ public class Part
             || (!HasEngineRuntime && ThrottleLevel <= 0.0))
             return Vector3d.Zero;
 
+        // R5d — sum per-mount thrust vectors so each engine's magnitude is independent of
+        // other mounts' gimbal. Averaging GimbalDeg across mixed fixed/gimballed clusters
+        // previously tilted the entire thrust budget by a diluted angle.
+        if (HasEngineRuntime)
+        {
+            var net = Vector3d.Zero;
+            foreach (var (_, thrustVector) in GetEngineInstanceThrustGeometry(ambientPressure))
+                net += thrustVector;
+            return net;
+        }
+
         double thrust = GetThrustMagnitude(ambientPressure);
         if (thrust <= 0.0) return Vector3d.Zero;
 
-        // Gimbal: GimbalOffset.{X,Z} ∈ [-1,1] is the normalized deflection of each axis.
-        // The actual deflection angle is (offset · GimbalRange) in degrees; the thrust
-        // direction is the unit vector tilted off +Y by that angle.
+        // Legacy single-engine / no-runtime path: GimbalOffset.{X,Z} ∈ [-1,1] is the
+        // normalized deflection; tilt the aggregate thrust off +Y by that angle.
         double gimbalRange = Definition.GimbalRange;
         double normalizedX = System.Math.Clamp(GimbalOffset.X, -1.0, 1.0);
         double normalizedZ = System.Math.Clamp(GimbalOffset.Z, -1.0, 1.0);
-        if (HasEngineRuntime)
-        {
-            var live = _engineStates.Where(
-                state => state.ChamberPressureFraction > 1e-3).ToArray();
-            if (live.Length > 0)
-            {
-                double actualX = live.Average(state => state.GimbalDeg.X);
-                double actualZ = live.Average(state => state.GimbalDeg.Z);
-                gimbalRange = 1.0;
-                normalizedX = actualX;
-                normalizedZ = actualZ;
-            }
-        }
         double gimbalRad = gimbalRange * MathUtils.DEG_TO_RAD;
         double ax = normalizedX * gimbalRad;
         double az = normalizedZ * gimbalRad;
@@ -726,12 +726,13 @@ public class Part
     /// <summary>
     /// Per-engine-instance thrust geometry in the part's local frame (+Y = up): mount
     /// position and gimballed thrust vector for every live engine instance, pressure-
-    /// corrected at <paramref name="ambientPressure"/>. Unlike <see cref="GetThrustVector"/>
-    /// (which collapses the whole part into a single averaged-gimbal force), this exposes
-    /// each mount's real 3D position and direction so a caller can compute genuine torque
-    /// (τ = r×F) instead of a scalar lever approximation. Legacy (non-cluster) parts yield
-    /// exactly one tuple built from <see cref="GetThrustVector"/> so behaviour is unchanged
-    /// for every part that has no engine cluster data.
+    /// corrected at <paramref name="ambientPressure"/>. <see cref="GetThrustVector"/>
+    /// for runtime clusters is the vector sum of these thrust vectors (R5d). This
+    /// exposes each mount's real 3D position and direction so a caller can compute
+    /// genuine torque (τ = r×F) instead of a scalar lever approximation. Legacy
+    /// (non-cluster) parts yield exactly one tuple built from the legacy
+    /// <see cref="GetThrustVector"/> path so behaviour is unchanged for every part
+    /// that has no engine cluster data.
     /// </summary>
     public IEnumerable<(Vector3d PositionM, Vector3d ThrustVectorN)>
         GetEngineInstanceThrustGeometry(double ambientPressure)

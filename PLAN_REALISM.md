@@ -220,11 +220,14 @@ equivocada hace la órbita.
   `git stash`). Gates `--ascent`/`--edl` sostenidos (ninguno inyecta fallas de motor, así
   que el cambio es inerte en ambos por construcción, confirmado).
 
-### R5d. Magnitud de empuje promediada en cluster mixto bajo steering activo — pendiente (abierto)
-- **Hoy:** `Part.GetThrustVector` sigue promediando la deflexión de gimbal entre un cluster mixto
-  gimballed/fijo bajo steering activo. Aproximación más chica que la de torque, ya cerrada por R5.
-- **Aceptación:** la magnitud de empuje por motor no se ve alterada artificialmente por el promedio
-  de gimbal de otros motores del mismo cluster.
+### R5d. Magnitud de empuje promediada en cluster mixto bajo steering activo — ✅ HECHO
+- **Fix aplicado:** `Part.GetThrustVector` con runtime por motor suma los vectores de
+  `GetEngineInstanceThrustGeometry` en vez de inclinación única × ΣT con gimbal promedio.
+  Los mounts fijos conservan empuje axial completo; la lateral solo viene de mounts gimballed.
+- **Archivos:** `ExosphereSimulation/Parts/Part.cs`,
+  `ExosphereSimulation.Tests/MixedClusterThrustVectorTests.cs` (4 tests).
+- **Aceptación:** ✅ `GetThrustVector` ≡ Σ geometría; mounts fijos sin lateral; `|F| < ΣT`
+  cuando los gimbals divergen; gimbal uniforme preserva la identidad legacy.
 
 ### R6. Sin sustentación aerodinámica / ángulo de ataque ✅ HECHO
 - **Hoy (antes):** el aero era sólo drag (orientación-dependiente). Starship reentra con **lift de
@@ -390,8 +393,8 @@ equivocada hace la órbita.
 ### Backlog abierto dejado por esta auditoría (Jul 2026)
 - **R18b.** Corrección broadside 1/√2 de Sutton-Graves — necesita su propio re-baseline medido de
   `PeakStructure`/`tail−belly` antes de aplicarse (ver R18).
-- **R18c.** `scripts/VesselRenderer.cs` pasa `noseRadius = 1.0` por defecto en su llamada de
-  heat-flux — inconsistente con el resto de call sites (deberían pasar el radio de casco real).
+- **R18c.** ~~`VesselRenderer` default `noseRadius = 1.0`~~ ✅ cerrado — ahora usa
+  `ComputeStagnationHeatFlux` (mismo blend actitud que plasma/lighting).
 - **R15b.** Fase orbital J2000 de Júpiter/Saturno (~0.3-0.5° off) — excluida a propósito de
   `EphemerisPhaseTests`, necesita su propia corrección, no aflojar la tolerancia.
 - **Limitaciones conocidas, no tocadas esta pasada** (registradas para no "redescubrirlas" como
@@ -423,8 +426,8 @@ equivocada hace la órbita.
 
 ## Orden de ejecucion actual
 1. No reabrir R1-R4, R5/R5b/R5c, R8-R10, R13 ni R15-R19 salvo regresion demostrada por telemetria/harness.
-2. Backlog fisico real pendiente: R5d empuje promediado en cluster mixto.
-   (R5 torque por geometria ✅, R5b TVC diferencial ✅, R5c torque wireado ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
+2. Backlog fisico R5 cerrado: R5/R5b/R5c/R5d ✅.
+   (R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
 3. Backlog de la auditoria Jul 2026 (motores/staging/Tierra/reingreso, ver seccion "OLA JUL2026"
    arriba): R18b correccion broadside 1/√2 de Sutton-Graves (necesita re-baseline propio), R18c
    `VesselRenderer.cs` con `noseRadius=1.0` por defecto, R15b fase J2000 de Jupiter/Saturno. Mas

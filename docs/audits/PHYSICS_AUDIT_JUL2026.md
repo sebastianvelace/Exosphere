@@ -301,8 +301,9 @@ this change (neither path injects an engine failure) and confirmed inert.
 **Status of R5b (differential per-mount TVC commanding): closed after this audit.**
 Landed in `aa408e7`: `PartGraph.SolveDifferentialGimbal` commands each live gimballed
 mount independently toward a desired torque; `Vessel.Tick` sizes that torque from
-`GetDifferentialTVCAngularAccelerationEnvelope`. The remaining R12 gap is the
-booster return controller itself, not TVC allocation.
+`GetDifferentialTVCAngularAccelerationEnvelope`. R5d (`GetThrustVector` per-mount sum)
+also closed. The remaining R12 gap is the booster return controller itself, not
+thrust/TVC allocation.
 
 ---
 

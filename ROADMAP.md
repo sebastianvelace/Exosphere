@@ -49,8 +49,8 @@ Base tecnica cerrada en `main`:
   torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`) y
   el TVC diferencial por motor (R5b: `PartGraph.SolveDifferentialGimbal`) comanda cada
   mount gimballed hacia el torque pedido; el torque real por mount se aplica tanto con
-  input como sin él (R5c). Pendiente de física de cluster: R5d (magnitud de empuje
-  promediada en cluster mixto).
+  input como sin él (R5c); `GetThrustVector` suma vectores por mount (R5d) sin diluir
+  mounts fijos al promediar gimbal del cluster.
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
@@ -233,4 +233,4 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
 5. Recien despues volver a gameplay grande: R12 booster boostback/catch, Apollo 11
-   jugable (TD&E/alunizaje), R11 sistemas atados a fases, o R5d empuje de cluster mixto.
+   jugable (TD&E/alunizaje), o R11 sistemas atados a fases.
