@@ -33,7 +33,7 @@
 | Crew model | `CrewMember.cs` | **Never populated** | ❌ phantom |
 | Multi-vessel sim | `Universe.Vessels`, staging debris | **Active vessel only** | ⚠️ visual debris only |
 | Lua mission scripts | `lua_scripts/gravity_turn_launch.lua` | **No runtime** | ❌ dead doc |
-| Booster recovery | ROADMAP R12 | Blocked on R5 | ⬜ deferred |
+| Booster recovery | ROADMAP R12 | Boostback + entry + catch + HUD | ✅ |
 
 ---
 
