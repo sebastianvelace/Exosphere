@@ -565,7 +565,7 @@ public partial class HUDController : Control
 
         var dismiss = new Label
         {
-            Text = "[F1] show / dismiss at any time  ·  auto-hides once at liftoff",
+            Text = "[F1] show / dismiss at any time  ·  auto-hides at ignition",
         };
         dismiss.HorizontalAlignment = HorizontalAlignment.Center;
         InterfaceTheme.ApplyBody(dismiss, 10);
@@ -1159,7 +1159,9 @@ public partial class HUDController : Control
 
     private static bool ShouldAutoDismissPadHelp(MissionManager mission)
     {
-        if (mission.Phase >= MissionPhase.LIFTOFF)
+        // Dismiss as soon as the launch sequence commits (IGNITION+), not only after
+        // LIFTOFF — otherwise the sheet sits over the attitude cluster through spool-up.
+        if (mission.Phase >= MissionPhase.IGNITION)
             return true;
 
         var bridge = SimulationBridge.Instance;
