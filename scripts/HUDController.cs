@@ -6,6 +6,7 @@ using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Presentation;
 using Exosphere.Simulation.Systems;
+// HoldDownReleasePolicy lives in Exosphere.Simulation.Flight (already imported).
 
 // ── Flight HUD (SpaceX-webcast aesthetic) ────────────────────────────────────
 // Dark translucent panels, thin lines, condensed type, cyan/white accents. A big
@@ -1138,8 +1139,9 @@ public partial class HUDController : Control
         if (bridge.IsIgnitionActive && !mission.IsCountingDown)
         {
             double twr = snapshot.ThrustToWeightRatio;
-            _launchPathLabel.Text = twr <= 1.02
-                ? $"MANUAL STARTUP / HOLD (TWR {twr:F2} < 1.02)"
+            double gate = HoldDownReleasePolicy.MinThrustToWeight;
+            _launchPathLabel.Text = twr <= gate
+                ? $"MANUAL STARTUP / HOLD (TWR {twr:F2} < {gate:F2})"
                 : "MANUAL STARTUP / RELEASING CLAMPS";
             _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
             return;
@@ -1148,12 +1150,13 @@ public partial class HUDController : Control
         if (mission.IsCountingDown)
         {
             double twr = snapshot.ThrustToWeightRatio;
+            double gate = HoldDownReleasePolicy.MinThrustToWeight;
             if (mission.Phase == MissionPhase.IGNITION
                 && snapshot.IsGroundHeld
-                && twr <= 1.02)
+                && twr <= gate)
             {
                 _launchPathLabel.Text = mission.CountdownTimer <= 0.0
-                    ? $"AUTO SEQUENCE / HOLD (TWR {twr:F2} < 1.02)"
+                    ? $"AUTO SEQUENCE / HOLD (TWR {twr:F2} < {gate:F2})"
                     : "AUTO SEQUENCE / ENGINE START";
                 _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
             }

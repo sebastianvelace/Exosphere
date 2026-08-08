@@ -168,9 +168,10 @@ public partial class CameraController : Node3D
             if (body != null)
             {
                 double alt = bridge.ActiveVessel.GetAltitude(body);
-                if (Mode == CameraMode.Pad && alt > 700)
+                // Keep pad framing through ~1.1 km so the tower does not vanish in 2 s.
+                if (Mode == CameraMode.Pad && alt > 1100)
                     Mode = CameraMode.Chase;
-                if (Mode == CameraMode.Chase && alt < 450)
+                if (Mode == CameraMode.Chase && alt < 800)
                     Mode = CameraMode.Pad;
             }
         }
@@ -200,7 +201,7 @@ public partial class CameraController : Node3D
 
         Vector3 camPos;
         Vector3 lookTarget;
-        if (Mode == CameraMode.Pad && trackAlt < 700.0)
+        if (Mode == CameraMode.Pad && trackAlt < 1100.0)
         {
             // Ground-anchored tracking shot: the pad sits at groundY, the rocket at the
             // origin (0..43 units tall). Look at the MIDPOINT and pull the camera back as the

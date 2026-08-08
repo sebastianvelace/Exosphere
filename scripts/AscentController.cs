@@ -132,12 +132,12 @@ public partial class AscentController : Control
         _active = true;
         _mecoStaged = false;
         // Start with a real ignition sequence when still clamped: spool the engines up and only
-        // release the hold-downs once thrust exceeds weight. If already flying, skip to ascent.
+        // release the hold-downs at commit-to-launch. Preserve throttle if [L] countdown already
+        // ramped it — do not zero and re-spool from scratch. If already flying, skip to ascent.
         if (vessel.IsGroundHeld)
         {
-            _phase     = Phase.Ignition;
-            _ignitionT = 0.0;
-            vessel.Throttle = 0.0;
+            _phase = Phase.Ignition;
+            _ignitionT = System.Math.Clamp(vessel.Throttle, 0.0, 1.0) * IgnitionTime;
             MissionManager.Instance?.EnterPhase(MissionPhase.IGNITION);
         }
         else
@@ -256,11 +256,10 @@ public partial class AscentController : Control
 
             if (vessel.IsGroundHeld)
             {
-                // Hold the clamps until the engines can actually lift the stack.
-                if (ramp >= 1.0 && _twr > 1.02)
+                if (HoldDownReleasePolicy.CanRelease(_twr, vessel.Throttle))
                 {
                     vessel.ReleaseGroundHold();
-                    MissionManager.Instance?.EnterPhase(MissionPhase.LIFTOFF);
+                    MissionManager.Instance?.NotifyHoldDownReleased();
                     GD.Print($"[ASCENT-AP] liftoff — TWR {_twr:F2}");
                 }
             }
@@ -561,8 +560,10 @@ public partial class AscentController : Control
                 Phase.Done => "ORBIT ACHIEVED",
                 _ => "",
             };
+            double throttle = SimulationBridge.Instance?.ActiveVessel?.Throttle ?? 0.0;
             string detail = _phase == Phase.Ignition
-                ? $"TWR {_twr:F2}  ·  {(_twr > 1.02 ? "▲ LIFTOFF" : "HOLD-DOWN CLAMPED")}"
+                ? $"TWR {_twr:F2}  ·  {(HoldDownReleasePolicy.CanRelease(_twr, throttle)
+                    ? "▲ LIFTOFF" : "HOLD-DOWN CLAMPED")}"
                 : $"Ap {_apo / 1000:F0} km  Pe {_per / 1000:F0} km  e {_ecc:F3}"
                     + (_phase == Phase.Ascent && _q > 15_000
                         ? $"  ·  q {_q / 1000:F0} kPa"

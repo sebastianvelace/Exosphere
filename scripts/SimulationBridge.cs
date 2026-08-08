@@ -79,7 +79,7 @@ public partial class SimulationBridge : Node
     public LaunchSite? LaunchSiteOrNull => _launchSite;
 
     // ── Ignition ramp state ───────────────────────────────────────────────
-    // True while Ignite() is spooling up and waiting for TWR > 1.02 to release the hold-down.
+    // True while Ignite() is spooling up and waiting for the commit-to-launch gate.
     private bool   _ignitionActive  = false;
     // Throttle rate used during the ignition ramp (throttle units per second).
     private const double IgnitionRampRate = 0.5;
@@ -240,7 +240,16 @@ public partial class SimulationBridge : Node
             bool boundedEntry = Universe.RequiresBoundedWarpPropagation(av);
             bool atmosphericZone = refB.Atmosphere != null
                 && av.GetAltitude(refB) <= refB.Atmosphere.MaxAltitude * 1.05;
-            if (av.Throttle > 0.01)
+            var missionPhase = MissionManager.Instance?.Phase;
+            // Real-time only through tower clear — atmospheric ×3 warp made pad liftoff
+            // feel like a snap even with correct TWR.
+            if (missionPhase is MissionPhase.COUNTDOWN
+                or MissionPhase.IGNITION
+                or MissionPhase.LIFTOFF)
+            {
+                MaxAllowedWarpIndex = 0;
+            }
+            else if (av.Throttle > 0.01)
             {
                 // Warp IS allowed while thrusting now — the active vessel stays on RK4 with a
                 // bounded sub-step (Universe.MaxThrustStep) so the burn is physics-faithful.
@@ -253,7 +262,7 @@ public partial class SimulationBridge : Node
                     ActiveFlightProfileId is
                         MercuryAtlasFlightProfile.Id
                         or Gemini8FlightProfile.Id
-                    && MissionManager.Instance?.Phase is MissionPhase.ORBIT
+                    && missionPhase is MissionPhase.ORBIT
                         or MissionPhase.COAST
                     && av.GetAltitude(refB) > 120_000.0;
                 MaxAllowedWarpIndex = forceSensitive
@@ -277,7 +286,7 @@ public partial class SimulationBridge : Node
             av = ActiveVessel;
         }
 
-        // ── Ignition ramp: sube throttle y suelta hold-down cuando TWR > 1.02 ──────
+        // ── Ignition ramp: spool throttle; release only at commit-to-launch ──────
         if (_ignitionActive && av != null)
         {
             // Avanzar el throttle comandado hacia 1.0 a una tasa controlada
@@ -285,17 +294,13 @@ public partial class SimulationBridge : Node
 
             if (av.IsGroundHeld)
             {
-                // Verificar si el empuje actual ya supera la gravedad local × 1.02
                 var refB2 = Universe.GetDominantBody(av.Position);
                 if (refB2 != null && av.TotalMass > 0.0)
                 {
                     double twr = av.GetThrustToWeightRatio(refB2);
-                    if (twr > 1.02)
+                    if (HoldDownReleasePolicy.CanRelease(twr, av.Throttle))
                     {
                         av.ReleaseGroundHold();
-                        // Lanzamiento manual: al soltar los clamps por primera vez, arranca la FSM
-                        // de misión (PRE_LAUNCH → LIFTOFF). BeginFlight() es idempotente, así que
-                        // no pasa nada si la misión ya despegó por [L] (countdown).
                         // Manual launch: kick the mission FSM off PRE_LAUNCH the moment the clamps
                         // release. BeginFlight() is idempotent, so [L]/countdown launches are safe.
                         MissionManager.Instance?.BeginFlight();
@@ -712,14 +717,16 @@ public partial class SimulationBridge : Node
     // ── Ignition / throttle contracts (consumed by HUDController / Agente E) ─
 
     /// <summary>
-    /// True while Ignite() is ramping up thrust and waiting for TWR &gt; 1.02 to release
-    /// the hold-down clamps. Resets once the vessel lifts off and throttle reaches 1.0.
+    /// True while Ignite() is ramping up thrust and waiting for the commit-to-launch
+    /// gate (TWR &gt; 1.05 and throttle ≥ 0.95). Resets once the vessel lifts off and
+    /// throttle reaches 1.0.
     /// </summary>
     public bool IsIgnitionActive => _ignitionActive;
 
     /// <summary>
     /// Secuencia de ignición: arranca la rampa de throttle comandado hacia 1.0 y suelta
-    /// los hold-downs automáticamente cuando TWR &gt; 1.02.
+    /// los hold-downs automáticamente al commit-to-launch
+    /// (<see cref="HoldDownReleasePolicy"/>).
     /// Si el vessel ya está en vuelo, fija el throttle al máximo de inmediato.
     /// </summary>
     public void Ignite()

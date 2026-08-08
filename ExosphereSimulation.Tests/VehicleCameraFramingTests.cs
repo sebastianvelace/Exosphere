@@ -36,7 +36,9 @@ public sealed class VehicleCameraFramingTests
         double starship = VehicleCameraFraming.PadTrackingDistance(
             121.0 / 2.8, -4.0 / 2.8);
 
-        Assert.InRange(mercury, 15.0, 18.0);
-        Assert.True(starship > mercury * 4.0);
+        // ~3× vehicle height floor keeps both stacks readable; Starship still much farther.
+        Assert.InRange(mercury, 25.0, 32.0);
+        Assert.True(starship > mercury * 3.5);
+        Assert.True(starship >= (121.0 / 2.8) * 3.0 - 0.1);
     }
 }
