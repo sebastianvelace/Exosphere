@@ -174,6 +174,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Gameplay
 
+- Control ownership jugable ✅ — stick a bordo crewed (`PilotCommandRouting`),
+  `[G]` cede a WASD, cue MANUAL/ASCENT/EDL/HISTORICAL; hold-down unificado
+  (TWR>1.05 + throttle≥0.95); cluster Minimal motores–navball–strip.
 - Save/load V2 de misión y multi-vessel — `SaveGameV2` + F5/F9 quicksave +
   MainMenu Continue; round-trip y migración probados.
 - Flujo jugable orbita → deorbit → ENTRY (oleada C2) ✅ — mapa `[B]`
