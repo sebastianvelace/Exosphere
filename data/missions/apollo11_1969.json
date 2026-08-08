@@ -2,10 +2,10 @@
   "id": "mission-apollo11-1969",
   "sequence": 5,
   "program": "NASA Apollo Program",
-  "titleEn": "Apollo 11 — Transposition and Docking",
-  "titleEs": "Apollo 11 — Transposición y acoplamiento",
-  "summaryEn": "Launch AS-506, reach Earth parking orbit, complete TLI, separate CSM-107, extract LM-5 Eagle from the SLA and hard-dock Columbia to Eagle. Lunar landing is deferred to a later slice.",
-  "summaryEs": "Lanza AS-506, alcanza la órbita de estacionamiento, completa TLI, separa CSM-107, extrae el LM-5 Eagle del SLA y acopla Columbia con Eagle. El alunizaje queda para una tanda posterior.",
+  "titleEn": "Apollo 11 — TD&E and Lunar Orbit",
+  "titleEs": "Apollo 11 — TD&E y órbita lunar",
+  "summaryEn": "Launch AS-506, reach Earth parking orbit, complete TLI, separate CSM-107, extract LM-5 Eagle, hard-dock Columbia to Eagle, then insert the docked stack into lunar orbit. Powered descent is deferred to a later slice.",
+  "summaryEs": "Lanza AS-506, alcanza la órbita de estacionamiento, completa TLI, separa CSM-107, extrae el LM-5 Eagle, acopla Columbia con Eagle e inserta el conjunto en órbita lunar. El descenso propulsado queda para una tanda posterior.",
   "historicalDate": "1969-07-16",
   "vehicleVariantId": "apollo11-saturn5-as506-csm107-lm5-1969-07-16",
   "launchSiteId": "kennedy",
@@ -55,6 +55,26 @@
       "comparison": "true",
       "target": 1,
       "required": true
+    },
+    {
+      "id": "lunar-orbit-insertion",
+      "titleEn": "Insert the docked stack into lunar orbit",
+      "titleEs": "Inserta el conjunto acoplado en órbita lunar",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "LOI",
+      "required": true
+    },
+    {
+      "id": "circular-lunar-orbit",
+      "titleEn": "Circularize in low lunar orbit",
+      "titleEs": "Circulariza en órbita lunar baja",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "LUNAR_ORBIT",
+      "required": true
     }
   ],
   "limits": [
@@ -81,7 +101,7 @@
   "rewards": [
     {
       "id": "historical-completion",
-      "amount": 250,
+      "amount": 275,
       "unlockIds": ["mission-sts1-1981", "vehicle-family-apollo-lm"]
     }
   ],
@@ -95,8 +115,8 @@
     {
       "id": "apollo11-mission-report",
       "url": "https://www.nasa.gov/history/alsj/a11/A11_MissionReport.pdf",
-      "accessedDate": "2026-08-07",
-      "description": "Apollo 11 mission report — transposition, docking and subsequent lunar ops."
+      "accessedDate": "2026-08-08",
+      "description": "Apollo 11 mission report — transposition, docking, LOI and lunar ops."
     }
   ]
 }

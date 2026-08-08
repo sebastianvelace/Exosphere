@@ -36,8 +36,8 @@ Base tecnica cerrada en `main`:
   `CampaignService`, `MissionDirector`, `MissionEvaluator`, debrief numérico,
   recompensas idempotentes y persistencia V2. Freedom 7, Friendship 7, Gemini 8
   y Apollo 8 tienen variantes históricas jugables. Apollo 11 ya dispone del
-  hardware fechado AS-506/CSM-107/LM-5, Eagle operativo, y TD&E jugable
-  (extract + hard-dock Columbia↔Eagle); alunizaje/retorno son el siguiente corte.
+  hardware fechado AS-506/CSM-107/LM-5, Eagle operativo, TD&E y LOI docked
+  hasta órbita lunar circular; alunizaje/retorno son el siguiente corte.
 - Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
   de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,

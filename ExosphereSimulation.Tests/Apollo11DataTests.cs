@@ -276,7 +276,7 @@ public sealed class Apollo11DataTests
     }
 
     [Fact]
-    public void MissionJsonWiresTdEObjectivesAndCampaignDefinition()
+    public void MissionJsonWiresTdEAndLoiObjectivesAndCampaignDefinition()
     {
         MissionDefinition mission = MissionDefinition.LoadFromJson(Path.Combine(
             Root.FullName, "data", "missions", "apollo11_1969.json"));
@@ -292,6 +292,8 @@ public sealed class Apollo11DataTests
         Assert.Contains("edwin-e-buzz-aldrin-jr", mission.CrewIds);
         Assert.Contains("michael-collins", mission.CrewIds);
         Assert.Contains(mission.Objectives, o => o.Id == "columbia-eagle-docking");
+        Assert.Contains(mission.Objectives, o => o.Id == "lunar-orbit-insertion");
+        Assert.Contains(mission.Objectives, o => o.Id == "circular-lunar-orbit");
 
         string campaignJson = File.ReadAllText(Path.Combine(
             Root.FullName, "data", "campaigns", "historical_nasa_spacex.json"));
@@ -301,7 +303,7 @@ public sealed class Apollo11DataTests
     }
 
     [Fact]
-    public void MissionEvaluatorSucceedsOnParkingTliAndDocking()
+    public void MissionEvaluatorSucceedsOnDockingAndLunarOrbit()
     {
         MissionDefinition mission = MissionDefinition.LoadFromJson(Path.Combine(
             Root.FullName, "data", "missions", "apollo11_1969.json"));
@@ -336,14 +338,32 @@ public sealed class Apollo11DataTests
             DockingAchieved = true,
             CrewAlive = true,
         });
+        director.Observe(new MissionTelemetrySnapshot
+        {
+            MissionTimeSeconds = Apollo11FlightProfile.DockingSeconds + 100_000.0,
+            Phase = "LOI",
+            AltitudeM = Apollo11FlightProfile.InitialLunarPeriluneAltitudeM,
+            DockingAchieved = true,
+            CrewAlive = true,
+        });
+        director.Observe(new MissionTelemetrySnapshot
+        {
+            MissionTimeSeconds = Apollo11FlightProfile.DockingSeconds + 120_000.0,
+            Phase = "LUNAR_ORBIT",
+            AltitudeM = Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
+            DockingAchieved = true,
+            CrewAlive = true,
+        });
 
         MissionDebrief debrief = director.FinalizeMission();
         Assert.Equal(MissionOutcome.Success, debrief.Outcome);
         Assert.True(debrief.Objectives.Single(r => r.Id == "columbia-eagle-docking").Passed);
+        Assert.True(debrief.Objectives.Single(r => r.Id == "lunar-orbit-insertion").Passed);
+        Assert.True(debrief.Objectives.Single(r => r.Id == "circular-lunar-orbit").Passed);
     }
 
     [Fact]
-    public void MissionFailsWithoutDocking()
+    public void MissionFailsWithoutDockingOrLunarOrbit()
     {
         MissionDefinition mission = MissionDefinition.LoadFromJson(Path.Combine(
             Root.FullName, "data", "missions", "apollo11_1969.json"));
@@ -353,14 +373,18 @@ public sealed class Apollo11DataTests
             MissionTimeSeconds = Apollo11FlightProfile.DockingSeconds,
             Phase = "LUNAR_APPROACH",
             AltitudeM = 330_000.0,
-            DockingAchieved = false,
+            DockingAchieved = true,
             CrewAlive = true,
         });
 
         MissionDebrief debrief = director.FinalizeMission();
         Assert.Equal(MissionOutcome.Failure, debrief.Outcome);
-        Assert.False(debrief.Objectives.Single(r =>
+        Assert.True(debrief.Objectives.Single(r =>
             r.Id == "columbia-eagle-docking").Passed);
+        Assert.False(debrief.Objectives.Single(r =>
+            r.Id == "lunar-orbit-insertion").Passed);
+        Assert.False(debrief.Objectives.Single(r =>
+            r.Id == "circular-lunar-orbit").Passed);
     }
 
     [Fact]
@@ -440,6 +464,129 @@ public sealed class Apollo11DataTests
         Assert.Contains(
             universe.DockingConnections,
             c => c.Id == Apollo11FlightProfile.DockingConnectionId);
+    }
+
+    [Fact]
+    public void HeadlessDockedStackLoiPlacesCircularLunarOrbit()
+    {
+        string data = Path.Combine(Root.FullName, "data");
+        var universe = Universe.LoadFromDataDirectory(data);
+        var earth = universe.GetBody("earth")!;
+        var moon = universe.GetBody("moon")!;
+        var columbia = LoadLaunchVariant().Build(LoadParts()).ToVessel(
+            "Columbia", "apollo11-columbia");
+        // Strip to CSM-only (LES + three stages) like post-sep stack.
+        string lesId = columbia.Parts.Parts.Single(part =>
+            part.Definition.HasVehicleRole("launch_escape_system")).InstanceId;
+        Assert.NotNull(columbia.DeployPayload(lesId, "LES"));
+        Assert.NotNull(columbia.Stage());
+        Assert.NotNull(columbia.Stage());
+        Assert.NotNull(columbia.Stage());
+
+        var eagle = LoadLmVariant().Build(LoadParts()).ToVessel(
+            "Eagle", Apollo11FlightProfile.EagleVesselId);
+
+        Vector3d up = Vector3d.Right;
+        Vector3d tangent = Vector3d.Forward;
+        double radius = moon.Radius
+            + Apollo11FlightProfile.InitialLunarPeriluneAltitudeM;
+        columbia.Position = moon.Position + up * radius;
+        columbia.Velocity = moon.Velocity
+            + tangent * System.Math.Sqrt(moon.GM / radius);
+        columbia.Orientation = Quaterniond.FromTo(Vector3d.Up, tangent);
+        columbia.ReferenceBodyId = moon.Id;
+
+        string cmPort = columbia.Parts.Parts.Single(part =>
+            part.Definition.IsDockingPort).InstanceId;
+        string lmPort = eagle.Parts.Parts.Single(part =>
+            part.Definition.IsDockingPort).InstanceId;
+        Assert.True(columbia.Parts.TryGetAttachmentNodeLocalPosition(
+            cmPort, "top", out var cmPortLocal));
+        Assert.True(eagle.Parts.TryGetAttachmentNodeLocalPosition(
+            lmPort, "top", out var lmPortLocal));
+        eagle.Orientation = columbia.Orientation;
+        eagle.Position = columbia.Position
+            + columbia.Orientation.Rotate(cmPortLocal - lmPortLocal)
+            + columbia.Orientation.Rotate(Vector3d.Up) * 0.12;
+        eagle.Velocity = columbia.Velocity;
+        eagle.ReferenceBodyId = moon.Id;
+
+        universe.AddVessel(columbia);
+        universe.AddVessel(eagle);
+        universe.SetActiveVessel(columbia.Id);
+
+        DockingAttempt docking = universe.TryDock(
+            columbia.Id, cmPort, eagle.Id, lmPort,
+            Apollo11FlightProfile.DockingConnectionId);
+        Assert.True(docking.Succeeded, docking.Failure.ToString());
+
+        double smFuelBefore = columbia.Parts.Parts
+            .Where(part => part.Definition.HasVehicleRole("service_module"))
+            .Sum(part => part.LiquidFuel + part.Oxidizer);
+
+        // Impulsive LOI + circularization matching the playable controller helpers.
+        Vector3d retrograde = -(columbia.Velocity - moon.Velocity).Normalized;
+        columbia.Velocity += retrograde * Apollo11FlightProfile.LoiDeltaVMps;
+        PlaceInLunarOrbitForTest(
+            columbia, moon,
+            Apollo11FlightProfile.InitialLunarPeriluneAltitudeM,
+            Apollo11FlightProfile.InitialLunarApoluneAltitudeM,
+            universe.CurrentTime);
+        columbia.Velocity +=
+            -(columbia.Velocity - moon.Velocity).Normalized
+            * Apollo11FlightProfile.CircularizationDeltaVMps;
+        PlaceInLunarOrbitForTest(
+            columbia, moon,
+            Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
+            Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
+            universe.CurrentTime);
+
+        Assert.Equal("moon", columbia.ReferenceBodyId);
+        Assert.NotNull(columbia.OrbitalState);
+        double periAlt = columbia.OrbitalState!.Periapsis - moon.Radius;
+        double apoAlt = columbia.OrbitalState.Apoapsis - moon.Radius;
+        Assert.InRange(periAlt,
+            Apollo11FlightProfile.CircularLunarOrbitAltitudeM - 500.0,
+            Apollo11FlightProfile.CircularLunarOrbitAltitudeM + 500.0);
+        Assert.InRange(apoAlt,
+            Apollo11FlightProfile.CircularLunarOrbitAltitudeM - 500.0,
+            Apollo11FlightProfile.CircularLunarOrbitAltitudeM + 500.0);
+        Assert.Contains(
+            universe.DockingConnections,
+            c => c.Id == Apollo11FlightProfile.DockingConnectionId);
+        Assert.True(smFuelBefore > 0.0);
+        Assert.Same(earth, universe.GetBody("earth"));
+    }
+
+    private static void PlaceInLunarOrbitForTest(
+        Vessel vessel,
+        CelestialBody moon,
+        double periluneAltitudeM,
+        double apoluneAltitudeM,
+        double epoch)
+    {
+        Vector3d up = (vessel.Position - moon.Position).Normalized;
+        Vector3d velocity = vessel.Velocity - moon.Velocity;
+        Vector3d tangent = (velocity - up * velocity.Dot(up)).Normalized;
+        if (tangent.MagnitudeSquared < 1e-9)
+            tangent = moon.RotationAxis.Cross(up).Normalized;
+        double radius = moon.Radius + periluneAltitudeM;
+        double apolune = moon.Radius + apoluneAltitudeM;
+        double semiMajorAxis = (radius + apolune) * 0.5;
+        double speed = System.Math.Sqrt(
+            moon.GM * (2.0 / radius - 1.0 / semiMajorAxis));
+        vessel.Position = moon.Position + up * radius;
+        vessel.Velocity = moon.Velocity + tangent * speed;
+        vessel.AngularVelocity = Vector3d.Zero;
+        vessel.IsOnRails = true;
+        vessel.OrbitalState = OrbitalElements.FromStateVector(
+            vessel.Position - moon.Position,
+            vessel.Velocity - moon.Velocity,
+            moon.GM,
+            moon.Id,
+            epoch);
+        vessel.ReferenceBodyId = moon.Id;
+        vessel.Throttle = 0.0;
     }
 
     private static double WetMass(PartDefinition part) =>

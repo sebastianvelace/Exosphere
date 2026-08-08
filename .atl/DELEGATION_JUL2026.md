@@ -3,8 +3,8 @@
 > Plan sync audit: 2026-07-03. Source of truth after this pass: code + tests, then these plan docs.
 > Audited by grep/read against `main`-era codebase on branch `docs/plan-sync-jul2026`.
 
-> Plan sync update: 2026-08-07 (branch `cursor/apollo11-tde-playable-fdaf`). Apollo 11
-> TD&E playable: mission JSON, docking ports, Eagle extract, Columbia hard-dock, campaign finalize.
+> Plan sync update: 2026-08-08 (branch `cursor/apollo11-loi-lunar-orbit-fdaf`). Apollo 11
+> docked-stack LOI → circular LLO after TD&E; mission finalize moves from dock to LUNAR_ORBIT.
 
 ---
 

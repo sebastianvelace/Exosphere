@@ -140,8 +140,8 @@ public partial class HistoricalFlightProfileController : Node
         bridge.SetWarpIndex(0);
         if (_apollo11Tde)
             GD.Print(
-                "[HISTORICAL] Apollo 11 transposition-and-docking "
-                + "sequence engaged (lunar landing deferred).");
+                "[HISTORICAL] Apollo 11 TD&E + docked LOI sequence engaged "
+                + "(powered descent deferred).");
         else if (_apolloProfile)
             GD.Print(
                 "[HISTORICAL] Apollo 8 lunar-orbit and Earth-return "
@@ -284,16 +284,35 @@ public partial class HistoricalFlightProfileController : Node
     {
         ResumeApollo8(elapsedSeconds);
         _apollo11Tde = true;
-        _apolloLoiComplete = true; // never run A8 lunar path on A11 TD&E
-        _apolloCircularized = true;
+        // This slice stops at circular LLO — never TEI / Earth return.
         _apolloTeiComplete = true;
         _apolloSmSeparated = true;
         _apollo11EagleExtracted = SimulationBridge.Instance?.Universe.Vessels
             .Any(v => v.Id == Apollo11FlightProfile.EagleVesselId) == true;
         _docked = SimulationBridge.Instance?.Universe.DockingConnections
             .Any(c => c.Id == Apollo11FlightProfile.DockingConnectionId) == true;
+
+        var phase = MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH;
+        if (!_docked)
+        {
+            _apolloLoiComplete = false;
+            _apolloCircularized = false;
+        }
+        else
+        {
+            _apolloLoiComplete = phase is MissionPhase.LOI
+                or MissionPhase.LUNAR_ORBIT
+                or MissionPhase.TEI
+                or MissionPhase.ENTRY
+                or MissionPhase.LANDED;
+            _apolloCircularized = phase is MissionPhase.LUNAR_ORBIT
+                or MissionPhase.TEI
+                or MissionPhase.ENTRY
+                or MissionPhase.LANDED;
+        }
+
         GD.Print(
-            $"[HISTORICAL] Apollo 11 TD&E sequence resumed at "
+            $"[HISTORICAL] Apollo 11 TD&E/LOI sequence resumed at "
             + $"T+{elapsedSeconds:F1}s.");
     }
 
@@ -639,7 +658,12 @@ public partial class HistoricalFlightProfileController : Node
 
         if (_apollo11Tde)
         {
-            ProcessApollo11TranspositionAndDocking(bridge, vessel, elapsed);
+            if (!_docked)
+            {
+                ProcessApollo11TranspositionAndDocking(bridge, vessel, elapsed);
+                return;
+            }
+            ProcessApollo11LunarOrbitInsertion(bridge, vessel);
             return;
         }
 
@@ -1242,12 +1266,6 @@ public partial class HistoricalFlightProfileController : Node
         Vessel columbia,
         double elapsed)
     {
-        if (_docked)
-        {
-            bridge.SetWarpIndex(0);
-            return;
-        }
-
         Vessel? eagle = bridge.EnsureApollo11EagleExtracted();
         if (eagle == null)
         {
@@ -1282,12 +1300,108 @@ public partial class HistoricalFlightProfileController : Node
         }
 
         _docked = true;
-        _active = false;
-        bridge.SetWarpIndex(0);
+        _apolloLoiComplete = false;
+        _apolloCircularized = false;
+        var earth = bridge.Universe.GetBody("earth");
+        if (earth != null)
+        {
+            columbia.IsOnRails = true;
+            columbia.OrbitalState = OrbitalElements.FromStateVector(
+                columbia.Position - earth.Position,
+                columbia.Velocity - earth.Velocity,
+                earth.GM,
+                earth.Id,
+                bridge.Universe.CurrentTime);
+            columbia.ReferenceBodyId = earth.Id;
+        }
+        columbia.Throttle = 0.0;
+        bridge.SetWarpIndex(8);
         GD.Print(
-            "[HISTORICAL] Columbia hard-docked to Eagle — TD&E complete "
-            + "(lunar landing deferred).");
-        CampaignRuntime.Instance?.RequestFinalize();
+            "[HISTORICAL] Columbia hard-docked to Eagle — TD&E complete; "
+            + "docked stack coasts to LOI.");
+    }
+
+    private void ProcessApollo11LunarOrbitInsertion(
+        SimulationBridge bridge,
+        Vessel columbia)
+    {
+        var universe = bridge.Universe;
+        var moon = universe.GetBody("moon");
+        if (moon == null) return;
+
+        if (!_apolloLoiComplete)
+        {
+            CelestialBody dominant = universe.GetDominantBody(columbia.Position);
+            if (dominant.Id != moon.Id)
+            {
+                bridge.SetWarpIndex(8);
+                return;
+            }
+
+            double altitude = columbia.GetAltitude(moon);
+            Vector3d moonUp = (columbia.Position - moon.Position).Normalized;
+            double radialSpeed =
+                (columbia.Velocity - moon.Velocity).Dot(moonUp);
+            if (altitude > 600_000.0)
+            {
+                bridge.SetWarpIndex(5);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            if (altitude > 180_000.0 && radialSpeed < 0.0) return;
+
+            Vector3d retrograde =
+                -(columbia.Velocity - moon.Velocity).Normalized;
+            columbia.Velocity +=
+                retrograde * Apollo11FlightProfile.LoiDeltaVMps;
+            ConsumeApolloSpsPropellant(
+                columbia, Apollo11FlightProfile.LoiDeltaVMps);
+            PlaceInLunarOrbit(
+                columbia,
+                moon,
+                Apollo11FlightProfile.InitialLunarPeriluneAltitudeM,
+                Apollo11FlightProfile.InitialLunarApoluneAltitudeM,
+                universe.CurrentTime);
+            _apolloLoiComplete = true;
+            _apolloLoiTime = universe.CurrentTime;
+            MissionManager.Instance?.EnterPhase(MissionPhase.LOI);
+            bridge.SetWarpIndex(7);
+            GD.Print(
+                "[HISTORICAL] Apollo 11 docked-stack LOI complete; "
+                + "elliptical lunar orbit.");
+            return;
+        }
+
+        if (!_apolloCircularized)
+        {
+            if (universe.CurrentTime - _apolloLoiTime
+                < Apollo11FlightProfile.CircularizationDelaySeconds)
+            {
+                bridge.SetWarpIndex(7);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            Vector3d retrograde =
+                -(columbia.Velocity - moon.Velocity).Normalized;
+            columbia.Velocity += retrograde
+                * Apollo11FlightProfile.CircularizationDeltaVMps;
+            ConsumeApolloSpsPropellant(
+                columbia, Apollo11FlightProfile.CircularizationDeltaVMps);
+            PlaceInLunarOrbit(
+                columbia,
+                moon,
+                Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
+                Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
+                universe.CurrentTime);
+            _apolloCircularized = true;
+            MissionManager.Instance?.EnterPhase(MissionPhase.LUNAR_ORBIT);
+            bridge.SetWarpIndex(0);
+            _active = false;
+            GD.Print(
+                "[HISTORICAL] Apollo 11 circular lunar orbit — LOI slice complete "
+                + "(powered descent deferred).");
+            CampaignRuntime.Instance?.RequestFinalize();
+        }
     }
 
     private static void ConfigureApollo11FinalApproach(
