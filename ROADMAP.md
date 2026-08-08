@@ -205,10 +205,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
   6.484.280 lb de ignición y las 33.205 lb del LM con procedencia NASA. F-1,
   J-2, SPS, DPS y APS son modelos fechados separados; Eagle conserva masa al
   separar descenso y activa APS tras DPS. `--apollo11` valida pad/liftoff.
-- Apollo 11 TD&E ✅ — `apollo11-lunar-landing-return` + `mission-apollo11-1969`:
-  parking→TLI→CSM sep→extract Eagle→hard-dock; `CampaignRuntime.RequestFinalize`
-  sin splashdown. Ver `docs/HITO4_APOLLO11_TDE.md`. Pendiente: DOI, alunizaje,
-  ascenso LM, rendezvous, TEI, entrada y amerizaje.
+- Apollo 11 TD&E + LOI ✅ — `apollo11-lunar-landing-return` + `mission-apollo11-1969`:
+  parking→TLI→CSM sep→extract Eagle→hard-dock→LOI→órbita lunar circular;
+  finalize de campaña en `LUNAR_ORBIT`. Ver `docs/HITO4_APOLLO11_TDE.md`.
+  Pendiente: DOI, alunizaje, ascenso LM, rendezvous, TEI, entrada y amerizaje.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 
@@ -234,4 +234,4 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
 5. Recien despues: Apollo 11 alunizaje (DOI→surface→APS→rendezvous→TEI).
-   (R11 ✅; R12 ✅; Apollo 11 TD&E ✅)
+   (R11 ✅; R12 ✅; Apollo 11 TD&E + LOI ✅)
