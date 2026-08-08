@@ -63,16 +63,10 @@ public partial class AttitudeNavball : Control
     public override void _Ready()
     {
         _font = InterfaceTheme.MonoFont;
-        SetAnchorsPreset(LayoutPreset.CenterBottom);
-        GrowHorizontal = GrowDirection.Both;
-        GrowVertical   = GrowDirection.Begin;
+        // Sized by the parent AttitudeCluster HBox — no viewport self-anchoring.
         float width = 2 * Radius + 28;
         float height = 2 * Radius + 46;
         CustomMinimumSize = new Vector2(width, height);
-        OffsetLeft  = -width * 0.5f;
-        OffsetRight =  width * 0.5f;
-        OffsetTop   = -(2 * Radius + 80);
-        OffsetBottom = -34;
         Size = new Vector2(width, height);
         MouseFilter = MouseFilterEnum.Ignore;
     }

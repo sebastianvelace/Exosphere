@@ -79,6 +79,7 @@ public partial class HUDController : Control
     private Control _phaseRoot = null!;
     private Control _bottomRoot = null!;
     private Control _timeRoot = null!;
+    private Control _attitudeClusterRoot = null!;
     private EngineGridHUD _engineGrid = null!;
     private AttitudeNavball _navball = null!;
     private AttitudeDataStrip _attitudeStrip = null!;
@@ -112,15 +113,46 @@ public partial class HUDController : Control
         BuildPadHelpOverlay();
         BuildDensityToast();
 
-        // Attitude cluster: engines — navball — data strip (+ mission checklist).
-        _engineGrid = new EngineGridHUD  { Name = "EngineGridHUD" };
+        // Attitude cluster: one CenterBottom row so engines/navball/strip cannot
+        // drift off-screen or under independent-anchor layout races.
+        BuildAttitudeCluster();
+        _objectives = new MissionObjectivesPanel { Name = "MissionObjectives" };
+        AddChild(_objectives);
+    }
+
+    private void BuildAttitudeCluster()
+    {
+        var root = new CenterContainer
+        {
+            Name = "AttitudeCluster",
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        root.SetAnchorsPreset(LayoutPreset.CenterBottom);
+        root.GrowHorizontal = GrowDirection.Both;
+        root.GrowVertical = GrowDirection.Begin;
+        root.OffsetLeft = -320;
+        root.OffsetRight = 320;
+        root.OffsetBottom = -108;
+        root.OffsetTop = -320;
+        root.ZIndex = 30; // above MISSION CONTROLS so the cluster is never buried
+        AddChild(root);
+        _attitudeClusterRoot = root;
+
+        var row = new HBoxContainer
+        {
+            Name = "AttitudeClusterRow",
+            Alignment = BoxContainer.AlignmentMode.Center,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        row.AddThemeConstantOverride("separation", 12);
+        root.AddChild(row);
+
+        _engineGrid = new EngineGridHUD { Name = "EngineGridHUD" };
         _navball = new AttitudeNavball { Name = "Navball" };
         _attitudeStrip = new AttitudeDataStrip { Name = "AttitudeDataStrip" };
-        _objectives = new MissionObjectivesPanel { Name = "MissionObjectives" };
-        AddChild(_engineGrid);
-        AddChild(_navball);
-        AddChild(_attitudeStrip);
-        AddChild(_objectives);
+        row.AddChild(_engineGrid);
+        row.AddChild(_navball);
+        row.AddChild(_attitudeStrip);
     }
 
     private void BuildDensityToast()
@@ -442,12 +474,14 @@ public partial class HUDController : Control
     {
         _padHelpRoot = new PanelContainer();
         _padHelpRoot.SetAnchorsPreset(LayoutPreset.Center);
+        // Keep the sheet above the attitude cluster so a late dismiss cannot bury engines/strip.
         _padHelpRoot.OffsetLeft = -400;
-        _padHelpRoot.OffsetTop = -230;
+        _padHelpRoot.OffsetTop = -280;
         _padHelpRoot.OffsetRight = 400;
-        _padHelpRoot.OffsetBottom = 250;
+        _padHelpRoot.OffsetBottom = 120;
         _padHelpRoot.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.86f, 14, 22, 18));
         _padHelpRoot.MouseFilter = MouseFilterEnum.Stop;
+        _padHelpRoot.ZIndex = 5;
         AddChild(_padHelpRoot);
 
         var vbox = new VBoxContainer();
@@ -987,23 +1021,18 @@ public partial class HUDController : Control
         _countdownRoot.Visible &= (exterior || cockpit) && !clean;
 
         // Attitude cluster stays visible in every exterior density — Clean only drops the
-        // secondary chrome (top panels, money band, phase track). A lone navball was the
-        // original "flat" screenshot; engines + strip are fly-the-vehicle instruments.
+        // secondary chrome (top panels, money band, phase track).
         bool cluster = exterior;
         bool instruments = exterior && !clean;
         _objectives.DensityAllowed = instruments;
-        _engineGrid.ProcessMode = cluster
+        _attitudeClusterRoot.Visible = cluster;
+        _attitudeClusterRoot.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
-        _navball.ProcessMode = exterior
-            ? ProcessModeEnum.Inherit
-            : ProcessModeEnum.Disabled;
-        _attitudeStrip.ProcessMode = cluster
-            ? ProcessModeEnum.Inherit
-            : ProcessModeEnum.Disabled;
-        _engineGrid.Visible = cluster;
-        _navball.Visible = exterior;
-        _attitudeStrip.Visible = cluster;
+        // Sit above the SPEED/ALT band in Minimal/Full; drop lower when Clean hides it.
+        float clusterBottom = clean ? -36f : -108f;
+        _attitudeClusterRoot.OffsetBottom = clusterBottom;
+        _attitudeClusterRoot.OffsetTop = clusterBottom - 220f;
     }
 
     private bool HasCriticalAlert() =>
@@ -1114,9 +1143,11 @@ public partial class HUDController : Control
 
     private void UpdatePadHelp(MissionManager mission)
     {
-        // Auto-hide is a ONE-SHOT at liftoff, not a per-frame veto: [F1] must be able to
-        // bring the key list back at any point in the flight (C5).
-        if (!_padHelpAutoDismissed && mission.Phase >= MissionPhase.LIFTOFF)
+        // Auto-hide once the stack leaves the pad. Phase>=LIFTOFF alone was not enough:
+        // a WASD soft-disengage during IGNITION could leave MissionManager stuck in
+        // IGNITION after clamps released, so this overlay covered the attitude cluster
+        // for the whole climb. Also dismiss on altitude / ground-hold clear.
+        if (!_padHelpAutoDismissed && ShouldAutoDismissPadHelp(mission))
         {
             _padHelpAutoDismissed = true;
             _padHelpDismissed = true;
@@ -1124,6 +1155,24 @@ public partial class HUDController : Control
 
         _padHelpRoot.Visible = !_padHelpDismissed
             && _snapshot?.ViewMode == FlightHudViewMode.Exterior;
+    }
+
+    private static bool ShouldAutoDismissPadHelp(MissionManager mission)
+    {
+        if (mission.Phase >= MissionPhase.LIFTOFF)
+            return true;
+
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        if (vessel == null || universe == null)
+            return false;
+
+        if (!vessel.IsGroundHeld && mission.Phase is not MissionPhase.PRE_LAUNCH)
+            return true;
+
+        var body = universe.GetDominantBody(vessel.Position);
+        return vessel.GetAltitude(body) > 80.0;
     }
 
     private void UpdateLaunchPathCallout(

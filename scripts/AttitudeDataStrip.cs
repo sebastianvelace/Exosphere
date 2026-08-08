@@ -4,8 +4,8 @@ using Godot;
 using Exosphere.Simulation.Presentation;
 
 /// <summary>
-/// Compact glass column to the right of the navball: throttle, engines, TWR,
-/// and Ap/Pe (or propellant % when orbit numbers are unavailable).
+/// Compact glass column for the attitude cluster (right of navball): throttle,
+/// engines, TWR, and Ap/Pe (or propellant %). Sized by the parent HBox.
 /// </summary>
 public partial class AttitudeDataStrip : Control
 {
@@ -27,20 +27,9 @@ public partial class AttitudeDataStrip : Control
     {
         _labelFont = InterfaceTheme.BodyFont;
         _valueFont = InterfaceTheme.MonoFont;
-        _panelStyle = InterfaceTheme.GlassPanel(0.72f, 10, 8, 8);
-
-        SetAnchorsPreset(LayoutPreset.CenterBottom);
-        GrowHorizontal = GrowDirection.End;
-        GrowVertical = GrowDirection.Begin;
-        float width = 108f;
-        float height = 168f;
-        CustomMinimumSize = new Vector2(width, height);
-        // Sit just right of the navball disc (radius 78 + pad 14 ≈ 92).
-        OffsetLeft = 102;
-        OffsetRight = OffsetLeft + width;
-        OffsetBottom = -34;
-        OffsetTop = OffsetBottom - height;
-        Size = new Vector2(width, height);
+        _panelStyle = InterfaceTheme.GlassPanel(0.78f, 10, 8, 8);
+        CustomMinimumSize = new Vector2(112, 168);
+        Size = CustomMinimumSize;
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
@@ -66,8 +55,9 @@ public partial class AttitudeDataStrip : Control
 
     public override void _Draw()
     {
-        if (Size.X < 8f || Size.Y < 8f) return;
-        DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, Size));
+        var size = Size.X >= 8f ? Size : CustomMinimumSize;
+        if (size.X < 8f || size.Y < 8f) return;
+        DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
 
         float y = 16f;
         y = Row(y, "THR", $"{_throttle * 100.0:F0}%", InterfaceTheme.Text);
@@ -94,10 +84,11 @@ public partial class AttitudeDataStrip : Control
 
     private float Row(float y, string label, string value, Color valueColor)
     {
+        float width = Size.X >= 8f ? Size.X : CustomMinimumSize.X;
         DrawString(_labelFont, new Vector2(10, y), label,
             HorizontalAlignment.Left, -1, 10, InterfaceTheme.TextMuted);
         var vw = _valueFont.GetStringSize(value, HorizontalAlignment.Right, -1, 12);
-        DrawString(_valueFont, new Vector2(Size.X - 10 - vw.X, y), value,
+        DrawString(_valueFont, new Vector2(width - 10 - vw.X, y), value,
             HorizontalAlignment.Left, -1, 12, valueColor);
         return y + 22f;
     }

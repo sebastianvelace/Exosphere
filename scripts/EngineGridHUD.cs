@@ -3,9 +3,9 @@ namespace Exosphere.Game;
 using Godot;
 using System.Linq;
 
-// ── Engine grid + propulsion readout ────────────────────────────────────────
-// Attitude-cluster board: sits left of the navball. Compact lit/total ring in every
-// density; Full also keeps THRUST/TWR/Isp readouts under the ring.
+// ── Engine grid (attitude-cluster left cell) ────────────────────────────────
+// Lit/total Raptor ring. Sized by the parent AttitudeCluster HBox — do not
+// self-anchor to the viewport.
 public partial class EngineGridHUD : Control
 {
     private const int RingInner = 3;
@@ -40,18 +40,11 @@ public partial class EngineGridHUD : Control
     {
         _labelFont = InterfaceTheme.BodyFont;
         _valueFont = InterfaceTheme.MonoFont;
-        _panelStyle = InterfaceTheme.GlassPanel(0.72f, 10, 0, 0);
-        SetAnchorsPreset(LayoutPreset.CenterBottom);
-        GrowHorizontal = GrowDirection.Begin;
-        GrowVertical   = GrowDirection.Begin;
+        _panelStyle = InterfaceTheme.GlassPanel(0.78f, 10, 0, 0);
         MouseFilter = MouseFilterEnum.Ignore;
         ApplyDensityLayout(force: true);
     }
 
-    /// <summary>
-    /// Anchor left of the navball (CenterBottom). Compact ring always; Full adds
-    /// propulsion readouts under the board.
-    /// </summary>
     private void ApplyDensityLayout(bool force = false)
     {
         bool showReadouts = UserInterfaceSettings.HudDensity == HudDensity.Full;
@@ -59,16 +52,9 @@ public partial class EngineGridHUD : Control
             return;
 
         _showReadouts = showReadouts;
-
-        float height = _showReadouts ? 210f : 118f;
-        float width = 112f;
+        float height = _showReadouts ? 210f : 124f;
+        float width = 120f;
         CustomMinimumSize = new Vector2(width, height);
-        // Force size from offsets — CustomMinimumSize alone can leave Size at 0
-        // until a parent layout pass, which made _Draw a no-op on some boots.
-        OffsetRight = -102;
-        OffsetLeft = OffsetRight - width;
-        OffsetBottom = -34;
-        OffsetTop = OffsetBottom - height;
         Size = new Vector2(width, height);
     }
 
@@ -112,6 +98,8 @@ public partial class EngineGridHUD : Control
     public override void _Draw()
     {
         var size = Size;
+        if (size.X < 8f || size.Y < 8f)
+            size = CustomMinimumSize;
         if (size.X < 8f || size.Y < 8f) return;
 
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
@@ -120,8 +108,8 @@ public partial class EngineGridHUD : Control
             HorizontalAlignment.Left, -1, 10, Accent);
 
         float cx = size.X * 0.5f;
-        float cy = 62f;
-        float rOuter = 38f, rMid = 24f, rInner = 10f;
+        float cy = 66f;
+        float rOuter = 40f, rMid = 26f, rInner = 11f;
         int litRemaining = _litEngines;
         _drawEngineIndex = 0;
         if (_nominalEngines == 33)
@@ -143,7 +131,7 @@ public partial class EngineGridHUD : Control
 
         if (!_showReadouts) return;
 
-        float ry = 118f;
+        float ry = 122f;
         ry = DrawReadout(10, ry, "THRUST", $"{_thrustKN:N0} kN", ValueBright);
         ry = DrawReadout(10, ry, "TWR",
             _twrValid ? $"{_twr:F2}" : "---",

@@ -301,9 +301,11 @@ public partial class SimulationBridge : Node
                     if (HoldDownReleasePolicy.CanRelease(twr, av.Throttle))
                     {
                         av.ReleaseGroundHold();
-                        // Manual launch: kick the mission FSM off PRE_LAUNCH the moment the clamps
-                        // release. BeginFlight() is idempotent, so [L]/countdown launches are safe.
+                        // PRE_LAUNCH → LIFTOFF (manual [Z]); IGNITION → LIFTOFF ([L]/[G]).
+                        // BeginFlight alone left countdown/ignition missions stuck in IGNITION
+                        // after a WASD soft-disengage, which also kept MISSION CONTROLS up.
                         MissionManager.Instance?.BeginFlight();
+                        MissionManager.Instance?.NotifyHoldDownReleased();
                     }
                 }
             }
