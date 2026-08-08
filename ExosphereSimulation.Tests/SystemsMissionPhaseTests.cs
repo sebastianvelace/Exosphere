@@ -315,6 +315,22 @@ public sealed class SystemsMissionPhaseTests
     }
 
     [Fact]
+    public void PilotCommandRouting_CrewedLocalPathIgnoresGroundLinkDown()
+    {
+        // Crewed + intact: onboard FCS. Link-down must not force the ground uplink path.
+        Assert.True(PilotCommandRouting.UsesOnboardStick(crewAlive: true, structuralControlLost: false));
+        Assert.False(PilotCommandRouting.UsesGroundUplink(crewAlive: true, structuralControlLost: false));
+
+        // Unmanned: ground uplink (may drop on LOS).
+        Assert.False(PilotCommandRouting.UsesOnboardStick(crewAlive: false, structuralControlLost: false));
+        Assert.True(PilotCommandRouting.UsesGroundUplink(crewAlive: false, structuralControlLost: false));
+
+        // Structural dead-stick: neither path claims authority (Vessel.Tick zeros stick).
+        Assert.False(PilotCommandRouting.UsesOnboardStick(crewAlive: true, structuralControlLost: true));
+        Assert.False(PilotCommandRouting.UsesGroundUplink(crewAlive: true, structuralControlLost: true));
+    }
+
+    [Fact]
     public void GroundCommandRelay_ThrottleDeltaAppliesAfterDelay()
     {
         var relay = new GroundCommandRelay();

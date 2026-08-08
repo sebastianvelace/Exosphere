@@ -15,6 +15,10 @@ public partial class HistoricalFlightProfileController : Node
     public static HistoricalFlightProfileController? Instance { get; private set; }
 
     private bool _active;
+
+    /// <summary>True while a historical automatic flight sequence owns guidance.</summary>
+    public bool IsEngaged => _active;
+
     private bool _atlasProfile;
     private bool _geminiProfile;
     private bool _apolloProfile;

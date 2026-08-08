@@ -5,6 +5,7 @@ using System.Linq;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Presentation;
+using Exosphere.Simulation.Systems;
 
 // ── Flight HUD (SpaceX-webcast aesthetic) ────────────────────────────────────
 // Dark translucent panels, thin lines, condensed type, cyan/white accents. A big
@@ -695,10 +696,10 @@ public partial class HUDController : Control
         if (bridge == null || vessel == null || universe == null) return;
         var refBody = universe.GetDominantBody(vessel.Position);
 
-        // ── Rotation controls (ground link) ────────────────────────────────
-        // Routed through SystemsController so cis-lunar light time delays the
-        // stick. Onboard guidance (Ascent/EDL/etc.) still writes PitchYawRoll
-        // directly later in the frame and is unaffected by blackout/delay.
+        // ── Attitude / throttle ─────────────────────────────────────────────
+        // Crewed craft fly an onboard FCS: stick writes the vessel directly and
+        // must not be gated by ground LOS/blackout. Unmanned / deep-space ground
+        // mode still rides GroundCommandRelay (light-time + link drop).
         double pitchIn = 0, yawIn = 0, rollIn = 0;
         if (Input.IsKeyPressed(Key.W)) pitchIn += 1.0;
         if (Input.IsKeyPressed(Key.S)) pitchIn -= 1.0;
@@ -706,30 +707,36 @@ public partial class HUDController : Control
         if (Input.IsKeyPressed(Key.D)) yawIn   += 1.0;
         if (Input.IsKeyPressed(Key.Q)) rollIn  -= 1.0;
         if (Input.IsKeyPressed(Key.E)) rollIn  += 1.0;
-        var groundAttitude = new Vector3d(pitchIn, yawIn, rollIn);
-        if (SystemsController.Instance != null)
-            SystemsController.Instance.SubmitGroundAttitude(groundAttitude);
+        var stick = new Vector3d(pitchIn, yawIn, rollIn);
+
+        bool crewAlive = SystemsController.Instance?.LifeSupport.CrewAlive ?? true;
+        bool groundUplink = SystemsController.Instance != null
+            && PilotCommandRouting.UsesGroundUplink(crewAlive, vessel.StructuralControlLost);
+
+        // Onboard (crewed) or structural dead-stick (Vessel.Tick zeros authority): local write.
+        // Unmanned only: ground relay.
+        if (groundUplink)
+            SystemsController.Instance!.SubmitGroundAttitude(stick);
         else
-            vessel.PitchYawRoll = groundAttitude;
+            vessel.PitchYawRoll = stick;
 
         // ── Hold-throttle (despegue manual) ─────────────────────────────────
-        // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al TWR>1.02);
+        // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al commit);
         // ya en vuelo, sube el throttle de forma progresiva. [X] mantenida lo baja.
-        // Hold [Z]: on the pad starts ignition (releases the hold-down at TWR>1.02);
+        // Hold [Z]: on the pad starts ignition (releases hold-down at commit-to-launch);
         // already flying, spools the throttle up. Hold [X] spools it down.
-        // Throttle rate is ground-uplinked (delayed past LEO); pad ignition stays local.
         if (Input.IsPhysicalKeyPressed(Key.Z))
         {
             if (vessel.IsGroundHeld || bridge.IsIgnitionActive) bridge.Ignite();
-            else if (SystemsController.Instance != null)
-                SystemsController.Instance.SubmitGroundThrottleDelta(0.5 * delta);
+            else if (groundUplink)
+                SystemsController.Instance!.SubmitGroundThrottleDelta(0.5 * delta);
             else
                 bridge.ThrottleUp(delta);
         }
         else if (Input.IsPhysicalKeyPressed(Key.X))
         {
-            if (SystemsController.Instance != null)
-                SystemsController.Instance.SubmitGroundThrottleDelta(-0.5 * delta);
+            if (groundUplink)
+                SystemsController.Instance!.SubmitGroundThrottleDelta(-0.5 * delta);
             else
                 bridge.ThrottleDown(delta);
         }
@@ -869,11 +876,30 @@ public partial class HUDController : Control
     /// UX-014 consolidation: the ascent autopilot and the EDL controller used to draw their
     /// own full-screen banners at 21.5% and 16% of viewport height. They now publish a status
     /// line and this is the only place it is rendered. Descent outranks ascent.
+    /// Ownership cue: MANUAL / ASCENT / EDL / HISTORICAL.
     /// </summary>
-    private void UpdateGuidanceLine() =>
-        _guidanceLabel.Text = EDLController.Instance?.BannerStatus
-            ?? AscentController.Instance?.BannerStatus
-            ?? "";
+    private void UpdateGuidanceLine()
+    {
+        if (EDLController.Instance?.BannerStatus is { Length: > 0 } edl)
+        {
+            _guidanceLabel.Text = edl;
+            return;
+        }
+
+        if (AscentController.Instance?.BannerStatus is { Length: > 0 } ascent)
+        {
+            _guidanceLabel.Text = ascent;
+            return;
+        }
+
+        if (HistoricalFlightProfileController.Instance?.IsEngaged == true)
+        {
+            _guidanceLabel.Text = "HISTORICAL";
+            return;
+        }
+
+        _guidanceLabel.Text = "MANUAL";
+    }
 
     private void UpdateBoosterLine()
     {

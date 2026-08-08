@@ -161,13 +161,16 @@ public partial class SystemsController : Node
         ControlLimited = Power.NoPowerAlert || geometricLos || !LifeSupport.CrewAlive
             || structuralLost;
 
+        // LOS/blackout clears the ground uplink queue only. Local stick (crewed FCS)
+        // must not be zeroed here — Systems runs before physics (prio −50), so wiping
+        // PitchYawRoll would kill the player's command for the whole tick. Structural
+        // dead-stick is enforced in Vessel.Tick via ControlAuthority.
         if (!Comms.HasSignal)
             GroundRelay.Clear();
 
         if (ControlLimited)
         {
             vessel.SASEnabled = false;
-            vessel.PitchYawRoll = Vector3d.Zero;
             GroundRelay.Clear();
 
             ManeuverExecutor.Instance?.Abort();
