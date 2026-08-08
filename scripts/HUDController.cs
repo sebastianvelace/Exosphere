@@ -6,14 +6,13 @@ using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Presentation;
 using Exosphere.Simulation.Systems;
-// HoldDownReleasePolicy lives in Exosphere.Simulation.Flight (already imported).
 
 // ── Flight HUD (SpaceX-webcast aesthetic) ────────────────────────────────────
 // Dark translucent panels, thin lines, condensed type, cyan/white accents. A big
 // centred bottom telemetry band (SPEED / ALTITUDE / T+), a milestone countdown, a
 // left "loads & trajectory" panel and a right "stages & Δv + event log" panel.
-// The engine board (EngineGridHUD) and navball (NavballController) are spawned as
-// children here. All physics-derived values arrive through FlightHudSnapshot.
+// Attitude cluster (engines — navball — data strip) is spawned as children here.
+// All physics-derived values arrive through FlightHudSnapshot.
 public partial class HUDController : Control
 {
     public static FlightHudSnapshot? LatestSnapshot { get; private set; }
@@ -80,8 +79,9 @@ public partial class HUDController : Control
     private Control _phaseRoot = null!;
     private Control _bottomRoot = null!;
     private Control _timeRoot = null!;
-    private Node _engineGrid = null!;
-    private Node _navball = null!;
+    private EngineGridHUD _engineGrid = null!;
+    private AttitudeNavball _navball = null!;
+    private AttitudeDataStrip _attitudeStrip = null!;
 
     // ── Pad help overlay + launch path callout (UX-001 / UX-002) ─────────────
     private PanelContainer _padHelpRoot = null!;
@@ -112,12 +112,14 @@ public partial class HUDController : Control
         BuildPadHelpOverlay();
         BuildDensityToast();
 
-        // Spawn the engine board, navball and live mission checklist as children.
+        // Attitude cluster: engines — navball — data strip (+ mission checklist).
         _engineGrid = new EngineGridHUD  { Name = "EngineGridHUD" };
         _navball = new AttitudeNavball { Name = "Navball" };
+        _attitudeStrip = new AttitudeDataStrip { Name = "AttitudeDataStrip" };
         _objectives = new MissionObjectivesPanel { Name = "MissionObjectives" };
         AddChild(_engineGrid);
         AddChild(_navball);
+        AddChild(_attitudeStrip);
         AddChild(_objectives);
     }
 
@@ -870,6 +872,7 @@ public partial class HUDController : Control
         UpdateGuidanceLine();
         UpdateBoosterLine();
         UpdateDensityToast(delta);
+        _attitudeStrip.UpdateFromSnapshot(snapshot);
         ApplyViewMode(snapshot.ViewMode);
     }
 
@@ -983,17 +986,23 @@ public partial class HUDController : Control
         _phaseTrack.Visible = banner;
         _countdownRoot.Visible &= (exterior || cockpit) && !clean;
 
+        // Attitude cluster: Minimal/Full = engines + navball + strip; Clean = navball + micro engine tally.
+        bool cluster = exterior;
+        bool strip = exterior && !clean;
         bool instruments = exterior && !clean;
         _objectives.DensityAllowed = instruments;
-        _engineGrid.ProcessMode = instruments
+        _engineGrid.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
         _navball.ProcessMode = exterior
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
-        if (_engineGrid is CanvasItem engineCanvas) engineCanvas.Visible = instruments;
-        // The navball survives CLEAN: it is the one instrument you cannot fly without.
-        if (_navball is CanvasItem navCanvas) navCanvas.Visible = exterior;
+        _attitudeStrip.ProcessMode = strip
+            ? ProcessModeEnum.Inherit
+            : ProcessModeEnum.Disabled;
+        _engineGrid.Visible = cluster;
+        _navball.Visible = exterior;
+        _attitudeStrip.Visible = strip;
     }
 
     private bool HasCriticalAlert() =>

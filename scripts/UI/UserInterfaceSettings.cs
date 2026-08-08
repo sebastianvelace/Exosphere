@@ -6,7 +6,9 @@ public enum InterfaceLanguage { English, Spanish }
 
 /// <summary>
 /// How much of the in-flight HUD is drawn. <see cref="HudDensity.Minimal"/> is the
-/// default: one authoritative readout per datum, no secondary panels.
+/// default: attitude cluster (engines — navball — data strip) without secondary
+/// top panels. <see cref="HudDensity.Full"/> adds those panels; <see cref="HudDensity.Clean"/>
+/// keeps the navball plus a micro engine tally.
 /// </summary>
 public enum HudDensity { Full, Minimal, Clean }
 
