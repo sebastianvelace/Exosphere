@@ -66,11 +66,14 @@ public partial class AttitudeNavball : Control
         SetAnchorsPreset(LayoutPreset.CenterBottom);
         GrowHorizontal = GrowDirection.Both;
         GrowVertical   = GrowDirection.Begin;
-        CustomMinimumSize = new Vector2(2 * Radius + 28, 2 * Radius + 46);
-        OffsetLeft  = -(Radius + 14);
-        OffsetRight =  (Radius + 14);
+        float width = 2 * Radius + 28;
+        float height = 2 * Radius + 46;
+        CustomMinimumSize = new Vector2(width, height);
+        OffsetLeft  = -width * 0.5f;
+        OffsetRight =  width * 0.5f;
         OffsetTop   = -(2 * Radius + 80);
         OffsetBottom = -34;
+        Size = new Vector2(width, height);
         MouseFilter = MouseFilterEnum.Ignore;
     }
 

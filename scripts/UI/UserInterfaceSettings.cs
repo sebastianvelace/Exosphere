@@ -5,10 +5,10 @@ using Godot;
 public enum InterfaceLanguage { English, Spanish }
 
 /// <summary>
-/// How much of the in-flight HUD is drawn. <see cref="HudDensity.Minimal"/> is the
-/// default: attitude cluster (engines — navball — data strip) without secondary
-/// top panels. <see cref="HudDensity.Full"/> adds those panels; <see cref="HudDensity.Clean"/>
-/// keeps the navball plus a micro engine tally.
+/// How much of the in-flight HUD is drawn. All densities keep the attitude cluster
+/// (engines — navball — data strip). <see cref="HudDensity.Minimal"/> is the default
+/// (cluster + compact bottom band). <see cref="HudDensity.Full"/> adds top panels.
+/// <see cref="HudDensity.Clean"/> drops chrome around the cluster only.
 /// </summary>
 public enum HudDensity { Full, Minimal, Clean }
 

@@ -4,8 +4,8 @@ using Godot;
 using System.Linq;
 
 // ── Engine grid + propulsion readout ────────────────────────────────────────
-// Attitude-cluster board: sits left of the navball. Compact ring in Minimal/Full;
-// Clean shrinks to a micro lit/total tally so the disc is never alone.
+// Attitude-cluster board: sits left of the navball. Compact lit/total ring in every
+// density; Full also keeps THRUST/TWR/Isp readouts under the ring.
 public partial class EngineGridHUD : Control
 {
     private const int RingInner = 3;
@@ -22,7 +22,6 @@ public partial class EngineGridHUD : Control
     private Font _labelFont = null!;
     private Font _valueFont = null!;
     private StyleBoxFlat _panelStyle = null!;
-    private bool _micro;
     private bool _showReadouts;
 
     private int    _litEngines;
@@ -50,38 +49,27 @@ public partial class EngineGridHUD : Control
     }
 
     /// <summary>
-    /// Anchor left of the navball (CenterBottom). Compact ring for Minimal/Full;
-    /// micro N/M tally for Clean.
+    /// Anchor left of the navball (CenterBottom). Compact ring always; Full adds
+    /// propulsion readouts under the board.
     /// </summary>
     private void ApplyDensityLayout(bool force = false)
     {
-        var density = UserInterfaceSettings.HudDensity;
-        bool micro = density == HudDensity.Clean;
-        bool showReadouts = density == HudDensity.Full;
-        if (!force && micro == _micro && showReadouts == _showReadouts
-            && CustomMinimumSize.Y > 0f)
+        bool showReadouts = UserInterfaceSettings.HudDensity == HudDensity.Full;
+        if (!force && showReadouts == _showReadouts && CustomMinimumSize.Y > 0f)
             return;
 
-        _micro = micro;
         _showReadouts = showReadouts;
-
-        if (_micro)
-        {
-            CustomMinimumSize = new Vector2(56, 36);
-            OffsetRight = -102;
-            OffsetLeft = OffsetRight - CustomMinimumSize.X;
-            OffsetBottom = -48;
-            OffsetTop = OffsetBottom - CustomMinimumSize.Y;
-            return;
-        }
 
         float height = _showReadouts ? 210f : 118f;
         float width = 112f;
         CustomMinimumSize = new Vector2(width, height);
+        // Force size from offsets — CustomMinimumSize alone can leave Size at 0
+        // until a parent layout pass, which made _Draw a no-op on some boots.
         OffsetRight = -102;
         OffsetLeft = OffsetRight - width;
         OffsetBottom = -34;
         OffsetTop = OffsetBottom - height;
+        Size = new Vector2(width, height);
     }
 
     public override void _Process(double delta)
@@ -124,17 +112,9 @@ public partial class EngineGridHUD : Control
     public override void _Draw()
     {
         var size = Size;
-        DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
+        if (size.X < 8f || size.Y < 8f) return;
 
-        if (_micro)
-        {
-            string tally = $"{_litEngines}/{_nominalEngines}";
-            var tw = _valueFont.GetStringSize(tally, HorizontalAlignment.Center, -1, 13);
-            DrawString(_valueFont, new Vector2((size.X - tw.X) * 0.5f, size.Y * 0.5f + 4f), tally,
-                HorizontalAlignment.Left, -1, 13,
-                _litEngines > 0 ? DotOnHot : LabelDim);
-            return;
-        }
+        DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
 
         DrawString(_labelFont, new Vector2(10, 16), "ENGINES",
             HorizontalAlignment.Left, -1, 10, Accent);

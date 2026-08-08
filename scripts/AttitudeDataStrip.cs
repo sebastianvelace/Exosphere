@@ -32,12 +32,15 @@ public partial class AttitudeDataStrip : Control
         SetAnchorsPreset(LayoutPreset.CenterBottom);
         GrowHorizontal = GrowDirection.End;
         GrowVertical = GrowDirection.Begin;
-        CustomMinimumSize = new Vector2(108, 168);
+        float width = 108f;
+        float height = 168f;
+        CustomMinimumSize = new Vector2(width, height);
         // Sit just right of the navball disc (radius 78 + pad 14 ≈ 92).
         OffsetLeft = 102;
-        OffsetRight = 210;
+        OffsetRight = OffsetLeft + width;
         OffsetBottom = -34;
-        OffsetTop = OffsetBottom - CustomMinimumSize.Y;
+        OffsetTop = OffsetBottom - height;
+        Size = new Vector2(width, height);
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
@@ -63,6 +66,7 @@ public partial class AttitudeDataStrip : Control
 
     public override void _Draw()
     {
+        if (Size.X < 8f || Size.Y < 8f) return;
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, Size));
 
         float y = 16f;

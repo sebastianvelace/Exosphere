@@ -986,9 +986,10 @@ public partial class HUDController : Control
         _phaseTrack.Visible = banner;
         _countdownRoot.Visible &= (exterior || cockpit) && !clean;
 
-        // Attitude cluster: Minimal/Full = engines + navball + strip; Clean = navball + micro engine tally.
+        // Attitude cluster stays visible in every exterior density — Clean only drops the
+        // secondary chrome (top panels, money band, phase track). A lone navball was the
+        // original "flat" screenshot; engines + strip are fly-the-vehicle instruments.
         bool cluster = exterior;
-        bool strip = exterior && !clean;
         bool instruments = exterior && !clean;
         _objectives.DensityAllowed = instruments;
         _engineGrid.ProcessMode = cluster
@@ -997,12 +998,12 @@ public partial class HUDController : Control
         _navball.ProcessMode = exterior
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
-        _attitudeStrip.ProcessMode = strip
+        _attitudeStrip.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
         _engineGrid.Visible = cluster;
         _navball.Visible = exterior;
-        _attitudeStrip.Visible = strip;
+        _attitudeStrip.Visible = cluster;
     }
 
     private bool HasCriticalAlert() =>
