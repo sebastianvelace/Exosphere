@@ -3,14 +3,18 @@ namespace Exosphere.Game;
 using Godot;
 using System.Linq;
 
-// ── Engine grid (attitude-cluster left cell) ────────────────────────────────
-// Lit/total Raptor ring. Sized by the parent AttitudeCluster HBox — do not
-// self-anchor to the viewport.
+// ── Engine grid (left of navball) ───────────────────────────────────────────
+// Positioned by HUDController as a child of AttitudeNavball — local Position,
+// not viewport anchors (CenterBottom+HBox was leaving Size at 0 for some boots).
 public partial class EngineGridHUD : Control
 {
     private const int RingInner = 3;
     private const int RingMid   = 10;
     private const int RingOuter = 20;
+
+    public const float BoardWidth = 120f;
+    public const float BoardHeightCompact = 124f;
+    public const float BoardHeightFull = 210f;
 
     private static readonly Color DotOff      = InterfaceTheme.Track;
     private static readonly Color DotOn       = new(0.78f, 0.81f, 0.86f, 1f);
@@ -25,7 +29,7 @@ public partial class EngineGridHUD : Control
     private bool _showReadouts;
 
     private int    _litEngines;
-    private int    _nominalEngines;
+    private int    _nominalEngines = 33;
     private double _throttle;
     private double _thrustKN;
     private double _twr;
@@ -40,39 +44,44 @@ public partial class EngineGridHUD : Control
     {
         _labelFont = InterfaceTheme.BodyFont;
         _valueFont = InterfaceTheme.MonoFont;
-        _panelStyle = InterfaceTheme.GlassPanel(0.78f, 10, 0, 0);
+        _panelStyle = InterfaceTheme.GlassPanel(0.82f, 10, 0, 0);
         MouseFilter = MouseFilterEnum.Ignore;
+        ClipContents = false;
         ApplyDensityLayout(force: true);
     }
 
-    private void ApplyDensityLayout(bool force = false)
+    public void ApplyDensityLayout(bool force = false)
     {
         bool showReadouts = UserInterfaceSettings.HudDensity == HudDensity.Full;
-        if (!force && showReadouts == _showReadouts && CustomMinimumSize.Y > 0f)
+        if (!force && showReadouts == _showReadouts && Size.X >= 8f)
             return;
 
         _showReadouts = showReadouts;
-        float height = _showReadouts ? 210f : 124f;
-        float width = 120f;
-        CustomMinimumSize = new Vector2(width, height);
-        Size = new Vector2(width, height);
+        float height = _showReadouts ? BoardHeightFull : BoardHeightCompact;
+        CustomMinimumSize = new Vector2(BoardWidth, height);
+        Size = new Vector2(BoardWidth, height);
+        QueueRedraw();
     }
 
     public override void _Process(double delta)
     {
         ApplyDensityLayout();
+        if (Size.X < 8f || Size.Y < 8f)
+            Size = CustomMinimumSize;
+
         var vessel = SimulationBridge.Instance?.ActiveVessel;
         var universe = SimulationBridge.Instance?.Universe;
-        if (vessel == null || universe == null) return;
+        if (vessel == null || universe == null)
+        {
+            QueueRedraw();
+            return;
+        }
 
         var body = universe.GetDominantBody(vessel.Position);
-
         var engines = vessel.Parts.ActiveEngines.ToList();
         _throttle = vessel.Throttle;
-
         _nominalEngines = System.Math.Max(1,
             engines.Sum(e => System.Math.Max(1, e.Definition.EngineCount)));
-
         _litEngines = System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
         _engineThrottles.Clear();
         _engineFailures.Clear();
@@ -87,40 +96,34 @@ public partial class EngineGridHUD : Control
         _thrustKN = thrustN / 1000.0;
         _massFlow = vessel.GetCurrentMassFlowTps(body);
         _ispEff   = vessel.GetCurrentIsp(body);
-
         double localWeight = vessel.GetWeightNewtons(body);
         _twrValid = localWeight > 0 && thrustN > 0;
         _twr = _twrValid ? thrustN / localWeight : 0;
-
         QueueRedraw();
     }
 
     public override void _Draw()
     {
-        var size = Size;
-        if (size.X < 8f || size.Y < 8f)
-            size = CustomMinimumSize;
+        var size = Size.X >= 8f ? Size : CustomMinimumSize;
         if (size.X < 8f || size.Y < 8f) return;
 
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
-
         DrawString(_labelFont, new Vector2(10, 16), "ENGINES",
             HorizontalAlignment.Left, -1, 10, Accent);
 
         float cx = size.X * 0.5f;
         float cy = 66f;
-        float rOuter = 40f, rMid = 26f, rInner = 11f;
         int litRemaining = _litEngines;
         _drawEngineIndex = 0;
         if (_nominalEngines == 33)
         {
-            litRemaining = DrawRing(cx, cy, rOuter, RingOuter, litRemaining);
-            litRemaining = DrawRing(cx, cy, rMid,   RingMid,   litRemaining);
-            DrawRing(cx, cy, rInner, RingInner, litRemaining);
+            litRemaining = DrawRing(cx, cy, 40f, RingOuter, litRemaining);
+            litRemaining = DrawRing(cx, cy, 26f, RingMid, litRemaining);
+            DrawRing(cx, cy, 11f, RingInner, litRemaining);
         }
         else
         {
-            DrawRing(cx, cy, rMid, _nominalEngines, litRemaining);
+            DrawRing(cx, cy, 26f, _nominalEngines, litRemaining);
         }
 
         string centre = $"{_litEngines}/{_nominalEngines}";
@@ -130,7 +133,6 @@ public partial class EngineGridHUD : Control
             _litEngines > 0 ? DotOnHot : LabelDim);
 
         if (!_showReadouts) return;
-
         float ry = 122f;
         ry = DrawReadout(10, ry, "THRUST", $"{_thrustKN:N0} kN", ValueBright);
         ry = DrawReadout(10, ry, "TWR",
@@ -177,10 +179,11 @@ public partial class EngineGridHUD : Control
 
     private float DrawReadout(float x, float y, string label, string value, Color valCol)
     {
+        float width = Size.X >= 8f ? Size.X : CustomMinimumSize.X;
         DrawString(_labelFont, new Vector2(x, y), label,
             HorizontalAlignment.Left, -1, 10, LabelDim);
         var vw = _valueFont.GetStringSize(value, HorizontalAlignment.Right, -1, 12);
-        DrawString(_valueFont, new Vector2(Size.X - 10 - vw.X, y), value,
+        DrawString(_valueFont, new Vector2(width - 10 - vw.X, y), value,
             HorizontalAlignment.Left, -1, 12, valCol);
         return y + 18f;
     }

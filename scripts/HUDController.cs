@@ -79,7 +79,6 @@ public partial class HUDController : Control
     private Control _phaseRoot = null!;
     private Control _bottomRoot = null!;
     private Control _timeRoot = null!;
-    private Control _attitudeClusterRoot = null!;
     private EngineGridHUD _engineGrid = null!;
     private AttitudeNavball _navball = null!;
     private AttitudeDataStrip _attitudeStrip = null!;
@@ -113,8 +112,8 @@ public partial class HUDController : Control
         BuildPadHelpOverlay();
         BuildDensityToast();
 
-        // Attitude cluster: one CenterBottom row so engines/navball/strip cannot
-        // drift off-screen or under independent-anchor layout races.
+        // Attitude cluster: navball owns CenterBottom; engines/strip are children
+        // with local Position so they cannot vanish from a zero-size HBox layout.
         BuildAttitudeCluster();
         _objectives = new MissionObjectivesPanel { Name = "MissionObjectives" };
         AddChild(_objectives);
@@ -122,37 +121,23 @@ public partial class HUDController : Control
 
     private void BuildAttitudeCluster()
     {
-        var root = new CenterContainer
-        {
-            Name = "AttitudeCluster",
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        root.SetAnchorsPreset(LayoutPreset.CenterBottom);
-        root.GrowHorizontal = GrowDirection.Both;
-        root.GrowVertical = GrowDirection.Begin;
-        root.OffsetLeft = -320;
-        root.OffsetRight = 320;
-        root.OffsetBottom = -108;
-        root.OffsetTop = -320;
-        root.ZIndex = 30; // above MISSION CONTROLS so the cluster is never buried
-        AddChild(root);
-        _attitudeClusterRoot = root;
-
-        var row = new HBoxContainer
-        {
-            Name = "AttitudeClusterRow",
-            Alignment = BoxContainer.AlignmentMode.Center,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        row.AddThemeConstantOverride("separation", 12);
-        root.AddChild(row);
+        _navball = new AttitudeNavball { Name = "Navball" };
+        _navball.ZIndex = 30;
+        AddChild(_navball);
 
         _engineGrid = new EngineGridHUD { Name = "EngineGridHUD" };
-        _navball = new AttitudeNavball { Name = "Navball" };
         _attitudeStrip = new AttitudeDataStrip { Name = "AttitudeDataStrip" };
-        row.AddChild(_engineGrid);
-        row.AddChild(_navball);
-        row.AddChild(_attitudeStrip);
+        // Parent to the navball so the trio moves as one instrument.
+        _navball.AddChild(_engineGrid);
+        _navball.AddChild(_attitudeStrip);
+
+        // Local coords: navball origin is its top-left. Place boards beside the disc.
+        const float gap = 10f;
+        float navW = 2f * 78f + 28f; // matches AttitudeNavball.Radius
+        _engineGrid.Position = new Vector2(-(EngineGridHUD.BoardWidth + gap), 8f);
+        _attitudeStrip.Position = new Vector2(navW + gap, 8f);
+        _engineGrid.Size = new Vector2(EngineGridHUD.BoardWidth, EngineGridHUD.BoardHeightCompact);
+        _attitudeStrip.Size = new Vector2(AttitudeDataStrip.BoardWidth, AttitudeDataStrip.BoardHeight);
     }
 
     private void BuildDensityToast()
@@ -1020,19 +1005,19 @@ public partial class HUDController : Control
         _phaseTrack.Visible = banner;
         _countdownRoot.Visible &= (exterior || cockpit) && !clean;
 
-        // Attitude cluster stays visible in every exterior density — Clean only drops the
-        // secondary chrome (top panels, money band, phase track).
+        // Attitude cluster (navball + child engines/strip) in every exterior density.
         bool cluster = exterior;
         bool instruments = exterior && !clean;
         _objectives.DensityAllowed = instruments;
-        _attitudeClusterRoot.Visible = cluster;
-        _attitudeClusterRoot.ProcessMode = cluster
+        _navball.Visible = cluster;
+        _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
+        _engineGrid.Visible = cluster;
+        _attitudeStrip.Visible = cluster;
+        _engineGrid.ApplyDensityLayout();
         // Sit above the SPEED/ALT band in Minimal/Full; drop lower when Clean hides it.
-        float clusterBottom = clean ? -36f : -108f;
-        _attitudeClusterRoot.OffsetBottom = clusterBottom;
-        _attitudeClusterRoot.OffsetTop = clusterBottom - 220f;
+        _navball.SetClusterBottomOffset(clean ? -36f : -108f);
     }
 
     private bool HasCriticalAlert() =>

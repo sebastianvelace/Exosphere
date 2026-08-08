@@ -4,18 +4,21 @@ using Godot;
 using Exosphere.Simulation.Presentation;
 
 /// <summary>
-/// Compact glass column for the attitude cluster (right of navball): throttle,
-/// engines, TWR, and Ap/Pe (or propellant %). Sized by the parent HBox.
+/// Glass column right of the navball. Positioned as a child of AttitudeNavball
+/// with a local Position — not viewport anchors.
 /// </summary>
 public partial class AttitudeDataStrip : Control
 {
+    public const float BoardWidth = 112f;
+    public const float BoardHeight = 168f;
+
     private Font _labelFont = null!;
     private Font _valueFont = null!;
     private StyleBoxFlat _panelStyle = null!;
 
     private double _throttle;
     private int _lit;
-    private int _total;
+    private int _total = 1;
     private double _twr;
     private bool _twrValid;
     private double? _apKm;
@@ -27,10 +30,20 @@ public partial class AttitudeDataStrip : Control
     {
         _labelFont = InterfaceTheme.BodyFont;
         _valueFont = InterfaceTheme.MonoFont;
-        _panelStyle = InterfaceTheme.GlassPanel(0.78f, 10, 8, 8);
-        CustomMinimumSize = new Vector2(112, 168);
+        _panelStyle = InterfaceTheme.GlassPanel(0.82f, 10, 8, 8);
+        CustomMinimumSize = new Vector2(BoardWidth, BoardHeight);
         Size = CustomMinimumSize;
         MouseFilter = MouseFilterEnum.Ignore;
+        ClipContents = false;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (Size.X < 8f || Size.Y < 8f)
+            Size = CustomMinimumSize;
+        // Snapshot is pushed from HUDController; keep redrawing so a zero-size
+        // first frame cannot leave a blank panel stuck.
+        QueueRedraw();
     }
 
     public void UpdateFromSnapshot(FlightHudSnapshot? snapshot)
@@ -60,10 +73,10 @@ public partial class AttitudeDataStrip : Control
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
 
         float y = 16f;
-        y = Row(y, "THR", $"{_throttle * 100.0:F0}%", InterfaceTheme.Text);
-        y = Row(y, "ENG", $"{_lit}/{_total}",
+        y = Row(y, size.X, "THR", $"{_throttle * 100.0:F0}%", InterfaceTheme.Text);
+        y = Row(y, size.X, "ENG", $"{_lit}/{_total}",
             _lit > 0 ? InterfaceTheme.Text : InterfaceTheme.TextMuted);
-        y = Row(y, "TWR",
+        y = Row(y, size.X, "TWR",
             _twrValid ? $"{_twr:F2}" : "---",
             _twrValid
                 ? (_twr >= 1.0 ? InterfaceTheme.Text : InterfaceTheme.Alert)
@@ -72,19 +85,18 @@ public partial class AttitudeDataStrip : Control
         y += 6f;
         if (_useOrbit)
         {
-            y = Row(y, "Ap", FormatOrbitKm(_apKm), InterfaceTheme.Text);
-            Row(y, "Pe", FormatOrbitKm(_peKm), InterfaceTheme.Text);
+            y = Row(y, size.X, "Ap", FormatOrbitKm(_apKm), InterfaceTheme.Text);
+            Row(y, size.X, "Pe", FormatOrbitKm(_peKm), InterfaceTheme.Text);
         }
         else
         {
-            Row(y, "FUEL", $"{_fuelPct:F0}%",
+            Row(y, size.X, "FUEL", $"{_fuelPct:F0}%",
                 _fuelPct < 15.0 ? InterfaceTheme.Warning : InterfaceTheme.Text);
         }
     }
 
-    private float Row(float y, string label, string value, Color valueColor)
+    private float Row(float y, float width, string label, string value, Color valueColor)
     {
-        float width = Size.X >= 8f ? Size.X : CustomMinimumSize.X;
         DrawString(_labelFont, new Vector2(10, y), label,
             HorizontalAlignment.Left, -1, 10, InterfaceTheme.TextMuted);
         var vw = _valueFont.GetStringSize(value, HorizontalAlignment.Right, -1, 12);

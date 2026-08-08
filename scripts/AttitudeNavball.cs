@@ -63,12 +63,28 @@ public partial class AttitudeNavball : Control
     public override void _Ready()
     {
         _font = InterfaceTheme.MonoFont;
-        // Sized by the parent AttitudeCluster HBox — no viewport self-anchoring.
+        // Self-anchored CenterBottom; engines + data strip are children with local Position.
+        SetAnchorsPreset(LayoutPreset.CenterBottom);
+        GrowHorizontal = GrowDirection.Both;
+        GrowVertical = GrowDirection.Begin;
         float width = 2 * Radius + 28;
         float height = 2 * Radius + 46;
         CustomMinimumSize = new Vector2(width, height);
         Size = new Vector2(width, height);
+        OffsetLeft = -width * 0.5f;
+        OffsetRight = width * 0.5f;
+        OffsetBottom = -108f;
+        OffsetTop = OffsetBottom - height;
         MouseFilter = MouseFilterEnum.Ignore;
+        ClipContents = false; // children (engines/strip) sit outside the disc bounds
+    }
+
+    /// <summary>Raise/lower the whole attitude cluster above the money band.</summary>
+    public void SetClusterBottomOffset(float bottom)
+    {
+        float height = CustomMinimumSize.Y > 0f ? CustomMinimumSize.Y : (2 * Radius + 46);
+        OffsetBottom = bottom;
+        OffsetTop = bottom - height;
     }
 
     public override void _Process(double delta)
