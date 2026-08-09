@@ -127,17 +127,103 @@ public sealed record AtmosphereOptics
     /// Below the geometric horizon the direct beam is zero (twilight remains sky scattering).
     /// </summary>
     public Vector3d DirectSolarTransmittance(double altitude, double sunElevationSin)
+        => DirectSolarTransmittance(altitude, sunElevationSin, 6_371_000.0, 1_000_000.0);
+
+    /// <summary>
+    /// Direct-sun RGB transmittance through a spherical atmosphere. Unlike the familiar
+    /// plane-parallel air-mass approximation, this follows the finite ray from the
+    /// observer to the outer atmospheric sphere. That matters at sunrise/sunset, from
+    /// high-altitude aircraft and in thin atmospheres where a flat column can overstate
+    /// the path by orders of magnitude.
+    /// </summary>
+    public Vector3d DirectSolarTransmittance(
+        double altitude,
+        double sunElevationSin,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount = 48)
     {
-        if (sunElevationSin <= 0.0) return Vector3d.Zero;
-        double cosZenith = System.Math.Clamp(sunElevationSin, 0.0, 1.0);
-        double zenithDegrees = System.Math.Acos(cosZenith) * 180.0 / System.Math.PI;
-        double airMass = 1.0 / (cosZenith
-            + 0.50572 * System.Math.Pow(96.07995 - zenithDegrees, -1.6364));
-        var tau = VerticalOpticalDepth(altitude) * airMass;
+        // A non-finite observation must never turn into full, unattenuated sunlight.
+        // This is especially important for the game-layer exposure controller during
+        // scene/bootstrap frames, when a body position may not be initialised yet.
+        if (!double.IsFinite(altitude) || !double.IsFinite(sunElevationSin)
+            || sunElevationSin <= 0.0)
+            return Vector3d.Zero;
+        if (!double.IsFinite(planetRadius) || planetRadius <= 0.0
+            || !double.IsFinite(atmosphereTopAltitude) || atmosphereTopAltitude <= 0.0)
+        {
+            return DirectSolarTransmittance(altitude, sunElevationSin);
+        }
+
+        var tau = OpticalDepthAlongRay(
+            altitude,
+            System.Math.Clamp(sunElevationSin, 0.0, 1.0),
+            planetRadius,
+            atmosphereTopAltitude,
+            sampleCount);
         return new Vector3d(
             System.Math.Exp(-tau.X),
             System.Math.Exp(-tau.Y),
             System.Math.Exp(-tau.Z));
+    }
+
+    /// <summary>
+    /// Integrates extinction along a ray that leaves an observer at <paramref name="altitude"/>
+    /// with <paramref name="cosZenith"/> equal to the ray's dot product with local up.
+    /// Simpson integration is intentionally deterministic so the same optical profile is
+    /// used by tests, exposure control and offline diagnostics.
+    /// </summary>
+    public Vector3d OpticalDepthAlongRay(
+        double altitude,
+        double cosZenith,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount = 48)
+    {
+        if (!double.IsFinite(altitude) || !double.IsFinite(cosZenith)
+            || !double.IsFinite(planetRadius) || !double.IsFinite(atmosphereTopAltitude)
+            || planetRadius <= 0.0 || atmosphereTopAltitude <= 0.0)
+            return Vector3d.Zero;
+
+        altitude = System.Math.Max(0.0, altitude);
+        cosZenith = System.Math.Clamp(cosZenith, -1.0, 1.0);
+        int n = System.Math.Max(8, sampleCount);
+        if ((n & 1) != 0) n++;
+
+        double observerRadius = planetRadius + altitude;
+        double outerRadius = planetRadius + atmosphereTopAltitude;
+        double b = observerRadius * cosZenith;
+        double discriminant = b * b - (observerRadius * observerRadius
+            - outerRadius * outerRadius);
+        if (discriminant <= 0.0) return Vector3d.Zero;
+
+        double distanceToOuter = -b + System.Math.Sqrt(discriminant);
+        if (distanceToOuter <= 0.0) return Vector3d.Zero;
+
+        // A sun below the geometric horizon has no direct beam. The caller may still
+        // render twilight/multiple scattering; this method is specifically direct light.
+        if (cosZenith <= 0.0) return Vector3d.Zero;
+
+        Vector3d integral = Vector3d.Zero;
+        double step = distanceToOuter / n;
+        for (int i = 0; i <= n; i++)
+        {
+            double distance = step * i;
+            double radius = System.Math.Sqrt(observerRadius * observerRadius
+                + distance * distance + 2.0 * observerRadius * cosZenith * distance);
+            double localAltitude = radius - planetRadius;
+            Vector3d density = new(
+                RayleighDensity(localAltitude),
+                MieDensity(localAltitude),
+                OzoneDensity(localAltitude));
+            Vector3d sample = RayleighScattering * density.X
+                + MieExtinction * density.Y
+                + OzoneAbsorption * density.Z;
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            integral += sample * weight;
+        }
+
+        return integral * (step / 3.0);
     }
 
     /// <summary>

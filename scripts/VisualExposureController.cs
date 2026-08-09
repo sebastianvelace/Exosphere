@@ -42,7 +42,12 @@ public partial class VisualExposureController : Node
         double air = optics == null ? 0.0 : System.Math.Max(
             optics.RayleighDensity(altitude), optics.MieDensity(altitude));
         double daylight = Smoothstep(-0.12, 0.03, sunElevation);
-        Vector3d direct = optics?.DirectSolarTransmittance(altitude, sunElevation)
+        Vector3d direct = optics?.DirectSolarTransmittance(
+            altitude,
+            sunElevation,
+            body.Radius,
+            optics == null ? 0.0 : body.Atmosphere!.MaxAltitude,
+            sampleCount: 32)
             ?? new Vector3d(1.0, 1.0, 1.0);
         double directLuminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
 
