@@ -24,12 +24,18 @@ not converted into a passing screenshot.
 | `aab7e7b` | Record EDL v3–v5 gate evidence | logs and acceptance criteria |
 | `4d36b73` | Gate low-energy single-engine final descent | focused EDL 7/7; EDL v6 still fails with 106.31 m/s contact |
 | `a13fc02` | Keep upright authority through final lateral recovery | focused EDL 8/8 + Godot build; v7 visual gate pending while another harness owns the lock |
+| `ce4a64b` | Opt-in data-driven aerosol climate profiles | JSON boundary tests + bounded AOD/Mie normalisation |
+| `2115102` | Bind aerosol climate to realtime sky transport | shader profile/Ångström/vertical Mie path; legacy switch retained |
+| `ce97d59` | Calibrate Earth coastal aerosol reference | v1 optical gate failure recorded; v2 clipping below threshold |
+| `6d71902` | Document aerosol renderer evidence | v2 `ATMOSPHERE_OK`, 16/16, 1157 frames |
 
 ## Current gates
 
 - Flight 7 stage-aware ascent: `stage-ascent-v1` passed `ASCENT_ORBIT_OK`; log contains
   `ENGINE_STAGE` rows for booster 33, hot-stage 39 and Ship 6.
-- Atmosphere matrix: `baseline-atm-v1` passed `ATMOSPHERE_OK` with 16/16 milestones.
+- Atmosphere matrix: `baseline-atm-v1` passed `ATMOSPHERE_OK` with 16/16 milestones. The
+  post-integration `aerosol-v2` matrix also passed `ATMOSPHERE_OK` with 16/16 and 1157 frames;
+  the `aerosol-v1` clipping failure is retained in its audit as a non-passing run.
 - EDL v3 reproduced a one-engine lateral rebound; v4 reproduced a three-engine hover;
   v5 reproduced a two-engine minimum-throttle rebound at ~20 m; v6 reproduced a late
   two-engine bounce and 106.31 m/s overload at contact. EDL touchdown remains open.

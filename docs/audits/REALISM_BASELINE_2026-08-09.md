@@ -4,6 +4,9 @@
 **Ejecución atmosférica:** `baseline-atm-v1`
 **Artefactos:** `/tmp/exo_baseline-atm-v1/` y `/tmp/exo_baseline-atm-v1.log`
 
+**Actualización visual:** `aerosol-v2` (`/tmp/exo_aerosol_v2/` y
+`/tmp/exo_aerosol_v2.log`) es la matriz posterior a la integración climática.
+
 ## Estado de la base
 
 - `origin/main` se integró en una rama limpia sin sobrescribir el WIP del usuario; ese WIP está
@@ -34,6 +37,11 @@ Las imágenes `exo_play_ground_day.png` y `exo_play_400km_day.png` se revisaron 
 el gradiente diurno es continuo, el limbo orbital está presente y no hay frame negro. El
 número de estrellas en noche es deliberadamente bajo y queda como parámetro de comparación para
 la futura calibración de exposición y magnitud estelar.
+
+La matriz `aerosol-v1` conservó los 16 hitos y 1.157 frames, pero fue rechazada por el gate de
+exposición (`ground_day skyWhiteClipFrac=0.16751`) al usar AOD550 Earth 0.08. El perfil costero
+despejado AOD550 0.04 de `ce97d59` produjo `aerosol-v2`: `ATMOSPHERE_OK`, 16/16 hitos, 1.157
+frames, `ground_day skyWhiteClipFrac=0.08642`, sin `GAP`, `FALLBACK` ni errores de shader.
 
 ## Ascenso E2E de Flight 7
 
@@ -101,11 +109,12 @@ Estas fallas son evidencia física útil: el controlador necesita resolver simul
 
 ## Limitaciones descubiertas
 
-1. La LUT y el nuevo overload de transporte pueden usar `AtmosphereDensityProfile` basado en
-   `P/T`, aerosoles y ozono; los consumidores visuales existentes siguen en el camino
-   exponencial por compatibilidad y necesitan migración gradual con gates de imagen.
-2. El estado de aerosoles/clima existe y está validado en CPU, pero aún no modifica el shader ni
-   invalida LUTs por revisión.
+1. La LUT, el overload de transporte y el shader pueden usar `AtmosphereDensityProfile` basado en
+   `P/T`, aerosoles y ozono. El shader además acepta `AerosolClimateState` opt-in con AOD550,
+   Ångström y escala vertical; la ruta sin bloque climático sigue en el camino legacy.
+2. La envolvente climática se evalúa en el observador y se aplica a la contribución Mie durante
+   el transporte realtime. Las LUTs de transmittance/multiple scattering siguen estáticas por
+   cuerpo y no se regeneran durante un time-warp.
 3. La matriz atmosférica no es un E2E de misión: aún falta ejecutar menú→VAB→lanzamiento→órbita→
    reentrada→aterrizaje con telemetría de controles y persistencia.
 4. La medición llvmpipe muestra un arranque/render lento; se necesita separar coste de primera
