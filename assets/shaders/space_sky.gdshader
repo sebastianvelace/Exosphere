@@ -10,6 +10,14 @@ uniform vec3 local_up = vec3(0.0, 1.0, 0.0);
 uniform float planet_radius = 6371000.0;
 uniform float atmosphere_height = 140000.0;
 uniform float observer_altitude = 2.0;
+// CPU-built one-dimensional density profile.  The profile is packed into a one-row
+// texture because Godot's sky shader exposes sampled profiles as sampler2D; x is the
+// normalised altitude coordinate and the three channels are Rayleigh, Mie and ozone.
+// Keep the switch explicit so a missing/unbound profile never changes the established
+// exponential renderer behaviour during startup or for bodies without a model LUT.
+uniform sampler2D density_lut : hint_default_black, filter_linear;
+uniform bool density_lut_enabled = false;
+uniform float density_lut_top_altitude = 140000.0;
 // CPU-built spherical transmittance LUT.  Its x coordinate is warped altitude
 // (u²) and y is warped sine solar elevation (v²); see AtmosphereTransmittanceLut.
 uniform sampler2D transmittance_lut : filter_linear;
@@ -112,6 +120,12 @@ float tangent_warped_boundary(
 
 vec3 density_at_height(float height) {
 	float h = max(height, 0.0);
+	if (density_lut_enabled) {
+		// The CPU profile uses x² altitude packing; invert that warp before sampling.
+		float altitude_fraction = clamp(h / max(density_lut_top_altitude, 1.0), 0.0, 1.0);
+		float altitude_u = sqrt(altitude_fraction);
+		return max(texture(density_lut, vec2(altitude_u, 0.5)).rgb, vec3(0.0));
+	}
 	float rayleigh = exp(-h / max(rayleigh_scale_height, 1.0));
 	float mie = exp(-h / max(mie_scale_height, 1.0));
 	float ozone = ozone_half_width > 0.0
