@@ -36,6 +36,12 @@ uniform float multiple_scattering_mu_layers = 12.0;
 uniform vec3 rayleigh_scattering = vec3(5.802e-6, 13.558e-6, 33.100e-6);
 uniform vec3 mie_scattering = vec3(3.996e-6);
 uniform vec3 mie_absorption = vec3(0.444e-6);
+// Optional climate/aerosol transport. Disabled is an explicit compatibility path:
+// custom body files that predate aerosol_climate keep their configured Mie coefficients.
+uniform bool aerosol_climate_enabled = false;
+uniform float aerosol_mie_scale = 1.0;
+uniform float aerosol_angstrom_exponent = 1.0;
+uniform float aerosol_scale_height = 1500.0;
 uniform vec3 ozone_absorption = vec3(0.650e-6, 1.881e-6, 0.085e-6);
 uniform float rayleigh_scale_height = 8000.0;
 uniform float mie_scale_height = 1200.0;
@@ -134,15 +140,42 @@ vec3 density_at_height(float height) {
 	return vec3(rayleigh, mie, ozone);
 }
 
+vec3 aerosol_spectral_scale() {
+	// RGB band anchors are approximately 650/550/450 nm. Ångström's power law
+	// increases short-wave extinction for fine aerosol while keeping green at 550 nm.
+	vec3 wavelengths = vec3(650.0, 550.0, 450.0);
+	return pow(vec3(550.0) / wavelengths,
+		vec3(max(aerosol_angstrom_exponent, 0.0)));
+}
+
+float aerosol_vertical_ratio(float height) {
+	if (!aerosol_climate_enabled) return 1.0;
+	float climate = exp(-max(height, 0.0) / max(aerosol_scale_height, 1.0));
+	float configured = exp(-max(height, 0.0) / max(mie_scale_height, 1.0));
+	// density_at_height already contains the configured Mie envelope. Replace that
+	// envelope with the climate scale height without applying a second sea-level factor.
+	return clamp(climate / max(configured, 1e-5), 0.0, 100.0);
+}
+
+vec3 effective_mie_scattering(float height) {
+	return mie_scattering * max(aerosol_mie_scale, 0.0)
+		* aerosol_spectral_scale() * aerosol_vertical_ratio(height);
+}
+
+vec3 effective_mie_absorption(float height) {
+	return mie_absorption * max(aerosol_mie_scale, 0.0)
+		* aerosol_spectral_scale() * aerosol_vertical_ratio(height);
+}
+
 float airglow_density_at_height(float height) {
 	float sigma = max(airglow_scale_height, 1.0);
 	float z = (height - airglow_center_altitude) / sigma;
 	return exp(-0.5 * z * z);
 }
 
-vec3 extinction(vec3 density) {
+vec3 extinction(vec3 density, float height) {
 	return rayleigh_scattering * density.x
-		+ (mie_scattering + mie_absorption) * density.y
+		+ (effective_mie_scattering(height) + effective_mie_absorption(height)) * density.y
 		+ ozone_absorption * density.z;
 }
 
@@ -198,7 +231,7 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 		float jitter = stable_jitter(position + apparent_direction * float(i) * 17.0);
 		float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));
 		float height = length(position + apparent_direction * t) - planet_radius;
-		depth += extinction(density_at_height(height)) * step_length;
+		depth += extinction(density_at_height(height), height) * step_length;
 	}
 	return depth;
 }
@@ -409,19 +442,20 @@ void sky() {
 			vec3 sample_position = origin + view_dir * t;
 			float height = length(sample_position) - planet_radius;
 			vec3 density = density_at_height(height);
-			vec3 sample_extinction = extinction(density);
+			vec3 sample_extinction = extinction(density, height);
 			vec3 segment_depth = sample_extinction * step_length;
 			vec3 view_throughput = transmittance(optical_depth + segment_depth * 0.5);
 			vec3 sun_throughput = solar_transmittance(sample_position, to_sun, outer_radius);
 			vec3 throughput = view_throughput * sun_throughput;
 			vec3 scattering = rayleigh_scattering * density.x * rayleigh_phase
-				+ mie_scattering * density.y * mie_phase;
+				+ effective_mie_scattering(height) * density.y * mie_phase;
 			in_scatter += throughput * scattering * step_length;
 
 			// Conservative local order-2 closure: redistribute a bounded fraction of
 			// direct-beam losses isotropically. Planet shadow is kept at zero explicitly.
 			if (!multiple_scattering_lut_enabled && !sun_is_occluded(sample_position, to_sun)) {
-				vec3 beta_s = rayleigh_scattering * density.x + mie_scattering * density.y;
+				vec3 beta_s = rayleigh_scattering * density.x
+					+ effective_mie_scattering(height) * density.y;
 				vec3 omega = clamp(beta_s / max(sample_extinction, vec3(1e-12)), vec3(0.0), vec3(1.0));
 				vec3 removed = clamp(vec3(1.0) - sun_throughput, vec3(0.0), vec3(1.0));
 				vec3 source_2 = beta_s * omega * removed
@@ -449,7 +483,7 @@ void sky() {
 			float local_limb_light = smoothstep(-0.035, 0.08, local_solar_elevation);
 			float sunlit_limb = max(local_limb_light, 0.08);
 			vec3 twilight_beta = rayleigh_scattering * density.x * rayleigh_phase * 0.72
-				+ mie_scattering * density.y * mie_phase * 1.28;
+				+ effective_mie_scattering(height) * density.y * mie_phase * 1.28;
 			twilight_radiance += view_throughput * twilight_beta
 				* (twilight_depression * twilight_band * upper_layer * sunlit_limb * 24.0)
 				* step_length;

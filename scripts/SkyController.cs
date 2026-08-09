@@ -56,6 +56,7 @@ public partial class SkyController : Node
     private double _lastAtmosphereAltitude;
     private Vector3d _lastAtmosphereUp;
     private Vector3d _lastAtmosphereSun;
+    private double _lastAtmosphereTime;
 
     public override void _Ready()
     {
@@ -80,6 +81,10 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("density_lut_enabled", false);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
+        _skyMat.SetShaderParameter("aerosol_climate_enabled", false);
+        _skyMat.SetShaderParameter("aerosol_mie_scale", 1.0f);
+        _skyMat.SetShaderParameter("aerosol_angstrom_exponent", 1.0f);
+        _skyMat.SetShaderParameter("aerosol_scale_height", 1_500.0f);
         _env.Sky.SkyMaterial = _skyMat;
         // The cloud field evolves slowly. Incremental refresh updates one cubemap face per
         // frame and avoids paying the complete gas+cloud integration six times every frame.
@@ -117,16 +122,22 @@ public partial class SkyController : Node
             || _lastAtmosphereBodyId != body.Id
             || System.Math.Abs(altitude - _lastAtmosphereAltitude) > 100.0
             || _lastAtmosphereUp.Dot(upD) < 0.99999
-            || _lastAtmosphereSun.Dot(sunD) < 0.999999;
+            || _lastAtmosphereSun.Dot(sunD) < 0.999999
+            // Climate envelopes evolve much more slowly than the flight integrator. A
+            // ten-minute invalidation keeps long time-warps visually honest without
+            // rebuilding the sky cubemap every simulation tick.
+            || System.Math.Abs(universe.CurrentTime - _lastAtmosphereTime) > 600.0;
         if (atmosphereChanged)
         {
-            BindAtmosphere(body, altitude, upD, sunD);
+            BindAtmosphere(body, altitude, upD, sunD,
+                body.GetLatitude(vessel.Position), universe.CurrentTime);
             BindSolarGeometry(vessel.Position, sun, body.Id);
             _hasAtmosphereState = true;
             _lastAtmosphereBodyId = body.Id;
             _lastAtmosphereAltitude = altitude;
             _lastAtmosphereUp = upD;
             _lastAtmosphereSun = sunD;
+            _lastAtmosphereTime = universe.CurrentTime;
         }
         UpdateEnvironment(body, altitude, upD.Dot(sunD));
     }
@@ -177,7 +188,9 @@ public partial class SkyController : Node
         CelestialBody body,
         double altitude,
         Vector3d up,
-        Vector3d toSun)
+        Vector3d toSun,
+        double latitudeDegrees,
+        double simulationTime)
     {
         var atmosphere = body.Atmosphere;
         var optics = atmosphere?.Optics;
@@ -195,6 +208,10 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
+        _skyMat.SetShaderParameter("aerosol_climate_enabled", false);
+        _skyMat.SetShaderParameter("aerosol_mie_scale", 1.0f);
+        _skyMat.SetShaderParameter("aerosol_angstrom_exponent", 1.0f);
+        _skyMat.SetShaderParameter("aerosol_scale_height", 1_500.0f);
 
         if (!enabled)
         {
@@ -236,6 +253,13 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("ozone_center_altitude", (float)optics.OzoneCenterAltitude);
         _skyMat.SetShaderParameter("ozone_half_width", (float)optics.OzoneHalfWidth);
         _skyMat.SetShaderParameter("mie_g", (float)optics.MieAnisotropy);
+        var aerosol = AtmosphereAerosolOptics.Resolve(
+            atmosphere, latitudeDegrees, altitude, simulationTime);
+        _skyMat.SetShaderParameter("aerosol_climate_enabled", aerosol.Enabled);
+        _skyMat.SetShaderParameter("aerosol_mie_scale", (float)aerosol.MieScale);
+        _skyMat.SetShaderParameter("aerosol_angstrom_exponent",
+            (float)aerosol.AngstromExponent);
+        _skyMat.SetShaderParameter("aerosol_scale_height", (float)aerosol.ScaleHeightMeters);
         _skyMat.SetShaderParameter("sun_illuminance",
             (float)(optics.SunIlluminanceScale * VisibleSolarRadianceScale));
         _skyMat.SetShaderParameter("surface_refractivity", (float)optics.SurfaceRefractivity);
