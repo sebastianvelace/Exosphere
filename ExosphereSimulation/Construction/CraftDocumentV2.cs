@@ -89,6 +89,9 @@ public static class CraftDocumentMigration
                 ChildNodeId = p.ChildNodeId,
             }).ToList(),
             Connections = legacy.Connections.ToList(),
+            PayloadManifest = legacy.PayloadManifest
+                .Select(ClonePayload)
+                .ToList(),
         };
     }
 
@@ -102,6 +105,19 @@ public static class CraftDocumentMigration
                 p.InstanceId, p.DefinitionId, p.ParentInstanceId,
                 p.ParentNodeId, p.ChildNodeId)).ToList(),
             Connections = document.Connections.ToList(),
+            PayloadManifest = document.PayloadManifest
+                .Select(ClonePayload)
+                .ToList(),
         };
     }
+
+    private static PayloadManifestEntryV2 ClonePayload(PayloadManifestEntryV2 payload) =>
+        new()
+        {
+            PayloadId = payload.PayloadId,
+            Name = payload.Name,
+            PartInstanceId = payload.PartInstanceId,
+            DeclaredMassKg = payload.DeclaredMassKg,
+            BecomesIndependentVessel = payload.BecomesIndependentVessel,
+        };
 }

@@ -43,6 +43,7 @@ public sealed class VesselAssembly
     private readonly PartCatalog _catalog;
     private readonly List<AssemblyPart> _parts = new();
     private readonly List<AssemblyConnection> _connections = new();
+    private readonly List<PayloadManifestEntryV2> _payloadManifest = new();
     private readonly HashSet<(string instanceId, string nodeId)> _usedNodes = new();
 
     public VesselAssembly(PartCatalog catalog)
@@ -52,6 +53,12 @@ public sealed class VesselAssembly
 
     public IReadOnlyList<AssemblyPart> Parts => _parts;
     public IReadOnlyList<AssemblyConnection> Connections => _connections;
+    /// <summary>
+    /// Payload declarations authored in the VAB. A declaration points at a part
+    /// instance, so it survives save/load and can be resolved by the flight layer
+    /// without guessing from names or categories.
+    /// </summary>
+    public IReadOnlyList<PayloadManifestEntryV2> PayloadManifest => _payloadManifest;
     public string? RootInstanceId => _parts.FirstOrDefault(p => p.ParentInstanceId == null)?.InstanceId;
 
     public AssemblyPart AddRoot(string definitionId)
@@ -172,9 +179,59 @@ public sealed class VesselAssembly
 
         _parts.RemoveAll(p => remove.Contains(p.InstanceId));
         _connections.RemoveAll(c => remove.Contains(c.ParentInstanceId) || remove.Contains(c.ChildInstanceId));
+        _payloadManifest.RemoveAll(p => remove.Contains(p.PartInstanceId));
         RebuildUsedNodes();
         return true;
     }
+
+    /// <summary>
+    /// Declares one assembled part as an explicitly integrated payload. The VAB uses
+    /// the part's dry mass as the default estimate (a satellite's propellant is not
+    /// silently invented by the builder), while an integration operator may provide a
+    /// measured mass from the payload manifest. Repeating the operation updates the
+    /// existing declaration instead of creating duplicate payload records.
+    /// </summary>
+    public PayloadManifestEntryV2 MarkPayload(
+        string instanceId,
+        string? payloadName = null,
+        double? declaredMassKg = null,
+        bool becomesIndependentVessel = true,
+        string? payloadId = null)
+    {
+        var part = RequireInstance(instanceId);
+        var definition = RequirePart(part.DefinitionId);
+        if (!string.IsNullOrWhiteSpace(payloadName) && payloadName.Trim().Length > 80)
+            throw new ArgumentException("Payload name cannot exceed 80 characters.", nameof(payloadName));
+
+        double mass = declaredMassKg ?? definition.MassDry;
+        if (!double.IsFinite(mass) || mass <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(declaredMassKg),
+                "Payload mass must be finite and greater than zero.");
+
+        var existing = _payloadManifest.FirstOrDefault(p => p.PartInstanceId == instanceId);
+        if (existing == null)
+        {
+            existing = new PayloadManifestEntryV2
+            {
+                PayloadId = string.IsNullOrWhiteSpace(payloadId)
+                    ? Guid.NewGuid().ToString()
+                    : payloadId,
+                PartInstanceId = instanceId,
+            };
+            _payloadManifest.Add(existing);
+        }
+
+        existing.Name = string.IsNullOrWhiteSpace(payloadName)
+            ? definition.Name
+            : payloadName.Trim();
+        existing.DeclaredMassKg = mass;
+        existing.BecomesIndependentVessel = becomesIndependentVessel;
+        return existing;
+    }
+
+    /// <summary>Removes a payload declaration while leaving the hardware in the craft.</summary>
+    public bool RemovePayload(string instanceId) =>
+        _payloadManifest.RemoveAll(p => p.PartInstanceId == instanceId) > 0;
 
     public VesselMetrics ComputeMetrics(double gravity = G0)
     {
@@ -270,6 +327,7 @@ public sealed class VesselAssembly
         Name = name,
         Parts = _parts.ToList(),
         Connections = _connections.ToList(),
+        PayloadManifest = _payloadManifest.Select(ClonePayload).ToList(),
     };
 
     public CraftDocumentV2 ToCraftDocument(string name = "Constructed Vessel") =>
@@ -310,8 +368,26 @@ public sealed class VesselAssembly
             assembly._usedNodes.Add((child.InstanceId, childNode.Id));
         }
 
+        foreach (var payload in craft.PayloadManifest)
+            assembly.MarkPayload(
+                payload.PartInstanceId,
+                payload.Name,
+                payload.DeclaredMassKg,
+                payload.BecomesIndependentVessel,
+                payload.PayloadId);
+
         return assembly;
     }
+
+    private static PayloadManifestEntryV2 ClonePayload(PayloadManifestEntryV2 payload) =>
+        new()
+        {
+            PayloadId = payload.PayloadId,
+            Name = payload.Name,
+            PartInstanceId = payload.PartInstanceId,
+            DeclaredMassKg = payload.DeclaredMassKg,
+            BecomesIndependentVessel = payload.BecomesIndependentVessel,
+        };
 
     public IEnumerable<AttachmentNodeDef> AvailableNodes(string instanceId)
     {

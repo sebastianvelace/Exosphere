@@ -118,6 +118,53 @@ public sealed class ConstructionRegressionTests
     }
 
     [Fact]
+    public void PayloadDeclarationRoundTripsWithMeasuredMassAndIndependentFlag()
+    {
+        var original = BuildStarshipLikeAssembly();
+        var payloadPart = original.Parts.First(p => p.DefinitionId == "starship_command");
+        var declaration = original.MarkPayload(
+            payloadPart.InstanceId,
+            "WeatherSat-1",
+            declaredMassKg: 2_450.0,
+            becomesIndependentVessel: false);
+
+        var document = original.ToCraftDocument("Payload integration");
+        string json = JsonSerializer.Serialize(document);
+        var restoredDocument = JsonSerializer.Deserialize<CraftDocumentV2>(json)!;
+        var restored = VesselAssembly.FromCraft(LoadCatalog(), restoredDocument);
+
+        var restoredPayload = Assert.Single(restored.PayloadManifest);
+        Assert.Equal(declaration.PayloadId, restoredPayload.PayloadId);
+        Assert.Equal("WeatherSat-1", restoredPayload.Name);
+        Assert.Equal(2_450.0, restoredPayload.DeclaredMassKg);
+        Assert.False(restoredPayload.BecomesIndependentVessel);
+        Assert.Equal(payloadPart.InstanceId, restoredPayload.PartInstanceId);
+    }
+
+    [Fact]
+    public void DeletingPayloadHardwareRemovesStaleManifestEntry()
+    {
+        var assembly = BuildStarshipLikeAssembly();
+        var payloadPart = assembly.Parts.First(p => p.DefinitionId == "starship_command");
+        assembly.MarkPayload(payloadPart.InstanceId, "Payload");
+
+        Assert.True(assembly.DeletePart(payloadPart.InstanceId));
+        Assert.Empty(assembly.PayloadManifest);
+    }
+
+    [Fact]
+    public void PayloadMassMustBeFiniteAndPositive()
+    {
+        var assembly = BuildStarshipLikeAssembly();
+        var payloadPart = assembly.Parts.First();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            assembly.MarkPayload(payloadPart.InstanceId, declaredMassKg: 0.0));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            assembly.MarkPayload(payloadPart.InstanceId, declaredMassKg: double.NaN));
+    }
+
+    [Fact]
     public void DeletingPartRemovesItsSubtreeAndFreesParentNode()
     {
         var assembly = new VesselAssembly(LoadCatalog());

@@ -388,6 +388,11 @@ public partial class ConstructionController : Control
         delete.Pressed += OnDelete;
         editRow.AddChild(delete);
 
+        var payload = CompactButton("Mark payload");
+        payload.TooltipText = "Declare the selected part as an integrated satellite/payload";
+        payload.Pressed += OnTogglePayload;
+        editRow.AddChild(payload);
+
         // Manual node-by-node attach: the least-used path (double-click and 3D-click
         // cover almost everything), collapsed by default so it doesn't compete with
         // the fast path for attention.
@@ -566,6 +571,43 @@ public partial class ConstructionController : Control
         _assembly.DeletePart(instanceId);
         Refresh();
         SetStatus("Part removed.");
+    }
+
+    private void OnTogglePayload()
+    {
+        if (_assembly == null || _catalog == null) return;
+        string? instanceId = SelectedAssemblyInstanceId();
+        if (instanceId == null)
+        {
+            SetStatus("Select the payload hardware in the stack or 3D preview first.");
+            return;
+        }
+
+        try
+        {
+            RecordUndo();
+            var current = _assembly.PayloadManifest
+                .FirstOrDefault(payload => payload.PartInstanceId == instanceId);
+            if (current != null)
+            {
+                _assembly.RemovePayload(instanceId);
+                Refresh();
+                SetStatus("Payload declaration removed; hardware remains attached.");
+                return;
+            }
+
+            var part = _assembly.Parts.First(p => p.InstanceId == instanceId);
+            var definition = _catalog[part.DefinitionId];
+            var payload = _assembly.MarkPayload(instanceId, definition.Name);
+            Refresh();
+            SetStatus(
+                $"Payload integrated: {payload.Name} ({payload.DeclaredMassKg / 1000.0:F2} t). " +
+                "It will remain in the saved craft manifest.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
     }
 
     private void OnExport()
@@ -779,16 +821,22 @@ public partial class ConstructionController : Control
             foreach (var part in _assembly.Parts)
             {
                 PartDefinition def = _catalog[part.DefinitionId];
-                string prefix = part.ParentInstanceId == null ? "ROOT" : "  +";
+                bool isPayload = _assembly.PayloadManifest
+                    .Any(payload => payload.PartInstanceId == part.InstanceId);
+                string prefix = isPayload
+                    ? "PAYLOAD"
+                    : part.ParentInstanceId == null ? "ROOT" : "  +";
                 int idx = _stackList.AddItem($"{prefix} {def.Name}");
                 _stackList.SetItemMetadata(idx, part.InstanceId);
             }
 
             var m = _assembly.ComputeMetrics();
+            double payloadMass = _assembly.PayloadManifest.Sum(payload => payload.DeclaredMassKg);
             _stats.Text =
                 $"Wet mass: {m.WetMass / 1000.0:F1} t\n" +
                 $"Dry mass: {m.DryMass / 1000.0:F1} t\n" +
                 $"Propellant: {m.PropellantMass / 1000.0:F1} t\n" +
+                $"Payload manifest: {_assembly.PayloadManifest.Count} · {payloadMass / 1000.0:F2} t\n" +
                 $"SL thrust: {m.SeaLevelThrust / 1000.0:F0} kN\n" +
                 $"SL TWR: {m.SeaLevelTwr:F2}\n" +
                 $"Vac delta-v: {m.VacuumDeltaV:F0} m/s";
@@ -806,7 +854,7 @@ public partial class ConstructionController : Control
         }
         else
         {
-            _stats.Text = "Wet mass: —\nDry mass: —\nPropellant: —\nSL thrust: —\nSL TWR: —\nVac delta-v: —";
+            _stats.Text = "Wet mass: —\nDry mass: —\nPropellant: —\nPayload manifest: —\nSL thrust: —\nSL TWR: —\nVac delta-v: —";
             _validation.Text = "○ BUILD CHECK · Add a command part to start the vehicle.";
             _validation.Modulate = new Color("ffb454");
             _launchButton.Disabled = true;
