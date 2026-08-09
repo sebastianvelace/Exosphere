@@ -126,6 +126,49 @@ public static class SaveSystem
             ReadSaveSlotMetadata(saveDirectory));
     }
 
+    /// <summary>
+    /// Returns the presentation-safe dossier for the same slot Continue selects.
+    /// The returned view is derived from SaveGameV2 and does not add fields to the
+    /// persisted schema. Invalid slots are ignored using the same rules as Continue.
+    /// </summary>
+    public static SaveDossierView? ReadMostRecentDossier(
+        string? saveDirectory = null)
+    {
+        string directory = saveDirectory ?? DefaultSaveDirectory;
+        if (!System.IO.Directory.Exists(directory)) return null;
+
+        var candidates = new List<(SaveSlotMetadata Metadata, SaveGameV2 Save)>();
+        foreach (string path in System.IO.Directory.GetFiles(directory, "*.json"))
+        {
+            string? slotName = System.IO.Path.GetFileNameWithoutExtension(path);
+            if (string.IsNullOrWhiteSpace(slotName)) continue;
+
+            try
+            {
+                SaveGameV2 save = SaveGameV2Json.DeserializeOrMigrate(
+                    System.IO.File.ReadAllText(path));
+                candidates.Add((
+                    new SaveSlotMetadata(slotName, save.SavedAtUtc),
+                    save));
+            }
+            catch
+            {
+                // Continue already skips malformed slots; the dossier must do the same.
+            }
+        }
+
+        string? selected = SaveSlotOrdering.SelectMostRecent(
+            candidates.Select(candidate => candidate.Metadata));
+        if (selected == null) return null;
+
+        var match = candidates.First(candidate =>
+            string.Equals(
+                candidate.Metadata.SlotName,
+                selected,
+                StringComparison.Ordinal));
+        return SaveDossierView.FromSave(match.Metadata.SlotName, match.Save);
+    }
+
     private static IEnumerable<SaveSlotMetadata> ReadSaveSlotMetadata(
         string? saveDirectory)
     {

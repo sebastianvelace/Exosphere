@@ -191,6 +191,7 @@ public partial class MainMenu : Control
         left.AddChild(_navigation);
 
         string? mostRecentSave = SaveSystem.FindMostRecentSaveSlot();
+        SaveDossierView? dossier = SaveSystem.ReadMostRecentDossier();
         AddNavButton(UiText.Get("continue"), () => ContinueSave(mostRecentSave), primary: true,
             disabled: mostRecentSave == null,
             tooltip: mostRecentSave == null ? UiText.Get("no_saves") : "");
@@ -206,7 +207,7 @@ public partial class MainMenu : Control
         var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         split.AddChild(spacer);
 
-        _dossier = BuildDossier();
+        _dossier = BuildDossier(dossier);
         split.AddChild(_dossier);
     }
 
@@ -232,7 +233,7 @@ public partial class MainMenu : Control
         _firstButton ??= button.Disabled ? null : button;
     }
 
-    private static PanelContainer BuildDossier()
+    private static PanelContainer BuildDossier(SaveDossierView? dossier)
     {
         var panel = new PanelContainer
         {
@@ -254,28 +255,57 @@ public partial class MainMenu : Control
         label.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
         content.AddChild(label);
 
-        var mission = new Label { Text = "FALCON 9 BLOCK 5\nPAYLOAD DEPLOYMENT" };
+        string missionTitle = dossier == null
+            ? "FALCON 9 BLOCK 5\nPAYLOAD DEPLOYMENT"
+            : $"{dossier.MissionId.ToUpperInvariant()}\n{dossier.MissionPhase.ToUpperInvariant()}";
+        var mission = new Label { Text = missionTitle };
         InterfaceTheme.ApplyDisplay(mission, 30);
         mission.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         content.AddChild(mission);
         content.AddChild(Divider());
-        content.AddChild(Metric(UiText.Get("vehicle"), "F9 B5 / STANDARD FAIRING"));
-        content.AddChild(Metric(UiText.Get("site"), "KENNEDY LC-39A"));
-        content.AddChild(Metric(UiText.Get("objective"), "200 KM PARKING ORBIT"));
-        content.AddChild(Metric(UiText.Get("physics"), "FULL / ASSISTS AVAILABLE"));
+        content.AddChild(Metric(
+            UiText.Get("vehicle"),
+            dossier == null
+                ? "F9 B5 / STANDARD FAIRING"
+                : dossier.ActiveVesselName.ToUpperInvariant()));
+        content.AddChild(Metric(
+            dossier == null ? UiText.Get("site") : "SAVE SLOT",
+            dossier == null
+                ? "KENNEDY LC-39A"
+                : dossier.SlotName.ToUpperInvariant()));
+        content.AddChild(Metric(
+            UiText.Get("objective"),
+            dossier == null
+                ? "200 KM PARKING ORBIT"
+                : $"{dossier.CompletedObjectiveCount} COMPLETE / " +
+                  $"{dossier.ReachedPhaseCount} PHASES"));
+        content.AddChild(Metric(
+            UiText.Get("physics"),
+            dossier == null
+                ? "FULL / ASSISTS AVAILABLE"
+                : $"{dossier.SimulationTime:F0} S / x{dossier.TimeScale:0.##}"));
         content.AddChild(Divider());
 
         var note = new Label
         {
-            Text = "Published performance values remain distinct from simulator estimates. " +
-                   "Open Vehicle Assembly to inspect the dated preset and its sources.",
+            Text = dossier == null
+                ? "Published performance values remain distinct from simulator estimates. " +
+                  "Open Vehicle Assembly to inspect the dated preset and its sources."
+                : $"CONTINUE  {dossier.SlotName.ToUpperInvariant()}  /  " +
+                  $"{dossier.VesselCount} VESSEL(S)  /  " +
+                  $"{dossier.CompletedCampaignMissionCount} CAMPAIGN MISSION(S) COMPLETE.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         InterfaceTheme.ApplyBody(note, 12);
         note.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         content.AddChild(note);
 
-        var profile = new Label { Text = "PROFILE  F9-B5-2025-05" };
+        var profile = new Label
+        {
+            Text = dossier == null
+                ? "PROFILE  F9-B5-2025-05"
+                : $"SAVED  {dossier.SavedAtUtc:yyyy-MM-dd HH:mm} UTC",
+        };
         InterfaceTheme.ApplyMono(profile, 10);
         profile.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
         content.AddChild(profile);
