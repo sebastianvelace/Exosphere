@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Xunit;
@@ -43,6 +44,36 @@ public sealed class LandingContactIntegrationTests
         Assert.Equal(VesselDestructionCause.GroundImpact, vessel.DestructionCause);
         Assert.False(vessel.IsGroundHeld);
         Assert.True(vessel.LastSurfaceContact?.HasOverload);
+    }
+
+    [Fact]
+    public void HighSpeedContactCannotBecomeLandingSuccessByAltitudeAlone()
+    {
+        // Start just above the foot datum with a deliberately unsafe approach speed. The
+        // first contact is a real spring event, not a touchdown: the mission must not be
+        // considered landed merely because the vessel is already at pad altitude.
+        var (universe, body, vessel) = CreateLandingCase(
+            verticalSpeed: -10.0, lateralSpeed: 0.0);
+
+        bool observedFastContact = false;
+        for (int i = 0; i < 200 && !vessel.IsSurfaceSettled && !vessel.IsDestroyed; i++)
+        {
+            universe.Tick(0.005);
+            if (vessel.LastSurfaceContact?.ContactCount >= 3)
+            {
+                observedFastContact = true;
+                double contactSpeed = vessel.GetSurfaceVelocity(body).Magnitude;
+                if (contactSpeed > AscentStagingPolicy.SoftLandingSpeedMps)
+                {
+                    Assert.False(vessel.IsSurfaceSettled,
+                        "an unsafe first contact must not be accepted by altitude alone");
+                    break;
+                }
+            }
+        }
+
+        Assert.True(observedFastContact,
+            "the scenario must exercise the multi-foot spring contact path");
     }
 
     [Fact]

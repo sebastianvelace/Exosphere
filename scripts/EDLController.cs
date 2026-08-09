@@ -34,6 +34,15 @@ public partial class EDLController : Control
     // ── Trigger thresholds ────────────────────────────────────────────────────
     private const double EntrySpeed   = 1200.0;   // m/s surface speed to arm entry
 
+    // The landing engines must not be cut by the first foot that happens to enter the
+    // penalty-contact envelope. A real vehicle still has thrust and attitude authority while
+    // the other legs are loading; cutting at a single contact turns a gentle approach into a
+    // falling rigid body and can create a catastrophic one-leg bottom-out on the next tick.
+    // Keep this gate deliberately stricter than Universe's final settled criterion: it is only
+    // an engine-cut decision, never a touchdown declaration.
+    private const double ContactCutoffNormalSpeedMps = 2.0;
+    private const double ContactCutoffTangentialSpeedMps = 1.0;
+
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
     private string _bodyName = "";
@@ -396,10 +405,13 @@ public partial class EDLController : Control
         // until the last instant and touched down hot.
         if (_phase is Edl.Retro or Edl.Catch or Edl.Final)
         {
-            // Once a foot has touched, commit to the compliant gear: shut the engines down
-            // and let spring/damper/friction settle the body. Relighting against a loaded foot
-            // would hide the contact dynamics and can overload one leg.
-            if (_phase == Edl.Final && vessel.HasSurfaceContact)
+            // Once at least three feet share a genuinely slow, low-drift contact, commit to
+            // the compliant gear: shut the engines down and let spring/damper/friction settle
+            // the body. A single foot is not a touchdown. It is a transient load case in which
+            // thrust and TVC must remain available while the remaining feet close the gap.
+            // This is intentionally a kinematic safety gate, not a distance-based success gate;
+            // IsSurfaceSettled below remains the only path to the LANDED mission phase.
+            if (_phase == Edl.Final && IsSafeMultiLegContact(vessel, body))
                 _landingCutoffCommitted = true;
             if (_phase == Edl.Final && _landingCutoffCommitted)
             {
@@ -823,6 +835,21 @@ public partial class EDLController : Control
         double throttle = desiredThrust / (perEngine * selected);
         vessel.Throttle = engineCluster.ApplyThrottleFloor(
             System.Math.Clamp(throttle, 0.0, 1.0));
+    }
+
+    private static bool IsSafeMultiLegContact(Vessel vessel, CelestialBody body)
+    {
+        var contact = vessel.LastSurfaceContact;
+        if (contact == null || contact.ContactCount < 3
+            || contact.HasOverload || contact.HasOverTravel)
+            return false;
+
+        Vector3d up = (vessel.Position - body.Position).Normalized;
+        Vector3d surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        double normalSpeed = System.Math.Abs(surfaceVelocity.Dot(up));
+        double tangentialSpeed = (surfaceVelocity - up * surfaceVelocity.Dot(up)).Magnitude;
+        return normalSpeed <= ContactCutoffNormalSpeedMps
+            && tangentialSpeed <= ContactCutoffTangentialSpeedMps;
     }
 
     private static double EstimateFlipTime(double angle, double angularAcceleration, double maxRate)
