@@ -43,6 +43,14 @@ public partial class EDLController : Control
     private const double ContactCutoffNormalSpeedMps = 2.0;
     private const double ContactCutoffTangentialSpeedMps = 1.0;
     private const int MinimumFinalApproachEngines = 2;
+    // Two Raptors at their 40% deep-throttle floor produced a measured positive climb
+    // beginning at ~20 m in exo_edl_fix_v5.  Once the vehicle is already slow and nearly
+    // over the pad, the centre sea-level Raptor provides the physically available lower
+    // thrust state.  Keep the transition gated by altitude, lateral speed and the
+    // discrete demand calculation; it must not become a generic one-engine fallback.
+    private const double FinalSingleEngineAltitudeM = 75.0;
+    private const double FinalSingleEngineLateralSpeedMps = 4.0;
+    private const double FinalSingleEngineReacquireLateralSpeedMps = 4.0;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -352,7 +360,7 @@ public partial class EDLController : Control
             double flareBlend = System.Math.Clamp(
                 (_alt - contactDatumAlt) / 30.0, 0.0, 1.0);
             double tiltRatio = System.Math.Min(
-                System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD), lateralVelocity.Magnitude * 0.04)
+                System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD), lateralVelocity.Magnitude * 0.08)
                 * flareBlend;
             aimAxis = lateralVelocity.Magnitude > 1e-3
                 ? (up - lateralVelocity.Normalized * tiltRatio).Normalized
@@ -839,8 +847,28 @@ public partial class EDLController : Control
             // that commits engine cutoff. One Raptor can nominally hold weight, but leaves no
             // margin for TVC, wind/drag asymmetry, or the first leg touching before the others.
             bool safeContact = IsSafeMultiLegContact(vessel, body);
+            bool lowEnergySingleEngine = !safeContact
+                && _alt <= FinalSingleEngineAltitudeM
+                && _horiz <= FinalSingleEngineLateralSpeedMps
+                // A short, low-energy one-engine pulse is the only state below the
+                // 40% floor that can break the two-engine hover. It is allowed only while
+                // vertical energy is already small; a fast approach remains two-engine.
+                && System.Math.Abs(_vUp) <= 2.5
+                && (requested <= 1
+                    || (_landingEngineCount == MinimumFinalApproachEngines && _vUp > -1.5));
+            // If the centre engine has already been selected, retain it while the lateral
+            // error is still recoverable. If it grows beyond the reacquisition envelope,
+            // return to two engines rather than letting a single offset/gimbal transient
+            // turn into the 10+ m/s drift seen in the v3 EDL run.
+            if (_landingEngineCount == 1
+                && _alt <= FinalSingleEngineAltitudeM
+                && _horiz <= FinalSingleEngineReacquireLateralSpeedMps
+                && System.Math.Abs(_vUp) <= 2.5)
+                lowEnergySingleEngine = true;
             selected = System.Math.Min(selected, requested);
-            if (!safeContact)
+            if (lowEnergySingleEngine)
+                selected = System.Math.Min(selected, 1);
+            else if (!safeContact)
                 selected = System.Math.Max(MinimumFinalApproachEngines, selected);
         }
         _landingEngineCount = selected;

@@ -94,6 +94,26 @@ public sealed class LandingContactIntegrationTests
     }
 
     [Fact]
+    public void EdlFinalApproachHasGatedSingleEngineLowEnergyState()
+    {
+        // A Raptor's documented deep-throttle floor makes two engines too much thrust for
+        // the final metres at this vehicle mass. The production controller may therefore use
+        // the centre sea-level engine, but only after the discrete demand, altitude and
+        // lateral-speed gates agree. This source contract protects that physical envelope
+        // from being replaced with an unconditional one-engine landing shortcut.
+        string source = File.ReadAllText(Path.Combine(
+            FindRepoRoot().FullName, "scripts", "EDLController.cs"));
+
+        Assert.Contains("FinalSingleEngineAltitudeM = 75.0", source);
+        Assert.Contains("FinalSingleEngineLateralSpeedMps = 4.0", source);
+        Assert.Contains("FinalSingleEngineReacquireLateralSpeedMps = 4.0", source);
+        Assert.Contains("requested <= 1", source);
+        Assert.Contains("System.Math.Abs(_vUp) <= 2.5", source);
+        Assert.Contains("selected = System.Math.Min(selected, 1)", source);
+        Assert.Contains("lateralVelocity.Magnitude * 0.08", source);
+    }
+
+    [Fact]
     public void DeterministicEdlContactStateRemainsInsideStructuralEnvelope()
     {
         // Regression for the full EDL playtest's measured pre-contact state. This is deliberately
