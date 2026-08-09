@@ -373,6 +373,57 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(0.0, optics.HorizonRefractionRadians(0.0, double.NaN));
     }
 
+    [Fact]
+    public void MultipleScatteringLutTransportsBoundedRadianceThroughTheColumn()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var lut = AtmosphereMultipleScatteringLut.Build(
+            optics, 6_371_000.0, 140_000.0,
+            width: 24, height: 16, integrationSteps: 16, solarSampleCount: 16);
+
+        var ground = lut.Sample(0.0, 1.0);
+        var high = lut.Sample(100_000.0, 1.0);
+        Assert.True(ground.X > 0.0 && ground.Y > 0.0 && ground.Z > 0.0);
+        Assert.True(high.X >= 0.0 && high.Y >= 0.0 && high.Z >= 0.0);
+        Assert.True(ground.X >= high.X && ground.Y >= high.Y && ground.Z >= high.Z,
+            $"global second-order radiance grew above the column: ground={ground}, high={high}");
+        Assert.Equal(Vector3d.Zero, lut.Sample(0.0, -0.01));
+    }
+
+    [Fact]
+    public void MultipleScatteringLutRespondsToPlanetCurvature()
+    {
+        var optics = AtmosphereModel.Mars().Optics;
+        var earthSized = AtmosphereMultipleScatteringLut.Build(
+            optics, 6_371_000.0, 100_000.0,
+            width: 16, height: 12, integrationSteps: 12, solarSampleCount: 16);
+        var marsSized = AtmosphereMultipleScatteringLut.Build(
+            optics, 3_389_500.0, 100_000.0,
+            width: 16, height: 12, integrationSteps: 12, solarSampleCount: 16);
+
+        var earthHorizon = earthSized.Sample(0.0, 0.05);
+        var marsHorizon = marsSized.Sample(0.0, 0.05);
+        Assert.True(earthHorizon.X > marsHorizon.X && earthHorizon.Z > marsHorizon.Z,
+            $"order-two LUT lost curvature: Earth={earthHorizon}, Mars={marsHorizon}");
+    }
+
+    [Fact]
+    public void RefractedOpticalDepthDiffersFromTheStraightSphericalRayNearTheHorizon()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var straight = optics.OpticalDepthAlongRay(
+            0.0, 0.05, 6_371_000.0, 140_000.0, sampleCount: 96);
+        var refracted = optics.OpticalDepthAlongRefractedRay(
+            0.0, 0.05, 6_371_000.0, 140_000.0, sampleCount: 96);
+
+        Assert.True(double.IsFinite(refracted.X) && double.IsFinite(refracted.Y)
+            && double.IsFinite(refracted.Z));
+        Assert.True(refracted.X >= 0.0 && refracted.Y >= 0.0 && refracted.Z >= 0.0);
+        Assert.True(Math.Abs(refracted.X - straight.X) > 1e-8
+            || Math.Abs(refracted.Z - straight.Z) > 1e-8,
+            $"refractive path collapsed to the straight ray: straight={straight}, refracted={refracted}");
+    }
+
     private static CelestialBody LoadBody(string id) => CelestialBody.LoadFromJson(
         Path.Combine(FindRepoRoot().FullName, "data", "bodies", $"{id}.json"));
 

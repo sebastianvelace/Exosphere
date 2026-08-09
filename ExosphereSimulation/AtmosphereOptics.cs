@@ -186,12 +186,13 @@ public sealed record AtmosphereOptics
             return DirectSolarTransmittance(altitude, sunElevationSin);
         }
 
-        var tau = OpticalDepthAlongRay(
-            altitude,
-            System.Math.Clamp(sunElevationSin, 0.0, 1.0),
-            planetRadius,
-            atmosphereTopAltitude,
-            sampleCount);
+        var tau = SurfaceRefractivity > 0.0 && RefractiveScaleHeight > 0.0
+            ? OpticalDepthAlongRefractedRay(
+                altitude, System.Math.Clamp(sunElevationSin, 0.0, 1.0),
+                planetRadius, atmosphereTopAltitude, sampleCount)
+            : OpticalDepthAlongRay(
+                altitude, System.Math.Clamp(sunElevationSin, 0.0, 1.0),
+                planetRadius, atmosphereTopAltitude, sampleCount);
         return new Vector3d(
             System.Math.Exp(-tau.X),
             System.Math.Exp(-tau.Y),
@@ -258,6 +259,71 @@ public sealed record AtmosphereOptics
     }
 
     /// <summary>
+    /// Integrates extinction along the outward branch of a refracted spherical ray.
+    /// Snell's invariant <c>p = n r sin(zenith)</c> is held constant and the radial
+    /// integral uses <c>ds/dr = 1 / sqrt(1 - (p/(nr))²)</c>.  The transformed variable
+    /// <c>r = r₀ + (Rtop-r₀)u²</c> resolves the dense lower atmosphere and the grazing
+    /// singularity deterministically.  Sub-horizon turning rays are deliberately rejected
+    /// here; they need a two-branch tangent solve and are the next refraction milestone.
+    /// </summary>
+    public Vector3d OpticalDepthAlongRefractedRay(
+        double altitude,
+        double cosZenith,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount = 48)
+    {
+        if (!double.IsFinite(altitude) || !double.IsFinite(cosZenith)
+            || !double.IsFinite(planetRadius) || !double.IsFinite(atmosphereTopAltitude)
+            || !double.IsFinite(SurfaceRefractivity) || !double.IsFinite(RefractiveScaleHeight)
+            || planetRadius <= 0.0 || atmosphereTopAltitude <= 0.0
+            || SurfaceRefractivity <= 0.0 || RefractiveScaleHeight <= 0.0
+            || cosZenith <= 0.0)
+        {
+            return OpticalDepthAlongRay(
+                altitude, cosZenith, planetRadius, atmosphereTopAltitude, sampleCount);
+        }
+
+        altitude = System.Math.Max(0.0, altitude);
+        cosZenith = System.Math.Clamp(cosZenith, 0.0, 1.0);
+        int n = System.Math.Max(8, sampleCount);
+        if ((n & 1) != 0) n++;
+
+        double r0 = planetRadius + altitude;
+        double rTop = planetRadius + atmosphereTopAltitude;
+        double span = rTop - r0;
+        if (span <= 0.0) return Vector3d.Zero;
+
+        double n0 = RefractiveIndex(altitude);
+        double p = n0 * r0 * System.Math.Sqrt(
+            System.Math.Max(0.0, 1.0 - cosZenith * cosZenith));
+        Vector3d integral = Vector3d.Zero;
+        double step = 1.0 / n;
+        for (int i = 0; i <= n; i++)
+        {
+            double u = i * step;
+            double radius = r0 + span * u * u;
+            double localAltitude = radius - planetRadius;
+            double dnDu = 2.0 * span * u;
+            double refractiveRadius = RefractiveIndex(localAltitude) * radius;
+            double ratio = p / System.Math.Max(refractiveRadius, 1.0);
+            double radial = System.Math.Sqrt(System.Math.Max(1e-12, 1.0 - ratio * ratio));
+            double dsDu = dnDu / radial;
+            Vector3d density = new(
+                RayleighDensity(localAltitude),
+                MieDensity(localAltitude),
+                OzoneDensity(localAltitude));
+            Vector3d sample = RayleighScattering * density.X
+                + MieExtinction * density.Y
+                + OzoneAbsorption * density.Z;
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            integral += sample * (weight * dsDu);
+        }
+
+        return integral * (step / 3.0);
+    }
+
+    /// <summary>
     /// Local second-order source approximation. Light removed from the direct solar beam is
     /// redistributed isotropically, bounded per colour band by the single-scattering albedo.
     /// Solid planetary shadow is an explicit zero: an opaque planet is not a scattering event.
@@ -317,4 +383,8 @@ public sealed record AtmosphereOptics
         scaleHeight > 0.0
             ? System.Math.Exp(-System.Math.Max(0.0, altitude) / scaleHeight)
             : 0.0;
+
+    private double RefractiveIndex(double altitude) =>
+        1.0 + SurfaceRefractivity * System.Math.Exp(
+            -System.Math.Max(0.0, altitude) / RefractiveScaleHeight);
 }

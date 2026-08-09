@@ -33,11 +33,16 @@ public partial class SkyController : Node
     private const int TransmittanceLutWidth = 128;
     private const int TransmittanceLutHeight = 96;
     private const int TransmittanceLutSamples = 48;
+    private const int MultipleScatteringLutWidth = 64;
+    private const int MultipleScatteringLutHeight = 48;
+    private const int MultipleScatteringIntegrationSteps = 48;
+    private const int MultipleScatteringSolarSamples = 32;
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
     private string? _boundCloudBodyId;
     private readonly Dictionary<string, Texture2D> _transmittanceLuts = new();
+    private readonly Dictionary<string, Texture2D> _multipleScatteringLuts = new();
     private double _updateAccumulator = 1.0;
     private bool _hasAtmosphereState;
     private string? _lastAtmosphereBodyId;
@@ -58,6 +63,7 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("cloud_coverage_tex", LoadTexture(EarthCloudTexPath, Colors.Black));
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
+        _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
         _env.Sky.SkyMaterial = _skyMat;
         // The cloud field evolves slowly. Incremental refresh updates one cubemap face per
         // frame and avoids paying the complete gas+cloud integration six times every frame.
@@ -169,6 +175,7 @@ public partial class SkyController : Node
             enabled ? (float)atmosphere!.MaxAltitude : 1.0f);
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
+        _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
 
         if (!enabled)
         {
@@ -189,6 +196,9 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("transmittance_lut", GetTransmittanceLut(
             body.Id, optics!, body.Radius, atmosphere!.MaxAltitude));
         _skyMat.SetShaderParameter("transmittance_lut_enabled", true);
+        _skyMat.SetShaderParameter("multiple_scattering_lut", GetMultipleScatteringLut(
+            body.Id, optics!, body.Radius, atmosphere.MaxAltitude));
+        _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", true);
 
         _skyMat.SetShaderParameter("rayleigh_scattering", ToGodot(optics!.RayleighScattering));
         _skyMat.SetShaderParameter("mie_scattering", ToGodot(optics.MieScattering));
@@ -299,6 +309,39 @@ public partial class SkyController : Node
 
         var texture = ImageTexture.CreateFromImage(image);
         _transmittanceLuts[bodyId] = texture;
+        return texture;
+    }
+
+    private Texture2D GetMultipleScatteringLut(
+        string bodyId,
+        AtmosphereOptics optics,
+        double planetRadius,
+        double atmosphereTopAltitude)
+    {
+        if (_multipleScatteringLuts.TryGetValue(bodyId, out var cached)) return cached;
+
+        var lut = AtmosphereMultipleScatteringLut.Build(
+            optics,
+            planetRadius,
+            atmosphereTopAltitude,
+            MultipleScatteringLutWidth,
+            MultipleScatteringLutHeight,
+            MultipleScatteringIntegrationSteps,
+            MultipleScatteringSolarSamples);
+        var image = Image.CreateEmpty(
+            lut.Width, lut.Height, false, Image.Format.Rgbaf);
+        for (int y = 0; y < lut.Height; y++)
+        {
+            for (int x = 0; x < lut.Width; x++)
+            {
+                var value = lut.GetTexel(x, y);
+                image.SetPixel(x, y, new Color(
+                    (float)value.X, (float)value.Y, (float)value.Z, 1.0f));
+            }
+        }
+
+        var texture = ImageTexture.CreateFromImage(image);
+        _multipleScatteringLuts[bodyId] = texture;
         return texture;
     }
 
