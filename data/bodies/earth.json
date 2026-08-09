@@ -29,6 +29,8 @@
       "airglow_scale_height": 6000,
       "mie_anisotropy": 0.8,
       "sun_illuminance_scale": 20.0,
+      "surface_refractivity": 0.000277,
+      "refractive_scale_height": 8000,
       "low_order_diffuse_strength": 0.25,
       "cloud_base_altitude": 1200,
       "cloud_top_altitude": 12000,

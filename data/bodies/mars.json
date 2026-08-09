@@ -23,6 +23,8 @@
       "ozone_half_width": 0,
       "mie_anisotropy": 0.76,
       "sun_illuminance_scale": 14.0,
+      "surface_refractivity": 0.0000039,
+      "refractive_scale_height": 11100,
       "low_order_diffuse_strength": 0.08
     },
     "layers": [

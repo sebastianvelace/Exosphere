@@ -1,6 +1,6 @@
 # Contrato físico de la óptica atmosférica
 
-**Estado:** implementado en la simulación y validado numéricamente
+**Estado:** V3 implementado en la simulación y validado numéricamente
 **Alcance:** `ExosphereSimulation/AtmosphereOptics.cs` y sus consumidores de iluminación/exposición
 
 Este documento describe el contrato que debe respetar cualquier renderer o sistema de
@@ -67,6 +67,29 @@ perfil genérico terrestre para compatibilidad. Los consumidores nuevos deben pa
 radio del cuerpo y el techo de su atmósfera; de lo contrario Marte, Venus o una luna usarían
 la curvatura de la Tierra.
 
+## LUT de transmitancia en tiempo real
+
+`AtmosphereTransmittanceLut` precalcula la misma transmitancia esférica en una tabla RGB de
+altitud × seno de elevación solar. Las coordenadas se deforman como `u²` y `v²`: se reserva
+resolución para la troposfera y para los rayos rasantes, donde la función cambia con mayor
+rapidez. La tabla se construye una sola vez por cuerpo y se sube como textura lineal HDR al
+shader `space_sky`; cada muestra de scattering solar hace una interpolación bilineal en vez de
+repetir una cuadratura solar ruidosa por píxel. Si la textura no está disponible, el shader
+mantiene la integración esférica como fallback.
+
+Este diseño comparte un único oráculo numérico entre simulación, exposición y GPU: cambiar el
+radio o el perfil óptico cambia también los texels y no puede dejar una atmósfera visual con
+curvatura terrestre implícita.
+
+## Refracción visible del horizonte
+
+Cada perfil declara la refractividad superficial `n − 1` y su escala vertical. `HorizonRefractionRadians`
+integra la pendiente esférica de un perfil exponencial, la limita a 0,035 rad y la usa para
+desplazar el disco solar aparente cerca del horizonte. En la Tierra produce aproximadamente
+0,56° al nivel del mar y decae exponencialmente con altura; Marte y Venus usan refractividades
+específicas de sus columnas de CO₂. No se aplica fuerza ni se cambia la navegación: es una
+corrección óptica acotada hasta que exista un trazador completo de rayos refractados.
+
 ## Integración local de segundo orden
 
 `LowOrderDiffuseStrength` controla un cierre local (`LowOrderDiffuseSource`), no un sustituto de una LUT de scattering múltiple:
@@ -89,6 +112,8 @@ redondeada mayor que uno genere energía difusa negativa.
 - que duplicar la resolución de Simpson converge en un amanecer de baja elevación;
 - que el radio real del cuerpo cambia la extinción (no hay radio terrestre implícito);
 - que entradas no finitas no producen luz solar sin atenuar;
+- que la LUT coincide con el oráculo en sus texels, conserva la monotonicidad y resuelve el
+  enrojecimiento de la columna solar rasante;
 - que ozono, airglow, nubes y fuente difusa respetan sus soportes y límites.
 
 Ejecutar el conjunto focalizado:
@@ -106,9 +131,10 @@ bash tools/atmosphere_quick_check.sh
 
 ## Límites conocidos y siguiente nivel de fidelidad
 
-Este contrato sigue siendo una aproximación de scattering simple: no modela refracción
-atmosférica, polarización, dispersión múltiple global, variación espectral por temperatura,
-perfil de humedad/aerosoles por clima ni el acoplamiento radiativo entre nubes y terreno.
-Para acercarse a una atmósfera de referencia científica, el siguiente paso es precalcular
-transmitancia y scattering múltiple en LUTs dependientes de altura, ángulo solar y ángulo de
-visión (Bruneton/Neyret), manteniendo esta implementación C# como oráculo numérico de pruebas.
+Este contrato sigue siendo una aproximación de scattering: la LUT resuelve transmitancia
+directa y el shader incluye una corrección acotada del disco solar, pero aún no modela un
+trazado refractivo completo, polarización, dispersión múltiple global,
+variación espectral por temperatura, perfil de humedad/aerosoles por clima ni el acoplamiento
+radiativo entre nubes y terreno. El siguiente nivel es una LUT de scattering múltiple dependiente
+de altura, ángulo solar y ángulo de visión (Bruneton/Neyret), más un integrador refractivo para
+el disco solar y el horizonte; esta implementación C# seguirá siendo el oráculo numérico.

@@ -27,6 +27,13 @@ public sealed record AtmosphereOptics
     public double AirglowScaleHeight { get; init; } = 6_000.0;
     public double MieAnisotropy { get; init; } = 0.80;
     public double SunIlluminanceScale { get; init; } = 20.0;
+    /// <summary>
+    /// Surface refractivity (n − 1) at the reference pressure/temperature of the profile.
+    /// It is dimensionless; Earth air at sea level is approximately 2.77e−4.
+    /// </summary>
+    public double SurfaceRefractivity { get; init; } = 2.77e-4;
+    /// <summary>Scale height used by the bounded visible-horizon refraction approximation.</summary>
+    public double RefractiveScaleHeight { get; init; } = 8_000.0;
     /// <summary>Bounded isotropic second-order fill used by the realtime sky integrator.</summary>
     public double LowOrderDiffuseStrength { get; init; } = 0.25;
     public double CloudBaseAltitude { get; init; } = 0.0;
@@ -34,6 +41,30 @@ public sealed record AtmosphereOptics
     public double CloudExtinction { get; init; } = 0.0;
     public double CloudCoverage { get; init; } = 0.0;
     public double CloudWindRadiansPerSecond { get; init; } = 0.0;
+
+    /// <summary>
+    /// Approximate upward displacement of a geometric horizon ray in radians.  The expression
+    /// follows the exponential spherical-gradient integral and is deliberately capped: it is
+    /// used for the apparent solar disc, not as a substitute for a full refractive ray tracer.
+    /// </summary>
+    public double HorizonRefractionRadians(double altitude, double planetRadius)
+    {
+        if (!double.IsFinite(altitude) || !double.IsFinite(planetRadius)
+            || !double.IsFinite(SurfaceRefractivity) || !double.IsFinite(RefractiveScaleHeight)
+            || planetRadius <= 0.0 || SurfaceRefractivity <= 0.0
+            || RefractiveScaleHeight <= 0.0)
+            return 0.0;
+
+        double density = System.Math.Exp(-System.Math.Max(0.0, altitude)
+            / RefractiveScaleHeight);
+        double sphericalGradient = System.Math.Sqrt(
+            2.0 * System.Math.PI * planetRadius / RefractiveScaleHeight);
+        // The 0.5 factor accounts for the finite temperature/lapse profile versus
+        // the isothermal exponential envelope used by the optical profile.
+        return System.Math.Clamp(
+            0.5 * SurfaceRefractivity * density * sphericalGradient,
+            0.0, 0.035);
+    }
 
     public bool HasCloudLayer => AreFinite(CloudBaseAltitude, CloudTopAltitude,
             CloudExtinction, CloudCoverage, CloudWindRadiansPerSecond)

@@ -1,6 +1,6 @@
 # Atmósfera física y óptica planetaria
 
-**Fecha:** 2026-07-11 · **Estado:** V2 óptica en tiempo real verificada
+**Fecha:** 2026-08-08 · **Estado:** V3 óptica esférica + LUT de transmitancia verificada
 
 ## Veredicto honesto
 
@@ -12,16 +12,21 @@ RGB, Mie con fase Henyey–Greenstein, absorción aerosol/ozono, sombra planetar
 de estrellas y transmitancia solar. Tierra, Marte y Venus cargan perfiles distintos desde
 los mismos JSON que usa la simulación.
 
-La V2 añade dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
+La V3 añade una LUT de transmitancia solar esférica, construida con el mismo integrador
+determinista que usan las pruebas y la exposición. La tabla concentra resolución en el
+horizonte y la troposfera, se cachea por cuerpo y reemplaza la cuadratura solar repetida en
+cada píxel por una interpolación HDR estable. La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
 orden, limitada por el albedo de dispersión por banda, y adaptación ocular temporal. El ojo
 reduce sensibilidad con constante de 0,7 s ante luz intensa y la recupera en 9 s en oscuridad;
 la exposición pre-tonemap queda entre 0,65 y 6. Las estrellas obedecen tanto a la luminancia
 instantánea del cielo como a esta adaptación lenta, por lo que no aparecen de inmediato al
 entrar en eclipse.
 
-No es todavía «totalmente realista»: falta multiple scattering precomputado, nubes
-volumétricas, clima/aerosoles variables, polarización, refracción, airglow y calibración
-espectral. Venus necesita un modelo multicapa de nubes H₂SO₄; la V1 es aproximada.
+No es todavía «totalmente realista»: falta multiple scattering precomputado, un trazador
+refractivo completo (V3 sólo corrige el desplazamiento visible del disco solar), nubes
+volumétricas, clima/aerosoles variables, polarización y calibración espectral. Venus necesita
+un modelo multicapa de nubes H₂SO₄; el airglow actual es una capa visible calibrada, no un
+modelo químico completo.
 
 ## Modelo
 
@@ -56,8 +61,9 @@ calibrables en datos, no mediciones oficiales.
 
 ## Evidencia
 
-- 43 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
-  transmitancia, ozono, enrojecimiento del Sol bajo y fuente difusa acotada/sombreada.
+- 27 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
+  transmitancia, ozono, enrojecimiento del Sol bajo, fuente difusa acotada/sombreada y
+  cuatro invariantes nuevas de LUT/refracción.
 - 5 pruebas de adaptación ocular: asimetría luz/oscuridad, monotonía, límites e
   independencia de la partición temporal.
 - Matriz framebuffer 12 m/20 km/80 km: limb curvo, espacio negro fuera de columna y
@@ -77,7 +83,7 @@ bash tools/atmosphere_quick_check.sh
 
 ## Próximos gates
 
-1. LUTs 4D con multiple scattering y unidades espectrales; reemplazar el cierre S₂ local.
+1. LUT 4D de multiple scattering y unidades espectrales; reemplazar el cierre S₂ local.
 2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
    sobre terreno y aerial perspective segmentada.
 3. Aerosoles por clima/latitud y capas Venus validadas.

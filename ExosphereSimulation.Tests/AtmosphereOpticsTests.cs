@@ -205,6 +205,8 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(preset.MieScaleHeight, json.MieScaleHeight);
         Assert.Equal(preset.MieAnisotropy, json.MieAnisotropy);
         Assert.Equal(preset.SunIlluminanceScale, json.SunIlluminanceScale);
+        Assert.Equal(preset.SurfaceRefractivity, json.SurfaceRefractivity);
+        Assert.Equal(preset.RefractiveScaleHeight, json.RefractiveScaleHeight);
         Assert.Equal(preset.LowOrderDiffuseStrength, json.LowOrderDiffuseStrength);
         Assert.Equal(preset.CloudBaseAltitude, json.CloudBaseAltitude);
         Assert.Equal(preset.CloudTopAltitude, json.CloudTopAltitude);
@@ -285,6 +287,90 @@ public sealed class AtmosphereOpticsTests
         Assert.False(invalid.HasCloudLayer);
         Assert.Equal(0.0, invalid.CloudVerticalDensity(2_000.0));
         Assert.Equal(0.0, invalid.CloudWeatherDensity(0.5));
+    }
+
+    [Fact]
+    public void TransmittanceLutMatchesTheSphericalOpticalOracleAtTexels()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        const double radius = 6_371_000.0;
+        const double top = 140_000.0;
+        var lut = AtmosphereTransmittanceLut.Build(
+            optics, radius, top, width: 40, height: 24, sampleCount: 32);
+
+        int x = 13;
+        int y = 7;
+        double altitude = top * AtmosphereTransmittanceLut.CoordinateValue(x, lut.Width);
+        double solarSin = AtmosphereTransmittanceLut.CoordinateValue(y, lut.Height);
+        var expected = optics.DirectSolarTransmittance(
+            altitude, solarSin, radius, top, sampleCount: 32);
+
+        Assert.Equal(expected, lut.GetTexel(x, y));
+    }
+
+    [Fact]
+    public void TransmittanceLutRemainsBoundedAndMonotonicWithAltitude()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var lut = AtmosphereTransmittanceLut.Build(
+            optics, 6_371_000.0, 140_000.0, width: 48, height: 28, sampleCount: 32);
+
+        var previous = lut.Sample(0.0, 0.08);
+        for (int i = 1; i <= 20; i++)
+        {
+            var current = lut.Sample(i * 6_000.0, 0.08);
+            Assert.InRange(current.X, 0.0, 1.0);
+            Assert.InRange(current.Y, 0.0, 1.0);
+            Assert.InRange(current.Z, 0.0, 1.0);
+            Assert.True(current.X >= previous.X && current.Y >= previous.Y
+                && current.Z >= previous.Z,
+                $"transmittance decreased with altitude: previous={previous}, current={current}");
+            previous = current;
+        }
+    }
+
+    [Fact]
+    public void TransmittanceLutResolvesTheGrazingSolarColumn()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var lut = AtmosphereTransmittanceLut.Build(
+            optics, 6_371_000.0, 140_000.0, width: 64, height: 40, sampleCount: 48);
+
+        var horizon = lut.Sample(0.0, 0.01);
+        var zenith = lut.Sample(0.0, 1.0);
+        Assert.True(horizon.X < zenith.X && horizon.Y < zenith.Y && horizon.Z < zenith.Z);
+        Assert.True(horizon.X / Math.Max(horizon.Z, 1e-12)
+            > zenith.X / Math.Max(zenith.Z, 1e-12));
+        Assert.Equal(Vector3d.Zero, lut.Sample(0.0, -0.01));
+    }
+
+    [Fact]
+    public void TransmittanceLutPreservesPlanetRadiusDependence()
+    {
+        var optics = AtmosphereModel.Mars().Optics;
+        var earthSized = AtmosphereTransmittanceLut.Build(
+            optics, 6_371_000.0, 100_000.0, width: 32, height: 20, sampleCount: 32);
+        var marsSized = AtmosphereTransmittanceLut.Build(
+            optics, 3_389_500.0, 100_000.0, width: 32, height: 20, sampleCount: 32);
+
+        var earthNearHorizon = earthSized.Sample(0.0, 0.04);
+        var marsNearHorizon = marsSized.Sample(0.0, 0.04);
+        Assert.True(marsNearHorizon.X > earthNearHorizon.X
+            && marsNearHorizon.Z > earthNearHorizon.Z,
+            $"LUT lost body curvature: Earth={earthNearHorizon}, Mars={marsNearHorizon}");
+    }
+
+    [Fact]
+    public void HorizonRefractionIsFiniteAndFallsAwayWithAltitude()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        double surface = optics.HorizonRefractionRadians(0.0, 6_371_000.0);
+        double high = optics.HorizonRefractionRadians(80_000.0, 6_371_000.0);
+
+        Assert.InRange(surface, 0.008, 0.012);
+        Assert.True(high > 0.0 && high < surface);
+        Assert.Equal(0.0, optics.HorizonRefractionRadians(double.NaN, 6_371_000.0));
+        Assert.Equal(0.0, optics.HorizonRefractionRadians(0.0, double.NaN));
     }
 
     private static CelestialBody LoadBody(string id) => CelestialBody.LoadFromJson(

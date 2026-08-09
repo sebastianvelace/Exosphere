@@ -6,9 +6,10 @@ using Exosphere.Simulation.Systems;
 using Godot;
 
 /// <summary>
-/// Binds the dominant body's physical optical atmosphere to the spherical single-scattering
-/// sky shader. The shader integrates Rayleigh/Mie/ozone extinction from the vessel altitude,
-/// so ground, twilight, limb and orbit use one continuous model instead of altitude palettes.
+/// Binds the dominant body's physical optical atmosphere to the spherical sky shader. The
+/// view ray remains integrated in the shader, while direct solar throughput comes from a
+/// CPU-built spherical LUT shared with the simulation oracle. This removes noisy per-pixel
+/// solar quadrature and keeps ground, twilight, limb and orbit on one continuous model.
 /// </summary>
 [GlobalClass]
 public partial class SkyController : Node
@@ -29,10 +30,14 @@ public partial class SkyController : Node
     // integrates a visible-band solar irradiance proxy.  Calibrate that proxy
     // once here so the accumulated HDR sky does not white-clip the lower limb.
     private const float VisibleSolarRadianceScale = 0.35f;
+    private const int TransmittanceLutWidth = 128;
+    private const int TransmittanceLutHeight = 96;
+    private const int TransmittanceLutSamples = 48;
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
     private string? _boundCloudBodyId;
+    private readonly Dictionary<string, Texture2D> _transmittanceLuts = new();
     private double _updateAccumulator = 1.0;
     private bool _hasAtmosphereState;
     private string? _lastAtmosphereBodyId;
@@ -52,6 +57,7 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("star_tex", LoadStarTexture());
         _skyMat.SetShaderParameter("cloud_coverage_tex", LoadTexture(EarthCloudTexPath, Colors.Black));
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
+        _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _env.Sky.SkyMaterial = _skyMat;
         // The cloud field evolves slowly. Incremental refresh updates one cubemap face per
         // frame and avoids paying the complete gas+cloud integration six times every frame.
@@ -162,6 +168,7 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("atmosphere_height",
             enabled ? (float)atmosphere!.MaxAltitude : 1.0f);
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
+        _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
 
         if (!enabled)
         {
@@ -170,10 +177,18 @@ public partial class SkyController : Node
             _skyMat.SetShaderParameter("mie_absorption", Vector3.Zero);
             _skyMat.SetShaderParameter("ozone_absorption", Vector3.Zero);
             _skyMat.SetShaderParameter("airglow_emission", Vector3.Zero);
+            _skyMat.SetShaderParameter("surface_refractivity", 0.0f);
             _skyMat.SetShaderParameter("low_order_diffuse_strength", 0.0f);
             _skyMat.SetShaderParameter("cloud_enabled", false);
             return;
         }
+
+        // Build each body's table once.  The LUT is independent of the vessel's current
+        // altitude and solar longitude; reusing it avoids a 12 Hz texture allocation and
+        // gives the shader a stable filtered result while its cubemap converges.
+        _skyMat.SetShaderParameter("transmittance_lut", GetTransmittanceLut(
+            body.Id, optics!, body.Radius, atmosphere!.MaxAltitude));
+        _skyMat.SetShaderParameter("transmittance_lut_enabled", true);
 
         _skyMat.SetShaderParameter("rayleigh_scattering", ToGodot(optics!.RayleighScattering));
         _skyMat.SetShaderParameter("mie_scattering", ToGodot(optics.MieScattering));
@@ -189,6 +204,8 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("mie_g", (float)optics.MieAnisotropy);
         _skyMat.SetShaderParameter("sun_illuminance",
             (float)(optics.SunIlluminanceScale * VisibleSolarRadianceScale));
+        _skyMat.SetShaderParameter("surface_refractivity", (float)optics.SurfaceRefractivity);
+        _skyMat.SetShaderParameter("refractive_scale_height", (float)optics.RefractiveScaleHeight);
         _skyMat.SetShaderParameter("low_order_diffuse_strength",
             (float)optics.LowOrderDiffuseStrength);
         _skyMat.SetShaderParameter("cloud_enabled", optics.HasCloudLayer);
@@ -252,6 +269,38 @@ public partial class SkyController : Node
 
     private static Vector3 ToGodot(Vector3d value) => new(
         (float)value.X, (float)value.Y, (float)value.Z);
+
+    private Texture2D GetTransmittanceLut(
+        string bodyId,
+        AtmosphereOptics optics,
+        double planetRadius,
+        double atmosphereTopAltitude)
+    {
+        if (_transmittanceLuts.TryGetValue(bodyId, out var cached)) return cached;
+
+        var lut = AtmosphereTransmittanceLut.Build(
+            optics,
+            planetRadius,
+            atmosphereTopAltitude,
+            TransmittanceLutWidth,
+            TransmittanceLutHeight,
+            TransmittanceLutSamples);
+        var image = Image.CreateEmpty(
+            lut.Width, lut.Height, false, Image.Format.Rgbaf);
+        for (int y = 0; y < lut.Height; y++)
+        {
+            for (int x = 0; x < lut.Width; x++)
+            {
+                var value = lut.GetTexel(x, y);
+                image.SetPixel(x, y, new Color(
+                    (float)value.X, (float)value.Y, (float)value.Z, 1.0f));
+            }
+        }
+
+        var texture = ImageTexture.CreateFromImage(image);
+        _transmittanceLuts[bodyId] = texture;
+        return texture;
+    }
 
     private static Texture2D LoadStarTexture()
         => LoadTexture(StarTexPath, Colors.Black);

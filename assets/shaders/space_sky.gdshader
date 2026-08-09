@@ -1,4 +1,4 @@
-// Exosphere physical atmosphere sky — spherical single scattering.
+// Exosphere physical atmosphere sky — spherical scattering with LUT solar transport.
 // Integrates wavelength-banded Rayleigh + aerosol Mie scattering, Mie/ozone absorption,
 // planet shadow and stellar extinction from the observer altitude to the atmosphere edge.
 shader_type sky;
@@ -10,6 +10,10 @@ uniform vec3 local_up = vec3(0.0, 1.0, 0.0);
 uniform float planet_radius = 6371000.0;
 uniform float atmosphere_height = 140000.0;
 uniform float observer_altitude = 2.0;
+// CPU-built spherical transmittance LUT.  Its x coordinate is warped altitude
+// (u²) and y is warped sine solar elevation (v²); see AtmosphereTransmittanceLut.
+uniform sampler2D transmittance_lut : filter_linear;
+uniform bool transmittance_lut_enabled = false;
 
 uniform vec3 rayleigh_scattering = vec3(5.802e-6, 13.558e-6, 33.100e-6);
 uniform vec3 mie_scattering = vec3(3.996e-6);
@@ -24,6 +28,8 @@ uniform float airglow_center_altitude = 97000.0;
 uniform float airglow_scale_height = 6000.0;
 uniform float mie_g = 0.80;
 uniform float sun_illuminance = 20.0;
+uniform float surface_refractivity = 0.000277;
+uniform float refractive_scale_height = 8000.0;
 uniform float star_energy = 0.9;
 uniform float eye_star_gain = 0.0;
 uniform float low_order_diffuse_strength : hint_range(0.0, 0.5) = 0.25;
@@ -114,6 +120,27 @@ vec3 transmittance(vec3 optical_depth) {
 	return exp(-clamp(optical_depth, vec3(0.0), vec3(80.0)));
 }
 
+float horizon_refraction(float altitude) {
+	float density = exp(-max(altitude, 0.0) / max(refractive_scale_height, 1.0));
+	float spherical_gradient = sqrt(2.0 * PI * planet_radius
+		/ max(refractive_scale_height, 1.0));
+	// Exponential spherical-gradient integral, reduced for the finite lapse profile.
+	return clamp(0.5 * max(surface_refractivity, 0.0) * density
+		* spherical_gradient, 0.0, 0.035);
+}
+
+vec3 refracted_sun_direction(vec3 geometric_sun, vec3 up) {
+	float geometric_elevation = asin(clamp(dot(up, geometric_sun), -1.0, 1.0));
+	float horizon_lift = horizon_refraction(observer_altitude)
+		* exp(-abs(geometric_elevation) / 0.30);
+	float apparent_elevation = geometric_elevation + horizon_lift;
+	vec3 horizontal = geometric_sun - up * sin(geometric_elevation);
+	float horizontal_length = length(horizontal);
+	if (horizontal_length < 1e-5) return geometric_sun;
+	horizontal /= horizontal_length;
+	return normalize(horizontal * cos(apparent_elevation) + up * sin(apparent_elevation));
+}
+
 // A stable, view-dependent dither breaks the radial spokes produced by a fixed
 // midpoint quadrature without introducing temporal shimmer.  The jitter is
 // applied inside each segment, so the numerical path still covers the complete
@@ -146,6 +173,20 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 bool sun_is_occluded(vec3 position, vec3 direction) {
 	vec2 ground_hit = ray_sphere(position, direction, planet_radius);
 	return ground_hit.x > 0.0;
+}
+
+vec3 solar_transmittance(vec3 position, vec3 direction, float outer_radius) {
+	if (sun_is_occluded(position, direction)) return vec3(0.0);
+	float solar_sin = dot(normalize(position), direction);
+	if (solar_sin <= 0.0) return vec3(0.0);
+	if (transmittance_lut_enabled) {
+		float altitude = max(length(position) - planet_radius, 0.0);
+		float altitude_u = sqrt(clamp(altitude / max(atmosphere_height, 1.0), 0.0, 1.0));
+		float solar_v = sqrt(clamp(solar_sin, 0.0, 1.0));
+		return clamp(texture(transmittance_lut, vec2(altitude_u, solar_v)).rgb,
+			vec3(0.0), vec3(1.0));
+	}
+	return transmittance(optical_depth_to_sun(position, direction, outer_radius));
 }
 
 vec2 dir_to_equirect(vec3 direction) {
@@ -201,6 +242,7 @@ void sky() {
 	vec3 view_dir = normalize(EYEDIR);
 	vec3 up = normalize(local_up);
 	vec3 to_sun = normalize(sun_dir);
+	vec3 apparent_sun = refracted_sun_direction(to_sun, up);
 	float outer_radius = planet_radius + atmosphere_height;
 	vec3 origin = up * (planet_radius + max(observer_altitude, 1.0));
 
@@ -244,9 +286,8 @@ void sky() {
 			vec3 density = density_at_height(height);
 			vec3 sample_extinction = extinction(density);
 			vec3 segment_depth = sample_extinction * step_length;
-			vec3 sun_depth = optical_depth_to_sun(sample_position, to_sun, outer_radius);
 			vec3 view_throughput = transmittance(optical_depth + segment_depth * 0.5);
-			vec3 sun_throughput = transmittance(sun_depth);
+			vec3 sun_throughput = solar_transmittance(sample_position, to_sun, outer_radius);
 			vec3 throughput = view_throughput * sun_throughput;
 			vec3 scattering = rayleigh_scattering * density.x * rayleigh_phase
 				+ mie_scattering * density.y * mie_phase;
@@ -327,8 +368,7 @@ void sky() {
 					float segment_alpha = 1.0
 						- exp(-rho * cloud_extinction * cloud_step);
 					float direct_light = cloud_sun_transmittance(p, to_sun);
-					vec3 atmospheric_sun = transmittance(
-						optical_depth_to_sun(p, to_sun, outer_radius));
+					vec3 atmospheric_sun = solar_transmittance(p, to_sun, outer_radius);
 					vec3 source = atmospheric_sun
 						* (direct_light * phase_cloud * atmospheric_solar_visibility + 0.018);
 					cloud_radiance += cloud_transmittance * source * segment_alpha;
@@ -384,7 +424,7 @@ void sky() {
 
 	// Resolved solar photosphere. The radial term approximates visible-band limb
 	// darkening; an angular occulting disc produces partial, total and annular eclipses.
-	float sun_chord = length(view_dir - to_sun);
+	float sun_chord = length(view_dir - apparent_sun);
 	float sun_radius_chord = 2.0 * sin(0.5 * sun_angular_radius);
 	float sun_edge = max(sun_radius_chord * 0.08, 0.00025);
 	float solar_disc = 1.0 - smoothstep(sun_radius_chord - sun_edge,
@@ -410,8 +450,7 @@ void sky() {
 		vec3 ground = mix(ground_horizon, ground_bottom, sqrt(nadir));
 		vec3 ground_position = origin + view_dir * ray_end;
 		float ground_sun = max(dot(normalize(ground_position), to_sun), 0.0);
-		vec3 ground_direct = transmittance(
-			optical_depth_to_sun(ground_position, to_sun, outer_radius));
+		vec3 ground_direct = solar_transmittance(ground_position, to_sun, outer_radius);
 		color += ground * transmittance(optical_depth)
 			* (0.012 + 0.24 * ground_sun * ground_direct * solar_visibility);
 	}
