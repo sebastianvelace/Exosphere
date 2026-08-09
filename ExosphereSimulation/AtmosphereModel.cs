@@ -296,6 +296,8 @@ public partial class AtmosphereModel
             // radiance domain. Keep this explicit: changing the AtmosphereOptics default
             // must not silently recalibrate Earth's sky.
             SunIlluminanceScale = 20.0,
+            SurfaceRefractivity = 2.77e-4,
+            RefractiveScaleHeight = 8_000.0,
             LowOrderDiffuseStrength = 0.25,
             CloudBaseAltitude = 1_200.0,
             CloudTopAltitude = 12_000.0,
@@ -350,6 +352,9 @@ public partial class AtmosphereModel
             OzoneHalfWidth = 0.0,
             MieAnisotropy = 0.76,
             SunIlluminanceScale = 14.0,
+            // CO₂ at 636 Pa and 210 K; scaled from the visible STP refractivity.
+            SurfaceRefractivity = 3.9e-6,
+            RefractiveScaleHeight = 11_100.0,
             LowOrderDiffuseStrength = 0.08,
         },
         MaxAltitude         = 100_000.0,    // 100 km
@@ -380,6 +385,10 @@ public partial class AtmosphereModel
             OzoneHalfWidth = 0.0,
             MieAnisotropy = 0.85,
             SunIlluminanceScale = 10.0,
+            // Dense CO₂ near the Venus cloud deck; this is intentionally a bounded
+            // optical parameter until a pressure-dependent refractivity table is added.
+            SurfaceRefractivity = 0.012,
+            RefractiveScaleHeight = 15_000.0,
             LowOrderDiffuseStrength = 0.40,
             CloudBaseAltitude = 48_000.0,
             CloudTopAltitude = 70_000.0,

@@ -42,6 +42,8 @@ public partial class AtmosphereModel
                 AirglowScaleHeight = ReadDouble(opticalJson, "airglow_scale_height", 6_000.0),
                 MieAnisotropy = ReadDouble(opticalJson, "mie_anisotropy", 0.80),
                 SunIlluminanceScale = ReadDouble(opticalJson, "sun_illuminance_scale", 20.0),
+                SurfaceRefractivity = ReadDouble(opticalJson, "surface_refractivity", 2.77e-4),
+                RefractiveScaleHeight = ReadDouble(opticalJson, "refractive_scale_height", 8_000.0),
                 LowOrderDiffuseStrength = ReadDouble(opticalJson, "low_order_diffuse_strength", 0.25),
                 CloudBaseAltitude = ReadDouble(opticalJson, "cloud_base_altitude", 0.0),
                 CloudTopAltitude = ReadDouble(opticalJson, "cloud_top_altitude", 0.0),
