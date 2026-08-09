@@ -81,6 +81,11 @@ velocidad de contacto segura y repetir `--edl` hasta obtener un aterrizaje físi
   mínimo de 40 % produjo otro rebote/hover: de 19,9 m pasó a 39,2 m sin registrar contacto. El
   gate se detuvo conservando las capturas y el log; la política one-engine/low-thrust final aún
   es un trabajo abierto.
+- `edl-v6` (`/tmp/exo_edl_v6.log`) validó la transición 3→2 y el nuevo gate de energía baja, pero
+  no alcanzó un touchdown: a 286,6 m iba a `−10,8 m/s`, rebotó a `+13,5 m/s`, derivó hasta 74 m
+  y terminó a 1,5 m con impacto de `106,31 m/s`, `peakLegLoad=44,784 MN`, `contacts=1` y
+  `overload=True`. Se observaron `ENTRY → PEAK_HEATING → RETRO_BURN → FLIP_COMPLETE →
+  FINAL_DESCENT`; el gate sigue fallando y no existe `exo_play_touchdown.png`.
 
 Estas fallas son evidencia física útil: el controlador necesita resolver simultáneamente el
   mínimo de throttle, la selección discreta de motores y la deriva lateral antes de declarar

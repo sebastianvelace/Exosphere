@@ -22,6 +22,7 @@ not converted into a passing screenshot.
 | `85030aa` | Two-engine final authority floor | EDL focused 6/6 |
 | `8701f32` | Avoid three-engine minimum-throttle hover | EDL focused 6/6 |
 | `aab7e7b` | Record EDL v3–v5 gate evidence | logs and acceptance criteria |
+| `4d36b73` | Gate low-energy single-engine final descent | focused EDL 7/7; EDL v6 still fails with 106.31 m/s contact |
 
 ## Current gates
 
@@ -29,7 +30,8 @@ not converted into a passing screenshot.
   `ENGINE_STAGE` rows for booster 33, hot-stage 39 and Ship 6.
 - Atmosphere matrix: `baseline-atm-v1` passed `ATMOSPHERE_OK` with 16/16 milestones.
 - EDL v3 reproduced a one-engine lateral rebound; v4 reproduced a three-engine hover;
-  v5 reproduced a two-engine minimum-throttle rebound at ~20 m. EDL touchdown remains open.
+  v5 reproduced a two-engine minimum-throttle rebound at ~20 m; v6 reproduced a late
+  two-engine bounce and 106.31 m/s overload at contact. EDL touchdown remains open.
 - The test suite is green on the latest completed commits; rerun the full suite after the
   one-engine/low-thrust EDL and menu dossier tranches merge.
 
