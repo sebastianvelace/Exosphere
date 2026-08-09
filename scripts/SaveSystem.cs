@@ -114,8 +114,48 @@ public static class SaveSystem
             .ToArray();
     }
 
+    /// <summary>
+    /// Reads valid V2 (or migratable legacy) headers and returns the slot selected by
+    /// Continue. Invalid and empty files are ignored; they must not prevent a valid save
+    /// from being resumed.
+    /// </summary>
+    public static string? FindMostRecentSaveSlot(
+        string? saveDirectory = null)
+    {
+        return SaveSlotOrdering.SelectMostRecent(
+            ReadSaveSlotMetadata(saveDirectory));
+    }
+
+    private static IEnumerable<SaveSlotMetadata> ReadSaveSlotMetadata(
+        string? saveDirectory)
+    {
+        string directory = saveDirectory ?? DefaultSaveDirectory;
+        if (!System.IO.Directory.Exists(directory)) yield break;
+
+        foreach (string path in System.IO.Directory.GetFiles(directory, "*.json"))
+        {
+            string? slotName = System.IO.Path.GetFileNameWithoutExtension(path);
+            if (string.IsNullOrWhiteSpace(slotName)) continue;
+
+            SaveGameV2 save;
+            try
+            {
+                string text = System.IO.File.ReadAllText(path);
+                save = SaveGameV2Json.DeserializeOrMigrate(text);
+            }
+            catch
+            {
+                // Continue should skip corrupt/empty slots and still offer the newest
+                // valid save. LoadGame reports the detailed error when chosen directly.
+                continue;
+            }
+
+            yield return new SaveSlotMetadata(slotName, save.SavedAtUtc);
+        }
+    }
+
     public static bool HasSaveSlots(string? saveDirectory = null) =>
-        ListSaveSlots(saveDirectory).Length > 0;
+        FindMostRecentSaveSlot(saveDirectory) != null;
 
     public static CampaignSaveV2 ReadMostRecentCampaignState(
         string? saveDirectory = null)

@@ -190,10 +190,10 @@ public partial class MainMenu : Control
         _navigation.AddThemeConstantOverride("separation", 7);
         left.AddChild(_navigation);
 
-        string[] saves = SaveSystem.ListSaveSlots();
-        AddNavButton(UiText.Get("continue"), () => ContinueSave(saves), primary: true,
-            disabled: saves.Length == 0,
-            tooltip: saves.Length == 0 ? UiText.Get("no_saves") : "");
+        string? mostRecentSave = SaveSystem.FindMostRecentSaveSlot();
+        AddNavButton(UiText.Get("continue"), () => ContinueSave(mostRecentSave), primary: true,
+            disabled: mostRecentSave == null,
+            tooltip: mostRecentSave == null ? UiText.Get("no_saves") : "");
         AddNavButton(UiText.Get("campaign"), ShowCampaign);
         AddNavButton(UiText.Get("sandbox"), OpenSandbox);
         AddNavButton(UiText.Get("vab"),
@@ -321,10 +321,10 @@ public partial class MainMenu : Control
         tween.TweenProperty(_dossier, "modulate:a", 1.0f, 0.55f).SetDelay(0.08f);
     }
 
-    private void ContinueSave(string[] saves)
+    private void ContinueSave(string? saveSlot)
     {
-        if (saves.Length == 0) return;
-        CraftLaunchRequest.Set(new LaunchIntent { Mode = "continue", SaveSlot = saves[^1] });
+        if (string.IsNullOrWhiteSpace(saveSlot)) return;
+        CraftLaunchRequest.Set(new LaunchIntent { Mode = "continue", SaveSlot = saveSlot });
         OpenFlight();
     }
 
