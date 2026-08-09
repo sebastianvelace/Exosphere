@@ -1,6 +1,6 @@
 # Contrato físico de la óptica atmosférica
 
-**Estado:** V6 implementado en la simulación y validado numéricamente
+**Estado:** V8 implementado en la simulación, con nubes 3D verificadas visualmente
 **Alcance:** `ExosphereSimulation/AtmosphereOptics.cs` y sus consumidores de iluminación/exposición
 
 Este documento describe el contrato que debe respetar cualquier renderer o sistema de
@@ -91,6 +91,24 @@ mantiene la integración esférica como fallback.
 Este diseño comparte un único oráculo numérico entre simulación, exposición y GPU: cambiar el
 radio o el perfil óptico cambia también los texels y no puede dejar una atmósfera visual con
 curvatura terrestre implícita.
+
+## Nubes volumétricas y coste de autosombra
+
+El cielo intersecta la cáscara nubosa entre `CloudBaseAltitude` y `CloudTopAltitude`. La cobertura
+del mapa equirectangular se combina con una envolvente vertical suave y un campo macro 3D
+determinista. La coordenada del ruido usa `cloud_world_to_texture` y el mismo desplazamiento
+longitudinal que el mapa meteorológico, de modo que el patrón no salta cuando rota el planeta:
+
+```text
+field = weather(uv) + 0.25(noise3(x)−0.5) + 0.20(detail(uv)−0.5)
+ρv = smoothstep(threshold−0.12, threshold+0.10, field)
+α = 1 − exp(−ρv σcloud Δs)
+```
+
+El rayo solar sigue integrando Beer–Lambert y fase HG, pero usa la densidad base weather+detalle
+en lugar de reevaluar el ruido macro en cada uno de sus siete pasos. Esta aproximación conserva
+la cobertura y la sombra global, reduce el coste en renderizadores de CPU y deja explícita la
+limitación: la autosombra aún no resuelve la microestructura de cada billow.
 
 ## Transporte global de orden dos
 
@@ -186,7 +204,8 @@ Este contrato sigue siendo una aproximación de scattering: las LUTs resuelven t
 directa, dos rebotes globales y una envolvente angular 4D de baja resolución, y el shader incluye
 una corrección acotada del disco solar y de las ramas refractadas visibles, pero aún no modela polarización,
 variación espectral por temperatura, perfil de humedad/aerosoles por clima ni el acoplamiento
-radiativo entre nubes y terreno, ni un trazado refractivo estelar de distancia finita.
+radiativo entre nubes y terreno, ni un trazado refractivo estelar de distancia finita. El ruido
+3D de nubes no sustituye todavía a una weather map dinámica ni a una microfísica convectiva.
 El siguiente nivel es una LUT de scattering múltiple de órdenes superiores dependiente de altura,
 ángulo solar y ángulo de visión (Bruneton/Neyret), más un integrador refractivo completo para el
 disco, el horizonte y las estrellas; esta implementación
