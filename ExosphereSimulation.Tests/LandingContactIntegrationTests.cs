@@ -104,11 +104,12 @@ public sealed class LandingContactIntegrationTests
         string source = File.ReadAllText(Path.Combine(
             FindRepoRoot().FullName, "scripts", "EDLController.cs"));
 
-        Assert.Contains("FinalSingleEngineAltitudeM = 75.0", source);
-        Assert.Contains("FinalSingleEngineLateralSpeedMps = 4.0", source);
-        Assert.Contains("FinalSingleEngineReacquireLateralSpeedMps = 4.0", source);
+        Assert.Contains("FinalSingleEngineAltitudeM = 250.0", source);
+        Assert.Contains("FinalSingleEngineLateralSpeedMps = 18.0", source);
+        Assert.Contains("FinalSingleEngineReacquireLateralSpeedMps = 20.0", source);
         Assert.Contains("requested <= 1", source);
-        Assert.Contains("System.Math.Abs(_vUp) <= 2.5", source);
+        Assert.Contains("FinalSingleEngineMinVerticalSpeedMps = -8.0", source);
+        Assert.Contains("FinalSingleEngineMaxVerticalSpeedMps = 4.0", source);
         Assert.Contains("selected = System.Math.Min(selected, 1)", source);
         Assert.Contains("lateralVelocity.Magnitude * 0.08", source);
     }

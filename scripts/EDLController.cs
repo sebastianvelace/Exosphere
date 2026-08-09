@@ -48,9 +48,15 @@ public partial class EDLController : Control
     // over the pad, the centre sea-level Raptor provides the physically available lower
     // thrust state.  Keep the transition gated by altitude, lateral speed and the
     // discrete demand calculation; it must not become a generic one-engine fallback.
-    private const double FinalSingleEngineAltitudeM = 75.0;
-    private const double FinalSingleEngineLateralSpeedMps = 4.0;
-    private const double FinalSingleEngineReacquireLateralSpeedMps = 4.0;
+    // v8 reached a repeatable two-engine minimum-throttle hover at 211–230 m. At ~243 m
+    // the state was already low-energy (vUp=+0.9, lateral=3.8 m/s), leaving ample vertical
+    // room for a controlled one-engine descent. The altitude gate is therefore an authority
+    // envelope, not a touchdown shortcut: the normal contact solver still owns the landing.
+    private const double FinalSingleEngineAltitudeM = 250.0;
+    private const double FinalSingleEngineLateralSpeedMps = 18.0;
+    private const double FinalSingleEngineReacquireLateralSpeedMps = 20.0;
+    private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
+    private const double FinalSingleEngineMaxVerticalSpeedMps = 4.0;
     // Lateral velocity is corrected through a finite TVC cant. Do not let a transient
     // cross-range spike request the full two-engine thrust budget in the last few hundred
     // metres: the vertical profile must remain dominant or the vehicle trades a horizontal
@@ -870,7 +876,8 @@ public partial class EDLController : Control
                 // A short, low-energy one-engine pulse is the only state below the
                 // 40% floor that can break the two-engine hover. It is allowed only while
                 // vertical energy is already small; a fast approach remains two-engine.
-                && System.Math.Abs(_vUp) <= 2.5
+                && _vUp >= FinalSingleEngineMinVerticalSpeedMps
+                && _vUp <= FinalSingleEngineMaxVerticalSpeedMps
                 && (requested <= 1
                     || (_landingEngineCount == MinimumFinalApproachEngines && _vUp > -1.5));
             // If the centre engine has already been selected, retain it while the lateral
@@ -880,7 +887,8 @@ public partial class EDLController : Control
             if (_landingEngineCount == 1
                 && _alt <= FinalSingleEngineAltitudeM
                 && _horiz <= FinalSingleEngineReacquireLateralSpeedMps
-                && System.Math.Abs(_vUp) <= 2.5)
+                && _vUp >= FinalSingleEngineMinVerticalSpeedMps
+                && _vUp <= FinalSingleEngineMaxVerticalSpeedMps)
                 lowEnergySingleEngine = true;
             selected = System.Math.Min(selected, requested);
             if (lowEnergySingleEngine)
