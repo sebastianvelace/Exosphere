@@ -86,6 +86,13 @@ velocidad de contacto segura y repetir `--edl` hasta obtener un aterrizaje físi
   y terminó a 1,5 m con impacto de `106,31 m/s`, `peakLegLoad=44,784 MN`, `contacts=1` y
   `overload=True`. Se observaron `ENTRY → PEAK_HEATING → RETRO_BURN → FLIP_COMPLETE →
   FINAL_DESCENT`; el gate sigue fallando y no existe `exo_play_touchdown.png`.
+- `a13fc02` corrige el salto de actitud identificado en v6: el eje final ya no cambia a
+  `-velDir` al superar 12 m/s laterales mientras el vehículo está subiendo. FINAL mantiene
+  un eje principalmente vertical, con inclinación limitada a 20° para reducir deriva, y
+  conserva un término horizontal acotado en la demanda de frenado. El cambio pasa 8 pruebas
+  EDL y compila sin warnings; el playtest `edl-final-axis-v7` queda pendiente porque otro
+  harness visual tenía el `flock` global ocupado. No se considera touchdown hasta obtener
+  `exo_play_touchdown.png`, `TOUCHDOWN`, contacto multipunto y el gate completo.
 
 Estas fallas son evidencia física útil: el controlador necesita resolver simultáneamente el
   mínimo de throttle, la selección discreta de motores y la deriva lateral antes de declarar

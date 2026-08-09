@@ -23,6 +23,7 @@ not converted into a passing screenshot.
 | `8701f32` | Avoid three-engine minimum-throttle hover | EDL focused 6/6 |
 | `aab7e7b` | Record EDL v3–v5 gate evidence | logs and acceptance criteria |
 | `4d36b73` | Gate low-energy single-engine final descent | focused EDL 7/7; EDL v6 still fails with 106.31 m/s contact |
+| `a13fc02` | Keep upright authority through final lateral recovery | focused EDL 8/8 + Godot build; v7 visual gate pending while another harness owns the lock |
 
 ## Current gates
 
