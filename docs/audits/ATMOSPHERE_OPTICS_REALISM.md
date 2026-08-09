@@ -1,6 +1,6 @@
 # Atmósfera física y óptica planetaria
 
-**Fecha:** 2026-08-09 · **Estado:** V5 óptica esférica + órdenes 2/3 + horizonte refractado verificado
+**Fecha:** 2026-08-09 · **Estado:** V6 óptica esférica + LUT angular 4D + horizonte refractado verificado
 
 ## Veredicto honesto
 
@@ -12,7 +12,7 @@ RGB, Mie con fase Henyey–Greenstein, absorción aerosol/ozono, sombra planetar
 de estrellas y transmitancia solar. Tierra, Marte y Venus cargan perfiles distintos desde
 los mismos JSON que usa la simulación.
 
-La V5 añade una LUT de transmitancia solar esférica, construida con el mismo integrador
+La V6 añade una LUT de transmitancia solar esférica, construida con el mismo integrador
 determinista que usan las pruebas y la exposición. La tabla concentra resolución en el
 horizonte y la troposfera, se cachea por cuerpo y reemplaza la cuadratura solar repetida en
 cada píxel por una interpolación HDR estable. La tabla cubre además `sin(elevación) ∈ [-0,04, 1]`,
@@ -21,6 +21,10 @@ global que transporta la fuente difusa a través de toda la columna: la primera 
 orden dos y una segunda integral añade un rebote isotrópico de orden tres, reemplazando el cierre
 S₂ local cuando está disponible. `DirectSolarTransmittance` resuelve la elevación aparente con
 Snell, integra la rama refractada y rechaza ductos no atravesables en vez de inventar energía.
+Sobre esa semilla, `AtmosphereAngularMultipleScatteringLut` añade un atlas 4D empaquetado
+(altura, elevación solar, vista cenital y `μ=view·sun`). La fase Rayleigh/Mie y el cociente
+de escape esférico sustituyen la vieja ganancia isotrópica hacia el cenit; las vistas hacia el
+suelo quedan a cero y la dispersión Mie hacia delante aparece sólo cuando la geometría lo pide.
 La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
 orden, limitada por el albedo de dispersión por banda, y adaptación ocular temporal. El ojo
 reduce sensibilidad con constante de 0,7 s ante luz intensa y la recupera en 9 s en oscuridad;
@@ -28,7 +32,7 @@ la exposición pre-tonemap queda entre 0,65 y 6. Las estrellas obedecen tanto a 
 instantánea del cielo como a esta adaptación lenta, por lo que no aparecen de inmediato al
 entrar en eclipse.
 
-No es todavía «totalmente realista»: falta multiple scattering de órdenes superiores, un trazador
+No es todavía «totalmente realista»: falta multiple scattering de órdenes superiores a tres, un trazador
 refractivo de dos ramas para ductos densos y estrellas, nubes volumétricas, clima/aerosoles variables,
 polarización y calibración espectral. Venus necesita
 un modelo multicapa de nubes H₂SO₄; el airglow actual es una capa visible calibrada, no un
@@ -69,9 +73,9 @@ calibrables en datos, no mediciones oficiales.
 
 ## Evidencia
 
-- 32 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
+- 37 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
   transmitancia, ozono, enrojecimiento del Sol bajo, fuente difusa acotada/sombreada y
-  diez invariantes nuevas de LUT, transporte global, horizonte subhorizonte y refracción.
+  quince invariantes nuevas de LUT, transporte global, atlas angular, horizonte subhorizonte y refracción.
 - 5 pruebas de adaptación ocular: asimetría luz/oscuridad, monotonía, límites e
   independencia de la partición temporal.
 - Matriz framebuffer 12 m/20 km/80 km: limb curvo, espacio negro fuera de columna y
@@ -91,8 +95,8 @@ bash tools/atmosphere_quick_check.sh
 
 ## Próximos gates
 
-1. LUT 4D angular de órdenes superiores y unidades espectrales; reemplazar el transporte
-   isotrópico de los órdenes dos/tres.
+1. Aumentar la resolución de la LUT 4D angular y añadir órdenes superiores a tres con unidades
+   espectrales calibradas; la versión actual es una envolvente de baja resolución.
 2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
    sobre terreno y aerial perspective segmentada.
 3. Aerosoles por clima/latitud y capas Venus validadas.
