@@ -13,6 +13,12 @@ using Exosphere.Simulation.Math;
 public sealed class AtmosphereTransmittanceLut
 {
     public const double CoordinateExponent = 2.0;
+    /// <summary>
+    /// Lower geometric solar-elevation bound represented by the table.  Earth refraction
+    /// lifts the apparent horizon by roughly 0.5 degrees; the wider 2.3-degree envelope
+    /// also covers the dense Venus profile without wasting resolution in deep night.
+    /// </summary>
+    public const double MinimumSolarElevationSin = -0.04;
 
     private readonly Vector3d[] _values;
 
@@ -60,7 +66,7 @@ public sealed class AtmosphereTransmittanceLut
         var values = new Vector3d[width * height];
         for (int y = 0; y < height; y++)
         {
-            double solarSin = CoordinateValue(y, height);
+            double solarSin = SolarElevationSin(y, height);
             for (int x = 0; x < width; x++)
             {
                 double altitude = atmosphereTopAltitude * CoordinateValue(x, width);
@@ -92,12 +98,15 @@ public sealed class AtmosphereTransmittanceLut
     public Vector3d Sample(double altitude, double solarElevationSin)
     {
         if (!double.IsFinite(altitude) || !double.IsFinite(solarElevationSin)
-            || solarElevationSin <= 0.0)
+            || solarElevationSin < MinimumSolarElevationSin)
             return Vector3d.Zero;
 
         double u = System.Math.Sqrt(System.Math.Clamp(altitude, 0.0,
             AtmosphereTopAltitude) / AtmosphereTopAltitude);
-        double v = System.Math.Sqrt(System.Math.Clamp(solarElevationSin, 0.0, 1.0));
+        double solarNormalized = (System.Math.Clamp(solarElevationSin,
+            MinimumSolarElevationSin, 1.0) - MinimumSolarElevationSin)
+            / (1.0 - MinimumSolarElevationSin);
+        double v = System.Math.Sqrt(System.Math.Clamp(solarNormalized, 0.0, 1.0));
         double px = u * (Width - 1);
         double py = v * (Height - 1);
         int x0 = System.Math.Clamp((int)System.Math.Floor(px), 0, Width - 1);
@@ -118,5 +127,12 @@ public sealed class AtmosphereTransmittanceLut
         if (size < 2) throw new ArgumentOutOfRangeException(nameof(size));
         double normalized = System.Math.Clamp((double)index / (size - 1), 0.0, 1.0);
         return System.Math.Pow(normalized, CoordinateExponent);
+    }
+
+    /// <summary>Maps a warped LUT row to geometric sine solar elevation.</summary>
+    public static double SolarElevationSin(int index, int size)
+    {
+        return MinimumSolarElevationSin
+            + (1.0 - MinimumSolarElevationSin) * CoordinateValue(index, size);
     }
 }

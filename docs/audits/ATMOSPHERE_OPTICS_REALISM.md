@@ -1,6 +1,6 @@
 # Atmósfera física y óptica planetaria
 
-**Fecha:** 2026-08-08 · **Estado:** V4 óptica esférica + orden dos + rama refractada verificada
+**Fecha:** 2026-08-09 · **Estado:** V5 óptica esférica + órdenes 2/3 + horizonte refractado verificado
 
 ## Veredicto honesto
 
@@ -12,13 +12,16 @@ RGB, Mie con fase Henyey–Greenstein, absorción aerosol/ozono, sombra planetar
 de estrellas y transmitancia solar. Tierra, Marte y Venus cargan perfiles distintos desde
 los mismos JSON que usa la simulación.
 
-La V4 añade una LUT de transmitancia solar esférica, construida con el mismo integrador
+La V5 añade una LUT de transmitancia solar esférica, construida con el mismo integrador
 determinista que usan las pruebas y la exposición. La tabla concentra resolución en el
 horizonte y la troposfera, se cachea por cuerpo y reemplaza la cuadratura solar repetida en
-cada píxel por una interpolación HDR estable. También añade una LUT global de orden dos que
-transporta la fuente difusa a través de toda la columna, reemplazando el cierre S₂ local
-cuando está disponible, y usa la rama saliente del integrador refractivo de Snell para la
-transmitancia directa. La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
+cada píxel por una interpolación HDR estable. La tabla cubre además `sin(elevación) ∈ [-0,04, 1]`,
+por lo que el horizonte aparente no se recorta al cruzar cero geométrico. También añade una LUT
+global que transporta la fuente difusa a través de toda la columna: la primera pasada produce
+orden dos y una segunda integral añade un rebote isotrópico de orden tres, reemplazando el cierre
+S₂ local cuando está disponible. `DirectSolarTransmittance` resuelve la elevación aparente con
+Snell, integra la rama refractada y rechaza ductos no atravesables en vez de inventar energía.
+La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
 orden, limitada por el albedo de dispersión por banda, y adaptación ocular temporal. El ojo
 reduce sensibilidad con constante de 0,7 s ante luz intensa y la recupera en 9 s en oscuridad;
 la exposición pre-tonemap queda entre 0,65 y 6. Las estrellas obedecen tanto a la luminancia
@@ -26,8 +29,8 @@ instantánea del cielo como a esta adaptación lenta, por lo que no aparecen de 
 entrar en eclipse.
 
 No es todavía «totalmente realista»: falta multiple scattering de órdenes superiores, un trazador
-refractivo completo (V4 cubre la rama saliente y corrige el desplazamiento visible del disco), nubes
-volumétricas, clima/aerosoles variables, polarización y calibración espectral. Venus necesita
+refractivo de dos ramas para ductos densos y estrellas, nubes volumétricas, clima/aerosoles variables,
+polarización y calibración espectral. Venus necesita
 un modelo multicapa de nubes H₂SO₄; el airglow actual es una capa visible calibrada, no un
 modelo químico completo.
 
@@ -39,7 +42,8 @@ modelo químico completo.
 T(a→b)=exp(-∫βext ds)
 L=∫Tview·Tsun·(βRρR PR(μ)+βMρM PM(μ,g)) ds
 L₂(h,μs)=∫Tview·βsca·ω·(1−Tsun(μs))/(4π) ds,
-Ldisplay=f(L+L₂)
+L₃(h,μs)=∫Tview·βsca·L₂(h′,μs) ds,
+Ldisplay=f(L+L₂+L₃)
 ```
 
 El rayo intersecta las esferas de superficie y techo atmosférico. Doce muestras de vista y
@@ -48,7 +52,7 @@ La sombra del planeta corta el Sol directo y también anula explícitamente S₂
 opaca no se interpreta como luz dispersada. `AtmosphereOptics` replica profundidad óptica y
 transmitancia en C#; la luz usa masa de aire Kasten–Young para sunsets rojos.
 
-El transporte de orden dos es global en altura pero isotrópico en ángulo: recupera parte del
+El transporte de órdenes dos y tres es global en altura pero isotrópico en ángulo: recupera parte del
 relleno perdido por single scattering sin exceder el límite local, pero no garantiza todavía
 conservación energética global, no transporta rebotes espaciales/angulares completos y no
 sustituye las LUTs 4D de Bruneton. Sus intensidades son datos por planeta: Tierra 0,25, Marte
@@ -65,9 +69,9 @@ calibrables en datos, no mediciones oficiales.
 
 ## Evidencia
 
-- 30 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
+- 32 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
   transmitancia, ozono, enrojecimiento del Sol bajo, fuente difusa acotada/sombreada y
-  ocho invariantes nuevas de LUT, transporte global y refracción.
+  diez invariantes nuevas de LUT, transporte global, horizonte subhorizonte y refracción.
 - 5 pruebas de adaptación ocular: asimetría luz/oscuridad, monotonía, límites e
   independencia de la partición temporal.
 - Matriz framebuffer 12 m/20 km/80 km: limb curvo, espacio negro fuera de columna y
@@ -87,11 +91,11 @@ bash tools/atmosphere_quick_check.sh
 
 ## Próximos gates
 
-1. LUT 4D de órdenes superiores y unidades espectrales; reemplazar el transporte isotrópico
-   de orden dos.
+1. LUT 4D angular de órdenes superiores y unidades espectrales; reemplazar el transporte
+   isotrópico de los órdenes dos/tres.
 2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
    sobre terreno y aerial perspective segmentada.
 3. Aerosoles por clima/latitud y capas Venus validadas.
-4. Trazador refractivo completo del disco, horizonte y estrellas; polarización y química del
-   airglow.
+4. Trazador refractivo de dos ramas para disco, horizonte y estrellas; polarización y química
+   del airglow.
 5. Golden por cuerpo: mediodía, sunset, 20/50/80/150/400 km y eclipse.

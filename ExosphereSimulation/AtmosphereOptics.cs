@@ -177,8 +177,7 @@ public sealed record AtmosphereOptics
         // A non-finite observation must never turn into full, unattenuated sunlight.
         // This is especially important for the game-layer exposure controller during
         // scene/bootstrap frames, when a body position may not be initialised yet.
-        if (!double.IsFinite(altitude) || !double.IsFinite(sunElevationSin)
-            || sunElevationSin <= 0.0)
+        if (!double.IsFinite(altitude) || !double.IsFinite(sunElevationSin))
             return Vector3d.Zero;
         if (!double.IsFinite(planetRadius) || planetRadius <= 0.0
             || !double.IsFinite(atmosphereTopAltitude) || atmosphereTopAltitude <= 0.0)
@@ -186,17 +185,219 @@ public sealed record AtmosphereOptics
             return DirectSolarTransmittance(altitude, sunElevationSin);
         }
 
-        var tau = SurfaceRefractivity > 0.0 && RefractiveScaleHeight > 0.0
-            ? OpticalDepthAlongRefractedRay(
-                altitude, System.Math.Clamp(sunElevationSin, 0.0, 1.0),
-                planetRadius, atmosphereTopAltitude, sampleCount)
-            : OpticalDepthAlongRay(
-                altitude, System.Math.Clamp(sunElevationSin, 0.0, 1.0),
+        if (SurfaceRefractivity > 0.0 && RefractiveScaleHeight > 0.0)
+        {
+            // The input is the geometric solar elevation.  Refraction changes the
+            // apparent elevation before the ray enters the atmosphere; solving that
+            // angle is what makes a sun a few tenths of a degree below the geometric
+            // horizon visible instead of hard-clipping to black.
+            if (!TrySolveRefractedSolarElevation(
+                    altitude, sunElevationSin, planetRadius, atmosphereTopAltitude,
+                    out double apparentElevationSin, sampleCount))
+                return Vector3d.Zero;
+
+            var refractedTau = OpticalDepthAlongRefractedRay(
+                altitude, apparentElevationSin,
                 planetRadius, atmosphereTopAltitude, sampleCount);
+            return new Vector3d(
+                System.Math.Exp(-refractedTau.X),
+                System.Math.Exp(-refractedTau.Y),
+                System.Math.Exp(-refractedTau.Z));
+        }
+
+        if (sunElevationSin <= 0.0) return Vector3d.Zero;
+        var tau = OpticalDepthAlongRay(
+            altitude, System.Math.Clamp(sunElevationSin, 0.0, 1.0),
+            planetRadius, atmosphereTopAltitude, sampleCount);
         return new Vector3d(
             System.Math.Exp(-tau.X),
             System.Math.Exp(-tau.Y),
             System.Math.Exp(-tau.Z));
+    }
+
+    /// <summary>
+    /// Solves the apparent solar elevation for a spherical refractive atmosphere.
+    ///
+    /// A ray leaves the observer at the apparent angle, accumulates the angular
+    /// displacement <c>∫ p/(r√((nr)²−p²)) dr</c> through the atmosphere, and then
+    /// continues as a vacuum ray.  Bisection is deterministic and monotonic for the
+    /// ordinary terrestrial profile; profiles with a refractive duct are rejected by
+    /// the path-integral guard and fall back to an explicit no-beam result rather than
+    /// fabricating energy.  Negative geometric elevations are accepted while the
+    /// refracted path still clears the planet.
+    /// </summary>
+    public bool TrySolveRefractedSolarElevation(
+        double altitude,
+        double geometricElevationSin,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        out double apparentElevationSin,
+        int sampleCount = 48)
+    {
+        apparentElevationSin = 0.0;
+        if (!double.IsFinite(altitude) || !double.IsFinite(geometricElevationSin)
+            || !double.IsFinite(planetRadius) || !double.IsFinite(atmosphereTopAltitude)
+            || !double.IsFinite(SurfaceRefractivity) || !double.IsFinite(RefractiveScaleHeight)
+            || planetRadius <= 0.0 || atmosphereTopAltitude <= 0.0)
+            return false;
+        if (SurfaceRefractivity <= 0.0 || RefractiveScaleHeight <= 0.0)
+        {
+            if (geometricElevationSin <= 0.0) return false;
+            apparentElevationSin = System.Math.Clamp(geometricElevationSin, 0.0, 1.0);
+            return true;
+        }
+
+        double geometricElevation = System.Math.Asin(
+            System.Math.Clamp(geometricElevationSin, -1.0, 1.0));
+        if (geometricElevation >= System.Math.PI * 0.5 - 1e-8)
+        {
+            apparentElevationSin = 1.0;
+            return true;
+        }
+
+        // A horizon ray is the lower end of the ordinary monotonic branch.  Its
+        // asymptotic elevation is negative by the amount of the real horizon lift.
+        if (!TryRefractedAsymptoticElevation(
+                altitude, 0.0, planetRadius, atmosphereTopAltitude,
+                out double geometricHorizon, sampleCount))
+        {
+            if (geometricElevation <= 0.0) return false;
+            apparentElevationSin = System.Math.Sin(geometricElevation);
+            return true;
+        }
+        if (geometricElevation < geometricHorizon - 1e-6)
+            return false;
+
+        double high = System.Math.PI * 0.5 - 1e-7;
+        if (!TryRefractedAsymptoticElevation(
+                altitude, high, planetRadius, atmosphereTopAltitude,
+                out double highGeometric, sampleCount))
+            return false;
+        if (geometricElevation >= highGeometric)
+        {
+            apparentElevationSin = System.Math.Sin(high);
+            return true;
+        }
+
+        // f(apparent) = geometric is monotonic on the non-ducted branch.
+        double low = 0.0;
+        for (int iteration = 0; iteration < 36; iteration++)
+        {
+            double middle = 0.5 * (low + high);
+            if (!TryRefractedAsymptoticElevation(
+                    altitude, middle, planetRadius, atmosphereTopAltitude,
+                    out double middleGeometric, sampleCount))
+                return false;
+            if (middleGeometric < geometricElevation)
+                low = middle;
+            else
+                high = middle;
+        }
+
+        apparentElevationSin = System.Math.Sin(0.5 * (low + high));
+        return true;
+    }
+
+    private bool TryRefractedAsymptoticElevation(
+        double altitude,
+        double apparentElevation,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        out double geometricElevation,
+        int sampleCount)
+    {
+        geometricElevation = 0.0;
+        altitude = System.Math.Max(0.0, altitude);
+        double r0 = planetRadius + altitude;
+        double rTop = planetRadius + atmosphereTopAltitude;
+        double span = rTop - r0;
+        if (span <= 0.0) return false;
+
+        double n0 = RefractiveIndex(altitude);
+        double p = n0 * r0 * System.Math.Cos(
+            System.Math.Clamp(apparentElevation, 0.0, System.Math.PI * 0.5));
+        if (!TryIntegrateRefractedAngularPath(
+                altitude, planetRadius, rTop, p, sampleCount,
+                out double angularDisplacement))
+            return false;
+
+        double nTop = RefractiveIndex(atmosphereTopAltitude);
+        double vacuumTail = System.Math.Asin(System.Math.Clamp(
+            p / System.Math.Max(nTop * rTop, 1.0), 0.0, 1.0));
+        geometricElevation = System.Math.PI * 0.5
+            - angularDisplacement - vacuumTail;
+        return double.IsFinite(geometricElevation);
+    }
+
+    /// <summary>
+    /// Integrates the angular ray displacement in the radial coordinate.  The preflight
+    /// scan catches refractive ducts (where n·r has a local minimum below the invariant)
+    /// instead of clamping an imaginary square root and creating non-physical energy.
+    /// </summary>
+    private bool TryIntegrateRefractedAngularPath(
+        double altitude,
+        double planetRadius,
+        double atmosphereTopRadius,
+        double invariant,
+        int sampleCount,
+        out double integral)
+    {
+        integral = 0.0;
+        double r0 = planetRadius + System.Math.Max(0.0, altitude);
+        double span = atmosphereTopRadius - r0;
+        if (span <= 0.0) return false;
+
+        int scanSteps = System.Math.Max(32, sampleCount * 2);
+        for (int i = 0; i <= scanSteps; i++)
+        {
+            double u = (double)i / scanSteps;
+            double radius = r0 + span * u * u;
+            double product = RefractiveIndex(radius - planetRadius) * radius;
+            if (product + 1e-5 < invariant) return false;
+        }
+
+        int n = System.Math.Max(8, sampleCount);
+        if ((n & 1) != 0) n++;
+        double step = 1.0 / n;
+        for (int i = 0; i <= n; i++)
+        {
+            double u = i * step;
+            double radius = r0 + span * u * u;
+            double drDu = 2.0 * span * u;
+            double product = RefractiveIndex(radius - planetRadius) * radius;
+            double delta = product * product - invariant * invariant;
+            double angularDu;
+            if (i == 0 && delta <= 1e-8)
+            {
+                // The grazing endpoint is an integrable square-root singularity.
+                // Evaluate its finite transformed limit instead of dropping it to
+                // zero, which otherwise biases the horizon bending by several percent.
+                double derivative = RefractiveProductDerivative(radius, radius - planetRadius);
+                if (derivative <= 0.0) return false;
+                angularDu = 2.0 * invariant * span
+                    / (radius * System.Math.Sqrt(2.0 * invariant * derivative * span));
+            }
+            else
+            {
+                if (delta <= 0.0) return false;
+                angularDu = invariant * drDu
+                    / (radius * System.Math.Sqrt(delta));
+            }
+
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            integral += weight * angularDu;
+        }
+
+        integral *= step / 3.0;
+        return double.IsFinite(integral) && integral >= 0.0;
+    }
+
+    private double RefractiveProductDerivative(double radius, double altitude)
+    {
+        double refractivity = SurfaceRefractivity * System.Math.Exp(
+            -System.Math.Max(0.0, altitude) / RefractiveScaleHeight);
+        return 1.0 + refractivity
+            - radius * refractivity / RefractiveScaleHeight;
     }
 
     /// <summary>
@@ -263,8 +464,8 @@ public sealed record AtmosphereOptics
     /// Snell's invariant <c>p = n r sin(zenith)</c> is held constant and the radial
     /// integral uses <c>ds/dr = 1 / sqrt(1 - (p/(nr))²)</c>.  The transformed variable
     /// <c>r = r₀ + (Rtop-r₀)u²</c> resolves the dense lower atmosphere and the grazing
-    /// singularity deterministically.  Sub-horizon turning rays are deliberately rejected
-    /// here; they need a two-branch tangent solve and are the next refraction milestone.
+    /// singularity deterministically.  Sub-horizon source directions are first mapped
+    /// to an apparent outbound elevation by <see cref="TrySolveRefractedSolarElevation"/>.
     /// </summary>
     public Vector3d OpticalDepthAlongRefractedRay(
         double altitude,
@@ -307,6 +508,7 @@ public sealed record AtmosphereOptics
             double dnDu = 2.0 * span * u;
             double refractiveRadius = RefractiveIndex(localAltitude) * radius;
             double ratio = p / System.Math.Max(refractiveRadius, 1.0);
+            if (ratio > 1.0 + 1e-8) return Vector3d.Zero;
             double radial = System.Math.Sqrt(System.Math.Max(1e-12, 1.0 - ratio * ratio));
             double dsDu = dnDu / radial;
             Vector3d density = new(

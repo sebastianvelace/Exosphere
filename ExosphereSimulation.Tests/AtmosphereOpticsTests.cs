@@ -51,7 +51,12 @@ public sealed class AtmosphereOpticsTests
         Assert.True(low.Y < zenith.Y);
         Assert.True(low.Z < zenith.Z);
         Assert.True(low.X / low.Z > zenith.X / zenith.Z);
-        Assert.Equal(Vector3d.Zero, optics.DirectSolarTransmittance(0.0, -0.01));
+        var refractedBelowHorizon = optics.DirectSolarTransmittance(0.0, -0.01);
+        Assert.True(refractedBelowHorizon.X > 0.0
+            && refractedBelowHorizon.Y > 0.0
+            && refractedBelowHorizon.Z > 0.0,
+            $"the refracted solar branch should retain a near-horizon beam: {refractedBelowHorizon}");
+        Assert.Equal(Vector3d.Zero, optics.DirectSolarTransmittance(0.0, -0.04));
     }
 
     [Fact]
@@ -301,7 +306,7 @@ public sealed class AtmosphereOpticsTests
         int x = 13;
         int y = 7;
         double altitude = top * AtmosphereTransmittanceLut.CoordinateValue(x, lut.Width);
-        double solarSin = AtmosphereTransmittanceLut.CoordinateValue(y, lut.Height);
+        double solarSin = AtmosphereTransmittanceLut.SolarElevationSin(y, lut.Height);
         var expected = optics.DirectSolarTransmittance(
             altitude, solarSin, radius, top, sampleCount: 32);
 
@@ -341,7 +346,10 @@ public sealed class AtmosphereOpticsTests
         Assert.True(horizon.X < zenith.X && horizon.Y < zenith.Y && horizon.Z < zenith.Z);
         Assert.True(horizon.X / Math.Max(horizon.Z, 1e-12)
             > zenith.X / Math.Max(zenith.Z, 1e-12));
-        Assert.Equal(Vector3d.Zero, lut.Sample(0.0, -0.01));
+        var refracted = lut.Sample(0.0, -0.01);
+        Assert.True(refracted.X > 0.0 && refracted.Y > 0.0 && refracted.Z > 0.0,
+            $"LUT dropped the refracted near-horizon beam: {refracted}");
+        Assert.Equal(Vector3d.Zero, lut.Sample(0.0, -0.08));
     }
 
     [Fact]
@@ -387,7 +395,10 @@ public sealed class AtmosphereOpticsTests
         Assert.True(high.X >= 0.0 && high.Y >= 0.0 && high.Z >= 0.0);
         Assert.True(ground.X >= high.X && ground.Y >= high.Y && ground.Z >= high.Z,
             $"global second-order radiance grew above the column: ground={ground}, high={high}");
-        Assert.Equal(Vector3d.Zero, lut.Sample(0.0, -0.01));
+        var refracted = lut.Sample(0.0, -0.01);
+        Assert.True(refracted.X > 0.0 && refracted.Y > 0.0 && refracted.Z > 0.0,
+            $"order-two LUT dropped the refracted near-horizon beam: {refracted}");
+        Assert.Equal(Vector3d.Zero, lut.Sample(0.0, -0.08));
     }
 
     [Fact]
@@ -422,6 +433,41 @@ public sealed class AtmosphereOpticsTests
         Assert.True(Math.Abs(refracted.X - straight.X) > 1e-8
             || Math.Abs(refracted.Z - straight.Z) > 1e-8,
             $"refractive path collapsed to the straight ray: straight={straight}, refracted={refracted}");
+    }
+
+    [Fact]
+    public void RefractedSolarSolverLiftsTheApparentHorizonButRejectsDeepNight()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        bool nearHorizon = optics.TrySolveRefractedSolarElevation(
+            0.0, -0.01, 6_371_000.0, 140_000.0,
+            out double apparentSin, sampleCount: 64);
+        bool deepNight = optics.TrySolveRefractedSolarElevation(
+            0.0, -0.08, 6_371_000.0, 140_000.0,
+            out _, sampleCount: 64);
+
+        Assert.True(nearHorizon);
+        Assert.True(apparentSin > 0.0,
+            $"a visible refracted source must leave the observer above the local tangent: {apparentSin}");
+        Assert.False(deepNight);
+    }
+
+    [Fact]
+    public void ZeroRefractivityPreservesTheGeometricDirectBeamRule()
+    {
+        var vacuum = new AtmosphereOptics
+        {
+            RayleighScattering = new Vector3d(1e-6, 2e-6, 3e-6),
+            SurfaceRefractivity = 0.0,
+            RefractiveScaleHeight = 0.0,
+        };
+
+        Assert.False(vacuum.TrySolveRefractedSolarElevation(
+            0.0, -0.01, 6_371_000.0, 140_000.0, out _));
+        Assert.Equal(Vector3d.Zero, vacuum.DirectSolarTransmittance(
+            0.0, -0.01, 6_371_000.0, 140_000.0));
+        Assert.True(vacuum.DirectSolarTransmittance(
+            0.0, 0.25, 6_371_000.0, 140_000.0).X > 0.0);
     }
 
     private static CelestialBody LoadBody(string id) => CelestialBody.LoadFromJson(

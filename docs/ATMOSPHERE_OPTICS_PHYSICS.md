@@ -1,6 +1,6 @@
 # Contrato físico de la óptica atmosférica
 
-**Estado:** V3 implementado en la simulación y validado numéricamente
+**Estado:** V5 implementado en la simulación y validado numéricamente
 **Alcance:** `ExosphereSimulation/AtmosphereOptics.cs` y sus consumidores de iluminación/exposición
 
 Este documento describe el contrato que debe respetar cualquier renderer o sistema de
@@ -54,16 +54,20 @@ r(s)    = √(r₀² + s² + 2 r₀ μ s)
 
 La profundidad se obtiene integrando `βext(r(s) − R)` con Simpson determinista. Si el perfil
 declara refractividad, `DirectSolarTransmittance` usa además el invariante esférico de Snell y
-la coordenada radial transformada `r=r₀+(Rtop-r₀)u²`; esto cambia la trayectoria saliente sin
-alterar la física de vuelo. El número de muestras se fuerza a ser par y nunca baja de ocho.
+resuelve por bisección la elevación aparente que conecta con la dirección geométrica del Sol.
+La integral angular incluye el tramo en vacío desde el techo; después la profundidad refractada
+usa la coordenada radial transformada `r=r₀+(Rtop-r₀)u²`. Por ello un Sol ligeramente por debajo
+del horizonte geométrico conserva un rayo si la trayectoria despeja el planeta, mientras que una
+noche más profunda devuelve cero. El número de muestras se fuerza a ser par y nunca baja de ocho.
 Esta curvatura es esencial cerca del
 horizonte: `1 / cos(zenith)` supone una columna plana infinita y sobre-extingue la luz en
 amaneceres, atardeceres, planetas pequeños y cámaras a gran altitud.
 
-La dirección solar con elevación no positiva no tiene Sol directo en este contrato y devuelve
-`Vector3d.Zero`; el crepúsculo y el airglow son fuentes atmosféricas separadas del rayo solar
-directo. Las entradas no finitas tampoco pueden convertirse en luz sin atenuar: devuelven
-cero para que un frame de inicialización no ilumine la escena por accidente.
+Una elevación geométrica por debajo del horizonte no implica automáticamente cero: el solver
+refractado acepta el intervalo subhorizonte visible y rechaza direcciones sin camino físico. El
+crepúsculo y el airglow siguen siendo fuentes atmosféricas separadas del rayo solar directo.
+Las entradas no finitas tampoco pueden convertirse en luz sin atenuar: devuelven cero para que
+un frame de inicialización no ilumine la escena por accidente.
 
 La sobrecarga histórica `DirectSolarTransmittance(altitude, sunElevationSin)` conserva un
 perfil genérico terrestre para compatibilidad. Los consumidores nuevos deben pasar siempre el
@@ -73,9 +77,10 @@ la curvatura de la Tierra.
 ## LUT de transmitancia en tiempo real
 
 `AtmosphereTransmittanceLut` precalcula la misma transmitancia esférica en una tabla RGB de
-altitud × seno de elevación solar. Las coordenadas se deforman como `u²` y `v²`: se reserva
-resolución para la troposfera y para los rayos rasantes, donde la función cambia con mayor
-rapidez. La tabla se construye una sola vez por cuerpo y se sube como textura lineal HDR al
+altitud × seno de elevación solar. Las coordenadas se deforman como `u²` y `v²`; la segunda
+abarca `sin(elevación) ∈ [-0,04, 1]` para conservar el horizonte refractado sin gastar texels
+en la noche profunda. Se reserva resolución para la troposfera y para los rayos rasantes, donde
+la función cambia con mayor rapidez. La tabla se construye una sola vez por cuerpo y se sube como textura lineal HDR al
 shader `space_sky`; cada muestra de scattering solar hace una interpolación bilineal en vez de
 repetir una cuadratura solar ruidosa por píxel. Si la textura no está disponible, el shader
 mantiene la integración esférica como fallback.
@@ -89,7 +94,9 @@ curvatura terrestre implícita.
 `AtmosphereMultipleScatteringLut` integra el cierre difuso desde cada altura del observador
 hacia el borde atmosférico. Para cada capa combina la fuente local `LowOrderDiffuseSource`,
 la transmitancia solar esférica y la diferencia de profundidad vertical entre observador y
-capa. El resultado es radiancia lineal por unidad de `SunIlluminanceScale`; el shader la
+capa. La primera pasada produce el orden dos; una segunda integral anidada vuelve a transportar
+ese campo isotrópico y añade un rebote de orden tres, limitado por los coeficientes de scattering.
+El resultado es radiancia lineal por unidad de `SunIlluminanceScale`; el shader la
 aplica como relleno isotrópico con una leve ponderación hacia el cenit y desactiva el antiguo
 S₂ por rayo cuando la tabla está disponible. Así el segundo rebote atraviesa toda la columna
 en lugar de depender de los segmentos visibles de una sola dirección.
@@ -102,11 +109,11 @@ una afirmación de que el problema 4D ya esté resuelto.
 
 Cada perfil declara la refractividad superficial `n − 1` y su escala vertical. `HorizonRefractionRadians`
 integra la pendiente esférica de un perfil exponencial, la limita a 0,035 rad y la usa para
-desplazar el disco solar aparente cerca del horizonte. En la Tierra produce aproximadamente
-0,56° al nivel del mar y decae exponencialmente con altura; Marte y Venus usan refractividades
-específicas de sus columnas de CO₂. La integración refractada cubre la rama saliente; los
-rayos subhorizonte con punto de retorno todavía requieren resolver las dos ramas de tangencia.
-No se aplica fuerza ni se cambia la navegación.
+desplazar el disco solar aparente cerca del horizonte. `TrySolveRefractedSolarElevation` integra
+la curvatura angular y añade la cola de vacío para encontrar la rama aparente saliente; también
+detecta perfiles donde `n·r` forma un ducto y rechaza una raíz imaginaria. En la Tierra produce
+aproximadamente 0,56° al nivel del mar y decae exponencialmente con altura; Marte y Venus usan
+refractividades específicas de sus columnas de CO₂. No se aplica fuerza ni se cambia la navegación.
 
 ## Integración local de segundo orden
 
@@ -132,8 +139,10 @@ redondeada mayor que uno genere energía difusa negativa.
 - que entradas no finitas no producen luz solar sin atenuar;
 - que la LUT coincide con el oráculo en sus texels, conserva la monotonicidad y resuelve el
   enrojecimiento de la columna solar rasante;
-- que el transporte global de orden dos permanece finito, disminuye sobre la columna y conserva
-  la dependencia del radio planetario;
+- que el transporte global de órdenes dos y tres permanece finito, disminuye sobre la columna y
+  conserva la dependencia del radio planetario;
+- que el solver refractado eleva una fuente subhorizonte visible, rechaza la noche profunda y
+  vuelve a la regla geométrica cuando la refractividad es cero;
 - que ozono, airglow, nubes y fuente difusa respetan sus soportes y límites.
 
 Ejecutar el conjunto focalizado:
@@ -152,11 +161,11 @@ bash tools/atmosphere_quick_check.sh
 ## Límites conocidos y siguiente nivel de fidelidad
 
 Este contrato sigue siendo una aproximación de scattering: las LUTs resuelven transmitancia
-directa y un rebote global isotrópico de orden dos, y el shader incluye una corrección acotada
-del disco solar y de la rama saliente, pero aún no modela el tramo subhorizonte completo,
-polarización,
+directa y dos rebotes globales isotrópicos (órdenes dos y tres), y el shader incluye una corrección
+acotada del disco solar y de la rama refractada visible, pero aún no modela polarización,
 variación espectral por temperatura, perfil de humedad/aerosoles por clima ni el acoplamiento
-radiativo entre nubes y terreno. El siguiente nivel es una LUT de scattering múltiple de órdenes
-superiores dependiente de altura, ángulo solar y ángulo de visión (Bruneton/Neyret), más un
-integrador refractivo completo para el disco, el horizonte y las estrellas; esta implementación
+radiativo entre nubes y terreno, ni una solución de dos ramas para ductos refractivos densos.
+El siguiente nivel es una LUT de scattering múltiple de órdenes superiores dependiente de altura,
+ángulo solar y ángulo de visión (Bruneton/Neyret), más un integrador refractivo completo para el
+disco, el horizonte y las estrellas; esta implementación
 C# seguirá siendo el oráculo numérico.
