@@ -470,6 +470,40 @@ public sealed class AtmosphereOpticsTests
             0.0, 0.25, 6_371_000.0, 140_000.0).X > 0.0);
     }
 
+    [Fact]
+    public void DenseVenusProfileCanTraceAValidTwoBranchHorizonRay()
+    {
+        var body = LoadBody("venus");
+        var optics = body.Atmosphere!.Optics;
+        const double altitude = 60_000.0;
+        double[] geometricCandidates = { -0.01, -0.02, -0.04, -0.08, -0.12 };
+        bool solved = false;
+        double apparent = 0.0;
+        double selectedGeometric = 0.0;
+        foreach (double geometric in geometricCandidates)
+        {
+            if (optics.TrySolveRefractedSolarElevation(
+                    altitude, geometric, body.Radius, body.Atmosphere.MaxAltitude,
+                    out apparent, sampleCount: 64))
+            {
+                solved = apparent < 0.0;
+                selectedGeometric = geometric;
+                if (solved) break;
+            }
+        }
+
+        Assert.True(solved,
+            $"no two-branch Venus ray solved at 60 km for candidates {string.Join(',', geometricCandidates)}");
+        var tau = optics.OpticalDepthAlongRefractedTwoBranch(
+            altitude, apparent, body.Radius, body.Atmosphere.MaxAltitude, sampleCount: 64);
+        Assert.True(double.IsFinite(tau.X) && double.IsFinite(tau.Y) && double.IsFinite(tau.Z));
+        Assert.True(tau.X > 0.0 && tau.Y > 0.0 && tau.Z > 0.0,
+            $"two-branch path lost extinction: geometric={selectedGeometric}, apparent={apparent}, tau={tau}");
+        var transmittance = optics.DirectSolarTransmittance(
+            altitude, selectedGeometric, body.Radius, body.Atmosphere.MaxAltitude, sampleCount: 64);
+        Assert.True(transmittance.X > 0.0 && transmittance.Y > 0.0 && transmittance.Z > 0.0);
+    }
+
     private static CelestialBody LoadBody(string id) => CelestialBody.LoadFromJson(
         Path.Combine(FindRepoRoot().FullName, "data", "bodies", $"{id}.json"));
 

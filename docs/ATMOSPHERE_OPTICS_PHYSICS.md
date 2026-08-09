@@ -58,7 +58,10 @@ resuelve por bisección la elevación aparente que conecta con la dirección geo
 La integral angular incluye el tramo en vacío desde el techo; después la profundidad refractada
 usa la coordenada radial transformada `r=r₀+(Rtop-r₀)u²`. Por ello un Sol ligeramente por debajo
 del horizonte geométrico conserva un rayo si la trayectoria despeja el planeta, mientras que una
-noche más profunda devuelve cero. El número de muestras se fuerza a ser par y nunca baja de ocho.
+noche más profunda devuelve cero. Si `n·r` tiene un mínimo por encima de la superficie y el
+observador está sobre él, `OpticalDepthAlongRefractedTwoBranch` integra la rama descendente,
+el punto de retorno y la rama ascendente. El número de muestras se fuerza a ser par y nunca baja
+de ocho.
 Esta curvatura es esencial cerca del
 horizonte: `1 / cos(zenith)` supone una columna plana infinita y sobre-extingue la luz en
 amaneceres, atardeceres, planetas pequeños y cámaras a gran altitud.
@@ -126,8 +129,9 @@ espectral de muchas longitudes de onda.
 Cada perfil declara la refractividad superficial `n − 1` y su escala vertical. `HorizonRefractionRadians`
 integra la pendiente esférica de un perfil exponencial, la limita a 0,035 rad y la usa para
 desplazar el disco solar aparente cerca del horizonte. `TrySolveRefractedSolarElevation` integra
-la curvatura angular y añade la cola de vacío para encontrar la rama aparente saliente; también
-detecta perfiles donde `n·r` forma un ducto y rechaza una raíz imaginaria. En la Tierra produce
+la curvatura angular y añade la cola de vacío para encontrar la rama aparente saliente. En perfiles
+con un ducto, busca además una raíz de retorno y suma ambas ramas sólo cuando el camino despeja
+la superficie; una raíz imaginaria o un rayo que impacta se anula. En la Tierra produce
 aproximadamente 0,56° al nivel del mar y decae exponencialmente con altura; Marte y Venus usan
 refractividades específicas de sus columnas de CO₂. No se aplica fuerza ni se cambia la navegación.
 
@@ -180,9 +184,9 @@ bash tools/atmosphere_quick_check.sh
 
 Este contrato sigue siendo una aproximación de scattering: las LUTs resuelven transmitancia
 directa, dos rebotes globales y una envolvente angular 4D de baja resolución, y el shader incluye
-una corrección acotada del disco solar y de la rama refractada visible, pero aún no modela polarización,
+una corrección acotada del disco solar y de las ramas refractadas visibles, pero aún no modela polarización,
 variación espectral por temperatura, perfil de humedad/aerosoles por clima ni el acoplamiento
-radiativo entre nubes y terreno, ni una solución de dos ramas para ductos refractivos densos.
+radiativo entre nubes y terreno, ni un trazado refractivo estelar de distancia finita.
 El siguiente nivel es una LUT de scattering múltiple de órdenes superiores dependiente de altura,
 ángulo solar y ángulo de visión (Bruneton/Neyret), más un integrador refractivo completo para el
 disco, el horizonte y las estrellas; esta implementación
