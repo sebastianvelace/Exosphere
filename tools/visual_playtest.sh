@@ -401,7 +401,11 @@ public partial class _PlaytestShot : Node
         ("cockpit_120km_night", 120_000.0, -35.0, true),
     };
     const int AtmosphereMinimumSettleFrames = 8;
-    const double AtmosphereSettleSeconds = 1.2;
+    // Incremental Sky updates one cubemap face per frame.  The atmospheric shader is
+    // intentionally expensive on llvmpipe, so a 1.2 s fixed delay could capture a
+    // half-updated (black or white) face after a solar-elevation change.  Wait long
+    // enough for a complete six-face refresh before judging the optics.
+    const double AtmosphereSettleSeconds = 6.0;
     const double AtmosphereMaximumSettleSeconds = 45.0;
     const int AtmosphereExposureStableFrames = 4;
     const double AtmosphereExposureRateTolerance = 0.015;
@@ -1497,10 +1501,13 @@ public partial class _PlaytestShot : Node
     private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
         Vessel vessel, Universe universe, CelestialBody body)
     {
-        if (_readyFrames < 60) return;
-
         if (_atmosIndex < 0)
         {
+            // Freeze the physical clock before the first case is applied. Previously the
+            // default launch craft was allowed to run for 60 frames, often crashing on the
+            // pad before the matrix could move it to its requested altitude. That made every
+            // capture report the same ~0 m state while the PNG gate still claimed success.
+            bridge.SetTimeScale(0.0);
             _atmosIndex = 0;
             ApplyAtmosphereCase(bridge, vessel, universe, body);
         }
@@ -1613,6 +1620,8 @@ public partial class _PlaytestShot : Node
             CameraController.Instance.ProcessMode = ProcessModeEnum.Disabled;
         if (GetTree().Root.FindChild("StarshipRenderer", true, false) is Node3D renderer)
             renderer.Visible = false;
+        if (GetTree().Root.FindChild("ActiveVesselRenderer", true, false) is Node3D activeRenderer)
+            activeRenderer.Visible = false;
         if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D cockpit)
             cockpit.Visible = false;
 
@@ -2145,6 +2154,62 @@ verify_pngs() {
       return 1
     fi
 
+    # Presence alone is not enough: a stale vessel/camera state can still produce a
+    # perfectly valid PNG while labeling it as another altitude or solar elevation.
+    # Compare every state against the immediately preceding ATMOS_APPLY request so the
+    # matrix remains a physical, reproducible experiment rather than just a screenshot
+    # inventory. The tolerances cover only telemetry rounding and floating-point body
+    # geometry (not an accidental launch, drift, or wrong Sun direction).
+    if ! awk '
+      function value(prefix,    i, pair) {
+        for (i = 1; i <= NF; i++)
+          if ($i ~ ("^" prefix "=")) {
+            split($i, pair, "=")
+            return pair[2]
+          }
+        return ""
+      }
+      function abs(value) { return value < 0 ? -value : value }
+      function reject(message) {
+        print "ERROR: atmosphere state gate: " message > "/dev/stderr"
+        bad = 1
+      }
+      /^ATMOS_APPLY / {
+        slug = value("slug")
+        if (slug == "") { reject("request without slug: " $0); next }
+        requestedAlt[slug] = value("targetAlt") + 0
+        requestedSun[slug] = value("targetSunElevation") + 0
+        requested[slug] = 1
+      }
+      /^ATMOS_STATE / {
+        slug = value("slug")
+        if (!(slug in requested)) {
+          reject("state has no matching request: " slug)
+          next
+        }
+        actualAlt = value("actualAlt")
+        actualSun = value("sunElevation")
+        if (actualAlt == "" || actualSun == "") {
+          reject("missing actualAlt/sunElevation for " slug)
+          next
+        }
+        if (abs(actualAlt + 0 - requestedAlt[slug]) > 2.0)
+          reject(slug " altitude mismatch: actual=" (actualAlt + 0) \
+            " target=" requestedAlt[slug] " (tolerance 2 m)")
+        if (abs(actualSun + 0 - requestedSun[slug]) > 0.25)
+          reject(slug " solar-elevation mismatch: actual=" (actualSun + 0) \
+            " target=" requestedSun[slug] " (tolerance 0.25 deg)")
+        seen[slug]++
+      }
+      END {
+        for (slug in requested)
+          if (!(slug in seen)) reject("missing state for " slug)
+        exit bad
+      }
+    ' "$LOG"; then
+      return 1
+    fi
+
     # These are instrumentation/physics guardrails, not a subjective image-quality score.
     # Each threshold targets a failure mode visible in prior regressions:
     #   * regional clipping catches a white surface sky hidden by a normal whole-frame mean;
@@ -2201,7 +2266,9 @@ verify_pngs() {
         }
         mean = get(slug, "mean")
         clip = get(slug, "clippedFrac")
-        if (mean < 0.0005 || mean > 0.9995 || clip > 0.95) {
+        # A real night-side frame can have a mean below 5e-4 after exposure adapts;
+        # reject only an effectively black framebuffer, not a dim star/airglow field.
+        if (mean < 0.00002 || mean > 0.9995 || clip > 0.95) {
           reject("degenerate capture " slug ": mean=" mean " clippedFrac=" clip)
         }
       }
@@ -2278,8 +2345,7 @@ verify_pngs() {
             "twilight horizon lacks red/blue spectral separation")
           require_metric(twilight[p], "twilightHorizonMean")
           require_metric("ground_night", "twilightHorizonMean")
-          if (get(twilight[p], "twilightHorizonMean")
-              < get("ground_night", "twilightHorizonMean") + 0.012)
+          if (get(twilight[p], "twilightHorizonMean") < get("ground_night", "twilightHorizonMean") + 0.012)
             reject(twilight[p] " horizon is not measurably brighter than full night")
         }
 
@@ -2303,7 +2369,10 @@ fi
 PLAYTEST_LOCK="/tmp/exosphere-visual-playtest.lock"
 exec {PLAYTEST_LOCK_FD}>"$PLAYTEST_LOCK"
 if ! flock -n "$PLAYTEST_LOCK_FD"; then
-  echo "ERROR: another visual_playtest process is already using the temporary autoload" >&2
+  echo "ERROR: another visual_playtest process is already using the temporary autoload ($PLAYTEST_LOCK)" >&2
+  echo "  Check who holds it: lsof \"$PLAYTEST_LOCK\" (or fuser \"$PLAYTEST_LOCK\")" >&2
+  echo "  If every listed PID is gone/stuck (e.g. an orphaned dotnet build-server), the lock" >&2
+  echo "  releases itself once those processes are killed — it is not a stale pidfile to rm -f." >&2
   exit 1
 fi
 OWNS_HARNESS=1
@@ -2311,7 +2380,12 @@ OWNS_HARNESS=1
 register_autoload
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
-  dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
+  # Close the lock fd for this child: dotnet build can spawn a long-lived, detached
+  # VBCSCompiler/MSBuild worker ("build server") that outlives this script. If that
+  # daemon inherited fd $PLAYTEST_LOCK_FD, a later hang in it would keep the flock
+  # held forever, orphaning the lock even after this script's own process exits.
+  dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet \
+    {PLAYTEST_LOCK_FD}>&-
 fi
 
 mkdir -p "$OUT_DIR"
@@ -2343,11 +2417,14 @@ if [[ "$MODE" == "reentry_compare" ]]; then
     : > "$LOG"
     : > "$CONSOLE_LOG"
     write_harness
-    dotnet build Exosphere.csproj --nologo -v quiet
+    # See the SKIP_BUILD block above: {PLAYTEST_LOCK_FD}>&- keeps the lock fd out of every
+    # build/launch child so a hung build-server or stray Godot subprocess can never hold the
+    # flock past this script's own lifetime.
+    dotnet build Exosphere.csproj --no-restore --nologo -v quiet {PLAYTEST_LOCK_FD}>&-
     EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
     xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
       --path . --rendering-driver opengl3 \
-      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+      res://scenes/flight/Flight.tscn {PLAYTEST_LOCK_FD}>&- 2>&1 | tee -a "$CONSOLE_LOG"
     cat "$LOG" >> "$COMBINED_LOG"
     cat "$CONSOLE_LOG" >> "$COMBINED_CONSOLE_LOG"
     rm -f "$LOG" "$CONSOLE_LOG"
@@ -2357,11 +2434,11 @@ if [[ "$MODE" == "reentry_compare" ]]; then
 else
   HARNESS_MODE="$MODE"
   write_harness
-  dotnet build Exosphere.csproj --nologo -v quiet
+  dotnet build Exosphere.csproj --no-restore --nologo -v quiet {PLAYTEST_LOCK_FD}>&-
   EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
   xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
     --path . --rendering-driver opengl3 \
-    res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+    res://scenes/flight/Flight.tscn {PLAYTEST_LOCK_FD}>&- 2>&1 | tee -a "$CONSOLE_LOG"
 fi
 
 verify_pngs
