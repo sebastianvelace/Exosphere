@@ -18,6 +18,12 @@ uniform float transmittance_lut_min_solar_sin = -0.04;
 // Global order-two radiance, built from the same C# profile as the transmittance LUT.
 uniform sampler2D multiple_scattering_lut : filter_linear;
 uniform bool multiple_scattering_lut_enabled = false;
+// The 4D angular LUT is packed as [mu][view][solar] rows in the same 2D texture.
+// Dimensions are uniforms so a diagnostic build can use a smaller atlas without
+// changing shader source.
+uniform float multiple_scattering_solar_layers = 20.0;
+uniform float multiple_scattering_view_layers = 12.0;
+uniform float multiple_scattering_mu_layers = 12.0;
 
 uniform vec3 rayleigh_scattering = vec3(5.802e-6, 13.558e-6, 33.100e-6);
 uniform vec3 mie_scattering = vec3(3.996e-6);
@@ -201,15 +207,42 @@ vec3 solar_transmittance(vec3 position, vec3 direction, float outer_radius) {
 	return transmittance(optical_depth_to_sun(position, direction, outer_radius));
 }
 
-vec3 multiple_scattering_radiance(float altitude, float solar_sin) {
+vec3 angular_multiple_scattering_slice(
+	float altitude_u, float solar_v, float view_index, float mu_index) {
+	float row = (mu_index * multiple_scattering_view_layers + view_index)
+		* multiple_scattering_solar_layers
+		+ solar_v * (multiple_scattering_solar_layers - 1.0) + 0.5;
+	float packed_height = multiple_scattering_solar_layers
+		* multiple_scattering_view_layers * multiple_scattering_mu_layers;
+	return max(texture(multiple_scattering_lut,
+		vec2(altitude_u, row / max(packed_height, 1.0))).rgb, vec3(0.0));
+}
+
+vec3 angular_multiple_scattering_radiance(
+	float altitude, float solar_sin, float view_cosine, float view_sun_cosine) {
 	if (!multiple_scattering_lut_enabled
-		|| solar_sin < transmittance_lut_min_solar_sin) return vec3(0.0);
+		|| solar_sin < transmittance_lut_min_solar_sin || view_cosine <= 0.0)
+		return vec3(0.0);
 	float altitude_u = sqrt(clamp(altitude / max(atmosphere_height, 1.0), 0.0, 1.0));
 	float solar_normalized = (clamp(solar_sin,
 		transmittance_lut_min_solar_sin, 1.0) - transmittance_lut_min_solar_sin)
 		/ max(1.0 - transmittance_lut_min_solar_sin, 1e-4);
 	float solar_v = sqrt(clamp(solar_normalized, 0.0, 1.0));
-	return max(texture(multiple_scattering_lut, vec2(altitude_u, solar_v)).rgb, vec3(0.0));
+	float view_v = (clamp(view_cosine, -1.0, 1.0) * 0.5 + 0.5)
+		* (multiple_scattering_view_layers - 1.0);
+	float mu_v = (clamp(view_sun_cosine, -1.0, 1.0) * 0.5 + 0.5)
+		* (multiple_scattering_mu_layers - 1.0);
+	float view0 = floor(view_v);
+	float mu0 = floor(mu_v);
+	float view1 = min(view0 + 1.0, multiple_scattering_view_layers - 1.0);
+	float mu1 = min(mu0 + 1.0, multiple_scattering_mu_layers - 1.0);
+	float tv = view_v - view0;
+	float tm = mu_v - mu0;
+	vec3 c00 = angular_multiple_scattering_slice(altitude_u, solar_v, view0, mu0);
+	vec3 c10 = angular_multiple_scattering_slice(altitude_u, solar_v, view1, mu0);
+	vec3 c01 = angular_multiple_scattering_slice(altitude_u, solar_v, view0, mu1);
+	vec3 c11 = angular_multiple_scattering_slice(altitude_u, solar_v, view1, mu1);
+	return mix(mix(c00, c10, tv), mix(c01, c11, tv), tm);
 }
 
 vec2 dir_to_equirect(vec3 direction) {
@@ -414,14 +447,17 @@ void sky() {
 	vec3 atmosphere = ((in_scatter + diffuse_scatter + twilight_radiance)
 		* atmospheric_solar_visibility
 		+ cloud_radiance) * sun_illuminance;
-	// The order-two LUT transports the local diffuse source through the entire column.
-	// It is isotropic by construction; a mild upward weighting accounts for the shorter
-	// escape path without pretending this 2D table is a full 4D angular solution.
+	// The angular LUT transports orders two/three through the complete column and
+	// resolves the view zenith and view/sun phase coordinates. Groundward rays are
+	// rejected by the LUT itself, so a planet cannot leak atmospheric fill through
+	// its opaque surface.
 	float observer_solar_sin = dot(up, to_sun);
-	vec3 global_multiple = multiple_scattering_radiance(
-		max(observer_altitude, 0.0), observer_solar_sin);
-	float view_up = clamp(0.5 + 0.5 * dot(view_dir, up), 0.0, 1.0);
-	atmosphere += global_multiple * (0.55 + 0.45 * view_up)
+	float observer_view_cosine = dot(view_dir, up);
+	float observer_view_sun_cosine = dot(view_dir, to_sun);
+	vec3 global_multiple = angular_multiple_scattering_radiance(
+		max(observer_altitude, 0.0), observer_solar_sin,
+		observer_view_cosine, observer_view_sun_cosine);
+	atmosphere += global_multiple
 		* atmospheric_solar_visibility * sun_illuminance;
 	// Chapman-style closure for the visible twilight dome.  At a grazing solar
 	// elevation the line of sight is tangent below the high layer, so a pure

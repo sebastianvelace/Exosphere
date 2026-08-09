@@ -7,9 +7,10 @@ using Godot;
 
 /// <summary>
 /// Binds the dominant body's physical optical atmosphere to the spherical sky shader. The
-/// view ray remains integrated in the shader, while direct solar throughput comes from a
-/// CPU-built spherical LUT shared with the simulation oracle. This removes noisy per-pixel
-/// solar quadrature and keeps ground, twilight, limb and orbit on one continuous model.
+/// view ray remains integrated in the shader, while direct solar throughput and the global
+/// multiple-scattering field come from CPU-built spherical LUTs shared with the simulation
+/// oracle. This removes noisy per-pixel solar quadrature and keeps ground, twilight, limb and
+/// orbit on one continuous model.
 /// </summary>
 [GlobalClass]
 public partial class SkyController : Node
@@ -37,6 +38,11 @@ public partial class SkyController : Node
     private const int MultipleScatteringLutHeight = 48;
     private const int MultipleScatteringIntegrationSteps = 48;
     private const int MultipleScatteringSolarSamples = 32;
+    private const int AngularScatteringLutWidth = 32;
+    private const int AngularScatteringSolarLayers = 20;
+    private const int AngularScatteringViewLayers = 12;
+    private const int AngularScatteringMuLayers = 12;
+    private const int AngularScatteringOpticalDepthSamples = 32;
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
@@ -64,6 +70,12 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
         _skyMat.SetShaderParameter("transmittance_lut_min_solar_sin",
             (float)AtmosphereTransmittanceLut.MinimumSolarElevationSin);
+        _skyMat.SetShaderParameter("multiple_scattering_solar_layers",
+            (float)AngularScatteringSolarLayers);
+        _skyMat.SetShaderParameter("multiple_scattering_view_layers",
+            (float)AngularScatteringViewLayers);
+        _skyMat.SetShaderParameter("multiple_scattering_mu_layers",
+            (float)AngularScatteringMuLayers);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
         _env.Sky.SkyMaterial = _skyMat;
@@ -322,7 +334,7 @@ public partial class SkyController : Node
     {
         if (_multipleScatteringLuts.TryGetValue(bodyId, out var cached)) return cached;
 
-        var lut = AtmosphereMultipleScatteringLut.Build(
+        var global = AtmosphereMultipleScatteringLut.Build(
             optics,
             planetRadius,
             atmosphereTopAltitude,
@@ -330,15 +342,33 @@ public partial class SkyController : Node
             MultipleScatteringLutHeight,
             MultipleScatteringIntegrationSteps,
             MultipleScatteringSolarSamples);
+        var lut = AtmosphereAngularMultipleScatteringLut.Build(
+            optics,
+            global,
+            planetRadius,
+            atmosphereTopAltitude,
+            AngularScatteringLutWidth,
+            AngularScatteringSolarLayers,
+            AngularScatteringViewLayers,
+            AngularScatteringMuLayers,
+            AngularScatteringOpticalDepthSamples);
         var image = Image.CreateEmpty(
-            lut.Width, lut.Height, false, Image.Format.Rgbaf);
-        for (int y = 0; y < lut.Height; y++)
+            lut.Width, lut.PackedHeight, false, Image.Format.Rgbaf);
+        for (int mu = 0; mu < lut.MuWidth; mu++)
         {
-            for (int x = 0; x < lut.Width; x++)
+            for (int view = 0; view < lut.ViewHeight; view++)
             {
-                var value = lut.GetTexel(x, y);
-                image.SetPixel(x, y, new Color(
-                    (float)value.X, (float)value.Y, (float)value.Z, 1.0f));
+                int rowBase = (mu * lut.ViewHeight + view) * lut.SolarHeight;
+                for (int solar = 0; solar < lut.SolarHeight; solar++)
+                {
+                    int row = rowBase + solar;
+                    for (int x = 0; x < lut.Width; x++)
+                    {
+                        var value = lut.GetTexel(x, solar, view, mu);
+                        image.SetPixel(x, row, new Color(
+                            (float)value.X, (float)value.Y, (float)value.Z, 1.0f));
+                    }
+                }
             }
         }
 

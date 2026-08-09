@@ -1,6 +1,6 @@
 # Contrato físico de la óptica atmosférica
 
-**Estado:** V5 implementado en la simulación y validado numéricamente
+**Estado:** V6 implementado en la simulación y validado numéricamente
 **Alcance:** `ExosphereSimulation/AtmosphereOptics.cs` y sus consumidores de iluminación/exposición
 
 Este documento describe el contrato que debe respetar cualquier renderer o sistema de
@@ -101,9 +101,25 @@ aplica como relleno isotrópico con una leve ponderación hacia el cenit y desac
 S₂ por rayo cuando la tabla está disponible. Así el segundo rebote atraviesa toda la columna
 en lugar de depender de los segmentos visibles de una sola dirección.
 
-La tabla sigue siendo 2D: no representa todavía la dependencia completa del ángulo de visión,
+La tabla global sigue siendo 2D: no representa todavía la dependencia completa del ángulo de visión,
 polarización ni rebotes de nube/terreno. Es un transporte global de orden dos verificable, no
 una afirmación de que el problema 4D ya esté resuelto.
+
+## Transporte angular 4D empaquetado
+
+`AtmosphereAngularMultipleScatteringLut` toma la semilla global de órdenes dos/tres y la
+reproyecta en cuatro coordenadas físicas: altura del observador, elevación solar, coseno
+cenital de la cámara y `μ = dot(view, sun)`. La fase Rayleigh normalizada
+`3(1+μ²)/4` y la fase Mie de Henyey–Greenstein se mezclan por banda según los coeficientes
+locales; una razón `exp(-(τview−τvertical))` aplica la curvatura y la longitud de escape
+esférica sin volver a integrar cada píxel.
+
+Godot empaqueta `[μ][view][solar]` en una textura 2D HDR y reconstruye las dos dimensiones
+angulares por interpolación lineal. Los rayos groundward se anulan, la rama forward Mie se
+conserva y el dominio solar subhorizonte comparte la misma cota refractada de `[-0,04, 1]`.
+Es una versión de baja resolución del bloque angular de Bruneton/Neyret: elimina la antigua
+ponderación artística cenital, pero todavía no incluye polarización ni una discretización
+espectral de muchas longitudes de onda.
 
 ## Refracción visible del horizonte
 
@@ -141,6 +157,8 @@ redondeada mayor que uno genere energía difusa negativa.
   enrojecimiento de la columna solar rasante;
 - que el transporte global de órdenes dos y tres permanece finito, disminuye sobre la columna y
   conserva la dependencia del radio planetario;
+- que el atlas angular anula vistas hacia el suelo, conserva el lóbulo forward de Mie y reduce
+  el escape en rayos rasantes sin perder la fuente refractada;
 - que el solver refractado eleva una fuente subhorizonte visible, rechaza la noche profunda y
   vuelve a la regla geométrica cuando la refractividad es cero;
 - que ozono, airglow, nubes y fuente difusa respetan sus soportes y límites.
@@ -161,8 +179,8 @@ bash tools/atmosphere_quick_check.sh
 ## Límites conocidos y siguiente nivel de fidelidad
 
 Este contrato sigue siendo una aproximación de scattering: las LUTs resuelven transmitancia
-directa y dos rebotes globales isotrópicos (órdenes dos y tres), y el shader incluye una corrección
-acotada del disco solar y de la rama refractada visible, pero aún no modela polarización,
+directa, dos rebotes globales y una envolvente angular 4D de baja resolución, y el shader incluye
+una corrección acotada del disco solar y de la rama refractada visible, pero aún no modela polarización,
 variación espectral por temperatura, perfil de humedad/aerosoles por clima ni el acoplamiento
 radiativo entre nubes y terreno, ni una solución de dos ramas para ductos refractivos densos.
 El siguiente nivel es una LUT de scattering múltiple de órdenes superiores dependiente de altura,
