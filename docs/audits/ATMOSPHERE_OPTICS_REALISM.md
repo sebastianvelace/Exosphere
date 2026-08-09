@@ -1,6 +1,6 @@
 # Atmósfera física y óptica planetaria
 
-**Fecha:** 2026-08-09 · **Estado:** V7 óptica esférica + LUT angular 4D + ductos refractivos verificados
+**Fecha:** 2026-08-09 · **Estado:** V8 óptica esférica + LUT angular 4D + ductos refractivos + nubes 3D verificadas
 
 ## Veredicto honesto
 
@@ -28,6 +28,14 @@ Sobre esa semilla, `AtmosphereAngularMultipleScatteringLut` añade un atlas 4D e
 (altura, elevación solar, vista cenital y `μ=view·sun`). La fase Rayleigh/Mie y el cociente
 de escape esférico sustituyen la vieja ganancia isotrópica hacia el cenit; las vistas hacia el
 suelo quedan a cero y la dispersión Mie hacia delante aparece sólo cuando la geometría lo pide.
+La V8 añade a la cáscara nubosa un campo de ruido 3D determinista de baja frecuencia. El mapa
+meteorológico equirectangular sigue definiendo cobertura geográfica y detalle de erosión, mientras
+el campo macro varía dentro del volumen para producir billows sin una textura 3D adicional. La
+advección comparte el desplazamiento longitudinal existente. El rayo de vista usa la densidad
+macro+weather; la autosombra solar conserva el mismo perfil vertical y mapa meteorológico, evitando
+recalcular el ruido costoso siete veces por muestra en llvmpipe. Así la sombra sigue siendo coherente
+con la cobertura observada, con una aproximación explícita y acotada.
+
 La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
 orden, limitada por el albedo de dispersión por banda, y adaptación ocular temporal. El ojo
 reduce sensibilidad con constante de 0,7 s ante luz intensa y la recupera en 9 s en oscuridad;
@@ -36,7 +44,7 @@ instantánea del cielo como a esta adaptación lenta, por lo que no aparecen de 
 entrar en eclipse.
 
 No es todavía «totalmente realista»: falta multiple scattering de órdenes superiores a tres, un trazador
-refractivo de distancia finita para estrellas, nubes volumétricas, clima/aerosoles variables,
+refractivo de distancia finita para estrellas, nubes microfísicas, clima/aerosoles variables,
 polarización y calibración espectral. Venus necesita
 un modelo multicapa de nubes H₂SO₄; el airglow actual es una capa visible calibrada, no un
 modelo químico completo.
@@ -84,6 +92,8 @@ calibrables en datos, no mediciones oficiales.
   independencia de la partición temporal.
 - Matriz framebuffer 12 m/20 km/80 km: limb curvo, espacio negro fuera de columna y
   estrellas atenuadas a través de atmósfera.
+- Matriz visual V8 completa: 16/16 capturas entre 20 m y 400 km, día/noche y cockpit,
+  `ATMOSPHERE_OK`, sin `GAP`/`FALLBACK`; mean frame time estable en ~160 ms en llvmpipe.
 - Godot carga/compila el shader y los assemblies terminan con 0 warnings.
 
 ```bash
@@ -101,8 +111,9 @@ bash tools/atmosphere_quick_check.sh
 
 1. Aumentar la resolución de la LUT 4D angular y añadir órdenes superiores a tres con unidades
    espectrales calibradas; la versión actual es una envolvente de baja resolución.
-2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
-   sobre terreno y aerial perspective segmentada.
+2. Evolucionar las nubes volumétricas actuales a weather map dinámica, microfísica por especie,
+   sombras proyectadas sobre terreno y aerial perspective segmentada. El ruido macro 3D de V8 es
+   un campo geométrico de baja frecuencia, no un modelo de convección ni precipitación.
 3. Aerosoles por clima/latitud y capas Venus validadas.
 4. Trazador refractivo de distancia finita para estrellas; polarización y química del airglow.
 5. Golden por cuerpo: mediodía, sunset, 20/50/80/150/400 km y eclipse.

@@ -50,6 +50,12 @@ uniform float cloud_extinction = 0.00011;
 uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.58;
 uniform float cloud_longitude_offset = 0.0;
 uniform mat3 cloud_world_to_texture;
+// The weather texture provides the large-scale geographic mask. This bounded
+// 3D field adds billows through the shell without requiring a
+// second volume texture. Scales are in inverse world metres; keeping them
+// explicit makes the defaults stable for Earth and similarly-sized bodies.
+uniform float cloud_macro_scale = 0.000075;
+uniform float cloud_macro_strength = 0.25;
 uniform float sun_angular_radius = 0.00465;
 uniform float sun_disc_radiance = 32.0;
 uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
@@ -257,7 +263,29 @@ float cloud_height_shape(float height) {
 	return smoothstep(0.0, 0.12, u) * (1.0 - smoothstep(0.72, 1.0, u));
 }
 
-float cloud_density(vec3 position) {
+// A small, deterministic 3D value-noise implementation. The hash uses only
+// arithmetic and fract (rather than a texture or a trigonometric hash), which
+// keeps the extra cloud samples affordable in the view and sun integrals.
+float cloud_hash3(vec3 cell) {
+	vec3 p = fract(cell * 0.1031);
+	p += dot(p, p.yzx + 33.33);
+	return fract((p.x + p.y) * p.z);
+}
+
+float cloud_value_noise3(vec3 position) {
+	vec3 cell = floor(position);
+	vec3 fraction = fract(position);
+	// A diagonal two-corner interpolation is deliberately used here instead of
+	// eight-corner trilinear noise. The weather map already supplies fine erosion;
+	// this field only needs a smooth, low-frequency 3D bias and is evaluated for
+	// every cloud view sample on software renderers.
+	vec3 smooth_fraction = fraction * fraction * (3.0 - 2.0 * fraction);
+	float a = cloud_hash3(cell);
+	float b = cloud_hash3(cell + vec3(1.0));
+	return mix(a, b, (smooth_fraction.x + smooth_fraction.y + smooth_fraction.z) / 3.0);
+}
+
+float cloud_density_base(vec3 position) {
 	float height = length(position) - planet_radius;
 	float shape = cloud_height_shape(height);
 	if (shape <= 0.0) return 0.0;
@@ -267,7 +295,31 @@ float cloud_density(vec3 position) {
 	float detail = texture(cloud_coverage_tex, uv * 3.07 + vec2(0.17, 0.31)).r;
 	float threshold = 1.0 - cloud_coverage;
 	return shape * smoothstep(threshold - 0.12, threshold + 0.10,
-		weather + (detail - 0.5) * 0.22);
+		weather + (detail - 0.5) * 0.20);
+}
+
+float cloud_density(vec3 position) {
+	float height = length(position) - planet_radius;
+	float shape = cloud_height_shape(height);
+	if (shape <= 0.0) return 0.0;
+	vec3 texture_direction = normalize(cloud_world_to_texture * normalize(position));
+	vec2 uv = dir_to_equirect(texture_direction) + vec2(cloud_longitude_offset, 0.0);
+	float weather = texture(cloud_coverage_tex, uv).r;
+	float detail = texture(cloud_coverage_tex, uv * 3.07 + vec2(0.17, 0.31)).r;
+	float threshold = 1.0 - cloud_coverage;
+	// Sample one oriented world-space macro field. The high-frequency texture
+	// detail below supplies erosion; keeping only one 3D field is important on
+	// CPU renderers because this function runs for both view and sun-shadow rays.
+	vec3 noise_position = cloud_world_to_texture * position;
+	vec3 wind_offset = vec3(cloud_longitude_offset * 64.0,
+		cloud_longitude_offset * 17.0, cloud_longitude_offset * 31.0);
+	float macro = cloud_value_noise3(noise_position * max(cloud_macro_scale, 1e-6)
+		+ wind_offset);
+	float weather_field = weather
+		+ (macro - 0.5) * cloud_macro_strength
+		+ (detail - 0.5) * 0.20;
+	return shape * smoothstep(threshold - 0.12, threshold + 0.10,
+		weather_field);
 }
 
 float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
@@ -283,7 +335,10 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
 			0.0, distance_to_edge, closest);
 		float step_length = max(segment_end - segment_start, 0.0);
 		vec3 p = position + to_sun * (0.5 * (segment_start + segment_end));
-		optical_depth += cloud_density(p) * cloud_extinction * step_length;
+		// The expensive 3D billow is evaluated on the view ray. The solar ray
+		// uses the same vertical/weather support, avoiding seven extra noise
+		// evaluations per view sample while retaining coherent self-shadowing.
+		optical_depth += cloud_density_base(p) * cloud_extinction * step_length;
 	}
 	return exp(-min(optical_depth, 80.0));
 }
