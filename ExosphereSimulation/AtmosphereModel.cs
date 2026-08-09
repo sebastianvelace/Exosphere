@@ -22,6 +22,16 @@ public partial class AtmosphereModel
 {
     /// <summary>Visible-spectrum scattering/absorption contract shared with rendering.</summary>
     public AtmosphereOptics Optics { get; init; } = new();
+
+    /// <summary>
+    /// Optional climate/aerosol envelope consumed by the realtime sky renderer.
+    /// <para>
+    /// A null value deliberately means "legacy optical profile": the configured Mie
+    /// coefficients remain untouched. This keeps older body files and custom atmospheres
+    /// visually compatible until they opt into an explicit AOD/Ångström profile.
+    /// </para>
+    /// </summary>
+    public AerosolClimateState? AerosolClimate { get; init; }
     /// <summary>Universal gas constant (J/(mol·K)).</summary>
     private const double R = 8.31446;
 
@@ -281,6 +291,21 @@ public partial class AtmosphereModel
     /// </summary>
     public static AtmosphereModel Earth() => new()
     {
+        AerosolClimate = new AerosolClimateState
+        {
+            Aod550 = 0.08,
+            AngstromExponent = 1.0,
+            DustFraction = 0.60,
+            MistFraction = 0.40,
+            LatitudeModulation = 0.30,
+            LatitudePeakDegrees = 25.0,
+            LatitudeWidthDegrees = 22.0,
+            AltitudeScaleHeightMeters = 1_500.0,
+            TemporalModulation = 0.12,
+            TemporalPeriodSeconds = 86_400.0,
+            SeasonalModulation = 0.10,
+            SeasonalPeriodSeconds = 31_557_600.0,
+        },
         Optics = new AtmosphereOptics
         {
             RayleighScattering = new Math.Vector3d(5.802e-6, 13.558e-6, 33.100e-6),
@@ -341,6 +366,21 @@ public partial class AtmosphereModel
     /// </summary>
     public static AtmosphereModel Mars() => new()
     {
+        AerosolClimate = new AerosolClimateState
+        {
+            Aod550 = 0.30,
+            AngstromExponent = 0.35,
+            DustFraction = 0.92,
+            MistFraction = 0.08,
+            LatitudeModulation = 0.55,
+            LatitudePeakDegrees = 20.0,
+            LatitudeWidthDegrees = 28.0,
+            AltitudeScaleHeightMeters = 11_000.0,
+            TemporalModulation = 0.25,
+            TemporalPeriodSeconds = 88_775.0,
+            SeasonalModulation = 0.18,
+            SeasonalPeriodSeconds = 59_355_000.0,
+        },
         Optics = new AtmosphereOptics
         {
             RayleighScattering = new Math.Vector3d(0.116e-6, 0.271e-6, 0.662e-6),
@@ -374,6 +414,21 @@ public partial class AtmosphereModel
     /// <summary>Thick Venusian CO₂ atmosphere. Mirrors <c>data/bodies/venus.json</c>.</summary>
     public static AtmosphereModel Venus() => new()
     {
+        AerosolClimate = new AerosolClimateState
+        {
+            Aod550 = 1.50,
+            AngstromExponent = 0.25,
+            DustFraction = 0.10,
+            MistFraction = 0.90,
+            LatitudeModulation = 0.12,
+            LatitudePeakDegrees = 45.0,
+            LatitudeWidthDegrees = 35.0,
+            AltitudeScaleHeightMeters = 15_000.0,
+            TemporalModulation = 0.03,
+            TemporalPeriodSeconds = 20_996_798.0,
+            SeasonalModulation = 0.02,
+            SeasonalPeriodSeconds = 194_000_000.0,
+        },
         Optics = new AtmosphereOptics
         {
             RayleighScattering = new Math.Vector3d(45.0e-6, 70.0e-6, 120.0e-6),

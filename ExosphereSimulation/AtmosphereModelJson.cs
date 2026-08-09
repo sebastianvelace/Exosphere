@@ -53,9 +53,33 @@ public partial class AtmosphereModel
             };
         }
 
+        AerosolClimateState? aerosolClimate = null;
+        if (json.TryGetProperty("aerosol_climate", out var aerosolJson)
+            && aerosolJson.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            aerosolClimate = new AerosolClimateState
+            {
+                Aod550 = ReadDouble(aerosolJson, "aod550", 0.08),
+                AngstromExponent = ReadDouble(aerosolJson, "angstrom_exponent", 1.0),
+                DustFraction = ReadDouble(aerosolJson, "dust_fraction", 0.60),
+                MistFraction = ReadDouble(aerosolJson, "mist_fraction", 0.40),
+                LatitudeModulation = ReadDouble(aerosolJson, "latitude_modulation", 0.30),
+                LatitudePeakDegrees = ReadDouble(aerosolJson, "latitude_peak_degrees", 25.0),
+                LatitudeWidthDegrees = ReadDouble(aerosolJson, "latitude_width_degrees", 22.0),
+                AltitudeScaleHeightMeters = ReadDouble(aerosolJson, "altitude_scale_height_m", 1_500.0),
+                TemporalModulation = ReadDouble(aerosolJson, "temporal_modulation", 0.12),
+                TemporalPeriodSeconds = ReadDouble(aerosolJson, "temporal_period_s", 86_400.0),
+                TemporalPhaseSeconds = ReadDouble(aerosolJson, "temporal_phase_s", 0.0),
+                SeasonalModulation = ReadDouble(aerosolJson, "seasonal_modulation", 0.10),
+                SeasonalPeriodSeconds = ReadDouble(aerosolJson, "seasonal_period_s", 31_557_600.0),
+                SeasonalPhaseSeconds = ReadDouble(aerosolJson, "seasonal_phase_s", 0.0),
+            }.Normalize();
+        }
+
         return new AtmosphereModel
         {
             Optics             = optics,
+            AerosolClimate     = aerosolClimate,
             ScaleHeight         = json.TryGetProperty("scale_height",          out var sh)  ? sh.GetDouble()  : 8500.0,
             SeaLevelDensity     = json.TryGetProperty("sea_level_density",     out var sld) ? sld.GetDouble() : 1.225,
             SeaLevelPressure    = json.TryGetProperty("sea_level_pressure",    out var slp) ? slp.GetDouble() : 101_325.0,

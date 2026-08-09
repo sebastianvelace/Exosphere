@@ -13,6 +13,20 @@
     "sea_level_pressure": 9200000,
     "sea_level_temperature": 737.0,
     "max_altitude": 250000,
+    "aerosol_climate": {
+      "aod550": 1.50,
+      "angstrom_exponent": 0.25,
+      "dust_fraction": 0.10,
+      "mist_fraction": 0.90,
+      "latitude_modulation": 0.12,
+      "latitude_peak_degrees": 45.0,
+      "latitude_width_degrees": 35.0,
+      "altitude_scale_height_m": 15000.0,
+      "temporal_modulation": 0.03,
+      "temporal_period_s": 20996798.0,
+      "seasonal_modulation": 0.02,
+      "seasonal_period_s": 194000000.0
+    },
     "optics": {
       "rayleigh_scattering": [0.000045, 0.000070, 0.000120],
       "mie_scattering": [0.000090, 0.000082, 0.000062],

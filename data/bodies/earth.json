@@ -15,6 +15,20 @@
     "max_altitude": 140000,
     "thermosphere_scale_height": 18750,
     "thermosphere_top_altitude": 1000000,
+    "aerosol_climate": {
+      "aod550": 0.08,
+      "angstrom_exponent": 1.0,
+      "dust_fraction": 0.60,
+      "mist_fraction": 0.40,
+      "latitude_modulation": 0.30,
+      "latitude_peak_degrees": 25.0,
+      "latitude_width_degrees": 22.0,
+      "altitude_scale_height_m": 1500.0,
+      "temporal_modulation": 0.12,
+      "temporal_period_s": 86400.0,
+      "seasonal_modulation": 0.10,
+      "seasonal_period_s": 31557600.0
+    },
     "optics": {
       "rayleigh_scattering": [0.000005802, 0.000013558, 0.0000331],
       "mie_scattering": [0.000003996, 0.000003996, 0.000003996],
