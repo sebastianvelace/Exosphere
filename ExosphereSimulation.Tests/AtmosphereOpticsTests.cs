@@ -55,6 +55,104 @@ public sealed class AtmosphereOpticsTests
     }
 
     [Fact]
+    public void SphericalSolarPathIsLongerAndMoreExtinctNearTheHorizon()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var zenith = optics.OpticalDepthAlongRay(
+            0.0, 1.0, 6_371_000.0, 140_000.0, sampleCount: 48);
+        var lowSun = optics.OpticalDepthAlongRay(
+            0.0, System.Math.Sin(5.0 * System.Math.PI / 180.0),
+            6_371_000.0, 140_000.0, sampleCount: 48);
+
+        Assert.True(lowSun.X > zenith.X * 5.0);
+        Assert.True(lowSun.Z > zenith.Z * 5.0);
+        Assert.True(lowSun.X < 80.0 && lowSun.Z < 80.0,
+            $"spherical optical depth diverged: {lowSun}");
+    }
+
+    [Fact]
+    public void SphericalSolarTransmissionUsesTheActualBodyRadius()
+    {
+        var optics = AtmosphereModel.Mars().Optics;
+        var earthSized = optics.DirectSolarTransmittance(
+            0.0, 0.05, 6_371_000.0, 100_000.0);
+        var marsSized = optics.DirectSolarTransmittance(
+            0.0, 0.05, 3_389_500.0, 100_000.0);
+
+        Assert.True(marsSized.X > 0.0 && marsSized.Z > 0.0);
+        Assert.True(marsSized.X > earthSized.X && marsSized.Z > earthSized.Z,
+            $"smaller body should have a shorter near-horizon column: Earth={earthSized}, Mars={marsSized}");
+    }
+
+    [Fact]
+    public void SphericalZenithColumnMatchesTheVerticalOpticalColumn()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var analytic = optics.VerticalOpticalDepth(0.0);
+        var spherical = optics.OpticalDepthAlongRay(
+            0.0, 1.0, 6_371_000.0, 140_000.0, sampleCount: 128);
+
+        // At zenith the spherical path is vertical.  The finite 140 km top omits only
+        // an exponentially tiny Rayleigh/Mie tail, so both implementations should agree
+        // to well below one percent in every band.
+        Assert.InRange(spherical.X, analytic.X * 0.999, analytic.X * 1.001);
+        Assert.InRange(spherical.Y, analytic.Y * 0.999, analytic.Y * 1.001);
+        Assert.InRange(spherical.Z, analytic.Z * 0.999, analytic.Z * 1.001);
+    }
+
+    [Fact]
+    public void SphericalOpticalDepthIsMonotonicAboveTheGeometricHorizon()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        double[] cosZenith = { 0.02, 0.10, 0.35, 0.70, 1.0 };
+        var previous = optics.OpticalDepthAlongRay(
+            0.0, cosZenith[0], 6_371_000.0, 140_000.0);
+
+        foreach (double cosine in cosZenith.Skip(1))
+        {
+            var current = optics.OpticalDepthAlongRay(
+                0.0, cosine, 6_371_000.0, 140_000.0);
+
+            Assert.True(current.X <= previous.X && current.Y <= previous.Y
+                && current.Z <= previous.Z,
+                $"optical depth grew toward zenith: previous={previous}, current={current}");
+            Assert.True(double.IsFinite(current.X) && double.IsFinite(current.Y)
+                && double.IsFinite(current.Z));
+            Assert.True(current.X >= 0.0 && current.Y >= 0.0 && current.Z >= 0.0);
+            previous = current;
+        }
+    }
+
+    [Fact]
+    public void SphericalTransmissionConvergesWhenSampleResolutionDoubles()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        var coarse = optics.DirectSolarTransmittance(
+            10_000.0, System.Math.Sin(2.0 * System.Math.PI / 180.0),
+            6_371_000.0, 140_000.0, sampleCount: 32);
+        var fine = optics.DirectSolarTransmittance(
+            10_000.0, System.Math.Sin(2.0 * System.Math.PI / 180.0),
+            6_371_000.0, 140_000.0, sampleCount: 128);
+
+        Assert.InRange(System.Math.Abs(coarse.X - fine.X), 0.0, 0.002);
+        Assert.InRange(System.Math.Abs(coarse.Y - fine.Y), 0.0, 0.002);
+        Assert.InRange(System.Math.Abs(coarse.Z - fine.Z), 0.0, 0.002);
+    }
+
+    [Fact]
+    public void NonFiniteSolarInputsNeverProduceUnattenuatedLight()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+
+        Assert.Equal(Vector3d.Zero,
+            optics.DirectSolarTransmittance(double.NaN, 1.0));
+        Assert.Equal(Vector3d.Zero,
+            optics.DirectSolarTransmittance(0.0, double.NaN));
+        Assert.Equal(Vector3d.Zero,
+            optics.DirectSolarTransmittance(double.PositiveInfinity, 1.0));
+    }
+
+    [Fact]
     public void EarthAirglowIsAThinUpperAtmosphereEmissionLayer()
     {
         var optics = LoadBody("earth").Atmosphere!.Optics;

@@ -105,7 +105,12 @@ public partial class PhaseLightingController : Node
             double sunElevation = sunBody != null
                 ? up.Dot((sunBody.Position - av.Position).Normalized)
                 : 1.0;
-            var direct = optics?.DirectSolarTransmittance(alt, sunElevation)
+            var direct = optics?.DirectSolarTransmittance(
+                alt,
+                sunElevation,
+                body.Radius,
+                body.Atmosphere?.MaxAltitude ?? 0.0,
+                sampleCount: 32)
                 ?? new Vector3d(1.0, 1.0, 1.0);
             double peak = System.Math.Max(1e-6,
                 System.Math.Max(direct.X, System.Math.Max(direct.Y, direct.Z)));

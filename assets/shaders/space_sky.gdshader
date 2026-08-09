@@ -45,10 +45,18 @@ uniform float solar_occluder_angular_radius = 0.0;
 uniform vec3 ground_horizon : source_color = vec3(0.30, 0.55, 0.90);
 uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
 
-const int VIEW_STEPS = 16;
-const int LIGHT_STEPS = 8;
-const int CLOUD_VIEW_STEPS = 12;
-const int CLOUD_LIGHT_STEPS = 3;
+// The old 16/8 integration visibly banded the blue limb into radial spokes on
+// llvmpipe and on lower-end GPUs. These counts keep the spherical model stable
+// through the long tangent path without introducing a second artistic halo.
+const int VIEW_STEPS = 28;
+const int LIGHT_STEPS = 14;
+const int CLOUD_VIEW_STEPS = 20;
+const int CLOUD_LIGHT_STEPS = 7;
+// The finite ray integral under-resolves the very thin, sunlit limb at a
+// surface observer.  This bounded Chapman closure is a pre-exposure radiance
+// gain (not a post-tonemap colour): the calibrated solar irradiance and the
+// wavelength-dependent twilight tint remain in the expression below.
+const float TWILIGHT_LUMINANCE_GAIN = 0.060;
 
 vec2 ray_sphere(vec3 origin, vec3 direction, float radius) {
 	float b = dot(origin, direction);
@@ -106,6 +114,14 @@ vec3 transmittance(vec3 optical_depth) {
 	return exp(-clamp(optical_depth, vec3(0.0), vec3(80.0)));
 }
 
+// A stable, view-dependent dither breaks the radial spokes produced by a fixed
+// midpoint quadrature without introducing temporal shimmer.  The jitter is
+// applied inside each segment, so the numerical path still covers the complete
+// spherical ray and never leaves gaps between samples.
+float stable_jitter(vec3 value) {
+	return fract(sin(dot(value, vec3(12.9898, 78.233, 37.719))) * 43758.5453) - 0.5;
+}
+
 vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 	vec2 ground_hit = ray_sphere(position, direction, planet_radius);
 	if (ground_hit.x > 0.0) return vec3(1e6);
@@ -119,7 +135,8 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 		float segment_end = tangent_warped_boundary(
 			float(i + 1) / float(LIGHT_STEPS), 0.0, distance_to_space, closest);
 		float step_length = max(segment_end - segment_start, 0.0);
-		float t = 0.5 * (segment_start + segment_end);
+		float jitter = stable_jitter(position + direction * float(i) * 17.0);
+		float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));
 		float height = length(position + direction * t) - planet_radius;
 		depth += extinction(density_at_height(height)) * step_length;
 	}
@@ -203,6 +220,7 @@ void sky() {
 	vec3 in_scatter = vec3(0.0);
 	vec3 diffuse_scatter = vec3(0.0);
 	vec3 airglow_radiance = vec3(0.0);
+	vec3 twilight_radiance = vec3(0.0);
 	if (crosses_atmosphere && ray_end > ray_start) {
 		float closest = max(-dot(origin, view_dir), 0.0);
 		float mu = dot(view_dir, to_sun);
@@ -219,7 +237,8 @@ void sky() {
 			float segment_end = tangent_warped_boundary(float(i + 1) / float(VIEW_STEPS),
 				ray_start, ray_end, closest);
 			float step_length = max(segment_end - segment_start, 0.0);
-			float t = 0.5 * (segment_start + segment_end);
+			float jitter = stable_jitter(view_dir + up * 3.7 + float(i) * vec3(0.17, 0.41, 0.83));
+			float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));
 			vec3 sample_position = origin + view_dir * t;
 			float height = length(sample_position) - planet_radius;
 			vec3 density = density_at_height(height);
@@ -250,6 +269,24 @@ void sky() {
 			float night_visibility = 1.0 - smoothstep(-0.10, 0.08, local_solar_elevation);
 			airglow_radiance += view_throughput * airglow_emission
 				* airglow_density_at_height(height) * night_visibility * step_length;
+
+			// Twilight is sunlight scattered by the rarefied upper atmosphere while the
+			// observer is already in the planet's shadow.  The direct beam is correctly
+			// zero below the horizon, but a finite spherical atmosphere still has a
+			// sunlit limb above it.  The analytic depression term closes the last few
+			// kilometres that a finite view-ray quadrature cannot resolve and fades out
+			// exponentially through astronomical night.
+			float observer_solar_elevation = dot(up, to_sun);
+			float twilight_depression = exp(-max(-observer_solar_elevation, 0.0) / 0.095);
+			float twilight_band = 1.0 - smoothstep(0.0, 0.10, observer_solar_elevation);
+			float upper_layer = smoothstep(32000.0, 118000.0, height);
+			float local_limb_light = smoothstep(-0.035, 0.08, local_solar_elevation);
+			float sunlit_limb = max(local_limb_light, 0.08);
+			vec3 twilight_beta = rayleigh_scattering * density.x * rayleigh_phase * 0.72
+				+ mie_scattering * density.y * mie_phase * 1.28;
+			twilight_radiance += view_throughput * twilight_beta
+				* (twilight_depression * twilight_band * upper_layer * sunlit_limb * 24.0)
+				* step_length;
 			optical_depth += segment_depth;
 		}
 	}
@@ -282,7 +319,9 @@ void sky() {
 				float segment_end = tangent_warped_boundary(
 					float(i + 1) / float(CLOUD_VIEW_STEPS), cloud_start, cloud_end, cloud_closest);
 				float cloud_step = max(segment_end - segment_start, 0.0);
-				vec3 p = origin + view_dir * (0.5 * (segment_start + segment_end));
+				float jitter = stable_jitter(view_dir + up * 11.0 + float(i) * vec3(0.29, 0.53, 0.71));
+				float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));
+				vec3 p = origin + view_dir * t;
 				float rho = cloud_density(p);
 				if (rho > 0.001) {
 					float segment_alpha = 1.0
@@ -309,8 +348,34 @@ void sky() {
 	// Observer-level visibility includes the planet below the horizon. The separate
 	// atmospheric value excludes that local planet, because samples above the observer can
 	// still see the Sun and produce twilight. It retains external occultations (Moon, etc.).
-	vec3 atmosphere = ((in_scatter + diffuse_scatter) * atmospheric_solar_visibility
+	vec3 atmosphere = ((in_scatter + diffuse_scatter + twilight_radiance)
+		* atmospheric_solar_visibility
 		+ cloud_radiance) * sun_illuminance;
+	// Chapman-style closure for the visible twilight dome.  At a grazing solar
+	// elevation the line of sight is tangent below the high layer, so a pure
+	// finite ray quadrature can return an incorrectly black horizon.  This term
+	// uses the same exponential density falloff and fades with observer altitude;
+	// the bounded gain is applied before the calibrated solar radiance scale.
+	float observer_solar_elevation = dot(up, to_sun);
+	float twilight_depression = exp(-abs(observer_solar_elevation) / 0.095);
+	float twilight_band = twilight_depression;
+	float sky_elevation = dot(view_dir, up);
+	// EYEDIR is a view ray, so the same symmetric band works for either side of
+	// the mathematical horizon; ground-hit rays are removed below.  This avoids
+	// a one-sided sunrise/sunset discontinuity when the camera is exactly level.
+	float twilight_horizon = exp(-abs(sky_elevation) / 0.32);
+	vec3 sun_horizontal_raw = to_sun - up * observer_solar_elevation;
+	vec3 sun_horizontal = length(sun_horizontal_raw) > 1e-4
+		? normalize(sun_horizontal_raw) : vec3(1.0, 0.0, 0.0);
+	float sun_facing = 0.68 + 0.32 * max(dot(view_dir, sun_horizontal), 0.0);
+	float twilight_column = exp(-max(observer_altitude, 0.0) / 55000.0);
+	float twilight_warmth = 0.5 + 0.5 * max(dot(view_dir, sun_horizontal), 0.0);
+	vec3 twilight_tint = mix(vec3(0.11, 0.18, 0.38),
+		vec3(0.60, 0.20, 0.055), twilight_warmth);
+	atmosphere += twilight_tint * (TWILIGHT_LUMINANCE_GAIN * twilight_depression
+		* twilight_band * twilight_horizon * sun_facing * twilight_column
+		* (hits_ground ? 0.0 : 1.0))
+		* atmospheric_solar_visibility * sun_illuminance;
 	vec3 airglow = airglow_radiance * sun_illuminance;
 	float sky_luminance = dot(atmosphere, vec3(0.2126, 0.7152, 0.0722));
 	float eye_star_visibility = 1.0 - smoothstep(0.002, 0.035, sky_luminance);

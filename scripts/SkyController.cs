@@ -21,12 +21,24 @@ public partial class SkyController : Node
     private const string VenusCloudTexPath = "res://assets/textures/venus.jpg";
     // The 8K map contains photographic Milky-Way exposure.  Naked-eye stars are
     // substantially dimmer whenever Earth, atmosphere or a sunlit vehicle is in view.
-    private const float StarEnergy = 0.24f;
+    // The photographic map is authored for a camera exposure, not naked-eye
+    // linear radiance.  Calibrate it upward here; the shader still applies
+    // spherical extinction and the eye adaptation gate before display.
+    private const float StarEnergy = 0.55f;
+    // The optical coefficients are physical cross-sections; the realtime sky
+    // integrates a visible-band solar irradiance proxy.  Calibrate that proxy
+    // once here so the accumulated HDR sky does not white-clip the lower limb.
+    private const float VisibleSolarRadianceScale = 0.35f;
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
     private string? _boundCloudBodyId;
     private double _updateAccumulator = 1.0;
+    private bool _hasAtmosphereState;
+    private string? _lastAtmosphereBodyId;
+    private double _lastAtmosphereAltitude;
+    private Vector3d _lastAtmosphereUp;
+    private Vector3d _lastAtmosphereSun;
 
     public override void _Ready()
     {
@@ -68,8 +80,26 @@ public partial class SkyController : Node
             : new Vector3d(0.4, 0.5, 0.8).Normalized;
         double altitude = vessel.GetAltitude(body);
 
-        BindAtmosphere(body, altitude, upD, sunD);
-        BindSolarGeometry(vessel.Position, sun, body.Id);
+        // Incremental skies rebuild one cubemap face at a time. Reassigning every
+        // uniform at 12 Hz invalidates that work before the six faces can complete;
+        // the result is a black/half-updated cubemap exactly at the terminator. Keep
+        // the physical bindings until the state has moved enough to be visible, then
+        // invalidate once and let the incremental renderer converge.
+        bool atmosphereChanged = !_hasAtmosphereState
+            || _lastAtmosphereBodyId != body.Id
+            || System.Math.Abs(altitude - _lastAtmosphereAltitude) > 100.0
+            || _lastAtmosphereUp.Dot(upD) < 0.99999
+            || _lastAtmosphereSun.Dot(sunD) < 0.999999;
+        if (atmosphereChanged)
+        {
+            BindAtmosphere(body, altitude, upD, sunD);
+            BindSolarGeometry(vessel.Position, sun, body.Id);
+            _hasAtmosphereState = true;
+            _lastAtmosphereBodyId = body.Id;
+            _lastAtmosphereAltitude = altitude;
+            _lastAtmosphereUp = upD;
+            _lastAtmosphereSun = sunD;
+        }
         UpdateEnvironment(body, altitude, upD.Dot(sunD));
     }
 
@@ -157,7 +187,8 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("ozone_center_altitude", (float)optics.OzoneCenterAltitude);
         _skyMat.SetShaderParameter("ozone_half_width", (float)optics.OzoneHalfWidth);
         _skyMat.SetShaderParameter("mie_g", (float)optics.MieAnisotropy);
-        _skyMat.SetShaderParameter("sun_illuminance", (float)optics.SunIlluminanceScale);
+        _skyMat.SetShaderParameter("sun_illuminance",
+            (float)(optics.SunIlluminanceScale * VisibleSolarRadianceScale));
         _skyMat.SetShaderParameter("low_order_diffuse_strength",
             (float)optics.LowOrderDiffuseStrength);
         _skyMat.SetShaderParameter("cloud_enabled", optics.HasCloudLayer);
