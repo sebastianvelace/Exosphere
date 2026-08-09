@@ -1,6 +1,6 @@
 # Atmósfera física y óptica planetaria
 
-**Fecha:** 2026-08-09 · **Estado:** V6 óptica esférica + LUT angular 4D + horizonte refractado verificado
+**Fecha:** 2026-08-09 · **Estado:** V7 óptica esférica + LUT angular 4D + ductos refractivos verificados
 
 ## Veredicto honesto
 
@@ -21,6 +21,9 @@ global que transporta la fuente difusa a través de toda la columna: la primera 
 orden dos y una segunda integral añade un rebote isotrópico de orden tres, reemplazando el cierre
 S₂ local cuando está disponible. `DirectSolarTransmittance` resuelve la elevación aparente con
 Snell, integra la rama refractada y rechaza ductos no atravesables en vez de inventar energía.
+Cuando el observador está sobre un mínimo de `n·r`, el trazador V7 encuentra el punto de retorno
+y suma las dos ramas sólo si el camino despeja la superficie; el perfil Venus a 60 km ya está
+cubierto por una prueba de transmisión y profundidad óptica finitas.
 Sobre esa semilla, `AtmosphereAngularMultipleScatteringLut` añade un atlas 4D empaquetado
 (altura, elevación solar, vista cenital y `μ=view·sun`). La fase Rayleigh/Mie y el cociente
 de escape esférico sustituyen la vieja ganancia isotrópica hacia el cenit; las vistas hacia el
@@ -33,7 +36,7 @@ instantánea del cielo como a esta adaptación lenta, por lo que no aparecen de 
 entrar en eclipse.
 
 No es todavía «totalmente realista»: falta multiple scattering de órdenes superiores a tres, un trazador
-refractivo de dos ramas para ductos densos y estrellas, nubes volumétricas, clima/aerosoles variables,
+refractivo de distancia finita para estrellas, nubes volumétricas, clima/aerosoles variables,
 polarización y calibración espectral. Venus necesita
 un modelo multicapa de nubes H₂SO₄; el airglow actual es una capa visible calibrada, no un
 modelo químico completo.
@@ -73,9 +76,10 @@ calibrables en datos, no mediciones oficiales.
 
 ## Evidencia
 
-- 37 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
+- 38 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
   transmitancia, ozono, enrojecimiento del Sol bajo, fuente difusa acotada/sombreada y
-  quince invariantes nuevas de LUT, transporte global, atlas angular, horizonte subhorizonte y refracción.
+  dieciséis invariantes nuevas de LUT, transporte global, atlas angular, horizonte subhorizonte,
+  ductos Venus y refracción.
 - 5 pruebas de adaptación ocular: asimetría luz/oscuridad, monotonía, límites e
   independencia de la partición temporal.
 - Matriz framebuffer 12 m/20 km/80 km: limb curvo, espacio negro fuera de columna y
@@ -100,6 +104,5 @@ bash tools/atmosphere_quick_check.sh
 2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
    sobre terreno y aerial perspective segmentada.
 3. Aerosoles por clima/latitud y capas Venus validadas.
-4. Trazador refractivo de dos ramas para disco, horizonte y estrellas; polarización y química
-   del airglow.
+4. Trazador refractivo de distancia finita para estrellas; polarización y química del airglow.
 5. Golden por cuerpo: mediodía, sunset, 20/50/80/150/400 km y eclipse.

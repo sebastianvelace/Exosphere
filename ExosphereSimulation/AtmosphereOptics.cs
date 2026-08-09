@@ -196,7 +196,7 @@ public sealed record AtmosphereOptics
                     out double apparentElevationSin, sampleCount))
                 return Vector3d.Zero;
 
-            var refractedTau = OpticalDepthAlongRefractedRay(
+            var refractedTau = OpticalDepthAlongRefractedPath(
                 altitude, apparentElevationSin,
                 planetRadius, atmosphereTopAltitude, sampleCount);
             return new Vector3d(
@@ -221,10 +221,10 @@ public sealed record AtmosphereOptics
     /// A ray leaves the observer at the apparent angle, accumulates the angular
     /// displacement <c>∫ p/(r√((nr)²−p²)) dr</c> through the atmosphere, and then
     /// continues as a vacuum ray.  Bisection is deterministic and monotonic for the
-    /// ordinary terrestrial profile; profiles with a refractive duct are rejected by
-    /// the path-integral guard and fall back to an explicit no-beam result rather than
-    /// fabricating energy.  Negative geometric elevations are accepted while the
-    /// refracted path still clears the planet.
+    /// ordinary terrestrial profile.  If a dense profile has a refractive minimum, the
+    /// solver switches to the explicit two-branch tangent path when the observer is above
+    /// it; impossible roots still return no beam rather than fabricating energy. Negative
+    /// geometric elevations are accepted while the refracted path clears the planet.
     /// </summary>
     public bool TrySolveRefractedSolarElevation(
         double altitude,
@@ -261,12 +261,19 @@ public sealed record AtmosphereOptics
                 altitude, 0.0, planetRadius, atmosphereTopAltitude,
                 out double geometricHorizon, sampleCount))
         {
-            if (geometricElevation <= 0.0) return false;
+            if (geometricElevation <= 0.0)
+                return TrySolveRefractedTwoBranchSolarElevation(
+                    altitude, geometricElevation, planetRadius, atmosphereTopAltitude,
+                    out apparentElevationSin, sampleCount);
             apparentElevationSin = System.Math.Sin(geometricElevation);
             return true;
         }
         if (geometricElevation < geometricHorizon - 1e-6)
-            return false;
+        {
+            return TrySolveRefractedTwoBranchSolarElevation(
+                altitude, geometricElevation, planetRadius, atmosphereTopAltitude,
+                out apparentElevationSin, sampleCount);
+        }
 
         double high = System.Math.PI * 0.5 - 1e-7;
         if (!TryRefractedAsymptoticElevation(
@@ -295,6 +302,184 @@ public sealed record AtmosphereOptics
         }
 
         apparentElevationSin = System.Math.Sin(0.5 * (low + high));
+        return true;
+    }
+
+    private bool TrySolveRefractedTwoBranchSolarElevation(
+        double altitude,
+        double geometricElevation,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        out double apparentElevationSin,
+        int sampleCount)
+    {
+        apparentElevationSin = 0.0;
+        if (!TryFindRefractiveMinimum(
+                altitude, planetRadius, atmosphereTopAltitude,
+                out double minimumRadius, out double minimumProduct))
+            return false;
+
+        double r0 = planetRadius + System.Math.Max(0.0, altitude);
+        double observerProduct = RefractiveIndex(altitude) * r0;
+        if (minimumRadius >= r0 - 1.0 || minimumProduct >= observerProduct)
+            return false;
+
+        // The downward branch exists between the tangent at the refractive minimum
+        // and a nearly horizontal local ray. Both endpoints are offset slightly so
+        // Simpson integration never samples a non-integrable double root.
+        double criticalMagnitude = System.Math.Acos(System.Math.Clamp(
+            minimumProduct / observerProduct, 0.0, 1.0));
+        if (criticalMagnitude <= 1e-5) return false;
+        double low = -criticalMagnitude + 1e-5;
+        double high = -1e-5;
+        if (!TryRefractedTwoBranchAsymptoticElevation(
+                altitude, low, planetRadius, atmosphereTopAltitude,
+                out double lowGeometric, sampleCount)
+            || !TryRefractedTwoBranchAsymptoticElevation(
+                altitude, high, planetRadius, atmosphereTopAltitude,
+                out double highGeometric, sampleCount))
+            return false;
+
+        double minimumGeometric = System.Math.Min(lowGeometric, highGeometric);
+        double maximumGeometric = System.Math.Max(lowGeometric, highGeometric);
+        if (geometricElevation < minimumGeometric - 1e-5
+            || geometricElevation > maximumGeometric + 1e-5)
+            return false;
+
+        double fa = lowGeometric;
+        double fb = highGeometric;
+        for (int iteration = 0; iteration < 36; iteration++)
+        {
+            double middle = 0.5 * (low + high);
+            if (!TryRefractedTwoBranchAsymptoticElevation(
+                    altitude, middle, planetRadius, atmosphereTopAltitude,
+                    out double middleGeometric, sampleCount))
+                return false;
+
+            if (fa < fb)
+            {
+                if (middleGeometric < geometricElevation)
+                {
+                    low = middle;
+                    fa = middleGeometric;
+                }
+                else
+                {
+                    high = middle;
+                    fb = middleGeometric;
+                }
+            }
+            else
+            {
+                if (middleGeometric > geometricElevation)
+                {
+                    low = middle;
+                    fa = middleGeometric;
+                }
+                else
+                {
+                    high = middle;
+                    fb = middleGeometric;
+                }
+            }
+        }
+
+        apparentElevationSin = System.Math.Sin(0.5 * (low + high));
+        return true;
+    }
+
+    private bool TryFindRefractiveMinimum(
+        double altitude,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        out double minimumRadius,
+        out double minimumProduct)
+    {
+        minimumRadius = planetRadius;
+        minimumProduct = double.PositiveInfinity;
+        double top = planetRadius + atmosphereTopAltitude;
+        int samples = 256;
+        for (int i = 0; i <= samples; i++)
+        {
+            double radius = planetRadius
+                + atmosphereTopAltitude * i / samples;
+            double product = RefractiveIndex(radius - planetRadius) * radius;
+            if (product < minimumProduct)
+            {
+                minimumProduct = product;
+                minimumRadius = radius;
+            }
+        }
+
+        double observerRadius = planetRadius + System.Math.Max(0.0, altitude);
+        return double.IsFinite(minimumProduct)
+            && minimumRadius > planetRadius + 1.0
+            && minimumRadius < observerRadius - 1.0
+            && minimumRadius < top;
+    }
+
+    private bool TryRefractedTwoBranchAsymptoticElevation(
+        double altitude,
+        double apparentElevation,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        out double geometricElevation,
+        int sampleCount)
+    {
+        geometricElevation = 0.0;
+        if (apparentElevation >= 0.0
+            || !TryFindRefractiveMinimum(
+                altitude, planetRadius, atmosphereTopAltitude,
+                out double minimumRadius, out double minimumProduct))
+            return false;
+
+        double r0 = planetRadius + System.Math.Max(0.0, altitude);
+        double rTop = planetRadius + atmosphereTopAltitude;
+        double p = RefractiveIndex(altitude) * r0 * System.Math.Cos(apparentElevation);
+        if (p <= minimumProduct || p >= RefractiveIndex(altitude) * r0)
+            return false;
+        if (!TryFindTurnRadius(
+                minimumRadius, r0, planetRadius, p, out double turnRadius))
+            return false;
+
+        if (!TryIntegrateRefractedAngularSegment(
+                turnRadius, r0, planetRadius, p, sampleCount,
+                out double inwardAngular)
+            || !TryIntegrateRefractedAngularSegment(
+                turnRadius, rTop, planetRadius, p, sampleCount,
+                out double outwardAngular))
+            return false;
+
+        double nTop = RefractiveIndex(atmosphereTopAltitude);
+        double vacuumTail = System.Math.Asin(System.Math.Clamp(
+            p / System.Math.Max(nTop * rTop, 1.0), 0.0, 1.0));
+        geometricElevation = System.Math.PI * 0.5
+            - inwardAngular - outwardAngular - vacuumTail;
+        return double.IsFinite(geometricElevation);
+    }
+
+    private bool TryFindTurnRadius(
+        double lowerRadius,
+        double upperRadius,
+        double planetRadius,
+        double invariant,
+        out double turnRadius)
+    {
+        turnRadius = lowerRadius;
+        double lowerProduct = RefractiveIndex(lowerRadius - planetRadius) * lowerRadius;
+        double upperProduct = RefractiveIndex(upperRadius - planetRadius) * upperRadius;
+        if (lowerProduct > invariant || upperProduct < invariant) return false;
+
+        double low = lowerRadius;
+        double high = upperRadius;
+        for (int i = 0; i < 64; i++)
+        {
+            double middle = 0.5 * (low + high);
+            double product = RefractiveIndex(middle - planetRadius) * middle;
+            if (product < invariant) low = middle;
+            else high = middle;
+        }
+        turnRadius = 0.5 * (low + high);
         return true;
     }
 
@@ -392,6 +577,61 @@ public sealed record AtmosphereOptics
         return double.IsFinite(integral) && integral >= 0.0;
     }
 
+    private bool TryIntegrateRefractedAngularSegment(
+        double startRadius,
+        double endRadius,
+        double planetRadius,
+        double invariant,
+        int sampleCount,
+        out double integral)
+    {
+        integral = 0.0;
+        double span = endRadius - startRadius;
+        if (span <= 0.0) return false;
+
+        int scanSteps = System.Math.Max(32, sampleCount * 2);
+        for (int i = 0; i <= scanSteps; i++)
+        {
+            double u = (double)i / scanSteps;
+            double radius = startRadius + span * u * u;
+            double product = RefractiveIndex(radius - planetRadius) * radius;
+            if (product + 1e-5 < invariant) return false;
+        }
+
+        int n = System.Math.Max(8, sampleCount);
+        if ((n & 1) != 0) n++;
+        double step = 1.0 / n;
+        for (int i = 0; i <= n; i++)
+        {
+            double u = i * step;
+            double radius = startRadius + span * u * u;
+            double drDu = 2.0 * span * u;
+            double product = RefractiveIndex(radius - planetRadius) * radius;
+            double delta = product * product - invariant * invariant;
+            double angularDu;
+            if (i == 0 && delta <= 1e-8)
+            {
+                double derivative = RefractiveProductDerivative(
+                    radius, radius - planetRadius);
+                if (derivative <= 0.0) return false;
+                angularDu = 2.0 * invariant * span
+                    / (radius * System.Math.Sqrt(2.0 * invariant * derivative * span));
+            }
+            else
+            {
+                if (delta <= 0.0) return false;
+                angularDu = invariant * drDu
+                    / (radius * System.Math.Sqrt(delta));
+            }
+
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            integral += weight * angularDu;
+        }
+
+        integral *= step / 3.0;
+        return double.IsFinite(integral) && integral >= 0.0;
+    }
+
     private double RefractiveProductDerivative(double radius, double altitude)
     {
         double refractivity = SurfaceRefractivity * System.Math.Exp(
@@ -460,6 +700,27 @@ public sealed record AtmosphereOptics
     }
 
     /// <summary>
+    /// Dispatches the refracted optical path selected by the apparent solar elevation.
+    /// Positive elevations use the direct outbound branch; negative elevations may use a
+    /// valid two-branch duct path when the observer is above a refractive minimum.
+    /// </summary>
+    private Vector3d OpticalDepthAlongRefractedPath(
+        double altitude,
+        double apparentElevationSin,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount)
+    {
+        if (apparentElevationSin >= 0.0)
+            return OpticalDepthAlongRefractedRay(
+                altitude, apparentElevationSin,
+                planetRadius, atmosphereTopAltitude, sampleCount);
+        return OpticalDepthAlongRefractedTwoBranch(
+            altitude, apparentElevationSin,
+            planetRadius, atmosphereTopAltitude, sampleCount);
+    }
+
+    /// <summary>
     /// Integrates extinction along the outward branch of a refracted spherical ray.
     /// Snell's invariant <c>p = n r sin(zenith)</c> is held constant and the radial
     /// integral uses <c>ds/dr = 1 / sqrt(1 - (p/(nr))²)</c>.  The transformed variable
@@ -520,6 +781,101 @@ public sealed record AtmosphereOptics
                 + OzoneAbsorption * density.Z;
             int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
             integral += sample * (weight * dsDu);
+        }
+
+        return integral * (step / 3.0);
+    }
+
+    /// <summary>
+    /// Integrates a valid two-branch refracted path for an observer above a refractive
+    /// minimum.  The ray initially travels downward, turns where <c>n(r)r = p</c>, then
+    /// climbs through the outer atmosphere.  This is the branch that dense Venus-like
+    /// profiles need for a source below the geometric horizon; a ray that would intersect
+    /// the ground returns zero instead of being treated as direct sunlight.
+    /// </summary>
+    public Vector3d OpticalDepthAlongRefractedTwoBranch(
+        double altitude,
+        double apparentElevationSin,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount = 48)
+    {
+        if (!double.IsFinite(altitude) || !double.IsFinite(apparentElevationSin)
+            || !double.IsFinite(planetRadius) || !double.IsFinite(atmosphereTopAltitude)
+            || !double.IsFinite(SurfaceRefractivity) || !double.IsFinite(RefractiveScaleHeight)
+            || planetRadius <= 0.0 || atmosphereTopAltitude <= 0.0
+            || SurfaceRefractivity <= 0.0 || RefractiveScaleHeight <= 0.0
+            || apparentElevationSin >= 0.0)
+            return Vector3d.Zero;
+
+        if (!TryFindRefractiveMinimum(
+                altitude, planetRadius, atmosphereTopAltitude,
+                out double minimumRadius, out double minimumProduct))
+            return Vector3d.Zero;
+        double r0 = planetRadius + System.Math.Max(0.0, altitude);
+        double rTop = planetRadius + atmosphereTopAltitude;
+        double p = RefractiveIndex(altitude) * r0 * System.Math.Sqrt(
+            System.Math.Max(0.0, 1.0 - apparentElevationSin * apparentElevationSin));
+        if (p <= minimumProduct
+            || p >= RefractiveIndex(altitude) * r0
+            || !TryFindTurnRadius(minimumRadius, r0, planetRadius, p,
+                out double turnRadius))
+            return Vector3d.Zero;
+
+        var inward = IntegrateRefractedExtinctionSegment(
+            turnRadius, r0, planetRadius, p, sampleCount);
+        var outward = IntegrateRefractedExtinctionSegment(
+            turnRadius, rTop, planetRadius, p, sampleCount);
+        return inward + outward;
+    }
+
+    private Vector3d IntegrateRefractedExtinctionSegment(
+        double startRadius,
+        double endRadius,
+        double planetRadius,
+        double invariant,
+        int sampleCount)
+    {
+        double span = endRadius - startRadius;
+        if (span <= 0.0) return Vector3d.Zero;
+        int n = System.Math.Max(8, sampleCount);
+        if ((n & 1) != 0) n++;
+        double step = 1.0 / n;
+        Vector3d integral = Vector3d.Zero;
+        for (int i = 0; i <= n; i++)
+        {
+            double u = i * step;
+            double radius = startRadius + span * u * u;
+            double localAltitude = radius - planetRadius;
+            double drDu = 2.0 * span * u;
+            double product = RefractiveIndex(localAltitude) * radius;
+            double ratio = invariant / System.Math.Max(product, 1.0);
+            if (ratio > 1.0 + 1e-8) return Vector3d.Zero;
+
+            double dsDu;
+            double delta = product * product - invariant * invariant;
+            if (i == 0 && delta <= 1e-8)
+            {
+                double derivative = RefractiveProductDerivative(radius, localAltitude);
+                if (derivative <= 0.0) return Vector3d.Zero;
+                dsDu = 2.0 * span / System.Math.Sqrt(
+                    2.0 * derivative * span / System.Math.Max(invariant, 1.0));
+            }
+            else
+            {
+                dsDu = drDu / System.Math.Sqrt(
+                    System.Math.Max(1e-12, 1.0 - ratio * ratio));
+            }
+
+            var density = new Vector3d(
+                RayleighDensity(localAltitude),
+                MieDensity(localAltitude),
+                OzoneDensity(localAltitude));
+            var extinction = RayleighScattering * density.X
+                + MieExtinction * density.Y
+                + OzoneAbsorption * density.Z;
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            integral += extinction * (weight * dsDu);
         }
 
         return integral * (step / 3.0);
