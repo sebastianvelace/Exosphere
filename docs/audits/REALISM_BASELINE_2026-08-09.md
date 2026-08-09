@@ -34,6 +34,24 @@ el gradiente diurno es continuo, el limbo orbital está presente y no hay frame 
 número de estrellas en noche es deliberadamente bajo y queda como parámetro de comparación para
 la futura calibración de exposición y magnitud estelar.
 
+## Ascenso E2E de Flight 7
+
+Ejecución `baseline-ascent-v1` (`--ascent --flight7`) completada con `ASCENT_ORBIT_OK`:
+
+- Secuencia observada: `IGNITION → LIFTOFF → MAX_Q → MECO → hot-stage → SEPARATION →
+  ASCENT_SHIP → INSERT → ORBIT`.
+- Órbita final: aproximadamente **158 × 143 km**, excentricidad `e=0.001`.
+- 1.992 frames de diagnóstico; `insertObserved=true`.
+- Velocidad vertical de inserción dentro de la telemetría: mínimo `−99,7 m/s`, máximo de
+  descenso `99,7 m/s`.
+- Se generaron capturas de pad, liftoff, max-q, hot-stage, separación y órbita en
+  `/tmp/exo_baseline-ascent-v1/`.
+
+La telemetría deja una observación para la auditoría de propulsión: durante la primera fase el
+campo de diagnóstico reporta `throttle > 0` con `runningEngines=0` y `spool=0`, aunque el
+propelente sí disminuye y el vehículo acelera. Debe verificarse si es sólo un contador de HUD o
+si el modelo está aplicando empuje sin estados de arranque coherentes.
+
 ## Limitaciones descubiertas
 
 1. La LUT de densidad ya usa `P/T`, pero transmittance y scattering múltiple todavía consumen
