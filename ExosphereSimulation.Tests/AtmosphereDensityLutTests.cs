@@ -111,6 +111,25 @@ public sealed class AtmosphereDensityLutTests
     }
 
     [Fact]
+    public void LutTexelsUseTheSameProfileAsCpuTransport()
+    {
+        var lut = AtmosphereDensityLut.Build(AtmosphereModel.Earth(), width: 64);
+
+        Assert.Same(lut.Atmosphere, lut.Profile.Atmosphere);
+        foreach (int index in new[] { 0, 3, 17, 41, 63 })
+        {
+            double altitude = lut.AtmosphereTopAltitude
+                * AtmosphereDensityLut.CoordinateValue(index, lut.Width);
+            var expected = lut.Profile.Sample(altitude);
+            var actual = lut.GetTexel(index);
+
+            Assert.Equal(expected.X, actual.X, 12);
+            Assert.Equal(expected.Y, actual.Y, 12);
+            Assert.Equal(expected.Z, actual.Z, 12);
+        }
+    }
+
+    [Fact]
     public void OutsideTheAtmosphericDomainIsVacuum()
     {
         var lut = AtmosphereDensityLut.Build(AtmosphereModel.Earth(), width: 32);

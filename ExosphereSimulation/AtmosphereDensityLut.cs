@@ -37,13 +37,20 @@ public sealed class AtmosphereDensityLut
     /// <summary>The source model used to generate the table.</summary>
     public AtmosphereModel Atmosphere { get; }
 
+    /// <summary>
+    /// Exact CPU density provider used to populate this table. Keeping it with the LUT
+    /// lets optical transport and rendering share one thermodynamic profile.
+    /// </summary>
+    public AtmosphereDensityProfile Profile { get; }
+
     private AtmosphereDensityLut(
-        AtmosphereModel atmosphere,
+        AtmosphereDensityProfile profile,
         int width,
         double atmosphereTopAltitude,
         Vector3d[] values)
     {
-        Atmosphere = atmosphere;
+        Profile = profile;
+        Atmosphere = profile.Atmosphere;
         Width = width;
         AtmosphereTopAltitude = atmosphereTopAltitude;
         _values = values;
@@ -63,28 +70,17 @@ public sealed class AtmosphereDensityLut
             throw new ArgumentOutOfRangeException(nameof(atmosphere),
                 "The atmosphere must have a positive MaxAltitude.");
 
-        double top = ResolveTopAltitude(atmosphere);
+        var profile = AtmosphereDensityProfile.Create(atmosphere);
+        double top = profile.AtmosphereTopAltitude;
         var values = new Vector3d[width];
-
-        // P/T is the best available number-density proxy.  GetDensity is retained as a
-        // deliberate fallback for the thermosphere, where pressure is aerodynamically
-        // defined as zero even though a residual density is present.
-        double seaPressure = SafeNonNegative(atmosphere.GetPressure(0.0));
-        double seaTemperature = SafePositive(atmosphere.GetTemperature(0.0));
-        double seaMassDensity = SafeNonNegative(atmosphere.GetDensity(0.0));
-        double seaNumberProxy = seaPressure > 0.0 && seaTemperature > 0.0
-            ? seaPressure / seaTemperature
-            : 0.0;
 
         for (int i = 0; i < width; i++)
         {
             double altitude = top * CoordinateValue(i, width);
-            values[i] = Evaluate(
-                atmosphere, atmosphere.Optics, altitude,
-                seaPressure, seaTemperature, seaMassDensity, seaNumberProxy);
+            values[i] = profile.Sample(altitude);
         }
 
-        return new AtmosphereDensityLut(atmosphere, width, top, values);
+        return new AtmosphereDensityLut(profile, width, top, values);
     }
 
     /// <summary>Returns the exact unfiltered texel at an altitude index.</summary>
@@ -132,62 +128,4 @@ public sealed class AtmosphereDensityLut
         return System.Math.Pow(normalized, CoordinateExponent);
     }
 
-    private static double ResolveTopAltitude(AtmosphereModel atmosphere)
-    {
-        // ThermosphereTopAltitude is only meaningful when the residual tail is enabled.
-        // A zero/disabled tail must not create a large table full of vacuum samples.
-        if (atmosphere.ThermosphereScaleHeight > 0.0
-            && double.IsFinite(atmosphere.ThermosphereTopAltitude)
-            && atmosphere.ThermosphereTopAltitude > atmosphere.MaxAltitude)
-            return atmosphere.ThermosphereTopAltitude;
-        return atmosphere.MaxAltitude;
-    }
-
-    private static Vector3d Evaluate(
-        AtmosphereModel atmosphere,
-        AtmosphereOptics optics,
-        double altitude,
-        double seaPressure,
-        double seaTemperature,
-        double seaMassDensity,
-        double seaNumberProxy)
-    {
-        double massDensity = SafeNonNegative(atmosphere.GetDensity(altitude));
-        double massRatio = seaMassDensity > 0.0
-            ? ClampUnit(massDensity / seaMassDensity)
-            : 0.0;
-
-        double pressure = SafeNonNegative(atmosphere.GetPressure(altitude));
-        double temperature = SafePositive(atmosphere.GetTemperature(altitude));
-        double numberRatio = seaNumberProxy > 0.0 && pressure > 0.0 && temperature > 0.0
-            ? ClampUnit((pressure / temperature) / seaNumberProxy)
-            : massRatio;
-
-        // The Rayleigh channel follows molecular number density.  The fallback is what
-        // preserves continuity across MaxAltitude, where pressure intentionally becomes 0
-        // while GetDensity still exposes the residual thermosphere.
-        double rayleigh = numberRatio;
-
-        // Aerosols cannot outlive the bulk atmosphere.  The optical Mie scale height gives
-        // the realistic near-surface aerosol falloff; massRatio prevents it reappearing in
-        // a custom model whose pressure/density boundary has already become vacuum.
-        double mieEnvelope = SafeUnit(optics.MieDensity(altitude));
-        double mie = System.Math.Min(mieEnvelope, massRatio);
-
-        // OzoneDensity is already a normalised species profile.  Gate it at a true vacuum
-        // boundary without scaling its peak by the much smaller bulk number density.
-        double ozone = massDensity > 0.0 ? SafeUnit(optics.OzoneDensity(altitude)) : 0.0;
-        return new Vector3d(rayleigh, mie, ozone);
-    }
-
-    private static double SafeNonNegative(double value) =>
-        double.IsFinite(value) && value > 0.0 ? value : 0.0;
-
-    private static double SafePositive(double value) =>
-        double.IsFinite(value) && value > 0.0 ? value : 0.0;
-
-    private static double ClampUnit(double value) =>
-        double.IsFinite(value) ? System.Math.Clamp(value, 0.0, 1.0) : 0.0;
-
-    private static double SafeUnit(double value) => ClampUnit(value);
 }
