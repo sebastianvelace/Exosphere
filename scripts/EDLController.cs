@@ -42,6 +42,7 @@ public partial class EDLController : Control
     // an engine-cut decision, never a touchdown declaration.
     private const double ContactCutoffNormalSpeedMps = 2.0;
     private const double ContactCutoffTangentialSpeedMps = 1.0;
+    private const int MinimumFinalApproachEngines = 2;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -823,12 +824,25 @@ public partial class EDLController : Control
         int selected = System.Math.Min(_landingEngineCount, maxLandingEngines);
         if (_phase == Edl.Final)
         {
+            // A two-engine final approach is the minimum stable authority for this
+            // vehicle. One Raptor can nominally hold weight, but leaves no margin for
+            // TVC, wind/drag asymmetry, or the first leg touching before the others. The
+            // engine-out step is therefore deferred until the same safe multi-leg contact
+            // gate that commits the shutdown; a single contact must never be allowed to
+            // turn a controlled descent into an uncontrolled one-leg rebound.
+            bool safeContact = IsSafeMultiLegContact(vessel, body);
+            if (!safeContact)
+                selected = System.Math.Max(MinimumFinalApproachEngines, selected);
+
             const double StepDownCapacityFraction = 0.75;
-            while (selected > 1
-                   && requested < selected
-                   && desiredThrust <= perEngine * (selected - 1)
-                       * StepDownCapacityFraction)
-                selected--;
+            if (safeContact)
+            {
+                while (selected > 1
+                       && requested < selected
+                       && desiredThrust <= perEngine * (selected - 1)
+                           * StepDownCapacityFraction)
+                    selected--;
+            }
         }
         _landingEngineCount = selected;
         engineCluster.SelectEngineCount(selected);

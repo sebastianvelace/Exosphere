@@ -77,6 +77,23 @@ public sealed class LandingContactIntegrationTests
     }
 
     [Fact]
+    public void EdlFinalApproachKeepsTwoEngineFloorUntilSafeMultiLegContact()
+    {
+        // EDLController is a Godot scene script and is intentionally not referenced by this
+        // pure-simulation test project. Keep a narrow source-level contract beside the physical
+        // contact regression: the production controller must not reintroduce a 2→1 engine step
+        // before the same three-leg/low-speed gate used to commit engine cutoff.
+        string source = File.ReadAllText(Path.Combine(
+            FindRepoRoot().FullName, "scripts", "EDLController.cs"));
+
+        Assert.Contains("MinimumFinalApproachEngines = 2", source);
+        Assert.Contains("if (!safeContact)", source);
+        Assert.Contains("selected = System.Math.Max(MinimumFinalApproachEngines, selected)", source);
+        Assert.Contains("if (safeContact)", source);
+        Assert.Contains("IsSafeMultiLegContact(vessel, body)", source);
+    }
+
+    [Fact]
     public void DeterministicEdlContactStateRemainsInsideStructuralEnvelope()
     {
         // Regression for the full EDL playtest's measured pre-contact state. This is deliberately
