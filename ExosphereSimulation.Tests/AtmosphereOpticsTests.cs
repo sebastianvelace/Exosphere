@@ -76,6 +76,72 @@ public sealed class AtmosphereOpticsTests
     }
 
     [Fact]
+    public void ProfileAwareRayTransportUsesThermodynamicSpeciesDensity()
+    {
+        // A positive lapse rate makes P/T depart measurably from the legacy single
+        // exponential.  Keeping only the Rayleigh coefficient non-zero makes the
+        // independently integrated expectation easy to audit.
+        var optics = new AtmosphereOptics
+        {
+            RayleighScattering = new Vector3d(1.0e-5, 0.0, 0.0),
+            RayleighScaleHeight = 8_500.0,
+            SurfaceRefractivity = 0.0,
+        };
+        var atmosphere = new AtmosphereModel
+        {
+            MaxAltitude = 100_000.0,
+            SeaLevelDensity = 1.225,
+            SeaLevelPressure = 101_325.0,
+            SeaLevelTemperature = 288.15,
+            ScaleHeight = 8_500.0,
+            Optics = optics,
+            Layers = new List<AtmosphereLayer>
+            {
+                new(0.0, 100_000.0, 288.15, 0.0015),
+            },
+        };
+        var profile = new AtmosphereDensityProfile(atmosphere);
+        const double planetRadius = 6_371_000.0;
+        const double top = 100_000.0;
+        const int sampleCount = 64;
+
+        var transport = optics.OpticalDepthAlongRay(
+            profile, 0.0, 1.0, planetRadius, top, sampleCount);
+        var legacy = optics.OpticalDepthAlongRay(
+            0.0, 1.0, planetRadius, top, sampleCount);
+        var expected = IntegrateProfileRayleighColumn(
+            optics, profile, planetRadius, top, sampleCount);
+
+        Assert.Equal(expected, transport.X, 12);
+        Assert.Equal(0.0, transport.Y, 12);
+        Assert.Equal(0.0, transport.Z, 12);
+        Assert.True(System.Math.Abs(transport.X - legacy.X) > 1.0e-5,
+            $"profile transport unexpectedly matched exponential transport: "
+            + $"profile={transport.X}, legacy={legacy.X}");
+    }
+
+    [Fact]
+    public void ProfileAwareRayTransportTreatsItsThermosphereTopAsVacuum()
+    {
+        var atmosphere = AtmosphereModel.Earth();
+        var profile = new AtmosphereDensityProfile(atmosphere);
+
+        var withinProfile = atmosphere.Optics.OpticalDepthAlongRay(
+            profile, 0.0, 1.0, 6_371_000.0,
+            profile.TopAltitude, sampleCount: 64);
+        var aboveProfile = atmosphere.Optics.OpticalDepthAlongRay(
+            profile, profile.TopAltitude + 1.0, 1.0, 6_371_000.0,
+            profile.TopAltitude + 250_000.0, sampleCount: 64);
+
+        Assert.True(withinProfile.X > aboveProfile.X);
+        Assert.True(withinProfile.Y > aboveProfile.Y);
+        Assert.True(withinProfile.Z >= aboveProfile.Z);
+        Assert.True(double.IsFinite(aboveProfile.X)
+            && double.IsFinite(aboveProfile.Y)
+            && double.IsFinite(aboveProfile.Z));
+    }
+
+    [Fact]
     public void SphericalSolarTransmissionUsesTheActualBodyRadius()
     {
         var optics = AtmosphereModel.Mars().Optics;
@@ -502,6 +568,29 @@ public sealed class AtmosphereOpticsTests
         var transmittance = optics.DirectSolarTransmittance(
             altitude, selectedGeometric, body.Radius, body.Atmosphere.MaxAltitude, sampleCount: 64);
         Assert.True(transmittance.X > 0.0 && transmittance.Y > 0.0 && transmittance.Z > 0.0);
+    }
+
+    private static double IntegrateProfileRayleighColumn(
+        AtmosphereOptics optics,
+        AtmosphereDensityProfile profile,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount)
+    {
+        int n = sampleCount % 2 == 0 ? sampleCount : sampleCount + 1;
+        double step = atmosphereTopAltitude / n;
+        double column = 0.0;
+        for (int i = 0; i <= n; i++)
+        {
+            double distance = step * i;
+            double observerRadius = planetRadius;
+            double radius = System.Math.Sqrt(observerRadius * observerRadius
+                + distance * distance + 2.0 * observerRadius * distance);
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            column += profile.Sample(radius - planetRadius).X * weight;
+        }
+
+        return optics.RayleighScattering.X * column * (step / 3.0);
     }
 
     private static CelestialBody LoadBody(string id) => CelestialBody.LoadFromJson(

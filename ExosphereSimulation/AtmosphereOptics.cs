@@ -653,6 +653,53 @@ public sealed record AtmosphereOptics
         double atmosphereTopAltitude,
         int sampleCount = 48)
     {
+        return OpticalDepthAlongRayCore(
+            altitude,
+            cosZenith,
+            planetRadius,
+            atmosphereTopAltitude,
+            sampleCount,
+            RayleighDensitySample);
+    }
+
+    /// <summary>
+    /// Integrates extinction along a geometric ray using a thermodynamic density profile.
+    ///
+    /// The legacy overload above deliberately keeps its exponential optical envelope for
+    /// renderer compatibility.  This overload is the opt-in CPU transport path for callers
+    /// that already have an <see cref="AtmosphereDensityProfile"/> (for example, a diagnostic
+    /// or a future profile-aware transmittance table).  The RGB extinction coefficients still
+    /// come from this optics instance; only the dimensionless molecular, aerosol and ozone
+    /// densities are supplied by <paramref name="profile"/>.  Refractive transport remains a
+    /// separate path because its ray geometry must use the same profile for the refractive
+    /// index as well as extinction.
+    /// </summary>
+    public Vector3d OpticalDepthAlongRay(
+        AtmosphereDensityProfile profile,
+        double altitude,
+        double cosZenith,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount = 48)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return OpticalDepthAlongRayCore(
+            altitude,
+            cosZenith,
+            planetRadius,
+            atmosphereTopAltitude,
+            sampleCount,
+            profile.Sample);
+    }
+
+    private Vector3d OpticalDepthAlongRayCore(
+        double altitude,
+        double cosZenith,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount,
+        Func<double, Vector3d> densitySampler)
+    {
         if (!double.IsFinite(altitude) || !double.IsFinite(cosZenith)
             || !double.IsFinite(planetRadius) || !double.IsFinite(atmosphereTopAltitude)
             || planetRadius <= 0.0 || atmosphereTopAltitude <= 0.0)
@@ -685,10 +732,7 @@ public sealed record AtmosphereOptics
             double radius = System.Math.Sqrt(observerRadius * observerRadius
                 + distance * distance + 2.0 * observerRadius * cosZenith * distance);
             double localAltitude = radius - planetRadius;
-            Vector3d density = new(
-                RayleighDensity(localAltitude),
-                MieDensity(localAltitude),
-                OzoneDensity(localAltitude));
+            Vector3d density = densitySampler(localAltitude);
             Vector3d sample = RayleighScattering * density.X
                 + MieExtinction * density.Y
                 + OzoneAbsorption * density.Z;
@@ -698,6 +742,11 @@ public sealed record AtmosphereOptics
 
         return integral * (step / 3.0);
     }
+
+    private Vector3d RayleighDensitySample(double altitude) => new(
+        RayleighDensity(altitude),
+        MieDensity(altitude),
+        OzoneDensity(altitude));
 
     /// <summary>
     /// Dispatches the refracted optical path selected by the apparent solar elevation.
