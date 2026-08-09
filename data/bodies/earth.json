@@ -16,7 +16,7 @@
     "thermosphere_scale_height": 18750,
     "thermosphere_top_altitude": 1000000,
     "aerosol_climate": {
-      "aod550": 0.08,
+      "aod550": 0.04,
       "angstrom_exponent": 1.0,
       "dust_fraction": 0.60,
       "mist_fraction": 0.40,

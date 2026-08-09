@@ -293,7 +293,9 @@ public partial class AtmosphereModel
     {
         AerosolClimate = new AerosolClimateState
         {
-            Aod550 = 0.08,
+            // Clear coastal launch-site reference aerosol column (550 nm). Hazy/dust
+            // weather remains selectable through an explicit body-file override.
+            Aod550 = 0.04,
             AngstromExponent = 1.0,
             DustFraction = 0.60,
             MistFraction = 0.40,
