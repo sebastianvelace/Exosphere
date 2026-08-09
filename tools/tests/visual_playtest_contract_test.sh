@@ -38,6 +38,16 @@ write_good_log "$good"
 verify_ascent_log_contract "$good"
 echo "PASS valid ascent fixture accepted"
 
+starship_good="$TEST_DIR/starship-good.log"
+write_good_log "$starship_good"
+{
+  echo "ENGINE_STAGE t=1.0 stage=booster selected=33 lit=31 ramp=2 residual=0 failed=0"
+  echo "ENGINE_STAGE t=42.0 stage=hotstage selected=39 lit=39 ramp=0 residual=0 failed=0"
+  echo "ENGINE_STAGE t=44.0 stage=ship selected=6 lit=6 ramp=0 residual=0 failed=0"
+} >> "$starship_good"
+verify_ascent_log_contract "$starship_good" "ASCENT_ORBIT_OK" 1
+echo "PASS valid Starship 33->39->6 stage telemetry accepted"
+
 bad_periapsis="$TEST_DIR/bad-periapsis.log"
 write_good_log "$bad_periapsis"
 sed -i 's/pe=146729.1/pe=-1200.0/' "$bad_periapsis"
@@ -83,6 +93,19 @@ write_good_log "$stalled"
 echo "FAIL invariant=physics_stalled noProgressFor=60.1" >> "$stalled"
 expect_failure "stalled physics invariant" "$stalled"
 
+bad_stage="$TEST_DIR/bad-stage.log"
+write_good_log "$bad_stage"
+{
+  echo "ENGINE_STAGE t=1.0 stage=booster selected=6 lit=6 ramp=0 residual=0 failed=0"
+  echo "ENGINE_STAGE t=42.0 stage=hotstage selected=39 lit=39 ramp=0 residual=0 failed=0"
+  echo "ENGINE_STAGE t=44.0 stage=ship selected=6 lit=6 ramp=0 residual=0 failed=0"
+} >> "$bad_stage"
+if verify_ascent_log_contract "$bad_stage" "ASCENT_ORBIT_OK" 1 >/dev/null 2>&1; then
+  echo "FAIL: contract accepted invalid fixture: wrong booster engine count" >&2
+  exit 1
+fi
+echo "PASS invalid fixture rejected: wrong booster engine count"
+
 nul_bytes="$TEST_DIR/nul-bytes.log"
 write_good_log "$nul_bytes"
 printf '\0corrupt-tail\n' >> "$nul_bytes"
@@ -93,4 +116,4 @@ write_good_log "$duplicate_run"
 echo "SUMMARY reason=ABORT" >> "$duplicate_run"
 expect_failure "duplicate run boundary" "$duplicate_run"
 
-echo "visual_playtest_contract_test: 1 valid and 11 invalid fixtures passed"
+echo "visual_playtest_contract_test: 2 valid and 12 invalid fixtures passed"

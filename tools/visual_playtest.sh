@@ -368,6 +368,7 @@ public partial class _PlaytestShot : Node
     double _lastProgressAltitude = double.NaN;
     double _lastProgressSpeed = double.NaN;
     double _lastProgressPeriapsis = double.NaN;
+    string _lastEngineStage = "unknown";
 
     // ── hotstage mode ────────────────────────────────────────────────────
     bool _hotstage;
@@ -995,16 +996,16 @@ public partial class _PlaytestShot : Node
             Vector3d up = (vessel.Position - body.Position).Normalized;
             double vUp = surfVel.Dot(up);
             double horizontal = (surfVel - up * vUp).Magnitude;
-            var cluster = vessel.Parts.Parts.FirstOrDefault(
-                p => p.Definition.IsStarshipFamily
-                    && p.Definition.HasVehicleRole("ship_engines"));
+            var engineTelemetry = SampleEngineStage(vessel);
             double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
             int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
             double maxStroke = vessel.LastSurfaceContact?.Points.Max(p => p.PenetrationM) ?? 0.0;
             double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
             _log.WriteLine($"TRACE t={simElapsed:F1} alt={alt:F1} vUp={vUp:F1} horiz={horizontal:F1} " +
-                $"throttle={vessel.Throttle:F3} spool={cluster?.ThrottleLevel ?? 0.0:F3} " +
-                $"engines={cluster?.SelectedEngineCount ?? 0} upright={upright:F4} phase={phase} " +
+                $"throttle={vessel.Throttle:F3} spool={engineTelemetry.Spool:F3} " +
+                $"stage={engineTelemetry.Stage} selectedEngines={engineTelemetry.Selected} " +
+                $"litEngines={engineTelemetry.Lit} residualEngines={engineTelemetry.Residual} " +
+                $"upright={upright:F4} phase={phase} " +
                 $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
                 $"settled={vessel.IsSurfaceSettled}");
             _log.Flush();
@@ -1042,10 +1043,7 @@ public partial class _PlaytestShot : Node
             {
                 QueueCapture("flip_complete");
                 _flipComplete = true;
-                int engines = vessel.Parts.Parts
-                    .FirstOrDefault(p => p.Definition.IsStarshipFamily
-                        && p.Definition.HasVehicleRole("ship_engines"))
-                    ?.SelectedEngineCount ?? 0;
+                int engines = SampleEngineStage(vessel).Selected;
                 _log.WriteLine($"CHECK finite_flip duration={universe.CurrentTime - _retroStart:F2}s " +
                     $"alignment={alignment:F5} omega={vessel.AngularVelocity.Magnitude:F4} engines={engines}");
                 _log.Flush();
@@ -1260,6 +1258,79 @@ public partial class _PlaytestShot : Node
         }
     }
 
+    private static (string Stage, int Selected, int Lit, int Ramp, int Residual,
+        int Failed, double Spool) SampleEngineStage(Vessel vessel)
+    {
+        // ActiveEngines is the simulation's stage authority: it resolves the current
+        // subtree and includes both clusters only during the explicit hot-stage window.
+        // Keeping this query here prevents the playtest from silently reporting Ship
+        // engines while Super Heavy is still doing the work.
+        var engines = vessel.Parts.ActiveEngines.ToArray();
+        bool booster = engines.Any(p => p.Definition.HasVehicleRole("booster"));
+        bool ship = engines.Any(p => p.Definition.HasVehicleRole("ship_engines"));
+        string stage = vessel.IsHotStageOverlapping && booster && ship
+            ? "hotstage"
+            : booster ? "booster"
+            : ship ? "ship"
+            : "other";
+
+        int selected = 0;
+        int lit = 0;
+        int ramp = 0;
+        int residual = 0;
+        int failed = 0;
+        foreach (var part in engines)
+        {
+            int partSelected = System.Math.Clamp(
+                part.SelectedEngineCount, 0, System.Math.Max(1, part.Definition.EngineCount));
+            selected += partSelected;
+            if (!part.HasEngineRuntime)
+            {
+                if (part.ThrottleLevel > 1e-3) lit += partSelected;
+                continue;
+            }
+
+            foreach (var state in part.EngineStates.Take(partSelected))
+            {
+                bool pressureQualified = state.ChamberPressureFraction > 1e-3;
+                if (!string.IsNullOrWhiteSpace(state.FailureCode)
+                    || state.State == EngineLifecycleState.Failed)
+                {
+                    failed++;
+                    continue;
+                }
+                if (pressureQualified && state.State == EngineLifecycleState.Ramp)
+                    ramp++;
+                if (pressureQualified && state.State is
+                    (EngineLifecycleState.Ignition
+                        or EngineLifecycleState.Ramp
+                        or EngineLifecycleState.Running))
+                    lit++;
+                if (pressureQualified && state.State is
+                    (EngineLifecycleState.Shutdown or EngineLifecycleState.Purge))
+                    residual++;
+            }
+        }
+
+        double spool = engines.Length == 0 ? 0.0 : engines.Max(p => p.ThrottleLevel);
+        return (stage, selected, lit, ramp, residual, failed, spool);
+    }
+
+    private void LogEngineStageTelemetry(
+        double time,
+        string missionPhase,
+        (string Stage, int Selected, int Lit, int Ramp, int Residual,
+            int Failed, double Spool) telemetry)
+    {
+        _log.WriteLine(
+            $"ENGINE_STAGE t={time:F1} mission={missionPhase} " +
+            $"stage={telemetry.Stage} selected={telemetry.Selected} " +
+            $"lit={telemetry.Lit} ramp={telemetry.Ramp} " +
+            $"residual={telemetry.Residual} failed={telemetry.Failed} " +
+            $"spool={telemetry.Spool:F3}");
+        _log.Flush();
+    }
+
     private void MonitorAscent(
         Vessel vessel,
         CelestialBody body,
@@ -1292,16 +1363,17 @@ public partial class _PlaytestShot : Node
             && double.IsFinite(vessel.Velocity.Y)
             && double.IsFinite(vessel.Velocity.Z);
 
-        Part? engineCluster = vessel.Parts.Parts.FirstOrDefault(
-            p => p.Definition.IsStarshipFamily
-                && p.Definition.HasVehicleRole("ship_engines"));
-        int runningEngines = engineCluster?.EngineStates.Count(state =>
-            state.State is EngineLifecycleState.Ignition
-                or EngineLifecycleState.Running) ?? 0;
-        int failedEngines = engineCluster?.EngineStates.Count(state =>
-            !string.IsNullOrWhiteSpace(state.FailureCode)) ?? 0;
+        var engineTelemetry = SampleEngineStage(vessel);
+        int runningEngines = engineTelemetry.Lit;
+        int failedEngines = engineTelemetry.Failed;
         double propellant = vessel.Parts.Parts.Sum(
             part => part.LiquidFuel + part.Oxidizer);
+
+        if (engineTelemetry.Stage != _lastEngineStage)
+        {
+            LogEngineStageTelemetry(universe.CurrentTime, missionPhase, engineTelemetry);
+            _lastEngineStage = engineTelemetry.Stage;
+        }
 
         if (guidance != _lastGuidancePhase)
         {
@@ -1310,7 +1382,8 @@ public partial class _PlaytestShot : Node
                 $"from={_lastGuidancePhase} guidance={guidance} mission={missionPhase} " +
                 $"alt={altitude:F1} spd={surfaceSpeed:F1} vSpeed={verticalSpeed:F1} " +
                 $"apo={apo:F1} pe={pe:F1} throttle={vessel.Throttle:F3} " +
-                $"runningEngines={runningEngines}");
+                $"stage={engineTelemetry.Stage} selectedEngines={engineTelemetry.Selected} " +
+                $"litEngines={engineTelemetry.Lit} runningEngines={runningEngines}");
             if (_insertObserved && guidance == "Coast")
             {
                 FailAscentInvariant(
@@ -1428,8 +1501,11 @@ public partial class _PlaytestShot : Node
             $"alt={altitude:F1} spd={surfaceSpeed:F1} vSpeed={verticalSpeed:F1} " +
             $"apo={apo:F1} pe={pe:F1} atmoTop={atmosphereTop:F1} " +
             $"q={dynamicPressure:F1} g={properAccelerationG:F2} " +
-            $"throttle={vessel.Throttle:F3} spool={engineCluster?.ThrottleLevel ?? 0.0:F3} " +
-            $"runningEngines={runningEngines} failedEngines={failedEngines} " +
+            $"throttle={vessel.Throttle:F3} spool={engineTelemetry.Spool:F3} " +
+            $"stage={engineTelemetry.Stage} selectedEngines={engineTelemetry.Selected} " +
+            $"litEngines={engineTelemetry.Lit} rampEngines={engineTelemetry.Ramp} " +
+            $"residualEngines={engineTelemetry.Residual} runningEngines={runningEngines} " +
+            $"failedEngines={failedEngines} " +
             $"propellant={propellant:F1} warp={universe.TimeScale:F1} " +
             $"finite={finite} destroyed={vessel.IsDestroyed} " +
             $"structuralLost={vessel.StructuralControlLost}");
@@ -1459,27 +1535,26 @@ public partial class _PlaytestShot : Node
         double heatRatio = vessel.Parts.Parts.Count > 0
             ? vessel.Parts.Parts.Max(p => p.ThermalRatio)
             : 0.0;
-        Part? engineCluster = vessel.Parts.Parts.FirstOrDefault(
-            p => p.Definition.IsStarshipFamily
-                && p.Definition.HasVehicleRole("ship_engines"));
-        string engineRuntime = engineCluster == null
+        var engineTelemetry = SampleEngineStage(vessel);
+        var activeEngineParts = vessel.Parts.ActiveEngines.ToArray();
+        string engineRuntime = activeEngineParts.Length == 0
             ? "none"
-            : string.Join(",", engineCluster.EngineStates
+            : string.Join(",", activeEngineParts.SelectMany(part => part.EngineStates)
                 .GroupBy(state => state.State)
                 .OrderBy(group => group.Key)
                 .Select(group => $"{group.Key}:{group.Count()}"));
-        string engineFailures = engineCluster == null
+        string engineFailures = activeEngineParts.Length == 0
             ? "none"
-            : string.Join(",", engineCluster.EngineStates
+            : string.Join(",", activeEngineParts.SelectMany(part => part.EngineStates)
                 .Where(state => !string.IsNullOrWhiteSpace(state.FailureCode))
                 .GroupBy(state => state.FailureCode)
                 .OrderBy(group => group.Key)
                 .Select(group => $"{group.Key}:{group.Count()}"));
-        int completedStarts = engineCluster?.EngineStates
-            .Take(engineCluster.SelectedEngineCount)
+        int completedStarts = activeEngineParts.SelectMany(part => part.EngineStates
+                .Take(System.Math.Clamp(part.SelectedEngineCount, 0, part.EngineStates.Count)))
             .Select(state => state.StartsCompleted)
             .DefaultIfEmpty(0)
-            .Min() ?? 0;
+            .Min();
         double liquidFuel = vessel.Parts.Parts.Sum(p => p.LiquidFuel);
         double oxidizer = vessel.Parts.Parts.Sum(p => p.Oxidizer);
         double propellant = liquidFuel + oxidizer;
@@ -1489,8 +1564,10 @@ public partial class _PlaytestShot : Node
             $"spd={surfVel.Magnitude:F1} vSpeed={vSpeed:F1} phase={phase} " +
             $"warp={universe.TimeScale:F1} heatRatio={heatRatio:F3} maxT={maxT:F0} " +
             $"propellant={propellant:F0} throttle={vessel.Throttle:F3} " +
-            $"spool={engineCluster?.ThrottleLevel ?? 0.0:F3} " +
-            $"engines={engineCluster?.SelectedEngineCount ?? 0} " +
+            $"stage={engineTelemetry.Stage} spool={engineTelemetry.Spool:F3} " +
+            $"selectedEngines={engineTelemetry.Selected} litEngines={engineTelemetry.Lit} " +
+            $"rampEngines={engineTelemetry.Ramp} residualEngines={engineTelemetry.Residual} " +
+            $"failedEngines={engineTelemetry.Failed} " +
             $"runtime={engineRuntime} failures={engineFailures} starts={completedStarts} " +
             $"lf={liquidFuel:F0} ox={oxidizer:F0} " +
             $"upright={upright:F4} authority={vessel.ControlAuthorityFactor:F2}");
@@ -1895,10 +1972,7 @@ public partial class _PlaytestShot : Node
         double apo = trajectory.Apoapsis - body.Radius;
         double pe = trajectory.Periapsis - body.Radius;
         double atmosphereTop = body.Atmosphere?.MaxAltitude ?? 0.0;
-        int selectedEngines = vessel.Parts.Parts
-            .FirstOrDefault(p => p.Definition.IsStarshipFamily
-                && p.Definition.HasVehicleRole("ship_engines"))
-            ?.SelectedEngineCount ?? 0;
+        var engineTelemetry = SampleEngineStage(vessel);
         int landingParts = vessel.Parts.Parts.Count(
             p => p.Definition.Category == PartCategory.Landing);
         int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
@@ -1909,7 +1983,9 @@ public partial class _PlaytestShot : Node
             $"CAPTURE {slug} path={path} alt={alt:F1} spd={spd:F1} vSpeed={vSpeed:F1} " +
             $"apo={apo:F1} pe={pe:F1} atmoTop={atmosphereTop:F1} q={q:F0} g={g:F2} " +
             $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2} " +
-            $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines} " +
+            $"omega={vessel.AngularVelocity.Magnitude:F4} stage={engineTelemetry.Stage} " +
+            $"selectedEngines={engineTelemetry.Selected} litEngines={engineTelemetry.Lit} " +
+            $"residualEngines={engineTelemetry.Residual} " +
             $"landingParts={landingParts} approachSpeed={_lastApproachSpeed:F2} " +
             $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
             $"settled={vessel.IsSurfaceSettled}");
@@ -2012,7 +2088,12 @@ verify_pngs() {
         return 1
       fi
     done
-    if ! verify_ascent_log_contract "$LOG" "LANDED"; then
+    local starship_stage_contract=0
+    if [[ "$VARIANT_FILE" == "starship_flight7_block2_2025.json" \
+      || "$VARIANT_FILE" == "starship_flight12_v3_2026.json" ]]; then
+      starship_stage_contract=1
+    fi
+    if ! verify_ascent_log_contract "$LOG" "LANDED" "$starship_stage_contract"; then
       echo "ERROR: full mission failed its pad-to-stable-orbit contract" >&2
       return 1
     fi
@@ -2074,7 +2155,12 @@ verify_pngs() {
         return 1
       fi
     done
-    if ! verify_ascent_log_contract "$LOG" "ASCENT_ORBIT_OK"; then
+    local starship_stage_contract=0
+    if [[ "$VARIANT_FILE" == "starship_flight7_block2_2025.json" \
+      || "$VARIANT_FILE" == "starship_flight12_v3_2026.json" ]]; then
+      starship_stage_contract=1
+    fi
+    if ! verify_ascent_log_contract "$LOG" "ASCENT_ORBIT_OK" "$starship_stage_contract"; then
       echo "ERROR: focused ascent did not reach a verified stable orbit" >&2
       return 1
     fi
