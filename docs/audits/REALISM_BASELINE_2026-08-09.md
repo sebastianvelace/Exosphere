@@ -52,6 +52,22 @@ campo de diagnóstico reporta `throttle > 0` con `runningEngines=0` y `spool=0`,
 propelente sí disminuye y el vehículo acelera. Debe verificarse si es sólo un contador de HUD o
 si el modelo está aplicando empuje sin estados de arranque coherentes.
 
+## EDL E2E — fallo reproducible
+
+Ejecución `baseline-edl-v1` (`--edl`) alcanzó entrada, pico de calentamiento, retro-burn, flip
+físico y descenso final, pero terminó correctamente clasificada como fallo:
+
+- `ENTRY → PEAK_HEATING → AERO_DESCENT → RETRO_BURN → FINAL_DESCENT` sí se observaron.
+- El flip terminó en 21,1 s con alineación `0.99624` y `omega=0.0683 rad/s`.
+- Cerca de 11 m la velocidad vertical era sólo `−0,4 m/s`, pero el contacto posterior dejó
+  `34,21 m/s` de impacto, `peakLegLoad=6.399 MN`, `contacts=1` y `settled=True`.
+- El runner recibió `CRASHED`, no se creó `exo_play_touchdown.png` y el gate EDL falló.
+
+Esto apunta a una interacción entre la lógica de throttle/engine-out final, la detección de
+contacto y la respuesta de las patas: no se debe convertir este estado en touchdown artificial.
+El siguiente tranche debe corregir el perfil de frenado y/o el contacto, añadir una prueba de
+velocidad de contacto segura y repetir `--edl` hasta obtener un aterrizaje físico verificable.
+
 ## Limitaciones descubiertas
 
 1. La LUT de densidad ya usa `P/T`, pero transmittance y scattering múltiple todavía consumen
