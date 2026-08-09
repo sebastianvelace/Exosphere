@@ -102,6 +102,14 @@ velocidad de contacto segura y repetir `--edl` hasta obtener un aterrizaje físi
   harness visual tenía el `flock` global ocupado. No se considera touchdown hasta obtener
   `exo_play_touchdown.png`, `TOUCHDOWN`, contacto multipunto y el gate completo.
 
+- `edl-one-engine-v9` (`/tmp/exo_edl_v9.log`) incorporó `c8a7558`, que adelanta la transición
+  a un solo motor para evitar el hover de dos motores. La ejecución fue interrumpida por el
+  harness durante `RETRO_BURN` antes de alcanzar `FINAL_DESCENT`: último estado válido a
+  `t=269,6 s`, `alt=2.906,7 m`, `vUp=-91,2 m/s`, `horiz=52,7 m/s`, `selectedEngines=3`,
+  `litEngines=3`, `upright=-0,0346`. No existe `TOUCHDOWN`, `exo_play_touchdown.png` ni
+  `SUMMARY`; por tanto es una corrida **incompleta**, no un aterrizaje aprobado. Una nueva
+  prueba debe usar otro `run-id` y comprobar que el proceso permanece vivo hasta el gate.
+
 Estas fallas son evidencia física útil: el controlador necesita resolver simultáneamente el
   mínimo de throttle, la selección discreta de motores y la deriva lateral antes de declarar
   `LANDED`. Ningún EDL PNG de touchdown se considera válido mientras no exista contacto multipunto

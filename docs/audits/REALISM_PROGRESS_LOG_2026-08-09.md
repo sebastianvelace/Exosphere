@@ -28,6 +28,7 @@ not converted into a passing screenshot.
 | `2115102` | Bind aerosol climate to realtime sky transport | shader profile/Ångström/vertical Mie path; legacy switch retained |
 | `ce97d59` | Calibrate Earth coastal aerosol reference | v1 optical gate failure recorded; v2 clipping below threshold |
 | `6d71902` | Document aerosol renderer evidence | v2 `ATMOSPHERE_OK`, 16/16, 1157 frames |
+| `c8a7558` | Transition to one engine before final hover | EDL source contracts updated; visual v9 incomplete before final descent |
 
 ## Current gates
 
@@ -39,6 +40,9 @@ not converted into a passing screenshot.
 - EDL v3 reproduced a one-engine lateral rebound; v4 reproduced a three-engine hover;
   v5 reproduced a two-engine minimum-throttle rebound at ~20 m; v6 reproduced a late
   two-engine bounce and 106.31 m/s overload at contact. EDL touchdown remains open.
+- `edl-one-engine-v9` reached retro-burn with the new one-engine transition policy but the
+  harness ended at `t=269,6 s` before `FINAL_DESCENT`; no touchdown artifact or summary was
+  emitted. Treat this as incomplete evidence and keep the physical gate open.
 - The test suite is green on the latest completed commits; rerun the full suite after the
   one-engine/low-thrust EDL and menu dossier tranches merge.
 
