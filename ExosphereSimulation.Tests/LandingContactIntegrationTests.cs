@@ -88,8 +88,8 @@ public sealed class LandingContactIntegrationTests
 
         Assert.Contains("MinimumFinalApproachEngines = 2", source);
         Assert.Contains("if (!safeContact)", source);
+        Assert.Contains("selected = System.Math.Min(selected, requested)", source);
         Assert.Contains("selected = System.Math.Max(MinimumFinalApproachEngines, selected)", source);
-        Assert.Contains("if (safeContact)", source);
         Assert.Contains("IsSafeMultiLegContact(vessel, body)", source);
     }
 

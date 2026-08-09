@@ -800,7 +800,16 @@ public partial class EDLController : Control
         double desiredThrust = System.Math.Max(0.0, accelerationCmd * mass);
         if (perEngine <= 1.0 || desiredThrust <= 1.0)
         {
-            engineCluster.SelectEngineCount(0);
+            // A zero-thrust command is still allowed to coast, but do not throw away the
+            // final-approach engine-count state before a safe contact. Keeping the two
+            // selected mounts warm avoids a fresh three-engine hover becoming a dead-stick
+            // descent on the next guidance sample; throttle 0 remains an actual shutdown.
+            bool safeContact = _phase == Edl.Final && IsSafeMultiLegContact(vessel, body);
+            int coastEngineCount = _phase == Edl.Final && !safeContact
+                ? System.Math.Min(maxLandingEngines, MinimumFinalApproachEngines)
+                : 0;
+            engineCluster.SelectEngineCount(coastEngineCount);
+            _landingEngineCount = coastEngineCount;
             vessel.Throttle = 0.0;
             return;
         }
@@ -824,25 +833,15 @@ public partial class EDLController : Control
         int selected = System.Math.Min(_landingEngineCount, maxLandingEngines);
         if (_phase == Edl.Final)
         {
-            // A two-engine final approach is the minimum stable authority for this
-            // vehicle. One Raptor can nominally hold weight, but leaves no margin for
-            // TVC, wind/drag asymmetry, or the first leg touching before the others. The
-            // engine-out step is therefore deferred until the same safe multi-leg contact
-            // gate that commits the shutdown; a single contact must never be allowed to
-            // turn a controlled descent into an uncontrolled one-leg rebound.
+            // A two-engine final approach is the minimum stable authority for this vehicle.
+            // First apply the demand transition (3→2 is needed to avoid a minimum-throttle
+            // hover), then clamp the result at two until the same safe multi-leg contact gate
+            // that commits engine cutoff. One Raptor can nominally hold weight, but leaves no
+            // margin for TVC, wind/drag asymmetry, or the first leg touching before the others.
             bool safeContact = IsSafeMultiLegContact(vessel, body);
+            selected = System.Math.Min(selected, requested);
             if (!safeContact)
                 selected = System.Math.Max(MinimumFinalApproachEngines, selected);
-
-            const double StepDownCapacityFraction = 0.75;
-            if (safeContact)
-            {
-                while (selected > 1
-                       && requested < selected
-                       && desiredThrust <= perEngine * (selected - 1)
-                           * StepDownCapacityFraction)
-                    selected--;
-            }
         }
         _landingEngineCount = selected;
         engineCluster.SelectEngineCount(selected);
