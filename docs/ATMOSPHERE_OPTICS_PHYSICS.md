@@ -1,6 +1,6 @@
 # Contrato físico de la óptica atmosférica
 
-**Estado:** V8 implementado en la simulación, con nubes 3D verificadas visualmente
+**Estado:** V9 implementado parcialmente: LUT de densidad termodinámica integrada en la vista; validación visual completa pendiente
 **Alcance:** `ExosphereSimulation/AtmosphereOptics.cs` y sus consumidores de iluminación/exposición
 
 Este documento describe el contrato que debe respetar cualquier renderer o sistema de
@@ -29,6 +29,47 @@ T(h) = exp(-τ(h))
 Por tanto, una profundidad óptica no puede ser negativa y una transmitancia válida debe estar
 entre cero y uno. La absorción de Mie y ozono solo extingue; `MieScattering` es la parte que
 puede volver a inyectar radiancia en el cielo.
+
+## V9: LUT de densidad termodinámica
+
+`AtmosphereDensityLut` añade una representación vertical compartida para la densidad que ve el
+shader. Es una tabla 1D empaquetada como textura de una fila de 256 texels, con valores lineales
+normalizados respecto al nivel del mar. Sus canales son:
+
+```text
+R = densidad molecular/Rayleigh
+G = envolvente de aerosol/Mie
+B = perfil normalizado de ozono (O₃)
+```
+
+El canal Rayleigh se deriva del estado termodinámico del perfil, usando `P/T` como proxy de
+densidad numérica cuando presión y temperatura son válidas. En la cola residual de la
+termósfera, `AtmosphereModel` deja de exponer presión aerodinámica aunque todavía conserve
+densidad másica; allí se usa deliberadamente la razón de densidad másica para mantener
+continuidad y evitar que la tabla corte la atmósfera de golpe. El canal Mie usa la envolvente
+óptica de aerosoles (`MieDensity`) limitada por la razón de densidad másica disponible, de modo
+que el aerosol no reaparezca en un vacío. El canal O₃ conserva `OzoneDensity` y se anula cuando
+la densidad másica es cero.
+
+La tabla representa `ThermosphereTopAltitude` cuando la cola termósferica está habilitada; sin
+cola, su techo es `MaxAltitude`. La coordenada de construcción es cuadrática
+(`altitude_fraction = u²`) y el shader recupera la coordenada con `sqrt(altitude_fraction)`.
+Esto concentra texels en la troposfera y estratosfera, donde los gradientes ópticos son mayores,
+sin perder la cola tenue de la termósfera. Fuera del intervalo representado se devuelve vacío,
+no una copia del texel superior.
+
+`SkyController` construye y cachea la tabla por cuerpo, la sube como `ImageTexture` lineal y
+publica `density_lut_top_altitude` por separado de `atmosphere_height`. El shader activa
+`density_lut_enabled` sólo después de enlazar una tabla válida y conserva el perfil exponencial
+como fallback de arranque o de cuerpos sin atmósfera. Separar ambos techos es intencional:
+la LUT puede contener la termósfera completa aunque la cáscara geométrica visible siga limitada
+al techo óptico actual.
+
+Esta LUT corrige el perfil de densidad usado por el camino de vista, pero todavía no convierte
+automáticamente todos los oráculos ópticos. La LUT solar de transmitancia y la LUT de scattering
+global/múltiple continúan construyéndose desde el perfil exponencial de `AtmosphereOptics`; la
+paridad termodinámica completa entre vista, Sol y scattering es el siguiente trabajo y debe
+validarse antes de elevar el techo geométrico a la termósfera.
 
 ## Luz solar y geometría esférica
 

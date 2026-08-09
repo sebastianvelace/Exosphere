@@ -1,6 +1,6 @@
 # Atmósfera física y óptica planetaria
 
-**Fecha:** 2026-08-09 · **Estado:** V8 óptica esférica + LUT angular 4D + ductos refractivos + nubes 3D verificadas
+**Fecha:** 2026-08-09 · **Estado:** V9 LUT de densidad termodinámica integrada en la vista; auditoría visual completa pendiente
 
 ## Veredicto honesto
 
@@ -35,6 +35,28 @@ advección comparte el desplazamiento longitudinal existente. El rayo de vista u
 macro+weather; la autosombra solar conserva el mismo perfil vertical y mapa meteorológico, evitando
 recalcular el ruido costoso siete veces por muestra en llvmpipe. Así la sombra sigue siendo coherente
 con la cobertura observada, con una aproximación explícita y acotada.
+
+V9 añade `AtmosphereDensityLut`, una tabla vertical de 256 texels que comparte con el shader
+el perfil de especies atmosféricas. El canal Rayleigh usa `P/T` para seguir la densidad numérica
+del estado termodinámico; cuando la presión deja de estar definida en la cola de la termósfera,
+usa la densidad másica residual como fallback continuo. El canal Mie combina la envolvente de
+aerosoles con un límite de masa disponible y el canal O₃ conserva la forma normalizada del
+perfil de ozono. La tabla usa un warp vertical cuadrático al construirla y `sqrt` al muestrearla,
+reservando resolución para la atmósfera baja sin descartar la cola termósferica.
+
+`SkyController` genera la tabla desde el mismo `AtmosphereModel`, la cachea por cuerpo y la
+publica como `density_lut` junto con `density_lut_top_altitude`. El shader sólo habilita esta
+fuente cuando el binding está listo y conserva el perfil exponencial como fallback. El techo de
+la LUT se mantiene separado de `atmosphere_height`: en V9 la cáscara geométrica visible sigue
+en el techo óptico actual (140 km para el perfil terrestre), aunque la tabla pueda representar
+una termósfera hasta 1.000 km. No se debe interpretar esa cola tabulada como volumen visible
+hasta que las LUTs de transmitancia solar y scattering se extiendan de forma consistente.
+
+El límite importante de esta iteración es la paridad: la densidad termodinámica ya alimenta el
+camino de vista, pero `AtmosphereTransmittanceLut` y `AtmosphereMultipleScatteringLut` siguen
+usando el perfil exponencial de `AtmosphereOptics`. Por ello V9 mejora la plausibilidad vertical
+del cielo, pero todavía no representa un modelo termodinámico único para todos los caminos
+radiativos.
 
 La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
 orden, limitada por el albedo de dispersión por banda, y adaptación ocular temporal. El ojo
@@ -94,6 +116,13 @@ calibrables en datos, no mediciones oficiales.
   estrellas atenuadas a través de atmósfera.
 - Matriz visual V8 completa: 16/16 capturas entre 20 m y 400 km, día/noche y cockpit,
   `ATMOSPHERE_OK`, sin `GAP`/`FALLBACK`; mean frame time estable en ~160 ms en llvmpipe.
+- V9: las pruebas de `AtmosphereDensityLut` cubren techo termósferico, normalización finita,
+  monotonicidad, fallback de densidad residual, máximo de ozono, warp, vacío fuera de dominio,
+  perfiles Tierra/Marte/Venus y el fallback exponencial sin capas (9/9). El chequeo atmosférico
+  integrado mantiene 79/79 pruebas y el smoke de Godot pasa.
+  La matriz framebuffer completa V9 (16 estados, incluidos 10/30/400 km y cockpit) sigue
+  pendiente; la corrida preliminar llega a día, amanecer, atardecer y noche sin `GAP` ni
+  `FALLBACK`, pero termina por el presupuesto de llvmpipe antes de completar todos los estados.
 - Godot carga/compila el shader y los assemblies terminan con 0 warnings.
 
 ```bash
@@ -109,11 +138,15 @@ bash tools/atmosphere_quick_check.sh
 
 ## Próximos gates
 
-1. Aumentar la resolución de la LUT 4D angular y añadir órdenes superiores a tres con unidades
+1. Reemplazar el perfil exponencial de los oráculos de transmitancia solar y scattering múltiple
+   por la misma densidad termodinámica de V9; después ampliar de forma coordinada el techo de
+   la cáscara, la LUT solar y el scattering para visualizar la termósfera sin discontinuidades.
+2. Repetir la matriz framebuffer completa de 16 estados y añadir golden checks para la LUT de
+   densidad en Tierra, Marte y Venus; comparar 20/50/80/150/400 km, día/noche, eclipse y cockpit.
+3. Aumentar la resolución de la LUT 4D angular y añadir órdenes superiores a tres con unidades
    espectrales calibradas; la versión actual es una envolvente de baja resolución.
-2. Evolucionar las nubes volumétricas actuales a weather map dinámica, microfísica por especie,
+4. Evolucionar las nubes volumétricas actuales a weather map dinámica, microfísica por especie,
    sombras proyectadas sobre terreno y aerial perspective segmentada. El ruido macro 3D de V8 es
    un campo geométrico de baja frecuencia, no un modelo de convección ni precipitación.
-3. Aerosoles por clima/latitud y capas Venus validadas.
-4. Trazador refractivo de distancia finita para estrellas; polarización y química del airglow.
-5. Golden por cuerpo: mediodía, sunset, 20/50/80/150/400 km y eclipse.
+5. Aerosoles por clima/latitud y capas Venus validadas.
+6. Trazador refractivo de distancia finita para estrellas; polarización y química del airglow.

@@ -49,6 +49,7 @@ public partial class SkyController : Node
     private string? _boundCloudBodyId;
     private readonly Dictionary<string, Texture2D> _transmittanceLuts = new();
     private readonly Dictionary<string, Texture2D> _multipleScatteringLuts = new();
+    private readonly Dictionary<string, (Texture2D Texture, float TopAltitude)> _densityLuts = new();
     private double _updateAccumulator = 1.0;
     private bool _hasAtmosphereState;
     private string? _lastAtmosphereBodyId;
@@ -76,6 +77,7 @@ public partial class SkyController : Node
             (float)AngularScatteringViewLayers);
         _skyMat.SetShaderParameter("multiple_scattering_mu_layers",
             (float)AngularScatteringMuLayers);
+        _skyMat.SetShaderParameter("density_lut_enabled", false);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
         _env.Sky.SkyMaterial = _skyMat;
@@ -185,6 +187,9 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("sun_dir", ToGodot(toSun));
         _skyMat.SetShaderParameter("planet_radius", (float)body.Radius);
         _skyMat.SetShaderParameter("observer_altitude", (float)System.Math.Max(1.0, altitude));
+        // Disable before resolving a new body/profile so a missing texture can never
+        // replace the established exponential fallback with the black default sampler.
+        _skyMat.SetShaderParameter("density_lut_enabled", false);
         _skyMat.SetShaderParameter("atmosphere_height",
             enabled ? (float)atmosphere!.MaxAltitude : 1.0f);
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
@@ -203,6 +208,11 @@ public partial class SkyController : Node
             _skyMat.SetShaderParameter("cloud_enabled", false);
             return;
         }
+
+        var densityLut = GetDensityLut(body.Id, atmosphere!);
+        _skyMat.SetShaderParameter("density_lut", densityLut.Texture);
+        _skyMat.SetShaderParameter("density_lut_top_altitude", densityLut.TopAltitude);
+        _skyMat.SetShaderParameter("density_lut_enabled", true);
 
         // Build each body's table once.  The LUT is independent of the vessel's current
         // altitude and solar longitude; reusing it avoids a 12 Hz texture allocation and
@@ -324,6 +334,27 @@ public partial class SkyController : Node
         var texture = ImageTexture.CreateFromImage(image);
         _transmittanceLuts[bodyId] = texture;
         return texture;
+    }
+
+    private (Texture2D Texture, float TopAltitude) GetDensityLut(
+        string bodyId,
+        AtmosphereModel atmosphere)
+    {
+        if (_densityLuts.TryGetValue(bodyId, out var cached)) return cached;
+
+        var lut = AtmosphereDensityLut.Build(atmosphere);
+        var image = Image.CreateEmpty(lut.Width, lut.Height, false, Image.Format.Rgbaf);
+        for (int x = 0; x < lut.Width; x++)
+        {
+            var value = lut.GetTexel(x);
+            image.SetPixel(x, 0, new Color(
+                (float)value.X, (float)value.Y, (float)value.Z, 1.0f));
+        }
+
+        var texture = ImageTexture.CreateFromImage(image);
+        var result = (texture, (float)lut.AtmosphereTopAltitude);
+        _densityLuts[bodyId] = result;
+        return result;
     }
 
     private Texture2D GetMultipleScatteringLut(
