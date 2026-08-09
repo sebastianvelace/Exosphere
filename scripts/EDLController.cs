@@ -51,6 +51,11 @@ public partial class EDLController : Control
     private const double FinalSingleEngineAltitudeM = 75.0;
     private const double FinalSingleEngineLateralSpeedMps = 4.0;
     private const double FinalSingleEngineReacquireLateralSpeedMps = 4.0;
+    // Lateral velocity is corrected through a finite TVC cant. Do not let a transient
+    // cross-range spike request the full two-engine thrust budget in the last few hundred
+    // metres: the vertical profile must remain dominant or the vehicle trades a horizontal
+    // error for a powered rebound (EDL v7 evidence).
+    private const double FinalHorizontalBrakeErrorMps = 4.0;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -463,6 +468,9 @@ public partial class EDLController : Control
             double coupledHorizontalError = _phase is Edl.Retro or Edl.Catch or Edl.Final
                 ? horizontalError
                 : 0.0;
+            if (_phase == Edl.Final)
+                coupledHorizontalError = System.Math.Clamp(
+                    coupledHorizontalError, 0.0, FinalHorizontalBrakeErrorMps);
             double brakingError = System.Math.Max(0.0,
                 System.Math.Max(verticalError, coupledHorizontalError));
             // Divide by the commanded thrust axis, not by -velocity. In final vertical flight
