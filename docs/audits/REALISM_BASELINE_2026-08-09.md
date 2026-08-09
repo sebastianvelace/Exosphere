@@ -10,7 +10,8 @@
   preservado en un stash reversible.
 - La serie atmosférica existente y el plan multiagente están publicados en la rama de trabajo.
 - Build Godot/C# sin warnings ni errores.
-- Suite xUnit completa: **526/526**.
+- Suite xUnit completa en la base inicial: **526/526**; después de los contratos ópticos y de
+  propulsión: **534/534**.
 - Perfil termodinámico: 8/8 tests.
 - Estado de aerosoles/clima: 8/8 tests.
 
@@ -47,10 +48,11 @@ Ejecución `baseline-ascent-v1` (`--ascent --flight7`) completada con `ASCENT_OR
 - Se generaron capturas de pad, liftoff, max-q, hot-stage, separación y órbita en
   `/tmp/exo_baseline-ascent-v1/`.
 
-La telemetría deja una observación para la auditoría de propulsión: durante la primera fase el
-campo de diagnóstico reporta `throttle > 0` con `runningEngines=0` y `spool=0`, aunque el
-propelente sí disminuye y el vehículo acelera. Debe verificarse si es sólo un contador de HUD o
-si el modelo está aplicando empuje sin estados de arranque coherentes.
+La telemetría histórica dejaba una observación: durante la primera fase el contador consultaba
+siempre el cluster Ship y reportaba `runningEngines=0` aunque el booster sí producía empuje. El
+harness ahora deriva el estado de `Parts.ActiveEngines` y expone `selected`, `lit`, `ramp`,
+`residual` y `failed`. El gate stage-aware de Flight 7 exige y observa `33 → 39 → 6` en
+`/tmp/exo_stage_ascent_v1.log`, además de mantener `ASCENT_ORBIT_OK`.
 
 ## EDL E2E — fallo reproducible
 
@@ -68,11 +70,28 @@ contacto y la respuesta de las patas: no se debe convertir este estado en touchd
 El siguiente tranche debe corregir el perfil de frenado y/o el contacto, añadir una prueba de
 velocidad de contacto segura y repetir `--edl` hasta obtener un aterrizaje físico verificable.
 
+## Iteraciones EDL posteriores
+
+- `edl-fix-v3` (`/tmp/exo_edl_fix_v3.log`) confirmó que mantener empuje ante un solo pie evita el
+  corte prematuro, pero la transición a un motor a 19,2 m elevó la deriva horizontal a 11,7 m/s;
+  terminó en `CRASHED`, 34,66 m/s, un contacto y sobrecarga de 7,07 MN.
+- `edl-fix-v4` mostró el siguiente defecto: el mínimo de dos motores quedó bloqueado mientras no
+  había contacto, por lo que el vehículo entró en hover a unos 520–577 m con `throttle=0.400`.
+- `edl-fix-v5` eliminó ese hover de tres motores y llegó con dos motores hasta ~20 m, pero el
+  mínimo de 40 % produjo otro rebote/hover: de 19,9 m pasó a 39,2 m sin registrar contacto. El
+  gate se detuvo conservando las capturas y el log; la política one-engine/low-thrust final aún
+  es un trabajo abierto.
+
+Estas fallas son evidencia física útil: el controlador necesita resolver simultáneamente el
+  mínimo de throttle, la selección discreta de motores y la deriva lateral antes de declarar
+  `LANDED`. Ningún EDL PNG de touchdown se considera válido mientras no exista contacto multipunto
+  lento, carga por pata dentro del límite y `IsSurfaceSettled` sostenido.
+
 ## Limitaciones descubiertas
 
-1. La LUT de densidad ya usa `P/T`, pero transmittance y scattering múltiple todavía consumen
-   perfiles exponenciales de `AtmosphereOptics`; hay que cerrar esa paridad antes de ampliar la
-   cáscara termósferica visible.
+1. La LUT y el nuevo overload de transporte pueden usar `AtmosphereDensityProfile` basado en
+   `P/T`, aerosoles y ozono; los consumidores visuales existentes siguen en el camino
+   exponencial por compatibilidad y necesitan migración gradual con gates de imagen.
 2. El estado de aerosoles/clima existe y está validado en CPU, pero aún no modifica el shader ni
    invalida LUTs por revisión.
 3. La matriz atmosférica no es un E2E de misión: aún falta ejecutar menú→VAB→lanzamiento→órbita→
