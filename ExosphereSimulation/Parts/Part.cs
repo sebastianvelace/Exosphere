@@ -644,10 +644,16 @@ public class Part
                 state => EvaluateEnginePerformance(state, ambientPressure).ThrustN)
             : GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
 
-    /// <summary>Pressure-corrected thrust of the selected engines at 100% throttle (N).</summary>
+    /// <summary>
+    /// Pressure-corrected thrust of the selected engines at 100% throttle (N).
+    /// Failed engine states are excluded even while their mounts remain selected, so
+    /// guidance/TWR consumers do not overstate the thrust that can actually be commanded.
+    /// </summary>
     public double GetFullThrottleThrustMagnitude(double ambientPressure = 0.0)
         => HasEngineRuntime
-            ? _engineStates.Take(SelectedEngineCount).Sum(state =>
+            ? _engineStates.Take(SelectedEngineCount)
+                .Where(state => !IsFailedEngine(state))
+                .Sum(state =>
                 {
                     var model = ResolveEngineModel(state);
                     return model == null
@@ -657,10 +663,15 @@ public class Part
                 })
             : GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
 
-    /// <summary>Pressure-corrected rated thrust of the complete represented cluster.</summary>
+    /// <summary>
+    /// Pressure-corrected rated thrust of the complete represented cluster.
+    /// Failed engine states are excluded from the available rating.
+    /// </summary>
     public double GetRatedFullThrottleThrustMagnitude(double ambientPressure = 0.0)
         => HasEngineRuntime
-            ? _engineStates.Sum(state =>
+            ? _engineStates
+                .Where(state => !IsFailedEngine(state))
+                .Sum(state =>
                 {
                     var model = ResolveEngineModel(state);
                     return model == null
@@ -668,7 +679,11 @@ public class Part
                         : EnginePerformanceEvaluator.Evaluate(
                             model, ambientPressure, model.MaximumThrottle).ThrustN;
                 })
-            : GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure);
+                : GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure);
+
+    private static bool IsFailedEngine(EngineInstanceState state) =>
+        state.State == EngineLifecycleState.Failed
+        || !string.IsNullOrWhiteSpace(state.FailureCode);
 
     private EngineModelDefinition? ResolveEngineModel(EngineInstanceState state)
     {

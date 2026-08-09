@@ -44,6 +44,8 @@ public sealed class EngineRuntimeTests
         var engine = CreateMerlinCluster("octaweb-engine-out");
         for (int i = 0; i < 100; i++) engine.AdvanceEngineRuntime(1.0, 0.02);
         double thrustBefore = engine.GetThrustMagnitude(101_325.0);
+        double selectedFullBefore = engine.GetFullThrottleThrustMagnitude(101_325.0);
+        double ratedFullBefore = engine.GetRatedFullThrottleThrustMagnitude(101_325.0);
         double flowBefore = engine.GetMassFlow(101_325.0);
 
         string failedId = engine.EngineStates[4].InstanceId;
@@ -51,6 +53,14 @@ public sealed class EngineRuntimeTests
 
         Assert.Equal(8, engine.EngineStates.Count(e => e.ActualThrottle > 0.99));
         Assert.Equal(thrustBefore * 8.0 / 9.0, engine.GetThrustMagnitude(101_325.0), 6);
+        Assert.Equal(
+            selectedFullBefore * 8.0 / 9.0,
+            engine.GetFullThrottleThrustMagnitude(101_325.0),
+            6);
+        Assert.Equal(
+            ratedFullBefore * 8.0 / 9.0,
+            engine.GetRatedFullThrottleThrustMagnitude(101_325.0),
+            6);
         Assert.Equal(flowBefore * 8.0 / 9.0, engine.GetMassFlow(101_325.0), 6);
         var failed = Assert.Single(engine.GetEngineTelemetry(101_325.0),
             row => row.InstanceId == failedId);
