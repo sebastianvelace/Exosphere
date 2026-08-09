@@ -14,6 +14,9 @@ uniform float observer_altitude = 2.0;
 // (u²) and y is warped sine solar elevation (v²); see AtmosphereTransmittanceLut.
 uniform sampler2D transmittance_lut : filter_linear;
 uniform bool transmittance_lut_enabled = false;
+// Global order-two radiance, built from the same C# profile as the transmittance LUT.
+uniform sampler2D multiple_scattering_lut : filter_linear;
+uniform bool multiple_scattering_lut_enabled = false;
 
 uniform vec3 rayleigh_scattering = vec3(5.802e-6, 13.558e-6, 33.100e-6);
 uniform vec3 mie_scattering = vec3(3.996e-6);
@@ -189,6 +192,13 @@ vec3 solar_transmittance(vec3 position, vec3 direction, float outer_radius) {
 	return transmittance(optical_depth_to_sun(position, direction, outer_radius));
 }
 
+vec3 multiple_scattering_radiance(float altitude, float solar_sin) {
+	if (!multiple_scattering_lut_enabled || solar_sin <= 0.0) return vec3(0.0);
+	float altitude_u = sqrt(clamp(altitude / max(atmosphere_height, 1.0), 0.0, 1.0));
+	float solar_v = sqrt(clamp(solar_sin, 0.0, 1.0));
+	return max(texture(multiple_scattering_lut, vec2(altitude_u, solar_v)).rgb, vec3(0.0));
+}
+
 vec2 dir_to_equirect(vec3 direction) {
 	float lon = atan(direction.z, direction.x);
 	float lat = asin(clamp(direction.y, -1.0, 1.0));
@@ -295,7 +305,7 @@ void sky() {
 
 			// Conservative local order-2 closure: redistribute a bounded fraction of
 			// direct-beam losses isotropically. Planet shadow is kept at zero explicitly.
-			if (!sun_is_occluded(sample_position, to_sun)) {
+			if (!multiple_scattering_lut_enabled && !sun_is_occluded(sample_position, to_sun)) {
 				vec3 beta_s = rayleigh_scattering * density.x + mie_scattering * density.y;
 				vec3 omega = clamp(beta_s / max(sample_extinction, vec3(1e-12)), vec3(0.0), vec3(1.0));
 				vec3 removed = clamp(vec3(1.0) - sun_throughput, vec3(0.0), vec3(1.0));
@@ -391,6 +401,15 @@ void sky() {
 	vec3 atmosphere = ((in_scatter + diffuse_scatter + twilight_radiance)
 		* atmospheric_solar_visibility
 		+ cloud_radiance) * sun_illuminance;
+	// The order-two LUT transports the local diffuse source through the entire column.
+	// It is isotropic by construction; a mild upward weighting accounts for the shorter
+	// escape path without pretending this 2D table is a full 4D angular solution.
+	float observer_solar_sin = dot(up, to_sun);
+	vec3 global_multiple = multiple_scattering_radiance(
+		max(observer_altitude, 0.0), observer_solar_sin);
+	float view_up = clamp(0.5 + 0.5 * dot(view_dir, up), 0.0, 1.0);
+	atmosphere += global_multiple * (0.55 + 0.45 * view_up)
+		* atmospheric_solar_visibility * sun_illuminance;
 	// Chapman-style closure for the visible twilight dome.  At a grazing solar
 	// elevation the line of sight is tangent below the high layer, so a pure
 	// finite ray quadrature can return an incorrectly black horizon.  This term

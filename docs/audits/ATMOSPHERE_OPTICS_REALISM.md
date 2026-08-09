@@ -1,6 +1,6 @@
 # Atmósfera física y óptica planetaria
 
-**Fecha:** 2026-08-08 · **Estado:** V3 óptica esférica + LUT de transmitancia verificada
+**Fecha:** 2026-08-08 · **Estado:** V4 óptica esférica + orden dos + rama refractada verificada
 
 ## Veredicto honesto
 
@@ -12,18 +12,21 @@ RGB, Mie con fase Henyey–Greenstein, absorción aerosol/ozono, sombra planetar
 de estrellas y transmitancia solar. Tierra, Marte y Venus cargan perfiles distintos desde
 los mismos JSON que usa la simulación.
 
-La V3 añade una LUT de transmitancia solar esférica, construida con el mismo integrador
+La V4 añade una LUT de transmitancia solar esférica, construida con el mismo integrador
 determinista que usan las pruebas y la exposición. La tabla concentra resolución en el
 horizonte y la troposfera, se cachea por cuerpo y reemplaza la cuadratura solar repetida en
-cada píxel por una interpolación HDR estable. La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
+cada píxel por una interpolación HDR estable. También añade una LUT global de orden dos que
+transporta la fuente difusa a través de toda la columna, reemplazando el cierre S₂ local
+cuando está disponible, y usa la rama saliente del integrador refractivo de Snell para la
+transmitancia directa. La V2 ya había añadido dos fenómenos perceptuales ausentes: una fuente difusa isotrópica de segundo
 orden, limitada por el albedo de dispersión por banda, y adaptación ocular temporal. El ojo
 reduce sensibilidad con constante de 0,7 s ante luz intensa y la recupera en 9 s en oscuridad;
 la exposición pre-tonemap queda entre 0,65 y 6. Las estrellas obedecen tanto a la luminancia
 instantánea del cielo como a esta adaptación lenta, por lo que no aparecen de inmediato al
 entrar en eclipse.
 
-No es todavía «totalmente realista»: falta multiple scattering precomputado, un trazador
-refractivo completo (V3 sólo corrige el desplazamiento visible del disco solar), nubes
+No es todavía «totalmente realista»: falta multiple scattering de órdenes superiores, un trazador
+refractivo completo (V4 cubre la rama saliente y corrige el desplazamiento visible del disco), nubes
 volumétricas, clima/aerosoles variables, polarización y calibración espectral. Venus necesita
 un modelo multicapa de nubes H₂SO₄; el airglow actual es una capa visible calibrada, no un
 modelo químico completo.
@@ -35,7 +38,8 @@ modelo químico completo.
 βext=βRρR+(βM,sca+βM,abs)ρM+βO3ρO3
 T(a→b)=exp(-∫βext ds)
 L=∫Tview·Tsun·(βRρR PR(μ)+βMρM PM(μ,g)) ds
-S₂≈βsca·ω·(1−Tsun)·k/(4π),  Ldisplay=f(L+∫Tview·S₂ ds)
+L₂(h,μs)=∫Tview·βsca·ω·(1−Tsun(μs))/(4π) ds,
+Ldisplay=f(L+L₂)
 ```
 
 El rayo intersecta las esferas de superficie y techo atmosférico. Doce muestras de vista y
@@ -44,11 +48,11 @@ La sombra del planeta corta el Sol directo y también anula explícitamente S₂
 opaca no se interpreta como luz dispersada. `AtmosphereOptics` replica profundidad óptica y
 transmitancia en C#; la luz usa masa de aire Kasten–Young para sunsets rojos.
 
-S₂ es un cierre local y acotado, no un transporte global: recupera parte del relleno perdido
-por single scattering sin exceder su límite local, pero no garantiza conservación energética
-global, no transporta rebotes espaciales/angulares,
-no reproduce correctamente el twilight profundo ni sustituye las LUTs 4D de Bruneton. Sus
-intensidades son datos por planeta: Tierra 0,25, Marte 0,08 y Venus 0,40.
+El transporte de orden dos es global en altura pero isotrópico en ángulo: recupera parte del
+relleno perdido por single scattering sin exceder el límite local, pero no garantiza todavía
+conservación energética global, no transporta rebotes espaciales/angulares completos y no
+sustituye las LUTs 4D de Bruneton. Sus intensidades son datos por planeta: Tierra 0,25, Marte
+0,08 y Venus 0,40.
 
 | Cuerpo | Rayleigh HR | Aerosol HM | Rasgo V1 |
 |---|---:|---:|---|
@@ -61,9 +65,9 @@ calibrables en datos, no mediciones oficiales.
 
 ## Evidencia
 
-- 27 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
+- 30 pruebas atmosféricas focales: USSA-76, termosfera, JSON, profundidad óptica,
   transmitancia, ozono, enrojecimiento del Sol bajo, fuente difusa acotada/sombreada y
-  cuatro invariantes nuevas de LUT/refracción.
+  ocho invariantes nuevas de LUT, transporte global y refracción.
 - 5 pruebas de adaptación ocular: asimetría luz/oscuridad, monotonía, límites e
   independencia de la partición temporal.
 - Matriz framebuffer 12 m/20 km/80 km: limb curvo, espacio negro fuera de columna y
@@ -83,9 +87,11 @@ bash tools/atmosphere_quick_check.sh
 
 ## Próximos gates
 
-1. LUT 4D de multiple scattering y unidades espectrales; reemplazar el cierre S₂ local.
+1. LUT 4D de órdenes superiores y unidades espectrales; reemplazar el transporte isotrópico
+   de orden dos.
 2. Evolucionar las nubes volumétricas actuales a weather map dinámica, ruido 3D, sombras
    sobre terreno y aerial perspective segmentada.
 3. Aerosoles por clima/latitud y capas Venus validadas.
-4. Refracción del disco solar/horizonte, polarización y airglow.
+4. Trazador refractivo completo del disco, horizonte y estrellas; polarización y química del
+   airglow.
 5. Golden por cuerpo: mediodía, sunset, 20/50/80/150/400 km y eclipse.

@@ -52,8 +52,11 @@ s_space = −b + √D
 r(s)    = √(r₀² + s² + 2 r₀ μ s)
 ```
 
-La profundidad se obtiene integrando `βext(r(s) − R)` con Simpson determinista. El número de
-muestras se fuerza a ser par y nunca baja de ocho. Esta curvatura es esencial cerca del
+La profundidad se obtiene integrando `βext(r(s) − R)` con Simpson determinista. Si el perfil
+declara refractividad, `DirectSolarTransmittance` usa además el invariante esférico de Snell y
+la coordenada radial transformada `r=r₀+(Rtop-r₀)u²`; esto cambia la trayectoria saliente sin
+alterar la física de vuelo. El número de muestras se fuerza a ser par y nunca baja de ocho.
+Esta curvatura es esencial cerca del
 horizonte: `1 / cos(zenith)` supone una columna plana infinita y sobre-extingue la luz en
 amaneceres, atardeceres, planetas pequeños y cámaras a gran altitud.
 
@@ -81,14 +84,29 @@ Este diseño comparte un único oráculo numérico entre simulación, exposició
 radio o el perfil óptico cambia también los texels y no puede dejar una atmósfera visual con
 curvatura terrestre implícita.
 
+## Transporte global de orden dos
+
+`AtmosphereMultipleScatteringLut` integra el cierre difuso desde cada altura del observador
+hacia el borde atmosférico. Para cada capa combina la fuente local `LowOrderDiffuseSource`,
+la transmitancia solar esférica y la diferencia de profundidad vertical entre observador y
+capa. El resultado es radiancia lineal por unidad de `SunIlluminanceScale`; el shader la
+aplica como relleno isotrópico con una leve ponderación hacia el cenit y desactiva el antiguo
+S₂ por rayo cuando la tabla está disponible. Así el segundo rebote atraviesa toda la columna
+en lugar de depender de los segmentos visibles de una sola dirección.
+
+La tabla sigue siendo 2D: no representa todavía la dependencia completa del ángulo de visión,
+polarización ni rebotes de nube/terreno. Es un transporte global de orden dos verificable, no
+una afirmación de que el problema 4D ya esté resuelto.
+
 ## Refracción visible del horizonte
 
 Cada perfil declara la refractividad superficial `n − 1` y su escala vertical. `HorizonRefractionRadians`
 integra la pendiente esférica de un perfil exponencial, la limita a 0,035 rad y la usa para
 desplazar el disco solar aparente cerca del horizonte. En la Tierra produce aproximadamente
 0,56° al nivel del mar y decae exponencialmente con altura; Marte y Venus usan refractividades
-específicas de sus columnas de CO₂. No se aplica fuerza ni se cambia la navegación: es una
-corrección óptica acotada hasta que exista un trazador completo de rayos refractados.
+específicas de sus columnas de CO₂. La integración refractada cubre la rama saliente; los
+rayos subhorizonte con punto de retorno todavía requieren resolver las dos ramas de tangencia.
+No se aplica fuerza ni se cambia la navegación.
 
 ## Integración local de segundo orden
 
@@ -114,6 +132,8 @@ redondeada mayor que uno genere energía difusa negativa.
 - que entradas no finitas no producen luz solar sin atenuar;
 - que la LUT coincide con el oráculo en sus texels, conserva la monotonicidad y resuelve el
   enrojecimiento de la columna solar rasante;
+- que el transporte global de orden dos permanece finito, disminuye sobre la columna y conserva
+  la dependencia del radio planetario;
 - que ozono, airglow, nubes y fuente difusa respetan sus soportes y límites.
 
 Ejecutar el conjunto focalizado:
@@ -131,10 +151,12 @@ bash tools/atmosphere_quick_check.sh
 
 ## Límites conocidos y siguiente nivel de fidelidad
 
-Este contrato sigue siendo una aproximación de scattering: la LUT resuelve transmitancia
-directa y el shader incluye una corrección acotada del disco solar, pero aún no modela un
-trazado refractivo completo, polarización, dispersión múltiple global,
+Este contrato sigue siendo una aproximación de scattering: las LUTs resuelven transmitancia
+directa y un rebote global isotrópico de orden dos, y el shader incluye una corrección acotada
+del disco solar y de la rama saliente, pero aún no modela el tramo subhorizonte completo,
+polarización,
 variación espectral por temperatura, perfil de humedad/aerosoles por clima ni el acoplamiento
-radiativo entre nubes y terreno. El siguiente nivel es una LUT de scattering múltiple dependiente
-de altura, ángulo solar y ángulo de visión (Bruneton/Neyret), más un integrador refractivo para
-el disco solar y el horizonte; esta implementación C# seguirá siendo el oráculo numérico.
+radiativo entre nubes y terreno. El siguiente nivel es una LUT de scattering múltiple de órdenes
+superiores dependiente de altura, ángulo solar y ángulo de visión (Bruneton/Neyret), más un
+integrador refractivo completo para el disco, el horizonte y las estrellas; esta implementación
+C# seguirá siendo el oráculo numérico.
