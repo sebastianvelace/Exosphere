@@ -62,6 +62,8 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("star_tex", LoadStarTexture());
         _skyMat.SetShaderParameter("cloud_coverage_tex", LoadTexture(EarthCloudTexPath, Colors.Black));
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
+        _skyMat.SetShaderParameter("transmittance_lut_min_solar_sin",
+            (float)AtmosphereTransmittanceLut.MinimumSolarElevationSin);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
         _env.Sky.SkyMaterial = _skyMat;

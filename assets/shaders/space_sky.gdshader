@@ -14,6 +14,7 @@ uniform float observer_altitude = 2.0;
 // (u²) and y is warped sine solar elevation (v²); see AtmosphereTransmittanceLut.
 uniform sampler2D transmittance_lut : filter_linear;
 uniform bool transmittance_lut_enabled = false;
+uniform float transmittance_lut_min_solar_sin = -0.04;
 // Global order-two radiance, built from the same C# profile as the transmittance LUT.
 uniform sampler2D multiple_scattering_lut : filter_linear;
 uniform bool multiple_scattering_lut_enabled = false;
@@ -132,9 +133,9 @@ float horizon_refraction(float altitude) {
 		* spherical_gradient, 0.0, 0.035);
 }
 
-vec3 refracted_sun_direction(vec3 geometric_sun, vec3 up) {
+vec3 refracted_sun_direction(vec3 geometric_sun, vec3 up, float altitude) {
 	float geometric_elevation = asin(clamp(dot(up, geometric_sun), -1.0, 1.0));
-	float horizon_lift = horizon_refraction(observer_altitude)
+	float horizon_lift = horizon_refraction(altitude)
 		* exp(-abs(geometric_elevation) / 0.30);
 	float apparent_elevation = geometric_elevation + horizon_lift;
 	vec3 horizontal = geometric_sun - up * sin(geometric_elevation);
@@ -153,11 +154,14 @@ float stable_jitter(vec3 value) {
 }
 
 vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
-	vec2 ground_hit = ray_sphere(position, direction, planet_radius);
+    vec3 ray_up = normalize(position);
+	float local_altitude = max(length(position) - planet_radius, 0.0);
+	vec3 apparent_direction = refracted_sun_direction(direction, ray_up, local_altitude);
+	vec2 ground_hit = ray_sphere(position, apparent_direction, planet_radius);
 	if (ground_hit.x > 0.0) return vec3(1e6);
-	vec2 atmosphere_hit = ray_sphere(position, direction, outer_radius);
+	vec2 atmosphere_hit = ray_sphere(position, apparent_direction, outer_radius);
 	float distance_to_space = max(atmosphere_hit.y, 0.0);
-	float closest = max(-dot(position, direction), 0.0);
+	float closest = max(-dot(position, apparent_direction), 0.0);
 	vec3 depth = vec3(0.0);
 	for (int i = 0; i < LIGHT_STEPS; i++) {
 		float segment_start = tangent_warped_boundary(
@@ -165,27 +169,32 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 		float segment_end = tangent_warped_boundary(
 			float(i + 1) / float(LIGHT_STEPS), 0.0, distance_to_space, closest);
 		float step_length = max(segment_end - segment_start, 0.0);
-		float jitter = stable_jitter(position + direction * float(i) * 17.0);
+		float jitter = stable_jitter(position + apparent_direction * float(i) * 17.0);
 		float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));
-		float height = length(position + direction * t) - planet_radius;
+		float height = length(position + apparent_direction * t) - planet_radius;
 		depth += extinction(density_at_height(height)) * step_length;
 	}
 	return depth;
 }
 
 bool sun_is_occluded(vec3 position, vec3 direction) {
-	vec2 ground_hit = ray_sphere(position, direction, planet_radius);
+	vec3 apparent_direction = refracted_sun_direction(
+		direction, normalize(position), max(length(position) - planet_radius, 0.0));
+	vec2 ground_hit = ray_sphere(position, apparent_direction, planet_radius);
 	return ground_hit.x > 0.0;
 }
 
 vec3 solar_transmittance(vec3 position, vec3 direction, float outer_radius) {
 	if (sun_is_occluded(position, direction)) return vec3(0.0);
 	float solar_sin = dot(normalize(position), direction);
-	if (solar_sin <= 0.0) return vec3(0.0);
+	if (solar_sin < transmittance_lut_min_solar_sin) return vec3(0.0);
 	if (transmittance_lut_enabled) {
 		float altitude = max(length(position) - planet_radius, 0.0);
 		float altitude_u = sqrt(clamp(altitude / max(atmosphere_height, 1.0), 0.0, 1.0));
-		float solar_v = sqrt(clamp(solar_sin, 0.0, 1.0));
+		float solar_normalized = (clamp(solar_sin,
+			transmittance_lut_min_solar_sin, 1.0) - transmittance_lut_min_solar_sin)
+			/ max(1.0 - transmittance_lut_min_solar_sin, 1e-4);
+		float solar_v = sqrt(clamp(solar_normalized, 0.0, 1.0));
 		return clamp(texture(transmittance_lut, vec2(altitude_u, solar_v)).rgb,
 			vec3(0.0), vec3(1.0));
 	}
@@ -193,9 +202,13 @@ vec3 solar_transmittance(vec3 position, vec3 direction, float outer_radius) {
 }
 
 vec3 multiple_scattering_radiance(float altitude, float solar_sin) {
-	if (!multiple_scattering_lut_enabled || solar_sin <= 0.0) return vec3(0.0);
+	if (!multiple_scattering_lut_enabled
+		|| solar_sin < transmittance_lut_min_solar_sin) return vec3(0.0);
 	float altitude_u = sqrt(clamp(altitude / max(atmosphere_height, 1.0), 0.0, 1.0));
-	float solar_v = sqrt(clamp(solar_sin, 0.0, 1.0));
+	float solar_normalized = (clamp(solar_sin,
+		transmittance_lut_min_solar_sin, 1.0) - transmittance_lut_min_solar_sin)
+		/ max(1.0 - transmittance_lut_min_solar_sin, 1e-4);
+	float solar_v = sqrt(clamp(solar_normalized, 0.0, 1.0));
 	return max(texture(multiple_scattering_lut, vec2(altitude_u, solar_v)).rgb, vec3(0.0));
 }
 
@@ -252,7 +265,7 @@ void sky() {
 	vec3 view_dir = normalize(EYEDIR);
 	vec3 up = normalize(local_up);
 	vec3 to_sun = normalize(sun_dir);
-	vec3 apparent_sun = refracted_sun_direction(to_sun, up);
+	vec3 apparent_sun = refracted_sun_direction(to_sun, up, observer_altitude);
 	float outer_radius = planet_radius + atmosphere_height;
 	vec3 origin = up * (planet_radius + max(observer_altitude, 1.0));
 

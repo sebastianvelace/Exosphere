@@ -3,12 +3,13 @@ namespace Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 
 /// <summary>
-/// Global, isotropic order-two atmospheric radiance lookup.
+/// Global, isotropic multiple-scattering atmospheric radiance lookup.
 ///
 /// Each texel integrates the bounded local source through the complete vertical column
 /// above an observer.  It is not the final Bruneton 4D solution (there is no view-angle
-/// dimension yet), but unlike the old per-ray S₂ closure it transports a scattered photon
-/// through the whole column and is shared by every sky direction.
+/// dimension yet), but unlike the old per-ray S₂ closure it transports photons through the
+/// whole column and is shared by every sky direction.  A second deterministic pass adds one
+/// additional isotropic scattering event (order three) without introducing a shader loop.
 /// Values are linear radiance per unit <see cref="AtmosphereOptics.SunIlluminanceScale"/>.
 /// </summary>
 public sealed class AtmosphereMultipleScatteringLut
@@ -35,7 +36,7 @@ public sealed class AtmosphereMultipleScatteringLut
     }
 
     /// <summary>
-    /// Integrates the order-two source from the observer to space.  The view transmittance
+    /// Integrates orders two and three from the observer to space.  The view transmittance
     /// uses the exact vertical optical-depth difference and the solar term uses the spherical
     /// direct-transmittance oracle, so changing the planet radius changes both transport legs.
     /// </summary>
@@ -60,7 +61,7 @@ public sealed class AtmosphereMultipleScatteringLut
         var values = new Vector3d[width * height];
         for (int y = 0; y < height; y++)
         {
-            double solarSin = AtmosphereTransmittanceLut.CoordinateValue(y, height);
+            double solarSin = AtmosphereTransmittanceLut.SolarElevationSin(y, height);
             for (int x = 0; x < width; x++)
             {
                 double observerAltitude = atmosphereTopAltitude
@@ -91,12 +92,16 @@ public sealed class AtmosphereMultipleScatteringLut
     public Vector3d Sample(double altitude, double solarElevationSin)
     {
         if (!double.IsFinite(altitude) || !double.IsFinite(solarElevationSin)
-            || solarElevationSin <= 0.0)
+            || solarElevationSin < AtmosphereTransmittanceLut.MinimumSolarElevationSin)
             return Vector3d.Zero;
 
         double u = System.Math.Sqrt(System.Math.Clamp(altitude, 0.0,
             AtmosphereTopAltitude) / AtmosphereTopAltitude);
-        double v = System.Math.Sqrt(System.Math.Clamp(solarElevationSin, 0.0, 1.0));
+        double solarNormalized = (System.Math.Clamp(solarElevationSin,
+            AtmosphereTransmittanceLut.MinimumSolarElevationSin, 1.0)
+            - AtmosphereTransmittanceLut.MinimumSolarElevationSin)
+            / (1.0 - AtmosphereTransmittanceLut.MinimumSolarElevationSin);
+        double v = System.Math.Sqrt(System.Math.Clamp(solarNormalized, 0.0, 1.0));
         double px = u * (Width - 1);
         double py = v * (Height - 1);
         int x0 = System.Math.Clamp((int)System.Math.Floor(px), 0, Width - 1);
@@ -119,13 +124,17 @@ public sealed class AtmosphereMultipleScatteringLut
         int integrationSteps,
         int solarSampleCount)
     {
-        if (solarSin <= 0.0 || observerAltitude >= atmosphereTopAltitude)
+        if (solarSin < AtmosphereTransmittanceLut.MinimumSolarElevationSin
+            || observerAltitude >= atmosphereTopAltitude)
             return Vector3d.Zero;
 
         double span = atmosphereTopAltitude - observerAltitude;
         double step = span / integrationSteps;
         Vector3d observerTau = optics.VerticalOpticalDepth(observerAltitude);
-        Vector3d radiance = Vector3d.Zero;
+        var sources = new Vector3d[integrationSteps];
+        var scattering = new Vector3d[integrationSteps];
+        var absoluteTau = new Vector3d[integrationSteps];
+        var viewThroughput = new Vector3d[integrationSteps];
         for (int i = 0; i < integrationSteps; i++)
         {
             double altitude = observerAltitude + (i + 0.5) * step;
@@ -139,18 +148,49 @@ public sealed class AtmosphereMultipleScatteringLut
                 planetRadius,
                 atmosphereTopAltitude,
                 solarSampleCount);
-            var source = optics.LowOrderDiffuseSource(density, solar);
-            var layerTau = observerTau - optics.VerticalOpticalDepth(altitude);
-            var view = new Vector3d(
+            sources[i] = optics.LowOrderDiffuseSource(density, solar);
+            scattering[i] = optics.RayleighScattering * density.X
+                + optics.MieScattering * density.Y;
+            absoluteTau[i] = optics.VerticalOpticalDepth(altitude);
+            var layerTau = observerTau - absoluteTau[i];
+            viewThroughput[i] = new Vector3d(
                 System.Math.Exp(-System.Math.Max(layerTau.X, 0.0)),
                 System.Math.Exp(-System.Math.Max(layerTau.Y, 0.0)),
                 System.Math.Exp(-System.Math.Max(layerTau.Z, 0.0)));
-            radiance += new Vector3d(
-                source.X * view.X,
-                source.Y * view.Y,
-                source.Z * view.Z) * step;
         }
 
-        return radiance;
+        // Order two: direct sunlight scattered once more and transported from each
+        // layer to the observer. The source is already bounded by the per-band
+        // single-scattering albedo in LowOrderDiffuseSource.
+        Vector3d orderTwo = Vector3d.Zero;
+        for (int i = 0; i < integrationSteps; i++)
+            orderTwo += Multiply(sources[i], viewThroughput[i]) * step;
+
+        // Order three: transport the isotropic order-two field at each layer and
+        // scatter it once again. The nested column integral is intentional: this
+        // table is built once per body, while the explicit path remains deterministic
+        // and keeps planet-radius dependence visible to tests.
+        Vector3d orderThree = Vector3d.Zero;
+        for (int i = 0; i < integrationSteps; i++)
+        {
+            Vector3d orderTwoAtLayer = Vector3d.Zero;
+            for (int j = i; j < integrationSteps; j++)
+            {
+                var tau = absoluteTau[i] - absoluteTau[j];
+                var transport = new Vector3d(
+                    System.Math.Exp(-System.Math.Max(tau.X, 0.0)),
+                    System.Math.Exp(-System.Math.Max(tau.Y, 0.0)),
+                    System.Math.Exp(-System.Math.Max(tau.Z, 0.0)));
+                orderTwoAtLayer += Multiply(sources[j], transport) * step;
+            }
+
+            var thirdSource = Multiply(scattering[i], orderTwoAtLayer);
+            orderThree += Multiply(thirdSource, viewThroughput[i]) * step;
+        }
+
+        return orderTwo + orderThree;
     }
+
+    private static Vector3d Multiply(Vector3d left, Vector3d right) => new(
+        left.X * right.X, left.Y * right.Y, left.Z * right.Z);
 }
