@@ -343,11 +343,15 @@ public partial class EDLController : Control
             // target retains nearly all projected drag while generating Starship-like L/D.
             aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
         }
-        else if (_phase == Edl.Catch || (_phase == Edl.Final && _horiz < 12.0))
+        else if (_phase == Edl.Catch || _phase == Edl.Final)
         {
             // Stay primarily upright but cant into the lateral error so the same thrust
             // command can actually remove it. A perfectly vertical axis cannot satisfy a
-            // horizontal error and otherwise turns that error into an endless hover.
+            // horizontal error and otherwise turns that error into an endless hover. This
+            // branch deliberately covers the whole final descent: switching to -velDir
+            // after a lateral-speed threshold is unsafe when a correction has already
+            // carried the vehicle through zero vertical speed, because it points thrust
+            // downward and commands a full-power rebound (EDL v6 evidence).
             // In the last 30 m above the feet, blend that cant back to vertical: arriving
             // tilted consumes suspension stroke geometrically before impact and overloads the
             // downhill foot even at a gentle vertical speed. A catch approach reuses the same
@@ -453,7 +457,12 @@ public partial class EDLController : Control
             double horizontalError = _phase == Edl.Catch
                 ? catchLateralVelocityError.Magnitude
                 : _horiz - horizontalTarget;
-            double coupledHorizontalError = _phase is Edl.Retro or Edl.Catch ? horizontalError : 0.0;
+            // Final descent still spends a bounded fraction of thrust on lateral velocity.
+            // The axis below caps the corresponding tilt at 20 deg, so this remains a
+            // vertical landing burn rather than a retrograde dive.
+            double coupledHorizontalError = _phase is Edl.Retro or Edl.Catch or Edl.Final
+                ? horizontalError
+                : 0.0;
             double brakingError = System.Math.Max(0.0,
                 System.Math.Max(verticalError, coupledHorizontalError));
             // Divide by the commanded thrust axis, not by -velocity. In final vertical flight

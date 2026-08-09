@@ -114,6 +114,23 @@ public sealed class LandingContactIntegrationTests
     }
 
     [Fact]
+    public void EdlFinalApproachKeepsAProgradeLandingAxisDuringLateralRecovery()
+    {
+        // At v6 the vehicle crossed the old 12 m/s lateral threshold while already
+        // climbing. Falling through to -velDir inverted the landing thrust component and
+        // saturated both engines, producing a 263 m rebound and a 106 m/s impact. Final
+        // guidance must therefore retain the bounded upright/canted axis for the complete
+        // final phase, and must include the horizontal error in its bounded burn demand.
+        string source = File.ReadAllText(Path.Combine(
+            FindRepoRoot().FullName, "scripts", "EDLController.cs"));
+
+        Assert.Contains("else if (_phase == Edl.Catch || _phase == Edl.Final)", source);
+        Assert.Contains("Edl.Retro or Edl.Catch or Edl.Final", source);
+        Assert.Contains("Math.Tan(20.0 * MathUtils.DEG_TO_RAD)", source);
+        Assert.DoesNotContain("(_phase == Edl.Final && _horiz < 12.0)", source);
+    }
+
+    [Fact]
     public void DeterministicEdlContactStateRemainsInsideStructuralEnvelope()
     {
         // Regression for the full EDL playtest's measured pre-contact state. This is deliberately
