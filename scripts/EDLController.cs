@@ -54,7 +54,7 @@ public partial class EDLController : Control
     // envelope, not a touchdown shortcut: the normal contact solver still owns the landing.
     private const double FinalSingleEngineAltitudeM = 160.0;
     private const double FinalSingleEngineLateralSpeedMps = 18.0;
-    private const double FinalSingleEngineReacquireLateralSpeedMps = 10.0;
+    private const double FinalSingleEngineReacquireLateralSpeedMps = 7.0;
     // Keep the centre engine available through the low-energy flare. Above this
     // altitude, one engine does not have enough authority to recover a leg-first
     // contact; below it, selection is governed by energy and lateral-speed hysteresis.
@@ -997,8 +997,10 @@ public partial class EDLController : Control
             // The rebound latch is only a vertical-energy escape from the two-engine
             // floor. It must not suppress lateral authority once a leg is near the
             // surface: reacquire the second engine before the first two feet load up.
-            if (_landingEngineCount == 1
-                && _horiz > FinalSingleEngineReacquireLateralSpeedMps)
+            if (lowEnergySingleEngine
+                && (_horiz > FinalSingleEngineReacquireLateralSpeedMps
+                    || (_alt <= FinalDualEngineLockAltitudeM
+                        && _horiz > FinalSingleEngineLowLateralSpeedMps)))
                 lowEnergySingleEngine = false;
             if (!safeContact
                 && _alt > FinalSingleEngineContactGuardAltitudeM)
