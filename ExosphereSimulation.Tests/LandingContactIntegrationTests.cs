@@ -116,7 +116,7 @@ public sealed class LandingContactIntegrationTests
         Assert.Contains("FinalSingleEngineMinVerticalSpeedMps = -8.0", source);
         Assert.Contains("FinalSingleEngineMaxVerticalSpeedMps = 4.0", source);
         Assert.Contains("FinalSingleEngineDescentBiasMps2 = 6.0", source);
-        Assert.Contains("FinalDualEngineDescentBiasGain = 3.0", source);
+        Assert.Contains("FinalDualEngineDescentBiasGain = 4.0", source);
         Assert.Contains("FinalDualEngineDescentBiasLimitMps2 = 18.0", source);
         Assert.Contains("FinalSingleEngineDescentBiasGain = 3.0", source);
         Assert.Contains("FinalSingleEngineDescentBiasLimitMps2 = 9.0", source);
