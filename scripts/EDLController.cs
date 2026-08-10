@@ -73,7 +73,8 @@ public partial class EDLController : Control
     // leaves positive thrust support and avoids a free-fall relight.
     private const double FinalSingleEngineDescentBiasGain = 3.0;
     private const double FinalSingleEngineDescentBiasLimitMps2 = 9.0;
-    private const double FinalDualEngineDescentBiasLimitMps2 = 9.5;
+    private const double FinalDualEngineDescentBiasGain = 1.5;
+    private const double FinalDualEngineDescentBiasLimitMps2 = 12.0;
     // Lateral velocity is corrected through a finite TVC cant. Do not let a transient
     // cross-range spike request the full two-engine thrust budget in the last few hundred
     // metres: the vertical profile must remain dominant or the vehicle trades a horizontal
@@ -551,7 +552,9 @@ public partial class EDLController : Control
             double descentBias = System.Math.Clamp(
                 _phase == Edl.Final && _landingEngineCount == 1
                     ? FinalSingleEngineDescentBiasGain * verticalError
-                    : 0.90 * verticalError,
+                    : _phase == Edl.Final && _landingEngineCount >= MinimumFinalApproachEngines
+                        ? FinalDualEngineDescentBiasGain * verticalError
+                        : 0.90 * verticalError,
                 -descentBiasLimit, 0.0);
             double aCmd = 1.6 * brakingError
                 + g / thrustUpComponent
