@@ -69,6 +69,13 @@ public partial class EDLController : Control
     // 220--240 m hover seen in EDL v8/v9. Keep a small lateral correction alive,
     // but let vertical energy win until the vehicle is back on a two-engine profile.
     private const double FinalSingleEngineHorizontalBrakeErrorMps = 1.0;
+    // Hysteresis for the discrete one/two-engine hand-off. A single engine is useful while
+    // the vehicle is still descending, but it cannot both arrest cross-range and guarantee
+    // downward motion once the vertical rate approaches zero. Re-acquire two engines in that
+    // state; return to one only after the lateral error is small or the descent is established.
+    private const double FinalSingleEngineAcquireDescentSpeedMps = -1.5;
+    private const double FinalSingleEngineRetainDescentSpeedMps = -0.5;
+    private const double FinalSingleEngineLowLateralSpeedMps = 3.0;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -892,8 +899,12 @@ public partial class EDLController : Control
                 // vertical energy is already small; a fast approach remains two-engine.
                 && _vUp >= FinalSingleEngineMinVerticalSpeedMps
                 && _vUp <= FinalSingleEngineMaxVerticalSpeedMps
+                && (_vUp <= FinalSingleEngineAcquireDescentSpeedMps
+                    || _horiz <= FinalSingleEngineLowLateralSpeedMps)
                 && (requested <= 1
-                    || (_landingEngineCount == MinimumFinalApproachEngines && _vUp > -1.5));
+                    || (_landingEngineCount == MinimumFinalApproachEngines
+                        && _vUp > FinalSingleEngineAcquireDescentSpeedMps
+                        && _horiz <= FinalSingleEngineLowLateralSpeedMps));
             // If the centre engine has already been selected, retain it while the lateral
             // error is still recoverable. If it grows beyond the reacquisition envelope,
             // return to two engines rather than letting a single offset/gimbal transient
@@ -902,7 +913,9 @@ public partial class EDLController : Control
                 && _alt <= FinalSingleEngineAltitudeM
                 && _horiz <= FinalSingleEngineReacquireLateralSpeedMps
                 && _vUp >= FinalSingleEngineMinVerticalSpeedMps
-                && _vUp <= FinalSingleEngineMaxVerticalSpeedMps)
+                && _vUp <= FinalSingleEngineMaxVerticalSpeedMps
+                && (_vUp <= FinalSingleEngineRetainDescentSpeedMps
+                    || _horiz <= FinalSingleEngineLowLateralSpeedMps))
                 lowEnergySingleEngine = true;
             selected = System.Math.Min(selected, requested);
             if (lowEnergySingleEngine)
