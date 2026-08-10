@@ -88,7 +88,7 @@ public partial class SimulationBridge : Node
     // challenge. Keep a realistic landing reserve in the ship tank so the centre Raptor
     // remains lit through the multi-leg contact transient and the normal settling gate.
     // The flight model still consumes the exact pressure/throttle-dependent mass flow.
-    private const double ReentryDemoReserveFraction = 0.20;
+    private const double ReentryDemoReserveFraction = 0.14;
 
     public override void _Ready()
     {

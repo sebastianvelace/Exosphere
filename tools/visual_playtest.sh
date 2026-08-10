@@ -985,7 +985,7 @@ public partial class _PlaytestShot : Node
 
             _edlSeeded = true;
             _edlScenarioStart = universe.CurrentTime;
-            _log.WriteLine("ACTION seeded deterministic EDL alt=70000m airspeed=1804m/s reserve=20%");
+            _log.WriteLine("ACTION seeded deterministic EDL alt=70000m airspeed=1804m/s reserve=14%");
             _log.Flush();
             return;
         }
