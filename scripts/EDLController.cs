@@ -489,7 +489,17 @@ public partial class EDLController : Control
             // burn starts braking immediately. Cap it by a constant-deceleration limit so a faster
             // arrival is still braked hard enough. Close the loop with gravity feed-forward.
             double heightToContact = System.Math.Max(0.0, _alt - effectiveContactDatumAlt);
-            double vTargetLin = touchdownRate + heightToContact * 0.035;
+            // A single centre engine has almost no excess thrust margin. The normal
+            // two/three-engine profile can carry a brisk 0.035 s^-1 descent ramp, but
+            // handing that same target to one engine creates a deep-throttle floor dive:
+            // at 270 m it asks for ~10 m/s down, then saturates at full thrust too late
+            // to arrest the fall. Ease the one-engine target to a conservative 0.010 s^-1
+            // ramp so the controller keeps useful support authority throughout the last
+            // few hundred metres while the terminal gain still removes the residual rate.
+            double targetRamp = _phase == Edl.Final && _landingEngineCount == 1
+                ? 0.010
+                : 0.035;
+            double vTargetLin = touchdownRate + heightToContact * targetRamp;
             double vTargetMax = System.Math.Sqrt(2.0 * 0.60 * aThrustFull * heightToContact)
                 + touchdownRate;
             double vTarget    = System.Math.Min(vTargetLin, vTargetMax);
