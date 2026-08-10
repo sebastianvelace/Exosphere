@@ -58,7 +58,7 @@ public partial class EDLController : Control
     // Below this altitude there is no time left to recover a leg-first contact with
     // a single Raptor. Keep two engines selected through the contact gate; this is
     // a guard on engine selection only, not a forced full-throttle landing burn.
-    private const double FinalSingleEngineContactGuardAltitudeM = 50.0;
+    private const double FinalSingleEngineContactGuardAltitudeM = 160.0;
     private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
     private const double FinalSingleEngineMaxVerticalSpeedMps = 4.0;
     private const double FinalSingleEngineDescentBiasMps2 = 6.0;
