@@ -86,7 +86,7 @@ public partial class EDLController : Control
     // that happens below the final-approach envelope, temporarily keep one centre Raptor
     // selected until the vehicle is descending again; otherwise the discrete selector can
     // chatter 2→1→2 and repeat the same hover at a lower altitude.
-    private const double FinalTwoEngineReboundAltitudeM = 180.0;
+    private const double FinalTwoEngineReboundAltitudeM = 240.0;
     private const double FinalTwoEngineReboundVerticalSpeedMps = 0.5;
     private const double FinalTwoEngineReboundLateralSpeedMps = 20.0;
     private const double FinalSingleEngineReboundMinVerticalSpeedMps = -25.0;
