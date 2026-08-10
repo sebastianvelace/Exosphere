@@ -59,6 +59,7 @@ public partial class EDLController : Control
     // a single Raptor. Keep two engines selected through the contact gate; this is
     // a guard on engine selection only, not a forced full-throttle landing burn.
     private const double FinalSingleEngineContactGuardAltitudeM = 160.0;
+    private const double FinalDualEngineLockAltitudeM = 50.0;
     private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
     private const double FinalSingleEngineMaxVerticalSpeedMps = 4.0;
     private const double FinalSingleEngineDescentBiasMps2 = 6.0;
@@ -995,6 +996,10 @@ public partial class EDLController : Control
                 lowEnergySingleEngine = false;
             if (!safeContact
                 && _alt > FinalSingleEngineContactGuardAltitudeM)
+                lowEnergySingleEngine = false;
+            if (!safeContact
+                && _landingEngineCount >= MinimumFinalApproachEngines
+                && _alt <= FinalDualEngineLockAltitudeM)
                 lowEnergySingleEngine = false;
             selected = System.Math.Min(selected, requested);
             if (lowEnergySingleEngine)
