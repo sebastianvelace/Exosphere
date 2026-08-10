@@ -594,7 +594,10 @@ public partial class EDLController : Control
             foreach (var engine in vessel?.Parts.Parts.Where(
                          p => p.Definition.Category == PartCategory.Engine)
                      ?? Enumerable.Empty<Part>())
+            {
                 engine.SelectEngineCount(System.Math.Max(1, engine.Definition.EngineCount));
+                engine.AllowDeepThrottle = false;
+            }
             foreach (var gear in vessel?.Parts.Parts.Where(
                          p => p.Definition.Category == PartCategory.Landing)
                      ?? Enumerable.Empty<Part>())
@@ -877,6 +880,11 @@ public partial class EDLController : Control
             return;
         }
 
+        // Keep the normal Raptor minimum-throttle model everywhere else. The final
+        // two-engine transition is the one controlled exception: it prevents the
+        // 40%-per-engine floor from creating a hover before touchdown.
+        engineCluster.AllowDeepThrottle = false;
+
         int represented = System.Math.Max(1, engineCluster.Definition.EngineCount);
         int maxLandingEngines = System.Math.Min(3, represented);
         double ratedCluster = engineCluster.GetRatedFullThrottleThrustMagnitude(
@@ -991,6 +999,8 @@ public partial class EDLController : Control
         }
         _landingEngineCount = selected;
         engineCluster.SelectEngineCount(selected);
+        engineCluster.AllowDeepThrottle = _phase == Edl.Final
+            && selected >= MinimumFinalApproachEngines;
         double throttle = desiredThrust / (perEngine * selected);
         vessel.Throttle = engineCluster.ApplyThrottleFloor(
             System.Math.Clamp(throttle, 0.0, 1.0));

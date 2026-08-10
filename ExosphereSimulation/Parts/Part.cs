@@ -63,6 +63,13 @@ public class Part
     private double _activeEngineFraction = 1.0;
 
     /// <summary>
+    /// EDL-only transition override. Two selected landing engines may be commanded
+    /// below the normal deep-throttle floor while the controller settles the vehicle.
+    /// This flag is runtime-only and callers clear it outside EDL.
+    /// </summary>
+    public bool AllowDeepThrottle { get; set; }
+
+    /// <summary>
     /// Fraction of the engines represented by this aggregate part that are selected.
     /// Defaults to one (the complete cluster). EDL can select a discrete 1/2/3-engine
     /// centre cluster without pretending all six Raptors deep-throttle together.
@@ -541,6 +548,7 @@ public class Part
     public double ApplyThrottleFloor(double requested)
     {
         if (Definition.Category != PartCategory.Engine) return requested;
+        if (AllowDeepThrottle) return System.Math.Clamp(requested, 0.0, 1.0);
         double floor = Definition.MinThrottle;
         if (floor <= 0.0 || requested <= 1e-3) return requested;          // off stays off
         return System.Math.Clamp(System.Math.Max(requested, floor), 0.0, 1.0);
