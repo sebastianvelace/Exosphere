@@ -58,8 +58,12 @@ public partial class EDLController : Control
     private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
     private const double FinalSingleEngineMaxVerticalSpeedMps = 4.0;
     private const double FinalSingleEngineDescentBiasMps2 = 6.0;
-    private const double FinalSingleEngineDescentBiasGain = 1.35;
-    private const double FinalSingleEngineDescentBiasLimitMps2 = 8.0;
+    // The single centre Raptor's deep-throttle floor can otherwise settle into a
+    // near-zero-rate hover above the pad.  A higher terminal gain keeps the target
+    // descent profile authoritative below ~30 m while the bounded limit still
+    // leaves positive thrust support and avoids a free-fall relight.
+    private const double FinalSingleEngineDescentBiasGain = 3.0;
+    private const double FinalSingleEngineDescentBiasLimitMps2 = 9.0;
     // Lateral velocity is corrected through a finite TVC cant. Do not let a transient
     // cross-range spike request the full two-engine thrust budget in the last few hundred
     // metres: the vertical profile must remain dominant or the vehicle trades a horizontal
