@@ -64,6 +64,8 @@ public partial class EDLController : Control
     // leaves positive thrust support and avoids a free-fall relight.
     private const double FinalSingleEngineDescentBiasGain = 3.0;
     private const double FinalSingleEngineDescentBiasLimitMps2 = 9.0;
+    private const double FinalSingleEngineHandoffThrottleCap = 0.75;
+    private const double FinalSingleEngineHandoffRampSeconds = 0.75;
     // Lateral velocity is corrected through a finite TVC cant. Do not let a transient
     // cross-range spike request the full two-engine thrust budget in the last few hundred
     // metres: the vertical profile must remain dominant or the vehicle trades a horizontal
@@ -117,6 +119,7 @@ public partial class EDLController : Control
     private bool _flipInProgress;
     private bool _landingCutoffCommitted;
     private bool _singleEngineReboundMode;
+    private double _singleEngineHandoffTimer;
     private int _landingEngineCount;
     private double _flipElapsed;
     private double _attitudeErrorDeg;
@@ -205,6 +208,7 @@ public partial class EDLController : Control
                 _flipInProgress = false;
                 _landingCutoffCommitted = false;
                 _singleEngineReboundMode = false;
+                _singleEngineHandoffTimer = 0.0;
                 _landingEngineCount = 3;
                 _flipElapsed = 0.0;
                 _towerCatchAborted = false;
@@ -233,6 +237,8 @@ public partial class EDLController : Control
         double mass, double speed, Vector3d up, Vector3d surfVel, double delta, Universe universe)
     {
         double g = body.GetSurfaceGravity();
+        _singleEngineHandoffTimer = System.Math.Max(
+            0.0, _singleEngineHandoffTimer - delta);
 
         double vDown   = System.Math.Max(0.0, -_vUp);
         double vertFrac = speed > 1e-3 ? vDown / speed : 1.0;
@@ -976,9 +982,17 @@ public partial class EDLController : Control
             else if (!safeContact)
                 selected = System.Math.Max(MinimumFinalApproachEngines, selected);
         }
+        int previousLandingEngineCount = _landingEngineCount;
         _landingEngineCount = selected;
+        bool handoffToSingleEngine = _phase == Edl.Final
+            && previousLandingEngineCount >= MinimumFinalApproachEngines
+            && selected == 1;
+        if (handoffToSingleEngine)
+            _singleEngineHandoffTimer = FinalSingleEngineHandoffRampSeconds;
         engineCluster.SelectEngineCount(selected);
         double throttle = desiredThrust / (perEngine * selected);
+        if (_singleEngineHandoffTimer > 0.0 && selected == 1)
+            throttle = System.Math.Min(throttle, FinalSingleEngineHandoffThrottleCap);
         vessel.Throttle = engineCluster.ApplyThrottleFloor(
             System.Math.Clamp(throttle, 0.0, 1.0));
     }
