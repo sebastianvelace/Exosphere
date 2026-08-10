@@ -59,6 +59,7 @@ public partial class EDLController : Control
     // a single Raptor. Keep two engines selected through the contact gate; this is
     // a guard on engine selection only, not a forced full-throttle landing burn.
     private const double FinalSingleEngineContactGuardAltitudeM = 160.0;
+    private const double FinalDualEnginePrecontactAltitudeM = 80.0;
     // Keep the centre engine available through the low-energy flare, but do not
     // force the two-engine hover floor until the vehicle is inside the last 20 m.
     // At 50 m the minimum two-engine thrust repeatedly arrested descent and
@@ -1004,6 +1005,12 @@ public partial class EDLController : Control
             if (!safeContact
                 && _landingEngineCount >= MinimumFinalApproachEngines
                 && _alt <= FinalDualEngineLockAltitudeM)
+                lowEnergySingleEngine = false;
+            // Inside the final 80 m, keep both landing mounts authoritative. This
+            // gives the second Raptor time to spool before leg contact and prevents
+            // the rebound escape from returning to a single-engine hover.
+            if (!safeContact
+                && _alt <= FinalDualEnginePrecontactAltitudeM)
                 lowEnergySingleEngine = false;
             selected = System.Math.Min(selected, requested);
             if (lowEnergySingleEngine)
