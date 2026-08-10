@@ -54,7 +54,7 @@ public partial class EDLController : Control
     // envelope, not a touchdown shortcut: the normal contact solver still owns the landing.
     private const double FinalSingleEngineAltitudeM = 160.0;
     private const double FinalSingleEngineLateralSpeedMps = 18.0;
-    private const double FinalSingleEngineReacquireLateralSpeedMps = 20.0;
+    private const double FinalSingleEngineReacquireLateralSpeedMps = 10.0;
     private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
     private const double FinalSingleEngineMaxVerticalSpeedMps = 4.0;
     private const double FinalSingleEngineDescentBiasMps2 = 6.0;
@@ -976,6 +976,12 @@ public partial class EDLController : Control
                 && (_vUp <= FinalSingleEngineRetainDescentSpeedMps
                     || _horiz <= FinalSingleEngineLowLateralSpeedMps))
                 lowEnergySingleEngine = true;
+            // The rebound latch is only a vertical-energy escape from the two-engine
+            // floor. It must not suppress lateral authority once a leg is near the
+            // surface: reacquire the second engine before the first two feet load up.
+            if (_landingEngineCount == 1
+                && _horiz > FinalSingleEngineReacquireLateralSpeedMps)
+                lowEnergySingleEngine = false;
             selected = System.Math.Min(selected, requested);
             if (lowEnergySingleEngine)
                 selected = System.Math.Min(selected, 1);
