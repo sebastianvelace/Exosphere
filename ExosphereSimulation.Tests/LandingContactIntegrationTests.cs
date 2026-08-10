@@ -109,6 +109,7 @@ public sealed class LandingContactIntegrationTests
         Assert.Contains("FinalSingleEngineReacquireLateralSpeedMps = 10.0", source);
         Assert.Contains("FinalSingleEngineContactGuardAltitudeM = 160.0", source);
         Assert.Contains("FinalDualEngineLockAltitudeM = 50.0", source);
+        Assert.Contains("&& _alt > FinalDualEngineLockAltitudeM", source);
         Assert.Contains("&& _alt > FinalSingleEngineContactGuardAltitudeM", source);
         Assert.Contains("AllowDeepThrottle = _phase == Edl.Final", source);
         Assert.Contains("requested <= 1", source);
