@@ -104,7 +104,7 @@ public sealed class LandingContactIntegrationTests
         string source = File.ReadAllText(Path.Combine(
             FindRepoRoot().FullName, "scripts", "EDLController.cs"));
 
-        Assert.Contains("FinalSingleEngineAltitudeM = 250.0", source);
+        Assert.Contains("FinalSingleEngineAltitudeM = 160.0", source);
         Assert.Contains("FinalSingleEngineLateralSpeedMps = 18.0", source);
         Assert.Contains("FinalSingleEngineReacquireLateralSpeedMps = 20.0", source);
         Assert.Contains("requested <= 1", source);
@@ -118,7 +118,7 @@ public sealed class LandingContactIntegrationTests
         Assert.Contains("FinalSingleEngineAcquireDescentSpeedMps = -1.5", source);
         Assert.Contains("FinalSingleEngineRetainDescentSpeedMps = -0.5", source);
         Assert.Contains("FinalSingleEngineLowLateralSpeedMps = 3.0", source);
-        Assert.Contains("FinalTwoEngineReboundAltitudeM = 500.0", source);
+        Assert.Contains("FinalTwoEngineReboundAltitudeM = 180.0", source);
         Assert.Contains("FinalTwoEngineReboundVerticalSpeedMps = 0.5", source);
         Assert.Contains("FinalTwoEngineReboundLateralSpeedMps = 20.0", source);
         Assert.Contains("FinalSingleEngineReboundMinVerticalSpeedMps = -25.0", source);

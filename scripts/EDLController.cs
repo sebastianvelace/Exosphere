@@ -52,7 +52,7 @@ public partial class EDLController : Control
     // the state was already low-energy (vUp=+0.9, lateral=3.8 m/s), leaving ample vertical
     // room for a controlled one-engine descent. The altitude gate is therefore an authority
     // envelope, not a touchdown shortcut: the normal contact solver still owns the landing.
-    private const double FinalSingleEngineAltitudeM = 250.0;
+    private const double FinalSingleEngineAltitudeM = 160.0;
     private const double FinalSingleEngineLateralSpeedMps = 18.0;
     private const double FinalSingleEngineReacquireLateralSpeedMps = 20.0;
     private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
@@ -86,7 +86,7 @@ public partial class EDLController : Control
     // that happens below the final-approach envelope, temporarily keep one centre Raptor
     // selected until the vehicle is descending again; otherwise the discrete selector can
     // chatter 2→1→2 and repeat the same hover at a lower altitude.
-    private const double FinalTwoEngineReboundAltitudeM = 500.0;
+    private const double FinalTwoEngineReboundAltitudeM = 180.0;
     private const double FinalTwoEngineReboundVerticalSpeedMps = 0.5;
     private const double FinalTwoEngineReboundLateralSpeedMps = 20.0;
     private const double FinalSingleEngineReboundMinVerticalSpeedMps = -25.0;
