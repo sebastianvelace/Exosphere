@@ -84,6 +84,12 @@ public partial class SimulationBridge : Node
     // Throttle rate used during the ignition ramp (throttle units per second).
     private const double IgnitionRampRate = 0.5;
 
+    // The re-entry demonstration is a watchable mission, not a propellant-starvation
+    // challenge. Keep a realistic landing reserve in the ship tank so the centre Raptor
+    // remains lit through the multi-leg contact transient and the normal settling gate.
+    // The flight model still consumes the exact pressure/throttle-dependent mass flow.
+    private const double ReentryDemoReserveFraction = 0.20;
+
     public override void _Ready()
     {
         Instance = this;
@@ -1090,7 +1096,7 @@ public partial class SimulationBridge : Node
             double totalCapacity = part.Definition.FuelCapacityLF
                 + part.Definition.FuelCapacityOx;
             if (totalCapacity <= 0.0) continue;
-            double target = totalCapacity * 0.12;
+            double target = totalCapacity * ReentryDemoReserveFraction;
             double mixtureCapacity = totalCapacity > 1e-9
                 ? part.Definition.FuelCapacityLF / totalCapacity
                 : 0.45;
