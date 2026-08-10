@@ -83,6 +83,7 @@ public partial class EDLController : Control
     private const double FinalTwoEngineReboundAltitudeM = 500.0;
     private const double FinalTwoEngineReboundVerticalSpeedMps = 0.5;
     private const double FinalTwoEngineReboundLateralSpeedMps = 20.0;
+    private const double FinalSingleEngineReboundMinVerticalSpeedMps = -25.0;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -927,10 +928,14 @@ public partial class EDLController : Control
                 && _vUp <= FinalSingleEngineMaxVerticalSpeedMps
                 && _horiz <= FinalTwoEngineReboundLateralSpeedMps)
                 _singleEngineReboundMode = true;
+            if ((!safeContact && (_landingEngineCount == 1 || lowEnergySingleEngine))
+                && _alt <= FinalTwoEngineReboundAltitudeM
+                && _horiz <= FinalTwoEngineReboundLateralSpeedMps)
+                _singleEngineReboundMode = true;
             if (_singleEngineReboundMode
                 && (safeContact
                     || _alt > FinalTwoEngineReboundAltitudeM
-                    || _vUp < FinalSingleEngineMinVerticalSpeedMps
+                    || _vUp < FinalSingleEngineReboundMinVerticalSpeedMps
                     || _horiz > FinalTwoEngineReboundLateralSpeedMps))
                 _singleEngineReboundMode = false;
             lowEnergySingleEngine |= _singleEngineReboundMode;
