@@ -63,6 +63,12 @@ public partial class EDLController : Control
     // metres: the vertical profile must remain dominant or the vehicle trades a horizontal
     // error for a powered rebound (EDL v7 evidence).
     private const double FinalHorizontalBrakeErrorMps = 4.0;
+    // A single centre engine has almost no excess thrust margin on the final Ship
+    // mass. Spending the full four-metre-per-second lateral budget on that engine
+    // can consume the entire vertical descent budget and create the repeatable
+    // 220--240 m hover seen in EDL v8/v9. Keep a small lateral correction alive,
+    // but let vertical energy win until the vehicle is back on a two-engine profile.
+    private const double FinalSingleEngineHorizontalBrakeErrorMps = 1.0;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -478,6 +484,9 @@ public partial class EDLController : Control
             if (_phase == Edl.Final)
                 coupledHorizontalError = System.Math.Clamp(
                     coupledHorizontalError, 0.0, FinalHorizontalBrakeErrorMps);
+            if (_phase == Edl.Final && _landingEngineCount == 1)
+                coupledHorizontalError = System.Math.Min(
+                    coupledHorizontalError, FinalSingleEngineHorizontalBrakeErrorMps);
             double brakingError = System.Math.Max(0.0,
                 System.Math.Max(verticalError, coupledHorizontalError));
             // Divide by the commanded thrust axis, not by -velocity. In final vertical flight
