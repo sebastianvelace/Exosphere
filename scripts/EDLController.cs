@@ -76,6 +76,13 @@ public partial class EDLController : Control
     private const double FinalSingleEngineAcquireDescentSpeedMps = -1.5;
     private const double FinalSingleEngineRetainDescentSpeedMps = -0.5;
     private const double FinalSingleEngineLowLateralSpeedMps = 3.0;
+    // A two-engine command can still rebound when the deep-throttle floor is reached. If
+    // that happens below the final-approach envelope, temporarily keep one centre Raptor
+    // selected until the vehicle is descending again; otherwise the discrete selector can
+    // chatter 2→1→2 and repeat the same hover at a lower altitude.
+    private const double FinalTwoEngineReboundAltitudeM = 500.0;
+    private const double FinalTwoEngineReboundVerticalSpeedMps = 0.5;
+    private const double FinalTwoEngineReboundLateralSpeedMps = 20.0;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
@@ -102,6 +109,7 @@ public partial class EDLController : Control
     private bool _legsDeployed;
     private bool _flipInProgress;
     private bool _landingCutoffCommitted;
+    private bool _singleEngineReboundMode;
     private int _landingEngineCount;
     private double _flipElapsed;
     private double _attitudeErrorDeg;
@@ -189,6 +197,7 @@ public partial class EDLController : Control
                 _legsDeployed = false;
                 _flipInProgress = false;
                 _landingCutoffCommitted = false;
+                _singleEngineReboundMode = false;
                 _landingEngineCount = 3;
                 _flipElapsed = 0.0;
                 _towerCatchAborted = false;
@@ -857,6 +866,7 @@ public partial class EDLController : Control
             // selected mounts warm avoids a fresh three-engine hover becoming a dead-stick
             // descent on the next guidance sample; throttle 0 remains an actual shutdown.
             bool safeContact = _phase == Edl.Final && IsSafeMultiLegContact(vessel, body);
+            _singleEngineReboundMode = false;
             int coastEngineCount = _phase == Edl.Final && !safeContact
                 ? System.Math.Min(maxLandingEngines, MinimumFinalApproachEngines)
                 : 0;
@@ -905,6 +915,25 @@ public partial class EDLController : Control
                     || (_landingEngineCount == MinimumFinalApproachEngines
                         && _vUp > FinalSingleEngineAcquireDescentSpeedMps
                         && _horiz <= FinalSingleEngineLowLateralSpeedMps));
+
+            // Recover from the measured two-engine floor rebound (v11): at this point the
+            // vehicle is already inside the final-approach envelope, so shedding one engine
+            // is safer than allowing the minimum two-engine thrust to climb away from the pad.
+            // Latch the state until descent or a lateral miss restores the two-engine margin.
+            if (!safeContact
+                && _landingEngineCount == MinimumFinalApproachEngines
+                && _alt <= FinalTwoEngineReboundAltitudeM
+                && _vUp >= FinalTwoEngineReboundVerticalSpeedMps
+                && _vUp <= FinalSingleEngineMaxVerticalSpeedMps
+                && _horiz <= FinalTwoEngineReboundLateralSpeedMps)
+                _singleEngineReboundMode = true;
+            if (_singleEngineReboundMode
+                && (safeContact
+                    || _alt > FinalTwoEngineReboundAltitudeM
+                    || _vUp < FinalSingleEngineMinVerticalSpeedMps
+                    || _horiz > FinalTwoEngineReboundLateralSpeedMps))
+                _singleEngineReboundMode = false;
+            lowEnergySingleEngine |= _singleEngineReboundMode;
             // If the centre engine has already been selected, retain it while the lateral
             // error is still recoverable. If it grows beyond the reacquisition envelope,
             // return to two engines rather than letting a single offset/gimbal transient

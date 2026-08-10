@@ -115,6 +115,10 @@ public sealed class LandingContactIntegrationTests
         Assert.Contains("FinalSingleEngineAcquireDescentSpeedMps = -1.5", source);
         Assert.Contains("FinalSingleEngineRetainDescentSpeedMps = -0.5", source);
         Assert.Contains("FinalSingleEngineLowLateralSpeedMps = 3.0", source);
+        Assert.Contains("FinalTwoEngineReboundAltitudeM = 500.0", source);
+        Assert.Contains("FinalTwoEngineReboundVerticalSpeedMps = 0.5", source);
+        Assert.Contains("FinalTwoEngineReboundLateralSpeedMps = 20.0", source);
+        Assert.Contains("_singleEngineReboundMode", source);
         Assert.Contains("_phase == Edl.Final && _landingEngineCount == 1", source);
         Assert.Contains("selected = System.Math.Min(selected, 1)", source);
         Assert.Contains("lateralVelocity.Magnitude * 0.08", source);
