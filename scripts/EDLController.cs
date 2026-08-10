@@ -55,6 +55,10 @@ public partial class EDLController : Control
     private const double FinalSingleEngineAltitudeM = 160.0;
     private const double FinalSingleEngineLateralSpeedMps = 18.0;
     private const double FinalSingleEngineReacquireLateralSpeedMps = 10.0;
+    // Below this altitude there is no time left to recover a leg-first contact with
+    // a single Raptor. Keep two engines selected through the contact gate; this is
+    // a guard on engine selection only, not a forced full-throttle landing burn.
+    private const double FinalSingleEngineContactGuardAltitudeM = 50.0;
     private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
     private const double FinalSingleEngineMaxVerticalSpeedMps = 4.0;
     private const double FinalSingleEngineDescentBiasMps2 = 6.0;
@@ -975,6 +979,9 @@ public partial class EDLController : Control
             // surface: reacquire the second engine before the first two feet load up.
             if (_landingEngineCount == 1
                 && _horiz > FinalSingleEngineReacquireLateralSpeedMps)
+                lowEnergySingleEngine = false;
+            if (_landingEngineCount == 1
+                && _alt <= FinalSingleEngineContactGuardAltitudeM)
                 lowEnergySingleEngine = false;
             selected = System.Math.Min(selected, requested);
             if (lowEnergySingleEngine)
