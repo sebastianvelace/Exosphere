@@ -102,13 +102,21 @@ velocidad de contacto segura y repetir `--edl` hasta obtener un aterrizaje físi
   harness visual tenía el `flock` global ocupado. No se considera touchdown hasta obtener
   `exo_play_touchdown.png`, `TOUCHDOWN`, contacto multipunto y el gate completo.
 
-- `edl-one-engine-v9` (`/tmp/exo_edl_v9.log`) incorporó `c8a7558`, que adelanta la transición
-  a un solo motor para evitar el hover de dos motores. La ejecución fue interrumpida por el
-  harness durante `RETRO_BURN` antes de alcanzar `FINAL_DESCENT`: último estado válido a
-  `t=269,6 s`, `alt=2.906,7 m`, `vUp=-91,2 m/s`, `horiz=52,7 m/s`, `selectedEngines=3`,
-  `litEngines=3`, `upright=-0,0346`. No existe `TOUCHDOWN`, `exo_play_touchdown.png` ni
-  `SUMMARY`; por tanto es una corrida **incompleta**, no un aterrizaje aprobado. Una nueva
-  prueba debe usar otro `run-id` y comprobar que el proceso permanece vivo hasta el gate.
+- `edl-final-axis-v7` (`/tmp/exo_edl_v7.log`) confirmó el primer efecto de `a13fc02`: el salto
+  de eje final desapareció y no se repitió el impacto de 106,31 m/s de v6. Sin embargo, la
+  combinación de dos motores y el mínimo físico de `40 %` dejó una oscilación sostenida entre
+  aproximadamente 272 y 335 m; el proceso se detuvo en `t≈372 s` sin contacto ni resumen.
+- `edl-lateral-cap-v8` (`/tmp/exo_edl_v8.log`) incorporó `9e5c924`, que limita a `4 m/s` la
+  demanda de frenado horizontal en FINAL. La amplitud del rebote se redujo, pero el sistema
+  quedó en hover de dos motores entre aproximadamente 211 y 230 m (`vUp≈+0,8/-2,2 m/s`);
+  terminó en `t≈382 s` sin tocar la superficie. Esto conserva el gate abierto: no es touchdown.
+- `edl-one-engine-v9` (`/tmp/exo_edl_v9.log`) incorporó `c8a7558` y sí demostró la transición
+  discreta solicitada: a `t=356,6 s`, `alt≈226 m`, `vUp≈-0,5 m/s`, `horiz≈14,3 m/s` pasó de
+  dos a un motor. El vehículo no alcanzó el suelo; con un motor siguió oscilando alrededor de
+  220–240 m, llegando a `throttle≈0,77–1,00`, y el run fue detenido en `t≈382,2 s` (`vUp≈-5,8
+  m/s`). `ac4a08e` aumenta de forma acotada el sesgo descendente sólo en ese estado, pero no
+  tiene validación visual todavía. No existe `TOUCHDOWN`, `exo_play_touchdown.png` ni un
+  resumen de aterrizaje; por tanto v7–v9 son corridas **incompletas**, no aterrizajes aprobados.
 
 Estas fallas son evidencia física útil: el controlador necesita resolver simultáneamente el
   mínimo de throttle, la selección discreta de motores y la deriva lateral antes de declarar

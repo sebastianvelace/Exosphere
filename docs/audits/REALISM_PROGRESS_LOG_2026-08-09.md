@@ -29,6 +29,8 @@ not converted into a passing screenshot.
 | `ce97d59` | Calibrate Earth coastal aerosol reference | v1 optical gate failure recorded; v2 clipping below threshold |
 | `6d71902` | Document aerosol renderer evidence | v2 `ATMOSPHERE_OK`, 16/16, 1157 frames |
 | `c8a7558` | Transition to one engine before final hover | EDL source contracts updated; visual v9 incomplete before final descent |
+| `9e5c924` | Cap final lateral braking demand | EDL source contracts + 8/8 focused tests; v8 reduced rebound but remained in two-engine hover |
+| `ac4a08e` | Bias one-engine final profile toward descent | EDL source contracts + 8/8 focused tests + build; visual validation remains pending |
 
 ## Current gates
 
@@ -40,9 +42,12 @@ not converted into a passing screenshot.
 - EDL v3 reproduced a one-engine lateral rebound; v4 reproduced a three-engine hover;
   v5 reproduced a two-engine minimum-throttle rebound at ~20 m; v6 reproduced a late
   two-engine bounce and 106.31 m/s overload at contact. EDL touchdown remains open.
-- `edl-one-engine-v9` reached retro-burn with the new one-engine transition policy but the
-  harness ended at `t=269,6 s` before `FINAL_DESCENT`; no touchdown artifact or summary was
-  emitted. Treat this as incomplete evidence and keep the physical gate open.
+- EDL v7 removed the final-axis reversal but oscillated at roughly 272–335 m; v8 reduced the
+  lateral-braking rebound but hovered at roughly 211–230 m; neither produced contact.
+- `edl-one-engine-v9` reached `FINAL_DESCENT` and selected one engine around `t=356,6 s`/
+  `alt≈226 m`, but then hovered around 220–240 m until it was stopped. `ac4a08e` adds a bounded
+  one-engine descent bias; because no visual run has validated it yet, there is still no
+  touchdown artifact or passing EDL summary. Keep the physical gate open.
 - The test suite is green on the latest completed commits; rerun the full suite after the
   one-engine/low-thrust EDL and menu dossier tranches merge.
 
