@@ -1004,18 +1004,9 @@ public partial class EDLController : Control
             if (!safeContact
                 && _alt > FinalSingleEngineContactGuardAltitudeM)
                 lowEnergySingleEngine = false;
-            if (!safeContact
-                && _landingEngineCount >= MinimumFinalApproachEngines
-                && _alt <= FinalDualEngineLockAltitudeM)
-                lowEnergySingleEngine = false;
-            // Once two engines have been reacquired below the 160 m contact guard,
-            // keep that authority monotonic through touchdown. Without this latch,
-            // the rebound escape could shed the second engine again around 80 m and
-            // leave the vehicle oscillating instead of settling onto its legs.
-            if (!safeContact
-                && _landingEngineCount >= MinimumFinalApproachEngines
-                && _alt <= FinalSingleEngineContactGuardAltitudeM)
-                lowEnergySingleEngine = false;
+                       if (!safeContact
+                           && _alt <= FinalDualEngineLockAltitudeM)
+                           lowEnergySingleEngine = false;
             selected = System.Math.Min(selected, requested);
             if (lowEnergySingleEngine)
                 selected = System.Math.Min(selected, 1);
