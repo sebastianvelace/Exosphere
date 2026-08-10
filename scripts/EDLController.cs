@@ -980,7 +980,7 @@ public partial class EDLController : Control
             if (_landingEngineCount == 1
                 && _horiz > FinalSingleEngineReacquireLateralSpeedMps)
                 lowEnergySingleEngine = false;
-            if (_landingEngineCount == 1
+            if (!safeContact
                 && _alt <= FinalSingleEngineContactGuardAltitudeM)
                 lowEnergySingleEngine = false;
             selected = System.Math.Min(selected, requested);
