@@ -59,7 +59,11 @@ public partial class EDLController : Control
     // a single Raptor. Keep two engines selected through the contact gate; this is
     // a guard on engine selection only, not a forced full-throttle landing burn.
     private const double FinalSingleEngineContactGuardAltitudeM = 160.0;
-    private const double FinalDualEngineLockAltitudeM = 50.0;
+    // Keep the centre engine available through the low-energy flare, but do not
+    // force the two-engine hover floor until the vehicle is inside the last 20 m.
+    // At 50 m the minimum two-engine thrust repeatedly arrested descent and
+    // produced a non-physical bounce around the lock altitude (v35).
+    private const double FinalDualEngineLockAltitudeM = 20.0;
     private const double FinalSingleEngineMinVerticalSpeedMps = -8.0;
     private const double FinalSingleEngineMaxVerticalSpeedMps = 4.0;
     private const double FinalSingleEngineDescentBiasMps2 = 6.0;
