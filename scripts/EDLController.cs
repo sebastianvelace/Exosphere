@@ -992,7 +992,6 @@ public partial class EDLController : Control
             // floor. It must not suppress lateral authority once a leg is near the
             // surface: reacquire the second engine before the first two feet load up.
             if (_landingEngineCount == 1
-                && _alt > FinalDualEngineLockAltitudeM
                 && _horiz > FinalSingleEngineReacquireLateralSpeedMps)
                 lowEnergySingleEngine = false;
             if (!safeContact
