@@ -59,6 +59,7 @@ Options:
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
   --cockpit     Capture the first-person cockpit optics and interior.
   --atmosphere  Capture a deterministic day/twilight/night altitude matrix with image metrics.
+  --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
   --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
                 real hot-staging dual-thrust overlap window, gated on vessel state
@@ -154,6 +155,7 @@ while [[ $# -gt 0 ]]; do
     --ship) MODE="ship"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
     --atmosphere) MODE="atmosphere"; shift ;;
+    --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
     --hotstage)
       MODE="hotstage"
@@ -210,6 +212,17 @@ if [[ ! "$MAX_RUNTIME_SEC" =~ ^[0-9]+$ ]] \
   || (( MAX_RUNTIME_SEC < 60 || MAX_RUNTIME_SEC > 7200 )); then
   echo "ERROR: --max-runtime must be an integer between 60 and 7200 seconds" >&2
   exit 2
+fi
+
+# The spectral matrix is a CPU validation harness, not a Godot scene. Keep it on the same
+# entry point as the visual matrix so acceptance jobs can request either artifact family,
+# while avoiding a temporary autoload and a framebuffer for an offline comparison.
+if [[ "$MODE" == "spectral" ]]; then
+  mkdir -p "$OUT_DIR"
+  dotnet run --project tools/SpectralValidation/SpectralValidation.csproj \
+    --no-restore -- "$OUT_DIR"
+  echo "visual_playtest: spectral comparison PASS; artifacts=$OUT_DIR"
+  exit 0
 fi
 
 write_run_summary() {
@@ -423,6 +436,8 @@ public partial class _PlaytestShot : Node
     int _atmosPerfFrames, _atmosSlowFrames;
     double _atmosPreviousExposure = -1.0;
     int _atmosExposureStableFrames;
+    SpectralAtmosphereOracle? _spectralOracle;
+    string? _spectralBodyId;
 
     public _PlaytestShot()
     {
@@ -1509,6 +1524,16 @@ public partial class _PlaytestShot : Node
     private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
         Vessel vessel, Universe universe, CelestialBody body)
     {
+        if (_spectralOracle == null || _spectralBodyId != body.Id)
+        {
+            _spectralOracle = SpectralAtmosphereOracle.Build(
+                body, maxOrder: SpectralAtmosphereOracle.ExperimentalOrder, sampleCount: 12);
+            _spectralBodyId = body.Id;
+            _log.WriteLine($"SPECTRAL_ORACLE body={body.Id} bands={SpectralAtmosphereOracle.BandCount} "
+                + $"provenance={_spectralOracle.DataProvenance} "
+                + $"maxOrder={_spectralOracle.MaxScatteringOrder}");
+            _log.Flush();
+        }
         if (_atmosIndex < 0)
         {
             // Freeze the physical clock before the first case is applied. Previously the
@@ -1719,9 +1744,21 @@ public partial class _PlaytestShot : Node
                 vessel.Position, moon.Position, moon.Radius, sun.Position, sun.Radius);
         }
 
+        double solarElevationRadians = solarElevation * System.Math.PI / 180.0;
+        double viewSunCosine = _atmosLook.Dot(sunDir);
+        var spectral = _spectralOracle?.Evaluate(
+            vessel.GetAltitude(earth), solarElevationRadians, 0.5, viewSunCosine,
+            eclipseVisibility);
+        Vector3d spectralRgb = spectral?.ToLinearRgb() ?? Vector3d.Zero;
+
         _log.WriteLine($"ATMOS_STATE slug={shot.Slug} actualAlt={vessel.GetAltitude(earth):F1} " +
             $"sunElevation={solarElevation:F2} solarVisibility={SunController.SolarVisibility:F3} " +
             $"eclipse={shot.Eclipse} eclipseVisibility={eclipseVisibility:F6} " +
+            $"lutVersion={SkyController.MultipleScatteringLutVersion} " +
+            $"lutOrder={SkyController.RuntimeMultipleScatteringOrder} " +
+            $"spectralOrder={_spectralOracle?.MaxScatteringOrder ?? 0} " +
+            $"spectralEnergy={spectral?.Energy ?? 0.0:E4} " +
+            $"spectralRgb={spectralRgb.X:E4},{spectralRgb.Y:E4},{spectralRgb.Z:E4} " +
             $"separationRad={separation:E4} sunRadiusRad={sunRadius:E4} " +
             $"occluderRadiusRad={occluderRadius:E4} cockpit={shot.Cockpit} " +
             $"exposure={exposure:F3} fov={camera?.Fov ?? -1:F2} " +

@@ -1,5 +1,6 @@
 namespace Exosphere.Game;
 
+using System.Diagnostics;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Systems;
@@ -16,6 +17,19 @@ using Godot;
 public partial class SkyController : Node
 {
     public static Color CurrentHorizonColor { get; private set; } = new(0.40f, 0.65f, 1.0f);
+
+    /// <summary>Stable telemetry contract for the RGB runtime atmosphere LUT.</summary>
+    public const string MultipleScatteringLutVersion = "rgb-ms-order4-v20";
+    public const int RuntimeMultipleScatteringOrder = SpectralAtmosphereOracle.OfficialRendererOrder;
+    public const int ExperimentalMultipleScatteringOrder = SpectralAtmosphereOracle.ExperimentalOrder;
+
+    /// <summary>
+    /// Development-only switch. When enabled, the CPU builds an order-five diagnostic LUT and
+    /// records its cost, but the shader continues sampling the official order-four texture.
+    /// </summary>
+    [Export] public bool GenerateExperimentalOrderFive { get; set; }
+    public double LastExperimentalOrderFiveBuildMilliseconds { get; private set; }
+    public long LastExperimentalOrderFiveEstimatedBytes { get; private set; }
 
     private const string SkyShaderPath = "res://assets/shaders/space_sky.gdshader";
     private const string StarTexPath = "res://assets/textures/starmap_milkyway_8k.jpg";
@@ -416,6 +430,29 @@ public partial class SkyController : Node
             MultipleScatteringIntegrationSteps,
             MultipleScatteringSolarSamples,
             MultipleScatteringMaxOrder);
+
+        if (GenerateExperimentalOrderFive)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var experimental = AtmosphereMultipleScatteringLut.Build(
+                profile,
+                planetRadius,
+                atmosphereTopAltitude,
+                MultipleScatteringLutWidth,
+                MultipleScatteringLutHeight,
+                MultipleScatteringIntegrationSteps,
+                MultipleScatteringSolarSamples,
+                ExperimentalMultipleScatteringOrder);
+            stopwatch.Stop();
+            LastExperimentalOrderFiveBuildMilliseconds = stopwatch.Elapsed.TotalMilliseconds;
+            LastExperimentalOrderFiveEstimatedBytes = (long)experimental.Width
+                * experimental.Height * 3 * sizeof(double);
+            GD.Print($"ATMOS_LUT_EXPERIMENT version={MultipleScatteringLutVersion} "
+                + $"officialOrder={RuntimeMultipleScatteringOrder} "
+                + $"experimentalOrder={ExperimentalMultipleScatteringOrder} "
+                + $"buildMs={LastExperimentalOrderFiveBuildMilliseconds:F2} "
+                + $"estimatedBytes={LastExperimentalOrderFiveEstimatedBytes}");
+        }
         var lut = AtmosphereAngularMultipleScatteringLut.Build(
             profile,
             global,
