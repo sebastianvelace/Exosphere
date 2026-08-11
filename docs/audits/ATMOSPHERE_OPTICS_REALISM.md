@@ -364,3 +364,27 @@ La puesta de sol de `/tmp/exo_atmo_adaptivefilter_v1/` conserva el gradiente roj
 solar sin las franjas continuas de la línea base; `120km_day` mantiene el limbo azul y
 `120km_night` el campo estelar nítido. El coste queda dentro del ruido del render incremental
 en llvmpipe porque el filtro sólo se activa con el Sol bajo.
+
+## V16 — irradiancia de eclipses con oscurecimiento de borde solar (2026-08-11)
+
+La visibilidad geométrica del disco solar se usaba también como fracción de irradiancia para
+la atmósfera. Esa aproximación sobrestima la luz durante una ocultación central: el Sol visible
+es más brillante en el centro que en el borde. `MissionGeometry` ahora integra una ley de
+oscurecimiento lineal `I(μ)=1-u(1-μ)` (`u=0,60`) mediante cuadratura polar determinista. La
+ponderación se aplica al transporte solar atmosférico y a la luz directa del suelo, mientras
+que el shader conserva la máscara espacial del ocultador y su limb darkening por píxel.
+
+Evidencia reproducible:
+
+| Comprobación | Resultado |
+|---|---:|
+| suite `ExosphereSimulation.Tests` | **518/518** |
+| `LimbDarkenedDiscVisibility` central vs. borde | **PASS** (ocultar el centro pierde más irradiancia) |
+| casos claro/total de disco ponderado | **PASS** (1,0 / 0,0) |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
+| `bash tools/atmosphere_quick_check.sh` | **PASS, 80/80** |
+| `visual_playtest.sh --atmosphere --run-id limbdark-v1 --skip-build` | **ATMOSPHERE_OK, 16/16** |
+
+La matriz `/tmp/exo_atmo_limbdark_v1/` mantiene el atardecer filtrado, el limbo azul a
+120 km, el nightglow y el campo estelar; la nueva rama sólo cambia escenas con ocultación
+solar y no deriva la exposición en condiciones despejadas.

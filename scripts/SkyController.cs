@@ -155,7 +155,10 @@ public partial class SkyController : Node
         foreach (var candidate in universe.Bodies)
         {
             if (candidate.Id == "sun") continue;
-            double visibility = MissionGeometry.SolarDiscVisibility(
+            // The atmosphere receives irradiance from the limb-darkened photosphere,
+            // not from a uniform geometric disc.  Central occultations therefore remove
+            // slightly more radiance than equal-area limb occultations.
+            double visibility = MissionGeometry.LimbDarkenedSolarDiscVisibility(
                 observer, candidate.Position, candidate.Radius, sun.Position, sun.Radius);
             if (candidate.Id != atmosphereBodyId)
                 atmosphericVisibility = System.Math.Min(atmosphericVisibility, visibility);

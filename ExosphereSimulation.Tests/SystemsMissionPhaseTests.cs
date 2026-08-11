@@ -72,6 +72,22 @@ public sealed class SystemsMissionPhaseTests
     }
 
     [Fact]
+    public void LimbDarkenedDiscWeightsCentralAndLimbOccultationsDifferently()
+    {
+        double centralUniform = MissionGeometry.DiscVisibility(1.0, 0.4, 0.0);
+        double centralLimbDarkened = MissionGeometry.LimbDarkenedDiscVisibility(
+            1.0, 0.4, 0.0, limbDarkening: 0.60);
+        double edgeUniform = MissionGeometry.DiscVisibility(1.0, 0.4, 1.05);
+        double edgeLimbDarkened = MissionGeometry.LimbDarkenedDiscVisibility(
+            1.0, 0.4, 1.05, limbDarkening: 0.60);
+
+        Assert.InRange(centralLimbDarkened, 0.0, centralUniform);
+        Assert.InRange(edgeLimbDarkened, edgeUniform, 1.0);
+        Assert.Equal(1.0, MissionGeometry.LimbDarkenedDiscVisibility(1.0, 0.1, 1.2), 12);
+        Assert.Equal(0.0, MissionGeometry.LimbDarkenedDiscVisibility(1.0, 1.1, 0.0), 12);
+    }
+
+    [Fact]
     public void DiscOverlapIsScaleInvariantAndMatchesAnalyticEqualDiscs()
     {
         double expected = 1.0 - (2.0 * System.Math.PI / 3.0
