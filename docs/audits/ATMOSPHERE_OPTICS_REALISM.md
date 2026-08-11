@@ -150,3 +150,36 @@ bash tools/atmosphere_quick_check.sh
    un campo geométrico de baja frecuencia, no un modelo de convección ni precipitación.
 5. Aerosoles por clima/latitud y capas Venus validadas.
 6. Trazador refractivo de distancia finita para estrellas; polarización y química del airglow.
+
+## V10 — paridad termodinámica de las LUT (2026-08-10)
+
+Esta iteración cierra el desacoplamiento más visible de V9: la vista primaria usaba la
+densidad `P/T`, pero las tablas de transmitancia solar y dispersión múltiple seguían
+integrando las exponenciales de `AtmosphereOptics`. El renderer ahora construye un
+`AtmosphereDensityProfile` por cuerpo y lo comparte con:
+
+- `AtmosphereTransmittanceLut` (rayos solares diurnos);
+- `AtmosphereMultipleScatteringLut` (fuente de órdenes 2/3 y transporte vertical);
+- `AtmosphereAngularMultipleScatteringLut` (beta local, tau vertical y escape angular);
+- `AtmosphereDensityLut` (perfil filtrado publicado al shader).
+
+El perfil integra la columna vertical con Simpson y warp cuadrático, preservando la
+resolución en la troposfera y la cola termósferica. Las elevaciones solares subhorizonte
+mantienen temporalmente el solver refractivo exponencial como ruta de compatibilidad; el
+próximo paso es sustituir también su índice `n(r)` por la refractividad termodinámica.
+
+### Evidencia reproducible
+
+| Gate | Resultado |
+| --- | --- |
+| `dotnet test ... --filter AtmosphereProfileTransportTests` | **3/3** |
+| `bash tools/atmosphere_quick_check.sh` | **PASS, 81/81** |
+| `dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --no-restore` | **549/549** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
+| `visual_playtest.sh --atmosphere --run-id atmo-profile-v1 --skip-build` | **ATMOSPHERE_OK** |
+
+La matriz visual V10 produjo capturas en suelo día/amanecer/atardecer/noche, 10/30/70/120
+km, 400 km y cockpit día/noche en `/tmp/exo_atmo_profile/`. No reportó `GAP`, `FALLBACK` ni
+clipping fuera de los umbrales del runner. El framebuffer confirmó que el cielo se vuelve
+negro y recupera estrellas sólo con adaptación nocturna en 400 km/noche, mientras que la
+atmósfera conserva el limbo azul en 120 km/día y el gradiente cálido de puesta de sol.
