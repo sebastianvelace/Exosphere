@@ -238,6 +238,8 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("airglow_emission", ToGodot(optics.AirglowEmission));
         _skyMat.SetShaderParameter("airglow_center_altitude", (float)optics.AirglowCenterAltitude);
         _skyMat.SetShaderParameter("airglow_scale_height", (float)optics.AirglowScaleHeight);
+        _skyMat.SetShaderParameter("airglow_daylight_fraction",
+            (float)System.Math.Clamp(optics.AirglowDaylightFraction, 0.0, 1.0));
         _skyMat.SetShaderParameter("rayleigh_scale_height", (float)optics.RayleighScaleHeight);
         _skyMat.SetShaderParameter("mie_scale_height", (float)optics.MieScaleHeight);
         _skyMat.SetShaderParameter("ozone_center_altitude", (float)optics.OzoneCenterAltitude);

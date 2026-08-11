@@ -27,6 +27,7 @@
       "airglow_emission": [0.00000000060, 0.00000000144, 0.00000000044],
       "airglow_center_altitude": 97000,
       "airglow_scale_height": 6000,
+      "airglow_daylight_fraction": 0.12,
       "mie_anisotropy": 0.8,
       "sun_illuminance_scale": 20.0,
       "surface_refractivity": 0.000277,

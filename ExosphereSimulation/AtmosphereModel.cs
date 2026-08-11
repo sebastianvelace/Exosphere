@@ -292,6 +292,7 @@ public partial class AtmosphereModel
             AirglowEmission = new Math.Vector3d(0.060e-8, 0.144e-8, 0.044e-8),
             AirglowCenterAltitude = 97_000.0,
             AirglowScaleHeight = 6_000.0,
+            AirglowDaylightFraction = 0.12,
             // Relative extraterrestrial solar irradiance in the renderer's shared linear
             // radiance domain. Keep this explicit: changing the AtmosphereOptics default
             // must not silently recalibrate Earth's sky.

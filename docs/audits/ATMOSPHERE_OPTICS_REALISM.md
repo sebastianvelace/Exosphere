@@ -300,3 +300,27 @@ La matriz conserva el gradiente de amanecer/atardecer, el limbo azul a 120 km, e
 estelar nocturno y la captura de cockpit. La puesta de sol todavía muestra bandas de baja
 luminancia del framebuffer; esa cuantización queda explícitamente abierta para la siguiente
 iteración y no se atribuye a la microfísica de nubes.
+
+## V14 — transición física de airglow/dayglow (2026-08-11)
+
+El airglow visible ya no se apaga con un interruptor al cruzar el terminador. Cada perfil
+puede declarar `airglow_daylight_fraction`; Earth usa 0,12 para representar la fracción débil
+de dayglow que permanece bajo excitación solar, mientras que los cuerpos sin un perfil de
+emisión conservan cero. La función CPU `AirglowSolarVisibility()` y el shader comparten la
+misma curva `smoothstep(-0.10, +0.08)` en seno de elevación: la emisión nocturna cae de forma
+continua y el suelo diurno no recibe un halo verde artificial.
+
+Evidencia reproducible:
+
+| Comprobación | Resultado |
+|---|---:|
+| `dotnet test ExosphereSimulation.Tests/...` | **517/517** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
+| `bash tools/atmosphere_quick_check.sh` | **PASS, 80/80** |
+| `visual_playtest.sh --atmosphere --run-id atmo-dayglow-v1` | **ATMOSPHERE_OK, 16/16** |
+| `PERF ground_day` | **160,15 ms/frame**, máximo 179,61 ms |
+| `PERF 120km_day` | **160,16 ms/frame**, máximo 176,16 ms |
+| `neonGreenFrac` en matriz | **0,000000** en las vistas exteriores |
+
+La captura de 120 km conserva el limbo azul y el nightglow sigue siendo ópticamente fino;
+la pequeña fracción diurna no cambia la exposición ni introduce un disco verde visible.

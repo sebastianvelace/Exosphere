@@ -168,6 +168,12 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(1.0, optics.AirglowDensity(optics.AirglowCenterAltitude), 12);
         Assert.True(optics.AirglowDensity(80_000.0) < 0.03);
         Assert.True(optics.AirglowDensity(120_000.0) < 0.001);
+        Assert.InRange(optics.AirglowDaylightFraction, 0.0, 1.0);
+        Assert.Equal(1.0, optics.AirglowSolarVisibility(-0.20), 12);
+        Assert.InRange(optics.AirglowSolarVisibility(0.50),
+            optics.AirglowDaylightFraction, 1.0);
+        Assert.True(optics.AirglowSolarVisibility(-0.20)
+            > optics.AirglowSolarVisibility(0.50));
     }
 
     [Theory]
@@ -206,6 +212,7 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(preset.AirglowEmission, json.AirglowEmission);
         Assert.Equal(preset.AirglowCenterAltitude, json.AirglowCenterAltitude);
         Assert.Equal(preset.AirglowScaleHeight, json.AirglowScaleHeight);
+        Assert.Equal(preset.AirglowDaylightFraction, json.AirglowDaylightFraction);
         Assert.Equal(preset.RayleighScaleHeight, json.RayleighScaleHeight);
         Assert.Equal(preset.MieScaleHeight, json.MieScaleHeight);
         Assert.Equal(preset.MieAnisotropy, json.MieAnisotropy);

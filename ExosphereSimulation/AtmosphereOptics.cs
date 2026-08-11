@@ -25,6 +25,12 @@ public sealed record AtmosphereOptics
     public Vector3d AirglowEmission { get; init; } = Vector3d.Zero;
     public double AirglowCenterAltitude { get; init; } = 97_000.0;
     public double AirglowScaleHeight { get; init; } = 6_000.0;
+    /// <summary>
+    /// Fraction of the nightglow emission retained under a sunlit line of sight.  Atomic
+    /// oxygen and OH bands have a weak dayglow component; keeping it explicit avoids the
+    /// non-physical hard switch that made the upper limb blink at the terminator.
+    /// </summary>
+    public double AirglowDaylightFraction { get; init; } = 0.0;
     public double MieAnisotropy { get; init; } = 0.80;
     public double SunIlluminanceScale { get; init; } = 20.0;
     /// <summary>
@@ -149,6 +155,20 @@ public sealed record AtmosphereOptics
         if (AirglowScaleHeight <= 0.0 || !double.IsFinite(altitude)) return 0.0;
         double z = (altitude - AirglowCenterAltitude) / AirglowScaleHeight;
         return System.Math.Exp(-0.5 * z * z);
+    }
+
+    /// <summary>
+    /// Solar excitation factor for the airglow layer. The night component transitions
+    /// smoothly across the terminator, while <see cref="AirglowDaylightFraction"/> retains
+    /// the calibrated weak dayglow floor on the sunlit side.
+    /// </summary>
+    public double AirglowSolarVisibility(double solarElevationSin)
+    {
+        if (!double.IsFinite(solarElevationSin)) return 0.0;
+        double daylightFloor = System.Math.Clamp(AirglowDaylightFraction, 0.0, 1.0);
+        double night = 1.0 - Smoothstep(-0.10, 0.08,
+            System.Math.Clamp(solarElevationSin, -1.0, 1.0));
+        return daylightFloor + (1.0 - daylightFloor) * night;
     }
 
     /// <summary>Vertical optical depth from altitude to space for the RGB bands.</summary>
