@@ -53,6 +53,55 @@ public sealed class AtmosphereProfileTransportTests
     }
 
     [Fact]
+    public void ProfileDirectBeamMatchesItsProfileRefractedPathOracle()
+    {
+        var atmosphere = AtmosphereModel.Earth();
+        var profile = new AtmosphereDensityProfile(atmosphere);
+        const double radius = 6_371_000.0;
+        const double top = 140_000.0;
+        const double geometricSin = -0.005;
+
+        Assert.True(profile.Optics.TrySolveRefractedSolarElevation(
+            profile, 0.0, geometricSin, radius, top,
+            out double apparentSin, sampleCount: 48));
+
+        var tau = profile.Optics.OpticalDepthAlongRefractedRay(
+            profile, 0.0, apparentSin, radius, top, sampleCount: 48);
+        var expected = new Vector3d(
+            System.Math.Exp(-tau.X),
+            System.Math.Exp(-tau.Y),
+            System.Math.Exp(-tau.Z));
+        var actual = profile.Optics.DirectSolarTransmittance(
+            profile, 0.0, geometricSin, radius, top, sampleCount: 48);
+
+        Assert.Equal(expected.X, actual.X, 12);
+        Assert.Equal(expected.Y, actual.Y, 12);
+        Assert.Equal(expected.Z, actual.Z, 12);
+    }
+
+    [Fact]
+    public void ProfileRefractedPathRespondsToThermodynamicLapse()
+    {
+        var atmosphere = AtmosphereModel.Earth();
+        var profile = new AtmosphereDensityProfile(atmosphere);
+        const double radius = 6_371_000.0;
+        const double top = 140_000.0;
+
+        var legacy = atmosphere.Optics.OpticalDepthAlongRefractedRay(
+            12_000.0, 0.05, radius, top, sampleCount: 96);
+        var thermodynamic = atmosphere.Optics.OpticalDepthAlongRefractedRay(
+            profile, 12_000.0, 0.05, radius, top, sampleCount: 96);
+
+        Assert.True(double.IsFinite(thermodynamic.X)
+            && double.IsFinite(thermodynamic.Y)
+            && double.IsFinite(thermodynamic.Z));
+        Assert.True(System.Math.Abs(legacy.X - thermodynamic.X) > 1e-10
+            || System.Math.Abs(legacy.Y - thermodynamic.Y) > 1e-10
+            || System.Math.Abs(legacy.Z - thermodynamic.Z) > 1e-10,
+            $"profile ray unexpectedly collapsed to legacy envelope: legacy={legacy}, profile={thermodynamic}");
+    }
+
+    [Fact]
     public void ProfileMultipleScatteringSeedDiffersFromLegacyEnvelope()
     {
         var atmosphere = BuildLapseAtmosphere();

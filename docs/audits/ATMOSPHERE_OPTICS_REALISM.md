@@ -164,11 +164,10 @@ integrando las exponenciales de `AtmosphereOptics`. El renderer ahora construye 
 - `AtmosphereDensityLut` (perfil filtrado publicado al shader).
 
 El perfil integra la columna vertical con Simpson y warp cuadrático, preservando la
-resolución en la troposfera y la cola termósferica. Las elevaciones solares subhorizonte
-usan ahora una elevación aparente derivada de la refractividad molecular `P/T` y la misma
-densidad profile-aware para la profundidad óptica; el límite actual es que el levantamiento
-es una aproximación esférica de primer orden, no un trazador refractivo completo de dos ramas
-para una atmósfera Venus extremadamente densa.
+resolución en la troposfera y la cola termósferica. En la implementación V10 las elevaciones
+solares subhorizonte usaban una elevación aparente derivada de la refractividad molecular
+`P/T` y la misma densidad profile-aware para la profundidad óptica; ese límite histórico
+quedó cubierto por el trazador esférico completo de V11.
 
 ### Evidencia reproducible
 
@@ -216,3 +215,32 @@ de 120 km muestra un limbo azul fino con transición continua hacia la superfici
 captura de atardecer mantiene el gradiente naranja y el oscurecimiento nocturno. El
 renderizador llvmpipe registra aproximadamente 160 ms por frame en esta VM, por lo que
 la lentitud del playtest es de infraestructura y no un bucle físico bloqueado.
+
+## V11 — trazado refractivo profile-aware (2026-08-11)
+
+La refracción dejó de usar la envolvente exponencial heredada cuando el renderer dispone
+de `AtmosphereDensityProfile`. El índice se calcula como `n(r)=1+κ·P/(T·P₀/T₀)` y se
+propaga por todo el trazador esférico: búsqueda del mínimo de `n·r`, inversión de la
+elevación aparente, integración angular de las ramas y profundidad óptica de cada tramo.
+Una atmósfera densa puede conservar ahora una fuente subhorizonte sólo si existe una rama
+ductada válida; los rayos que intersectan el cuerpo devuelven transmisión nula.
+
+Para no convertir la construcción de LUT en un bloqueo de arranque, las elevaciones solares
+por encima de 0,035 rad (≈2°) usan directamente la integral radial profile-aware —la
+corrección angular es subpíxel en ese régimen— y el inversor completo queda reservado al
+limbo y a las elevaciones negativas. La extinción no vuelve al modelo exponencial en ese
+camino rápido.
+
+Evidencia V11:
+
+| Comprobación | Resultado |
+|---|---:|
+| `AtmosphereProfileTransportTests` | **6/6** |
+| suite `ExosphereSimulation.Tests` | **516/516** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings / 0 errors** |
+| `tools/atmosphere_quick_check.sh` | **79/79, PASS** |
+| Venus profile: rama ductada a 60 km | **PASS** |
+| `visual_playtest.sh --atmosphere --run-id atmo-profile-v4 --skip-build` | **ATMOSPHERE_OK** |
+
+La matriz V11 generó las 16 capturas en `/tmp/exo_atmo_profile_v4/` sin `GAP` ni
+`FALLBACK`; se revisaron visualmente el atardecer en superficie y el limbo azul a 120 km.

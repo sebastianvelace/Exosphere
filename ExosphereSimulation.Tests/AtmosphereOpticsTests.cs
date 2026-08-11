@@ -475,15 +475,18 @@ public sealed class AtmosphereOpticsTests
     {
         var body = LoadBody("venus");
         var optics = body.Atmosphere!.Optics;
+        var profile = new AtmosphereDensityProfile(body.Atmosphere);
         const double altitude = 60_000.0;
-        double[] geometricCandidates = { -0.01, -0.02, -0.04, -0.08, -0.12 };
+        double[] geometricCandidates = {
+            -0.001, -0.002, -0.005, -0.01, -0.02, -0.04, -0.08, -0.12, -0.20, -0.30,
+        };
         bool solved = false;
         double apparent = 0.0;
         double selectedGeometric = 0.0;
         foreach (double geometric in geometricCandidates)
         {
             if (optics.TrySolveRefractedSolarElevation(
-                    altitude, geometric, body.Radius, body.Atmosphere.MaxAltitude,
+                    profile, altitude, geometric, body.Radius, body.Atmosphere.MaxAltitude,
                     out apparent, sampleCount: 64))
             {
                 solved = apparent < 0.0;
@@ -495,12 +498,14 @@ public sealed class AtmosphereOpticsTests
         Assert.True(solved,
             $"no two-branch Venus ray solved at 60 km for candidates {string.Join(',', geometricCandidates)}");
         var tau = optics.OpticalDepthAlongRefractedTwoBranch(
-            altitude, apparent, body.Radius, body.Atmosphere.MaxAltitude, sampleCount: 64);
+            profile, altitude, apparent, body.Radius, body.Atmosphere.MaxAltitude,
+            sampleCount: 64);
         Assert.True(double.IsFinite(tau.X) && double.IsFinite(tau.Y) && double.IsFinite(tau.Z));
         Assert.True(tau.X > 0.0 && tau.Y > 0.0 && tau.Z > 0.0,
             $"two-branch path lost extinction: geometric={selectedGeometric}, apparent={apparent}, tau={tau}");
         var transmittance = optics.DirectSolarTransmittance(
-            altitude, selectedGeometric, body.Radius, body.Atmosphere.MaxAltitude, sampleCount: 64);
+            profile, altitude, selectedGeometric, body.Radius,
+            body.Atmosphere.MaxAltitude, sampleCount: 64);
         Assert.True(transmittance.X > 0.0 && transmittance.Y > 0.0 && transmittance.Z > 0.0);
     }
 
