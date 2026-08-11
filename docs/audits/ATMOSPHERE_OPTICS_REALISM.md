@@ -176,7 +176,7 @@ para una atmósfera Venus extremadamente densa.
 | --- | --- |
 | `dotnet test ... --filter AtmosphereProfileTransportTests` | **3/3** |
 | `bash tools/atmosphere_quick_check.sh` | **PASS, 81/81** |
-| `dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --no-restore` | **549/549** |
+| `dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --no-restore` | **514/514** |
 | `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
 | `visual_playtest.sh --atmosphere --run-id atmo-profile-v1 --skip-build` | **ATMOSPHERE_OK** |
 
@@ -191,3 +191,28 @@ Tras activar el levantamiento de horizonte profile-aware se repitió la matriz c
 `/tmp/exo_atmo_profile_v2/`. El test dedicado de rayo subhorizonte confirma que una elevación
 geométrica de −0,005 rad conserva transmitancia positiva por refracción; por debajo del
 levantamiento calculado el solver devuelve vacío, evitando inventar luz nocturna.
+
+### Verificación posterior al merge en `main`
+
+El merge de la rama de producto expuso una divergencia de API: `main` conservaba la
+integración óptica heredada pero no la sobrecarga que recibe `AtmosphereDensityProfile`.
+Se restauró una única rutina Simpson (`OpticalDepthAlongRayCore`) y ambos caminos —perfil
+termodinámico y compatibilidad heredada— comparten ahora el mismo integrador, cambiando
+únicamente el muestreador de densidad. Esto evita que la iluminación directa, las LUT y
+las pruebas vuelvan a mezclar perfiles.
+
+Evidencia reproducible en `main`:
+
+| Comprobación | Resultado |
+|---|---:|
+| `dotnet test ... --no-restore` | **514/514** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings / 0 errors** |
+| `tools/atmosphere_quick_check.sh` | **79/79, PASS** |
+| `visual_playtest.sh --atmosphere --run-id atmo-main-v1 --skip-build` | **ATMOSPHERE_OK** |
+
+La matriz de `main` conserva las 16 capturas (suelo día/amanecer/atardecer/noche,
+10/30/70/120/400 km día/noche y cabina día/noche) en `/tmp/exo_atmo_main/`. La captura
+de 120 km muestra un limbo azul fino con transición continua hacia la superficie; la
+captura de atardecer mantiene el gradiente naranja y el oscurecimiento nocturno. El
+renderizador llvmpipe registra aproximadamente 160 ms por frame en esta VM, por lo que
+la lentitud del playtest es de infraestructura y no un bucle físico bloqueado.

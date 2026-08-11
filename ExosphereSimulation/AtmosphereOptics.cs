@@ -705,6 +705,36 @@ public sealed record AtmosphereOptics
         double planetRadius,
         double atmosphereTopAltitude,
         int sampleCount = 48)
+        => OpticalDepthAlongRayCore(
+            altitude, cosZenith, planetRadius, atmosphereTopAltitude,
+            sampleCount, SampleLegacyDensity);
+
+    /// <summary>
+    /// Integrates extinction using the supplied thermodynamic density profile.
+    /// This overload keeps offline LUTs and realtime transport on the same source
+    /// profile instead of silently falling back to the legacy exponential envelope.
+    /// </summary>
+    public Vector3d OpticalDepthAlongRay(
+        AtmosphereDensityProfile profile,
+        double altitude,
+        double cosZenith,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount = 48)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return OpticalDepthAlongRayCore(
+            altitude, cosZenith, planetRadius, atmosphereTopAltitude,
+            sampleCount, profile.Sample);
+    }
+
+    private Vector3d OpticalDepthAlongRayCore(
+        double altitude,
+        double cosZenith,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount,
+        Func<double, Vector3d> densitySampler)
     {
         if (!double.IsFinite(altitude) || !double.IsFinite(cosZenith)
             || !double.IsFinite(planetRadius) || !double.IsFinite(atmosphereTopAltitude)
@@ -738,10 +768,7 @@ public sealed record AtmosphereOptics
             double radius = System.Math.Sqrt(observerRadius * observerRadius
                 + distance * distance + 2.0 * observerRadius * cosZenith * distance);
             double localAltitude = radius - planetRadius;
-            Vector3d density = new(
-                RayleighDensity(localAltitude),
-                MieDensity(localAltitude),
-                OzoneDensity(localAltitude));
+            Vector3d density = densitySampler(localAltitude);
             Vector3d sample = RayleighScattering * density.X
                 + MieExtinction * density.Y
                 + OzoneAbsorption * density.Z;
@@ -751,6 +778,9 @@ public sealed record AtmosphereOptics
 
         return integral * (step / 3.0);
     }
+
+    private Vector3d SampleLegacyDensity(double altitude)
+        => new(RayleighDensity(altitude), MieDensity(altitude), OzoneDensity(altitude));
 
     /// <summary>
     /// Dispatches the refracted optical path selected by the apparent solar elevation.
