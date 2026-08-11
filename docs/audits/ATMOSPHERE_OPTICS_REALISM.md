@@ -449,3 +449,84 @@ La matriz `/tmp/exo_atmo_angularwarp_v1/` mantiene el horizonte rojo continuo al
 el limbo azul a 120 km y un campo estelar nítido sin halos verdes. El coste permanece dentro
 del ruido del render CPU; la siguiente mejora de orden superior debe medir primero la ganancia
 visual antes de aumentar resolución o número de muestras.
+
+## V19 — investigación del siguiente nivel: órdenes superiores y gate de eclipse (2026-08-11)
+
+Esta sección no cambia todavía el renderer; fija qué queda pendiente y cómo se validará sin
+confundir un halo artístico con transporte radiativo.
+
+### Hallazgos en el código actual
+
+1. `AtmosphereMultipleScatteringLut.Build` integra una fuente global de orden dos y un único
+   rebote isotrópico adicional de orden tres. `AtmosphereAngularMultipleScatteringLut` toma esa
+   semilla y aplica fase Rayleigh/Mie más un cociente de escape esférico. Es una envolvente angular
+   útil, pero no una solución sucesiva de la ecuación de transporte para los órdenes 4+.
+2. El shader desactiva el cierre `low_order_diffuse_strength` cuando existe la LUT, pero el
+   término de twilight acotado sigue sumándose por separado. Una LUT de órdenes superiores debe
+   medir y retirar únicamente las correcciones que dupliquen energía; airglow, disco solar y
+   exposición deben permanecer independientes.
+3. La matriz `visual_playtest.sh --atmosphere` cubre 16 combinaciones de altitud, día/noche y
+   cockpit, pero ninguna coloca un occluder frente al Sol. `SkyController` ya calcula la
+   visibilidad limb-darkened y la geometría del occluder; falta una captura de aceptación que
+   demuestre que esa señal llega al cielo, nubes, potencia, térmica y HUD.
+
+### Qué exige la referencia física
+
+Bruneton y Neyret describen un atlas dependiente de radio, dirección de vista, dirección solar y
+ángulo relativo, y su implementación de 2017 calcula primero transmitancia y scattering simple;
+después repite, para cada orden `2..N`, una fase de `scattering density`, otra de irradiancia
+indirecta y otra de `multiple scattering`, acumulando las texturas delta. La referencia también
+mantiene un oráculo CPU, pruebas de homogeneidad dimensional y comparación contra render espectral.
+Por tanto, “subir la resolución” del atlas actual no equivale a añadir órdenes superiores: el
+trabajo correcto es introducir un transporte delta por orden y dejar la resolución como una
+variable independiente.
+
+### Diseño propuesto para la próxima implementación
+
+- Añadir un LUT de órdenes sucesivos profile-aware, con `maxScatteringOrder = 4` como primer
+  objetivo. Cada iteración conservará `deltaDensity`, `deltaMultiple` y `deltaIrradiance`, y
+  acumulará en radiancia lineal; el orden 4 será opcional durante la validación para conservar el
+  arranque actual como fallback.
+- Reutilizar las coordenadas angulares no uniformes de V18, pero no reutilizar la semilla
+  isotrópica como si fuera una solución exacta. La textura de runtime se construirá una vez por
+  perfil/cuerpo y se cacheará igual que las LUTs existentes.
+- Añadir invariantes CPU antes de conectarlo al shader: no negatividad, monotonía de energía con
+  el orden, límite finito al aumentar `N`, igualdad de orden 2/3 con la ruta actual dentro de una
+  tolerancia explícita y ausencia de energía en sombra planetaria.
+- Medir la diferencia contra una referencia espectral reducida en escenas de día, terminador,
+  noche y limbo. Si el orden 4 no cambia visualmente el resultado pero cuesta memoria/tiempo,
+  no se promoverá por número de versión.
+
+### Gate de eclipse que falta
+
+El harness debe añadir cuatro estados reproducibles a la matriz, usando una posición sintética de
+la Luna/occluder congelada durante la captura: `eclipse_clear`, `eclipse_partial_central`,
+`eclipse_partial_limb` (o anular) y `eclipse_total`. Cada `ATMOS_STATE` debe registrar:
+`occluderId`, separación angular, radios aparentes, `solarVisibility`,
+`atmosphericSolarVisibility`, elevación solar y exposición asentada.
+
+Los criterios físicos del gate serán:
+
+- toda visibilidad queda en `[0,1]`; despejado ≈ `1` y total ≈ `0`;
+- para la misma fracción geométrica, una ocultación central produce menor irradiancia que una
+  ocultación de borde por el limb darkening;
+- la visibilidad es continua y no decreciente al aumentar la separación entre discos;
+- la misma fracción alimenta luz directa, scattering, nubes, potencia y carga térmica;
+- durante totalidad sólo reaparecen estrellas de forma gradual por adaptación ocular; no se
+  acepta cielo blanco, clipping amplio ni una banda verde saturada;
+- la captura debe probar la salida visual y el telemetría de la geometría, no sólo que exista un
+  PNG.
+
+### Orden recomendado de trabajo
+
+1. Implementar y testear el transporte delta hasta orden 4 en CPU, conservando la ruta actual.
+2. Conectar la textura acumulada al shader y medir energía/performance con la matriz V18.
+3. Añadir los cuatro estados de eclipse al harness y publicar el gate reproducible.
+4. Sólo después calibrar órdenes 5+, reflexión del terreno, polarización, clima/aerosoles y
+   química del airglow.
+
+Referencias primarias consultadas: [Bruneton y Neyret 2008](https://doi.org/10.1111/j.1467-8659.2008.01245.x),
+[Bruneton 2017 y su implementación testeada](https://ebruneton.github.io/precomputed_atmospheric_scattering/),
+[algoritmo de acumulación por orden](https://ebruneton.github.io/precomputed_atmospheric_scattering/atmosphere/reference/model.cc.html)
+y la revisión NASA de métodos de scattering múltiple planetario
+([NTRS 19750056479](https://ntrs.nasa.gov/citations/19750056479)).
