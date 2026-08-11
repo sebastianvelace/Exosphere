@@ -50,6 +50,7 @@ public partial class SkyController : Node
     private readonly Dictionary<string, Texture2D> _transmittanceLuts = new();
     private readonly Dictionary<string, Texture2D> _multipleScatteringLuts = new();
     private readonly Dictionary<string, (Texture2D Texture, float TopAltitude)> _densityLuts = new();
+    private readonly Dictionary<string, AtmosphereDensityProfile> _densityProfiles = new();
     private double _updateAccumulator = 1.0;
     private bool _hasAtmosphereState;
     private string? _lastAtmosphereBodyId;
@@ -226,7 +227,8 @@ public partial class SkyController : Node
             return;
         }
 
-        var densityLut = GetDensityLut(body.Id, atmosphere!);
+        var densityProfile = GetDensityProfile(body.Id, atmosphere!);
+        var densityLut = GetDensityLut(body.Id, densityProfile);
         _skyMat.SetShaderParameter("density_lut", densityLut.Texture);
         _skyMat.SetShaderParameter("density_lut_top_altitude", densityLut.TopAltitude);
         _skyMat.SetShaderParameter("density_lut_enabled", true);
@@ -235,10 +237,10 @@ public partial class SkyController : Node
         // altitude and solar longitude; reusing it avoids a 12 Hz texture allocation and
         // gives the shader a stable filtered result while its cubemap converges.
         _skyMat.SetShaderParameter("transmittance_lut", GetTransmittanceLut(
-            body.Id, optics!, body.Radius, atmosphere!.MaxAltitude));
+            body.Id, densityProfile, body.Radius, atmosphere!.MaxAltitude));
         _skyMat.SetShaderParameter("transmittance_lut_enabled", true);
         _skyMat.SetShaderParameter("multiple_scattering_lut", GetMultipleScatteringLut(
-            body.Id, optics!, body.Radius, atmosphere.MaxAltitude));
+            body.Id, densityProfile, body.Radius, atmosphere.MaxAltitude));
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", true);
 
         _skyMat.SetShaderParameter("rayleigh_scattering", ToGodot(optics!.RayleighScattering));
@@ -330,14 +332,14 @@ public partial class SkyController : Node
 
     private Texture2D GetTransmittanceLut(
         string bodyId,
-        AtmosphereOptics optics,
+        AtmosphereDensityProfile profile,
         double planetRadius,
         double atmosphereTopAltitude)
     {
         if (_transmittanceLuts.TryGetValue(bodyId, out var cached)) return cached;
 
         var lut = AtmosphereTransmittanceLut.Build(
-            optics,
+            profile,
             planetRadius,
             atmosphereTopAltitude,
             TransmittanceLutWidth,
@@ -360,13 +362,23 @@ public partial class SkyController : Node
         return texture;
     }
 
-    private (Texture2D Texture, float TopAltitude) GetDensityLut(
+    private AtmosphereDensityProfile GetDensityProfile(
         string bodyId,
         AtmosphereModel atmosphere)
     {
+        if (_densityProfiles.TryGetValue(bodyId, out var cached)) return cached;
+        var profile = AtmosphereDensityProfile.Create(atmosphere);
+        _densityProfiles[bodyId] = profile;
+        return profile;
+    }
+
+    private (Texture2D Texture, float TopAltitude) GetDensityLut(
+        string bodyId,
+        AtmosphereDensityProfile profile)
+    {
         if (_densityLuts.TryGetValue(bodyId, out var cached)) return cached;
 
-        var lut = AtmosphereDensityLut.Build(atmosphere);
+        var lut = AtmosphereDensityLut.Build(profile.Atmosphere);
         var image = Image.CreateEmpty(lut.Width, lut.Height, false, Image.Format.Rgbaf);
         for (int x = 0; x < lut.Width; x++)
         {
@@ -383,14 +395,14 @@ public partial class SkyController : Node
 
     private Texture2D GetMultipleScatteringLut(
         string bodyId,
-        AtmosphereOptics optics,
+        AtmosphereDensityProfile profile,
         double planetRadius,
         double atmosphereTopAltitude)
     {
         if (_multipleScatteringLuts.TryGetValue(bodyId, out var cached)) return cached;
 
         var global = AtmosphereMultipleScatteringLut.Build(
-            optics,
+            profile,
             planetRadius,
             atmosphereTopAltitude,
             MultipleScatteringLutWidth,
@@ -398,7 +410,7 @@ public partial class SkyController : Node
             MultipleScatteringIntegrationSteps,
             MultipleScatteringSolarSamples);
         var lut = AtmosphereAngularMultipleScatteringLut.Build(
-            optics,
+            profile,
             global,
             planetRadius,
             atmosphereTopAltitude,

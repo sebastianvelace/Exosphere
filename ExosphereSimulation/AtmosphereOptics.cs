@@ -216,6 +216,39 @@ public sealed record AtmosphereOptics
     }
 
     /// <summary>
+    /// Profile-aware direct solar transport used by the renderer's thermodynamic LUTs.
+    /// Daylight rays use the exact density profile rather than the legacy exponential
+    /// envelope.  The narrow sub-horizon band keeps the established refractive solver as
+    /// a compatibility path until refractive index integration is made profile-aware too.
+    /// </summary>
+    public Vector3d DirectSolarTransmittance(
+        AtmosphereDensityProfile profile,
+        double altitude,
+        double sunElevationSin,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount = 48)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!double.IsFinite(altitude) || !double.IsFinite(sunElevationSin)
+            || !double.IsFinite(planetRadius) || !double.IsFinite(atmosphereTopAltitude)
+            || planetRadius <= 0.0 || atmosphereTopAltitude <= 0.0)
+            return Vector3d.Zero;
+
+        if (sunElevationSin <= 0.0)
+            return DirectSolarTransmittance(
+                altitude, sunElevationSin, planetRadius, atmosphereTopAltitude, sampleCount);
+
+        var tau = OpticalDepthAlongRay(
+            profile, altitude, sunElevationSin, planetRadius,
+            atmosphereTopAltitude, sampleCount);
+        return new Vector3d(
+            System.Math.Exp(-tau.X),
+            System.Math.Exp(-tau.Y),
+            System.Math.Exp(-tau.Z));
+    }
+
+    /// <summary>
     /// Solves the apparent solar elevation for a spherical refractive atmosphere.
     ///
     /// A ray leaves the observer at the apparent angle, accumulates the angular

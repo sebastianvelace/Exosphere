@@ -81,6 +81,47 @@ public sealed class AtmosphereMultipleScatteringLut
             width, height, planetRadius, atmosphereTopAltitude, values);
     }
 
+    /// <summary>
+    /// Profile-aware builder used by the realtime sky.  All source, view transport and
+    /// solar transport samples come from the same thermodynamic density profile, avoiding
+    /// the V9 split where only the primary view ray used P/T density.
+    /// </summary>
+    public static AtmosphereMultipleScatteringLut Build(
+        AtmosphereDensityProfile profile,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int width = 64,
+        int height = 48,
+        int integrationSteps = 48,
+        int solarSampleCount = 32)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
+        if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
+        if (integrationSteps < 4) throw new ArgumentOutOfRangeException(nameof(integrationSteps));
+        if (!double.IsFinite(planetRadius) || planetRadius <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(planetRadius));
+        if (!double.IsFinite(atmosphereTopAltitude) || atmosphereTopAltitude <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(atmosphereTopAltitude));
+
+        var values = new Vector3d[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            double solarSin = AtmosphereTransmittanceLut.SolarElevationSin(y, height);
+            for (int x = 0; x < width; x++)
+            {
+                double observerAltitude = atmosphereTopAltitude
+                    * AtmosphereTransmittanceLut.CoordinateValue(x, width);
+                values[y * width + x] = IntegrateColumn(
+                    profile, observerAltitude, solarSin, planetRadius,
+                    atmosphereTopAltitude, integrationSteps, solarSampleCount);
+            }
+        }
+
+        return new AtmosphereMultipleScatteringLut(
+            width, height, planetRadius, atmosphereTopAltitude, values);
+    }
+
     public Vector3d GetTexel(int x, int y)
     {
         if ((uint)x >= (uint)Width) throw new ArgumentOutOfRangeException(nameof(x));
@@ -170,6 +211,70 @@ public sealed class AtmosphereMultipleScatteringLut
         // scatter it once again. The nested column integral is intentional: this
         // table is built once per body, while the explicit path remains deterministic
         // and keeps planet-radius dependence visible to tests.
+        Vector3d orderThree = Vector3d.Zero;
+        for (int i = 0; i < integrationSteps; i++)
+        {
+            Vector3d orderTwoAtLayer = Vector3d.Zero;
+            for (int j = i; j < integrationSteps; j++)
+            {
+                var tau = absoluteTau[i] - absoluteTau[j];
+                var transport = new Vector3d(
+                    System.Math.Exp(-System.Math.Max(tau.X, 0.0)),
+                    System.Math.Exp(-System.Math.Max(tau.Y, 0.0)),
+                    System.Math.Exp(-System.Math.Max(tau.Z, 0.0)));
+                orderTwoAtLayer += Multiply(sources[j], transport) * step;
+            }
+
+            var thirdSource = Multiply(scattering[i], orderTwoAtLayer);
+            orderThree += Multiply(thirdSource, viewThroughput[i]) * step;
+        }
+
+        return orderTwo + orderThree;
+    }
+
+    private static Vector3d IntegrateColumn(
+        AtmosphereDensityProfile profile,
+        double observerAltitude,
+        double solarSin,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int integrationSteps,
+        int solarSampleCount)
+    {
+        if (solarSin < AtmosphereTransmittanceLut.MinimumSolarElevationSin
+            || observerAltitude >= atmosphereTopAltitude)
+            return Vector3d.Zero;
+
+        double span = atmosphereTopAltitude - observerAltitude;
+        double step = span / integrationSteps;
+        var optics = profile.Optics;
+        Vector3d observerTau = profile.VerticalOpticalDepth(observerAltitude);
+        var sources = new Vector3d[integrationSteps];
+        var scattering = new Vector3d[integrationSteps];
+        var absoluteTau = new Vector3d[integrationSteps];
+        var viewThroughput = new Vector3d[integrationSteps];
+        for (int i = 0; i < integrationSteps; i++)
+        {
+            double altitude = observerAltitude + (i + 0.5) * step;
+            var density = profile.Sample(altitude);
+            var solar = optics.DirectSolarTransmittance(
+                profile, altitude, solarSin, planetRadius,
+                atmosphereTopAltitude, solarSampleCount);
+            sources[i] = optics.LowOrderDiffuseSource(density, solar);
+            scattering[i] = optics.RayleighScattering * density.X
+                + optics.MieScattering * density.Y;
+            absoluteTau[i] = profile.VerticalOpticalDepth(altitude);
+            var layerTau = observerTau - absoluteTau[i];
+            viewThroughput[i] = new Vector3d(
+                System.Math.Exp(-System.Math.Max(layerTau.X, 0.0)),
+                System.Math.Exp(-System.Math.Max(layerTau.Y, 0.0)),
+                System.Math.Exp(-System.Math.Max(layerTau.Z, 0.0)));
+        }
+
+        Vector3d orderTwo = Vector3d.Zero;
+        for (int i = 0; i < integrationSteps; i++)
+            orderTwo += Multiply(sources[i], viewThroughput[i]) * step;
+
         Vector3d orderThree = Vector3d.Zero;
         for (int i = 0; i < integrationSteps; i++)
         {

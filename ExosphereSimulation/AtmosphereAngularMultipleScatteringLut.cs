@@ -116,6 +116,79 @@ public sealed class AtmosphereAngularMultipleScatteringLut
             planetRadius, atmosphereTopAltitude, values);
     }
 
+    /// <summary>
+    /// Profile-aware angular atlas.  The phase coefficients remain the configured optical
+    /// species, while local beta, vertical tau and view escape all use the same P/T and
+    /// residual-thermosphere samples as the global seed.
+    /// </summary>
+    public static AtmosphereAngularMultipleScatteringLut Build(
+        AtmosphereDensityProfile profile,
+        AtmosphereMultipleScatteringLut globalSeed,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int width = 32,
+        int solarHeight = 20,
+        int viewHeight = 12,
+        int muWidth = 12,
+        int opticalDepthSamples = 32)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(globalSeed);
+        if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
+        if (solarHeight < 2) throw new ArgumentOutOfRangeException(nameof(solarHeight));
+        if (viewHeight < 2) throw new ArgumentOutOfRangeException(nameof(viewHeight));
+        if (muWidth < 2) throw new ArgumentOutOfRangeException(nameof(muWidth));
+        if (opticalDepthSamples < 8) throw new ArgumentOutOfRangeException(nameof(opticalDepthSamples));
+        if (!double.IsFinite(planetRadius) || planetRadius <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(planetRadius));
+        if (!double.IsFinite(atmosphereTopAltitude) || atmosphereTopAltitude <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(atmosphereTopAltitude));
+
+        var optics = profile.Optics;
+        var values = new Vector3d[width * solarHeight * viewHeight * muWidth];
+        for (int x = 0; x < width; x++)
+        {
+            double altitude = atmosphereTopAltitude
+                * AtmosphereTransmittanceLut.CoordinateValue(x, width);
+            var verticalTau = profile.VerticalOpticalDepth(altitude);
+            var density = profile.Sample(altitude);
+            var rayleighBeta = optics.RayleighScattering * density.X;
+            var mieBeta = optics.MieScattering * density.Y;
+
+            var viewEscape = new Vector3d[viewHeight];
+            for (int viewIndex = 0; viewIndex < viewHeight; viewIndex++)
+            {
+                double viewCos = ViewCosine(viewIndex, viewHeight);
+                viewEscape[viewIndex] = ViewEscapeRatio(
+                    profile, verticalTau, altitude, viewCos,
+                    planetRadius, atmosphereTopAltitude, opticalDepthSamples);
+            }
+
+            for (int muIndex = 0; muIndex < muWidth; muIndex++)
+            {
+                double mu = MuCosine(muIndex, muWidth);
+                var phase = PhaseGain(optics, rayleighBeta, mieBeta, mu);
+                for (int viewIndex = 0; viewIndex < viewHeight; viewIndex++)
+                {
+                    var directional = Multiply(phase, viewEscape[viewIndex]);
+                    for (int solarIndex = 0; solarIndex < solarHeight; solarIndex++)
+                    {
+                        double solarSin = AtmosphereTransmittanceLut.SolarElevationSin(
+                            solarIndex, solarHeight);
+                        var seed = globalSeed.Sample(altitude, solarSin);
+                        int offset = Index(x, solarIndex, viewIndex, muIndex,
+                            width, solarHeight, viewHeight);
+                        values[offset] = Multiply(seed, directional);
+                    }
+                }
+            }
+        }
+
+        return new AtmosphereAngularMultipleScatteringLut(
+            width, solarHeight, viewHeight, muWidth,
+            planetRadius, atmosphereTopAltitude, values);
+    }
+
     public Vector3d GetTexel(int altitudeIndex, int solarIndex, int viewIndex, int muIndex)
     {
         if ((uint)altitudeIndex >= (uint)Width)
@@ -208,6 +281,25 @@ public sealed class AtmosphereAngularMultipleScatteringLut
         if (viewCosine <= 0.0) return Vector3d.Zero;
         var viewTau = optics.OpticalDepthAlongRay(
             altitude, viewCosine, planetRadius, atmosphereTopAltitude, sampleCount);
+        return new Vector3d(
+            System.Math.Exp(-System.Math.Max(viewTau.X - verticalTau.X, 0.0)),
+            System.Math.Exp(-System.Math.Max(viewTau.Y - verticalTau.Y, 0.0)),
+            System.Math.Exp(-System.Math.Max(viewTau.Z - verticalTau.Z, 0.0)));
+    }
+
+    private static Vector3d ViewEscapeRatio(
+        AtmosphereDensityProfile profile,
+        Vector3d verticalTau,
+        double altitude,
+        double viewCosine,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int sampleCount)
+    {
+        if (viewCosine <= 0.0) return Vector3d.Zero;
+        var viewTau = profile.Optics.OpticalDepthAlongRay(
+            profile, altitude, viewCosine, planetRadius,
+            atmosphereTopAltitude, sampleCount);
         return new Vector3d(
             System.Math.Exp(-System.Math.Max(viewTau.X - verticalTau.X, 0.0)),
             System.Math.Exp(-System.Math.Max(viewTau.Y - verticalTau.Y, 0.0)),

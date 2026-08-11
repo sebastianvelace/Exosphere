@@ -83,6 +83,57 @@ public sealed class AtmosphereTransmittanceLut
             width, height, planetRadius, atmosphereTopAltitude, values);
     }
 
+    /// <summary>
+    /// Builds a table from the thermodynamic species profile.  This overload is kept
+    /// separate from the legacy optics-only builder so existing analytical baselines
+    /// remain reproducible while the game renderer can opt into profile parity.
+    /// </summary>
+    public static AtmosphereTransmittanceLut Build(
+        AtmosphereDensityProfile profile,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int width = 128,
+        int height = 96,
+        int sampleCount = 48)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return BuildProfile(
+            profile, planetRadius, atmosphereTopAltitude,
+            width, height, sampleCount);
+    }
+
+    private static AtmosphereTransmittanceLut BuildProfile(
+        AtmosphereDensityProfile profile,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        int width,
+        int height,
+        int sampleCount)
+    {
+        if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
+        if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
+        if (!double.IsFinite(planetRadius) || planetRadius <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(planetRadius));
+        if (!double.IsFinite(atmosphereTopAltitude) || atmosphereTopAltitude <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(atmosphereTopAltitude));
+
+        var values = new Vector3d[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            double solarSin = SolarElevationSin(y, height);
+            for (int x = 0; x < width; x++)
+            {
+                double altitude = atmosphereTopAltitude * CoordinateValue(x, width);
+                values[y * width + x] = profile.Optics.DirectSolarTransmittance(
+                    profile, altitude, solarSin, planetRadius,
+                    atmosphereTopAltitude, sampleCount);
+            }
+        }
+
+        return new AtmosphereTransmittanceLut(
+            width, height, planetRadius, atmosphereTopAltitude, values);
+    }
+
     /// <summary>Returns the exact, unfiltered texel in row-major order.</summary>
     public Vector3d GetTexel(int x, int y)
     {

@@ -107,6 +107,46 @@ public sealed class AtmosphereDensityProfile
     }
 
     /// <summary>
+    /// Extinction coefficients for the thermodynamic species sample.  Keeping this
+    /// operation on the profile prevents the transmittance and multiple-scattering
+    /// tables from silently falling back to the older exponential envelopes.
+    /// </summary>
+    public Vector3d Extinction(double altitude)
+    {
+        var density = Sample(altitude);
+        return Optics.RayleighScattering * density.X
+            + Optics.MieExtinction * density.Y
+            + Optics.OzoneAbsorption * density.Z;
+    }
+
+    /// <summary>
+    /// Numerically integrates the profile's vertical optical depth to the represented
+    /// top of the atmosphere.  The quadratic altitude warp resolves the lower atmosphere
+    /// while still retaining the thermospheric tail when one is configured.
+    /// </summary>
+    public Vector3d VerticalOpticalDepth(double altitude, int sampleCount = 48)
+    {
+        if (!double.IsFinite(altitude) || altitude >= TopAltitude || TopAltitude <= 0.0)
+            return Vector3d.Zero;
+        double start = System.Math.Max(0.0, altitude);
+        double span = TopAltitude - start;
+        int n = System.Math.Max(8, sampleCount);
+        if ((n & 1) != 0) n++;
+        double step = 1.0 / n;
+        Vector3d integral = Vector3d.Zero;
+        for (int i = 0; i <= n; i++)
+        {
+            double u = (double)i / n;
+            // h = start + span*u² concentrates Simpson nodes near the dense floor.
+            double height = start + span * u * u;
+            double dhDu = 2.0 * span * u;
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            integral += Extinction(height) * (weight * dhDu);
+        }
+        return integral * (step / 3.0);
+    }
+
+    /// <summary>
     /// Returns the dimensionless refractivity ratio at altitude.  Multiplying this by
     /// <see cref="AtmosphereOptics.SurfaceRefractivity"/> yields <c>n − 1</c>.
     /// </summary>
