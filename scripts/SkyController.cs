@@ -32,7 +32,10 @@ public partial class SkyController : Node
     // once here so the accumulated HDR sky does not white-clip the lower limb.
     private const float VisibleSolarRadianceScale = 0.35f;
     private const int TransmittanceLutWidth = 128;
-    private const int TransmittanceLutHeight = 96;
+    // The solar coordinate is square-root warped toward the horizon.  Doubling the
+    // vertical resolution keeps the refracted twilight limb continuous when the LUT is
+    // bilinearly sampled by the sky shader; the horizontal resolution remains unchanged.
+    private const int TransmittanceLutHeight = 192;
     private const int TransmittanceLutSamples = 48;
     private const int MultipleScatteringLutWidth = 64;
     private const int MultipleScatteringLutHeight = 48;
@@ -72,6 +75,8 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("star_energy", StarEnergy);
         _skyMat.SetShaderParameter("transmittance_lut_min_solar_sin",
             (float)AtmosphereTransmittanceLut.MinimumSolarElevationSin);
+        _skyMat.SetShaderParameter("transmittance_lut_height",
+            (float)TransmittanceLutHeight);
         _skyMat.SetShaderParameter("multiple_scattering_solar_layers",
             (float)AngularScatteringSolarLayers);
         _skyMat.SetShaderParameter("multiple_scattering_view_layers",

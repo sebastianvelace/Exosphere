@@ -23,6 +23,7 @@ uniform float density_lut_top_altitude = 140000.0;
 uniform sampler2D transmittance_lut : filter_linear;
 uniform bool transmittance_lut_enabled = false;
 uniform float transmittance_lut_min_solar_sin = -0.04;
+uniform float transmittance_lut_height = 96.0;
 // Global order-two radiance, built from the same C# profile as the transmittance LUT.
 uniform sampler2D multiple_scattering_lut : filter_linear;
 uniform bool multiple_scattering_lut_enabled = false;
@@ -221,7 +222,21 @@ vec3 solar_transmittance(vec3 position, vec3 direction, float outer_radius) {
 			transmittance_lut_min_solar_sin, 1.0) - transmittance_lut_min_solar_sin)
 			/ max(1.0 - transmittance_lut_min_solar_sin, 1e-4);
 		float solar_v = sqrt(clamp(solar_normalized, 0.0, 1.0));
-		return clamp(texture(transmittance_lut, vec2(altitude_u, solar_v)).rgb,
+		vec2 lut_uv = vec2(altitude_u, solar_v);
+		// Horizon texels carry the steepest solar-airmass gradient. A three-tap
+		// symmetric filter removes residual row quantisation from the packed CPU LUT
+		// without blurring the high-elevation sun path or adding temporal noise.
+		if (solar_v < 0.35) {
+			float texel = 1.0 / max(transmittance_lut_height - 1.0, 2.0);
+			vec3 lower = texture(transmittance_lut,
+				vec2(altitude_u, max(solar_v - texel, 0.0))).rgb;
+			vec3 center = texture(transmittance_lut, lut_uv).rgb;
+			vec3 upper = texture(transmittance_lut,
+				vec2(altitude_u, min(solar_v + texel, 1.0))).rgb;
+			return clamp((lower + 2.0 * center + upper) * 0.25,
+				vec3(0.0), vec3(1.0));
+		}
+		return clamp(texture(transmittance_lut, lut_uv).rgb,
 			vec3(0.0), vec3(1.0));
 	}
 	return transmittance(optical_depth_to_sun(position, direction, outer_radius));
@@ -592,5 +607,9 @@ void sky() {
 			* (0.012 + 0.24 * ground_sun * ground_direct * solar_visibility);
 	}
 
-	COLOR = max(color, vec3(0.0));
+	// The sky is finally quantised by the framebuffer/tonemapper. A tiny deterministic
+	// blue-noise-like offset prevents 8-bit twilight gradients from forming horizontal
+	// contour bands; it is view-stable (unlike TIME noise) and far below visible radiance.
+	float output_dither = stable_jitter(view_dir * 4096.0 + up * 13.0) * 0.0015;
+	COLOR = max(color + vec3(output_dither), vec3(0.0));
 }

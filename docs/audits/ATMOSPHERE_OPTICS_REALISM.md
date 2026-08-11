@@ -244,3 +244,29 @@ Evidencia V11:
 
 La matriz V11 generó las 16 capturas en `/tmp/exo_atmo_profile_v4/` sin `GAP` ni
 `FALLBACK`; se revisaron visualmente el atardecer en superficie y el limbo azul a 120 km.
+
+## V12 — continuidad de gradientes en el limbo (2026-08-11)
+
+La captura de puesta de sol mostró franjas horizontales muy finas en el gradiente de baja
+luminancia. La causa no era la física ni el número de muestras del rayo: aumentar la
+cuadratura del shader no cambió las métricas. El artefacto aparecía al cuantizar el gradiente
+HDR al framebuffer y se mitigó en dos puntos:
+
+- la LUT de transmitancia solar pasó de 96 a 192 filas en el eje solar (con warp cuadrático
+  hacia el horizonte);
+- el shader aplica sólo en `solar_v < 0,35` un filtro simétrico de tres taps y añade un
+  dither determinista de amplitud 0,0015 antes del tonemapping. El dither depende de la
+  dirección de vista, no de `TIME`, por lo que no produce shimmer temporal.
+
+Evidencia V12:
+
+| Comprobación | Resultado |
+|---|---:|
+| `visual_playtest.sh --atmosphere --run-id atmo-dither-v1` | **ATMOSPHERE_OK** |
+| Capturas de la matriz | **16/16, >8 KB cada una** |
+| `PERF ground_sunset` | **160,00 ms/frame** en llvmpipe |
+| Cambios de radiancia media atardecer | **sin deriva física apreciable** |
+
+La captura `ground_sunset` de `/tmp/exo_atmo_dither_v1/` mantiene el gradiente rojo/naranja,
+la fuente solar y el oscurecimiento nocturno; la vista de 120 km conserva el limbo azul. El
+coste adicional del filtrado es local al tercio de LUT cercano al horizonte.
