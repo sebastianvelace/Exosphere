@@ -39,6 +39,20 @@ public sealed class AtmosphereProfileTransportTests
     }
 
     [Fact]
+    public void ProfileSolarTransportRetainsARefractedNearHorizonBeam()
+    {
+        var atmosphere = AtmosphereModel.Earth();
+        var profile = new AtmosphereDensityProfile(atmosphere);
+
+        var belowHorizon = atmosphere.Optics.DirectSolarTransmittance(
+            profile, 0.0, -0.005, 6_371_000.0, 140_000.0, sampleCount: 32);
+
+        Assert.True(belowHorizon.X > 0.0 && belowHorizon.Y > 0.0
+            && belowHorizon.Z > 0.0,
+            $"profile refractive lift clipped the near-horizon beam: {belowHorizon}");
+    }
+
+    [Fact]
     public void ProfileMultipleScatteringSeedDiffersFromLegacyEnvelope()
     {
         var atmosphere = BuildLapseAtmosphere();

@@ -165,8 +165,10 @@ integrando las exponenciales de `AtmosphereOptics`. El renderer ahora construye 
 
 El perfil integra la columna vertical con Simpson y warp cuadrático, preservando la
 resolución en la troposfera y la cola termósferica. Las elevaciones solares subhorizonte
-mantienen temporalmente el solver refractivo exponencial como ruta de compatibilidad; el
-próximo paso es sustituir también su índice `n(r)` por la refractividad termodinámica.
+usan ahora una elevación aparente derivada de la refractividad molecular `P/T` y la misma
+densidad profile-aware para la profundidad óptica; el límite actual es que el levantamiento
+es una aproximación esférica de primer orden, no un trazador refractivo completo de dos ramas
+para una atmósfera Venus extremadamente densa.
 
 ### Evidencia reproducible
 
@@ -183,3 +185,9 @@ km, 400 km y cockpit día/noche en `/tmp/exo_atmo_profile/`. No reportó `GAP`, 
 clipping fuera de los umbrales del runner. El framebuffer confirmó que el cielo se vuelve
 negro y recupera estrellas sólo con adaptación nocturna en 400 km/noche, mientras que la
 atmósfera conserva el limbo azul en 120 km/día y el gradiente cálido de puesta de sol.
+
+Tras activar el levantamiento de horizonte profile-aware se repitió la matriz como
+`atmo-profile-v2`: `ATMOSPHERE_OK`, sin `GAP`/`FALLBACK`, con las 16 capturas en
+`/tmp/exo_atmo_profile_v2/`. El test dedicado de rayo subhorizonte confirma que una elevación
+geométrica de −0,005 rad conserva transmitancia positiva por refracción; por debajo del
+levantamiento calculado el solver devuelve vacío, evitando inventar luz nocturna.
