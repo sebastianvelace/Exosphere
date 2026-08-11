@@ -567,3 +567,78 @@ el render CPU de la máquina de validación (≈160 ms/frame), sin regresión me
 Pendiente antes de promover órdenes 5+: comparar orden 4 contra una referencia espectral reducida
 en terminador y aerosoles, y calibrar el suelo nocturno para que la adaptación ocular conserve
 detalle sin levantar artificialmente el airglow.
+
+## V21 — referencia espectral CPU de nueve bandas (2026-08-11)
+
+Esta iteración añade un oráculo de validación en `ExosphereSimulation/SpectralAtmosphereOracle.cs`.
+El renderer no lo ejecuta por frame y sigue usando las texturas RGB existentes; su función es medir
+si la semilla RGB y sus órdenes sucesivos conservan tendencias físicas razonables.
+
+### Bandas y reconstrucción
+
+La referencia usa nueve centros visibles uniformes:
+
+```text
+400, 437.5, 475, 512.5, 550, 587.5, 625, 662.5, 700 nm
+```
+
+Los JSON siguen siendo compatibles: `rayleigh_scattering`, `mie_scattering`,
+`mie_absorption` y `ozone_absorption` continúan siendo vectores RGB. El oráculo interpreta sus
+anclajes como B=440 nm, G=550 nm y R=680 nm y reconstruye cada banda con interpolación
+log-lineal controlada. Los ceros se mantienen en cero y la extrapolación se limita al segmento
+adyacente. Por tanto, Earth, Mars y Venus quedan marcados como `reconstructed`: las bandas
+intermedias no son mediciones espectrales. Los metadatos opcionales de rango, interpolación,
+temperatura de calibración y estado se conservan en los tres perfiles actuales.
+
+La integración convierte cada vector espectral con funciones CIE 1931 normalizadas y la matriz
+D65 sRGB fija, sin depender del monitor o de la gestión de color de Godot. También integra
+transmitancia vertical y trayectorias esféricas, Rayleigh, Mie, absorción aerosol/ozono y
+sucesivas contribuciones 2..5. La totalidad pone a cero la irradiancia directa y la elevación
+solar negativa sólo conserva el pequeño margen de horizonte refractado; el airglow sigue siendo
+independiente y se marca como emisión, no como scattering solar.
+
+API estable:
+
+```csharp
+var oracle = SpectralAtmosphereOracle.Build(body, maxOrder: 5, sampleCount: 32);
+SpectralRadiance radiance = oracle.Evaluate(altitude, solarElevationRadians,
+    viewCosine, viewSunCosine, solarVisibility);
+Vector3d rgb = radiance.ToLinearRgb();
+double energy4 = oracle.EnergyByOrder(4);
+```
+
+### Comparación RGB y decisión de orden
+
+`SpectralAtmosphereComparator` construye las LUT RGB globales de órdenes 2, 3, 4 y 5, el atlas
+angular y la referencia espectral en las mismas coordenadas. `tools/spectral_validation.sh` (o
+`tools/visual_playtest.sh --spectral`) deja un CSV por cuerpo con error absoluto/relativo,
+error cromático, energía, monotonía y finitud. El harness framebuffer `--atmosphere` además
+registra `lutVersion`, `lutOrder`, `spectralOrder` y el RGB de referencia junto a cada captura.
+
+Corrida reducida reproducible (`/tmp/exo_spectral_validation_v1/`, 7 escenas Earth/Venus y 5
+escenas Mars por el techo atmosférico):
+
+| Cuerpo | error absoluto medio O3 | error absoluto medio O4 | error cromático O4 | finitud/monotonía | O4 no peor que O3 |
+|---|---:|---:|---:|---|---|
+| Earth | 1.2211e-4 | 1.2063e-4 | 6.2112e-2 | PASS / PASS | PASS |
+| Mars | 1.8436e-3 | 1.8433e-3 | 6.8760e-3 | PASS / PASS | PASS |
+| Venus | 3.5986e-3 | 8.8438e-3 | 3.9120e-2 | PASS / PASS | **FAIL** |
+
+El resultado no justifica activar orden 5: aunque todos los órdenes son finitos, no negativos y
+monótonos, Venus presenta una sobreestimación del orden 4 frente a esta referencia reconstruida.
+La decisión es mantener `MultipleScatteringMaxOrder = 4` como ruta oficial compatible con el
+renderer actual, dejar el orden 5 únicamente en `GenerateExperimentalOrderFive`/el comparador
+offline y no promoverlo. El fallo de Venus queda abierto como calibración de un perfil ópticamente
+espeso; no se presenta como evidencia de datos medidos ni se cambia la física de Venus para
+forzar el resultado.
+
+### Límites de validez
+
+- No hay datos espectrales medidos por cuerpo en los JSON; la reconstrucción sirve para detectar
+  divergencias de color y energía, no para reclamar exactitud radiométrica absoluta.
+- El atlas angular sigue siendo RGB y su camino de runtime no aumenta el coste por frame.
+- El orden 5 sólo mide convergencia y coste de precálculo/memoria; no se conecta automáticamente
+  al shader.
+- La suite CPU valida día, terminador, noche y sombra solar directa. La matriz visual completa
+  sigue requiriendo framebuffer real para evaluar clipping, exposición, estrellas y separación
+  rojo/azul del limbo en capturas.
