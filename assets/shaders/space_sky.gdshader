@@ -45,6 +45,9 @@ uniform float ozone_half_width = 15000.0;
 uniform vec3 airglow_emission = vec3(0.060e-8, 0.144e-8, 0.044e-8);
 uniform float airglow_center_altitude = 97000.0;
 uniform float airglow_scale_height = 6000.0;
+uniform vec3 airglow_secondary_emission = vec3(0.0);
+uniform float airglow_secondary_center_altitude = 87000.0;
+uniform float airglow_secondary_scale_height = 4000.0;
 uniform float airglow_daylight_fraction : hint_range(0.0, 1.0) = 0.0;
 uniform float mie_g = 0.80;
 uniform float sun_illuminance = 20.0;
@@ -147,6 +150,12 @@ vec3 density_at_height(float height) {
 float airglow_density_at_height(float height) {
 	float sigma = max(airglow_scale_height, 1.0);
 	float z = (height - airglow_center_altitude) / sigma;
+	return exp(-0.5 * z * z);
+}
+
+float airglow_secondary_density_at_height(float height) {
+	float sigma = max(airglow_secondary_scale_height, 1.0);
+	float z = (height - airglow_secondary_center_altitude) / sigma;
 	return exp(-0.5 * z * z);
 }
 
@@ -477,8 +486,11 @@ void sky() {
 			float night_visibility = 1.0 - smoothstep(-0.10, 0.08, local_solar_elevation);
 			float airglow_visibility = mix(
 				clamp(airglow_daylight_fraction, 0.0, 1.0), 1.0, night_visibility);
-			airglow_radiance += view_throughput * airglow_emission
-				* airglow_density_at_height(height) * airglow_visibility * step_length;
+			vec3 airglow_source = airglow_emission * airglow_density_at_height(height)
+				+ airglow_secondary_emission
+				* airglow_secondary_density_at_height(height);
+			airglow_radiance += view_throughput * airglow_source
+				* airglow_visibility * step_length;
 
 			// Twilight is sunlight scattered by the rarefied upper atmosphere while the
 			// observer is already in the planet's shadow.  The direct beam is correctly

@@ -388,3 +388,28 @@ Evidencia reproducible:
 La matriz `/tmp/exo_atmo_limbdark_v1/` mantiene el atardecer filtrado, el limbo azul a
 120 km, el nightglow y el campo estelar; la nueva rama sólo cambia escenas con ocultación
 solar y no deriva la exposición en condiciones despejadas.
+
+## V17 — airglow espectral de dos capas (2026-08-11)
+
+El nightglow terrestre estaba representado por una única gaussiana centrada en 97 km. La
+implementación ahora conserva esa banda de oxígeno atómico (O₂, verde tenue) y añade una
+segunda capa opcional de OH alrededor de 87 km, con emisión roja mucho más débil. Cada perfil
+puede declarar `airglow_secondary_emission`, centro y escala independientes; Marte y Venus
+mantienen el vector cero por defecto. Ambas capas comparten la visibilidad solar suave del
+terminador y la transmitancia de la línea de visión, por lo que no son un halo de postproceso.
+
+Evidencia reproducible:
+
+| Comprobación | Resultado |
+|---|---:|
+| suite `ExosphereSimulation.Tests` | **518/518** |
+| máximos y separación de las dos capas CPU | **PASS** (97 km / 87 km) |
+| perfiles JSON Tierra/Marte/Venus | **PASS** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
+| `bash tools/atmosphere_quick_check.sh` | **PASS, 80/80** |
+| `visual_playtest.sh --atmosphere --run-id airglow-v2 --skip-build` | **ATMOSPHERE_OK, 16/16** |
+| `neonGreenFrac` en vistas exteriores | **0,000000** |
+
+La matriz `/tmp/exo_atmo_airglow_v2/` conserva el limbo azul, la exposición diurna y el
+campo estelar; la banda OH queda deliberadamente por debajo del brillo que produciría un
+halo verde artificial, pero aporta una contribución cálida independiente en el modelo lineal.

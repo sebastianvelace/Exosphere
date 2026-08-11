@@ -166,6 +166,11 @@ public sealed class AtmosphereOpticsTests
         Assert.True(optics.AirglowEmission.Y > optics.AirglowEmission.Z);
         Assert.True(optics.AirglowEmission.X > optics.AirglowEmission.Z);
         Assert.Equal(1.0, optics.AirglowDensity(optics.AirglowCenterAltitude), 12);
+        Assert.True(optics.AirglowSecondaryEmission.X > optics.AirglowSecondaryEmission.Y);
+        Assert.Equal(1.0,
+            optics.AirglowSecondaryDensity(optics.AirglowSecondaryCenterAltitude), 12);
+        Assert.True(optics.AirglowSecondaryCenterAltitude < optics.AirglowCenterAltitude);
+        Assert.True(optics.AirglowSecondaryDensity(optics.AirglowCenterAltitude) < 0.05);
         Assert.True(optics.AirglowDensity(80_000.0) < 0.03);
         Assert.True(optics.AirglowDensity(120_000.0) < 0.001);
         Assert.InRange(optics.AirglowDaylightFraction, 0.0, 1.0);
@@ -212,6 +217,10 @@ public sealed class AtmosphereOpticsTests
         Assert.Equal(preset.AirglowEmission, json.AirglowEmission);
         Assert.Equal(preset.AirglowCenterAltitude, json.AirglowCenterAltitude);
         Assert.Equal(preset.AirglowScaleHeight, json.AirglowScaleHeight);
+        Assert.Equal(preset.AirglowSecondaryEmission, json.AirglowSecondaryEmission);
+        Assert.Equal(preset.AirglowSecondaryCenterAltitude,
+            json.AirglowSecondaryCenterAltitude);
+        Assert.Equal(preset.AirglowSecondaryScaleHeight, json.AirglowSecondaryScaleHeight);
         Assert.Equal(preset.AirglowDaylightFraction, json.AirglowDaylightFraction);
         Assert.Equal(preset.RayleighScaleHeight, json.RayleighScaleHeight);
         Assert.Equal(preset.MieScaleHeight, json.MieScaleHeight);

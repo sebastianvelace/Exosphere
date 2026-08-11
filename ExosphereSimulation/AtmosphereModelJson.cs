@@ -40,6 +40,11 @@ public partial class AtmosphereModel
                 AirglowEmission = ReadVector(opticalJson, "airglow_emission"),
                 AirglowCenterAltitude = ReadDouble(opticalJson, "airglow_center_altitude", 97_000.0),
                 AirglowScaleHeight = ReadDouble(opticalJson, "airglow_scale_height", 6_000.0),
+                AirglowSecondaryEmission = ReadVector(opticalJson, "airglow_secondary_emission"),
+                AirglowSecondaryCenterAltitude = ReadDouble(
+                    opticalJson, "airglow_secondary_center_altitude", 87_000.0),
+                AirglowSecondaryScaleHeight = ReadDouble(
+                    opticalJson, "airglow_secondary_scale_height", 4_000.0),
                 AirglowDaylightFraction = ReadDouble(opticalJson, "airglow_daylight_fraction", 0.0),
                 MieAnisotropy = ReadDouble(opticalJson, "mie_anisotropy", 0.80),
                 SunIlluminanceScale = ReadDouble(opticalJson, "sun_illuminance_scale", 20.0),

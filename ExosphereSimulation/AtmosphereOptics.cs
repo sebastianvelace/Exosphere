@@ -26,6 +26,13 @@ public sealed record AtmosphereOptics
     public double AirglowCenterAltitude { get; init; } = 97_000.0;
     public double AirglowScaleHeight { get; init; } = 6_000.0;
     /// <summary>
+    /// Optional lower airglow band, normally hydroxyl (OH) emission near the mesopause.
+    /// A zero vector keeps bodies without a configured secondary chemistry layer unchanged.
+    /// </summary>
+    public Vector3d AirglowSecondaryEmission { get; init; } = Vector3d.Zero;
+    public double AirglowSecondaryCenterAltitude { get; init; } = 87_000.0;
+    public double AirglowSecondaryScaleHeight { get; init; } = 4_000.0;
+    /// <summary>
     /// Fraction of the nightglow emission retained under a sunlit line of sight.  Atomic
     /// oxygen and OH bands have a weak dayglow component; keeping it explicit avoids the
     /// non-physical hard switch that made the upper limb blink at the terminator.
@@ -154,6 +161,15 @@ public sealed record AtmosphereOptics
     {
         if (AirglowScaleHeight <= 0.0 || !double.IsFinite(altitude)) return 0.0;
         double z = (altitude - AirglowCenterAltitude) / AirglowScaleHeight;
+        return System.Math.Exp(-0.5 * z * z);
+    }
+
+    /// <summary>Gaussian density envelope of the optional lower OH airglow band.</summary>
+    public double AirglowSecondaryDensity(double altitude)
+    {
+        if (AirglowSecondaryScaleHeight <= 0.0 || !double.IsFinite(altitude)) return 0.0;
+        double z = (altitude - AirglowSecondaryCenterAltitude)
+            / AirglowSecondaryScaleHeight;
         return System.Math.Exp(-0.5 * z * z);
     }
 
