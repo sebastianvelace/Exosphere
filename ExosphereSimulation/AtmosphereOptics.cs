@@ -217,9 +217,10 @@ public sealed record AtmosphereOptics
 
     /// <summary>
     /// Profile-aware direct solar transport used by the renderer's thermodynamic LUTs.
-    /// Daylight rays use the exact density profile rather than the legacy exponential
-    /// envelope.  The narrow sub-horizon band keeps the established refractive solver as
-    /// a compatibility path until refractive index integration is made profile-aware too.
+    /// Daylight and near-horizon rays use the exact density profile rather than the legacy
+    /// exponential envelope.  The refractive lift is a bounded first-order spherical
+    /// approximation derived from the profile molecular refractivity; it is deliberately
+    /// shared by the solar LUT and the realtime shader so the terminator stays continuous.
     /// </summary>
     public Vector3d DirectSolarTransmittance(
         AtmosphereDensityProfile profile,
@@ -235,17 +236,36 @@ public sealed record AtmosphereOptics
             || planetRadius <= 0.0 || atmosphereTopAltitude <= 0.0)
             return Vector3d.Zero;
 
-        if (sunElevationSin <= 0.0)
-            return DirectSolarTransmittance(
-                altitude, sunElevationSin, planetRadius, atmosphereTopAltitude, sampleCount);
+        double geometricElevation = System.Math.Asin(
+            System.Math.Clamp(sunElevationSin, -1.0, 1.0));
+        double lift = ProfileHorizonRefractionRadians(
+            profile, altitude, planetRadius);
+        double apparentElevation = geometricElevation + lift;
+        if (apparentElevation <= 0.0)
+            return Vector3d.Zero;
 
         var tau = OpticalDepthAlongRay(
-            profile, altitude, sunElevationSin, planetRadius,
+            profile, altitude, System.Math.Sin(apparentElevation), planetRadius,
             atmosphereTopAltitude, sampleCount);
         return new Vector3d(
             System.Math.Exp(-tau.X),
             System.Math.Exp(-tau.Y),
             System.Math.Exp(-tau.Z));
+    }
+
+    private double ProfileHorizonRefractionRadians(
+        AtmosphereDensityProfile profile,
+        double altitude,
+        double planetRadius)
+    {
+        if (SurfaceRefractivity <= 0.0 || RefractiveScaleHeight <= 0.0)
+            return 0.0;
+        double molecular = profile.Sample(altitude).X;
+        double sphericalGradient = System.Math.Sqrt(
+            2.0 * System.Math.PI * planetRadius / RefractiveScaleHeight);
+        return System.Math.Clamp(
+            0.5 * SurfaceRefractivity * molecular * sphericalGradient,
+            0.0, 0.035);
     }
 
     /// <summary>
