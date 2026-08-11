@@ -98,6 +98,30 @@ public sealed record AtmosphereOptics
     public double CloudLocalExtinction(double altitude, double weatherSample) =>
         CloudExtinction * CloudVerticalDensity(altitude) * CloudWeatherDensity(weatherSample);
 
+    /// <summary>
+    /// Integrates the vertical cloud optical depth for a weather-map sample.  This is the
+    /// CPU oracle for the renderer's Beer–Lambert cloud transport: the shader may add
+    /// horizontal billow detail, but it must preserve this same non-negative, finite
+    /// vertical envelope and weather monotonicity.
+    /// </summary>
+    public double CloudVerticalOpticalDepth(double weatherSample, int sampleCount = 32)
+    {
+        if (!HasCloudLayer || !double.IsFinite(weatherSample)) return 0.0;
+
+        int n = System.Math.Max(8, sampleCount);
+        if ((n & 1) != 0) n++;
+        double span = CloudTopAltitude - CloudBaseAltitude;
+        double step = span / n;
+        double integral = 0.0;
+        for (int i = 0; i <= n; i++)
+        {
+            double altitude = CloudBaseAltitude + step * i;
+            int weight = i == 0 || i == n ? 1 : (i % 2 == 0 ? 2 : 4);
+            integral += weight * CloudLocalExtinction(altitude, weatherSample);
+        }
+        return integral * step / 3.0;
+    }
+
     public Vector3d MieExtinction => MieScattering + MieAbsorption;
     public bool IsEnabled => RayleighScattering.MagnitudeSquared > 0.0
         || MieExtinction.MagnitudeSquared > 0.0;

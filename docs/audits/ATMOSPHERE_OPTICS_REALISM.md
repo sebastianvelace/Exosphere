@@ -270,3 +270,33 @@ Evidencia V12:
 La captura `ground_sunset` de `/tmp/exo_atmo_dither_v1/` mantiene el gradiente rojo/naranja,
 la fuente solar y el oscurecimiento nocturno; la vista de 120 km conserva el limbo azul. El
 coste adicional del filtrado es local al tercio de LUT cercano al horizonte.
+
+## V13 — reciprocidad de sombras volumétricas de nubes (2026-08-11)
+
+La ruta de iluminación solar de las nubes tenía una simplificación que ya no era coherente
+con la cámara: `cloud_density()` incluía weather map, erosión y el campo de billows 3D, pero
+`cloud_sun_transmittance()` integraba sólo `cloud_density_base()`. Por eso un volumen podía
+mostrar una protuberancia iluminada sin producir la sombra correspondiente. La ruta solar
+ahora integra el mismo campo volumétrico mediante Beer–Lambert; se redujo la cuadratura solar
+de siete a cinco nodos warped para conservar el presupuesto del render incremental.
+
+El oráculo CPU `CloudVerticalOpticalDepth()` integra la envolvente vertical y verifica que la
+profundidad sea finita, no negativa y monótona con la cobertura del mapa. No pretende sustituir
+la textura geográfica ni el ruido 3D del shader: fija los invariantes físicos que ambos deben
+respetar.
+
+Evidencia reproducible:
+
+| Comprobación | Resultado |
+|---|---:|
+| `dotnet test ExosphereSimulation.Tests/...` | **517/517** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
+| `bash tools/atmosphere_quick_check.sh` | **PASS, 80/80** |
+| `visual_playtest.sh --atmosphere --run-id atmo-cloudshadow-v3` | **ATMOSPHERE_OK, 16/16** |
+| `PERF ground_day` | **160,12 ms/frame**, máximo 173,50 ms |
+| `PERF ground_sunset` | **160,00 ms/frame**, máximo 175,68 ms |
+
+La matriz conserva el gradiente de amanecer/atardecer, el limbo azul a 120 km, el campo
+estelar nocturno y la captura de cockpit. La puesta de sol todavía muestra bandas de baja
+luminancia del framebuffer; esa cuantización queda explícitamente abierta para la siguiente
+iteración y no se atribuye a la microfísica de nubes.

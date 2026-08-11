@@ -82,7 +82,11 @@ uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
 const int VIEW_STEPS = 28;
 const int LIGHT_STEPS = 14;
 const int CLOUD_VIEW_STEPS = 20;
-const int CLOUD_LIGHT_STEPS = 7;
+// Keep the light integral cheaper than the camera integral, but sample the same
+// volumetric field in both directions.  Five warped samples are enough to resolve
+// the compact cloud shell while avoiding the old base-mask shortcut that made the
+// projected shadow disagree with the billows visible to the camera.
+const int CLOUD_LIGHT_STEPS = 5;
 // The finite ray integral under-resolves the very thin, sunlit limb at a
 // surface observer.  This bounded Chapman closure is a pre-exposure radiance
 // gain (not a post-tonemap colour): the calibrated solar irradiance and the
@@ -364,10 +368,12 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
 			0.0, distance_to_edge, closest);
 		float step_length = max(segment_end - segment_start, 0.0);
 		vec3 p = position + to_sun * (0.5 * (segment_start + segment_end));
-		// The expensive 3D billow is evaluated on the view ray. The solar ray
-		// uses the same vertical/weather support, avoiding seven extra noise
-		// evaluations per view sample while retaining coherent self-shadowing.
-		optical_depth += cloud_density_base(p) * cloud_extinction * step_length;
+		// Use the identical weather + erosion + 3D billow field as the camera
+		// integral.  A base-only mask was visibly inconsistent: a billow could be
+		// bright on its lit face while casting no corresponding shadow.  Beer-Lambert
+		// integration is now reciprocal in view and solar directions; the reduced
+		// five-sample light quadrature keeps the incremental sky affordable.
+		optical_depth += cloud_density(p) * cloud_extinction * step_length;
 	}
 	return exp(-min(optical_depth, 80.0));
 }

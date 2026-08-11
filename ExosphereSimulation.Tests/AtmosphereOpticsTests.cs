@@ -279,6 +279,21 @@ public sealed class AtmosphereOpticsTests
     }
 
     [Fact]
+    public void CloudVerticalOpticalDepthIsFiniteAndWeatherMonotonic()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        double empty = optics.CloudVerticalOpticalDepth(0.0);
+        double partial = optics.CloudVerticalOpticalDepth(0.5);
+        double saturated = optics.CloudVerticalOpticalDepth(1.0);
+
+        Assert.Equal(0.0, empty, 12);
+        Assert.True(double.IsFinite(partial) && double.IsFinite(saturated));
+        Assert.InRange(partial, 0.0, saturated);
+        Assert.InRange(saturated, 0.0,
+            optics.CloudExtinction * (optics.CloudTopAltitude - optics.CloudBaseAltitude));
+    }
+
+    [Fact]
     public void InvalidCloudParametersCannotEnableRendering()
     {
         var invalid = new AtmosphereOptics
