@@ -324,3 +324,43 @@ Evidencia reproducible:
 
 La captura de 120 km conserva el limbo azul y el nightglow sigue siendo ópticamente fino;
 la pequeña fracción diurna no cambia la exposición ni introduce un disco verde visible.
+
+## V15 — prefiltro meteorológico adaptativo en crepúsculo (2026-08-11)
+
+La comparación A/B aisló las franjas que quedaban en la puesta de sol: desaparecían al
+desactivar las nubes y no cambiaban al aumentar los pasos de integración ni al retirar las
+sombras solares. El origen era la magnificación de filas de latitud del mapa equirectangular
+de cobertura (8K) a lo largo de los rayos tangentes de baja elevación. Un `textureLod` fijo
+mejoraba el horizonte pero lavaba el cielo diurno, por lo que no se dejó como solución global.
+
+El shader ahora conserva el texel de resolución completa durante el día y mezcla, sólo cuando
+el seno de elevación solar cae por debajo de 0,18, un prefiltro latitudinal de cinco muestras
+(centro, ±64 y ±128 texels verticales). El peso se desvanece suavemente entre +0,02 y +0,18,
+de modo que no hay salto visible al cruzar el terminador. El mismo weather filtrado alimenta
+la cámara y la integral solar, preservando reciprocidad de sombras.
+
+Evidencia A/B revisada:
+
+| Escena | Resultado |
+|---|---:|
+| `ground_day` con prefiltro adaptativo | coincide visualmente con la línea base, sin bandas nuevas |
+| `ground_sunset` con prefiltro adaptativo | franjas largas eliminadas; sólo queda dither subpíxel aislado |
+| `ground_sunset` sin prefiltro | bandas horizontales continuas claramente visibles |
+
+Evidencia reproducible:
+
+| Comprobación | Resultado |
+|---|---:|
+| `dotnet test ExosphereSimulation.Tests/...` | **517/517** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
+| `bash tools/atmosphere_quick_check.sh` | **PASS, 80/80** |
+| `visual_playtest.sh --atmosphere --run-id adaptivefilter-v1 --skip-build` | **ATMOSPHERE_OK, 16/16** |
+| `PERF ground_sunset` | **159,98 ms/frame**, máximo 173,81 ms |
+| `PERF ground_night` | **160,02 ms/frame**, máximo 179,70 ms |
+| `PERF 120km_day` | **159,77 ms/frame**, máximo 176,17 ms |
+| `neonGreenFrac` en matriz exterior | **0,000000** |
+
+La puesta de sol de `/tmp/exo_atmo_adaptivefilter_v1/` conserva el gradiente rojo y el disco
+solar sin las franjas continuas de la línea base; `120km_day` mantiene el limbo azul y
+`120km_night` el campo estelar nítido. El coste queda dentro del ruido del render incremental
+en llvmpipe porque el filtro sólo se activa con el Sol bajo.

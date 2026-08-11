@@ -66,6 +66,10 @@ uniform mat3 cloud_world_to_texture;
 // explicit makes the defaults stable for Earth and similarly-sized bodies.
 uniform float cloud_macro_scale = 0.000075;
 uniform float cloud_macro_strength = 0.25;
+// Low-sun rays magnify latitude rows in the equirectangular weather map.  The
+// controller enables this narrow prefilter only around twilight/night; daylight
+// retains the full-resolution weather texture and its synoptic detail.
+uniform float cloud_weather_prefilter : hint_range(0.0, 1.0) = 0.0;
 uniform float sun_angular_radius = 0.00465;
 uniform float sun_disc_radiance = 32.0;
 uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
@@ -319,13 +323,29 @@ float cloud_value_noise3(vec3 position) {
 	return mix(a, b, (smooth_fraction.x + smooth_fraction.y + smooth_fraction.z) / 3.0);
 }
 
+// The global weather map is an 8K equirectangular image.  Near the horizon a
+// single texel row can be magnified over many view samples, exposing JPEG
+// latitude bands as unstable stripes.  A narrow latitude-aware prefilter keeps
+// the synoptic pattern while removing that projection aliasing.
+float cloud_weather_sample(vec2 uv) {
+	vec2 texel = vec2(1.0 / 8192.0, 1.0 / 4096.0);
+	float center = texture(cloud_coverage_tex, uv).r;
+	float north_near = textureLod(cloud_coverage_tex, uv - vec2(0.0, texel.y * 64.0), 3.0).r;
+	float south_near = textureLod(cloud_coverage_tex, uv + vec2(0.0, texel.y * 64.0), 3.0).r;
+	float north_far = textureLod(cloud_coverage_tex, uv - vec2(0.0, texel.y * 128.0), 3.0).r;
+	float south_far = textureLod(cloud_coverage_tex, uv + vec2(0.0, texel.y * 128.0), 3.0).r;
+	float prefiltered = center * 0.20
+		+ (north_near + south_near + north_far + south_far) * 0.20;
+	return mix(center, prefiltered, clamp(cloud_weather_prefilter, 0.0, 1.0));
+}
+
 float cloud_density_base(vec3 position) {
 	float height = length(position) - planet_radius;
 	float shape = cloud_height_shape(height);
 	if (shape <= 0.0) return 0.0;
 	vec3 texture_direction = normalize(cloud_world_to_texture * normalize(position));
 	vec2 uv = dir_to_equirect(texture_direction) + vec2(cloud_longitude_offset, 0.0);
-	float weather = texture(cloud_coverage_tex, uv).r;
+	float weather = cloud_weather_sample(uv);
 	float detail = texture(cloud_coverage_tex, uv * 3.07 + vec2(0.17, 0.31)).r;
 	float threshold = 1.0 - cloud_coverage;
 	return shape * smoothstep(threshold - 0.12, threshold + 0.10,
@@ -338,7 +358,7 @@ float cloud_density(vec3 position) {
 	if (shape <= 0.0) return 0.0;
 	vec3 texture_direction = normalize(cloud_world_to_texture * normalize(position));
 	vec2 uv = dir_to_equirect(texture_direction) + vec2(cloud_longitude_offset, 0.0);
-	float weather = texture(cloud_coverage_tex, uv).r;
+	float weather = cloud_weather_sample(uv);
 	float detail = texture(cloud_coverage_tex, uv * 3.07 + vec2(0.17, 0.31)).r;
 	float threshold = 1.0 - cloud_coverage;
 	// Sample one oriented world-space macro field. The high-frequency texture

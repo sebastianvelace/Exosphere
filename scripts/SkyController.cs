@@ -283,6 +283,12 @@ public partial class SkyController : Node
         double column = optics?.RayleighDensity(altitude) ?? 0.0;
         float daylight = Smoothstep(-0.12f, 0.03f, (float)sunElevationSin);
         float air = (float)System.Math.Clamp(column, 0.0, 1.0);
+        // At low solar elevations, the long tangent path magnifies individual
+        // latitude rows in the equirectangular cloud map.  Fade in the shader's
+        // narrow latitude prefilter only there; full daylight keeps the original
+        // high-frequency weather detail intact.
+        _skyMat?.SetShaderParameter("cloud_weather_prefilter",
+            1.0f - Smoothstep(0.02f, 0.18f, (float)sunElevationSin));
 
         Color horizon = body.Id switch
         {
