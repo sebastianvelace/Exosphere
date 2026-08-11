@@ -19,10 +19,13 @@ public partial class AttitudeNavball : Control
 {
     private static readonly Color PanelBg     = InterfaceTheme.GlassStrong;
     private static readonly Color PanelBorder = InterfaceTheme.EdgeStrong;
-    private static readonly Color SkyCol      = new(0.28f, 0.30f, 0.34f, 1f);
-    private static readonly Color GroundCol   = new(0.075f, 0.082f, 0.095f, 1f);
+    private static readonly Color SkyColHigh  = new(0.36f, 0.40f, 0.48f, 1f);
+    private static readonly Color SkyColLow   = new(0.22f, 0.24f, 0.30f, 1f);
+    private static readonly Color GroundCol   = new(0.070f, 0.078f, 0.090f, 1f);
     private static readonly Color HorizonCol  = InterfaceTheme.Text;
+    private static readonly Color HorizonOutline = new(0f, 0f, 0f, 0.72f);
     private static readonly Color LadderCol   = new(0.82f, 0.84f, 0.88f, 0.64f);
+    private static readonly Color LadderNear  = new(0.90f, 0.92f, 0.96f, 0.82f);
     private static readonly Color Reticle     = InterfaceTheme.Text;
     private static readonly Color ProgradeCol = InterfaceTheme.Text;
     private static readonly Color RetroCol    = new(0.62f, 0.65f, 0.70f, 1f);
@@ -45,6 +48,8 @@ public partial class AttitudeNavball : Control
     private bool   _progradeVisible;
     private bool   _radialVisible;
     private double _speed;
+    /// <summary>True when HDG is surface-track (velocity), not nose compass.</summary>
+    private bool   _headingIsTrack;
 
     // ── Pitch director (gravity-turn guidance) ────────────────────────────────
     // Guía de actitud para el piloto manual: pitch objetivo que cae de ~90° (vertical en
@@ -58,15 +63,28 @@ public partial class AttitudeNavball : Control
     public override void _Ready()
     {
         _font = InterfaceTheme.MonoFont;
+        // Self-anchored CenterBottom; engines + data strip are children with local Position.
         SetAnchorsPreset(LayoutPreset.CenterBottom);
         GrowHorizontal = GrowDirection.Both;
-        GrowVertical   = GrowDirection.Begin;
-        CustomMinimumSize = new Vector2(2 * Radius + 28, 2 * Radius + 46);
-        OffsetLeft  = -(Radius + 14);
-        OffsetRight =  (Radius + 14);
-        OffsetTop   = -(2 * Radius + 80);
-        OffsetBottom = -34;
+        GrowVertical = GrowDirection.Begin;
+        float width = 2 * Radius + 28;
+        float height = 2 * Radius + 46;
+        CustomMinimumSize = new Vector2(width, height);
+        Size = new Vector2(width, height);
+        OffsetLeft = -width * 0.5f;
+        OffsetRight = width * 0.5f;
+        OffsetBottom = -108f;
+        OffsetTop = OffsetBottom - height;
         MouseFilter = MouseFilterEnum.Ignore;
+        ClipContents = false; // children (engines/strip) sit outside the disc bounds
+    }
+
+    /// <summary>Raise/lower the whole attitude cluster above the money band.</summary>
+    public void SetClusterBottomOffset(float bottom)
+    {
+        float height = CustomMinimumSize.Y > 0f ? CustomMinimumSize.Y : (2 * Radius + 46);
+        OffsetBottom = bottom;
+        OffsetTop = bottom - height;
     }
 
     public override void _Process(double delta)
@@ -98,9 +116,10 @@ public partial class AttitudeNavball : Control
         // (avoids jumps when nose is nearly vertical); otherwise fall back to nose direction.
         var surfVelForHdg = vessel.GetSurfaceVelocity(body);
         double speedForHdg = surfVelForHdg.Magnitude;
-        var hdgDir = speedForHdg > 5.0
-            ? (surfVelForHdg - up * surfVelForHdg.Dot(up))   // surface velocity on horizon plane
-            : (nose - up * nose.Dot(up));                      // nose on horizon plane (fallback)
+        _headingIsTrack = speedForHdg > 5.0;
+        var hdgDir = _headingIsTrack
+            ? (surfVelForHdg - up * surfVelForHdg.Dot(up))   // surface track on horizon
+            : (nose - up * nose.Dot(up));                      // nose compass (fallback)
         if (hdgDir.MagnitudeSquared > 1e-9)
         {
             hdgDir = hdgDir.Normalized;
@@ -231,8 +250,15 @@ public partial class AttitudeNavball : Control
         var i1 = horizonMid - rightv * half;   // chord endpoints on the circle
         var i2 = horizonMid + rightv * half;
 
-        // Base disc = sky.
-        DrawCircle(c, Radius, SkyCol);
+        // Base disc = sky (subtle high→low gradient along ball "up").
+        DrawCircle(c, Radius, SkyColLow);
+        for (int band = 3; band >= 1; band--)
+        {
+            float t = band / 4f;
+            var col = SkyColLow.Lerp(SkyColHigh, t);
+            col.A = 0.55f * t;
+            DrawCircle(c - dir * (Radius * (1f - t) * 0.35f), Radius * (0.55f + 0.35f * t), col);
+        }
 
         // Ground = circular segment below the horizon, walked around the rim with the chord
         // intersections inserted at the two crossings (perfect clip, handles any roll/pitch).
@@ -253,27 +279,30 @@ public partial class AttitudeNavball : Control
             }
             prev = p; prevG = pG;
         }
-        // Solo rellenar si el segmento de tierra tiene área real. Cuando el morro apunta
-        // casi vertical (pitch ≈ ±90°, p.ej. en plataforma) la cuerda colapsa y los puntos
-        // quedan casi colineales → triangulación inválida. Lo saltamos en ese caso.
         // Only fill when the ground segment has real area. Near-vertical pitch collapses the
         // chord and leaves near-collinear points → invalid triangulation; skip it then.
         if (grd.Count >= 3 && half > 1.0f && PolygonArea(grd) > 2.0f)
             DrawColoredPolygon(grd.ToArray(), GroundCol);
 
-        // Bezel + horizon line (the chord).
+        // Bezel + horizon chord with dark outline for contrast on either hemisphere.
         DrawArc(c, Radius, 0, Mathf.Tau, 64, PanelBorder, 1.4f, true);
-        if (half > 0.5f) DrawLine(i1, i2, HorizonCol, 1.6f, true);
-
-        // Pitch ladder: ticks every 30°, within the disc.
-        for (int deg = -60; deg <= 60; deg += 30)
+        if (half > 0.5f)
         {
-            if (deg == 0) continue;
+            DrawLine(i1, i2, HorizonOutline, 3.2f, true);
+            DrawLine(i1, i2, HorizonCol, 1.7f, true);
+        }
+
+        // Pitch ladder: dense near the horizon (±10/20), then 30/45/60.
+        int[] ladder = { -60, -45, -30, -20, -10, 10, 20, 30, 45, 60 };
+        foreach (int deg in ladder)
+        {
             float off = (float)(deg / 90.0) * Radius;
             var lineMid = horizonMid + dir * off;
-            float halfLen = deg % 2 == 0 ? 26f : 16f;
+            bool near = System.Math.Abs(deg) <= 20;
+            float halfLen = near ? 22f : (System.Math.Abs(deg) % 30 == 0 ? 26f : 14f);
             if ((lineMid - c).Length() > Radius - 6f) continue;
-            DrawLine(lineMid - rightv * halfLen, lineMid + rightv * halfLen, LadderCol, 1.1f, true);
+            DrawLine(lineMid - rightv * halfLen, lineMid + rightv * halfLen,
+                near ? LadderNear : LadderCol, near ? 1.35f : 1.1f, true);
         }
     }
 
@@ -287,26 +316,25 @@ public partial class AttitudeNavball : Control
 
     private void DrawRollPointer(Vector2 c, float roll)
     {
-        // Bank-angle scale arc at the top with a fixed pointer triangle.
-        for (int deg = -60; deg <= 60; deg += 30)
+        // Bank-angle scale arc at the top; denser ticks near wings-level.
+        for (int deg = -60; deg <= 60; deg += 15)
         {
             float a = -Mathf.Pi / 2f + deg * Mathf.Pi / 180f;
-            var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * Radius;
-            DrawCircle(p, 1.6f, LabelDim);
+            var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (Radius + 1.5f);
+            float tickR = deg == 0 ? 2.4f : (deg % 30 == 0 ? 1.8f : 1.2f);
+            DrawCircle(p, tickR, deg == 0 ? Reticle : LabelDim);
         }
-        // The moving roll indicator triangle (rotates with the ball "up").
-        // El vértice apunta hacia el centro a lo largo del eje radial; la base es
-        // PERPENDICULAR a ese eje para que el triángulo nunca sea degenerado (colineal),
-        // lo que antes hacía fallar la triangulación de Godot a roll = 0.
-        // Apex points inward along the radial axis; the base is PERPENDICULAR to it so the
-        // triangle is never degenerate (collinear), which used to break Godot's triangulation.
-        var radial = new Vector2(Mathf.Sin(roll), -Mathf.Cos(roll));   // centre → top
-        var across = new Vector2(radial.Y, -radial.X);                 // base direction
-        var top  = c + radial * Radius;
-        var tl   = top + across * 5f;
-        var tr   = top - across * 5f;
-        var apex = top - radial * 9f;
-        DrawColoredPolygon(new[] { tl, tr, apex }, Reticle);
+        // Moving roll indicator — larger, outlined apex toward centre.
+        var radial = new Vector2(Mathf.Sin(roll), -Mathf.Cos(roll));
+        var across = new Vector2(radial.Y, -radial.X);
+        var top  = c + radial * (Radius + 1f);
+        var tl   = top + across * 7f;
+        var tr   = top - across * 7f;
+        var apex = top - radial * 12f;
+        DrawColoredPolygon(new[] { tl, tr, apex }, HorizonOutline);
+        DrawColoredPolygon(new[] {
+            tl - across * 1.2f, tr + across * 1.2f, apex + radial * 1.5f
+        }, Reticle);
     }
 
     private void DrawProgradeMarker(Vector2 p, Color col, bool prograde)
@@ -375,7 +403,9 @@ public partial class AttitudeNavball : Control
 
     private void DrawAttitudeText()
     {
-        string line = $"PCH {_pitchDeg,4:F0}°   HDG {_headingDeg,3:F0}°   RLL {_rollDeg,4:F0}°";
+        // TRK = surface track when moving; HDG = nose compass on the pad / hover.
+        string hdgTag = _headingIsTrack ? "TRK" : "HDG";
+        string line = $"PCH {_pitchDeg,4:F0}°   {hdgTag} {_headingDeg,3:F0}°   RLL {_rollDeg,4:F0}°";
         var sz = _font.GetStringSize(line, HorizontalAlignment.Center, -1, 11);
         DrawString(_font, new Vector2(Size.X / 2f - sz.X / 2f, Size.Y - 4f), line,
             HorizontalAlignment.Left, -1, 11, ValueBright);

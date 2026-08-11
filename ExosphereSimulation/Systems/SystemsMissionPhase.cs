@@ -8,6 +8,12 @@ public enum SystemsMissionPhase
 {
     /// Pre-launch, landed, or otherwise idle — minimal life-support EC draw.
     Idle,
-    /// Ascent, orbit ops, coast, or descent — full crew systems load.
+    /// Orbit/coast/transfer ops — nominal crew systems load.
     Active,
+    /// Ascent, boostback, or landing burns — elevated avionics/EC draw.
+    HighLoad,
+    /// Atmospheric entry / aero descent — elevated EC + cabin thermal coupling.
+    Entry,
+    /// Peak heating — maximum EC and TPS leak into the cabin thermal model.
+    PeakHeating,
 }

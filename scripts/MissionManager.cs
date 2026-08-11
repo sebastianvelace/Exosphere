@@ -88,7 +88,7 @@ public partial class MissionManager : Node
     /// para no pisar [L] (StartCountdown) ni reiniciar una misión en progreso.
     ///
     /// Manual launch (hold-[Z]): skips the countdown and starts the FSM at LIFTOFF.
-    /// Called by SimulationBridge once it releases the hold-downs (TWR &gt; 1.02).
+    /// Called by SimulationBridge once it releases the hold-downs at commit-to-launch.
     /// Idempotent: does nothing unless we are still in PRE_LAUNCH.
     /// </summary>
     public void BeginFlight()
@@ -97,6 +97,20 @@ public partial class MissionManager : Node
         // No estábamos en countdown, pero reseteamos los gatillos de fase por si acaso.
         IsCountingDown  = false;
         _maxQTriggered  = false;
+        SetPhase(MissionPhase.LIFTOFF);
+        EmitSignal(SignalName.LaunchCommitted);
+    }
+
+    /// <summary>
+    /// Hold-downs just released during countdown/ignition — enter LIFTOFF and fire
+    /// <see cref="LaunchCommitted"/> once. No-op if already past ignition.
+    /// </summary>
+    public void NotifyHoldDownReleased()
+    {
+        IsCountingDown = false;
+        if (Phase is not (MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN
+            or MissionPhase.IGNITION))
+            return;
         SetPhase(MissionPhase.LIFTOFF);
         EmitSignal(SignalName.LaunchCommitted);
     }
@@ -169,27 +183,13 @@ public partial class MissionManager : Node
             {
                 CountdownTimer = 0.0;
                 bridge.SetThrottle(1.0);
-
-                // Release the hold-downs only once the engines can actually lift the stack
-                // (thrust > weight), not merely because the clock hit zero.
-                bool canLift = false;
-                if (vessel != null)
-                {
-                    var rb = universe.GetDominantBody(vessel.Position);
-                    canLift = vessel.GetThrustToWeightRatio(rb) > 1.02;
-                }
-                if (canLift)
-                {
-                    IsCountingDown = false;
-                    bridge.ReleaseGroundHold();
-                    SetPhase(MissionPhase.LIFTOFF);
-                    EmitSignal(SignalName.LaunchCommitted);
-                    // [L] owns the complete automatic mission: guidance and hot
-                    // staging must start with the launch, not require a hidden [G].
-                    if (HistoricalFlightProfileController.Instance?
-                            .EngageIfSupported() != true)
-                        AscentController.Instance?.Engage();
-                }
+                IsCountingDown = false;
+                // Do NOT ReleaseGroundHold here — that used to skip Ascent Ignition and
+                // make [L] feel like an instant tower snap. Engage() owns the release
+                // gate (TWR + near-full throttle) and emits LaunchCommitted on liftoff.
+                if (HistoricalFlightProfileController.Instance?
+                        .EngageIfSupported() != true)
+                    AscentController.Instance?.Engage();
             }
         }
 

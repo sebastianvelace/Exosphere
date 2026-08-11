@@ -5,13 +5,14 @@ using System.Linq;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Presentation;
+using Exosphere.Simulation.Systems;
 
 // ── Flight HUD (SpaceX-webcast aesthetic) ────────────────────────────────────
 // Dark translucent panels, thin lines, condensed type, cyan/white accents. A big
 // centred bottom telemetry band (SPEED / ALTITUDE / T+), a milestone countdown, a
 // left "loads & trajectory" panel and a right "stages & Δv + event log" panel.
-// The engine board (EngineGridHUD) and navball (NavballController) are spawned as
-// children here. All physics-derived values arrive through FlightHudSnapshot.
+// Attitude cluster (engines — navball — data strip) is spawned as children here.
+// All physics-derived values arrive through FlightHudSnapshot.
 public partial class HUDController : Control
 {
     public static FlightHudSnapshot? LatestSnapshot { get; private set; }
@@ -66,6 +67,7 @@ public partial class HUDController : Control
     private Label _countdownLabel = null!;
     private Label _countdownMilestone = null!;
     private Label _guidanceLabel = null!;
+    private Label _boosterLabel = null!;
     private Label _densityToast = null!;
     private double _densityToastTimer;
     private Label _alertLabel = null!;
@@ -77,8 +79,9 @@ public partial class HUDController : Control
     private Control _phaseRoot = null!;
     private Control _bottomRoot = null!;
     private Control _timeRoot = null!;
-    private Node _engineGrid = null!;
-    private Node _navball = null!;
+    private EngineGridHUD _engineGrid = null!;
+    private AttitudeNavball _navball = null!;
+    private AttitudeDataStrip _attitudeStrip = null!;
 
     // ── Pad help overlay + launch path callout (UX-001 / UX-002) ─────────────
     private PanelContainer _padHelpRoot = null!;
@@ -109,13 +112,32 @@ public partial class HUDController : Control
         BuildPadHelpOverlay();
         BuildDensityToast();
 
-        // Spawn the engine board, navball and live mission checklist as children.
-        _engineGrid = new EngineGridHUD  { Name = "EngineGridHUD" };
-        _navball = new AttitudeNavball { Name = "Navball" };
+        // Attitude cluster: navball owns CenterBottom; engines/strip are children
+        // with local Position so they cannot vanish from a zero-size HBox layout.
+        BuildAttitudeCluster();
         _objectives = new MissionObjectivesPanel { Name = "MissionObjectives" };
-        AddChild(_engineGrid);
-        AddChild(_navball);
         AddChild(_objectives);
+    }
+
+    private void BuildAttitudeCluster()
+    {
+        _navball = new AttitudeNavball { Name = "Navball" };
+        _navball.ZIndex = 30;
+        AddChild(_navball);
+
+        _engineGrid = new EngineGridHUD { Name = "EngineGridHUD" };
+        _attitudeStrip = new AttitudeDataStrip { Name = "AttitudeDataStrip" };
+        // Parent to the navball so the trio moves as one instrument.
+        _navball.AddChild(_engineGrid);
+        _navball.AddChild(_attitudeStrip);
+
+        // Local coords: navball origin is its top-left. Place boards beside the disc.
+        const float gap = 10f;
+        float navW = 2f * 78f + 28f; // matches AttitudeNavball.Radius
+        _engineGrid.Position = new Vector2(-(EngineGridHUD.BoardWidth + gap), 8f);
+        _attitudeStrip.Position = new Vector2(navW + gap, 8f);
+        _engineGrid.Size = new Vector2(EngineGridHUD.BoardWidth, EngineGridHUD.BoardHeightCompact);
+        _attitudeStrip.Size = new Vector2(AttitudeDataStrip.BoardWidth, AttitudeDataStrip.BoardHeight);
     }
 
     private void BuildDensityToast()
@@ -262,6 +284,16 @@ public partial class HUDController : Control
         _guidanceLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _guidanceLabel.CustomMinimumSize = new Vector2(580, 0);
         vbox.AddChild(_guidanceLabel);
+
+        // R12: booster return is a parallel vehicle — keep Ship mission phase intact
+        // and publish Super Heavy status on its own line under Ship guidance.
+        _boosterLabel = new Label { Text = "" };
+        _boosterLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        InterfaceTheme.ApplyMono(_boosterLabel, 10);
+        _boosterLabel.AddThemeColorOverride("font_color", InterfaceTheme.Warning);
+        _boosterLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _boosterLabel.CustomMinimumSize = new Vector2(580, 0);
+        vbox.AddChild(_boosterLabel);
 
         var nav = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         nav.AddThemeConstantOverride("separation", 12);
@@ -427,12 +459,14 @@ public partial class HUDController : Control
     {
         _padHelpRoot = new PanelContainer();
         _padHelpRoot.SetAnchorsPreset(LayoutPreset.Center);
+        // Keep the sheet above the attitude cluster so a late dismiss cannot bury engines/strip.
         _padHelpRoot.OffsetLeft = -400;
-        _padHelpRoot.OffsetTop = -230;
+        _padHelpRoot.OffsetTop = -280;
         _padHelpRoot.OffsetRight = 400;
-        _padHelpRoot.OffsetBottom = 250;
+        _padHelpRoot.OffsetBottom = 120;
         _padHelpRoot.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.86f, 14, 22, 18));
         _padHelpRoot.MouseFilter = MouseFilterEnum.Stop;
+        _padHelpRoot.ZIndex = 5;
         AddChild(_padHelpRoot);
 
         var vbox = new VBoxContainer();
@@ -516,7 +550,7 @@ public partial class HUDController : Control
 
         var dismiss = new Label
         {
-            Text = "[F1] show / dismiss at any time  ·  auto-hides once at liftoff",
+            Text = "[F1] show / dismiss at any time  ·  auto-hides at ignition",
         };
         dismiss.HorizontalAlignment = HorizontalAlignment.Center;
         InterfaceTheme.ApplyBody(dismiss, 10);
@@ -684,7 +718,10 @@ public partial class HUDController : Control
         if (bridge == null || vessel == null || universe == null) return;
         var refBody = universe.GetDominantBody(vessel.Position);
 
-        // ── Rotation controls ──────────────────────────────────────────────
+        // ── Attitude / throttle ─────────────────────────────────────────────
+        // Crewed craft fly an onboard FCS: stick writes the vessel directly and
+        // must not be gated by ground LOS/blackout. Unmanned / deep-space ground
+        // mode still rides GroundCommandRelay (light-time + link drop).
         double pitchIn = 0, yawIn = 0, rollIn = 0;
         if (Input.IsKeyPressed(Key.W)) pitchIn += 1.0;
         if (Input.IsKeyPressed(Key.S)) pitchIn -= 1.0;
@@ -692,21 +729,38 @@ public partial class HUDController : Control
         if (Input.IsKeyPressed(Key.D)) yawIn   += 1.0;
         if (Input.IsKeyPressed(Key.Q)) rollIn  -= 1.0;
         if (Input.IsKeyPressed(Key.E)) rollIn  += 1.0;
-        vessel.PitchYawRoll = new Vector3d(pitchIn, yawIn, rollIn);
+        var stick = new Vector3d(pitchIn, yawIn, rollIn);
+
+        bool crewAlive = SystemsController.Instance?.LifeSupport.CrewAlive ?? true;
+        bool groundUplink = SystemsController.Instance != null
+            && PilotCommandRouting.UsesGroundUplink(crewAlive, vessel.StructuralControlLost);
+
+        // Onboard (crewed) or structural dead-stick (Vessel.Tick zeros authority): local write.
+        // Unmanned only: ground relay.
+        if (groundUplink)
+            SystemsController.Instance!.SubmitGroundAttitude(stick);
+        else
+            vessel.PitchYawRoll = stick;
 
         // ── Hold-throttle (despegue manual) ─────────────────────────────────
-        // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al TWR>1.02);
+        // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al commit);
         // ya en vuelo, sube el throttle de forma progresiva. [X] mantenida lo baja.
-        // Hold [Z]: on the pad starts ignition (releases the hold-down at TWR>1.02);
+        // Hold [Z]: on the pad starts ignition (releases hold-down at commit-to-launch);
         // already flying, spools the throttle up. Hold [X] spools it down.
         if (Input.IsPhysicalKeyPressed(Key.Z))
         {
             if (vessel.IsGroundHeld || bridge.IsIgnitionActive) bridge.Ignite();
-            else                                                 bridge.ThrottleUp(delta);
+            else if (groundUplink)
+                SystemsController.Instance!.SubmitGroundThrottleDelta(0.5 * delta);
+            else
+                bridge.ThrottleUp(delta);
         }
         else if (Input.IsPhysicalKeyPressed(Key.X))
         {
-            bridge.ThrottleDown(delta);
+            if (groundUplink)
+                SystemsController.Instance!.SubmitGroundThrottleDelta(-0.5 * delta);
+            else
+                bridge.ThrottleDown(delta);
         }
 
         var viewMode = MapViewController.Instance?.Visible == true
@@ -835,7 +889,9 @@ public partial class HUDController : Control
             UpdatePadHelp(mission);
         }
         UpdateGuidanceLine();
+        UpdateBoosterLine();
         UpdateDensityToast(delta);
+        _attitudeStrip.UpdateFromSnapshot(snapshot);
         ApplyViewMode(snapshot.ViewMode);
     }
 
@@ -843,11 +899,36 @@ public partial class HUDController : Control
     /// UX-014 consolidation: the ascent autopilot and the EDL controller used to draw their
     /// own full-screen banners at 21.5% and 16% of viewport height. They now publish a status
     /// line and this is the only place it is rendered. Descent outranks ascent.
+    /// Ownership cue: MANUAL / ASCENT / EDL / HISTORICAL.
     /// </summary>
-    private void UpdateGuidanceLine() =>
-        _guidanceLabel.Text = EDLController.Instance?.BannerStatus
-            ?? AscentController.Instance?.BannerStatus
-            ?? "";
+    private void UpdateGuidanceLine()
+    {
+        if (EDLController.Instance?.BannerStatus is { Length: > 0 } edl)
+        {
+            _guidanceLabel.Text = edl;
+            return;
+        }
+
+        if (AscentController.Instance?.BannerStatus is { Length: > 0 } ascent)
+        {
+            _guidanceLabel.Text = ascent;
+            return;
+        }
+
+        if (HistoricalFlightProfileController.Instance?.IsEngaged == true)
+        {
+            _guidanceLabel.Text = "HISTORICAL";
+            return;
+        }
+
+        _guidanceLabel.Text = "MANUAL";
+    }
+
+    private void UpdateBoosterLine()
+    {
+        string? line = BoosterReturnController.Instance?.StatusLine;
+        _boosterLabel.Text = string.IsNullOrEmpty(line) ? "" : line!;
+    }
 
     private void UpdateDensityToast(double delta)
     {
@@ -919,21 +1000,24 @@ public partial class HUDController : Control
         _phaseLabel.Visible = banner;
         _launchPathLabel.Visible = banner;
         _guidanceLabel.Visible = banner && _guidanceLabel.Text.Length > 0;
+        _boosterLabel.Visible = banner && _boosterLabel.Text.Length > 0;
         _navRow.Visible = banner && full;
         _phaseTrack.Visible = banner;
         _countdownRoot.Visible &= (exterior || cockpit) && !clean;
 
+        // Attitude cluster (navball + child engines/strip) in every exterior density.
+        bool cluster = exterior;
         bool instruments = exterior && !clean;
         _objectives.DensityAllowed = instruments;
-        _engineGrid.ProcessMode = instruments
+        _navball.Visible = cluster;
+        _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
-        _navball.ProcessMode = exterior
-            ? ProcessModeEnum.Inherit
-            : ProcessModeEnum.Disabled;
-        if (_engineGrid is CanvasItem engineCanvas) engineCanvas.Visible = instruments;
-        // The navball survives CLEAN: it is the one instrument you cannot fly without.
-        if (_navball is CanvasItem navCanvas) navCanvas.Visible = exterior;
+        _engineGrid.Visible = cluster;
+        _attitudeStrip.Visible = cluster;
+        _engineGrid.ApplyDensityLayout();
+        // Sit above the SPEED/ALT band in Minimal/Full; drop lower when Clean hides it.
+        _navball.SetClusterBottomOffset(clean ? -36f : -108f);
     }
 
     private bool HasCriticalAlert() =>
@@ -1044,9 +1128,11 @@ public partial class HUDController : Control
 
     private void UpdatePadHelp(MissionManager mission)
     {
-        // Auto-hide is a ONE-SHOT at liftoff, not a per-frame veto: [F1] must be able to
-        // bring the key list back at any point in the flight (C5).
-        if (!_padHelpAutoDismissed && mission.Phase >= MissionPhase.LIFTOFF)
+        // Auto-hide once the stack leaves the pad. Phase>=LIFTOFF alone was not enough:
+        // a WASD soft-disengage during IGNITION could leave MissionManager stuck in
+        // IGNITION after clamps released, so this overlay covered the attitude cluster
+        // for the whole climb. Also dismiss on altitude / ground-hold clear.
+        if (!_padHelpAutoDismissed && ShouldAutoDismissPadHelp(mission))
         {
             _padHelpAutoDismissed = true;
             _padHelpDismissed = true;
@@ -1054,6 +1140,26 @@ public partial class HUDController : Control
 
         _padHelpRoot.Visible = !_padHelpDismissed
             && _snapshot?.ViewMode == FlightHudViewMode.Exterior;
+    }
+
+    private static bool ShouldAutoDismissPadHelp(MissionManager mission)
+    {
+        // Dismiss as soon as the launch sequence commits (IGNITION+), not only after
+        // LIFTOFF — otherwise the sheet sits over the attitude cluster through spool-up.
+        if (mission.Phase >= MissionPhase.IGNITION)
+            return true;
+
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        if (vessel == null || universe == null)
+            return false;
+
+        if (!vessel.IsGroundHeld && mission.Phase is not MissionPhase.PRE_LAUNCH)
+            return true;
+
+        var body = universe.GetDominantBody(vessel.Position);
+        return vessel.GetAltitude(body) > 80.0;
     }
 
     private void UpdateLaunchPathCallout(
@@ -1079,8 +1185,9 @@ public partial class HUDController : Control
         if (bridge.IsIgnitionActive && !mission.IsCountingDown)
         {
             double twr = snapshot.ThrustToWeightRatio;
-            _launchPathLabel.Text = twr <= 1.02
-                ? $"MANUAL STARTUP / HOLD (TWR {twr:F2} < 1.02)"
+            double gate = HoldDownReleasePolicy.MinThrustToWeight;
+            _launchPathLabel.Text = twr <= gate
+                ? $"MANUAL STARTUP / HOLD (TWR {twr:F2} < {gate:F2})"
                 : "MANUAL STARTUP / RELEASING CLAMPS";
             _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
             return;
@@ -1089,12 +1196,13 @@ public partial class HUDController : Control
         if (mission.IsCountingDown)
         {
             double twr = snapshot.ThrustToWeightRatio;
+            double gate = HoldDownReleasePolicy.MinThrustToWeight;
             if (mission.Phase == MissionPhase.IGNITION
                 && snapshot.IsGroundHeld
-                && twr <= 1.02)
+                && twr <= gate)
             {
                 _launchPathLabel.Text = mission.CountdownTimer <= 0.0
-                    ? $"AUTO SEQUENCE / HOLD (TWR {twr:F2} < 1.02)"
+                    ? $"AUTO SEQUENCE / HOLD (TWR {twr:F2} < {gate:F2})"
                     : "AUTO SEQUENCE / ENGINE START";
                 _launchPathLabel.AddThemeColorOverride("font_color", WarnCol);
             }

@@ -28,9 +28,16 @@ public class LifeSupportSystem
     public double GetEcLoadKw(int crewCount, SystemsMissionPhase phase)
     {
         if (crewCount <= 0 || !CrewAlive) return 0.0;
-        return phase == SystemsMissionPhase.Active
-            ? EcLoadPerCrewActiveKw * crewCount
-            : EcLoadStandbyKw;
+        if (phase == SystemsMissionPhase.Idle) return EcLoadStandbyKw;
+
+        double perCrew = EcLoadPerCrewActiveKw * phase switch
+        {
+            SystemsMissionPhase.HighLoad => 1.2,
+            SystemsMissionPhase.Entry => 1.3,
+            SystemsMissionPhase.PeakHeating => 1.5,
+            _ => 1.0, // Active / cruise
+        };
+        return perCrew * crewCount;
     }
 
     public void Tick(double dt, int crewCount, SystemsMissionPhase phase = SystemsMissionPhase.Active)

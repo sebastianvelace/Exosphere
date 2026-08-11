@@ -1182,8 +1182,8 @@ public partial class VesselRenderer : Node3D
             Vector3d up = (TargetVessel.Position - body.Position).Normalized;
             Vector3d surfaceVelocity = TargetVessel.GetSurfaceVelocity(body);
             radialSpeed = surfaceVelocity.Dot(up);
-            heatFlux = ThermalModel.ComputeHeatFlux(
-                body.GetAtmosphericDensity(TargetVessel.Position), surfaceVelocity.Magnitude);
+            heatFlux = TargetVessel.ComputeStagnationHeatFlux(
+                body.GetAtmosphericDensity(TargetVessel.Position), surfaceVelocity);
         }
         double hottestSkin = TargetVessel.Parts.Parts.Count > 0
             ? TargetVessel.Parts.Parts.Max(p => p.SkinTemperature)

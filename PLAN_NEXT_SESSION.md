@@ -18,7 +18,10 @@ The next session should **not** open large new systems. Highest ROI is:
 2. **Close the V0.5 audit gap** — compare hot-staging, startup, and reentry captures against real IFT/Flight 7 references; tune only what the diff shows.
 3. **Ship reentry lighting + zone charring** — blocked today because the harness cannot produce a belly-flop EDL frame for before/after verification.
 
-Physics backlog: R5 torque-from-mount-geometry and R5c (torque as unpiloted attitude disturbance) are now closed. The Ship's tower catch shipped (`ffaa1e4`) using the pre-existing idealized full-authority estimate, not R5b — it did not wait on R5b/R5c. R5b (differential per-mount TVC) and R12 (booster boostback + catch) are now an active, explicitly prioritized tranche — terminar Mechazilla by finishing the booster's half of the tower catch — rather than deferred non-goals. Over-engineering cleanup (dead NavBall, duplicate warp) is a low-risk parallel lane.
+Physics backlog: R5/R5b/R5c/R5d are closed. Mechazilla Ship catch + booster return (R12
+boostback/entry/catch + HUD) are landed. Over-engineering cleanup (dead NavBall, duplicate
+warp) is a low-risk parallel lane. Apollo 11 TD&E + docked LOI (circular LLO) are
+landed — next large gameplay slice is DOI / powered descent / surface.
 
 ---
 
@@ -190,25 +193,23 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Realism feel** | An engine-out failure now has a real, geometry-correct torque signature instead of just less thrust — the first building block for engine-out, asymmetric thrust, and real boostback. |
 | **Status** | **DONE** this session. Remaining scope split into P-P6b/P-P6c below (both smaller than the original "LARGE" estimate). |
 
-### P-P6b. Differential per-mount TVC commanding — NEW (open)
+### P-P6b. Differential per-mount TVC commanding — DONE
 
 | | |
 | --- | --- |
-| **Evidence** | `Vessel.Tick` still mirrors ONE gimbal command to every gimballed mount in a part; real differential TVC (each engine gimballing independently to null a desired torque) is not implemented. Identified as follow-up during P-P6 design, not implemented. |
-| **Owner** | `ExosphereSimulation/Vessel.cs` (Tick gimbal-command dispatch), `ExosphereSimulation/Parts/*` |
-| **Acceptance** | Given a target torque, each gimballed mount receives its own deflection command (not a shared scalar); xUnit shows differential commands null a synthetic disturbance torque; nominal symmetric-cluster steering unchanged. |
-| **Realism feel** | Enables real boostback/hover-slam attitude control instead of one shared gimbal angle across a whole cluster. |
-| **Status** | Open — smaller, separate follow-up from P-P6. Blocks R12 boostback + tower catch alongside P-P6c. |
+| **Evidence** | `aa408e7` — `PartGraph.SolveDifferentialGimbal` + `GetDifferentialTVCAngularAccelerationEnvelope`; `Vessel.Tick` sizes desired torque from the deliverable envelope and commands each live gimballed mount independently. `DifferentialTVCTests.cs`. |
+| **Owner** | `ExosphereSimulation/Vessel.cs`, `ExosphereSimulation/Parts/*` |
+| **Acceptance** | ✅ Per-mount commands; assembled Flight 7 authority regressions; `[G]` ascent and EDL flip green. |
+| **Status** | **DONE**. Unblocks R12 booster boostback/catch. |
 
-### P-P6c. Wire `GetTotalTorque` as unconditional attitude disturbance — NEW (open)
+### P-P6c. Wire `GetTotalTorque` as attitude disturbance — DONE
 
 | | |
 | --- | --- |
-| **Evidence** | `GetTotalTorque` is correct and tested but not consumed in `Vessel.Tick`; the angular-acceleration block there is still gated behind `hasInput` (active pilot/SAS steering), so today an engine-out produces zero attitude effect while idle even though genuine torque is now computable. |
-| **Owner** | `ExosphereSimulation/Vessel.cs` (Tick angular-acceleration block) |
-| **Acceptance** | An idle vessel (no pilot/SAS input) with an asymmetric engine failure rotates under RK4 per `GetTotalTorque`; existing `hasInput` steering paths unchanged; R13 nominal EDL/ascent telemetry unaffected. |
-| **Realism feel** | An engine-out should visibly tumble an unpiloted stage, not silently do nothing until the player touches the stick. |
-| **Status** | Open — smaller, separate follow-up from P-P6. |
+| **Evidence** | `f68ca7c` (unpiloted) + `aa408e7` (unified with piloted path once R5b removed the double-count risk). |
+| **Owner** | `ExosphereSimulation/Vessel.cs` |
+| **Acceptance** | ✅ Idle asymmetric engine-out rotates; piloted path uses real per-mount torque + RCS floor. |
+| **Status** | **DONE**. |
 
 ---
 
@@ -231,7 +232,7 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Owner** | `ExosphereSimulation/Flight/MissionPhaseTrack.cs`, `scripts/HUDController.cs`, `MissionManager.cs`, `AudioManager.cs` |
 | **Acceptance** | Phase track lights deorbit/EDL slots; COAST driven by AutopilotController (unchanged); THERMAL panel untouched. |
 | **Realism feel** | After SECO the player still sees a mission arc through entry — not a silent coast into fire. |
-| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. Ship tower catch also landed (`ffaa1e4`), on the pre-existing idealized gimbal authority. **Remaining:** IFT reference compare (harness now exists via `--hotstage`/`--reentry-compare`); R5b differential TVC (R5c is done) and R12 booster boostback/catch are in progress, not blocked. |
+| **Status** | **DONE** (oleada C3 + control-loss + visual A). Oleada B+C landed: save/load, deorbit→ENTRY, phase cues, structural breakup, LEO warp decay, hot-stage overlap, control-loss authority. Visual A: plasma phase intensity, flap/nose V1.1, deluge silhouette. Ship tower catch landed (`ffaa1e4`); R5b/R5d landed. **Remaining:** deeper IFT side-by-side reference judgment; R12 booster boostback/catch. |
 
 ### G-P2. VAB pre-launch validation pass
 
@@ -251,13 +252,13 @@ instead of pure broadside. Do not reopen without regression proof against R13 te
 | **Acceptance** | One scripted mission: "Reach 150 km orbit and deorbit to soft landing." Success/fail banner with phase checklist. Telemetry log exported on completion. *(Prerequisite path ORBIT→deorbit→ENTRY is C2 DONE.)* |
 | **Realism feel** | A mission has a beginning, middle, and end — like Flight 7's objective, not sandbox forever. |
 
-### G-P4. Systems tied to mission phases (R11)
+### G-P4. Systems tied to mission phases (R11) — ✅
 
 | | |
 | --- | --- |
-| **Evidence** | `SystemsController.cs` simulates life/power/comms/thermal; not phase-wired (`.atl/DELEGATION_JUL2026.md:22`). |
-| **Owner** | `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs` |
-| **Acceptance** | Eclipse → solar power drop; comms delay scales with distance; HUD shows consequences. xUnit on power in shadow. |
+| **Evidence** | Phase map Idle/Active/HighLoad/Entry/PeakHeating; eclipse→solar; LS+avionics EC by phase; aero→cabin thermal; `GroundCommandRelay` delays HUD stick/throttle; SystemsHUD ground-delay/blackout cues. |
+| **Owner** | `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`, `HUDController.cs`, `SystemsHUD.cs` |
+| **Acceptance** | Eclipse → solar power drop; comms delay scales with distance and delays ground commands; HUD shows consequences. xUnit on power/thermal/relay. |
 | **Realism feel** | Orbital ops have constraints — the player manages power and comms like a real flight director. |
 
 ### G-P5. VAB UX backlog (lower priority)
@@ -289,8 +290,8 @@ From `.atl/OVERENGINEERING_AUDIT_JUL2026.md`. Safe parallel lane — does not ch
 
 | Non-goal | Why |
 | --- | --- |
-| ~~**R5b/R5c differential TVC + torque wiring, engine-out gameplay**~~ | Superseded: R5c is done; R5b + R12 are now an actively prioritized tranche (Ship catch already shipped without waiting on either) |
-| ~~**R12 boostback + Mechazilla catch**~~ | Superseded: does not depend on R5b/R5c — the Ship half of the catch shipped first; the booster half (boostback + catch) is now in progress after R5b |
+| ~~**R5b/R5c differential TVC + torque wiring**~~ | Closed: R5b (`aa408e7`) and R5c (`f68ca7c`) are done |
+| ~~**R12 Ship Mechazilla catch**~~ | Closed (`ffaa1e4`). Booster half remains an active gameplay item, not a non-goal |
 | **VAB rewrite** | V1.5 works; gizmos are incremental |
 | **Global tonemap / ACES experiments** | Proven to subexpose orbit (`PLAN_PLAYTEST.md` B1) |
 | **Retune drag/heating for VFX** | Physics serves telemetry, not screenshots |

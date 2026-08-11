@@ -33,7 +33,7 @@
 | Crew model | `CrewMember.cs` | **Never populated** | ❌ phantom |
 | Multi-vessel sim | `Universe.Vessels`, staging debris | **Active vessel only** | ⚠️ visual debris only |
 | Lua mission scripts | `lua_scripts/gravity_turn_launch.lua` | **No runtime** | ❌ dead doc |
-| Booster recovery | ROADMAP R12 | Blocked on R5 | ⬜ deferred |
+| Booster recovery | ROADMAP R12 | Boostback + entry + catch + HUD | ✅ |
 
 ---
 
@@ -69,15 +69,13 @@
 | **Recommendation** | Populate crew from mission JSON or Starship command part; crew panel in HUD; mission fail on crew loss for crewed missions. |
 | **Owner** | `CrewMember.cs`, `Vessel.cs`, `SimulationBridge.SpawnStarshipStack`, `SystemsController.cs` |
 
-### G-004 — Comms delay and LOS are display-only, not gameplay (P1)
+### G-004 — Comms delay and LOS are display-only, not gameplay (P1) — ✅ partial (R11)
 
 | | |
 |---|---|
-| **Evidence** | `CommsSystem` computes `SignalDelaySeconds`, LOS, strength (`CommsSystem.cs:16-34`). `SystemsHUD` shows delay label (`SystemsHUD.cs:55-60`). `ControlLimited` triggers on `!Comms.HasSignal` (`SystemsController.cs:67-77`) — binary SAS/autopilot abort, not delayed commands. |
-| **Gap** | Player input is instant at Moon distance; delay never affects throttle/attitude commands. No ground-station window, no reentry blackout as distinct comms phase. R11 partially done (eclipse→power) but comms gameplay deferred per `DELEGATION_JUL2026.md:22`. |
-| **Impact** | Flight-director tension (one-way light time, blackout) missing. |
-| **Recommendation** | Command queue with `SignalDelaySeconds` latency for non-critical inputs; optional "ground assist" mode requiring `HasSignal`; reentry comms fade tied to plasma phase. |
-| **Owner** | `CommsSystem.cs`, `SystemsController.cs`, `SimulationBridge.cs` input path |
+| **Evidence** | `GroundCommandRelay` delays HUD attitude/throttle by `SignalDelaySeconds`; uplink drops when `!HasSignal` (LOS + plasma blackout). Onboard Ascent/EDL bypass the relay. SystemsHUD shows `GROUND DELAY` / `BLACKOUT` / `LOS`. Geometric LOS still trips `ControlLimited`; blackout does not. |
+| **Remaining** | No discrete ground-station window scheduling; blackout is still not a separate mission phase banner beyond SystemsHUD. |
+| **Owner** | `GroundCommandRelay.cs`, `SystemsController.cs`, `HUDController.cs` |
 
 ### G-005 — Failure states lack durable mission consequences (P1)
 
@@ -119,14 +117,12 @@
 | **Recommendation** | `VesselAssembly.ComputeMetrics` gate: TWR ≥ 1.0, ≥1 engine, decoupler if multi-stage; block launch with readable errors. |
 | **Owner** | `ConstructionController.cs`, `VesselAssembly.cs` |
 
-### G-009 — Systems partially phase-wired; R11 still open (P1)
+### G-009 — Systems partially phase-wired; R11 still open (P1) — ✅ (R11)
 
 | | |
 |---|---|
-| **Evidence** | Eclipse→solar cut tested (`SystemsMissionPhaseTests.cs:34-46`). Life-support idle vs active by `MissionPhase` (`SystemsController.cs:81-85`). `DELEGATION_JUL2026.md:22` still marks R11 ⬜. Thermal not phase-aware; comms not gameplay (G-004). |
-| **Gap** | Reentry heating does not drive cabin thermal alerts; long coast does not force power budgeting decisions beyond passive drain. |
-| **Impact** | Systems HUD is monitoring, not mission-critical resource management. |
-| **Recommendation** | Phase hooks: `PEAK_HEATING` → thermal spike; `ORBIT` coast → eclipse power puzzles; mission fail on prolonged `NoPowerAlert` if objective requires comms. |
+| **Evidence** | `SystemsMissionPhase` Idle/Active/HighLoad/Entry/PeakHeating; LS+avionics EC; aero→cabin thermal; eclipse power; `SystemsMissionPhaseTests`. |
+| **Remaining** | Mission-fail on prolonged `NoPowerAlert` still optional; RTG/fuel-cell not modeled. |
 | **Owner** | `SystemsController.cs`, `ExosphereSimulation/Systems/*` |
 
 ### G-010 — Lua autopilot script is documentation only (P2)
@@ -189,13 +185,13 @@
 | **Recommendation** | After G-002 scaffold, add `MissionType.Interplanetary` with SOI-crossing checkpoints. |
 | **Owner** | `MissionManager.cs`, `TransferPlanner.cs` |
 
-### G-017 — Booster return / tower catch absent (P2, in progress)
+### G-017 — Booster return / tower catch (P2) — ✅ R12
 
 | | |
 |---|---|
-| **Evidence** | The Ship half of the tower catch shipped (`ffaa1e4`): `EDLController` `Catch`/`Caught` phases, `Vessel.IsCaught`/`CatchContactPoints`, `SurfaceContactSolver.FromCatchCradle`. The booster still separates as inert debris — no boostback, no controlled reentry, no catch. R5 multi-motor lifecycle/torque is closed; only R5b (differential per-mount TVC) remains as a real prerequisite, for the asymmetric-thrust hover-slam the booster needs. |
-| **Recommendation** | R5b then R12-booster is an actively scheduled tranche (reusing the Ship's catch infrastructure), not deferred. |
-| **Owner** | `scripts/BoosterReturnController.cs` (new), `ExosphereSimulation/Parts/PartGraph.cs`, `LaunchComplexSpec.cs` |
+| **Evidence** | Ship catch + booster boostback → entry burn (13) → catch (3); HUD `BOOSTER` line; outbound cutoff + IFT Δv budget gate in `BoosterReturnGuidanceTests`. |
+| **Remaining** | Optional: divert-to-Gulf abort; wall-clock boostback vs IFT timeline compare in playtest harness. |
+| **Owner** | `scripts/BoosterReturnController.cs`, `ExosphereSimulation/Flight/BoosterReturnGuidance.cs` |
 
 ### G-018 — Craft persistence separate from mission persistence (P1)
 

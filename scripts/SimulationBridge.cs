@@ -75,8 +75,11 @@ public partial class SimulationBridge : Node
 
     private LaunchSite? _launchSite;
 
+    /// <summary>Active launch site, if the configured id resolved from data.</summary>
+    public LaunchSite? LaunchSiteOrNull => _launchSite;
+
     // ── Ignition ramp state ───────────────────────────────────────────────
-    // True while Ignite() is spooling up and waiting for TWR > 1.02 to release the hold-down.
+    // True while Ignite() is spooling up and waiting for the commit-to-launch gate.
     private bool   _ignitionActive  = false;
     // Throttle rate used during the ignition ramp (throttle units per second).
     private const double IgnitionRampRate = 0.5;
@@ -139,6 +142,9 @@ public partial class SimulationBridge : Node
 
             var ascent = new AscentController { Name = "AscentController" };
             uiLayer.CallDeferred("add_child", ascent);
+
+            var boosterReturn = new BoosterReturnController { Name = "BoosterReturnController" };
+            uiLayer.CallDeferred("add_child", boosterReturn);
 
             var historical = new HistoricalFlightProfileController
             {
@@ -234,7 +240,16 @@ public partial class SimulationBridge : Node
             bool boundedEntry = Universe.RequiresBoundedWarpPropagation(av);
             bool atmosphericZone = refB.Atmosphere != null
                 && av.GetAltitude(refB) <= refB.Atmosphere.MaxAltitude * 1.05;
-            if (av.Throttle > 0.01)
+            var missionPhase = MissionManager.Instance?.Phase;
+            // Real-time only through tower clear — atmospheric ×3 warp made pad liftoff
+            // feel like a snap even with correct TWR.
+            if (missionPhase is MissionPhase.COUNTDOWN
+                or MissionPhase.IGNITION
+                or MissionPhase.LIFTOFF)
+            {
+                MaxAllowedWarpIndex = 0;
+            }
+            else if (av.Throttle > 0.01)
             {
                 // Warp IS allowed while thrusting now — the active vessel stays on RK4 with a
                 // bounded sub-step (Universe.MaxThrustStep) so the burn is physics-faithful.
@@ -247,7 +262,7 @@ public partial class SimulationBridge : Node
                     ActiveFlightProfileId is
                         MercuryAtlasFlightProfile.Id
                         or Gemini8FlightProfile.Id
-                    && MissionManager.Instance?.Phase is MissionPhase.ORBIT
+                    && missionPhase is MissionPhase.ORBIT
                         or MissionPhase.COAST
                     && av.GetAltitude(refB) > 120_000.0;
                 MaxAllowedWarpIndex = forceSensitive
@@ -271,7 +286,7 @@ public partial class SimulationBridge : Node
             av = ActiveVessel;
         }
 
-        // ── Ignition ramp: sube throttle y suelta hold-down cuando TWR > 1.02 ──────
+        // ── Ignition ramp: spool throttle; release only at commit-to-launch ──────
         if (_ignitionActive && av != null)
         {
             // Avanzar el throttle comandado hacia 1.0 a una tasa controlada
@@ -279,20 +294,18 @@ public partial class SimulationBridge : Node
 
             if (av.IsGroundHeld)
             {
-                // Verificar si el empuje actual ya supera la gravedad local × 1.02
                 var refB2 = Universe.GetDominantBody(av.Position);
                 if (refB2 != null && av.TotalMass > 0.0)
                 {
                     double twr = av.GetThrustToWeightRatio(refB2);
-                    if (twr > 1.02)
+                    if (HoldDownReleasePolicy.CanRelease(twr, av.Throttle))
                     {
                         av.ReleaseGroundHold();
-                        // Lanzamiento manual: al soltar los clamps por primera vez, arranca la FSM
-                        // de misión (PRE_LAUNCH → LIFTOFF). BeginFlight() es idempotente, así que
-                        // no pasa nada si la misión ya despegó por [L] (countdown).
-                        // Manual launch: kick the mission FSM off PRE_LAUNCH the moment the clamps
-                        // release. BeginFlight() is idempotent, so [L]/countdown launches are safe.
+                        // PRE_LAUNCH → LIFTOFF (manual [Z]); IGNITION → LIFTOFF ([L]/[G]).
+                        // BeginFlight alone left countdown/ignition missions stuck in IGNITION
+                        // after a WASD soft-disengage, which also kept MISSION CONTROLS up.
                         MissionManager.Instance?.BeginFlight();
+                        MissionManager.Instance?.NotifyHoldDownReleased();
                     }
                 }
             }
@@ -332,14 +345,20 @@ public partial class SimulationBridge : Node
             // frame from the same site/spec data the render tower uses — the tower is
             // bolted to a rotating body, so a target computed once at arm time would drift
             // away under it exactly like the render pad would without this same refresh.
-            if (ActiveVessel!.IsAttemptingTowerCatch && _launchSite != null)
+            // R12: refresh EVERY vessel attempting a catch (Ship or returning booster),
+            // not only ActiveVessel — the booster return flies while Ship stays active.
+            if (_launchSite != null)
             {
                 var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
                     _launchSite, padEarth, time);
-                ActiveVessel.CatchTargetPositionWorld = cradle;
-                ActiveVessel.CatchTargetUpWorld = up;
-                ActiveVessel.CatchTargetVelocityWorld =
-                    padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
+                var cradleVel = padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
+                foreach (var vessel in Universe.Vessels)
+                {
+                    if (!vessel.IsAttemptingTowerCatch) continue;
+                    vessel.CatchTargetPositionWorld = cradle;
+                    vessel.CatchTargetUpWorld = up;
+                    vessel.CatchTargetVelocityWorld = cradleVel;
+                }
             }
         }
     }
@@ -349,9 +368,14 @@ public partial class SimulationBridge : Node
     /// false) if the vessel does not carry catch-pin hardpoints — most vehicles, and every
     /// non-V3 Starship, always fall through to the normal leg landing untouched.
     /// </summary>
-    public bool ArmTowerCatchApproach()
+    public bool ArmTowerCatchApproach() => ArmTowerCatchApproach(ActiveVessel);
+
+    /// <summary>
+    /// Arms a tower catch for an explicit vessel (R12 booster return while Ship remains
+    /// the active/piloted vessel).
+    /// </summary>
+    public bool ArmTowerCatchApproach(Vessel? vessel)
     {
-        var vessel = ActiveVessel;
         if (vessel == null || !vessel.HasCatchPins) return false;
         vessel.IsAttemptingTowerCatch = true;
         return true;
@@ -695,14 +719,16 @@ public partial class SimulationBridge : Node
     // ── Ignition / throttle contracts (consumed by HUDController / Agente E) ─
 
     /// <summary>
-    /// True while Ignite() is ramping up thrust and waiting for TWR &gt; 1.02 to release
-    /// the hold-down clamps. Resets once the vessel lifts off and throttle reaches 1.0.
+    /// True while Ignite() is ramping up thrust and waiting for the commit-to-launch
+    /// gate (TWR &gt; 1.05 and throttle ≥ 0.95). Resets once the vessel lifts off and
+    /// throttle reaches 1.0.
     /// </summary>
     public bool IsIgnitionActive => _ignitionActive;
 
     /// <summary>
     /// Secuencia de ignición: arranca la rampa de throttle comandado hacia 1.0 y suelta
-    /// los hold-downs automáticamente cuando TWR &gt; 1.02.
+    /// los hold-downs automáticamente al commit-to-launch
+    /// (<see cref="HoldDownReleasePolicy"/>).
     /// Si el vessel ya está en vuelo, fija el throttle al máximo de inmediato.
     /// </summary>
     public void Ignite()
@@ -847,6 +873,54 @@ public partial class SimulationBridge : Node
         SpawnDebrisRenderer(target, "Target_");
         GD.Print("[HISTORICAL] Agena 5003 acquired in its 161.3 nmi target orbit.");
         return target;
+    }
+
+    /// <summary>
+    /// After CSM/S-IVB separation, extract LM-5 Eagle from the opaque SLA envelope,
+    /// carve its wet mass out of the SLA dry mass, and spawn Eagle as a dockable vessel.
+    /// </summary>
+    public Vessel? EnsureApollo11EagleExtracted()
+    {
+        const string eagleId = Exosphere.Simulation.Flight.Apollo11FlightProfile.EagleVesselId;
+        var existing = Universe.Vessels.FirstOrDefault(v => v.Id == eagleId);
+        if (existing != null) return existing;
+
+        var slaHost = Universe.Vessels.FirstOrDefault(v =>
+            v.Parts.Parts.Any(part =>
+                part.Definition.HasVehicleRole("sla_lunar_module")));
+        if (slaHost == null) return null;
+
+        var sla = slaHost.Parts.Parts.First(part =>
+            part.Definition.HasVehicleRole("sla_lunar_module"));
+        sla.MassDryOffset =
+            Exosphere.Simulation.Flight.Apollo11FlightProfile.EmptySlaDryMassKg
+            - sla.Definition.MassDry;
+
+        string dataPath = ProjectSettings.GlobalizePath(DataDirectory);
+        var catalog = PartCatalog.LoadFromDirectory(
+            System.IO.Path.Combine(dataPath, "parts"));
+        var variant = VehicleVariantDefinition.LoadFromJson(
+            System.IO.Path.Combine(
+                dataPath, "vehicles", "apollo11_lm5_eagle_1969.json"));
+        var eagle = variant.Build(catalog).ToVessel("LM-5 Eagle", eagleId);
+
+        // Place Eagle just ahead of the SLA nose along the host +Y thrust/stack axis.
+        Vector3d forward = slaHost.Orientation.Rotate(Vector3d.Up).Normalized;
+        eagle.Position = slaHost.Position + forward * 12.0;
+        eagle.Velocity = slaHost.Velocity;
+        eagle.Orientation = slaHost.Orientation;
+        eagle.AngularVelocity = Vector3d.Zero;
+        eagle.ReferenceBodyId = slaHost.ReferenceBodyId;
+        eagle.IsOnRails = false;
+        eagle.OrbitalState = null;
+        eagle.SASEnabled = true;
+        eagle.Throttle = 0.0;
+        Universe.AddVessel(eagle);
+        SpawnDebrisRenderer(eagle, "Eagle_");
+        GD.Print(
+            $"[HISTORICAL] LM-5 Eagle extracted from SLA "
+            + $"(SLA shell {Exosphere.Simulation.Flight.Apollo11FlightProfile.EmptySlaDryMassKg:F0} kg).");
+        return eagle;
     }
 
     public Vector3d GetLaunchHeadingDirection()

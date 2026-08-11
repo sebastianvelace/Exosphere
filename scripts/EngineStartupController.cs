@@ -69,7 +69,7 @@ public partial class EngineStartupController : Node3D
         float target = targetThrottle <= 0.01f ? 0f : Mathf.Clamp(targetThrottle, 0f, 1f);
         target = Mathf.Pow(target, 0.65f);
 
-        float rate = target > _intensity ? 5.5f : 2.2f;
+        float rate = target > _intensity ? 4.2f : 2.0f;
         _intensity = Mathf.Lerp(_intensity, target, Mathf.Clamp((float)delta * rate, 0f, 1f));
 
         if (_intensity <= 0.01f)
@@ -92,8 +92,8 @@ public partial class EngineStartupController : Node3D
         {
             _flareCone.Visible = true;
             _flareCone.Scale = new Vector3(1.25f + 1.2f * k, 3.0f + 4.8f * k, 1.25f + 1.2f * k);
-            _flareMat.AlbedoColor = new Color(0.95f, 0.56f, 0.18f, 0.16f + 0.36f * k);
-            _flareMat.EmissionEnergyMultiplier = 2.8f + 5.2f * k;
+            _flareMat.AlbedoColor = new Color(0.95f, 0.56f, 0.18f, 0.18f + 0.40f * k);
+            _flareMat.EmissionEnergyMultiplier = 3.2f + 5.8f * k;
         }
 
         if (_deckGlow != null && _deckMat != null)

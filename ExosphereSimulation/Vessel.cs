@@ -908,6 +908,10 @@ public class Vessel
         if (detached.Root != null) debris.Parts.SetRoot(detached.Root);
         foreach (var p in detached.Parts) debris.Parts.AddPart(p);
         foreach (var j in detached.Joints) debris.Parts.AddJoint(j);
+        // Parity with DeployPayload: staged debris (Super Heavy) must inherit catch /
+        // landing contact geometry declared on its parts so R12 can arm a tower catch.
+        debris.ConfigureLandingContactsFromParts();
+        debris.ConfigureCatchContactsFromParts();
         return debris;
     }
 

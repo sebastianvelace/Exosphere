@@ -1,5 +1,6 @@
 namespace Exosphere.Game;
 
+using System.Linq;
 using Godot;
 using Exosphere.Simulation;
 
@@ -67,7 +68,9 @@ public partial class LaunchPadController : Node3D
     {
         if (_chopstickArmNodes.Count == 0) return;
 
-        bool caught = SimulationBridge.Instance?.ActiveVessel?.IsCaught ?? false;
+        // R12: a returning booster can be caught while Ship remains ActiveVessel.
+        bool caught = SimulationBridge.Instance?.Universe.Vessels
+            .Any(v => v.IsCaught) ?? false;
         float target = caught ? 1f : 0f;
         const float closeSpeedPerSecond = 0.8f;   // ~1.25 s for a full open<->close sweep
         _chopstickCloseAmount = Mathf.MoveToward(

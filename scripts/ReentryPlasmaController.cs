@@ -175,13 +175,13 @@ public partial class ReentryPlasmaController : Node3D
             (float)intensity * concentr * hudGuard * dangerMul * flicker, 0f, 1f);
         _shockMat.SetShaderParameter("heat_level", heatLevel);
 
-        _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f,
-            (float)(intensity * 0.16f) * Mathf.Lerp(0.50f, 1.0f, misalign));
-        _wakeMat.EmissionEnergyMultiplier = (float)(0.7 + intensity * 1.4);
+        float wakeAlpha = (float)(intensity * 0.20f) * Mathf.Lerp(0.55f, 1.0f, misalign);
+        _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f, wakeAlpha);
+        _wakeMat.EmissionEnergyMultiplier = (float)(0.85 + intensity * 1.7);
 
         // Windward cap: flatten along the flow (thin, wide bow shock) and grow with flux.
-        float sizeScale = Mathf.Lerp(0.62f, 1.08f, (float)intensity);
-        float flatten   = Mathf.Lerp(0.85f, 0.45f, align);       // belly-first = thinner cap
+        float sizeScale = Mathf.Lerp(0.62f, 1.12f, (float)intensity);
+        float flatten   = Mathf.Lerp(0.85f, 0.42f, align);       // belly-first = thinner cap
         // Mesh local +Y now points along the flow (set by OrientYAxis above), so
         // squash Y to press the cap onto the windward face.
         _shock.Scale = new Vector3(sizeScale * (1f + 0.4f * align), sizeScale * flatten, sizeScale * (1f + 0.4f * align));
@@ -268,9 +268,9 @@ public partial class ReentryPlasmaController : Node3D
         float edgeBase = Mathf.Clamp((intensity - 0.08f) / 0.92f, 0f, 1f);
         float focus = Mathf.Lerp(0.58f, 1.0f, align);
         float misalign = 1f - align;
-        float noseBoost  = Mathf.Lerp(0.55f, 1.05f, misalign);
+        float noseBoost  = Mathf.Lerp(0.55f, 1.20f, misalign);
         float bellyScale = Mathf.Lerp(0.38f, 0.95f, align);
-        float flapBoost  = Mathf.Lerp(0.70f, 1.15f, misalign);
+        float flapBoost  = Mathf.Lerp(0.75f, 1.25f, misalign);
 
         foreach (var edge in _edgeGlows)
         {
@@ -290,9 +290,9 @@ public partial class ReentryPlasmaController : Node3D
             };
             float alphaCap = edge.Kind switch
             {
-                EdgeKind.Nose  => 0.40f,
-                EdgeKind.Belly => 0.24f,
-                EdgeKind.Flap  => 0.36f,
+                EdgeKind.Nose  => 0.46f,
+                EdgeKind.Belly => 0.22f,
+                EdgeKind.Flap  => 0.40f,
                 _              => 0.45f,
             };
 
@@ -311,7 +311,7 @@ public partial class ReentryPlasmaController : Node3D
 
             edge.Mat.AlbedoColor = col;
             edge.Mat.Emission = new Color(col.R, col.G, col.B);
-            edge.Mat.EmissionEnergyMultiplier = (2.0f + 8.0f * k) * exposure;
+            edge.Mat.EmissionEnergyMultiplier = (2.2f + 8.5f * k) * exposure;
         }
     }
 

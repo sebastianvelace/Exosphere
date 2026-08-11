@@ -192,11 +192,17 @@ equivocada hace la órbita.
 - **Aceptación:** ✅ suite 369/369 (antes 362); un motor fuera de eje produce torque neto, no sólo
   pérdida de empuje proporcional; el fallo de un motor diametralmente opuesto cancela a ~cero.
 
-### R5b. TVC diferencial por motor — pendiente (abierto)
-- **Hoy:** `Vessel.Tick` sigue reflejando UN comando de gimbal a todos los mounts gimballed de una
-  parte; no hay TVC diferencial real (cada motor gimballando de forma independiente para anular un
-  torque deseado).
-- **Aceptación:** cada mount gimballed recibe su propio comando derivado del torque objetivo.
+### R5b. TVC diferencial por motor — ✅ HECHO
+- **Fix aplicado:** `PartGraph.SolveDifferentialGimbal` asigna un comando de gimbal por mount
+  (mínimo-norma sobre el Jacobiano de palanca/empuje de cada instancia viva y gimballed,
+  regularizado). `Vessel.Tick` dimensiona el torque deseado con
+  `GetDifferentialTVCAngularAccelerationEnvelope` (solo mounts que el solver puede comandar)
+  y aplica el torque real por geometría en ambas ramas (con y sin input), con suelo RCS.
+  Suite: `DifferentialTVCTests.cs` + regresiones de autoridad en stack Flight 7 ensamblado.
+- **Archivos:** `ExosphereSimulation/Parts/PartGraph.cs`, `Part.cs`, `Vessel.cs`,
+  `ExosphereSimulation.Tests/DifferentialTVCTests.cs`.
+- **Aceptación:** ✅ cada mount gimballed recibe su propio comando; un torque de disturbio
+  sintético se anula diferencialmente; `[G]` ascent y EDL flip siguen verdes.
 
 ### R5c. Torque como disturbio no wireado en `Vessel.Tick` — ✅ HECHO (parcial, adrede)
 - **Fix aplicado:** `Vessel.Tick` ahora aplica `GetPitchYawRollAngularAcceleration` como
@@ -214,11 +220,14 @@ equivocada hace la órbita.
   `git stash`). Gates `--ascent`/`--edl` sostenidos (ninguno inyecta fallas de motor, así
   que el cambio es inerte en ambos por construcción, confirmado).
 
-### R5d. Magnitud de empuje promediada en cluster mixto bajo steering activo — pendiente (abierto)
-- **Hoy:** `Part.GetThrustVector` sigue promediando la deflexión de gimbal entre un cluster mixto
-  gimballed/fijo bajo steering activo. Aproximación más chica que la de torque, ya cerrada por R5.
-- **Aceptación:** la magnitud de empuje por motor no se ve alterada artificialmente por el promedio
-  de gimbal de otros motores del mismo cluster.
+### R5d. Magnitud de empuje promediada en cluster mixto bajo steering activo — ✅ HECHO
+- **Fix aplicado:** `Part.GetThrustVector` con runtime por motor suma los vectores de
+  `GetEngineInstanceThrustGeometry` en vez de inclinación única × ΣT con gimbal promedio.
+  Los mounts fijos conservan empuje axial completo; la lateral solo viene de mounts gimballed.
+- **Archivos:** `ExosphereSimulation/Parts/Part.cs`,
+  `ExosphereSimulation.Tests/MixedClusterThrustVectorTests.cs` (4 tests).
+- **Aceptación:** ✅ `GetThrustVector` ≡ Σ geometría; mounts fijos sin lateral; `|F| < ΣT`
+  cuando los gimbals divergen; gimbal uniforme preserva la identidad legacy.
 
 ### R6. Sin sustentación aerodinámica / ángulo de ataque ✅ HECHO
 - **Hoy (antes):** el aero era sólo drag (orientación-dependiente). Starship reentra con **lift de
@@ -384,8 +393,8 @@ equivocada hace la órbita.
 ### Backlog abierto dejado por esta auditoría (Jul 2026)
 - **R18b.** Corrección broadside 1/√2 de Sutton-Graves — necesita su propio re-baseline medido de
   `PeakStructure`/`tail−belly` antes de aplicarse (ver R18).
-- **R18c.** `scripts/VesselRenderer.cs` pasa `noseRadius = 1.0` por defecto en su llamada de
-  heat-flux — inconsistente con el resto de call sites (deberían pasar el radio de casco real).
+- **R18c.** ~~`VesselRenderer` default `noseRadius = 1.0`~~ ✅ cerrado — ahora usa
+  `ComputeStagnationHeatFlux` (mismo blend actitud que plasma/lighting).
 - **R15b.** Fase orbital J2000 de Júpiter/Saturno (~0.3-0.5° off) — excluida a propósito de
   `EphemerisPhaseTests`, necesita su propia corrección, no aflojar la tolerancia.
 - **Limitaciones conocidas, no tocadas esta pasada** (registradas para no "redescubrirlas" como
@@ -402,29 +411,44 @@ equivocada hace la órbita.
 
 ## OLA 4 — Sistemas / UX (realismo de misión, backlog)
 
-### R11. Sistemas de vida/energía/comms desconectados de las fases
-- **Hoy:** `Systems/*` existen (LifeSupport, Power, Comms, Thermal) pero no atados a eventos:
-  eclipse → sin solar; comms con retardo por distancia; consumo por fase.
-- **Archivos:** `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`.
-- **Aceptación:** en sombra cae la energía; el retardo de comms crece con la distancia.
+### R11. Sistemas de vida/energía/comms atados a fases — ✅ jugable
+- Eclipse → solar a 0 (penumbra proporcional); delay de comms ∝ distancia; LS Idle vs Active+.
+- Fases de sistemas: `Idle` / `Active` / `HighLoad` / `Entry` / `PeakHeating` (mapa desde
+  `MissionPhase` en `SystemsController.MapMissionPhase`).
+- EC: LS por fase + `SystemsPhaseLoads.AvionicsExtraKw` (boost en HighLoad/Entry/Peak).
+- Térmica: acoplamiento de flujo aero → cabina (`ThermalSystem` + área por fase).
+- Retardo de mando en tierra: `GroundCommandRelay` retrasa stick/throttle del HUD por
+  `SignalDelaySeconds`; uplink cae en LOS/blackout; guiado a bordo (Ascent/EDL) no pasa
+  por el relay. HUD: `GROUND DELAY` / `BLACKOUT` / `LOS`.
+- Tests: `SystemsMissionPhaseTests` (eclipse, delay, LS, thermal aero, relay).
+- Archivos: `ExosphereSimulation/Systems/*`, `scripts/SystemsController.cs`,
+  `scripts/HUDController.cs`, `scripts/SystemsHUD.cs`.
 
-### R12. Boostback + captura en torre (Mechazilla) — depende de R5b
-- Secuencia real de flip + boostback del Super Heavy y captura. El torque por motor (R5) y su
-  wireado como disturbio (R5c) ya están; requiere TVC diferencial (R5b).
+### R12. Boostback + captura en torre (Mechazilla) — ✅ jugable (Ship + booster + entry burn)
+- Catch de la etapa superior (Ship) cerrado: fases `Catch`/`Caught`, cuna de dos pines,
+  `MissionPhase.CAUGHT`.
+- Booster (`BoosterReturnController` + `BoosterReturnGuidance`): tras `VesselStaged`
+  arma boostback (13 motores, corta cuando el componente outbound &lt; 100 m/s o reserva),
+  costa, **entry burn** a &lt;5 km (13 motores) → catch a &lt;1.5 km (3 motores), multi-vessel
+  cradle/chopsticks, pines en `super_heavy_booster` / V3. HUD: línea `BOOSTER …` bajo la
+  guía del Ship (no roba `MissionPhase`). Δv budget 6%→2.5% anclado a banda IFT
+  (800–1800 m/s) en xUnit. Evidencia: `BoosterReturnGuidanceTests`, `CatchContactTests`.
+- Pendiente fino opcional: telemetría de boostback en vuelo real vs IFT wall-clock,
+  divert-to-Gulf abort path.
 
 ---
 
 ## Orden de ejecucion actual
-1. No reabrir R1-R4, R8-R10, R13 ni R15-R19 salvo regresion demostrada por telemetria/harness.
-2. Backlog fisico real pendiente: R5b TVC diferencial, R5d empuje promediado en cluster mixto.
-   (R5 torque por geometria ✅, R5c torque wireado como disturbio ✅, R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
+1. No reabrir R1-R4, R5/R5b/R5c, R8-R10, R13 ni R15-R19 salvo regresion demostrada por telemetria/harness.
+2. Backlog fisico R5 cerrado: R5/R5b/R5c/R5d ✅.
+   (R6 lift/AoA ✅, R7 termosfera/decay ✅, B2 hot-stage overlap ✅)
 3. Backlog de la auditoria Jul 2026 (motores/staging/Tierra/reingreso, ver seccion "OLA JUL2026"
    arriba): R18b correccion broadside 1/√2 de Sutton-Graves (necesita re-baseline propio), R18c
    `VesselRenderer.cs` con `noseRadius=1.0` por defecto, R15b fase J2000 de Jupiter/Saturno. Mas
    limitaciones conocidas sin tocar: sin J2, sin fase sideral en epoch, sin correccion baricentrica,
    Luna en conica fija, termosfera sin variabilidad solar, sin fallo estructural por presion
    dinamica pura, EDL sin ley de guiado real.
-4. Backlog mision/sistemas: R11 sistemas conectados a fases, R12 boostback/captura dependiente de R5b.
+4. Backlog mision/sistemas: R11 ✅; R12 ✅ (Ship catch + booster boostback/entry/catch + HUD).
 5. Backlog visual vive en `PLAN_VISUAL_REALISM.md`; no duplicar aqui la auditoria visual.
 
 ## Método de verificación (para cada ola)

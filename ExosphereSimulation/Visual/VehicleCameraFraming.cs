@@ -3,6 +3,10 @@ namespace Exosphere.Simulation.Visual;
 /// <summary>Pure camera-fit contract shared by staging tests and the Godot chase camera.</summary>
 public static class VehicleCameraFraming
 {
+    /// <summary>
+    /// Ground-anchored pad tracking distance. Wider than the vehicle span so the
+    /// tower and stack share the frame through the first kilometre of climb.
+    /// </summary>
     public static double PadTrackingDistance(
         double vehicleHeightRenderUnits,
         double groundYRenderUnits)
@@ -10,14 +14,12 @@ public static class VehicleCameraFraming
         if (!double.IsFinite(vehicleHeightRenderUnits)
             || !double.IsFinite(groundYRenderUnits)
             || vehicleHeightRenderUnits <= 0.0)
-            return 28.0;
+            return 40.0;
         double span = System.Math.Max(
             vehicleHeightRenderUnits - groundYRenderUnits,
             vehicleHeightRenderUnits);
-        double minimum = vehicleHeightRenderUnits < 20.0
-            ? System.Math.Max(12.0, vehicleHeightRenderUnits * 1.7)
-            : vehicleHeightRenderUnits * 2.2;
-        return System.Math.Clamp(span * 1.55, minimum, 850.0);
+        double minimum = vehicleHeightRenderUnits * 3.0;
+        return System.Math.Clamp(span * 2.4, minimum, 850.0);
     }
 
     public static double MinimumOrbitDistance(

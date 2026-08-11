@@ -32,6 +32,9 @@
   "min_throttle": 0.40,
   "thrust_position_y_m": -34.0,
   "is_rcs": false,
+  "catch_pin_lateral_offset_m": 4.4,
+  "catch_pin_offset_y_m": 30.5,
+  "catch_pin_radius_m": 0.4,
   "attachment_nodes": [
     {"id": "top", "position": [0, 34.0, 0], "size": 3, "type": "stack"},
     {"id": "engine_bell", "position": [0, -34.0, 0], "size": 0, "type": "engine_bell"}

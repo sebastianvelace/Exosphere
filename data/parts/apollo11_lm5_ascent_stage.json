@@ -13,6 +13,12 @@
   "fuel_capacity_lf": 1015.000157176923,
   "fuel_capacity_ox": 1624.000251483077,
   "max_crew": 2,
+  "is_docking_port": true,
+  "docking_node_id": "top",
+  "docking_axis_local": [0, -1, 0],
+  "docking_capture_range_m": 0.85,
+  "docking_max_capture_speed_mps": 0.35,
+  "docking_alignment_tolerance_deg": 14,
   "attachment_nodes": [
     {"id": "top", "position": [0, 1.88, 0], "size": 2, "type": "stack"},
     {"id": "bottom", "position": [0, -1.88, 0], "size": 2, "type": "stack"}

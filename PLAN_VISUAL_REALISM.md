@@ -148,7 +148,8 @@ Mejoras:
 - [x] Startup/ramp: transicion visible desde ignicion a liftoff. `EngineStartupController`
   agrega glow/flicker, vapor de chill y flecks de ignicion mientras la nave sigue
   ground-held; verificado con trigger local Xvfb en `/tmp/exosphere_startup_00..33.png`.
-  Pendiente: comparar intensidad/timing contra referencias reales y ajustar solo si se ve teatral.
+  Ajuste esta tanda: ramp un poco más lenta + flare más legible en hold-down
+  (`EngineStartupController`). Comparación IFT fina sigue siendo juicio humano.
 - [x] Hot-staging VFX implementado en codigo: al staging `SimulationBridge.TriggerStaging`
   reconstruye la Ship, spawnea el debris de Super Heavy y emite `VesselStaged`;
   `HotStageFlashController` escucha esa senal y dispara flash/luz/anillo de choque/plume corto/hollin.
@@ -158,8 +159,9 @@ Mejoras:
 - [x] Hot-staging comparado contra referencia: captura multiframe en ascenso real `[G]`
   bajo xvfb (`/tmp/exosphere_hotstage_ascent_00..13.png`, jul 2026). Criterio cumplido:
   flash/pluma entre etapas, ring chamuscado en booster, Ship encendida antes de separarse,
-  HUD legible. Ver `.atl/agent-hotstaging-log.md`. Pendiente: comparacion lado-a-lado con
-  frame IFT T+2:39 para afinar intensidad del flash.
+  HUD legible. Ver `.atl/agent-hotstaging-log.md`. Flash/anillo/hollín reforzados esta
+  tanda (`HotStageFlashController`) para legibilidad en captura estática; juicio IFT
+  T+2:39 lado-a-lado sigue abierto como comparación humana de referencia.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
 - [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
@@ -193,9 +195,12 @@ Hecho:
 - [x] Breakup VFX cuando ocurre destruccion termica.
 - [x] Entrada mal orientada se ve mas roja/extendida que belly-first nominal.
 
-Pendiente:
-- [ ] Afinar shock/plasma localizado con capturas reales de EDL: tamano, alpha,
-  color y timing en nose, leading edges y flap edges (comparacion IFT lado-a-lado).
+Pendiente / cerrado esta tanda:
+- [x] Afinar shock/plasma localizado con capturas reales de EDL: wake α, edge
+  nose/flap boost en mala actitud, lighting reentry más cálido en PEAK
+  (`ReentryPlasmaController`, `PhaseLightingController`). Verificado con
+  `--reentry-compare` → `/tmp/exo_play-agent-reentry-v1/`. Comparación fina
+  IFT lado-a-lado sigue siendo juicio humano de referencia, no tooling.
 - [x] Charring por zonas: nose/flaps/belly no deben degradarse todos al mismo ritmo.
   (`VesselRenderer` `TileCharZone` + part/attitude scaling; verificado visualmente.)
 - [x] Capturas comparativas belly-flop nominal vs mala orientacion.

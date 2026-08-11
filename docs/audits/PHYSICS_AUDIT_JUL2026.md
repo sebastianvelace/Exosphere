@@ -298,12 +298,12 @@ both times, rather than trusting a single post-hoc assertion.
 `--edl` reached `LANDED` with 6 settled contacts. Both expected inert under
 this change (neither path injects an engine failure) and confirmed inert.
 
-**Status of R5b (differential per-mount TVC commanding), still open.**
-Unrelated to R5c and not attempted this pass: `Vessel.Tick` still mirrors one
-commanded `GimbalOffset` to every gimballed mount in a part rather than
-commanding each mount independently to null a target torque. That remains the
-larger, separate piece needed before real boostback/hover-slam attitude control
-(R12) is meaningful.
+**Status of R5b (differential per-mount TVC commanding): closed after this audit.**
+Landed in `aa408e7`: `PartGraph.SolveDifferentialGimbal` commands each live gimballed
+mount independently toward a desired torque; `Vessel.Tick` sizes that torque from
+`GetDifferentialTVCAngularAccelerationEnvelope`. R5d (`GetThrustVector` per-mount sum)
+also closed. The remaining R12 gap is the booster return controller itself, not
+thrust/TVC allocation.
 
 ---
 

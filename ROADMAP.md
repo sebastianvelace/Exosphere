@@ -36,9 +36,8 @@ Base tecnica cerrada en `main`:
   `CampaignService`, `MissionDirector`, `MissionEvaluator`, debrief numérico,
   recompensas idempotentes y persistencia V2. Freedom 7, Friendship 7, Gemini 8
   y Apollo 8 tienen variantes históricas jugables. Apollo 11 ya dispone del
-  hardware fechado AS-506/CSM-107/LM-5 y de Eagle como vehículo operativo;
-  transposición/docking, descenso lunar y evaluación de misión son el siguiente
-  corte jugable.
+  hardware fechado AS-506/CSM-107/LM-5, Eagle operativo, TD&E y LOI docked
+  hasta órbita lunar circular; alunizaje/retorno son el siguiente corte.
 - Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
   de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, motores 33/6 visuales, acero procedural,
@@ -46,9 +45,11 @@ Base tecnica cerrada en `main`:
   seams longitudinales, pluma liftoff mas densa y Super Heavy separado con anillo
   expuesto/quemado. Los motores 33/6 tienen estado, feed, gimbal, telemetría,
   fallos y pluma individual; ya no son solamente una multiplicación visual. El
-  torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`) y ya
-  está wireado como disturbio de actitud cuando no hay input del piloto; falta TVC
-  diferencial por motor (ver R5b en `PLAN_REALISM.md`).
+  torque por geometría real de cada mount ya se calcula (`PartGraph.GetTotalTorque`) y
+  el TVC diferencial por motor (R5b: `PartGraph.SolveDifferentialGimbal`) comanda cada
+  mount gimballed hacia el torque pedido; el torque real por mount se aplica tanto con
+  input como sin él (R5c); `GetThrustVector` suma vectores por mount (R5d) sin diluir
+  mounts fijos al promediar gimbal del cluster.
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
@@ -131,11 +132,11 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 - VAB catalog/assembly/export y picking actual, incluido el rediseño de UI con
   el tema glass compartido.
 - Detalle visual dedicado de Falcon 9 Block 5 y New Glenn 7x2 (`rocket-visual-design`).
-- Catch de la torre (Mechazilla) para la etapa superior (Ship): fase `Catch`/`Caught`
-  en `EDLController`, contacto de dos pines vía `SurfaceContactSolver`, guiado de
-  aproximación y `MissionPhase.CAUGHT`. Usa la autoridad de actitud idealizada
-  existente, no TVC diferencial — el catch del booster (R12, pendiente) reutiliza
-  esta misma infraestructura de torre/cuna/contacto.
+- Catch de la torre (Mechazilla): Ship (`EDLController` Catch/Caught) y booster
+  (`BoosterReturnController` boostback→entry burn→catch) reutilizan cuna/pines/
+  `Universe.EvaluateCatchContact`. Cradle refresh y chopsticks son multi-vessel
+  (el booster puede atraparse mientras Ship sigue activo). HUD muestra `BOOSTER …`
+  sin alterar `MissionPhase` del Ship.
 
 ## Pendientes Reales
 
@@ -173,6 +174,9 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 ### Gameplay
 
+- Control ownership jugable ✅ — stick a bordo crewed (`PilotCommandRouting`),
+  `[G]` cede a WASD, cue MANUAL/ASCENT/EDL/HISTORICAL; hold-down unificado
+  (TWR>1.05 + throttle≥0.95); cluster Minimal motores–navball–strip.
 - Save/load V2 de misión y multi-vessel — `SaveGameV2` + F5/F9 quicksave +
   MainMenu Continue; round-trip y migración probados.
 - Flujo jugable orbita → deorbit → ENTRY (oleada C2) ✅ — mapa `[B]`
@@ -204,8 +208,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
   6.484.280 lb de ignición y las 33.205 lb del LM con procedencia NASA. F-1,
   J-2, SPS, DPS y APS son modelos fechados separados; Eagle conserva masa al
   separar descenso y activa APS tras DPS. `--apollo11` valida pad/liftoff.
-  Pendiente: TD&E multi-vessel, docking CSM/LM, perfil de alunizaje, ascenso,
-  rendezvous, TEI, entrada y objetivos de campaña.
+- Apollo 11 TD&E + LOI ✅ — `apollo11-lunar-landing-return` + `mission-apollo11-1969`:
+  parking→TLI→CSM sep→extract Eagle→hard-dock→LOI→órbita lunar circular;
+  finalize de campaña en `LUNAR_ORBIT`. Ver `docs/HITO4_APOLLO11_TDE.md`.
+  Pendiente: DOI, alunizaje, ascenso LM, rendezvous, TEI, entrada y amerizaje.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 
@@ -230,5 +236,5 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      ajuste de alpha/timing/zone charring).
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
-5. Recien despues volver a gameplay grande: misiones, save/load, recursos o
-   engine-out real.
+5. Recien despues: Apollo 11 alunizaje (DOI→surface→APS→rendezvous→TEI).
+   (R11 ✅; R12 ✅; Apollo 11 TD&E + LOI ✅)

@@ -10,7 +10,9 @@ using System.Linq;
 [GlobalClass]
 public partial class HotStageFlashController : Node3D
 {
-    private const float Duration = 1.45f;
+    // Slightly longer so a single state-gated capture during IsHotStageOverlapping
+    // still shows interstage flash + soot rather than catching only the fade tail.
+    private const float Duration = 1.75f;
 
     private MeshInstance3D? _plume;
     private MeshInstance3D? _shockRing;
@@ -47,25 +49,25 @@ public partial class HotStageFlashController : Node3D
         if (_plume != null && _plumeMat != null)
         {
             _plume.Visible = true;
-            _plume.Scale = new Vector3(1.0f + 0.75f * t, 8.0f + 5.0f * t, 1.0f + 0.75f * t);
-            _plumeMat.AlbedoColor = new Color(1.0f, 0.62f, 0.20f, 0.62f * hot);
-            _plumeMat.EmissionEnergyMultiplier = 5.8f * hot;
+            _plume.Scale = new Vector3(1.15f + 0.90f * t, 9.0f + 6.0f * t, 1.15f + 0.90f * t);
+            _plumeMat.AlbedoColor = new Color(1.0f, 0.64f, 0.22f, 0.78f * hot);
+            _plumeMat.EmissionEnergyMultiplier = 7.6f * hot;
         }
 
         if (_shockRing != null && _ringMat != null)
         {
             _shockRing.Visible = true;
-            float ringScale = 1.2f + 3.8f * t;
+            float ringScale = 1.35f + 4.4f * t;
             _shockRing.Scale = new Vector3(ringScale, ringScale, ringScale);
-            _ringMat.AlbedoColor = new Color(0.95f, 0.82f, 0.48f, 0.72f * fade);
-            _ringMat.EmissionEnergyMultiplier = 3.2f * fade;
+            _ringMat.AlbedoColor = new Color(1.0f, 0.86f, 0.52f, 0.88f * fade);
+            _ringMat.EmissionEnergyMultiplier = 4.6f * fade;
         }
 
         if (_flashLight != null)
         {
             _flashLight.Visible = true;
-            _flashLight.LightEnergy = 14f * hot;
-            _flashLight.OmniRange = 28f + 18f * fade;
+            _flashLight.LightEnergy = 20f * hot;
+            _flashLight.OmniRange = 34f + 22f * fade;
         }
 
         if (_age >= Duration)
@@ -127,7 +129,7 @@ public partial class HotStageFlashController : Node3D
         if (_flashLight != null)
         {
             _flashLight.Visible = true;
-            _flashLight.LightEnergy = 14f;
+            _flashLight.LightEnergy = 20f;
         }
 
         if (_soot != null)
@@ -145,16 +147,16 @@ public partial class HotStageFlashController : Node3D
             DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoColor = new Color(1.0f, 0.58f, 0.18f, 0.62f),
+            AlbedoColor = new Color(1.0f, 0.60f, 0.20f, 0.78f),
             EmissionEnabled = true,
-            Emission = new Color(1.0f, 0.66f, 0.25f),
-            EmissionEnergyMultiplier = 5.8f,
+            Emission = new Color(1.0f, 0.70f, 0.28f),
+            EmissionEnergyMultiplier = 7.6f,
         };
 
         var plumeMesh = new CylinderMesh
         {
-            TopRadius = 0.26f,
-            BottomRadius = 0.78f,
+            TopRadius = 0.30f,
+            BottomRadius = 0.92f,
             Height = 1.0f,
             RadialSegments = 32,
             Rings = 18,
@@ -181,16 +183,16 @@ public partial class HotStageFlashController : Node3D
             DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoColor = new Color(0.95f, 0.82f, 0.48f, 0.72f),
+            AlbedoColor = new Color(1.0f, 0.86f, 0.52f, 0.88f),
             EmissionEnabled = true,
-            Emission = new Color(1.0f, 0.74f, 0.34f),
-            EmissionEnergyMultiplier = 3.2f,
+            Emission = new Color(1.0f, 0.78f, 0.38f),
+            EmissionEnergyMultiplier = 4.6f,
         };
 
         _shockRing = new MeshInstance3D
         {
             Name = "HotStageShockRing",
-            Mesh = new TorusMesh { InnerRadius = 1.55f, OuterRadius = 1.78f, Rings = 64, RingSegments = 10 },
+            Mesh = new TorusMesh { InnerRadius = 1.45f, OuterRadius = 1.92f, Rings = 64, RingSegments = 12 },
             Position = new Vector3(0f, -0.25f, 0f),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
@@ -205,8 +207,8 @@ public partial class HotStageFlashController : Node3D
         {
             Name = "HotStageFlashLight",
             Position = new Vector3(0f, -0.35f, 0f),
-            LightColor = new Color(1.0f, 0.74f, 0.42f),
-            OmniRange = 42f,
+            LightColor = new Color(1.0f, 0.76f, 0.44f),
+            OmniRange = 52f,
             LightEnergy = 0f,
             ShadowEnabled = false,
             LightSpecular = 0.65f,
@@ -268,10 +270,10 @@ public partial class HotStageFlashController : Node3D
         return new GpuParticles3D
         {
             Name = "HotStageSoot",
-            Amount = 150,
-            Lifetime = 1.35f,
+            Amount = 190,
+            Lifetime = 1.55f,
             OneShot = true,
-            Explosiveness = 0.82f,
+            Explosiveness = 0.86f,
             Randomness = 0.5f,
             ProcessMaterial = pm,
             DrawPass1 = quad,
