@@ -53,6 +53,21 @@ public sealed class AtmosphereAngularMultipleScatteringLutTests
     }
 
     [Fact]
+    public void AngularCoordinatesResolveHorizonAndForwardLobeWithEndpointWarps()
+    {
+        Assert.Equal(-1.0, AtmosphereAngularMultipleScatteringLut.ViewCosine(0, 9), 12);
+        Assert.Equal(0.0, AtmosphereAngularMultipleScatteringLut.ViewCosine(4, 9), 12);
+        Assert.Equal(1.0, AtmosphereAngularMultipleScatteringLut.ViewCosine(8, 9), 12);
+        Assert.True(AtmosphereAngularMultipleScatteringLut.ViewCosine(1, 9) < -0.75);
+        Assert.True(AtmosphereAngularMultipleScatteringLut.ViewCosine(7, 9) > 0.75);
+
+        Assert.Equal(-1.0, AtmosphereAngularMultipleScatteringLut.MuCosine(0, 9), 12);
+        Assert.Equal(1.0, AtmosphereAngularMultipleScatteringLut.MuCosine(8, 9), 12);
+        Assert.Equal(0.5, AtmosphereAngularMultipleScatteringLut.MuCosine(4, 9), 12);
+        Assert.True(AtmosphereAngularMultipleScatteringLut.MuCosine(7, 9) > 0.9);
+    }
+
+    [Fact]
     public void AngularAtlasTexelsRemainFiniteAndNonNegative()
     {
         var lut = BuildEarthAtlas();

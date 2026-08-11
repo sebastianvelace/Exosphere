@@ -281,10 +281,14 @@ vec3 angular_multiple_scattering_radiance(
 		transmittance_lut_min_solar_sin, 1.0) - transmittance_lut_min_solar_sin)
 		/ max(1.0 - transmittance_lut_min_solar_sin, 1e-4);
 	float solar_v = sqrt(clamp(solar_normalized, 0.0, 1.0));
-	float view_v = (clamp(view_cosine, -1.0, 1.0) * 0.5 + 0.5)
-		* (multiple_scattering_view_layers - 1.0);
-	float mu_v = (clamp(view_sun_cosine, -1.0, 1.0) * 0.5 + 0.5)
-		* (multiple_scattering_mu_layers - 1.0);
+	float view_t = clamp(view_cosine, -1.0, 1.0) * 0.5 + 0.5;
+	float view_u = view_t <= 0.5
+		? sqrt(view_t * 0.5)
+		: 1.0 - sqrt((1.0 - view_t) * 0.5);
+	float mu_t = clamp(view_sun_cosine, -1.0, 1.0) * 0.5 + 0.5;
+	float mu_u = 1.0 - sqrt(1.0 - mu_t);
+	float view_v = view_u * (multiple_scattering_view_layers - 1.0);
+	float mu_v = mu_u * (multiple_scattering_mu_layers - 1.0);
 	float view0 = floor(view_v);
 	float mu0 = floor(mu_v);
 	float view1 = min(view0 + 1.0, multiple_scattering_view_layers - 1.0);

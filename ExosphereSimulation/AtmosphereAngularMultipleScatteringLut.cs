@@ -8,6 +8,8 @@ using Exosphere.Simulation.Math;
 /// The atlas axes are observer altitude, geometric solar elevation, view zenith cosine and
 /// view/sun cosine (mu).  It is packed as a 2D texture by the Godot layer, but retaining all
 /// four physical coordinates removes the old isotropic ``0.55 + 0.45 * view_up`` closure.
+/// The view axis is endpoint-warped toward the horizon/zenith and the mu axis is warped toward
+/// +1, where spherical escape and the forward Mie lobe vary fastest.
 /// The radiance seed comes from <see cref="AtmosphereMultipleScatteringLut"/> (orders two and
 /// three); the angular transport applies the normalized Rayleigh/Mie phase and a spherical
 /// escape ratio relative to the vertical column.  This is a deterministic low-resolution
@@ -224,10 +226,12 @@ public sealed class AtmosphereAngularMultipleScatteringLut
             / (1.0 - AtmosphereTransmittanceLut.MinimumSolarElevationSin);
         double py = System.Math.Sqrt(System.Math.Clamp(solarNormalized, 0.0, 1.0))
             * (SolarHeight - 1);
-        double pView = (System.Math.Clamp(viewCosine, -1.0, 1.0) * 0.5 + 0.5)
-            * (ViewHeight - 1);
-        double pMu = (System.Math.Clamp(viewSunCosine, -1.0, 1.0) * 0.5 + 0.5)
-            * (MuWidth - 1);
+        // The atlas is non-uniform: escape radiance bends sharply around the geometric
+        // horizon, while the Mie phase has its narrowest lobe at mu=+1.  Invert the same
+        // piecewise mappings used by ViewCosine/MuCosine so interpolation spends texels
+        // where the physical signal has the most curvature.
+        double pView = InverseViewCoordinate(viewCosine) * (ViewHeight - 1);
+        double pMu = InverseMuCoordinate(viewSunCosine) * (MuWidth - 1);
 
         int x0 = ClampIndex(px, Width, out double tx);
         int y0 = ClampIndex(py, SolarHeight, out double ty);
@@ -264,10 +268,37 @@ public sealed class AtmosphereAngularMultipleScatteringLut
     public static double ViewCosine(int index, int size)
     {
         if (size < 2) throw new ArgumentOutOfRangeException(nameof(size));
-        return -1.0 + 2.0 * System.Math.Clamp((double)index / (size - 1), 0.0, 1.0);
+        double u = System.Math.Clamp((double)index / (size - 1), 0.0, 1.0);
+        double t = u <= 0.5
+            ? 2.0 * u * u
+            : 1.0 - 2.0 * (1.0 - u) * (1.0 - u);
+        return -1.0 + 2.0 * t;
     }
 
-    public static double MuCosine(int index, int size) => ViewCosine(index, size);
+    /// <summary>
+    /// Forward-scatter coordinate warped toward +1, where a terrestrial Mie lobe is narrow.
+    /// </summary>
+    public static double MuCosine(int index, int size)
+    {
+        if (size < 2) throw new ArgumentOutOfRangeException(nameof(size));
+        double u = System.Math.Clamp((double)index / (size - 1), 0.0, 1.0);
+        double t = 1.0 - (1.0 - u) * (1.0 - u);
+        return -1.0 + 2.0 * t;
+    }
+
+    private static double InverseViewCoordinate(double cosine)
+    {
+        double t = (System.Math.Clamp(cosine, -1.0, 1.0) + 1.0) * 0.5;
+        return t <= 0.5
+            ? System.Math.Sqrt(t * 0.5)
+            : 1.0 - System.Math.Sqrt((1.0 - t) * 0.5);
+    }
+
+    private static double InverseMuCoordinate(double cosine)
+    {
+        double t = (System.Math.Clamp(cosine, -1.0, 1.0) + 1.0) * 0.5;
+        return 1.0 - System.Math.Sqrt(1.0 - t);
+    }
 
     private static Vector3d ViewEscapeRatio(
         AtmosphereOptics optics,

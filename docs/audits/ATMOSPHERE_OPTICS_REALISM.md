@@ -413,3 +413,39 @@ Evidencia reproducible:
 La matriz `/tmp/exo_atmo_airglow_v2/` conserva el limbo azul, la exposición diurna y el
 campo estelar; la banda OH queda deliberadamente por debajo del brillo que produciría un
 halo verde artificial, pero aporta una contribución cálida independiente en el modelo lineal.
+
+## V18 — atlas angular no uniforme para horizonte y dispersión hacia delante (2026-08-11)
+
+La LUT de dispersión múltiple angular todavía repartía sus texels de forma lineal en
+`cos(view_zenith)` y `mu`. Esa distribución desperdicia resolución en regiones casi lineales:
+la curvatura de escape cambia con rapidez alrededor del horizonte geométrico y la fase Mie
+terrestre concentra su lóbulo más estrecho cerca de `mu=+1`. El atlas ahora usa dos ejes
+invertibles y no uniformes, conservando exactamente los extremos físicos:
+
+- el eje de vista aplica una cuadrática por tramos, con nodos adicionales hacia
+  `cos(view_zenith)=-1` (horizonte/retaguardia) y `+1` (zenit);
+- el eje `mu` aplica `1-(1-u)^2`, concentrando nodos hacia la dispersión hacia delante;
+- el muestreo CPU y `space_sky.gdshader` comparten las inversas analíticas, evitando una
+  discrepancia entre la LUT precalculada y el lookup en tiempo real.
+
+El cambio sólo mueve resolución angular: no altera la energía integrada, la función de fase,
+la transmitancia ni la exposición. Por eso es especialmente seguro para el terminador y el
+nightglow, donde los gradientes son pequeños y una interpolación lineal puede producir bandas.
+
+Evidencia reproducible:
+
+| Comprobación | Resultado |
+|---|---:|
+| suite `ExosphereSimulation.Tests` | **519/519** |
+| `dotnet build Exosphere.csproj --no-restore` | **0 warnings, 0 errors** |
+| `bash tools/atmosphere_quick_check.sh` | **PASS, 80/80** |
+| `visual_playtest.sh --atmosphere --run-id angularwarp-v1 --skip-build` | **ATMOSPHERE_OK, 16/16** |
+| `PERF ground_sunset` | **159,97 ms/frame**, máximo 179,48 ms |
+| `PERF 120km_day` | **160,00 ms/frame**, máximo 175,00 ms |
+| `PERF 120km_night` | **160,18 ms/frame**, máximo 176,77 ms |
+| `neonGreenFrac` en la matriz | **0,000000** |
+
+La matriz `/tmp/exo_atmo_angularwarp_v1/` mantiene el horizonte rojo continuo al atardecer,
+el limbo azul a 120 km y un campo estelar nítido sin halos verdes. El coste permanece dentro
+del ruido del render CPU; la siguiente mejora de orden superior debe medir primero la ganancia
+visual antes de aumentar resolución o número de muestras.
