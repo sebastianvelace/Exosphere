@@ -49,6 +49,16 @@ public sealed record AtmosphereOptics
     public double RefractiveScaleHeight { get; init; } = 8_000.0;
     /// <summary>Bounded isotropic second-order fill used by the realtime sky integrator.</summary>
     public double LowOrderDiffuseStrength { get; init; } = 0.25;
+
+    /// <summary>
+    /// Optional metadata for the CPU spectral reference. The current body files only carry
+    /// RGB coefficients, so the oracle marks their nine-band reconstruction explicitly.
+    /// </summary>
+    public double SpectralWavelengthMinNm { get; init; } = 400.0;
+    public double SpectralWavelengthMaxNm { get; init; } = 700.0;
+    public string SpectralInterpolation { get; init; } = "log-linear";
+    public double SpectralCalibrationTemperatureK { get; init; } = 0.0;
+    public string SpectralDataStatus { get; init; } = "reconstructed";
     public double CloudBaseAltitude { get; init; } = 0.0;
     public double CloudTopAltitude { get; init; } = 0.0;
     public double CloudExtinction { get; init; } = 0.0;

@@ -56,6 +56,16 @@ public partial class AtmosphereModel
                 CloudExtinction = ReadDouble(opticalJson, "cloud_extinction", 0.0),
                 CloudCoverage = ReadDouble(opticalJson, "cloud_coverage", 0.0),
                 CloudWindRadiansPerSecond = ReadDouble(opticalJson, "cloud_wind_radians_per_second", 0.0),
+                SpectralWavelengthMinNm = ReadDouble(opticalJson,
+                    "spectral_wavelength_min_nm", 400.0),
+                SpectralWavelengthMaxNm = ReadDouble(opticalJson,
+                    "spectral_wavelength_max_nm", 700.0),
+                SpectralInterpolation = ReadString(opticalJson,
+                    "spectral_interpolation", "log-linear"),
+                SpectralCalibrationTemperatureK = ReadDouble(opticalJson,
+                    "spectral_calibration_temperature_k", 0.0),
+                SpectralDataStatus = ReadString(opticalJson,
+                    "spectral_data_status", "reconstructed"),
             };
         }
 
@@ -92,4 +102,11 @@ public partial class AtmosphereModel
     private static double ReadDouble(
         System.Text.Json.JsonElement json, string name, double fallback) =>
         json.TryGetProperty(name, out var value) ? value.GetDouble() : fallback;
+
+    private static string ReadString(
+        System.Text.Json.JsonElement json, string name, string fallback) =>
+        json.TryGetProperty(name, out var value) && value.ValueKind ==
+            System.Text.Json.JsonValueKind.String
+            ? value.GetString() ?? fallback
+            : fallback;
 }
