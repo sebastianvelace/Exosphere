@@ -11,6 +11,10 @@ shader_type spatial;
 render_mode cull_back, unshaded;
 
 uniform vec3 sun_dir = vec3(0.42, 0.78, 0.46);
+// Limb-darkened solar-disc visibility supplied by SunController.  This keeps the
+// distant Earth surface consistent with the atmospheric eclipse radiance instead of
+// leaving a full-strength unshaded day map during totality.
+uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 
 uniform sampler2D day_tex   : source_color, filter_linear_mipmap;
 uniform sampler2D night_tex : source_color, filter_linear_mipmap;
@@ -123,7 +127,7 @@ void fragment() {
 	vec3 direct_transmittance = exp(-vertical_optical_depth * min(air_mass, 40.0));
 	float diffuse_fill = mix(0.012, 0.045, smoothstep(-0.18, 0.30, ndl));
 	vec3 lit = surface * (vec3(diffuse_fill)
-		+ day_gain * pow(diff, 0.8) * direct_transmittance);
+		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility);
 
 	// City lights on the night side (emissive). Threshold on luminance so ONLY genuine
 	// bright lights pass — the Black Marble texture has a dark, blocky data floor in

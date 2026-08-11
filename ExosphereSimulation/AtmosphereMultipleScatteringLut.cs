@@ -8,8 +8,10 @@ using Exosphere.Simulation.Math;
 /// Each texel integrates the bounded local source through the complete vertical column
 /// above an observer.  It is not the final Bruneton 4D solution (there is no view-angle
 /// dimension yet), but unlike the old per-ray S₂ closure it transports photons through the
-/// whole column and is shared by every sky direction.  A second deterministic pass adds one
-/// additional isotropic scattering event (order three) without introducing a shader loop.
+/// whole column and is shared by every sky direction.  Successive deterministic passes add
+/// bounded isotropic scattering events (orders three and four) without introducing a shader
+/// loop; the maximum order remains configurable so the legacy order-three route is available
+/// as a fallback during validation.
 /// Values are linear radiance per unit <see cref="AtmosphereOptics.SunIlluminanceScale"/>.
 /// </summary>
 public sealed class AtmosphereMultipleScatteringLut
@@ -20,23 +22,26 @@ public sealed class AtmosphereMultipleScatteringLut
     public int Height { get; }
     public double PlanetRadius { get; }
     public double AtmosphereTopAltitude { get; }
+    public int MaxScatteringOrder { get; }
 
     private AtmosphereMultipleScatteringLut(
         int width,
         int height,
         double planetRadius,
         double atmosphereTopAltitude,
+        int maxScatteringOrder,
         Vector3d[] values)
     {
         Width = width;
         Height = height;
         PlanetRadius = planetRadius;
         AtmosphereTopAltitude = atmosphereTopAltitude;
+        MaxScatteringOrder = maxScatteringOrder;
         _values = values;
     }
 
     /// <summary>
-    /// Integrates orders two and three from the observer to space.  The view transmittance
+    /// Integrates successive isotropic orders from the observer to space.  The view transmittance
     /// uses the exact vertical optical-depth difference and the solar term uses the spherical
     /// direct-transmittance oracle, so changing the planet radius changes both transport legs.
     /// </summary>
@@ -47,12 +52,14 @@ public sealed class AtmosphereMultipleScatteringLut
         int width = 64,
         int height = 48,
         int integrationSteps = 48,
-        int solarSampleCount = 32)
+        int solarSampleCount = 32,
+        int maxScatteringOrder = 3)
     {
         ArgumentNullException.ThrowIfNull(optics);
         if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
         if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
         if (integrationSteps < 4) throw new ArgumentOutOfRangeException(nameof(integrationSteps));
+        ValidateOrder(maxScatteringOrder);
         if (!double.IsFinite(planetRadius) || planetRadius <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(planetRadius));
         if (!double.IsFinite(atmosphereTopAltitude) || atmosphereTopAltitude <= 0.0)
@@ -73,12 +80,14 @@ public sealed class AtmosphereMultipleScatteringLut
                     planetRadius,
                     atmosphereTopAltitude,
                     integrationSteps,
-                    solarSampleCount);
+                    solarSampleCount,
+                    maxScatteringOrder);
             }
         }
 
         return new AtmosphereMultipleScatteringLut(
-            width, height, planetRadius, atmosphereTopAltitude, values);
+            width, height, planetRadius, atmosphereTopAltitude,
+            maxScatteringOrder, values);
     }
 
     /// <summary>
@@ -93,12 +102,14 @@ public sealed class AtmosphereMultipleScatteringLut
         int width = 64,
         int height = 48,
         int integrationSteps = 48,
-        int solarSampleCount = 32)
+        int solarSampleCount = 32,
+        int maxScatteringOrder = 3)
     {
         ArgumentNullException.ThrowIfNull(profile);
         if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
         if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
         if (integrationSteps < 4) throw new ArgumentOutOfRangeException(nameof(integrationSteps));
+        ValidateOrder(maxScatteringOrder);
         if (!double.IsFinite(planetRadius) || planetRadius <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(planetRadius));
         if (!double.IsFinite(atmosphereTopAltitude) || atmosphereTopAltitude <= 0.0)
@@ -114,12 +125,14 @@ public sealed class AtmosphereMultipleScatteringLut
                     * AtmosphereTransmittanceLut.CoordinateValue(x, width);
                 values[y * width + x] = IntegrateColumn(
                     profile, observerAltitude, solarSin, planetRadius,
-                    atmosphereTopAltitude, integrationSteps, solarSampleCount);
+                    atmosphereTopAltitude, integrationSteps, solarSampleCount,
+                    maxScatteringOrder);
             }
         }
 
         return new AtmosphereMultipleScatteringLut(
-            width, height, planetRadius, atmosphereTopAltitude, values);
+            width, height, planetRadius, atmosphereTopAltitude,
+            maxScatteringOrder, values);
     }
 
     public Vector3d GetTexel(int x, int y)
@@ -163,7 +176,8 @@ public sealed class AtmosphereMultipleScatteringLut
         double planetRadius,
         double atmosphereTopAltitude,
         int integrationSteps,
-        int solarSampleCount)
+        int solarSampleCount,
+        int maxScatteringOrder)
     {
         if (solarSin < AtmosphereTransmittanceLut.MinimumSolarElevationSin
             || observerAltitude >= atmosphereTopAltitude)
@@ -200,36 +214,9 @@ public sealed class AtmosphereMultipleScatteringLut
                 System.Math.Exp(-System.Math.Max(layerTau.Z, 0.0)));
         }
 
-        // Order two: direct sunlight scattered once more and transported from each
-        // layer to the observer. The source is already bounded by the per-band
-        // single-scattering albedo in LowOrderDiffuseSource.
-        Vector3d orderTwo = Vector3d.Zero;
-        for (int i = 0; i < integrationSteps; i++)
-            orderTwo += Multiply(sources[i], viewThroughput[i]) * step;
-
-        // Order three: transport the isotropic order-two field at each layer and
-        // scatter it once again. The nested column integral is intentional: this
-        // table is built once per body, while the explicit path remains deterministic
-        // and keeps planet-radius dependence visible to tests.
-        Vector3d orderThree = Vector3d.Zero;
-        for (int i = 0; i < integrationSteps; i++)
-        {
-            Vector3d orderTwoAtLayer = Vector3d.Zero;
-            for (int j = i; j < integrationSteps; j++)
-            {
-                var tau = absoluteTau[i] - absoluteTau[j];
-                var transport = new Vector3d(
-                    System.Math.Exp(-System.Math.Max(tau.X, 0.0)),
-                    System.Math.Exp(-System.Math.Max(tau.Y, 0.0)),
-                    System.Math.Exp(-System.Math.Max(tau.Z, 0.0)));
-                orderTwoAtLayer += Multiply(sources[j], transport) * step;
-            }
-
-            var thirdSource = Multiply(scattering[i], orderTwoAtLayer);
-            orderThree += Multiply(thirdSource, viewThroughput[i]) * step;
-        }
-
-        return orderTwo + orderThree;
+        return IntegrateSuccessiveOrders(
+            sources, scattering, absoluteTau, viewThroughput,
+            integrationSteps, step, maxScatteringOrder);
     }
 
     private static Vector3d IntegrateColumn(
@@ -239,7 +226,8 @@ public sealed class AtmosphereMultipleScatteringLut
         double planetRadius,
         double atmosphereTopAltitude,
         int integrationSteps,
-        int solarSampleCount)
+        int solarSampleCount,
+        int maxScatteringOrder)
     {
         if (solarSin < AtmosphereTransmittanceLut.MinimumSolarElevationSin
             || observerAltitude >= atmosphereTopAltitude)
@@ -271,29 +259,63 @@ public sealed class AtmosphereMultipleScatteringLut
                 System.Math.Exp(-System.Math.Max(layerTau.Z, 0.0)));
         }
 
-        Vector3d orderTwo = Vector3d.Zero;
-        for (int i = 0; i < integrationSteps; i++)
-            orderTwo += Multiply(sources[i], viewThroughput[i]) * step;
+        return IntegrateSuccessiveOrders(
+            sources, scattering, absoluteTau, viewThroughput,
+            integrationSteps, step, maxScatteringOrder);
+    }
 
-        Vector3d orderThree = Vector3d.Zero;
-        for (int i = 0; i < integrationSteps; i++)
+    private static Vector3d IntegrateSuccessiveOrders(
+        Vector3d[] directSources,
+        Vector3d[] scattering,
+        Vector3d[] absoluteTau,
+        Vector3d[] viewThroughput,
+        int integrationSteps,
+        double step,
+        int maxScatteringOrder)
+    {
+        // directSources is the local order-two source: direct solar photons that have
+        // already scattered once into an isotropic field.  Each pass computes the next
+        // delta source by transporting the previous pass through the column, multiplying
+        // by the local scattering coefficient, then adds its contribution at the observer.
+        // Keeping only the previous delta makes order four O(N²) in the vertical samples,
+        // rather than retaining a separate volume for every order.
+        var deltaSource = directSources;
+        Vector3d accumulated = Vector3d.Zero;
+        for (int order = 2; order <= maxScatteringOrder; order++)
         {
-            Vector3d orderTwoAtLayer = Vector3d.Zero;
-            for (int j = i; j < integrationSteps; j++)
+            for (int i = 0; i < integrationSteps; i++)
+                accumulated += Multiply(deltaSource[i], viewThroughput[i]) * step;
+
+            if (order == maxScatteringOrder) break;
+
+            var nextDelta = new Vector3d[integrationSteps];
+            for (int i = 0; i < integrationSteps; i++)
             {
-                var tau = absoluteTau[i] - absoluteTau[j];
-                var transport = new Vector3d(
-                    System.Math.Exp(-System.Math.Max(tau.X, 0.0)),
-                    System.Math.Exp(-System.Math.Max(tau.Y, 0.0)),
-                    System.Math.Exp(-System.Math.Max(tau.Z, 0.0)));
-                orderTwoAtLayer += Multiply(sources[j], transport) * step;
+                Vector3d transported = Vector3d.Zero;
+                for (int j = i; j < integrationSteps; j++)
+                {
+                    var tau = absoluteTau[i] - absoluteTau[j];
+                    var throughput = new Vector3d(
+                        System.Math.Exp(-System.Math.Max(tau.X, 0.0)),
+                        System.Math.Exp(-System.Math.Max(tau.Y, 0.0)),
+                        System.Math.Exp(-System.Math.Max(tau.Z, 0.0)));
+                    transported += Multiply(deltaSource[j], throughput) * step;
+                }
+
+                nextDelta[i] = Multiply(scattering[i], transported);
             }
 
-            var thirdSource = Multiply(scattering[i], orderTwoAtLayer);
-            orderThree += Multiply(thirdSource, viewThroughput[i]) * step;
+            deltaSource = nextDelta;
         }
 
-        return orderTwo + orderThree;
+        return accumulated;
+    }
+
+    private static void ValidateOrder(int maxScatteringOrder)
+    {
+        if (maxScatteringOrder < 2 || maxScatteringOrder > 8)
+            throw new ArgumentOutOfRangeException(nameof(maxScatteringOrder),
+                "Scattering order must be between 2 and 8.");
     }
 
     private static Vector3d Multiply(Vector3d left, Vector3d right) => new(

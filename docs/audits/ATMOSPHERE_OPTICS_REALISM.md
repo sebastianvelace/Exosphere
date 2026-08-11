@@ -530,3 +530,40 @@ Referencias primarias consultadas: [Bruneton y Neyret 2008](https://doi.org/10.1
 [algoritmo de acumulación por orden](https://ebruneton.github.io/precomputed_atmospheric_scattering/atmosphere/reference/model.cc.html)
 y la revisión NASA de métodos de scattering múltiple planetario
 ([NTRS 19750056479](https://ntrs.nasa.gov/citations/19750056479)).
+
+## V20 — transporte hasta orden 4 y eclipse coherente en superficie (2026-08-11)
+
+Se implementó el primer paso del diseño anterior sin sustituir la ruta estable de orden 3:
+
+- `AtmosphereMultipleScatteringLut` ahora acepta `maxScatteringOrder` (2..8) y transporta la
+  delta de cada rebote sucesivo por la columna atmosférica. El perfil por defecto conserva orden
+  3; `SkyController` solicita orden 4 para el runtime terrestre. El algoritmo sólo conserva la
+  delta anterior, por lo que no duplica memoria por orden y mantiene radiancia no negativa/finita.
+- Se añadió un oráculo que verifica que el orden 4 añade energía finita y no negativa sin romper
+  la monotonía de orden 2 → 3 → 4. La suite pasó de 519 a **520 tests**.
+- La visibilidad limb-darkened del Sol ahora se propaga también a los materiales de superficie y
+  suelo (`solar_visibility`) y se actualiza en cada frame aunque sólo se mueva el occluder. Así,
+  una totalidad no conserva el mapa diurno a brillo completo y la potencia/térmica usan la misma
+  fracción física.
+- El harness reproduce cuatro geometrías (`eclipse_clear`, `eclipse_partial_central`,
+  `eclipse_partial_limb`, `eclipse_total`) y valida visibilidad CPU/runtime, orden de limb
+  darkening, exposición asentada y ausencia de clipping masivo.
+
+Evidencia reproducible de `/tmp/exo_atmo_eclipse_v2/`:
+
+| Estado | Visibilidad CPU/runtime | `clippedFrac` | `surfaceClippedFrac` |
+|---|---:|---:|---:|
+| despejado | 1,000000 / 1,000 | 0,00333 | 0,01587 |
+| parcial central | 0,351490 / 0,351 | 0,00000 | 0,00000 |
+| parcial de borde | 0,692239 / 0,692 | 0,00000 | 0,00000 |
+| totalidad | 0,000000 / 0,000 | 0,00003 | 0,00007 |
+
+La matriz completa terminó con **`ATMOSPHERE_OK`, 20/20 capturas**, 0,000000 de píxeles
+neón-verde y 0 warnings/0 errores de compilación. La captura de totalidad muestra el limbo
+oscuro y las estrellas recuperadas sin el disco terrestre blanco de V19; la parcial central
+mantiene la textura terrestre atenuada en vez de un mapa solarizado. El coste sigue dominado por
+el render CPU de la máquina de validación (≈160 ms/frame), sin regresión medible frente a V18.
+
+Pendiente antes de promover órdenes 5+: comparar orden 4 contra una referencia espectral reducida
+en terminador y aerosoles, y calibrar el suelo nocturno para que la adaptación ocular conserve
+detalle sin levantar artificialmente el airglow.

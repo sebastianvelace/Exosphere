@@ -67,8 +67,8 @@ public partial class SystemsController : Node
             {
                 if (body.Id == "sun") continue;
                 solarVisibility = System.Math.Min(solarVisibility,
-                    MissionGeometry.SolarDiscVisibility(vessel.Position, body.Position,
-                        body.Radius, sunBody.Position, sunBody.Radius));
+                    MissionGeometry.LimbDarkenedSolarDiscVisibility(vessel.Position,
+                        body.Position, body.Radius, sunBody.Position, sunBody.Radius));
             }
         }
 

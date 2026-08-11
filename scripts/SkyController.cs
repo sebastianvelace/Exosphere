@@ -41,6 +41,10 @@ public partial class SkyController : Node
     private const int MultipleScatteringLutHeight = 48;
     private const int MultipleScatteringIntegrationSteps = 48;
     private const int MultipleScatteringSolarSamples = 32;
+    // Order four is the first higher-order pass beyond the validated S2/S3 fallback.
+    // The CPU builder keeps the legacy order selectable for diagnostics; the realtime sky
+    // opts into the finite order-four accumulation once per body/profile.
+    private const int MultipleScatteringMaxOrder = 4;
     private const int AngularScatteringLutWidth = 32;
     private const int AngularScatteringSolarLayers = 20;
     private const int AngularScatteringViewLayers = 12;
@@ -127,13 +131,17 @@ public partial class SkyController : Node
         if (atmosphereChanged)
         {
             BindAtmosphere(body, altitude, upD, sunD);
-            BindSolarGeometry(vessel.Position, sun, body.Id);
             _hasAtmosphereState = true;
             _lastAtmosphereBodyId = body.Id;
             _lastAtmosphereAltitude = altitude;
             _lastAtmosphereUp = upD;
             _lastAtmosphereSun = sunD;
         }
+        // Occluders can move while the local atmosphere and Sun direction remain within
+        // the cache tolerances (the Moon is the common case).  Solar geometry therefore
+        // needs its own update path; otherwise an eclipse would remain visually stuck until
+        // the vessel moved enough to rebuild the atmospheric bindings.
+        BindSolarGeometry(vessel.Position, sun, body.Id);
         UpdateEnvironment(body, altitude, upD.Dot(sunD));
     }
 
@@ -406,7 +414,8 @@ public partial class SkyController : Node
             MultipleScatteringLutWidth,
             MultipleScatteringLutHeight,
             MultipleScatteringIntegrationSteps,
-            MultipleScatteringSolarSamples);
+            MultipleScatteringSolarSamples,
+            MultipleScatteringMaxOrder);
         var lut = AtmosphereAngularMultipleScatteringLut.Build(
             profile,
             global,

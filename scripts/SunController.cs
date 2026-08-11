@@ -48,10 +48,11 @@ public partial class SunController : Node
         foreach (var body in universe.Bodies)
         {
             if (body.Id == "sun") continue;
-            visibility = System.Math.Min(visibility, MissionGeometry.SolarDiscVisibility(
+            visibility = System.Math.Min(visibility, MissionGeometry.LimbDarkenedSolarDiscVisibility(
                 vessel.Position, body.Position, body.Radius, sun.Position, sun.Radius));
         }
         SolarVisibility = (float)visibility;
+        FeedSolarVisibility(SolarVisibility);
     }
 
     /// <summary>
@@ -99,6 +100,21 @@ public partial class SunController : Node
             if ((mesh.GetSurfaceOverrideMaterial(0) ?? mesh.GetActiveMaterial(0)) is ShaderMaterial sm)
                 sm.SetShaderParameter("sun_dir", sunDir);
         }
+    }
+
+    private void FeedSolarVisibility(float visibility)
+    {
+        if (_earthMat == null)
+            _earthMat = FindBodyMaterial("Earth_mesh");
+        _earthMat?.SetShaderParameter("solar_visibility", visibility);
+
+        // The low-altitude tangent patch is a separate unshaded material.  It uses the
+        // same parameter so a synthetic or real eclipse cannot leave the local terrain
+        // at full direct-light strength while the atmosphere is in shadow.
+        if (GetTree().Root.FindChild("EarthGround", true, false) is MeshInstance3D ground
+            && (ground.GetSurfaceOverrideMaterial(0) ?? ground.GetActiveMaterial(0))
+                is ShaderMaterial groundMaterial)
+            groundMaterial.SetShaderParameter("solar_visibility", visibility);
     }
 
     private ShaderMaterial? FindBodyMaterial(string meshName)

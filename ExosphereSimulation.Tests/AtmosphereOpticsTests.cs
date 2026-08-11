@@ -433,6 +433,32 @@ public sealed class AtmosphereOpticsTests
     }
 
     [Fact]
+    public void MultipleScatteringOrderFourAddsFiniteNonNegativeEnergy()
+    {
+        var optics = LoadBody("earth").Atmosphere!.Optics;
+        static AtmosphereMultipleScatteringLut Build(
+            AtmosphereOptics optics, int order) => AtmosphereMultipleScatteringLut.Build(
+                optics, 6_371_000.0, 100_000.0,
+                width: 8, height: 6, integrationSteps: 12,
+                solarSampleCount: 12, maxScatteringOrder: order);
+
+        var order2 = Build(optics, 2).Sample(0.0, 1.0);
+        var order3Lut = Build(optics, 3);
+        var order4Lut = Build(optics, 4);
+        var order3 = order3Lut.Sample(0.0, 1.0);
+        var order4 = order4Lut.Sample(0.0, 1.0);
+
+        Assert.Equal(2, Build(optics, 2).MaxScatteringOrder);
+        Assert.Equal(3, order3Lut.MaxScatteringOrder);
+        Assert.Equal(4, order4Lut.MaxScatteringOrder);
+        Assert.True(order2.X >= 0.0 && order2.Y >= 0.0 && order2.Z >= 0.0);
+        Assert.True(order4.X >= order3.X && order4.Y >= order3.Y && order4.Z >= order3.Z,
+            $"higher-order transport reduced radiance: S2={order2}, S3={order3}, S4={order4}");
+        Assert.True(double.IsFinite(order4.X) && double.IsFinite(order4.Y)
+            && double.IsFinite(order4.Z));
+    }
+
+    [Fact]
     public void MultipleScatteringLutRespondsToPlanetCurvature()
     {
         var optics = AtmosphereModel.Mars().Optics;
