@@ -84,6 +84,13 @@ public class Universe
     /// </summary>
     public double TimeScale { get; set; } = 1.0;
 
+    /// <summary>
+    /// Effective cap selected for the most recent mixed/high-warp tick. Zero means the
+    /// last tick used the full-physics or pure-rails branch. This is diagnostic telemetry;
+    /// it does not change the dispatch policy by itself.
+    /// </summary>
+    public double LastMixedPhysicsStepCap { get; private set; }
+
     /// <summary>The vessel the player is currently controlling.</summary>
     public Vessel? ActiveVessel { get; set; }
 
@@ -511,6 +518,7 @@ public class Universe
     /// </summary>
     public void Tick(double realDeltaTime)
     {
+        LastMixedPhysicsStepCap = 0.0;
         double simDelta = realDeltaTime * TimeScale;
         if (simDelta <= 0.0) return;
 
@@ -540,12 +548,8 @@ public class Universe
             // re-evaluation timely, and lets surface-impact be checked each sub-step.
             // While the active vessel is thrusting, tighten the sub-step so a powered burn under
             // warp integrates accurately (thrust + gravity) and matches a real-time burn.
-            bool thrusting = ActiveVessel is { Throttle: > 0.01 };
-            bool forceSensitive = ActiveVessel != null && RequiresOffRailsPhysics(ActiveVessel);
-            double cap = anyContactSensitive ? MaxContactStep
-                       : thrusting ? MaxThrustStep
-                       : forceSensitive ? MaxPhysicsStep
-                       : MaxCoastStep;
+            double cap = GetMixedPhysicsStepCap(anyContactSensitive);
+            LastMixedPhysicsStepCap = cap;
             double remaining = simDelta;
             while (remaining > 1e-12)
             {
@@ -561,6 +565,41 @@ public class Universe
             TickRails(simDelta);
             CurrentTime += simDelta;
         }
+    }
+
+    /// <summary>
+    /// Selects the safe global slice for the mixed branch. Every vessel that will enter
+    /// <see cref="IntegrateVesselOffRails"/> participates in this decision; using only
+    /// <see cref="ActiveVessel"/> would allow a secondary atmospheric vessel to receive
+    /// <see cref="MaxCoastStep"/> while the active vessel was coasting on rails.
+    /// </summary>
+    private double GetMixedPhysicsStepCap(bool anyContactSensitive)
+    {
+        double cap = anyContactSensitive ? MaxContactStep : MaxCoastStep;
+
+        foreach (var vessel in _vessels)
+        {
+            if (IsDockedSecondary(vessel)
+                || vessel.IsDestroyed
+                || vessel.IsGroundHeld
+                || vessel.IsSurfaceSettled && vessel.Throttle <= 0.01)
+                continue;
+
+            if (!RequiresOffRailsPhysics(vessel))
+                continue;
+
+            bool thrusting = vessel.Throttle > 0.01
+                || vessel.Parts.ActiveEngines.Any(e => e.ThrottleLevel > 0.01);
+            double vesselCap = thrusting ? MaxThrustStep : MaxPhysicsStep;
+            cap = System.Math.Min(cap, vesselCap);
+
+            // No smaller cap exists in this scheduler. Avoid rescanning a large fleet
+            // once the landing/contact cadence is already the limiting factor.
+            if (cap <= MaxContactStep)
+                break;
+        }
+
+        return cap;
     }
 
     /// <summary>

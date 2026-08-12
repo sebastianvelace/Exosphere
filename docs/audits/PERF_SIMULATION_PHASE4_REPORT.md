@@ -1,8 +1,10 @@
 # Fase 4 — auditoría del scheduler de simulación
 
-Fecha: 2026-08-11
+Fecha original: 2026-08-11
+Actualización de implementación: 2026-08-12
 Alcance: `ExosphereSimulation/Universe.cs`, `Vessel.cs`, `Parts/PartGraph.cs`, `Physics/*`, integradores y el punto de entrada de `SimulationBridge`.
-Restricción: **sólo documentación**. No se modificó código de runtime, tests, escenas, configuración ni datos.
+La auditoría original fue sólo documentación. Esta actualización implementa únicamente el
+primer gate P0 descrito abajo; no activa hibernación ni cambia la política oficial de rails.
 
 ## Veredicto ejecutivo
 
@@ -14,15 +16,18 @@ El simulador tiene tres rutas reales:
 
 También existe una clasificación `Active/Nearby/OnRails/Hibernated`, pero es una clasificación sin efectos temporales: no decide qué nave recibe un tick, no avanza el reloj de una nave dormida y no contiene un estado de wake-up. `Universe.cs:26-46` y `648-699` lo declaran explícitamente.
 
-El hallazgo prioritario antes de introducir sleep/wake es una asimetría de caps en la rama mixta:
+El hallazgo prioritario que bloqueaba sleep/wake era una asimetría de caps en la rama mixta:
 
 - `Universe.Tick` decide el cap global mirando `ActiveVessel` (`Universe.cs:535-555`).
 - `anyForceSensitive` puede ser verdadero por una nave no activa (`517-520`).
-- Esa nave puede entrar a `IntegrateVesselOffRails` con `MaxCoastStep = 2 s` (`1111-1119`, `144`), aunque por atmósfera, contacto o térmica debería recibir un paso de física/contacto menor.
+- Esa nave podía entrar a `IntegrateVesselOffRails` con `MaxCoastStep = 2 s` (`1111-1119`, `144`), aunque por atmósfera, contacto o térmica debería recibir un paso de física/contacto menor.
 
-No lo corrijo aquí porque el encargo prohíbe modificar código. Debe ser el primer test de regresión y el primer gate de cualquier scheduler nuevo.
+La fase 5 lo corrige con un cap mínimo calculado sobre todas las naves elegibles y lo
+protege con una prueba multi-vessel; la sección final de este documento contiene la
+evidencia. El problema de optimización posterior sigue siendo separar ese cap por nave
+sin perder determinismo ni eventos.
 
-La propuesta segura es incremental: mantener siempre activa la nave controlada; usar rails sólo cuando la nave esté libre de fuerzas y eventos; usar proximidad como filtro conservador, no como permiso de apagar física por distancia; y no implementar hibernación por `continue` hasta disponer de estado temporal explícito, eventos pendientes y pruebas de equivalencia.
+La propuesta segura sigue siendo incremental: mantener siempre activa la nave controlada; usar rails sólo cuando la nave esté libre de fuerzas y eventos; usar proximidad como filtro conservador, no como permiso de apagar física por distancia; y no implementar hibernación por `continue` hasta disponer de estado temporal explícito, eventos pendientes y pruebas de equivalencia.
 
 ## Evidencia de verificación
 
@@ -170,11 +175,19 @@ La documentación térmica deja claro que `MaxCoastStep = 2 s` puede implicar 10
 
 ## Hallazgos priorizados
 
-### P0 — cap incorrecto para una nave no activa sensible a fuerzas
+### P0 — cap incorrecto para una nave no activa sensible a fuerzas — corregido
 
 `anyForceSensitive` mira todas las naves, pero `cap` usa sólo `ActiveVessel` (`Universe.cs:517-555`). Si la activa está en vacuum coast y una secundaria entra en atmósfera, la secundaria puede recibir `dt=2 s`. Riesgos: drag/contacto/thermal RK4 más grueso, penetración, temperatura o destrucción desplazada.
 
-**Acción obligatoria antes de optimizar:** test que construya active vacuum + secondary atmosférica/contact-sensitive y observe el `dt` efectivo por vessel.
+**Corrección aplicada en la fase 5:** `GetMixedPhysicsStepCap` recorre todas las naves
+que realmente entrarán en `IntegrateVesselOffRails` y elige el mínimo cap seguro entre
+contacto, thrust y física. Rails válidos, estados anclados, wrecks y secondary docked no
+reducen el cap. `LastMixedPhysicsStepCap` expone el cap efectivo del último tick para
+diagnóstico sin alterar la API de juego.
+
+El test `MixedSchedulerBoundsSecondaryForceSensitiveVesselAndMatchesFineTick` reproduce
+active vacuum + secondary atmosférica a warp x100, exige el cap <= 20 ms simulados y
+compara posición/velocidad contra un tick de referencia a tiempo real. El caso pasó.
 
 ### P1 — tier hibernated no controla dispatch
 
@@ -256,14 +269,14 @@ No usar un único epsilon: contacto de milímetros, órbita LEO y conica helioc�
 
 ## Tests e invariantes propuestos
 
-Estos tests quedan propuestos; no se añadieron por la restricción de esta fase.
+Los tests 1 y 4 se implementaron en la fase 5; los restantes siguen siendo gates futuros.
 
 ### Scheduler y caps
 
-1. **Cap por vessel:** active vacuum + secondary atmosférica a warp alto; ningún off-rails `dt` excede `MaxPhysicsStep` y contacto no excede `MaxContactStep`.
+1. **Cap por vessel:** active vacuum + secondary atmosférica a warp alto; ningún off-rails `dt` excede `MaxPhysicsStep` y contacto no excede `MaxContactStep`. **Implementado.**
 2. **Burn:** throttle bajo warp; cada paso `<= MaxThrustStep`, spool una vez y consumo igual a referencia real-time.
 3. **Settled wake:** `IsSurfaceSettled` a warp alto no salta timers; throttle despierta inmediatamente.
-4. **Tier no mutante:** consultar tier no cambia posición, velocidad, rails, conica, recursos ni flags.
+4. **Tier no mutante:** consultar tier no cambia posición, velocidad, rails, conica, recursos ni flags. **Cubierto por la suite existente; el nuevo cap añade telemetría sin mutar el estado físico.**
 
 ### Rails y wake
 
@@ -300,11 +313,14 @@ Estos tests quedan propuestos; no se añadieron por la restricción de esta fase
 
 ### Fase 4a — instrumentación
 
-Añadir contadores CPU y escenarios multi-vessel sin cambiar física. Reproducir el P0 y medir substeps, tiempo y allocations.
+Añadir contadores CPU y escenarios multi-vessel sin cambiar física. **P0 reproducido y
+corregido; falta medir substeps/allocations por nave en una flota representativa.**
 
 ### Fase 4b — caps y snapshots
 
-Corregir el cap por vessel no activo, consolidar snapshot de body/policy y medir equivalencia real-time/warp, térmica y contacto.
+Consolidar snapshot de body/policy y medir equivalencia real-time/warp, térmica y
+contacto. El cap global mínimo actual es una barrera conservadora; no es todavía el
+scheduler óptimo por nave.
 
 ### Fase 4c — rails por eventos
 
@@ -320,9 +336,11 @@ Sólo con snapshots inmutables, command buffers y commit determinista para consu
 
 ## Decisión
 
-No se recomienda activar todavía ningún “hibernated tick skip”, scheduler por distancia sin eventos ni paralelización de `Vessel.Tick`. La base actual es defendible cuando usa RK4/rails con sus guardas, pero necesita métricas y la corrección del cap per-vessel antes de añadir otra capa.
+No se recomienda activar todavía ningún “hibernated tick skip”, scheduler por distancia sin eventos ni paralelización de `Vessel.Tick`. La base actual es defendible cuando usa RK4/rails con sus guardas; todavía necesita métricas y una política por vessel basada en deadlines antes de añadir otra capa.
 
-El siguiente gate será: **P0 reproducido y cubierto por test, métricas CPU p50/p95/p99 de `Universe.Tick`, equivalencia de trayectoria y matriz de eventos verde**. Hasta entonces, los cambios deben limitarse a instrumentación o documentación.
+El P0 ya está reproducido, corregido y cubierto por test. El siguiente gate es:
+**métricas CPU p50/p95/p99 de `Universe.Tick`, equivalencia de trayectoria y matriz de
+eventos multi-vessel verde**. Hasta entonces no se activa hibernación.
 
 ## Validación Flight 7 con el benchmark de fase 4
 
@@ -349,8 +367,63 @@ rss_max_kib=1314968
 ```
 
 La órbita alcanzada fue 163×149 km con `e=0.001` según el log del harness. Esto
-valida la ruta actual y el benchmark, pero no resuelve el P0 del cap por vessel:
-no se debe inferir de una única Starship que una flota multi-vessel con atmósfera,
-contacto y thermal haya conservado el mismo error. El siguiente cambio de código
-debe reproducir primero ese P0 con dos naves y comparar trayectoria, temperatura,
-contactos, rupturas y consumo antes/después.
+valida la ruta actual y el benchmark. No se debe inferir de una única Starship que una
+flota multi-vessel con atmósfera, contacto y thermal tenga el mismo coste: el cap actual
+es global y deliberadamente conservador. La siguiente fase debe comparar una matriz de
+dos o más naves con trayectoria, temperatura, contactos, rupturas, consumo y coste por
+vessel antes de sustituirlo por deadlines independientes.
+
+## Fase 5 — corrección del cap mixed y validación post-fix
+
+### Implementación
+
+- `Universe.GetMixedPhysicsStepCap` inspecciona todas las naves que requieren física
+  fuera de rails y toma el mínimo cap seguro: contacto (`MaxContactStep`), thrust
+  (`MaxThrustStep`) o física (`MaxPhysicsStep`).
+- `LastMixedPhysicsStepCap` registra el valor usado en el último tick mixed; vale cero
+  para las rutas full-physics y rails puras.
+- No se añadió ningún `continue` de hibernación, reloj diferido, multithreading ni cambio
+  en `MultipleScatteringMaxOrder`/render. El coste de evaluación del cap es O(vessels),
+  aceptado temporalmente para cerrar el P0; una política por vessel requiere snapshots y
+  deadlines antes de optimizarlo.
+
+### Evidencia automatizada
+
+```text
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --no-build --nologo
+  Failed: 0, Passed: 550, Skipped: 0, Total: 550
+
+MixedSchedulerBoundsSecondaryForceSensitiveVesselAndMatchesFineTick
+  Passed: 1/1
+
+Flight 7 post-fix
+  status=PASS
+  summary_reason=ASCENT_ORBIT_OK
+  summary_frames=1993
+  trace_count=48
+  transition_sequence=Ignition>Ascent>Coast>Insert>Done
+  trace_time_monotonic=true
+  trace_progress_detected=true
+  trace_stall_detected=false
+  trace_max_gap_sec=10.300
+  trace_time_span_sec=479.000
+  trace_last_alt_m=150092.000
+  trace_last_apo_m=150401.100
+  capture_count=6
+  wall_seconds=868.070000
+  rss_max_kib=1333868
+```
+
+La corrida post-fix llegó a órbita y no registró NaN, fallback, GAP ni stall. La
+ejecución se realizó con framebuffer CPU/llvmpipe; `wall_seconds` y `rss_max_kib` son
+datos de ese entorno de validación, no un presupuesto de GPU de producción.
+
+### Decisión de promoción
+
+El cap corregido se mantiene como ruta oficial porque elimina una condición insegura sin
+cambiar la física de rails ni la ruta visual. No se promueve todavía hibernación ni un
+cap independiente por vessel: antes deben pasar la matriz multi-vessel de contacto,
+térmica, docking, staging, SOI y wake-up, además de registrar p50/p95/p99 y allocations.
+El orden de trabajo siguiente queda fijado como: instrumentar → comparar referencia
+fine-tick → introducir deadlines conservadores → probar wake/deferred state → medir
+recién entonces cualquier ahorro de ticks.

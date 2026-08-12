@@ -6,6 +6,8 @@ TEST_FILE="$ROOT_DIR/ExosphereSimulation.Tests/PerformanceAcceptanceTests.cs"
 SIMULATION_BRIDGE="$ROOT_DIR/scripts/SimulationBridge.cs"
 SKY_CONTROLLER="$ROOT_DIR/scripts/SkyController.cs"
 EXPOSURE_CONTROLLER="$ROOT_DIR/scripts/VisualExposureController.cs"
+UNIVERSE="$ROOT_DIR/ExosphereSimulation/Universe.cs"
+SCHEDULER_TEST="$ROOT_DIR/ExosphereSimulation.Tests/PhysicsSchedulerPerformanceTests.cs"
 
 pass_count=0
 fail_count=0
@@ -69,6 +71,12 @@ require_text "$SKY_CONTROLLER" "PollAtmosphereLutBuild" \
     "atmosphere LUT completion is polled on the main thread"
 require_text "$EXPOSURE_CONTROLLER" "DirectTransmittanceCadenceSeconds" \
     "direct-transmittance work has an explicit cadence gate"
+require_text "$UNIVERSE" "GetMixedPhysicsStepCap" \
+    "mixed scheduler derives its cap from every eligible vessel"
+require_text "$UNIVERSE" "LastMixedPhysicsStepCap" \
+    "mixed scheduler exposes effective cap telemetry"
+require_text "$SCHEDULER_TEST" "MixedSchedulerBoundsSecondaryForceSensitiveVesselAndMatchesFineTick" \
+    "multi-vessel mixed-cap regression test is present"
 
 log_file="${PERF_ACCEPTANCE_LOG:-}"
 if [[ -z "$log_file" ]]; then

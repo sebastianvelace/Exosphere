@@ -109,6 +109,56 @@ public sealed class PhysicsSchedulerPerformanceTests
         Assert.Equal(a.OrbitalState?.ReferenceBodyId, b.OrbitalState?.ReferenceBodyId);
     }
 
+    [Fact]
+    public void MixedSchedulerBoundsSecondaryForceSensitiveVesselAndMatchesFineTick()
+    {
+        var mixedEarth = LoadBody("earth");
+        var mixedActive = CoastVessel(mixedEarth, "mixed-active");
+        var mixedSecondary = CoastVessel(mixedEarth, "mixed-secondary");
+        mixedSecondary.Position = mixedEarth.Position
+            + Vector3d.Right * (mixedEarth.Radius + 150_000.0);
+        mixedSecondary.Velocity = mixedEarth.Velocity + Vector3d.Up * 7_700.0;
+
+        var mixed = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = mixedActive,
+        };
+        mixed.AddBody(mixedEarth);
+        mixed.AddVessel(mixedActive);
+        mixed.AddVessel(mixedSecondary);
+
+        Assert.False(mixed.RequiresOffRailsPhysics(mixedActive));
+        Assert.True(mixed.RequiresOffRailsPhysics(mixedSecondary));
+
+        // One 20 ms simulated slice at warp x100. The old active-only policy selected
+        // MaxCoastStep=2 s here; the secondary would then receive a coarser RK4 step.
+        mixed.Tick(0.0002);
+        Assert.InRange(mixed.LastMixedPhysicsStepCap, 0.0, 0.020000001);
+        Assert.True(double.IsFinite(mixedSecondary.Position.X));
+        Assert.True(double.IsFinite(mixedSecondary.Velocity.X));
+        Assert.False(mixedSecondary.IsOnRails);
+
+        var fineEarth = LoadBody("earth");
+        var fineActive = CoastVessel(fineEarth, "fine-active");
+        var fineSecondary = CoastVessel(fineEarth, "fine-secondary");
+        fineSecondary.Position = fineEarth.Position
+            + Vector3d.Right * (fineEarth.Radius + 150_000.0);
+        fineSecondary.Velocity = fineEarth.Velocity + Vector3d.Up * 7_700.0;
+        var fine = new Universe
+        {
+            TimeScale = 1.0,
+            ActiveVessel = fineSecondary,
+        };
+        fine.AddBody(fineEarth);
+        fine.AddVessel(fineActive);
+        fine.AddVessel(fineSecondary);
+        fine.Tick(0.02);
+
+        AssertVectorClose(fineSecondary.Position, mixedSecondary.Position, 1e-5);
+        AssertVectorClose(fineSecondary.Velocity, mixedSecondary.Velocity, 1e-8);
+    }
+
     private static Universe CreateCoastingUniverse(string vesselId)
     {
         var earth = LoadBody("earth");
