@@ -61,8 +61,10 @@ VRAM telemetry; the latter remains a separate validation gate.
   `ExosphereSimulation/Universe.cs`, which reference missing
   `RestoreDeferredVesselsForNormalMode` and `TryAdvanceDeferredVessel`. This phase did not
   modify that file.
-- The visual smoke was not counted as a pass in this phase because the configured
-  `GODOT_BIN` path was not present in the current VM. No visual regression claim is made.
+- The visual smoke was not counted as a pass in this phase because the harness could not
+  create an X11 or Wayland display in the current VM (`X11 Display is not available`, then
+  `Can't connect to a Wayland display`). The Godot binary was found, but no visual
+  regression claim is made without a framebuffer-backed run.
 
 ## Decision
 
