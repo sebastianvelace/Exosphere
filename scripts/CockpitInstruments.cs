@@ -13,6 +13,7 @@ public partial class CockpitInstruments : Node
     private readonly SubViewport[] _vp   = new SubViewport[3];
     private readonly ScreenPanel[] _pan  = new ScreenPanel[3];
     private bool _wired;
+    private bool _cockpitRenderingActive;
 
     public override void _Ready()
     {
@@ -31,11 +32,28 @@ public partial class CockpitInstruments : Node
             AddChild(vp);
             _vp[i] = vp; _pan[i] = p;
         }
+
+        // The screen textures remain allocated and wired while the cockpit is hidden,
+        // but their render targets do not need a frame every tick.  Re-enabling Always
+        // on cockpit entry preserves the existing panel nodes and their latest telemetry.
+        SetViewportUpdateMode(active: false);
+        GD.Print("PERF_COCKPIT stage=created viewports=3 size=512x512 update=disabled");
     }
 
     public override void _Process(double delta)
     {
-        for (int i = 0; i < 3; i++) _pan[i].QueueRedraw();
+        bool cockpitActive = CameraController.Instance?.IsCockpitView == true;
+        if (cockpitActive != _cockpitRenderingActive)
+        {
+            _cockpitRenderingActive = cockpitActive;
+            SetViewportUpdateMode(cockpitActive);
+            GD.Print($"PERF_COCKPIT stage=update_mode cockpit={cockpitActive.ToString().ToLowerInvariant()} " +
+                     $"viewports=3 mode={(cockpitActive ? "always" : "disabled")}");
+        }
+
+        if (_cockpitRenderingActive)
+            for (int i = 0; i < 3; i++) _pan[i].QueueRedraw();
+
         if (_wired) return;
 
         bool all = true;
@@ -58,6 +76,14 @@ public partial class CockpitInstruments : Node
             screen.SetSurfaceOverrideMaterial(0, mat);
         }
         if (all) _wired = true;
+    }
+
+    private void SetViewportUpdateMode(bool active)
+    {
+        var mode = active ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+        for (int i = 0; i < _vp.Length; i++)
+            if (_vp[i] != null)
+                _vp[i].RenderTargetUpdateMode = mode;
     }
 }
 
