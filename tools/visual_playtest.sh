@@ -18,6 +18,7 @@ if [[ -n "${LOG:-}" ]]; then LOG_SET=1; fi
 OUT_DIR="${OUT_DIR:-/tmp/exo_play}"
 LOG="${LOG:-/tmp/exo_play.log}"
 CONSOLE_LOG=""
+GODOT_LOG_FILE=""
 RUN_ID=""
 RUN_TOKEN=""
 MAX_RUNTIME_SEC="${PLAYTEST_MAX_RUNTIME_SEC:-}"
@@ -264,6 +265,17 @@ print_failure_diagnostics() {
       -printf '%f\n' 2>/dev/null | sort | paste -sd, -)"
     echo "visual_playtest: captures=${captures:-none}" >&2
   fi
+}
+
+prepare_godot_log_file() {
+  # Godot's default crash log lives under user://logs. In this environment the
+  # crash handler can fail to create that directory and then abort the process
+  # before the scene starts. --log-file is supported by the installed 4.6.3
+  # binary; keep one explicit native log per launch beside the harness console
+  # log so every run is reproducible and isolated by --run-id/--log.
+  GODOT_LOG_FILE="${CONSOLE_LOG}.godot"
+  mkdir -p "$(dirname "$GODOT_LOG_FILE")"
+  : > "$GODOT_LOG_FILE"
 }
 
 cleanup() {
@@ -2580,6 +2592,7 @@ if [[ "$MODE" == "reentry_compare" ]]; then
     CONSOLE_LOG="${LOG}.console"
     : > "$LOG"
     : > "$CONSOLE_LOG"
+    prepare_godot_log_file
     write_harness
     # See the SKIP_BUILD block above: {PLAYTEST_LOCK_FD}>&- keeps the lock fd out of every
     # build/launch child so a hung build-server or stray Godot subprocess can never hold the
@@ -2588,6 +2601,7 @@ if [[ "$MODE" == "reentry_compare" ]]; then
     EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
     xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
       --path . --rendering-driver opengl3 \
+      --log-file "$GODOT_LOG_FILE" \
       res://scenes/flight/Flight.tscn {PLAYTEST_LOCK_FD}>&- 2>&1 | tee -a "$CONSOLE_LOG"
     cat "$LOG" >> "$COMBINED_LOG"
     cat "$CONSOLE_LOG" >> "$COMBINED_CONSOLE_LOG"
@@ -2599,9 +2613,11 @@ else
   HARNESS_MODE="$MODE"
   write_harness
   dotnet build Exosphere.csproj --no-restore --nologo -v quiet {PLAYTEST_LOCK_FD}>&-
+  prepare_godot_log_file
   EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
   xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
     --path . --rendering-driver opengl3 \
+    --log-file "$GODOT_LOG_FILE" \
     res://scenes/flight/Flight.tscn {PLAYTEST_LOCK_FD}>&- 2>&1 | tee -a "$CONSOLE_LOG"
 fi
 
