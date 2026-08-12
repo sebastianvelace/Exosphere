@@ -15,9 +15,15 @@ using Godot;
 [GlobalClass]
 public partial class VisualExposureController : Node
 {
+    private const double DirectTransmittanceCadenceSeconds = 0.10;
     private readonly ExposureAdaptation _adaptation = new();
     private Godot.Environment? _environment;
     private ShaderMaterial? _skyMaterial;
+    private double _directTransmittanceAccumulator = double.MaxValue;
+    private Vector3d _cachedDirectTransmittance = new(1.0, 1.0, 1.0);
+    private string? _cachedBodyId;
+    private double _cachedAltitude;
+    private double _cachedSunElevation;
 
     public override void _Ready() => ProcessPriority = 20;
 
@@ -42,13 +48,34 @@ public partial class VisualExposureController : Node
         double air = optics == null ? 0.0 : System.Math.Max(
             optics.RayleighDensity(altitude), optics.MieDensity(altitude));
         double daylight = Smoothstep(-0.12, 0.03, sunElevation);
-        Vector3d direct = optics?.DirectSolarTransmittance(
-            altitude,
-            sunElevation,
-            body.Radius,
-            optics == null ? 0.0 : body.Atmosphere!.MaxAltitude,
-            sampleCount: 32)
-            ?? new Vector3d(1.0, 1.0, 1.0);
+        _directTransmittanceAccumulator += delta;
+        // The exposure integrator is intentionally a lower-rate consumer of flight state.
+        // Altitude and solar elevation can change every physics tick during ascent, but a
+        // 10 Hz optical sample is sufficient for the eye-adaptation time scale.  Only an
+        // SOI/body transition bypasses the cadence so a new atmosphere is never displayed
+        // with the previous body's direct beam.
+        bool directStateChanged = _cachedBodyId != body.Id;
+        if (optics != null && (_directTransmittanceAccumulator >= DirectTransmittanceCadenceSeconds
+            || directStateChanged))
+        {
+            _cachedDirectTransmittance = optics.DirectSolarTransmittance(
+                altitude,
+                sunElevation,
+                body.Radius,
+                body.Atmosphere!.MaxAltitude,
+                sampleCount: 32);
+            _cachedBodyId = body.Id;
+            _cachedAltitude = altitude;
+            _cachedSunElevation = sunElevation;
+            _directTransmittanceAccumulator = 0.0;
+        }
+        else if (optics == null)
+        {
+            _cachedDirectTransmittance = new Vector3d(1.0, 1.0, 1.0);
+            _cachedBodyId = body.Id;
+            _directTransmittanceAccumulator = 0.0;
+        }
+        Vector3d direct = _cachedDirectTransmittance;
         double directLuminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
 
         double density = body.GetAtmosphericDensity(vessel.Position);

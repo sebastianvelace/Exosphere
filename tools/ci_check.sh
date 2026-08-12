@@ -20,10 +20,12 @@ fi
 
 bash -n tools/visual_playtest.sh
 bash tools/tests/visual_playtest_contract_test.sh
+bash tools/tests/flight_startup_contract_test.sh
 
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 dotnet build Exosphere.csproj --nologo -v quiet
 dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
+bash tools/flight_startup_quick_check.sh
 
 DEFAULT_GODOT="/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64"
 GODOT="${GODOT_BIN:-$DEFAULT_GODOT}"

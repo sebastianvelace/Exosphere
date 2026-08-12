@@ -1,5 +1,6 @@
 namespace Exosphere.Game;
 
+using System.Diagnostics;
 using Godot;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
@@ -88,10 +89,14 @@ public partial class SimulationBridge : Node
     {
         Instance = this;
 
+        var startup = Stopwatch.StartNew();
+        GD.Print("PERF_STARTUP phase=begin");
+
         var dataPath = ProjectSettings.GlobalizePath(DataDirectory);
         Universe = Universe.LoadFromDataDirectory(dataPath);
         Universe.TimeScale = 1.0;
         _running = true;
+        GD.Print($"PERF_STARTUP phase=universe_loaded ms={startup.Elapsed.TotalMilliseconds:F1} bodies={Universe.Bodies.Count}");
 
         var pendingIntent = CraftLaunchRequest.Pop();
         if (pendingIntent != null)
@@ -102,6 +107,7 @@ public partial class SimulationBridge : Node
         var sites = LaunchSite.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "launch_sites"));
         if (!sites.TryGetValue(LaunchSiteId, out _launchSite))
             GD.PushWarning($"[Sim] Launch site '{LaunchSiteId}' not found; pad will fall back to the equator.");
+        GD.Print($"PERF_STARTUP phase=launch_sites_loaded ms={startup.Elapsed.TotalMilliseconds:F1} sites={sites.Count}");
 
         // Create sibling nodes — deferred: parent (Flight) is busy in _Ready()
         var mm = new MissionManager { Name = "MissionManager" };
@@ -193,6 +199,7 @@ public partial class SimulationBridge : Node
                 && string.IsNullOrWhiteSpace(pendingIntent.SaveSlot);
         if (needsDefaultStack)
             SpawnStarshipStack(dataPath);
+        GD.Print($"PERF_STARTUP phase=starship_spawned ms={startup.Elapsed.TotalMilliseconds:F1} vessels={Universe.Vessels.Count}");
         SpawnPendingConstructedVessel(dataPath, pendingIntent);
         var campaignRuntime = new CampaignRuntime
         {
@@ -210,8 +217,11 @@ public partial class SimulationBridge : Node
             pendingIntent?.CampaignState
                 ?? SaveSystem.LastLoadedMetadata?.Campaign,
             continuingSave ? SaveSystem.LastLoadedMetadata?.Mission : null);
+        GD.Print($"PERF_STARTUP phase=campaign_initialized ms={startup.Elapsed.TotalMilliseconds:F1}");
         SpawnPlanets();
+        GD.Print($"PERF_STARTUP phase=planets_spawned ms={startup.Elapsed.TotalMilliseconds:F1}");
         EmitSignal(SignalName.SimulationLoaded);
+        GD.Print($"PERF_STARTUP phase=simulation_loaded ms={startup.Elapsed.TotalMilliseconds:F1}");
 
         _camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
         if (_camera != null)

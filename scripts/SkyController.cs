@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using System.Diagnostics;
+using System.Threading.Tasks;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Systems;
@@ -72,6 +73,10 @@ public partial class SkyController : Node
     private readonly Dictionary<string, Texture2D> _multipleScatteringLuts = new();
     private readonly Dictionary<string, (Texture2D Texture, float TopAltitude)> _densityLuts = new();
     private readonly Dictionary<string, AtmosphereDensityProfile> _densityProfiles = new();
+    private Task<AtmosphereLutCpuResult>? _atmosphereLutTask;
+    private string? _atmosphereLutTaskBodyId;
+    public bool IsAtmosphereLutBuildPending => _atmosphereLutTask is { IsCompleted: false };
+    public double LastAtmosphereLutBuildMilliseconds { get; private set; }
     private double _updateAccumulator = 1.0;
     private bool _hasAtmosphereState;
     private string? _lastAtmosphereBodyId;
@@ -112,6 +117,8 @@ public partial class SkyController : Node
 
     public override void _Process(double delta)
     {
+        PollAtmosphereLutBuild();
+
         // Rebuilding a procedural sky cubemap for every simulation frame was one
         // of the largest launch-time stalls.  Atmospheric geometry changes slowly;
         // 12 Hz remains visually continuous and lets incremental cubemap work settle.
@@ -241,20 +248,25 @@ public partial class SkyController : Node
         }
 
         var densityProfile = GetDensityProfile(body.Id, atmosphere!);
+        var buildTimer = Stopwatch.StartNew();
         var densityLut = GetDensityLut(body.Id, densityProfile);
+        GD.Print($"PERF_ATMOS body={body.Id} stage=density_lut ms={buildTimer.Elapsed.TotalMilliseconds:F1}");
         _skyMat.SetShaderParameter("density_lut", densityLut.Texture);
         _skyMat.SetShaderParameter("density_lut_top_altitude", densityLut.TopAltitude);
         _skyMat.SetShaderParameter("density_lut_enabled", true);
 
-        // Build each body's table once.  The LUT is independent of the vessel's current
-        // altitude and solar longitude; reusing it avoids a 12 Hz texture allocation and
-        // gives the shader a stable filtered result while its cubemap converges.
-        _skyMat.SetShaderParameter("transmittance_lut", GetTransmittanceLut(
-            body.Id, densityProfile, body.Radius, atmosphere!.MaxAltitude));
-        _skyMat.SetShaderParameter("transmittance_lut_enabled", true);
-        _skyMat.SetShaderParameter("multiple_scattering_lut", GetMultipleScatteringLut(
-            body.Id, densityProfile, body.Radius, atmosphere.MaxAltitude));
-        _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", true);
+        // These tables are pure CPU work but can take seconds for Earth.  Queue them away
+        // from the main thread and keep the shader's analytical fallback active until the
+        // immutable result is ready.  Texture/Image creation stays on this thread.
+        if (TryGetAtmosphereLuts(body.Id, densityProfile, body.Radius, atmosphere!.MaxAltitude,
+            out var transmittance, out var multipleScattering)
+            && transmittance != null && multipleScattering != null)
+        {
+            _skyMat.SetShaderParameter("transmittance_lut", transmittance);
+            _skyMat.SetShaderParameter("transmittance_lut_enabled", true);
+            _skyMat.SetShaderParameter("multiple_scattering_lut", multipleScattering);
+            _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", true);
+        }
 
         _skyMat.SetShaderParameter("rayleigh_scattering", ToGodot(optics!.RayleighScattering));
         _skyMat.SetShaderParameter("mie_scattering", ToGodot(optics.MieScattering));
@@ -350,21 +362,129 @@ public partial class SkyController : Node
     private static Vector3 ToGodot(Vector3d value) => new(
         (float)value.X, (float)value.Y, (float)value.Z);
 
-    private Texture2D GetTransmittanceLut(
+    private bool TryGetAtmosphereLuts(
         string bodyId,
         AtmosphereDensityProfile profile,
         double planetRadius,
-        double atmosphereTopAltitude)
+        double atmosphereTopAltitude,
+        out Texture2D? transmittance,
+        out Texture2D? multipleScattering)
     {
-        if (_transmittanceLuts.TryGetValue(bodyId, out var cached)) return cached;
+        if (_transmittanceLuts.TryGetValue(bodyId, out transmittance)
+            && _multipleScatteringLuts.TryGetValue(bodyId, out multipleScattering))
+            return true;
 
-        var lut = AtmosphereTransmittanceLut.Build(
+        transmittance = null;
+        multipleScattering = null;
+        // PollAtmosphereLutBuild is the sole consumer of completed tasks.  The task may
+        // complete between that poll and this bind, so do not clear a completed task here:
+        // doing so would lose the result and queue a duplicate CPU build.
+        if (_atmosphereLutTask != null) return false;
+
+        bool includeExperimentalOrderFive = GenerateExperimentalOrderFive;
+        _atmosphereLutTaskBodyId = bodyId;
+        _atmosphereLutTask = Task.Run(() => BuildAtmosphereLutsCpu(
+            bodyId, profile, planetRadius, atmosphereTopAltitude,
+            includeExperimentalOrderFive));
+        GD.Print($"PERF_ATMOS body={bodyId} stage=queued worker=true");
+        return false;
+    }
+
+    private void PollAtmosphereLutBuild()
+    {
+        var task = _atmosphereLutTask;
+        if (task == null || !task.IsCompleted) return;
+
+        string bodyId = _atmosphereLutTaskBodyId ?? string.Empty;
+        _atmosphereLutTask = null;
+        _atmosphereLutTaskBodyId = null;
+        if (task.IsCanceled || task.IsFaulted)
+        {
+            GD.PrintErr($"PERF_ATMOS body={bodyId} stage=worker_failed error={task.Exception}");
+            _hasAtmosphereState = false;
+            return;
+        }
+
+        var result = task.GetAwaiter().GetResult();
+        var timer = Stopwatch.StartNew();
+        _transmittanceLuts[bodyId] = CreateTransmittanceTexture(result.Transmittance);
+        _multipleScatteringLuts[bodyId] = CreateMultipleScatteringTexture(result.Angular);
+        LastAtmosphereLutBuildMilliseconds = result.BuildMilliseconds;
+        LastExperimentalOrderFiveBuildMilliseconds = result.ExperimentalOrderFiveMilliseconds;
+        LastExperimentalOrderFiveEstimatedBytes = result.ExperimentalOrderFiveEstimatedBytes;
+        GD.Print($"PERF_ATMOS body={bodyId} stage=worker_complete "
+            + $"cpuMs={result.BuildMilliseconds:F1} uploadMs={timer.Elapsed.TotalMilliseconds:F1}");
+
+        // Re-enter BindAtmosphere on the next cadence so the newly uploaded textures become
+        // active without rebuilding the CPU tables. This also handles an SOI crossing while
+        // the worker was running.
+        _hasAtmosphereState = false;
+    }
+
+    private static AtmosphereLutCpuResult BuildAtmosphereLutsCpu(
+        string bodyId,
+        AtmosphereDensityProfile profile,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        bool includeExperimentalOrderFive)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var transmittance = AtmosphereTransmittanceLut.Build(
             profile,
             planetRadius,
             atmosphereTopAltitude,
             TransmittanceLutWidth,
             TransmittanceLutHeight,
             TransmittanceLutSamples);
+
+        var global = AtmosphereMultipleScatteringLut.Build(
+            profile,
+            planetRadius,
+            atmosphereTopAltitude,
+            MultipleScatteringLutWidth,
+            MultipleScatteringLutHeight,
+            MultipleScatteringIntegrationSteps,
+            MultipleScatteringSolarSamples,
+            MultipleScatteringMaxOrder);
+
+        double experimentalMilliseconds = 0.0;
+        long experimentalBytes = 0;
+        if (includeExperimentalOrderFive)
+        {
+            var experimentalTimer = Stopwatch.StartNew();
+            var experimental = AtmosphereMultipleScatteringLut.Build(
+                profile,
+                planetRadius,
+                atmosphereTopAltitude,
+                MultipleScatteringLutWidth,
+                MultipleScatteringLutHeight,
+                MultipleScatteringIntegrationSteps,
+                MultipleScatteringSolarSamples,
+                ExperimentalMultipleScatteringOrder);
+            experimentalTimer.Stop();
+            experimentalMilliseconds = experimentalTimer.Elapsed.TotalMilliseconds;
+            experimentalBytes = (long)experimental.Width * experimental.Height
+                * 3 * sizeof(double);
+        }
+
+        var angular = AtmosphereAngularMultipleScatteringLut.Build(
+            profile,
+            global,
+            planetRadius,
+            atmosphereTopAltitude,
+            AngularScatteringLutWidth,
+            AngularScatteringSolarLayers,
+            AngularScatteringViewLayers,
+            AngularScatteringMuLayers,
+            AngularScatteringOpticalDepthSamples);
+        stopwatch.Stop();
+        return new AtmosphereLutCpuResult(
+            bodyId, transmittance, angular, stopwatch.Elapsed.TotalMilliseconds,
+            experimentalMilliseconds, experimentalBytes);
+    }
+
+    private static Texture2D CreateTransmittanceTexture(AtmosphereTransmittanceLut lut)
+    {
         var image = Image.CreateEmpty(
             lut.Width, lut.Height, false, Image.Format.Rgbaf);
         for (int y = 0; y < lut.Height; y++)
@@ -377,9 +497,7 @@ public partial class SkyController : Node
             }
         }
 
-        var texture = ImageTexture.CreateFromImage(image);
-        _transmittanceLuts[bodyId] = texture;
-        return texture;
+        return ImageTexture.CreateFromImage(image);
     }
 
     private AtmosphereDensityProfile GetDensityProfile(
@@ -413,56 +531,9 @@ public partial class SkyController : Node
         return result;
     }
 
-    private Texture2D GetMultipleScatteringLut(
-        string bodyId,
-        AtmosphereDensityProfile profile,
-        double planetRadius,
-        double atmosphereTopAltitude)
+    private static Texture2D CreateMultipleScatteringTexture(
+        AtmosphereAngularMultipleScatteringLut lut)
     {
-        if (_multipleScatteringLuts.TryGetValue(bodyId, out var cached)) return cached;
-
-        var global = AtmosphereMultipleScatteringLut.Build(
-            profile,
-            planetRadius,
-            atmosphereTopAltitude,
-            MultipleScatteringLutWidth,
-            MultipleScatteringLutHeight,
-            MultipleScatteringIntegrationSteps,
-            MultipleScatteringSolarSamples,
-            MultipleScatteringMaxOrder);
-
-        if (GenerateExperimentalOrderFive)
-        {
-            var stopwatch = Stopwatch.StartNew();
-            var experimental = AtmosphereMultipleScatteringLut.Build(
-                profile,
-                planetRadius,
-                atmosphereTopAltitude,
-                MultipleScatteringLutWidth,
-                MultipleScatteringLutHeight,
-                MultipleScatteringIntegrationSteps,
-                MultipleScatteringSolarSamples,
-                ExperimentalMultipleScatteringOrder);
-            stopwatch.Stop();
-            LastExperimentalOrderFiveBuildMilliseconds = stopwatch.Elapsed.TotalMilliseconds;
-            LastExperimentalOrderFiveEstimatedBytes = (long)experimental.Width
-                * experimental.Height * 3 * sizeof(double);
-            GD.Print($"ATMOS_LUT_EXPERIMENT version={MultipleScatteringLutVersion} "
-                + $"officialOrder={RuntimeMultipleScatteringOrder} "
-                + $"experimentalOrder={ExperimentalMultipleScatteringOrder} "
-                + $"buildMs={LastExperimentalOrderFiveBuildMilliseconds:F2} "
-                + $"estimatedBytes={LastExperimentalOrderFiveEstimatedBytes}");
-        }
-        var lut = AtmosphereAngularMultipleScatteringLut.Build(
-            profile,
-            global,
-            planetRadius,
-            atmosphereTopAltitude,
-            AngularScatteringLutWidth,
-            AngularScatteringSolarLayers,
-            AngularScatteringViewLayers,
-            AngularScatteringMuLayers,
-            AngularScatteringOpticalDepthSamples);
         var image = Image.CreateEmpty(
             lut.Width, lut.PackedHeight, false, Image.Format.Rgbaf);
         for (int mu = 0; mu < lut.MuWidth; mu++)
@@ -483,10 +554,16 @@ public partial class SkyController : Node
             }
         }
 
-        var texture = ImageTexture.CreateFromImage(image);
-        _multipleScatteringLuts[bodyId] = texture;
-        return texture;
+        return ImageTexture.CreateFromImage(image);
     }
+
+    private sealed record AtmosphereLutCpuResult(
+        string BodyId,
+        AtmosphereTransmittanceLut Transmittance,
+        AtmosphereAngularMultipleScatteringLut Angular,
+        double BuildMilliseconds,
+        double ExperimentalOrderFiveMilliseconds,
+        long ExperimentalOrderFiveEstimatedBytes);
 
     private static Texture2D LoadStarTexture()
         => LoadTexture(StarTexPath, Colors.Black);
