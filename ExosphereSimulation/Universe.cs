@@ -24,6 +24,28 @@ public enum VesselPhysicsWorkload
 }
 
 /// <summary>
+/// Coarse simulation tier for a vessel relative to the currently controlled vessel.
+/// This is a scheduling classification, not a visual LOD.  In particular,
+/// <see cref="Hibernated"/> currently means that a vessel is eligible for a future
+/// deferred-update policy; the current integrator still advances it through the
+/// existing compatible path.
+/// </summary>
+public enum VesselSimulationTier
+{
+    /// <summary>The vessel currently controlled by the player.</summary>
+    Active,
+
+    /// <summary>A vessel that must remain responsive to local/contact/force events.</summary>
+    Nearby,
+
+    /// <summary>A coasting vessel already represented by an analytic conic.</summary>
+    OnRails,
+
+    /// <summary>A distant, non-force-sensitive vessel eligible for deferred updates.</summary>
+    Hibernated,
+}
+
+/// <summary>
 /// Root simulation container.
 /// Owns all celestial bodies and vessels, advances simulation time,
 /// and dispatches to the appropriate integrator based on warp factor.
@@ -89,6 +111,19 @@ public class Universe
     /// <summary>Maximum physics sub-step (s) used in full-physics mode (50 Hz).</summary>
     private const double MaxPhysicsStep = 0.02;
     private const double MaxContactStep = 0.005;
+
+    /// <summary>
+    /// Distance from the active vessel within which a non-active vessel remains in the
+    /// responsive tier.  This is deliberately conservative and only affects the public
+    /// classification in this phase; it does not alter the existing physics dispatch.
+    /// </summary>
+    public const double NearbyVesselDistance = 250_000.0;
+
+    /// <summary>
+    /// Distance beyond which a non-active vessel that is not force-sensitive is eligible
+    /// for deferred updates at warp.  The current scheduler does not skip it yet.
+    /// </summary>
+    public const double HibernatedVesselDistance = 5_000_000.0;
 
     /// <summary>
     /// Maximum sub-step (s) used in the mixed time-warp branch for the active vessel.
@@ -593,6 +628,80 @@ public class Universe
             return true; // degenerate/suborbital state: choose bounded physics safely
         }
     }
+
+    /// <summary>
+    /// Classifies a vessel into the deterministic active/nearby/on-rails/hibernated
+    /// policy used by the performance roadmap.
+    /// </summary>
+    /// <remarks>
+    /// Precedence is intentionally fixed and independent of vessel-list order:
+    /// destroyed vessels are hibernated, the active vessel is active, force-sensitive
+    /// or spatially close vessels are nearby, explicit analytic-rail vessels are
+    /// on-rails, and only distant coasting vessels at warp are hibernation candidates.
+    /// At real-time/low warp a distant vessel remains <see cref="Nearby"/> because the
+    /// existing scheduler still evaluates full physics for that regime.
+    ///
+    /// This method has no side effects.  It does not set <see cref="Vessel.IsOnRails"/>,
+    /// mutate orbital elements, or skip a tick; those changes require a separately
+    /// validated wake-up/temporal-state implementation.
+    /// </remarks>
+    public VesselSimulationTier ClassifySimulationTier(Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+
+        if (vessel.IsDestroyed)
+            return VesselSimulationTier.Hibernated;
+
+        if (ReferenceEquals(vessel, ActiveVessel))
+            return VesselSimulationTier.Active;
+
+        // Unsafe-to-rail conditions take precedence over distance and explicit rail
+        // state so atmospheric/contact/thrust events cannot be hidden by tiering.
+        if (RequiresOffRailsPhysics(vessel))
+            return VesselSimulationTier.Nearby;
+
+        // Never classify a numerically corrupted state as a deferred/analytic
+        // candidate.  Nearby is the fail-safe tier until a higher-level invariant
+        // checker reports the non-finite state.
+        if (!IsFinitePosition(vessel.Position)
+            || (ActiveVessel is not null && !IsFinitePosition(ActiveVessel.Position)))
+        {
+            return VesselSimulationTier.Nearby;
+        }
+
+        if (ActiveVessel is not null
+            && (vessel.Position - ActiveVessel.Position).Magnitude
+                <= NearbyVesselDistance)
+        {
+            return VesselSimulationTier.Nearby;
+        }
+
+        if (vessel.IsOnRails)
+            return VesselSimulationTier.OnRails;
+
+        if (TimeScale > 4.0
+            && ActiveVessel is not null
+            && IsFinitePosition(vessel.Position)
+            && IsFinitePosition(ActiveVessel.Position)
+            && (vessel.Position - ActiveVessel.Position).Magnitude
+                >= HibernatedVesselDistance)
+        {
+            return VesselSimulationTier.Hibernated;
+        }
+
+        // At low warp, preserve the current full-physics contract.  At high warp a
+        // non-active vessel takes the existing analytic path even if it has not yet
+        // had IsOnRails set by the mixed dispatcher; expose that as OnRails rather
+        // than calling it hibernated unless it is clearly distant.
+        return TimeScale > 4.0
+            ? VesselSimulationTier.OnRails
+            : VesselSimulationTier.Nearby;
+    }
+
+    private static bool IsFinitePosition(Vector3d position) =>
+        double.IsFinite(position.X)
+        && double.IsFinite(position.Y)
+        && double.IsFinite(position.Z);
 
     /// <summary>
     /// Classifies the work the mixed/high-warp scheduler should dispatch for the
