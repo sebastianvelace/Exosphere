@@ -78,10 +78,16 @@ require_text "$UNIVERSE" "LastMixedPhysicsStepCap" \
     "mixed scheduler exposes effective cap telemetry"
 require_text "$SCHEDULER_TELEMETRY" "PhysicsSchedulerTelemetry" \
     "scheduler workload snapshot type is present"
+require_text "$SCHEDULER_TELEMETRY" "DeadlineProjectedDispatches" \
+    "scheduler telemetry exposes current-epoch deadline projections"
 require_text "$SCHEDULER_TEST" "MixedSchedulerBoundsSecondaryForceSensitiveVesselAndMatchesFineTick" \
     "multi-vessel mixed-cap regression test is present"
 require_text "$SCHEDULER_TEST" "SchedulerTelemetryCountsMixedWorkloadWithoutSkippingVessels" \
     "mixed workload telemetry regression test is present"
+require_text "$SCHEDULER_TEST" "DeferredRailsProjectsCurrentEpochAndMatchesAlwaysCheckedReference" \
+    "deferred rails equivalence regression test is present"
+require_text "$SCHEDULER_TEST" "DeferredRailsCatchesUpBeforeForceSensitiveWake" \
+    "deferred rails wake-up regression test is present"
 
 log_file="${PERF_ACCEPTANCE_LOG:-}"
 if [[ -z "$log_file" ]]; then

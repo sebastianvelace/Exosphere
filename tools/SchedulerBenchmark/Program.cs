@@ -20,7 +20,7 @@ var scenarios = new[]
 
 var report = new List<string>
 {
-    "format_version=scheduler_phase6_v1",
+    "format_version=scheduler_phase7_v1",
     $"samples={samples}",
     $"warmup={warmup}",
     $"runtime={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}",
@@ -38,6 +38,9 @@ foreach (var scenario in scenarios)
         + $"cpu_ms={result.ProcessCpuMs:F2} alloc_per_tick={result.ManagedBytesPerTick:F1} "
         + $"branch={result.Telemetry.Branch} work={result.Telemetry.TotalWorkDispatches} "
         + $"outer={result.Telemetry.OuterSubsteps} rails_slices={result.Telemetry.RailsSlices} "
+        + $"deadline_skips={result.Telemetry.DeadlineDeferredSkips} "
+        + $"deadline_projected={result.Telemetry.DeadlineProjectedDispatches} "
+        + $"deadline_catchup={result.Telemetry.DeadlineCatchUpDispatches} "
         + $"finite={result.Finite}");
 }
 
@@ -253,6 +256,10 @@ record ScenarioResult(
         yield return $"{Name}.full_physics_dispatches={Telemetry.FullPhysicsDispatches}";
         yield return $"{Name}.on_rails_dispatches={Telemetry.OnRailsDispatches}";
         yield return $"{Name}.rails_slices={Telemetry.RailsSlices}";
+        yield return $"{Name}.deadline_eligible_evaluations={Telemetry.DeadlineEligibleEvaluations}";
+        yield return $"{Name}.deadline_deferred_skips={Telemetry.DeadlineDeferredSkips}";
+        yield return $"{Name}.deadline_projected_dispatches={Telemetry.DeadlineProjectedDispatches}";
+        yield return $"{Name}.deadline_catchup_dispatches={Telemetry.DeadlineCatchUpDispatches}";
         yield return $"{Name}.docked_secondary_skips={Telemetry.DockedSecondarySkips}";
         yield return $"{Name}.docking_constraint_applications={Telemetry.DockingConstraintApplications}";
         yield return $"{Name}.finite={Finite.ToString().ToLowerInvariant()}";

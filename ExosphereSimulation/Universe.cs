@@ -56,6 +56,8 @@ public class Universe
     private readonly List<Vessel>        _vessels = new();
     private readonly List<Vessel>        _pendingStructuralDebris = new();
     private readonly List<DockingConnection> _dockingConnections = new();
+    private readonly Dictionary<string, double> _lastDeferredRailUpdate = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
 
     public IReadOnlyList<CelestialBody> Bodies  => _bodies.AsReadOnly();
     public IReadOnlyList<Vessel>        Vessels => _vessels.AsReadOnly();
@@ -72,6 +74,8 @@ public class Universe
     public void SetCurrentTime(double t)
     {
         CurrentTime = t;
+        _lastDeferredRailUpdate.Clear();
+        _nextDeferredRailDeadline.Clear();
         if (_bodies.Count > 0)
             KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime);
     }
@@ -185,6 +189,10 @@ public class Universe
     private int _tickDockedSecondarySkips;
     private int _tickRailsSlices;
     private int _tickDockingConstraintApplications;
+    private int _tickDeadlineEligibleEvaluations;
+    private int _tickDeadlineDeferredSkips;
+    private int _tickDeadlineCatchUpDispatches;
+    private int _tickDeadlineProjectedDispatches;
 
     // ── Object management ─────────────────────────────────────────────────
 
@@ -219,6 +227,8 @@ public class Universe
             connection.PrimaryVesselId == vessel.Id
             || connection.SecondaryVesselId == vessel.Id);
         _vessels.Remove(vessel);
+        _lastDeferredRailUpdate.Remove(vessel.Id);
+        _nextDeferredRailDeadline.Remove(vessel.Id);
         if (ReferenceEquals(ActiveVessel, vessel))
             ActiveVessel = null;
     }
@@ -240,6 +250,8 @@ public class Universe
         var secondary = _vessels.FirstOrDefault(v => v.Id == secondaryVesselId);
         if (primary == null || secondary == null)
             return FailedDocking(DockingFailure.VesselMissing);
+        CatchUpDeferredRailVessel(primary, CurrentTime);
+        CatchUpDeferredRailVessel(secondary, CurrentTime);
         if (_dockingConnections.Any(connection =>
                 connection.PrimaryVesselId == primaryVesselId
                 || connection.SecondaryVesselId == primaryVesselId
@@ -320,6 +332,10 @@ public class Universe
         primary.OrbitalState = null;
         secondary.IsOnRails = false;
         secondary.OrbitalState = null;
+        _lastDeferredRailUpdate.Remove(primary.Id);
+        _lastDeferredRailUpdate.Remove(secondary.Id);
+        _nextDeferredRailDeadline.Remove(primary.Id);
+        _nextDeferredRailDeadline.Remove(secondary.Id);
         _dockingConnections.Add(connection);
         ApplyDockingConstraint(connection);
         return new DockingAttempt(
@@ -560,6 +576,9 @@ public class Universe
         {
             // Full RK4 physics, capped at MaxPhysicsStep per sub-step
             _tickBranch = PhysicsSchedulerBranch.FullPhysics;
+            FlushDeferredRailsToCurrentTime();
+            _lastDeferredRailUpdate.Clear();
+            _nextDeferredRailDeadline.Clear();
             _tickEffectiveStepCap = anyContactSensitive ? MaxContactStep : MaxPhysicsStep;
             double remaining = simDelta;
             while (remaining > 1e-12)
@@ -598,6 +617,9 @@ public class Universe
         {
             // Pure rails: everything propagated analytically
             _tickBranch = PhysicsSchedulerBranch.Rails;
+            FlushDeferredRailsToCurrentTime();
+            _lastDeferredRailUpdate.Clear();
+            _nextDeferredRailDeadline.Clear();
             _tickEffectiveStepCap = MaxCoastStep;
             _tickOuterSubsteps++;
             TickRails(simDelta);
@@ -624,6 +646,10 @@ public class Universe
         _tickDockedSecondarySkips = 0;
         _tickRailsSlices = 0;
         _tickDockingConstraintApplications = 0;
+        _tickDeadlineEligibleEvaluations = 0;
+        _tickDeadlineDeferredSkips = 0;
+        _tickDeadlineCatchUpDispatches = 0;
+        _tickDeadlineProjectedDispatches = 0;
     }
 
     private void PublishSchedulerTelemetry()
@@ -641,7 +667,11 @@ public class Universe
             _tickDestroyedDispatches,
             _tickDockedSecondarySkips,
             _tickRailsSlices,
-            _tickDockingConstraintApplications);
+            _tickDockingConstraintApplications,
+            _tickDeadlineEligibleEvaluations,
+            _tickDeadlineDeferredSkips,
+            _tickDeadlineCatchUpDispatches,
+            _tickDeadlineProjectedDispatches);
     }
 
     private void RecordWorkload(VesselPhysicsWorkload workload)
@@ -664,6 +694,170 @@ public class Universe
                 _tickDestroyedDispatches++;
                 break;
         }
+    }
+
+    /// <summary>
+    /// Returns the only deadline plan currently permitted by the scheduler. A plan is
+    /// eligible only for a finite, force-free, non-active, non-docked vessel whose conic
+    /// stays outside the modeled atmosphere/contact corridor. The plan contains no saved
+    /// state; the caller must materialize the vessel before any other branch can mutate it.
+    /// </summary>
+    public PhysicsSchedulerDeadlinePlan GetPhysicsSchedulerDeadlinePlan(Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+
+        if (ReferenceEquals(vessel, ActiveVessel))
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.ActiveVessel);
+        if (IsDockedSecondary(vessel))
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.DockedSecondary);
+        if (vessel.IsDestroyed)
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.Destroyed);
+        if (vessel.IsSurfaceSettled)
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.SurfaceSettled);
+        if (vessel.IsGroundHeld)
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.GroundHeld);
+        if (!IsFinitePosition(vessel.Position) || !IsFinitePosition(vessel.Velocity))
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.InvalidState);
+
+        if (ClassifyMixedPhysicsWorkload(vessel) != VesselPhysicsWorkload.OnRails)
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.ForceSensitive);
+        if (vessel.OrbitalState is not { } orbit)
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.MissingOrbit);
+        if (!double.IsFinite(orbit.SemiMajorAxis)
+            || !double.IsFinite(orbit.Eccentricity)
+            || !double.IsFinite(orbit.Periapsis))
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.InvalidState);
+
+        var body = GetBody(orbit.ReferenceBodyId);
+        if (body is null)
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.InvalidState);
+
+        double protectedRadius = body.Radius
+            + (body.Atmosphere?.MaxAltitude * 1.05 ?? 1_000.0);
+        if (orbit.IsRadial || orbit.Periapsis <= protectedRadius)
+            return new(false, 0.0, PhysicsSchedulerDeadlineReason.PeriapsisEvent);
+
+        return new(true, MaxCoastStep, PhysicsSchedulerDeadlineReason.DeferredRails);
+    }
+
+    private void FlushDeferredRailsToCurrentTime()
+    {
+        foreach (var vessel in _vessels.ToList())
+        {
+            if (IsDockedSecondary(vessel) || vessel.IsDestroyed)
+                continue;
+            CatchUpDeferredRailVessel(vessel, CurrentTime);
+        }
+    }
+
+    /// <summary>
+    /// Restores the last event-safe conic state of a deferred vessel.  During a skipped
+    /// deadline the public position/velocity are projected to the current epoch for
+    /// rendering and navigation, while the orbital elements remain anchored at the last
+    /// event-check epoch.  A wake-up must restore that anchored state before running the
+    /// full rails propagator; otherwise the propagator would interpret a current-epoch
+    /// position as if it belonged to an older conic epoch and introduce a phase jump.
+    /// </summary>
+    private bool RestoreDeferredRailStateAtTime(Vessel vessel, double time)
+    {
+        if (vessel.OrbitalState is not { } orbit)
+            return false;
+
+        var reference = GetBody(orbit.ReferenceBodyId);
+        if (reference is null || !double.IsFinite(reference.GM) || reference.GM <= 0.0)
+            return false;
+
+        try
+        {
+            var (relativePosition, relativeVelocity) =
+                KeplerPropagator.PropagateToTime(orbit, time, reference.GM);
+            var (referencePosition, referenceVelocity) = BodyStateAt(reference, time);
+            Vector3d position = referencePosition + relativePosition;
+            Vector3d velocity = referenceVelocity + relativeVelocity;
+            if (!IsFinitePosition(position) || !IsFinitePosition(velocity))
+                return false;
+
+            vessel.Position = position;
+            vessel.Velocity = velocity;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Projects a deferred conic to the current public epoch without changing its event
+    /// anchor.  This is the cheap path: no atmosphere, SOI or surface scan is performed.
+    /// The projection is accepted only while the reference body remains dominant and the
+    /// conic is non-radial; otherwise the caller must materialize the vessel immediately.
+    /// </summary>
+    private bool ProjectDeferredRailsVesselToTime(Vessel vessel, double targetTime)
+    {
+        if (vessel.OrbitalState is not { } orbit || orbit.IsRadial)
+            return false;
+
+        var reference = GetBody(orbit.ReferenceBodyId);
+        if (reference is null || !double.IsFinite(reference.GM) || reference.GM <= 0.0)
+            return false;
+
+        try
+        {
+            var (relativePosition, relativeVelocity) =
+                KeplerPropagator.PropagateToTime(orbit, targetTime, reference.GM);
+            var (referencePosition, referenceVelocity) = BodyStateAt(reference, targetTime);
+            Vector3d position = referencePosition + relativePosition;
+            Vector3d velocity = referenceVelocity + relativeVelocity;
+            if (!IsFinitePosition(position) || !IsFinitePosition(velocity))
+                return false;
+
+            // Check an interior sample as well as the endpoint.  A high-speed conic can
+            // cross a small sphere of influence and return to the original body before
+            // the deadline ends; endpoint-only validation would miss that event.
+            double midpointTime = CurrentTime + (targetTime - CurrentTime) * 0.5;
+            var (midpointRelativePosition, _) =
+                KeplerPropagator.PropagateToTime(orbit, midpointTime, reference.GM);
+            var (midpointReferencePosition, _) = BodyStateAt(reference, midpointTime);
+            Vector3d midpointPosition = midpointReferencePosition + midpointRelativePosition;
+            if (!IsFinitePosition(midpointPosition)
+                || GetDominantBodyAt(midpointPosition, midpointTime).Id != reference.Id
+                || GetDominantBodyAt(position, targetTime).Id != reference.Id)
+                return false;
+
+            vessel.Position = position;
+            vessel.Velocity = velocity;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private bool CatchUpDeferredRailVessel(Vessel vessel, double targetTime)
+    {
+        if (!_lastDeferredRailUpdate.TryGetValue(vessel.Id, out double lastTime))
+            return false;
+        if (lastTime >= targetTime - 1e-12)
+            return false;
+
+        if (!RestoreDeferredRailStateAtTime(vessel, lastTime))
+        {
+            // The deferred state is no longer trustworthy.  Drop the schedule and let
+            // the caller use the conservative current-step fallback rather than trying
+            // to integrate a projected state against an old epoch.
+            _lastDeferredRailUpdate.Remove(vessel.Id);
+            _nextDeferredRailDeadline.Remove(vessel.Id);
+            return false;
+        }
+
+        PropagateVesselOnRails(vessel, lastTime, targetTime);
+        _lastDeferredRailUpdate[vessel.Id] = targetTime;
+        _nextDeferredRailDeadline.Remove(vessel.Id);
+        _tickDeadlineCatchUpDispatches++;
+        _tickOnRailsDispatches++;
+        return true;
     }
 
     /// <summary>
@@ -1172,6 +1366,7 @@ public class Universe
     {
         // All celestial bodies on rails
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
+        double targetTime = CurrentTime + dt;
 
         foreach (var vessel in _vessels.ToList())
         {
@@ -1188,6 +1383,13 @@ public class Universe
                 continue;
             }
 
+            // A deferred rails vessel may be behind the global epoch when a command or
+            // another event makes it non-rails. Materialize it at CurrentTime before
+            // handing it to RK4/surface logic; integrating stale coordinates would be a
+            // temporal teleport, not an optimization.
+            if (workload != VesselPhysicsWorkload.OnRails)
+                CatchUpDeferredRailVessel(vessel, CurrentTime);
+
             // Rails propagation does not need the dominant body selected here:
             // PropagateVesselOnRails resolves its own reference frame at the conic
             // epoch, and this avoids one duplicate body scan per rails vessel/substep.
@@ -1201,6 +1403,65 @@ public class Universe
                     vessel.IsOnRails = true;
                     vessel.OrbitalState = null;
                 }
+
+                PhysicsSchedulerDeadlinePlan deadline =
+                    GetPhysicsSchedulerDeadlinePlan(vessel);
+                if (deadline.CanDefer)
+                {
+                    _tickDeadlineEligibleEvaluations++;
+                    bool hasLastUpdate = _lastDeferredRailUpdate.TryGetValue(
+                        vessel.Id, out double lastUpdate);
+                    if (!hasLastUpdate)
+                        lastUpdate = CurrentTime;
+                    bool due = !hasLastUpdate
+                        || !_nextDeferredRailDeadline.TryGetValue(
+                            vessel.Id, out double nextDeadline)
+                        || targetTime >= nextDeadline - 1e-12;
+                    if (!due)
+                    {
+                        if (ProjectDeferredRailsVesselToTime(vessel, targetTime))
+                        {
+                            _tickDeadlineDeferredSkips++;
+                            _tickDeadlineProjectedDispatches++;
+                            RecordWorkload(workload);
+                            continue;
+                        }
+
+                        // A cheap projection detected an event boundary (or a numerical
+                        // problem).  Materialize from the last safe epoch now; this is
+                        // the conservative fallback for an independent deadline.
+                        if (CatchUpDeferredRailVessel(vessel, targetTime))
+                        {
+                            RecordWorkload(workload);
+                            continue;
+                        }
+
+                        _lastDeferredRailUpdate.Remove(vessel.Id);
+                        _nextDeferredRailDeadline.Remove(vessel.Id);
+                        RecordWorkload(workload);
+                        PropagateVesselOnRails(vessel, dt);
+                        continue;
+                    }
+
+                    if (hasLastUpdate && !RestoreDeferredRailStateAtTime(vessel, lastUpdate))
+                    {
+                        _lastDeferredRailUpdate.Remove(vessel.Id);
+                        _nextDeferredRailDeadline.Remove(vessel.Id);
+                        RecordWorkload(workload);
+                        PropagateVesselOnRails(vessel, dt);
+                        continue;
+                    }
+
+                    PropagateVesselOnRails(vessel, hasLastUpdate ? lastUpdate : CurrentTime, targetTime);
+                    _lastDeferredRailUpdate[vessel.Id] = targetTime;
+                    _nextDeferredRailDeadline[vessel.Id] =
+                        targetTime + deadline.IntervalSeconds;
+                    RecordWorkload(workload);
+                    continue;
+                }
+
+                _lastDeferredRailUpdate.Remove(vessel.Id);
+                _nextDeferredRailDeadline.Remove(vessel.Id);
                 RecordWorkload(workload);
                 PropagateVesselOnRails(vessel, dt);
                 continue;
@@ -1540,8 +1801,18 @@ public class Universe
 
     // ── Vessel on-rails propagation ───────────────────────────────────────
 
-    private void PropagateVesselOnRails(Vessel vessel, double dt)
+    private void PropagateVesselOnRails(Vessel vessel, double dt) =>
+        PropagateVesselOnRails(vessel, CurrentTime, CurrentTime + dt);
+
+    private void PropagateVesselOnRails(
+        Vessel vessel,
+        double startTime,
+        double targetTime)
     {
+        double dt = targetTime - startTime;
+        if (dt <= 1e-12)
+            return;
+
         // Compute or reuse cached orbital elements.
         // CRITICAL: the global bodies were already propagated to the tick's END time by
         // PropagateAllBodies before this runs, but vessel.Position/Velocity still correspond
@@ -1551,12 +1822,12 @@ public class Universe
         // is tens of thousands of km — a wrong orbit the instant warp is engaged.
         if (vessel.OrbitalState is null)
         {
-            var refBody      = GetDominantBodyAt(vessel.Position, CurrentTime);
-            var (refP, refV) = BodyStateAt(refBody, CurrentTime);
+            var refBody      = GetDominantBodyAt(vessel.Position, startTime);
+            var (refP, refV) = BodyStateAt(refBody, startTime);
             var relPos       = vessel.Position - refP;
             var relVel       = vessel.Velocity - refV;
             vessel.OrbitalState    = KeplerPropagator.ComputeElements(
-                relPos, relVel, refBody.GM, refBody.Id, CurrentTime);
+                relPos, relVel, refBody.GM, refBody.Id, startTime);
             vessel.ReferenceBodyId = refBody.Id;
         }
 
@@ -1573,11 +1844,11 @@ public class Universe
         // absolute position/velocity, only the orbital elements change).
         // vessel.Position corresponds to CurrentTime (end of the previous tick); evaluate the
         // dominant body and re-frame against the body state at THAT instant, not end-of-tick.
-        var dominantNow = GetDominantBodyAt(vessel.Position, CurrentTime);
+        var dominantNow = GetDominantBodyAt(vessel.Position, startTime);
         if (dominantNow.Id != vessel.OrbitalState!.ReferenceBodyId)
         {
-            var (bp, bv) = BodyStateAt(dominantNow, CurrentTime);
-            ReframeVesselToBody(vessel, dominantNow, bp, bv, CurrentTime);
+            var (bp, bv) = BodyStateAt(dominantNow, startTime);
+            ReframeVesselToBody(vessel, dominantNow, bp, bv, startTime);
             reference = dominantNow;
         }
 
@@ -1604,7 +1875,7 @@ public class Universe
         // made reentry under warp impossible.
         if (vessel.OrbitalState.IsRadial)
         {
-            var (refP0, refV0) = BodyStateAt(reference, CurrentTime);
+            var (refP0, refV0) = BodyStateAt(reference, startTime);
             ResolveOnRailsImpact(vessel, reference, refP0, refV0);
             return;
         }
@@ -1616,9 +1887,11 @@ public class Universe
         // propagated radius at each sample. If any sample is below the surface, the arc
         // grazes the body within this step → resolve the impact at that point, never skip it.
         double remaining   = dt;
-        double sampleTime  = CurrentTime;
-        Vector3d lastRelP  = vessel.Position - reference.Position;
-        Vector3d lastRelV  = vessel.Velocity - reference.Velocity;
+        double sampleTime  = startTime;
+        var (referenceStartPosition, referenceStartVelocity) =
+            BodyStateAt(reference, startTime);
+        Vector3d lastRelP  = vessel.Position - referenceStartPosition;
+        Vector3d lastRelV  = vessel.Velocity - referenceStartVelocity;
         while (remaining > 1e-9)
         {
             _tickRailsSlices++;
@@ -1679,8 +1952,10 @@ public class Universe
             }
         }
 
-        vessel.Position = reference.Position + lastRelP;
-        vessel.Velocity = reference.Velocity + lastRelV;
+        var (referenceTargetPosition, referenceTargetVelocity) =
+            BodyStateAt(reference, targetTime);
+        vessel.Position = referenceTargetPosition + lastRelP;
+        vessel.Velocity = referenceTargetVelocity + lastRelV;
     }
 
     /// <summary>

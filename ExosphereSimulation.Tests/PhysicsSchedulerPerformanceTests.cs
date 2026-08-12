@@ -239,6 +239,107 @@ public sealed class PhysicsSchedulerPerformanceTests
         Assert.InRange(rails.LastSchedulerTelemetry.SimulatedSeconds, 39.99999, 40.00001);
     }
 
+    [Fact]
+    public void DeferredRailsProjectsCurrentEpochAndMatchesAlwaysCheckedReference()
+    {
+        var mixedEarth = LoadBody("earth");
+        var mixedActive = PoweredVessel(mixedEarth, "deadline-active");
+        var mixedRails = SafeRailVessel(mixedEarth, "deadline-rails");
+        mixedRails.IsOnRails = true;
+        var mixed = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = mixedActive,
+        };
+        mixed.AddBody(mixedEarth);
+        mixed.AddVessel(mixedActive);
+        mixed.AddVessel(mixedRails);
+
+        var referenceEarth = LoadBody("earth");
+        var referenceRails = SafeRailVessel(referenceEarth, "reference-rails");
+        referenceRails.IsOnRails = true;
+        var reference = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = referenceRails,
+        };
+        reference.AddBody(referenceEarth);
+        reference.AddVessel(referenceRails);
+
+        // The first two ticks establish a conic and its first event-safe epoch.  The
+        // following ticks are eligible for projection, so the public state must still
+        // advance every tick even though the expensive event scan is deferred.
+        for (int i = 0; i < 15; i++)
+        {
+            mixed.Tick(0.005);
+            reference.Tick(0.005);
+        }
+
+        Assert.InRange(mixed.CurrentTime, 7.499999, 7.500001);
+        Assert.True(mixed.LastSchedulerTelemetry.DeadlineEligibleEvaluations > 0);
+        Assert.True(mixed.LastSchedulerTelemetry.DeadlineDeferredSkips > 0);
+        Assert.True(mixed.LastSchedulerTelemetry.DeadlineProjectedDispatches > 0);
+        Assert.True(mixedRails.IsOnRails);
+        AssertVectorClose(referenceRails.Position, mixedRails.Position, 1e-4);
+        AssertVectorClose(referenceRails.Velocity, mixedRails.Velocity, 1e-9);
+    }
+
+    [Fact]
+    public void DeferredRailsCatchesUpBeforeForceSensitiveWake()
+    {
+        var earth = LoadBody("earth");
+        var active = PoweredVessel(earth, "wake-active");
+        var rails = SafeRailVessel(earth, "wake-rails");
+        rails.IsOnRails = true;
+        var universe = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = active,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(active);
+        universe.AddVessel(rails);
+
+        universe.Tick(0.005);
+        universe.Tick(0.005);
+        universe.Tick(0.005);
+        Assert.True(rails.IsOnRails);
+
+        rails.Throttle = 0.1;
+        universe.Tick(0.005);
+
+        Assert.True(universe.LastSchedulerTelemetry.DeadlineCatchUpDispatches > 0);
+        Assert.True(universe.LastSchedulerTelemetry.FullPhysicsDispatches > 0);
+        Assert.False(rails.IsOnRails);
+        Assert.True(double.IsFinite(rails.Position.X));
+        Assert.True(double.IsFinite(rails.Position.Y));
+        Assert.True(double.IsFinite(rails.Position.Z));
+        Assert.True(double.IsFinite(rails.Velocity.X));
+        Assert.True(double.IsFinite(rails.Velocity.Y));
+        Assert.True(double.IsFinite(rails.Velocity.Z));
+    }
+
+    [Fact]
+    public void DeadlinePlanRejectsConicsThatEnterProtectedAtmosphere()
+    {
+        var earth = LoadBody("earth");
+        var rails = SafeRailVessel(earth, "deadline-periapsis");
+        rails.IsOnRails = true;
+        var universe = new Universe { TimeScale = 100.0 };
+        universe.AddBody(earth);
+        universe.AddVessel(rails);
+
+        universe.Tick(0.02);
+        Assert.NotNull(rails.OrbitalState);
+        rails.OrbitalState!.PeriapsisRadius = earth.Radius + 1_000.0;
+
+        var plan = universe.GetPhysicsSchedulerDeadlinePlan(rails);
+
+        Assert.False(plan.CanDefer);
+        Assert.Equal(PhysicsSchedulerDeadlineReason.PeriapsisEvent, plan.Reason);
+        Assert.Equal(0.0, plan.IntervalSeconds);
+    }
+
     private static Universe CreateCoastingUniverse(string vesselId)
     {
         var earth = LoadBody("earth");
@@ -267,6 +368,17 @@ public sealed class PhysicsSchedulerPerformanceTests
             LengthM = 5.0,
             DiameterM = 2.0,
         }));
+        return vessel;
+    }
+
+    private static Vessel SafeRailVessel(CelestialBody earth, string id)
+    {
+        var vessel = CoastVessel(earth, id);
+        double radius = earth.Radius + 1_500_000.0;
+        vessel.Position = earth.Position + Vector3d.Right * radius;
+        vessel.Velocity = earth.Velocity
+            + Vector3d.Up * System.Math.Sqrt(earth.GM / radius);
+        vessel.ReferenceBodyId = earth.Id;
         return vessel;
     }
 

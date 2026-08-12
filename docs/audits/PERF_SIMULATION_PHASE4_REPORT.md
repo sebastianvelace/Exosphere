@@ -499,3 +499,77 @@ y combinados: vacuum rails, entrada atmosférica, contacto, thermal, docking, st
 SOI y nave distante. Debe registrar p50/p95/p99 de `Universe.Tick`, allocations/GC y los
 contadores anteriores. Sólo si la referencia fine-tick y la matriz de eventos son verdes
 se podrá implementar un deadline por nave con fallback al cap global actual.
+
+## Fase 7 — deadlines conservadores con proyección y wake-up
+
+Se implementó el primer deadline por nave únicamente para coasting analítico fuera del
+corridor de atmósfera/contacto. El renderer y la navegación no reciben un estado viejo:
+cuando una nave omite la comprobación cara de eventos, su posición y velocidad se
+proyectan al `targetTime` mediante el mismo conic ya validado. Los elementos orbitales
+conservan además una época segura (`lastDeferredRailUpdate`) desde la que se puede
+reconstruir el estado antes de comprobar eventos o cambiar de régimen.
+
+La política es fail-safe:
+
+- activo, docked-secondary, destruido, superficie, ground-hold, thrust, atmósfera,
+  térmica, estado no finito, conic radial o periapsis dentro de `radius + 1.05 ×
+  MaxAltitude` nunca recibe deadline;
+- una proyección se acepta sólo si es finita y el cuerpo dominante sigue siendo el mismo
+  tanto en un sample intermedio como en el destino;
+- si la proyección detecta un cruce potencial, se restaura la época segura y se ejecuta
+  la propagación completa hasta el epoch actual;
+- antes de `TryDock`, de una transición a RK4 y de las ramas full/pure-rails se hace
+  catch-up de cualquier nave atrasada;
+- ante un fallo de restauración se elimina el deadline y se usa el paso conservador de la
+  ruta existente. No se intenta integrar una posición proyectada como si perteneciera a
+  una época antigua.
+
+El intervalo actual es `MaxCoastStep`; el deadline sólo evita repetir la exploración de
+eventos en cada substep global. No cambia `MultipleScatteringMaxOrder`, el coste por
+frame del renderer ni activa hibernación física arbitraria.
+
+### Gates de equivalencia y transición
+
+```text
+PhysicsSchedulerPerformanceTests  PASS: 10/10
+  DeferredRailsProjectsCurrentEpochAndMatchesAlwaysCheckedReference  PASS
+  DeferredRailsCatchesUpBeforeForceSensitiveWake                    PASS
+  DeadlinePlanRejectsConicsThatEnterProtectedAtmosphere             PASS
+Build ExosphereSimulation.sln                                        PASS: 0 warnings, 0 errors
+```
+
+La prueba de equivalencia ejecuta la misma órbita con una nave diferida y con una nave
+activa que comprueba rails en cada tick. Tras 7.5 segundos simulados, la posición coincide
+con una tolerancia de 0.1 mm y la velocidad con 1 nm/s. La prueba de wake modifica el
+throttle después de una proyección y verifica que el catch-up ocurre antes de RK4; la
+prueba de periapsis fuerza una entrada en el corredor protegido y comprueba que el plan
+queda rechazado.
+
+### Medición CPU de la implementación
+
+Ejecutado con `SAMPLES=20`, `WARMUP=5`, .NET 8 y la flota determinista del benchmark el
+2026-08-12. Los números son comparativos de esta máquina, no un presupuesto universal:
+
+| Escenario | Rama | Workload final | Slices | Deadline skips | Proyecciones | Catch-up | p50 ms | p95 ms | Alloc/tick |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| full_single | FullPhysics | 1 full | 0 | 0 | 0 | 0 | 0.1529 | 0.2287 | 8.7 KB |
+| full_fleet | FullPhysics | 4 full | 0 | 0 | 0 | 0 | 0.4262 | 0.4954 | 25.4 KB |
+| rails_fleet | Rails | 32 rails | 640 | 0 | 0 | 0 | 2.0790 | 2.3724 | 190.5 KB |
+| mixed_fleet | Mixed | 450 dispatches | 16 | 384 | 384 | 0 | 10.4117 | 11.5519 | 748.7 KB |
+
+El resultado demuestra que la política está activa en `mixed_fleet`: 384 dispatches
+conservan un estado público en el epoch actual mientras la exploración de eventos se
+aplaza. El baseline sigue siendo finito y el contador de work no desaparece; por eso el
+benchmark no confunde “menos trabajo de eventos” con “nave ignorada”. La ruta pura Rails
+mantiene su propagación completa y sus 640 slices, ya que el deadline es una protección
+para la rama Mixed y no una sustitución de la validación global de alto warp.
+
+### Decisión de promoción
+
+Se promueve el deadline conservador como optimización interna de la rama Mixed, con
+`MaxCoastStep` y los guards actuales como límite. No se promueve todavía hibernación por
+distancia, paralelización de `Vessel.Tick` ni un scheduler que omita posición/velocidad.
+Antes de ampliar el intervalo deben añadirse mediciones y equivalencias para docking,
+staging, SOI, entrada atmosférica, térmica y captura de la nave activa. `DeadlineProjectedDispatches`,
+`DeadlineDeferredSkips` y `DeadlineCatchUpDispatches` quedan como telemetría obligatoria
+para detectar una regresión en esas transiciones.
