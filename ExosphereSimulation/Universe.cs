@@ -10,6 +10,20 @@ using Exosphere.Simulation.Integrators;
 using Exosphere.Simulation.Math;
 
 /// <summary>
+/// Work dispatched for a vessel by the mixed/high-warp scheduler.  These values
+/// describe the simulation path, not a visual LOD: <see cref="FullPhysics"/>
+/// remains the only path that evaluates the vessel's RK4 forces.
+/// </summary>
+public enum VesselPhysicsWorkload
+{
+    FullPhysics,
+    OnRails,
+    SurfaceSettled,
+    GroundHeld,
+    Destroyed,
+}
+
+/// <summary>
 /// Root simulation container.
 /// Owns all celestial bodies and vessels, advances simulation time,
 /// and dispatches to the appropriate integrator based on warp factor.
@@ -580,6 +594,49 @@ public class Universe
         }
     }
 
+    /// <summary>
+    /// Classifies the work the mixed/high-warp scheduler should dispatch for the
+    /// vessel's current state.  A vessel that is already on rails is classified as
+    /// analytic only when the same conditions that would keep it on rails are true.
+    /// In particular, an active vessel below warp 10 remains <see
+    /// cref="VesselPhysicsWorkload.FullPhysics"/> so the existing active-vessel
+    /// transition to RK4 is preserved.
+    /// </summary>
+    public VesselPhysicsWorkload ClassifyMixedPhysicsWorkload(Vessel vessel)
+        => ClassifyMixedPhysicsWorkload(vessel, out _);
+
+    private VesselPhysicsWorkload ClassifyMixedPhysicsWorkload(
+        Vessel vessel,
+        out bool requiresForces)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        requiresForces = false;
+
+        // Match the dispatch precedence in TickPhysicsMixed exactly: a destroyed
+        // vessel is never woken by a stale settled/rails flag.
+        if (vessel.IsDestroyed)
+            return VesselPhysicsWorkload.Destroyed;
+
+        // A settled vessel with a command must wake the solver.  The idle path
+        // remains an anchored update, not a rigid-body/RK4 update.
+        if (vessel.IsSurfaceSettled && vessel.Throttle <= 0.01)
+            return VesselPhysicsWorkload.SurfaceSettled;
+
+        if (vessel.IsGroundHeld)
+            return VesselPhysicsWorkload.GroundHeld;
+
+        requiresForces = RequiresOffRailsPhysics(vessel);
+
+        // At TimeScale 5..9 the mixed branch deliberately does not promote the
+        // active vessel to rails.  Existing rails state must therefore be cleared
+        // and integrated by RK4 just as before this classification was introduced.
+        bool canUseAnalyticPropagation = vessel != ActiveVessel || TimeScale >= 10.0;
+        if (canUseAnalyticPropagation && !requiresForces)
+            return VesselPhysicsWorkload.OnRails;
+
+        return VesselPhysicsWorkload.FullPhysics;
+    }
+
     // ── Integration modes ─────────────────────────────────────────────────
 
     private void TickPhysics(double dt)
@@ -863,30 +920,42 @@ public class Universe
         foreach (var vessel in _vessels.ToList())
         {
             if (IsDockedSecondary(vessel)) continue;
-            if (vessel.IsDestroyed)
+            var workload = ClassifyMixedPhysicsWorkload(vessel, out bool requiresForces);
+            if (workload == VesselPhysicsWorkload.Destroyed)
             {
                 AdvanceAnchoredWreck(vessel, dt);
                 continue;
             }
 
+            // Rails propagation does not need the dominant body selected here:
+            // PropagateVesselOnRails resolves its own reference frame at the conic
+            // epoch, and this avoids one duplicate body scan per rails vessel/substep.
+            if (workload == VesselPhysicsWorkload.OnRails)
+            {
+                // Only the active vessel changes its explicit rails flag in this
+                // branch.  Non-active vessels historically entered the analytic
+                // propagator without changing that flag, so preserve that contract.
+                if (vessel == ActiveVessel && !vessel.IsOnRails)
+                {
+                    vessel.IsOnRails = true;
+                    vessel.OrbitalState = null;
+                }
+                PropagateVesselOnRails(vessel, dt);
+                continue;
+            }
+
+            // Preserve the pre-existing reference-body choice when a settled vessel
+            // has just received throttle and is about to wake the full solver.
             var refBody = vessel.IsSurfaceSettled
                 ? ResolveSurfaceBody(vessel)
                 : GetDominantBody(vessel.Position);
-            if (vessel.IsSurfaceSettled)
+            if (workload == VesselPhysicsWorkload.SurfaceSettled)
             {
                 // Rigid-body sleep for a landed vehicle.  This is not a launch
                 // clamp: any commanded thrust wakes the solver immediately.
-                if (vessel.Throttle > 0.01)
-                {
-                    vessel.IsSurfaceSettled = false;
-                    vessel.SurfaceSettledDuration = 0.0;
-                }
-                else
-                {
-                    AdvanceSurfaceAnchor(vessel, refBody, dt);
-                    vessel.Tick(dt, refBody);
-                    continue;
-                }
+                AdvanceSurfaceAnchor(vessel, refBody, dt);
+                vessel.Tick(dt, refBody);
+                continue;
             }
             if (vessel.IsGroundHeld)
             {
@@ -900,8 +969,6 @@ public class Universe
                 vessel.Tick(dt, refBody);
                 continue;
             }
-
-            bool requiresForces = RequiresOffRailsPhysics(vessel);
 
             if (vessel == ActiveVessel)
             {
