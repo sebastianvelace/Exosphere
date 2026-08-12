@@ -365,6 +365,7 @@ public partial class _PlaytestShot : Node
 
     StreamWriter _log = null!;
     double _t0;
+    double _lastProcessWallSeconds;
     int _frame;
     int _readyFrames;
     int _settleLeft;
@@ -494,6 +495,7 @@ public partial class _PlaytestShot : Node
         _log.WriteLine($"=== Exosphere visual playtest {DateTime.UtcNow:O} mode={_mode} ===");
         _log.Flush();
         _t0 = Time.GetTicksMsec() / 1000.0;
+        _lastProcessWallSeconds = _t0;
         ProcessMode = ProcessModeEnum.Always;
         // Controllers run at priority 100. Diagnostics run later so their requested
         // bounded RK4 x2 acceleration is not immediately overwritten back to real time.
@@ -505,7 +507,10 @@ public partial class _PlaytestShot : Node
         if (!_authorized || _finished) return;
         _frame++;
 
-        double elapsed = Time.GetTicksMsec() / 1000.0 - _t0;
+        double nowWallSeconds = Time.GetTicksMsec() / 1000.0;
+        double frameSeconds = nowWallSeconds - _lastProcessWallSeconds;
+        _lastProcessWallSeconds = nowWallSeconds;
+        double elapsed = nowWallSeconds - _t0;
         if (elapsed > MaxRuntimeSec)
         {
             _log.WriteLine(
@@ -527,6 +532,12 @@ public partial class _PlaytestShot : Node
         }
 
         _readyFrames++;
+        if (frameSeconds > 0.0 && double.IsFinite(frameSeconds))
+        {
+            _log.WriteLine($"PERF_FRAME frame={_frame} frame_ms={frameSeconds * 1000.0:F3} " +
+                "source=process_callback");
+            if ((_frame & 31) == 0) _log.Flush();
+        }
         var body = universe.GetDominantBody(vessel.Position);
         if (body == null) return;
 

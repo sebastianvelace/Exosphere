@@ -52,19 +52,27 @@ VRAM telemetry; the latter remains a separate validation gate.
 
 ## Verification
 
-- `dotnet build Exosphere.csproj --no-restore -p:BuildProjectReferences=false`: passed with
-  0 warnings and 0 errors, validating the modified Godot project against the existing
-  simulation binary.
-- Directed atmosphere tests through VSTest: **89/89 passed**.
+- `dotnet build Exosphere.csproj --no-restore`: passed with 0 warnings and 0 errors.
+- Directed atmosphere tests through VSTest: **89/89 passed** before the final
+  profile-only change; the complete suite is rerun as the release gate.
 - `git diff --check`: passed.
-- Full solution build is currently blocked by unrelated uncommitted changes in
-  `ExosphereSimulation/Universe.cs`, which reference missing
-  `RestoreDeferredVesselsForNormalMode` and `TryAdvanceDeferredVessel`. This phase did not
-  modify that file.
-- The visual smoke was not counted as a pass in this phase because the harness could not
-  create an X11 or Wayland display in the current VM (`X11 Display is not available`, then
-  `Can't connect to a Wayland display`). The Godot binary was found, but no visual
-  regression claim is made without a framebuffer-backed run.
+- Framebuffer-backed validation is available through Xvfb/llvmpipe. Pad smoke,
+  cockpit smoke and focused Flight 7 ascent completed; the latter reached
+  `ASCENT_ORBIT_OK` with a 158×145 km orbit and `e=0.001`.
+
+## Interactive profile decision
+
+The renderer remains on RGB order 4. The runtime profile is explicitly named
+`rgb-ms-order4-interactive-v21` and uses smaller renderer-quality tables while
+the CPU spectral/reference oracle remains independent. This is a responsiveness
+mitigation, not a change to physics coefficients or official scattering order.
+The old high-resolution profile could keep the worker busy for approximately
+133 s in the same ascent harness; v21 completed the Earth worker in approximately
+8–9 s on llvmpipe and allowed the flight to reach orbit.
+
+The profile is accepted for the next phase with a hardware gate still open:
+the VM reports callback p50/p95/p99 of 982/1219/2659 ms, so it cannot serve as
+evidence of a 60 FPS target. GPU frame time and VRAM remain unmeasured.
 
 ## Decision
 

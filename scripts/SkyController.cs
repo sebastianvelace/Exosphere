@@ -23,7 +23,7 @@ public partial class SkyController : Node
     public static Color CurrentHorizonColor { get; private set; } = new(0.40f, 0.65f, 1.0f);
 
     /// <summary>Stable telemetry contract for the RGB runtime atmosphere LUT.</summary>
-    public const string MultipleScatteringLutVersion = "rgb-ms-order4-v20";
+    public const string MultipleScatteringLutVersion = "rgb-ms-order4-interactive-v21";
     public const int RuntimeMultipleScatteringOrder = SpectralAtmosphereOracle.OfficialRendererOrder;
     public const int ExperimentalMultipleScatteringOrder = SpectralAtmosphereOracle.ExperimentalOrder;
 
@@ -49,25 +49,26 @@ public partial class SkyController : Node
     // integrates a visible-band solar irradiance proxy.  Calibrate that proxy
     // once here so the accumulated HDR sky does not white-clip the lower limb.
     private const float VisibleSolarRadianceScale = 0.35f;
-    private const int TransmittanceLutWidth = 128;
-    // The solar coordinate is square-root warped toward the horizon.  Doubling the
-    // vertical resolution keeps the refracted twilight limb continuous when the LUT is
-    // bilinearly sampled by the sky shader; the horizontal resolution remains unchanged.
-    private const int TransmittanceLutHeight = 192;
-    private const int TransmittanceLutSamples = 48;
-    private const int MultipleScatteringLutWidth = 64;
-    private const int MultipleScatteringLutHeight = 48;
-    private const int MultipleScatteringIntegrationSteps = 48;
-    private const int MultipleScatteringSolarSamples = 32;
+    // Interactive runtime profile: preserve the same physical model and official order 4,
+    // but bound CPU work tightly enough that llvmpipe/Godot remains responsive while the
+    // worker builds. The offline spectral/reference tools keep their independent high-
+    // resolution settings; these dimensions are renderer-quality settings, not physics data.
+    private const int TransmittanceLutWidth = 64;
+    private const int TransmittanceLutHeight = 96;
+    private const int TransmittanceLutSamples = 16;
+    private const int MultipleScatteringLutWidth = 32;
+    private const int MultipleScatteringLutHeight = 24;
+    private const int MultipleScatteringIntegrationSteps = 16;
+    private const int MultipleScatteringSolarSamples = 12;
     // Order four is the first higher-order pass beyond the validated S2/S3 fallback.
     // The CPU builder keeps the legacy order selectable for diagnostics; the realtime sky
     // opts into the finite order-four accumulation once per body/profile.
     private const int MultipleScatteringMaxOrder = 4;
-    private const int AngularScatteringLutWidth = 32;
-    private const int AngularScatteringSolarLayers = 20;
-    private const int AngularScatteringViewLayers = 12;
-    private const int AngularScatteringMuLayers = 12;
-    private const int AngularScatteringOpticalDepthSamples = 32;
+    private const int AngularScatteringLutWidth = 16;
+    private const int AngularScatteringSolarLayers = 8;
+    private const int AngularScatteringViewLayers = 8;
+    private const int AngularScatteringMuLayers = 8;
+    private const int AngularScatteringOpticalDepthSamples = 12;
     private const int MaxCpuLutCacheEntries = 3;
 
     private enum AtmosphereLutWorkerState
