@@ -79,6 +79,12 @@ public partial class SimulationBridge : Node
     /// <summary>Active launch site, if the configured id resolved from data.</summary>
     public LaunchSite? LaunchSiteOrNull => _launchSite;
 
+    // Planet meshes/materials are presentation resources, not simulation state.  Keep only
+    // the body needed by the initial vessel in the synchronous load path; an interplanetary
+    // transition requests its presentation lazily after the physics tick.
+    private readonly HashSet<string> _spawnedPlanetIds = new(StringComparer.OrdinalIgnoreCase);
+    private string? _pendingPlanetPresentationBodyId;
+
     // ── Ignition ramp state ───────────────────────────────────────────────
     // True while Ignite() is spooling up and waiting for the commit-to-launch gate.
     private bool   _ignitionActive  = false;
@@ -286,6 +292,7 @@ public partial class SimulationBridge : Node
         }
 
         Universe.Tick(delta);
+        QueueRequiredPlanetPresentation();
         SyncStructuralDebrisRenderers();
 
         // Hot-stage overlap finished in sim time → mechanical separation this frame.
@@ -493,26 +500,94 @@ public partial class SimulationBridge : Node
         var fo          = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
         if (planetsNode == null || fo == null) return;
 
+        var requiredBody = ActiveVessel != null
+            ? Universe.GetDominantBody(ActiveVessel.Position)
+            : Universe.GetBody("earth");
+        int created = 0;
+        int deferred = 0;
         foreach (var body in Universe.Bodies)
         {
-            // The photosphere is rendered by the sky shader at its exact angular radius.
-            // A second scaled-space sphere would overlap it and break eclipse silhouettes.
             if (body.Id == "sun") continue;
-            // Unit sphere — FloatingOrigin scales each planet per-frame to its correct
-            // angular size as a precision-safe "scaled-space" backdrop. The shader supplies
-            // its own atmospheric Fresnel rim, so no separate glow shell is needed.
-            var sphere = new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 96, Rings = 48 };
-            var mat = body.Id == "earth"
-                ? PlanetMaterials.CreateEarth()
-                : PlanetMaterials.CreatePlanet(body.Id, GetPlanetColor(body.Id));
-
-            var mesh = new MeshInstance3D { Name = body.Name + "_mesh", Mesh = sphere };
-            mesh.SetSurfaceOverrideMaterial(0, mat);
-            planetsNode.AddChild(mesh);
-            fo.RegisterPlanetNode(body.Id, mesh);
-
-            if (body.Id == "saturn") AddSaturnRing(mesh);
+            if (string.Equals(body.Id, requiredBody?.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                if (SpawnPlanet(body, planetsNode, fo)) created++;
+            }
+            else
+            {
+                deferred++;
+            }
         }
+
+        GD.Print(
+            $"PERF_PLANETS mode=lazy initial={requiredBody?.Id ?? "none"} " +
+            $"created={created} deferred={deferred} total={created + deferred}");
+    }
+
+    private bool SpawnPlanet(CelestialBody body, Node3D planetsNode, FloatingOrigin fo)
+    {
+        // The photosphere is rendered by the sky shader at its exact angular radius.  A
+        // second scaled-space sphere would overlap it and break eclipse silhouettes.
+        if (body.Id == "sun" || !_spawnedPlanetIds.Add(body.Id)) return false;
+
+        // Unit sphere — FloatingOrigin scales each planet per-frame to its correct angular
+        // size as a precision-safe "scaled-space" backdrop. The shader supplies its own
+        // atmospheric Fresnel rim, so no separate glow shell is needed.
+        var sphere = new SphereMesh
+        {
+            Radius = 1f,
+            Height = 2f,
+            RadialSegments = 96,
+            Rings = 48,
+        };
+        var mat = body.Id == "earth"
+            ? PlanetMaterials.CreateEarth()
+            : PlanetMaterials.CreatePlanet(body.Id, GetPlanetColor(body.Id));
+
+        var mesh = new MeshInstance3D { Name = body.Name + "_mesh", Mesh = sphere };
+        mesh.SetSurfaceOverrideMaterial(0, mat);
+        planetsNode.AddChild(mesh);
+        fo.RegisterPlanetNode(body.Id, mesh);
+
+        if (body.Id == "saturn") AddSaturnRing(mesh);
+        return true;
+    }
+
+    private void QueueRequiredPlanetPresentation()
+    {
+        var vessel = ActiveVessel;
+        if (vessel == null) return;
+
+        var body = Universe.GetDominantBody(vessel.Position);
+        if (body == null || body.Id == "sun" || _spawnedPlanetIds.Contains(body.Id)) return;
+        if (_pendingPlanetPresentationBodyId == body.Id) return;
+
+        _pendingPlanetPresentationBodyId = body.Id;
+        GD.Print($"PERF_PLANETS stage=queued body={body.Id} reason=dominant_body_transition");
+        CallDeferred(nameof(SpawnPendingPlanetPresentation));
+    }
+
+    public void SpawnPendingPlanetPresentation()
+    {
+        var bodyId = _pendingPlanetPresentationBodyId;
+        _pendingPlanetPresentationBodyId = null;
+        if (string.IsNullOrWhiteSpace(bodyId) || Universe == null) return;
+
+        var body = Universe.GetBody(bodyId);
+        var planetsNode = GetTree().Root.FindChild("Planets", true, false) as Node3D;
+        var fo = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        var requiredBody = ActiveVessel != null
+            ? Universe.GetDominantBody(ActiveVessel.Position)
+            : null;
+        if (body == null
+            || requiredBody == null
+            || !string.Equals(body.Id, requiredBody.Id, StringComparison.OrdinalIgnoreCase)
+            || planetsNode == null
+            || fo == null)
+            return;
+
+        var timer = Stopwatch.StartNew();
+        if (SpawnPlanet(body, planetsNode, fo))
+            GD.Print($"PERF_PLANETS stage=lazy_spawn body={body.Id} ms={timer.Elapsed.TotalMilliseconds:F1}");
     }
 
     // Saturn's rings: a flat annulus child (local XZ plane) that scales/tilts with the
