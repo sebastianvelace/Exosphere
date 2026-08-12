@@ -1,6 +1,9 @@
 namespace Exosphere.Game;
 
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
@@ -65,18 +68,63 @@ public partial class SkyController : Node
     private const int AngularScatteringViewLayers = 12;
     private const int AngularScatteringMuLayers = 12;
     private const int AngularScatteringOpticalDepthSamples = 32;
+    private const int MaxCpuLutCacheEntries = 3;
+
+    private enum AtmosphereLutWorkerState
+    {
+        Idle,
+        Queued,
+        Running,
+        CancelRequested,
+        Completed,
+        Canceled,
+        Faulted,
+    }
+
+    private enum AtmosphereLutWorkerPhase
+    {
+        None,
+        Transmittance,
+        GlobalMultipleScattering,
+        ExperimentalOrderFive,
+        AngularAtlas,
+        Completed,
+    }
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
     private string? _boundCloudBodyId;
     private readonly Dictionary<string, Texture2D> _transmittanceLuts = new();
     private readonly Dictionary<string, Texture2D> _multipleScatteringLuts = new();
+    private readonly Dictionary<string, AtmosphereLutCpuResult> _cpuLutCache = new();
     private readonly Dictionary<string, (Texture2D Texture, float TopAltitude)> _densityLuts = new();
     private readonly Dictionary<string, AtmosphereDensityProfile> _densityProfiles = new();
     private Task<AtmosphereLutCpuResult>? _atmosphereLutTask;
+    private CancellationTokenSource? _atmosphereLutCancellation;
     private string? _atmosphereLutTaskBodyId;
+    private string? _atmosphereLutTaskCacheKey;
+    private int _atmosphereLutGeneration;
+    private int _workerState;
+    private int _workerPhase;
+    private long _workerQueuedTimestamp;
+    private long _workerStartedTimestamp;
+    private long _workerFinishedTimestamp;
+    private long _workerProducedBytes;
+    private long _workerEstimatedBytes;
+    private int _lastTelemetryGeneration = -1;
+    private int _lastTelemetryState = -1;
+    private int _lastTelemetryPhase = -1;
+    private long _lastTelemetryTimestamp;
+    private bool _isExiting;
     public bool IsAtmosphereLutBuildPending => _atmosphereLutTask is { IsCompleted: false };
     public double LastAtmosphereLutBuildMilliseconds { get; private set; }
+    public long LastAtmosphereLutEstimatedBytes { get; private set; }
+    public long LastAtmosphereLutPeakBytes { get; private set; }
+    public long LastAtmosphereLutUploadBytes { get; private set; }
+    public string AtmosphereLutWorkerStatus => WorkerStateName(Volatile.Read(ref _workerState));
+    public double AtmosphereLutWorkerElapsedMilliseconds => WorkerElapsedMilliseconds();
+    public long AtmosphereLutWorkerEstimatedBytes => Interlocked.Read(ref _workerEstimatedBytes);
+    public long AtmosphereLutWorkerProducedBytes => Interlocked.Read(ref _workerProducedBytes);
     private double _updateAccumulator = 1.0;
     private bool _hasAtmosphereState;
     private string? _lastAtmosphereBodyId;
@@ -113,6 +161,12 @@ public partial class SkyController : Node
         // The cloud field evolves slowly. Incremental refresh updates one cubemap face per
         // frame and avoids paying the complete gas+cloud integration six times every frame.
         _env.Sky.ProcessMode = Sky.ProcessModeEnum.Incremental;
+    }
+
+    public override void _ExitTree()
+    {
+        _isExiting = true;
+        CancelAtmosphereLutBuild("exit_tree");
     }
 
     public override void _Process(double delta)
@@ -370,65 +424,396 @@ public partial class SkyController : Node
         out Texture2D? transmittance,
         out Texture2D? multipleScattering)
     {
-        if (_transmittanceLuts.TryGetValue(bodyId, out transmittance)
-            && _multipleScatteringLuts.TryGetValue(bodyId, out multipleScattering))
+        bool includeExperimentalOrderFive = GenerateExperimentalOrderFive;
+        string cacheKey = CreateAtmosphereLutCacheKey(
+            bodyId, profile, planetRadius, atmosphereTopAltitude,
+            includeExperimentalOrderFive);
+        if (_transmittanceLuts.TryGetValue(cacheKey, out transmittance)
+            && _multipleScatteringLuts.TryGetValue(cacheKey, out multipleScattering))
             return true;
 
         transmittance = null;
         multipleScattering = null;
+
+        if (_cpuLutCache.TryGetValue(cacheKey, out var cached))
+        {
+            try
+            {
+                ActivateAtmosphereLuts(cacheKey, cached, cacheHit: true);
+                transmittance = _transmittanceLuts[cacheKey];
+                multipleScattering = _multipleScatteringLuts[cacheKey];
+                return true;
+            }
+            catch (Exception exception)
+            {
+                _cpuLutCache.Remove(cacheKey);
+                GD.PrintErr($"PERF_ATMOS body={bodyId} stage=cache_failed "
+                    + $"state=faulted error={exception.GetType().Name}");
+            }
+        }
+
         // PollAtmosphereLutBuild is the sole consumer of completed tasks.  The task may
         // complete between that poll and this bind, so do not clear a completed task here:
         // doing so would lose the result and queue a duplicate CPU build.
-        if (_atmosphereLutTask != null) return false;
+        if (_atmosphereLutTask != null)
+        {
+            if (!string.Equals(_atmosphereLutTaskCacheKey, cacheKey, StringComparison.Ordinal))
+                CancelAtmosphereLutBuild("profile_changed");
+            return false;
+        }
 
-        bool includeExperimentalOrderFive = GenerateExperimentalOrderFive;
+        var cancellation = new CancellationTokenSource();
+        int generation = ++_atmosphereLutGeneration;
         _atmosphereLutTaskBodyId = bodyId;
-        _atmosphereLutTask = Task.Run(() => BuildAtmosphereLutsCpu(
-            bodyId, profile, planetRadius, atmosphereTopAltitude,
+        _atmosphereLutTaskCacheKey = cacheKey;
+        _atmosphereLutCancellation = cancellation;
+        _workerQueuedTimestamp = Stopwatch.GetTimestamp();
+        _workerStartedTimestamp = 0;
+        _workerFinishedTimestamp = 0;
+        Interlocked.Exchange(ref _workerEstimatedBytes, EstimateAtmosphereLutPeakBytes(
             includeExperimentalOrderFive));
-        GD.Print($"PERF_ATMOS body={bodyId} stage=queued worker=true");
+        Interlocked.Exchange(ref _workerProducedBytes, 0);
+        Interlocked.Exchange(ref _workerPhase, (int)AtmosphereLutWorkerPhase.None);
+        Interlocked.Exchange(ref _workerState, (int)AtmosphereLutWorkerState.Queued);
+        _lastTelemetryGeneration = -1;
+        _lastTelemetryState = -1;
+        _lastTelemetryPhase = -1;
+        _lastTelemetryTimestamp = 0;
+        GD.Print($"PERF_ATMOS body={bodyId} stage=queued worker=true generation={generation} "
+            + $"state=queued estimatedBytes={AtmosphereLutWorkerEstimatedBytes} cache=miss");
+        _atmosphereLutTask = Task.Run(() => BuildAtmosphereLutsCpu(
+            bodyId, cacheKey, profile, planetRadius, atmosphereTopAltitude,
+            includeExperimentalOrderFive, generation, cancellation.Token, this), cancellation.Token);
         return false;
     }
 
     private void PollAtmosphereLutBuild()
     {
+        EmitWorkerTelemetryIfChanged();
         var task = _atmosphereLutTask;
         if (task == null || !task.IsCompleted) return;
 
         string bodyId = _atmosphereLutTaskBodyId ?? string.Empty;
+        string cacheKey = _atmosphereLutTaskCacheKey ?? string.Empty;
+        var cancellation = _atmosphereLutCancellation;
         _atmosphereLutTask = null;
+        _atmosphereLutCancellation = null;
         _atmosphereLutTaskBodyId = null;
-        if (task.IsCanceled || task.IsFaulted)
+        _atmosphereLutTaskCacheKey = null;
+        _workerFinishedTimestamp = Stopwatch.GetTimestamp();
+        bool cancellationRequested = cancellation?.IsCancellationRequested == true;
+        if (task.IsCanceled || task.IsFaulted || cancellationRequested)
         {
-            GD.PrintErr($"PERF_ATMOS body={bodyId} stage=worker_failed error={task.Exception}");
-            _hasAtmosphereState = false;
+            bool canceled = task.IsCanceled || cancellationRequested;
+            Interlocked.Exchange(ref _workerState, (int)(canceled
+                ? AtmosphereLutWorkerState.Canceled
+                : AtmosphereLutWorkerState.Faulted));
+            string error = task.Exception?.GetBaseException().GetType().Name ?? "canceled";
+            GD.Print(canceled
+                ? $"PERF_ATMOS body={bodyId} stage=worker_canceled state=canceled "
+                    + $"elapsedMs={AtmosphereLutWorkerElapsedMilliseconds:F1} "
+                    + $"bytes={AtmosphereLutWorkerProducedBytes}"
+                : $"PERF_ATMOS body={bodyId} stage=worker_failed state=faulted "
+                    + $"elapsedMs={AtmosphereLutWorkerElapsedMilliseconds:F1} error={error}");
+            cancellation?.Dispose();
+            if (!_isExiting) _hasAtmosphereState = false;
             return;
         }
 
-        var result = task.GetAwaiter().GetResult();
-        var timer = Stopwatch.StartNew();
-        _transmittanceLuts[bodyId] = CreateTransmittanceTexture(result.Transmittance);
-        _multipleScatteringLuts[bodyId] = CreateMultipleScatteringTexture(result.Angular);
-        LastAtmosphereLutBuildMilliseconds = result.BuildMilliseconds;
-        LastExperimentalOrderFiveBuildMilliseconds = result.ExperimentalOrderFiveMilliseconds;
-        LastExperimentalOrderFiveEstimatedBytes = result.ExperimentalOrderFiveEstimatedBytes;
-        GD.Print($"PERF_ATMOS body={bodyId} stage=worker_complete "
-            + $"cpuMs={result.BuildMilliseconds:F1} uploadMs={timer.Elapsed.TotalMilliseconds:F1}");
+        try
+        {
+            var result = task.GetAwaiter().GetResult();
+            ActivateAtmosphereLuts(cacheKey, result, cacheHit: false);
+            GD.Print($"PERF_ATMOS body={bodyId} stage=worker_complete state=completed "
+                + $"generation={result.Generation} cpuMs={result.BuildMilliseconds:F1} "
+                + $"queueMs={QueueMilliseconds():F1} uploadBytes={result.UploadBytes} "
+                + $"retainedCpuBytes={result.RetainedCpuBytes} "
+                + $"peakBytes={result.PeakWorkingBytes}");
+        }
+        catch (Exception exception)
+        {
+            Interlocked.Exchange(ref _workerState, (int)AtmosphereLutWorkerState.Faulted);
+            GD.PrintErr($"PERF_ATMOS body={bodyId} stage=upload_failed state=faulted "
+                + $"error={exception.GetType().Name}");
+        }
+        finally
+        {
+            cancellation?.Dispose();
+        }
 
         // Re-enter BindAtmosphere on the next cadence so the newly uploaded textures become
         // active without rebuilding the CPU tables. This also handles an SOI crossing while
         // the worker was running.
-        _hasAtmosphereState = false;
+        if (!_isExiting) _hasAtmosphereState = false;
     }
 
-    private static AtmosphereLutCpuResult BuildAtmosphereLutsCpu(
+    private void ActivateAtmosphereLuts(
+        string cacheKey,
+        AtmosphereLutCpuResult result,
+        bool cacheHit)
+    {
+        var uploadTimer = Stopwatch.StartNew();
+        if (!_transmittanceLuts.TryGetValue(cacheKey, out var transmittance))
+        {
+            transmittance = CreateTransmittanceTexture(result.Transmittance);
+            _transmittanceLuts[cacheKey] = transmittance;
+        }
+
+        if (!_multipleScatteringLuts.TryGetValue(cacheKey, out var multipleScattering))
+        {
+            multipleScattering = CreateMultipleScatteringTexture(result.Angular);
+            _multipleScatteringLuts[cacheKey] = multipleScattering;
+        }
+
+        _cpuLutCache[cacheKey] = result;
+        TrimCpuLutCache(cacheKey);
+        LastAtmosphereLutBuildMilliseconds = result.BuildMilliseconds;
+        LastAtmosphereLutEstimatedBytes = result.RetainedCpuBytes;
+        LastAtmosphereLutPeakBytes = result.PeakWorkingBytes;
+        LastAtmosphereLutUploadBytes = result.UploadBytes;
+        LastExperimentalOrderFiveBuildMilliseconds = result.ExperimentalOrderFiveMilliseconds;
+        LastExperimentalOrderFiveEstimatedBytes = result.ExperimentalOrderFiveEstimatedBytes;
+        Interlocked.Exchange(ref _workerProducedBytes, result.RetainedCpuBytes);
+        Interlocked.Exchange(ref _workerEstimatedBytes, result.PeakWorkingBytes);
+        Interlocked.Exchange(ref _workerState, (int)AtmosphereLutWorkerState.Completed);
+        _workerFinishedTimestamp = Stopwatch.GetTimestamp();
+
+        if (cacheHit)
+        {
+            GD.Print($"PERF_ATMOS body={result.BodyId} stage=cache_hit state=completed "
+                + $"cpuMs={result.BuildMilliseconds:F1} uploadMs={uploadTimer.Elapsed.TotalMilliseconds:F1} "
+                + $"retainedCpuBytes={result.RetainedCpuBytes} uploadBytes={result.UploadBytes}");
+        }
+    }
+
+    private void TrimCpuLutCache(string activeKey)
+    {
+        while (_cpuLutCache.Count > MaxCpuLutCacheEntries)
+        {
+            string? evictionKey = null;
+            foreach (string key in _cpuLutCache.Keys)
+            {
+                if (!string.Equals(key, activeKey, StringComparison.Ordinal))
+                {
+                    evictionKey = key;
+                    break;
+                }
+            }
+
+            if (evictionKey == null) return;
+            _cpuLutCache.Remove(evictionKey);
+            // The renderer texture cache is keyed by the same immutable profile key. Drop
+            // both entries together so profile churn cannot retain an unbounded pair of
+            // CPU/GPU LUTs. Godot releases the resources when these references disappear.
+            _transmittanceLuts.Remove(evictionKey);
+            _multipleScatteringLuts.Remove(evictionKey);
+        }
+    }
+
+    private void CancelAtmosphereLutBuild(string reason)
+    {
+        var task = _atmosphereLutTask;
+        var cancellation = _atmosphereLutCancellation;
+        if (task == null || cancellation == null || task.IsCompleted
+            || cancellation.IsCancellationRequested)
+            return;
+
+        Interlocked.Exchange(ref _workerState, (int)AtmosphereLutWorkerState.CancelRequested);
+        cancellation.Cancel();
+        string bodyId = _atmosphereLutTaskBodyId ?? string.Empty;
+        GD.Print($"PERF_ATMOS body={bodyId} stage=cancel_requested "
+            + $"state=cancel_requested reason={reason} "
+            + $"elapsedMs={AtmosphereLutWorkerElapsedMilliseconds:F1} "
+            + $"bytes={AtmosphereLutWorkerProducedBytes}");
+
+        if (_isExiting)
+        {
+            // _ExitTree will not receive another _Process callback. Dispose the CTS after
+            // the detached worker observes cancellation; never wait on the main thread.
+            _ = task.ContinueWith(
+                _ => cancellation.Dispose(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            _atmosphereLutCancellation = null;
+        }
+    }
+
+    private void SetWorkerRunning()
+    {
+        _workerStartedTimestamp = Stopwatch.GetTimestamp();
+        Interlocked.Exchange(ref _workerState, (int)AtmosphereLutWorkerState.Running);
+    }
+
+    private void SetWorkerPhase(AtmosphereLutWorkerPhase phase, long producedBytes)
+    {
+        Interlocked.Exchange(ref _workerPhase, (int)phase);
+        Interlocked.Exchange(ref _workerProducedBytes, producedBytes);
+    }
+
+    private void SetWorkerProducedBytes(long producedBytes) =>
+        Interlocked.Exchange(ref _workerProducedBytes, producedBytes);
+
+    private void EmitWorkerTelemetryIfChanged()
+    {
+        int state = Volatile.Read(ref _workerState);
+        int phase = Volatile.Read(ref _workerPhase);
+        int generation = _atmosphereLutGeneration;
+        long now = Stopwatch.GetTimestamp();
+        bool changed = generation != _lastTelemetryGeneration
+            || state != _lastTelemetryState
+            || phase != _lastTelemetryPhase;
+        bool periodic = _lastTelemetryTimestamp == 0
+            || now - _lastTelemetryTimestamp >= Stopwatch.Frequency * 5;
+        if (!changed && !periodic) return;
+
+        _lastTelemetryGeneration = generation;
+        _lastTelemetryState = state;
+        _lastTelemetryPhase = phase;
+        _lastTelemetryTimestamp = now;
+        string bodyId = _atmosphereLutTaskBodyId ?? _lastAtmosphereBodyId ?? string.Empty;
+        string stage = state == (int)AtmosphereLutWorkerState.Queued
+            ? "worker_queued"
+            : state == (int)AtmosphereLutWorkerState.Running
+                ? "worker_running"
+                : "worker_progress";
+        GD.Print($"PERF_ATMOS body={bodyId} stage={stage} "
+            + $"state={WorkerStateName(state)} phase={WorkerPhaseName(phase)} "
+            + $"generation={generation} elapsedMs={AtmosphereLutWorkerElapsedMilliseconds:F1} "
+            + $"bytes={AtmosphereLutWorkerProducedBytes}/"
+            + $"{AtmosphereLutWorkerEstimatedBytes}");
+    }
+
+    private double WorkerElapsedMilliseconds()
+    {
+        long queued = Interlocked.Read(ref _workerQueuedTimestamp);
+        if (queued == 0) return 0.0;
+        long started = Interlocked.Read(ref _workerStartedTimestamp);
+        long begin = started > 0 ? started : queued;
+        long finished = Interlocked.Read(ref _workerFinishedTimestamp);
+        long end = finished > 0 ? finished : Stopwatch.GetTimestamp();
+        return (end - begin) * 1000.0 / Stopwatch.Frequency;
+    }
+
+    private double QueueMilliseconds()
+    {
+        long queued = Interlocked.Read(ref _workerQueuedTimestamp);
+        long started = Interlocked.Read(ref _workerStartedTimestamp);
+        if (queued == 0 || started == 0) return 0.0;
+        return (started - queued) * 1000.0 / Stopwatch.Frequency;
+    }
+
+    private static string WorkerStateName(int state) => state switch
+    {
+        (int)AtmosphereLutWorkerState.Queued => "queued",
+        (int)AtmosphereLutWorkerState.Running => "running",
+        (int)AtmosphereLutWorkerState.CancelRequested => "cancel_requested",
+        (int)AtmosphereLutWorkerState.Completed => "completed",
+        (int)AtmosphereLutWorkerState.Canceled => "canceled",
+        (int)AtmosphereLutWorkerState.Faulted => "faulted",
+        _ => "idle",
+    };
+
+    private static string WorkerPhaseName(int phase) => phase switch
+    {
+        (int)AtmosphereLutWorkerPhase.Transmittance => "transmittance",
+        (int)AtmosphereLutWorkerPhase.GlobalMultipleScattering => "global_ms_order4",
+        (int)AtmosphereLutWorkerPhase.ExperimentalOrderFive => "experimental_order5",
+        (int)AtmosphereLutWorkerPhase.AngularAtlas => "angular_atlas",
+        (int)AtmosphereLutWorkerPhase.Completed => "completed",
+        _ => "none",
+    };
+
+    private static long EstimateAtmosphereLutPeakBytes(bool includeExperimentalOrderFive)
+    {
+        long transmittance = EstimateVectorBytes(TransmittanceLutWidth * TransmittanceLutHeight);
+        long global = EstimateVectorBytes(MultipleScatteringLutWidth * MultipleScatteringLutHeight);
+        long angular = EstimateVectorBytes(
+            AngularScatteringLutWidth * AngularScatteringSolarLayers
+            * AngularScatteringViewLayers * AngularScatteringMuLayers);
+        long experimental = includeExperimentalOrderFive ? global : 0;
+        return transmittance + global + angular + experimental;
+    }
+
+    private static long EstimateVectorBytes(long vectorCount) => checked(vectorCount * 3 * sizeof(double));
+
+    private static long EstimateTextureBytes(int width, int height) =>
+        checked((long)width * height * 4 * sizeof(float));
+
+    private static string CreateAtmosphereLutCacheKey(
         string bodyId,
         AtmosphereDensityProfile profile,
         double planetRadius,
         double atmosphereTopAltitude,
         bool includeExperimentalOrderFive)
     {
+        var builder = new StringBuilder(1_024);
+        builder.Append(bodyId).Append('|')
+            .Append(MultipleScatteringLutVersion).Append('|')
+            .Append(RuntimeMultipleScatteringOrder).Append('|')
+            .Append(includeExperimentalOrderFive ? "order5" : "official");
+        AppendDouble(builder, planetRadius);
+        AppendDouble(builder, atmosphereTopAltitude);
+        AppendDouble(builder, profile.TopAltitude);
+
+        var atmosphere = profile.Atmosphere;
+        AppendDouble(builder, atmosphere.SurfaceGravity);
+        AppendDouble(builder, atmosphere.GeopotentialRadius);
+        AppendDouble(builder, atmosphere.MaxAltitude);
+        AppendDouble(builder, atmosphere.SeaLevelDensity);
+        AppendDouble(builder, atmosphere.ScaleHeight);
+        AppendDouble(builder, atmosphere.SeaLevelPressure);
+        AppendDouble(builder, atmosphere.SeaLevelTemperature);
+        AppendDouble(builder, atmosphere.MolarMass);
+        AppendDouble(builder, atmosphere.ThermosphereScaleHeight);
+        AppendDouble(builder, atmosphere.ThermosphereScaleHeightGrowth);
+        AppendDouble(builder, atmosphere.ThermosphereTopAltitude);
+        builder.Append('|').Append(atmosphere.Layers.Count);
+        foreach (var layer in atmosphere.Layers)
+        {
+            AppendDouble(builder, layer.AltMin);
+            AppendDouble(builder, layer.AltMax);
+            AppendDouble(builder, layer.TempBase);
+            AppendDouble(builder, layer.LapseRate);
+        }
+
+        var optics = profile.Optics;
+        AppendVector(builder, optics.RayleighScattering);
+        AppendVector(builder, optics.MieScattering);
+        AppendVector(builder, optics.MieAbsorption);
+        AppendVector(builder, optics.OzoneAbsorption);
+        AppendDouble(builder, optics.RayleighScaleHeight);
+        AppendDouble(builder, optics.MieScaleHeight);
+        AppendDouble(builder, optics.OzoneCenterAltitude);
+        AppendDouble(builder, optics.OzoneHalfWidth);
+        AppendDouble(builder, optics.MieAnisotropy);
+        return builder.ToString();
+    }
+
+    private static void AppendVector(StringBuilder builder, Vector3d value)
+    {
+        AppendDouble(builder, value.X);
+        AppendDouble(builder, value.Y);
+        AppendDouble(builder, value.Z);
+    }
+
+    private static void AppendDouble(StringBuilder builder, double value) =>
+        builder.Append('|').Append(value.ToString("R", CultureInfo.InvariantCulture));
+
+    private static AtmosphereLutCpuResult BuildAtmosphereLutsCpu(
+        string bodyId,
+        string cacheKey,
+        AtmosphereDensityProfile profile,
+        double planetRadius,
+        double atmosphereTopAltitude,
+        bool includeExperimentalOrderFive,
+        int generation,
+        CancellationToken cancellationToken,
+        SkyController telemetry)
+    {
         var stopwatch = Stopwatch.StartNew();
+        telemetry?.SetWorkerRunning();
+        telemetry?.SetWorkerPhase(AtmosphereLutWorkerPhase.Transmittance, 0);
         var transmittance = AtmosphereTransmittanceLut.Build(
             profile,
             planetRadius,
@@ -436,7 +821,12 @@ public partial class SkyController : Node
             TransmittanceLutWidth,
             TransmittanceLutHeight,
             TransmittanceLutSamples);
+        cancellationToken.ThrowIfCancellationRequested();
+        long transmittanceBytes = EstimateVectorBytes(transmittance.Width * transmittance.Height);
+        telemetry?.SetWorkerProducedBytes(transmittanceBytes);
 
+        telemetry?.SetWorkerPhase(AtmosphereLutWorkerPhase.GlobalMultipleScattering,
+            transmittanceBytes);
         var global = AtmosphereMultipleScatteringLut.Build(
             profile,
             planetRadius,
@@ -446,11 +836,16 @@ public partial class SkyController : Node
             MultipleScatteringIntegrationSteps,
             MultipleScatteringSolarSamples,
             MultipleScatteringMaxOrder);
+        cancellationToken.ThrowIfCancellationRequested();
+        long globalBytes = EstimateVectorBytes(global.Width * global.Height);
+        telemetry?.SetWorkerProducedBytes(transmittanceBytes + globalBytes);
 
         double experimentalMilliseconds = 0.0;
         long experimentalBytes = 0;
         if (includeExperimentalOrderFive)
         {
+            telemetry?.SetWorkerPhase(AtmosphereLutWorkerPhase.ExperimentalOrderFive,
+                transmittanceBytes + globalBytes);
             var experimentalTimer = Stopwatch.StartNew();
             var experimental = AtmosphereMultipleScatteringLut.Build(
                 profile,
@@ -465,8 +860,12 @@ public partial class SkyController : Node
             experimentalMilliseconds = experimentalTimer.Elapsed.TotalMilliseconds;
             experimentalBytes = (long)experimental.Width * experimental.Height
                 * 3 * sizeof(double);
+            cancellationToken.ThrowIfCancellationRequested();
+            telemetry?.SetWorkerProducedBytes(transmittanceBytes + globalBytes + experimentalBytes);
         }
 
+        telemetry?.SetWorkerPhase(AtmosphereLutWorkerPhase.AngularAtlas,
+            transmittanceBytes + globalBytes + experimentalBytes);
         var angular = AtmosphereAngularMultipleScatteringLut.Build(
             profile,
             global,
@@ -477,10 +876,19 @@ public partial class SkyController : Node
             AngularScatteringViewLayers,
             AngularScatteringMuLayers,
             AngularScatteringOpticalDepthSamples);
+        cancellationToken.ThrowIfCancellationRequested();
         stopwatch.Stop();
+        long angularBytes = EstimateVectorBytes(angular.Width * angular.PackedHeight);
+        long peakBytes = transmittanceBytes + globalBytes + angularBytes + experimentalBytes;
+        long uploadBytes = EstimateTextureBytes(transmittance.Width, transmittance.Height)
+            + EstimateTextureBytes(angular.Width, angular.PackedHeight);
+        telemetry?.SetWorkerProducedBytes(transmittanceBytes + angularBytes);
+        telemetry?.SetWorkerPhase(AtmosphereLutWorkerPhase.Completed,
+            transmittanceBytes + angularBytes);
         return new AtmosphereLutCpuResult(
-            bodyId, transmittance, angular, stopwatch.Elapsed.TotalMilliseconds,
-            experimentalMilliseconds, experimentalBytes);
+            bodyId, cacheKey, generation, transmittance, angular,
+            stopwatch.Elapsed.TotalMilliseconds, experimentalMilliseconds, experimentalBytes,
+            transmittanceBytes + angularBytes, peakBytes, uploadBytes);
     }
 
     private static Texture2D CreateTransmittanceTexture(AtmosphereTransmittanceLut lut)
@@ -559,11 +967,16 @@ public partial class SkyController : Node
 
     private sealed record AtmosphereLutCpuResult(
         string BodyId,
+        string CacheKey,
+        int Generation,
         AtmosphereTransmittanceLut Transmittance,
         AtmosphereAngularMultipleScatteringLut Angular,
         double BuildMilliseconds,
         double ExperimentalOrderFiveMilliseconds,
-        long ExperimentalOrderFiveEstimatedBytes);
+        long ExperimentalOrderFiveEstimatedBytes,
+        long RetainedCpuBytes,
+        long PeakWorkingBytes,
+        long UploadBytes);
 
     private static Texture2D LoadStarTexture()
         => LoadTexture(StarTexPath, Colors.Black);
