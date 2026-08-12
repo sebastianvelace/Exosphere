@@ -27,6 +27,20 @@ public partial class SunController : Node
 {
     public static float SolarVisibility { get; private set; } = 1f;
 
+    // Lighting is presentation-only.  Twenty updates per second are enough to keep a
+    // moving terminator/eclipsing body visually locked while avoiding a tree walk and
+    // several material writes on every render frame.
+    private const double VisualUpdatePeriodSeconds = 1.0 / 20.0;
+    private double _visualUpdateTimer;
+    private Vector3 _lastSunDir;
+    private float _lastFedVisibility = -1f;
+    private Universe? _cachedUniverse;
+    private CelestialBody? _cachedSun;
+    private readonly List<ShaderMaterial> _planetMaterials = new();
+    private Node3D? _planetsNode;
+    private MeshInstance3D? _groundMesh;
+    private ShaderMaterial? _groundMaterial;
+
     // Cached node lookups — re-found lazily if they go null (e.g. scene rebuild).
     private DirectionalLight3D? _light;
     private ShaderMaterial?     _earthMat;
@@ -36,13 +50,42 @@ public partial class SunController : Node
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
-        var sun = universe?.GetBody("sun");
+        if (!ReferenceEquals(_cachedUniverse, universe))
+        {
+            _cachedUniverse = universe;
+            _cachedSun = universe?.GetBody("sun");
+            _planetMaterials.Clear();
+            _planetsNode = null;
+            _groundMesh = null;
+            _groundMaterial = null;
+            _earthMat = null;
+            _lastSunDir = Vector3.Zero;
+            _lastFedVisibility = -1f;
+            _visualUpdateTimer = 0.0;
+        }
+
+        var sun = _cachedSun;
         if (vessel == null || universe == null || sun == null) return;
 
         Vector3d simDir = (sun.Position - vessel.Position).Normalized;
         var renderDir = new Vector3((float)simDir.X, (float)simDir.Y, (float)simDir.Z);
-        OrientLight(renderDir);
-        FeedSunDir(renderDir);
+        _visualUpdateTimer -= System.Math.Max(0.0, delta);
+        if (_visualUpdateTimer > 0.0) return;
+        _visualUpdateTimer = VisualUpdatePeriodSeconds;
+
+        bool sunDirectionChanged = _lastSunDir == Vector3.Zero
+            || _lastSunDir.DistanceSquaredTo(renderDir) > 1e-10f;
+        bool materialsNeedRefresh = _earthMat == null
+            || _planetMaterials.Count == 0
+            || _planetsNode == null
+            || !IsInstanceValid(_planetsNode);
+        if (sunDirectionChanged)
+        {
+            OrientLight(renderDir);
+            _lastSunDir = renderDir;
+        }
+        if (sunDirectionChanged || materialsNeedRefresh)
+            FeedSunDir(renderDir);
 
         double visibility = 1.0;
         foreach (var body in universe.Bodies)
@@ -51,8 +94,13 @@ public partial class SunController : Node
             visibility = System.Math.Min(visibility, MissionGeometry.LimbDarkenedSolarDiscVisibility(
                 vessel.Position, body.Position, body.Radius, sun.Position, sun.Radius));
         }
-        SolarVisibility = (float)visibility;
-        FeedSolarVisibility(SolarVisibility);
+        float visibilityValue = (float)visibility;
+        if (System.Math.Abs(visibilityValue - _lastFedVisibility) > 1e-4f)
+        {
+            SolarVisibility = visibilityValue;
+            FeedSolarVisibility(visibilityValue);
+            _lastFedVisibility = visibilityValue;
+        }
     }
 
     /// <summary>
@@ -85,21 +133,9 @@ public partial class SunController : Node
             _earthMat = FindBodyMaterial("Earth_mesh");
         _earthMat?.SetShaderParameter("sun_dir", sunDir);
 
-        // Cheap pass over the remaining planet meshes (Mars, etc.). These materials
-        // are created once and persist, so this is just a handful of cheap calls/frame.
-        var planets = GetTree().Root.FindChild("Planets", true, false) as Node3D;
-        if (planets == null) return;
-
-        foreach (var child in planets.GetChildren())
-        {
-            if (child is not MeshInstance3D mesh) continue;
-            if (mesh.Name == "Earth_mesh") continue;   // already handled above
-            // Body shaders (planet_body / earth_surface) all declare `sun_dir`. The Sun
-            // itself uses a StandardMaterial3D, so the ShaderMaterial test skips it; any
-            // other ShaderMaterial here carries the uniform, so the set is always valid.
-            if ((mesh.GetSurfaceOverrideMaterial(0) ?? mesh.GetActiveMaterial(0)) is ShaderMaterial sm)
-                sm.SetShaderParameter("sun_dir", sunDir);
-        }
+        RefreshPlanetMaterials();
+        foreach (var material in _planetMaterials)
+            material.SetShaderParameter("sun_dir", sunDir);
     }
 
     private void FeedSolarVisibility(float visibility)
@@ -111,10 +147,36 @@ public partial class SunController : Node
         // The low-altitude tangent patch is a separate unshaded material.  It uses the
         // same parameter so a synthetic or real eclipse cannot leave the local terrain
         // at full direct-light strength while the atmosphere is in shadow.
-        if (GetTree().Root.FindChild("EarthGround", true, false) is MeshInstance3D ground
-            && (ground.GetSurfaceOverrideMaterial(0) ?? ground.GetActiveMaterial(0))
-                is ShaderMaterial groundMaterial)
-            groundMaterial.SetShaderParameter("solar_visibility", visibility);
+        if (_groundMesh == null || !IsInstanceValid(_groundMesh))
+        {
+            _groundMesh = GetTree().Root.FindChild("EarthGround", true, false) as MeshInstance3D;
+            _groundMaterial = _groundMesh == null
+                ? null
+                : (_groundMesh.GetSurfaceOverrideMaterial(0) ?? _groundMesh.GetActiveMaterial(0))
+                    as ShaderMaterial;
+        }
+        _groundMaterial?.SetShaderParameter("solar_visibility", visibility);
+    }
+
+    private void RefreshPlanetMaterials()
+    {
+        if (_planetsNode == null || !IsInstanceValid(_planetsNode))
+        {
+            _planetsNode = GetTree().Root.FindChild("Planets", true, false) as Node3D;
+            _planetMaterials.Clear();
+            if (_planetsNode == null) return;
+
+            foreach (var child in _planetsNode.GetChildren())
+            {
+                if (child is not MeshInstance3D mesh || mesh.Name == "Earth_mesh") continue;
+                // Body shaders (planet_body / earth_surface) all declare `sun_dir`.
+                // Keep only valid ShaderMaterial references so this traversal happens
+                // once per scene/universe instead of once per render frame.
+                if ((mesh.GetSurfaceOverrideMaterial(0) ?? mesh.GetActiveMaterial(0))
+                    is ShaderMaterial material)
+                    _planetMaterials.Add(material);
+            }
+        }
     }
 
     private ShaderMaterial? FindBodyMaterial(string meshName)

@@ -1,12 +1,21 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 using Exosphere.Simulation.Systems;
 using Exosphere.Simulation.Math;
 
 /// Nodo que actualiza todos los sistemas cada frame y los expone al HUD.
 public partial class SystemsController : Node
 {
+    // The system ticks themselves stay per-frame: their dt integration and command
+    // ordering are gameplay-relevant. SunController owns the 20 Hz solar-disc sample;
+    // reusing its value here avoids a duplicate body loop and keeps power/thermal/HUD
+    // lighting on the same eclipse sample.
+    private Universe? _cachedUniverse;
+    private CelestialBody? _cachedEarth;
+    private CelestialBody? _cachedSun;
+
     public static SystemsController? Instance { get; private set; }
 
     public LifeSupportSystem LifeSupport { get; } = new();
@@ -46,6 +55,13 @@ public partial class SystemsController : Node
         var universe = bridge?.Universe;
         if (vessel == null || universe == null) return;
 
+        if (!ReferenceEquals(_cachedUniverse, universe))
+        {
+            _cachedUniverse = universe;
+            _cachedEarth = universe.GetBody("earth");
+            _cachedSun = universe.GetBody("sun");
+        }
+
         var refBody = universe.GetDominantBody(vessel.Position);
         double alt  = vessel.GetAltitude(refBody);
 
@@ -58,19 +74,9 @@ public partial class SystemsController : Node
         var sysPhase = CurrentSystemsPhase;
         LifeSupport.Tick(delta, crewCount, sysPhase);
 
-        var earthBody = universe.GetBody("earth");
-        var sunBody   = universe.GetBody("sun");
-        double solarVisibility = 1.0;
-        if (sunBody != null)
-        {
-            foreach (var body in universe.Bodies)
-            {
-                if (body.Id == "sun") continue;
-                solarVisibility = System.Math.Min(solarVisibility,
-                    MissionGeometry.LimbDarkenedSolarDiscVisibility(vessel.Position,
-                        body.Position, body.Radius, sunBody.Position, sunBody.Radius));
-            }
-        }
+        var earthBody = _cachedEarth;
+        var sunBody   = _cachedSun;
+        double solarVisibility = SunController.SolarVisibility;
 
         Vector3d sunPos = sunBody?.Position ?? Vector3d.Zero;
         double lsLoadKw = LifeSupport.GetEcLoadKw(crewCount, sysPhase);

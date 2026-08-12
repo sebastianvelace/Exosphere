@@ -17,8 +17,27 @@ public partial class VesselRenderer : Node3D
     private readonly Dictionary<string, Node3D> _parachuteVisuals = new();
     private MeshInstance3D? _hullMesh;
     private PlumeSystem?    _plumes;
+    private bool _usesGenericPlumes;
+    private bool _hasSuperHeavy;
+    private int _selectedShipEngines = 6;
+    private readonly Dictionary<string, double> _perEngineThrottle = new(StringComparer.Ordinal);
+    private double _engineVisualTimer;
+    private double _thermalVisualTimer;
+    private double _landingGearStateTimer;
+    private double _parachuteStateTimer;
+    private bool _landingGearDeployed;
+    private float _cachedFlapDeployment;
+    private float _cachedFlapPitch;
+    private float _cachedFlapRoll;
+    private double _flapInputTimer;
+    private double _landingGearMotionDelta;
+    private float _lastGlow = float.NaN;
     private static EngineDefinitionCatalog? _engineCatalog;
     private static bool _engineCatalogLoadAttempted;
+
+    private const double EngineVisualPeriodSeconds = 1.0 / 30.0;
+    private const double ThermalVisualPeriodSeconds = 1.0 / 15.0;
+    private const double SecondaryVisualPeriodSeconds = 1.0 / 20.0;
 
     private sealed class FlapRig
     {
@@ -39,6 +58,8 @@ public partial class VesselRenderer : Node3D
         public MeshInstance3D Foot = null!;
         public int Index;
         public float FullLength;
+        public float LastVisibleLength = -1f;
+        public double CompressionM;
     }
 
     private readonly List<LandingLegRig> _landingLegRigs = new();
@@ -111,6 +132,10 @@ public partial class VesselRenderer : Node3D
             p.Definition.VehicleFamily, "falcon9", StringComparison.OrdinalIgnoreCase));
         bool hasNewGlenn = vessel.Parts.Parts.Any(p => string.Equals(
             p.Definition.VehicleFamily, "newglenn", StringComparison.OrdinalIgnoreCase));
+        _hasSuperHeavy = hasSH;
+        _selectedShipEngines = vessel.Parts.Parts
+            .FirstOrDefault(p => p.Definition.IsStarshipFamily
+                && p.Definition.HasVehicleRole("ship_engines"))?.SelectedEngineCount ?? 6;
         if      (hasSH && hasStarship) BuildFullStack(vessel);
         else if (hasSH)                BuildSuperHeavyOnly(vessel);
         else if (hasStarship)          BuildStarshipSection(vessel, yOffset: -22f);
@@ -537,6 +562,7 @@ public partial class VesselRenderer : Node3D
     // que usamos Mat() blanco liso en vez del shader de acero.
     private void BuildFalcon9Section(Vessel vessel)
     {
+        _usesGenericPlumes = true;
         var positions = vessel.Parts.ComputePartLocalPositions();
         double minimumY = positions.Count == 0
             ? 0.0
@@ -881,6 +907,7 @@ public partial class VesselRenderer : Node3D
     // no soldaduras de metal expuesto) y usa strakes fijos en vez de rejillas.
     private void BuildNewGlennSection(Vessel vessel)
     {
+        _usesGenericPlumes = true;
         var positions = vessel.Parts.ComputePartLocalPositions();
         double minimumY = positions.Count == 0
             ? 0.0
@@ -1148,29 +1175,72 @@ public partial class VesselRenderer : Node3D
     {
         if (TargetVessel == null) return;
 
-        float  throttle  = (float)TargetVessel.Throttle;
-        bool shPresent = TargetVessel.Parts.Parts.Any(
-            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
         var universe = SimulationBridge.Instance?.Universe;
         var body = universe?.GetDominantBody(TargetVessel.Position);
         double alt = body != null ? TargetVessel.GetAltitude(body) : 0.0;
-        double pressureRatio = body?.Atmosphere != null
-            ? System.Math.Clamp(TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
-            : 0.0;
-        int selectedShipEngines = TargetVessel.Parts.Parts
-            .FirstOrDefault(p => p.Definition.IsStarshipFamily
-                && p.Definition.HasVehicleRole("ship_engines"))?.SelectedEngineCount ?? 6;
 
-        _plumes?.Update(throttle, shPresent, alt, pressureRatio, selectedShipEngines);
-        if (_plumes != null)
+        _engineVisualTimer -= System.Math.Max(0.0, delta);
+        if (_engineVisualTimer <= 0.0)
         {
-            var perEngineThrottle = TargetVessel.GetEngineReadouts(body)
-                .ToDictionary(row => row.InstanceId, row => row.Throttle);
-            _plumes.UpdateGeneric(perEngineThrottle, alt, pressureRatio);
+            _engineVisualTimer = EngineVisualPeriodSeconds;
+            double pressureRatio = body?.Atmosphere != null
+                ? System.Math.Clamp(TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
+                : 0.0;
+            float throttle = (float)TargetVessel.Throttle;
+            _plumes?.Update(throttle, _hasSuperHeavy, alt, pressureRatio, _selectedShipEngines);
+            if (_usesGenericPlumes && _plumes != null)
+            {
+                _perEngineThrottle.Clear();
+                foreach (var row in TargetVessel.GetEngineReadouts(body))
+                    _perEngineThrottle[row.InstanceId] = row.Throttle;
+                _plumes.UpdateGeneric(_perEngineThrottle, alt, pressureRatio);
+            }
         }
-        UpdateFlaps(delta, body);
-        UpdateLandingGear(delta);
-        UpdateParachutes();
+
+        _flapInputTimer -= System.Math.Max(0.0, delta);
+        if (_flapInputTimer <= 0.0)
+        {
+            _flapInputTimer = SecondaryVisualPeriodSeconds;
+            _cachedFlapDeployment = ComputeFlapDeployment(body);
+            _cachedFlapPitch = (float)TargetVessel.PitchYawRoll.X;
+            _cachedFlapRoll = (float)TargetVessel.PitchYawRoll.Z;
+        }
+        UpdateFlaps(delta, _cachedFlapDeployment, _cachedFlapPitch, _cachedFlapRoll);
+
+        _landingGearMotionDelta += System.Math.Max(0.0, delta);
+        _landingGearStateTimer -= System.Math.Max(0.0, delta);
+        if (_landingGearStateTimer <= 0.0)
+        {
+            _landingGearStateTimer = SecondaryVisualPeriodSeconds;
+            _landingGearDeployed = TargetVessel.Parts.Parts.Any(p =>
+                p.Definition.Category == PartCategory.Landing && p.IsDeployed);
+            foreach (var rig in _landingLegRigs)
+            {
+                rig.CompressionM = 0.0;
+                var points = TargetVessel.LastSurfaceContact?.Points;
+                if (points == null) continue;
+                foreach (var point in points)
+                {
+                    if (point.Name.EndsWith($"-{rig.Index}", StringComparison.Ordinal))
+                    {
+                        rig.CompressionM = point.PenetrationM;
+                        break;
+                    }
+                }
+            }
+        }
+        AdvanceLandingGear(_landingGearMotionDelta);
+        _landingGearMotionDelta = 0.0;
+        _parachuteStateTimer -= System.Math.Max(0.0, delta);
+        if (_parachuteStateTimer <= 0.0)
+        {
+            _parachuteStateTimer = SecondaryVisualPeriodSeconds;
+            UpdateParachutes();
+        }
+
+        _thermalVisualTimer -= System.Math.Max(0.0, delta);
+        if (_thermalVisualTimer > 0.0) return;
+        _thermalVisualTimer = ThermalVisualPeriodSeconds;
 
         // Visible incandescence is a reentry phenomenon, not a generic "warm
         // skin" indicator. Gate it with the same physical observables as the
@@ -1185,10 +1255,17 @@ public partial class VesselRenderer : Node3D
             heatFlux = TargetVessel.ComputeStagnationHeatFlux(
                 body.GetAtmosphericDensity(TargetVessel.Position), surfaceVelocity);
         }
-        double hottestSkin = TargetVessel.Parts.Parts.Count > 0
-            ? TargetVessel.Parts.Parts.Max(p => p.SkinTemperature)
-            : 290.0;
+        double hottestSkin = 290.0;
+        foreach (var part in TargetVessel.Parts.Parts)
+            if (part.SkinTemperature > hottestSkin) hottestSkin = part.SkinTemperature;
         float glow = (float)VehicleVisualPhysics.ReentryGlow(radialSpeed, heatFlux, hottestSkin);
+
+        if (!float.IsNaN(_lastGlow) && Mathf.Abs(glow - _lastGlow) < 0.001f)
+        {
+            UpdateTileCharring(body);
+            return;
+        }
+        _lastGlow = glow;
 
         // Bare leeward steel only catches a faint reflected plasma glow. The TPS
         // materials carry the strong orange-white incandescence.
@@ -1205,9 +1282,9 @@ public partial class VesselRenderer : Node3D
         UpdateTileCharring(body);
     }
 
-    private void UpdateFlaps(double delta, CelestialBody? body)
+    private float ComputeFlapDeployment(CelestialBody? body)
     {
-        if (_flapRigs.Count == 0 || TargetVessel == null) return;
+        if (_flapRigs.Count == 0 || TargetVessel == null) return 0f;
 
         float aeroDeployment = 0f;
         if (body?.Atmosphere != null)
@@ -1224,8 +1301,13 @@ public partial class VesselRenderer : Node3D
             }
         }
 
-        float pitch = (float)TargetVessel.PitchYawRoll.X;
-        float roll  = (float)TargetVessel.PitchYawRoll.Z;
+        return aeroDeployment;
+    }
+
+    private void UpdateFlaps(double delta, float aeroDeployment, float pitch, float roll)
+    {
+        if (_flapRigs.Count == 0 || TargetVessel == null) return;
+
         float response = 1f - Mathf.Exp(-(float)delta * 3.8f);
 
         foreach (var flap in _flapRigs)
@@ -1367,26 +1449,26 @@ public partial class VesselRenderer : Node3D
         }
     }
 
-    private void UpdateLandingGear(double delta)
+    private void AdvanceLandingGear(double delta)
     {
         if (TargetVessel == null || _landingLegRigs.Count == 0) return;
-        bool deployed = TargetVessel.Parts.Parts.Any(p =>
-            p.Definition.Category == PartCategory.Landing && p.IsDeployed);
         _landingGearDeployment = Mathf.MoveToward(
-            _landingGearDeployment, deployed ? 1f : 0f, (float)delta * 1.5f);
+            _landingGearDeployment, _landingGearDeployed ? 1f : 0f, (float)delta * 1.5f);
 
         foreach (var rig in _landingLegRigs)
         {
-            double compressionM = TargetVessel.LastSurfaceContact?.Points
-                .FirstOrDefault(p => p.Name.EndsWith($"-{rig.Index}", StringComparison.Ordinal))
-                .PenetrationM ?? 0.0;
-            float compression = (float)(compressionM / MetresPerUnit);
+            float compression = (float)(rig.CompressionM / MetresPerUnit);
             float visibleLength = Mathf.Max(0.08f,
                 rig.FullLength * _landingGearDeployment - compression);
+            bool visible = _landingGearDeployment > 0.01f;
+            if (Mathf.Abs(visibleLength - rig.LastVisibleLength) < 0.0005f
+                && rig.Root.Visible == visible)
+                continue;
+            rig.LastVisibleLength = visibleLength;
+            rig.Root.Visible = visible;
             rig.Strut.Scale = new Vector3(1f, visibleLength / rig.FullLength, 1f);
             rig.Strut.Position = new Vector3(0f, -visibleLength * 0.5f, 0f);
             rig.Foot.Position = new Vector3(0f, -visibleLength, 0f);
-            rig.Root.Visible = _landingGearDeployment > 0.01f;
         }
     }
 
@@ -1404,6 +1486,7 @@ public partial class VesselRenderer : Node3D
 
     private void BuildGenericVessel(Vessel vessel)
     {
+        _usesGenericPlumes = true;
         var positions = vessel.Parts.ComputePartLocalPositions();
         double minimumY = positions.Count == 0
             ? 0.0
@@ -2866,6 +2949,16 @@ public partial class VesselRenderer : Node3D
         _landingLegRigs.Clear();
         _landingGearDeployment = 0f;
         _plumes   = null;
+        _usesGenericPlumes = false;
+        _hasSuperHeavy = false;
+        _selectedShipEngines = 6;
+        _perEngineThrottle.Clear();
+        _engineVisualTimer = 0.0;
+        _thermalVisualTimer = 0.0;
+        _landingGearStateTimer = 0.0;
+        _parachuteStateTimer = 0.0;
+        _flapInputTimer = 0.0;
+        _lastGlow = float.NaN;
         _hullMesh = null;
     }
 
