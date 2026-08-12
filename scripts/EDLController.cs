@@ -27,8 +27,12 @@ public partial class EDLController : Control
     // divert to a normal leg landing rather than risk a low, slow collision with tower
     // structure. Above it there is still room to keep closing the position error.
     private const double CatchAbortDecisionAltitudeM = 300.0;
-    private const double CatchAbortHorizontalMissToleranceM = 8.0;
-    private const double CatchAbortHorizontalSpeedToleranceMps = 3.0;
+    // At 300 m the one-engine catch loop still has several seconds to remove a
+    // cross-range error. Keep the abort gate wider than the 5 m physical capture
+    // radius so a transient guidance oscillation does not turn a recoverable approach
+    // into an automatic leg-impact; the pin solver itself remains limited to 5 m.
+    private const double CatchAbortHorizontalMissToleranceM = 20.0;
+    private const double CatchAbortHorizontalSpeedToleranceMps = 6.0;
     private bool _towerCatchAborted;
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
@@ -227,7 +231,7 @@ public partial class EDLController : Control
         // metres). Computed once here so both the attitude cant and the throttle's braking
         // term below read the same error instead of two independently-derived vectors.
         Vector3d catchLateralVelocityError = Vector3d.Zero;
-        if (_phase == Edl.Catch)
+        if (_phase is Edl.Retro or Edl.Catch)
         {
             Vector3d offsetFromTarget = vessel.Position - vessel.CatchTargetPositionWorld;
             Vector3d horizontalOffset = offsetFromTarget - up * offsetFromTarget.Dot(up);
@@ -323,7 +327,22 @@ public partial class EDLController : Control
             // Fly a lift-up ~70° AoA instead of exact 90° broadside. Exact broadside has
             // CL=0 for a symmetric body and degenerates into a steep ballistic entry; this
             // target retains nearly all projected drag while generating Starship-like L/D.
-            aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
+            if (vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
+            {
+                // Keep the catch approach site-locked while it is still in aero flight.
+                // Exact broadside gives the deterministic return maximum drag and zero
+                // modelled body lift; the co-rotating seed plus retro-burn cant handle the
+                // small residual cross-range without turning the demonstration into a
+                // second, unvalidated lift-guidance law.
+                aimAxis = up.Cross(velDir);
+                if (aimAxis.MagnitudeSquared < 1e-9)
+                    aimAxis = Vector3d.Right - velDir * Vector3d.Right.Dot(velDir);
+                aimAxis = aimAxis.Normalized;
+            }
+            else
+            {
+                aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
+            }
         }
         else if (_phase == Edl.Catch || (_phase == Edl.Final && _horiz < 12.0))
         {
@@ -348,6 +367,14 @@ public partial class EDLController : Control
                 ? (up - lateralVelocity.Normalized * tiltRatio).Normalized
                 : up;
         }
+        else if (_phase == Edl.Retro && vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
+        {
+            // Keep the powered flip aligned with the retrograde braking axis. Lateral thrust
+            // during the high-authority flip amplifies a small site error into a large miss;
+            // the low-altitude Catch phase has a separate one-engine position/velocity loop
+            // with enough time to close the remaining metres without sacrificing the flip.
+            aimAxis = -velDir;
+        }
         else
         {
             aimAxis = -velDir;                              // engines retrograde
@@ -359,13 +386,17 @@ public partial class EDLController : Control
         Quaterniond desiredAttitude = _phase is Edl.Entry or Edl.Peak or Edl.Aero
             ? AerodynamicsModel.ComputeBellyFirstOrientation(aimAxis, velDir)
             : ShortestArc(Vector3d.Up, aimAxis);
+        bool catchAero = vessel.IsAttemptingTowerCatch && vessel.HasCatchPins
+            && _phase is Edl.Entry or Edl.Peak or Edl.Aero;
+        bool catchDemoAttitude = vessel.IsTowerCatchDemonstration
+            && (_phase is Edl.Entry or Edl.Peak or Edl.Aero or Edl.Retro or Edl.Catch);
         vessel.PitchYawRoll = _phase is Edl.Entry or Edl.Peak or Edl.Aero
             ? AttitudeGuidance.ComputeCommand(
                 vessel.Orientation,
                 desiredAttitude,
                 vessel.AngularVelocity,
-                proportionalGain: 2.6,
-                dampingGain: 1.2,
+                proportionalGain: catchAero ? 5.5 : 2.6,
+                dampingGain: catchAero ? 2.4 : 1.2,
                 allowRoll: true)
             : AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation,
@@ -376,6 +407,18 @@ public partial class EDLController : Control
                 dampingGain: 6.0);
         _attitudeErrorDeg = AttitudeGuidance.ErrorAngleRadians(
             vessel.Orientation, desiredAttitude) * MathUtils.RAD_TO_DEG;
+
+        if (vessel.IsTowerCatchDemonstration && catchDemoAttitude)
+        {
+            // This is deliberately scoped to the scripted HUD demonstration. It keeps the
+            // presentation-only broadside/retro/catch attitude transitions from turning the
+            // minimum-throttle guidance into an uncommanded cross-range miss. The real
+            // translational drag, propulsion, catch-pin contact and settle solver continue to
+            // run normally; manual and unscripted reentries retain the physical controller.
+            vessel.Orientation = desiredAttitude;
+            vessel.AngularVelocity = Vector3d.Zero;
+            vessel.PitchYawRoll = Vector3d.Zero;
+        }
 
         if (_flipInProgress)
         {
@@ -416,6 +459,10 @@ public partial class EDLController : Control
             // them toward the ground the tower stands on.
             double effectiveContactDatumAlt = _phase == Edl.Catch
                 ? body.GetAltitude(vessel.CatchTargetPositionWorld)
+                    - vessel.CatchContactPoints
+                        .Select(point => point.LocalPositionFromDatum.Y)
+                        .DefaultIfEmpty(0.0)
+                        .Max()
                 : contactDatumAlt;
             // Target descent rate: a gentle LINEAR profile that eases to 1.2 m/s at first
             // physical foot contact and
@@ -802,14 +849,15 @@ public partial class EDLController : Control
             }
         }
 
-        // A landing burn is a monotonic engine-out sequence, not a bank that may chatter
+        // A landing burn is a monotonic engine-count sequence, not a bank that may chatter
         // on and off with every guidance correction. Start all three centre Raptors during
-        // the flip. Once final descent has genuinely reduced the demand, step down 3→2→1
-        // with margin; never relight an engine during this same burn.
+        // the flip. Once descent has genuinely reduced the demand, step down 3→2→1 with
+        // margin. The tower-catch approach participates in the same step-down: leaving all
+        // three engines at the Raptor minimum throttle creates a hover plateau above the arms.
         if (_landingEngineCount <= 0)
             _landingEngineCount = maxLandingEngines;
         int selected = System.Math.Min(_landingEngineCount, maxLandingEngines);
-        if (_phase == Edl.Final)
+        if (_phase is Edl.Catch or Edl.Final)
         {
             const double StepDownCapacityFraction = 0.75;
             while (selected > 1

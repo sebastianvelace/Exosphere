@@ -95,12 +95,21 @@ public class Vessel
     /// be caught, regardless of mission mode or approach quality.</summary>
     public bool HasCatchPins => _catchContactPoints.Length > 0;
     public ContactWrench? LastCatchContact { get; internal set; }
+    /// <summary>Last tower-contact gate result, retained for flight diagnostics.</summary>
+    public double LastCatchEvaluationRangeM { get; internal set; } = double.NaN;
+    public bool LastCatchEvaluationPassedGate { get; internal set; }
     public double CatchSettledDuration { get; internal set; }
     public bool IsCaught { get; internal set; }
     /// <summary>Set by the game layer when this vessel is flying a return-to-launch-site
     /// catch approach. Gates both the EDL guidance's position-error term and the (cheap)
     /// per-frame catch-contact evaluation, so an ordinary reentry never pays for either.</summary>
     public bool IsAttemptingTowerCatch { get; set; }
+    /// <summary>
+    /// Marks the deterministic scripted reentry demonstration. It permits the game-layer EDL
+    /// director to hold the broadside presentation while validating the tower path; manual and
+    /// ordinary flight reentries never use this presentation-only stabilizer.
+    /// </summary>
+    public bool IsTowerCatchDemonstration { get; set; }
     /// <summary>Inertial position of the catch cradle right now, refreshed each frame by the
     /// game layer from <c>LaunchComplexSpec.GetCatchCradlePosition</c> — <see cref="Universe"/>
     /// stays free of any launch-site/JSON lookup this way, matching the boundary already
@@ -108,6 +117,22 @@ public class Vessel
     public Vector3d CatchTargetPositionWorld { get; set; }
     public Vector3d CatchTargetUpWorld { get; set; } = Vector3d.Up;
     public Vector3d CatchTargetVelocityWorld { get; set; }
+    /// <summary>Simulation epoch at which <see cref="CatchTargetPositionWorld"/> was sampled.</summary>
+    public double CatchTargetEpochSeconds { get; set; } = double.NaN;
+
+    /// <summary>
+    /// Predicts the inertial cradle position at a physics substep. The game layer refreshes
+    /// the target once per frame; the pure simulation must still account for the rotating
+    /// launch site's motion while a warp frame is split into several integration steps.
+    /// </summary>
+    public Vector3d GetCatchTargetPositionAt(double simulationTime)
+    {
+        if (!double.IsFinite(CatchTargetEpochSeconds)
+            || !double.IsFinite(simulationTime))
+            return CatchTargetPositionWorld;
+        return CatchTargetPositionWorld
+            + CatchTargetVelocityWorld * (simulationTime - CatchTargetEpochSeconds);
+    }
     public bool HasDeployedParachute => Parts.Parts.Any(
         p => p.IsDeployed && p.Definition.DragChute > 0.0);
     public double MaximumSplashdownSpeedMps => Parts.Parts
@@ -128,6 +153,34 @@ public class Vessel
     public Vector3d CrashSimPosition      { get; set; } = Vector3d.Zero; // sim position of impact
 
     public void ReleaseGroundHold() => IsGroundHeld = false;
+
+    /// <summary>
+    /// Clears transient flight state before a debug/navigation teleport. A circular orbit
+    /// jump supplies a new position and velocity, so retaining an old conic epoch or angular
+    /// momentum would make the next tick propagate from the wrong body and visibly spin the
+    /// vehicle even when the pilot has released the controls.
+    /// </summary>
+    public void PrepareForTeleport()
+    {
+        IsGroundHeld = false;
+        IsSurfaceSettled = false;
+        SurfaceSettledDuration = 0.0;
+        IsOnRails = false;
+        OrbitalState = null;
+        AngularVelocity = Vector3d.Zero;
+        PitchYawRoll = Vector3d.Zero;
+        LastSurfaceContact = null;
+        LastContactForceWorld = Vector3d.Zero;
+        LastContactTorqueWorld = Vector3d.Zero;
+        LastCatchContact = null;
+        LastCatchEvaluationRangeM = double.NaN;
+        LastCatchEvaluationPassedGate = false;
+        CatchTargetEpochSeconds = double.NaN;
+        CatchSettledDuration = 0.0;
+        IsCaught = false;
+        IsAttemptingTowerCatch = false;
+        IsTowerCatchDemonstration = false;
+    }
 
     /// <summary>
     /// Opens the dual-thrust hot-stage window: upper engines join <see cref="Parts.ActiveEngines"/>

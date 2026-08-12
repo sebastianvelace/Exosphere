@@ -375,6 +375,7 @@ public partial class SimulationBridge : Node
                     vessel.CatchTargetPositionWorld = cradle;
                     vessel.CatchTargetUpWorld = up;
                     vessel.CatchTargetVelocityWorld = cradleVel;
+                    vessel.CatchTargetEpochSeconds = time;
                 }
             }
         }
@@ -1101,12 +1102,18 @@ public partial class SimulationBridge : Node
         Vector3d currentUp = (vessel.Position - earth.Position).Normalized;
         if (currentUp.MagnitudeSquared < 1e-9) currentUp = Vector3d.Right;
 
-        // Put the demonstration on the daylight side so entry plasma, flaps and landing
-        // attitude remain inspectable instead of inheriting whatever local solar time the
-        // launch pad happens to have at J2000.
-        Vector3d up = currentUp;
+        // Catch-equipped Starship must be seeded above the actual launch-site meridian;
+        // placing it on an arbitrary daylight-side great circle can leave it thousands of
+        // kilometres from the Mechazilla cradle even though the EDL state is correctly armed.
+        // Vehicles without catch pins retain the daylight-side seed so the generic visual
+        // demonstration remains inspectable at any launch site's local time.
+        bool towerCatchCapable = vessel.Parts.Parts.Any(
+            p => p.Definition.CatchPinLateralOffsetM > 0.0);
+        Vector3d up = towerCatchCapable
+            ? _launchSite?.GetLocalFrame(earth, Universe.CurrentTime).Up ?? currentUp
+            : currentUp;
         var sun = Universe.GetBody("sun");
-        if (sun != null)
+        if (!towerCatchCapable && sun != null)
         {
             Vector3d toSun = (sun.Position - earth.Position).Normalized;
             Vector3d terminatorUp = currentUp - toSun * currentUp.Dot(toSun);
@@ -1127,12 +1134,53 @@ public partial class SimulationBridge : Node
         // A repeatable suborbital entry state chosen to expose heating, aerodynamic descent,
         // belly-flop, powered flip and touchdown in one watchable session. It intentionally
         // starts at the 70 km entry interface instead of pretending to perform a deorbit burn.
-        Vector3d airVelocity = east * 1_800.0 - up * 120.0;
+        // The catch demonstration is intentionally a deterministic tower-approach test:
+        // a 1.8 km/s eastward entry would carry the ship thousands of kilometres past the
+        // fixed launch site before the final 300 m catch guidance becomes active. Keep the
+        // ordinary visual entry lateral for non-catch vehicles, but make a catch-capable
+        // Starship descend over the cradle so the chopstick/contact path is exercised rather
+        // than an unrelated cross-range miss.
+        Vector3d airVelocity = towerCatchCapable
+            ? -up * 1_800.0
+            : east * 1_800.0 - up * 120.0;
         Vector3d velocityDirection = airVelocity.Normalized;
-        Vector3d longAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velocityDirection);
+        Vector3d longAxis;
+        if (towerCatchCapable)
+        {
+            // Exact broadside removes the artificial body-lift vector from this deterministic
+            // tower test while retaining the large drag area and tile-forward presentation.
+            // The normal gameplay entry path continues to use the calibrated 70° lift-up axis.
+            longAxis = up.Cross(velocityDirection);
+            if (longAxis.MagnitudeSquared < 1e-9)
+                longAxis = _launchSite?.GetLocalFrame(earth, Universe.CurrentTime).East
+                    ?? Vector3d.Right;
+            longAxis = longAxis.Normalized;
+        }
+        else
+        {
+            longAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velocityDirection);
+        }
 
-        vessel.Position = earth.Position + up * (earth.Radius + 70_000.0);
-        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position) + airVelocity;
+        Vector3d entryPosition = earth.Position + up * (earth.Radius + 70_000.0);
+        Vector3d rotationReferencePosition = entryPosition;
+        if (towerCatchCapable && _launchSite != null)
+        {
+            // Align the high-altitude seed with the actual cradle radial line. The arms are
+            // offset from the pad datum, so using only the pad's Up vector leaves a fixed
+            // cross-range error before guidance is allowed to act.
+            var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
+                _launchSite, earth, Universe.CurrentTime);
+            Vector3d cradleUp = (cradle - earth.Position).Normalized;
+            if (cradleUp.MagnitudeSquared > 1e-9)
+                entryPosition = earth.Position + cradleUp * (earth.Radius + 70_000.0);
+            // The atmosphere target is the rotating cradle at the surface, not a free
+            // inertial point at entry altitude. Its tangential velocity is the seed that
+            // produced the stable low-cross-range approach in the flight trace.
+            rotationReferencePosition = cradle;
+        }
+        vessel.Position = entryPosition;
+        Vector3d rotationalVelocity = earth.GetSurfaceVelocity(rotationReferencePosition);
+        vessel.Velocity = earth.Velocity + rotationalVelocity + airVelocity;
         if (bellyFirst)
         {
             vessel.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
@@ -1161,6 +1209,8 @@ public partial class SimulationBridge : Node
         vessel.Throttle = 0.0;
         vessel.ConfigureLandingContactsFromParts();
         vessel.ConfigureCatchContactsFromParts();
+        ArmTowerCatchApproach(vessel);
+        vessel.IsTowerCatchDemonstration = towerCatchCapable;
 
         foreach (var part in vessel.Parts.Parts)
         {
@@ -1199,7 +1249,6 @@ public partial class SimulationBridge : Node
         var v = ActiveVessel;
         if (earth == null || v == null) return;
 
-        v.IsGroundHeld = false;
         var up = (v.Position - earth.Position).Normalized;
         if (up.MagnitudeSquared < 1e-9) up = new Vector3d(0, 1, 0);
         double r = earth.Radius + altitude;
@@ -1209,6 +1258,10 @@ public partial class SimulationBridge : Node
         var tangent = refDir.Cross(up).Normalized;
         double vCirc = System.Math.Sqrt(earth.GM / r);
         v.Velocity = earth.Velocity + tangent * vCirc;
+        v.PrepareForTeleport();
+        v.ReferenceBodyId = earth.Id;
+        v.Orientation = Quaterniond.FromTo(Vector3d.Up, tangent);
+        v.SASEnabled = true;
         v.Throttle = 0.0;
 
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
@@ -1248,8 +1301,6 @@ public partial class SimulationBridge : Node
         var v = ActiveVessel;
         if (body == null || v == null) return;
 
-        v.IsGroundHeld = false;
-
         // Approach direction + distance: ringed bodies (Saturn) are viewed from OUTSIDE the
         // ring system (rings reach ~2.3 R) at a 3/4 angle so the rings read as an open ellipse;
         // other bodies are viewed from a sensible fraction of their radius.
@@ -1267,9 +1318,16 @@ public partial class SimulationBridge : Node
         }
         v.Position = body.Position + up * r;
         var tangent = new Vector3d(0, 1, 0).Cross(up).Normalized;
+        if (tangent.MagnitudeSquared < 1e-9)
+            tangent = Vector3d.Right;
         double vCirc = System.Math.Sqrt(body.GM / r);
         v.Velocity = body.Velocity + tangent * vCirc;
+        v.PrepareForTeleport();
+        v.ReferenceBodyId = body.Id;
+        v.Orientation = Quaterniond.FromTo(Vector3d.Up, tangent);
+        v.SASEnabled = true;
         v.Throttle = 0.0;
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
         GD.Print($"[DEBUG] JumpToBody {bodyId} -> orbit {altitude / 1000:F0} km");
     }
 }

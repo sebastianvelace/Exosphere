@@ -1562,9 +1562,11 @@ public class Universe
         Vector3d framedVelocity =
             refBody.Velocity + relativeVelocity;
 
+        double evaluationTime = CurrentTime + dt;
         var contactBefore = EvaluateLandingContact(
             vessel, refBody, framedPosition, framedVelocity);
-        var catchContactBefore = EvaluateCatchContact(vessel, framedPosition, framedVelocity);
+        var catchContactBefore = EvaluateCatchContact(
+            vessel, framedPosition, framedVelocity, evaluationTime);
         vessel.LastContactForceWorld =
             (contactBefore?.ForceWorld ?? Vector3d.Zero) + (catchContactBefore?.ForceWorld ?? Vector3d.Zero);
         vessel.LastContactTorqueWorld =
@@ -1586,7 +1588,8 @@ public class Universe
                 Vector3d velocity = refBody.Velocity + relativeVel;
                 var stageContact = EvaluateLandingContact(
                     vessel, refBody, position, velocity);
-                var stageCatchContact = EvaluateCatchContact(vessel, position, velocity);
+                var stageCatchContact = EvaluateCatchContact(
+                    vessel, position, velocity, evaluationTime);
                 var contactAcceleration = vessel.TotalMass > 0.0
                     ? ((stageContact?.ForceWorld ?? Vector3d.Zero)
                         + (stageCatchContact?.ForceWorld ?? Vector3d.Zero)) / vessel.TotalMass
@@ -1601,7 +1604,8 @@ public class Universe
 
         var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
         UpdateLandingContactState(vessel, refBody, contactAfter, dt);
-        var catchContactAfter = EvaluateCatchContact(vessel, vessel.Position, vessel.Velocity);
+        var catchContactAfter = EvaluateCatchContact(
+            vessel, vessel.Position, vessel.Velocity, evaluationTime);
         UpdateCatchContactState(vessel, catchContactAfter, dt);
         ApplyPostIntegrationPhysics(vessel, refBody, dt);
     }
@@ -1614,16 +1618,20 @@ public class Universe
     private const double CatchCaptureRadiusM = 5.0;
 
     private static Physics.ContactWrench? EvaluateCatchContact(
-        Vessel vessel, Vector3d position, Vector3d velocity)
+        Vessel vessel, Vector3d position, Vector3d velocity, double evaluationTime)
     {
+        Vector3d cradlePosition = vessel.GetCatchTargetPositionAt(evaluationTime);
+        vessel.LastCatchEvaluationRangeM =
+            (position - cradlePosition).Magnitude;
+        vessel.LastCatchEvaluationPassedGate = false;
         if (!vessel.IsAttemptingTowerCatch || !vessel.HasCatchPins)
             return null;
-        if ((position - vessel.CatchTargetPositionWorld).MagnitudeSquared
+        if ((position - cradlePosition).MagnitudeSquared
             > CatchRangeGateM * CatchRangeGateM)
             return null;
+        vessel.LastCatchEvaluationPassedGate = true;
 
         var input = vessel.GetContactInput(position, velocity);
-        Vector3d cradlePosition = vessel.CatchTargetPositionWorld;
         Vector3d up = vessel.CatchTargetUpWorld;
         Vector3d cradleVelocity = vessel.CatchTargetVelocityWorld;
         return Physics.SurfaceContactSolver.Evaluate(

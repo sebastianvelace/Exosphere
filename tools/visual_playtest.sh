@@ -372,7 +372,7 @@ public partial class _PlaytestShot : Node
     string? _pendingSlug;
 
     bool _pad, _liftoff, _maxq, _separation, _orbit, _orbitBeauty;
-    bool _entry, _peak, _retro, _landed;
+    bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     bool _beautyJumped;
     int _beautyWaitFrames;
@@ -1041,17 +1041,27 @@ public partial class _PlaytestShot : Node
             Vector3d up = (vessel.Position - body.Position).Normalized;
             double vUp = surfVel.Dot(up);
             double horizontal = (surfVel - up * vUp).Magnitude;
-            var cluster = vessel.Parts.Parts.FirstOrDefault(
-                p => p.Definition.IsStarshipFamily
-                    && p.Definition.HasVehicleRole("ship_engines"));
+            var cluster = vessel.Parts.ActiveEngines.FirstOrDefault();
             double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
+            Vector3d catchOffset = vessel.Position - vessel.CatchTargetPositionWorld;
+            Vector3d catchHorizontalOffset = catchOffset - up * catchOffset.Dot(up);
             int contacts = vessel.LastSurfaceContact?.ContactCount ?? 0;
             double maxStroke = vessel.LastSurfaceContact?.Points.Max(p => p.PenetrationM) ?? 0.0;
             double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
+            double minCatchGap = vessel.LastCatchContact?.Points.Min(p => p.SignedGapM) ?? double.NaN;
+            double catchRange = (vessel.Position - vessel.CatchTargetPositionWorld).Magnitude;
+            double maxCatchPinY = vessel.CatchContactPoints
+                .Select(point => point.LocalPositionFromDatum.Y)
+                .DefaultIfEmpty(double.NaN)
+                .Max();
             _log.WriteLine($"TRACE t={simElapsed:F1} alt={alt:F1} vUp={vUp:F1} horiz={horizontal:F1} " +
                 $"throttle={vessel.Throttle:F3} spool={cluster?.ThrottleLevel ?? 0.0:F3} " +
                 $"engines={cluster?.SelectedEngineCount ?? 0} upright={upright:F4} phase={phase} " +
-                $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
+                $"catchArmed={vessel.IsAttemptingTowerCatch} catchPins={vessel.HasCatchPins} " +
+                $"catchMiss={catchHorizontalOffset.Magnitude:F1} catchAlt={body.GetAltitude(vessel.CatchTargetPositionWorld):F1} " +
+                $"catchGap={minCatchGap:F3} catchRange={catchRange:F1} " +
+                $"evalRange={vessel.LastCatchEvaluationRangeM:F1} evalGate={vessel.LastCatchEvaluationPassedGate} pinY={maxCatchPinY:F1} " +
+                $"rails={vessel.IsOnRails} contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
                 $"settled={vessel.IsSurfaceSettled}");
             _log.Flush();
             _nextEdlTelemetry = simElapsed + 5.0;
@@ -1059,7 +1069,8 @@ public partial class _PlaytestShot : Node
 
         if (!_entry && mission?.Phase is MissionPhase.ENTRY or MissionPhase.PEAK_HEATING
                 or MissionPhase.AERO_DESCENT or MissionPhase.RETRO_BURN
-                or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED)
+                or MissionPhase.FINAL_DESCENT or MissionPhase.LANDED
+                or MissionPhase.CAUGHT)
         {
             QueueCapture("entry");
             _entry = true;
@@ -1088,14 +1099,25 @@ public partial class _PlaytestShot : Node
             {
                 QueueCapture("flip_complete");
                 _flipComplete = true;
-                int engines = vessel.Parts.Parts
-                    .FirstOrDefault(p => p.Definition.IsStarshipFamily
-                        && p.Definition.HasVehicleRole("ship_engines"))
-                    ?.SelectedEngineCount ?? 0;
+                // The flip is captured at real-time scale for readable evidence. Once the
+                // attitude gate has passed, accelerate only the validation run's final
+                // descent; the same EDL/engine/contact physics continues to execute.
+                bridge.SetTimeScale(6.0);
+                int engines = vessel.Parts.ActiveEngines.FirstOrDefault()?.SelectedEngineCount ?? 0;
                 _log.WriteLine($"CHECK finite_flip duration={universe.CurrentTime - _retroStart:F2}s " +
                     $"alignment={alignment:F5} omega={vessel.AngularVelocity.Magnitude:F4} engines={engines}");
                 _log.Flush();
             }
+        }
+
+        if (!_caught && mission?.Phase == MissionPhase.CAUGHT)
+        {
+            QueueCapture("caught");
+            _caught = true;
+            _log.WriteLine($"CHECK tower_catch caught=True pins={vessel.LastCatchContact?.ContactCount ?? 0} " +
+                $"relativeSpeed={(vessel.Velocity - vessel.CatchTargetVelocityWorld).Magnitude:F3} " +
+                $"angularSpeed={vessel.AngularVelocity.Magnitude:F4}");
+            _log.Flush();
         }
 
         if (!_landed && mission?.Phase == MissionPhase.LANDED)
@@ -1119,6 +1141,12 @@ public partial class _PlaytestShot : Node
                 $"overTravel={contact?.HasOverTravel ?? false} overload={contact?.HasOverload ?? false}");
             _log.Flush();
             Finish("CRASHED");
+            return;
+        }
+
+        if (_caught && _pendingSlug == null)
+        {
+            Finish("CAUGHT");
             return;
         }
 
@@ -1197,7 +1225,7 @@ public partial class _PlaytestShot : Node
                 _reentryQueued = true;
             }
             else if (mission?.Phase is MissionPhase.RETRO_BURN or MissionPhase.FINAL_DESCENT
-                or MissionPhase.LANDED)
+                or MissionPhase.LANDED or MissionPhase.CAUGHT)
             {
                 LogReentryCompareState(slug, vessel, body, mission, simElapsed,
                     $"POST_HEATING_FALLBACK phase={mission?.Phase}");
@@ -1338,9 +1366,9 @@ public partial class _PlaytestShot : Node
             && double.IsFinite(vessel.Velocity.Y)
             && double.IsFinite(vessel.Velocity.Z);
 
-        Part? engineCluster = vessel.Parts.Parts.FirstOrDefault(
-            p => p.Definition.IsStarshipFamily
-                && p.Definition.HasVehicleRole("ship_engines"));
+        // Inspect the current stage, not a hard-coded ship part: before staging the active
+        // cluster is Super Heavy (33 engines), while after staging it is the Ship (6).
+        Part? engineCluster = vessel.Parts.ActiveEngines.FirstOrDefault();
         int runningEngines = engineCluster?.EngineStates.Count(state =>
             state.State is EngineLifecycleState.Ignition
                 or EngineLifecycleState.Running) ?? 0;
@@ -1505,9 +1533,7 @@ public partial class _PlaytestShot : Node
         double heatRatio = vessel.Parts.Parts.Count > 0
             ? vessel.Parts.Parts.Max(p => p.ThermalRatio)
             : 0.0;
-        Part? engineCluster = vessel.Parts.Parts.FirstOrDefault(
-            p => p.Definition.IsStarshipFamily
-                && p.Definition.HasVehicleRole("ship_engines"));
+        Part? engineCluster = vessel.Parts.ActiveEngines.FirstOrDefault();
         string engineRuntime = engineCluster == null
             ? "none"
             : string.Join(",", engineCluster.EngineStates
@@ -2212,19 +2238,33 @@ verify_pngs() {
       return 1
     fi
   elif [[ "$MODE" == "edl" ]]; then
-    local required=(entry retro_burn flip_complete touchdown)
+    local required=(entry retro_burn flip_complete)
     for slug in "${required[@]}"; do
       if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
         echo "ERROR: missing required EDL milestone PNG: exo_play_${slug}.png" >&2
         return 1
       fi
     done
-    if ! grep -q 'SUMMARY reason=LANDED' "$LOG"; then
-      echo "ERROR: deterministic EDL did not end in a verified landing" >&2
-      return 1
-    fi
-    if ! grep -Eq 'CAPTURE touchdown .*contacts=[3-9][0-9]* .*settled=True' "$LOG"; then
-      echo "ERROR: touchdown was not supported by at least three settled physical contacts" >&2
+    if grep -q 'SUMMARY reason=CAUGHT' "$LOG"; then
+      if [[ ! -f "$OUT_DIR/exo_play_caught.png" ]]; then
+        echo "ERROR: verified tower catch has no caught milestone PNG" >&2
+        return 1
+      fi
+      if ! grep -Eq 'CHECK tower_catch caught=True pins=[2-9][0-9]* relativeSpeed=[0-9.]+ angularSpeed=[0-9.]+' "$LOG"; then
+        echo "ERROR: tower catch summary lacks two settled pin contacts" >&2
+        return 1
+      fi
+    elif grep -q 'SUMMARY reason=LANDED' "$LOG"; then
+      if [[ ! -f "$OUT_DIR/exo_play_touchdown.png" ]]; then
+        echo "ERROR: verified leg landing has no touchdown milestone PNG" >&2
+        return 1
+      fi
+      if ! grep -Eq 'CAPTURE touchdown .*contacts=[3-9][0-9]* .*settled=True' "$LOG"; then
+        echo "ERROR: touchdown was not supported by at least three settled physical contacts" >&2
+        return 1
+      fi
+    else
+      echo "ERROR: deterministic EDL did not end in a verified catch or landing" >&2
       return 1
     fi
   elif [[ "$MODE" == "hotstage" ]]; then

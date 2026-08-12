@@ -1186,7 +1186,12 @@ public partial class VesselRenderer : Node3D
             double pressureRatio = body?.Atmosphere != null
                 ? System.Math.Clamp(TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
                 : 0.0;
-            float throttle = (float)TargetVessel.Throttle;
+            // Commanded throttle is not the same as delivered thrust during chill/spin/ignition
+            // or after an engine-out. Keep the plume consistent with the physical engine
+            // telemetry; the pad startup controller supplies the separate pre-chamber glow.
+            float throttle = TargetVessel.ActiveEngineCount > 0
+                ? (float)TargetVessel.Throttle
+                : 0f;
             _plumes?.Update(throttle, _hasSuperHeavy, alt, pressureRatio, _selectedShipEngines);
             if (_usesGenericPlumes && _plumes != null)
             {

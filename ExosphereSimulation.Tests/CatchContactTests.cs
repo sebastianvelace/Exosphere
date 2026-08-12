@@ -37,6 +37,21 @@ public sealed class CatchContactTests
     }
 
     [Fact]
+    public void CatchTargetPredictionAdvancesWithCradleVelocity()
+    {
+        var vessel = new Vessel
+        {
+            CatchTargetPositionWorld = new Vector3d(10, 20, 30),
+            CatchTargetVelocityWorld = new Vector3d(2, -1, 0.5),
+            CatchTargetEpochSeconds = 100.0,
+        };
+
+        var predicted = vessel.GetCatchTargetPositionAt(104.0);
+
+        Assert.Equal(new Vector3d(18, 16, 32), predicted);
+    }
+
+    [Fact]
     public void NominalTowerApproachSettlesAsCaughtNotAsSurfaceLanded()
     {
         var (universe, vessel) = CreateCatchCase(verticalSpeed: -1.0, lateralOffset: 0.0);
@@ -64,7 +79,7 @@ public sealed class CatchContactTests
     }
 
     [Fact]
-    public void CatchPinDataIsScopedToCatchEquippedVehicles()
+    public void CatchPinDataExistsOnShipAndBoosterCatchVehicles()
     {
         var v3 = PartDefinition.LoadFromJson(Path.Combine(
             FindRepoRoot().FullName, "data", "parts", "starship_v3_command_flight12.json"));
@@ -75,7 +90,10 @@ public sealed class CatchContactTests
 
         Assert.True(v3.CatchPinLateralOffsetM > 0.0);
         Assert.True(v3.CatchPinRadiusM > 0.0);
-        Assert.Equal(0.0, legacy.CatchPinLateralOffsetM);
+        // The reentry-capable Starship ship now carries the same declared pair as the V3
+        // configuration, so the top section can use the tower path in every reentry demo.
+        Assert.True(legacy.CatchPinLateralOffsetM > 0.0);
+        Assert.True(legacy.CatchPinRadiusM > 0.0);
         // R12: Super Heavy declares its own catch-pin hardpoints near the hot-stage ring.
         Assert.True(booster.CatchPinLateralOffsetM > 0.0);
         Assert.True(booster.CatchPinRadiusM > 0.0);

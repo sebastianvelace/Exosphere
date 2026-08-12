@@ -2,6 +2,8 @@ namespace Exosphere.Game;
 
 using Godot;
 using System.Linq;
+using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Propulsion;
 
 // ── Engine grid (left of navball) ───────────────────────────────────────────
 // Positioned by HUDController as a child of AttitudeNavball — local Position,
@@ -38,6 +40,7 @@ public partial class EngineGridHUD : Control
     private bool   _twrValid;
     private readonly List<double> _engineThrottles = new();
     private readonly List<bool> _engineFailures = new();
+    private readonly List<EngineLifecycleState> _engineStates = new();
     private int _drawEngineIndex;
 
     public override void _Ready()
@@ -85,11 +88,13 @@ public partial class EngineGridHUD : Control
         _litEngines = System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
         _engineThrottles.Clear();
         _engineFailures.Clear();
+        _engineStates.Clear();
         var readouts = vessel.GetEngineReadouts(body).ToList();
         if (readouts.Count == _nominalEngines)
         {
             _engineThrottles.AddRange(readouts.Select(row => row.Throttle));
             _engineFailures.AddRange(readouts.Select(row => row.FailureCode != null));
+            _engineStates.AddRange(readouts.Select(row => row.State));
         }
 
         double thrustN = vessel.GetCurrentThrust(body);
@@ -153,11 +158,18 @@ public partial class EngineGridHUD : Control
                                 cy + radius * (float)System.Math.Sin(a));
             bool on = lit > 0;
             bool failed = false;
+            bool starting = false;
             double throttle = _throttle;
             if (_engineThrottles.Count == _nominalEngines)
             {
                 throttle = _engineThrottles[_drawEngineIndex];
                 failed = _engineFailures[_drawEngineIndex];
+                starting = !_engineFailures[_drawEngineIndex]
+                    && _engineStates[_drawEngineIndex] is
+                        EngineLifecycleState.Chill
+                        or EngineLifecycleState.SpinPrime
+                        or EngineLifecycleState.Ignition
+                        or EngineLifecycleState.Ramp;
                 on = throttle > 1e-3;
             }
             else if (on)
@@ -167,6 +179,8 @@ public partial class EngineGridHUD : Control
             _drawEngineIndex++;
             Color c = failed
                 ? InterfaceTheme.Alert
+                : starting
+                    ? InterfaceTheme.Warning
                 : on
                     ? (throttle >= 0.85 ? DotOnHot : DotOn)
                     : DotOff;

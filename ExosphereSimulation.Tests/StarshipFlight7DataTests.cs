@@ -129,6 +129,24 @@ public sealed class StarshipFlight7DataTests
     }
 
     [Fact]
+    public void BoosterEngineTelemetryReportsThirtyThreeLitAfterStartupWithoutFailures()
+    {
+        var catalog = LoadPartCatalog();
+        var booster = new Part(catalog["super_heavy_booster"], "booster-hud-telemetry");
+        var graph = new PartGraph();
+        graph.SetRoot(booster);
+
+        for (int i = 0; i < 100; i++)
+            booster.AdvanceEngineRuntime(1.0, 0.02);
+
+        Assert.Equal(33, graph.ActiveEngineCount);
+        Assert.Equal(33, graph.GetEngineReadouts(101_325.0)
+            .Count(row => row.Throttle > 0.99 && row.FailureCode == null));
+        Assert.DoesNotContain(graph.GetEngineReadouts(101_325.0),
+            row => row.FailureCode != null);
+    }
+
+    [Fact]
     public void BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss()
     {
         var catalog = LoadPartCatalog();
