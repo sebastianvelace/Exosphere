@@ -4,6 +4,27 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 source "$ROOT/tools/lib/playtest_contracts.sh"
 
+HARNESS_SCRIPT="$ROOT/tools/visual_playtest.sh"
+bash -n "$HARNESS_SCRIPT"
+
+# Both Godot launch paths must override the default user://logs destination.
+# That default can fail to create its parent directory in the Xvfb environment
+# and caused Godot 4.6.3 to abort before the scene loaded.
+launch_count="$(grep -c -- '--log-file "\$GODOT_LOG_FILE"' "$HARNESS_SCRIPT")"
+if [[ "$launch_count" -ne 2 ]]; then
+  echo "FAIL expected 2 explicit Godot --log-file launch arguments, got $launch_count" >&2
+  exit 1
+fi
+if ! grep -q 'GODOT_LOG_FILE="\${CONSOLE_LOG}.godot"' "$HARNESS_SCRIPT"; then
+  echo "FAIL Godot native log is not isolated beside the per-run console log" >&2
+  exit 1
+fi
+if ! grep -q 'mkdir -p "\$(dirname "\$GODOT_LOG_FILE")"' "$HARNESS_SCRIPT"; then
+  echo "FAIL Godot native log parent directory is not created explicitly" >&2
+  exit 1
+fi
+echo "PASS explicit per-launch Godot log contract"
+
 TEST_DIR="$(mktemp -d /tmp/exo_contract_test.XXXXXX)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 
