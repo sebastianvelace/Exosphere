@@ -13,6 +13,7 @@
     <Compile Remove="ExosphereSimulation/**/*.cs" />
     <Compile Remove="ExosphereSimulation.Tests/**/*.cs" />
     <Compile Remove="tools/SpectralValidation/**/*.cs" />
+    <Compile Remove="tools/SchedulerBenchmark/**/*.cs" />
     <Compile Remove=".godot/**/*.cs" />
   </ItemGroup>
 </Project>

@@ -74,6 +74,8 @@ public sealed class DockingSystemTests
         Vector3d separationBefore =
             secondary.Position - primary.Position;
         universe.Tick(0.02);
+        Assert.Equal(1, universe.LastSchedulerTelemetry.DockedSecondarySkips);
+        Assert.Equal(1, universe.LastSchedulerTelemetry.DockingConstraintApplications);
         AssertVectorClose(
             primary.Orientation.Rotate(
                 result.Connection!.SecondaryPositionPrimaryLocal),

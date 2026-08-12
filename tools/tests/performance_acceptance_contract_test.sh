@@ -8,6 +8,7 @@ SKY_CONTROLLER="$ROOT_DIR/scripts/SkyController.cs"
 EXPOSURE_CONTROLLER="$ROOT_DIR/scripts/VisualExposureController.cs"
 UNIVERSE="$ROOT_DIR/ExosphereSimulation/Universe.cs"
 SCHEDULER_TEST="$ROOT_DIR/ExosphereSimulation.Tests/PhysicsSchedulerPerformanceTests.cs"
+SCHEDULER_TELEMETRY="$ROOT_DIR/ExosphereSimulation/PhysicsSchedulerTelemetry.cs"
 
 pass_count=0
 fail_count=0
@@ -75,8 +76,12 @@ require_text "$UNIVERSE" "GetMixedPhysicsStepCap" \
     "mixed scheduler derives its cap from every eligible vessel"
 require_text "$UNIVERSE" "LastMixedPhysicsStepCap" \
     "mixed scheduler exposes effective cap telemetry"
+require_text "$SCHEDULER_TELEMETRY" "PhysicsSchedulerTelemetry" \
+    "scheduler workload snapshot type is present"
 require_text "$SCHEDULER_TEST" "MixedSchedulerBoundsSecondaryForceSensitiveVesselAndMatchesFineTick" \
     "multi-vessel mixed-cap regression test is present"
+require_text "$SCHEDULER_TEST" "SchedulerTelemetryCountsMixedWorkloadWithoutSkippingVessels" \
+    "mixed workload telemetry regression test is present"
 
 log_file="${PERF_ACCEPTANCE_LOG:-}"
 if [[ -z "$log_file" ]]; then

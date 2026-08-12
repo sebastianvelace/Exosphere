@@ -91,6 +91,12 @@ public class Universe
     /// </summary>
     public double LastMixedPhysicsStepCap { get; private set; }
 
+    /// <summary>
+    /// Deterministic dispatch counters for the most recent <see cref="Tick(double)"/>.
+    /// This records simulation work only; it intentionally excludes wall-clock timing.
+    /// </summary>
+    public PhysicsSchedulerTelemetry LastSchedulerTelemetry { get; private set; }
+
     /// <summary>The vessel the player is currently controlling.</summary>
     public Vessel? ActiveVessel { get; set; }
 
@@ -162,6 +168,23 @@ public class Universe
     /// threshold, so they will always trigger destruction.
     /// </summary>
     private const double SoftLandingThreshold = Flight.AscentStagingPolicy.SoftLandingSpeedMps;
+
+    // Per-tick scheduler counters. Keeping these as fields avoids allocating a metrics
+    // object in the frame-critical path; the immutable public snapshot is published once
+    // after dispatch completes.
+    private PhysicsSchedulerBranch _tickBranch;
+    private double _tickRealDeltaTime;
+    private double _tickSimulatedSeconds;
+    private double _tickEffectiveStepCap;
+    private int _tickOuterSubsteps;
+    private int _tickFullPhysicsDispatches;
+    private int _tickOnRailsDispatches;
+    private int _tickSurfaceSettledDispatches;
+    private int _tickGroundHeldDispatches;
+    private int _tickDestroyedDispatches;
+    private int _tickDockedSecondarySkips;
+    private int _tickRailsSlices;
+    private int _tickDockingConstraintApplications;
 
     // ── Object management ─────────────────────────────────────────────────
 
@@ -456,6 +479,7 @@ public class Universe
                 v.Id != connection.PrimaryVesselId || v.IsDestroyed)
             || _vessels.All(v =>
                 v.Id != connection.SecondaryVesselId || v.IsDestroyed));
+        _tickDockingConstraintApplications += _dockingConnections.Count;
         foreach (var connection in _dockingConnections)
             ApplyDockingConstraint(connection);
     }
@@ -520,7 +544,12 @@ public class Universe
     {
         LastMixedPhysicsStepCap = 0.0;
         double simDelta = realDeltaTime * TimeScale;
-        if (simDelta <= 0.0) return;
+        BeginSchedulerTelemetry(realDeltaTime, simDelta);
+        if (simDelta <= 0.0)
+        {
+            PublishSchedulerTelemetry();
+            return;
+        }
 
         bool anyForceSensitive = _vessels.Any(RequiresBoundedWarpPropagation);
         bool anyContactSensitive = _bodies.Count > 0 && _vessels.Any(v =>
@@ -530,11 +559,14 @@ public class Universe
         if (TimeScale <= 4.0)
         {
             // Full RK4 physics, capped at MaxPhysicsStep per sub-step
+            _tickBranch = PhysicsSchedulerBranch.FullPhysics;
+            _tickEffectiveStepCap = anyContactSensitive ? MaxContactStep : MaxPhysicsStep;
             double remaining = simDelta;
             while (remaining > 1e-12)
             {
                 double step  = System.Math.Min(remaining,
                     anyContactSensitive ? MaxContactStep : MaxPhysicsStep);
+                _tickOuterSubsteps++;
                 TickPhysics(step);
                 CurrentTime += step;
                 remaining   -= step;
@@ -550,10 +582,13 @@ public class Universe
             // warp integrates accurately (thrust + gravity) and matches a real-time burn.
             double cap = GetMixedPhysicsStepCap(anyContactSensitive);
             LastMixedPhysicsStepCap = cap;
+            _tickBranch = PhysicsSchedulerBranch.Mixed;
+            _tickEffectiveStepCap = cap;
             double remaining = simDelta;
             while (remaining > 1e-12)
             {
                 double step = System.Math.Min(remaining, cap);
+                _tickOuterSubsteps++;
                 TickPhysicsMixed(step);
                 CurrentTime += step;
                 remaining   -= step;
@@ -562,8 +597,72 @@ public class Universe
         else
         {
             // Pure rails: everything propagated analytically
+            _tickBranch = PhysicsSchedulerBranch.Rails;
+            _tickEffectiveStepCap = MaxCoastStep;
+            _tickOuterSubsteps++;
             TickRails(simDelta);
             CurrentTime += simDelta;
+        }
+
+        PublishSchedulerTelemetry();
+    }
+
+    private void BeginSchedulerTelemetry(double realDeltaTime, double simDelta)
+    {
+        _tickBranch = PhysicsSchedulerBranch.None;
+        _tickRealDeltaTime = realDeltaTime;
+        _tickSimulatedSeconds = simDelta > 0.0 && double.IsFinite(simDelta)
+            ? simDelta
+            : 0.0;
+        _tickEffectiveStepCap = 0.0;
+        _tickOuterSubsteps = 0;
+        _tickFullPhysicsDispatches = 0;
+        _tickOnRailsDispatches = 0;
+        _tickSurfaceSettledDispatches = 0;
+        _tickGroundHeldDispatches = 0;
+        _tickDestroyedDispatches = 0;
+        _tickDockedSecondarySkips = 0;
+        _tickRailsSlices = 0;
+        _tickDockingConstraintApplications = 0;
+    }
+
+    private void PublishSchedulerTelemetry()
+    {
+        LastSchedulerTelemetry = new PhysicsSchedulerTelemetry(
+            _tickBranch,
+            _tickRealDeltaTime,
+            _tickSimulatedSeconds,
+            _tickEffectiveStepCap,
+            _tickOuterSubsteps,
+            _tickFullPhysicsDispatches,
+            _tickOnRailsDispatches,
+            _tickSurfaceSettledDispatches,
+            _tickGroundHeldDispatches,
+            _tickDestroyedDispatches,
+            _tickDockedSecondarySkips,
+            _tickRailsSlices,
+            _tickDockingConstraintApplications);
+    }
+
+    private void RecordWorkload(VesselPhysicsWorkload workload)
+    {
+        switch (workload)
+        {
+            case VesselPhysicsWorkload.FullPhysics:
+                _tickFullPhysicsDispatches++;
+                break;
+            case VesselPhysicsWorkload.OnRails:
+                _tickOnRailsDispatches++;
+                break;
+            case VesselPhysicsWorkload.SurfaceSettled:
+                _tickSurfaceSettledDispatches++;
+                break;
+            case VesselPhysicsWorkload.GroundHeld:
+                _tickGroundHeldDispatches++;
+                break;
+            case VesselPhysicsWorkload.Destroyed:
+                _tickDestroyedDispatches++;
+                break;
         }
     }
 
@@ -796,9 +895,14 @@ public class Universe
         // Snapshot the list: structural breakup may AddVessel mid-loop.
         foreach (var vessel in _vessels.ToList())
         {
-            if (IsDockedSecondary(vessel)) continue;
+            if (IsDockedSecondary(vessel))
+            {
+                _tickDockedSecondarySkips++;
+                continue;
+            }
             if (vessel.IsDestroyed)
             {
+                RecordWorkload(VesselPhysicsWorkload.Destroyed);
                 AdvanceAnchoredWreck(vessel, dt);
                 continue;
             }
@@ -813,6 +917,7 @@ public class Universe
                 }
                 else
                 {
+                    RecordWorkload(VesselPhysicsWorkload.SurfaceSettled);
                     AdvanceSurfaceAnchor(vessel, settledBody, dt);
                     vessel.Tick(dt, settledBody);
                     continue;
@@ -821,6 +926,7 @@ public class Universe
 
             if (vessel.IsGroundHeld)
             {
+                RecordWorkload(VesselPhysicsWorkload.GroundHeld);
                 // Vessel is clamped to the body surface — follow the body's orbit
                 var heldBody = GetDominantBody(vessel.Position);
                 AdvanceGroundHoldFrame(vessel, heldBody, dt);
@@ -842,12 +948,14 @@ public class Universe
                 }
                 else
                 {
+                    RecordWorkload(VesselPhysicsWorkload.OnRails);
                     PropagateVesselOnRails(vessel, dt);
                     continue;
                 }
             }
 
             var refBody = GetDominantBody(vessel.Position);
+            RecordWorkload(VesselPhysicsWorkload.FullPhysics);
             IntegrateVesselOffRails(vessel, refBody, dt);
         }
         ApplyDockingConstraints();
@@ -1067,10 +1175,15 @@ public class Universe
 
         foreach (var vessel in _vessels.ToList())
         {
-            if (IsDockedSecondary(vessel)) continue;
+            if (IsDockedSecondary(vessel))
+            {
+                _tickDockedSecondarySkips++;
+                continue;
+            }
             var workload = ClassifyMixedPhysicsWorkload(vessel, out bool requiresForces);
             if (workload == VesselPhysicsWorkload.Destroyed)
             {
+                RecordWorkload(workload);
                 AdvanceAnchoredWreck(vessel, dt);
                 continue;
             }
@@ -1088,6 +1201,7 @@ public class Universe
                     vessel.IsOnRails = true;
                     vessel.OrbitalState = null;
                 }
+                RecordWorkload(workload);
                 PropagateVesselOnRails(vessel, dt);
                 continue;
             }
@@ -1099,6 +1213,7 @@ public class Universe
                 : GetDominantBody(vessel.Position);
             if (workload == VesselPhysicsWorkload.SurfaceSettled)
             {
+                RecordWorkload(workload);
                 // Rigid-body sleep for a landed vehicle.  This is not a launch
                 // clamp: any commanded thrust wakes the solver immediately.
                 AdvanceSurfaceAnchor(vessel, refBody, dt);
@@ -1107,6 +1222,7 @@ public class Universe
             }
             if (vessel.IsGroundHeld)
             {
+                RecordWorkload(workload);
                 AdvanceGroundHoldFrame(vessel, refBody, dt);
                 vessel.Position = refBody.Position
                     + vessel.GroundNormal
@@ -1140,10 +1256,12 @@ public class Universe
 
                 if (vessel.IsOnRails)
                 {
+                    RecordWorkload(VesselPhysicsWorkload.OnRails);
                     PropagateVesselOnRails(vessel, dt);
                 }
                 else
                 {
+                    RecordWorkload(VesselPhysicsWorkload.FullPhysics);
                     IntegrateVesselOffRails(vessel, refBody, dt);
                 }
             }
@@ -1151,10 +1269,12 @@ public class Universe
             {
                 vessel.IsOnRails = false;
                 vessel.OrbitalState = null;
+                RecordWorkload(VesselPhysicsWorkload.FullPhysics);
                 IntegrateVesselOffRails(vessel, refBody, dt);
             }
             else
             {
+                RecordWorkload(VesselPhysicsWorkload.OnRails);
                 PropagateVesselOnRails(vessel, dt);
             }
         }
@@ -1385,9 +1505,14 @@ public class Universe
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
         foreach (var vessel in _vessels)
         {
-            if (IsDockedSecondary(vessel)) continue;
+            if (IsDockedSecondary(vessel))
+            {
+                _tickDockedSecondarySkips++;
+                continue;
+            }
             if (vessel.IsDestroyed)
             {
+                RecordWorkload(VesselPhysicsWorkload.Destroyed);
                 AdvanceAnchoredWreck(vessel, dt);
                 continue;
             }
@@ -1400,12 +1525,14 @@ public class Universe
                 }
                 else
                 {
+                    RecordWorkload(VesselPhysicsWorkload.SurfaceSettled);
                     var body = ResolveSurfaceBody(vessel);
                     AdvanceSurfaceAnchor(vessel, body, dt);
                     vessel.Tick(dt, body);
                     continue;
                 }
             }
+            RecordWorkload(VesselPhysicsWorkload.OnRails);
             PropagateVesselOnRails(vessel, dt);
         }
         ApplyDockingConstraints();
@@ -1494,6 +1621,7 @@ public class Universe
         Vector3d lastRelV  = vessel.Velocity - reference.Velocity;
         while (remaining > 1e-9)
         {
+            _tickRailsSlices++;
             double slice = System.Math.Min(remaining, MaxCoastStep);
             sampleTime  += slice;
             remaining   -= slice;

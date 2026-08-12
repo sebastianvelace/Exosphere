@@ -427,3 +427,75 @@ térmica, docking, staging, SOI y wake-up, además de registrar p50/p95/p99 y al
 El orden de trabajo siguiente queda fijado como: instrumentar → comparar referencia
 fine-tick → introducir deadlines conservadores → probar wake/deferred state → medir
 recién entonces cualquier ahorro de ticks.
+
+## Fase 6 — telemetría determinista de workload multi-vessel
+
+La siguiente fase no introduce hibernación ni cambia el integrador. Añade
+`PhysicsSchedulerTelemetry`, un snapshot inmutable publicado por `Universe.Tick` con:
+
+- rama efectiva (`FullPhysics`, `Mixed` o `Rails`);
+- segundos reales y simulados, cap efectivo y número de substeps exteriores;
+- dispatches de física completa, rails, surface-settled, ground-held y wrecks;
+- secondary docked omitidas del integrador;
+- slices internos de la propagación analítica;
+- aplicaciones de constraints de docking.
+
+Los contadores se actualizan con enteros durante el tick y se publican al final, sin
+`Stopwatch`, temporizadores, logging por frame ni objetos temporales en el camino crítico.
+Por diseño son comparables entre máquinas y no se pueden interpretar como milisegundos.
+La medición de tiempo CPU p50/p95/p99 queda separada para un benchmark controlado; mezclarla
+con el snapshot físico haría que el gate dependiera del hardware.
+
+### Gates añadidos
+
+```text
+SchedulerTelemetryCountsMixedWorkloadWithoutSkippingVessels  PASS
+  mixed: 1 FullPhysics, 2 OnRails, 1 Destroyed, 2 rails slices, 1 outer substep
+
+SchedulerTelemetryIdentifiesFullPhysicsAndPureRailsBranches  PASS
+HardDockConservesLinearMomentumAndUndockKeepsRigidBodyVelocity  PASS
+  docked secondary skips=1, docking constraint applications=1
+
+PhysicsSchedulerPerformanceTests  PASS: 7/7
+DockingSystemTests                  PASS: 5/5
+Performance acceptance contract    PASS: 17, FAIL: 0, SKIP: 1 dynamic-log gate
+```
+
+La telemetría demuestra qué trabajo se hace hoy, pero no autoriza todavía a omitirlo.
+Una nave clasificada como `Hibernated` debe seguir apareciendo como dispatch `OnRails` o
+en otro estado explícito hasta que exista `LastSimulatedTime`, cola de eventos y una
+prueba de materialización equivalente.
+
+### Benchmark CPU reproducible
+
+`tools/perf/scheduler_phase6_benchmark.sh` crea una flota nueva por escenario, calienta
+el scheduler, mide 80 ticks y valida finitud. La muestra ejecutada el 2026-08-12 en
+.NET 8.0.29 produjo estos valores de tiempo transcurrido por tick; no son un presupuesto
+universal de hardware ni una medición de GPU:
+
+| Escenario | Rama | Workload final | Outer substeps | p50 ms | p95 ms | p99 ms | Alloc/tick |
+|---|---|---:|---:|---:|---:|---:|---:|
+| full_single | FullPhysics | 1 full | 1 | 0.0441 | 0.0556 | 0.0763 | 8.4 KB |
+| full_fleet | FullPhysics | 4 full | 1 | 0.1337 | 0.1508 | 0.2105 | 24.9 KB |
+| rails_fleet | Rails | 32 rails / 640 slices | 1 | 0.5657 | 0.6578 | 1.0854 | 179.1 KB |
+| mixed_fleet | Mixed | 47 full / 403 rails | 25 | 3.0002 | 3.3063 | 3.4595 | 648.8 KB |
+
+La flota `rails_fleet` se coloca por encima de 1.5 Mm porque Earth modela la
+termosfera hasta 1.0 Mm; la primera corrida con 0.8 Mm fue correctamente degradada a
+Mixed y llegó a 2000 substeps. Esa salida se considera una validación del guard físico,
+no un baseline de rails puro.
+
+El resultado actual identifica el siguiente cuello de botella: una sola nave sensible
+a fuerzas hace que Mixed repita el ciclo global 25 veces y que las naves rails repitan
+sus slices dentro de cada ciclo. El cambio seguro siguiente es un scheduler de deadlines
+por vessel con commit determinista, no un `continue` de hibernación. Debe compararse
+contra estos cuatro baselines y conservar todos los eventos de superficie, atmósfera,
+SOI, docking y staging.
+
+### Próximo gate de rendimiento
+
+El próximo cambio debe consumir este snapshot en un benchmark de flota con casos aislados
+y combinados: vacuum rails, entrada atmosférica, contacto, thermal, docking, staging,
+SOI y nave distante. Debe registrar p50/p95/p99 de `Universe.Tick`, allocations/GC y los
+contadores anteriores. Sólo si la referencia fine-tick y la matriz de eventos son verdes
+se podrá implementar un deadline por nave con fallback al cap global actual.

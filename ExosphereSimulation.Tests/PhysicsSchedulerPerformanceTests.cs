@@ -159,6 +159,86 @@ public sealed class PhysicsSchedulerPerformanceTests
         AssertVectorClose(fineSecondary.Velocity, mixedSecondary.Velocity, 1e-8);
     }
 
+    [Fact]
+    public void SchedulerTelemetryCountsMixedWorkloadWithoutSkippingVessels()
+    {
+        var earth = LoadBody("earth");
+        var activeRails = CoastVessel(earth, "telemetry-active");
+        var secondaryPhysics = CoastVessel(earth, "telemetry-atmosphere");
+        secondaryPhysics.Position = earth.Position
+            + Vector3d.Right * (earth.Radius + 150_000.0);
+        secondaryPhysics.Velocity = earth.Velocity + Vector3d.Up * 7_700.0;
+        var nonActiveRails = CoastVessel(earth, "telemetry-rails");
+        nonActiveRails.IsOnRails = true;
+        var wreck = new Vessel("telemetry-wreck") { IsDestroyed = true };
+
+        var universe = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = activeRails,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(activeRails);
+        universe.AddVessel(secondaryPhysics);
+        universe.AddVessel(nonActiveRails);
+        universe.AddVessel(wreck);
+
+        universe.Tick(0.0002);
+
+        PhysicsSchedulerTelemetry telemetry = universe.LastSchedulerTelemetry;
+        Assert.Equal(PhysicsSchedulerBranch.Mixed, telemetry.Branch);
+        Assert.InRange(telemetry.RealDeltaTime, 0.000199999, 0.000200001);
+        Assert.InRange(telemetry.SimulatedSeconds, 0.01999999, 0.02000001);
+        Assert.Equal(1, telemetry.OuterSubsteps);
+        Assert.Equal(1, telemetry.FullPhysicsDispatches);
+        Assert.Equal(2, telemetry.OnRailsDispatches);
+        Assert.Equal(1, telemetry.DestroyedDispatches);
+        Assert.Equal(0, telemetry.SurfaceSettledDispatches);
+        Assert.Equal(0, telemetry.GroundHeldDispatches);
+        Assert.Equal(0, telemetry.DockedSecondarySkips);
+        Assert.Equal(2, telemetry.RailsSlices);
+        Assert.Equal(4, telemetry.TotalWorkDispatches);
+        Assert.Equal(universe.LastMixedPhysicsStepCap, telemetry.EffectiveStepCap);
+    }
+
+    [Fact]
+    public void SchedulerTelemetryIdentifiesFullPhysicsAndPureRailsBranches()
+    {
+        var fullEarth = LoadBody("earth");
+        var fullVessel = CoastVessel(fullEarth, "telemetry-full");
+        var full = new Universe
+        {
+            TimeScale = 1.0,
+            ActiveVessel = fullVessel,
+        };
+        full.AddBody(fullEarth);
+        full.AddVessel(fullVessel);
+
+        full.Tick(0.02);
+
+        Assert.Equal(PhysicsSchedulerBranch.FullPhysics, full.LastSchedulerTelemetry.Branch);
+        Assert.Equal(1, full.LastSchedulerTelemetry.OuterSubsteps);
+        Assert.Equal(1, full.LastSchedulerTelemetry.FullPhysicsDispatches);
+        Assert.Equal(0, full.LastSchedulerTelemetry.OnRailsDispatches);
+        Assert.Equal(0, full.LastSchedulerTelemetry.RailsSlices);
+
+        var railsEarth = LoadBody("earth");
+        var railsVessel = CoastVessel(railsEarth, "telemetry-pure-rails");
+        railsVessel.IsOnRails = true;
+        var rails = new Universe { TimeScale = 2_000.0 };
+        rails.AddBody(railsEarth);
+        rails.AddVessel(railsVessel);
+
+        rails.Tick(0.02);
+
+        Assert.Equal(PhysicsSchedulerBranch.Rails, rails.LastSchedulerTelemetry.Branch);
+        Assert.Equal(1, rails.LastSchedulerTelemetry.OuterSubsteps);
+        Assert.Equal(0, rails.LastSchedulerTelemetry.FullPhysicsDispatches);
+        Assert.Equal(1, rails.LastSchedulerTelemetry.OnRailsDispatches);
+        Assert.True(rails.LastSchedulerTelemetry.RailsSlices > 0);
+        Assert.InRange(rails.LastSchedulerTelemetry.SimulatedSeconds, 39.99999, 40.00001);
+    }
+
     private static Universe CreateCoastingUniverse(string vesselId)
     {
         var earth = LoadBody("earth");
