@@ -77,6 +77,10 @@ uniform float sun_angular_radius = 0.00465;
 uniform float sun_disc_radiance = 32.0;
 uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform float atmospheric_solar_visibility : hint_range(0.0, 1.0) = 1.0;
+// Interactive quadrature quality. The CPU/LUT oracle and the official order-4
+// transport remain unchanged; this only bounds the realtime view integration.
+// 0 keeps the minimum stable sample count, 1 uses the reference shader counts.
+uniform float atmosphere_quality : hint_range(0.0, 1.0) = 0.60;
 uniform bool solar_occluder_enabled = false;
 uniform vec3 solar_occluder_dir = vec3(0.0, -1.0, 0.0);
 uniform float solar_occluder_angular_radius = 0.0;
@@ -100,6 +104,11 @@ const int CLOUD_LIGHT_STEPS = 5;
 // gain (not a post-tonemap colour): the calibrated solar irradiance and the
 // wavelength-dependent twilight tint remain in the expression below.
 const float TWILIGHT_LUMINANCE_GAIN = 0.060;
+
+float render_step_count(float minimum_steps, float maximum_steps) {
+	return mix(minimum_steps, maximum_steps,
+		clamp(atmosphere_quality, 0.0, 1.0));
+}
 
 vec2 ray_sphere(vec3 origin, vec3 direction, float radius) {
 	float b = dot(origin, direction);
@@ -208,11 +217,13 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 	float distance_to_space = max(atmosphere_hit.y, 0.0);
 	float closest = max(-dot(position, apparent_direction), 0.0);
 	vec3 depth = vec3(0.0);
+	float light_steps = render_step_count(8.0, float(LIGHT_STEPS));
 	for (int i = 0; i < LIGHT_STEPS; i++) {
+		if (float(i) >= light_steps) break;
 		float segment_start = tangent_warped_boundary(
-			float(i) / float(LIGHT_STEPS), 0.0, distance_to_space, closest);
+			float(i) / light_steps, 0.0, distance_to_space, closest);
 		float segment_end = tangent_warped_boundary(
-			float(i + 1) / float(LIGHT_STEPS), 0.0, distance_to_space, closest);
+			float(i + 1) / light_steps, 0.0, distance_to_space, closest);
 		float step_length = max(segment_end - segment_start, 0.0);
 		float jitter = stable_jitter(position + apparent_direction * float(i) * 17.0);
 		float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));
@@ -395,10 +406,12 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
 	float distance_to_edge = max(outer_hit.y, 0.0);
 	float closest = max(-dot(position, to_sun), 0.0);
 	float optical_depth = 0.0;
+	float cloud_light_steps = render_step_count(3.0, float(CLOUD_LIGHT_STEPS));
 	for (int i = 0; i < CLOUD_LIGHT_STEPS; i++) {
-		float segment_start = tangent_warped_boundary(float(i) / float(CLOUD_LIGHT_STEPS),
+		if (float(i) >= cloud_light_steps) break;
+		float segment_start = tangent_warped_boundary(float(i) / cloud_light_steps,
 			0.0, distance_to_edge, closest);
-		float segment_end = tangent_warped_boundary(float(i + 1) / float(CLOUD_LIGHT_STEPS),
+		float segment_end = tangent_warped_boundary(float(i + 1) / cloud_light_steps,
 			0.0, distance_to_edge, closest);
 		float step_length = max(segment_end - segment_start, 0.0);
 		vec3 p = position + to_sun * (0.5 * (segment_start + segment_end));
@@ -453,10 +466,12 @@ void sky() {
 			/ (8.0 * PI * (2.0 + g2)
 			* pow(max(1.0 + g2 - 2.0 * mie_g * mu, 1e-3), 1.5));
 
+		float view_steps = render_step_count(12.0, float(VIEW_STEPS));
 		for (int i = 0; i < VIEW_STEPS; i++) {
-			float segment_start = tangent_warped_boundary(float(i) / float(VIEW_STEPS),
+			if (float(i) >= view_steps) break;
+			float segment_start = tangent_warped_boundary(float(i) / view_steps,
 				ray_start, ray_end, closest);
-			float segment_end = tangent_warped_boundary(float(i + 1) / float(VIEW_STEPS),
+			float segment_end = tangent_warped_boundary(float(i + 1) / view_steps,
 				ray_start, ray_end, closest);
 			float step_length = max(segment_end - segment_start, 0.0);
 			float jitter = stable_jitter(view_dir + up * 3.7 + float(i) * vec3(0.17, 0.41, 0.83));
@@ -539,11 +554,13 @@ void sky() {
 			float mu_cloud = dot(view_dir, to_sun);
 			float phase_cloud = 0.82 * hg_phase(mu_cloud, 0.82)
 				+ 0.18 * hg_phase(mu_cloud, -0.20);
+			float cloud_view_steps = render_step_count(8.0, float(CLOUD_VIEW_STEPS));
 			for (int i = 0; i < CLOUD_VIEW_STEPS; i++) {
+				if (float(i) >= cloud_view_steps) break;
 				float segment_start = tangent_warped_boundary(
-					float(i) / float(CLOUD_VIEW_STEPS), cloud_start, cloud_end, cloud_closest);
+					float(i) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
 				float segment_end = tangent_warped_boundary(
-					float(i + 1) / float(CLOUD_VIEW_STEPS), cloud_start, cloud_end, cloud_closest);
+					float(i + 1) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
 				float cloud_step = max(segment_end - segment_start, 0.0);
 				float jitter = stable_jitter(view_dir + up * 11.0 + float(i) * vec3(0.29, 0.53, 0.71));
 				float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));

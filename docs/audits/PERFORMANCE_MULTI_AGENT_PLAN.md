@@ -1,8 +1,13 @@
 # Plan riguroso de optimización y despliegue multiagente
 
-Estado: aprobado para ejecución por fases  
-Fecha de baseline: 2026-08-11  
+Estado: aprobado para ejecución por fases; fase 7 runtime aplicada, siguiente fase lista para worktrees aislados
+Fecha de baseline: 2026-08-11; actualización runtime: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
+
+La evidencia de la fase runtime y sus límites está en
+[`PERF_RUNTIME_PHASE7_REPORT.md`](PERF_RUNTIME_PHASE7_REPORT.md). El smoke visual continúa
+siendo PASS, pero llvmpipe no es suficiente para declarar 60 FPS de hardware: la fase siguiente
+debe conservar la separación entre medición CPU, callback de proceso y GPU real.
 
 ## 1. Diagnóstico reproducible
 

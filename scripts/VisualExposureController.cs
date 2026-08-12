@@ -24,6 +24,7 @@ public partial class VisualExposureController : Node
     private string? _cachedBodyId;
     private double _cachedAltitude;
     private double _cachedSunElevation;
+    private float _lastEyeStarGain = float.NaN;
 
     public override void _Ready() => ProcessPriority = 20;
 
@@ -104,8 +105,17 @@ public partial class VisualExposureController : Node
         float darkAdaptation = Mathf.Clamp((exposure - 1.45f) / 3.55f, 0.0f, 1.0f);
         float photopicSuppression = (float)System.Math.Clamp(
             skyLuminance * 4.0 + surfaceLuminance * 6.0 + plasma, 0.0, 1.0);
-        _skyMaterial?.SetShaderParameter("eye_star_gain",
-            darkAdaptation * (1.0f - photopicSuppression));
+        float eyeStarGain = darkAdaptation * (1.0f - photopicSuppression);
+        // This is a custom sky uniform. Rewriting it every frame invalidates the
+        // incremental sky cubemap even after exposure has settled. A 0.005 step is
+        // below a visible star-luminance change but prevents a permanent rebuild loop.
+        if (_skyMaterial != null
+            && (float.IsNaN(_lastEyeStarGain)
+                || System.Math.Abs(eyeStarGain - _lastEyeStarGain) > 0.005f))
+        {
+            _skyMaterial.SetShaderParameter("eye_star_gain", eyeStarGain);
+            _lastEyeStarGain = eyeStarGain;
+        }
     }
 
     private void EnsureReferences()

@@ -70,6 +70,9 @@ public partial class SkyController : Node
     private const int AngularScatteringMuLayers = 8;
     private const int AngularScatteringOpticalDepthSamples = 12;
     private const int MaxCpuLutCacheEntries = 3;
+    // Runtime-only shader quadrature quality. Offline LUT/reference sampling is
+    // intentionally independent and remains at its validated resolution.
+    private const float InteractiveAtmosphereQuality = 0.60f;
 
     private enum AtmosphereLutWorkerState
     {
@@ -132,6 +135,18 @@ public partial class SkyController : Node
     private double _lastAtmosphereAltitude;
     private Vector3d _lastAtmosphereUp;
     private Vector3d _lastAtmosphereSun;
+    // Sky.ProcessMode.Incremental invalidates the radiance cubemap when a custom
+    // uniform is written. Keep presentation parameters sticky: writing the same
+    // value every frame defeats the incremental renderer and turns one cubemap
+    // face into a full atmosphere integration on every render tick.
+    private bool _solarGeometryInitialized;
+    private float _lastSolarAngularRadius = float.NaN;
+    private float _lastSolarVisibility = float.NaN;
+    private float _lastAtmosphericSolarVisibility = float.NaN;
+    private bool _lastSolarOccluderEnabled;
+    private Vector3 _lastSolarOccluderDirection;
+    private float _lastSolarOccluderAngularRadius = float.NaN;
+    private float _lastCloudWeatherPrefilter = float.NaN;
 
     public override void _Ready()
     {
@@ -155,13 +170,18 @@ public partial class SkyController : Node
             (float)AngularScatteringViewLayers);
         _skyMat.SetShaderParameter("multiple_scattering_mu_layers",
             (float)AngularScatteringMuLayers);
+        _skyMat.SetShaderParameter("atmosphere_quality", InteractiveAtmosphereQuality);
         _skyMat.SetShaderParameter("density_lut_enabled", false);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
         _env.Sky.SkyMaterial = _skyMat;
-        // The cloud field evolves slowly. Incremental refresh updates one cubemap face per
-        // frame and avoids paying the complete gas+cloud integration six times every frame.
+        // Atmospheric radiance is low frequency and is refreshed incrementally.
+        // 128² keeps the six-face cubemap cheap on integrated/llvmpipe renderers;
+        // the full-screen background still uses the filtered cubemap.
+        _env.Sky.RadianceSize = Sky.RadianceSizeEnum.Size128;
         _env.Sky.ProcessMode = Sky.ProcessModeEnum.Incremental;
+        GD.Print($"PERF_RENDER stage=sky_config radiance=128 process=incremental "
+            + $"atmosphereQuality={InteractiveAtmosphereQuality:F2}");
     }
 
     public override void _ExitTree()
@@ -230,8 +250,14 @@ public partial class SkyController : Node
             return;
 
         double sunDistance = (sun.Position - observer).Magnitude;
-        _skyMat.SetShaderParameter("sun_angular_radius", (float)
-            MissionGeometry.ApparentAngularRadius(sun.Radius, sunDistance));
+        float sunAngularRadius = (float)MissionGeometry.ApparentAngularRadius(
+            sun.Radius, sunDistance);
+        if (!_solarGeometryInitialized
+            || System.Math.Abs(sunAngularRadius - _lastSolarAngularRadius) > 1e-7f)
+        {
+            _skyMat.SetShaderParameter("sun_angular_radius", sunAngularRadius);
+            _lastSolarAngularRadius = sunAngularRadius;
+        }
 
         CelestialBody? bestOccluder = null;
         double lowestVisibility = 1.0;
@@ -254,16 +280,49 @@ public partial class SkyController : Node
         }
 
         bool enabled = bestOccluder != null && lowestVisibility < 0.999999;
-        _skyMat.SetShaderParameter("solar_visibility", (float)lowestVisibility);
-        _skyMat.SetShaderParameter("atmospheric_solar_visibility", (float)atmosphericVisibility);
-        _skyMat.SetShaderParameter("solar_occluder_enabled", enabled);
-        if (!enabled) return;
+        float solarVisibility = (float)lowestVisibility;
+        float atmosphericSolarVisibility = (float)atmosphericVisibility;
+        if (!_solarGeometryInitialized
+            || System.Math.Abs(solarVisibility - _lastSolarVisibility) > 1e-5f)
+        {
+            _skyMat.SetShaderParameter("solar_visibility", solarVisibility);
+            _lastSolarVisibility = solarVisibility;
+        }
+        if (!_solarGeometryInitialized
+            || System.Math.Abs(atmosphericSolarVisibility - _lastAtmosphericSolarVisibility) > 1e-5f)
+        {
+            _skyMat.SetShaderParameter("atmospheric_solar_visibility", atmosphericSolarVisibility);
+            _lastAtmosphericSolarVisibility = atmosphericSolarVisibility;
+        }
+        if (!_solarGeometryInitialized || enabled != _lastSolarOccluderEnabled)
+        {
+            _skyMat.SetShaderParameter("solar_occluder_enabled", enabled);
+            _lastSolarOccluderEnabled = enabled;
+        }
+        if (!enabled)
+        {
+            _solarGeometryInitialized = true;
+            return;
+        }
 
         Vector3d direction = (bestOccluder!.Position - observer).Normalized;
         double distance = (bestOccluder.Position - observer).Magnitude;
-        _skyMat.SetShaderParameter("solar_occluder_dir", ToGodot(direction));
-        _skyMat.SetShaderParameter("solar_occluder_angular_radius", (float)
-            MissionGeometry.ApparentAngularRadius(bestOccluder.Radius, distance));
+        Vector3 occluderDirection = ToGodot(direction);
+        float occluderAngularRadius = (float)MissionGeometry.ApparentAngularRadius(
+            bestOccluder.Radius, distance);
+        if (!_solarGeometryInitialized
+            || _lastSolarOccluderDirection.DistanceSquaredTo(occluderDirection) > 1e-10f)
+        {
+            _skyMat.SetShaderParameter("solar_occluder_dir", occluderDirection);
+            _lastSolarOccluderDirection = occluderDirection;
+        }
+        if (!_solarGeometryInitialized
+            || System.Math.Abs(occluderAngularRadius - _lastSolarOccluderAngularRadius) > 1e-7f)
+        {
+            _skyMat.SetShaderParameter("solar_occluder_angular_radius", occluderAngularRadius);
+            _lastSolarOccluderAngularRadius = occluderAngularRadius;
+        }
+        _solarGeometryInitialized = true;
     }
 
     private void BindAtmosphere(
@@ -385,8 +444,15 @@ public partial class SkyController : Node
         // latitude rows in the equirectangular cloud map.  Fade in the shader's
         // narrow latitude prefilter only there; full daylight keeps the original
         // high-frequency weather detail intact.
-        _skyMat?.SetShaderParameter("cloud_weather_prefilter",
-            1.0f - Smoothstep(0.02f, 0.18f, (float)sunElevationSin));
+        float cloudWeatherPrefilter =
+            1.0f - Smoothstep(0.02f, 0.18f, (float)sunElevationSin);
+        if (_skyMat != null
+            && (float.IsNaN(_lastCloudWeatherPrefilter)
+                || System.Math.Abs(cloudWeatherPrefilter - _lastCloudWeatherPrefilter) > 1e-3f))
+        {
+            _skyMat.SetShaderParameter("cloud_weather_prefilter", cloudWeatherPrefilter);
+            _lastCloudWeatherPrefilter = cloudWeatherPrefilter;
+        }
 
         Color horizon = body.Id switch
         {
@@ -812,6 +878,11 @@ public partial class SkyController : Node
         CancellationToken cancellationToken,
         SkyController telemetry)
     {
+        // The LUT is deliberately asynchronous, but a normal-priority thread can
+        // still starve the renderer on machines with few cores (and on llvmpipe).
+        // Lower only this worker for its lifetime and restore the ThreadPool thread
+        // before it returns to the pool; simulation/physics threads are untouched.
+        using var workerPriority = new WorkerThreadPriorityScope();
         var stopwatch = Stopwatch.StartNew();
         telemetry?.SetWorkerRunning();
         telemetry?.SetWorkerPhase(AtmosphereLutWorkerPhase.Transmittance, 0);
@@ -890,6 +961,44 @@ public partial class SkyController : Node
             bodyId, cacheKey, generation, transmittance, angular,
             stopwatch.Elapsed.TotalMilliseconds, experimentalMilliseconds, experimentalBytes,
             transmittanceBytes + angularBytes, peakBytes, uploadBytes);
+    }
+
+    private sealed class WorkerThreadPriorityScope : IDisposable
+    {
+        private readonly Thread? _thread;
+        private readonly ThreadPriority _previous;
+
+        public WorkerThreadPriorityScope()
+        {
+            try
+            {
+                _thread = Thread.CurrentThread;
+                _previous = _thread.Priority;
+                _thread.Priority = ThreadPriority.BelowNormal;
+            }
+            catch (Exception exception) when (
+                exception is PlatformNotSupportedException
+                or InvalidOperationException
+                or System.ComponentModel.Win32Exception)
+            {
+                _thread = null;
+                _previous = ThreadPriority.Normal;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_thread == null) return;
+            try { _thread.Priority = _previous; }
+            catch (Exception exception) when (
+                exception is PlatformNotSupportedException
+                or InvalidOperationException
+                or System.ComponentModel.Win32Exception)
+            {
+                // Priority is an optional scheduling hint; failure to restore it
+                // must never turn a valid LUT into a simulation fault.
+            }
+        }
     }
 
     private static Texture2D CreateTransmittanceTexture(AtmosphereTransmittanceLut lut)
