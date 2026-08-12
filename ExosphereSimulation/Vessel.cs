@@ -591,6 +591,22 @@ public class Vessel
 
     public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
+        Parts.BeginPhysicsTick();
+        try
+        {
+            TickPhysics(dt, refBody, externalContactTorqueWorld);
+        }
+        finally
+        {
+            Parts.EndPhysicsTick();
+        }
+    }
+
+    private void TickPhysics(
+        double dt,
+        CelestialBody refBody,
+        Vector3d externalContactTorqueWorld)
+    {
         // A failure or an impact can legitimately leave the rigid body above the normal
         // actuator envelope. Preserve that incoming rate while ordinary controls/aero
         // work it down; the 20°/s envelope must prevent commanded acceleration, not
@@ -602,6 +618,9 @@ public class Vessel
         // y antes de que RK4 muestree las fuerzas), para que los subpasos k₁…k₄ usen
         // el mismo ThrottleLevel spooled dentro de un mismo paso de física.
         ApplyThrottle(dt);
+        // AdvanceEngineRuntime can fail an engine on an over-temperature transition. Do not
+        // let the active-engine snapshot taken by ApplyThrottle survive that state change.
+        Parts.InvalidateTickActiveEngineCache();
 
         Parts.ConsumePropellant(dt, pressure);
         AdvanceHotStageOverlap(dt);

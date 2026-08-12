@@ -26,25 +26,103 @@ public class PartGraph
 
     private readonly List<Part>  _parts  = new();
     private readonly List<Joint> _joints = new();
+    private readonly List<Part> _tickStageParts = new();
+    private readonly List<Part> _tickActiveEngines = new();
+    private readonly List<Part> _queryStageParts = new();
+    private readonly List<Part> _queryActiveEngines = new();
+    private readonly List<Part> _tickEngineScratch = new();
+    private readonly List<Part> _tickSubtreeScratch = new();
+    private readonly List<LiquidEngineDemand> _liquidDemands = new();
+    private readonly List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>
+        _gimbalContributions = new();
+    private readonly Dictionary<Part, Vector3d> _partLocalPositions = new();
     private Part? _root;
+    private bool _partLocalPositionsValid;
+    private bool _physicsTickActive;
+    private bool _tickStageCacheValid;
+    private bool _tickActiveEngineCacheValid;
+    private bool _tickMassPropertiesValid;
+    private double _tickTotalMass;
+    private Vector3d _tickCenterOfMass;
+    private double _tickTransverseMomentOfInertia;
+    private double _tickAxialMomentOfInertia;
 
     public IReadOnlyList<Part>  Parts  => _parts.AsReadOnly();
     public IReadOnlyList<Joint> Joints => _joints.AsReadOnly();
     public Part? Root => _root;
 
     /// <summary>
+    /// Enables the short-lived physics-tick caches. They are intentionally scoped to one
+    /// <see cref="Vessel.Tick"/> so resource consumption and staging remain authoritative
+    /// outside the cache window.
+    /// </summary>
+    internal void BeginPhysicsTick()
+    {
+        _physicsTickActive = true;
+        _tickStageCacheValid = false;
+        _tickActiveEngineCacheValid = false;
+        _tickMassPropertiesValid = false;
+        _partLocalPositionsValid = false;
+    }
+
+    internal void EndPhysicsTick()
+    {
+        _physicsTickActive = false;
+        _tickStageCacheValid = false;
+        _tickActiveEngineCacheValid = false;
+        _tickMassPropertiesValid = false;
+        _partLocalPositionsValid = false;
+    }
+
+    internal void InvalidateTickActiveEngineCache() => _tickActiveEngineCacheValid = false;
+
+    private void InvalidateTopologyCaches()
+    {
+        _partLocalPositionsValid = false;
+        _tickStageCacheValid = false;
+        _tickActiveEngineCacheValid = false;
+        _tickMassPropertiesValid = false;
+    }
+
+    /// <summary>
     /// When true, upper-stage engines may fire and drain their own tanks while the booster
     /// stage is still attached (hot-stage overlap). Cleared automatically at mechanical stage.
     /// </summary>
-    public bool HotStageOverlapActive { get; set; }
+    private bool _hotStageOverlapActive;
 
-    public void SetRoot(Part part) { _root = part; if (!_parts.Contains(part)) _parts.Add(part); }
-    public void AddPart(Part part) { if (!_parts.Contains(part)) _parts.Add(part); }
+    public bool HotStageOverlapActive
+    {
+        get => _hotStageOverlapActive;
+        set
+        {
+            if (_hotStageOverlapActive == value) return;
+            _hotStageOverlapActive = value;
+            _tickActiveEngineCacheValid = false;
+        }
+    }
+
+    public void SetRoot(Part part)
+    {
+        _root = part;
+        if (!_parts.Contains(part)) _parts.Add(part);
+        InvalidateTopologyCaches();
+    }
+
+    public void AddPart(Part part)
+    {
+        if (!_parts.Contains(part))
+        {
+            _parts.Add(part);
+            InvalidateTopologyCaches();
+        }
+    }
+
     public void AddJoint(Joint joint)
     {
         _joints.Add(joint);
         if (!_parts.Contains(joint.Parent)) _parts.Add(joint.Parent);
         if (!_parts.Contains(joint.Child))  _parts.Add(joint.Child);
+        InvalidateTopologyCaches();
     }
 
     public IEnumerable<Part>  GetChildren(Part parent) =>
@@ -53,7 +131,18 @@ public class PartGraph
         _joints.FirstOrDefault(j => j.Parent == parent && j.Child == child);
 
     // ── Propiedades calculadas ────────────────────────────────────────────
-    public double TotalMass        => _parts.Sum(p => p.CurrentMass);
+    public double TotalMass
+    {
+        get
+        {
+            if (_physicsTickActive)
+            {
+                EnsureTickMassProperties();
+                return _tickTotalMass;
+            }
+            return _parts.Sum(p => p.CurrentMass);
+        }
+    }
     public double DryMass          => _parts.Sum(p => p.EffectiveMassDry);
     public double TotalLiquidFuel  => _parts.Sum(p => p.LiquidFuel);
     public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer);
@@ -114,6 +203,84 @@ public class PartGraph
         }
     }
 
+    private void EnsureTickStageCache()
+    {
+        if (_tickStageCacheValid) return;
+        BuildCurrentStageParts(_tickStageParts);
+        _tickStageCacheValid = true;
+        _tickActiveEngineCacheValid = false;
+    }
+
+    private void EnsureTickActiveEngineCache()
+    {
+        if (_tickActiveEngineCacheValid) return;
+        _tickActiveEngines.Clear();
+        if (HotStageOverlapActive)
+        {
+            for (int i = 0; i < _parts.Count; i++)
+            {
+                var part = _parts[i];
+                if (part.Definition.Category == PartCategory.Engine
+                    && part.IsStagingActive && !part.IsBroken)
+                    _tickActiveEngines.Add(part);
+            }
+        }
+        else
+        {
+            EnsureTickStageCache();
+            for (int i = 0; i < _tickStageParts.Count; i++)
+            {
+                var part = _tickStageParts[i];
+                if (part.Definition.Category == PartCategory.Engine
+                    && part.IsStagingActive && !part.IsBroken)
+                    _tickActiveEngines.Add(part);
+            }
+        }
+        _tickActiveEngineCacheValid = true;
+    }
+
+    private void EnsureTickMassProperties()
+    {
+        if (_tickMassPropertiesValid) return;
+
+        _tickTotalMass = 0.0;
+        _tickCenterOfMass = Vector3d.Zero;
+        if (_root != null)
+        {
+            var positions = GetCachedPartLocalPositions();
+            for (int i = 0; i < _parts.Count; i++)
+            {
+                var part = _parts[i];
+                double mass = part.CurrentMass;
+                _tickTotalMass += mass;
+                if (positions.TryGetValue(part, out var position))
+                    _tickCenterOfMass += position * mass;
+            }
+            if (_tickTotalMass > 0.0)
+                _tickCenterOfMass /= _tickTotalMass;
+        }
+
+        double radius = MaximumDiameter * 0.5;
+        _tickTransverseMomentOfInertia = _tickTotalMass
+            * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
+        _tickAxialMomentOfInertia = 0.5 * _tickTotalMass * radius * radius;
+        _tickMassPropertiesValid = true;
+    }
+
+    private Dictionary<Part, Vector3d> GetCachedPartLocalPositions()
+    {
+        if (!_physicsTickActive)
+            return ComputePartLocalPositions();
+        if (_partLocalPositionsValid)
+            return _partLocalPositions;
+
+        _partLocalPositions.Clear();
+        if (_root != null)
+            AssignPositions(_root, Vector3d.Zero, _partLocalPositions);
+        _partLocalPositionsValid = true;
+        return _partLocalPositions;
+    }
+
     // Parts belonging to the currently-firing stage: the subtree hanging below the
     // lowest still-attached decoupler (the side away from the root command section).
     // With no active decoupler the whole vessel is one stage. Engines only fire — and
@@ -122,10 +289,28 @@ public class PartGraph
     // not cross-feed across stage interfaces, nor light all stages at liftoff).
     public List<Part> CurrentStageParts()
     {
+        if (_physicsTickActive)
+        {
+            EnsureTickStageCache();
+            return _tickStageParts;
+        }
+
+        var result = new List<Part>(_parts.Count);
+        BuildCurrentStageParts(result);
+        return result;
+    }
+
+    private void BuildCurrentStageParts(List<Part> result)
+    {
+        result.Clear();
         var activeDecouplers = _parts
             .Where(p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive)
             .ToList();
-        if (activeDecouplers.Count == 0) return new List<Part>(_parts);
+        if (activeDecouplers.Count == 0)
+        {
+            result.AddRange(_parts);
+            return;
+        }
 
         foreach (var d in activeDecouplers)
         {
@@ -134,21 +319,53 @@ public class PartGraph
             var farSide = CollectSubtree(child);   // subtree below the decoupler
             // The bottom stage's subtree contains no further attached decoupler.
             if (!farSide.Any(p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive))
-                return farSide;
+            {
+                result.AddRange(farSide);
+                return;
+            }
         }
-        return new List<Part>(_parts);
+        result.AddRange(_parts);
     }
 
     public IEnumerable<Part> ActiveEngines
     {
         get
         {
-            // Hot-stage overlap deliberately lights both the booster and ship clusters while
-            // the stack is still one graph. Outside that window only CurrentStageParts burn.
-            IEnumerable<Part> pool = HotStageOverlapActive ? _parts : CurrentStageParts();
-            return pool.Where(p => p.Definition.Category == PartCategory.Engine
-                                 && p.IsStagingActive && !p.IsBroken);
+            if (_physicsTickActive)
+            {
+                EnsureTickActiveEngineCache();
+                return _tickActiveEngines;
+            }
+
+            return GetQueryActiveEngineList();
         }
+    }
+
+    private List<Part> GetQueryActiveEngineList()
+    {
+        _queryActiveEngines.Clear();
+        if (HotStageOverlapActive)
+        {
+            for (int i = 0; i < _parts.Count; i++)
+            {
+                var part = _parts[i];
+                if (part.Definition.Category == PartCategory.Engine
+                    && part.IsStagingActive && !part.IsBroken)
+                    _queryActiveEngines.Add(part);
+            }
+            return _queryActiveEngines;
+        }
+
+        _queryStageParts.Clear();
+        BuildCurrentStageParts(_queryStageParts);
+        for (int i = 0; i < _queryStageParts.Count; i++)
+        {
+            var part = _queryStageParts[i];
+            if (part.Definition.Category == PartCategory.Engine
+                && part.IsStagingActive && !part.IsBroken)
+                _queryActiveEngines.Add(part);
+        }
+        return _queryActiveEngines;
     }
 
     // Centro de masa en espacio local del vessel (+Y = arriba, raíz en Y=0)
@@ -156,6 +373,12 @@ public class PartGraph
     {
         get
         {
+            if (_physicsTickActive)
+            {
+                EnsureTickMassProperties();
+                return _tickCenterOfMass;
+            }
+
             double totalMass = TotalMass;
             if (totalMass <= 0.0 || _root == null) return Vector3d.Zero;
             var positions = ComputePartLocalPositions();
@@ -177,6 +400,11 @@ public class PartGraph
     {
         get
         {
+            if (_physicsTickActive)
+            {
+                EnsureTickMassProperties();
+                return _tickTransverseMomentOfInertia;
+            }
             double radius = MaximumDiameter * 0.5;
             return TotalMass * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
         }
@@ -187,6 +415,11 @@ public class PartGraph
     {
         get
         {
+            if (_physicsTickActive)
+            {
+                EnsureTickMassProperties();
+                return _tickAxialMomentOfInertia;
+            }
             double radius = MaximumDiameter * 0.5;
             return 0.5 * TotalMass * radius * radius;
         }
@@ -208,7 +441,7 @@ public class PartGraph
         double inertia = TransverseMomentOfInertia;
         if (inertia <= 0.0) return 0.0;
 
-        var positions = ComputePartLocalPositions();
+        var positions = GetCachedPartLocalPositions();
         double comY = CenterOfMass.Y;
         double torque = 0.0;
         foreach (var engine in ActiveEngines)
@@ -264,7 +497,7 @@ public class PartGraph
         double axial = AxialMomentOfInertia;
         if (transverse <= 0.0 && axial <= 0.0) return Vector3d.Zero;
 
-        var positions = ComputePartLocalPositions();
+        var positions = GetCachedPartLocalPositions();
         double comY = CenterOfMass.Y;
         double rollRadius = MaximumDiameter * 0.5 * 0.65;
         double pitchYawTorque = 0.0;
@@ -295,8 +528,13 @@ public class PartGraph
     public Vector3d GetTotalThrust() => GetTotalThrust(0.0);
 
     // Empuje total corregido por presión ambiente (Pa).
-    public Vector3d GetTotalThrust(double ambientPressure) =>
-        ActiveEngines.Aggregate(Vector3d.Zero, (sum, e) => sum + e.GetThrustVector(ambientPressure));
+    public Vector3d GetTotalThrust(double ambientPressure)
+    {
+        var thrust = Vector3d.Zero;
+        foreach (var engine in ActiveEngines)
+            thrust += engine.GetThrustVector(ambientPressure);
+        return thrust;
+    }
 
     /// <summary>
     /// Genuine geometric torque (N·m) about the vessel's centre of mass: τ = Σ r_i × F_i
@@ -311,7 +549,7 @@ public class PartGraph
     /// </summary>
     public Vector3d GetTotalTorque(double ambientPressure)
     {
-        var positions = ComputePartLocalPositions();
+        var positions = GetCachedPartLocalPositions();
         var com = CenterOfMass;
         var torque = Vector3d.Zero;
         foreach (var engine in ActiveEngines)
@@ -368,10 +606,13 @@ public class PartGraph
     /// </summary>
     public void SolveDifferentialGimbal(Vector3d desiredTorque, double ambientPressure)
     {
-        var positions = ComputePartLocalPositions();
+        var positions = GetCachedPartLocalPositions();
         var com = CenterOfMass;
 
-        var contributions = new List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>();
+        var contributions = _physicsTickActive
+            ? _gimbalContributions
+            : new List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>();
+        contributions.Clear();
         double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
 
         foreach (var engine in ActiveEngines)
@@ -443,23 +684,54 @@ public class PartGraph
     // Part internals or duplicate the thrust equation — it just reads these.
 
     /// <summary>Number of engines in the current stage that are lit (firing).</summary>
-    public int ActiveEngineCount =>
-        ActiveEngines
-            .Sum(e => e.HasEngineRuntime
-                ? e.EngineStates.Count(s => s.ChamberPressureFraction > 1e-3)
-                : e.ThrottleLevel > 1e-3 ? e.SelectedEngineCount : 0);
+    public int ActiveEngineCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var engine in ActiveEngines)
+            {
+                if (!engine.HasEngineRuntime)
+                {
+                    if (engine.ThrottleLevel > 1e-3)
+                        count += engine.SelectedEngineCount;
+                    continue;
+                }
+
+                foreach (var state in engine.EngineStates)
+                    if (state.ChamberPressureFraction > 1e-3)
+                        count++;
+            }
+            return count;
+        }
+    }
 
     /// <summary>Total pressure-corrected thrust magnitude (N) of the current stage now.</summary>
-    public double GetCurrentThrust(double ambientPressure) =>
-        ActiveEngines.Sum(e => e.GetThrustMagnitude(ambientPressure));
+    public double GetCurrentThrust(double ambientPressure)
+    {
+        double thrust = 0.0;
+        foreach (var engine in ActiveEngines)
+            thrust += engine.GetThrustMagnitude(ambientPressure);
+        return thrust;
+    }
 
     /// <summary>Pressure-corrected current-stage thrust available at full throttle.</summary>
-    public double GetMaximumThrust(double ambientPressure) =>
-        ActiveEngines.Sum(e => e.GetFullThrottleThrustMagnitude(ambientPressure));
+    public double GetMaximumThrust(double ambientPressure)
+    {
+        double thrust = 0.0;
+        foreach (var engine in ActiveEngines)
+            thrust += engine.GetFullThrottleThrustMagnitude(ambientPressure);
+        return thrust;
+    }
 
     /// <summary>Total propellant mass flow of the current stage (kg/s) at this pressure.</summary>
-    public double GetCurrentMassFlow(double ambientPressure) =>
-        ActiveEngines.Sum(e => e.GetMassFlow(ambientPressure));
+    public double GetCurrentMassFlow(double ambientPressure)
+    {
+        double massFlow = 0.0;
+        foreach (var engine in ActiveEngines)
+            massFlow += engine.GetMassFlow(ambientPressure);
+        return massFlow;
+    }
 
     /// <summary>
     /// Thrust-weighted current specific impulse (s) of the firing stage: the effective Isp of
@@ -565,19 +837,26 @@ public class PartGraph
         ConsumePropellantFromPool(stage, stage, dt, ambientPressure);
     }
 
-    private static void ConsumePropellantFromPool(
+    private void ConsumePropellantFromPool(
         IReadOnlyList<Part> enginePool,
         IReadOnlyList<Part> tankPool,
         double dt,
         double ambientPressure)
     {
-        var engines = enginePool.Where(p => p.Definition.Category == PartCategory.Engine
-                                         && p.IsStagingActive && !p.IsBroken).ToList();
+        var engines = _physicsTickActive ? _tickEngineScratch : new List<Part>();
+        engines.Clear();
+        for (int i = 0; i < enginePool.Count; i++)
+        {
+            var part = enginePool[i];
+            if (part.Definition.Category == PartCategory.Engine
+                && part.IsStagingActive && !part.IsBroken)
+                engines.Add(part);
+        }
         if (engines.Count == 0) return;
 
         // Calcular flujo de masa total de todos los motores activos
         double totalSolidRate = 0, totalMonoRate = 0;
-        var liquidDemands = new List<LiquidEngineDemand>();
+        _liquidDemands.Clear();
         foreach (var engine in engines)
         {
             var def = engine.Definition;
@@ -593,27 +872,33 @@ public class PartGraph
             {
                 if (engine.HasEngineRuntime)
                 {
-                    var telemetry = engine.GetEngineTelemetry(ambientPressure).ToArray();
-                    for (int i = 0; i < telemetry.Length; i++)
+                    int engineIndex = 0;
+                    foreach (var row in engine.GetEngineTelemetry(ambientPressure))
                     {
-                        var row = telemetry[i];
-                        if (row.MassFlowKgS <= 1e-12) continue;
+                        if (row.MassFlowKgS <= 1e-12)
+                        {
+                            engineIndex++;
+                            continue;
+                        }
                         if (row.MassFlowKgS
-                            > engine.GetEngineFeedLimitKgS(i) + 1e-9)
+                            > engine.GetEngineFeedLimitKgS(engineIndex) + 1e-9)
                         {
                             engine.FailEngine(
                                 row.InstanceId, "FEED_BRANCH_FLOW_LIMIT");
+                            _tickActiveEngineCacheValid = false;
+                            engineIndex++;
                             continue;
                         }
-                        liquidDemands.Add(new LiquidEngineDemand(
+                        _liquidDemands.Add(new LiquidEngineDemand(
                             engine,
                             row.InstanceId,
                             row.MassFlowKgS,
                             def.MixtureRatio));
+                        engineIndex++;
                     }
                 }
                 else
-                    liquidDemands.Add(new LiquidEngineDemand(
+                    _liquidDemands.Add(new LiquidEngineDemand(
                         engine,
                         engine.InstanceId,
                         engine.GetMassFlow(ambientPressure),
@@ -628,7 +913,7 @@ public class PartGraph
         // Consumir de los tanques de la etapa activa (cross-feed dentro de la etapa)
         bool nonLiquidFlameOut = false;
 
-        if (liquidDemands.Count > 0)
+        if (_liquidDemands.Count > 0)
         {
             double totalLF   = tankPool.Sum(p => p.LiquidFuel);
             double totalOx   = tankPool.Sum(p => p.Oxidizer);
@@ -641,8 +926,10 @@ public class PartGraph
                 ? totalLF / loadedTotal
                 : 0.45;
 
-            foreach (var demand in liquidDemands
-                         .OrderBy(item => item.EngineInstanceId, StringComparer.Ordinal))
+            _liquidDemands.Sort(static (left, right) =>
+                StringComparer.Ordinal.Compare(
+                    left.EngineInstanceId, right.EngineInstanceId));
+            foreach (var demand in _liquidDemands)
             {
                 double fuelFraction = demand.MixtureRatio > 0.0
                     ? 1.0 / (1.0 + demand.MixtureRatio)
@@ -660,10 +947,16 @@ public class PartGraph
                 }
 
                 if (demand.EnginePart.HasEngineRuntime)
+                {
                     demand.EnginePart.FailEngine(
                         demand.EngineInstanceId, "PROPELLANT_STARVATION");
+                    _tickActiveEngineCacheValid = false;
+                }
                 else
+                {
                     demand.EnginePart.IsStagingActive = false;
+                    _tickActiveEngineCacheValid = false;
+                }
             }
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
@@ -683,8 +976,15 @@ public class PartGraph
             double solidNeeded = totalSolidRate * dt;
             double totalSolid  = tankPool.Sum(p => p.SolidFuel);
             if (totalSolid < solidNeeded) nonLiquidFlameOut = true;
-            else foreach (var p in tankPool.Where(p2 => p2.SolidFuel > 0))
-                p.SolidFuel -= solidNeeded * (p.SolidFuel / totalSolid);
+            else
+            {
+                for (int i = 0; i < tankPool.Count; i++)
+                {
+                    var part = tankPool[i];
+                    if (part.SolidFuel > 0)
+                        part.SolidFuel -= solidNeeded * (part.SolidFuel / totalSolid);
+                }
+            }
         }
 
         if (totalMonoRate > 0)
@@ -692,8 +992,15 @@ public class PartGraph
             double monoNeeded = totalMonoRate * dt;
             double totalMono  = tankPool.Sum(p => p.Monopropellant);
             if (totalMono < monoNeeded) nonLiquidFlameOut = true;
-            else foreach (var p in tankPool.Where(p2 => p2.Monopropellant > 0))
-                p.Monopropellant -= monoNeeded * (p.Monopropellant / totalMono);
+            else
+            {
+                for (int i = 0; i < tankPool.Count; i++)
+                {
+                    var part = tankPool[i];
+                    if (part.Monopropellant > 0)
+                        part.Monopropellant -= monoNeeded * (part.Monopropellant / totalMono);
+                }
+            }
         }
 
         if (nonLiquidFlameOut)
@@ -704,6 +1011,7 @@ public class PartGraph
                     engine.FailAllEngines("PROPELLANT_STARVATION");
                 else
                     engine.IsStagingActive = false;
+                _tickActiveEngineCacheValid = false;
             }
         }
     }
@@ -780,6 +1088,7 @@ public class PartGraph
         }
         _joints.Remove(separationJoint);
         foreach (var p in detachedParts) _parts.Remove(p);
+        InvalidateTopologyCaches();
 
         return detachedGraph;
     }
@@ -803,6 +1112,7 @@ public class PartGraph
             _joints.Remove(rootJoint);
             _parts.Remove(separationRoot);
             _root = rootChildren[0];
+            InvalidateTopologyCaches();
             return detachedRoot;
         }
         var separationJoint = _joints.FirstOrDefault(j => j.Child == separationRoot);
@@ -821,6 +1131,7 @@ public class PartGraph
         }
         _joints.Remove(separationJoint);
         foreach (var part in detachedParts) _parts.Remove(part);
+        InvalidateTopologyCaches();
         return detachedGraph;
     }
 
