@@ -25,5 +25,12 @@ rg -q --fixed-strings 'double allocatedBytesPerTick' "$TEST" \
   || fail "Starship allocation budget missing"
 rg -q --fixed-strings 'Assert.InRange(allocatedBytesPerTick, 0.0, 5_000.0)' "$TEST" \
   || fail "Starship allocation budget is not enforced"
+rg -q --fixed-strings 'GetEngineInstanceThrustGeometrySnapshot' "$PART" "$GRAPH" \
+  || fail "thrust geometry snapshot buffer missing"
+rg -q --fixed-strings 'GetEngineInstanceGimbalAuthoritySnapshot' "$PART" "$GRAPH" \
+  || fail "gimbal authority snapshot buffer missing"
+if rg -q 'foreach \(var .*GetEngineInstance(ThrustGeometry|GimbalAuthority)' "$GRAPH"; then
+  fail "PartGraph still consumes engine geometry through iterator foreach"
+fi
 
-echo "starship_hotpath_contract_test: PASS (allocation budget and allocation-free engine reductions)"
+echo "starship_hotpath_contract_test: PASS (allocation budget, reductions and geometry snapshots)"

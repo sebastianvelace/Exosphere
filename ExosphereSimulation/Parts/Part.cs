@@ -56,6 +56,13 @@ public class Part
     public Vector3d GimbalOffset  { get; set; } = Vector3d.Zero;  // deflexión normalizada
     private readonly List<EngineInstanceState> _engineStates = new();
     private readonly List<EngineFailureInjection> _scheduledFailures = new();
+    private readonly List<(Vector3d PositionM, Vector3d ThrustVectorN)>
+        _thrustGeometryScratch = new();
+    private readonly List<(
+        EngineInstanceState State,
+        Vector3d PositionM,
+        double ThrustN,
+        double GimbalRangeDeg)> _gimbalAuthorityScratch = new();
     public IReadOnlyList<EngineInstanceState> EngineStates => _engineStates;
     public IReadOnlyList<EngineFailureInjection> ScheduledEngineFailures =>
         _scheduledFailures;
@@ -738,8 +745,9 @@ public class Part
         if (HasEngineRuntime)
         {
             var net = Vector3d.Zero;
-            foreach (var (_, thrustVector) in GetEngineInstanceThrustGeometry(ambientPressure))
-                net += thrustVector;
+            var geometry = GetEngineInstanceThrustGeometrySnapshot(ambientPressure);
+            for (int i = 0; i < geometry.Count; i++)
+                net += geometry[i].ThrustVectorN;
             return net;
         }
 
@@ -772,12 +780,28 @@ public class Part
     public IEnumerable<(Vector3d PositionM, Vector3d ThrustVectorN)>
         GetEngineInstanceThrustGeometry(double ambientPressure)
     {
+        BuildEngineInstanceThrustGeometry(_thrustGeometryScratch, ambientPressure);
+        return _thrustGeometryScratch;
+    }
+
+    internal IReadOnlyList<(Vector3d PositionM, Vector3d ThrustVectorN)>
+        GetEngineInstanceThrustGeometrySnapshot(double ambientPressure)
+    {
+        BuildEngineInstanceThrustGeometry(_thrustGeometryScratch, ambientPressure);
+        return _thrustGeometryScratch;
+    }
+
+    private void BuildEngineInstanceThrustGeometry(
+        List<(Vector3d PositionM, Vector3d ThrustVectorN)> destination,
+        double ambientPressure)
+    {
+        destination.Clear();
         if (!HasEngineRuntime)
         {
-            yield return (
+            destination.Add((
                 new Vector3d(0.0, Definition.ThrustPositionYM, 0.0),
-                GetThrustVector(ambientPressure));
-            yield break;
+                GetThrustVector(ambientPressure)));
+            return;
         }
 
         for (int i = 0; i < _engineStates.Count; i++)
@@ -798,7 +822,7 @@ public class Part
 
             double thrust = EvaluateEnginePerformance(state, ambientPressure).ThrustN;
             var direction = TiltDirection(baseDirection, state.GimbalDeg.X, state.GimbalDeg.Z);
-            yield return (position, direction * thrust);
+            destination.Add((position, direction * thrust));
         }
     }
 
@@ -828,7 +852,23 @@ public class Part
     public IEnumerable<(EngineInstanceState State, Vector3d PositionM, double ThrustN, double GimbalRangeDeg)>
         GetEngineInstanceGimbalAuthority(double ambientPressure)
     {
-        if (!HasEngineRuntime || IsBroken || !IsStagingActive) yield break;
+        BuildEngineInstanceGimbalAuthority(_gimbalAuthorityScratch, ambientPressure);
+        return _gimbalAuthorityScratch;
+    }
+
+    internal IReadOnlyList<(EngineInstanceState State, Vector3d PositionM, double ThrustN, double GimbalRangeDeg)>
+        GetEngineInstanceGimbalAuthoritySnapshot(double ambientPressure)
+    {
+        BuildEngineInstanceGimbalAuthority(_gimbalAuthorityScratch, ambientPressure);
+        return _gimbalAuthorityScratch;
+    }
+
+    private void BuildEngineInstanceGimbalAuthority(
+        List<(EngineInstanceState State, Vector3d PositionM, double ThrustN, double GimbalRangeDeg)> destination,
+        double ambientPressure)
+    {
+        destination.Clear();
+        if (!HasEngineRuntime || IsBroken || !IsStagingActive) return;
 
         int selected = SelectedEngineCount;
         for (int i = 0; i < _engineStates.Count; i++)
@@ -851,7 +891,7 @@ public class Part
             double range = ResolveEngineModel(state)?.GimbalRangeDeg ?? Definition.GimbalRange;
             if (range <= 0.0) continue;
 
-            yield return (state, position, thrust, range);
+            destination.Add((state, position, thrust, range));
         }
     }
 

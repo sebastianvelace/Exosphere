@@ -517,9 +517,10 @@ public class PartGraph
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
             bool countsForRoll = engine.Definition.EngineCount >= 2;
-            foreach (var (_, mountPosition, thrustN, gimbalRangeDeg)
-                     in engine.GetEngineInstanceGimbalAuthority(ambientPressure))
+            var authority = engine.GetEngineInstanceGimbalAuthoritySnapshot(ambientPressure);
+            for (int i = 0; i < authority.Count; i++)
             {
+                var (_, mountPosition, thrustN, gimbalRangeDeg) = authority[i];
                 double gimbalRad = gimbalRangeDeg * MathUtils.DEG_TO_RAD;
                 double lever = System.Math.Abs(partPosition.Y + mountPosition.Y - comY);
                 pitchYawTorque += thrustN * lever * System.Math.Sin(gimbalRad);
@@ -565,9 +566,10 @@ public class PartGraph
         foreach (var engine in ActiveEngines)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
-            foreach (var (mountPosition, thrustVector) in
-                     engine.GetEngineInstanceThrustGeometry(ambientPressure))
+            var geometry = engine.GetEngineInstanceThrustGeometrySnapshot(ambientPressure);
+            for (int i = 0; i < geometry.Count; i++)
             {
+                var (mountPosition, thrustVector) = geometry[i];
                 var r = partPosition + mountPosition - com;
                 torque += r.Cross(thrustVector);
             }
@@ -628,13 +630,14 @@ public class PartGraph
         foreach (var engine in ActiveEngines)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
-            foreach (var (state, mountPosition, thrustN, gimbalRangeDeg)
-                     in engine.GetEngineInstanceGimbalAuthority(ambientPressure))
+            var authorityRows = engine.GetEngineInstanceGimbalAuthoritySnapshot(ambientPressure);
+            for (int i = 0; i < authorityRows.Count; i++)
             {
+                var (state, mountPosition, thrustN, gimbalRangeDeg) = authorityRows[i];
                 var r = partPosition + mountPosition - com;
-                double authority = thrustN * (gimbalRangeDeg * MathUtils.DEG_TO_RAD);
-                var jx = r.Cross(new Vector3d(authority, 0.0, 0.0));
-                var jz = r.Cross(new Vector3d(0.0, 0.0, authority));
+                double mountAuthority = thrustN * (gimbalRangeDeg * MathUtils.DEG_TO_RAD);
+                var jx = r.Cross(new Vector3d(mountAuthority, 0.0, 0.0));
+                var jz = r.Cross(new Vector3d(0.0, 0.0, mountAuthority));
                 contributions.Add((state, jx, jz));
 
                 m00 += jx.X * jx.X + jz.X * jz.X;
