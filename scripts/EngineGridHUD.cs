@@ -1,7 +1,6 @@
 namespace Exosphere.Game;
 
 using Godot;
-using System.Linq;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Propulsion;
 
@@ -13,6 +12,7 @@ public partial class EngineGridHUD : Control
     private const int RingInner = 3;
     private const int RingMid   = 10;
     private const int RingOuter = 20;
+    private const double TelemetryUpdatePeriodSeconds = 0.10;
 
     public const float BoardWidth = 120f;
     public const float BoardHeightCompact = 124f;
@@ -41,7 +41,9 @@ public partial class EngineGridHUD : Control
     private readonly List<double> _engineThrottles = new();
     private readonly List<bool> _engineFailures = new();
     private readonly List<EngineLifecycleState> _engineStates = new();
+    private readonly List<EngineReadout> _readoutScratch = new();
     private int _drawEngineIndex;
+    private double _telemetryAccumulator = double.MaxValue;
 
     public override void _Ready()
     {
@@ -72,29 +74,37 @@ public partial class EngineGridHUD : Control
         if (Size.X < 8f || Size.Y < 8f)
             Size = CustomMinimumSize;
 
+        _telemetryAccumulator += System.Math.Max(0.0, delta);
+        if (_telemetryAccumulator < TelemetryUpdatePeriodSeconds)
+            return;
+        _telemetryAccumulator = 0.0;
+
         var vessel = SimulationBridge.Instance?.ActiveVessel;
         var universe = SimulationBridge.Instance?.Universe;
         if (vessel == null || universe == null)
-        {
-            QueueRedraw();
             return;
-        }
 
         var body = universe.GetDominantBody(vessel.Position);
-        var engines = vessel.Parts.ActiveEngines.ToList();
         _throttle = vessel.Throttle;
-        _nominalEngines = System.Math.Max(1,
-            engines.Sum(e => System.Math.Max(1, e.Definition.EngineCount)));
+        int nominalEngines = 0;
+        foreach (var engine in vessel.Parts.ActiveEngines)
+            nominalEngines += System.Math.Max(1, engine.Definition.EngineCount);
+        _nominalEngines = System.Math.Max(1, nominalEngines);
         _litEngines = System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
         _engineThrottles.Clear();
         _engineFailures.Clear();
         _engineStates.Clear();
-        var readouts = vessel.GetEngineReadouts(body).ToList();
-        if (readouts.Count == _nominalEngines)
+        _readoutScratch.Clear();
+        foreach (var readout in vessel.GetEngineReadouts(body))
+            _readoutScratch.Add(readout);
+        if (_readoutScratch.Count == _nominalEngines)
         {
-            _engineThrottles.AddRange(readouts.Select(row => row.Throttle));
-            _engineFailures.AddRange(readouts.Select(row => row.FailureCode != null));
-            _engineStates.AddRange(readouts.Select(row => row.State));
+            foreach (var row in _readoutScratch)
+            {
+                _engineThrottles.Add(row.Throttle);
+                _engineFailures.Add(row.FailureCode != null);
+                _engineStates.Add(row.State);
+            }
         }
 
         double thrustN = vessel.GetCurrentThrust(body);

@@ -546,7 +546,16 @@ public class Universe
             }
         }
 
-        return best ?? _bodies.OrderByDescending(b => b.Mass).First();
+        if (best != null) return best;
+
+        // This fallback is queried by multiple render/physics consumers. Avoid
+        // OrderByDescending here: the body list is stable and a manual maximum
+        // keeps the no-SOI path allocation-free.
+        CelestialBody fallback = _bodies[0];
+        for (int i = 1; i < _bodies.Count; i++)
+            if (_bodies[i].Mass > fallback.Mass)
+                fallback = _bodies[i];
+        return fallback;
     }
 
     // ── Main tick ──────────────────────────────────────────────────────────
@@ -742,8 +751,9 @@ public class Universe
 
     private void FlushDeferredRailsToCurrentTime()
     {
-        foreach (var vessel in _vessels.ToList())
+        for (int i = 0, count = _vessels.Count; i < count; i++)
         {
+            var vessel = _vessels[i];
             if (IsDockedSecondary(vessel) || vessel.IsDestroyed)
                 continue;
             CatchUpDeferredRailVessel(vessel, CurrentTime);
@@ -1086,9 +1096,12 @@ public class Universe
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
 
         // 2. Integrate each active vessel with RK4.
-        // Snapshot the list: structural breakup may AddVessel mid-loop.
-        foreach (var vessel in _vessels.ToList())
+        // Snapshot the count: structural breakup may append debris mid-loop. New
+        // vessels intentionally wait for the next scheduler tick, matching the
+        // previous ToList snapshot without allocating per substep.
+        for (int i = 0, count = _vessels.Count; i < count; i++)
         {
+            var vessel = _vessels[i];
             if (IsDockedSecondary(vessel))
             {
                 _tickDockedSecondarySkips++;
@@ -1368,8 +1381,11 @@ public class Universe
         KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
         double targetTime = CurrentTime + dt;
 
-        foreach (var vessel in _vessels.ToList())
+        // Structural breakup may append debris; preserve the old snapshot semantics
+        // by capturing the starting count while avoiding a list allocation per substep.
+        for (int i = 0, count = _vessels.Count; i < count; i++)
         {
+            var vessel = _vessels[i];
             if (IsDockedSecondary(vessel))
             {
                 _tickDockedSecondarySkips++;

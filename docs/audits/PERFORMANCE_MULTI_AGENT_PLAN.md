@@ -1,13 +1,18 @@
 # Plan riguroso de optimización y despliegue multiagente
 
-Estado: aprobado para ejecución por fases; fase 7 runtime aplicada, siguiente fase lista para worktrees aislados
-Fecha de baseline: 2026-08-11; actualización runtime: 2026-08-12
+Estado: fase 7 runtime y fase 8 scheduler aplicadas; siguiente fase: perfilado de Vessel/PartGraph
+Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
 La evidencia de la fase runtime y sus límites está en
 [`PERF_RUNTIME_PHASE7_REPORT.md`](PERF_RUNTIME_PHASE7_REPORT.md). El smoke visual continúa
 siendo PASS, pero llvmpipe no es suficiente para declarar 60 FPS de hardware: la fase siguiente
 debe conservar la separación entre medición CPU, callback de proceso y GPU real.
+
+La evidencia del scheduler está en
+[`PERF_SIMULATION_PHASE8_REPORT.md`](PERF_SIMULATION_PHASE8_REPORT.md). La fase 8 elimina
+asignaciones de snapshots de flota y limita el HUD de motores a 10 Hz; no cambia la física de
+la nave activa ni promueve un LOD adicional.
 
 ## 1. Diagnóstico reproducible
 
@@ -238,10 +243,11 @@ Agente 0 baseline
 Orden de merge:
 
 1. Baseline/contratos y la corrección de arranque actual.
-2. Agente 1, para que el resto mida sin el stall conocido.
-3. Agentes 2, 3, 4 y 5 en paralelo, cada uno con ownership separado.
-4. Agente 6 ejecuta la matriz contra el commit padre y cada candidato.
-5. Integración final en una rama única; repetir baseline completo y visual playtest.
+2. Agente 1, para que el resto mida sin el stall conocido. [completado en fase 7]
+3. Agente 2 scheduler y parte del Agente 4 HUD, con ownership separado. [completado en fase 8]
+4. Agente 3 Starship/PartGraph, Agente 4 render restante y Agente 5 GPU/recursos en paralelo.
+5. Agente 6 ejecuta la matriz contra el commit padre y cada candidato.
+6. Integración final en una rama única; repetir baseline completo y visual playtest.
 
 Si dos agentes necesitan la misma API, el coordinador crea primero un contrato pequeño
 (interfaz, snapshot o evento) en una rama de integración; no se resuelve copiando cambios
