@@ -151,7 +151,9 @@ public class PartGraph
     {
         get
         {
-            double specified = _parts.Sum(p => System.Math.Max(0.0, p.Definition.LengthM));
+            double specified = 0.0;
+            foreach (var part in _parts)
+                specified += System.Math.Max(0.0, part.Definition.LengthM);
             return specified > 0.0
                 ? specified
                 : System.Math.Max(1.0, _parts.Count * 12.0);
@@ -162,7 +164,9 @@ public class PartGraph
         get
         {
             if (_parts.Count == 0) return 1.0;
-            double specified = _parts.Max(p => System.Math.Max(0.0, p.Definition.DiameterM));
+            double specified = 0.0;
+            foreach (var part in _parts)
+                specified = System.Math.Max(specified, part.Definition.DiameterM);
             return specified > 0.0
                 ? specified
                 : System.Math.Max(1.0, 2.0 * System.Math.Sqrt(_parts.Count * 0.2));
@@ -173,11 +177,17 @@ public class PartGraph
     {
         get
         {
-            double declared = _parts
-                .Select(p => p.Definition.NoseRadiusM)
-                .Where(r => r > 0.0)
-                .DefaultIfEmpty(0.0)
-                .Min();
+            double declared = 0.0;
+            bool found = false;
+            foreach (var part in _parts)
+            {
+                double radius = part.Definition.NoseRadiusM;
+                if (radius > 0.0 && (!found || radius < declared))
+                {
+                    declared = radius;
+                    found = true;
+                }
+            }
             return declared > 0.0 ? declared : MaximumDiameter * 0.5;
         }
     }
@@ -190,16 +200,16 @@ public class PartGraph
             // made the complete rocket behave as though the capsule were exposed.
             if (_root?.Definition.AxialDragCoefficient > 0.0)
                 return _root.Definition.AxialDragCoefficient;
-            var declared = _parts
-                .Where(p => p.Definition.AxialDragCoefficient > 0.0)
-                .ToArray();
-            if (declared.Length == 0) return 0.6;
-            double totalLength = declared.Sum(
-                p => System.Math.Max(0.01, p.Definition.LengthM));
-            return declared.Sum(p =>
-                    p.Definition.AxialDragCoefficient
-                    * System.Math.Max(0.01, p.Definition.LengthM))
-                / totalLength;
+            double totalLength = 0.0;
+            double weightedCoefficient = 0.0;
+            foreach (var part in _parts)
+            {
+                if (part.Definition.AxialDragCoefficient <= 0.0) continue;
+                double length = System.Math.Max(0.01, part.Definition.LengthM);
+                totalLength += length;
+                weightedCoefficient += part.Definition.AxialDragCoefficient * length;
+            }
+            return totalLength > 0.0 ? weightedCoefficient / totalLength : 0.6;
         }
     }
 
@@ -866,9 +876,10 @@ public class PartGraph
 
             // ṁ = F(p)/(Isp·g₀) con el empuje corregido por presión (coherente con
             // GetThrustMagnitude), no el empuje de vacío bruto.
-            var fuelType = def.FuelTypeStr.ToLowerInvariant();
+            var fuelType = def.FuelTypeStr;
 
-            if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel"))
+            if (fuelType.Contains("liquidfuel", StringComparison.OrdinalIgnoreCase)
+                || fuelType.Contains("liquid_fuel", StringComparison.OrdinalIgnoreCase))
             {
                 if (engine.HasEngineRuntime)
                 {
@@ -904,9 +915,9 @@ public class PartGraph
                         engine.GetMassFlow(ambientPressure),
                         def.MixtureRatio));
             }
-            else if (fuelType.Contains("solid"))
+            else if (fuelType.Contains("solid", StringComparison.OrdinalIgnoreCase))
                 totalSolidRate += engine.GetMassFlow(ambientPressure);
-            else if (fuelType.Contains("mono"))
+            else if (fuelType.Contains("mono", StringComparison.OrdinalIgnoreCase))
                 totalMonoRate += engine.GetMassFlow(ambientPressure);
         }
 
@@ -915,8 +926,13 @@ public class PartGraph
 
         if (_liquidDemands.Count > 0)
         {
-            double totalLF   = tankPool.Sum(p => p.LiquidFuel);
-            double totalOx   = tankPool.Sum(p => p.Oxidizer);
+            double totalLF = 0.0;
+            double totalOx = 0.0;
+            for (int i = 0; i < tankPool.Count; i++)
+            {
+                totalLF += tankPool[i].LiquidFuel;
+                totalOx += tankPool[i].Oxidizer;
+            }
             double remainingLF = totalLF;
             double remainingOx = totalOx;
             double fundedLF = 0.0;
@@ -974,7 +990,9 @@ public class PartGraph
         if (totalSolidRate > 0)
         {
             double solidNeeded = totalSolidRate * dt;
-            double totalSolid  = tankPool.Sum(p => p.SolidFuel);
+            double totalSolid = 0.0;
+            for (int i = 0; i < tankPool.Count; i++)
+                totalSolid += tankPool[i].SolidFuel;
             if (totalSolid < solidNeeded) nonLiquidFlameOut = true;
             else
             {
@@ -990,7 +1008,9 @@ public class PartGraph
         if (totalMonoRate > 0)
         {
             double monoNeeded = totalMonoRate * dt;
-            double totalMono  = tankPool.Sum(p => p.Monopropellant);
+            double totalMono = 0.0;
+            for (int i = 0; i < tankPool.Count; i++)
+                totalMono += tankPool[i].Monopropellant;
             if (totalMono < monoNeeded) nonLiquidFlameOut = true;
             else
             {

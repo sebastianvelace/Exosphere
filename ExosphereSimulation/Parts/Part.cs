@@ -512,9 +512,17 @@ public class Part
     private void RefreshAggregateThrottle()
     {
         int selected = SelectedEngineCount;
-        ThrottleLevel = selected > 0
-            ? _engineStates.Take(selected).Sum(s => s.ActualThrottle) / selected
-            : 0.0;
+        if (selected <= 0)
+        {
+            ThrottleLevel = 0.0;
+            return;
+        }
+
+        int count = System.Math.Min(selected, _engineStates.Count);
+        double total = 0.0;
+        for (int i = 0; i < count; i++)
+            total += _engineStates[i].ActualThrottle;
+        ThrottleLevel = count > 0 ? total / selected : 0.0;
     }
 
     // ── Masa actual (seca + propelante) ───────────────────────────────────
@@ -622,8 +630,12 @@ public class Part
             || IsBroken || !IsStagingActive)
             return 0.0;
         if (HasEngineRuntime)
-            return _engineStates.Sum(
-                state => EvaluateEnginePerformance(state, ambientPressure).MassFlowKgS);
+        {
+            double massFlow = 0.0;
+            foreach (var state in _engineStates)
+                massFlow += EvaluateEnginePerformance(state, ambientPressure).MassFlowKgS;
+            return massFlow;
+        }
         if (ThrottleLevel <= 0.0) return 0.0;
         double isp = GetIsp(ambientPressure);
         if (isp < 1.0) return 0.0;
@@ -639,36 +651,50 @@ public class Part
     /// Falls back to vacuum thrust when no sea-level figure is provided.
     /// </summary>
     public double GetThrustMagnitude(double ambientPressure = 0.0)
-        => HasEngineRuntime
-            ? _engineStates.Sum(
-                state => EvaluateEnginePerformance(state, ambientPressure).ThrustN)
-            : GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
+    {
+        if (!HasEngineRuntime)
+            return GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
+
+        double thrust = 0.0;
+        foreach (var state in _engineStates)
+            thrust += EvaluateEnginePerformance(state, ambientPressure).ThrustN;
+        return thrust;
+    }
 
     /// <summary>Pressure-corrected thrust of the selected engines at 100% throttle (N).</summary>
     public double GetFullThrottleThrustMagnitude(double ambientPressure = 0.0)
-        => HasEngineRuntime
-            ? _engineStates.Take(SelectedEngineCount).Sum(state =>
-                {
-                    var model = ResolveEngineModel(state);
-                    return model == null
-                        ? 0.0
-                        : EnginePerformanceEvaluator.Evaluate(
-                            model, ambientPressure, model.MaximumThrottle).ThrustN;
-                })
-            : GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
+    {
+        if (!HasEngineRuntime)
+            return GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
+
+        int count = System.Math.Min(SelectedEngineCount, _engineStates.Count);
+        double thrust = 0.0;
+        for (int i = 0; i < count; i++)
+        {
+            var model = ResolveEngineModel(_engineStates[i]);
+            if (model != null)
+                thrust += EnginePerformanceEvaluator.Evaluate(
+                    model, ambientPressure, model.MaximumThrottle).ThrustN;
+        }
+        return thrust;
+    }
 
     /// <summary>Pressure-corrected rated thrust of the complete represented cluster.</summary>
     public double GetRatedFullThrottleThrustMagnitude(double ambientPressure = 0.0)
-        => HasEngineRuntime
-            ? _engineStates.Sum(state =>
-                {
-                    var model = ResolveEngineModel(state);
-                    return model == null
-                        ? 0.0
-                        : EnginePerformanceEvaluator.Evaluate(
-                            model, ambientPressure, model.MaximumThrottle).ThrustN;
-                })
-            : GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure);
+    {
+        if (!HasEngineRuntime)
+            return GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure);
+
+        double thrust = 0.0;
+        foreach (var state in _engineStates)
+        {
+            var model = ResolveEngineModel(state);
+            if (model != null)
+                thrust += EnginePerformanceEvaluator.Evaluate(
+                    model, ambientPressure, model.MaximumThrottle).ThrustN;
+        }
+        return thrust;
+    }
 
     private EngineModelDefinition? ResolveEngineModel(EngineInstanceState state)
     {
@@ -881,9 +907,11 @@ public class Part
         double thrust       = GetThrustMagnitude(ambientPressure);
         double massFlowRate = thrust / (isp * 9.80665);  // kg/s
 
-        var fuelType = Definition.FuelTypeStr.ToLowerInvariant();
+        var fuelType = Definition.FuelTypeStr;
 
-        if (fuelType.Contains("liquidfuel") || fuelType.Contains("liquid_fuel+oxidizer") || fuelType.Contains("liquidfuelandoxidizer"))
+        if (fuelType.Contains("liquidfuel", StringComparison.OrdinalIgnoreCase)
+            || fuelType.Contains("liquid_fuel+oxidizer", StringComparison.OrdinalIgnoreCase)
+            || fuelType.Contains("liquidfuelandoxidizer", StringComparison.OrdinalIgnoreCase))
         {
             // Reparte ṁ entre LF y Ox según la proporción REALMENTE cargada en la pieza,
             // de modo que el O/F del motor (p. ej. 3.55 para Raptor) se respete y ambos
@@ -900,12 +928,12 @@ public class Part
             LiquidFuel -= lfRate * dt;
             Oxidizer   -= oxRate * dt;
         }
-        else if (fuelType.Contains("solid"))
+        else if (fuelType.Contains("solid", StringComparison.OrdinalIgnoreCase))
         {
             if (SolidFuel < massFlowRate * dt) return false;
             SolidFuel -= massFlowRate * dt;
         }
-        else if (fuelType.Contains("mono"))
+        else if (fuelType.Contains("mono", StringComparison.OrdinalIgnoreCase))
         {
             if (Monopropellant < massFlowRate * dt) return false;
             Monopropellant -= massFlowRate * dt;

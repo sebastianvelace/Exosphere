@@ -555,15 +555,20 @@ public class Vessel
         Vector3d? position = null)
     {
         double altitude = body.GetAltitude(position ?? Position);
-        return Parts.Parts.Where(p => p.IsDeployed).Sum(part =>
+        double totalArea = 0.0;
+        foreach (var part in Parts.Parts)
         {
+            if (!part.IsDeployed) continue;
             var definition = part.Definition;
-            if (definition.DragChute <= 0.0) return 0.0;
+            if (definition.DragChute <= 0.0) continue;
             if (definition.DeployAltitude > 0.0
                 && definition.SemiDeployDrag > 0.0)
             {
                 if (altitude > definition.DeployAltitude)
-                    return definition.SemiDeployDrag;
+                {
+                    totalArea += definition.SemiDeployDrag;
+                    continue;
+                }
                 // Reefing lines do not release a full canopy instantaneously. Use a
                 // one-kilometre inflation corridor below the declared main-deploy event;
                 // this avoids a non-physical impulse while preserving the published event.
@@ -572,11 +577,13 @@ public class Vessel
                     0.0,
                     1.0);
                 double smooth = inflation * inflation * (3.0 - 2.0 * inflation);
-                return definition.SemiDeployDrag
+                totalArea += definition.SemiDeployDrag
                     + (definition.DragChute - definition.SemiDeployDrag) * smooth;
+                continue;
             }
-            return definition.DragChute;
-        });
+            totalArea += definition.DragChute;
+        }
+        return totalArea;
     }
 
     // Aceleración gravitacional total de todos los cuerpos (m/s²)
@@ -801,6 +808,19 @@ public class Vessel
             if (density > 0.0 && surfVel.Magnitude > 1.0)
             {
                 double temp = System.Math.Max(1.0, refBody.Atmosphere.GetTemperature(altitude));
+                double? aerodynamicCenterOffset = null;
+                bool hasBodyFlaps = false;
+                foreach (var part in Parts.Parts)
+                {
+                    if (!aerodynamicCenterOffset.HasValue
+                        && part.Definition.AerodynamicCenterOffsetYM.HasValue)
+                        aerodynamicCenterOffset = part.Definition.AerodynamicCenterOffsetYM;
+                    if (part.Definition.IsStarshipFamily
+                        && part.Definition.HasVehicleRole("command")
+                        && !part.IsBroken)
+                        hasBodyFlaps = true;
+                }
+
                 var angularAccel = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
                     density,
                     surfVel,
@@ -810,20 +830,13 @@ public class Vessel
                     MaximumDiameter,
                     Parts.TransverseMomentOfInertia,
                     temp,
-                    Parts.Parts
-                        .Select(part =>
-                            part.Definition.AerodynamicCenterOffsetYM)
-                        .FirstOrDefault(offset => offset.HasValue));
+                    aerodynamicCenterOffset);
                 AngularVelocity += angularAccel * dt;
 
                 // Starship's four body flaps remain the primary attitude actuators during
                 // unpowered entry. Their hinge force scales with q and their physical lever
                 // arm; this replaces the impossible assumption that only lit engines can
                 // hold a lift-producing angle of attack.
-                bool hasBodyFlaps = Parts.Parts.Any(p =>
-                    p.Definition.IsStarshipFamily
-                    && p.Definition.HasVehicleRole("command")
-                    && !p.IsBroken);
                 if (hasBodyFlaps && hasInput)
                 {
                     AngularVelocity += AerodynamicsModel.ComputeFlapControlAngularAcceleration(

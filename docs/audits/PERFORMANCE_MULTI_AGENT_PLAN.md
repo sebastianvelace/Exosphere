@@ -1,6 +1,6 @@
 # Plan riguroso de optimización y despliegue multiagente
 
-Estado: fase 7 runtime y fase 8 scheduler aplicadas; siguiente fase: perfilado de Vessel/PartGraph
+Estado: fases 7–9 aplicadas; siguiente fase: buffers por tick para geometría/gimbal sólo con perfilado
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -13,6 +13,12 @@ La evidencia del scheduler está en
 [`PERF_SIMULATION_PHASE8_REPORT.md`](PERF_SIMULATION_PHASE8_REPORT.md). La fase 8 elimina
 asignaciones de snapshots de flota y limita el HUD de motores a 10 Hz; no cambia la física de
 la nave activa ni promueve un LOD adicional.
+
+La evidencia del hot path de Starship está en
+[`PERF_STARSHIP_PHASE9_REPORT.md`](PERF_STARSHIP_PHASE9_REPORT.md). La fase 9 reduce las
+asignaciones administradas medidas del Flight 7 de 5.32 a 4.50 KiB por tick y añade un
+presupuesto xUnit; todavía no elimina los generadores de geometría de gimbal porque requieren
+medición separada de paridad de torque.
 
 ## 1. Diagnóstico reproducible
 
@@ -245,7 +251,8 @@ Orden de merge:
 1. Baseline/contratos y la corrección de arranque actual.
 2. Agente 1, para que el resto mida sin el stall conocido. [completado en fase 7]
 3. Agente 2 scheduler y parte del Agente 4 HUD, con ownership separado. [completado en fase 8]
-4. Agente 3 Starship/PartGraph, Agente 4 render restante y Agente 5 GPU/recursos en paralelo.
+4. Agente 3 Starship/PartGraph: fase 9 aplicada; Agente 4 render restante y Agente 5 GPU/recursos
+   continúan en paralelo.
 5. Agente 6 ejecuta la matriz contra el commit padre y cada candidato.
 6. Integración final en una rama única; repetir baseline completo y visual playtest.
 

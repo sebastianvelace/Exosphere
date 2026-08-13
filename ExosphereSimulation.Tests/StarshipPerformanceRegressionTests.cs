@@ -50,13 +50,18 @@ public sealed class StarshipPerformanceRegressionTests
         });
 
         double millisecondsPerTick = stopwatch.Elapsed.TotalMilliseconds / measuredTicks;
+        double allocatedBytesPerTick = allocatedBytes / (double)measuredTicks;
         _output.WriteLine(
             $"Flight7Tick: {measuredTicks} ticks in {stopwatch.Elapsed.TotalMilliseconds:F3} ms; "
             + $"{millisecondsPerTick:F6} ms/tick; engines={vessel.ActiveEngineCount}; "
             + $"managedAlloc={allocatedBytes:N0} bytes; "
-            + $"managedAllocPerTick={allocatedBytes / (double)measuredTicks:N2} bytes/tick");
+            + $"managedAllocPerTick={allocatedBytesPerTick:N2} bytes/tick");
 
         Assert.InRange(millisecondsPerTick, 0.0, 25.0);
+        // This is deliberately an allocation budget, not a machine-specific time budget.
+        // The previous LINQ-heavy path measured ~5.32 KiB/tick; keep the optimized path
+        // below 5 KiB so a new per-tick iterator/list cannot silently return.
+        Assert.InRange(allocatedBytesPerTick, 0.0, 5_000.0);
     }
 
     [Fact]
