@@ -3,8 +3,8 @@
 Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; fase 13 limitada a
 llvmpipe; fase 14 aplica preview VAB bajo demanda; fase 15 añade probe in-process opt-in;
 fase 16 gatea el renderer exterior oculto en IVA; fase 17 elimina el staging CPU duplicado
-del anillo de Saturno; fase 18 acota el refresh de pantallas cockpit a 30 Hz; siguiente fase:
-profiling de render/GPU con hardware objetivo
+del anillo de Saturno; fase 18 acota el refresh de pantallas cockpit a 30 Hz; fase 19 cierra
+el límite de llvmpipe y define la matriz Earth/star; siguiente fase: GPU física objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -73,6 +73,11 @@ La fase 18 limita el trabajo de presentación de las pantallas cockpit a refresc
 30 Hz, documentado en [`PERF_COCKPIT_REFRESH_PHASE18_REPORT.md`](PERF_COCKPIT_REFRESH_PHASE18_REPORT.md).
 Los tres targets siguen siendo 512² y se pausan completamente fuera de IVA; no se cambia la
 frecuencia de física ni la resolución sin una validación visual separada.
+
+La fase 19 deja documentado el límite de medición y la matriz de recursos Earth/star en
+[`PERF_RENDER_PHASE19_REPORT.md`](PERF_RENDER_PHASE19_REPORT.md): el timer in-process y los
+contadores de render son válidos para el canal, pero `real_gpu=false`, VRAM de driver y FPS
+siguen en `NOT_MEASURED`. No se promueve todavía una variante 8K/4K/2K.
 
 ## 1. Diagnóstico reproducible
 
