@@ -757,30 +757,80 @@ public class PartGraph
         return GetCurrentThrust(ambientPressure) / (mdot * 9.80665);
     }
 
-    /// <summary>Per-engine snapshot for the current stage (one row per engine part).</summary>
-    public IEnumerable<EngineReadout> GetEngineReadouts(double ambientPressure) =>
-        ActiveEngines.SelectMany(e => e.HasEngineRuntime
-            ? e.GetEngineTelemetry(ambientPressure).Select(t => new EngineReadout(
-                t.InstanceId,
-                e.Definition.Name,
-                t.ChamberPressureFraction,
-                t.ThrustN,
-                t.MassFlowKgS,
-                t.State,
-                t.FailureCode))
-            : new[]
+    /// <summary>
+    /// Per-engine snapshot for the current stage (one row per engine part).
+    /// This compatibility enumerable remains convenient for simulation callers, while the
+    /// presentation layer should prefer <see cref="FillEngineReadouts"/> to reuse its buffer.
+    /// </summary>
+    public IEnumerable<EngineReadout> GetEngineReadouts(double ambientPressure)
+    {
+        foreach (var engine in ActiveEngines)
+        {
+            if (engine.HasEngineRuntime)
             {
-                new EngineReadout(
-                    e.InstanceId,
-                    e.Definition.Name,
-                    e.ThrottleLevel,
-                    e.GetThrustMagnitude(ambientPressure),
-                    e.GetMassFlow(ambientPressure),
-                    e.ThrottleLevel > 1e-3
-                        ? EngineLifecycleState.Running
-                        : EngineLifecycleState.Off,
-                    e.IsBroken ? "PART_BROKEN" : null),
-            });
+                foreach (var telemetry in engine.GetEngineTelemetry(ambientPressure))
+                {
+                    yield return new EngineReadout(
+                        telemetry.InstanceId,
+                        engine.Definition.Name,
+                        telemetry.ChamberPressureFraction,
+                        telemetry.ThrustN,
+                        telemetry.MassFlowKgS,
+                        telemetry.State,
+                        telemetry.FailureCode);
+                }
+
+                continue;
+            }
+
+            yield return BuildStaticEngineReadout(engine, ambientPressure);
+        }
+    }
+
+    /// <summary>
+    /// Fills a caller-owned buffer with the current-stage engine telemetry.
+    /// The buffer is cleared and never replaced, allowing HUD/render consumers to sample
+    /// telemetry without allocating a list or copying the compatibility enumerable.
+    /// </summary>
+    public void FillEngineReadouts(double ambientPressure, List<EngineReadout> destination)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        destination.Clear();
+
+        foreach (var engine in ActiveEngines)
+        {
+            if (engine.HasEngineRuntime)
+            {
+                foreach (var telemetry in engine.GetEngineTelemetry(ambientPressure))
+                {
+                    destination.Add(new EngineReadout(
+                        telemetry.InstanceId,
+                        engine.Definition.Name,
+                        telemetry.ChamberPressureFraction,
+                        telemetry.ThrustN,
+                        telemetry.MassFlowKgS,
+                        telemetry.State,
+                        telemetry.FailureCode));
+                }
+
+                continue;
+            }
+
+            destination.Add(BuildStaticEngineReadout(engine, ambientPressure));
+        }
+    }
+
+    private static EngineReadout BuildStaticEngineReadout(Part engine, double ambientPressure) =>
+        new(
+            engine.InstanceId,
+            engine.Definition.Name,
+            engine.ThrottleLevel,
+            engine.GetThrustMagnitude(ambientPressure),
+            engine.GetMassFlow(ambientPressure),
+            engine.ThrottleLevel > 1e-3
+                ? EngineLifecycleState.Running
+                : EngineLifecycleState.Off,
+            engine.IsBroken ? "PART_BROKEN" : null);
 
     /// <summary>
     /// Ideal rocket-equation Δv (m/s) for a stage burning from <paramref name="wetMass"/> to

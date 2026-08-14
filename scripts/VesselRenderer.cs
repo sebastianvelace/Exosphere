@@ -21,6 +21,7 @@ public partial class VesselRenderer : Node3D
     private bool _hasSuperHeavy;
     private int _selectedShipEngines = 6;
     private readonly Dictionary<string, double> _perEngineThrottle = new(StringComparer.Ordinal);
+    private readonly List<EngineReadout> _engineReadoutScratch = new();
     private double _engineVisualTimer;
     private double _thermalVisualTimer;
     private double _landingGearStateTimer;
@@ -1196,7 +1197,8 @@ public partial class VesselRenderer : Node3D
             if (_usesGenericPlumes && _plumes != null)
             {
                 _perEngineThrottle.Clear();
-                foreach (var row in TargetVessel.GetEngineReadouts(body))
+                TargetVessel.FillEngineReadouts(body, _engineReadoutScratch);
+                foreach (var row in _engineReadoutScratch)
                     _perEngineThrottle[row.InstanceId] = row.Throttle;
                 _plumes.UpdateGeneric(_perEngineThrottle, alt, pressureRatio);
             }
@@ -2958,6 +2960,7 @@ public partial class VesselRenderer : Node3D
         _hasSuperHeavy = false;
         _selectedShipEngines = 6;
         _perEngineThrottle.Clear();
+        _engineReadoutScratch.Clear();
         _engineVisualTimer = 0.0;
         _thermalVisualTimer = 0.0;
         _landingGearStateTimer = 0.0;

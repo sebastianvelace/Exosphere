@@ -422,6 +422,13 @@ public class Vessel
     public IEnumerable<EngineReadout> GetEngineReadouts(CelestialBody? body) =>
         Parts.GetEngineReadouts(GetAmbientPressure(body));
 
+    /// <summary>
+    /// Fills a caller-owned engine telemetry buffer without allocating a new collection.
+    /// Presentation consumers use this when sampling at a fixed visual cadence.
+    /// </summary>
+    public void FillEngineReadouts(CelestialBody? body, List<EngineReadout> destination) =>
+        Parts.FillEngineReadouts(GetAmbientPressure(body), destination);
+
     public bool InjectEngineFailure(string engineInstanceId, string failureCode)
     {
         foreach (var part in Parts.Parts.Where(p => p.HasEngineRuntime))

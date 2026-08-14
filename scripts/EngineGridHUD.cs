@@ -94,9 +94,7 @@ public partial class EngineGridHUD : Control
         _engineThrottles.Clear();
         _engineFailures.Clear();
         _engineStates.Clear();
-        _readoutScratch.Clear();
-        foreach (var readout in vessel.GetEngineReadouts(body))
-            _readoutScratch.Add(readout);
+        vessel.FillEngineReadouts(body, _readoutScratch);
         if (_readoutScratch.Count == _nominalEngines)
         {
             foreach (var row in _readoutScratch)

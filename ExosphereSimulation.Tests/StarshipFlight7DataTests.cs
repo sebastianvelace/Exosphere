@@ -147,6 +147,36 @@ public sealed class StarshipFlight7DataTests
     }
 
     [Fact]
+    public void FilledEngineTelemetryMatchesCompatibilityEnumerableAndReusesBuffer()
+    {
+        var catalog = LoadPartCatalog();
+        var booster = new Part(catalog["super_heavy_booster"], "booster-buffer-telemetry");
+        var graph = new PartGraph();
+        graph.SetRoot(booster);
+
+        for (int i = 0; i < 100; i++)
+            booster.AdvanceEngineRuntime(1.0, 0.02);
+
+        var expected = graph.GetEngineReadouts(SeaLevelPressure).ToArray();
+        var buffer = new List<EngineReadout>
+        {
+            new("stale", "stale", 0.0, 0.0, 0.0, EngineLifecycleState.Off, null),
+        };
+
+        graph.FillEngineReadouts(SeaLevelPressure, buffer);
+
+        Assert.Equal(expected, buffer);
+        Assert.Equal(33, buffer.Count);
+        Assert.All(buffer, row => Assert.True(row.Throttle > 0.99));
+
+        int capacityAfterFirstFill = buffer.Capacity;
+        graph.FillEngineReadouts(SeaLevelPressure, buffer);
+
+        Assert.Equal(expected, buffer);
+        Assert.Equal(capacityAfterFirstFill, buffer.Capacity);
+    }
+
+    [Fact]
     public void BoosterEngineOutProducesAsymmetricTorque_NotJustProportionalThrustLoss()
     {
         var catalog = LoadPartCatalog();

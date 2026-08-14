@@ -1,6 +1,6 @@
 # Plan riguroso de optimización y despliegue multiagente
 
-Estado: fases 7–10 aplicadas; siguiente fase: consumidores visuales de telemetría y render
+Estado: fases 7–11 aplicadas; siguiente fase: profiling de render/GPU y runtime de plumas
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -24,6 +24,12 @@ La fase 10 completa esa medición en
 [`PERF_STARSHIP_PHASE10_REPORT.md`](PERF_STARSHIP_PHASE10_REPORT.md): los snapshots reutilizados
 de geometría/gimbal dejan el Flight 7 en 3.97 KiB por tick, con 19/19 pruebas focalizadas de
 torque y TVC verdes. El siguiente ownership pasa a consumidores visuales, sin tocar `Vessel.Tick`.
+
+La fase 11 completa el primer tramo visual en
+[`PERF_VISUAL_PHASE11_REPORT.md`](PERF_VISUAL_PHASE11_REPORT.md): HUD y renderer reutilizan
+buffers de `EngineReadout`, con cadencias explícitas de 10/30 Hz y contrato de regresión. La
+suite queda en 559/559; el coste de llvmpipe observado en el playtest queda separado de la
+medición de simulación y obliga a perfilar render/GPU antes de elegir el siguiente recorte.
 
 ## 1. Diagnóstico reproducible
 
@@ -258,8 +264,12 @@ Orden de merge:
 3. Agente 2 scheduler y parte del Agente 4 HUD, con ownership separado. [completado en fase 8]
 4. Agente 3 Starship/PartGraph: fases 9–10 aplicadas; Agente 4 render restante y Agente 5
    GPU/recursos continúan en paralelo.
-5. Agente 6 ejecuta la matriz contra el commit padre y cada candidato.
-6. Integración final en una rama única; repetir baseline completo y visual playtest.
+5. Agente 4 consumidores visuales: fase 11 aplicada para buffers/cadencias; queda pendiente
+   medir draw calls, material updates, partículas y coste managed de `PlumeSystem`.
+6. Agentes 5 y 6 deben comparar baseline/candidato bajo el mismo renderer antes de promover
+   LOD, reducción de partículas, sombras o cambios de resolución.
+7. Agente 6 ejecuta la matriz contra el commit padre y cada candidato.
+8. Integración final en una rama única; repetir baseline completo y visual playtest.
 
 Si dos agentes necesitan la misma API, el coordinador crea primero un contrato pequeño
 (interfaz, snapshot o evento) en una rama de integración; no se resuelve copiando cambios
