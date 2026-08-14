@@ -153,6 +153,11 @@ public partial class EDLController : Control
                 _landingEngineCount = 3;
                 _flipElapsed = 0.0;
                 _towerCatchAborted = false;
+                // Normal Earth Starbase returns use the same physical two-pin catch
+                // path as the deterministic reentry demo. The policy is deliberately
+                // narrow; Mars/Venus, other launch sites and non-Starship vehicles keep
+                // their ordinary leg-landing fallback.
+                bridge?.TryArmStarbaseCatchForReentry(vessel, body);
                 _load.Reset();
                 Visible = true;
                 mission?.EnterPhase(MissionPhase.ENTRY);

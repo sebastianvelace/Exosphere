@@ -1,8 +1,43 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 27 P2 allocations integrada; display, GPU y EventPipe externos pendientes
+Estado: fase 27 integrada; auditoría de gameplay Starship cerrada; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
-Base: `3367186` (`main` limpio después de la auditoría funcional de vuelo)
+Base: `2a37cda` (`main` limpio después de la fase 27)
+
+## Auditoría de gameplay Starship — cierre de la fase actual
+
+La discrepancia del HUD quedó clasificada: `THR 100%` es throttle comandado, mientras que
+los puntos rojos representan instancias con `FailureCode`; por tanto, la captura con `ENG 0/33`
+y los 33 puntos rojos era un engine-out real, no un estado normal de espera. El HUD ahora
+expone la primera familia de fallo (`STARVATION`, `FEED LIMIT`, `OVERHEAT` o `RESTART LIMIT`)
+para que el diagnóstico no dependa de interpretar dos indicadores contradictorios.
+
+También se cerró el salto `J`: antes de aplicar la orientación y el cuerpo destino se limpian
+los comandos retrasados del `GroundCommandRelay` y el estado transitorio de motor (presión de
+cámara, gimbal y throttle). Se conservan los contadores/historiales de fiabilidad, de modo que
+el reset no borra fallos persistentes ni falsea telemetría.
+
+La reentrada normal de una Starship desde un sitio Starbase terrestre arma ahora el mismo
+acercamiento físico de la torre que la demostración: la presentación queda anclada al vehículo
+que realmente intenta la captura, la torre permanece visible durante todo el EDL y el solver
+de dos pasadores, velocidad relativa y asentamiento sigue siendo quien decide `CAUGHT`. Otros
+cuerpos, otros sitios y vehículos sin configuración Starship conservan el camino de patas.
+
+Evidencia de integración de esta auditoría:
+
+- suite xUnit completa: `587/587 PASS`, 0 omitidos;
+- build Godot C# con `--no-restore`: 0 warnings, 0 errors;
+- contratos de gameplay: PASS; contratos acumulados de optimización: `34/34 PASS`;
+- startup quick-check: PASS; escenas Flight y Construction headless: exit 0;
+- EDL visual: `CAUGHT`, `pins=2`, `relativeSpeed=0.030`, `angularSpeed=0.0000`, 616 frames;
+- ascenso visual parcial: a 2.5 km se observaron `runningEngines=33` y `failedEngines=0`;
+  se interrumpió por el coste del framebuffer llvmpipe, por lo que no se etiqueta como
+  `ASCENT_ORBIT_OK`.
+
+La siguiente etapa queda definida como una matriz de reentrada orbital normal (sin modo demo)
+con telemetría de captura y una matriz de estabilidad post-`J` para Earth/Mars/Venus. La
+validación de GPU física, EventPipe y la matriz framebuffer completa sigue `BLOCKED` en este
+host: no se convertirán esos bloqueos de infraestructura en supuestas ganancias de FPS.
 
 ## Resultado de la fase 27 — hot path de staging
 

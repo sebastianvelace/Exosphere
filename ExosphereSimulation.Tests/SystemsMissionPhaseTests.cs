@@ -363,6 +363,29 @@ public sealed class SystemsMissionPhaseTests
     }
 
     [Fact]
+    public void GroundCommandRelay_ClearDropsCommandsQueuedBeforeNavigationJump()
+    {
+        var relay = new GroundCommandRelay();
+        relay.SubmitAttitude(
+            now: 100.0,
+            delaySeconds: 20.0,
+            pyr: new Vector3d(1.0, -1.0, 0.5),
+            linkUp: true);
+        relay.SubmitThrottleDelta(
+            now: 100.0,
+            delaySeconds: 20.0,
+            delta: 0.5,
+            linkUp: true);
+
+        Assert.True(relay.HasPending);
+        relay.Clear();
+
+        Assert.False(relay.HasPending);
+        Assert.Equal(0, relay.PendingAttitudeCount);
+        Assert.Equal(0, relay.PendingThrottleCount);
+    }
+
+    [Fact]
     public void PowerSystem_PhaseAvionicsLoadDrainsFasterThanCruise()
     {
         var cruise = new PowerSystem();

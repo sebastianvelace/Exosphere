@@ -347,14 +347,17 @@ public partial class SimulationBridge : Node
         // moving vessel. Its local +Y must follow radial up; leaving Basis.Identity makes
         // the entire tower lean by the site's latitude/axial tilt in render space.
         var padEarth = Universe.GetBody("earth");
-        if (_launchPad != null && ActiveVessel != null && padEarth != null)
+        var catchAnchorVessel = Universe.Vessels.FirstOrDefault(vessel =>
+            vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration)
+            ?? ActiveVessel;
+        if (_launchPad != null && catchAnchorVessel != null && padEarth != null)
         {
             const float metresPerUnit = 2.8f;
-            double alt = ActiveVessel.GetAltitude(padEarth);
+            double alt = catchAnchorVessel.GetAltitude(padEarth);
             double time = Universe.CurrentTime;
             var surfacePos = _launchSite?.GetPosition(padEarth, time)
                 ?? padEarth.GetSurfacePositionAtTime(0.0, 0.0, time);
-            var offset = surfacePos - ActiveVessel.Position;          // = -up·alt metres
+            var offset = surfacePos - catchAnchorVessel.Position;     // = -up·alt metres
             var position = new Godot.Vector3(
                 (float)(offset.X / metresPerUnit),
                 (float)(offset.Y / metresPerUnit),
@@ -365,7 +368,19 @@ public partial class SimulationBridge : Node
             var south = frame?.South ?? east.Cross(up).Normalized;
             var basis = new Basis(ToGodotVector(east), ToGodotVector(up), ToGodotVector(south));
             _launchPad.Transform = new Transform3D(basis, position);
-            _launchPad.Visible = alt < 8_000;   // hide above 8 km
+            bool catchApproachActive = Universe.Vessels.Any(vessel =>
+                vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration);
+            bool starshipReentryActive = MissionManager.Instance?.InDescent == true
+                && catchAnchorVessel.Parts.Parts.Any(part =>
+                    part.Definition.IsStarshipFamily
+                    && part.Definition.HasVehicleRole("command"));
+            // Keep the fixed launch complex in the scene for the complete Earth
+            // Starship entry/catch track. Hiding it at 8 km made the chopsticks
+            // disappear during the exact final-approach window they are meant to
+            // explain, while the physical catch solver continued running.
+            _launchPad.Visible = alt < 8_000
+                || catchApproachActive
+                || starshipReentryActive;
 
             // While a catch approach is armed, refresh the sim-side cradle target every
             // frame from the same site/spec data the render tower uses — the tower is
@@ -406,6 +421,27 @@ public partial class SimulationBridge : Node
         if (vessel == null || !vessel.HasCatchPins) return false;
         vessel.IsAttemptingTowerCatch = true;
         return true;
+    }
+
+    /// <summary>
+    /// Applies the Starbase return policy used by ordinary Earth Starship reentries.
+    /// The physical solver remains the authority: this only arms the approach when the
+    /// destination is an Earth Starbase site and the vessel is the crewed Ship section.
+    /// Other launch sites, bodies and vehicles retain their normal landing/fallback path.
+    /// </summary>
+    public bool TryArmStarbaseCatchForReentry(Vessel? vessel, CelestialBody? body)
+    {
+        if (vessel == null || body == null || body.Id != "earth") return false;
+        if (!LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!vessel.HasCatchPins) return false;
+        bool isStarshipShip = vessel.Parts.Parts.Any(part =>
+            part.Definition.IsStarshipFamily
+            && part.Definition.HasVehicleRole("command"))
+            && vessel.Parts.Parts.Any(part =>
+                part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("ship_engines"));
+        return isStarshipShip && ArmTowerCatchApproach(vessel);
     }
 
     private void SpawnPendingConstructedVessel(
@@ -1356,6 +1392,11 @@ public partial class SimulationBridge : Node
     /// </summary>
     private void CancelGuidanceForTeleport()
     {
+        // The relay is independent from map/autopilot nodes. Clear it before the
+        // vessel reset so an interplanetary command queued under the old body cannot
+        // re-apply stale attitude or throttle after JumpToBody installs the new orbit.
+        SystemsController.Instance?.ClearPendingGroundCommandsForTeleport();
+
         if (MapViewController.Instance is { } map)
         {
             map.CancelGuidanceForTeleport();

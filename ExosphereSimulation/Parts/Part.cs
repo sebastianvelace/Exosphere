@@ -169,6 +169,31 @@ public class Part
         RefreshAggregateThrottle();
     }
 
+    /// <summary>
+    /// Cuts transient propulsion state at a discontinuous navigation jump. A vessel
+    /// teleport is an unpowered-coast boundary, so carrying chamber pressure or a gimbal
+    /// angle into the first destination tick would create a real residual torque even
+    /// though the vessel throttle was reset to zero. Restart counters and failure codes
+    /// intentionally survive; this only removes instantaneous runtime state.
+    /// </summary>
+    public void ResetEngineRuntimeForTeleport()
+    {
+        foreach (var engine in _engineStates)
+        {
+            engine.CommandedThrottle = 0.0;
+            engine.ActualThrottle = 0.0;
+            engine.ChamberPressureFraction = 0.0;
+            engine.GimbalDeg = Vector3d.Zero;
+            engine.GimbalVelocityDegPerS = Vector3d.Zero;
+            if (engine.State != EngineLifecycleState.Failed)
+            {
+                engine.State = EngineLifecycleState.Off;
+                engine.StateElapsedSeconds = 0.0;
+            }
+        }
+        RefreshAggregateThrottle();
+    }
+
     public void ScheduleEngineFailure(EngineFailureInjection injection)
     {
         injection.Validate();

@@ -64,6 +64,7 @@ public sealed record FlightHudSnapshot
     public required int NominalEngineCount { get; init; }
     public required int ActiveEngineCount { get; init; }
     public required int FailedEngineCount { get; init; }
+    public required string? PrimaryEngineFailureCode { get; init; }
     public required double LiquidFuelKg { get; init; }
     public required double LiquidFuelFraction { get; init; }
     public required double OxidizerKg { get; init; }
@@ -168,11 +169,16 @@ public sealed class FlightHudPresenter
         int nominalEngines = _engineReadoutScratch.Count;
         int activeEngines = 0;
         int failedEngines = 0;
+        string? primaryEngineFailureCode = null;
         for (int i = 0; i < _engineReadoutScratch.Count; i++)
         {
             var readout = _engineReadoutScratch[i];
             if (readout.Throttle > 1e-3) activeEngines++;
-            if (readout.FailureCode != null) failedEngines++;
+            if (readout.FailureCode != null)
+            {
+                failedEngines++;
+                primaryEngineFailureCode ??= readout.FailureCode;
+            }
         }
 
         var alerts = BuildAlerts(
@@ -219,6 +225,7 @@ public sealed class FlightHudPresenter
             NominalEngineCount = nominalEngines,
             ActiveEngineCount = activeEngines,
             FailedEngineCount = failedEngines,
+            PrimaryEngineFailureCode = primaryEngineFailureCode,
             LiquidFuelKg = liquidFuel,
             LiquidFuelFraction = liquidFraction,
             OxidizerKg = oxidizer,

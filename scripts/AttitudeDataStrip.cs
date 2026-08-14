@@ -21,6 +21,7 @@ public partial class AttitudeDataStrip : Control
     private int _total = 1;
     private double _twr;
     private bool _twrValid;
+    private string? _primaryFailureCode;
     private double? _apKm;
     private double? _peKm;
     private double _fuelPct;
@@ -59,6 +60,9 @@ public partial class AttitudeDataStrip : Control
         _total = System.Math.Max(1, snapshot.NominalEngineCount);
         _twr = snapshot.ThrustToWeightRatio;
         _twrValid = snapshot.CurrentThrustN > 0.0 && _twr > 0.0;
+        _primaryFailureCode = snapshot.FailedEngineCount > 0
+            ? snapshot.PrimaryEngineFailureCode
+            : null;
         _fuelPct = snapshot.LiquidFuelFraction * 100.0;
         _useOrbit = snapshot.ApoapsisAltitudeM is { } || snapshot.PeriapsisAltitudeM is { };
         _apKm = snapshot.ApoapsisAltitudeM is { } ap ? ap / 1000.0 : null;
@@ -86,13 +90,15 @@ public partial class AttitudeDataStrip : Control
         if (_useOrbit)
         {
             y = Row(y, size.X, "Ap", FormatOrbitKm(_apKm), InterfaceTheme.Text);
-            Row(y, size.X, "Pe", FormatOrbitKm(_peKm), InterfaceTheme.Text);
+            y = Row(y, size.X, "Pe", FormatOrbitKm(_peKm), InterfaceTheme.Text);
         }
         else
         {
-            Row(y, size.X, "FUEL", $"{_fuelPct:F0}%",
+            y = Row(y, size.X, "FUEL", $"{_fuelPct:F0}%",
                 _fuelPct < 15.0 ? InterfaceTheme.Warning : InterfaceTheme.Text);
         }
+        if (!string.IsNullOrWhiteSpace(_primaryFailureCode))
+            Row(y, size.X, "FAIL", FormatFailureCode(_primaryFailureCode), InterfaceTheme.Alert);
     }
 
     private float Row(float y, float width, string label, string value, Color valueColor)
@@ -112,4 +118,14 @@ public partial class AttitudeDataStrip : Control
         if (System.Math.Abs(v) >= 1000.0) return $"{v / 1000.0:F1} Mm";
         return $"{v:F0} km";
     }
+
+    private static string FormatFailureCode(string? code) => code switch
+    {
+        "PROPELLANT_STARVATION" => "STARVATION",
+        "FEED_BRANCH_FLOW_LIMIT" => "FEED LIMIT",
+        "ENGINE_OVERTEMPERATURE" => "OVERHEAT",
+        "RESTART_LIMIT_EXCEEDED" => "RESTART LIMIT",
+        _ when !string.IsNullOrWhiteSpace(code) && code!.Length > 13 => code[..13],
+        _ => code ?? "UNKNOWN",
+    };
 }

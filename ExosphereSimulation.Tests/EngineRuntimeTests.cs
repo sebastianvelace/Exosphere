@@ -2,6 +2,7 @@ namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Persistence;
 using Exosphere.Simulation.Propulsion;
@@ -75,6 +76,31 @@ public sealed class EngineRuntimeTests
         Assert.Contains(EngineLifecycleState.Shutdown, visited);
         Assert.Contains(EngineLifecycleState.Purge, visited);
         Assert.Equal(EngineLifecycleState.Off, engine.EngineStates[0].State);
+        Assert.Equal(0.0, engine.ThrottleLevel);
+    }
+
+    [Fact]
+    public void TeleportResetCutsChamberPressureAndGimbalWithoutErasingReliabilityHistory()
+    {
+        var engine = CreateMerlinCluster("teleport-cutoff");
+        for (int i = 0; i < 100; i++)
+            engine.AdvanceEngineRuntime(1.0, 0.02);
+        engine.GimbalOffset = new Vector3d(0.8, 0.0, -0.6);
+        engine.AdvanceEngineRuntime(1.0, 0.02);
+
+        int starts = engine.EngineStates[0].StartsCompleted;
+        engine.ResetEngineRuntimeForTeleport();
+
+        Assert.All(engine.EngineStates, state =>
+        {
+            Assert.Equal(EngineLifecycleState.Off, state.State);
+            Assert.Equal(0.0, state.CommandedThrottle);
+            Assert.Equal(0.0, state.ActualThrottle);
+            Assert.Equal(0.0, state.ChamberPressureFraction);
+            Assert.Equal(Vector3d.Zero, state.GimbalDeg);
+            Assert.Equal(Vector3d.Zero, state.GimbalVelocityDegPerS);
+            Assert.Equal(starts, state.StartsCompleted);
+        });
         Assert.Equal(0.0, engine.ThrottleLevel);
     }
 

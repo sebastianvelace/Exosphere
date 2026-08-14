@@ -26,6 +26,14 @@ public partial class SystemsController : Node
 
     public bool ControlLimited { get; private set; }
 
+    /// <summary>
+    /// Drops ground-link commands that were scheduled for the old world position.
+    /// A navigation jump changes both the reference body and the one-way light-time
+    /// path; applying those delayed samples after the jump would overwrite the fresh
+    /// teleport attitude/throttle reset and look like an unexplained tumble.
+    /// </summary>
+    public void ClearPendingGroundCommandsForTeleport() => GroundRelay.Clear();
+
     /// <summary>True when one-way light time is large enough to delay ground stick/throttle.</summary>
     public bool GroundDelayActive =>
         Comms.HasSignal && Comms.SignalDelaySeconds >= GroundCommandRelay.ImmediateThresholdSeconds;

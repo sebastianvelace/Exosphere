@@ -114,6 +114,7 @@ public sealed class FlightHudPresenterTests
         Assert.Equal(9, snapshot.NominalEngineCount);
         Assert.Equal(8, snapshot.ActiveEngineCount);
         Assert.Equal(1, snapshot.FailedEngineCount);
+        Assert.Equal("TURBOPUMP", snapshot.PrimaryEngineFailureCode);
         Assert.Equal(FlightAlertSeverity.Caution, alert.Severity);
         Assert.Contains("guidance", alert.RecommendedAction, StringComparison.OrdinalIgnoreCase);
     }

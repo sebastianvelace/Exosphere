@@ -27,6 +27,11 @@ require_pattern scripts/VesselRenderer.cs 'TargetVessel.ActiveEngineCount > 0' '
 require_pattern ExosphereSimulation/Vessel.cs 'public void PrepareForTeleport()' 'teleport state reset API'
 require_pattern scripts/SimulationBridge.cs 'v.PrepareForTeleport();' 'orbit jump reset'
 require_pattern scripts/SimulationBridge.cs 'v.ReferenceBodyId = body.Id;' 'body jump reference-body reset'
+require_pattern ExosphereSimulation/Vessel.cs 'ResetEngineRuntimeForTeleport();' 'teleport cuts residual engine torque'
+require_pattern scripts/SimulationBridge.cs 'ClearPendingGroundCommandsForTeleport();' 'body jump clears delayed ground commands'
+require_pattern scripts/EDLController.cs 'TryArmStarbaseCatchForReentry(vessel, body);' 'normal Starbase reentry catch arming'
+require_pattern scripts/SimulationBridge.cs 'catchAnchorVessel' 'catch vessel anchors launch-pad presentation'
+require_pattern scripts/SimulationBridge.cs 'starshipReentryActive' 'Starship reentry keeps launch complex visible'
 
 # Every reentry-capable legacy Starship definition has catch pins, and visual
 # acceptance recognizes the simulator's CAUGHT terminal phase.

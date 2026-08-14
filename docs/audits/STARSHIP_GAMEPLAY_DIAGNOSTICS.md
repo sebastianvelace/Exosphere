@@ -7,16 +7,18 @@
 The screenshot combined three independent signals:
 
 - `THR 100%` is the commanded throttle, not delivered chamber thrust.
-- `ENG 0/33` was the current-stage telemetry during chill, spin-prime and ignition; the
-  ascent harness also selected the pre-staging `ship_engines` part by definition instead of
-  reading the active engine part.
-- Red engine dots represented `FailureCode`, so showing red during normal startup was
-  misleading. A startup lifecycle state is now amber; red is reserved for an actual engine
-  failure. The plume is gated by `ActiveEngineCount`, so throttle alone cannot create a full
-  thrust plume after an engine-out.
+- `ENG 0/33` by itself can be a normal chill/spin-prime/ignition state, but the screenshot's
+  red dots are not an "off" style: red is reserved for an actual `FailureCode`. Therefore that
+  particular frame represents 33 failed engine instances, not 33 engines waiting to start.
+- A startup lifecycle state is amber and the current-stage telemetry reads the active engine
+  part. The plume is gated by `ActiveEngineCount`, so throttle alone cannot create a full thrust
+  plume after an engine-out.
 
 The engine model remains deliberately stateful: command throttle can be non-zero while the
 engine is chilling, priming, igniting, ramping or failed. The HUD now exposes that distinction.
+When an engine is genuinely failed, the vehicle strip also reports the first failure family
+(`STARVATION`, `FEED LIMIT`, `OVERHEAT` or `RESTART LIMIT`) instead of leaving `ENG 0/N`
+without a cause. The exact per-engine code remains available in the simulation telemetry.
 
 ### Map jump and interplanetary transfer
 
@@ -25,6 +27,9 @@ catch/contact state and reference-body data. On the next physics tick those stal
 fight the new position and make the ship tumble or become effectively uncontrollable.
 `Vessel.PrepareForTeleport()` now clears the stale dynamic state; the bridge then assigns the
 new body, tangent orientation, zero throttle and SAS state explicitly.
+The reset also clears delayed ground-link commands and cuts transient chamber pressure/gimbal
+state. This closes the two paths that could otherwise re-apply old attitude commands or create
+a residual torque on the first destination tick.
 
 ### Mechazilla / chopsticks
 
@@ -46,14 +51,17 @@ The Starship reentry demonstration now:
 7. aims the descent datum at the actual pin height rather than the vessel datum.
 
 The scripted attitude stabilization is explicitly gated by `IsTowerCatchDemonstration`. Manual
-flight and ordinary unscripted reentries continue to use the physical attitude controller.
+flight and ordinary unscripted reentries continue to use the physical attitude controller. A
+normal Earth return from a Starbase launch site now arms the same physical catch approach for a
+catch-capable Starship; the two-pin solver still decides whether it actually settles, and the
+existing low-altitude abort diverts to legs when the corridor is missed.
 The catch radius was not widened and `IsCaught` is never set by the presentation path.
 
 ## Validation matrix
 
 | Check | Result |
 |---|---|
-| Targeted engine, catch, teleport and runtime tests | 18/18 passed |
+| Targeted engine, catch, teleport and runtime tests | 33/33 passed |
 | Godot C# build | 0 warnings, 0 errors |
 | Gameplay regression contract | PASS |
 | Visual harness contract | 1 valid + 11 invalid fixtures passed |
@@ -72,5 +80,8 @@ console warnings about X11 input and VSync are environment warnings, not simulat
 - The cradle target is sampled once per frame but propagated to each physics substep using its
   inertial velocity; this prevents time-warp frames from comparing against a stale launch-site
   position.
-- Mars/Venus and ordinary unassisted Starship reentries are not changed by the scripted catch
-  stabilizer and require their own visual matrix in a later pass.
+- Mars/Venus and non-Starbase Starship reentries do not arm the Starbase catch policy; they keep
+  the ordinary EDL/leg path.
+- The launch complex remains visible throughout an Earth Starship EDL/catch attempt and is
+  anchored to the vessel actually returning when a booster is the catch candidate, rather than
+  always to `ActiveVessel`.
