@@ -34,5 +34,7 @@ rg -q --fixed-strings 'TelemetryUpdatePeriodSeconds = 0.10' "$HUD" \
   || fail "HUD telemetry cadence guard missing"
 rg -q --fixed-strings 'EngineVisualPeriodSeconds = 1.0 / 30.0' "$RENDERER" \
   || fail "renderer telemetry cadence guard missing"
+rg -q --fixed-strings 'if (!Visible || TargetVessel == null) return;' "$RENDERER" \
+  || fail "renderer must pause visual work when the exterior is hidden"
 
-echo "visual_telemetry_contract_test: PASS (reused engine telemetry buffers at bounded visual cadences)"
+echo "visual_telemetry_contract_test: PASS (reused buffers, bounded cadences, hidden-renderer gate)"

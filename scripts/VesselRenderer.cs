@@ -1174,7 +1174,12 @@ public partial class VesselRenderer : Node3D
 
     public override void _Process(double delta)
     {
-        if (TargetVessel == null) return;
+        // CameraController hides the exterior renderer during IVA. Visibility does
+        // not pause Node3D processing, so avoid physics queries and material/particle
+        // setters while the entire exterior is outside the active camera. The next
+        // visible frame runs the normal cadence immediately (timers are not advanced
+        // while hidden), keeping re-entry and cockpit exit visually synchronized.
+        if (!Visible || TargetVessel == null) return;
 
         var universe = SimulationBridge.Instance?.Universe;
         var body = universe?.GetDominantBody(TargetVessel.Position);

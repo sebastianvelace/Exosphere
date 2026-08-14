@@ -2,7 +2,8 @@
 
 Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; fase 13 limitada a
 llvmpipe; fase 14 aplica preview VAB bajo demanda; fase 15 añade probe in-process opt-in;
-siguiente fase: profiling de render/GPU con hardware objetivo
+fase 16 gatea el renderer exterior oculto en IVA; siguiente fase: profiling de render/GPU
+con hardware objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -55,6 +56,11 @@ La fase 15 implementa el límite de medición faltante en
 tiempo CPU/GPU de viewport y contadores de `RenderingServer`, pero mantiene VRAM física y
 FPS en `NOT_MEASURED`. La primera corrida sigue siendo llvmpipe; sirve para validar el
 canal y dimensionar el backend software, no para promover una optimización visual.
+
+La fase 16 aplica el gate de trabajo fuera de cámara documentado en
+[`PERF_VESSEL_RENDERER_PHASE16_REPORT.md`](PERF_VESSEL_RENDERER_PHASE16_REPORT.md): el
+`VesselRenderer` exterior deja de consultar física visual y escribir plumas/materiales
+durante IVA, sin pausar la nave simulada ni los sistemas de misión.
 
 ## 1. Diagnóstico reproducible
 
