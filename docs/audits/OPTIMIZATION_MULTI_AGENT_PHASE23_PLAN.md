@@ -32,8 +32,8 @@ desacopladores ya disparados y orden de partes conservan exactamente la selecci�
 Suite completa posterior: `585/585 PASS`, 0 omitidos. Informe: `PERF_PARTGRAPH_ALLOCATIONS_PHASE27_REPORT.md`.
 
 La auditoría P1 conserva `sample_window` y deadlines; no se reducen dispatches ni
-proyecciones sin una matriz adicional de equivalencia. El candidato de reutilizar la
-clasificación `OnRails` queda pendiente y separado del cambio promovido. Informe:
+proyecciones. El candidato de reutilizar la clasificación `OnRails` fue medido de nuevo,
+no reprodujo una mejora estable y quedó descartado para esta fase. Informe:
 `PERF_SCHEDULER_SAMPLE_WINDOW_PHASE27_REPORT.md`.
 
 ## Resultado de la fase 26

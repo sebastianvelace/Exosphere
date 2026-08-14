@@ -29,7 +29,10 @@ El baseline reproducido fue:
 - Mantener como candidato futuro la reutilización de la clasificación `OnRails` entre
   `ClassifyMixedPhysicsWorkload` y `GetPhysicsSchedulerDeadlinePlan`. Una prueba temporal
   informó aproximadamente 41.6 KiB/tick y 0.8–1.0 ms/tick menos, pero requiere una matriz
-  de equivalencia propia antes de tocar `Universe.cs`.
+  de equivalencia propia antes de tocar `Universe.cs`. La réplica del coordinador con la
+  misma implementación no reprodujo esa mejora: `mixed_fleet` permaneció en 598,761 B/tick
+  y el p95 fue 3.876 ms frente a 3.698 ms del cambio de `PartGraph`. La modificación fue
+  revertida y queda `DESCARTADA` para esta fase.
 
 También se identificaron como líneas futuras, no aprobadas: coste O(n²) potencial en
 `StressSolver.ComputeLoads`, coste partes×substeps en `ThermalModel` y reservas por punto
@@ -39,5 +42,5 @@ en `SurfaceContactSolver`.
 
 Esta auditoría no cambia la política física. La optimización promovida en la fase 27 es
 únicamente la reutilización de buffers de `PartGraph`; el candidato de scheduler queda
-documentado para una fase separada con pruebas de posición, velocidad, SOI, contacto,
-staging y catch-up antes de cualquier promoción.
+descartado hasta que exista una medición estable y una matriz de posición, velocidad, SOI,
+contacto, staging y catch-up.
