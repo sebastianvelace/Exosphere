@@ -89,6 +89,20 @@ public partial class MapViewController : Control
     public void ToggleVisible() => Visible = !Visible;
 
     /// <summary>
+    /// Clears every map-owned command before a debug/navigation teleport. A transfer
+    /// executor or the local deorbit autopilot writes attitude/throttle every frame;
+    /// leaving either armed would overwrite the freshly reset vessel state on the
+    /// first frame at the destination and present as an unexplained tumble.
+    /// </summary>
+    public void CancelGuidanceForTeleport()
+    {
+        Planner.ClearNode();
+        _autopilot?.Disarm();
+        TransferPlanner.Instance?.ClearNode();
+        ManeuverExecutor.Instance?.Abort();
+    }
+
+    /// <summary>
     /// Selects and plans a supported transfer target through the same path used by
     /// keyboard input. Exposed for controller UI and deterministic visual acceptance.
     /// </summary>

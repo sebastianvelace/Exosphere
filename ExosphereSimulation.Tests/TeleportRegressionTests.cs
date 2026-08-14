@@ -21,6 +21,7 @@ public sealed class TeleportRegressionTests
             },
             AngularVelocity = new Vector3d(0.2, 0.1, -0.3),
             PitchYawRoll = new Vector3d(1.0, -1.0, 0.5),
+            Throttle = 1.0,
             IsAttemptingTowerCatch = true,
         };
 
@@ -30,6 +31,7 @@ public sealed class TeleportRegressionTests
         Assert.False(vessel.IsSurfaceSettled);
         Assert.False(vessel.IsOnRails);
         Assert.Null(vessel.OrbitalState);
+        Assert.Equal(0.0, vessel.Throttle);
         Assert.Equal(Vector3d.Zero, vessel.AngularVelocity);
         Assert.Equal(Vector3d.Zero, vessel.PitchYawRoll);
         Assert.False(vessel.IsCaught);

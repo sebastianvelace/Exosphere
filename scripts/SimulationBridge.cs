@@ -1263,6 +1263,8 @@ public partial class SimulationBridge : Node
         var v = ActiveVessel;
         if (earth == null || v == null) return;
 
+        CancelGuidanceForTeleport();
+
         var up = (v.Position - earth.Position).Normalized;
         if (up.MagnitudeSquared < 1e-9) up = new Vector3d(0, 1, 0);
         double r = earth.Radius + altitude;
@@ -1315,6 +1317,8 @@ public partial class SimulationBridge : Node
         var v = ActiveVessel;
         if (body == null || v == null) return;
 
+        CancelGuidanceForTeleport();
+
         // Approach direction + distance: ringed bodies (Saturn) are viewed from OUTSIDE the
         // ring system (rings reach ~2.3 R) at a 3/4 angle so the rings read as an open ellipse;
         // other bodies are viewed from a sensible fraction of their radius.
@@ -1343,5 +1347,26 @@ public partial class SimulationBridge : Node
         v.Throttle = 0.0;
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
         GD.Print($"[DEBUG] JumpToBody {bodyId} -> orbit {altitude / 1000:F0} km");
+    }
+
+    /// <summary>
+    /// Invalidates all game-layer flight commands before a discontinuous navigation
+    /// state change. The simulation reset clears rigid-body state; this companion reset
+    /// prevents a Godot controller from writing its old command back on the next frame.
+    /// </summary>
+    private void CancelGuidanceForTeleport()
+    {
+        if (MapViewController.Instance is { } map)
+        {
+            map.CancelGuidanceForTeleport();
+            return;
+        }
+
+        // Keep the bridge safe in lightweight/debug scenes that do not instantiate the
+        // map panel, while preserving the same fail-closed behavior.
+        ManeuverExecutor.Instance?.Abort();
+        if (GetTree().Root.FindChild("AutopilotController", true, false)
+            is AutopilotController autopilot)
+            autopilot.Disarm();
     }
 }

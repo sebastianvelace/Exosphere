@@ -167,6 +167,10 @@ public class Vessel
         SurfaceSettledDuration = 0.0;
         IsOnRails = false;
         OrbitalState = null;
+        // A navigation jump always starts as an unpowered coast. The caller may arm
+        // a new burn explicitly after the destination state has been installed, but
+        // an old throttle command must never survive the discontinuity for one tick.
+        Throttle = 0.0;
         AngularVelocity = Vector3d.Zero;
         PitchYawRoll = Vector3d.Zero;
         LastSurfaceContact = null;
