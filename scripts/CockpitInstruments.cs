@@ -12,8 +12,11 @@ public partial class CockpitInstruments : Node
 {
     private readonly SubViewport[] _vp   = new SubViewport[3];
     private readonly ScreenPanel[] _pan  = new ScreenPanel[3];
+    private const double CockpitRefreshHz = 30.0;
+    private const double CockpitRefreshPeriod = 1.0 / CockpitRefreshHz;
     private bool _wired;
     private bool _cockpitRenderingActive;
+    private double _refreshAccumulator;
 
     public override void _Ready()
     {
@@ -22,7 +25,7 @@ public partial class CockpitInstruments : Node
             var vp = new SubViewport
             {
                 Size = new Vector2I(512, 512),
-                RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+                RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
                 TransparentBg = false,
             };
             var p = new ScreenPanel { Which = i };
@@ -34,10 +37,11 @@ public partial class CockpitInstruments : Node
         }
 
         // The screen textures remain allocated and wired while the cockpit is hidden,
-        // but their render targets do not need a frame every tick.  Re-enabling Always
-        // on cockpit entry preserves the existing panel nodes and their latest telemetry.
+        // but their render targets do not need a frame every tick. Cockpit presentation
+        // is refreshed at 30 Hz with UpdateMode.Once; physics and HUD snapshots continue
+        // at their normal cadence.
         SetViewportUpdateMode(active: false);
-        GD.Print("PERF_COCKPIT stage=created viewports=3 size=512x512 update=disabled");
+        GD.Print("PERF_COCKPIT stage=created viewports=3 size=512x512 update=disabled refreshHz=30");
     }
 
     public override void _Process(double delta)
@@ -48,11 +52,22 @@ public partial class CockpitInstruments : Node
             _cockpitRenderingActive = cockpitActive;
             SetViewportUpdateMode(cockpitActive);
             GD.Print($"PERF_COCKPIT stage=update_mode cockpit={cockpitActive.ToString().ToLowerInvariant()} " +
-                     $"viewports=3 mode={(cockpitActive ? "always" : "disabled")}");
+                     $"viewports=3 mode={(cockpitActive ? "once" : "disabled")} refreshHz=30");
         }
 
         if (_cockpitRenderingActive)
-            for (int i = 0; i < 3; i++) _pan[i].QueueRedraw();
+        {
+            _refreshAccumulator += delta;
+            if (_refreshAccumulator >= CockpitRefreshPeriod)
+            {
+                _refreshAccumulator %= CockpitRefreshPeriod;
+                for (int i = 0; i < 3; i++)
+                {
+                    _pan[i].QueueRedraw();
+                    _vp[i].RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+                }
+            }
+        }
 
         if (_wired) return;
 
@@ -80,7 +95,8 @@ public partial class CockpitInstruments : Node
 
     private void SetViewportUpdateMode(bool active)
     {
-        var mode = active ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+        var mode = SubViewport.UpdateMode.Disabled;
+        _refreshAccumulator = active ? CockpitRefreshPeriod : 0.0;
         for (int i = 0; i < _vp.Length; i++)
             if (_vp[i] != null)
                 _vp[i].RenderTargetUpdateMode = mode;

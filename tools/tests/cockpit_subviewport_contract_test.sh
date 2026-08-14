@@ -23,12 +23,14 @@ require_text "$COCKPIT" 'SetViewportUpdateMode(active: false);' \
   "Flight cockpit viewports must start paused"
 require_text "$COCKPIT" 'SubViewport.UpdateMode.Disabled' \
   "Flight cockpit must have an explicit disabled update mode"
-require_text "$COCKPIT" 'SubViewport.UpdateMode.Always' \
-  "Flight cockpit must restore Always mode when active"
+require_text "$COCKPIT" 'SubViewport.UpdateMode.Once' \
+  "Flight cockpit must use bounded one-shot refreshes when active"
 require_text "$COCKPIT" 'if (_cockpitRenderingActive)' \
   "Flight cockpit panel redraw must remain gated by active cockpit state"
-require_text "$COCKPIT" 'for (int i = 0; i < 3; i++) _pan[i].QueueRedraw();' \
-  "Flight cockpit must redraw all three instruments when active"
+require_text "$COCKPIT" '_pan[i].QueueRedraw();' \
+  "Flight cockpit must retain the three-instrument refresh loop"
+require_text "$COCKPIT" 'CockpitRefreshHz = 30.0' \
+  "Flight cockpit refresh rate must remain explicitly bounded"
 
 # Construction preview is demand-driven: its empty state must not keep a 1024² target
 # and a hidden VesselRenderer processing every frame.
@@ -47,4 +49,4 @@ require_text "$CONSTRUCTION" 'ProcessModeEnum.Disabled' \
 require_text "$CONSTRUCTION" 'ProcessModeEnum.Inherit' \
   "Construction preview renderer must resume processing when populated"
 
-echo "cockpit_subviewport_contract_test: PASS (Flight=3x512 paused outside cockpit; Construction=1x1024 demand-driven)"
+echo "cockpit_subviewport_contract_test: PASS (Flight=3x512 paused outside cockpit, 30Hz once-refresh; Construction=1x1024 demand-driven)"

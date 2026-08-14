@@ -3,7 +3,8 @@
 Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; fase 13 limitada a
 llvmpipe; fase 14 aplica preview VAB bajo demanda; fase 15 añade probe in-process opt-in;
 fase 16 gatea el renderer exterior oculto en IVA; fase 17 elimina el staging CPU duplicado
-del anillo de Saturno; siguiente fase: profiling de render/GPU con hardware objetivo
+del anillo de Saturno; fase 18 acota el refresh de pantallas cockpit a 30 Hz; siguiente fase:
+profiling de render/GPU con hardware objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -67,6 +68,11 @@ La fase 17 elimina la carga manual duplicada del anillo de Saturno, documentada 
 `Texture2D` importado con mipmaps y deja de decodificar el PNG en CPU al entrar al SOI de
 Saturno. El nuevo modo `tools/visual_playtest.sh --saturn` valida cuerpo, anillo y alpha con
 una captura encuadrada; el tamaño `.ctex` se reporta como cache de importación, no como VRAM.
+
+La fase 18 limita el trabajo de presentación de las pantallas cockpit a refrescos one-shot de
+30 Hz, documentado en [`PERF_COCKPIT_REFRESH_PHASE18_REPORT.md`](PERF_COCKPIT_REFRESH_PHASE18_REPORT.md).
+Los tres targets siguen siendo 512² y se pausan completamente fuera de IVA; no se cambia la
+frecuencia de física ni la resolución sin una validación visual separada.
 
 ## 1. Diagnóstico reproducible
 
