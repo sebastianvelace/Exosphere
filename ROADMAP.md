@@ -87,6 +87,15 @@ Base tecnica cerrada en `main`:
 La siguiente etapa no debe abrir un sistema grande nuevo. Primero hay que subir la
 fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
+0. **Optimización multiagente fase 23**
+   - El plan operativo, ownership, worktrees, baselines y gates viven en
+     `docs/audits/OPTIMIZATION_MULTI_AGENT_PHASE23_PLAN.md`.
+   - El orden obligatorio es medir → optimizar una superficie → probar equivalencia →
+     integrar. No se activa hibernación física por distancia ni se declara una mejora GPU
+     mientras el host sólo exponga llvmpipe.
+   - El primer baseline reproducido el 2026-08-14 deja `mixed_fleet` en p95 3.7288 ms y
+     718,566 B/tick; estos valores son comparativos de la máquina, no un objetivo universal.
+
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield
      edge, soot/frost, vents, raceways, grid fins, flaps y engine bay.
