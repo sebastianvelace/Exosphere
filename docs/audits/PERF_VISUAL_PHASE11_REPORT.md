@@ -1,6 +1,6 @@
 # Fase 11 — buffers de telemetría para HUD y renderer
 
-Estado: implementado; validación funcional completa; playtest visual en ejecución
+Estado: implementado y validado
 Fecha: 2026-08-12
 Alcance: `PartGraph`, `Vessel`, `EngineGridHUD`, `VesselRenderer`
 
@@ -39,9 +39,11 @@ esas asignaciones requiere un perfil de Godot/managed separado y no se presume a
 - Benchmark diagnóstico de `Vessel.Tick`, 500 ticks: 3,968.08 B/tick y 0.014815 ms/tick;
   estable frente al presupuesto de fase 10 (`<5,000 B/tick`). Esta métrica es del hot path de
   simulación y no es una medición de FPS del renderer.
-- Playtest visual de ascenso con `run-id` aislado: debe cerrar con `ASCENT_ORBIT_OK`, sin
-  `GAP`, `FALLBACK`, NaN, destrucción o pérdida de progreso; las capturas y el log quedan en
-  `/tmp/exo_visual_telemetry_phase11_escalated/`.
+- Playtest visual final con `run-id=phase11-telemetry-ascent-final`: `ASCENT_ORBIT_OK`, órbita
+  `151×143 km`, `e=0.001`; capturas `pad`, `liftoff`, `maxq`, `hotstage`, `separation` y
+  `orbit` válidas. La traza mantuvo 33 motores antes de separación, 6 después, estados
+  finitos y cero GAP/FALLBACK. El worker LUT completó en 8,019.7 ms sin bloquear la física.
+  Artefactos: `/tmp/exo_visual_telemetry_phase11_final/`.
 
 ## Lectura del coste visual
 

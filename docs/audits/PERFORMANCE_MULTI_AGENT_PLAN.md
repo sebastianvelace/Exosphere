@@ -1,6 +1,7 @@
 # Plan riguroso de optimización y despliegue multiagente
 
-Estado: fases 7–11 aplicadas; siguiente fase: profiling de render/GPU y runtime de plumas
+Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; siguiente fase:
+profiling de render/GPU con hardware objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -30,6 +31,12 @@ La fase 11 completa el primer tramo visual en
 buffers de `EngineReadout`, con cadencias explícitas de 10/30 Hz y contrato de regresión. La
 suite queda en 559/559; el coste de llvmpipe observado en el playtest queda separado de la
 medición de simulación y obliga a perfilar render/GPU antes de elegir el siguiente recorte.
+
+El experimento de dirty state de plumas queda registrado en
+[`PERF_PLUME_PHASE12_REPORT.md`](PERF_PLUME_PHASE12_REPORT.md). El benchmark controlado no
+mejoró p50/p95/p99 y fue retirado; no se promueve una optimización sólo por reducir setters
+aparentes. El próximo agente debe instrumentar el coste real de `SetShaderParameter`,
+`ParticleProcessMaterial`, draw calls y GPU time con caches/importaciones normalizados.
 
 ## 1. Diagnóstico reproducible
 
