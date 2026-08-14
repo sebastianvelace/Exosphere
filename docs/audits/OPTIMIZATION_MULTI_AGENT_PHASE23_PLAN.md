@@ -36,6 +36,12 @@ proyecciones. El candidato de reutilizar la clasificación `OnRails` fue medido 
 no reprodujo una mejora estable y quedó descartado para esta fase. Informe:
 `PERF_SCHEDULER_SAMPLE_WINDOW_PHASE27_REPORT.md`.
 
+La oleada P2/P4 posterior integró dos mejoras independientes y verificadas: buffers/caches
+para reducir allocations de simulación y HUD, y cache de nodos de cámara que oculta el
+`ActiveVesselRenderer` correcto durante cockpit. Los cambios no alteran la física. Informes:
+`PERF_ALLOCATIONS_HOTPATH_PHASE27_P2_REPORT.md` y el commit
+`4cd5117 perf: cache cockpit and exterior renderer nodes`.
+
 ## Resultado de la fase 26
 
 La corrección SOI quedó protegida con cobertura permanente y el preflight externo se
