@@ -2,8 +2,10 @@ namespace ExosphereSimulation.Tests;
 
 using System.Diagnostics;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Propulsion;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -124,6 +126,65 @@ public sealed class StarshipPerformanceRegressionTests
         vessel.Tick(TickDt, earth);
         Assert.Equal(6, vessel.ActiveEngineCount);
         Assert.True(double.IsFinite(vessel.TotalMass) && vessel.TotalMass > 0.0);
+    }
+
+    [Fact]
+    public void AllocationAudit_Flight7EngineTelemetryBufferReportsManagedCost()
+    {
+        var catalog = PartCatalog.LoadFromDirectory(
+            Path.Combine(FindRepoRoot().FullName, "data", "parts"));
+        var booster = new Part(catalog["super_heavy_booster"], "allocation-audit-booster");
+        var graph = new PartGraph();
+        graph.SetRoot(booster);
+        for (int i = 0; i < 100; i++)
+            booster.AdvanceEngineRuntime(1.0, TickDt);
+
+        var buffer = new List<EngineReadout>(33);
+        for (int i = 0; i < 100; i++)
+            graph.FillEngineReadouts(101_325.0, buffer);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        const int samples = 1_000;
+        for (int i = 0; i < samples; i++)
+            graph.FillEngineReadouts(101_325.0, buffer);
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        Assert.Equal(33, buffer.Count);
+        Assert.All(buffer, row => Assert.True(row.Throttle > 0.99));
+        double allocatedBytesPerSample = allocatedBytes / (double)samples;
+        _output.WriteLine(
+            $"AllocationAudit EngineTelemetryFill: {samples} samples; "
+            + $"managedAlloc={allocatedBytes:N0} bytes; "
+            + $"managedAllocPerSample={allocatedBytesPerSample:F2} bytes/sample");
+        Assert.InRange(allocatedBytesPerSample, 0.0, 1_000.0);
+    }
+
+    [Fact]
+    public void AllocationAudit_Flight7EngineTelemetryCacheInvalidatesAfterEngineFailure()
+    {
+        var catalog = PartCatalog.LoadFromDirectory(
+            Path.Combine(FindRepoRoot().FullName, "data", "parts"));
+        var booster = new Part(catalog["super_heavy_booster"], "allocation-audit-failure");
+        var graph = new PartGraph();
+        graph.SetRoot(booster);
+        for (int i = 0; i < 100; i++)
+            booster.AdvanceEngineRuntime(1.0, TickDt);
+
+        var buffer = new List<EngineReadout>(33);
+        graph.FillEngineReadouts(101_325.0, buffer);
+        Assert.DoesNotContain(buffer, row => row.FailureCode != null);
+
+        string failedInstanceId = booster.EngineStates[7].InstanceId;
+        Assert.True(booster.FailEngine(failedInstanceId, "ALLOCATION_AUDIT_ENGINE_OUT"));
+        graph.FillEngineReadouts(101_325.0, buffer);
+
+        var failed = Assert.Single(buffer, row => row.InstanceId == failedInstanceId);
+        Assert.Equal(EngineLifecycleState.Failed, failed.State);
+        Assert.Equal("ALLOCATION_AUDIT_ENGINE_OUT", failed.FailureCode);
+        Assert.Equal(32, graph.ActiveEngineCount);
     }
 
     private static Vessel BuildFlight7Stack()

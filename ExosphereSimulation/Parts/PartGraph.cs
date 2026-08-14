@@ -30,6 +30,9 @@ public class PartGraph
     private readonly List<Part> _tickActiveEngines = new();
     private readonly List<Part> _queryStageParts = new();
     private readonly List<Part> _queryActiveEngines = new();
+    private readonly List<Part> _engineReadoutCacheParts = new();
+    private readonly List<EngineInstanceState?> _engineReadoutCacheStates = new();
+    private readonly List<EngineReadout> _engineReadoutCacheRows = new();
     private readonly List<Part> _tickEngineScratch = new();
     private readonly List<Part> _tickSubtreeScratch = new();
     private readonly List<LiquidEngineDemand> _liquidDemands = new();
@@ -42,6 +45,8 @@ public class PartGraph
     private bool _tickStageCacheValid;
     private bool _tickActiveEngineCacheValid;
     private bool _tickMassPropertiesValid;
+    private bool _engineReadoutCacheValid;
+    private double _engineReadoutCacheAmbientPressure;
     private double _tickTotalMass;
     private Vector3d _tickCenterOfMass;
     private double _tickTransverseMomentOfInertia;
@@ -62,6 +67,7 @@ public class PartGraph
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
+        _engineReadoutCacheValid = false;
         _partLocalPositionsValid = false;
     }
 
@@ -71,6 +77,7 @@ public class PartGraph
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
+        _engineReadoutCacheValid = false;
         _partLocalPositionsValid = false;
     }
 
@@ -82,6 +89,7 @@ public class PartGraph
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
+        _engineReadoutCacheValid = false;
     }
 
     /// <summary>
@@ -98,6 +106,7 @@ public class PartGraph
             if (_hotStageOverlapActive == value) return;
             _hotStageOverlapActive = value;
             _tickActiveEngineCacheValid = false;
+            _engineReadoutCacheValid = false;
         }
     }
 
@@ -787,6 +796,75 @@ public class PartGraph
         }
     }
 
+    private List<Part> GetActiveEngineListForReadout()
+    {
+        if (_physicsTickActive)
+        {
+            EnsureTickActiveEngineCache();
+            return _tickActiveEngines;
+        }
+
+        return GetQueryActiveEngineList();
+    }
+
+    private bool TryCopyCachedEngineReadouts(
+        IReadOnlyList<Part> engines,
+        double ambientPressure,
+        List<EngineReadout> destination)
+    {
+        // A non-finite pressure must still reach the evaluator so it preserves its existing
+        // argument validation instead of accidentally becoming a cache hit.
+        if (!_engineReadoutCacheValid
+            || !double.IsFinite(ambientPressure)
+            || ambientPressure != _engineReadoutCacheAmbientPressure)
+            return false;
+
+        int rowIndex = 0;
+        for (int engineIndex = 0; engineIndex < engines.Count; engineIndex++)
+        {
+            var engine = engines[engineIndex];
+            if (engine.HasEngineRuntime)
+            {
+                var states = engine.EngineStates;
+                for (int stateIndex = 0; stateIndex < states.Count; stateIndex++)
+                {
+                    if (rowIndex >= _engineReadoutCacheRows.Count
+                        || _engineReadoutCacheParts[rowIndex] != engine
+                        || _engineReadoutCacheStates[rowIndex] != states[stateIndex])
+                        return false;
+
+                    var state = states[stateIndex];
+                    var row = _engineReadoutCacheRows[rowIndex];
+                    if (state.State != row.State
+                        || state.ChamberPressureFraction != row.Throttle
+                        || !string.Equals(
+                            state.FailureCode,
+                            row.FailureCode,
+                            StringComparison.Ordinal))
+                        return false;
+                    rowIndex++;
+                }
+            }
+            else
+            {
+                if (rowIndex >= _engineReadoutCacheRows.Count
+                    || _engineReadoutCacheParts[rowIndex] != engine
+                    || _engineReadoutCacheStates[rowIndex] != null)
+                    return false;
+
+                var row = _engineReadoutCacheRows[rowIndex];
+                if (engine.ThrottleLevel != row.Throttle
+                    || (engine.IsBroken ? "PART_BROKEN" : null) != row.FailureCode)
+                    return false;
+                rowIndex++;
+            }
+        }
+
+        if (rowIndex != _engineReadoutCacheRows.Count) return false;
+        destination.AddRange(_engineReadoutCacheRows);
+        return true;
+    }
+
     /// <summary>
     /// Fills a caller-owned buffer with the current-stage engine telemetry.
     /// The buffer is cleared and never replaced, allowing HUD/render consumers to sample
@@ -797,27 +875,48 @@ public class PartGraph
         ArgumentNullException.ThrowIfNull(destination);
         destination.Clear();
 
-        foreach (var engine in ActiveEngines)
+        var engines = GetActiveEngineListForReadout();
+        if (TryCopyCachedEngineReadouts(engines, ambientPressure, destination))
+            return;
+
+        _engineReadoutCacheParts.Clear();
+        _engineReadoutCacheStates.Clear();
+        _engineReadoutCacheRows.Clear();
+        _engineReadoutCacheAmbientPressure = ambientPressure;
+        _engineReadoutCacheValid = false;
+
+        foreach (var engine in engines)
         {
             if (engine.HasEngineRuntime)
             {
+                int stateIndex = 0;
                 foreach (var telemetry in engine.GetEngineTelemetry(ambientPressure))
                 {
-                    destination.Add(new EngineReadout(
+                    var row = new EngineReadout(
                         telemetry.InstanceId,
                         engine.Definition.Name,
                         telemetry.ChamberPressureFraction,
                         telemetry.ThrustN,
                         telemetry.MassFlowKgS,
                         telemetry.State,
-                        telemetry.FailureCode));
+                        telemetry.FailureCode);
+                    destination.Add(row);
+                    _engineReadoutCacheParts.Add(engine);
+                    _engineReadoutCacheStates.Add(engine.EngineStates[stateIndex++]);
+                    _engineReadoutCacheRows.Add(row);
                 }
 
                 continue;
             }
 
-            destination.Add(BuildStaticEngineReadout(engine, ambientPressure));
+            var staticRow = BuildStaticEngineReadout(engine, ambientPressure);
+            destination.Add(staticRow);
+            _engineReadoutCacheParts.Add(engine);
+            _engineReadoutCacheStates.Add(null);
+            _engineReadoutCacheRows.Add(staticRow);
         }
+
+        _engineReadoutCacheValid = true;
     }
 
     private static EngineReadout BuildStaticEngineReadout(Part engine, double ambientPressure) =>
