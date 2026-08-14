@@ -609,8 +609,13 @@ public partial class SimulationBridge : Node
         if (shader != null)
         {
             var rmat = new ShaderMaterial { Shader = shader };
-            var img = Image.LoadFromFile(ProjectSettings.GlobalizePath("res://assets/textures/saturn_ring.png"));
-            if (img != null) { img.GenerateMipmaps(); rmat.SetShaderParameter("ring_tex", ImageTexture.CreateFromImage(img)); }
+            // Use Godot's imported/cached texture directly. The former Image.LoadFromFile
+            // path decoded the 8192x500 PNG on the CPU and created a second ImageTexture
+            // with runtime mipmaps, duplicating staging/resident memory for one backdrop
+            // that is instantiated only when Saturn becomes the dominant body.
+            var ringTexture = GD.Load<Texture2D>("res://assets/textures/saturn_ring.png");
+            if (ringTexture != null)
+                rmat.SetShaderParameter("ring_tex", ringTexture);
             ring.SetSurfaceOverrideMaterial(0, rmat);
         }
         ring.CustomAabb = new Aabb(new Godot.Vector3(-2.4f, -0.1f, -2.4f), new Godot.Vector3(4.8f, 0.2f, 4.8f));

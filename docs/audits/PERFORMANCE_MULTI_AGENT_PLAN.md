@@ -2,8 +2,8 @@
 
 Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; fase 13 limitada a
 llvmpipe; fase 14 aplica preview VAB bajo demanda; fase 15 añade probe in-process opt-in;
-fase 16 gatea el renderer exterior oculto en IVA; siguiente fase: profiling de render/GPU
-con hardware objetivo
+fase 16 gatea el renderer exterior oculto en IVA; fase 17 elimina el staging CPU duplicado
+del anillo de Saturno; siguiente fase: profiling de render/GPU con hardware objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -61,6 +61,12 @@ La fase 16 aplica el gate de trabajo fuera de cámara documentado en
 [`PERF_VESSEL_RENDERER_PHASE16_REPORT.md`](PERF_VESSEL_RENDERER_PHASE16_REPORT.md): el
 `VesselRenderer` exterior deja de consultar física visual y escribir plumas/materiales
 durante IVA, sin pausar la nave simulada ni los sistemas de misión.
+
+La fase 17 elimina la carga manual duplicada del anillo de Saturno, documentada en
+[`PERF_SATURN_RING_PHASE17_REPORT.md`](PERF_SATURN_RING_PHASE17_REPORT.md): el runtime usa el
+`Texture2D` importado con mipmaps y deja de decodificar el PNG en CPU al entrar al SOI de
+Saturno. El nuevo modo `tools/visual_playtest.sh --saturn` valida cuerpo, anillo y alpha con
+una captura encuadrada; el tamaño `.ctex` se reporta como cache de importación, no como VRAM.
 
 ## 1. Diagnóstico reproducible
 

@@ -59,6 +59,7 @@ Options:
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
   --cockpit     Capture the first-person cockpit optics and interior.
+  --saturn      Jump to Saturn and capture the imported ring texture.
   --atmosphere  Capture a deterministic day/twilight/night altitude matrix with image metrics.
   --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
@@ -155,6 +156,7 @@ while [[ $# -gt 0 ]]; do
     --launch) MODE="launch"; shift ;;
     --ship) MODE="ship"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
+    --saturn) MODE="saturn"; shift ;;
     --atmosphere) MODE="atmosphere"; shift ;;
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
@@ -586,6 +588,31 @@ public partial class _PlaytestShot : Node
             }
             if (_orbitBeauty && _pendingSlug == null)
                 Finish("COCKPIT_OK");
+            return;
+        }
+
+        if (_mode == "saturn")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                // Keep the production presentation path: stage the default stack, use
+                // the public body jump, and let SimulationBridge queue Saturn lazily.
+                bridge.TriggerStaging();
+                bridge.JumpToBody("saturn");
+                // The public jump positions the vessel at Saturn, while this frame places
+                // the camera almost on the outward radial so the body/ring is in view.
+                CameraController.Instance?.SetExternalChaseFrame(0f, 70f, 38f);
+                _shipSeeded = true;
+                _readyFrames = 0;
+                return;
+            }
+            if (_shipSeeded && _pendingSlug == null && _readyFrames >= 120 && !_orbitBeauty)
+            {
+                QueueCapture("saturn_ring");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("SATURN_OK");
             return;
         }
 
@@ -2274,6 +2301,31 @@ verify_pngs() {
     fi
     if ! grep -q 'SUMMARY reason=HOTSTAGE_OK' "$LOG"; then
       echo "ERROR: hot-stage capture did not confirm the dual-thrust overlap state" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "saturn" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_saturn_ring.png" ]]; then
+      echo "ERROR: missing required Saturn ring milestone PNG" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=SATURN_OK' "$LOG"; then
+      echo "ERROR: Saturn capture did not finish its physical body-transition scenario" >&2
+      return 1
+    fi
+    # A valid file alone can hide an out-of-frame body (the first version of this mode
+    # captured only the starfield). Require measurable ring/body signal in the image
+    # metrics so this remains a real visual acceptance gate.
+    if ! awk '
+      /^IMAGE slug=saturn_ring / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^p95=/)  { split($i, p, "="); p95  = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && mean > 0.02 && p95 > 0.20) }
+    ' "$LOG"; then
+      echo "ERROR: Saturn image metrics do not prove visible ring/body signal" >&2
       return 1
     fi
   elif [[ "$MODE" == "reentry_compare" ]]; then

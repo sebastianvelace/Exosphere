@@ -40,6 +40,17 @@ public partial class CameraController : Node3D
             48f);
     }
 
+    /// <summary>Set a deterministic external chase frame for visual acceptance scenes.</summary>
+    public void SetExternalChaseFrame(float yaw, float pitch, float distance)
+    {
+        _cockpit = false;
+        _padPresetIdx = 0;
+        Mode = CameraMode.Chase;
+        _yaw = yaw;
+        _pitch = Mathf.Clamp(pitch, -89f, 89f);
+        _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
+    }
+
     // ── Chase / orbit state ───────────────────────────────────────────────
     private float _yaw      = 25f;
     private float _pitch    = 12f;
