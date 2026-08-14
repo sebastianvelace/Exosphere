@@ -1,7 +1,8 @@
 # Plan riguroso de optimización y despliegue multiagente
 
-Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; siguiente fase:
-profiling de render/GPU con hardware objetivo
+Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; fase 13 limitada a
+llvmpipe; fase 14 aplica preview VAB bajo demanda; siguiente fase: profiling de render/GPU
+con hardware objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -42,6 +43,12 @@ La fase 13 registró el límite de medición del host en
 [`PERF_RENDER_PHASE13_REPORT.md`](PERF_RENDER_PHASE13_REPORT.md): el adapter es llvmpipe y el
 probe mantiene GPU/VRAM/FPS en `NOT_MEASURED`. El siguiente despliegue queda bloqueado a una
 medición GPU real para evitar optimizar contra ruido del backend software.
+
+La fase 14 aplica la primera optimización de recursos de escena fuera del vuelo en
+[`PERF_VAB_PHASE14_REPORT.md`](PERF_VAB_PHASE14_REPORT.md): el preview 3D del VAB deja de
+actualizar su target 1024² y su `VesselRenderer` cuando la asamblea está vacía, y vuelve a
+activarlos al construir o cargar una nave. El picking sigue consultando el mundo de física
+del `SubViewport`; no se cambia la asamblea, la validación ni la ruta de lanzamiento.
 
 ## 1. Diagnóstico reproducible
 

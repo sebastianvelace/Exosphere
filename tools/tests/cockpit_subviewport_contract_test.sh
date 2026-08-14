@@ -30,11 +30,21 @@ require_text "$COCKPIT" 'if (_cockpitRenderingActive)' \
 require_text "$COCKPIT" 'for (int i = 0; i < 3; i++) _pan[i].QueueRedraw();' \
   "Flight cockpit must redraw all three instruments when active"
 
-# Construction is intentionally audit-only in this phase.  This contract ensures its
-# viewport remains untouched and documents the measured baseline for the phase report.
+# Construction preview is demand-driven: its empty state must not keep a 1024² target
+# and a hidden VesselRenderer processing every frame.
 require_text "$CONSTRUCTION" 'Size = new Vector2I(1024, 1024),' \
   "Construction preview baseline is missing"
-require_text "$CONSTRUCTION" 'RenderTargetUpdateMode = SubViewport.UpdateMode.Always,' \
-  "Construction preview update mode changed outside this phase ownership"
+require_text "$CONSTRUCTION" 'RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,' \
+  "Construction preview must start with rendering disabled"
+require_text "$CONSTRUCTION" 'SetPreviewRenderingActive(active: false);' \
+  "Construction preview empty state must disable rendering"
+require_text "$CONSTRUCTION" 'SetPreviewRenderingActive(active: true);' \
+  "Construction preview populated state must re-enable rendering"
+require_text "$CONSTRUCTION" 'SubViewport.UpdateMode.Always' \
+  "Construction preview must restore Always mode when populated"
+require_text "$CONSTRUCTION" 'ProcessModeEnum.Disabled' \
+  "Construction preview renderer must stop processing when empty"
+require_text "$CONSTRUCTION" 'ProcessModeEnum.Inherit' \
+  "Construction preview renderer must resume processing when populated"
 
-echo "cockpit_subviewport_contract_test: PASS (Flight=3x512 paused outside cockpit; Construction=1x1024 audit-only)"
+echo "cockpit_subviewport_contract_test: PASS (Flight=3x512 paused outside cockpit; Construction=1x1024 demand-driven)"

@@ -39,6 +39,8 @@ public partial class ConstructionController : Control
     private MeshInstance3D?     _highlight;
     private StandardMaterial3D? _highlightMat;
     private string?             _selectedInstanceId;
+    private bool                _previewRenderingActive;
+    private bool                _previewUpdateModeInitialized;
 
     // ── Orbit camera (RMB-drag rotate, wheel zoom, auto-frame on rebuild) ─────
     // The preview camera used to be pinned at one fixed pose with no way to look at
@@ -239,7 +241,10 @@ public partial class ConstructionController : Control
         {
             Size = new Vector2I(1024, 1024),
             TransparentBg = true,
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            // The empty VAB does not need a rendered target. UpdatePreview enables
+            // this only after a vessel exists; manual picking remains available
+            // because it queries the SubViewport's physics world directly.
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
             // Hacemos el raycast manualmente sobre DirectSpaceState; no usamos el
             // picking automático de Godot. / We raycast manually against
             // DirectSpaceState; Godot's automatic object picking stays off.
@@ -247,6 +252,7 @@ public partial class ConstructionController : Control
         };
         viewportContainer.AddChild(viewport);
         _previewViewport = viewport;
+        SetPreviewRenderingActive(active: false);
 
         _previewEmpty = new Label
         {
@@ -279,6 +285,9 @@ public partial class ConstructionController : Control
         ApplyCameraOrbit();
         _previewRenderer = new VesselRenderer { Name = "PreviewVessel" };
         previewRoot.AddChild(_previewRenderer);
+        // The viewport was initialized before the renderer node existed. Reapply the
+        // current demand state so an empty VAB cannot briefly process this node.
+        SetPreviewRenderingActive(_previewRenderingActive);
 
         // Capa de picking (hermana del renderer): cuerpos de colisión invisibles
         // por pieza y por nodo disponible. / Picking layer (renderer sibling):
@@ -826,6 +835,7 @@ public partial class ConstructionController : Control
         {
             if (_assembly.Parts.Count == 0)
             {
+                SetPreviewRenderingActive(active: false);
                 _previewRenderer.Visible = false;
                 _previewEmpty.Visible = true;
                 _picking?.RebuildSelectionBodies(_assembly);
@@ -833,12 +843,14 @@ public partial class ConstructionController : Control
                 return;
             }
 
+            SetPreviewRenderingActive(active: true);
             _previewRenderer.Visible = true;
             _previewEmpty.Visible = false;
             _previewRenderer.BuildFromVessel(_assembly.ToVessel(CraftName()));
         }
         catch
         {
+            SetPreviewRenderingActive(active: false);
             _previewRenderer.Visible = false;
         }
 
@@ -852,6 +864,28 @@ public partial class ConstructionController : Control
         else
             UpdateHighlight();
         RefreshNodeMarkers();
+    }
+
+    private void SetPreviewRenderingActive(bool active)
+    {
+        if (_previewViewport == null) return;
+
+        bool changed = !_previewUpdateModeInitialized || _previewRenderingActive != active;
+        _previewRenderingActive = active;
+        _previewUpdateModeInitialized = true;
+
+        _previewViewport.RenderTargetUpdateMode = active
+            ? SubViewport.UpdateMode.Always
+            : SubViewport.UpdateMode.Disabled;
+        if (_previewRenderer != null)
+            _previewRenderer.ProcessMode = active
+                ? ProcessModeEnum.Inherit
+                : ProcessModeEnum.Disabled;
+
+        if (changed)
+            GD.Print($"PERF_VAB_PREVIEW stage=update_mode active={active.ToString().ToLowerInvariant()} " +
+                     $"viewport_mode={(active ? "always" : "disabled")} " +
+                     $"renderer_process={(active ? "inherit" : "disabled")}");
     }
 
     private void RefreshNodeChoices()
