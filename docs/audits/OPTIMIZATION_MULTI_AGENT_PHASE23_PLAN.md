@@ -1,8 +1,40 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 25 SOI corregida; display y EventPipe externos pendientes
+Estado: fase 27 P2 allocations integrada; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `3367186` (`main` limpio después de la auditoría funcional de vuelo)
+
+## Resultado de la fase 27 — hot path de staging
+
+La primera optimización local de esta oleada se limitó a `PartGraph.BuildCurrentStageParts`.
+El camino anterior creaba una lista LINQ de desacopladores, enumeradores de `GetChildren` y
+una lista temporal del subárbol cada vez que el scheduler consultaba motores activos. El
+camino nuevo reutiliza dos buffers privados y recorre `_parts`/`_joints` por índice; conserva
+el orden anterior y no modifica las fórmulas físicas, los deadlines ni la política de
+wake-up.
+
+Medición comparable en .NET 8, `SAMPLES=80`, `WARMUP=10`:
+
+| Escenario | p95 antes | p95 después | allocations antes | allocations después | cambio allocations |
+|---|---:|---:|---:|---:|---:|
+| `full_single` | 0.0442 ms | 0.0477 ms | 5,981.9 B/tick | 5,253.9 B/tick | −12.17% |
+| `rails_fleet` | 0.7363 ms | 0.7421 ms | 190,077.9 B/tick | 186,749.9 B/tick | −1.75% |
+| `mixed_fleet` | 3.7606 ms | 3.6976 ms | 718,564.0 B/tick | 598,761.2 B/tick | −16.67% |
+
+Con `SAMPLES=256`, `mixed_fleet` quedó en 4.0265 ms p95 y 605,960.5 B/tick, con
+`dispatches=450`, `projections=396` y todos los indicadores finitos/válidos. La variación
+de p95 no se presenta como una ganancia de FPS hasta tener una captura de framebuffer en
+hardware objetivo; la decisión de promoción se basa aquí en la reducción directa de
+allocations y la equivalencia funcional.
+
+Cobertura nueva: `PartGraphHotPathTests` verifica que desacopladores activos anidados,
+desacopladores ya disparados y orden de partes conservan exactamente la selección de etapa.
+Suite completa posterior: `585/585 PASS`, 0 omitidos. Informe: `PERF_PARTGRAPH_ALLOCATIONS_PHASE27_REPORT.md`.
+
+La auditoría P1 conserva `sample_window` y deadlines; no se reducen dispatches ni
+proyecciones sin una matriz adicional de equivalencia. El candidato de reutilizar la
+clasificación `OnRails` queda pendiente y separado del cambio promovido. Informe:
+`PERF_SCHEDULER_SAMPLE_WINDOW_PHASE27_REPORT.md`.
 
 ## Resultado de la fase 26
 
