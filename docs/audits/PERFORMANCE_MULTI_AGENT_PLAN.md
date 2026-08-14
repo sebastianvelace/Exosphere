@@ -4,7 +4,8 @@ Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; fase 13
 llvmpipe; fase 14 aplica preview VAB bajo demanda; fase 15 añade probe in-process opt-in;
 fase 16 gatea el renderer exterior oculto en IVA; fase 17 elimina el staging CPU duplicado
 del anillo de Saturno; fase 18 acota el refresh de pantallas cockpit a 30 Hz; fase 19 cierra
-el límite de llvmpipe y define la matriz Earth/star; siguiente fase: GPU física objetivo
+el límite de llvmpipe y define la matriz Earth/star; fase 20 prueba 4K aislada sin promoción;
+siguiente fase: GPU física objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -78,6 +79,13 @@ La fase 19 deja documentado el límite de medición y la matriz de recursos Eart
 [`PERF_RENDER_PHASE19_REPORT.md`](PERF_RENDER_PHASE19_REPORT.md): el timer in-process y los
 contadores de render son válidos para el canal, pero `real_gpu=false`, VRAM de driver y FPS
 siguen en `NOT_MEASURED`. No se promueve todavía una variante 8K/4K/2K.
+
+La fase 20 ejecutó la primera variante candidata en un worktree aislado y queda registrada en
+[`PERF_TEXTURE_MATRIX_PHASE20_REPORT.md`](PERF_TEXTURE_MATRIX_PHASE20_REPORT.md). Activar
+mipmaps y limitar esos cuatro recursos a 4K redujo el caché de importación completo de 62.06
+a 38.34 MiB, pero la matriz atmosférica no alcanzó `ATMOSPHERE_OK` bajo llvmpipe. Smoke,
+cockpit y Saturn sí pasaron; no se promueve el cambio hasta repetir día/terminador/noche,
+órbita y planetas en una GPU física con RSS y VRAM medidos.
 
 ## 1. Diagnóstico reproducible
 
