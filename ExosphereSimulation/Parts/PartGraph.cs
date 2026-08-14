@@ -30,6 +30,8 @@ public class PartGraph
     private readonly List<Part> _tickActiveEngines = new();
     private readonly List<Part> _queryStageParts = new();
     private readonly List<Part> _queryActiveEngines = new();
+    private readonly List<Part> _stageSubtreeScratch = new();
+    private readonly List<Part> _stageTraversalScratch = new();
     private readonly List<Part> _engineReadoutCacheParts = new();
     private readonly List<EngineInstanceState?> _engineReadoutCacheStates = new();
     private readonly List<EngineReadout> _engineReadoutCacheRows = new();
@@ -322,28 +324,78 @@ public class PartGraph
     private void BuildCurrentStageParts(List<Part> result)
     {
         result.Clear();
-        var activeDecouplers = _parts
-            .Where(p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive)
-            .ToList();
-        if (activeDecouplers.Count == 0)
+        bool foundActiveDecoupler = false;
+        for (int partIndex = 0; partIndex < _parts.Count; partIndex++)
+        {
+            var decoupler = _parts[partIndex];
+            if (decoupler.Definition.Category != PartCategory.Decoupler
+                || !decoupler.IsStagingActive)
+                continue;
+
+            foundActiveDecoupler = true;
+            Part? child = null;
+            for (int jointIndex = 0; jointIndex < _joints.Count; jointIndex++)
+            {
+                var joint = _joints[jointIndex];
+                if (ReferenceEquals(joint.Parent, decoupler))
+                {
+                    child = joint.Child;
+                    break;
+                }
+            }
+
+            if (child == null) continue;
+
+            CollectSubtreeInto(child, _stageSubtreeScratch);
+            bool containsActiveDecoupler = false;
+            for (int subtreeIndex = 0; subtreeIndex < _stageSubtreeScratch.Count; subtreeIndex++)
+            {
+                var subtreePart = _stageSubtreeScratch[subtreeIndex];
+                if (subtreePart.Definition.Category == PartCategory.Decoupler
+                    && subtreePart.IsStagingActive)
+                {
+                    containsActiveDecoupler = true;
+                    break;
+                }
+            }
+
+            // The bottom stage is the first active-decoupler subtree that contains no
+            // further active decoupler. Preserve the previous _parts/_joints order.
+            if (!containsActiveDecoupler)
+            {
+                result.AddRange(_stageSubtreeScratch);
+                return;
+            }
+        }
+
+        if (!foundActiveDecoupler)
         {
             result.AddRange(_parts);
             return;
         }
 
-        foreach (var d in activeDecouplers)
+        result.AddRange(_parts);
+    }
+
+    private void CollectSubtreeInto(Part root, List<Part> result)
+    {
+        result.Clear();
+        _stageTraversalScratch.Clear();
+        _stageTraversalScratch.Add(root);
+
+        for (int queueIndex = 0; queueIndex < _stageTraversalScratch.Count; queueIndex++)
         {
-            var child = GetChildren(d).FirstOrDefault();
-            if (child == null) continue;
-            var farSide = CollectSubtree(child);   // subtree below the decoupler
-            // The bottom stage's subtree contains no further attached decoupler.
-            if (!farSide.Any(p => p.Definition.Category == PartCategory.Decoupler && p.IsStagingActive))
+            var part = _stageTraversalScratch[queueIndex];
+            result.Add(part);
+            for (int jointIndex = 0; jointIndex < _joints.Count; jointIndex++)
             {
-                result.AddRange(farSide);
-                return;
+                var joint = _joints[jointIndex];
+                if (ReferenceEquals(joint.Parent, part))
+                    _stageTraversalScratch.Add(joint.Child);
             }
         }
-        result.AddRange(_parts);
+
+        _stageTraversalScratch.Clear();
     }
 
     public IEnumerable<Part> ActiveEngines
