@@ -87,6 +87,11 @@ a 38.34 MiB, pero la matriz atmosférica no alcanzó `ATMOSPHERE_OK` bajo llvmpi
 cockpit y Saturn sí pasaron; no se promueve el cambio hasta repetir día/terminador/noche,
 órbita y planetas en una GPU física con RSS y VRAM medidos.
 
+La fase 21 deja preparado el runner [`PERF_TEXTURE_GPU_MATRIX_PHASE21_REPORT.md`](PERF_TEXTURE_GPU_MATRIX_PHASE21_REPORT.md):
+crea worktrees efímeros para las cuatro variantes, ejecuta import/probe y se bloquea ante
+llvmpipe o evidencia de adaptador desconocido. El contrato está en CI; la ejecución completa
+queda pendiente de una máquina con GPU física y no se considera una promoción de calidad.
+
 ## 1. Diagnóstico reproducible
 
 El bloqueo observado después de entrar al nivel era un bloqueo del hilo principal, no una
