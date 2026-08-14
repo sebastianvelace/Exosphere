@@ -38,6 +38,11 @@ mejoró p50/p95/p99 y fue retirado; no se promueve una optimización sólo por r
 aparentes. El próximo agente debe instrumentar el coste real de `SetShaderParameter`,
 `ParticleProcessMaterial`, draw calls y GPU time con caches/importaciones normalizados.
 
+La fase 13 registró el límite de medición del host en
+[`PERF_RENDER_PHASE13_REPORT.md`](PERF_RENDER_PHASE13_REPORT.md): el adapter es llvmpipe y el
+probe mantiene GPU/VRAM/FPS en `NOT_MEASURED`. El siguiente despliegue queda bloqueado a una
+medición GPU real para evitar optimizar contra ruido del backend software.
+
 ## 1. Diagnóstico reproducible
 
 El bloqueo observado después de entrar al nivel era un bloqueo del hilo principal, no una
