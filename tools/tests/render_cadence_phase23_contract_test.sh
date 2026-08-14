@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COCKPIT="$ROOT/scripts/CockpitInstruments.cs"
 RENDERER="$ROOT/scripts/VesselRenderer.cs"
 CONSTRUCTION="$ROOT/scripts/ConstructionController.cs"
+CAMERA="$ROOT/scripts/CameraController.cs"
 
 fail() {
   echo "render_cadence_phase23_contract_test: FAIL: $*" >&2
@@ -16,7 +17,7 @@ require_text() {
   rg -q --fixed-strings "$pattern" "$file" || fail "$description"
 }
 
-for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION"; do
+for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION" "$CAMERA"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 
@@ -51,4 +52,17 @@ require_text "$CONSTRUCTION" 'SubViewport.UpdateMode.Always' \
 require_text "$CONSTRUCTION" 'ProcessModeEnum.Disabled' \
   "VAB renderer must stop processing when empty"
 
-echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz gated, exterior=hidden/thermal gated, VAB=demand-driven)"
+# The runtime renderer is created by SimulationBridge as ActiveVesselRenderer. The
+# camera must hide that node in IVA, while retaining the old name only for temporary
+# visual harness compatibility; repeated tree walks must not remain in the visibility
+# setter on every frame.
+require_text "$CAMERA" 'root.FindChild("ActiveVesselRenderer", true, false)' \
+  "cockpit visibility must resolve the production exterior renderer name"
+require_text "$CAMERA" 'root.FindChild("StarshipRenderer", true, false)' \
+  "cockpit visibility must retain the visual harness fallback name"
+require_text "$CAMERA" 'private Node3D? _exteriorRenderer;' \
+  "exterior renderer reference must be cached"
+require_text "$CAMERA" 'ResolvePresentationNodes();' \
+  "camera presentation nodes must use the lazy cache resolver"
+
+echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz gated, exterior=hidden/thermal gated+cached, VAB=demand-driven)"

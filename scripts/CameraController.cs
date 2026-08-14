@@ -89,13 +89,17 @@ public partial class CameraController : Node3D
     private bool _trackedHadBooster;
     private float _externalFov = 75f;
     private float _externalNear = 0.5f;
+    private Camera3D? _camera;
+    private Node3D? _cockpitRenderer;
+    private Node3D? _exteriorRenderer;
     private const float CockpitFov = 60f;
     private const float CockpitNear = 0.04f;
 
     public override void _Ready()
     {
         Instance = this;
-        if (GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
+        ResolvePresentationNodes();
+        if (_camera is { } camera)
         {
             _externalFov = camera.Fov;
             _externalNear = camera.Near;
@@ -148,6 +152,7 @@ public partial class CameraController : Node3D
 
     public override void _Process(double delta)
     {
+        ResolvePresentationNodes();
         if (_cockpit) { DriveCockpit(delta); return; }
         SetCockpitVisible(false);
 
@@ -187,7 +192,7 @@ public partial class CameraController : Node3D
             }
         }
 
-        var camera = GetNodeOrNull<Camera3D>("Camera3D");
+        var camera = _camera;
         if (camera == null) return;
         camera.Near = _externalNear;
         _shake.BaseFov = _externalFov;
@@ -288,12 +293,11 @@ public partial class CameraController : Node3D
     // ── First-person cockpit camera ───────────────────────────────────────────
     private void DriveCockpit(double delta)
     {
-        var camera = GetNodeOrNull<Camera3D>("Camera3D");
+        var camera = _camera;
         var bridge = SimulationBridge.Instance;
         var v = bridge?.ActiveVessel;
-        if (camera == null || bridge == null || v == null) return;
-
         SetCockpitVisible(true);
+        if (camera == null || bridge == null || v == null) return;
 
         // Smooth vessel orientation to absorb high-freq sim jitter. Rate 8/s: fast enough
         // to track real pitch-overs, slow enough to kill single-frame noise spikes.
@@ -316,7 +320,7 @@ public partial class CameraController : Node3D
             : Mathf.Max(1.2f, (float)(v.VehicleLength / 2.8 * 0.72));
         float cockpitLocalOffsetY = eyeLocalY - CockpitRenderer.AuthoredEyeY;
 
-        if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D ckn)
+        if (_cockpitRenderer is { } ckn)
         {
             ckn.Position   = _smoothedOrientation * new Vector3(0f, cockpitLocalOffsetY, 0f);
             ckn.Quaternion = _smoothedOrientation;
@@ -379,11 +383,40 @@ public partial class CameraController : Node3D
 
     private void SetCockpitVisible(bool vis)
     {
-        if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D ck && ck.Visible != vis)
-            ck.Visible = vis;
+        if (_cockpitRenderer != null && _cockpitRenderer.Visible != vis)
+            _cockpitRenderer.Visible = vis;
         // Hide the rocket exterior while inside the cockpit (restore it otherwise).
-        if (GetTree().Root.FindChild("StarshipRenderer", true, false) is Node3D sr && sr.Visible == vis)
-            sr.Visible = !vis;
+        if (_exteriorRenderer != null && _exteriorRenderer.Visible == vis)
+            _exteriorRenderer.Visible = !vis;
+    }
+
+    /// <summary>
+    /// Resolves presentation nodes once they exist and reuses them on subsequent frames.
+    /// SimulationBridge creates the active renderer after this controller's _Ready(), so
+    /// the lookup remains lazy until dynamic nodes are present. The old StarshipRenderer
+    /// name is retained for temporary visual harness compatibility; production uses
+    /// ActiveVesselRenderer.
+    /// </summary>
+    private void ResolvePresentationNodes()
+    {
+        if (_camera == null || !GodotObject.IsInstanceValid(_camera))
+            _camera = GetNodeOrNull<Camera3D>("Camera3D");
+
+        var root = GetTree().Root;
+        if (_cockpitRenderer == null || !GodotObject.IsInstanceValid(_cockpitRenderer))
+            _cockpitRenderer = root.FindChild("CockpitRenderer", true, false) as Node3D;
+
+        bool cachedFallback = _exteriorRenderer != null
+            && _exteriorRenderer.Name == "StarshipRenderer";
+        if (_exteriorRenderer == null
+            || !GodotObject.IsInstanceValid(_exteriorRenderer)
+            || cachedFallback)
+        {
+            _exteriorRenderer = root.FindChild("ActiveVesselRenderer", true, false) as Node3D
+                ?? (cachedFallback
+                    ? _exteriorRenderer
+                    : root.FindChild("StarshipRenderer", true, false) as Node3D);
+        }
     }
 
     private static Vector3 ToG(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
