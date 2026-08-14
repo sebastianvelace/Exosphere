@@ -11,5 +11,9 @@ rg -q --fixed-strings "GC.GetAllocatedBytesForCurrentThread" "$PROJECT" "$ROOT_D
 rg -q --fixed-strings "PhysicsSchedulerTelemetry" "$ROOT_DIR/tools/SchedulerBenchmark/Program.cs"
 rg -q --fixed-strings "BuildMixedFleet" "$ROOT_DIR/tools/SchedulerBenchmark/Program.cs"
 rg -q --fixed-strings "BuildRailsFleet" "$ROOT_DIR/tools/SchedulerBenchmark/Program.cs"
+rg -q --fixed-strings "scheduler_phase23_v1" "$ROOT_DIR/tools/SchedulerBenchmark/Program.cs"
+rg -q --fixed-strings '"wake_catchup"' "$ROOT_DIR/tools/SchedulerBenchmark/Program.cs"
+rg -q --fixed-strings "sample_window_dispatches" "$ROOT_DIR/tools/SchedulerBenchmark/Program.cs"
+rg -q --fixed-strings "sample_window_deadline_catchup" "$ROOT_DIR/tools/SchedulerBenchmark/Program.cs"
 
-echo "scheduler_phase6_benchmark_contract_test: PASS"
+echo "scheduler_phase6_benchmark_contract_test: PASS (phase23 window + wake_catchup covered)"

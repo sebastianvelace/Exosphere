@@ -1250,6 +1250,13 @@ public partial class VesselRenderer : Node3D
             UpdateParachutes();
         }
 
+        // Thermal presentation exists only on Starship heat-shield/steel materials.
+        // Falcon 9, New Glenn and generic renderers have no thermal material targets;
+        // avoid querying atmosphere, surface velocity and every part for a result that
+        // cannot affect their visuals. This is presentation-only and leaves Vessel
+        // thermal simulation untouched.
+        if (_shipSteelMats.Count == 0 && _tileZoneMats.Count == 0) return;
+
         _thermalVisualTimer -= System.Math.Max(0.0, delta);
         if (_thermalVisualTimer > 0.0) return;
         _thermalVisualTimer = ThermalVisualPeriodSeconds;

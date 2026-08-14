@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+COCKPIT="$ROOT/scripts/CockpitInstruments.cs"
+RENDERER="$ROOT/scripts/VesselRenderer.cs"
+CONSTRUCTION="$ROOT/scripts/ConstructionController.cs"
+
+fail() {
+  echo "render_cadence_phase23_contract_test: FAIL: $*" >&2
+  exit 1
+}
+
+require_text() {
+  local file="$1" pattern="$2" description="$3"
+  rg -q --fixed-strings "$pattern" "$file" || fail "$description"
+}
+
+for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION"; do
+  [[ -f "$file" ]] || fail "missing $file"
+done
+
+# Cockpit presentation is paused outside IVA and refreshed by bounded one-shot work.
+require_text "$COCKPIT" 'RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,' \
+  "cockpit viewports must start disabled"
+require_text "$COCKPIT" 'SubViewport.UpdateMode.Once' \
+  "cockpit refresh must remain one-shot"
+require_text "$COCKPIT" 'CockpitRefreshHz = 30.0' \
+  "cockpit refresh rate must remain explicit"
+require_text "$COCKPIT" 'if (_cockpitRenderingActive)' \
+  "cockpit redraw must remain gated by cockpit visibility"
+
+# Exterior presentation must not process while hidden and must skip thermal physics
+# queries for renderer families with no thermal presentation materials.
+require_text "$RENDERER" 'if (!Visible || TargetVessel == null) return;' \
+  "hidden exterior renderer gate missing"
+require_text "$RENDERER" 'EngineVisualPeriodSeconds = 1.0 / 30.0' \
+  "engine visual cadence guard missing"
+require_text "$RENDERER" 'ThermalVisualPeriodSeconds = 1.0 / 15.0' \
+  "thermal visual cadence guard missing"
+require_text "$RENDERER" 'if (_shipSteelMats.Count == 0 && _tileZoneMats.Count == 0) return;' \
+  "non-Starship thermal query skip missing"
+
+# VAB policy is audited here without changing its controller in this scoped task.
+require_text "$CONSTRUCTION" 'RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,' \
+  "VAB empty state must start disabled"
+require_text "$CONSTRUCTION" 'SetPreviewRenderingActive(active: false);' \
+  "VAB empty state gate missing"
+require_text "$CONSTRUCTION" 'SubViewport.UpdateMode.Always' \
+  "VAB populated state must restore rendering"
+require_text "$CONSTRUCTION" 'ProcessModeEnum.Disabled' \
+  "VAB renderer must stop processing when empty"
+
+echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz gated, exterior=hidden/thermal gated, VAB=demand-driven)"

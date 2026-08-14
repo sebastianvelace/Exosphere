@@ -579,7 +579,10 @@ public partial class SkyController : Node
             GD.Print(canceled
                 ? $"PERF_ATMOS body={bodyId} stage=worker_canceled state=canceled "
                     + $"elapsedMs={AtmosphereLutWorkerElapsedMilliseconds:F1} "
-                    + $"bytes={AtmosphereLutWorkerProducedBytes}"
+                    + $"queueMs={QueueMilliseconds():F1} "
+                    + $"bytes={AtmosphereLutWorkerProducedBytes}/"
+                    + $"{AtmosphereLutWorkerEstimatedBytes} "
+                    + $"estimatedBytes={AtmosphereLutWorkerEstimatedBytes}"
                 : $"PERF_ATMOS body={bodyId} stage=worker_failed state=faulted "
                     + $"elapsedMs={AtmosphereLutWorkerElapsedMilliseconds:F1} error={error}");
             cancellation?.Dispose();
@@ -691,7 +694,10 @@ public partial class SkyController : Node
         GD.Print($"PERF_ATMOS body={bodyId} stage=cancel_requested "
             + $"state=cancel_requested reason={reason} "
             + $"elapsedMs={AtmosphereLutWorkerElapsedMilliseconds:F1} "
-            + $"bytes={AtmosphereLutWorkerProducedBytes}");
+            + $"queueMs={QueueMilliseconds():F1} "
+            + $"bytes={AtmosphereLutWorkerProducedBytes}/"
+            + $"{AtmosphereLutWorkerEstimatedBytes} "
+            + $"estimatedBytes={AtmosphereLutWorkerEstimatedBytes}");
 
         if (_isExiting)
         {
@@ -819,6 +825,20 @@ public partial class SkyController : Node
             .Append(MultipleScatteringLutVersion).Append('|')
             .Append(RuntimeMultipleScatteringOrder).Append('|')
             .Append(includeExperimentalOrderFive ? "order5" : "official");
+        // Keep the in-process cache safe when an interactive resolution or integration
+        // setting changes without a version-string edit.  These are renderer controls;
+        // the spectral oracle remains offline and never participates in this key.
+        builder.Append("|transmittance=").Append(TransmittanceLutWidth).Append('x')
+            .Append(TransmittanceLutHeight).Append('x').Append(TransmittanceLutSamples)
+            .Append("|global=").Append(MultipleScatteringLutWidth).Append('x')
+            .Append(MultipleScatteringLutHeight).Append('x')
+            .Append(MultipleScatteringIntegrationSteps).Append('x')
+            .Append(MultipleScatteringSolarSamples)
+            .Append("|angular=").Append(AngularScatteringLutWidth).Append('x')
+            .Append(AngularScatteringSolarLayers).Append('x')
+            .Append(AngularScatteringViewLayers).Append('x')
+            .Append(AngularScatteringMuLayers).Append('x')
+            .Append(AngularScatteringOpticalDepthSamples);
         AppendDouble(builder, planetRadius);
         AppendDouble(builder, atmosphereTopAltitude);
         AppendDouble(builder, profile.TopAltitude);
