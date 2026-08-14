@@ -265,6 +265,15 @@ public class OrbitalElements
         Vector3d kHat = new(0.0, 0.0, 1.0);
         Vector3d nVec = kHat.Cross(h);
         double   nMag = nVec.Magnitude;
+        // For an exactly equatorial retrograde orbit, Ω is undefined and the
+        // transformation in MathUtils has cos(i) = -1.  In that convention the
+        // perifocal +Y axis maps to inertial -Y, so the longitude of periapsis
+        // must use the opposite sign.  Detect the singular geometry from the
+        // normalized node magnitude, not an absolute |n| threshold: h can be
+        // very large or very small depending on the reference body.
+        bool equatorialRetrograde = hMag > 1e-12
+            && h.Z < 0.0
+            && nMag / hMag <= 1e-12;
 
         // ── Eccentricity vector ──────────────────────────────────────────────
         // e⃗ = (1/μ) [ (v²−μ/r) r⃗ − (r⃗·v⃗) v⃗ ]
@@ -300,7 +309,7 @@ public class OrbitalElements
 
         // ── Longitude of ascending node ──────────────────────────────────────
         double lan;
-        if (nMag < 1e-10)
+        if (equatorialRetrograde || nMag < 1e-10)
         {
             // Equatorial orbit — LAN undefined, set to 0
             lan = 0.0;
@@ -317,6 +326,15 @@ public class OrbitalElements
         {
             // Circular — AoP undefined, use true longitude of periapsis
             aop = 0.0;
+        }
+        else if (equatorialRetrograde)
+        {
+            // MathUtils.OrbitalToInertialStateVector uses the standard perifocal
+            // rotation. At i=π, Ω=0 reflects perifocal +Y onto inertial -Y;
+            // therefore the stored argument is the negative inertial longitude
+            // of the eccentricity vector. Without this sign, FromStateVector
+            // followed by GetStateAtTime mirrors the state at its own epoch.
+            aop = -System.Math.Atan2(eVec.Y, eVec.X);
         }
         else if (nMag < 1e-10)
         {
@@ -336,7 +354,13 @@ public class OrbitalElements
         if (e < 1e-10)
         {
             // Circular — use argument of latitude
-            if (nMag < 1e-10)
+            if (equatorialRetrograde)
+            {
+                // With i=π the inertial longitude advances in the opposite
+                // direction to the positive perifocal anomaly.
+                nu = -System.Math.Atan2(pos.Y, pos.X);
+            }
+            else if (nMag < 1e-10)
             {
                 nu = System.Math.Atan2(pos.Y, pos.X);
             }

@@ -506,7 +506,7 @@ public sealed class PhysicsSchedulerPerformanceTests
             ForceSensitiveVelocityToleranceMps);
     }
 
-    [Fact(Skip = "BLOCKED: SOI rails path has a reproducible inertial-frame divergence; see PERF_RAILS_EQUIVALENCE_PHASE24_REPORT.md")]
+    [Fact]
     public void SoiCrossingDeadlinePathMatchesAlwaysCheckedReferenceWithoutInertialJump()
     {
         var mixed = CreateSyntheticSoiUniverse(activeReference: false, out Vessel mixedVessel);

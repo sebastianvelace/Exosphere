@@ -1,8 +1,29 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 24 instrumentada; bloqueos SOI, display y EventPipe pendientes
+Estado: fase 25 SOI corregida; display y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `3367186` (`main` limpio después de la auditoría funcional de vuelo)
+
+## Resultado de la fase 25
+
+La divergencia SOI quedó corregida en su origen matemático, sin introducir un fallback
+numérico en el scheduler:
+
+- causa: órbitas ecuatoriales retrógradas (`i = π`) almacenaban el argumento de periapsis
+  con el signo incompatible con la matriz perifocal de `MathUtils`;
+- corrección: `OrbitalElements.FromStateVector` usa `-atan2(eᵧ, eₓ)` sólo cuando
+  `h.Z < 0` y `|n|/|h| ≤ 1e-12`; órbitas prograde e inclinadas no entran en la rama;
+- equivalencia SOI: `1/1 PASS`, posición y velocidad dentro de las tolerancias `1e-6 m` y
+  `1e-9 m/s`;
+- regresión scheduler: `19/19 PASS`; suite completa: `576/576 PASS`;
+- el fallback RK4 experimental de N10 fue descartado por coste y porque habría ocultado el
+  defecto de representación.
+
+Informe: `PERF_RAILS_ORBITAL_ELEMENTS_FIX_PHASE25_REPORT.md`.
+
+La siguiente etapa vuelve a ser externa al código: repetir la matriz framebuffer Mars/Venus
+en un host con X11/GPU funcional y obtener un perfil EventPipe real antes de optimizar las
+396 proyecciones/tick de `mixed_fleet`.
 
 ## Resultado de la fase 24
 
