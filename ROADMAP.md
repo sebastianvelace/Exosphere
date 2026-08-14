@@ -90,6 +90,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 0. **Optimización multiagente fase 23**
    - El plan operativo, ownership, worktrees, baselines y gates viven en
      `docs/audits/OPTIMIZATION_MULTI_AGENT_PHASE23_PLAN.md`.
+   - Oleada 1 integrada en `25f6bde`: cache de telemetría de motores, cobertura de wake-up,
+     early-out térmico de render y gates de workers/QA. La suite integrada queda en 571 tests.
    - El orden obligatorio es medir → optimizar una superficie → probar equivalencia →
      integrar. No se activa hibernación física por distancia ni se declara una mejora GPU
      mientras el host sólo exponga llvmpipe.

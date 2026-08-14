@@ -4,6 +4,34 @@ Estado: plan listo para ejecución por worktrees aislados
 Fecha: 2026-08-14  
 Base: `3367186` (`main` limpio después de la auditoría funcional de vuelo)
 
+## Resultado de la oleada 1
+
+La primera oleada se integró en `25f6bde` después de tres commits de agentes y una revisión
+central:
+
+| Agente | Resultado | Decisión |
+|---|---|---|
+| P1 scheduler | 4 tests de wake-up y benchmark `scheduler_phase23_v1` con ventana de dispatch/proyección/catch-up | aceptar como instrumentación y cobertura; no se alteró `Universe.cs` |
+| P2 allocations | `FillEngineReadouts` de 73.656 B a 104 B por muestra estable; engine-out invalida cache | promover; `Vessel.Tick` permanece sin mejora y sin regresión medida |
+| P4 render | early-out térmico para renderers sin materiales Starship | promover; Starship conserva ruta térmica completa |
+| P5 atmósfera | cache key completo y telemetría de cancelación/bytes/cola | promover; orden 4 oficial, orden 5 offline |
+| P6 QA | 22 pruebas focalizadas y 25 gates con fixtures inválidos | promover como barrera de integración |
+
+Evidencia de integración:
+
+- build y suite completa: `571/571`, 0 warnings, 0 errors;
+- `ci_check.sh`: contratos anteriores y phase23 PASS;
+- `atmosphere_quick_check`: `81/81 PASS`;
+- contratos P1/P4/P5/P6: PASS;
+- GPU física: `BLOCKED` por llvmpipe;
+- validación espectral: finita y monótona, con Venus todavía `order4NoWorse=False`;
+- ascenso post-integración: pre-launch `0/33` sin rojo y liftoff/Max-Q `runningEngines=33`,
+  `failedEngines=0`; la corrida fue cancelada antes de órbita por el coste del framebuffer
+  software, por lo que no se etiqueta como un nuevo `ASCENT_ORBIT_OK`.
+
+La siguiente oleada debe medir una mejora de tiempo real en hardware objetivo antes de
+promover scheduler por deadlines más agresivo, reducción de texturas o cambios de calidad.
+
 ## Objetivo
 
 Hacer que el vuelo sandbox sea más fluido sin ocultar trabajo físico que todavía pueda
@@ -224,3 +252,8 @@ Después del baseline, lanzar P1/P2/P4/P5/P6 en worktrees separados y reservar P
 máquina con GPU física. La primera propuesta de implementación debe ser la de menor riesgo:
 reducir allocations medidas y trabajo de presentación fuera de pantalla; la hibernación
 física por distancia queda fuera hasta que exista una matriz completa de wake-up/eventos.
+
+En la siguiente iteración P1 debe medir el coste de la instrumentación `sample_window` sin
+confundirlo con una mejora del runtime; P2 debe separar allocations del tick físico de las
+lecturas HUD; P3 debe repetir la matriz en GPU física; P6 debe completar los casos atmosféricos
+de 400 km y la matriz visual completa antes de marcar la fase como cerrada.
