@@ -4,6 +4,23 @@ Estado: fase 25 SOI corregida; display y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `3367186` (`main` limpio después de la auditoría funcional de vuelo)
 
+## Resultado de la fase 26
+
+La corrección SOI quedó protegida con cobertura permanente y el preflight externo se
+cerró sin asumir capacidades inexistentes:
+
+- `OrbitalElementsRoundTripTests`: 8 casos PASS para cuatro cuadrantes retrógrados,
+  circular retrógrada, prograde e inclinadas;
+- preflight display/GPU/EventPipe: `BLOCKED` por X11/Wayland, `/dev/dri` y ausencia de
+  `dotnet-trace`/`dotnet-counters`;
+- no se modificaron runtime adicional, scheduler, harness ni configuración del host;
+- la matriz Mars/Venus sigue requiriendo un host válido para producir las seis capturas.
+
+El siguiente trabajo que requiere estado externo es ejecutar
+`--atmosphere-bodies` y `rails_eventpipe_phase24.sh` en una máquina con display/GPU y
+collectors instalados. Hasta entonces, el fallback CPU y los gates fail-closed son la
+única evidencia aceptable.
+
 ## Resultado de la fase 25
 
 La divergencia SOI quedó corregida en su origen matemático, sin introducir un fallback
