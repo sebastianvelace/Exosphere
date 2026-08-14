@@ -61,6 +61,7 @@ Options:
   --cockpit     Capture the first-person cockpit optics and interior.
   --saturn      Jump to Saturn and capture the imported ring texture.
   --atmosphere  Capture a deterministic day/twilight/night altitude matrix with image metrics.
+  --atmosphere-bodies  Capture explicit Mars/Venus day/orbit/night atmosphere cases.
   --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
   --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
@@ -158,6 +159,7 @@ while [[ $# -gt 0 ]]; do
     --cockpit) MODE="cockpit"; shift ;;
     --saturn) MODE="saturn"; shift ;;
     --atmosphere) MODE="atmosphere"; shift ;;
+    --atmosphere-bodies) MODE="atmosphere_bodies"; shift ;;
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
     --hotstage)
@@ -436,6 +438,21 @@ public partial class _PlaytestShot : Node
         ("cockpit_120km_day",   120_000.0,  35.0, true, "none"),
         ("cockpit_120km_night", 120_000.0, -35.0, true, "none"),
     };
+    // Mars/Venus are deliberately a separate matrix.  The Earth set above is an existing
+    // acceptance baseline and must remain byte-for-byte reproducible; this set exercises
+    // the same renderer contract after a real body transition, including the lazy planet
+    // presentation path.  The orbital cases are outside the dense lower atmosphere on
+    // purpose: they validate the optically thin limb/space transition rather than hiding a
+    // body-specific profile behind a copied Earth altitude.
+    readonly (string BodyId, string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit)[] _atmosBodyCases =
+    {
+        ("mars",  "mars_10km_day",   10_000.0,  35.0, false),
+        ("mars",  "mars_400km_day", 400_000.0,  35.0, false),
+        ("mars",  "mars_10km_night", 10_000.0, -35.0, false),
+        ("venus", "venus_10km_day",  10_000.0,  35.0, false),
+        ("venus", "venus_400km_day",400_000.0,  35.0, false),
+        ("venus", "venus_10km_night",10_000.0, -35.0, false),
+    };
     const int AtmosphereMinimumSettleFrames = 8;
     // Incremental Sky updates one cubemap face per frame.  The atmospheric shader is
     // intentionally expensive on llvmpipe, so a 1.2 s fixed delay could capture a
@@ -446,6 +463,8 @@ public partial class _PlaytestShot : Node
     const int AtmosphereExposureStableFrames = 4;
     const double AtmosphereExposureRateTolerance = 0.015;
     int _atmosIndex = -1;
+    bool _atmosBodyCaseApplied;
+    string? _atmosBodyTransitionRequested;
     Vector3d _atmosUp = Vector3d.Up, _atmosLook = Vector3d.Forward;
     double _atmosFrameSeconds, _atmosMaxFrameSeconds;
     int _atmosPerfFrames, _atmosSlowFrames;
@@ -563,6 +582,12 @@ public partial class _PlaytestShot : Node
         double fluxRatio = flux / FluxPeak;
 
         TryCapturePending();
+
+        if (_mode == "atmosphere_bodies")
+        {
+            ProcessAtmosphereBodies(delta, bridge, vessel, universe, body);
+            return;
+        }
 
         if (_mode == "atmosphere")
         {
@@ -1662,6 +1687,97 @@ public partial class _PlaytestShot : Node
         ApplyAtmosphereCase(bridge, vessel, universe, body);
     }
 
+    private void ProcessAtmosphereBodies(double delta, SimulationBridge bridge,
+        Vessel vessel, Universe universe, CelestialBody body)
+    {
+        if (_atmosIndex < 0)
+        {
+            bridge.SetTimeScale(0.0);
+            _atmosIndex = 0;
+            _atmosBodyCaseApplied = false;
+            _atmosBodyTransitionRequested = null;
+        }
+
+        var shot = _atmosBodyCases[_atmosIndex];
+        var targetBody = universe.GetBody(shot.BodyId);
+        if (targetBody?.Atmosphere == null)
+        {
+            _log.WriteLine($"FAIL atmosphere_body_missing body={shot.BodyId} slug={shot.Slug}");
+            _log.Flush();
+            Finish("ATMOSPHERE_BODIES_INVALID");
+            return;
+        }
+
+        // Do not label an Earth frame as Mars/Venus.  JumpToBody performs the same public
+        // guidance cancellation and rigid-body reset used by the game; the next frame must
+        // prove that the dominant body actually changed before the case is applied.
+        if (!string.Equals(body.Id, shot.BodyId, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.Equals(_atmosBodyTransitionRequested, shot.BodyId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _log.WriteLine($"ATMOS_BODY_SWITCH from={body.Id} target={shot.BodyId} slug={shot.Slug}");
+                bridge.JumpToBody(shot.BodyId, shot.AltitudeM);
+                bridge.SetTimeScale(0.0);
+                _atmosBodyTransitionRequested = shot.BodyId;
+                _log.Flush();
+            }
+            return;
+        }
+
+        _atmosBodyTransitionRequested = null;
+        if (_spectralOracle == null || _spectralBodyId != body.Id)
+        {
+            _spectralOracle = SpectralAtmosphereOracle.Build(
+                body, maxOrder: SpectralAtmosphereOracle.ExperimentalOrder, sampleCount: 12);
+            _spectralBodyId = body.Id;
+            _log.WriteLine($"SPECTRAL_ORACLE body={body.Id} bands={SpectralAtmosphereOracle.BandCount} "
+                + $"provenance={_spectralOracle.DataProvenance} "
+                + $"maxOrder={_spectralOracle.MaxScatteringOrder}");
+            _log.Flush();
+        }
+
+        if (!_atmosBodyCaseApplied)
+        {
+            ApplyAtmosphereBodyCase(bridge, vessel, universe, body, shot);
+            _atmosBodyCaseApplied = true;
+            return;
+        }
+
+        _atmosFrameSeconds += delta;
+        _atmosMaxFrameSeconds = System.Math.Max(_atmosMaxFrameSeconds, delta);
+        _atmosPerfFrames++;
+        if (delta > 1.0 / 30.0) _atmosSlowFrames++;
+
+        ApplyAtmosphereBodyCamera(shot.Cockpit);
+        var world = GetTree().Root.FindChild("WorldEnvironment", true, false)
+            as WorldEnvironment;
+        double exposure = world?.Environment?.TonemapExposure ?? -1.0;
+        if (exposure > 0.0 && _atmosPreviousExposure > 0.0 && delta > 1e-6)
+        {
+            double rate = System.Math.Abs(exposure - _atmosPreviousExposure) / delta;
+            _atmosExposureStableFrames = rate <= AtmosphereExposureRateTolerance
+                ? _atmosExposureStableFrames + 1 : 0;
+        }
+        _atmosPreviousExposure = exposure;
+
+        bool enoughFrames = _atmosPerfFrames >= AtmosphereMinimumSettleFrames;
+        bool enoughTime = _atmosFrameSeconds >= AtmosphereSettleSeconds;
+        bool stableExposure = _atmosExposureStableFrames >= AtmosphereExposureStableFrames;
+        bool safetyLimit = _atmosFrameSeconds >= AtmosphereMaximumSettleSeconds;
+        if (!safetyLimit && !(enoughFrames && enoughTime && stableExposure)) return;
+
+        CaptureNow(shot.Slug);
+        LogAtmosphereBodyState(vessel, universe, body, shot);
+        _atmosIndex++;
+        _atmosBodyCaseApplied = false;
+        if (_atmosIndex >= _atmosBodyCases.Length)
+        {
+            Finish("ATMOSPHERE_BODIES_OK");
+            return;
+        }
+    }
+
     private void ApplyAtmosphereCase(SimulationBridge bridge, Vessel vessel,
         Universe universe, CelestialBody earth)
     {
@@ -1719,6 +1835,53 @@ public partial class _PlaytestShot : Node
         _log.WriteLine($"ATMOS_APPLY slug={shot.Slug} targetAlt={shot.AltitudeM:F1} " +
             $"targetSunElevation={shot.SunElevationDeg:F1} cockpit={shot.Cockpit} " +
             $"eclipse={shot.Eclipse}");
+        _log.Flush();
+    }
+
+    private void ApplyAtmosphereBodyCase(SimulationBridge bridge, Vessel vessel,
+        Universe universe, CelestialBody body,
+        (string BodyId, string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit) shot)
+    {
+        var sun = universe.GetBody("sun");
+        Vector3d sunDir = sun == null
+            ? new Vector3d(0.4, 0.5, 0.8).Normalized
+            : (sun.Position - body.Position).Normalized;
+        Vector3d seed = System.Math.Abs(sunDir.Dot(Vector3d.Up)) < 0.92
+            ? Vector3d.Up : Vector3d.Right;
+        Vector3d terminatorUp = (seed - sunDir * seed.Dot(sunDir)).Normalized;
+        double elev = shot.SunElevationDeg * System.Math.PI / 180.0;
+        _atmosUp = (terminatorUp * System.Math.Cos(elev)
+            + sunDir * System.Math.Sin(elev)).Normalized;
+
+        Vector3d projectedSun = sunDir - _atmosUp * sunDir.Dot(_atmosUp);
+        if (projectedSun.MagnitudeSquared < 1e-10)
+            projectedSun = body.GetEastDirection(body.Position + _atmosUp * body.Radius);
+        _atmosLook = projectedSun.Normalized;
+
+        vessel.IsGroundHeld = false;
+        vessel.Position = body.Position + _atmosUp * (body.Radius + shot.AltitudeM);
+        vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
+        vessel.Throttle = 0.0;
+
+        Vector3d localXWorld = _atmosLook.Cross(-_atmosUp).Normalized;
+        var basis = new Basis(ToGodot(localXWorld), ToGodot(_atmosLook), ToGodot(-_atmosUp));
+        var q = basis.GetRotationQuaternion();
+        vessel.Orientation = new Quaterniond(q.W, q.X, q.Y, q.Z);
+
+        bridge.SetTimeScale(0.0);
+        if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+            hud.Visible = false;
+        if (CameraController.Instance != null)
+            CameraController.Instance.ProcessMode = ProcessModeEnum.Disabled;
+
+        _atmosFrameSeconds = 0.0;
+        _atmosMaxFrameSeconds = 0.0;
+        _atmosPerfFrames = 0;
+        _atmosSlowFrames = 0;
+        _atmosPreviousExposure = -1.0;
+        _atmosExposureStableFrames = 0;
+        _log.WriteLine($"ATMOS_APPLY body={body.Id} slug={shot.Slug} targetAlt={shot.AltitudeM:F1} "
+            + $"targetSunElevation={shot.SunElevationDeg:F1} cockpit={shot.Cockpit} eclipse=none");
         _log.Flush();
     }
 
@@ -1789,6 +1952,27 @@ public partial class _PlaytestShot : Node
         }
     }
 
+    private void ApplyAtmosphereBodyCamera(bool cockpit)
+    {
+        if (cockpit) return;
+        if (CameraController.Instance != null)
+            CameraController.Instance.ProcessMode = ProcessModeEnum.Disabled;
+        if (GetTree().Root.FindChild("StarshipRenderer", true, false) is Node3D renderer)
+            renderer.Visible = false;
+        if (GetTree().Root.FindChild("ActiveVesselRenderer", true, false) is Node3D activeRenderer)
+            activeRenderer.Visible = false;
+        if (GetTree().Root.FindChild("CockpitRenderer", true, false) is Node3D cockpitRenderer)
+            cockpitRenderer.Visible = false;
+
+        if (GetTree().Root.FindChild("Camera3D", true, false) is Camera3D camera)
+        {
+            camera.Position = Vector3.Zero;
+            camera.Near = 0.1f;
+            camera.Fov = 60.0f;
+            camera.LookAt(ToGodot(_atmosLook) * 100.0f, ToGodot(_atmosUp));
+        }
+    }
+
     private void LogAtmosphereState(SimulationBridge bridge, Vessel vessel,
         Universe universe, CelestialBody earth,
         (string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit, string Eclipse) shot)
@@ -1844,6 +2028,44 @@ public partial class _PlaytestShot : Node
             $"maxFrameMs={_atmosMaxFrameSeconds * 1000.0:F2} slowFrames={_atmosSlowFrames} " +
             $"sampleFrames={_atmosPerfFrames} exposureStableFrames={_atmosExposureStableFrames} " +
             $"reportedFps={Engine.GetFramesPerSecond()}");
+        _log.Flush();
+    }
+
+    private void LogAtmosphereBodyState(Vessel vessel, Universe universe, CelestialBody body,
+        (string BodyId, string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit) shot)
+    {
+        var sun = universe.GetBody("sun");
+        Vector3d up = (vessel.Position - body.Position).Normalized;
+        Vector3d sunDir = sun == null ? Vector3d.Up : (sun.Position - vessel.Position).Normalized;
+        double solarElevation = System.Math.Asin(System.Math.Clamp(up.Dot(sunDir), -1.0, 1.0))
+            * 180.0 / System.Math.PI;
+        var camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
+        var world = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
+        float exposure = world?.Environment?.TonemapExposure ?? -1.0f;
+        double meanMs = _atmosPerfFrames > 0
+            ? _atmosFrameSeconds * 1000.0 / _atmosPerfFrames : 0.0;
+        double solarElevationRadians = solarElevation * System.Math.PI / 180.0;
+        double viewSunCosine = _atmosLook.Dot(sunDir);
+        var spectral = _spectralOracle?.Evaluate(
+            vessel.GetAltitude(body), solarElevationRadians, 0.5, viewSunCosine, 1.0);
+        Vector3d spectralRgb = spectral?.ToLinearRgb() ?? Vector3d.Zero;
+
+        _log.WriteLine($"ATMOS_STATE body={body.Id} slug={shot.Slug} actualAlt={vessel.GetAltitude(body):F1} "
+            + $"sunElevation={solarElevation:F2} solarVisibility={SunController.SolarVisibility:F3} "
+            + $"eclipse=none eclipseVisibility=1.000000 "
+            + $"lutVersion={SkyController.MultipleScatteringLutVersion} "
+            + $"lutOrder={SkyController.RuntimeMultipleScatteringOrder} "
+            + $"spectralOrder={_spectralOracle?.MaxScatteringOrder ?? 0} "
+            + $"spectralEnergy={spectral?.Energy ?? 0.0:E4} "
+            + $"spectralRgb={spectralRgb.X:E4},{spectralRgb.Y:E4},{spectralRgb.Z:E4} "
+            + $"separationRad=0.0000E+00 sunRadiusRad=0.0000E+00 "
+            + $"occluderRadiusRad=0.0000E+00 cockpit={shot.Cockpit} exposure={exposure:F3} "
+            + $"fov={camera?.Fov ?? -1:F2} near={camera?.Near ?? -1:F3} "
+            + $"exposureSettled={_atmosExposureStableFrames >= AtmosphereExposureStableFrames}");
+        _log.WriteLine($"PERF body={body.Id} slug={shot.Slug} meanFrameMs={meanMs:F2} "
+            + $"maxFrameMs={_atmosMaxFrameSeconds * 1000.0:F2} slowFrames={_atmosSlowFrames} "
+            + $"sampleFrames={_atmosPerfFrames} exposureStableFrames={_atmosExposureStableFrames} "
+            + $"reportedFps={Engine.GetFramesPerSecond()}");
         _log.Flush();
     }
 
@@ -2348,6 +2570,128 @@ verify_pngs() {
       echo "ERROR: reentry compare did not finish cleanly in both launches (found ${ok_count:-0}/2 REENTRY_VARIANT_OK, see GAP/timeout lines)" >&2
       return 1
     fi
+  elif [[ "$MODE" == "atmosphere_bodies" ]]; then
+    local required=(
+      mars_10km_day mars_400km_day mars_10km_night
+      venus_10km_day venus_400km_day venus_10km_night
+    )
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing Mars/Venus atmosphere PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+      if ! grep -q "^IMAGE slug=${slug} " "$LOG"; then
+        echo "ERROR: missing image metrics for Mars/Venus case: ${slug}" >&2
+        return 1
+      fi
+      if ! grep -q "^ATMOS_STATE .*slug=${slug} " "$LOG"; then
+        echo "ERROR: missing physical state evidence for Mars/Venus case: ${slug}" >&2
+        return 1
+      fi
+    done
+    if ! grep -q 'SUMMARY reason=ATMOSPHERE_BODIES_OK' "$LOG"; then
+      echo "ERROR: Mars/Venus atmosphere matrix did not finish cleanly" >&2
+      return 1
+    fi
+    if grep -Eq '^(FAIL|GAP) ' "$LOG"; then
+      echo "ERROR: Mars/Venus atmosphere log contains FAIL/GAP evidence" >&2
+      grep -E '^(FAIL|GAP) ' "$LOG" >&2
+      return 1
+    fi
+    if grep '^ATMOS_STATE ' "$LOG" | grep -qv ' exposureSettled=True'; then
+      echo "ERROR: Mars/Venus atmosphere capture reached its safety limit before exposure settled" >&2
+      grep '^ATMOS_STATE ' "$LOG" | grep -v ' exposureSettled=True' >&2
+      return 1
+    fi
+
+    # Fail closed on body identity, physical target matching, and finite optical telemetry.
+    # This prevents a stale Earth frame or an out-of-range body jump from being accepted as
+    # a valid Mars/Venus screenshot.  The orbital cases intentionally allow altitude above
+    # the atmosphere top; they still require the correct body and finite state.
+    if ! awk '
+      function value(prefix,    i, pair) {
+        for (i = 1; i <= NF; i++)
+          if ($i ~ ("^" prefix "=")) {
+            split($i, pair, "=")
+            return pair[2]
+          }
+        return ""
+      }
+      function abs(value) { return value < 0 ? -value : value }
+      function finite(value) { return value != "" && value == value && value !~ /^(nan|NaN|inf|Inf|-inf|-Inf)$/ }
+      function reject(message) {
+        print "ERROR: Mars/Venus atmosphere gate: " message > "/dev/stderr"
+        bad = 1
+      }
+      BEGIN {
+        expected["mars_10km_day"] = "mars"
+        expected["mars_400km_day"] = "mars"
+        expected["mars_10km_night"] = "mars"
+        expected["venus_10km_day"] = "venus"
+        expected["venus_400km_day"] = "venus"
+        expected["venus_10km_night"] = "venus"
+      }
+      /^ATMOS_APPLY / {
+        slug = value("slug")
+        body = value("body")
+        if (!(slug in expected) || body != expected[slug])
+          reject("unexpected apply identity slug=" slug " body=" body)
+        targetAlt[slug] = value("targetAlt") + 0
+        targetSun[slug] = value("targetSunElevation") + 0
+        requested[slug]++
+      }
+      /^ATMOS_STATE / {
+        slug = value("slug")
+        body = value("body")
+        if (!(slug in expected) || body != expected[slug])
+          reject("unexpected state identity slug=" slug " body=" body)
+        if (!(slug in targetAlt))
+          reject("state without preceding apply for " slug)
+        actualAlt = value("actualAlt")
+        actualSun = value("sunElevation")
+        solarRaw = value("solarVisibility")
+        energyRaw = value("spectralEnergy")
+        solar = solarRaw + 0
+        energy = energyRaw + 0
+        if (!finite(actualAlt) || !finite(actualSun) || !finite(solarRaw) || !finite(energyRaw))
+          reject("non-finite state for " slug)
+        if (abs(actualAlt + 0 - targetAlt[slug]) > 2.0)
+          reject(slug " altitude mismatch actual=" actualAlt " target=" targetAlt[slug])
+        if (abs(actualSun + 0 - targetSun[slug]) > 0.25)
+          reject(slug " solar-elevation mismatch actual=" actualSun " target=" targetSun[slug])
+        if (solar < -1e-6 || solar > 1.000001)
+          reject(slug " solarVisibility outside [0,1]: " solar)
+        if (value("eclipse") != "none" || (value("eclipseVisibility") + 0) < 0.999)
+          reject(slug " has unexpected eclipse state")
+        if (value("exposureSettled") != "True")
+          reject(slug " exposure did not settle")
+        seen[slug]++
+      }
+      /^IMAGE / {
+        slug = value("slug")
+        meanRaw = value("mean")
+        clippedRaw = value("clippedFrac")
+        if (!(slug in expected) || !finite(meanRaw) || !finite(clippedRaw))
+          reject("invalid image metrics for " slug)
+        mean = meanRaw + 0
+        clipped = clippedRaw + 0
+        if (mean <= 0.00002 || mean >= 0.9995 || clipped < 0.0 || clipped > 0.95)
+          reject("degenerate image metrics for " slug)
+        image[slug]++
+      }
+      /^SUMMARY reason=ATMOSPHERE_BODIES_OK$/ { summary++ }
+      END {
+        for (slug in expected) {
+          if (requested[slug] != 1) reject("expected exactly one apply for " slug)
+          if (seen[slug] != 1) reject("expected exactly one state for " slug)
+          if (image[slug] != 1) reject("expected exactly one image for " slug)
+        }
+        if (summary != 1) reject("missing or duplicated ATMOSPHERE_BODIES_OK")
+        exit bad
+      }
+    ' "$LOG"; then
+      return 1
+    fi
   elif [[ "$MODE" == "atmosphere" ]]; then
     local required=(
       ground_day ground_sunrise ground_sunset ground_night
@@ -2762,6 +3106,8 @@ elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "reentry_compare" ]]; then
   echo "visual_playtest: reentry attitude compare OK — see REENTRY_COMPARE rows in $LOG"
+elif [[ "$MODE" == "atmosphere_bodies" ]]; then
+  echo "visual_playtest: Mars/Venus atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "atmosphere" ]]; then
   echo "visual_playtest: atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "lunar_map" ]]; then

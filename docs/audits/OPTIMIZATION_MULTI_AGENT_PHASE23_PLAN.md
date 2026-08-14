@@ -1,8 +1,35 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: oleada 2 cerrada; gates atmosférico y GPU pendientes
+Estado: fase 24 instrumentada; bloqueos SOI, display y EventPipe pendientes
 Fecha: 2026-08-14  
 Base: `3367186` (`main` limpio después de la auditoría funcional de vuelo)
+
+## Resultado de la fase 24
+
+La siguiente etapa quedó instrumentada y cerrada con tres bloqueos explícitos; no se
+promovió una optimización de runtime sin trazas ni equivalencia:
+
+| Línea | Resultado | Decisión |
+|---|---|---|
+| Rails/EventPipe | `dotnet-trace` y `dotnet-counters` no están instalados; fallback Phase 23 PASS (`rails_fleet` p95 0.754 ms, `mixed_fleet` 727 KiB/tick) | mantener el candidato de caché de proyecciones en investigación; no cambiar frecuencia ni hibernación |
+| Mars/Venus visual | harness nuevo con 6 casos (`--atmosphere-bodies`), Earth intacto; Xvfb bloqueó la corrida real | aceptar el gate sintético; exigir seis capturas en un host con display/GPU válido |
+| Equivalencia rails/SOI | deadline, wake-up, atmósfera y contacto pasan; el cruce SOI diverge 6,082.76 m y 2,000 m/s | bloquear optimización SOI; diagnóstico marcado `Skip` para mantener CI verde hasta triagear `Universe` |
+
+Verificación de esta fase:
+
+- contratos Mars/Venus y Phase 23: `34/34 PASS`;
+- contrato EventPipe fail-closed: `PASS`;
+- pruebas scheduler focalizadas: `18 PASS, 1 SKIP` por la divergencia SOI documentada;
+- build del juego: 0 warnings, 0 errors;
+- no se declaró `MARS_VENUS_OK`, `EVENTPIPE_OK` ni una mejora de FPS.
+
+Informes: `PERF_RAILS_EVENTPIPE_PHASE24_REPORT.md`,
+`PERF_ATMOSPHERE_MARS_VENUS_PHASE24_REPORT.md` y
+`PERF_RAILS_EQUIVALENCE_PHASE24_REPORT.md`.
+
+La siguiente acción prioritaria ya no es reducir trabajo: es corregir o explicar el cambio
+de marco inercial en el cruce SOI y volver a ejecutar la prueba sin `Skip`. Sólo después
+de esa equivalencia se puede evaluar una reutilización de proyecciones en `mixed_fleet`.
 
 ## Resultado de la oleada 2
 

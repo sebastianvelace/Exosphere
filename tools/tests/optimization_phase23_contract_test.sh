@@ -50,6 +50,14 @@ require_text "$VISUAL" '--ascent' 'visual ascent mode is declared'
 require_text "$VISUAL" '--edl' 'visual EDL/catch mode is declared'
 require_text "$VISUAL" '--saturn' 'visual Saturn jump mode is declared'
 require_text "$VISUAL" '--atmosphere' 'visual atmosphere matrix mode is declared'
+require_text "$VISUAL" '--atmosphere-bodies' 'Mars/Venus atmosphere matrix mode is declared'
+require_text "$VISUAL" 'ATMOSPHERE_BODIES_OK' 'Mars/Venus atmosphere terminal state is gated'
+require_text "$VISUAL" 'mars_10km_day' 'Mars low-altitude day case is declared'
+require_text "$VISUAL" 'mars_400km_day' 'Mars orbital day case is declared'
+require_text "$VISUAL" 'mars_10km_night' 'Mars night case is declared'
+require_text "$VISUAL" 'venus_10km_day' 'Venus low-altitude day case is declared'
+require_text "$VISUAL" 'venus_400km_day' 'Venus orbital day case is declared'
+require_text "$VISUAL" 'venus_10km_night' 'Venus night case is declared'
 require_text "$VISUAL" '--spectral' 'offline spectral mode is declared'
 require_text "$VISUAL" '--verify-only' 'visual artifacts have a reproducible verify-only path'
 require_text "$VISUAL" 'SUMMARY reason=CAUGHT' 'catch terminal state is gated'
@@ -215,6 +223,84 @@ atmos_bad="$TMP/atmos-bad.log"
 sed 's/eclipse_partial_central actualAlt=120000/eclipse_partial_central actualAlt=120010/' \
   "$atmos_good" > "$atmos_bad"
 expect_failure 'atmosphere target/state mismatch rejected' validate_atmosphere_log "$atmos_bad"
+
+validate_atmosphere_bodies_log() {
+  local log="$1"
+  awk '
+    function value(key,    i, pair) {
+      for (i = 1; i <= NF; i++) if ($i ~ ("^" key "=")) {
+        split($i, pair, "="); return pair[2]
+      }
+      return ""
+    }
+    function abs(v) { return v < 0 ? -v : v }
+    function finite(v) { return v != "" && v == v && v !~ /^(nan|NaN|inf|Inf|-inf|-Inf)$/ }
+    function reject(message) { print "ERROR body fixture: " message > "/dev/stderr"; bad = 1 }
+    BEGIN {
+      expected["mars_10km_day"] = "mars"; expected["mars_400km_day"] = "mars"
+      expected["mars_10km_night"] = "mars"
+      expected["venus_10km_day"] = "venus"; expected["venus_400km_day"] = "venus"
+      expected["venus_10km_night"] = "venus"
+    }
+    /^ATMOS_APPLY / {
+      slug = value("slug"); body = value("body")
+      if (!(slug in expected) || body != expected[slug]) reject("apply identity " slug)
+      targetAlt[slug] = value("targetAlt") + 0
+      targetSun[slug] = value("targetSunElevation") + 0
+      requested[slug]++
+    }
+    /^ATMOS_STATE / {
+      slug = value("slug"); body = value("body")
+      if (!(slug in expected) || body != expected[slug]) reject("state identity " slug)
+      actualAlt = value("actualAlt"); actualSun = value("sunElevation")
+      solar = value("solarVisibility"); energy = value("spectralEnergy")
+      if (!finite(actualAlt) || !finite(actualSun) || !finite(solar) || !finite(energy))
+        reject("non-finite state " slug)
+      if (abs(actualAlt + 0 - targetAlt[slug]) > 2.0) reject("altitude " slug)
+      if (abs(actualSun + 0 - targetSun[slug]) > 0.25) reject("solar elevation " slug)
+      if (value("eclipse") != "none" || value("exposureSettled") != "True") reject("optics state " slug)
+      seen[slug]++
+    }
+    /^IMAGE / {
+      slug = value("slug")
+      if (!(slug in expected)) reject("unexpected image identity " slug)
+      image[slug]++
+    }
+    /^SUMMARY reason=ATMOSPHERE_BODIES_OK$/ { summary++ }
+    END {
+      for (slug in expected) {
+        if (requested[slug] != 1 || seen[slug] != 1 || image[slug] != 1)
+          reject("missing/duplicate apply/state/image " slug)
+      }
+      if (summary != 1) reject("summary")
+      exit bad
+    }
+  ' "$log"
+}
+
+atmos_bodies_good="$TMP/atmos-bodies-good.log"
+{
+  for row in \
+    'mars mars_10km_day 10000 35 1.0 1.2E-3' \
+    'mars mars_400km_day 400000 35 1.0 0.0E+0' \
+    'mars mars_10km_night 10000 -35 1.0 1.0E-4' \
+    'venus venus_10km_day 10000 35 1.0 2.1E-2' \
+    'venus venus_400km_day 400000 35 1.0 0.0E+0' \
+    'venus venus_10km_night 10000 -35 1.0 1.0E-4'; do
+    read -r body slug altitude sun visibility energy <<< "$row"
+    echo "ATMOS_APPLY body=$body slug=$slug targetAlt=$altitude targetSunElevation=$sun cockpit=False eclipse=none"
+    echo "IMAGE slug=$slug mean=0.10 clippedFrac=0.01"
+    echo "ATMOS_STATE body=$body slug=$slug actualAlt=$altitude sunElevation=$sun solarVisibility=$visibility eclipse=none eclipseVisibility=1.000000 spectralEnergy=$energy exposureSettled=True"
+  done
+  echo 'SUMMARY reason=ATMOSPHERE_BODIES_OK'
+} > "$atmos_bodies_good"
+validate_atmosphere_bodies_log "$atmos_bodies_good"
+pass_gate 'Mars/Venus atmosphere valid fixture accepted'
+
+atmos_bodies_bad="$TMP/atmos-bodies-bad.log"
+sed 's/ATMOS_STATE body=venus slug=venus_10km_night actualAlt=10000/ATMOS_STATE body=mars slug=venus_10km_night actualAlt=10000/' \
+  "$atmos_bodies_good" > "$atmos_bodies_bad"
+expect_failure 'Mars/Venus body identity mismatch rejected' validate_atmosphere_bodies_log "$atmos_bodies_bad"
 
 validate_spectral_log() {
   local log="$1" line finite monotonic order4 decision
