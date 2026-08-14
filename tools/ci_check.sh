@@ -32,6 +32,7 @@ bash tools/tests/saturn_ring_contract_test.sh
 bash tools/perf/phase4_gpu_probe_contract_test.sh
 bash tools/perf/texture_gpu_matrix_contract_test.sh
 bash tools/perf/scheduler_phase6_benchmark_contract_test.sh
+bash tools/perf/allocations_tick_phase23_contract_test.sh
 bash tools/tests/atmosphere_phase23_contract_test.sh
 bash tools/tests/render_cadence_phase23_contract_test.sh
 bash tools/tests/optimization_phase23_contract_test.sh

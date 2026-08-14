@@ -31,6 +31,7 @@ VISUAL_MODE="none"
 RUN_ID="texture-matrix-$$"
 ALLOW_SOFTWARE=0
 SKIP_BUILD=0
+OFFLINE=0
 
 usage() {
   cat <<'EOF'
@@ -56,6 +57,7 @@ Options:
   --visual-mode MODE     none, smoke, cockpit, saturn, or atmosphere.
   --allow-software       Complete software-renderer diagnostics; never PASS hardware gate.
   --skip-build           Reuse existing candidate build (advanced).
+  --offline              Ignore unavailable NuGet feeds and use the local package cache.
   --validate DIR         Validate matrix.meta and matrix.rows.tsv in DIR.
   -h, --help             Show this help.
 
@@ -136,6 +138,7 @@ while [[ $# -gt 0 ]]; do
     --visual-mode) [[ $# -ge 2 ]] || die "--visual-mode requires a value"; VISUAL_MODE="$2"; shift 2 ;;
     --allow-software) ALLOW_SOFTWARE=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
+    --offline) OFFLINE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown option: $1" ;;
   esac
@@ -171,6 +174,7 @@ write_meta() {
     echo "resolution=$RESOLUTION"
     echo "frames_requested=$FRAMES"
     echo "visual_mode=$VISUAL_MODE"
+    if (( OFFLINE == 1 )); then echo "restore_mode=ignore_failed_sources"; else echo "restore_mode=strict"; fi
     echo "physical_gpu_gate=$physical"
     echo "software_renderer_observed=$software"
   } > "$META"
@@ -260,7 +264,9 @@ for variant in "${VARIANT_IDS[@]}"; do
   mkdir -p "$variant_dir"
   variant_status=PASS
 
-  if ! dotnet restore "$candidate/Exosphere.csproj" --nologo > "$variant_dir/dotnet_restore.log" 2>&1; then
+  restore_args=()
+  if (( OFFLINE == 1 )); then restore_args+=(--ignore-failed-sources); fi
+  if ! dotnet restore "$candidate/Exosphere.csproj" --nologo "${restore_args[@]}" > "$variant_dir/dotnet_restore.log" 2>&1; then
     variant_status=FAIL
   fi
   if [[ "$variant_status" == PASS && "$SKIP_BUILD" -eq 0 ]] && ! dotnet build "$candidate/Exosphere.csproj" --no-restore --nologo -v quiet > "$variant_dir/dotnet_build.log" 2>&1; then

@@ -1,8 +1,35 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: plan listo para ejecución por worktrees aislados  
+Estado: oleada 2 cerrada; gates atmosférico y GPU pendientes
 Fecha: 2026-08-14  
 Base: `3367186` (`main` limpio después de la auditoría funcional de vuelo)
+
+## Resultado de la oleada 2
+
+La segunda oleada se cerró el 2026-08-14 con medición reproducible y sin promover cambios
+físicos por intuición:
+
+| Agente | Resultado | Decisión |
+|---|---|---|
+| N1 allocations/tick | benchmark separado con 256 muestras y 32 warm-up; `mixed_fleet` ~727 KiB/tick, `rails_fleet` ~190 KiB/tick, Flight 7 directo ~3,976 B por `Vessel.Tick`; snapshot de telemetría ~0 B material | aceptar la instrumentación; no optimizar runtime hasta perfilar rails/proyecciones con equivalencia |
+| N2 atmósfera visual | 8/20 casos Earth preservados; `--verify-only` rechazó la matriz incompleta; Xvfb no permitió cerrar la corrida y Mars/Venus no existen aún en el modo visual | `INCOMPLETE/BLOCKED`; no declarar `ATMOSPHERE_OK` |
+| N3 GPU física | Godot observó Mesa llvmpipe; `real_gpu_observed=false`; sólo `8k_nomip` hizo preflight | `BLOCKED`; no publicar FPS/VRAM ni promover textura |
+
+Gates de la oleada:
+
+- benchmark de asignaciones: `PASS`, cinco escenarios finitos y un catch-up determinista;
+- xUnit: `571/571`, sin fallos;
+- contratos Phase 23: `25/25`, además de contratos atmosférico, render y visual en verde;
+- builds de herramientas: 0 warnings, 0 errores;
+- GPU física y matriz atmosférica completa: no aprobadas por evidencia insuficiente del entorno.
+
+Informes: `PERF_ALLOCATIONS_TICK_PHASE23_REPORT.md`,
+`PERF_ATMOSPHERE_FULL_PHASE23_REPORT.md` y `PERF_TEXTURE_GPU_MATRIX_PHASE23_REPORT.md`.
+
+La siguiente etapa debe atacar el coste dominante medido en `rails_fleet`/`mixed_fleet`
+con un perfil EventPipe o `dotnet-trace` y una prueba de equivalencia de wake-up; no debe
+empezar por hibernación física global. En paralelo, el harness atmosférico debe incorporar
+Mars/Venus y recuperar un display X11 funcional antes de repetir la matriz completa.
 
 ## Resultado de la oleada 1
 
