@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Presentation;
 
 string repositoryRoot = FindRepositoryRoot();
 int samples = ReadIntOption(args, "--samples", 80);
@@ -67,6 +68,7 @@ foreach (var scenario in scenarios)
         + $"telemetry_snapshot_bytes={breakdown.TelemetrySnapshot.ManagedBytesPerOperation:F1} "
         + $"scheduler_empty_bytes={breakdown.SchedulerEmpty.ManagedBytesPerOperation:F1} "
         + $"engine_snapshot_bytes={breakdown.EngineSnapshot.ManagedBytesPerOperation:F1} "
+        + $"hud_capture_bytes={breakdown.HudCapture.ManagedBytesPerOperation:F1} "
         + $"valid={breakdown.Valid}");
 }
 
@@ -173,13 +175,17 @@ static AllocationBreakdown MeasureAllocationBreakdown(
     AllocationMeasurement engineSnapshot = scenario.Name == "full_single"
         ? MeasureEngineTelemetrySnapshot(repositoryRoot, samples, warmup)
         : AllocationMeasurement.NotApplicable("engine_readout_snapshot");
+    AllocationMeasurement hudCapture = scenario.Name == "full_single"
+        ? MeasureHudTelemetryCapture(repositoryRoot, samples, warmup)
+        : AllocationMeasurement.NotApplicable("hud_telemetry_capture");
     return new AllocationBreakdown(
         scenario.Name,
         vesselTick,
         flight7VesselTick,
         telemetrySnapshot,
         schedulerEmpty,
-        engineSnapshot);
+        engineSnapshot,
+        hudCapture);
 }
 
 static AllocationMeasurement MeasureEmptyScheduler(
@@ -327,6 +333,49 @@ static AllocationMeasurement MeasureEngineTelemetrySnapshot(
         () => buffer.Count > 0
             && buffer.All(row => double.IsFinite(row.ThrustN)
                 && double.IsFinite(row.MassFlowKgS)));
+}
+
+static AllocationMeasurement MeasureHudTelemetryCapture(
+    string repositoryRoot,
+    int samples,
+    int warmup)
+{
+    CelestialBody earth = LoadBody(repositoryRoot, "earth");
+    Vessel vessel = BuildFlight7Stack(repositoryRoot);
+    vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 100_000.0);
+    vessel.Velocity = earth.Velocity + Vector3d.Up * 7_600.0;
+    vessel.Throttle = 1.0;
+    for (int i = 0; i < System.Math.Max(100, warmup); i++)
+        vessel.Tick(0.02, earth);
+
+    var universe = new Universe { ActiveVessel = vessel, TimeScale = 1.0 };
+    universe.AddBody(earth);
+    universe.AddVessel(vessel);
+    var presenter = new FlightHudPresenter();
+    for (int i = 0; i < 8; i++)
+        CaptureHudTelemetry(presenter, universe, vessel);
+
+    StabilizeManagedRuntime();
+    return MeasureOperations(
+        "hud_telemetry_capture",
+        samples,
+        1,
+        _ => CaptureHudTelemetry(presenter, universe, vessel),
+        () => AllocationBenchmarkSink.HudAltitudeM is { } altitude
+            && double.IsFinite(altitude));
+}
+
+static void CaptureHudTelemetry(
+    FlightHudPresenter presenter,
+    Universe universe,
+    Vessel vessel)
+{
+    var snapshot = presenter.Capture(
+        universe,
+        vessel,
+        "ORBIT",
+        FlightHudViewMode.Exterior);
+    AllocationBenchmarkSink.HudAltitudeM = snapshot.AltitudeM;
 }
 
 static AllocationMeasurement MeasureOperations(
@@ -568,13 +617,15 @@ record AllocationBreakdown(
     AllocationMeasurement Flight7VesselTick,
     AllocationMeasurement TelemetrySnapshot,
     AllocationMeasurement SchedulerEmpty,
-    AllocationMeasurement EngineSnapshot)
+    AllocationMeasurement EngineSnapshot,
+    AllocationMeasurement HudCapture)
 {
     public bool Valid => VesselTick.Valid
         && Flight7VesselTick.Valid
         && TelemetrySnapshot.Valid
         && SchedulerEmpty.Valid
-        && EngineSnapshot.Valid;
+        && EngineSnapshot.Valid
+        && HudCapture.Valid;
 
     public IEnumerable<string> ToLines()
     {
@@ -592,6 +643,9 @@ record AllocationBreakdown(
             yield return line;
         foreach (string line in EngineSnapshot.ToLines(
                      $"{ScenarioName}.engine_readout_snapshot"))
+            yield return line;
+        foreach (string line in HudCapture.ToLines(
+                     $"{ScenarioName}.hud_telemetry_capture"))
             yield return line;
         yield return $"{ScenarioName}.allocation_valid={Valid.ToString().ToLowerInvariant()}";
     }
@@ -731,6 +785,7 @@ static class AllocationBenchmarkSink
 {
     public static int TelemetryChecksum;
     public static int EngineRowCount;
+    public static double? HudAltitudeM;
 }
 
 record TelemetryTotals(

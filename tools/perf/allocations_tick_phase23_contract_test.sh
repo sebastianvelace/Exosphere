@@ -17,6 +17,7 @@ rg -q --fixed-strings "MeasureDirectVesselTick" "$PROJECT"
 rg -q --fixed-strings "MeasureFlight7VesselTick" "$PROJECT"
 rg -q --fixed-strings "MeasureTelemetrySnapshot" "$PROJECT"
 rg -q --fixed-strings "MeasureEmptyScheduler" "$PROJECT"
+rg -q --fixed-strings "MeasureHudTelemetryCapture" "$PROJECT"
 rg -q --fixed-strings '"wake_catchup"' "$PROJECT"
 rg -q --fixed-strings "allocation_valid=true" "$BENCHMARK"
 

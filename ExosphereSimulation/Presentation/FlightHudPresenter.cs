@@ -1,6 +1,7 @@
 namespace Exosphere.Simulation.Presentation;
 
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Parts;
 
 public enum FlightHudViewMode
 {
@@ -86,6 +87,7 @@ public sealed class FlightHudPresenter
     private bool _launchCaptured;
     private double _smoothedG;
     private string? _activeVesselId;
+    private readonly List<EngineReadout> _engineReadoutScratch = new(39);
 
     public FlightHudSnapshot Capture(
         Universe universe,
@@ -152,14 +154,26 @@ public sealed class FlightHudPresenter
         bool impactTrajectory = periapsis is < 0.0;
         double liquidFuel = vessel.Parts.TotalLiquidFuel;
         double oxidizer = vessel.Parts.TotalOxidizer;
-        double liquidCapacity = vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityLF);
-        double oxidizerCapacity = vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityOx);
+        double liquidCapacity = 0.0;
+        double oxidizerCapacity = 0.0;
+        for (int i = 0; i < vessel.Parts.Parts.Count; i++)
+        {
+            var part = vessel.Parts.Parts[i];
+            liquidCapacity += part.Definition.FuelCapacityLF;
+            oxidizerCapacity += part.Definition.FuelCapacityOx;
+        }
         double liquidFraction = liquidCapacity > 0.0 ? liquidFuel / liquidCapacity : 0.0;
         double oxidizerFraction = oxidizerCapacity > 0.0 ? oxidizer / oxidizerCapacity : 0.0;
-        var engineReadouts = vessel.GetEngineReadouts(body).ToArray();
-        int nominalEngines = engineReadouts.Length;
-        int activeEngines = engineReadouts.Count(e => e.Throttle > 1e-3);
-        int failedEngines = engineReadouts.Count(e => e.FailureCode != null);
+        vessel.FillEngineReadouts(body, _engineReadoutScratch);
+        int nominalEngines = _engineReadoutScratch.Count;
+        int activeEngines = 0;
+        int failedEngines = 0;
+        for (int i = 0; i < _engineReadoutScratch.Count; i++)
+        {
+            var readout = _engineReadoutScratch[i];
+            if (readout.Throttle > 1e-3) activeEngines++;
+            if (readout.FailureCode != null) failedEngines++;
+        }
 
         var alerts = BuildAlerts(
             missionPhase,

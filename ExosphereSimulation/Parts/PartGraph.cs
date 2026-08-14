@@ -26,12 +26,15 @@ public class PartGraph
 
     private readonly List<Part>  _parts  = new();
     private readonly List<Joint> _joints = new();
+    private readonly IReadOnlyList<Part> _partsView;
+    private readonly IReadOnlyList<Joint> _jointsView;
     private readonly List<Part> _tickStageParts = new();
     private readonly List<Part> _tickActiveEngines = new();
     private readonly List<Part> _queryStageParts = new();
     private readonly List<Part> _queryActiveEngines = new();
     private readonly List<Part> _stageSubtreeScratch = new();
     private readonly List<Part> _stageTraversalScratch = new();
+    private readonly Queue<Part> _stageQueueScratch = new();
     private readonly List<Part> _engineReadoutCacheParts = new();
     private readonly List<EngineInstanceState?> _engineReadoutCacheStates = new();
     private readonly List<EngineReadout> _engineReadoutCacheRows = new();
@@ -54,8 +57,16 @@ public class PartGraph
     private double _tickTransverseMomentOfInertia;
     private double _tickAxialMomentOfInertia;
 
-    public IReadOnlyList<Part>  Parts  => _parts.AsReadOnly();
-    public IReadOnlyList<Joint> Joints => _joints.AsReadOnly();
+    public PartGraph()
+    {
+        // A read-only facade is itself an allocation. Keep one stable view per graph so
+        // physics/HUD queries do not create garbage merely by reading the topology.
+        _partsView = _parts.AsReadOnly();
+        _jointsView = _joints.AsReadOnly();
+    }
+
+    public IReadOnlyList<Part>  Parts  => _partsView;
+    public IReadOnlyList<Joint> Joints => _jointsView;
     public Part? Root => _root;
 
     /// <summary>
@@ -1397,13 +1408,15 @@ public class PartGraph
     private void AssignPositions(Part part, Vector3d pos, Dictionary<Part, Vector3d> map)
     {
         map[part] = pos;
-        foreach (var child in GetChildren(part))
+        // Preserve joint order without allocating the Where/Select iterator or doing a
+        // second joint search for each child.
+        for (int jointIndex = 0; jointIndex < _joints.Count; jointIndex++)
         {
-            var joint = GetJoint(part, child);
-            var parentNode = part.Definition.AttachmentNodes
-                .FirstOrDefault(n => n.Id == joint?.ParentNodeId);
-            var childNode  = child.Definition.AttachmentNodes
-                .FirstOrDefault(n => n.Id == joint?.ChildNodeId);
+            var joint = _joints[jointIndex];
+            if (!ReferenceEquals(joint.Parent, part)) continue;
+            var child = joint.Child;
+            var parentNode = FindAttachmentNode(part, joint.ParentNodeId);
+            var childNode = FindAttachmentNode(child, joint.ChildNodeId);
 
             var pOff = parentNode != null
                 ? new Vector3d(parentNode.Position[0], parentNode.Position[1], parentNode.Position[2])
@@ -1416,17 +1429,41 @@ public class PartGraph
         }
     }
 
+    private static AttachmentNodeDef? FindAttachmentNode(Part part, string? nodeId)
+    {
+        if (string.IsNullOrEmpty(nodeId)) return null;
+        var nodes = part.Definition.AttachmentNodes;
+        for (int i = 0; i < nodes.Count; i++)
+            if (nodes[i].Id == nodeId) return nodes[i];
+        return null;
+    }
+
     private List<Part> CollectSubtree(Part root)
     {
         var result = new List<Part>();
-        var queue  = new Queue<Part>();
+        CollectSubtreeInto(root, result, _stageQueueScratch);
+        return result;
+    }
+
+    private void CollectSubtreeInto(
+        Part root,
+        List<Part> result,
+        Queue<Part> queue)
+    {
+        result.Clear();
+        queue.Clear();
         queue.Enqueue(root);
         while (queue.Count > 0)
         {
-            var p = queue.Dequeue();
-            result.Add(p);
-            foreach (var child in GetChildren(p)) queue.Enqueue(child);
+            var part = queue.Dequeue();
+            result.Add(part);
+            for (int jointIndex = 0; jointIndex < _joints.Count; jointIndex++)
+            {
+                var joint = _joints[jointIndex];
+                if (ReferenceEquals(joint.Parent, part))
+                    queue.Enqueue(joint.Child);
+            }
         }
-        return result;
+        queue.Clear();
     }
 }

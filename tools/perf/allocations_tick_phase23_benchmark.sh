@@ -28,6 +28,7 @@ done
 
 rg -q '^full_single\.flight7_vessel_tick\.managed_alloc_bytes_per_operation=[0-9]+\.[0-9]+$' "$REPORT"
 rg -q '^full_single\.engine_readout_snapshot\.managed_alloc_bytes_per_operation=[0-9]+\.[0-9]+$' "$REPORT"
+rg -q '^full_single\.hud_telemetry_capture\.managed_alloc_bytes_per_operation=[0-9]+\.[0-9]+$' "$REPORT"
 rg -q '^summary_finite=true$' "$REPORT"
 rg -q '^summary_valid=true$' "$REPORT"
 
