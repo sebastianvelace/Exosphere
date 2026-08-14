@@ -5,7 +5,7 @@ llvmpipe; fase 14 aplica preview VAB bajo demanda; fase 15 añade probe in-proce
 fase 16 gatea el renderer exterior oculto en IVA; fase 17 elimina el staging CPU duplicado
 del anillo de Saturno; fase 18 acota el refresh de pantallas cockpit a 30 Hz; fase 19 cierra
 el límite de llvmpipe y define la matriz Earth/star; fase 20 prueba 4K aislada sin promoción;
-siguiente fase: GPU física objetivo
+fase 21 añade runner fail-closed; siguiente fase: GPU física objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
