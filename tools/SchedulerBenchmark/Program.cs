@@ -16,35 +16,47 @@ var scenarios = new[]
     new Scenario("full_fleet", () => BuildFullFleet(repositoryRoot, 4), 1.0, 0.02),
     new Scenario("rails_fleet", () => BuildRailsFleet(repositoryRoot, 32), 2_000.0, 0.02),
     new Scenario("mixed_fleet", () => BuildMixedFleet(repositoryRoot, 16), 100.0, 0.005),
+    new Scenario(
+        "wake_catchup",
+        () => BuildWakeCatchUpUniverse(repositoryRoot),
+        100.0,
+        0.005,
+        BeforeTick: (universe, sample) =>
+        {
+            if (sample == samples / 2)
+                universe.Vessels.Single(vessel => vessel.Id == "wake-rails").Throttle = 0.1;
+        },
+        RequiresCatchUp: true),
 };
 
 var report = new List<string>
 {
-    "format_version=scheduler_phase7_v1",
+    "format_version=scheduler_phase23_v1",
     $"samples={samples}",
     $"warmup={warmup}",
     $"runtime={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}",
 };
 bool allFinite = true;
+bool allValid = true;
 
 foreach (var scenario in scenarios)
 {
     ScenarioResult result = Measure(scenario, samples, warmup);
     report.AddRange(result.ToLines());
     allFinite &= result.Finite;
+    allValid &= result.Valid;
     Console.WriteLine(
         $"SCHEDULER scenario={result.Name} samples={result.SampleCount} "
         + $"p50_ms={result.P50Ms:F4} p95_ms={result.P95Ms:F4} p99_ms={result.P99Ms:F4} "
         + $"cpu_ms={result.ProcessCpuMs:F2} alloc_per_tick={result.ManagedBytesPerTick:F1} "
-        + $"branch={result.Telemetry.Branch} work={result.Telemetry.TotalWorkDispatches} "
-        + $"outer={result.Telemetry.OuterSubsteps} rails_slices={result.Telemetry.RailsSlices} "
-        + $"deadline_skips={result.Telemetry.DeadlineDeferredSkips} "
-        + $"deadline_projected={result.Telemetry.DeadlineProjectedDispatches} "
-        + $"deadline_catchup={result.Telemetry.DeadlineCatchUpDispatches} "
-        + $"finite={result.Finite}");
+        + $"dispatches_per_tick={result.Totals.TotalWorkDispatches / (double)result.SampleCount:F3} "
+        + $"projections_per_tick={result.Totals.DeadlineProjectedDispatches / (double)result.SampleCount:F3} "
+        + $"catchup_per_tick={result.Totals.DeadlineCatchUpDispatches / (double)result.SampleCount:F3} "
+        + $"event_contract={result.EventContractPass} finite={result.Finite}");
 }
 
 report.Add($"summary_finite={allFinite.ToString().ToLowerInvariant()}");
+report.Add($"summary_valid={allValid.ToString().ToLowerInvariant()}");
 if (outputPath is null)
     Console.WriteLine(string.Join(Environment.NewLine, report));
 else
@@ -54,7 +66,7 @@ else
     File.WriteAllLines(absoluteOutput, report);
     Console.WriteLine($"SCHEDULER_REPORT path={absoluteOutput}");
 }
-if (!allFinite)
+if (!allValid)
     Environment.ExitCode = 1;
 
 static ScenarioResult Measure(Scenario scenario, int samples, int warmup)
@@ -73,13 +85,16 @@ static ScenarioResult Measure(Scenario scenario, int samples, int warmup)
     Process process = Process.GetCurrentProcess();
     process.Refresh();
     TimeSpan cpuBefore = process.TotalProcessorTime;
+    var totals = new TelemetryTotalsBuilder();
 
     for (int i = 0; i < samples; i++)
     {
+        scenario.BeforeTick?.Invoke(universe, i);
         long start = Stopwatch.GetTimestamp();
         universe.Tick(scenario.RealDeltaTime);
         long end = Stopwatch.GetTimestamp();
         samplesMs[i] = (end - start) * 1000.0 / Stopwatch.Frequency;
+        totals.Add(universe.LastSchedulerTelemetry);
     }
 
     process.Refresh();
@@ -90,6 +105,9 @@ static ScenarioResult Measure(Scenario scenario, int samples, int warmup)
         && telemetry.Branch != PhysicsSchedulerBranch.None
         && double.IsFinite(telemetry.SimulatedSeconds)
         && universe.Vessels.All(v => IsFinite(v.Position) && IsFinite(v.Velocity));
+    TelemetryTotals aggregate = totals.Build();
+    bool eventContractPass = !scenario.RequiresCatchUp
+        || aggregate.DeadlineCatchUpDispatches > 0;
 
     Array.Sort(samplesMs);
     return new ScenarioResult(
@@ -104,7 +122,10 @@ static ScenarioResult Measure(Scenario scenario, int samples, int warmup)
         GC.CollectionCount(1) - gen1Before,
         GC.CollectionCount(2) - gen2Before,
         telemetry,
-        finite);
+        aggregate,
+        finite,
+        eventContractPass,
+        finite && eventContractPass);
 }
 
 static Universe BuildFullFleet(string root, int count)
@@ -155,6 +176,24 @@ static Universe BuildMixedFleet(string root, int railCount)
         vessel.IsOnRails = true;
         universe.AddVessel(vessel);
     }
+    return universe;
+}
+
+static Universe BuildWakeCatchUpUniverse(string root)
+{
+    var earth = LoadBody(root, "earth");
+    var universe = new Universe { TimeScale = 100.0 };
+    universe.AddBody(earth);
+
+    // Keep the active vessel force-sensitive so the secondary rail vessel can be
+    // projected for several samples before the benchmark injects a throttle wake-up.
+    var active = CoastVessel(earth, "wake-active", 10_000.0);
+    universe.AddVessel(active);
+    universe.ActiveVessel = active;
+
+    var rails = CoastVessel(earth, "wake-rails", 1_500_000.0);
+    rails.IsOnRails = true;
+    universe.AddVessel(rails);
     return universe;
 }
 
@@ -221,7 +260,13 @@ static string? ReadStringOption(string[] arguments, string name)
     return index >= 0 && index + 1 < arguments.Length ? arguments[index + 1] : null;
 }
 
-record Scenario(string Name, Func<Universe> Build, double TimeScale, double RealDeltaTime);
+record Scenario(
+    string Name,
+    Func<Universe> Build,
+    double TimeScale,
+    double RealDeltaTime,
+    Action<Universe, int>? BeforeTick = null,
+    bool RequiresCatchUp = false);
 
 record ScenarioResult(
     string Name,
@@ -235,7 +280,10 @@ record ScenarioResult(
     int Gen1Collections,
     int Gen2Collections,
     PhysicsSchedulerTelemetry Telemetry,
-    bool Finite)
+    TelemetryTotals Totals,
+    bool Finite,
+    bool EventContractPass,
+    bool Valid)
 {
     public IEnumerable<string> ToLines()
     {
@@ -249,6 +297,20 @@ record ScenarioResult(
         yield return $"{Name}.gc_gen0={Gen0Collections}";
         yield return $"{Name}.gc_gen1={Gen1Collections}";
         yield return $"{Name}.gc_gen2={Gen2Collections}";
+        yield return $"{Name}.sample_window_dispatches={Totals.TotalWorkDispatches}";
+        yield return $"{Name}.sample_window_full_physics_dispatches={Totals.FullPhysicsDispatches}";
+        yield return $"{Name}.sample_window_on_rails_dispatches={Totals.OnRailsDispatches}";
+        yield return $"{Name}.sample_window_outer_substeps={Totals.OuterSubsteps}";
+        yield return $"{Name}.sample_window_rails_slices={Totals.RailsSlices}";
+        yield return $"{Name}.sample_window_deadline_eligible={Totals.DeadlineEligibleEvaluations}";
+        yield return $"{Name}.sample_window_deadline_skips={Totals.DeadlineDeferredSkips}";
+        yield return $"{Name}.sample_window_deadline_projections={Totals.DeadlineProjectedDispatches}";
+        yield return $"{Name}.sample_window_deadline_catchup={Totals.DeadlineCatchUpDispatches}";
+        yield return $"{Name}.sample_window_docked_secondary_skips={Totals.DockedSecondarySkips}";
+        yield return $"{Name}.sample_window_docking_constraints={Totals.DockingConstraintApplications}";
+        yield return $"{Name}.dispatches_per_tick={Totals.TotalWorkDispatches / (double)SampleCount:F6}";
+        yield return $"{Name}.projections_per_tick={Totals.DeadlineProjectedDispatches / (double)SampleCount:F6}";
+        yield return $"{Name}.catchup_per_tick={Totals.DeadlineCatchUpDispatches / (double)SampleCount:F6}";
         yield return $"{Name}.branch={Telemetry.Branch}";
         yield return $"{Name}.simulated_seconds={Telemetry.SimulatedSeconds:F6}";
         yield return $"{Name}.effective_step_cap={Telemetry.EffectiveStepCap:F6}";
@@ -263,5 +325,63 @@ record ScenarioResult(
         yield return $"{Name}.docked_secondary_skips={Telemetry.DockedSecondarySkips}";
         yield return $"{Name}.docking_constraint_applications={Telemetry.DockingConstraintApplications}";
         yield return $"{Name}.finite={Finite.ToString().ToLowerInvariant()}";
+        yield return $"{Name}.event_contract={EventContractPass.ToString().ToLowerInvariant()}";
+        yield return $"{Name}.valid={Valid.ToString().ToLowerInvariant()}";
     }
+}
+
+record TelemetryTotals(
+    long TotalWorkDispatches,
+    long FullPhysicsDispatches,
+    long OnRailsDispatches,
+    long OuterSubsteps,
+    long RailsSlices,
+    long DeadlineEligibleEvaluations,
+    long DeadlineDeferredSkips,
+    long DeadlineProjectedDispatches,
+    long DeadlineCatchUpDispatches,
+    long DockedSecondarySkips,
+    long DockingConstraintApplications);
+
+sealed class TelemetryTotalsBuilder
+{
+    private long _totalWorkDispatches;
+    private long _fullPhysicsDispatches;
+    private long _onRailsDispatches;
+    private long _outerSubsteps;
+    private long _railsSlices;
+    private long _deadlineEligibleEvaluations;
+    private long _deadlineDeferredSkips;
+    private long _deadlineProjectedDispatches;
+    private long _deadlineCatchUpDispatches;
+    private long _dockedSecondarySkips;
+    private long _dockingConstraintApplications;
+
+    public void Add(PhysicsSchedulerTelemetry telemetry)
+    {
+        _totalWorkDispatches += telemetry.TotalWorkDispatches;
+        _fullPhysicsDispatches += telemetry.FullPhysicsDispatches;
+        _onRailsDispatches += telemetry.OnRailsDispatches;
+        _outerSubsteps += telemetry.OuterSubsteps;
+        _railsSlices += telemetry.RailsSlices;
+        _deadlineEligibleEvaluations += telemetry.DeadlineEligibleEvaluations;
+        _deadlineDeferredSkips += telemetry.DeadlineDeferredSkips;
+        _deadlineProjectedDispatches += telemetry.DeadlineProjectedDispatches;
+        _deadlineCatchUpDispatches += telemetry.DeadlineCatchUpDispatches;
+        _dockedSecondarySkips += telemetry.DockedSecondarySkips;
+        _dockingConstraintApplications += telemetry.DockingConstraintApplications;
+    }
+
+    public TelemetryTotals Build() => new(
+        _totalWorkDispatches,
+        _fullPhysicsDispatches,
+        _onRailsDispatches,
+        _outerSubsteps,
+        _railsSlices,
+        _deadlineEligibleEvaluations,
+        _deadlineDeferredSkips,
+        _deadlineProjectedDispatches,
+        _deadlineCatchUpDispatches,
+        _dockedSecondarySkips,
+        _dockingConstraintApplications);
 }

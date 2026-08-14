@@ -320,6 +320,139 @@ public sealed class PhysicsSchedulerPerformanceTests
     }
 
     [Fact]
+    public void AtmosphericRailVesselWakesBeforeMixedSchedulerDispatch()
+    {
+        var earth = LoadBody("earth");
+        var active = CoastVessel(earth, "atmosphere-active");
+        var atmospheric = CoastVessel(earth, "atmosphere-rail");
+        atmospheric.Position = earth.Position
+            + Vector3d.Right * (earth.Radius + 80_000.0);
+        atmospheric.Velocity = earth.Velocity + Vector3d.Up * 7_800.0;
+        atmospheric.IsOnRails = true;
+
+        var universe = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = active,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(active);
+        universe.AddVessel(atmospheric);
+
+        Assert.True(universe.RequiresOffRailsPhysics(atmospheric));
+        PhysicsSchedulerDeadlinePlan plan =
+            universe.GetPhysicsSchedulerDeadlinePlan(atmospheric);
+        Assert.False(plan.CanDefer);
+        Assert.Equal(PhysicsSchedulerDeadlineReason.ForceSensitive, plan.Reason);
+
+        universe.Tick(0.0002);
+
+        Assert.False(atmospheric.IsOnRails);
+        Assert.True(universe.LastSchedulerTelemetry.FullPhysicsDispatches > 0);
+        Assert.Equal(0, universe.LastSchedulerTelemetry.DeadlineProjectedDispatches);
+        Assert.True(double.IsFinite(atmospheric.Position.X));
+        Assert.True(double.IsFinite(atmospheric.Velocity.X));
+    }
+
+    [Fact]
+    public void LandingContactRailVesselUsesContactCadenceAndFullPhysics()
+    {
+        var earth = LoadBody("earth");
+        var active = CoastVessel(earth, "contact-active");
+        var contactVessel = CoastVessel(earth, "contact-rail");
+        var gearDefinition = PartDefinition.LoadFromJson(Path.Combine(
+            FindRepoRoot().FullName,
+            "data",
+            "parts",
+            "starship_landing_gear.json"));
+        contactVessel.Parts.AddPart(new Part(gearDefinition) { IsDeployed = true });
+        contactVessel.ConfigureLandingContactsFromParts();
+        contactVessel.Position = earth.Position
+            + Vector3d.Up * (earth.Radius + 8.1);
+        contactVessel.Velocity = earth.Velocity
+            + earth.GetSurfaceVelocity(contactVessel.Position);
+        contactVessel.IsOnRails = true;
+
+        var universe = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = active,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(active);
+        universe.AddVessel(contactVessel);
+
+        Assert.True(contactVessel.HasDeployedLandingGear);
+        Assert.True(universe.RequiresOffRailsPhysics(contactVessel));
+
+        universe.Tick(0.0002);
+
+        Assert.Equal(0.005, universe.LastSchedulerTelemetry.EffectiveStepCap, 12);
+        Assert.Equal(4, universe.LastSchedulerTelemetry.OuterSubsteps);
+        Assert.True(universe.LastSchedulerTelemetry.FullPhysicsDispatches > 0);
+        Assert.False(contactVessel.IsOnRails);
+        Assert.True(double.IsFinite(contactVessel.Position.X));
+        Assert.True(double.IsFinite(contactVessel.Velocity.X));
+    }
+
+    [Fact]
+    public void DockedSecondaryIsSkippedWhilePrimaryStillReceivesSchedulerWork()
+    {
+        var universe = CreateDockingSchedulerUniverse(
+            out Vessel primary,
+            out Vessel secondary);
+        Assert.True(universe.TryDock(
+            primary.Id,
+            "primary-port",
+            secondary.Id,
+            "secondary-port",
+            "scheduler-dock").Succeeded);
+
+        universe.TimeScale = 100.0;
+        universe.ActiveVessel = primary;
+        universe.Tick(0.0002);
+
+        Assert.Equal(1, universe.LastSchedulerTelemetry.DockedSecondarySkips);
+        Assert.Equal(1, universe.LastSchedulerTelemetry.DockingConstraintApplications);
+        Assert.Equal(1, universe.LastSchedulerTelemetry.TotalWorkDispatches);
+        Assert.Equal(0, universe.LastSchedulerTelemetry.DeadlineCatchUpDispatches);
+        Assert.True(double.IsFinite(primary.Position.X));
+        Assert.True(double.IsFinite(secondary.Position.X));
+    }
+
+    [Fact]
+    public void StagingThenThrottleWakesDetachedFragmentThroughMixedScheduler()
+    {
+        var earth = LoadBody("earth");
+        var stack = BuildFlight7Stack();
+        double radius = earth.Radius + 1_000_000.0;
+        stack.Position = earth.Position + Vector3d.Right * radius;
+        stack.Velocity = earth.Velocity
+            + Vector3d.Up * System.Math.Sqrt(earth.GM / radius);
+        stack.ReferenceBodyId = earth.Id;
+
+        var universe = new Universe
+        {
+            TimeScale = 100.0,
+            ActiveVessel = stack,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(stack);
+
+        Vessel detached = Assert.IsType<Vessel>(stack.Stage());
+        detached.IsOnRails = true;
+        detached.Throttle = 0.1;
+        universe.AddVessel(detached);
+
+        universe.Tick(0.0002);
+
+        Assert.False(detached.IsOnRails);
+        Assert.True(universe.LastSchedulerTelemetry.FullPhysicsDispatches > 0);
+        Assert.True(double.IsFinite(detached.Position.X));
+        Assert.True(double.IsFinite(detached.Velocity.X));
+    }
+
+    [Fact]
     public void DeadlinePlanRejectsConicsThatEnterProtectedAtmosphere()
     {
         var earth = LoadBody("earth");
@@ -387,6 +520,74 @@ public sealed class PhysicsSchedulerPerformanceTests
         var vessel = CoastVessel(earth, id);
         vessel.Position = earth.Position + Vector3d.Up * (earth.Radius + 10_000.0);
         vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
+        return vessel;
+    }
+
+    private static Universe CreateDockingSchedulerUniverse(
+        out Vessel primary,
+        out Vessel secondary)
+    {
+        var body = new CelestialBody
+        {
+            Id = "scheduler-docking-body",
+            Mass = 5.972e24,
+            GM = 3.986004418e14,
+            Radius = 1_000_000.0,
+            SphereOfInfluence = 1.0e9,
+        };
+        var definition = PartDefinition.LoadFromJson(Path.Combine(
+            FindRepoRoot().FullName,
+            "data",
+            "parts",
+            "docking_port_standard.json"));
+        primary = new Vessel("scheduler-primary")
+        {
+            Position = body.Position
+                + Vector3d.Right * (body.Radius + 100_000.0),
+            Orientation = Quaterniond.Identity,
+            SASEnabled = false,
+            ReferenceBodyId = body.Id,
+        };
+        double orbitalRadius = body.Radius + 100_000.0;
+        Vector3d circularVelocity =
+            Vector3d.Up * System.Math.Sqrt(body.GM / orbitalRadius);
+        primary.Velocity = circularVelocity;
+        primary.Parts.SetRoot(new Part(definition, "primary-port"));
+        secondary = new Vessel("scheduler-secondary")
+        {
+            Position = primary.Position + Vector3d.Up * 0.2,
+            Velocity = circularVelocity,
+            Orientation = Quaterniond.FromAxisAngle(
+                Vector3d.Right,
+                System.Math.PI),
+            SASEnabled = false,
+            ReferenceBodyId = body.Id,
+        };
+        secondary.Parts.SetRoot(new Part(definition, "secondary-port"));
+
+        var universe = new Universe { ActiveVessel = primary };
+        universe.AddBody(body);
+        universe.AddVessel(primary);
+        universe.AddVessel(secondary);
+        return universe;
+    }
+
+    private static Vessel BuildFlight7Stack()
+    {
+        var defs = PartDefinition.LoadAllFromDirectory(
+            Path.Combine(FindRepoRoot().FullName, "data", "parts"));
+        var command = new Part(defs["starship_command"]);
+        var tank = new Part(defs["starship_tank"]);
+        var engines = new Part(defs["starship_engines"]);
+        var ring = new Part(defs["decoupler_heavy"]);
+        var booster = new Part(defs["super_heavy_booster"]);
+
+        var vessel = new Vessel("scheduler-staging-stack");
+        vessel.Parts.SetRoot(command);
+        vessel.Parts.AddJoint(new Joint(command, tank, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(tank, engines, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(engines, ring, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(ring, booster, "bottom", "top"));
         return vessel;
     }
 
