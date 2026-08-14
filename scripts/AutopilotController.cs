@@ -23,6 +23,12 @@ public partial class AutopilotController : Node
     private bool   _restoreSas;
 
     private const double NodeWindow = 0.10;   // rad: how close to node before igniting
+    // A deorbit burn commonly starts 180° away from the current thrust axis. The generic
+    // guidance defaults leave that exact retrograde turn under-damped and can keep the
+    // autopilot in the throttle-inhibited alignment loop. Use a deliberately damped loop
+    // for maneuver execution only; EDL/ascent retain their own tuned callers.
+    private const double BurnProportionalGain = 2.0;
+    private const double BurnDampingGain = 25.0;
 
     public void Bind(ManeuverPlanner planner) => _planner = planner;
 
@@ -94,7 +100,8 @@ public partial class AutopilotController : Node
         // Slew through bounded torque and wait for the physical attitude to settle before
         // ignition. The engine remains pointed by its actual integrated quaternion throughout.
         vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
-            vessel.Orientation, Vector3d.Up, dir, vessel.AngularVelocity);
+            vessel.Orientation, Vector3d.Up, dir, vessel.AngularVelocity,
+            BurnProportionalGain, BurnDampingGain);
         double alignment = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(dir);
         if (alignment < 0.998 || vessel.AngularVelocity.Magnitude > 0.03)
         {

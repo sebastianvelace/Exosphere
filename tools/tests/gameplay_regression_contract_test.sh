@@ -33,6 +33,7 @@ require_pattern scripts/EDLController.cs 'TryArmStarbaseCatchForReentry(vessel, 
 require_pattern scripts/SimulationBridge.cs 'catchAnchorVessel' 'catch vessel anchors launch-pad presentation'
 require_pattern scripts/SimulationBridge.cs 'starshipReentryActive' 'Starship reentry keeps launch complex visible'
 require_pattern scripts/SimulationBridge.cs 'earthReturnActive' 'Earth launch complex visibility is body-gated'
+require_pattern scripts/AutopilotController.cs 'BurnDampingGain' 'deorbit autopilot uses damped retrograde alignment'
 
 # Every reentry-capable legacy Starship definition has catch pins, and visual
 # acceptance recognizes the simulator's CAUGHT terminal phase.

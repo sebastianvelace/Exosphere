@@ -1421,11 +1421,20 @@ public partial class _PlaytestShot : Node
             double vUp = surfVel.Dot(up);
             double pe = trajectory.Periapsis - earthBody.Radius;
             double ap = trajectory.Apoapsis - earthBody.Radius;
+            Vector3d thrustAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+            Vector3d retroDirection = surfVel.Magnitude > 1.0
+                ? -surfVel.Normalized : Vector3d.Zero;
+            double retroAlignment = retroDirection.MagnitudeSquared > 0.0
+                ? thrustAxis.Dot(retroDirection) : double.NaN;
+            double thrustN = vessel.ComputeThrust(earthBody).Magnitude;
+            int activeEngines = vessel.Parts.ActiveEngines.Count();
             int failedEngines = vessel.Parts.ActiveEngines.FirstOrDefault()?.EngineStates
                 .Count(state => !string.IsNullOrWhiteSpace(state.FailureCode)) ?? 0;
             _log.WriteLine($"TRACE_ORBITAL_REENTRY t={simElapsed:F1} alt={alt:F1} " +
                 $"vUp={vUp:F1} spd={surfVel.Magnitude:F1} pe={pe:F1} ap={ap:F1} " +
                 $"phase={phase} throttle={vessel.Throttle:F3} " +
+                $"activeEngines={activeEngines} thrustN={thrustN:F0} " +
+                $"retroAlignment={retroAlignment:F4} pyr={vessel.PitchYawRoll} " +
                 $"failedEngines={failedEngines} catchArmed={vessel.IsAttemptingTowerCatch} " +
                 $"catchPins={vessel.HasCatchPins} destroyed={vessel.IsDestroyed} " +
                 "normalFlow=True demo=False");
@@ -1433,16 +1442,18 @@ public partial class _PlaytestShot : Node
             _nextOrbitalReentryTelemetry = universe.CurrentTime + 10.0;
 
             // A deorbit burn must either lower the measured periapsis or leave the
-            // RETRO_BURN state. If neither happens for 60 simulated seconds, stop here:
-            // waiting out the framebuffer budget would only turn a controller stall into a
+            // RETRO_BURN state. The ship rotates on the modeled RCS floor while throttle
+            // is inhibited, so allow that bounded alignment window before declaring a
+            // controller stall.
+            // Waiting beyond this bounded window would only turn a controller stall into a
             // misleading timeout. This is evidence of a limitation, never a success path.
             if (!_orbitalReentryEntry
-                && simElapsed > 60.0
+                && simElapsed > 150.0
                 && phase == nameof(MissionPhase.RETRO_BURN)
                 && alt > 200_000.0
                 && pe > _orbitalReentrySeededPe - 5_000.0)
             {
-                _log.WriteLine($"GAP normal deorbit made no physical progress within 60s " +
+                _log.WriteLine($"GAP normal deorbit made no physical progress within 150s " +
                     $"phase={phase} alt={alt:F1} pe={pe:F1} seededPe={_orbitalReentrySeededPe:F1} " +
                     "possible_autopilot_or_power_abort=True");
                 _log.Flush();
@@ -1451,10 +1462,12 @@ public partial class _PlaytestShot : Node
             }
         }
 
+        // RETRO_BURN is also the pre-entry deorbit phase. Do not classify that
+        // phase as atmospheric entry or the stall watchdog above would be disabled
+        // exactly when the map autopilot is stuck before lowering periapsis.
         if (!_orbitalReentryEntry && mission?.Phase is MissionPhase.ENTRY
                 or MissionPhase.PEAK_HEATING or MissionPhase.AERO_DESCENT
-                or MissionPhase.RETRO_BURN or MissionPhase.FINAL_DESCENT
-                or MissionPhase.CAUGHT)
+                or MissionPhase.FINAL_DESCENT or MissionPhase.CAUGHT)
         {
             QueueCapture("orbital_reentry_entry");
             _orbitalReentryEntry = true;

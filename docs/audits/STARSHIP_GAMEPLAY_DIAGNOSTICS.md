@@ -63,7 +63,7 @@ The catch radius was not widened and `IsCaught` is never set by the presentation
 |---|---|
 | Targeted engine, catch, teleport and runtime tests | 33/33 passed |
 | Post-`J` Earth/Mars/Venus stability tests | 4/4 passed |
-| Full xUnit suite after post-`J` coverage | 591/591 passed |
+| Full xUnit suite after post-`J`/retrograde guidance coverage | 592/592 passed |
 | Godot C# build | 0 warnings, 0 errors |
 | Gameplay regression contract | PASS |
 | Visual harness contract | 1 valid + 11 invalid fixtures passed |
@@ -89,5 +89,6 @@ console warnings about X11 input and VSync are environment warnings, not simulat
   anchored to the vessel actually returning when a booster is the catch candidate, rather than
   always to `ActiveVessel`.
 - The opt-in normal orbital reentry visual run is currently `PARTIAL/BLOCKED` on llvmpipe: the
-  real map deorbit path arms `RETRO_BURN` but did not lower the periapsis from ~250 km before
-  the bounded run was interrupted. No normal-flow `CAUGHT` result is claimed yet.
+  real map deorbit path arms `RETRO_BURN` but, after the damped-alignment mitigation, still
+  reports `throttle=0`, `thrustN=0`, `pe≈249.98 km` and three failed engine instances at the
+  150 s watchdog. No normal-flow `CAUGHT` result is claimed yet.

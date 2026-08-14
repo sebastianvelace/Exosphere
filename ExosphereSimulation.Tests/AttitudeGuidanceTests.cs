@@ -105,4 +105,35 @@ public sealed class AttitudeGuidanceTests
         Assert.True(angularVelocity.Magnitude < 0.04,
             $"controller must settle instead of spinning through target: rate={angularVelocity.Magnitude:F6}");
     }
+
+    [Fact]
+    public void AxisPointingConvergesWhenTheTargetIsExactlyRetrograde()
+    {
+        var orientation = Quaterniond.FromAxisAngle(Vector3d.Right, 37.0 * MathUtils.DEG_TO_RAD);
+        var target = -orientation.Rotate(Vector3d.Up).Normalized;
+        var angularVelocity = Vector3d.Zero;
+        const double dt = 0.01;
+        const double authority = 0.01;
+
+        for (int i = 0; i < 10_000; i++)
+        {
+            var command = AttitudeGuidance.ComputeAxisPointingCommand(
+                orientation, Vector3d.Up, target, angularVelocity, 2.0, 25.0);
+            var localAcceleration = new Vector3d(command.X, 0.0, command.Y) * authority;
+            angularVelocity += orientation.Rotate(localAcceleration) * dt;
+            double rate = angularVelocity.Magnitude;
+            if (rate > 0.35) angularVelocity *= 0.35 / rate;
+            if (rate > 1e-12)
+            {
+                var dq = Quaterniond.FromAxisAngle(angularVelocity.Normalized, rate * dt);
+                orientation = (dq * orientation).Normalize();
+            }
+        }
+
+        double alignment = orientation.Rotate(Vector3d.Up).Normalized.Dot(target);
+        Assert.True(alignment > 0.999,
+            $"exact retrograde axis failed to converge: alignment={alignment:F6}");
+        Assert.True(angularVelocity.Magnitude < 0.04,
+            $"exact retrograde axis must settle: rate={angularVelocity.Magnitude:F6}");
+    }
 }
