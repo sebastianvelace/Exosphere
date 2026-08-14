@@ -25,6 +25,35 @@ if ! grep -q 'mkdir -p "\$(dirname "\$GODOT_LOG_FILE")"' "$HARNESS_SCRIPT"; then
 fi
 echo "PASS explicit per-launch Godot log contract"
 
+if ! grep -q -- '--orbital-reentry' "$HARNESS_SCRIPT" \
+  || ! grep -q 'MODE="orbital_reentry"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ProcessOrbitalReentry' "$HARNESS_SCRIPT"; then
+  echo "FAIL normal orbital reentry mode is not wired into the harness" >&2
+  exit 1
+fi
+if awk '
+  /private void ProcessOrbitalReentry\(/ { inside = 1 }
+  inside && /BeginReentryDemonstration/ { found = 1 }
+  inside && /^    \/\/ Reuses the exact same deterministic-70km-entry/ { inside = 0 }
+  END { exit found ? 0 : 1 }
+' "$HARNESS_SCRIPT"; then
+  echo "FAIL orbital reentry harness calls the deterministic demo entry point" >&2
+  exit 1
+fi
+if ! grep -q 'source=map_deorbit_autopilot' "$HARNESS_SCRIPT" \
+  || ! grep -q 'normalFlow=True demo=False' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ORBITAL_REENTRY_OK' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ORBITAL_REENTRY_DEORBIT_STALLED' "$HARNESS_SCRIPT"; then
+  echo "FAIL normal orbital reentry fail-closed evidence is incomplete" >&2
+  exit 1
+fi
+if ! grep -q 'status="PARTIAL"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'PARTIAL reason=INTERRUPTED' "$HARNESS_SCRIPT"; then
+  echo "FAIL interrupted visual runs are not marked PARTIAL" >&2
+  exit 1
+fi
+echo "PASS normal orbital reentry is opt-in, non-demo, and fail-closed"
+
 TEST_DIR="$(mktemp -d /tmp/exo_contract_test.XXXXXX)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 
@@ -115,3 +144,46 @@ echo "SUMMARY reason=ABORT" >> "$duplicate_run"
 expect_failure "duplicate run boundary" "$duplicate_run"
 
 echo "visual_playtest_contract_test: 1 valid and 11 invalid fixtures passed"
+
+orbital_out="$TEST_DIR/orbital-good-out"
+mkdir -p "$orbital_out"
+for slug in orbital_reentry_orbit orbital_reentry_entry orbital_reentry_peak_heating \
+  orbital_reentry_retro_burn orbital_reentry_caught; do
+  dd if=/dev/zero of="$orbital_out/exo_play_${slug}.png" bs=9000 count=1 status=none
+done
+orbital_good="$TEST_DIR/orbital-good.log"
+cat > "$orbital_good" <<'EOF'
+=== Exosphere visual playtest fixture mode=orbital_reentry ===
+NORMAL_REENTRY_SETUP source=JumpToOrbit altitude=250000 pe=250000 ap=250000 atmoTop=140000 launchSite=starbase demo=False flownAscent=False
+NORMAL_REENTRY_ARMED source=map_deorbit_autopilot targetPe=80000 dv=95.0 phase=COAST launchSite=starbase demo=False
+TRACE_ORBITAL_REENTRY t=1 alt=250000 vUp=0 spd=7700 pe=250000 ap=250000 phase=COAST throttle=0 failedEngines=0 catchArmed=False catchPins=True destroyed=False normalFlow=True demo=False
+TRACE_ORBITAL_REENTRY t=2 alt=70000 vUp=-1200 spd=1800 pe=50000 ap=250000 phase=ENTRY throttle=0 failedEngines=0 catchArmed=True catchPins=True destroyed=False normalFlow=True demo=False
+CHECK orbital_reentry caught=True pins=2 relativeSpeed=0.030 angularSpeed=0.0000 normalFlow=True demo=False
+SUMMARY reason=ORBITAL_REENTRY_OK frames=120
+EOF
+if ! bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
+    --out-dir "$orbital_out" --log "$orbital_good" >/dev/null; then
+  echo "FAIL valid normal orbital reentry fixture rejected" >&2
+  exit 1
+fi
+echo "PASS valid normal orbital reentry fixture accepted"
+
+orbital_demo="$TEST_DIR/orbital-demo.log"
+sed 's/demo=False/demo=True/g' "$orbital_good" > "$orbital_demo"
+if bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
+    --out-dir "$orbital_out" --log "$orbital_demo" >/dev/null 2>&1; then
+  echo "FAIL demo-only orbital fixture was accepted" >&2
+  exit 1
+fi
+echo "PASS demo-only orbital fixture rejected"
+
+orbital_no_catch="$TEST_DIR/orbital-no-catch.log"
+sed '/CHECK orbital_reentry/d' "$orbital_good" > "$orbital_no_catch"
+if bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
+    --out-dir "$orbital_out" --log "$orbital_no_catch" >/dev/null 2>&1; then
+  echo "FAIL no-catch orbital fixture was accepted" >&2
+  exit 1
+fi
+echo "PASS no-catch orbital fixture rejected"
+
+echo "visual_playtest_contract_test: normal orbital reentry fixtures passed"

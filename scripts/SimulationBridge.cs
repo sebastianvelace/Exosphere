@@ -369,8 +369,11 @@ public partial class SimulationBridge : Node
             var basis = new Basis(ToGodotVector(east), ToGodotVector(up), ToGodotVector(south));
             _launchPad.Transform = new Transform3D(basis, position);
             bool catchApproachActive = Universe.Vessels.Any(vessel =>
-                vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration);
-            bool starshipReentryActive = MissionManager.Instance?.InDescent == true
+                vessel.ReferenceBodyId == padEarth.Id
+                && (vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration));
+            bool earthReturnActive = catchAnchorVessel.ReferenceBodyId == padEarth.Id;
+            bool starshipReentryActive = earthReturnActive
+                && MissionManager.Instance?.InDescent == true
                 && catchAnchorVessel.Parts.Parts.Any(part =>
                     part.Definition.IsStarshipFamily
                     && part.Definition.HasVehicleRole("command"));

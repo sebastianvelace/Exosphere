@@ -34,6 +34,7 @@ SKIP_BUILD=0
 PROJECT_BACKUP=""
 APOLLO11_HARDWARE=0
 OWNS_HARNESS=0
+CLEANUP_DONE=0
 
 usage() {
   cat <<'EOF'
@@ -64,6 +65,8 @@ Options:
   --atmosphere-bodies  Capture explicit Mars/Venus day/orbit/night atmosphere cases.
   --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
+  --orbital-reentry  Seed a Starbase Starship in circular orbit, arm the real map deorbit
+                autopilot, and verify normal atmospheric entry through tower catch.
   --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
                 real hot-staging dual-thrust overlap window, gated on vessel state
                 (IsHotStageOverlapping), not a frame count.
@@ -162,6 +165,12 @@ while [[ $# -gt 0 ]]; do
     --atmosphere-bodies) MODE="atmosphere_bodies"; shift ;;
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
+    --orbital-reentry)
+      MODE="orbital_reentry"
+      VARIANT_FILE="starship_flight7_block2_2025.json"
+      VARIANT_SITE="starbase"
+      VARIANT_PROFILE="starship-flight7-ascent"
+      shift ;;
     --hotstage)
       MODE="hotstage"
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -209,6 +218,10 @@ if [[ -z "$MAX_RUNTIME_SEC" ]]; then
     MAX_RUNTIME_SEC=3600
   elif [[ "$MODE" == "ascent" ]]; then
     MAX_RUNTIME_SEC=1200
+  elif [[ "$MODE" == "orbital_reentry" ]]; then
+    # This is deliberately bounded: it validates one prepared orbit and one normal
+    # deorbit/EDL pass, never an open-ended campaign or a demo fallback.
+    MAX_RUNTIME_SEC=900
   else
     MAX_RUNTIME_SEC=1800
   fi
@@ -242,7 +255,7 @@ write_run_summary() {
     echo "artifacts=$OUT_DIR"
     if [[ -f "$LOG" ]]; then
       echo "milestones=$(awk '/^CAPTURE / { printf "%s%s", separator, $2; separator="," } END { print "" }' "$LOG")"
-      grep -aE '^(SUMMARY|FAIL|GAP|FALLBACK) ' "$LOG" | tail -20 || true
+      grep -aE '^(SUMMARY|PARTIAL|FAIL|GAP|FALLBACK) ' "$LOG" | tail -20 || true
       grep -aE '^(ASCENT_METRICS|TRANSITION_ASCENT) ' "$LOG" | tail -8 || true
       grep -a '^TRACE_ASCENT ' "$LOG" | tail -1 || true
       grep -aE 'failures=[^ ]*[A-Z][A-Z_]+:[1-9]' "$LOG" | tail -1 || true
@@ -254,7 +267,7 @@ print_failure_diagnostics() {
   echo "visual_playtest: diagnostics mode=$MODE out=$OUT_DIR log=$LOG" >&2
   if [[ -f "$LOG" ]]; then
     echo "visual_playtest: last state evidence:" >&2
-    grep -aE '^(CAPTURE|TRACE_ASCENT|TRANSITION_ASCENT|ASCENT_METRICS|TRACE_FULL|TRACE |FAIL|GAP|FALLBACK|SUMMARY)' "$LOG" \
+    grep -aE '^(CAPTURE|TRACE_ASCENT|TRANSITION_ASCENT|ASCENT_METRICS|TRACE_FULL|TRACE |FAIL|GAP|PARTIAL|FALLBACK|SUMMARY)' "$LOG" \
       | tail -25 >&2 || true
   else
     echo "visual_playtest: telemetry log was not created" >&2
@@ -284,8 +297,22 @@ prepare_godot_log_file() {
 
 cleanup() {
   local ec=$?
+  if [[ "$CLEANUP_DONE" -eq 1 ]]; then
+    return
+  fi
+  CLEANUP_DONE=1
   set +e
-  if [[ $ec -eq 0 ]]; then
+  local status="FAIL"
+  if [[ $ec -eq 130 || $ec -eq 143 ]]; then
+    status="PARTIAL"
+    if [[ -f "$LOG" ]]; then
+      echo "PARTIAL reason=INTERRUPTED exit=$ec mode=$MODE" >> "$LOG"
+    fi
+  fi
+  if [[ "$status" == "PARTIAL" ]]; then
+    write_run_summary "$status"
+    print_failure_diagnostics
+  elif [[ $ec -eq 0 ]]; then
     write_run_summary "PASS"
   else
     write_run_summary "FAIL"
@@ -410,6 +437,16 @@ public partial class _PlaytestShot : Node
     // separate Godot launches — see tools/visual_playtest.sh orchestration below) ──────
     bool _reentrySeeded, _reentryQueued;
     double _reentryScenarioStart;
+
+    // ── orbital_reentry mode ────────────────────────────────────────────────
+    // This path deliberately starts from an explicit circular-orbit setup, then uses the
+    // production map deorbit planner/autopilot and normal EDL activation. It never calls
+    // BeginReentryDemonstration; the log names the setup teleport so the acceptance result
+    // cannot be mistaken for a flown ascent or the deterministic demo.
+    bool _orbitalReentrySeeded, _orbitalReentryEntry, _orbitalReentryPeak;
+    bool _orbitalReentryRetro, _orbitalReentryCaught;
+    double _orbitalReentryScenarioStart, _nextOrbitalReentryTelemetry;
+    double _orbitalReentrySeededPe = double.NaN;
 
     // Atmosphere acceptance is deliberately state-seeded instead of flown.  This makes
     // every altitude/solar-elevation pair reproducible and keeps the matrix fast enough
@@ -740,6 +777,12 @@ public partial class _PlaytestShot : Node
         if (_mode == "edl")
         {
             ProcessEdlVerification(bridge, vessel, universe, body, mission, alt, surfVel, phase);
+            return;
+        }
+
+        if (_mode == "orbital_reentry")
+        {
+            ProcessOrbitalReentry(bridge, vessel, universe, body, mission, alt, surfVel, phase);
             return;
         }
 
@@ -1210,6 +1253,272 @@ public partial class _PlaytestShot : Node
 
         if (simElapsed > 900.0)
             Finish("EDL_TIMEOUT");
+    }
+
+    private void ProcessOrbitalReentry(SimulationBridge bridge, Vessel vessel, Universe universe,
+        CelestialBody body, MissionManager? mission, double alt, Vector3d surfVel, string phase)
+    {
+        const double OrbitAltitudeM = 250_000.0;
+        const double DeorbitTargetPeM = 80_000.0;
+        const double SimTimeoutSec = 720.0;
+
+        if (!_orbitalReentrySeeded)
+        {
+            if (_readyFrames < 45) return;
+
+            // Keep this acceptance mode narrow and explicit. A different site or vehicle
+            // would exercise a different policy and must not silently pass as Starbase.
+            if (!string.Equals("${VARIANT_SITE}", "starbase", StringComparison.OrdinalIgnoreCase))
+            {
+                _log.WriteLine("GAP normal orbital reentry requires launchSite=starbase " +
+                    "(scenario was not armed)");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_UNAVAILABLE");
+                return;
+            }
+
+            var earth = universe.GetBody("earth");
+            if (earth == null)
+            {
+                _log.WriteLine("GAP normal orbital reentry requires Earth");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_UNAVAILABLE");
+                return;
+            }
+
+            bool hasShip = vessel.Parts.Parts.Any(part =>
+                part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("ship_engines"));
+            bool hasBooster = vessel.Parts.Parts.Any(part =>
+                part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("booster"));
+            if (hasBooster)
+            {
+                // Setup only: normal reentry must be evaluated on the standalone Ship.
+                bridge.TriggerStaging();
+                vessel = bridge.ActiveVessel!;
+                hasShip = vessel.Parts.Parts.Any(part =>
+                    part.Definition.IsStarshipFamily
+                    && part.Definition.HasVehicleRole("ship_engines"));
+            }
+            if (!hasShip || vessel.IsDestroyed)
+            {
+                _log.WriteLine("GAP normal orbital reentry requires a standalone Starship " +
+                    "ship_engines vessel after staging");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_UNAVAILABLE");
+                return;
+            }
+
+            // Explicit setup teleport: it establishes a reproducible safe orbit, but does
+            // not enter EDL and is never reported as a normal reentry milestone.
+            bridge.JumpToOrbit(OrbitAltitudeM);
+            vessel = bridge.ActiveVessel!;
+            earth = universe.GetBody("earth")!;
+            var seededOrbit = OrbitalElements.FromStateVector(
+                vessel.Position - earth.Position,
+                vessel.Velocity - earth.Velocity,
+                earth.GM,
+                earth.Id,
+                universe.CurrentTime);
+            double seededPe = seededOrbit.Periapsis - earth.Radius;
+            double seededAp = seededOrbit.Apoapsis - earth.Radius;
+            double atmosphereTop = earth.Atmosphere?.MaxAltitude ?? double.NaN;
+            bool finiteOrbit = double.IsFinite(seededPe)
+                && double.IsFinite(seededAp)
+                && double.IsFinite(atmosphereTop);
+            bool safeOrbit = finiteOrbit
+                && seededPe >= atmosphereTop
+                && seededAp >= seededPe;
+            if (!safeOrbit)
+            {
+                _log.WriteLine($"GAP normal orbital setup is not a safe closed orbit " +
+                    $"pe={seededPe:F1} ap={seededAp:F1} atmoTop={atmosphereTop:F1}");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_SETUP_INVALID");
+                return;
+            }
+
+            var map = MapViewController.Instance;
+            if (map == null)
+            {
+                _log.WriteLine("GAP normal orbital reentry map planner/autopilot is unavailable");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_UNAVAILABLE");
+                return;
+            }
+
+            // Invoke the same public input path as the player: B plans the deorbit and
+            // Enter arms the local AutopilotController. No private controller state is
+            // reached from this temporary harness.
+            if (!map.Visible) map.ToggleVisible();
+            map._UnhandledInput(new InputEventKey
+            {
+                Keycode = Key.B,
+                Pressed = true,
+            });
+            if (!map.Planner.HasNode
+                || map.Planner.DvPrograde >= -50.0
+                || !double.IsFinite(map.Planner.DeltaVMagnitude))
+            {
+                _log.WriteLine($"GAP normal deorbit planner refused targetPe={DeorbitTargetPeM:F1} " +
+                    $"dv={map.Planner.DeltaVMagnitude:F1} prograde={map.Planner.DvPrograde:F1}");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_DEORBIT_UNAVAILABLE");
+                return;
+            }
+            double plannedDv = map.Planner.DeltaVMagnitude;
+            map._UnhandledInput(new InputEventKey
+            {
+                Keycode = Key.Enter,
+                Pressed = true,
+            });
+            if (mission?.Phase != MissionPhase.COAST)
+            {
+                _log.WriteLine($"GAP normal deorbit autopilot refused arm phase={mission?.Phase} " +
+                    $"dv={plannedDv:F1}");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_DEORBIT_UNAVAILABLE");
+                return;
+            }
+            if (map.Visible) map.ToggleVisible();
+            CameraController.Instance?.EnterShipChaseView();
+
+            _log.WriteLine($"NORMAL_REENTRY_SETUP source=JumpToOrbit altitude={OrbitAltitudeM:F0} " +
+                $"pe={seededPe:F1} ap={seededAp:F1} atmoTop={atmosphereTop:F1} " +
+                "launchSite=starbase demo=False flownAscent=False");
+            _log.WriteLine($"NORMAL_REENTRY_ARMED source=map_deorbit_autopilot targetPe={DeorbitTargetPeM:F0} " +
+                $"dv={plannedDv:F1} phase={mission?.Phase} launchSite=starbase demo=False");
+            _log.Flush();
+            QueueCapture("orbital_reentry_orbit");
+            _orbitalReentrySeeded = true;
+            _orbitalReentryScenarioStart = universe.CurrentTime;
+            _nextOrbitalReentryTelemetry = universe.CurrentTime;
+            _orbitalReentrySeededPe = seededPe;
+            bridge.SetTimeScale(3.0);
+            return;
+        }
+
+        double simElapsed = universe.CurrentTime - _orbitalReentryScenarioStart;
+        var earthBody = universe.GetBody("earth");
+        if (earthBody == null)
+        {
+            _log.WriteLine("FAIL normal orbital reentry lost Earth reference");
+            _log.Flush();
+            Finish("ORBITAL_REENTRY_INVALID");
+            return;
+        }
+
+        if (universe.CurrentTime >= _nextOrbitalReentryTelemetry)
+        {
+            var trajectory = OrbitalElements.FromStateVector(
+                vessel.Position - earthBody.Position,
+                vessel.Velocity - earthBody.Velocity,
+                earthBody.GM,
+                earthBody.Id,
+                universe.CurrentTime);
+            Vector3d up = (vessel.Position - earthBody.Position).Normalized;
+            double vUp = surfVel.Dot(up);
+            double pe = trajectory.Periapsis - earthBody.Radius;
+            double ap = trajectory.Apoapsis - earthBody.Radius;
+            int failedEngines = vessel.Parts.ActiveEngines.FirstOrDefault()?.EngineStates
+                .Count(state => !string.IsNullOrWhiteSpace(state.FailureCode)) ?? 0;
+            _log.WriteLine($"TRACE_ORBITAL_REENTRY t={simElapsed:F1} alt={alt:F1} " +
+                $"vUp={vUp:F1} spd={surfVel.Magnitude:F1} pe={pe:F1} ap={ap:F1} " +
+                $"phase={phase} throttle={vessel.Throttle:F3} " +
+                $"failedEngines={failedEngines} catchArmed={vessel.IsAttemptingTowerCatch} " +
+                $"catchPins={vessel.HasCatchPins} destroyed={vessel.IsDestroyed} " +
+                "normalFlow=True demo=False");
+            _log.Flush();
+            _nextOrbitalReentryTelemetry = universe.CurrentTime + 10.0;
+
+            // A deorbit burn must either lower the measured periapsis or leave the
+            // RETRO_BURN state. If neither happens for 60 simulated seconds, stop here:
+            // waiting out the framebuffer budget would only turn a controller stall into a
+            // misleading timeout. This is evidence of a limitation, never a success path.
+            if (!_orbitalReentryEntry
+                && simElapsed > 60.0
+                && phase == nameof(MissionPhase.RETRO_BURN)
+                && alt > 200_000.0
+                && pe > _orbitalReentrySeededPe - 5_000.0)
+            {
+                _log.WriteLine($"GAP normal deorbit made no physical progress within 60s " +
+                    $"phase={phase} alt={alt:F1} pe={pe:F1} seededPe={_orbitalReentrySeededPe:F1} " +
+                    "possible_autopilot_or_power_abort=True");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_DEORBIT_STALLED");
+                return;
+            }
+        }
+
+        if (!_orbitalReentryEntry && mission?.Phase is MissionPhase.ENTRY
+                or MissionPhase.PEAK_HEATING or MissionPhase.AERO_DESCENT
+                or MissionPhase.RETRO_BURN or MissionPhase.FINAL_DESCENT
+                or MissionPhase.CAUGHT)
+        {
+            QueueCapture("orbital_reentry_entry");
+            _orbitalReentryEntry = true;
+            bridge.SetTimeScale(3.0);
+        }
+        if (!_orbitalReentryPeak && mission?.Phase == MissionPhase.PEAK_HEATING)
+        {
+            QueueCapture("orbital_reentry_peak_heating");
+            _orbitalReentryPeak = true;
+        }
+        if (_orbitalReentryEntry && !_orbitalReentryRetro
+            && mission?.Phase == MissionPhase.RETRO_BURN)
+        {
+            QueueCapture("orbital_reentry_retro_burn");
+            _orbitalReentryRetro = true;
+            bridge.SetTimeScale(1.0);
+        }
+
+        if (vessel.IsDestroyed)
+        {
+            _log.WriteLine($"FAIL normal orbital Starbase reentry destroyed phase={phase} " +
+                $"cause={vessel.DestructionCause} alt={alt:F1} spd={surfVel.Magnitude:F1}");
+            _log.Flush();
+            Finish("ORBITAL_REENTRY_CRASHED");
+            return;
+        }
+
+        if (mission?.Phase == MissionPhase.LANDED)
+        {
+            // A leg touchdown is not accepted for this Starbase catch scenario. Keeping it
+            // as a GAP makes an abort-to-legs visible instead of silently passing the wrong
+            // terminal behavior.
+            _log.WriteLine($"GAP normal Starbase reentry reached LANDED without tower catch " +
+                $"alt={alt:F1} spd={surfVel.Magnitude:F1} catchArmed={vessel.IsAttemptingTowerCatch}");
+            _log.Flush();
+            Finish("ORBITAL_REENTRY_NO_CATCH");
+            return;
+        }
+
+        if (!_orbitalReentryCaught && mission?.Phase == MissionPhase.CAUGHT)
+        {
+            QueueCapture("orbital_reentry_caught");
+            _orbitalReentryCaught = true;
+            _log.WriteLine($"CHECK orbital_reentry caught=True pins={vessel.LastCatchContact?.ContactCount ?? 0} " +
+                $"relativeSpeed={(vessel.Velocity - vessel.CatchTargetVelocityWorld).Magnitude:F3} " +
+                $"angularSpeed={vessel.AngularVelocity.Magnitude:F4} normalFlow=True demo=False");
+            _log.Flush();
+        }
+
+        if (_orbitalReentryCaught && _pendingSlug == null)
+        {
+            Finish("ORBITAL_REENTRY_OK");
+            return;
+        }
+
+        if (simElapsed > SimTimeoutSec)
+        {
+            _log.WriteLine($"GAP normal orbital reentry did not reach Starbase catch within " +
+                $"simTimeout={SimTimeoutSec:F0}s phase={phase} alt={alt:F1} " +
+                $"entry={_orbitalReentryEntry} peak={_orbitalReentryPeak} " +
+                $"retro={_orbitalReentryRetro}");
+            _log.Flush();
+            Finish("ORBITAL_REENTRY_TIMEOUT");
+        }
     }
 
     // Reuses the exact same deterministic-70km-entry seeding as ProcessEdlVerification
@@ -2516,6 +2825,40 @@ verify_pngs() {
       echo "ERROR: deterministic EDL did not end in a verified catch or landing" >&2
       return 1
     fi
+  elif [[ "$MODE" == "orbital_reentry" ]]; then
+    local required=(orbital_reentry_orbit orbital_reentry_entry
+      orbital_reentry_peak_heating orbital_reentry_retro_burn orbital_reentry_caught)
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing normal orbital reentry milestone PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+    done
+    if ! grep -q 'SUMMARY reason=ORBITAL_REENTRY_OK' "$LOG"; then
+      echo "ERROR: normal orbital reentry did not finish with ORBITAL_REENTRY_OK" >&2
+      return 1
+    fi
+    if ! grep -q 'NORMAL_REENTRY_SETUP .*source=JumpToOrbit .*demo=False .*flownAscent=False' "$LOG"; then
+      echo "ERROR: missing explicit non-demo orbital setup evidence" >&2
+      return 1
+    fi
+    if ! grep -q 'NORMAL_REENTRY_ARMED .*source=map_deorbit_autopilot .*demo=False' "$LOG"; then
+      echo "ERROR: missing normal map deorbit/autopilot evidence" >&2
+      return 1
+    fi
+    if ! grep -Eq 'CHECK orbital_reentry caught=True pins=[2-9][0-9]* relativeSpeed=[0-9.]+ angularSpeed=[0-9.]+ normalFlow=True demo=False' "$LOG"; then
+      echo "ERROR: normal orbital reentry lacks a settled physical tower catch" >&2
+      return 1
+    fi
+    if grep -Eq '^(FAIL|GAP) ' "$LOG"; then
+      echo "ERROR: normal orbital reentry log contains FAIL/GAP evidence" >&2
+      grep -E '^(FAIL|GAP) ' "$LOG" >&2
+      return 1
+    fi
+    if ! grep -q 'TRACE_ORBITAL_REENTRY .*normalFlow=True demo=False' "$LOG"; then
+      echo "ERROR: missing normal-flow telemetry (demo must not satisfy this gate)" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "hotstage" ]]; then
     if [[ ! -f "$OUT_DIR/exo_play_hotstage.png" ]]; then
       echo "ERROR: missing required hot-stage milestone PNG: exo_play_hotstage.png" >&2
@@ -3102,6 +3445,8 @@ elif [[ "$MODE" == "ascent" ]]; then
   echo "visual_playtest: focused ascent diagnostics OK — stable orbit verified"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
+elif [[ "$MODE" == "orbital_reentry" ]]; then
+  echo "visual_playtest: normal orbital Starbase reentry verification OK — physical catch confirmed"
 elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "reentry_compare" ]]; then

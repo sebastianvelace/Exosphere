@@ -62,9 +62,12 @@ The catch radius was not widened and `IsCaught` is never set by the presentation
 | Check | Result |
 |---|---|
 | Targeted engine, catch, teleport and runtime tests | 33/33 passed |
+| Post-`J` Earth/Mars/Venus stability tests | 4/4 passed |
+| Full xUnit suite after post-`J` coverage | 591/591 passed |
 | Godot C# build | 0 warnings, 0 errors |
 | Gameplay regression contract | PASS |
 | Visual harness contract | 1 valid + 11 invalid fixtures passed |
+| Normal orbital reentry harness contract | PASS; opt-in, non-demo, fail-closed |
 | EDL visual stages | ENTRY, peak heating, flip, retro and caught captures recorded |
 | EDL final acceptance | PASS: `CHECK tower_catch caught=True pins=2 relativeSpeed=0.030 angularSpeed=0.0000`; `SUMMARY reason=CAUGHT` |
 
@@ -85,3 +88,6 @@ console warnings about X11 input and VSync are environment warnings, not simulat
 - The launch complex remains visible throughout an Earth Starship EDL/catch attempt and is
   anchored to the vessel actually returning when a booster is the catch candidate, rather than
   always to `ActiveVessel`.
+- The opt-in normal orbital reentry visual run is currently `PARTIAL/BLOCKED` on llvmpipe: the
+  real map deorbit path arms `RETRO_BURN` but did not lower the periapsis from ~250 km before
+  the bounded run was interrupted. No normal-flow `CAUGHT` result is claimed yet.

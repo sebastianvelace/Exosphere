@@ -34,10 +34,29 @@ Evidencia de integración de esta auditoría:
   se interrumpió por el coste del framebuffer llvmpipe, por lo que no se etiqueta como
   `ASCENT_ORBIT_OK`.
 
-La siguiente etapa queda definida como una matriz de reentrada orbital normal (sin modo demo)
-con telemetría de captura y una matriz de estabilidad post-`J` para Earth/Mars/Venus. La
-validación de GPU física, EventPipe y la matriz framebuffer completa sigue `BLOCKED` en este
-host: no se convertirán esos bloqueos de infraestructura en supuestas ganancias de FPS.
+## Siguiente etapa — estabilidad post-J y reentrada orbital normal
+
+La matriz CPU post-`J` quedó incorporada en `PostJumpStabilityTests`: Earth, Mars y Venus
+mantienen cuerpo de referencia, geometría finita, throttle/actitud/velocidad angular nulos y
+estado no destruido durante 150 ticks; el relay tampoco reaplica comandos previos. Resultado:
+`4/4 PASS` nuevos y `591/591 PASS` en la suite completa.
+
+El harness ahora tiene `--orbital-reentry`, opt-in y fail-closed. Usa `JumpToOrbit` sólo como
+setup explícito, arma el deorbit con el flujo real de mapa (`B` + `Enter`) y exige telemetría
+`normalFlow=True`, entrada, peak heating, retro-burn y captura física. Los contratos aceptan un
+fixture normal válido y rechazan tanto demo-only como ausencia de captura.
+
+La primera corrida framebuffer real no alcanzó un gate de juego: quedó en `RETRO_BURN` con
+`throttle=0`, `pe≈250 km` durante más de 60 s simulados y se interrumpió por el coste de
+llvmpipe (~268–313 ms/frame). Resultado honesto: `PARTIAL/BLOCKED`, con sólo la captura de
+órbita y sin `ENTRY`, `CAUGHT` ni `ORBITAL_REENTRY_OK`. Esto deja un defecto investigable en
+la activación/ejecución del autopilot de deorbit, separado del reset post-`J` ya validado.
+
+La próxima acción es instrumentar y corregir ese stall (alineación, autoridad de TVC y/o
+selección de nodo) con una prueba CPU/harness acotada; después se repite la corrida normal en
+un host con GPU física. La validación de GPU física, EventPipe y la matriz framebuffer completa
+sigue `BLOCKED` en este host: no se convertirán esos bloqueos de infraestructura en supuestas
+ganancias de FPS.
 
 ## Resultado de la fase 27 — hot path de staging
 
