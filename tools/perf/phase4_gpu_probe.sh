@@ -5,13 +5,12 @@ set -euo pipefail
 #
 # This is deliberately a read-only, opt-in harness. Godot's command-line
 # --benchmark-file records startup/shutdown phases, not per-frame GPU
-# timestamps. The real in-process sources are RenderingServer viewport render
-# measurements and RenderingServer rendering-info counters. No C# instrumentation
-# is added here, so this probe must never turn process FPS, wall time, or an
-# adapter name into a GPU measurement.
+# timestamps. Phase 15 adds an opt-in C# probe that supplies those in-process
+# sources. This shell wrapper only aggregates its explicit PERF_GPU samples and
+# must never turn process FPS, wall time, or an adapter name into a GPU measurement.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-FORMAT_VERSION="phase4_gpu_probe_v1"
+FORMAT_VERSION="phase4_gpu_probe_v2"
 DEFAULT_GODOT="/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64"
 
 usage() {
@@ -90,14 +89,17 @@ validate_report() {
     }
   done
 
-  [[ "$(metric_value format_version "$report")" == "$FORMAT_VERSION" ]] || {
-    echo "FAIL unsupported format version" >&2
-    return 1
-  }
-  [[ "$(metric_value status "$report")" == "NOT_MEASURED" ]] || {
-    echo "FAIL status must remain NOT_MEASURED until an in-process GPU source is added" >&2
-    return 1
-  }
+  local format status
+  format="$(metric_value format_version "$report")"
+  case "$format" in
+    phase4_gpu_probe_v1|phase4_gpu_probe_v2) ;;
+    *) echo "FAIL unsupported format version" >&2; return 1 ;;
+  esac
+  status="$(metric_value status "$report")"
+  case "$status" in
+    NOT_MEASURED|MEASURED) ;;
+    *) echo "FAIL status must be NOT_MEASURED or MEASURED" >&2; return 1 ;;
+  esac
   case "$(metric_value probe_mode "$report")" in audit|run) ;; *)
     echo "FAIL unsupported probe mode" >&2
     return 1
@@ -127,18 +129,93 @@ validate_report() {
     return 1
   esac
 
-  # This is the central fail-closed gate. The shell can discover a renderer
-  # header and an adapter label, but it cannot produce a GPU timestamp or
-  # driver-resident VRAM measurement. Numeric values are rejected until the
-  # report contract is deliberately extended with an in-process source.
-  for key in \
-    gpu_frame_time_source gpu_frame_time_p50_ms gpu_frame_time_p95_ms gpu_frame_time_p99_ms \
-    gpu_vram_source gpu_vram_bytes fps_source fps_p50 fps_p95 fps_p99; do
-    [[ "$(metric_value "$key" "$report")" == "NOT_MEASURED" ]] || {
-      echo "FAIL ${key} must be NOT_MEASURED" >&2
-      return 1
-    }
-  done
+  # v1 is retained as an audit-only fixture for historical reports. v2 can
+  # contain measurements emitted by the in-process probe, while driver-resident
+  # VRAM and FPS remain fail-closed because they have separate sources.
+  if [[ "$format" == phase4_gpu_probe_v1 ]]; then
+    [[ "$status" == NOT_MEASURED ]] || { echo "FAIL v1 status must be NOT_MEASURED" >&2; return 1; }
+    for key in \
+      gpu_frame_time_source gpu_frame_time_p50_ms gpu_frame_time_p95_ms gpu_frame_time_p99_ms \
+      gpu_vram_source gpu_vram_bytes fps_source fps_p50 fps_p95 fps_p99; do
+      [[ "$(metric_value "$key" "$report")" == "NOT_MEASURED" ]] || {
+        echo "FAIL v1 ${key} must be NOT_MEASURED" >&2
+        return 1
+      }
+    done
+  else
+    local v2_required
+    v2_required=(
+      render_probe_enabled render_probe_samples
+      render_cpu_time_source render_cpu_time_p50_ms render_cpu_time_p95_ms render_cpu_time_p99_ms
+      render_draw_calls_source render_draw_calls_p50 render_draw_calls_p95 render_draw_calls_p99
+      render_primitives_source render_primitives_p50 render_primitives_p95 render_primitives_p99
+      render_objects_source render_objects_p50 render_objects_p95 render_objects_p99
+      render_video_mem_source render_video_mem_p50_bytes render_video_mem_p95_bytes render_video_mem_p99_bytes
+    )
+    for key in "${v2_required[@]}"; do
+      grep -q "^${key}=" "$report" || {
+        echo "FAIL v2 report is missing ${key}" >&2
+        return 1
+      }
+    done
+    local probe_samples
+    probe_samples="$(metric_value render_probe_samples "$report")"
+    [[ "$probe_samples" =~ ^[0-9]+$ ]] || { echo "FAIL render_probe_samples is not an integer" >&2; return 1; }
+    if [[ "$status" == MEASURED ]]; then
+      [[ "$(metric_value render_probe_enabled "$report")" == true ]] || {
+        echo "FAIL MEASURED report must have render_probe_enabled=true" >&2; return 1;
+      }
+      (( probe_samples > 0 )) || { echo "FAIL MEASURED report has no probe samples" >&2; return 1; }
+      local gpu_source
+      gpu_source="$(metric_value gpu_frame_time_source "$report")"
+      case "$gpu_source" in
+        NOT_MEASURED)
+          for key in gpu_frame_time_p50_ms gpu_frame_time_p95_ms gpu_frame_time_p99_ms; do
+            [[ "$(metric_value "$key" "$report")" == NOT_MEASURED ]] || {
+              echo "FAIL ${key} must be NOT_MEASURED without a GPU source" >&2; return 1;
+            }
+          done
+          ;;
+        in_process_rendering_server)
+          for key in gpu_frame_time_p50_ms gpu_frame_time_p95_ms gpu_frame_time_p99_ms; do
+            value="$(metric_value "$key" "$report")"
+            [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || {
+              echo "FAIL ${key} is not finite in-process GPU telemetry" >&2; return 1;
+            }
+          done
+          ;;
+        *) echo "FAIL unsupported gpu_frame_time_source=${gpu_source}" >&2; return 1 ;;
+      esac
+      for key in \
+        render_cpu_time_p50_ms render_cpu_time_p95_ms render_cpu_time_p99_ms \
+        render_draw_calls_p50 render_draw_calls_p95 render_draw_calls_p99 \
+        render_primitives_p50 render_primitives_p95 render_primitives_p99 \
+        render_objects_p50 render_objects_p95 render_objects_p99 \
+        render_video_mem_p50_bytes render_video_mem_p95_bytes render_video_mem_p99_bytes; do
+        value="$(metric_value "$key" "$report")"
+        [[ "$value" == NOT_MEASURED || "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || {
+          echo "FAIL ${key} is not finite numeric telemetry" >&2; return 1;
+        }
+      done
+    else
+      (( probe_samples == 0 )) || { echo "FAIL NOT_MEASURED report has probe samples" >&2; return 1; }
+      for key in \
+        render_cpu_time_source render_cpu_time_p50_ms render_cpu_time_p95_ms render_cpu_time_p99_ms \
+        render_draw_calls_source render_draw_calls_p50 render_draw_calls_p95 render_draw_calls_p99 \
+        render_primitives_source render_primitives_p50 render_primitives_p95 render_primitives_p99 \
+        render_objects_source render_objects_p50 render_objects_p95 render_objects_p99 \
+        render_video_mem_source render_video_mem_p50_bytes render_video_mem_p95_bytes render_video_mem_p99_bytes; do
+        [[ "$(metric_value "$key" "$report")" == NOT_MEASURED ]] || {
+          echo "FAIL NOT_MEASURED ${key} must be NOT_MEASURED" >&2; return 1;
+        }
+      done
+    fi
+    for key in gpu_vram_source gpu_vram_bytes fps_source fps_p50 fps_p95 fps_p99; do
+      [[ "$(metric_value "$key" "$report")" == NOT_MEASURED ]] || {
+        echo "FAIL ${key} remains NOT_MEASURED without a dedicated source" >&2; return 1;
+      }
+    done
+  fi
   [[ "$(metric_value rendering_server_api "$report")" == "IN_PROCESS_ONLY" ]] || {
     echo "FAIL rendering_server_api must identify the in-process boundary" >&2
     return 1
@@ -166,6 +243,37 @@ safe_value() {
   # Reports are intentionally strict key=value records. Paths and startup
   # headers are encoded rather than emitted with whitespace.
   printf '%s' "$1" | tr '\n\t ' '___' | sed 's/=/~/g'
+}
+
+percentile_file() {
+  local file="$1" percentile="$2"
+  awk -v p="$percentile" '
+    { values[NR] = $1 }
+    END {
+      n = NR
+      if (n == 0) { print "NOT_MEASURED"; exit }
+      rank = int((p * n + 99) / 100)
+      if (rank < 1) rank = 1
+      if (rank > n) rank = n
+      printf "%.3f\n", values[rank]
+    }' "$file"
+}
+
+extract_probe_metric() {
+  local key="$1" destination="$2"
+  awk '!seen[$0]++' "$STDOUT_LOG" "$GODOT_LOG" 2>/dev/null \
+    | awk -v key="$key" '/PERF_GPU sample=/ {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ ("^" key "=[0-9]+(\\.[0-9]+)?$")) {
+            split($i, pair, "="); print pair[2]
+          }
+        }
+      }' | sort -n > "$destination"
+}
+
+count_probe_samples() {
+  awk '!seen[$0]++' "$STDOUT_LOG" "$GODOT_LOG" 2>/dev/null \
+    | awk '/PERF_GPU sample=[0-9]+/ { count++ } END { print count + 0 }'
 }
 
 has_help_flag() {
@@ -259,6 +367,15 @@ adapter_observed="NOT_MEASURED"
 adapter_source="NOT_MEASURED"
 software_renderer="unknown"
 real_gpu="unknown"
+render_probe_enabled="false"
+render_probe_samples=0
+GPU_SAMPLES=""
+CPU_SAMPLES=""
+DRAW_SAMPLES=""
+PRIMITIVE_SAMPLES=""
+OBJECT_SAMPLES=""
+VIDEO_MEM_SAMPLES=""
+GPU_STATUS="NOT_MEASURED"
 
 if (( RUN == 1 )); then
   probe_mode="run"
@@ -295,15 +412,15 @@ if (( RUN == 1 )); then
   set +e
   case "$display_backend" in
     native)
-      timeout "$TIMEOUT_SEC" "${engine_args[@]}" >"$STDOUT_LOG" 2>&1
+      EXOSPHERE_RENDER_PROBE=1 timeout "$TIMEOUT_SEC" "${engine_args[@]}" >"$STDOUT_LOG" 2>&1
       godot_exit=$?
       ;;
     xvfb)
-      timeout "$TIMEOUT_SEC" xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" "${engine_args[@]}" >"$STDOUT_LOG" 2>&1
+      EXOSPHERE_RENDER_PROBE=1 timeout "$TIMEOUT_SEC" xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" "${engine_args[@]}" >"$STDOUT_LOG" 2>&1
       godot_exit=$?
       ;;
     headless)
-      timeout "$TIMEOUT_SEC" "${engine_args[@]}" --headless >"$STDOUT_LOG" 2>&1
+      EXOSPHERE_RENDER_PROBE=1 timeout "$TIMEOUT_SEC" "${engine_args[@]}" --headless >"$STDOUT_LOG" 2>&1
       godot_exit=$?
       ;;
   esac
@@ -328,9 +445,29 @@ if (( RUN == 1 )); then
     software_renderer="false"
     real_gpu="unknown"
   fi
+  if rg -q '^PERF_GPU_CONFIG ' "$STDOUT_LOG" "$GODOT_LOG" 2>/dev/null; then
+    render_probe_enabled="true"
+  fi
+
+  GPU_SAMPLES="$OUT_DIR/gpu_samples.ms"
+  CPU_SAMPLES="$OUT_DIR/render_cpu_samples.ms"
+  DRAW_SAMPLES="$OUT_DIR/render_draw_calls.samples"
+  PRIMITIVE_SAMPLES="$OUT_DIR/render_primitives.samples"
+  OBJECT_SAMPLES="$OUT_DIR/render_objects.samples"
+  VIDEO_MEM_SAMPLES="$OUT_DIR/render_video_mem.bytes"
+  : > "$GPU_SAMPLES"; : > "$CPU_SAMPLES"; : > "$DRAW_SAMPLES"
+  : > "$PRIMITIVE_SAMPLES"; : > "$OBJECT_SAMPLES"; : > "$VIDEO_MEM_SAMPLES"
+  extract_probe_metric gpu_ms "$GPU_SAMPLES"
+  extract_probe_metric cpu_render_ms "$CPU_SAMPLES"
+  extract_probe_metric draw_calls "$DRAW_SAMPLES"
+  extract_probe_metric primitives "$PRIMITIVE_SAMPLES"
+  extract_probe_metric objects "$OBJECT_SAMPLES"
+  extract_probe_metric video_mem_bytes "$VIDEO_MEM_SAMPLES"
+  render_probe_samples="$(count_probe_samples)"
+  if (( render_probe_samples > 0 )); then GPU_STATUS="MEASURED"; fi
 fi
 
-status="NOT_MEASURED"
+status="$GPU_STATUS"
 if (( RUN == 1 )) && [[ "$godot_exit" != 0 ]]; then status="FAIL"; fi
 {
   echo "format_version=$FORMAT_VERSION"
@@ -359,14 +496,66 @@ if (( RUN == 1 )) && [[ "$godot_exit" != 0 ]]; then status="FAIL"; fi
   echo "benchmark_file=$([[ -f "$BENCHMARK_FILE" ]] && safe_value "$BENCHMARK_FILE" || echo not_created)"
   echo "benchmark_phase_count=$benchmark_phase_count"
   echo "benchmark_scope=$benchmark_scope"
+  echo "render_probe_enabled=$render_probe_enabled"
+  echo "render_probe_samples=$render_probe_samples"
   echo "rendering_server_api=IN_PROCESS_ONLY"
   echo "gpu_viewport_time_api=RenderingServer_ViewportGetMeasuredRenderTimeGpu"
   echo "gpu_rendering_info_api=RenderingServer_GetRenderingInfo"
   echo "gpu_memory_report_api=RenderingDevice_GetDriverAndDeviceMemoryReport_VulkanOnly"
-  echo "gpu_frame_time_source=NOT_MEASURED"
-  echo "gpu_frame_time_p50_ms=NOT_MEASURED"
-  echo "gpu_frame_time_p95_ms=NOT_MEASURED"
-  echo "gpu_frame_time_p99_ms=NOT_MEASURED"
+  if [[ "$GPU_STATUS" == MEASURED && -s "$GPU_SAMPLES" ]]; then
+    echo "gpu_frame_time_source=in_process_rendering_server"
+    echo "gpu_frame_time_p50_ms=$(percentile_file "$GPU_SAMPLES" 50)"
+    echo "gpu_frame_time_p95_ms=$(percentile_file "$GPU_SAMPLES" 95)"
+    echo "gpu_frame_time_p99_ms=$(percentile_file "$GPU_SAMPLES" 99)"
+  else
+    echo "gpu_frame_time_source=NOT_MEASURED"
+    echo "gpu_frame_time_p50_ms=NOT_MEASURED"
+    echo "gpu_frame_time_p95_ms=NOT_MEASURED"
+    echo "gpu_frame_time_p99_ms=NOT_MEASURED"
+  fi
+  if [[ "$GPU_STATUS" == MEASURED ]]; then
+    echo "render_cpu_time_source=in_process_rendering_server"
+    echo "render_cpu_time_p50_ms=$(percentile_file "$CPU_SAMPLES" 50)"
+    echo "render_cpu_time_p95_ms=$(percentile_file "$CPU_SAMPLES" 95)"
+    echo "render_cpu_time_p99_ms=$(percentile_file "$CPU_SAMPLES" 99)"
+    echo "render_draw_calls_source=in_process_rendering_server"
+    echo "render_draw_calls_p50=$(percentile_file "$DRAW_SAMPLES" 50)"
+    echo "render_draw_calls_p95=$(percentile_file "$DRAW_SAMPLES" 95)"
+    echo "render_draw_calls_p99=$(percentile_file "$DRAW_SAMPLES" 99)"
+    echo "render_primitives_source=in_process_rendering_server"
+    echo "render_primitives_p50=$(percentile_file "$PRIMITIVE_SAMPLES" 50)"
+    echo "render_primitives_p95=$(percentile_file "$PRIMITIVE_SAMPLES" 95)"
+    echo "render_primitives_p99=$(percentile_file "$PRIMITIVE_SAMPLES" 99)"
+    echo "render_objects_source=in_process_rendering_server"
+    echo "render_objects_p50=$(percentile_file "$OBJECT_SAMPLES" 50)"
+    echo "render_objects_p95=$(percentile_file "$OBJECT_SAMPLES" 95)"
+    echo "render_objects_p99=$(percentile_file "$OBJECT_SAMPLES" 99)"
+    echo "render_video_mem_source=in_process_rendering_server"
+    echo "render_video_mem_p50_bytes=$(percentile_file "$VIDEO_MEM_SAMPLES" 50)"
+    echo "render_video_mem_p95_bytes=$(percentile_file "$VIDEO_MEM_SAMPLES" 95)"
+    echo "render_video_mem_p99_bytes=$(percentile_file "$VIDEO_MEM_SAMPLES" 99)"
+  else
+    echo "render_cpu_time_source=NOT_MEASURED"
+    echo "render_cpu_time_p50_ms=NOT_MEASURED"
+    echo "render_cpu_time_p95_ms=NOT_MEASURED"
+    echo "render_cpu_time_p99_ms=NOT_MEASURED"
+    echo "render_draw_calls_source=NOT_MEASURED"
+    echo "render_draw_calls_p50=NOT_MEASURED"
+    echo "render_draw_calls_p95=NOT_MEASURED"
+    echo "render_draw_calls_p99=NOT_MEASURED"
+    echo "render_primitives_source=NOT_MEASURED"
+    echo "render_primitives_p50=NOT_MEASURED"
+    echo "render_primitives_p95=NOT_MEASURED"
+    echo "render_primitives_p99=NOT_MEASURED"
+    echo "render_objects_source=NOT_MEASURED"
+    echo "render_objects_p50=NOT_MEASURED"
+    echo "render_objects_p95=NOT_MEASURED"
+    echo "render_objects_p99=NOT_MEASURED"
+    echo "render_video_mem_source=NOT_MEASURED"
+    echo "render_video_mem_p50_bytes=NOT_MEASURED"
+    echo "render_video_mem_p95_bytes=NOT_MEASURED"
+    echo "render_video_mem_p99_bytes=NOT_MEASURED"
+  fi
   echo "gpu_vram_source=NOT_MEASURED"
   echo "gpu_vram_bytes=NOT_MEASURED"
   echo "fps_source=NOT_MEASURED"
@@ -381,4 +570,9 @@ if [[ "$status" == FAIL ]]; then
 fi
 validate_report "$REPORT"
 echo "phase4_gpu_probe: status=$status artifacts=$OUT_DIR report=$REPORT"
-echo "phase4_gpu_probe: GPU frame time, VRAM, and FPS remain NOT_MEASURED (in-process API required)"
+if [[ "$(metric_value gpu_frame_time_source "$REPORT")" == in_process_rendering_server ]]; then
+  echo "phase4_gpu_probe: in-process render timer captured; real_gpu=$(metric_value real_gpu_observed "$REPORT")"
+else
+  echo "phase4_gpu_probe: GPU frame time remains NOT_MEASURED (backend did not provide a sample)"
+fi
+echo "phase4_gpu_probe: driver-resident VRAM and FPS remain NOT_MEASURED"

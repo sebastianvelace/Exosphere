@@ -95,6 +95,15 @@ public partial class SimulationBridge : Node
     {
         Instance = this;
 
+        // Render timing is opt-in because enabling viewport measurements can add
+        // backend work every frame. The probe is attached to the Flight root only
+        // for explicit profiling runs and never changes simulation state.
+        if (RenderPerformanceProbe.IsRequested())
+        {
+            var renderProbe = new RenderPerformanceProbe { Name = "RenderPerformanceProbe" };
+            GetParent()?.CallDeferred("add_child", renderProbe);
+        }
+
         var startup = Stopwatch.StartNew();
         GD.Print("PERF_STARTUP phase=begin");
 

@@ -55,6 +55,42 @@ EOF
 bash "$HARNESS" --validate "$good"
 echo "PASS audit-only NOT_MEASURED report accepted"
 
+measured="$TEST_DIR/measured.tsv"
+sed -e 's/format_version=phase4_gpu_probe_v1/format_version=phase4_gpu_probe_v2/' \
+    -e 's/status=NOT_MEASURED/status=MEASURED/' "$good" > "$measured"
+cat >> "$measured" <<'EOF'
+render_probe_enabled=true
+render_probe_samples=4
+render_cpu_time_source=in_process_rendering_server
+render_cpu_time_p50_ms=8.000
+render_cpu_time_p95_ms=12.000
+render_cpu_time_p99_ms=12.000
+render_draw_calls_source=in_process_rendering_server
+render_draw_calls_p50=100.000
+render_draw_calls_p95=110.000
+render_draw_calls_p99=110.000
+render_primitives_source=in_process_rendering_server
+render_primitives_p50=2000.000
+render_primitives_p95=2200.000
+render_primitives_p99=2200.000
+render_objects_source=in_process_rendering_server
+render_objects_p50=50.000
+render_objects_p95=55.000
+render_objects_p99=55.000
+render_video_mem_source=in_process_rendering_server
+render_video_mem_p50_bytes=4096.000
+render_video_mem_p95_bytes=8192.000
+render_video_mem_p99_bytes=8192.000
+EOF
+sed -i \
+  -e 's/gpu_frame_time_source=NOT_MEASURED/gpu_frame_time_source=in_process_rendering_server/' \
+  -e 's/gpu_frame_time_p50_ms=NOT_MEASURED/gpu_frame_time_p50_ms=4.000/' \
+  -e 's/gpu_frame_time_p95_ms=NOT_MEASURED/gpu_frame_time_p95_ms=5.000/' \
+  -e 's/gpu_frame_time_p99_ms=NOT_MEASURED/gpu_frame_time_p99_ms=5.000/' \
+  "$measured"
+bash "$HARNESS" --validate "$measured"
+echo "PASS in-process measured report accepted"
+
 expect_failure() {
   local name="$1" fixture="$2"
   if bash "$HARNESS" --validate "$fixture" >/dev/null 2>&1; then
@@ -75,6 +111,10 @@ expect_failure "numeric FPS without source" "$fake_fps"
 fake_status="$TEST_DIR/fake-status.tsv"
 sed 's/status=NOT_MEASURED/status=PASS/' "$good" > "$fake_status"
 expect_failure "PASS status without measured source" "$fake_status"
+
+bad_measured_samples="$TEST_DIR/bad-measured-samples.tsv"
+sed 's/render_probe_samples=4/render_probe_samples=0/' "$measured" > "$bad_measured_samples"
+expect_failure "MEASURED report without samples" "$bad_measured_samples"
 
 malformed="$TEST_DIR/malformed.tsv"
 sed 's/adapter_source=NOT_MEASURED/adapter source=NOT_MEASURED/' "$good" > "$malformed"

@@ -1,8 +1,8 @@
 # Plan riguroso de optimización y despliegue multiagente
 
 Estado: fases 7–11 aplicadas; experimento de plumas fase 12 rechazado; fase 13 limitada a
-llvmpipe; fase 14 aplica preview VAB bajo demanda; siguiente fase: profiling de render/GPU
-con hardware objetivo
+llvmpipe; fase 14 aplica preview VAB bajo demanda; fase 15 añade probe in-process opt-in;
+siguiente fase: profiling de render/GPU con hardware objetivo
 Fecha de baseline: 2026-08-11; actualizaciones runtime/scheduler: 2026-08-12
 Alcance: vuelo sandbox, Starship por defecto, Godot 4.6.3 mono, .NET 8
 
@@ -49,6 +49,12 @@ La fase 14 aplica la primera optimización de recursos de escena fuera del vuelo
 actualizar su target 1024² y su `VesselRenderer` cuando la asamblea está vacía, y vuelve a
 activarlos al construir o cargar una nave. El picking sigue consultando el mundo de física
 del `SubViewport`; no se cambia la asamblea, la validación ni la ruta de lanzamiento.
+
+La fase 15 implementa el límite de medición faltante en
+[`PERF_RENDER_PHASE15_REPORT.md`](PERF_RENDER_PHASE15_REPORT.md): un probe opt-in obtiene
+tiempo CPU/GPU de viewport y contadores de `RenderingServer`, pero mantiene VRAM física y
+FPS en `NOT_MEASURED`. La primera corrida sigue siendo llvmpipe; sirve para validar el
+canal y dimensionar el backend software, no para promover una optimización visual.
 
 ## 1. Diagnóstico reproducible
 

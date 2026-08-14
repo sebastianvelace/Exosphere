@@ -27,6 +27,8 @@ bash tools/tests/physics_hotpath_contract_test.sh
 bash tools/tests/starship_hotpath_contract_test.sh
 bash tools/tests/visual_telemetry_contract_test.sh
 bash tools/tests/cockpit_subviewport_contract_test.sh
+bash tools/tests/render_performance_probe_contract_test.sh
+bash tools/perf/phase4_gpu_probe_contract_test.sh
 bash tools/perf/scheduler_phase6_benchmark_contract_test.sh
 
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
