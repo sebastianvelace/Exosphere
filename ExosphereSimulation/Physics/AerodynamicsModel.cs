@@ -147,6 +147,26 @@ public static class AerodynamicsModel
         Vector3d localUp,
         Vector3d velocityDirection,
         double angleOfAttackDegrees = NominalEntryAngleOfAttackDegrees)
+        => ComputeEntryAxis(localUp, velocityDirection, angleOfAttackDegrees, liftSign: 1.0);
+
+    /// <summary>
+    /// Builds the same high-drag entry attitude while biasing body lift toward the body.
+    /// A catch approach has a fixed downrange target; using a small, deliberate down-lift
+    /// bias prevents a shallow 80 km deorbit from skipping back into orbit before the low
+    /// altitude flip. This is guidance, not a force override: the force still comes from
+    /// <see cref="ComputeLift"/> and the normal atmospheric integrator.
+    /// </summary>
+    public static Vector3d ComputeLiftDownEntryAxis(
+        Vector3d localUp,
+        Vector3d velocityDirection,
+        double angleOfAttackDegrees = NominalEntryAngleOfAttackDegrees)
+        => ComputeEntryAxis(localUp, velocityDirection, angleOfAttackDegrees, liftSign: -1.0);
+
+    private static Vector3d ComputeEntryAxis(
+        Vector3d localUp,
+        Vector3d velocityDirection,
+        double angleOfAttackDegrees,
+        double liftSign)
     {
         var flow = velocityDirection.Normalized;
         var liftUp = localUp - flow * localUp.Dot(flow);
@@ -159,7 +179,7 @@ public static class AerodynamicsModel
 
         double alpha = System.Math.Clamp(angleOfAttackDegrees, 0.0, 90.0)
             * MathUtils.DEG_TO_RAD;
-        return (flow * System.Math.Cos(alpha) + liftUp * System.Math.Sin(alpha)).Normalized;
+        return (flow * System.Math.Cos(alpha) + liftUp * (liftSign * System.Math.Sin(alpha))).Normalized;
     }
 
     /// <summary>
@@ -330,9 +350,18 @@ public static class AerodynamicsModel
         // 9 m hull cross-sections, with fore/aft pairs acting far from the mass centre.
         double combinedFlapArea = 1.40 * vehicleDiameter * vehicleDiameter;
         double leverArm = 0.45 * vehicleLength;
-        const double controlCoefficient = 1.00;
+        // The flap area is an aggregate of four large surfaces. A coefficient of 1.0
+        // underestimates their hinge moment against the static-margin torque at orbital
+        // entry q; 3.0 keeps the model bounded while giving the onboard EDL controller a
+        // real chance to hold the declared 70° angle of attack.
+        const double controlCoefficient = 3.00;
+        // A Starship belly-flop must be able to recover from the static-margin nose-down
+        // tendency before the low-altitude flip. The previous 1.20 rad/s² ceiling was
+        // below the authority needed in the high-q part of an orbital return; it allowed
+        // the vehicle to rotate axial, lose drag and burn through the aft package. Keep a
+        // finite physical ceiling, but leave enough margin for a controlled recovery.
         double pitchYawAuthority = System.Math.Min(
-            1.20,
+            4.00,
             q * combinedFlapArea * leverArm * controlCoefficient / transverseMomentOfInertia);
         double rollAuthority = pitchYawAuthority * 0.55;
 

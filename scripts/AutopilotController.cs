@@ -21,6 +21,8 @@ public partial class AutopilotController : Node
     private double _targetDv;             // m/s snapshot at ignition
     private double _prevNu;               // for node-crossing detection
     private bool   _restoreSas;
+    private bool   _burnCommandCommitted;
+    private Vector3d _burnDirectionWorld = Vector3d.Zero;
 
     private const double NodeWindow = 0.10;   // rad: how close to node before igniting
     // A deorbit burn commonly starts 180° away from the current thrust axis. The generic
@@ -40,6 +42,7 @@ public partial class AutopilotController : Node
             IsBurning = false;
             _deliveredDv = 0.0;
             _prevNu = double.NaN;
+            _burnCommandCommitted = false;
 
             // Deorbit-ish retro burn: leave ORBIT into COAST while waiting for ignition.
             if (_planner.DvPrograde < -50.0
@@ -92,10 +95,12 @@ public partial class AutopilotController : Node
         }
 
         // ── Burning ──────────────────────────────────────────────────────────
-        var (pro, nrm, rad) = _planner.BurnBasisAtNode();
-        Vector3d dir = pro * _planner.DvPrograde + nrm * _planner.DvNormal + rad * _planner.DvRadial;
+        // The burn basis is impulsive: once ignition begins, keep the direction computed
+        // at the node. Rebuilding it from the changing orbit every frame can rotate the
+        // target as the burn itself changes eccentricity, turning a retrograde deorbit into
+        // a prograde/normal excursion on larger burns.
+        Vector3d dir = _burnDirectionWorld;
         if (dir.Magnitude < 1e-6) { EndBurn(); IsArmed = false; return; }
-        dir = dir.Normalized;
 
         // Slew through bounded torque and wait for the physical attitude to settle before
         // ignition. The engine remains pointed by its actual integrated quaternion throughout.
@@ -103,11 +108,17 @@ public partial class AutopilotController : Node
             vessel.Orientation, Vector3d.Up, dir, vessel.AngularVelocity,
             BurnProportionalGain, BurnDampingGain);
         double alignment = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(dir);
-        if (alignment < 0.998 || vessel.AngularVelocity.Magnitude > 0.03)
+        if (!_burnCommandCommitted
+            && (alignment < 0.998 || vessel.AngularVelocity.Magnitude > 0.03))
         {
             vessel.Throttle = 0.0;
             return;
         }
+        // Once the first ignition command is accepted, do not cut throttle and let the
+        // engine lifecycle re-enter Chill/SpinPrime on every small attitude oscillation.
+        // A burn is a single committed event; guidance continues correcting attitude while
+        // the planned ΔV is delivered, and the engine failure policy remains authoritative.
+        _burnCommandCommitted = true;
         vessel.Throttle = 1.0;
 
         // Accumulate delivered ΔV from the actual thrust this frame. The vessel
@@ -130,6 +141,7 @@ public partial class AutopilotController : Node
         IsBurning   = true;
         _targetDv   = _planner.DeltaVMagnitude;
         _deliveredDv = 0.0;
+        _burnDirectionWorld = _planner.DeltaVInertial().Normalized;
         _restoreSas = vessel.SASEnabled;
         vessel.SASEnabled = false;
 
@@ -165,6 +177,8 @@ public partial class AutopilotController : Node
             v.SASEnabled  = _restoreSas;
         }
         IsBurning = false;
+        _burnCommandCommitted = false;
+        _burnDirectionWorld = Vector3d.Zero;
     }
 
     // ── Math helpers ──────────────────────────────────────────────────────────

@@ -74,6 +74,32 @@ public sealed class StarshipFlight7DataTests
     }
 
     [Fact]
+    public void RatedLandingThrustRemainsAvailableBeforeIgnitionSpoolsChamber()
+    {
+        var part = new Part(LoadPartCatalog()["starship_engines"], "ship-engine-flip-gate");
+        part.SelectEngineCount(3);
+
+        // EDL must calculate stopping distance from rated capability, not from current
+        // chamber pressure. At the moment the flip gate is evaluated the engines are still
+        // off, so current thrust is intentionally zero while nominal thrust is finite.
+        Assert.Equal(13_500_000.0,
+            part.GetRatedFullThrottleThrustMagnitude(0.0), 4);
+        Assert.Equal(0.0, part.GetThrustMagnitude(0.0), 8);
+    }
+
+    [Fact]
+    public void ShipEngineSectionIsProtectedDuringBellyFirstEntry()
+    {
+        var definition = LoadPartCatalog()["starship_engines"];
+
+        // The aft engine bay sits behind the protected tank/belly during entry. It must
+        // not be treated as a bare exposed engine package and burn away before the flip
+        // gate can relight the centre Raptors.
+        Assert.True(definition.HasHeatShield);
+        Assert.Equal(3_000.0, definition.HeatTolerance, 8);
+    }
+
+    [Fact]
     public void CenterRaptorsSupportAscentInsertionDeorbitAndLandingSequence()
     {
         var part = new Part(

@@ -1325,11 +1325,12 @@ public partial class SimulationBridge : Node
 
     /// <summary>
     /// Map-facing helper: plan a retrograde deorbit burn on the orbital-map planner that
-    /// lowers periapsis into the atmosphere (default Pe altitude 80 km). Does not execute
+    /// lowers periapsis into the atmosphere (default Pe altitude 60 km). Does not execute
     /// the burn — arm with Enter on the map. Leaves <see cref="BeginReentryDemonstration"/>
     /// alone (that remains a teleport demo).
     /// </summary>
-    public bool PlanDeorbitForActiveVessel(double targetPeAltitudeM = 80_000.0)
+    public bool PlanDeorbitForActiveVessel(double targetPeAltitudeM =
+        ManeuverPlanner.DefaultDeorbitTargetPeAltitudeM)
     {
         var map = MapViewController.Instance;
         var vessel = ActiveVessel;

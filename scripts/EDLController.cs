@@ -65,6 +65,7 @@ public partial class EDLController : Control
     private bool _landingCutoffCommitted;
     private int _landingEngineCount;
     private double _flipElapsed;
+    private bool _flipGateDiagnosticEmitted;
     private double _attitudeErrorDeg;
 
     public override void _Ready()
@@ -152,6 +153,7 @@ public partial class EDLController : Control
                 _landingCutoffCommitted = false;
                 _landingEngineCount = 3;
                 _flipElapsed = 0.0;
+                _flipGateDiagnosticEmitted = false;
                 _towerCatchAborted = false;
                 // Normal Earth Starbase returns use the same physical two-pin catch
                 // path as the deterministic reentry demo. The policy is deliberately
@@ -246,8 +248,18 @@ public partial class EDLController : Control
             Vector3d desiredHorizontalVelocity = towardTarget * closingSpeed;
             catchLateralVelocityError = (surfVel - up * _vUp) - desiredHorizontalVelocity;
         }
-        if (_phase is Edl.Entry or Edl.Peak or Edl.Aero && vDown > 5.0 && _alt <= flipAlt)
+        // Keep the gate explicit. The previous pattern expression was easy to misread and
+        // made a normal Starbase return reach the ground still in belly-flop when the
+        // computed stopping-distance floor was crossed. This is the only transition that
+        // may enter the powered flip from aero flight.
+        if (aeroPhase && vDown > 5.0 && _alt <= flipAlt)
         {
+            if (!_flipGateDiagnosticEmitted)
+            {
+                GD.Print($"[EDL] flip gate entered alt={_alt:F1} m flipAlt={flipAlt:F1} " +
+                         $"vDown={vDown:F1} m/s aBrake={aBrake:F2} m/s²");
+                _flipGateDiagnosticEmitted = true;
+            }
             _phase = Edl.Retro;
             _flipInProgress = true;
             _flipElapsed = 0.0;
@@ -334,15 +346,12 @@ public partial class EDLController : Control
             // target retains nearly all projected drag while generating Starship-like L/D.
             if (vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
             {
-                // Keep the catch approach site-locked while it is still in aero flight.
-                // Exact broadside gives the deterministic return maximum drag and zero
-                // modelled body lift; the co-rotating seed plus retro-burn cant handle the
-                // small residual cross-range without turning the demonstration into a
-                // second, unvalidated lift-guidance law.
-                aimAxis = up.Cross(velDir);
-                if (aimAxis.MagnitudeSquared < 1e-9)
-                    aimAxis = Vector3d.Right - velDir * Vector3d.Right.Dot(velDir);
-                aimAxis = aimAxis.Normalized;
+                // A shallow atmospheric deorbit with exact broadside (zero body lift) can skip
+                // back out of the atmosphere before reaching the low flip gate. Keep the
+                // belly-first high-drag attitude, but bias lift toward the body so the
+                // normal aerodynamic integrator commits the return trajectory. The tower
+                // target is still handled by the powered retro/catch guidance below.
+                aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
             }
             else
             {
@@ -817,9 +826,28 @@ public partial class EDLController : Control
         if (engineCluster == null) return MaxThrustAccel(vessel, body, mass);
         int represented = System.Math.Max(1, engineCluster.Definition.EngineCount);
         int landingCount = System.Math.Min(3, represented);
-        double rated = engineCluster.GetRatedFullThrottleThrustMagnitude(
-            vessel.GetAmbientPressure(body));
+        double rated = RatedClusterThrust(engineCluster, vessel.GetAmbientPressure(body));
         return rated * landingCount / represented / mass;
+    }
+
+    /// <summary>
+    /// Returns nominal cluster thrust for guidance timing, independent of current chamber
+    /// pressure and selected-engine runtime state. The runtime model is authoritative when
+    /// resolved; the legacy part rating is a compatibility fallback for a staged vessel whose
+    /// engine instances have not been hydrated yet. A zero throttle/empty chamber must never
+    /// collapse the flip gate to altitude zero.
+    /// </summary>
+    private static double RatedClusterThrust(Part engineCluster, double ambientPressure)
+    {
+        double rated = engineCluster.GetRatedFullThrottleThrustMagnitude(ambientPressure);
+        if (rated > 0.0 && double.IsFinite(rated)) return rated;
+
+        double pressureFraction = System.Math.Clamp(
+            ambientPressure / 101_325.0, 0.0, 1.0);
+        double legacyRated = engineCluster.Definition.ThrustVac
+            + (engineCluster.Definition.ThrustSL - engineCluster.Definition.ThrustVac)
+                * pressureFraction;
+        return double.IsFinite(legacyRated) ? System.Math.Max(0.0, legacyRated) : 0.0;
     }
 
     private void CommandLandingEngines(
@@ -833,8 +861,8 @@ public partial class EDLController : Control
 
         int represented = System.Math.Max(1, engineCluster.Definition.EngineCount);
         int maxLandingEngines = System.Math.Min(3, represented);
-        double ratedCluster = engineCluster.GetRatedFullThrottleThrustMagnitude(
-            vessel.GetAmbientPressure(body));
+        double ratedCluster = RatedClusterThrust(
+            engineCluster, vessel.GetAmbientPressure(body));
         double perEngine = ratedCluster / represented;
         double desiredThrust = System.Math.Max(0.0, accelerationCmd * mass);
         if (perEngine <= 1.0 || desiredThrust <= 1.0)

@@ -11,6 +11,7 @@
   "cost": 18000,
   "drag_coefficient": 0.3,
   "heat_tolerance": 3000,
+  "has_heat_shield": true,
   "thrust_vac": 13500000,
   "thrust_sl": 11000000,
   "isp_vac": 363,

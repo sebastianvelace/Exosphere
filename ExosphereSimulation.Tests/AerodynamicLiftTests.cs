@@ -103,6 +103,21 @@ public sealed class AerodynamicLiftTests
     }
 
     [Fact]
+    public void LiftDownEntryAxisProducesInwardLiftForCatchApproach()
+    {
+        var velocity = new Vector3d(1.0, -0.1, 0.0).Normalized;
+        var localUp = Vector3d.Up;
+        var axis = AerodynamicsModel.ComputeLiftDownEntryAxis(localUp, velocity);
+        var lift = AerodynamicsModel.ComputeLift(Density, velocity * Speed, axis, PartCount);
+        var outward = (localUp - velocity * localUp.Dot(velocity)).Normalized;
+
+        Assert.Equal(AerodynamicsModel.NominalEntryAngleOfAttackDegrees,
+            System.Math.Acos(axis.Dot(velocity)) * 180.0 / System.Math.PI, 8);
+        Assert.True(lift.Dot(outward) < 0.0,
+            "catch entry guidance must bias body lift toward the planet to prevent an atmospheric skip");
+    }
+
+    [Fact]
     public void FlapAuthorityScalesWithDynamicPressureAndOpposesNoAxisMapping()
     {
         var command = new Vector3d(1.0, 0.0, 0.0); // semantic pitch -> local X
@@ -135,6 +150,27 @@ public sealed class AerodynamicLiftTests
 
         Assert.True(flapMoment.Magnitude >= staticMoment.Magnitude,
             $"full flaps must be able to trim entry: flap={flapMoment.Magnitude:F3}, static={staticMoment.Magnitude:F3}");
+    }
+
+    [Fact]
+    public void FlapAuthorityRetainsHighQRecoveryMarginWithoutUnboundedTorque()
+    {
+        var command = new Vector3d(1.0, 0.0, 0.0);
+        var authority = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+            density: 0.30,
+            surfaceVelocity: Vector3d.Right * 1_500.0,
+            orientation: Quaterniond.Identity,
+            pitchYawRollCommand: command,
+            vehicleLength: 52.0,
+            vehicleDiameter: 9.0,
+            transverseMomentOfInertia: 5.6e7);
+
+        // High-q orbital entry needs more than the old 1.20 rad/s² ceiling to recover
+        // belly-first, but the actuator remains bounded by the declared 4 rad/s² limit.
+        Assert.True(authority.X > 1.20);
+        Assert.True(authority.X <= 4.0 + 1e-12);
+        Assert.Equal(0.0, authority.Y, 12);
+        Assert.Equal(0.0, authority.Z, 12);
     }
 
     [Fact]

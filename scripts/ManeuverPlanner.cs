@@ -15,6 +15,11 @@ using Exosphere.Simulation.Navigation;
 /// </summary>
 public sealed class ManeuverPlanner
 {
+    // The normal player-facing deorbit preset must enter decisively instead of
+    // grazing the atmospheric boundary. The requested target remains overridable
+    // for map tooling and tests.
+    public const double DefaultDeorbitTargetPeAltitudeM = 60_000.0;
+
     // ── Orbit snapshot (relative to reference body) ───────────────────────────
     public bool     HasOrbit       { get; private set; }
     public double   Mu             { get; private set; }   // GM of reference body
@@ -98,11 +103,12 @@ public sealed class ManeuverPlanner
 
     /// <summary>
     /// Map preset: place a retrograde deorbit node that lowers periapsis into the
-    /// atmosphere (default Pe altitude 80 km). Near-circular orbits (e &lt; 0.01) burn
+    /// atmosphere (default Pe altitude 60 km). Near-circular orbits (e &lt; 0.01) burn
     /// immediately at the current true anomaly; otherwise the node is at apoapsis (ν=π).
     /// Requires a prior <see cref="SetOrbit"/> snapshot. Returns false if no orbit.
     /// </summary>
-    public bool PlanDeorbit(CelestialBody body, double targetPeAltitudeM = 80_000.0)
+    public bool PlanDeorbit(CelestialBody body,
+        double targetPeAltitudeM = DefaultDeorbitTargetPeAltitudeM)
     {
         if (!HasOrbit || body == null) return false;
 
