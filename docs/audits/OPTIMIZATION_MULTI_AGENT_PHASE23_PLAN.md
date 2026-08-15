@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 29 medida; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 30 medida; buffers de hot-stage promovidos; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -135,6 +135,37 @@ para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
 Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
+
+## Resultado de la fase 30 — hot-stage sin garbage por tick
+
+La auditoría específica del vuelo Flight 7 aisló una asignación repetida durante el
+solapamiento de hot-stage: `PartGraph` reconstruía un `HashSet<Part>` y una `List<Part>` en
+cada tick para separar el conjunto inferior del conjunto superior. Se sustituyó esa ruta por
+dos buffers privados reutilizables, rellenados por índice, sin cambiar la partición de partes,
+el orden de consumo, los límites de combustible ni la física de staging.
+
+La regresión `HotStagePropellantPoolStaysWithinAllocationBudget` calienta 32 ticks, mide 128
+ticks y exige una asignación administrada inferior a 800 B/tick, además de masa finita y
+positiva. La medición directa de la suite registró:
+
+| Caso | Resultado |
+|---|---:|
+| Flight 7, 500 ticks | 360.08 B/tick |
+| Hot-stage overlap, 128 ticks | 320.00 B/tick |
+| `mixed_fleet` benchmark global | 182,965.6 B/tick; p95 4.1550 ms |
+
+El benchmark global no mostró una regresión de allocations ni de contrato después del
+cambio. La suite Starship focalizada pasó `6/6`; la suite xUnit completa pasó `599/599`; el
+build y `ci_check.sh` terminaron con 0 warnings y 0 errores. La decisión es promover la
+reutilización de buffers como optimización local de bajo riesgo y mantener intacta la física.
+
+El wrapper `tools/perf/starship_hotpath_benchmark.sh` no pudo abrir el socket de ejecución de
+VSTest (`SocketException: Permission denied`) incluso con build omitido. Esto es una limitación
+del harness del host, no un fallo del código: las mismas pruebas filtradas ejecutadas
+directamente sí pasaron `6/6`, por lo que no se usa el wrapper como evidencia de rendimiento
+negativa.
+
+Informe reproducible: `docs/audits/PERF_STARSHIP_HOTSTAGE_PHASE30_REPORT.md`.
 
 ## Resultado de la fase 29 — baseline vigente y bloqueos externos
 
@@ -292,10 +323,10 @@ frecuencia ni paralelización de `Vessel.Tick` sólo porque parezca intuitivamen
 
 ## Baseline que todos deben usar
 
-La base funcional está verde. El conteo vigente después de fase 28 es:
+La base funcional está verde. El conteo vigente después de fase 30 es:
 
 - build Godot/.NET: 0 warnings, 0 errors;
-- xUnit: 598/598;
+- xUnit: 599/599;
 - ascenso Flight 7: `ASCENT_ORBIT_OK`, `33/33` al liftoff, `39/39` en hot-stage;
 - EDL Starship: `CAUGHT`, dos pasadores, `relativeSpeed=0.030`, `angularSpeed=0`;
 - salto a Saturno: `SATURN_OK`, anillos visibles;
