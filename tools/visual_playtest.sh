@@ -34,6 +34,7 @@ SKIP_BUILD=0
 PROJECT_BACKUP=""
 APOLLO11_HARDWARE=0
 OWNS_HARNESS=0
+OWNS_LOCK=0
 CLEANUP_DONE=0
 
 usage() {
@@ -73,7 +74,8 @@ Options:
   --reentry-compare  Capture nominal belly-flop vs. forced bad-attitude (nose-first,
                 tumbling) EDL, gated on PEAK_HEATING/destruction, for VFX/thermal comparison.
   --run-id ID    Isolate default artifacts as /tmp/exo_play-ID{,.log}; recommended for agents.
-  --max-runtime SEC  Wall-clock budget (default: 3600 full mission, 1800 other modes).
+  --max-runtime SEC  Wall-clock budget (default: 3600 full mission, 1200 ascent,
+                      1800 orbital reentry/other modes).
   --verify-only  Re-run artifact/log gates without building or launching Godot.
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
   --log FILE    Telemetry log path (default: /tmp/exo_play.log)
@@ -220,8 +222,10 @@ if [[ -z "$MAX_RUNTIME_SEC" ]]; then
     MAX_RUNTIME_SEC=1200
   elif [[ "$MODE" == "orbital_reentry" ]]; then
     # This is deliberately bounded: it validates one prepared orbit and one normal
-    # deorbit/EDL pass, never an open-ended campaign or a demo fallback.
-    MAX_RUNTIME_SEC=900
+    # deorbit/EDL pass, never an open-ended campaign or a demo fallback. The CPU/Xvfb
+    # renderer needs more wall time than the direct 70 km EDL demonstration because
+    # this path also integrates the 1,200 km coast and the real deorbit burn.
+    MAX_RUNTIME_SEC=1800
   else
     MAX_RUNTIME_SEC=1800
   fi
@@ -324,6 +328,10 @@ cleanup() {
       cp "$PROJECT_BACKUP" project.godot
       rm -f "$PROJECT_BACKUP"
     fi
+  fi
+  if [[ "$OWNS_LOCK" -eq 1 ]]; then
+    rm -f "$PLAYTEST_LOCK/owner" 2>/dev/null || true
+    rmdir "$PLAYTEST_LOCK" 2>/dev/null || true
   fi
   if [[ $ec -ne 0 ]]; then
     if [[ "$OWNS_HARNESS" -eq 1 ]]; then
@@ -1258,9 +1266,15 @@ public partial class _PlaytestShot : Node
     private void ProcessOrbitalReentry(SimulationBridge bridge, Vessel vessel, Universe universe,
         CelestialBody body, MissionManager? mission, double alt, Vector3d surfVel, string phase)
     {
-        const double OrbitAltitudeM = 250_000.0;
-        const double DeorbitTargetPeM = 80_000.0;
-        const double SimTimeoutSec = 720.0;
+        // Earth keeps active vessels on bounded RK4 through the modeled 1,000 km
+        // thermosphere. Start above that boundary so the coast can use analytic rails;
+        // the real deorbit burn targets the player-safe 60 km periapsis and re-enters normally.
+        const double OrbitAltitudeM = 1_200_000.0;
+        const double DeorbitTargetPeM = 60_000.0;
+        // A 1,200 km circular setup needs roughly half an orbital period to reach its
+        // 60 km periapsis after the impulsive burn. Keep this as simulated time; the
+        // wall-clock budget remains controlled by the shell harness.
+        const double SimTimeoutSec = 6_000.0;
 
         if (!_orbitalReentrySeeded)
         {
@@ -1427,15 +1441,31 @@ public partial class _PlaytestShot : Node
             double retroAlignment = retroDirection.MagnitudeSquared > 0.0
                 ? thrustAxis.Dot(retroDirection) : double.NaN;
             double thrustN = vessel.ComputeThrust(earthBody).Magnitude;
+            var activeEnginePart = vessel.Parts.ActiveEngines.FirstOrDefault();
+            var allEngineParts = vessel.Parts.Parts.Where(
+                part => part.Definition.Category == PartCategory.Engine).ToArray();
             int activeEngines = vessel.Parts.ActiveEngines.Count();
-            int failedEngines = vessel.Parts.ActiveEngines.FirstOrDefault()?.EngineStates
-                .Count(state => !string.IsNullOrWhiteSpace(state.FailureCode)) ?? 0;
+            int failedEngines = allEngineParts.Sum(part => part.EngineStates
+                .Count(state => !string.IsNullOrWhiteSpace(state.FailureCode)));
+            string failureCodes = allEngineParts.Length == 0
+                ? "-"
+                : string.Join("|", allEngineParts.Select(part =>
+                    $"{part.Definition.Id}:{(part.IsBroken ? "BROKEN" :
+                        part.IsStagingActive ? "STAGE" : "INACTIVE")}:" +
+                    string.Join(",", part.EngineStates.Select(state => state.FailureCode ?? "-"))));
+            double propellant = vessel.Parts.Parts.Sum(part => part.LiquidFuel + part.Oxidizer);
+            var autopilot = GetTree().Root.FindChild("AutopilotController", true, false)
+                as AutopilotController;
             _log.WriteLine($"TRACE_ORBITAL_REENTRY t={simElapsed:F1} alt={alt:F1} " +
                 $"vUp={vUp:F1} spd={surfVel.Magnitude:F1} pe={pe:F1} ap={ap:F1} " +
                 $"phase={phase} throttle={vessel.Throttle:F3} " +
                 $"activeEngines={activeEngines} thrustN={thrustN:F0} " +
                 $"retroAlignment={retroAlignment:F4} pyr={vessel.PitchYawRoll} " +
-                $"failedEngines={failedEngines} catchArmed={vessel.IsAttemptingTowerCatch} " +
+                $"failedEngines={failedEngines} failureCodes={failureCodes} " +
+                $"propellant={propellant:F0} " +
+                $"autopilotArmed={autopilot?.IsArmed ?? false} " +
+                $"autopilotBurning={autopilot?.IsBurning ?? false} " +
+                $"catchArmed={vessel.IsAttemptingTowerCatch} " +
                 $"catchPins={vessel.HasCatchPins} destroyed={vessel.IsDestroyed} " +
                 "normalFlow=True demo=False");
             _log.Flush();
@@ -1521,6 +1551,14 @@ public partial class _PlaytestShot : Node
         {
             Finish("ORBITAL_REENTRY_OK");
             return;
+        }
+
+        // Once the real deorbit burn has completed, use the same bounded coast policy as
+        // the full-mission harness: high warp is safe above the atmosphere, then reduce it
+        // before the entry interface so EDL still receives physical RK4 steps.
+        if (!_orbitalReentryEntry && mission?.Phase == MissionPhase.COAST)
+        {
+            bridge.SetTimeScale(alt > 120_000.0 ? 200.0 : 5.0);
         }
 
         if (simElapsed > SimTimeoutSec)
@@ -1651,10 +1689,19 @@ public partial class _PlaytestShot : Node
     {
         if (!_deorbitStarted)
         {
-            DrainToReserve(vessel, 0.12);
+            // A 1,200 km -> 60 km deorbit spends more propellant than a nominal
+            // 12% landing reserve.  That value was valid for the direct 70 km EDL
+            // demonstration, but it starved the real orbital-return vehicle before
+            // the flip and made the acceptance run look like an attitude failure.
+            // Keep enough for the deorbit burn plus three-engine flip/catch margin.
+            // This is an explicit scenario seed, not a claim about the player's live tank
+            // state: JumpToOrbit may be reached from a partially flown launch profile.
+            const double orbitalReturnReserve = 0.45;
+            SetPropellantReserve(vessel, orbitalReturnReserve);
             bridge.SetTimeScale(1.0);
             _deorbitStarted = true;
-            _log.WriteLine("ACTION deorbit: capped propellant at 12% landing reserve, starting retro burn");
+            _log.WriteLine($"ACTION deorbit: capped propellant at {orbitalReturnReserve:P0} " +
+                "deorbit+landing reserve, starting retro burn");
             _log.Flush();
         }
 
@@ -2412,6 +2459,14 @@ public partial class _PlaytestShot : Node
 
     private void CaptureNow(string slug)
     {
+        // Headless runs are telemetry-only diagnostics: the dummy renderer has no
+        // framebuffer texture, but physics and milestone logging remain valid.
+        if (DisplayServer.GetName() == "headless")
+        {
+            _log.WriteLine($"CAPTURE {slug} headless=True");
+            _log.Flush();
+            return;
+        }
         var img = GetTree().Root.GetViewport().GetTexture().GetImage();
         string path = Path.Combine(_outDir, $"exo_play_{slug}.png");
         img.SavePng(path);
@@ -2646,19 +2701,18 @@ public partial class _PlaytestShot : Node
         _log.Flush();
     }
 
-    private static void DrainToReserve(Vessel vessel, double reserveFrac)
+    private static void SetPropellantReserve(Vessel vessel, double reserveFrac)
     {
         foreach (var p in vessel.Parts.Parts)
         {
             double cap = p.Definition.FuelCapacityLF + p.Definition.FuelCapacityOx;
             if (cap <= 0.0) continue;
             double target = cap * reserveFrac;
-            double total = p.LiquidFuel + p.Oxidizer;
-            if (total <= target) continue;
-            double remove = total - target;
-            double lfFrac = total > 1e-9 ? p.LiquidFuel / total : 0.45;
-            p.LiquidFuel -= remove * lfFrac;
-            p.Oxidizer -= remove * (1.0 - lfFrac);
+            double fuelFraction = cap > 1e-9
+                ? p.Definition.FuelCapacityLF / cap
+                : 0.45;
+            p.LiquidFuel = target * fuelFraction;
+            p.Oxidizer = target * (1.0 - fuelFraction);
         }
     }
 
@@ -3346,25 +3400,32 @@ if [[ "$VERIFY_ONLY" -eq 1 ]]; then
 fi
 
 PLAYTEST_LOCK="/tmp/exosphere-visual-playtest.lock"
-exec {PLAYTEST_LOCK_FD}>"$PLAYTEST_LOCK"
-if ! flock -n "$PLAYTEST_LOCK_FD"; then
-  echo "ERROR: another visual_playtest process is already using the temporary autoload ($PLAYTEST_LOCK)" >&2
-  echo "  Check who holds it: lsof \"$PLAYTEST_LOCK\" (or fuser \"$PLAYTEST_LOCK\")" >&2
-  echo "  If every listed PID is gone/stuck (e.g. an orphaned dotnet build-server), the lock" >&2
-  echo "  releases itself once those processes are killed — it is not a stale pidfile to rm -f." >&2
-  exit 1
+if ! mkdir "$PLAYTEST_LOCK" 2>/dev/null; then
+  lock_owner=""
+  if [[ -f "$PLAYTEST_LOCK/owner" ]]; then
+    lock_owner="$(<"$PLAYTEST_LOCK/owner")"
+  fi
+  if [[ "$lock_owner" =~ ^[0-9]+$ ]] && kill -0 "$lock_owner" 2>/dev/null; then
+    echo "ERROR: another visual_playtest process is already using the temporary autoload ($PLAYTEST_LOCK)" >&2
+    echo "  owner pid=$lock_owner" >&2
+    exit 1
+  fi
+  # A killed shell cannot run the cleanup trap. Recover only an unowned lock
+  # directory; a live owner always wins the race and remains protected.
+  rm -f "$PLAYTEST_LOCK/owner" 2>/dev/null || true
+  if ! rmdir "$PLAYTEST_LOCK" 2>/dev/null || ! mkdir "$PLAYTEST_LOCK" 2>/dev/null; then
+    echo "ERROR: visual_playtest lock is busy or could not be recovered ($PLAYTEST_LOCK)" >&2
+    exit 1
+  fi
 fi
+printf '%s\n' "$$" > "$PLAYTEST_LOCK/owner"
+OWNS_LOCK=1
 OWNS_HARNESS=1
 
 register_autoload
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
-  # Close the lock fd for this child: dotnet build can spawn a long-lived, detached
-  # VBCSCompiler/MSBuild worker ("build server") that outlives this script. If that
-  # daemon inherited fd $PLAYTEST_LOCK_FD, a later hang in it would keep the flock
-  # held forever, orphaning the lock even after this script's own process exits.
-  dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet \
-    {PLAYTEST_LOCK_FD}>&-
+  dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 fi
 
 mkdir -p "$OUT_DIR"
@@ -3397,15 +3458,12 @@ if [[ "$MODE" == "reentry_compare" ]]; then
     : > "$CONSOLE_LOG"
     prepare_godot_log_file
     write_harness
-    # See the SKIP_BUILD block above: {PLAYTEST_LOCK_FD}>&- keeps the lock fd out of every
-    # build/launch child so a hung build-server or stray Godot subprocess can never hold the
-    # flock past this script's own lifetime.
-    dotnet build Exosphere.csproj --no-restore --nologo -v quiet {PLAYTEST_LOCK_FD}>&-
-    EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
-    xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
+    dotnet build Exosphere.csproj --no-restore --nologo -v quiet
+    xvfb-run -a -s "-screen 0 1920x1080x24" env \
+      EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
       --path . --rendering-driver opengl3 \
       --log-file "$GODOT_LOG_FILE" \
-      res://scenes/flight/Flight.tscn {PLAYTEST_LOCK_FD}>&- 2>&1 | tee -a "$CONSOLE_LOG"
+      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
     cat "$LOG" >> "$COMBINED_LOG"
     cat "$CONSOLE_LOG" >> "$COMBINED_CONSOLE_LOG"
     rm -f "$LOG" "$CONSOLE_LOG"
@@ -3415,13 +3473,13 @@ if [[ "$MODE" == "reentry_compare" ]]; then
 else
   HARNESS_MODE="$MODE"
   write_harness
-  dotnet build Exosphere.csproj --no-restore --nologo -v quiet {PLAYTEST_LOCK_FD}>&-
+  dotnet build Exosphere.csproj --no-restore --nologo -v quiet
   prepare_godot_log_file
-  EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
-  xvfb-run -a -s "-screen 0 1920x1080x24" "$GODOT" \
+  xvfb-run -a -s "-screen 0 1920x1080x24" env \
+    EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
     --path . --rendering-driver opengl3 \
     --log-file "$GODOT_LOG_FILE" \
-    res://scenes/flight/Flight.tscn {PLAYTEST_LOCK_FD}>&- 2>&1 | tee -a "$CONSOLE_LOG"
+    res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
 fi
 
 verify_pngs

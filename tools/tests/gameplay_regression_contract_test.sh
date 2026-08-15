@@ -34,6 +34,15 @@ require_pattern scripts/SimulationBridge.cs 'catchAnchorVessel' 'catch vessel an
 require_pattern scripts/SimulationBridge.cs 'starshipReentryActive' 'Starship reentry keeps launch complex visible'
 require_pattern scripts/SimulationBridge.cs 'earthReturnActive' 'Earth launch complex visibility is body-gated'
 require_pattern scripts/AutopilotController.cs 'BurnDampingGain' 'deorbit autopilot uses damped retrograde alignment'
+require_pattern scripts/AutopilotController.cs '_burnCommandCommitted' 'deorbit burn does not restart engines on alignment oscillation'
+require_pattern scripts/ManeuverPlanner.cs 'DefaultDeorbitTargetPeAltitudeM = 60_000.0' 'player deorbit preset has a deep atmospheric target'
+require_pattern ExosphereSimulation/Physics/AerodynamicsModel.cs 'ComputeLiftDownEntryAxis' 'catch approach uses inward aerodynamic lift'
+require_pattern scripts/EDLController.cs 'aeroPhase && vDown > 5.0 && _alt <= flipAlt' 'normal EDL flip gate is explicit'
+require_pattern scripts/EDLController.cs 'RatedClusterThrust(engineCluster, vessel.GetAmbientPressure(body))' 'EDL flip timing uses nominal thrust before ignition'
+require_pattern scripts/EDLController.cs 'engineCluster.Definition.ThrustVac' 'EDL has a legacy thrust fallback for staged runtime hydration'
+require_pattern tools/visual_playtest.sh 'const double orbitalReturnReserve = 0.45;' 'orbital reentry reserves propellant for deorbit and landing'
+require_pattern tools/visual_playtest.sh 'SetPropellantReserve(vessel, orbitalReturnReserve)' 'orbital reentry seeds a deterministic reserve'
+require_pattern tools/visual_playtest.sh 'deorbit+landing reserve' 'orbital reserve is visible in acceptance telemetry'
 
 # Every reentry-capable legacy Starship definition has catch pins, and visual
 # acceptance recognizes the simulator's CAUGHT terminal phase.
@@ -41,7 +50,7 @@ require_pattern data/parts/starship_command.json 'catch_pin_lateral_offset_m' 'l
 require_pattern scripts/SimulationBridge.cs 'ArmTowerCatchApproach(vessel);' 'reentry catch arming'
 require_pattern scripts/EDLController.cs 'if (_phase is Edl.Catch or Edl.Final)' 'catch-specific engine selection'
 require_pattern scripts/EDLController.cs 'vessel.IsAttemptingTowerCatch && vessel.HasCatchPins' 'catch trajectory guidance gate'
-require_pattern scripts/EDLController.cs 'aimAxis = up.Cross(velDir)' 'catch broadside trajectory'
+require_pattern scripts/EDLController.cs 'aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir)' 'catch inward-lift trajectory'
 require_pattern scripts/EDLController.cs 'desiredHorizontalVelocity = towardTarget * closingSpeed' 'catch position/velocity guidance'
 require_pattern scripts/SimulationBridge.cs 'Vector3d rotationalVelocity = earth.GetSurfaceVelocity(rotationReferencePosition);' 'catch-target rotation seed'
 require_pattern scripts/EDLController.cs 'CatchAbortHorizontalMissToleranceM = 20.0' 'recoverable catch abort corridor'

@@ -57,13 +57,21 @@ catch-capable Starship; the two-pin solver still decides whether it actually set
 existing low-altitude abort diverts to legs when the corridor is missed.
 The catch radius was not widened and `IsCaught` is never set by the presentation path.
 
+The normal orbital return validation also exposed a separate sequencing edge: during the
+belly-flop phase the selected landing engines are intentionally still cold, so instantaneous
+thrust is zero even though the rated cluster can provide the flip burn. EDL now uses rated
+cluster capability for stopping-distance/flip timing, with a legacy part-rating fallback for
+staged vessels whose runtime model has not hydrated yet. It still commands and verifies real
+engine spool/thrust after the gate; this fallback does not manufacture thrust or bypass engine
+failures.
+
 ## Validation matrix
 
 | Check | Result |
 |---|---|
 | Targeted engine, catch, teleport and runtime tests | 33/33 passed |
 | Post-`J` Earth/Mars/Venus stability tests | 4/4 passed |
-| Full xUnit suite after post-`J`/retrograde guidance coverage | 592/592 passed |
+| Full xUnit suite after post-`J`/retrograde/reentry/thermal coverage | 596/596 passed |
 | Godot C# build | 0 warnings, 0 errors |
 | Gameplay regression contract | PASS |
 | Visual harness contract | 1 valid + 11 invalid fixtures passed |
@@ -73,6 +81,12 @@ The catch radius was not widened and `IsCaught` is never set by the presentation
 
 The visual harness runs under llvmpipe in CI and is intentionally slower than real time. Its
 console warnings about X11 input and VSync are environment warnings, not simulation failures.
+The post-fix normal-orbit framebuffer run is not promoted here: this host's `/tmp/.X11-unix`
+belongs to `nobody:nogroup`, so new Xvfb displays cannot be created. A headless telemetry run
+reached `ENTRY` with `propellant=1093633`, `failedEngines=0` and no `FAIL`/`GAP`, but the dummy
+renderer cannot provide the PNG acceptance artifacts and the run stopped before a physical
+`CAUGHT` conclusion. The normal visual gate remains open until a healthy Xvfb/GPU host
+records `ORBITAL_REENTRY_OK`.
 
 ## Known limits
 
@@ -88,7 +102,8 @@ console warnings about X11 input and VSync are environment warnings, not simulat
 - The launch complex remains visible throughout an Earth Starship EDL/catch attempt and is
   anchored to the vessel actually returning when a booster is the catch candidate, rather than
   always to `ActiveVessel`.
-- The opt-in normal orbital reentry visual run is currently `PARTIAL/BLOCKED` on llvmpipe: the
-  real map deorbit path arms `RETRO_BURN` but, after the damped-alignment mitigation, still
-  reports `throttle=0`, `thrustN=0`, `pe≈249.98 km` and three failed engine instances at the
-  150 s watchdog. No normal-flow `CAUGHT` result is claimed yet.
+- A pre-fix normal orbital visual run reached `ENTRY` and `PEAK_HEATING` but ended in
+  `GroundImpact`: the aft engine section was receiving bare-metal convective heating and was
+  gone before the 8 km flip gate. `starship_engines` now declares the protected aft package,
+  with a data regression. The post-fix 1,200 km run still requires a framebuffer host for the
+  final `CAUGHT` acceptance gate.

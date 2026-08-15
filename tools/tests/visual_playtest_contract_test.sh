@@ -155,7 +155,7 @@ orbital_good="$TEST_DIR/orbital-good.log"
 cat > "$orbital_good" <<'EOF'
 === Exosphere visual playtest fixture mode=orbital_reentry ===
 NORMAL_REENTRY_SETUP source=JumpToOrbit altitude=250000 pe=250000 ap=250000 atmoTop=140000 launchSite=starbase demo=False flownAscent=False
-NORMAL_REENTRY_ARMED source=map_deorbit_autopilot targetPe=80000 dv=95.0 phase=COAST launchSite=starbase demo=False
+NORMAL_REENTRY_ARMED source=map_deorbit_autopilot targetPe=60000 dv=95.0 phase=COAST launchSite=starbase demo=False
 TRACE_ORBITAL_REENTRY t=1 alt=250000 vUp=0 spd=7700 pe=250000 ap=250000 phase=COAST throttle=0 failedEngines=0 catchArmed=False catchPins=True destroyed=False normalFlow=True demo=False
 TRACE_ORBITAL_REENTRY t=2 alt=70000 vUp=-1200 spd=1800 pe=50000 ap=250000 phase=ENTRY throttle=0 failedEngines=0 catchArmed=True catchPins=True destroyed=False normalFlow=True demo=False
 CHECK orbital_reentry caught=True pins=2 relativeSpeed=0.030 angularSpeed=0.0000 normalFlow=True demo=False

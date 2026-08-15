@@ -101,7 +101,7 @@
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `DeorbitPlanner.ComputeRetroDeltaV` + map `[B]` → `ManeuverPlanner.PlanDeorbit` (Pe≈80 km); Enter arms map autopilot; ORBIT→COAST→RETRO_BURN→COAST then `EDLController` arms `ENTRY`. `DeorbitToEntryTests` cover vis-viva Δv + entry-speed gate kinematics. `BeginReentryDemonstration` left intact as teleport demo. |
+| **Evidence** | `DeorbitPlanner.ComputeRetroDeltaV` + map `[B]` → `ManeuverPlanner.PlanDeorbit` (normal preset Pe≈60 km); Enter arms map autopilot; ORBIT→COAST→RETRO_BURN→COAST then `EDLController` arms `ENTRY`. The deeper preset removes grazing-entry sensitivity while preserving the explicit target override for tooling. `DeorbitToEntryTests` cover vis-viva Δv + entry-speed gate kinematics. `BeginReentryDemonstration` left intact as teleport demo. |
 | **User pain / realism break** | ~~After ORBIT, player had no mission-like path to reentry.~~ |
 | **Proposed solution** | Map action deorbit preset (retrograde node). Wire to play harness milestone 7. |
 | **Acceptance** | ✅ Player path: `[M]` map → `[B]` deorbit → `⏎` exec → coast → ENTRY (no teleport). |

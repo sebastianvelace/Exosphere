@@ -1,8 +1,8 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 27 integrada; auditoría de gameplay Starship cerrada; display, GPU y EventPipe externos pendientes
+Estado: fase 27 integrada; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
-Base: `2a37cda` (`main` limpio después de la fase 27)
+Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
@@ -25,7 +25,7 @@ cuerpos, otros sitios y vehículos sin configuración Starship conservan el cami
 
 Evidencia de integración de esta auditoría:
 
-- suite xUnit completa: `587/587 PASS`, 0 omitidos;
+- suite xUnit completa: `596/596 PASS`, 0 omitidos (tras la cobertura térmica/autoridad de flaps);
 - build Godot C# con `--no-restore`: 0 warnings, 0 errors;
 - contratos de gameplay: PASS; contratos acumulados de optimización: `34/34 PASS`;
 - startup quick-check: PASS; escenas Flight y Construction headless: exit 0;
@@ -39,26 +39,27 @@ Evidencia de integración de esta auditoría:
 La matriz CPU post-`J` quedó incorporada en `PostJumpStabilityTests`: Earth, Mars y Venus
 mantienen cuerpo de referencia, geometría finita, throttle/actitud/velocidad angular nulos y
 estado no destruido durante 150 ticks; el relay tampoco reaplica comandos previos. Resultado:
-`4/4 PASS` nuevos, más la regresión de control retrogrado, y `592/592 PASS` en la suite completa.
+`4/4 PASS` nuevos, más la regresión de control retrogrado y la protección térmica del conjunto
+de motores; `596/596 PASS` en la suite completa.
 
 El harness ahora tiene `--orbital-reentry`, opt-in y fail-closed. Usa `JumpToOrbit` sólo como
 setup explícito, arma el deorbit con el flujo real de mapa (`B` + `Enter`) y exige telemetría
 `normalFlow=True`, entrada, peak heating, retro-burn y captura física. Los contratos aceptan un
 fixture normal válido y rechazan tanto demo-only como ausencia de captura.
 
-La corrida framebuffer real sigue sin alcanzar un gate de juego. La mitigación de damping para
-el giro retrogrado pasa la prueba CPU, pero en Godot el flujo terminó en
-`ORBITAL_REENTRY_DEORBIT_STALLED`: a 150 s simulados seguía en `RETRO_BURN` con
-`throttle=0`, `thrustN=0`, `pe=249979.5 m`, `retroAlignment≈-0.998` y tres instancias de motor
-fallidas. Resultado honesto: `PARTIAL/BLOCKED`, con sólo la captura de órbita y sin `ENTRY`,
-`CAUGHT` ni `ORBITAL_REENTRY_OK`. El problema restante está en la activación/fallo de motores
-o en el estado interno del autopilot, no en el watchdog ni en la evidencia visual.
+La primera corrida framebuffer oficial alcanzó `ENTRY`, `PEAK_HEATING` y `AERO_DESCENT`, pero
+terminó en `GroundImpact` porque el modelo térmico trataba el conjunto de motores, ubicado
+detrás del tanque, como metal desnudo. La traza mostró que el conjunto desaparecía antes de
+la compuerta de 8 km; no fue un fallo de deorbit, de selección de motores ni un bypass del
+solver. El perfil de datos ahora declara su protección térmica y una regresión exige que esa
+propiedad permanezca. La repetición headless alcanzó `ENTRY` sin fallos de motor y con reserva
+de propelente, pero no puede producir las capturas ni cerrar el contacto físico en el renderer
+dummy. La repetición framebuffer a 1.200 km sigue siendo obligatoria y sólo se promoverá como
+`ORBITAL_REENTRY_OK` si registra `flip`, `CAUGHT` y contacto físico.
 
-La próxima acción es exponer códigos de fallo por instancia y `IsArmed/IsBurning` del autopilot,
-añadir una prueba de activación de motor tras staging y corregir la causa antes de repetir la
-corrida normal en un host con GPU física. La validación de GPU física, EventPipe y la matriz
-framebuffer completa sigue `BLOCKED` en este host: no se convertirán esos bloqueos de
-infraestructura en supuestas ganancias de FPS.
+La validación de GPU física, EventPipe y la matriz framebuffer completa sigue `BLOCKED` en este
+host por llvmpipe; no se convertirán esos bloqueos de infraestructura en supuestas ganancias
+de FPS.
 
 ## Resultado de la fase 27 — hot path de staging
 
