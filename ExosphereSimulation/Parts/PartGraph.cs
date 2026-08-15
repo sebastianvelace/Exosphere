@@ -41,6 +41,8 @@ public class PartGraph
     private readonly List<Part> _tickEngineScratch = new();
     private readonly List<Part> _tickSubtreeScratch = new();
     private readonly List<LiquidEngineDemand> _liquidDemands = new();
+    private readonly HashSet<Part> _hotStageBottomSet = new();
+    private readonly List<Part> _hotStageUpperParts = new();
     private readonly List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>
         _gimbalContributions = new();
     private readonly Dictionary<Part, Vector3d> _partLocalPositions = new();
@@ -1051,10 +1053,24 @@ public class PartGraph
         if (HotStageOverlapActive)
         {
             var bottom = CurrentStageParts();
-            var bottomSet = new HashSet<Part>(bottom);
-            var upper = _parts.Where(p => !bottomSet.Contains(p)).ToList();
+            _hotStageBottomSet.Clear();
+            for (int i = 0; i < bottom.Count; i++)
+                _hotStageBottomSet.Add(bottom[i]);
+
+            _hotStageUpperParts.Clear();
+            for (int i = 0; i < _parts.Count; i++)
+            {
+                var part = _parts[i];
+                if (!_hotStageBottomSet.Contains(part))
+                    _hotStageUpperParts.Add(part);
+            }
+
             ConsumePropellantFromPool(bottom, bottom, dt, ambientPressure);
-            ConsumePropellantFromPool(upper, upper, dt, ambientPressure);
+            ConsumePropellantFromPool(
+                _hotStageUpperParts,
+                _hotStageUpperParts,
+                dt,
+                ambientPressure);
             return;
         }
 

@@ -129,6 +129,37 @@ public sealed class StarshipPerformanceRegressionTests
     }
 
     [Fact]
+    public void HotStagePropellantPoolStaysWithinAllocationBudget()
+    {
+        var earth = LoadBody("earth");
+        var vessel = BuildFlight7Stack();
+        vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 100_000.0);
+        vessel.Throttle = 1.0;
+        vessel.BeginHotStageOverlap(10.0);
+
+        for (int i = 0; i < 32; i++)
+            vessel.Tick(TickDt, earth);
+
+        Assert.True(vessel.IsHotStageOverlapping);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        const int measuredTicks = 128;
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < measuredTicks; i++)
+            vessel.Tick(TickDt, earth);
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        double allocatedBytesPerTick = allocatedBytes / (double)measuredTicks;
+
+        _output.WriteLine(
+            $"HotStageTick: {measuredTicks} ticks; "
+            + $"managedAllocPerTick={allocatedBytesPerTick:F2} bytes/tick");
+        Assert.InRange(allocatedBytesPerTick, 0.0, 800.0);
+        Assert.True(double.IsFinite(vessel.TotalMass) && vessel.TotalMass > 0.0);
+    }
+
+    [Fact]
     public void AllocationAudit_Flight7EngineTelemetryBufferReportsManagedCost()
     {
         var catalog = PartCatalog.LoadFromDirectory(
