@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 32 medida; fallos programados de motor sin closures por tick; interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 33 medida; enumeración interna de motores sin boxing por tick; fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -135,6 +135,33 @@ para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
 Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
+
+## Resultado de la fase 33 — enumeración interna de motores sin boxing por tick
+
+El residual después de la fase 32 era `240–360 B/tick`. La causa restante era que los callers
+internos recorrían `PartGraph.ActiveEngines`, cuya firma pública devuelve `IEnumerable<Part>`.
+Aunque el almacenamiento real era un `List<Part>` reutilizable, cada `foreach` desde esa
+interfaz podía boxear el enumerador struct de la lista.
+
+Se añadió `ActiveEngineList` como buffer `List<Part>` interno para la simulación y se migraron
+`Vessel.Tick`, `ControlAuthority` y los cálculos de thrust/torque/TVC de `PartGraph`. La API
+pública `ActiveEngines` sigue existiendo y delega al mismo buffer, por lo que no se rompe la
+compatibilidad de presentation/external callers.
+
+| Escenario | Antes fase 33 | Después | Reducción |
+|---|---:|---:|---:|
+| Motores apagados | 240 B/tick | 80 B/tick | 66.67% |
+| Motores encendidos | 280 B/tick | 120 B/tick | 57.14% |
+| Motores encendidos + TVC | 360 B/tick | 120 B/tick | 66.67% |
+
+La cobertura focalizada pasó `19/19` y el desglose mantiene `<=1,000 B/tick` en los tres
+escenarios. No cambian selección de etapa, authority, torque, TVC ni telemetría pública.
+
+Decisión: promover el buffer concreto. El residual de `80–120 B/tick` queda dentro del
+presupuesto de simulación administrada; no se introducen cadencias reducidas ni hibernación
+física.
+
+Informe reproducible: `docs/audits/PERF_ACTIVE_ENGINE_ENUMERATION_PHASE33_REPORT.md`.
 
 ## Resultado de la fase 32 — agenda de fallos de motor sin closure por tick
 
@@ -387,7 +414,7 @@ frecuencia ni paralelización de `Vessel.Tick` sólo porque parezca intuitivamen
 
 ## Baseline que todos deben usar
 
-La base funcional está verde. El conteo vigente después de fase 32 es:
+La base funcional está verde. El conteo vigente después de fase 33 es:
 
 - build Godot/.NET: 0 warnings, 0 errors;
 - xUnit: 602/602;
