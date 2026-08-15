@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 33 medida; enumeración interna de motores sin boxing por tick; fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 34 medida; enumeración interna de partes y motores sin boxing por tick; fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -135,6 +135,35 @@ para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
 Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
+
+## Resultado de la fase 34 — enumeración interna de partes sin boxing por tick
+
+El residual después de la fase 33 era `80–120 B/tick` en el fixture Flight 7. La revisión de
+los callers internos encontró tres recorridos de `Parts.Parts`, cuya superficie pública es
+`IReadOnlyList<Part>`: autoridad estructural, área efectiva de paracaídas y centro
+aerodinámico/flaps. En cada `foreach`, la enumeración por interfaz podía boxear el enumerador
+de la lista concreta durante el tick.
+
+Se añadió `PartGraph.PartList` como acceso interno al buffer estable `_parts` y se migraron
+únicamente esos recorridos de física. La fachada pública `Parts` conserva su tipo
+`IReadOnlyList<Part>` y no cambia la semántica para HUD, tests, staging ni callers externos.
+El recorrido de teletransporte, las consultas LINQ de presentación y las operaciones de
+staging permanecen fuera de este cambio por no ser hot paths del tick.
+
+| Escenario | Después fase 33 | Después fase 34 | Reducción fase 34 |
+|---|---:|---:|---:|
+| Motores apagados | 80 B/tick | 0 B/tick | 100.00% |
+| Motores encendidos | 120 B/tick | 40 B/tick | 66.67% |
+| Motores encendidos + TVC | 120 B/tick | 40 B/tick | 66.67% |
+
+La prueba focalizada pasó `19/19`, la suite completa `602/602`, y el contrato de hot paths
+pasó. El límite de la regresión sigue siendo `<=1,000 B/tick`; el cambio no toca la cadencia
+del scheduler, la hibernación, los deadlines ni las fórmulas aerodinámicas. El residual de
+`40 B/tick` con motores activos queda documentado como siguiente objetivo de perfilado, no
+como justificación para degradar la física.
+
+Decisión: promover el buffer concreto de topología. La API pública permanece compatible.
+Informe reproducible: `PERF_PART_ENUMERATION_PHASE34_REPORT.md`.
 
 ## Resultado de la fase 33 — enumeración interna de motores sin boxing por tick
 
