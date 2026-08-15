@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 31 medida; interpolación de motores y consumo runtime sin allocations por muestra; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 32 medida; fallos programados de motor sin closures por tick; interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -135,6 +135,33 @@ para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
 Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
+
+## Resultado de la fase 32 — agenda de fallos de motor sin closure por tick
+
+El desglose de Flight 7 runtime mostró un coste persistente incluso con motores apagados:
+`3,672 B/tick` sin input, `3,712 B/tick` con motores encendidos y `3,792 B/tick` con TVC.
+La causa era `Part.ApplyScheduledFailure`: `List.FindIndex` recibía un predicado que cerraba
+sobre el estado de cada motor en cada tick, aunque `_scheduledFailures` estuviera vacío.
+
+La búsqueda ahora recorre la lista por índice y conserva el primer match, las condiciones de
+estado/intento/tiempo y la eliminación de una sola inyección antes de `FailEngine`. No se
+modifica el orden de fiabilidad ni la transición térmica/ignición.
+
+| Escenario | Antes | Después | Reducción |
+|---|---:|---:|---:|
+| Motores apagados | 3,672 B/tick | 240 B/tick | 93.46% |
+| Motores encendidos | 3,712 B/tick | 280 B/tick | 92.46% |
+| Motores encendidos + TVC | 3,792 B/tick | 360 B/tick | 90.51% |
+
+La regresión `RuntimeFlight7AllocationBreakdownReportsControlHotPaths` exige `<=1,000 B/tick`
+en los tres escenarios. `EngineReliabilityTests` conserva PASS para fallos programados,
+sobretemperatura, reinicios y round-trip de save. El contrato `starship_hotpath_contract_test`
+también fue ajustado al límite más estricto.
+
+Decisión: promover el recorrido indexado. El residual de 240–360 B/tick queda dentro del
+presupuesto local y no justifica todavía tocar la cadencia del scheduler ni desactivar física.
+
+Informe reproducible: `docs/audits/PERF_ENGINE_FAILURE_SCHEDULE_PHASE32_REPORT.md`.
 
 ## Resultado de la fase 31 — performance map de motores sin allocations por muestra
 
@@ -360,10 +387,10 @@ frecuencia ni paralelización de `Vessel.Tick` sólo porque parezca intuitivamen
 
 ## Baseline que todos deben usar
 
-La base funcional está verde. El conteo vigente después de fase 31 es:
+La base funcional está verde. El conteo vigente después de fase 32 es:
 
 - build Godot/.NET: 0 warnings, 0 errors;
-- xUnit: 601/601;
+- xUnit: 602/602;
 - ascenso Flight 7: `ASCENT_ORBIT_OK`, `33/33` al liftoff, `39/39` en hot-stage;
 - EDL Starship: `CAUGHT`, dos pasadores, `relativeSpeed=0.030`, `angularSpeed=0`;
 - salto a Saturno: `SATURN_OK`, anillos visibles;

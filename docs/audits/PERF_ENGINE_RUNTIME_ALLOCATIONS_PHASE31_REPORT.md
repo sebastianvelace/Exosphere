@@ -55,7 +55,8 @@ Resultados:
 | Contratos de optimización | PASS, 34/34 |
 | Builds y startup | PASS; 0 warnings, 0 errores |
 
-La regresión runtime exige actualmente `<= 10,000 B/tick`, masa finita y 33 motores activos.
+La regresión runtime exigía inicialmente `<= 10,000 B/tick`; fase 32 la endurece a
+`<= 1,000 B/tick`, masa finita y 33 motores activos.
 El límite deja margen frente a la variación del host sin permitir que reaparezcan allocations de
 órdenes de magnitud mayores.
 
