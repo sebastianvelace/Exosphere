@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 30 medida; buffers de hot-stage promovidos; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 31 medida; interpolación de motores y consumo runtime sin allocations por muestra; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -135,6 +135,43 @@ para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
 Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
+
+## Resultado de la fase 31 — performance map de motores sin allocations por muestra
+
+El fixture histórico de `StarshipPerformanceRegressionTests` no resolvía los modelos de motor
+runtime y, por tanto, no ejercitaba el coste real de `EnginePerformanceEvaluator`. Se añadió un
+fixture Flight 7 construido con `PartCatalog`, que carga los `performanceMap` de los Raptors y
+mide el mismo `Vessel.Tick` que usa la simulación.
+
+La auditoría aisló dos fuentes de garbage en ese camino:
+
+- `ConsumePropellantFromPool` recorría `GetEngineTelemetry`, creando el estado del iterador y
+  records de presentación para obtener sólo el flujo de masa. La física ahora lee un
+  `EnginePerformanceSample` por índice mediante una API interna, dejando la enumeración de
+  telemetría para HUD/compatibilidad.
+- `EnginePerformanceEvaluator` reconstruía `GroupBy`/`OrderBy`/`Select`/`ToArray` por cada
+  instancia y tick. La interpolación de presión y throttle ahora usa un escaneo acotado de la
+  lista validada, conservando la regla de límites de la implementación anterior.
+
+Medición A/B del fixture runtime, 32 ticks de warm-up y 128 ticks medidos:
+
+| Estado | Allocations |
+|---|---:|
+| Antes de la reescritura del `performanceMap` | 141,520 B/tick |
+| Después, con `EnginePerformanceSample` y escaneo directo | 3,712 B/tick |
+| Reducción | 97.38% |
+
+La prueba del mapa confirma la interpolación de presión/throttle y mide `0 B` en 1,000
+muestras después del warm-up. El benchmark scheduler global conservó `mixed_fleet` en
+`182,965.6 B/tick`; su p95 fue `4.4282 ms`, dentro de la variación del host y sin cambiar
+dispatches, proyecciones ni contratos.
+
+La suite completa pasó `601/601`, los contratos de optimización `34/34`, el build quedó en
+`0 warnings / 0 errors` y el startup quick-check pasó. Decisión: promover la ruta de consumo
+sin telemetría materializada y la interpolación sin LINQ; mantener el umbral runtime en
+`10,000 B/tick` como regresión de seguridad.
+
+Informe reproducible: `docs/audits/PERF_ENGINE_RUNTIME_ALLOCATIONS_PHASE31_REPORT.md`.
 
 ## Resultado de la fase 30 — hot-stage sin garbage por tick
 
@@ -323,10 +360,10 @@ frecuencia ni paralelización de `Vessel.Tick` sólo porque parezca intuitivamen
 
 ## Baseline que todos deben usar
 
-La base funcional está verde. El conteo vigente después de fase 30 es:
+La base funcional está verde. El conteo vigente después de fase 31 es:
 
 - build Godot/.NET: 0 warnings, 0 errors;
-- xUnit: 599/599;
+- xUnit: 601/601;
 - ascenso Flight 7: `ASCENT_ORBIT_OK`, `33/33` al liftoff, `39/39` en hot-stage;
 - EDL Starship: `CAUGHT`, dos pasadores, `relativeSpeed=0.030`, `angularSpeed=0`;
 - salto a Saturno: `SATURN_OK`, anillos visibles;
