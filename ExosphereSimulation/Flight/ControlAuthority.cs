@@ -58,7 +58,7 @@ public static class ControlAuthority
         if (!usesStarshipFlapModel) return Full;
 
         bool hasEngines = false;
-        foreach (var _ in vessel.Parts.ActiveEngines)
+        foreach (var _ in vessel.Parts.ActiveEngineList)
         {
             hasEngines = true;
             break;

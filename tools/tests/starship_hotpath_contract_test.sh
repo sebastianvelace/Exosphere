@@ -25,6 +25,10 @@ rg -q --fixed-strings 'double allocatedBytesPerTick' "$TEST" \
   || fail "Starship allocation budget missing"
 rg -q --fixed-strings 'Assert.InRange(allocatedBytesPerTick, 0.0, 1_000.0)' "$TEST" \
   || fail "Starship allocation budget is not enforced"
+rg -q --fixed-strings 'internal List<Part> ActiveEngineList' "$GRAPH" \
+  || fail "concrete active-engine buffer missing"
+rg -q --fixed-strings 'public IEnumerable<Part> ActiveEngines => ActiveEngineList;' "$GRAPH" \
+  || fail "public active-engine compatibility enumerable missing"
 rg -q --fixed-strings 'GetEngineInstanceThrustGeometrySnapshot' "$PART" "$GRAPH" \
   || fail "thrust geometry snapshot buffer missing"
 rg -q --fixed-strings 'GetEngineInstanceGimbalAuthoritySnapshot' "$PART" "$GRAPH" \

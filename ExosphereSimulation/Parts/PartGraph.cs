@@ -411,7 +411,11 @@ public class PartGraph
         _stageTraversalScratch.Clear();
     }
 
-    public IEnumerable<Part> ActiveEngines
+    /// <summary>
+    /// Concrete active-engine buffer for simulation callers. Keeping the concrete list
+    /// available avoids boxing its struct enumerator when the physics tick iterates it.
+    /// </summary>
+    internal List<Part> ActiveEngineList
     {
         get
         {
@@ -424,6 +428,9 @@ public class PartGraph
             return GetQueryActiveEngineList();
         }
     }
+
+    /// <summary>Compatibility enumerable for presentation and external callers.</summary>
+    public IEnumerable<Part> ActiveEngines => ActiveEngineList;
 
     private List<Part> GetQueryActiveEngineList()
     {
@@ -528,7 +535,7 @@ public class PartGraph
         var positions = GetCachedPartLocalPositions();
         double comY = CenterOfMass.Y;
         double torque = 0.0;
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
         {
             if (!positions.TryGetValue(engine, out var centre)) continue;
             double thrustY = centre.Y + engine.Definition.ThrustPositionYM;
@@ -553,7 +560,7 @@ public class PartGraph
 
         double radius = MaximumDiameter * 0.5 * 0.65;
         double torque = 0.0;
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
         {
             if (engine.Definition.EngineCount < 2) continue;
             double gimbal = System.Math.Abs(engine.Definition.GimbalRange) * MathUtils.DEG_TO_RAD;
@@ -587,7 +594,7 @@ public class PartGraph
         double pitchYawTorque = 0.0;
         double rollTorque = 0.0;
 
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
             bool countsForRoll = engine.Definition.EngineCount >= 2;
@@ -616,7 +623,7 @@ public class PartGraph
     public Vector3d GetTotalThrust(double ambientPressure)
     {
         var thrust = Vector3d.Zero;
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
             thrust += engine.GetThrustVector(ambientPressure);
         return thrust;
     }
@@ -637,7 +644,7 @@ public class PartGraph
         var positions = GetCachedPartLocalPositions();
         var com = CenterOfMass;
         var torque = Vector3d.Zero;
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
             var geometry = engine.GetEngineInstanceThrustGeometrySnapshot(ambientPressure);
@@ -701,7 +708,7 @@ public class PartGraph
         contributions.Clear();
         double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
 
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
             var authorityRows = engine.GetEngineInstanceGimbalAuthoritySnapshot(ambientPressure);
@@ -776,7 +783,7 @@ public class PartGraph
         get
         {
             int count = 0;
-            foreach (var engine in ActiveEngines)
+            foreach (var engine in ActiveEngineList)
             {
                 if (!engine.HasEngineRuntime)
                 {
@@ -797,7 +804,7 @@ public class PartGraph
     public double GetCurrentThrust(double ambientPressure)
     {
         double thrust = 0.0;
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
             thrust += engine.GetThrustMagnitude(ambientPressure);
         return thrust;
     }
@@ -806,7 +813,7 @@ public class PartGraph
     public double GetMaximumThrust(double ambientPressure)
     {
         double thrust = 0.0;
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
             thrust += engine.GetFullThrottleThrustMagnitude(ambientPressure);
         return thrust;
     }
@@ -815,7 +822,7 @@ public class PartGraph
     public double GetCurrentMassFlow(double ambientPressure)
     {
         double massFlow = 0.0;
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
             massFlow += engine.GetMassFlow(ambientPressure);
         return massFlow;
     }
@@ -838,7 +845,7 @@ public class PartGraph
     /// </summary>
     public IEnumerable<EngineReadout> GetEngineReadouts(double ambientPressure)
     {
-        foreach (var engine in ActiveEngines)
+        foreach (var engine in ActiveEngineList)
         {
             if (engine.HasEngineRuntime)
             {
@@ -1035,7 +1042,7 @@ public class PartGraph
     public double ClampAscentThrottle()
     {
         double applied = 0.0; bool any = false;
-        foreach (var e in ActiveEngines)
+        foreach (var e in ActiveEngineList)
         {
             e.ThrottleLevel = e.ApplyThrottleFloor(e.ThrottleLevel);
             if (!any) { applied = e.ThrottleLevel; any = true; }

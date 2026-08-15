@@ -460,7 +460,7 @@ public class Vessel
     // los cuatro subpasos k₁…k₄ usen el mismo nivel de empuje dentro de un mismo tick.
     private void ApplyThrottle(double dt)
     {
-        foreach (var engine in Parts.ActiveEngines)
+        foreach (var engine in Parts.ActiveEngineList)
             engine.AdvanceEngineRuntime(Throttle, dt);
     }
 
@@ -753,7 +753,7 @@ public class Vessel
         // in Part.GetThrustVector); GimbalCommandOverride is cleared every tick so a stale
         // per-instance command from a previous tick — or from a tick where the pilot let go of
         // the stick — never lingers on an instance the current tick doesn't recompute.
-        foreach (var engine in Parts.ActiveEngines)
+        foreach (var engine in Parts.ActiveEngineList)
         {
             engine.GimbalOffset = hasInput
                 ? new Vector3d(command.Y, 0.0, -command.X)
