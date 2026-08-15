@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 35 medida; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 36 medida; telemetría de catch-up y validación de delta añadidas; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -135,6 +135,33 @@ para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
 Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
+
+## Resultado de la fase 36 — telemetría de catch-up y entradas inválidas
+
+La auditoría multiagente confirmó que el riesgo más importante para un “freeze” después de
+entrar al nivel no era un error de rails, sino el catch-up ilimitado: `Universe.Tick` puede
+convertir un hitch de wall-clock en cientos o miles de substeps cuando `TimeScale` es alto.
+Cambiar ahora la política para descartar tiempo simulado sería peligroso porque podría saltar
+impactos, SOI, calentamiento o wake-ups.
+
+La fase 36 añade instrumentación sin alterar la física:
+
+- `PhysicsSchedulerTelemetry.WallClockMilliseconds` mide el coste del scheduler por tick.
+- `CatchUpRisk` se marca cuando una llamada alcanza o supera `Universe.CatchUpWarningSubsteps` (`128`).
+- Un hitch de `0.5 s` a `x1000` conserva exactamente `500 s` simulados y registra `250`
+  substeps con `CatchUpRisk=True`.
+- `NaN`, infinito, delta negativo y escalas inválidas se convierten en no-op seguro; el
+  reloj, el estado de cuerpos y la rama publicada no se corrompen.
+- El benchmark serializa `scheduler_wall_clock_ms` y `catch_up_risk` para correlacionar la
+  próxima captura de entrada al nivel con substeps reales.
+
+La prueba focalizada del scheduler pasó `21/21`, la suite completa `605/605`, y el benchmark
+con `8` muestras por escenario terminó con `summary_finite=true` y `summary_valid=true`.
+La decisión es mantener la política actual y usar esta telemetría para diseñar la siguiente
+fase: acumulador fijo o presupuesto de catch-up con equivalencia física explícita. No se activa
+hibernación real ni se aumenta `MaxCoastStep` todavía.
+
+Informe reproducible: `PERF_SCHEDULER_CATCHUP_TELEMETRY_PHASE36_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 
