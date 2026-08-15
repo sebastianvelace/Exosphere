@@ -184,8 +184,41 @@ public sealed class StarshipPerformanceRegressionTests
             $"RuntimeFlight7Tick: {measuredTicks} ticks; "
             + $"managedAllocPerTick={allocatedBytesPerTick:F2} bytes/tick; "
             + $"engines={vessel.ActiveEngineCount}");
-        Assert.InRange(allocatedBytesPerTick, 0.0, 10_000.0);
+        Assert.InRange(allocatedBytesPerTick, 0.0, 1_000.0);
         Assert.True(double.IsFinite(vessel.TotalMass) && vessel.TotalMass > 0.0);
+    }
+
+    [Fact]
+    public void RuntimeFlight7AllocationBreakdownReportsControlHotPaths()
+    {
+        var earth = LoadBody("earth");
+        foreach (var scenario in new[]
+        {
+            (Name: "engines_off", Throttle: 0.0, Input: Vector3d.Zero),
+            (Name: "engines_on", Throttle: 1.0, Input: Vector3d.Zero),
+            (Name: "engines_on_tvc", Throttle: 1.0, Input: new Vector3d(0.2, -0.1, 0.15)),
+        })
+        {
+            var vessel = BuildRuntimeFlight7Stack();
+            vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 100_000.0);
+            vessel.Throttle = scenario.Throttle;
+            vessel.PitchYawRoll = scenario.Input;
+            for (int i = 0; i < 32; i++)
+                vessel.Tick(TickDt, earth);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            const int measuredTicks = 128;
+            for (int i = 0; i < measuredTicks; i++)
+                vessel.Tick(TickDt, earth);
+            long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+            _output.WriteLine(
+                $"RuntimeFlight7Breakdown: {scenario.Name}; "
+                + $"managedAllocPerTick={allocatedBytes / (double)measuredTicks:F2}");
+            Assert.InRange(allocatedBytes / (double)measuredTicks, 0.0, 1_000.0);
+        }
     }
 
     [Fact]

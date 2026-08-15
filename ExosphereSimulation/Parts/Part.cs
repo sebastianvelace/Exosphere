@@ -268,20 +268,26 @@ public class Part
             EngineLifecycleState.Chill or EngineLifecycleState.SpinPrime
             ? state.StartAttempts + 1
             : state.StartAttempts;
-        int index = _scheduledFailures.FindIndex(injection =>
-            string.Equals(
-                injection.EngineInstanceId,
-                state.InstanceId,
-                StringComparison.Ordinal)
-            && injection.TriggerState == state.State
-            && (injection.TriggerStartAttempt == 0
-                || injection.TriggerStartAttempt == activeAttempt)
-            && state.StateElapsedSeconds + dt
-                >= injection.TriggerAfterStateSeconds);
-        if (index < 0) return false;
-        string failureCode = _scheduledFailures[index].FailureCode;
-        _scheduledFailures.RemoveAt(index);
-        return FailEngine(state.InstanceId, failureCode);
+        for (int index = 0; index < _scheduledFailures.Count; index++)
+        {
+            var injection = _scheduledFailures[index];
+            if (!string.Equals(
+                    injection.EngineInstanceId,
+                    state.InstanceId,
+                    StringComparison.Ordinal)
+                || injection.TriggerState != state.State
+                || injection.TriggerStartAttempt != 0
+                    && injection.TriggerStartAttempt != activeAttempt
+                || state.StateElapsedSeconds + dt
+                    < injection.TriggerAfterStateSeconds)
+                continue;
+
+            string failureCode = injection.FailureCode;
+            _scheduledFailures.RemoveAt(index);
+            return FailEngine(state.InstanceId, failureCode);
+        }
+
+        return false;
     }
 
     private void AdvanceEngineThermalState(

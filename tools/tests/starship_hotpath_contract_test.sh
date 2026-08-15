@@ -23,7 +23,7 @@ rg -q --fixed-strings 'for (int i = 0; i < count; i++)' "$PART" \
   || fail "selected engine reduction loop missing"
 rg -q --fixed-strings 'double allocatedBytesPerTick' "$TEST" \
   || fail "Starship allocation budget missing"
-rg -q --fixed-strings 'Assert.InRange(allocatedBytesPerTick, 0.0, 5_000.0)' "$TEST" \
+rg -q --fixed-strings 'Assert.InRange(allocatedBytesPerTick, 0.0, 1_000.0)' "$TEST" \
   || fail "Starship allocation budget is not enforced"
 rg -q --fixed-strings 'GetEngineInstanceThrustGeometrySnapshot' "$PART" "$GRAPH" \
   || fail "thrust geometry snapshot buffer missing"
