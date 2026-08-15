@@ -28,12 +28,12 @@ public static class ControlAuthority
     public static double Evaluate(Vessel vessel)
     {
         if (vessel.IsDestroyed) return None;
-        if (vessel.Parts.Parts.Count == 0) return None;
+        if (vessel.Parts.PartList.Count == 0) return None;
 
         bool hasCommand = false;
         bool hasFlaps = false;
         bool usesStarshipFlapModel = false;
-        foreach (var part in vessel.Parts.Parts)
+        foreach (var part in vessel.Parts.PartList)
         {
             if (part.IsBroken) continue;
             if (part.Definition.Category == PartCategory.Command)

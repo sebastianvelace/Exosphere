@@ -72,6 +72,13 @@ public class PartGraph
     public Part? Root => _root;
 
     /// <summary>
+    /// Concrete topology buffer for internal simulation loops. The public <see cref="Parts"/>
+    /// facade remains read-only; physics callers use this stable list to avoid boxing the
+    /// <see cref="List{T}.Enumerator"/> on every tick.
+    /// </summary>
+    internal List<Part> PartList => _parts;
+
+    /// <summary>
     /// Enables the short-lived physics-tick caches. They are intentionally scoped to one
     /// <see cref="Vessel.Tick"/> so resource consumption and staging remain authoritative
     /// outside the cache window.

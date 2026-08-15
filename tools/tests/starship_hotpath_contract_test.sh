@@ -29,6 +29,10 @@ rg -q --fixed-strings 'internal List<Part> ActiveEngineList' "$GRAPH" \
   || fail "concrete active-engine buffer missing"
 rg -q --fixed-strings 'public IEnumerable<Part> ActiveEngines => ActiveEngineList;' "$GRAPH" \
   || fail "public active-engine compatibility enumerable missing"
+rg -q --fixed-strings 'internal List<Part> PartList => _parts;' "$GRAPH" \
+  || fail "concrete part topology buffer missing"
+rg -q --fixed-strings 'public IReadOnlyList<Part>  Parts  => _partsView;' "$GRAPH" \
+  || fail "public part topology compatibility facade missing"
 rg -q --fixed-strings 'GetEngineInstanceThrustGeometrySnapshot' "$PART" "$GRAPH" \
   || fail "thrust geometry snapshot buffer missing"
 rg -q --fixed-strings 'GetEngineInstanceGimbalAuthoritySnapshot' "$PART" "$GRAPH" \

@@ -570,7 +570,7 @@ public class Vessel
     {
         double altitude = body.GetAltitude(position ?? Position);
         double totalArea = 0.0;
-        foreach (var part in Parts.Parts)
+        foreach (var part in Parts.PartList)
         {
             if (!part.IsDeployed) continue;
             var definition = part.Definition;
@@ -854,7 +854,7 @@ public class Vessel
                 double temp = System.Math.Max(1.0, refBody.Atmosphere.GetTemperature(altitude));
                 double? aerodynamicCenterOffset = null;
                 bool hasBodyFlaps = false;
-                foreach (var part in Parts.Parts)
+                foreach (var part in Parts.PartList)
                 {
                     if (!aerodynamicCenterOffset.HasValue
                         && part.Definition.AerodynamicCenterOffsetYM.HasValue)
