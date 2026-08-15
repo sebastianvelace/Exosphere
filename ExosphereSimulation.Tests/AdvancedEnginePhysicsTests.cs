@@ -33,6 +33,33 @@ public sealed class AdvancedEnginePhysicsTests
     }
 
     [Fact]
+    public void PerformanceMap_ReusesNoManagedObjectsPerSample()
+    {
+        var model = SyntheticModel();
+        model.PerformanceMap =
+        [
+            new() { AmbientPressurePa = 0, Throttle = 0.5, ThrustN = 60, SpecificImpulseS = 300 },
+            new() { AmbientPressurePa = 100, Throttle = 0.5, ThrustN = 50, SpecificImpulseS = 280 },
+            new() { AmbientPressurePa = 0, Throttle = 1.0, ThrustN = 140, SpecificImpulseS = 320 },
+            new() { AmbientPressurePa = 100, Throttle = 1.0, ThrustN = 100, SpecificImpulseS = 300 },
+        ];
+
+        for (int i = 0; i < 32; i++)
+            EnginePerformanceEvaluator.Evaluate(model, 50.0, 0.75);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        const int samples = 1_000;
+        for (int i = 0; i < samples; i++)
+            EnginePerformanceEvaluator.Evaluate(model, 50.0, 0.75);
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        Assert.Equal(0L, allocatedBytes);
+    }
+
+    [Fact]
     public void NozzleEquation_UsesMomentumAndPressureTermsWhenComplete()
     {
         var model = SyntheticModel();

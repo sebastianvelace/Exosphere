@@ -160,6 +160,35 @@ public sealed class StarshipPerformanceRegressionTests
     }
 
     [Fact]
+    public void RuntimeFlight7TickReportsEnginePerformanceAllocationCost()
+    {
+        var earth = LoadBody("earth");
+        var vessel = BuildRuntimeFlight7Stack();
+        vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 100_000.0);
+        vessel.Throttle = 1.0;
+
+        for (int i = 0; i < 32; i++)
+            vessel.Tick(TickDt, earth);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        const int measuredTicks = 128;
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < measuredTicks; i++)
+            vessel.Tick(TickDt, earth);
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        double allocatedBytesPerTick = allocatedBytes / (double)measuredTicks;
+
+        _output.WriteLine(
+            $"RuntimeFlight7Tick: {measuredTicks} ticks; "
+            + $"managedAllocPerTick={allocatedBytesPerTick:F2} bytes/tick; "
+            + $"engines={vessel.ActiveEngineCount}");
+        Assert.InRange(allocatedBytesPerTick, 0.0, 10_000.0);
+        Assert.True(double.IsFinite(vessel.TotalMass) && vessel.TotalMass > 0.0);
+    }
+
+    [Fact]
     public void AllocationAudit_Flight7EngineTelemetryBufferReportsManagedCost()
     {
         var catalog = PartCatalog.LoadFromDirectory(
@@ -229,6 +258,25 @@ public sealed class StarshipPerformanceRegressionTests
         var booster = new Part(defs["super_heavy_booster"]);
 
         var vessel = new Vessel("perf-flight7") { Name = "Performance Flight 7" };
+        vessel.Parts.SetRoot(command);
+        vessel.Parts.AddJoint(new Joint(command, tank, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(tank, engines, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(engines, ring, "bottom", "top"));
+        vessel.Parts.AddJoint(new Joint(ring, booster, "bottom", "top"));
+        return vessel;
+    }
+
+    private static Vessel BuildRuntimeFlight7Stack()
+    {
+        var root = FindRepoRoot();
+        var catalog = PartCatalog.LoadFromDirectory(Path.Combine(root.FullName, "data", "parts"));
+        var command = new Part(catalog["starship_command"]);
+        var tank = new Part(catalog["starship_tank"]);
+        var engines = new Part(catalog["starship_engines"]);
+        var ring = new Part(catalog["decoupler_heavy"]);
+        var booster = new Part(catalog["super_heavy_booster"]);
+
+        var vessel = new Vessel("perf-runtime-flight7") { Name = "Runtime Performance Flight 7" };
         vessel.Parts.SetRoot(command);
         vessel.Parts.AddJoint(new Joint(command, tank, "bottom", "top"));
         vessel.Parts.AddJoint(new Joint(tank, engines, "bottom", "top"));

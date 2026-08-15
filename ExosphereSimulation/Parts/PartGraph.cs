@@ -1114,29 +1114,31 @@ public class PartGraph
             {
                 if (engine.HasEngineRuntime)
                 {
-                    int engineIndex = 0;
-                    foreach (var row in engine.GetEngineTelemetry(ambientPressure))
+                    var states = engine.EngineStates;
+                    for (int engineIndex = 0; engineIndex < states.Count; engineIndex++)
                     {
-                        if (row.MassFlowKgS <= 1e-12)
+                        var state = states[engineIndex];
+                        var performance = engine.GetEngineInstancePerformance(
+                            engineIndex,
+                            ambientPressure);
+                        if (performance.MassFlowKgS <= 1e-12)
                         {
-                            engineIndex++;
                             continue;
                         }
-                        if (row.MassFlowKgS
+                        if (performance.MassFlowKgS
                             > engine.GetEngineFeedLimitKgS(engineIndex) + 1e-9)
                         {
                             engine.FailEngine(
-                                row.InstanceId, "FEED_BRANCH_FLOW_LIMIT");
+                                state.InstanceId,
+                                "FEED_BRANCH_FLOW_LIMIT");
                             _tickActiveEngineCacheValid = false;
-                            engineIndex++;
                             continue;
                         }
                         _liquidDemands.Add(new LiquidEngineDemand(
                             engine,
-                            row.InstanceId,
-                            row.MassFlowKgS,
+                            state.InstanceId,
+                            performance.MassFlowKgS,
                             def.MixtureRatio));
-                        engineIndex++;
                     }
                 }
                 else

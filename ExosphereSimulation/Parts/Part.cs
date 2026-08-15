@@ -321,6 +321,21 @@ public class Part
             : double.PositiveInfinity;
     }
 
+    /// <summary>
+    /// Returns the live performance sample for one runtime engine instance without creating
+    /// the compatibility <see cref="EngineTelemetry"/> record. Physics consumption uses this
+    /// path because telemetry records are presentation data and must not be allocated once per
+    /// engine on every <see cref="Vessel.Tick"/>.
+    /// </summary>
+    internal EnginePerformanceSample GetEngineInstancePerformance(
+        int engineIndex,
+        double ambientPressure)
+    {
+        if ((uint)engineIndex >= (uint)_engineStates.Count)
+            throw new ArgumentOutOfRangeException(nameof(engineIndex));
+        return EvaluateEnginePerformance(_engineStates[engineIndex], ambientPressure);
+    }
+
     private EnginePerformanceSample EvaluateEnginePerformance(
         EngineInstanceState state,
         double ambientPressure)

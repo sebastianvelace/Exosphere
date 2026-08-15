@@ -386,14 +386,10 @@ public static class EnginePerformanceEvaluator
 
         if (model.PerformanceMap.Count > 0)
         {
-            var throttleCurves = model.PerformanceMap
-                .GroupBy(point => point.Throttle)
-                .OrderBy(group => group.Key)
-                .Select(group => (
-                    throttle: group.Key,
-                    sample: InterpolatePressure(group, pressure)))
-                .ToArray();
-            var mapped = InterpolateThrottle(throttleCurves, command);
+            var mapped = InterpolatePerformanceMap(
+                model.PerformanceMap,
+                pressure,
+                command);
             double mapThrottle = System.Math.Max(mapped.referenceThrottle, 1e-9);
             double scale = command / mapThrottle;
             double thrust = System.Math.Max(0.0, mapped.thrust * scale);
@@ -421,56 +417,203 @@ public static class EnginePerformanceEvaluator
             actualThrust, specificImpulse, massFlow, command);
     }
 
+    /// <summary>
+    /// Interpolates the validated pressure/throttle map without materializing LINQ groups,
+    /// sorted arrays, or closures. Maps are tiny (normally two throttle levels and two
+    /// pressures), so the bounded quadratic scan is cheaper than allocating on every engine
+    /// instance during a physics tick. The selection order mirrors GroupBy + OrderBy from the
+    /// previous implementation: throttle groups are sorted numerically and pressure points
+    /// are sorted numerically within each group.
+    /// </summary>
+    private static (double thrust, double isp, double referenceThrottle)
+        InterpolatePerformanceMap(
+            IReadOnlyList<PressureThrottlePoint> points,
+            double pressure,
+            double command)
+    {
+        int groupCount = 0;
+        double smallestThrottle = double.PositiveInfinity;
+        double secondSmallestThrottle = double.PositiveInfinity;
+        double largestThrottle = double.NegativeInfinity;
+        double secondLargestThrottle = double.NegativeInfinity;
+        double lowerThrottle = double.NegativeInfinity;
+        double upperThrottle = double.PositiveInfinity;
+
+        for (int i = 0; i < points.Count; i++)
+        {
+            double throttle = points[i].Throttle;
+            bool seen = false;
+            for (int previous = 0; previous < i; previous++)
+            {
+                if (points[previous].Throttle == throttle)
+                {
+                    seen = true;
+                    break;
+                }
+            }
+            if (seen) continue;
+            groupCount++;
+
+            if (throttle < smallestThrottle)
+            {
+                secondSmallestThrottle = smallestThrottle;
+                smallestThrottle = throttle;
+            }
+            else if (throttle < secondSmallestThrottle)
+                secondSmallestThrottle = throttle;
+
+            if (throttle > largestThrottle)
+            {
+                secondLargestThrottle = largestThrottle;
+                largestThrottle = throttle;
+            }
+            else if (throttle > secondLargestThrottle)
+                secondLargestThrottle = throttle;
+
+            if (throttle >= command && throttle < upperThrottle)
+                upperThrottle = throttle;
+            if (throttle < command && throttle > lowerThrottle)
+                lowerThrottle = throttle;
+        }
+
+        if (groupCount == 1)
+        {
+            var only = InterpolatePressure(
+                points,
+                smallestThrottle,
+                pressure);
+            return (only.thrust, only.isp, smallestThrottle);
+        }
+
+        // This is the same boundary rule as InterpolateThrottle: when the command lies
+        // outside the map, use the nearest two groups rather than extrapolating from one.
+        if (double.IsPositiveInfinity(upperThrottle))
+        {
+            upperThrottle = largestThrottle;
+            lowerThrottle = secondLargestThrottle;
+        }
+        else if (double.IsNegativeInfinity(lowerThrottle))
+        {
+            lowerThrottle = smallestThrottle;
+            upperThrottle = secondSmallestThrottle;
+        }
+
+        var lower = InterpolatePressure(points, lowerThrottle, pressure);
+        var upper = InterpolatePressure(points, upperThrottle, pressure);
+        double span = upperThrottle - lowerThrottle;
+        double t = span > 1e-12
+            ? (command - lowerThrottle) / span
+            : 0.0;
+        return (
+            lower.thrust + (upper.thrust - lower.thrust) * t,
+            lower.isp + (upper.isp - lower.isp) * t,
+            command);
+    }
+
+    private static (double thrust, double isp) InterpolatePressure(
+        IReadOnlyList<PressureThrottlePoint> points,
+        double throttle,
+        double pressure)
+    {
+        int count = 0;
+        int minimumIndex = -1;
+        int secondMinimumIndex = -1;
+        int maximumIndex = -1;
+        int secondMaximumIndex = -1;
+        int lowerIndex = -1;
+        int upperIndex = -1;
+        double minimumPressure = double.PositiveInfinity;
+        double secondMinimumPressure = double.PositiveInfinity;
+        double maximumPressure = double.NegativeInfinity;
+        double secondMaximumPressure = double.NegativeInfinity;
+        double lowerPressure = double.NegativeInfinity;
+        double upperPressure = double.PositiveInfinity;
+
+        for (int i = 0; i < points.Count; i++)
+        {
+            var point = points[i];
+            if (point.Throttle != throttle) continue;
+            count++;
+
+            if (point.AmbientPressurePa < minimumPressure)
+            {
+                secondMinimumPressure = minimumPressure;
+                secondMinimumIndex = minimumIndex;
+                minimumPressure = point.AmbientPressurePa;
+                minimumIndex = i;
+            }
+            else if (point.AmbientPressurePa < secondMinimumPressure)
+            {
+                secondMinimumPressure = point.AmbientPressurePa;
+                secondMinimumIndex = i;
+            }
+
+            if (point.AmbientPressurePa > maximumPressure)
+            {
+                secondMaximumPressure = maximumPressure;
+                secondMaximumIndex = maximumIndex;
+                maximumPressure = point.AmbientPressurePa;
+                maximumIndex = i;
+            }
+            else if (point.AmbientPressurePa > secondMaximumPressure)
+            {
+                secondMaximumPressure = point.AmbientPressurePa;
+                secondMaximumIndex = i;
+            }
+
+            if (point.AmbientPressurePa >= pressure
+                && point.AmbientPressurePa < upperPressure)
+            {
+                upperPressure = point.AmbientPressurePa;
+                upperIndex = i;
+            }
+            if (point.AmbientPressurePa < pressure
+                && point.AmbientPressurePa > lowerPressure)
+            {
+                lowerPressure = point.AmbientPressurePa;
+                lowerIndex = i;
+            }
+        }
+
+        if (count == 0)
+            throw new InvalidOperationException("Performance map has no throttle group.");
+        if (count == 1)
+        {
+            var only = points[minimumIndex];
+            return (only.ThrustN, only.SpecificImpulseS);
+        }
+
+        // Match the old sorted-array boundary behavior at/below the minimum and above the
+        // maximum pressure. Duplicate pressures are retained in original order by the
+        // selection rules, just as LINQ's stable OrderBy did.
+        if (upperIndex < 0)
+        {
+            lowerIndex = secondMaximumIndex;
+            upperIndex = maximumIndex;
+        }
+        else if (lowerIndex < 0)
+        {
+            lowerIndex = minimumIndex;
+            upperIndex = secondMinimumIndex;
+        }
+
+        var lower = points[lowerIndex];
+        var upper = points[upperIndex];
+        double span = upper.AmbientPressurePa - lower.AmbientPressurePa;
+        double t = span > 1e-12
+            ? (pressure - lower.AmbientPressurePa) / span
+            : 0.0;
+        return (
+            lower.ThrustN + (upper.ThrustN - lower.ThrustN) * t,
+            lower.SpecificImpulseS + (upper.SpecificImpulseS - lower.SpecificImpulseS) * t);
+    }
+
     private static bool HasNozzleEquation(EngineModelDefinition model) =>
         model.ExitAreaM2.HasValue
         && model.NominalMassFlowKgS.HasValue
         && model.EffectiveExhaustVelocityMps.HasValue
         && model.EffectiveExitPressurePa.HasValue;
 
-    private static (double thrust, double isp) InterpolatePressure(
-        IEnumerable<PressureThrottlePoint> curve,
-        double pressure)
-    {
-        var points = curve.OrderBy(point => point.AmbientPressurePa).ToArray();
-        if (points.Length == 1)
-            return (points[0].ThrustN, points[0].SpecificImpulseS);
-        int upper = Array.FindIndex(
-            points, point => point.AmbientPressurePa >= pressure);
-        if (upper < 0) upper = points.Length - 1;
-        if (upper == 0) upper = 1;
-        var a = points[upper - 1];
-        var b = points[upper];
-        double span = b.AmbientPressurePa - a.AmbientPressurePa;
-        double t = span > 1e-12
-            ? (pressure - a.AmbientPressurePa) / span
-            : 0.0;
-        return (
-            a.ThrustN + (b.ThrustN - a.ThrustN) * t,
-            a.SpecificImpulseS + (b.SpecificImpulseS - a.SpecificImpulseS) * t);
-    }
-
-    private static (double thrust, double isp, double referenceThrottle)
-        InterpolateThrottle(
-            (double throttle, (double thrust, double isp) sample)[] curves,
-            double throttle)
-    {
-        if (curves.Length == 1)
-            return (
-                curves[0].sample.thrust,
-                curves[0].sample.isp,
-                curves[0].throttle);
-        int upper = Array.FindIndex(curves, curve => curve.throttle >= throttle);
-        if (upper < 0) upper = curves.Length - 1;
-        if (upper == 0) upper = 1;
-        var a = curves[upper - 1];
-        var b = curves[upper];
-        double span = b.throttle - a.throttle;
-        double t = span > 1e-12 ? (throttle - a.throttle) / span : 0.0;
-        return (
-            a.sample.thrust + (b.sample.thrust - a.sample.thrust) * t,
-            a.sample.isp + (b.sample.isp - a.sample.isp) * t,
-            throttle);
-    }
 }
 
 public sealed record PartVisualDescriptor(
