@@ -214,6 +214,7 @@ public sealed class StarshipPerformanceRegressionTests
             for (int i = 0; i < measuredTicks; i++)
                 vessel.Tick(TickDt, earth);
             long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+            Assert.Equal(0L, allocatedBytes);
             _output.WriteLine(
                 $"RuntimeFlight7Breakdown: {scenario.Name}; "
                 + $"managedAllocPerTick={allocatedBytes / (double)measuredTicks:F2}");

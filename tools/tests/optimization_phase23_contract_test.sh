@@ -70,6 +70,18 @@ require_text "$BRIDGE" 'CancelGuidanceForTeleport();' 'body jump cancels stale g
 require_text "$BRIDGE" 'v.PrepareForTeleport();' 'body jump clears rigid-body state'
 require_text "$SPECTRAL" 'decision=order4-official-order5-diagnostic' \
   'spectral promotion decision remains explicit'
+require_text "$ROOT/ExosphereSimulation/Universe.cs" '_bodiesView = _bodies.AsReadOnly();' \
+  'Universe caches the bodies read-only view'
+require_text "$ROOT/ExosphereSimulation/Universe.cs" 'public IReadOnlyList<CelestialBody> Bodies  => _bodiesView;' \
+  'Universe exposes the stable bodies view'
+require_text "$ROOT/ExosphereSimulation.Tests/PerformanceAcceptanceTests.cs" \
+  'UniverseCollectionViewsAreStableAndAllocationFreeAfterConstruction' \
+  'Universe collection view allocation regression is covered'
+if rg -q --fixed-strings 'ActiveEngines.Any(' "$ROOT/ExosphereSimulation/Universe.cs"; then
+  fail_gate 'Universe scheduler still enumerates ActiveEngines through LINQ'
+else
+  pass_gate 'Universe scheduler uses the concrete active-engine buffer'
+fi
 require_text "$GPU" 'physical_gpu_gate' 'GPU matrix records physical-adapter status'
 require_text "$GPU" 'software_renderer_observed' 'GPU matrix records software-renderer evidence'
 require_text "$GPU" 'final_status=BLOCKED; physical_gate=BLOCKED' \

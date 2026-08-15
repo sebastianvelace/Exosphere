@@ -1224,8 +1224,9 @@ public class PartGraph
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
             {
-                foreach (var p in tankPool)
+                for (int tankIndex = 0; tankIndex < tankPool.Count; tankIndex++)
                 {
+                    var p = tankPool[tankIndex];
                     if (totalLF > 0.0)
                         p.LiquidFuel -= fundedLF * (p.LiquidFuel / totalLF);
                     if (totalOx > 0.0)

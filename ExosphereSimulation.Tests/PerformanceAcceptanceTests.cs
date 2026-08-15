@@ -36,6 +36,33 @@ public sealed class PerformanceAcceptanceTests
     }
 
     [Fact]
+    public void UniverseCollectionViewsAreStableAndAllocationFreeAfterConstruction()
+    {
+        var universe = new Universe();
+        var bodies = universe.Bodies;
+        var vessels = universe.Vessels;
+        var dockingConnections = universe.DockingConnections;
+
+        Assert.Same(bodies, universe.Bodies);
+        Assert.Same(vessels, universe.Vessels);
+        Assert.Same(dockingConnections, universe.DockingConnections);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++)
+        {
+            _ = universe.Bodies.Count;
+            _ = universe.Vessels.Count;
+            _ = universe.DockingConnections.Count;
+        }
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        Assert.Equal(0, allocatedBytes);
+    }
+
+    [Fact]
     public void ActiveNearbyAndOnRailsTiersAreMutuallyExclusive()
     {
         var earth = LoadBody("earth");

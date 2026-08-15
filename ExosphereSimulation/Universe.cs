@@ -56,14 +56,26 @@ public class Universe
     private readonly List<Vessel>        _vessels = new();
     private readonly List<Vessel>        _pendingStructuralDebris = new();
     private readonly List<DockingConnection> _dockingConnections = new();
+    private readonly IReadOnlyList<CelestialBody> _bodiesView;
+    private readonly IReadOnlyList<Vessel> _vesselsView;
+    private readonly IReadOnlyList<DockingConnection> _dockingConnectionsView;
     private readonly Dictionary<string, double> _lastDeferredRailUpdate = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
     private readonly KeplerPropagator.BodyPropagationWorkspace _bodyPropagationWorkspace = new();
 
-    public IReadOnlyList<CelestialBody> Bodies  => _bodies.AsReadOnly();
-    public IReadOnlyList<Vessel>        Vessels => _vessels.AsReadOnly();
-    public IReadOnlyList<DockingConnection> DockingConnections =>
-        _dockingConnections.AsReadOnly();
+    public Universe()
+    {
+        // Collection views are part of the frame-facing simulation API. Keep one stable
+        // read-only facade per backing list so every HUD/controller query does not allocate
+        // a new ReadOnlyCollection wrapper.
+        _bodiesView = _bodies.AsReadOnly();
+        _vesselsView = _vessels.AsReadOnly();
+        _dockingConnectionsView = _dockingConnections.AsReadOnly();
+    }
+
+    public IReadOnlyList<CelestialBody> Bodies  => _bodiesView;
+    public IReadOnlyList<Vessel>        Vessels => _vesselsView;
+    public IReadOnlyList<DockingConnection> DockingConnections => _dockingConnectionsView;
 
     /// <summary>Current simulation time (seconds since J2000).</summary>
     public double CurrentTime { get; private set; } = 0.0;
@@ -906,7 +918,7 @@ public class Universe
                 continue;
 
             bool thrusting = vessel.Throttle > 0.01
-                || vessel.Parts.ActiveEngines.Any(e => e.ThrottleLevel > 0.01);
+                || HasActiveEngineAboveThrottle(vessel, 0.01);
             double vesselCap = thrusting ? MaxThrustStep : MaxPhysicsStep;
             cap = System.Math.Min(cap, vesselCap);
 
@@ -927,7 +939,7 @@ public class Universe
     {
         if (vessel.IsDestroyed) return false;
         if (vessel.IsGroundHeld || vessel.Throttle > 1e-3
-            || vessel.Parts.ActiveEngines.Any(e => e.ThrottleLevel > 1e-3))
+            || HasActiveEngineAboveThrottle(vessel, 1e-3))
             return true;
         if (_bodies.Count == 0) return false;
 
@@ -953,6 +965,18 @@ public class Universe
         return altitude <= body.Atmosphere.MaxAltitude * 1.05
             || q >= 0.5
             || heatFlux >= 500.0;
+    }
+
+    private static bool HasActiveEngineAboveThrottle(Vessel vessel, double threshold)
+    {
+        var engines = vessel.Parts.ActiveEngineList;
+        for (int i = 0; i < engines.Count; i++)
+        {
+            if (engines[i].ThrottleLevel > threshold)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
