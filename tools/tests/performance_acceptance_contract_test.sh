@@ -80,6 +80,14 @@ require_text "$SCHEDULER_TELEMETRY" "PhysicsSchedulerTelemetry" \
     "scheduler workload snapshot type is present"
 require_text "$SCHEDULER_TELEMETRY" "DeadlineProjectedDispatches" \
     "scheduler telemetry exposes current-epoch deadline projections"
+require_text "$SCHEDULER_TELEMETRY" "CatchUpRisk" \
+    "scheduler telemetry exposes catch-up risk"
+require_text "$UNIVERSE" "CatchUpWarningSubsteps" \
+    "scheduler defines a catch-up warning threshold"
+require_text "$SCHEDULER_TEST" "SchedulerTelemetryFlagsLargeCatchUpWithoutChangingSimulatedTime" \
+    "large catch-up telemetry regression test is present"
+require_text "$SCHEDULER_TEST" "SchedulerRejectsInvalidDeltaWithoutCorruptingClock" \
+    "invalid scheduler delta regression test is present"
 require_text "$SCHEDULER_TEST" "MixedSchedulerBoundsSecondaryForceSensitiveVesselAndMatchesFineTick" \
     "multi-vessel mixed-cap regression test is present"
 require_text "$SCHEDULER_TEST" "SchedulerTelemetryCountsMixedWorkloadWithoutSkippingVessels" \

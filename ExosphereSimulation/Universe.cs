@@ -5,6 +5,7 @@
 
 namespace Exosphere.Simulation;
 
+using System.Diagnostics;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Integrators;
 using Exosphere.Simulation.Math;
@@ -146,6 +147,12 @@ public class Universe
     private const double MaxContactStep = 0.005;
 
     /// <summary>
+    /// Diagnostic warning threshold for a single scheduler call. It does not cap or discard
+    /// simulation time; it marks a call that needs hitch/catch-up policy review.
+    /// </summary>
+    public const int CatchUpWarningSubsteps = 128;
+
+    /// <summary>
     /// Distance from the active vessel within which a non-active vessel remains in the
     /// responsive tier.  This is deliberately conservative and only affects the public
     /// classification in this phase; it does not alter the existing physics dispatch.
@@ -209,6 +216,7 @@ public class Universe
     private int _tickDeadlineDeferredSkips;
     private int _tickDeadlineCatchUpDispatches;
     private int _tickDeadlineProjectedDispatches;
+    private long _tickStartTimestamp;
 
     // ── Object management ─────────────────────────────────────────────────
 
@@ -596,7 +604,11 @@ public class Universe
         LastMixedPhysicsStepCap = 0.0;
         double simDelta = realDeltaTime * TimeScale;
         BeginSchedulerTelemetry(realDeltaTime, simDelta);
-        if (simDelta <= 0.0)
+        if (!double.IsFinite(realDeltaTime)
+            || realDeltaTime <= 0.0
+            || !double.IsFinite(TimeScale)
+            || TimeScale <= 0.0
+            || !double.IsFinite(simDelta))
         {
             PublishSchedulerTelemetry();
             return;
@@ -666,6 +678,7 @@ public class Universe
 
     private void BeginSchedulerTelemetry(double realDeltaTime, double simDelta)
     {
+        _tickStartTimestamp = Stopwatch.GetTimestamp();
         _tickBranch = PhysicsSchedulerBranch.None;
         _tickRealDeltaTime = realDeltaTime;
         _tickSimulatedSeconds = simDelta > 0.0 && double.IsFinite(simDelta)
@@ -689,6 +702,11 @@ public class Universe
 
     private void PublishSchedulerTelemetry()
     {
+        double wallClockMilliseconds =
+            (Stopwatch.GetTimestamp() - _tickStartTimestamp) * 1000.0 / Stopwatch.Frequency;
+        if (!double.IsFinite(wallClockMilliseconds) || wallClockMilliseconds < 0.0)
+            wallClockMilliseconds = 0.0;
+
         LastSchedulerTelemetry = new PhysicsSchedulerTelemetry(
             _tickBranch,
             _tickRealDeltaTime,
@@ -706,7 +724,9 @@ public class Universe
             _tickDeadlineEligibleEvaluations,
             _tickDeadlineDeferredSkips,
             _tickDeadlineCatchUpDispatches,
-            _tickDeadlineProjectedDispatches);
+            _tickDeadlineProjectedDispatches,
+            wallClockMilliseconds,
+            _tickOuterSubsteps >= CatchUpWarningSubsteps);
     }
 
     private void RecordWorkload(VesselPhysicsWorkload workload)

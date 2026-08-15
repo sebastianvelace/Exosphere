@@ -251,6 +251,54 @@ public sealed class PhysicsSchedulerPerformanceTests
     }
 
     [Fact]
+    public void SchedulerTelemetryFlagsLargeCatchUpWithoutChangingSimulatedTime()
+    {
+        var earth = LoadBody("earth");
+        var vessel = CoastVessel(earth, "catch-up-warning");
+        var universe = new Universe
+        {
+            ActiveVessel = vessel,
+            TimeScale = 1_000.0,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        universe.Tick(0.5);
+
+        Assert.Equal(PhysicsSchedulerBranch.Mixed, universe.LastSchedulerTelemetry.Branch);
+        Assert.Equal(500.0, universe.LastSchedulerTelemetry.SimulatedSeconds, 10);
+        Assert.Equal(250, universe.LastSchedulerTelemetry.OuterSubsteps);
+        Assert.True(universe.LastSchedulerTelemetry.CatchUpRisk);
+        Assert.True(double.IsFinite(universe.LastSchedulerTelemetry.WallClockMilliseconds));
+        Assert.True(universe.LastSchedulerTelemetry.WallClockMilliseconds >= 0.0);
+        Assert.Equal(500.0, universe.CurrentTime, 10);
+    }
+
+    [Fact]
+    public void SchedulerRejectsInvalidDeltaWithoutCorruptingClock()
+    {
+        var earth = LoadBody("earth");
+        var vessel = CoastVessel(earth, "invalid-delta");
+        var universe = new Universe { ActiveVessel = vessel };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        universe.Tick(double.NaN);
+        Assert.Equal(0.0, universe.CurrentTime);
+        Assert.Equal(PhysicsSchedulerBranch.None, universe.LastSchedulerTelemetry.Branch);
+        Assert.Equal(0.0, universe.LastSchedulerTelemetry.SimulatedSeconds);
+
+        universe.Tick(-1.0);
+        Assert.Equal(0.0, universe.CurrentTime);
+        Assert.Equal(PhysicsSchedulerBranch.None, universe.LastSchedulerTelemetry.Branch);
+
+        universe.TimeScale = double.NaN;
+        universe.Tick(0.02);
+        Assert.Equal(0.0, universe.CurrentTime);
+        Assert.Equal(PhysicsSchedulerBranch.None, universe.LastSchedulerTelemetry.Branch);
+    }
+
+    [Fact]
     public void DeferredRailsProjectsCurrentEpochAndMatchesAlwaysCheckedReference()
     {
         var mixedEarth = LoadBody("earth");

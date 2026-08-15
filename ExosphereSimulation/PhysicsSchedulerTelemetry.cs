@@ -63,7 +63,9 @@ public readonly record struct PhysicsSchedulerTelemetry(
     int DeadlineEligibleEvaluations,
     int DeadlineDeferredSkips,
     int DeadlineCatchUpDispatches,
-    int DeadlineProjectedDispatches)
+    int DeadlineProjectedDispatches,
+    double WallClockMilliseconds,
+    bool CatchUpRisk)
 {
     /// <summary>Total vessel work items dispatched, excluding docked secondary skips.</summary>
     public int TotalWorkDispatches =>

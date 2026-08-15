@@ -766,6 +766,8 @@ record ScenarioResult(
         yield return $"{Name}.simulated_seconds={Telemetry.SimulatedSeconds:F6}";
         yield return $"{Name}.effective_step_cap={Telemetry.EffectiveStepCap:F6}";
         yield return $"{Name}.outer_substeps={Telemetry.OuterSubsteps}";
+        yield return $"{Name}.scheduler_wall_clock_ms={Telemetry.WallClockMilliseconds:F6}";
+        yield return $"{Name}.catch_up_risk={Telemetry.CatchUpRisk.ToString().ToLowerInvariant()}";
         yield return $"{Name}.full_physics_dispatches={Telemetry.FullPhysicsDispatches}";
         yield return $"{Name}.on_rails_dispatches={Telemetry.OnRailsDispatches}";
         yield return $"{Name}.rails_slices={Telemetry.RailsSlices}";
