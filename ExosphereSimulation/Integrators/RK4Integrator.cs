@@ -73,20 +73,43 @@ public static class RK4Integrator
         double dt,
         Func<Vector3d, Vector3d, double, Vector3d> acceleration)
     {
-        double[] state = [pos.X, pos.Y, pos.Z, vel.X, vel.Y, vel.Z];
+        // Keep the generic array API above for callers that integrate arbitrary state
+        // vectors, but use scalar/vector stages for the simulation's 6-DoF path. The old
+        // implementation allocated the state, four derivative arrays, four intermediate
+        // arrays and the result on every vessel sub-step. Vector3d is a value type, so the
+        // equivalent formulation is allocation-free apart from a caller-owned closure.
+        double halfDt = dt * 0.5;
+        double dtOver6 = dt / 6.0;
 
-        double[] result = Step(state, t, dt, (s, time) =>
-        {
-            var p = new Vector3d(s[0], s[1], s[2]);
-            var v = new Vector3d(s[3], s[4], s[5]);
-            var a = acceleration(p, v, time);
-            return [v.X, v.Y, v.Z, a.X, a.Y, a.Z];
-        });
+        Vector3d k1Pos = vel;
+        Vector3d k1Vel = acceleration(pos, vel, t);
 
+        Vector3d p2 = pos + k1Pos * halfDt;
+        Vector3d v2 = vel + k1Vel * halfDt;
+        Vector3d k2Pos = v2;
+        Vector3d k2Vel = acceleration(p2, v2, t + halfDt);
+
+        Vector3d p3 = pos + k2Pos * halfDt;
+        Vector3d v3 = vel + k2Vel * halfDt;
+        Vector3d k3Pos = v3;
+        Vector3d k3Vel = acceleration(p3, v3, t + halfDt);
+
+        Vector3d p4 = pos + k3Pos * dt;
+        Vector3d v4 = vel + k3Vel * dt;
+        Vector3d k4Pos = v4;
+        Vector3d k4Vel = acceleration(p4, v4, t + dt);
+
+        Vector3d weightedPosition = k1Pos
+            + 2.0 * k2Pos
+            + 2.0 * k3Pos
+            + k4Pos;
+        Vector3d weightedVelocity = k1Vel
+            + 2.0 * k2Vel
+            + 2.0 * k3Vel
+            + k4Vel;
         return (
-            new Vector3d(result[0], result[1], result[2]),
-            new Vector3d(result[3], result[4], result[5])
-        );
+            pos + weightedPosition * dtOver6,
+            vel + weightedVelocity * dtOver6);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────

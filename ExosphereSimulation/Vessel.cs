@@ -613,6 +613,18 @@ public class Vessel
         return accel;
     }
 
+    /// <summary>
+    /// Allocation-free list overload used by <see cref="Universe"/> during RK4. The
+    /// enumerable overload remains for callers that provide a general sequence.
+    /// </summary>
+    public Vector3d ComputeGravityAt(Vector3d pos, IReadOnlyList<CelestialBody> bodies)
+    {
+        var accel = Vector3d.Zero;
+        for (int i = 0; i < bodies.Count; i++)
+            accel = accel + bodies[i].GetGravityAt(pos);
+        return accel;
+    }
+
     // Aceleración neta para el integrador RK4 (m/s²) — estado actual.
     public Vector3d ComputeNetAcceleration(IEnumerable<CelestialBody> bodies, CelestialBody? refBody) =>
         ComputeNetAccelerationAt(Position, Velocity, bodies, refBody);
@@ -642,12 +654,30 @@ public class Vessel
         return gravity + thrust + drag;
     }
 
+    /// <summary>List-specialized RK4 force evaluation without interface enumeration.</summary>
+    public Vector3d ComputeNetAccelerationAt(
+        Vector3d pos,
+        Vector3d vel,
+        IReadOnlyList<CelestialBody> bodies,
+        CelestialBody? refBody)
+    {
+        var gravity = ComputeGravityAt(pos, bodies);
+        if (TotalMass <= 0.0) return gravity;
+
+        double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TotalMass;
+        var drag = refBody != null
+            ? ComputeDragAt(pos, vel, refBody) / TotalMass
+            : Vector3d.Zero;
+        return gravity + thrust + drag;
+    }
+
     // Overload accepting IReadOnlyList for compatibility with Universe.cs
     public Vector3d ComputeNetAcceleration(IReadOnlyList<CelestialBody> bodies, CelestialBody refBody) =>
-        ComputeNetAcceleration((IEnumerable<CelestialBody>)bodies, refBody);
+        ComputeNetAccelerationAt(Position, Velocity, bodies, refBody);
 
     public Vector3d ComputeGravity(IReadOnlyList<CelestialBody> bodies) =>
-        ComputeGravity((IEnumerable<CelestialBody>)bodies);
+        ComputeGravityAt(Position, bodies);
 
     // ── Tick interno (consumo, SAS, rotación) ──────────────────────────────
     // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor

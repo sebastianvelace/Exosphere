@@ -58,6 +58,7 @@ public class Universe
     private readonly List<DockingConnection> _dockingConnections = new();
     private readonly Dictionary<string, double> _lastDeferredRailUpdate = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
+    private readonly KeplerPropagator.BodyPropagationWorkspace _bodyPropagationWorkspace = new();
 
     public IReadOnlyList<CelestialBody> Bodies  => _bodies.AsReadOnly();
     public IReadOnlyList<Vessel>        Vessels => _vessels.AsReadOnly();
@@ -77,7 +78,10 @@ public class Universe
         _lastDeferredRailUpdate.Clear();
         _nextDeferredRailDeadline.Clear();
         if (_bodies.Count > 0)
-            KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime);
+            KeplerPropagator.PropagateAllBodies(
+                _bodies,
+                CurrentTime,
+                _bodyPropagationWorkspace);
     }
 
     /// <summary>
@@ -521,7 +525,17 @@ public class Universe
     }
 
     /// <summary>Finds a celestial body by its <see cref="CelestialBody.Id"/>.</summary>
-    public CelestialBody? GetBody(string id)  => _bodies.FirstOrDefault(b => b.Id == id);
+    public CelestialBody? GetBody(string id)
+    {
+        // This is on the orbital propagation path. A captured LINQ predicate here created
+        // a delegate/closure for every reference-body lookup, including every deferred-rail
+        // projection. The body list is small and stable, so a direct scan is both cheaper
+        // and allocation-free without changing lookup semantics.
+        for (int i = 0; i < _bodies.Count; i++)
+            if (_bodies[i].Id == id)
+                return _bodies[i];
+        return null;
+    }
 
     /// <summary>
     /// Returns the celestial body whose sphere of influence contains
@@ -1093,7 +1107,10 @@ public class Universe
     private void TickPhysics(double dt)
     {
         // 1. Propagate celestial bodies on Keplerian rails
-        KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
+        KeplerPropagator.PropagateAllBodies(
+            _bodies,
+            CurrentTime + dt,
+            _bodyPropagationWorkspace);
 
         // 2. Integrate each active vessel with RK4.
         // Snapshot the count: structural breakup may append debris mid-loop. New
@@ -1378,7 +1395,10 @@ public class Universe
     private void TickPhysicsMixed(double dt)
     {
         // All celestial bodies on rails
-        KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
+        KeplerPropagator.PropagateAllBodies(
+            _bodies,
+            CurrentTime + dt,
+            _bodyPropagationWorkspace);
         double targetTime = CurrentTime + dt;
 
         // Structural breakup may append debris; preserve the old snapshot semantics
@@ -1787,7 +1807,10 @@ public class Universe
 
     private void TickRails(double dt)
     {
-        KeplerPropagator.PropagateAllBodies(_bodies, CurrentTime + dt);
+        KeplerPropagator.PropagateAllBodies(
+            _bodies,
+            CurrentTime + dt,
+            _bodyPropagationWorkspace);
         foreach (var vessel in _vessels)
         {
             if (IsDockedSecondary(vessel))
@@ -2057,7 +2080,13 @@ public class Universe
             }
         }
 
-        return best ?? _bodies.OrderByDescending(b => b.Mass).First();
+        if (best != null) return best;
+
+        CelestialBody fallback = _bodies[0];
+        for (int i = 1; i < _bodies.Count; i++)
+            if (_bodies[i].Mass > fallback.Mass)
+                fallback = _bodies[i];
+        return fallback;
     }
 
     /// <summary>

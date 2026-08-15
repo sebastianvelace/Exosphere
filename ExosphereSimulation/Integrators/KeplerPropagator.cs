@@ -10,6 +10,22 @@ using Exosphere.Simulation.Math;
 public static class KeplerPropagator
 {
     /// <summary>
+    /// Reusable graph workspace for repeated body propagation in one Universe.
+    /// The propagation algorithm is unchanged; only its temporary lookup/state sets are
+    /// retained between calls so a mixed-physics tick does not allocate once per sub-step.
+    /// A workspace is intentionally owned by one Universe and is not thread-safe.
+    /// </summary>
+    internal sealed class BodyPropagationWorkspace
+    {
+        internal readonly Dictionary<string, CelestialBody> BodyMap =
+            new(StringComparer.Ordinal);
+        internal readonly HashSet<string> Completed =
+            new(StringComparer.Ordinal);
+        internal readonly HashSet<string> Visiting =
+            new(StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// Returns the inertial position and velocity of an orbit described by
     /// <paramref name="elements"/> at simulation time <paramref name="targetTime"/>.
     /// The result is relative to the reference body's centre.
@@ -59,6 +75,34 @@ public static class KeplerPropagator
 
         foreach (var body in bodyMap.Values)
             PropagateHierarchy(body, bodyMap, targetTime, completed, visiting);
+    }
+
+    /// <summary>
+    /// Allocation-free steady-state overload for the simulation scheduler. The caller
+    /// owns <paramref name="workspace"/> and must not use it concurrently.
+    /// </summary>
+    internal static void PropagateAllBodies(
+        IReadOnlyList<CelestialBody> bodies,
+        double targetTime,
+        BodyPropagationWorkspace workspace)
+    {
+        workspace.BodyMap.Clear();
+        workspace.Completed.Clear();
+        workspace.Visiting.Clear();
+
+        for (int i = 0; i < bodies.Count; i++)
+            workspace.BodyMap[bodies[i].Id] = bodies[i];
+
+        for (int i = 0; i < bodies.Count; i++)
+        {
+            var body = bodies[i];
+            PropagateHierarchy(
+                body,
+                workspace.BodyMap,
+                targetTime,
+                workspace.Completed,
+                workspace.Visiting);
+        }
     }
 
     private static void PropagateHierarchy(
