@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 28 integrada; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 29 medida; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -136,6 +136,28 @@ Decisión: promover la reutilización de buffers y el RK4 especializado. Mantene
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
 
+## Resultado de la fase 29 — baseline vigente y bloqueos externos
+
+Se repitió el scheduler después del push de fase 28 con `SAMPLES=80`, `WARMUP=10`:
+
+| Escenario | p95 ms | allocations/tick | dispatches | proyecciones | estado |
+|---|---:|---:|---:|---:|---|
+| `full_single` | 0.0561 | 2,734.3 B | 1.000 | 0.000 | PASS |
+| `rails_fleet` | 0.6375 | 5,931.5 B | 32.000 | 0.000 | PASS |
+| `mixed_fleet` | 4.3208 | 182,965.6 B | 450.000 | 396.000 | PASS |
+| `wake_catchup` | 1.3597 | 88,216.1 B | 50.013 | 12.375 | PASS |
+
+El runner de EventPipe terminó `BLOCKED_EVENTPIPE` con `BLOCKED_NOT_INSTALLED`. La máquina
+no expone `/dev/dri`, no tiene `dotnet-trace` ni `dotnet-counters`, y el socket X11 compartido
+es propiedad de `nobody:nogroup`; no se modificaron permisos del sistema ni se forzó una
+captura visual insegura. Por tanto, no se promueve una reducción adicional de deadlines,
+hibernación por distancia, LOD físico ni cambios de textura en esta fase.
+
+La siguiente acción requiere un host de validación con GPU física, framebuffer controlable y
+collectors .NET. Allí se debe ejecutar `scheduler_phase6_benchmark.sh`,
+`rails_eventpipe_phase24.sh`, `--orbital-reentry`, `--edl`, `--cockpit` y la matriz Earth/
+Mars/Venus antes de abrir otra modificación de runtime.
+
 ## Resultado de la fase 26
 
 La corrección SOI quedó protegida con cobertura permanente y el preflight externo se
@@ -270,16 +292,18 @@ frecuencia ni paralelización de `Vessel.Tick` sólo porque parezca intuitivamen
 
 ## Baseline que todos deben usar
 
-La base funcional está verde:
+La base funcional está verde. El conteo vigente después de fase 28 es:
 
 - build Godot/.NET: 0 warnings, 0 errors;
-- xUnit: 559/559;
+- xUnit: 598/598;
 - ascenso Flight 7: `ASCENT_ORBIT_OK`, `33/33` al liftoff, `39/39` en hot-stage;
 - EDL Starship: `CAUGHT`, dos pasadores, `relativeSpeed=0.030`, `angularSpeed=0`;
 - salto a Saturno: `SATURN_OK`, anillos visibles;
 - GPU física: bloqueada en este host; el backend observado es Mesa llvmpipe.
 
-Benchmark CPU reproducido el 2026-08-14 con .NET 8, `SAMPLES=80`, `WARMUP=10`:
+El benchmark de esta tabla es el baseline histórico previo a fase 28. El baseline vigente
+queda registrado en `PERF_SIMULATION_ALLOCATIONS_PHASE28_REPORT.md` y se repitió en fase 29.
+Benchmark histórico reproducido el 2026-08-14 con .NET 8, `SAMPLES=80`, `WARMUP=10`:
 
 | Escenario | Rama | p50 ms | p95 ms | p99 ms | alloc/tick | trabajo |
 |---|---|---:|---:|---:|---:|---:|
