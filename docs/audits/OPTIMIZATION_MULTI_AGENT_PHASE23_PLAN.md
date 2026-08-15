@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 34 medida; enumeración interna de partes y motores sin boxing por tick; fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 35 medida; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -135,6 +135,47 @@ para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
 Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
 la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
 en hardware objetivo.
+
+## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
+
+La auditoría del camino de entrada al nivel encontró que `Universe.Bodies`, `Universe.Vessels`
+y `Universe.DockingConnections` ejecutaban `AsReadOnly()` en cada lectura. Estas propiedades
+son consultadas por `SimulationBridge`, HUD, mapa, cielo, comunicaciones y controladores de
+vuelo; por tanto, el wrapper podía convertirse en garbage repetitivo incluso cuando el
+contenido de la simulación no cambiaba.
+
+`Universe` ahora crea una sola vista read-only por lista en su constructor y expone siempre la
+misma referencia. La semántica permanece igual: los callers siguen viendo una colección no
+mutable y las mutaciones pasan únicamente por `AddBody`, `AddVessel` y las operaciones
+autoritativas existentes. No se cambiaron dispatches, cadencias, integración RK4, rails ni
+condiciones de wake-up.
+
+La regresión `UniverseCollectionViewsAreStableAndAllocationFreeAfterConstruction` verificó
+identidad estable y `0` bytes asignados al realizar 10.000 lecturas de cada colección. La
+auditoría del fixture Flight 7 encontró además el último boxing: el reparto de propelente
+recorría `tankPool` como `IReadOnlyList<Part>` mediante `foreach`. Se sustituyó por un loop
+indexado, sin cambiar la distribución de LF/Ox ni las reglas de starvation.
+
+La revisión del scheduler encontró dos consultas adicionales de `ActiveEngines.Any(...)` en
+la selección de cap y en `RequiresOffRailsPhysics`. Ambas usan ahora el mismo buffer concreto
+con un loop indexado, manteniendo intactas las reglas de wake-up y rails.
+
+| Escenario | Después fase 34 | Después fase 35 | Reducción |
+|---|---:|---:|---:|
+| Motores apagados | 0 B/tick | 0 B/tick | 0.00% |
+| Motores encendidos | 40 B/tick | 0 B/tick | 100.00% |
+| Motores encendidos + TVC | 40 B/tick | 0 B/tick | 100.00% |
+
+La prueba focalizada pasó `20/20`, el contrato de optimización pasó `38/38`, y la suite
+completa pasó `603/603`. El benchmark standalone fue reproducido por la auditoría delegada
+con `8/8 PASS`; los intentos locales que coincidieron con el primer perfilado fueron
+bloqueados por el socket de VSTest del host (`Permission denied`), no por una aserción de
+simulación.
+
+Decisión: promover las tres correcciones. El desglose Flight 7 queda en `0 B/tick` en los tres
+escenarios medidos; no se cambia scheduler, cadencia ni hibernación. El siguiente perfilado
+debe concentrarse en tiempo de CPU, GPU y allocations fuera de este fixture.
+Informe reproducible: `PERF_UNIVERSE_COLLECTION_VIEWS_PHASE35_REPORT.md`.
 
 ## Resultado de la fase 34 — enumeración interna de partes sin boxing por tick
 
