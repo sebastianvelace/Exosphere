@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 27 integrada; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 28 integrada; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -98,6 +98,43 @@ para reducir allocations de simulación y HUD, y cache de nodos de cámara que o
 `ActiveVesselRenderer` correcto durante cockpit. Los cambios no alteran la física. Informes:
 `PERF_ALLOCATIONS_HOTPATH_PHASE27_P2_REPORT.md` y el commit
 `4cd5117 perf: cache cockpit and exterior renderer nodes`.
+
+## Resultado de la fase 28 — allocations del scheduler y RK4
+
+El perfil de la siguiente etapa aisló dos fuentes independientes de garbage en el tick:
+
+- `KeplerPropagator.PropagateAllBodies` reconstruía un `Dictionary` y dos `HashSet` en cada
+  subpaso mixto. `Universe` ahora posee un workspace reutilizable por instancia; la API
+  pública enumerable conserva su comportamiento para callers externos.
+- `RK4Integrator.StepPosVel` creaba el vector de estado y múltiples arrays temporales por
+  integración. El camino 6-DoF usa las mismas cuatro etapas RK4 sobre `Vector3d`; el API
+  genérico por arrays queda intacto para estados arbitrarios.
+
+También se eliminaron predicados LINQ capturados de `Universe.GetBody`, el fallback LINQ de
+`GetDominantBodyAt` y la enumeración por interfaz en las sobrecargas de fuerza que utiliza
+`Universe`. No se cambiaron pasos máximos, deadlines, fórmulas de gravedad, drag, thrust ni
+criterios de wake-up.
+
+Medición reproducible del benchmark `tools/perf/allocations_tick_phase23_benchmark.sh`,
+`.NET 8`, `SAMPLES=80`, `WARMUP=10` (el baseline previo equivalente fue
+`mixed_fleet=583,989.8 B/tick`, `p95=5.0599 ms`, con 40 muestras):
+
+| Escenario | p95 actual | allocations/tick actual | dispatches | proyecciones |
+|---|---:|---:|---:|---:|
+| `full_single` | 0.0564 ms | 2,734.0 B | 1 | 0 |
+| `rails_fleet` | 0.5616 ms | 5,931.3 B | 32 | 0 |
+| `mixed_fleet` | 4.0478 ms | 182,965.4 B | 450 | 396 |
+| `wake_catchup` | 1.3890 ms | 88,215.9 B | 50.013 | 12.375 |
+
+`mixed_fleet` reduce allocations aproximadamente 68.7% frente al baseline medido y su p95
+queda aproximadamente 20.0% por debajo. La mejora de tiempo se considera CPU de referencia,
+no FPS de hardware: la validación Vulkan/GPU y el framebuffer orbital siguen bloqueados por
+el host llvmpipe/X11. La regresión `RK4AllocationRegressionTests` exige resultado exacto
+para aceleración constante y ≤64 B por subpaso en el camino 6-DoF.
+
+Decisión: promover la reutilización de buffers y el RK4 especializado. Mantener sin cambios
+la política de hibernación y los deadlines hasta obtener EventPipe/GPU y equivalencia visual
+en hardware objetivo.
 
 ## Resultado de la fase 26
 
