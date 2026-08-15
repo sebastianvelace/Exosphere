@@ -1006,9 +1006,35 @@ public class Universe
     /// </summary>
     public bool RequiresBoundedWarpPropagation(Vessel vessel)
     {
+        ArgumentNullException.ThrowIfNull(vessel);
+        // Preserve the cheap settled/destroyed short-circuit for callers that only need
+        // bounded-entry state.  The combined bridge query still evaluates force sensitivity
+        // separately because that value controls the user-visible warp cap.
         if (vessel.IsDestroyed || vessel.IsSurfaceSettled)
             return false;
-        if (RequiresOffRailsPhysics(vessel)) return true;
+        return RequiresBoundedWarpPropagation(vessel, RequiresOffRailsPhysics(vessel));
+    }
+
+    /// <summary>
+    /// Evaluates both warp-safety decisions from one vessel snapshot.  The Godot bridge
+    /// needs both values while selecting the user-visible warp limit; keeping this as a
+    /// single API avoids recomputing atmospheric density, heating and engine activity in
+    /// the same frame.  It deliberately does not cache the result: position, throttle and
+    /// vessel state may change between frames.
+    /// </summary>
+    public (bool ForceSensitive, bool BoundedEntry) GetWarpPhysicsRequirements(Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        bool forceSensitive = RequiresOffRailsPhysics(vessel);
+        bool boundedEntry = RequiresBoundedWarpPropagation(vessel, forceSensitive);
+        return (forceSensitive, boundedEntry);
+    }
+
+    private bool RequiresBoundedWarpPropagation(Vessel vessel, bool forceSensitive)
+    {
+        if (vessel.IsDestroyed || vessel.IsSurfaceSettled)
+            return false;
+        if (forceSensitive) return true;
         if (_bodies.Count == 0 || vessel.IsDestroyed) return false;
         var body = GetDominantBody(vessel.Position);
         if (body.Atmosphere == null) return false;

@@ -261,8 +261,9 @@ public partial class SimulationBridge : Node
         if (av != null)
         {
             var refB = Universe.GetDominantBody(av.Position);
-            bool forceSensitive = Universe.RequiresOffRailsPhysics(av);
-            bool boundedEntry = Universe.RequiresBoundedWarpPropagation(av);
+            var warpRequirements = Universe.GetWarpPhysicsRequirements(av);
+            bool forceSensitive = warpRequirements.ForceSensitive;
+            bool boundedEntry = warpRequirements.BoundedEntry;
             bool atmosphericZone = refB.Atmosphere != null
                 && av.GetAltitude(refB) <= refB.Atmosphere.MaxAltitude * 1.05;
             var missionPhase = MissionManager.Instance?.Phase;

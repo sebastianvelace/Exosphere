@@ -600,7 +600,15 @@ public partial class _PlaytestShot : Node
         _readyFrames++;
         if (frameSeconds > 0.0 && double.IsFinite(frameSeconds))
         {
+            var schedulerTelemetry = universe.LastSchedulerTelemetry;
+            string catchUpRisk = schedulerTelemetry.CatchUpRisk ? "true" : "false";
             _log.WriteLine($"PERF_FRAME frame={_frame} frame_ms={frameSeconds * 1000.0:F3} " +
+                $"scheduler_ms={schedulerTelemetry.WallClockMilliseconds:F3} " +
+                $"scheduler_branch={schedulerTelemetry.Branch} " +
+                $"scheduler_substeps={schedulerTelemetry.OuterSubsteps} " +
+                $"scheduler_cap={schedulerTelemetry.EffectiveStepCap:F6} " +
+                $"scheduler_simulated={schedulerTelemetry.SimulatedSeconds:F6} " +
+                $"catch_up_risk={catchUpRisk} " +
                 "source=process_callback");
             if ((_frame & 31) == 0) _log.Flush();
         }

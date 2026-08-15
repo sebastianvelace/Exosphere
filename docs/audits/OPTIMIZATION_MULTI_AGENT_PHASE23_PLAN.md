@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 36 medida; telemetría de catch-up y validación de delta añadidas; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 37 medida; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -162,6 +162,30 @@ fase: acumulador fijo o presupuesto de catch-up con equivalencia física explíc
 hibernación real ni se aumenta `MaxCoastStep` todavía.
 
 Informe reproducible: `PERF_SCHEDULER_CATCHUP_TELEMETRY_PHASE36_REPORT.md`.
+
+## Resultado de la fase 37 — telemetría del playtest y consulta de warp sin duplicación
+
+La biblioteca ya exponía el coste de `Universe.Tick`, pero el harness de Godot sólo registraba
+el wall-clock del callback. Ahora cada `PERF_FRAME` correlaciona `frame_ms` con
+`scheduler_ms`, rama (`FullPhysics`, `Mixed`, `Rails` o `None`), substeps, cap efectivo,
+segundos simulados y `catch_up_risk`. Esto permite distinguir un atasco de física de uno de
+LUT, render o presentación en la captura real de entrada al nivel.
+
+El puente de warp también dejó de llamar por separado a `RequiresOffRailsPhysics` y
+`RequiresBoundedWarpPropagation`. `GetWarpPhysicsRequirements` calcula ambas decisiones una
+sola vez por frame, sin cachearlas entre frames ni alterar las APIs existentes. La regresión
+`CombinedWarpRequirementsMatchIndividualQueries` exige igualdad con las dos consultas
+individuales.
+
+Resultado de verificación de esta fase: `25/25` pruebas focalizadas, suite completa
+`606/606`, build Godot con `0 warnings / 0 errors`, contrato estático `32 PASS / 1 dynamic
+skip` y contrato dinámico `40 PASS / 0 FAIL` sobre el log real (`234/234` frames válidos).
+El playtest llegó a `ASCENT_SH` con `33/33` motores y estado finito; el gate orbital queda
+pendiente porque el host llvmpipe mide ~1,011 ms de mediana por frame, aunque el scheduler
+midió sólo `4.824 ms` de mediana. La siguiente fase debe perfilar render/presentación/UI/LUT
+con esta misma correlación antes de tocar el presupuesto físico.
+
+Informe reproducible: `PERF_PLAYTEST_SCHEDULER_TELEMETRY_PHASE37_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 

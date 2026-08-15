@@ -71,6 +71,21 @@ public sealed class WarpPhysicsParityTests
         Assert.True(universe.RequiresBoundedWarpPropagation(vessel));
     }
 
+    [Fact]
+    public void CombinedWarpRequirementsMatchIndividualQueries()
+    {
+        var earth = LoadBody("earth");
+        var vessel = EntryProbe(earth);
+        var universe = new Universe { ActiveVessel = vessel };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        var combined = universe.GetWarpPhysicsRequirements(vessel);
+
+        Assert.Equal(universe.RequiresOffRailsPhysics(vessel), combined.ForceSensitive);
+        Assert.Equal(universe.RequiresBoundedWarpPropagation(vessel), combined.BoundedEntry);
+    }
+
     private static Vessel EntryProbe(CelestialBody earth)
     {
         var vessel = new Vessel();
