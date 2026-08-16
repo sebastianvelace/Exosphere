@@ -299,6 +299,48 @@ public sealed class PhysicsSchedulerPerformanceTests
     }
 
     [Fact]
+    public void SchedulerTelemetryDistinguishesUninitializedPauseAndInvalidInputs()
+    {
+        var earth = LoadBody("earth");
+        var vessel = CoastVessel(earth, "scheduler-skip-reasons");
+        var universe = new Universe { ActiveVessel = vessel };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        Assert.False(universe.LastSchedulerTelemetry.IsInitialized);
+        Assert.Equal(
+            PhysicsSchedulerSkipReason.NotInitialized,
+            universe.LastSchedulerTelemetry.SkipReason);
+
+        universe.TimeScale = 0.0;
+        universe.Tick(0.02);
+        Assert.True(universe.LastSchedulerTelemetry.IsInitialized);
+        Assert.Equal(
+            PhysicsSchedulerSkipReason.Paused,
+            universe.LastSchedulerTelemetry.SkipReason);
+        Assert.Equal(PhysicsSchedulerBranch.None, universe.LastSchedulerTelemetry.Branch);
+
+        universe.TimeScale = 1.0;
+        universe.Tick(double.NaN);
+        Assert.Equal(
+            PhysicsSchedulerSkipReason.InvalidDelta,
+            universe.LastSchedulerTelemetry.SkipReason);
+
+        universe.TimeScale = double.PositiveInfinity;
+        universe.Tick(0.02);
+        Assert.Equal(
+            PhysicsSchedulerSkipReason.InvalidTimeScale,
+            universe.LastSchedulerTelemetry.SkipReason);
+
+        universe.TimeScale = 1.0;
+        universe.Tick(0.001);
+        Assert.Equal(
+            PhysicsSchedulerSkipReason.None,
+            universe.LastSchedulerTelemetry.SkipReason);
+        Assert.Equal(PhysicsSchedulerBranch.FullPhysics, universe.LastSchedulerTelemetry.Branch);
+    }
+
+    [Fact]
     public void DeferredRailsProjectsCurrentEpochAndMatchesAlwaysCheckedReference()
     {
         var mixedEarth = LoadBody("earth");

@@ -12,6 +12,16 @@ public enum PhysicsSchedulerBranch
     Rails,
 }
 
+/// <summary>Reason why a scheduler call did not dispatch a physics branch.</summary>
+public enum PhysicsSchedulerSkipReason
+{
+    NotInitialized,
+    None,
+    Paused,
+    InvalidDelta,
+    InvalidTimeScale,
+}
+
 /// <summary>
 /// Why a vessel did or did not receive an independent rails deadline.  A non-deferred
 /// reason always means the caller must use the conservative global scheduler cadence.
@@ -67,6 +77,13 @@ public readonly record struct PhysicsSchedulerTelemetry(
     double WallClockMilliseconds,
     bool CatchUpRisk)
 {
+    /// <summary>True after at least one call to <see cref="Universe.Tick(double)"/>.</summary>
+    public bool IsInitialized { get; init; }
+
+    /// <summary>Distinguishes a valid pause from rejected scheduler input.</summary>
+    public PhysicsSchedulerSkipReason SkipReason { get; init; } =
+        PhysicsSchedulerSkipReason.NotInitialized;
+
     /// <summary>Total vessel work items dispatched, excluding docked secondary skips.</summary>
     public int TotalWorkDispatches =>
         FullPhysicsDispatches

@@ -602,6 +602,7 @@ public partial class _PlaytestShot : Node
         {
             var schedulerTelemetry = universe.LastSchedulerTelemetry;
             string catchUpRisk = schedulerTelemetry.CatchUpRisk ? "true" : "false";
+            string schedulerInitialized = schedulerTelemetry.IsInitialized ? "true" : "false";
             _log.WriteLine($"PERF_FRAME frame={_frame} frame_ms={frameSeconds * 1000.0:F3} " +
                 $"scheduler_ms={schedulerTelemetry.WallClockMilliseconds:F3} " +
                 $"scheduler_branch={schedulerTelemetry.Branch} " +
@@ -609,6 +610,25 @@ public partial class _PlaytestShot : Node
                 $"scheduler_cap={schedulerTelemetry.EffectiveStepCap:F6} " +
                 $"scheduler_simulated={schedulerTelemetry.SimulatedSeconds:F6} " +
                 $"catch_up_risk={catchUpRisk} " +
+                "source=process_callback");
+            _log.WriteLine($"PERF_SCHEDULER schema=1 frame={_frame} " +
+                $"initialized={schedulerInitialized} " +
+                $"skip_reason={schedulerTelemetry.SkipReason} " +
+                $"branch={schedulerTelemetry.Branch} " +
+                $"substeps={schedulerTelemetry.OuterSubsteps} " +
+                $"full_physics={schedulerTelemetry.FullPhysicsDispatches} " +
+                $"on_rails={schedulerTelemetry.OnRailsDispatches} " +
+                $"surface_settled={schedulerTelemetry.SurfaceSettledDispatches} " +
+                $"ground_held={schedulerTelemetry.GroundHeldDispatches} " +
+                $"destroyed={schedulerTelemetry.DestroyedDispatches} " +
+                $"docked_skips={schedulerTelemetry.DockedSecondarySkips} " +
+                $"rails_slices={schedulerTelemetry.RailsSlices} " +
+                $"docking_constraints={schedulerTelemetry.DockingConstraintApplications} " +
+                $"deadline_eligible={schedulerTelemetry.DeadlineEligibleEvaluations} " +
+                $"deadline_deferred={schedulerTelemetry.DeadlineDeferredSkips} " +
+                $"deadline_catch_up={schedulerTelemetry.DeadlineCatchUpDispatches} " +
+                $"deadline_projected={schedulerTelemetry.DeadlineProjectedDispatches} " +
+                $"total_work={schedulerTelemetry.TotalWorkDispatches} " +
                 "source=process_callback");
             if ((_frame & 31) == 0) _log.Flush();
         }

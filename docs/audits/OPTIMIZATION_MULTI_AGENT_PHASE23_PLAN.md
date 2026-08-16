@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 40 medida; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 41 instrumentada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -248,6 +248,26 @@ que no se habilita `0.25` en el runtime. La matriz completa Earth y Mars/Venus q
 de la próxima fase en hardware físico.
 
 Informe reproducible: `PERF_PRESENTATION_PHASE40_OPTICAL_CADENCE_REPORT.md`.
+
+## Resultado de la fase 41 — scheduler observable antes de introducir deuda temporal
+
+`PhysicsSchedulerTelemetry` distingue `NotInitialized`, `Paused`, `InvalidDelta`,
+`InvalidTimeScale` y tick válido. El harness conserva `PERF_FRAME` y añade
+`PERF_SCHEDULER schema=1` con contadores de FullPhysics, Rails, anclados, destruidos,
+docking y deadlines. El contrato dinámico exige que todas las categorías sumen `total_work`
+y que la rama/razón sean coherentes.
+
+El smoke real produjo `50/50` líneas válidas, `SMOKE_OK` y `47 PASS / 0 FAIL / 0 SKIP` en
+`performance_acceptance_contract_test.sh`. En el pad, la carga aparece como `GroundHeld`,
+no como física dinámica falsa.
+
+La hibernación real y el cap de catch-up quedan deliberadamente pendientes: `Universe.Tick`
+todavía consume el intervalo completo. La próxima implementación debe conservar deuda exacta,
+interrumpir sólo entre pasos globales completos, presupuestar también Rails y consumir el
+tiempo realmente procesado en los sistemas de gameplay. No se acepta descartar tiempo ni
+ocultar impactos/SOI/contactos.
+
+Informe reproducible: `PERF_SCHEDULER_TELEMETRY_PHASE41_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 

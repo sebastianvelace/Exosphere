@@ -200,6 +200,7 @@ public class Universe
     // object in the frame-critical path; the immutable public snapshot is published once
     // after dispatch completes.
     private PhysicsSchedulerBranch _tickBranch;
+    private PhysicsSchedulerSkipReason _tickSkipReason;
     private double _tickRealDeltaTime;
     private double _tickSimulatedSeconds;
     private double _tickEffectiveStepCap;
@@ -604,12 +605,27 @@ public class Universe
         LastMixedPhysicsStepCap = 0.0;
         double simDelta = realDeltaTime * TimeScale;
         BeginSchedulerTelemetry(realDeltaTime, simDelta);
-        if (!double.IsFinite(realDeltaTime)
-            || realDeltaTime <= 0.0
-            || !double.IsFinite(TimeScale)
-            || TimeScale <= 0.0
-            || !double.IsFinite(simDelta))
+        if (!double.IsFinite(realDeltaTime) || realDeltaTime <= 0.0)
         {
+            _tickSkipReason = PhysicsSchedulerSkipReason.InvalidDelta;
+            PublishSchedulerTelemetry();
+            return;
+        }
+        if (!double.IsFinite(TimeScale) || TimeScale < 0.0)
+        {
+            _tickSkipReason = PhysicsSchedulerSkipReason.InvalidTimeScale;
+            PublishSchedulerTelemetry();
+            return;
+        }
+        if (TimeScale == 0.0)
+        {
+            _tickSkipReason = PhysicsSchedulerSkipReason.Paused;
+            PublishSchedulerTelemetry();
+            return;
+        }
+        if (!double.IsFinite(simDelta))
+        {
+            _tickSkipReason = PhysicsSchedulerSkipReason.InvalidDelta;
             PublishSchedulerTelemetry();
             return;
         }
@@ -680,6 +696,7 @@ public class Universe
     {
         _tickStartTimestamp = Stopwatch.GetTimestamp();
         _tickBranch = PhysicsSchedulerBranch.None;
+        _tickSkipReason = PhysicsSchedulerSkipReason.None;
         _tickRealDeltaTime = realDeltaTime;
         _tickSimulatedSeconds = simDelta > 0.0 && double.IsFinite(simDelta)
             ? simDelta
@@ -726,7 +743,11 @@ public class Universe
             _tickDeadlineCatchUpDispatches,
             _tickDeadlineProjectedDispatches,
             wallClockMilliseconds,
-            _tickOuterSubsteps >= CatchUpWarningSubsteps);
+            _tickOuterSubsteps >= CatchUpWarningSubsteps)
+        {
+            IsInitialized = true,
+            SkipReason = _tickSkipReason,
+        };
     }
 
     private void RecordWorkload(VesselPhysicsWorkload workload)

@@ -118,6 +118,12 @@ require_text "$VISUAL_PLAYTEST" "catch_up_risk=" \
     "visual playtest records scheduler catch-up telemetry"
 require_text "$VISUAL_PLAYTEST" "LastSchedulerTelemetry" \
     "visual playtest reads the authoritative scheduler snapshot"
+require_text "$VISUAL_PLAYTEST" "PERF_SCHEDULER schema=1" \
+    "visual playtest records extended scheduler telemetry"
+require_text "$VISUAL_PLAYTEST" "SkipReason" \
+    "visual playtest records scheduler skip reason"
+require_text "$VISUAL_PLAYTEST" "TotalWorkDispatches" \
+    "visual playtest records scheduler work totals"
 
 log_file="${PERF_ACCEPTANCE_LOG:-}"
 if [[ -z "$log_file" ]]; then
@@ -212,6 +218,46 @@ else
             fi
         else
             fail_gate "all PERF_FRAME scheduler fields are finite and schema-valid (${valid_scheduler_frame_count}/${perf_frame_count})"
+        fi
+
+        extended_scheduler_lines="$(rg '^PERF_SCHEDULER ' "$frame_log" || true)"
+        extended_scheduler_count="$(printf '%s\n' "$extended_scheduler_lines" | sed '/^$/d' | wc -l | tr -d ' ')"
+        extended_scheduler_pattern='^PERF_SCHEDULER schema=1 frame=[0-9]+ initialized=(true|false) skip_reason=(NotInitialized|None|Paused|InvalidDelta|InvalidTimeScale) branch=(None|FullPhysics|Mixed|Rails) substeps=[0-9]+ full_physics=[0-9]+ on_rails=[0-9]+ surface_settled=[0-9]+ ground_held=[0-9]+ destroyed=[0-9]+ docked_skips=[0-9]+ rails_slices=[0-9]+ docking_constraints=[0-9]+ deadline_eligible=[0-9]+ deadline_deferred=[0-9]+ deadline_catch_up=[0-9]+ deadline_projected=[0-9]+ total_work=[0-9]+ source=process_callback$'
+        valid_extended_scheduler_lines="$(printf '%s\n' "$extended_scheduler_lines" | rg "$extended_scheduler_pattern" || true)"
+        valid_extended_scheduler_count="$(printf '%s\n' "$valid_extended_scheduler_lines" | sed '/^$/d' | wc -l | tr -d ' ')"
+        if [[ "$extended_scheduler_count" == "0" ]]; then
+            skip_gate "extended scheduler telemetry (no PERF_SCHEDULER lines in supplied log)"
+        elif [[ "$valid_extended_scheduler_count" == "$extended_scheduler_count" ]]; then
+            pass_gate "all PERF_SCHEDULER fields are schema-valid (${valid_extended_scheduler_count}/${extended_scheduler_count})"
+            extended_scheduler_invariant_failures="$(printf '%s\n' "$extended_scheduler_lines" | awk '
+                {
+                    initialized = ""; reason = ""; branch = "";
+                    full = -1; rails = -1; settled = -1; ground = -1; destroyed = -1; total = -1;
+                    for (i = 1; i <= NF; i++) {
+                        split($i, pair, "=");
+                        if (pair[1] == "initialized") initialized = pair[2];
+                        if (pair[1] == "skip_reason") reason = pair[2];
+                        if (pair[1] == "branch") branch = pair[2];
+                        if (pair[1] == "full_physics") full = pair[2] + 0;
+                        if (pair[1] == "on_rails") rails = pair[2] + 0;
+                        if (pair[1] == "surface_settled") settled = pair[2] + 0;
+                        if (pair[1] == "ground_held") ground = pair[2] + 0;
+                        if (pair[1] == "destroyed") destroyed = pair[2] + 0;
+                        if (pair[1] == "total_work") total = pair[2] + 0;
+                    }
+                    if (initialized == "false" && reason != "NotInitialized") bad++;
+                    if (branch != "None" && reason != "None") bad++;
+                    if (full + rails + settled + ground + destroyed != total) bad++;
+                }
+                END { print bad + 0 }
+            ' )"
+            if [[ "$extended_scheduler_invariant_failures" == "0" ]]; then
+                pass_gate "PERF_SCHEDULER work/skip invariants hold"
+            else
+                fail_gate "PERF_SCHEDULER work/skip invariants hold (${extended_scheduler_invariant_failures} violations)"
+            fi
+        else
+            fail_gate "all PERF_SCHEDULER fields are schema-valid (${valid_extended_scheduler_count}/${extended_scheduler_count})"
         fi
     fi
 fi
