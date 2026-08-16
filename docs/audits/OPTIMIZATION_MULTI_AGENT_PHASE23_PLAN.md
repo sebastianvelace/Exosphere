@@ -286,6 +286,21 @@ realmente procesado antes de activar la deuda en el juego.
 
 Informe reproducible: `PERF_SCHEDULER_DEBT_WAKEUP_PHASE42_REPORT.md`.
 
+## Resultado de la fase 43 — consumo de tiempo simulado procesado
+
+`SystemsController` conserva su pre-pase para relay y consecuencias, pero los consumibles
+se actualizan después de `Universe.Tick` mediante `AdvanceProcessedSimulation`. Life support,
+potencia, térmica, comunicaciones, Δv de maniobras/autopilot y temporizadores físicos de
+EDL consumen `ProcessedSimulationSeconds`; la pausa no adelanta ninguno. La presentación y
+la entrada continúan usando wall-clock.
+
+Build Godot: `0 warnings / 0 errors`; smoke real `SMOKE_OK`; contrato dinámico `54 PASS /
+0 FAIL / 0 SKIP`; `50/50` líneas de scheduler válidas. La deuda y el presupuesto siguen
+desactivados por defecto hasta completar paridad de consumibles, blackout, EDL, staging y
+docking bajo deuda.
+
+Informe reproducible: `PERF_PROCESSED_SIM_TIME_PHASE43_REPORT.md`.
+
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 
 La auditoría del camino de entrada al nivel encontró que `Universe.Bodies`, `Universe.Vessels`

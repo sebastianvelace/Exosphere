@@ -67,7 +67,7 @@ public partial class AutopilotController : Node
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
-        if (vessel == null || universe == null) { Disarm(); return; }
+        if (bridge == null || vessel == null || universe == null) { Disarm(); return; }
 
         var refBody = universe.GetDominantBody(vessel.Position);
         var relPos  = vessel.Position - refBody.Position;
@@ -121,13 +121,13 @@ public partial class AutopilotController : Node
         _burnCommandCommitted = true;
         vessel.Throttle = 1.0;
 
-        // Accumulate delivered ΔV from the actual thrust this frame. The vessel
-        // integrates over simulation time (delta · TimeScale), so the ΔV book-keeping
-        // must use the same scaled step — otherwise the burn over-runs under time warp.
+        // Accumulate delivered ΔV from the actual thrust in the last committed physics
+        // interval. Using render delta · TimeScale would overrun a burn when scheduler
+        // debt is capped.
         double mass = vessel.TotalMass;
         if (mass > 0.0)
         {
-            double simStep = delta * universe.TimeScale;
+            double simStep = bridge.LastProcessedSimulationSeconds;
             double thrust  = vessel.ComputeThrust(refBody).Magnitude;
             _deliveredDv += thrust / mass * simStep;
         }

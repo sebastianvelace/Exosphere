@@ -17,6 +17,29 @@ public partial class SimulationBridge : Node
 
     public Universe Universe { get; private set; } = null!;
     public Vessel?  ActiveVessel => Universe.ActiveVessel;
+
+    /// <summary>
+    /// Simulation seconds committed by the most recently completed Universe tick.
+    /// Systems that model rates must consume this value rather than multiplying the
+    /// current render-frame delta by TimeScale; the latter would double-count time when
+    /// scheduler debt is enabled. Before the first tick it is zero by design.
+    /// </summary>
+    public double LastProcessedSimulationSeconds
+    {
+        get
+        {
+            if (Universe == null || !Universe.LastSchedulerTelemetry.IsInitialized)
+                return 0.0;
+            double seconds = Universe.LastSchedulerTelemetry.ProcessedSimulationSeconds;
+            return double.IsFinite(seconds) && seconds > 0.0 ? seconds : 0.0;
+        }
+    }
+
+    /// <summary>Requested simulation time from the most recently completed tick.</summary>
+    public double LastRequestedSimulationSeconds =>
+        Universe != null && Universe.LastSchedulerTelemetry.IsInitialized
+            ? Universe.LastSchedulerTelemetry.RequestedSimulationSeconds
+            : 0.0;
     public string ActiveFlightProfileId { get; private set; } = "manual";
     public void SetActiveFlightProfile(string profileId)
     {
@@ -302,6 +325,10 @@ public partial class SimulationBridge : Node
         }
 
         Universe.Tick(delta);
+        // Consumable and blackout systems integrate only the committed simulation
+        // interval. This call is deliberately after the scheduler and before ascent/EDL
+        // post-processors; render/UI controllers continue to use wall-clock delta.
+        SystemsController.Instance?.AdvanceProcessedSimulation();
         QueueRequiredPlanetPresentation();
         SyncStructuralDebrisRenderers();
 

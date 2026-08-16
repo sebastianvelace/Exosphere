@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEST_FILE="$ROOT_DIR/ExosphereSimulation.Tests/PerformanceAcceptanceTests.cs"
 SIMULATION_BRIDGE="$ROOT_DIR/scripts/SimulationBridge.cs"
+SYSTEMS_CONTROLLER="$ROOT_DIR/scripts/SystemsController.cs"
+AUTOPILOT_CONTROLLER="$ROOT_DIR/scripts/AutopilotController.cs"
+MANEUVER_EXECUTOR="$ROOT_DIR/scripts/ManeuverExecutor.cs"
+EDL_CONTROLLER="$ROOT_DIR/scripts/EDLController.cs"
 VISUAL_PLAYTEST="$ROOT_DIR/tools/visual_playtest.sh"
 SKY_CONTROLLER="$ROOT_DIR/scripts/SkyController.cs"
 MARS_TERRAIN="$ROOT_DIR/scripts/MarsTerrainController.cs"
@@ -114,6 +118,18 @@ require_text "$SCHEDULER_TEST" "CorruptedRailStateIsNeverClassifiedAsAnalyticWor
     "invalid rail state fail-safe test is present"
 require_text "$SIMULATION_BRIDGE" "GetWarpPhysicsRequirements" \
     "warp-limit bridge uses one combined physics-requirements query"
+require_text "$SIMULATION_BRIDGE" "LastProcessedSimulationSeconds" \
+    "bridge exposes committed simulation time to gameplay systems"
+require_text "$SIMULATION_BRIDGE" "AdvanceProcessedSimulation" \
+    "bridge advances gameplay systems after the physics tick"
+require_text "$SYSTEMS_CONTROLLER" "ProcessedSimulationSeconds" \
+    "systems controller consumes committed simulation time"
+require_text "$AUTOPILOT_CONTROLLER" "LastProcessedSimulationSeconds" \
+    "autopilot delta-v accounting consumes committed simulation time"
+require_text "$MANEUVER_EXECUTOR" "LastProcessedSimulationSeconds" \
+    "maneuver delta-v accounting consumes committed simulation time"
+require_text "$EDL_CONTROLLER" "LastProcessedSimulationSeconds" \
+    "EDL physical timers consume committed simulation time"
 require_text "$VISUAL_PLAYTEST" "scheduler_ms=" \
     "visual playtest records scheduler wall-clock telemetry"
 require_text "$VISUAL_PLAYTEST" "scheduler_branch=" \

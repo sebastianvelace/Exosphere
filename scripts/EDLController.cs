@@ -87,7 +87,9 @@ public partial class EDLController : Control
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
         var mission = MissionManager.Instance;
-        if (vessel == null || universe == null) { Visible = false; return; }
+        if (bridge == null || vessel == null || universe == null) { Visible = false; return; }
+
+        double processedSimDelta = bridge.LastProcessedSimulationSeconds;
 
         var body = universe.GetDominantBody(vessel.Position);
         if (body.Atmosphere == null) { Deactivate(); return; }
@@ -105,7 +107,7 @@ public partial class EDLController : Control
         // Track the peak only once the EDL track is armed, so an ascent's 3 g does not
         // pre-poison the entry readout.
         if (_phase != Edl.Inactive)
-            _load.Update(delta, _gForce);
+            _load.Update(processedSimDelta, _gForce);
 
         var comms = SystemsController.Instance?.Comms;
         _blackout = comms?.PlasmaBlackout ?? false;
@@ -177,7 +179,7 @@ public partial class EDLController : Control
             return;
         }
 
-        AdvancePhase(vessel, body, mission, mass, speed, up, surfVel, delta, universe);
+        AdvancePhase(vessel, body, mission, mass, speed, up, surfVel, processedSimDelta, universe);
         QueueRedraw();   // live telemetry overlay
     }
 

@@ -56,12 +56,39 @@ public partial class SystemsController : Node
         }
     }
 
-    public override void _Process(double delta)
+    public override void _Process(double _delta)
     {
         var bridge   = SimulationBridge.Instance;
         var vessel   = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
-        if (vessel == null || universe == null) return;
+        if (bridge == null || vessel == null || universe == null) return;
+
+        // Apply light-time-delayed ground commands first so autopilots can still
+        // overwrite PitchYawRoll later in the frame (onboard, undelayed).
+        FlushGroundCommands(universe.CurrentTime, vessel);
+
+        // Consequences from the previous post-physics integration are applied before
+        // the next physics tick. The consumable/system integration itself happens from
+        // SimulationBridge.AdvanceProcessedSimulation after Universe.Tick, so it uses
+        // the same committed vessel state and cannot consume wall-clock time twice.
+        ApplyGameplayConsequences(vessel);
+    }
+
+    /// <summary>
+    /// Advances gameplay systems using the simulation seconds actually committed by the
+    /// most recent <see cref="Universe.Tick(double)"/>. SimulationBridge calls this once
+    /// after physics and before ascent/EDL post-processors; it must not be called from a
+    /// render-only controller with wall-clock delta.
+    /// </summary>
+    public void AdvanceProcessedSimulation()
+    {
+        var bridge   = SimulationBridge.Instance;
+        var vessel   = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        if (bridge == null || vessel == null || universe == null) return;
+
+        double processedSimDelta = bridge.LastProcessedSimulationSeconds;
+        if (processedSimDelta <= 0.0) return;
 
         if (!ReferenceEquals(_cachedUniverse, universe))
         {
@@ -73,14 +100,10 @@ public partial class SystemsController : Node
         var refBody = universe.GetDominantBody(vessel.Position);
         double alt  = vessel.GetAltitude(refBody);
 
-        // Apply light-time-delayed ground commands first so autopilots can still
-        // overwrite PitchYawRoll later in the frame (onboard, undelayed).
-        FlushGroundCommands(universe.CurrentTime, vessel);
-
         int crewCount = vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
         CurrentSystemsPhase = MapMissionPhase(MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
         var sysPhase = CurrentSystemsPhase;
-        LifeSupport.Tick(delta, crewCount, sysPhase);
+        LifeSupport.Tick(processedSimDelta, crewCount, sysPhase);
 
         var earthBody = _cachedEarth;
         var sunBody   = _cachedSun;
@@ -89,7 +112,8 @@ public partial class SystemsController : Node
         Vector3d sunPos = sunBody?.Position ?? Vector3d.Zero;
         double lsLoadKw = LifeSupport.GetEcLoadKw(crewCount, sysPhase);
         double phaseLoadKw = SystemsPhaseLoads.AvionicsExtraKw(sysPhase);
-        Power.Tick(delta, vessel.Position, sunPos, solarVisibility, lsLoadKw + phaseLoadKw);
+        Power.Tick(processedSimDelta, vessel.Position, sunPos, solarVisibility,
+            lsLoadKw + phaseLoadKw);
 
         bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
         double atmoTemp = inAtmo ? refBody.Atmosphere!.GetTemperature(alt) : 3.0;
@@ -97,7 +121,7 @@ public partial class SystemsController : Node
         double airDensity = refBody.GetAtmosphericDensity(vessel.Position);
         double heatFlux = Exosphere.Simulation.Physics.ThermalModel.ComputeHeatFlux(
             airDensity, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
-        Thermal.Tick(delta, solarVisibility, inAtmo, atmoTemp, heatFlux, sysPhase);
+        Thermal.Tick(processedSimDelta, solarVisibility, inAtmo, atmoTemp, heatFlux, sysPhase);
 
         Vector3d earthPos = earthBody?.Position ?? Vector3d.Zero;
 
@@ -109,7 +133,7 @@ public partial class SystemsController : Node
             DensityKgM3 = airDensity,
             AirspeedMs  = airspeed,
         };
-        Comms.Tick(delta, vessel.Position, earthPos, universe.Bodies, entryCondition);
+        Comms.Tick(processedSimDelta, vessel.Position, earthPos, universe.Bodies, entryCondition);
 
         ApplyGameplayConsequences(vessel);
     }

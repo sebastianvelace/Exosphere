@@ -135,8 +135,9 @@ public partial class ManeuverExecutor : Node
         double mass   = vessel.TotalMass;
         if (mass > 0.0)
         {
-            // Usar el timestep escalado igual que el AutopilotController
-            double simStep = delta * universe.TimeScale;
+            // Consume only the simulation seconds actually committed by Universe.Tick;
+            // render delta · TimeScale would overrun this burn under scheduler debt.
+            double simStep = SimulationBridge.Instance?.LastProcessedSimulationSeconds ?? 0.0;
             RemainingDv -= thrust / mass * simStep;
         }
 
