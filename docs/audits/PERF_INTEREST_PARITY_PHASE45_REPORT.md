@@ -18,7 +18,7 @@ contact, atmospheric force sensitivity, structural control loss, and the existin
 periapsis safety plan. The Godot boundary now has a second, explicit read-only input contract
 for mission/controller and systems state: mission callback, descent/entry, life-support,
 power, thermal, and geometric communications alerts. It now also carries the next
-life-support/power alert deadline. A deadline outside the 60-second wake window remains
+life-support/power/thermal alert deadline. A deadline outside the 60-second wake window remains
 `EventDriven`; a deadline inside the window carries `SystemsDeadline` and is `Proximity`.
 Plasma blackout is intentionally not treated as geometric control loss because onboard entry
 guidance must continue through the blackout.
@@ -69,9 +69,12 @@ phase ownership and system alerts without creating system controllers for distan
 `SimulationBridge.GetSimulationInterestDecision(vessel)` overlays that snapshot only when
 `vessel == ActiveVessel`; distant vessels continue through the pure CPU snapshot. This avoids
 the false optimization of treating an active vessel's life-support alert as a wake reason for
-the whole fleet. `LifeSupportSystem.GetNextAlertDeadlineSeconds` and
-`PowerSystem.GetNextAlertDeadlineSeconds` use the same rates/thresholds as their tick methods;
-their projections are read-only and are recalculated after each committed systems sample.
+the whole fleet. `LifeSupportSystem.GetNextAlertDeadlineSeconds`,
+`PowerSystem.GetNextAlertDeadlineSeconds`, and `ThermalSystem.GetNextAlertDeadlineSeconds` use
+the same rates/thresholds or heat-balance equation as their tick methods. All projections are
+read-only and are recalculated after each committed systems sample; the thermal estimate is
+explicitly local-linear and expires at the next sample because atmospheric and solar inputs
+can change.
 
 ## What this does not prove
 
@@ -81,8 +84,8 @@ resource starvation deadlines, mission callback queues, SOI transfer materializa
 Godot-side EDL presentation state still need promotion tests at the dispatcher boundary.
 The external contract is now present, but its `HasPendingMissionCallback` input remains false
 until a real queued callback source exists; the adapter does not invent callbacks from a phase
-label. Thermal deadlines and future comms geometry deadlines are also intentionally not
-invented from the current alert booleans.
+label. Future comms geometry deadlines are intentionally not invented from the current alert
+booleans.
 
 In particular, the policy's `EventDriven` tier is covered by the pure policy tests, but the
 current `Universe` deadline planner does not expose a future physical timestamp for a safe

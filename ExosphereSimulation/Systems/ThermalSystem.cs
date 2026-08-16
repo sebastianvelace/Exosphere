@@ -24,6 +24,16 @@ public class ThermalSystem
     /// </summary>
     private const double AeroCabinLeakFraction = 0.015;
 
+    // The interest adapter may ask for a deadline between committed system ticks. Keep
+    // the inputs that produced the current thermal sample so the projection uses the
+    // same balance equation as Tick without advancing or mutating the system.
+    private bool _hasLastSample;
+    private double _lastSolarVisibility;
+    private bool _lastInAtmosphere;
+    private double _lastAtmosphericTemp;
+    private double _lastAeroHeatFluxWm2;
+    private SystemsMissionPhase _lastPhase;
+
     public void Tick(double dt, bool inEclipse, bool inAtmosphere, double atmosphericTemp)
         => Tick(dt, inEclipse ? 0.0 : 1.0, inAtmosphere, atmosphericTemp);
 
@@ -33,29 +43,76 @@ public class ThermalSystem
     public void Tick(double dt, double solarVisibility, bool inAtmosphere, double atmosphericTemp,
         double aeroHeatFluxWm2, SystemsMissionPhase phase = SystemsMissionPhase.Active)
     {
-        double solarIn = System.Math.Clamp(solarVisibility, 0.0, 1.0)
-            * SolarHeatFlux * SolarAbsorb * VehicleArea * 0.5;
+        _lastSolarVisibility = solarVisibility;
+        _lastInAtmosphere = inAtmosphere;
+        _lastAtmosphericTemp = atmosphericTemp;
+        _lastAeroHeatFluxWm2 = aeroHeatFluxWm2;
+        _lastPhase = phase;
+        _hasLastSample = true;
 
-        // Radiation to space
-        double radOut = Emissivity * Boltzmann * VehicleArea * System.Math.Pow(TemperatureK, 4);
-
-        // In atmosphere: convective exchange
-        double convective = inAtmosphere
-            ? (atmosphericTemp - TemperatureK) * 200.0  // simple convection
-            : 0.0;
-
-        // TPS leak: free-stream stagnation flux × coupling area × tiny fraction.
-        double couplingArea = SystemsPhaseLoads.ThermalCouplingAreaM2(phase);
-        double aeroIn = System.Math.Max(0.0, aeroHeatFluxWm2) * couplingArea * AeroCabinLeakFraction;
-
-        double netHeat = solarIn - radOut + convective + aeroIn;
+        double netHeat = ComputeNetHeatWatts(
+            TemperatureK, solarVisibility, inAtmosphere, atmosphericTemp,
+            aeroHeatFluxWm2, phase);
         TemperatureK = System.Math.Max(SpaceBgTemp, TemperatureK + netHeat * dt / ThermalMass);
 
         HotAlert  = TemperatureK > MaxSafeTemp;
         ColdAlert = TemperatureK < MinSafeTemp;
     }
 
+    /// <summary>
+    /// Projects the next thermal alert from the last committed heat-balance sample.
+    /// This is a read-only, local linear estimate: atmosphere, solar visibility and
+    /// aero heating may change before the deadline, so callers must recompute it after
+    /// the next committed systems tick. A missing or non-finite sample returns null.
+    /// </summary>
+    public double? GetNextAlertDeadlineSeconds()
+    {
+        if (!_hasLastSample || !double.IsFinite(TemperatureK))
+            return null;
+
+        if (TemperatureK <= MinSafeTemp || TemperatureK >= MaxSafeTemp)
+            return 0.0;
+
+        double rateKPerSecond = ComputeNetHeatWatts(
+            TemperatureK, _lastSolarVisibility, _lastInAtmosphere,
+            _lastAtmosphericTemp, _lastAeroHeatFluxWm2, _lastPhase) / ThermalMass;
+        if (!double.IsFinite(rateKPerSecond) || rateKPerSecond == 0.0)
+            return null;
+
+        double seconds = rateKPerSecond > 0.0
+            ? (MaxSafeTemp - TemperatureK) / rateKPerSecond
+            : (TemperatureK - MinSafeTemp) / -rateKPerSecond;
+        return double.IsFinite(seconds) && seconds >= 0.0 ? seconds : null;
+    }
+
     public double TempCelsius    => TemperatureK - 273.15;
     public double ThermalFraction => System.Math.Clamp(
         (TemperatureK - MinSafeTemp) / (MaxSafeTemp - MinSafeTemp), 0.0, 1.0);
+
+    private static double ComputeNetHeatWatts(
+        double temperatureK,
+        double solarVisibility,
+        bool inAtmosphere,
+        double atmosphericTemp,
+        double aeroHeatFluxWm2,
+        SystemsMissionPhase phase)
+    {
+        double solarIn = System.Math.Clamp(solarVisibility, 0.0, 1.0)
+            * SolarHeatFlux * SolarAbsorb * VehicleArea * 0.5;
+
+        // Radiation to space.
+        double radOut = Emissivity * Boltzmann * VehicleArea * System.Math.Pow(temperatureK, 4);
+
+        // In atmosphere: convective exchange.
+        double convective = inAtmosphere
+            ? (atmosphericTemp - temperatureK) * 200.0
+            : 0.0;
+
+        // TPS leak: free-stream stagnation flux × coupling area × tiny fraction.
+        double couplingArea = SystemsPhaseLoads.ThermalCouplingAreaM2(phase);
+        double aeroIn = System.Math.Max(0.0, aeroHeatFluxWm2)
+            * couplingArea * AeroCabinLeakFraction;
+
+        return solarIn - radOut + convective + aeroIn;
+    }
 }

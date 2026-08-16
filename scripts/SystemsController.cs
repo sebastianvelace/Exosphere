@@ -92,6 +92,7 @@ public partial class SystemsController : Node
         double? systemsDeadline = MinDeadline(
             LifeSupport.GetNextAlertDeadlineSeconds(crewCount, systemsPhase),
             Power.GetNextAlertDeadlineSeconds());
+        systemsDeadline = MinDeadline(systemsDeadline, Thermal.GetNextAlertDeadlineSeconds());
 
         return new SimulationExternalInterestInputs(
             IsMissionControlled: missionControlled,

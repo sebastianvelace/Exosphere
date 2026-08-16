@@ -298,6 +298,51 @@ public sealed class SystemsMissionPhaseTests
     }
 
     [Fact]
+    public void ThermalSystem_NextAlertDeadlineUsesLastCommittedHeatRate()
+    {
+        var thermal = new ThermalSystem();
+
+        Assert.Null(thermal.GetNextAlertDeadlineSeconds());
+
+        thermal.Tick(0.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 2.0e6, phase: SystemsMissionPhase.PeakHeating);
+
+        double before = thermal.TemperatureK;
+        double? deadline = thermal.GetNextAlertDeadlineSeconds();
+
+        Assert.True(deadline.HasValue);
+        Assert.True(double.IsFinite(deadline.Value));
+        Assert.True(deadline.Value > 0.0);
+        Assert.Equal(before, thermal.TemperatureK);
+        Assert.Equal(deadline.Value, thermal.GetNextAlertDeadlineSeconds()!.Value, precision: 12);
+
+        thermal.Tick(1.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 2.0e6, phase: SystemsMissionPhase.PeakHeating);
+        Assert.True(thermal.TemperatureK > before);
+    }
+
+    [Fact]
+    public void ThermalSystem_ProjectsColdAlertFromSpaceCoolingWithoutMutating()
+    {
+        var thermal = new ThermalSystem();
+
+        thermal.Tick(0.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 0.0, phase: SystemsMissionPhase.Active);
+
+        double before = thermal.TemperatureK;
+        double? deadline = thermal.GetNextAlertDeadlineSeconds();
+
+        Assert.True(deadline.HasValue);
+        Assert.True(double.IsFinite(deadline.Value));
+        Assert.True(deadline.Value > 0.0);
+        Assert.Equal(before, thermal.TemperatureK);
+
+        thermal.Tick(1.0, solarVisibility: 0.0, inAtmosphere: false, atmosphericTemp: 3.0,
+            aeroHeatFluxWm2: 0.0, phase: SystemsMissionPhase.Active);
+        Assert.True(thermal.TemperatureK < before);
+    }
+
+    [Fact]
     public void GroundCommandRelay_AppliesImmediatelyBelowThreshold()
     {
         var relay = new GroundCommandRelay();
