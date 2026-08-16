@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 37 medida; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 38 medida; diagnóstico de render/presentación con probe A/B y terreno marciano lazy; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -186,6 +186,28 @@ midió sólo `4.824 ms` de mediana. La siguiente fase debe perfilar render/prese
 con esta misma correlación antes de tocar el presupuesto físico.
 
 Informe reproducible: `PERF_PLAYTEST_SCHEDULER_TELEMETRY_PHASE37_REPORT.md`.
+
+## Resultado de la fase 38 — diagnóstico render/presentación y terreno marciano lazy
+
+La captura de fase 37 aisló el coste fuera de `Universe.Tick`; esta fase lo confirmó con el
+probe de render in-process. En el host llvmpipe, el smoke Earth normal midió `1,098.077 ms`
+CPU render y `1,102.228 ms` GPU por frame, con `9,774` objetos, `1,218,406` primitivas y
+`15,772` draw calls. El A/B sin sombras bajó a `984.074 ms`, `8,035` objetos, `982,074`
+primitivas y `12,293` draw calls; el A/B ocultando el pad no cambió los contadores, así que
+no se atribuye el cuello de botella al pad sin una medición de hardware/nodo más precisa.
+
+`MarsTerrainController` dejó de construir síncronamente su malla 96×96 durante el arranque
+Earth. Ahora sólo se crea al acercarse realmente a Mars y registra su coste puntual. Esto es
+una mejora segura de trabajo innecesario, no una afirmación de FPS: el backend llvmpipe tiene
+variación de arranque y las corridas A/B terminaron como `SMOKE_OK`, no como benchmark de GPU
+física.
+
+El probe permite las variantes opt-in `hide_pad`, `no_directional_shadows`,
+`hide_launch_effects`, `hide_vessel`, `hide_hud`, `hide_starfield` y `hide_earth_ground`.
+Se conserva la configuración oficial de sombras; la siguiente fase probará una calidad baja
+con gates visuales y medirá VFX/HUD durante ignición, reentrada y captura.
+
+Informe reproducible: `PERF_RENDER_PRESENTATION_PHASE38_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 

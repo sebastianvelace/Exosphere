@@ -6,6 +6,7 @@ TEST_FILE="$ROOT_DIR/ExosphereSimulation.Tests/PerformanceAcceptanceTests.cs"
 SIMULATION_BRIDGE="$ROOT_DIR/scripts/SimulationBridge.cs"
 VISUAL_PLAYTEST="$ROOT_DIR/tools/visual_playtest.sh"
 SKY_CONTROLLER="$ROOT_DIR/scripts/SkyController.cs"
+MARS_TERRAIN="$ROOT_DIR/scripts/MarsTerrainController.cs"
 EXPOSURE_CONTROLLER="$ROOT_DIR/scripts/VisualExposureController.cs"
 UNIVERSE="$ROOT_DIR/ExosphereSimulation/Universe.cs"
 SCHEDULER_TEST="$ROOT_DIR/ExosphereSimulation.Tests/PhysicsSchedulerPerformanceTests.cs"
@@ -73,6 +74,10 @@ require_text "$SKY_CONTROLLER" "PollAtmosphereLutBuild" \
     "atmosphere LUT completion is polled on the main thread"
 require_text "$EXPOSURE_CONTROLLER" "DirectTransmittanceCadenceSeconds" \
     "direct-transmittance work has an explicit cadence gate"
+require_text "$MARS_TERRAIN" "EnsureMesh" \
+    "Mars terrain mesh is lazy-built on approach"
+require_text "$MARS_TERRAIN" "PERF_RENDER stage=mars_terrain_build" \
+    "Mars terrain build exposes its one-time render cost"
 require_text "$UNIVERSE" "GetMixedPhysicsStepCap" \
     "mixed scheduler derives its cap from every eligible vessel"
 require_text "$UNIVERSE" "LastMixedPhysicsStepCap" \

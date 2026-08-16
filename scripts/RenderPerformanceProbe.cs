@@ -19,6 +19,9 @@ public partial class RenderPerformanceProbe : Node
     private int _warmupRemaining = WarmupFrames;
     private int _sampleIndex;
     private bool _measurementEnabled;
+    private bool _abOverrideApplied;
+    private readonly string _abOverride =
+        OS.GetEnvironment("EXOSPHERE_RENDER_AB").Trim().ToLowerInvariant();
 
     public static bool IsRequested() =>
         string.Equals(OS.GetEnvironment("EXOSPHERE_RENDER_PROBE"), "1", StringComparison.Ordinal);
@@ -39,6 +42,8 @@ public partial class RenderPerformanceProbe : Node
 
     public override void _Process(double delta)
     {
+        ApplyAbOverrideIfRequested();
+
         if (_warmupRemaining > 0)
         {
             _warmupRemaining--;
@@ -69,6 +74,62 @@ public partial class RenderPerformanceProbe : Node
         if (!_measurementEnabled) return;
         RenderingServer.ViewportSetMeasureRenderTime(_viewportRid, false);
         _measurementEnabled = false;
+    }
+
+    private void ApplyAbOverrideIfRequested()
+    {
+        if (_abOverrideApplied || string.IsNullOrEmpty(_abOverride))
+        {
+            _abOverrideApplied = true;
+            return;
+        }
+
+        Node root = GetTree().Root;
+        bool applied = _abOverride switch
+        {
+            "hide_pad" => SetVisible(root.FindChild("LaunchPadController", true, false), false),
+            "hide_launch_effects" => SetVisible(
+                root.FindChild("LaunchEffectsController", true, false), false),
+            "hide_vessel" => SetVisible(root.FindChild("VesselRenderer", true, false), false),
+            "hide_hud" => SetVisible(root.FindChild("HUDController", true, false), false),
+            "hide_starfield" => SetVisible(
+                root.FindChild("StarfieldController", true, false), false),
+            "hide_earth_ground" => SetVisible(
+                root.FindChild("EarthGroundController", true, false), false),
+            "no_directional_shadows" => DisableDirectionalShadows(root),
+            _ => false,
+        };
+
+        if (applied)
+        {
+            _abOverrideApplied = true;
+            GD.Print($"PERF_GPU_AB mode={_abOverride} applied=true");
+        }
+    }
+
+    private static bool SetVisible(Node? node, bool visible)
+    {
+        if (node is Node3D node3D)
+        {
+            node3D.Visible = visible;
+            return true;
+        }
+
+        if (node is CanvasItem canvasItem)
+        {
+            canvasItem.Visible = visible;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool DisableDirectionalShadows(Node root)
+    {
+        if (root.FindChild("DirectionalLight3D", true, false) is not DirectionalLight3D light)
+            return false;
+        light.ShadowEnabled = false;
+        return true;
     }
 
     private static string Metric(double value) =>

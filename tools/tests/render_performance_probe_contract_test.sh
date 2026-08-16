@@ -18,6 +18,12 @@ require_text() {
 [[ -f "$PROBE" ]] || fail "probe source is missing"
 require_text "$PROBE" 'EXOSPHERE_RENDER_PROBE' \
   "probe must be opt-in through an environment variable"
+require_text "$PROBE" 'EXOSPHERE_RENDER_AB' \
+  "probe must support explicit render A/B overrides"
+require_text "$PROBE" 'no_directional_shadows' \
+  "probe must expose a directional-shadow A/B variant"
+require_text "$PROBE" 'hide_pad' \
+  "probe must expose a launch-pad A/B variant"
 require_text "$PROBE" 'ViewportSetMeasureRenderTime' \
   "probe must enable viewport render measurements"
 require_text "$PROBE" 'ViewportGetMeasuredRenderTimeCpu' \

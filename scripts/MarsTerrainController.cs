@@ -14,10 +14,20 @@ public partial class MarsTerrainController : Node3D
     private const int   Grid      = 96;      // subdivisions per side
     private const float ShowAlt   = 12000f;  // m: terrain visible below this altitude
 
-    private MeshInstance3D _mesh = null!;
+    private MeshInstance3D? _mesh;
 
     public override void _Ready()
     {
+        // Earth is the normal entry body. Building a 96x96 procedural mesh here would
+        // spend the first visible frame doing synchronous terrain work for a planet the
+        // player has not reached. Keep the node inert until Mars is actually near.
+        Visible = false;
+    }
+
+    private void EnsureMesh()
+    {
+        if (_mesh != null) return;
+
         _mesh = new MeshInstance3D { Name = "MarsSurface", Mesh = BuildMesh() };
         var mat = new StandardMaterial3D
         {
@@ -28,7 +38,7 @@ public partial class MarsTerrainController : Node3D
         };
         _mesh.SetSurfaceOverrideMaterial(0, mat);
         AddChild(_mesh);
-        Visible = false;
+        GD.Print($"PERF_RENDER stage=mars_terrain_build grid={Grid} vertices={Grid * Grid * 6}");
     }
 
     public override void _Process(double delta)
@@ -45,6 +55,7 @@ public partial class MarsTerrainController : Node3D
         double alt = vessel.GetAltitude(mars);
         if (body.Id != "mars" || alt > ShowAlt) { Visible = false; return; }
 
+        EnsureMesh();
         Visible = true;
 
         // Surface point directly beneath the vessel, expressed relative to the vessel
