@@ -102,6 +102,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      y alertas de soporte vital/energía/térmica/comms, y fixtures de paridad. Commit integrado
      `b3afcf3`; 656 tests, CI y smoke visual pasan. El scheduler sigue en FullPhysics hasta
      comparar `EventDriven/Dormant` contra la referencia con deadlines, recursos y eventos.
+   - **Fase 46:** la matriz `FullPhysics` vs `DeferredRails` ya cubre proyección, deadlines,
+     SOI, atmósfera, contacto, staging, actitud y consumo de propelente. El gate focalizado
+     pasa 6/6; informe en `docs/audits/PERF_DISPATCH_PARITY_PHASE46_REPORT.md`. Aún no se
+     promueve `EventDriven/Dormant`: faltan deadlines de sistemas, callbacks y save/load.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

@@ -685,6 +685,120 @@ public sealed class PhysicsSchedulerPerformanceTests
     }
 
     [Fact]
+    public void DeferredRailsAttitudeWakeMatchesAlwaysCheckedReference()
+    {
+        var mixedEarth = LoadBody("earth");
+        var mixedRails = SafeRailVessel(mixedEarth, "attitude-wake-rails");
+        mixedRails.IsOnRails = true;
+        var mixed = new Universe { TimeScale = 5.0 };
+        mixed.AddBody(mixedEarth);
+        mixed.AddVessel(mixedRails);
+
+        var referenceEarth = LoadBody("earth");
+        var referenceRails = SafeRailVessel(referenceEarth, "attitude-wake-reference");
+        referenceRails.IsOnRails = true;
+        var reference = new Universe
+        {
+            TimeScale = 5.0,
+            ActiveVessel = referenceRails,
+        };
+        reference.AddBody(referenceEarth);
+        reference.AddVessel(referenceRails);
+
+        for (int i = 0; i < 3; i++)
+        {
+            mixed.Tick(0.005);
+            reference.Tick(0.005);
+        }
+
+        // A non-zero TVC/RCS command is a physical wake condition even with closed main
+        // engines. The mixed path must materialize the same epoch before integrating it.
+        var command = new Vector3d(0.20, -0.10, 0.05);
+        mixedRails.PitchYawRoll = command;
+        referenceRails.PitchYawRoll = command;
+        mixed.Tick(0.005);
+        reference.Tick(0.005);
+
+        Assert.True(mixed.LastSchedulerTelemetry.DeadlineCatchUpDispatches > 0);
+        Assert.True(mixed.LastSchedulerTelemetry.FullPhysicsDispatches > 0);
+        Assert.False(mixedRails.IsOnRails);
+        AssertVesselStateClose(
+            referenceRails,
+            mixedRails,
+            SafeRailPositionToleranceM,
+            SafeRailVelocityToleranceMps);
+        AssertVectorClose(
+            referenceRails.AngularVelocity,
+            mixedRails.AngularVelocity,
+            1e-10);
+        Assert.Equal(referenceRails.Orientation, mixedRails.Orientation);
+    }
+
+    [Fact]
+    public void DeferredRailsThrustWakePreservesPropellantAgainstFullPhysics()
+    {
+        var mixedEarth = LoadBody("earth");
+        var mixedActive = SafeRailVessel(mixedEarth, "propellant-wake-active");
+        var mixedRails = BuildFlight7Stack();
+        ConfigureCircularOrbit(mixedRails, mixedEarth);
+        mixedRails.IsOnRails = true;
+        var mixed = new Universe
+        {
+            TimeScale = 5.0,
+            ActiveVessel = mixedActive,
+        };
+        mixed.AddBody(mixedEarth);
+        mixed.AddVessel(mixedActive);
+        mixed.AddVessel(mixedRails);
+
+        var referenceEarth = LoadBody("earth");
+        var referenceRails = BuildFlight7Stack();
+        ConfigureCircularOrbit(referenceRails, referenceEarth);
+        referenceRails.IsOnRails = true;
+        var reference = new Universe
+        {
+            TimeScale = 5.0,
+            ActiveVessel = referenceRails,
+        };
+        reference.AddBody(referenceEarth);
+        reference.AddVessel(referenceRails);
+
+        for (int i = 0; i < 3; i++)
+        {
+            mixed.Tick(0.005);
+            reference.Tick(0.005);
+        }
+
+        mixedRails.Throttle = 0.05;
+        referenceRails.Throttle = 0.05;
+        double mixedFuelBefore = mixedRails.Parts.TotalLiquidFuel;
+        double referenceFuelBefore = referenceRails.Parts.TotalLiquidFuel;
+        double mixedOxBefore = mixedRails.Parts.TotalOxidizer;
+        double referenceOxBefore = referenceRails.Parts.TotalOxidizer;
+
+        mixed.Tick(0.005);
+        reference.Tick(0.005);
+
+        Assert.True(mixed.LastSchedulerTelemetry.DeadlineCatchUpDispatches > 0);
+        Assert.True(mixed.LastSchedulerTelemetry.FullPhysicsDispatches > 0);
+        Assert.False(mixedRails.IsOnRails);
+        Assert.True(mixedRails.Parts.TotalLiquidFuel < mixedFuelBefore);
+        Assert.True(mixedRails.Parts.TotalOxidizer < mixedOxBefore);
+        Assert.Equal(referenceFuelBefore - referenceRails.Parts.TotalLiquidFuel,
+            mixedFuelBefore - mixedRails.Parts.TotalLiquidFuel,
+            1e-10);
+        Assert.Equal(referenceOxBefore - referenceRails.Parts.TotalOxidizer,
+            mixedOxBefore - mixedRails.Parts.TotalOxidizer,
+            1e-10);
+        Assert.Equal(referenceRails.Parts.TotalMass, mixedRails.Parts.TotalMass, 1e-9);
+        AssertVesselStateClose(
+            referenceRails,
+            mixedRails,
+            1e-4,
+            1e-8);
+    }
+
+    [Fact]
     public void AtmosphericRailIsRejectedAndMatchesAlwaysCheckedReference()
     {
         var mixedEarth = LoadBody("earth");
@@ -1002,6 +1116,16 @@ public sealed class PhysicsSchedulerPerformanceTests
             + Vector3d.Up * System.Math.Sqrt(earth.GM / radius);
         vessel.ReferenceBodyId = earth.Id;
         return vessel;
+    }
+
+    private static void ConfigureCircularOrbit(
+        Vessel vessel,
+        CelestialBody earth)
+    {
+        vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 1_500_000.0);
+        vessel.Velocity = earth.Velocity
+            + Vector3d.Up * System.Math.Sqrt(earth.GM / (earth.Radius + 1_500_000.0));
+        vessel.ReferenceBodyId = earth.Id;
     }
 
     private static Vessel AtmosphericRailVessel(CelestialBody earth, string id)
