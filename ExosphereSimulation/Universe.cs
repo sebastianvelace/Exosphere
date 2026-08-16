@@ -1268,6 +1268,76 @@ public class Universe
             : VesselSimulationTier.Nearby;
     }
 
+    /// <summary>
+    /// Builds the phase-45 interest decision from the authoritative vessel state. This is
+    /// intentionally observational: it does not change rails, advance time, or skip work.
+    /// The scheduler may consume this decision only after the event/deadline parity gate is
+    /// promoted; until then <see cref="SimulationInterestPolicy.EnabledByDefault"/> remains
+    /// false and the existing dispatch path is authoritative.
+    /// </summary>
+    public SimulationInterestDecision GetSimulationInterestDecision(Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        if (_bodies.Count == 0
+            || !HasFinitePhysicalState(vessel)
+            || (ActiveVessel is not null && !HasFinitePhysicalState(ActiveVessel)))
+        {
+            return new(
+                SimulationInterestTier.Active,
+                SimulationWakeReason.InvalidInput);
+        }
+
+        bool isDocked = false;
+        for (int i = 0; i < _dockingConnections.Count; i++)
+        {
+            var connection = _dockingConnections[i];
+            if (connection.PrimaryVesselId == vessel.Id
+                || connection.SecondaryVesselId == vessel.Id)
+            {
+                isDocked = true;
+                break;
+            }
+        }
+
+        bool wakeCommand = HasWakeCommand(vessel);
+        bool forceSensitive = RequiresOffRailsPhysics(vessel);
+        PhysicsSchedulerDeadlinePlan deadline = GetPhysicsSchedulerDeadlinePlan(vessel);
+        // DeferredRails.IntervalSeconds is the scheduler's bounded projection cadence,
+        // not a physical SOI/deadline event. Passing it into the interest policy would
+        // wake every coasting vessel on every query because the default event window is
+        // 60 s. Only a future physical event may populate SecondsUntilNextDeadline;
+        // the current deadline planner exposes that event through PeriapsisEvent below.
+        double? secondsUntilDeadline = null;
+        bool soiOrDeadline = deadline.Reason is
+            PhysicsSchedulerDeadlineReason.PeriapsisEvent;
+        double? distanceToActive = ActiveVessel is { } active
+            && !ReferenceEquals(active, vessel)
+            ? (vessel.Position - active.Position).Magnitude
+            : null;
+
+        var inputs = new SimulationInterestInputs(
+            IsActiveVessel: ReferenceEquals(vessel, ActiveVessel),
+            IsPilotControlled: ReferenceEquals(vessel, ActiveVessel),
+            IsMissionControlled: false,
+            IsSelected: ReferenceEquals(vessel, ActiveVessel),
+            HasThrust: wakeCommand,
+            HasPendingCommand: wakeCommand,
+            HasDockingOrContact: isDocked
+                || vessel.HasSurfaceContact
+                || vessel.IsAttemptingTowerCatch,
+            IsAtmosphereOrReentry: forceSensitive
+                || vessel.IsAttemptingTowerCatch,
+            HasPendingSoiTransition: soiOrDeadline,
+            SecondsUntilNextDeadline: secondsUntilDeadline,
+            IsMissionCriticalState: vessel.StructuralControlLost
+                || vessel.IsCaught
+                || vessel.IsAttemptingTowerCatch,
+            DistanceToActiveVesselM: distanceToActive,
+            DistanceToInteractionM: vessel.IsAttemptingTowerCatch ? 0.0 : null);
+
+        return SimulationInterestPolicy.Classify(inputs);
+    }
+
     private static bool IsFinitePosition(Vector3d position) =>
         double.IsFinite(position.X)
         && double.IsFinite(position.Y)
