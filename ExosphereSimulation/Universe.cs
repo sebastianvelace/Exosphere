@@ -1290,6 +1290,17 @@ public class Universe
     /// false and the existing dispatch path is authoritative.
     /// </summary>
     public SimulationInterestDecision GetSimulationInterestDecision(Vessel vessel)
+        => GetSimulationInterestDecision(vessel, SimulationExternalInterestInputs.None);
+
+    /// <summary>
+    /// Builds the same observational decision while applying a game-layer snapshot for
+    /// mission callbacks and vehicle-system alerts. The snapshot is consumed only for
+    /// classification; this method still never advances time, changes rails, or skips a
+    /// physics tick.
+    /// </summary>
+    public SimulationInterestDecision GetSimulationInterestDecision(
+        Vessel vessel,
+        SimulationExternalInterestInputs externalInputs)
     {
         ArgumentNullException.ThrowIfNull(vessel);
         if (_bodies.Count == 0
@@ -1349,7 +1360,7 @@ public class Universe
             DistanceToActiveVesselM: distanceToActive,
             DistanceToInteractionM: vessel.IsAttemptingTowerCatch ? 0.0 : null);
 
-        return SimulationInterestPolicy.Classify(inputs);
+        return SimulationInterestPolicy.Classify(inputs, externalInputs);
     }
 
     private static bool IsFinitePosition(Vector3d position) =>

@@ -74,6 +74,57 @@ public sealed class SimulationInterestPolicyTests
     }
 
     [Fact]
+    public void ExternalSystemsAlertWakesADeferredVesselWithoutPromotingItToActive()
+    {
+        var external = SimulationExternalInterestInputs.None with
+        {
+            HasSystemsAlert = true,
+        };
+
+        var decision = SimulationInterestPolicy.Classify(BaseInputs(), external);
+
+        Assert.Equal(SimulationInterestTier.Proximity, decision.Tier);
+        Assert.Equal(SimulationWakeReason.SystemsAlert, decision.WakeReasons);
+        Assert.False(decision.AllowsDeferredWork);
+    }
+
+    [Fact]
+    public void ExternalMissionCriticalStateHasActivePrecedenceAndRetainsReasons()
+    {
+        var external = SimulationExternalInterestInputs.None with
+        {
+            IsMissionControlled = true,
+            IsMissionCriticalState = true,
+            HasPendingMissionCallback = true,
+        };
+
+        var decision = SimulationInterestPolicy.Classify(BaseInputs(), external);
+
+        Assert.Equal(SimulationInterestTier.Active, decision.Tier);
+        Assert.Equal(
+            SimulationWakeReason.MissionCriticalState | SimulationWakeReason.MissionCallback,
+            decision.WakeReasons);
+        Assert.False(decision.AllowsDeferredWork);
+    }
+
+    [Fact]
+    public void ExternalEntryStateComposesWithAUserCommand()
+    {
+        var external = SimulationExternalInterestInputs.None with
+        {
+            IsAtmosphereOrReentry = true,
+        };
+        var inputs = BaseInputs() with { HasPendingCommand = true };
+
+        var decision = SimulationInterestPolicy.Classify(inputs, external);
+
+        Assert.Equal(SimulationInterestTier.Proximity, decision.Tier);
+        Assert.Equal(
+            SimulationWakeReason.Command | SimulationWakeReason.AtmosphereReentry,
+            decision.WakeReasons);
+    }
+
+    [Fact]
     public void WakeReasonsComposeDeterministically()
     {
         var inputs = BaseInputs() with

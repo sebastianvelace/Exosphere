@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Systems;
 using Exosphere.Simulation.Math;
 
@@ -40,6 +41,57 @@ public partial class SystemsController : Node
 
     /// <summary>Mapped systems phase for the active mission phase (for HUD / tests).</summary>
     public SystemsMissionPhase CurrentSystemsPhase { get; private set; } = SystemsMissionPhase.Idle;
+
+    /// <summary>
+    /// Creates the game-layer portion of the observational interest snapshot. It is only
+    /// valid for the active vessel: these systems are intentionally not instantiated for
+    /// every distant vessel. The scheduler remains unchanged; this is a parity boundary
+    /// for a future, separately gated deferred-work implementation.
+    /// </summary>
+    public SimulationExternalInterestInputs BuildSimulationInterestInputs()
+    {
+        MissionPhase phase = MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH;
+        bool missionControlled = phase is MissionPhase.COUNTDOWN
+            or MissionPhase.IGNITION
+            or MissionPhase.LIFTOFF
+            or MissionPhase.ASCENT_SH
+            or MissionPhase.MAX_Q
+            or MissionPhase.MECO
+            or MissionPhase.SEPARATION
+            or MissionPhase.ASCENT_SHIP
+            or MissionPhase.ENTRY
+            or MissionPhase.PEAK_HEATING
+            or MissionPhase.AERO_DESCENT
+            or MissionPhase.RETRO_BURN
+            or MissionPhase.FINAL_DESCENT;
+        bool missionCritical = phase is MissionPhase.LIFTOFF
+            or MissionPhase.MAX_Q
+            or MissionPhase.MECO
+            or MissionPhase.SEPARATION
+            or MissionPhase.ENTRY
+            or MissionPhase.PEAK_HEATING
+            or MissionPhase.AERO_DESCENT
+            or MissionPhase.RETRO_BURN
+            or MissionPhase.FINAL_DESCENT
+            or MissionPhase.LANDED
+            or MissionPhase.CAUGHT
+            or MissionPhase.CRASHED;
+        bool systemsAlert = ControlLimited
+            || LifeSupport.OxygenAlert
+            || LifeSupport.CO2Alert
+            || Power.LowPowerAlert
+            || Power.NoPowerAlert
+            || Thermal.HotAlert
+            || Thermal.ColdAlert
+            || (!Comms.HasSignal && !Comms.PlasmaBlackout);
+
+        return new SimulationExternalInterestInputs(
+            IsMissionControlled: missionControlled,
+            IsMissionCriticalState: missionCritical,
+            IsAtmosphereOrReentry: MissionManager.Instance?.InDescent == true,
+            HasPendingMissionCallback: false,
+            HasSystemsAlert: systemsAlert);
+    }
 
     public override void _Ready()
     {

@@ -284,6 +284,39 @@ public sealed class SimulationInterestUniverseParityTests
     }
 
     [Fact]
+    public void ExternalSystemsAlertIsObservedWithoutMutatingUniverseState()
+    {
+        var body = Body();
+        var active = new Vessel("active")
+        {
+            Position = Vector3d.Zero,
+            Velocity = Vector3d.Zero,
+            ReferenceBodyId = body.Id,
+        };
+        var candidate = SafeRailVessel(body, "systems-alert");
+        var universe = new Universe { ActiveVessel = active, TimeScale = 100.0 };
+        universe.AddBody(body);
+        universe.AddVessel(active);
+        universe.AddVessel(candidate);
+
+        Vector3d positionBefore = candidate.Position;
+        Vector3d velocityBefore = candidate.Velocity;
+        bool railsBefore = candidate.IsOnRails;
+        double epochBefore = universe.CurrentTime;
+
+        SimulationInterestDecision decision = universe.GetSimulationInterestDecision(
+            candidate,
+            SimulationExternalInterestInputs.None with { HasSystemsAlert = true });
+
+        Assert.Equal(SimulationInterestTier.Proximity, decision.Tier);
+        AssertContainsFlag(decision.WakeReasons, SimulationWakeReason.SystemsAlert);
+        Assert.Equal(positionBefore, candidate.Position);
+        Assert.Equal(velocityBefore, candidate.Velocity);
+        Assert.Equal(railsBefore, candidate.IsOnRails);
+        Assert.Equal(epochBefore, universe.CurrentTime);
+    }
+
+    [Fact]
     public void PolicyMatrixCoversStagingDockingSoiEdlAndSystemsWakeReasons()
     {
         var cases = new[]

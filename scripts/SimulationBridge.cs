@@ -19,6 +19,22 @@ public partial class SimulationBridge : Node
     public Vessel?  ActiveVessel => Universe.ActiveVessel;
 
     /// <summary>
+    /// Observes interest for one vessel and overlays authoritative active-mission/system
+    /// state when the vessel is the controlled craft. This does not enable deferred work,
+    /// mutate rails, or change the current physics dispatch path.
+    /// </summary>
+    public SimulationInterestDecision GetSimulationInterestDecision(Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        SimulationExternalInterestInputs externalInputs =
+            ReferenceEquals(vessel, ActiveVessel)
+                ? SystemsController.Instance?.BuildSimulationInterestInputs()
+                    ?? SimulationExternalInterestInputs.None
+                : SimulationExternalInterestInputs.None;
+        return Universe.GetSimulationInterestDecision(vessel, externalInputs);
+    }
+
+    /// <summary>
     /// Simulation seconds committed by the most recently completed Universe tick.
     /// Systems that model rates must consume this value rather than multiplying the
     /// current render-frame delta by TimeScale; the latter would double-count time when

@@ -39,6 +39,12 @@ public enum SimulationWakeReason
     /// <summary>Input validation failed; the decision must remain fail-closed.</summary>
     InvalidInput = 1 << 7,
 
+    /// <summary>A mission callback or phase transition still needs prompt service.</summary>
+    MissionCallback = 1 << 8,
+
+    /// <summary>A life-support, power, thermal, or communications alert is active.</summary>
+    SystemsAlert = 1 << 9,
+
     // Descriptive aliases for callers that prefer the wording used in the phase plan.
     DockingOrContact = DockingContact,
     AtmosphereOrReentry = AtmosphereReentry,
@@ -98,6 +104,27 @@ public readonly record struct SimulationInterestInputs(
     }
 }
 
+/// <summary>
+/// Immutable state supplied by the game layer when a mission controller or vehicle
+/// systems have information that the pure vessel snapshot cannot see. This boundary is
+/// deliberately Godot-free and has no mutation or time-advancement semantics.
+/// </summary>
+public readonly record struct SimulationExternalInterestInputs(
+    bool IsMissionControlled,
+    bool IsMissionCriticalState,
+    bool IsAtmosphereOrReentry,
+    bool HasPendingMissionCallback,
+    bool HasSystemsAlert)
+{
+    /// <summary>No game-layer override is present.</summary>
+    public static SimulationExternalInterestInputs None => new(
+        IsMissionControlled: false,
+        IsMissionCriticalState: false,
+        IsAtmosphereOrReentry: false,
+        HasPendingMissionCallback: false,
+        HasSystemsAlert: false);
+}
+
 /// <summary>Numeric thresholds for one deterministic interest decision.</summary>
 public readonly record struct SimulationInterestPolicyOptions(
     double ProximityRadiusM,
@@ -148,13 +175,13 @@ public readonly record struct SimulationInterestDecision(
 }
 
 /// <summary>
-/// Pure CPU policy primitive for phase 45. It is intentionally not wired into Universe,
-/// Godot, project settings, or the current scheduler. The default runtime configuration
+/// Pure CPU policy primitive for phase 45. It is not wired into the scheduler or project
+/// settings; observational adapters may query it, but the default runtime configuration
 /// remains off until a later parity gate promotes it.
 /// </summary>
 public static class SimulationInterestPolicy
 {
-    /// <summary>This policy is not enabled by default; this file has no runtime caller yet.</summary>
+    /// <summary>This policy is not enabled by default; it cannot skip work by itself.</summary>
     public const bool EnabledByDefault = false;
 
     /// <summary>
@@ -165,6 +192,17 @@ public static class SimulationInterestPolicy
     public static SimulationInterestDecision Classify(
         SimulationInterestInputs inputs,
         SimulationInterestPolicyOptions? options = null)
+        => Classify(inputs, SimulationExternalInterestInputs.None, options);
+
+    /// <summary>
+    /// Classifies a vessel snapshot together with an optional game-layer state snapshot.
+    /// This overload remains side-effect-free and keeps the default vessel-only API
+    /// compatible with callers that have no mission or systems controller.
+    /// </summary>
+    public static SimulationInterestDecision Classify(
+        SimulationInterestInputs inputs,
+        SimulationExternalInterestInputs externalInputs,
+        SimulationInterestPolicyOptions? options = null)
     {
         var effectiveOptions = options ?? SimulationInterestPolicyOptions.Default;
         if (!inputs.IsValid || !effectiveOptions.IsValid)
@@ -174,7 +212,8 @@ public static class SimulationInterestPolicy
                 SimulationWakeReason.InvalidInput);
         }
 
-        SimulationWakeReason wakeReasons = GetWakeUpReasonsValidated(inputs, effectiveOptions);
+        SimulationWakeReason wakeReasons = GetWakeUpReasonsValidated(
+            inputs, externalInputs, effectiveOptions);
 
         // Selection and mission ownership are promoted to Active even when they also
         // carry a wake reason. This keeps player/mission state at full resolution.
@@ -182,7 +221,9 @@ public static class SimulationInterestPolicy
             || inputs.IsPilotControlled
             || inputs.IsMissionControlled
             || inputs.IsSelected
-            || inputs.IsMissionCriticalState)
+            || inputs.IsMissionCriticalState
+            || externalInputs.IsMissionControlled
+            || externalInputs.IsMissionCriticalState)
         {
             return new(SimulationInterestTier.Active, wakeReasons);
         }
@@ -210,16 +251,24 @@ public static class SimulationInterestPolicy
     public static SimulationWakeReason GetWakeUpReasons(
         SimulationInterestInputs inputs,
         SimulationInterestPolicyOptions? options = null)
+        => GetWakeUpReasons(inputs, SimulationExternalInterestInputs.None, options);
+
+    /// <summary>Returns wake flags after applying an external mission/systems snapshot.</summary>
+    public static SimulationWakeReason GetWakeUpReasons(
+        SimulationInterestInputs inputs,
+        SimulationExternalInterestInputs externalInputs,
+        SimulationInterestPolicyOptions? options = null)
     {
         var effectiveOptions = options ?? SimulationInterestPolicyOptions.Default;
         if (!inputs.IsValid || !effectiveOptions.IsValid)
             return SimulationWakeReason.InvalidInput;
 
-        return GetWakeUpReasonsValidated(inputs, effectiveOptions);
+        return GetWakeUpReasonsValidated(inputs, externalInputs, effectiveOptions);
     }
 
     private static SimulationWakeReason GetWakeUpReasonsValidated(
         SimulationInterestInputs inputs,
+        SimulationExternalInterestInputs externalInputs,
         SimulationInterestPolicyOptions options)
     {
         SimulationWakeReason reasons = SimulationWakeReason.None;
@@ -242,6 +291,14 @@ public static class SimulationInterestPolicy
             reasons |= SimulationWakeReason.Selection;
         if (inputs.IsMissionControlled || inputs.IsMissionCriticalState)
             reasons |= SimulationWakeReason.MissionCriticalState;
+        if (externalInputs.IsMissionControlled || externalInputs.IsMissionCriticalState)
+            reasons |= SimulationWakeReason.MissionCriticalState;
+        if (externalInputs.IsAtmosphereOrReentry)
+            reasons |= SimulationWakeReason.AtmosphereReentry;
+        if (externalInputs.HasPendingMissionCallback)
+            reasons |= SimulationWakeReason.MissionCallback;
+        if (externalInputs.HasSystemsAlert)
+            reasons |= SimulationWakeReason.SystemsAlert;
 
         return reasons;
     }
