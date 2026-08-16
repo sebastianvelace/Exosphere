@@ -18,12 +18,15 @@ Smoke framebuffer con `EXOSPHERE_RENDER_PROBE=1`, 11 muestras después del calen
 | Earth pad normal | 1,098.077 ms | 1,102.228 ms | 9,774 | 1,218,406 | 15,772 | ~598 MB |
 | A/B `hide_pad` | 991.570 ms | 996.235 ms | 9,774 | 1,218,406 | 15,772 | ~598 MB |
 | A/B `no_directional_shadows` | 984.074 ms | 987.809 ms | 8,035 | 982,074 | 12,293 | ~598 MB |
+| A/B `hide_sky` | 416.502 ms | 424.003 ms | 9,773 | 1,218,394 | 15,772 | ~598 MB |
 
 Cada corrida terminó con `SMOKE_OK` y captura PNG válida. `hide_pad` no cambió los contadores
 del renderer, así que no se promoverá una optimización del pad sin una medición por nodo o una
 captura en hardware físico. Desactivar todas las sombras direccionales reduce aproximadamente
 22% los draw calls y primitivas, pero cambia la lectura visual; queda como candidato de calidad
-`Low`, no como cambio oficial predeterminado.
+`Low`, no como cambio oficial predeterminado. `hide_sky` redujo aproximadamente 62% el tiempo
+de render en este host, confirmando que el sky shader atmosférico es el cuello de botella
+dominante; eliminarlo no es una solución visual aceptable.
 
 ## Cambio seguro promovido
 
@@ -36,7 +39,7 @@ siguiente debe decidir si se precalcula fuera del frame o se usa una malla cache
 
 ## Instrumentación A/B
 
-El probe opt-in acepta `EXOSPHERE_RENDER_AB` con estas variantes: `hide_pad`,
+El probe opt-in acepta `EXOSPHERE_RENDER_AB` con estas variantes: `hide_pad`, `hide_sky`,
 `no_directional_shadows`, `hide_launch_effects`, `hide_vessel`, `hide_hud`, `hide_starfield`
 y `hide_earth_ground`. No tienen efecto si `EXOSPHERE_RENDER_PROBE` no está activado y no
 alteran el juego normal.

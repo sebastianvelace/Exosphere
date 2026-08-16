@@ -24,6 +24,10 @@ require_text "$PROBE" 'no_directional_shadows' \
   "probe must expose a directional-shadow A/B variant"
 require_text "$PROBE" 'hide_pad' \
   "probe must expose a launch-pad A/B variant"
+require_text "$PROBE" 'hide_sky' \
+  "probe must expose an atmosphere-sky A/B variant"
+require_text "$PROBE" 'sky_quality_low' \
+  "probe must expose a low-atmosphere-quality A/B variant"
 require_text "$PROBE" 'ViewportSetMeasureRenderTime' \
   "probe must enable viewport render measurements"
 require_text "$PROBE" 'ViewportGetMeasuredRenderTimeCpu' \

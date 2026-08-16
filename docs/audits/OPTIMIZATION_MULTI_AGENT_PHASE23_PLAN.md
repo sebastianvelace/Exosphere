@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 38 medida; diagnóstico de render/presentación con probe A/B y terreno marciano lazy; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 39 medida; A/B de calidad del sky confirma una reducción potencial de ~28% sin retirar la atmósfera; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -194,7 +194,10 @@ probe de render in-process. En el host llvmpipe, el smoke Earth normal midió `1
 CPU render y `1,102.228 ms` GPU por frame, con `9,774` objetos, `1,218,406` primitivas y
 `15,772` draw calls. El A/B sin sombras bajó a `984.074 ms`, `8,035` objetos, `982,074`
 primitivas y `12,293` draw calls; el A/B ocultando el pad no cambió los contadores, así que
-no se atribuye el cuello de botella al pad sin una medición de hardware/nodo más precisa.
+no se atribuye el cuello de botella al pad sin una medición de hardware/nodo más precisa. El
+A/B ocultando el sky bajó a `416.502 ms` CPU y `424.003 ms` GPU, confirmando que el shader
+atmosférico es el cuello de botella dominante en este backend; no se elimina porque rompería
+la escena.
 
 `MarsTerrainController` dejó de construir síncronamente su malla 96×96 durante el arranque
 Earth. Ahora sólo se crea al acercarse realmente a Mars y registra su coste puntual. Esto es
@@ -202,12 +205,29 @@ una mejora segura de trabajo innecesario, no una afirmación de FPS: el backend 
 variación de arranque y las corridas A/B terminaron como `SMOKE_OK`, no como benchmark de GPU
 física.
 
-El probe permite las variantes opt-in `hide_pad`, `no_directional_shadows`,
+El probe permite las variantes opt-in `hide_pad`, `hide_sky`, `no_directional_shadows`,
 `hide_launch_effects`, `hide_vessel`, `hide_hud`, `hide_starfield` y `hide_earth_ground`.
-Se conserva la configuración oficial de sombras; la siguiente fase probará una calidad baja
-con gates visuales y medirá VFX/HUD durante ignición, reentrada y captura.
+Se conserva la configuración oficial de sombras y la calidad atmosférica `0.60`; la siguiente
+fase probará una calidad baja del sky con gates visuales y medirá VFX/HUD durante ignición,
+reentrada y captura.
 
 Informe reproducible: `PERF_RENDER_PRESENTATION_PHASE38_REPORT.md`.
+
+## Resultado de la fase 39 — A/B de calidad del sky atmosférico
+
+El probe midió el uniforme ya existente `atmosphere_quality` sin alterar el valor oficial.
+En el host llvmpipe, `0.60` dio `1,098.077 ms` CPU render y `1,102.228 ms` GPU; `0.25`
+dio `788.115 ms` y `795.604 ms`, una reducción aproximada de `28%` con los mismos
+`9,774` objetos, `1,218,406` primitivas y `15,772` draw calls. Retirar completamente el
+sky baja a `424.003 ms` GPU, confirmando la atribución pero no siendo una solución visual.
+
+Se agregaron las variantes opt-in `sky_quality_low` (`0.25`) y `sky_quality_min` (`0.0`)
+al probe; el renderer normal sigue en `0.60`. La captura pad baja no muestra una regresión
+obvia, pero no valida terminador, eclipse, limbo ni Mars/Venus. No se promueve aún: la
+siguiente etapa debe ejecutar la matriz visual completa y medir una GPU física antes de
+convertirlo en preset `Low`.
+
+Informe reproducible: `PERF_SKY_QUALITY_AB_PHASE39_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 

@@ -96,6 +96,9 @@ public partial class RenderPerformanceProbe : Node
                 root.FindChild("StarfieldController", true, false), false),
             "hide_earth_ground" => SetVisible(
                 root.FindChild("EarthGroundController", true, false), false),
+            "hide_sky" => DisableSky(root),
+            "sky_quality_low" => SetSkyQuality(root, 0.25f),
+            "sky_quality_min" => SetSkyQuality(root, 0.0f),
             "no_directional_shadows" => DisableDirectionalShadows(root),
             _ => false,
         };
@@ -129,6 +132,24 @@ public partial class RenderPerformanceProbe : Node
         if (root.FindChild("DirectionalLight3D", true, false) is not DirectionalLight3D light)
             return false;
         light.ShadowEnabled = false;
+        return true;
+    }
+
+    private static bool DisableSky(Node root)
+    {
+        if (root.FindChild("WorldEnvironment", true, false) is not WorldEnvironment world
+            || world.Environment == null)
+            return false;
+        world.Environment.Sky = null;
+        return true;
+    }
+
+    private static bool SetSkyQuality(Node root, float quality)
+    {
+        if (root.FindChild("WorldEnvironment", true, false) is not WorldEnvironment world
+            || world.Environment?.Sky?.SkyMaterial is not ShaderMaterial material)
+            return false;
+        material.SetShaderParameter("atmosphere_quality", quality);
         return true;
     }
 
