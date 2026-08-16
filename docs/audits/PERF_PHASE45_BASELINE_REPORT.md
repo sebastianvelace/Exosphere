@@ -51,6 +51,12 @@ El mismo reporte midió `hud_capture_bytes=1,601.5 B` en `full_single`. Es una
 señal administrada del presenter, no un frame-time de Godot; sirve como baseline
 para la optimización de presentación de esta oleada.
 
+Después de la optimización localizada del presenter, la misma métrica quedó en
+`961.5 B` (`-40.0%`). El p95 del scheduler mixto cambió de `4.4341` a `5.4049 ms`
+entre corridas, por lo que esa variación no se atribuye al cambio ni se presenta
+como una mejora de CPU. El detalle y la decisión están en
+`PERF_HUD_PRESENTATION_PHASE45_REPORT.md`.
+
 ## Preflight y bloqueo de framebuffer
 
 Los contratos estáticos de render/sky y la compilación Godot pasan. La nueva A/B

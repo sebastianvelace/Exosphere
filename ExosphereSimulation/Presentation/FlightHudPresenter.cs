@@ -89,6 +89,14 @@ public sealed class FlightHudPresenter
     private double _smoothedG;
     private string? _activeVesselId;
     private readonly List<EngineReadout> _engineReadoutScratch = new(39);
+    private readonly List<FlightAlertSnapshot> _alertScratch = new(6);
+
+    private enum AlertValueFormat
+    {
+        G,
+        KiloPascal,
+        Percent,
+    }
 
     public FlightHudSnapshot Capture(
         Universe universe,
@@ -267,26 +275,26 @@ public sealed class FlightHudPresenter
         int nominalEngines,
         int failedEngines)
     {
-        var alerts = new List<FlightAlertSnapshot>();
+        _alertScratch.Clear();
 
         AddThresholdAlert(
-            alerts, "LOAD-G", g, 4.0, 3.7, 6.0,
-            "CREW LOAD", $"{g:F1} g", "4.0 g",
+            _alertScratch, "LOAD-G", g, 4.0, 3.7, 6.0,
+            "CREW LOAD", AlertValueFormat.G, "4.0 g",
             "Reduce thrust or adjust the flight profile");
         AddThresholdAlert(
-            alerts, "MAX-Q", dynamicPressure, 35_000.0, 30_000.0, 55_000.0,
-            "DYNAMIC PRESSURE", $"{dynamicPressure / 1000.0:F1} kPa", "35.0 kPa",
+            _alertScratch, "MAX-Q", dynamicPressure, 35_000.0, 30_000.0, 55_000.0,
+            "DYNAMIC PRESSURE", AlertValueFormat.KiloPascal, "35.0 kPa",
             "Throttle down until aerodynamic load decreases");
 
         if (liquidCapacity > 0.0)
             AddLowAlert(
-                alerts, "FUEL-LOW", liquidFraction, 0.12, 0.15,
-                "FUEL RESERVE", $"{liquidFraction * 100.0:F0}%", "12%",
+                _alertScratch, "FUEL-LOW", liquidFraction, 0.12, 0.15,
+                "FUEL RESERVE", "12%",
                 "Review burn plan and reserve margin");
         if (oxidizerCapacity > 0.0)
             AddLowAlert(
-                alerts, "OX-LOW", oxidizerFraction, 0.12, 0.15,
-                "OXIDIZER RESERVE", $"{oxidizerFraction * 100.0:F0}%", "12%",
+                _alertScratch, "OX-LOW", oxidizerFraction, 0.12, 0.15,
+                "OXIDIZER RESERVE", "12%",
                 "Review burn plan and reserve margin");
 
         bool activeFlight = !isGroundHeld
@@ -295,7 +303,7 @@ public sealed class FlightHudPresenter
         SetLatch("TRAJECTORY", activeFlight && impactTrajectory, !impactTrajectory);
         if (_latchedAlerts.Contains("TRAJECTORY"))
         {
-            alerts.Add(new FlightAlertSnapshot(
+            _alertScratch.Add(new FlightAlertSnapshot(
                 "TRAJECTORY",
                 FlightAlertSeverity.Critical,
                 "IMPACT TRAJECTORY",
@@ -308,7 +316,7 @@ public sealed class FlightHudPresenter
         SetLatch("ENGINE-OUT", failedEngines > 0, failedEngines == 0);
         if (_latchedAlerts.Contains("ENGINE-OUT"))
         {
-            alerts.Add(new FlightAlertSnapshot(
+            _alertScratch.Add(new FlightAlertSnapshot(
                 "ENGINE-OUT",
                 failedEngines >= System.Math.Max(2, nominalEngines / 3)
                     ? FlightAlertSeverity.Critical
@@ -320,21 +328,23 @@ public sealed class FlightHudPresenter
                 _acknowledgedAlerts.Contains("ENGINE-OUT")));
         }
 
-        return alerts
-            .OrderByDescending(a => a.Severity)
-            .ThenBy(a => a.Code, StringComparer.Ordinal)
-            .ToArray();
+        if (_alertScratch.Count == 0)
+            return Array.Empty<FlightAlertSnapshot>();
+
+        SortAlerts(_alertScratch);
+        // A snapshot must remain stable after the next capture clears the scratch list.
+        return _alertScratch.ToArray();
     }
 
     private void AddThresholdAlert(
-        ICollection<FlightAlertSnapshot> alerts,
+        List<FlightAlertSnapshot> alerts,
         string code,
         double value,
         double trigger,
         double clear,
         double critical,
         string title,
-        string valueText,
+        AlertValueFormat valueFormat,
         string limit,
         string action)
     {
@@ -344,20 +354,19 @@ public sealed class FlightHudPresenter
             code,
             value >= critical ? FlightAlertSeverity.Critical : FlightAlertSeverity.Caution,
             title,
-            valueText,
+            FormatAlertValue(value, valueFormat),
             limit,
             action,
             _acknowledgedAlerts.Contains(code)));
     }
 
     private void AddLowAlert(
-        ICollection<FlightAlertSnapshot> alerts,
+        List<FlightAlertSnapshot> alerts,
         string code,
         double value,
         double trigger,
         double clear,
         string title,
-        string valueText,
         string limit,
         string action)
     {
@@ -369,10 +378,47 @@ public sealed class FlightHudPresenter
                 ? FlightAlertSeverity.Critical
                 : FlightAlertSeverity.Caution,
             title,
-            valueText,
+            FormatAlertValue(value, AlertValueFormat.Percent),
             limit,
             action,
             _acknowledgedAlerts.Contains(code)));
+    }
+
+    private static string FormatAlertValue(double value, AlertValueFormat format) =>
+        format switch
+        {
+            AlertValueFormat.G => $"{value:F1} g",
+            AlertValueFormat.KiloPascal => $"{value / 1000.0:F1} kPa",
+            AlertValueFormat.Percent => $"{value * 100.0:F0}%",
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
+        };
+
+    private static void SortAlerts(List<FlightAlertSnapshot> alerts)
+    {
+        // The HUD has at most six alert types. Insertion sort avoids LINQ iterators and a
+        // temporary ordering array while retaining the existing severity/code ordering.
+        for (int i = 1; i < alerts.Count; i++)
+        {
+            var candidate = alerts[i];
+            int j = i - 1;
+            while (j >= 0 && CompareAlerts(alerts[j], candidate) > 0)
+            {
+                alerts[j + 1] = alerts[j];
+                j--;
+            }
+
+            alerts[j + 1] = candidate;
+        }
+    }
+
+    private static int CompareAlerts(
+        FlightAlertSnapshot left,
+        FlightAlertSnapshot right)
+    {
+        int severity = right.Severity.CompareTo(left.Severity);
+        return severity != 0
+            ? severity
+            : string.CompareOrdinal(left.Code, right.Code);
     }
 
     private void SetLatch(string code, bool trigger, bool clear)
