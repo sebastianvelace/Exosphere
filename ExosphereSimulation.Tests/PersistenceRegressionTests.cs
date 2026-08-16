@@ -117,6 +117,31 @@ public sealed class PersistenceRegressionTests
     }
 
     [Fact]
+    public void SaveV2SystemsExtensionRoundTripsWithoutSchemaMigration()
+    {
+        using var systemsDocument = JsonDocument.Parse("""
+        {
+          "revision": 1,
+          "owner": "deferred-vessel",
+          "pendingDeadlineSeconds": 42.5
+        }
+        """);
+
+        var metadata = new SaveGameV2();
+        metadata.Systems["future.systems.snapshot"] = systemsDocument.RootElement.Clone();
+
+        var universe = new Universe();
+        universe.SetSimulationTime(17.25);
+        string json = SaveGameV2Json.Serialize(SaveGameV2Codec.Capture(universe, metadata));
+        var decoded = SaveGameV2Json.DeserializeOrMigrate(json);
+
+        Assert.True(decoded.Systems.TryGetValue("future.systems.snapshot", out var snapshot));
+        Assert.Equal(1, snapshot.GetProperty("revision").GetInt32());
+        Assert.Equal("deferred-vessel", snapshot.GetProperty("owner").GetString());
+        Assert.Equal(42.5, snapshot.GetProperty("pendingDeadlineSeconds").GetDouble());
+    }
+
+    [Fact]
     public void InvalidSaveIsRejectedBeforeLiveUniverseIsMutated()
     {
         var catalog = LoadCatalog();
