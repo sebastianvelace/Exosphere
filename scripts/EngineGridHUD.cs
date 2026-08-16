@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation.Presentation;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Propulsion;
 
@@ -32,15 +33,13 @@ public partial class EngineGridHUD : Control
 
     private int    _litEngines;
     private int    _nominalEngines = 33;
+    private int    _failedEngines;
     private double _throttle;
     private double _thrustKN;
     private double _twr;
     private double _ispEff;
     private double _massFlow;
     private bool   _twrValid;
-    private readonly List<double> _engineThrottles = new();
-    private readonly List<bool> _engineFailures = new();
-    private readonly List<EngineLifecycleState> _engineStates = new();
     private readonly List<EngineReadout> _readoutScratch = new();
     private int _drawEngineIndex;
     private double _telemetryAccumulator = double.MaxValue;
@@ -89,21 +88,16 @@ public partial class EngineGridHUD : Control
         int nominalEngines = 0;
         foreach (var engine in vessel.Parts.ActiveEngines)
             nominalEngines += System.Math.Max(1, engine.Definition.EngineCount);
-        _nominalEngines = System.Math.Max(1, nominalEngines);
-        _litEngines = System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
-        _engineThrottles.Clear();
-        _engineFailures.Clear();
-        _engineStates.Clear();
+        int declaredNominal = System.Math.Max(1, nominalEngines);
         vessel.FillEngineReadouts(body, _readoutScratch);
-        if (_readoutScratch.Count == _nominalEngines)
-        {
-            foreach (var row in _readoutScratch)
-            {
-                _engineThrottles.Add(row.Throttle);
-                _engineFailures.Add(row.FailureCode != null);
-                _engineStates.Add(row.State);
-            }
-        }
+        bool hasOneRowPerEngine = _readoutScratch.Count == declaredNominal;
+        _nominalEngines = hasOneRowPerEngine ? _readoutScratch.Count : declaredNominal;
+        _litEngines = hasOneRowPerEngine
+            ? EngineHudPresentation.CountDelivered(_readoutScratch)
+            : System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
+        _failedEngines = hasOneRowPerEngine
+            ? EngineHudPresentation.CountFailures(_readoutScratch)
+            : 0;
 
         double thrustN = vessel.GetCurrentThrust(body);
         _thrustKN = thrustN / 1000.0;
@@ -123,6 +117,9 @@ public partial class EngineGridHUD : Control
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
         DrawString(_labelFont, new Vector2(10, 16), "ENGINES",
             HorizontalAlignment.Left, -1, 10, Accent);
+        if (_failedEngines > 0)
+            DrawString(_valueFont, new Vector2(size.X - 43f, 16), $"FAIL {_failedEngines}",
+                HorizontalAlignment.Left, -1, 8, InterfaceTheme.Alert);
 
         float cx = size.X * 0.5f;
         float cy = 66f;
@@ -165,35 +162,29 @@ public partial class EngineGridHUD : Control
             var p = new Vector2(cx + radius * (float)System.Math.Cos(a),
                                 cy + radius * (float)System.Math.Sin(a));
             bool on = lit > 0;
-            bool failed = false;
-            bool starting = false;
+            EngineHudIndicatorState indicator = EngineHudIndicatorState.Off;
             double throttle = _throttle;
-            if (_engineThrottles.Count == _nominalEngines)
+            if (_readoutScratch.Count == _nominalEngines)
             {
-                throttle = _engineThrottles[_drawEngineIndex];
-                failed = _engineFailures[_drawEngineIndex];
-                starting = !_engineFailures[_drawEngineIndex]
-                    && _engineStates[_drawEngineIndex] is
-                        EngineLifecycleState.Chill
-                        or EngineLifecycleState.SpinPrime
-                        or EngineLifecycleState.Ignition
-                        or EngineLifecycleState.Ramp;
-                on = throttle > 1e-3;
+                var readout = _readoutScratch[_drawEngineIndex];
+                throttle = readout.Throttle;
+                indicator = EngineHudPresentation.Classify(readout);
+                on = EngineHudPresentation.IsDelivered(readout);
             }
             else if (on)
             {
                 lit--;
             }
             _drawEngineIndex++;
-            Color c = failed
+            Color c = indicator == EngineHudIndicatorState.Failed
                 ? InterfaceTheme.Alert
-                : starting
+                : indicator == EngineHudIndicatorState.Starting
                     ? InterfaceTheme.Warning
                 : on
                     ? (throttle >= 0.85 ? DotOnHot : DotOn)
                     : DotOff;
             DrawCircle(p, 2.8f, c);
-            if (on || failed)
+            if (on || indicator == EngineHudIndicatorState.Failed)
                 DrawArc(p, 3.8f, 0, Mathf.Tau, 12, new Color(c, 0.35f), 1.2f, true);
         }
         return lit;

@@ -7,6 +7,7 @@ using Exosphere.Simulation.Data;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
+using Exosphere.Simulation.Presentation;
 using Exosphere.Simulation.Propulsion;
 
 public partial class VesselRenderer : Node3D
@@ -1195,14 +1196,13 @@ public partial class VesselRenderer : Node3D
             // Commanded throttle is not the same as delivered thrust during chill/spin/ignition
             // or after an engine-out. Keep the plume consistent with the physical engine
             // telemetry; the pad startup controller supplies the separate pre-chamber glow.
-            float throttle = TargetVessel.ActiveEngineCount > 0
-                ? (float)TargetVessel.Throttle
-                : 0f;
+            TargetVessel.FillEngineReadouts(body, _engineReadoutScratch);
+            float throttle = (float)EngineHudPresentation.DeliveredThrottle(
+                _engineReadoutScratch);
             _plumes?.Update(throttle, _hasSuperHeavy, alt, pressureRatio, _selectedShipEngines);
             if (_usesGenericPlumes && _plumes != null)
             {
                 _perEngineThrottle.Clear();
-                TargetVessel.FillEngineReadouts(body, _engineReadoutScratch);
                 foreach (var row in _engineReadoutScratch)
                     _perEngineThrottle[row.InstanceId] = row.Throttle;
                 _plumes.UpdateGeneric(_perEngineThrottle, alt, pressureRatio);
