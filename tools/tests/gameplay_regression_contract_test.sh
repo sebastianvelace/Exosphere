@@ -16,12 +16,22 @@ require_pattern() {
 bash -n "$ROOT/tools/visual_playtest.sh"
 
 # Red is reserved for an actual FailureCode; starting or unloaded engines have
-# their own HUD state and must not be presented as failed.
-require_pattern scripts/EngineGridHUD.cs 'Color c = failed' 'engine failure color gate'
-require_pattern scripts/EngineGridHUD.cs 'EngineLifecycleState.Chill' 'engine startup state coloring'
+# their own HUD state and must not be presented as failed.  Accept the legacy
+# inline classifier and the newer shared presentation classifier so this gameplay
+# contract remains compatible with either already-reviewed HUD implementation.
+if rg -q --fixed-strings 'Color c = failed' "$ROOT/scripts/EngineGridHUD.cs"; then
+  require_pattern scripts/EngineGridHUD.cs 'EngineLifecycleState.Chill' 'engine startup state coloring'
+else
+  require_pattern scripts/EngineGridHUD.cs 'EngineHudPresentation.Classify(readout)' 'shared engine state classifier'
+  require_pattern ExosphereSimulation/Presentation/EngineHudPresentation.cs 'readout.FailureCode != null' 'engine failure semantics'
+fi
 
 # A plume follows delivered engine availability, not merely the throttle command.
-require_pattern scripts/VesselRenderer.cs 'TargetVessel.ActiveEngineCount > 0' 'delivered-thrust plume gate'
+if rg -q --fixed-strings 'TargetVessel.ActiveEngineCount > 0' "$ROOT/scripts/VesselRenderer.cs"; then
+  :
+else
+  require_pattern scripts/VesselRenderer.cs 'EngineHudPresentation.DeliveredThrottle(' 'delivered-thrust telemetry gate'
+fi
 
 # A map jump must clear stale conic, rails, attitude-rate and contact state.
 require_pattern ExosphereSimulation/Vessel.cs 'public void PrepareForTeleport()' 'teleport state reset API'
@@ -29,6 +39,12 @@ require_pattern scripts/SimulationBridge.cs 'v.PrepareForTeleport();' 'orbit jum
 require_pattern scripts/SimulationBridge.cs 'v.ReferenceBodyId = body.Id;' 'body jump reference-body reset'
 require_pattern ExosphereSimulation/Vessel.cs 'ResetEngineRuntimeForTeleport();' 'teleport cuts residual engine torque'
 require_pattern scripts/SimulationBridge.cs 'ClearPendingGroundCommandsForTeleport();' 'body jump clears delayed ground commands'
+require_pattern scripts/SimulationBridge.cs 'AscentController.Instance?.CancelGuidanceForTeleport();' 'body jump cancels ascent writer'
+require_pattern scripts/SimulationBridge.cs 'HistoricalFlightProfileController.Instance?.CancelGuidanceForTeleport();' 'body jump cancels historical writer'
+require_pattern scripts/AscentController.cs 'public void CancelGuidanceForTeleport()' 'ascent teleport cancellation API'
+require_pattern ExosphereSimulation/Flight/StarbaseCatchPolicy.cs 'public static bool IsValidEntry(' 'pure Starbase catch eligibility policy'
+require_pattern scripts/SimulationBridge.cs 'ArmValidStarbaseReentryCatch();' 'pre-EDL valid reentry catch arm'
+require_pattern scripts/SimulationBridge.cs 'StarbaseCatchPolicy.IsValidEntry(' 'runtime uses fail-closed catch policy'
 require_pattern scripts/EDLController.cs 'TryArmStarbaseCatchForReentry(vessel, body);' 'normal Starbase reentry catch arming'
 require_pattern scripts/SimulationBridge.cs 'catchAnchorVessel' 'catch vessel anchors launch-pad presentation'
 require_pattern scripts/SimulationBridge.cs 'starshipReentryActive' 'Starship reentry keeps launch complex visible'
@@ -58,6 +74,9 @@ require_pattern scripts/EDLController.cs 'CatchAbortHorizontalSpeedToleranceMps 
 require_pattern scripts/EDLController.cs 'if (_phase is Edl.Catch or Edl.Final)' 'catch engine stepdown path'
 require_pattern scripts/EDLController.cs 'CatchContactPoints' 'catch pin datum descent target'
 require_pattern scripts/EDLController.cs 'Edl.Catch);' 'catch-phase scripted attitude scope'
+require_pattern scripts/LaunchPadController.cs 'CatchApproachArmed' 'launch pad exposes armed catch telemetry'
+require_pattern scripts/LaunchPadController.cs 'CATCH_VISUAL' 'launch pad emits catch visual telemetry'
+require_pattern scripts/LaunchPadController.cs 'float target = caught ? 1f : 0f;' 'visual closes only after physical catch'
 require_pattern tools/visual_playtest.sh 'Finish("CAUGHT")' 'visual catch acceptance'
 require_pattern tools/visual_playtest.sh 'QueueCapture("caught")' 'visual catch capture'
 require_pattern tools/visual_playtest.sh 'bridge.SetTimeScale(3.0);' 'accelerated post-flip validation'

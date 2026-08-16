@@ -42,6 +42,14 @@ public partial class LaunchPadController : Node3D
     private readonly List<(Node3D node, float offsetFromCenterZ)> _chopstickArmNodes = new();
     private float _towerCenterZ;
     private float _chopstickCloseAmount;   // 0 = open/idle, 1 = fully closed on a caught ship
+    private string _lastCatchVisualState = "UNARMED";
+
+    /// <summary>Presentation telemetry for the physical catch state.</summary>
+    public bool CatchApproachArmed { get; private set; }
+    public bool CatchCaptured { get; private set; }
+    public string CatchVisualState => CatchCaptured
+        ? "CAUGHT"
+        : CatchApproachArmed ? "ARMED" : "UNARMED";
 
     public override void _Ready()
     {
@@ -69,8 +77,23 @@ public partial class LaunchPadController : Node3D
         if (_chopstickArmNodes.Count == 0) return;
 
         // R12: a returning booster can be caught while Ship remains ActiveVessel.
-        bool caught = SimulationBridge.Instance?.Universe.Vessels
-            .Any(v => v.IsCaught) ?? false;
+        var vessels = SimulationBridge.Instance?.Universe.Vessels;
+        bool caught = vessels?.Any(v => v.IsCaught) ?? false;
+        bool armed = vessels?.Any(v => v.IsAttemptingTowerCatch) ?? false;
+        CatchCaptured = caught;
+        CatchApproachArmed = armed;
+
+        string visualState = CatchVisualState;
+        if (visualState != _lastCatchVisualState)
+        {
+            _lastCatchVisualState = visualState;
+            GD.Print($"[CATCH_VISUAL] state={visualState} arms=visible " +
+                $"physical={(armed || caught ? "armed" : "idle")}");
+        }
+
+        // An armed approach keeps the arms explicitly in their ready/open pose. Only a
+        // physical dual-pin settle is allowed to close them; merely entering the area or
+        // missing the corridor never fakes a capture.
         float target = caught ? 1f : 0f;
         const float closeSpeedPerSecond = 0.8f;   // ~1.25 s for a full open<->close sweep
         _chopstickCloseAmount = Mathf.MoveToward(

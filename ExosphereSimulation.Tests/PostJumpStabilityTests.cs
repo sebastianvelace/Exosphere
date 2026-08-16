@@ -119,6 +119,37 @@ public sealed class PostJumpStabilityTests
         Assert.Equal(0.0, appliedThrottle);
     }
 
+    [Fact]
+    public void TeleportResetKeepsInstalledDestinationAttitudeButZerosRatesAndCommands()
+    {
+        var destinationAttitude = Quaterniond.FromAxisAngle(
+            Vector3d.Right, 37.0 * MathUtils.DEG_TO_RAD);
+        var vessel = new Vessel("post-jump-attitude")
+        {
+            Orientation = destinationAttitude,
+            AngularVelocity = new Vector3d(0.20, -0.10, 0.08),
+            PitchYawRoll = new Vector3d(-0.7, 0.4, 0.2),
+            Throttle = 0.85,
+            IsOnRails = true,
+            OrbitalState = new OrbitalElements
+            {
+                ReferenceBodyId = "earth",
+                SemiMajorAxis = 7_000_000.0,
+                Eccentricity = 0.01,
+            },
+        };
+
+        vessel.PrepareForTeleport();
+
+        Assert.Equal(destinationAttitude.Rotate(Vector3d.Up),
+            vessel.Orientation.Rotate(Vector3d.Up));
+        Assert.Equal(Vector3d.Zero, vessel.AngularVelocity);
+        Assert.Equal(Vector3d.Zero, vessel.PitchYawRoll);
+        Assert.Equal(0.0, vessel.Throttle);
+        Assert.False(vessel.IsOnRails);
+        Assert.Null(vessel.OrbitalState);
+    }
+
     private static void AssertFinite(Vessel vessel, CelestialBody body)
     {
         AssertFinite(vessel.Position);

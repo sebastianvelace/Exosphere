@@ -36,7 +36,7 @@ public partial class EDLController : Control
     private bool _towerCatchAborted;
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
-    private const double EntrySpeed   = 1200.0;   // m/s surface speed to arm entry
+    private const double EntrySpeed   = StarbaseCatchPolicy.MinimumEntrySpeedMps;
 
     // ── Live telemetry (refreshed each frame) ─────────────────────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;

@@ -11,8 +11,8 @@ The screenshot combined three independent signals:
   red dots are not an "off" style: red is reserved for an actual `FailureCode`. Therefore that
   particular frame represents 33 failed engine instances, not 33 engines waiting to start.
 - A startup lifecycle state is amber and the current-stage telemetry reads the active engine
-  part. The plume is gated by `ActiveEngineCount`, so throttle alone cannot create a full thrust
-  plume after an engine-out.
+  part. The HUD and exterior plume now consume the same delivered-thrust rows, so throttle alone
+  cannot create a full thrust plume after an engine-out.
 
 The engine model remains deliberately stateful: command throttle can be non-zero while the
 engine is chilling, priming, igniting, ramping or failed. The HUD now exposes that distinction.
@@ -69,15 +69,16 @@ failures.
 
 | Check | Result |
 |---|---|
-| Targeted engine, catch, teleport and runtime tests | 33/33 passed |
+| New scheduler/HUD/jump/catch focused tests | 22/22 passed |
 | Post-`J` Earth/Mars/Venus stability tests | 4/4 passed |
-| Full xUnit suite after post-`J`/retrograde/reentry/thermal coverage | 596/596 passed |
+| Full xUnit suite after scheduler parity and gameplay coverage | 631/631 passed |
 | Godot C# build | 0 warnings, 0 errors |
-| Gameplay regression contract | PASS |
+| Gameplay regression and engine-HUD contracts | PASS |
+| Optimization contract suite | 38/38 PASS |
 | Visual harness contract | 1 valid + 11 invalid fixtures passed |
 | Normal orbital reentry harness contract | PASS; opt-in, non-demo, fail-closed |
-| EDL visual stages | ENTRY, peak heating, flip, retro and caught captures recorded |
-| EDL final acceptance | PASS: `CHECK tower_catch caught=True pins=2 relativeSpeed=0.030 angularSpeed=0.0000`; `SUMMARY reason=CAUGHT` |
+| EDL visual stages | ENTRY, peak heating, aero, flip, retro and caught captures recorded |
+| EDL final acceptance | PASS: `CHECK tower_catch caught=True pins=2 relativeSpeed=0.031 angularSpeed=0.0000`; `SUMMARY reason=CAUGHT`, 581 frames |
 
 The visual harness runs under llvmpipe in CI and is intentionally slower than real time. Its
 console warnings about X11 input and VSync are environment warnings, not simulation failures.
@@ -101,7 +102,12 @@ records `ORBITAL_REENTRY_OK`.
   the ordinary EDL/leg path.
 - The launch complex remains visible throughout an Earth Starship EDL/catch attempt and is
   anchored to the vessel actually returning when a booster is the catch candidate, rather than
-  always to `ActiveVessel`.
+  always to `ActiveVessel`. The arms emit `UNARMED → ARMED → CAUGHT`; they remain open while
+  armed and close only after `Vessel.IsCaught` is true.
+- The ascent framebuffer run reached pad, liftoff, Max-Q, hot-stage and separation with
+  `33/33` and `failedEngines=0` before being stopped because llvmpipe rendered at roughly
+  one second per frame. It is evidence for the corrected HUD semantics, not a claim of a
+  completed orbital gate.
 - A pre-fix normal orbital visual run reached `ENTRY` and `PEAK_HEATING` but ended in
   `GroundImpact`: the aft engine section was receiving bare-metal convective heating and was
   gone before the 8 km flip gate. `starship_engines` now declares the protected aft package,

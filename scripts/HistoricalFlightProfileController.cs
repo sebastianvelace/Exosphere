@@ -19,6 +19,22 @@ public partial class HistoricalFlightProfileController : Node
     /// <summary>True while a historical automatic flight sequence owns guidance.</summary>
     public bool IsEngaged => _active;
 
+    /// <summary>
+    /// Historical profiles are another possible attitude/throttle writer.  A navigation
+    /// jump must invalidate them just like the ordinary ascent and maneuver controllers;
+    /// otherwise a profile resumed on the old body can reapply stale commands after J.
+    /// </summary>
+    public void CancelGuidanceForTeleport()
+    {
+        _active = false;
+        var vessel = SimulationBridge.Instance?.ActiveVessel;
+        if (vessel == null) return;
+
+        vessel.Throttle = 0.0;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        vessel.SASEnabled = true;
+    }
+
     private bool _atlasProfile;
     private bool _geminiProfile;
     private bool _apolloProfile;

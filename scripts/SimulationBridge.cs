@@ -325,6 +325,7 @@ public partial class SimulationBridge : Node
         }
 
         Universe.Tick(delta);
+        ArmValidStarbaseReentryCatch();
         // Consumable and blackout systems integrate only the committed simulation
         // interval. This call is deliberately after the scheduler and before ascent/EDL
         // post-processors; render/UI controllers continue to use wall-clock delta.
@@ -401,7 +402,8 @@ public partial class SimulationBridge : Node
                 && (vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration));
             bool earthReturnActive = catchAnchorVessel.ReferenceBodyId == padEarth.Id;
             bool starshipReentryActive = earthReturnActive
-                && MissionManager.Instance?.InDescent == true
+                && (MissionManager.Instance?.InDescent == true
+                    || catchApproachActive)
                 && catchAnchorVessel.Parts.Parts.Any(part =>
                     part.Definition.IsStarshipFamily
                     && part.Definition.HasVehicleRole("command"));
@@ -449,9 +451,29 @@ public partial class SimulationBridge : Node
     /// </summary>
     public bool ArmTowerCatchApproach(Vessel? vessel)
     {
-        if (vessel == null || !vessel.HasCatchPins) return false;
+        if (vessel == null || !vessel.HasCatchPins
+            || !LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var body = Universe.GetDominantBody(vessel.Position);
+        if (body.Id != "earth" || vessel.IsDestroyed) return false;
         vessel.IsAttemptingTowerCatch = true;
         return true;
+    }
+
+    /// <summary>
+    /// Arms a valid normal Starbase entry before EDL's later-priority pass runs.  This
+    /// removes the one-frame gap where EDL was already descending but the launch complex
+    /// still used the old mission phase to decide visibility.  The policy remains strict:
+    /// no pins, non-Earth body, non-Starbase site, ascent, low-speed coast, or invalid
+    /// trajectory can arm this path.
+    /// </summary>
+    private void ArmValidStarbaseReentryCatch()
+    {
+        var vessel = ActiveVessel;
+        if (vessel == null || vessel.IsDestroyed) return;
+        var body = Universe.GetDominantBody(vessel.Position);
+        if (body?.Atmosphere == null) return;
+        TryArmStarbaseCatchForReentry(vessel, body);
     }
 
     /// <summary>
@@ -465,14 +487,34 @@ public partial class SimulationBridge : Node
         if (vessel == null || body == null || body.Id != "earth") return false;
         if (!LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
             return false;
-        if (!vessel.HasCatchPins) return false;
         bool isStarshipShip = vessel.Parts.Parts.Any(part =>
             part.Definition.IsStarshipFamily
             && part.Definition.HasVehicleRole("command"))
             && vessel.Parts.Parts.Any(part =>
                 part.Definition.IsStarshipFamily
                 && part.Definition.HasVehicleRole("ship_engines"));
-        return isStarshipShip && ArmTowerCatchApproach(vessel);
+        double altitude = vessel.GetAltitude(body);
+        Vector3d up = (vessel.Position - body.Position).Normalized;
+        double verticalSpeed = vessel.GetSurfaceVelocity(body).Dot(up);
+        double surfaceSpeed = vessel.GetSurfaceVelocity(body).Magnitude;
+        bool validEntry = StarbaseCatchPolicy.IsValidEntry(
+            body.Id,
+            LaunchSiteId,
+            vessel.IsDestroyed,
+            vessel.HasCatchPins,
+            isStarshipShip,
+            altitude,
+            body.Atmosphere?.MaxAltitude ?? double.NaN,
+            verticalSpeed,
+            surfaceSpeed);
+        if (!validEntry) return false;
+
+        bool newlyArmed = !vessel.IsAttemptingTowerCatch;
+        bool armed = ArmTowerCatchApproach(vessel);
+        if (newlyArmed && armed)
+            GD.Print($"[CATCH] state=ARMED valid=starbase-entry alt={altitude:F0} " +
+                $"speed={surfaceSpeed:F0} vUp={verticalSpeed:F0} pins={vessel.CatchContactPoints.Count}");
+        return armed;
     }
 
     private void SpawnPendingConstructedVessel(
@@ -1428,6 +1470,11 @@ public partial class SimulationBridge : Node
         // vessel reset so an interplanetary command queued under the old body cannot
         // re-apply stale attitude or throttle after JumpToBody installs the new orbit.
         SystemsController.Instance?.ClearPendingGroundCommandsForTeleport();
+        // A map jump is a discontinuity. Cancel every guidance owner before its next
+        // post-physics pass can write commands for the old body; PrepareForTeleport below
+        // then clears the sim-side rigid-body state when the destination is installed.
+        AscentController.Instance?.CancelGuidanceForTeleport();
+        HistoricalFlightProfileController.Instance?.CancelGuidanceForTeleport();
 
         if (MapViewController.Instance is { } map)
         {

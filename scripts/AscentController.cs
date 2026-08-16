@@ -196,6 +196,32 @@ public partial class AscentController : Control
         GD.Print("[ASCENT-AP] gravity-turn ASSIST disengaged");
     }
 
+    /// <summary>
+    /// Cancels every ascent writer before a discontinuous map jump.  The map jump changes
+    /// body, position and velocity immediately; leaving this controller engaged would make
+    /// its old phase write a gravity-turn command into the new body's orbit on the next
+    /// frame, which presents as an uncontrolled post-jump tumble.
+    /// </summary>
+    public void CancelGuidanceForTeleport()
+    {
+        _active = false;
+        _assist = false;
+        _phase = Phase.Idle;
+        _mecoStaged = false;
+        _ignitionT = 0.0;
+        Visible = false;
+
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.ActiveVessel is { } vessel)
+        {
+            vessel.Throttle = 0.0;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.SASEnabled = true;
+        }
+        if (bridge?.Universe is { } universe && universe.TimeScale > 1.0)
+            universe.TimeScale = 1.0;
+    }
+
     public override void _Process(double delta)
     {
         // Assist mode runs on its own (it does not require the full autopilot to be active).
