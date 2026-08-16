@@ -112,6 +112,58 @@ public sealed class SimulationInterestUniverseParityTests
     }
 
     [Fact]
+    public void AttitudeCommandWakesADeferredVesselWithZeroThrottle()
+    {
+        var body = Body();
+        var active = new Vessel("active")
+        {
+            Position = Vector3d.Zero,
+            Velocity = Vector3d.Zero,
+            ReferenceBodyId = body.Id,
+        };
+        var candidate = SafeRailVessel(body, "attitude-command");
+        var universe = new Universe { ActiveVessel = active, TimeScale = 100.0 };
+        universe.AddBody(body);
+        universe.AddVessel(active);
+        universe.AddVessel(candidate);
+
+        candidate.PitchYawRoll = new Vector3d(0.25, 0.0, 0.0);
+
+        SimulationInterestDecision decision =
+            universe.GetSimulationInterestDecision(candidate);
+
+        Assert.Equal(SimulationInterestTier.Proximity, decision.Tier);
+        Assert.Equal(0.0, candidate.Throttle);
+        AssertContainsFlag(decision.WakeReasons, SimulationWakeReason.Command);
+        AssertContainsFlag(decision.WakeReasons, SimulationWakeReason.AtmosphereReentry);
+        Assert.False(decision.AllowsDeferredWork);
+        Assert.Equal(
+            VesselPhysicsWorkload.FullPhysics,
+            universe.ClassifyMixedPhysicsWorkload(candidate));
+    }
+
+    [Fact]
+    public void NonFiniteAttitudeCommandFailsClosed()
+    {
+        var body = Body();
+        var candidate = SafeRailVessel(body, "invalid-attitude-command");
+        candidate.PitchYawRoll = new Vector3d(double.NaN, 0.0, 0.0);
+        var universe = new Universe();
+        universe.AddBody(body);
+        universe.AddVessel(candidate);
+
+        SimulationInterestDecision decision =
+            universe.GetSimulationInterestDecision(candidate);
+
+        Assert.Equal(SimulationInterestTier.Active, decision.Tier);
+        AssertContainsFlag(decision.WakeReasons, SimulationWakeReason.InvalidInput);
+        Assert.True(decision.IsFailClosed);
+        Assert.Equal(
+            VesselPhysicsWorkload.FullPhysics,
+            universe.ClassifyMixedPhysicsWorkload(candidate));
+    }
+
+    [Fact]
     public void DockingConnectionWakesTheSecondaryVessel()
     {
         var body = Body();

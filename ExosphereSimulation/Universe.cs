@@ -1125,12 +1125,26 @@ public class Universe
 
     private static bool HasWakeCommand(Vessel vessel) =>
         vessel.Throttle > 1e-3
-        || HasActiveEngineAboveThrottle(vessel, 1e-3);
+        || HasActiveEngineAboveThrottle(vessel, 1e-3)
+        || HasAttitudeCommand(vessel);
+
+    /// <summary>
+    /// A non-zero pilot/autopilot attitude command is a wake condition even when the
+    /// throttle is closed. Treating it as idle would let a future rail/deferred path
+    /// discard TVC/RCS torque and is especially dangerous immediately after a navigation
+    /// jump or during a powered attitude correction.
+    /// </summary>
+    private static bool HasAttitudeCommand(Vessel vessel) =>
+        vessel.PitchYawRoll.MagnitudeSquared > 1e-6;
 
     private static bool HasFinitePhysicalState(Vessel vessel) =>
         IsFinitePosition(vessel.Position)
         && IsFinitePosition(vessel.Velocity)
         && IsFinitePosition(vessel.AngularVelocity)
+        && IsFinitePosition(vessel.PitchYawRoll)
+        && double.IsFinite(vessel.Throttle)
+        && vessel.Throttle >= 0.0
+        && vessel.Throttle <= 1.0
         && double.IsFinite(vessel.Orientation.W)
         && double.IsFinite(vessel.Orientation.X)
         && double.IsFinite(vessel.Orientation.Y)

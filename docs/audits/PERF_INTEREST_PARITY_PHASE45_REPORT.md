@@ -23,7 +23,7 @@ existing `Universe.Tick` dispatcher is still the official runtime path.
 
 ## Fixtures and results
 
-`ExosphereSimulation.Tests/SimulationInterestUniverseParityTests.cs` exercises eight tests,
+`ExosphereSimulation.Tests/SimulationInterestUniverseParityTests.cs` exercises ten tests,
 including a five-row policy matrix for the requested transitions:
 
 | Scenario | Expected result | Covered contract |
@@ -36,14 +36,25 @@ including a five-row policy matrix for the requested transitions:
 | Tower-catch EDL | `Active` + mission-critical | contact, atmosphere and catch remain protected |
 | Invalid numeric state | `Active` + `InvalidInput` | fail-closed, never deferred |
 | Systems mission-critical matrix row | `Active` | future systems scheduler must preserve critical state |
+| Attitude command at zero throttle | `Proximity` + `Command` | TVC/RCS control cannot be deferred |
 
-Focused result: **8/8 passed**.
+Focused result: **10/10 passed**.
+
+The official visual ascent harness also passed with the attitude wake guard enabled:
+`--ascent --flight7 --run-id phase46-attitude-wake --skip-build` reached
+`ASCENT_ORBIT_OK`, captured liftoff, max-Q, hot-stage, separation and orbit, and reported
+33 booster engines / 6 ship engines with zero engine failures in its trace.
 
 The fixture caught and corrected a subtle policy error: the existing `DeferredRails` interval
 (`2 s`) is a bounded projection cadence, not a physical SOI deadline. Feeding it into the
 60-second wake window incorrectly promoted every coasting rail vessel to `Proximity`. The
 adapter now leaves the optional physical-deadline field empty for that cadence and uses the
 explicit `PeriapsisEvent` reason for the currently modeled safety boundary.
+
+The next safety check also found that the scheduler's wake predicate only considered throttle
+and active-engine demand. It now treats a finite non-zero `PitchYawRoll` command as a wake
+condition and rejects non-finite/out-of-range throttle or attitude state as invalid. This keeps
+TVC/RCS corrections observable even when a vessel is coasting with engines closed.
 
 ## What this does not prove
 
