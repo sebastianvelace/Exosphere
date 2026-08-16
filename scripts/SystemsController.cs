@@ -113,6 +113,19 @@ public partial class SystemsController : Node
     public override void _Ready()
     {
         Instance = this;
+
+        if (SaveSystem.PendingSystemsState is { } pending)
+        {
+            var bridge = SimulationBridge.Instance;
+            if (bridge?.ActiveVessel is { } active && bridge.Universe != null)
+            {
+                SaveSystem.PendingSystemsState = null;
+                RestoreSaveState(pending, active.Id, bridge.Universe.CurrentTime);
+            }
+            else
+                GD.PushWarning("[Systems] Loaded state deferred: active vessel is not ready.");
+        }
+
         // Flush delayed ground commands before HUD enqueues this frame's stick sample
         // and before onboard guidance (Ascent/EDL) overwrites PitchYawRoll.
         ProcessPriority = -50;
@@ -123,6 +136,66 @@ public partial class SystemsController : Node
             var hud = new SystemsHUD { Name = "SystemsHUD" };
             uiLayer.CallDeferred("add_child", hud);
         }
+    }
+
+    /// <summary>Captures all persistent systems state at one committed simulation epoch.</summary>
+    public VesselSystemsState CaptureSaveState(string vesselId, double simulationTime)
+    {
+        var state = new VesselSystemsState
+        {
+            VesselId = vesselId,
+            SimulationTime = simulationTime,
+            LifeSupport = LifeSupport.CaptureState(),
+            Power = Power.CaptureState(),
+            Thermal = Thermal.CaptureState(),
+            Comms = Comms.CaptureState(),
+        };
+        state.Validate();
+        return state;
+    }
+
+    /// <summary>
+    /// Restores a state already validated by SaveGameV2. Delayed ground commands are
+    /// intentionally discarded because their original link epoch may no longer exist.
+    /// </summary>
+    public void RestoreSaveState(
+        VesselSystemsState state,
+        string expectedVesselId,
+        double expectedSimulationTime)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        state.Validate();
+        if (!string.Equals(state.VesselId, expectedVesselId, StringComparison.Ordinal))
+            throw new System.IO.InvalidDataException(
+                "Loaded systems state targets another vessel.");
+        if (!double.IsFinite(expectedSimulationTime)
+            || System.Math.Abs(state.SimulationTime - expectedSimulationTime) > 1e-9)
+        {
+            throw new System.IO.InvalidDataException(
+                "Loaded systems state is at another epoch.");
+        }
+
+        LifeSupport.RestoreState(state.LifeSupport);
+        Power.RestoreState(state.Power);
+        Thermal.RestoreState(state.Thermal);
+        Comms.RestoreState(state.Comms);
+        GroundRelay.Clear();
+        ControlLimited = false;
+        CurrentSystemsPhase = MapMissionPhase(
+            MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
+    }
+
+    /// <summary>Clears system state when loading a legacy save with no system snapshot.</summary>
+    public void ResetForLoadedSimulation()
+    {
+        LifeSupport.Reset();
+        Power.Reset();
+        Thermal.Reset();
+        Comms.Reset();
+        GroundRelay.Clear();
+        ControlLimited = false;
+        CurrentSystemsPhase = MapMissionPhase(
+            MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
     }
 
     public override void _Process(double _delta)

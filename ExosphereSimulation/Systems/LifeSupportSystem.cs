@@ -25,6 +25,30 @@ public class LifeSupportSystem
     private const double EcLoadPerCrewActiveKw = 0.45;
     private const double EcLoadStandbyKw       = 0.15;
 
+    public LifeSupportState CaptureState() => new()
+    {
+        OxygenKg = OxygenKg,
+        CO2Kg = CO2Kg,
+        WaterKg = WaterKg,
+        FoodKg = FoodKg,
+        CrewAlive = CrewAlive,
+    };
+
+    public void RestoreState(LifeSupportState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        state.Validate();
+        OxygenKg = state.OxygenKg;
+        CO2Kg = state.CO2Kg;
+        WaterKg = state.WaterKg;
+        FoodKg = state.FoodKg;
+        CrewAlive = state.CrewAlive;
+        OxygenAlert = OxygenKg < MaxOxygen * 0.2;
+        CO2Alert = CO2Kg > MaxCO2 * 0.8;
+    }
+
+    public void Reset() => RestoreState(new LifeSupportState());
+
     public double GetEcLoadKw(int crewCount, SystemsMissionPhase phase)
     {
         if (crewCount <= 0 || !CrewAlive) return 0.0;

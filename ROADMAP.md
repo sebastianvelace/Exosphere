@@ -115,9 +115,13 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      autoritativas.
    - **Fase 48:** auditoría de persistencia/eventos en
      `docs/audits/PERF_PERSISTENCE_EVENT_PARITY_PHASE48_REPORT.md`. `SaveGameV2.Systems` conserva
-     extensiones JSON futuras, pero todavía no hay snapshot de sistemas por nave ni cola de
-     callbacks. El runtime diferido sigue bloqueado; se requiere validar captura/restauración
-     atómica en el mismo epoch antes de comparar un candidato contra FullPhysics.
+     extensiones JSON y `VesselSystems` añade un snapshot tipado por nave; el controlador de
+     juego actualmente captura/restaura sólo la nave activa en el mismo epoch. La cola de
+     comandos y callbacks aún no es persistente; el runtime diferido sigue bloqueado.
+   - **Fase 49 en curso:** snapshot de soporte vital, energía, térmica y comunicaciones integrado
+     en save/load con validación de identidad, epoch y límites físicos. Siguiente gate: crear
+     estado de sistemas para naves no activas y una cola de callbacks antes de comparar
+     reanudación diferida contra FullPhysics.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

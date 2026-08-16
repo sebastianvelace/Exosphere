@@ -15,6 +15,35 @@ public class CommsSystem
 
     private readonly PlasmaBlackoutModel _blackout = new();
 
+    public CommsState CaptureState() => new()
+    {
+        HasSignal = HasSignal,
+        SignalStrength = SignalStrength,
+        SignalDelaySeconds = SignalDelaySeconds,
+        LossOfSignalAlert = LossOfSignalAlert,
+        PlasmaBlackout = _blackout.CaptureState(),
+    };
+
+    public void RestoreState(CommsState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        state.Validate();
+        HasSignal = state.HasSignal;
+        SignalStrength = state.SignalStrength;
+        SignalDelaySeconds = state.SignalDelaySeconds;
+        LossOfSignalAlert = state.LossOfSignalAlert;
+        _blackout.RestoreState(state.PlasmaBlackout);
+    }
+
+    public void Reset()
+    {
+        HasSignal = true;
+        SignalStrength = 1.0;
+        SignalDelaySeconds = 0.0;
+        LossOfSignalAlert = false;
+        _blackout.Reset();
+    }
+
     /// <summary>
     /// True while the ionised shock layer of a hypersonic entry is reflecting the downlink.
     /// This is a DIFFERENT failure from geometric loss of signal: the antenna and the relay

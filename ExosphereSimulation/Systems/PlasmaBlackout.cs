@@ -97,6 +97,24 @@ public sealed class PlasmaBlackoutModel
     /// <summary>Longest blackout observed since the last <see cref="Reset"/> (s).</summary>
     public double LongestBlackoutSeconds { get; private set; }
 
+    public PlasmaBlackoutState CaptureState() => new()
+    {
+        IsBlackedOut = IsBlackedOut,
+        ElapsedSeconds = ElapsedSeconds,
+        LongestBlackoutSeconds = LongestBlackoutSeconds,
+        EngageDwellSeconds = _engageDwell,
+    };
+
+    public void RestoreState(PlasmaBlackoutState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        state.Validate();
+        IsBlackedOut = state.IsBlackedOut;
+        ElapsedSeconds = state.ElapsedSeconds;
+        LongestBlackoutSeconds = state.LongestBlackoutSeconds;
+        _engageDwell = state.EngageDwellSeconds;
+    }
+
     /// <summary>Advances the blackout state by <paramref name="dt"/> seconds.</summary>
     public void Tick(double dt, in PlasmaBlackoutInput condition)
     {

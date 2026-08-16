@@ -34,6 +34,34 @@ public class ThermalSystem
     private double _lastAeroHeatFluxWm2;
     private SystemsMissionPhase _lastPhase;
 
+    public ThermalState CaptureState() => new()
+    {
+        TemperatureK = TemperatureK,
+        HasLastSample = _hasLastSample,
+        LastSolarVisibility = _lastSolarVisibility,
+        LastInAtmosphere = _lastInAtmosphere,
+        LastAtmosphericTemp = _lastAtmosphericTemp,
+        LastAeroHeatFluxWm2 = _lastAeroHeatFluxWm2,
+        LastPhase = _lastPhase,
+    };
+
+    public void RestoreState(ThermalState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        state.Validate();
+        TemperatureK = state.TemperatureK;
+        _hasLastSample = state.HasLastSample;
+        _lastSolarVisibility = state.LastSolarVisibility;
+        _lastInAtmosphere = state.LastInAtmosphere;
+        _lastAtmosphericTemp = state.LastAtmosphericTemp;
+        _lastAeroHeatFluxWm2 = state.LastAeroHeatFluxWm2;
+        _lastPhase = state.LastPhase;
+        HotAlert = TemperatureK > MaxSafeTemp;
+        ColdAlert = TemperatureK < MinSafeTemp;
+    }
+
+    public void Reset() => RestoreState(new ThermalState());
+
     public void Tick(double dt, bool inEclipse, bool inAtmosphere, double atmosphericTemp)
         => Tick(dt, inEclipse ? 0.0 : 1.0, inAtmosphere, atmosphericTemp);
 

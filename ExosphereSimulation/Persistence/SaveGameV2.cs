@@ -5,6 +5,7 @@ using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Propulsion;
+using Exosphere.Simulation.Systems;
 using System.Text.Json;
 
 public sealed class SaveGameV2
@@ -23,6 +24,7 @@ public sealed class SaveGameV2
     public CampaignSaveV2 Campaign { get; set; } = new();
     public List<PersistentAssetSaveV2> PersistentAssets { get; set; } = new();
     public Dictionary<string, JsonElement> Systems { get; set; } = new();
+    public Dictionary<string, VesselSystemsState> VesselSystems { get; set; } = new();
 }
 
 public sealed class DockingConnectionSaveV2
@@ -231,6 +233,10 @@ public static class SaveGameV2Codec
         save.DockingConnections = universe.DockingConnections
             .Select(CaptureDockingConnection)
             .ToList();
+        // Systems are owned by the game-layer controller and are attached explicitly by
+        // SaveSystem at this same committed epoch. Never carry a stale metadata snapshot
+        // into a new capture.
+        save.VesselSystems = new(StringComparer.Ordinal);
         Validate(save);
         return save;
     }
@@ -427,6 +433,27 @@ public static class SaveGameV2Codec
             if (amount < 0)
                 throw new InvalidDataException(
                     $"Campaign reward '{key}' cannot be negative.");
+        }
+
+        if (save.VesselSystems == null)
+            throw new InvalidDataException("Vessel systems collection is null.");
+        foreach (var (vesselId, systems) in save.VesselSystems)
+        {
+            RequireId(vesselId, "systems vessel");
+            if (!vesselIds.Contains(vesselId))
+                throw new InvalidDataException(
+                    $"Systems state references missing vessel '{vesselId}'.");
+            if (systems == null)
+                throw new InvalidDataException(
+                    $"Systems state for '{vesselId}' is null.");
+            if (!string.Equals(systems.VesselId, vesselId, StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    $"Systems state id mismatch for '{vesselId}'.");
+            RequireFinite(systems.SimulationTime, vesselId);
+            if (System.Math.Abs(systems.SimulationTime - save.SimulationTime) > 1e-9)
+                throw new InvalidDataException(
+                    $"Systems state for '{vesselId}' is not at save epoch.");
+            systems.Validate();
         }
     }
 

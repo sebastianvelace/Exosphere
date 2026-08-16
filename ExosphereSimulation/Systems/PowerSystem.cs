@@ -17,6 +17,26 @@ public class PowerSystem
     private const double SolarPanelEfficiency = 0.28;
     private const double SolarConstant        = 1361.0;
 
+    public PowerState CaptureState() => new()
+    {
+        BatteryKwh = BatteryKwh,
+        SolarOutputKw = SolarOutputKw,
+        ExtraLoadKw = ExtraLoadKw,
+    };
+
+    public void RestoreState(PowerState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        state.Validate();
+        BatteryKwh = state.BatteryKwh;
+        SolarOutputKw = state.SolarOutputKw;
+        ExtraLoadKw = state.ExtraLoadKw;
+        LowPowerAlert = BatteryKwh < MaxBatteryKwh * 0.2;
+        NoPowerAlert = BatteryKwh <= 0.0;
+    }
+
+    public void Reset() => RestoreState(new PowerState());
+
     public void Tick(double dt, Vector3d vesselPosition, Vector3d sunPosition, bool inEclipse,
                      double extraLoadKw = 0.0)
         => Tick(dt, vesselPosition, sunPosition, inEclipse ? 0.0 : 1.0, extraLoadKw);

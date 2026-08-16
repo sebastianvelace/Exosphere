@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Persistence;
+using Exosphere.Simulation.Systems;
 using Godot;
 
 /// <summary>
@@ -22,6 +23,7 @@ public static class SaveSystem
     /// Mission phase to apply once the deferred MissionManager child exists.
     /// </summary>
     public static MissionPhase? PendingMissionPhase { get; set; }
+    public static VesselSystemsState? PendingSystemsState { get; set; }
 
     public static void SaveGame(string slotName = "quicksave")
     {
@@ -32,6 +34,13 @@ public static class SaveSystem
         System.IO.Directory.CreateDirectory(DefaultSaveDirectory);
         var save = SaveGameV2Codec.Capture(
             bridge.Universe, LastLoadedMetadata);
+        save.VesselSystems.Clear();
+        if (bridge.ActiveVessel is { } activeVessel
+            && SystemsController.Instance is { } systemsController)
+        {
+            save.VesselSystems[activeVessel.Id] = systemsController.CaptureSaveState(
+                activeVessel.Id, bridge.Universe.CurrentTime);
+        }
         if (CampaignRuntime.Instance?.CaptureMissionState() is { } mission)
             save.Mission = mission;
         if (CampaignRuntime.Instance?.Campaign?.State is { } campaign)
@@ -51,6 +60,7 @@ public static class SaveSystem
 
     public static bool LoadGame(string slotName = "quicksave")
     {
+        PendingSystemsState = null;
         string safeSlot = NormalizeSlotName(slotName);
         string path = System.IO.Path.Combine(
             DefaultSaveDirectory, $"{safeSlot}.json");
@@ -68,6 +78,22 @@ public static class SaveSystem
             var catalog = PartCatalog.LoadFromDirectory(partsPath);
             SaveGameV2Codec.Restore(bridge.Universe, save, catalog);
             LastLoadedMetadata = save;
+            PendingSystemsState = null;
+
+            if (save.ActiveVesselId is { } activeId
+                && save.VesselSystems.TryGetValue(activeId, out var systemsState))
+            {
+                if (SystemsController.Instance is { } systemsController)
+                    systemsController.RestoreSaveState(
+                        systemsState, activeId, save.SimulationTime);
+                else
+                    PendingSystemsState = systemsState;
+            }
+            else
+            {
+                PendingSystemsState = null;
+                SystemsController.Instance?.ResetForLoadedSimulation();
+            }
 
             int warpIndex = Array.FindIndex(
                 SimulationBridge.WarpLevels,
