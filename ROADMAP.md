@@ -97,6 +97,11 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      mientras el host sólo exponga llvmpipe.
    - El primer baseline reproducido el 2026-08-14 deja `mixed_fleet` en p95 3.7288 ms y
      718,566 B/tick; estos valores son comparativos de la máquina, no un objetivo universal.
+   - **Fase 45 en curso:** la política `SimulationInterestPolicy` y el snapshot externo de
+     misión/sistemas ya tienen adapter observacional, razones de wake para actitud, callbacks
+     y alertas de soporte vital/energía/térmica/comms, y fixtures de paridad. Commit integrado
+     `b3afcf3`; 656 tests, CI y smoke visual pasan. El scheduler sigue en FullPhysics hasta
+     comparar `EventDriven/Dormant` contra la referencia con deadlines, recursos y eventos.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield
