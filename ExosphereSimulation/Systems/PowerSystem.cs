@@ -49,4 +49,23 @@ public class PowerSystem
     }
 
     public double BatteryFraction => BatteryKwh / MaxBatteryKwh;
+
+    /// <summary>
+    /// Projects when the existing low-power alert threshold is reached using the last
+    /// committed net bus load. This is read-only and only valid as a deadline until the
+    /// next solar/eclipsing sample changes <see cref="SolarOutputKw"/>.
+    /// </summary>
+    public double? GetNextAlertDeadlineSeconds()
+    {
+        double threshold = MaxBatteryKwh * 0.2;
+        if (BatteryKwh <= threshold)
+            return 0.0;
+
+        double netPowerKw = SolarOutputKw - BaseLoadKw - ExtraLoadKw;
+        if (!double.IsFinite(netPowerKw) || netPowerKw >= 0.0)
+            return null;
+
+        double seconds = (BatteryKwh - threshold) / -netPowerKw * 3600.0;
+        return double.IsFinite(seconds) && seconds >= 0.0 ? seconds : null;
+    }
 }

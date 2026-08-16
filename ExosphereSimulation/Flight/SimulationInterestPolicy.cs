@@ -45,6 +45,9 @@ public enum SimulationWakeReason
     /// <summary>A life-support, power, thermal, or communications alert is active.</summary>
     SystemsAlert = 1 << 9,
 
+    /// <summary>A future systems alert is inside the configured wake window.</summary>
+    SystemsDeadline = 1 << 10,
+
     // Descriptive aliases for callers that prefer the wording used in the phase plan.
     DockingOrContact = DockingContact,
     AtmosphereOrReentry = AtmosphereReentry,
@@ -114,15 +117,29 @@ public readonly record struct SimulationExternalInterestInputs(
     bool IsMissionCriticalState,
     bool IsAtmosphereOrReentry,
     bool HasPendingMissionCallback,
-    bool HasSystemsAlert)
+    bool HasSystemsAlert,
+    double? SecondsUntilNextSystemsDeadline)
 {
+    /// <summary>True when the optional systems deadline is finite and non-negative.</summary>
+    public bool IsValid => !SecondsUntilNextSystemsDeadline.HasValue
+        || double.IsFinite(SecondsUntilNextSystemsDeadline.Value)
+            && SecondsUntilNextSystemsDeadline.Value >= 0.0;
+
+    /// <summary>Fail-fast validation for the optional systems deadline.</summary>
+    public void Validate()
+    {
+        if (!IsValid)
+            throw new ArgumentOutOfRangeException(nameof(SecondsUntilNextSystemsDeadline));
+    }
+
     /// <summary>No game-layer override is present.</summary>
     public static SimulationExternalInterestInputs None => new(
         IsMissionControlled: false,
         IsMissionCriticalState: false,
         IsAtmosphereOrReentry: false,
         HasPendingMissionCallback: false,
-        HasSystemsAlert: false);
+        HasSystemsAlert: false,
+        SecondsUntilNextSystemsDeadline: null);
 }
 
 /// <summary>Numeric thresholds for one deterministic interest decision.</summary>
@@ -205,7 +222,7 @@ public static class SimulationInterestPolicy
         SimulationInterestPolicyOptions? options = null)
     {
         var effectiveOptions = options ?? SimulationInterestPolicyOptions.Default;
-        if (!inputs.IsValid || !effectiveOptions.IsValid)
+        if (!inputs.IsValid || !externalInputs.IsValid || !effectiveOptions.IsValid)
         {
             return new(
                 SimulationInterestTier.Active,
@@ -240,6 +257,7 @@ public static class SimulationInterestPolicy
         // A known but not-yet-near deadline is safe for event-driven propagation. Without
         // one, the object has no scheduled work and is eligible for Dormant treatment.
         return inputs.SecondsUntilNextDeadline.HasValue
+            || externalInputs.SecondsUntilNextSystemsDeadline.HasValue
             ? new(SimulationInterestTier.EventDriven, SimulationWakeReason.None)
             : new(SimulationInterestTier.Dormant, SimulationWakeReason.None);
     }
@@ -260,7 +278,7 @@ public static class SimulationInterestPolicy
         SimulationInterestPolicyOptions? options = null)
     {
         var effectiveOptions = options ?? SimulationInterestPolicyOptions.Default;
-        if (!inputs.IsValid || !effectiveOptions.IsValid)
+        if (!inputs.IsValid || !externalInputs.IsValid || !effectiveOptions.IsValid)
             return SimulationWakeReason.InvalidInput;
 
         return GetWakeUpReasonsValidated(inputs, externalInputs, effectiveOptions);
@@ -299,6 +317,11 @@ public static class SimulationInterestPolicy
             reasons |= SimulationWakeReason.MissionCallback;
         if (externalInputs.HasSystemsAlert)
             reasons |= SimulationWakeReason.SystemsAlert;
+        if (externalInputs.SecondsUntilNextSystemsDeadline is double systemsDeadline
+            && systemsDeadline <= options.DeadlineWakeWindowSeconds)
+        {
+            reasons |= SimulationWakeReason.SystemsDeadline;
+        }
 
         return reasons;
     }

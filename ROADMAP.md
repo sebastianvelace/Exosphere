@@ -106,6 +106,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      SOI, atmósfera, contacto, staging, actitud y consumo de propelente. El gate focalizado
      pasa 6/6; informe en `docs/audits/PERF_DISPATCH_PARITY_PHASE46_REPORT.md`. Aún no se
      promueve `EventDriven/Dormant`: faltan deadlines de sistemas, callbacks y save/load.
+   - **Fase 47 en curso:** soporte vital y batería ya proyectan sus próximos umbrales de alerta
+     en el snapshot observacional. La política conserva `EventDriven` fuera de 60 s y despierta
+     en `SystemsDeadline` dentro de la ventana; térmica, comunicaciones geométricas y callbacks
+     pendientes siguen bloqueados hasta tener fuentes autoritativas.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

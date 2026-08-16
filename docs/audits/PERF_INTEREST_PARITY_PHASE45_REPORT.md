@@ -17,9 +17,11 @@ ownership, finite kinematics, engine/throttle wake state, docking connections, s
 contact, atmospheric force sensitivity, structural control loss, and the existing scheduler's
 periapsis safety plan. The Godot boundary now has a second, explicit read-only input contract
 for mission/controller and systems state: mission callback, descent/entry, life-support,
-power, thermal, and geometric communications alerts. Plasma blackout is intentionally not
-treated as geometric control loss because onboard entry guidance must continue through the
-blackout.
+power, thermal, and geometric communications alerts. It now also carries the next
+life-support/power alert deadline. A deadline outside the 60-second wake window remains
+`EventDriven`; a deadline inside the window carries `SystemsDeadline` and is `Proximity`.
+Plasma blackout is intentionally not treated as geometric control loss because onboard entry
+guidance must continue through the blackout.
 
 The query does not advance `CurrentTime`, change `IsOnRails`/`OrbitalState`, consume resources,
 or skip any scheduler work. `SimulationInterestPolicy.EnabledByDefault` remains `false`; the
@@ -42,8 +44,9 @@ including a five-row policy matrix for the requested transitions:
 | Systems mission-critical matrix row | `Active` | future systems scheduler must preserve critical state |
 | Attitude command at zero throttle | `Proximity` + `Command` | TVC/RCS control cannot be deferred |
 
-Focused result: **11/11 passed** for the Universe parity fixtures, plus three pure-policy
-fixtures for external mission/systems state.
+Focused result: **11/11 passed** for the Universe parity fixtures, plus five pure-policy
+fixtures for external mission/systems state and deterministic system-deadline tests for
+life-support/power.
 
 The official visual ascent harness also passed with the attitude wake guard enabled:
 `--ascent --flight7 --run-id phase46-attitude-wake --skip-build` reached
@@ -66,7 +69,9 @@ phase ownership and system alerts without creating system controllers for distan
 `SimulationBridge.GetSimulationInterestDecision(vessel)` overlays that snapshot only when
 `vessel == ActiveVessel`; distant vessels continue through the pure CPU snapshot. This avoids
 the false optimization of treating an active vessel's life-support alert as a wake reason for
-the whole fleet.
+the whole fleet. `LifeSupportSystem.GetNextAlertDeadlineSeconds` and
+`PowerSystem.GetNextAlertDeadlineSeconds` use the same rates/thresholds as their tick methods;
+their projections are read-only and are recalculated after each committed systems sample.
 
 ## What this does not prove
 
@@ -76,7 +81,8 @@ resource starvation deadlines, mission callback queues, SOI transfer materializa
 Godot-side EDL presentation state still need promotion tests at the dispatcher boundary.
 The external contract is now present, but its `HasPendingMissionCallback` input remains false
 until a real queued callback source exists; the adapter does not invent callbacks from a phase
-label.
+label. Thermal deadlines and future comms geometry deadlines are also intentionally not
+invented from the current alert booleans.
 
 In particular, the policy's `EventDriven` tier is covered by the pure policy tests, but the
 current `Universe` deadline planner does not expose a future physical timestamp for a safe

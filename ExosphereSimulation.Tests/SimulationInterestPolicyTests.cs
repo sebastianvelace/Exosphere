@@ -125,6 +125,49 @@ public sealed class SimulationInterestPolicyTests
     }
 
     [Fact]
+    public void ExternalSystemsDeadlineUsesEventDrivenUntilTheWakeWindow()
+    {
+        var farDeadline = SimulationExternalInterestInputs.None with
+        {
+            SecondsUntilNextSystemsDeadline = 600.0,
+        };
+        var nearDeadline = farDeadline with
+        {
+            SecondsUntilNextSystemsDeadline =
+                SimulationInterestPolicyOptions.Default.DeadlineWakeWindowSeconds,
+        };
+
+        var deferred = SimulationInterestPolicy.Classify(BaseInputs(), farDeadline);
+        var wake = SimulationInterestPolicy.Classify(BaseInputs(), nearDeadline);
+
+        Assert.Equal(SimulationInterestTier.EventDriven, deferred.Tier);
+        Assert.Equal(SimulationWakeReason.None, deferred.WakeReasons);
+        Assert.True(deferred.AllowsDeferredWork);
+        Assert.Equal(SimulationInterestTier.Proximity, wake.Tier);
+        Assert.Equal(SimulationWakeReason.SystemsDeadline, wake.WakeReasons);
+        Assert.False(wake.AllowsDeferredWork);
+    }
+
+    [Fact]
+    public void InvalidExternalSystemsDeadlineFailsClosed()
+    {
+        var invalid = SimulationExternalInterestInputs.None with
+        {
+            SecondsUntilNextSystemsDeadline = -0.001,
+        };
+
+        var decision = SimulationInterestPolicy.Classify(BaseInputs(), invalid);
+
+        Assert.Equal(SimulationInterestTier.Active, decision.Tier);
+        Assert.Equal(SimulationWakeReason.InvalidInput, decision.WakeReasons);
+        Assert.True(decision.IsFailClosed);
+        Assert.Equal(
+            SimulationWakeReason.InvalidInput,
+            SimulationInterestPolicy.GetWakeUpReasons(BaseInputs(), invalid));
+        Assert.Throws<ArgumentOutOfRangeException>(invalid.Validate);
+    }
+
+    [Fact]
     public void WakeReasonsComposeDeterministically()
     {
         var inputs = BaseInputs() with

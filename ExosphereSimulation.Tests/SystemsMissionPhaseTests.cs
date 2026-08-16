@@ -220,6 +220,23 @@ public sealed class SystemsMissionPhaseTests
     }
 
     [Fact]
+    public void LifeSupport_NextAlertDeadlineUsesTheFirstFiniteResourceThreshold()
+    {
+        var ls = new LifeSupportSystem();
+        double co2Rate = 0.000694 * 4.0 - 0.000600;
+        double expected = (ls.MaxCO2 * 0.8 - ls.CO2Kg) / co2Rate;
+
+        double? deadline = ls.GetNextAlertDeadlineSeconds(
+            crewCount: 4,
+            phase: SystemsMissionPhase.Active);
+
+        Assert.Equal(expected, deadline!.Value, precision: 9);
+        Assert.Null(ls.GetNextAlertDeadlineSeconds(
+            crewCount: 4,
+            phase: SystemsMissionPhase.Idle));
+    }
+
+    [Fact]
     public void LifeSupport_PeakHeatingDrawsMoreEcThanActive()
     {
         var ls = new LifeSupportSystem();
@@ -399,5 +416,18 @@ public sealed class SystemsMissionPhaseTests
             extraLoadKw: ls + SystemsPhaseLoads.AvionicsExtraKw(SystemsMissionPhase.PeakHeating));
 
         Assert.True(peak.BatteryKwh < cruise.BatteryKwh);
+    }
+
+    [Fact]
+    public void PowerSystem_NextAlertDeadlineMatchesEclipseDischargeRate()
+    {
+        var power = new PowerSystem();
+        var sun = new Vector3d(150_000_000_000.0, 0.0, 0.0);
+        power.Tick(1.0, Vector3d.Zero, sun, inEclipse: true);
+
+        double expected = (power.BatteryKwh - power.MaxBatteryKwh * 0.2)
+            / (power.BaseLoadKw + power.ExtraLoadKw) * 3600.0;
+
+        Assert.Equal(expected, power.GetNextAlertDeadlineSeconds()!.Value, precision: 9);
     }
 }

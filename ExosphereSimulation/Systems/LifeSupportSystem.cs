@@ -67,6 +67,49 @@ public class LifeSupportSystem
     public double WaterFraction  => WaterKg  / MaxWater;
     public double FoodFraction   => FoodKg   / MaxFood;
 
+    /// <summary>
+    /// Returns the first time at which an active crew resource reaches an existing alert
+    /// threshold. The result is a projection only: it does not mutate the system and it
+    /// deliberately uses the same rates as <see cref="Tick"/>. <c>null</c> means that the
+    /// selected phase has no consumption or that no finite alert is reachable.
+    /// </summary>
+    public double? GetNextAlertDeadlineSeconds(
+        int crewCount,
+        SystemsMissionPhase phase = SystemsMissionPhase.Active)
+    {
+        if (!CrewAlive || crewCount <= 0 || phase == SystemsMissionPhase.Idle)
+            return null;
+
+        if (OxygenKg <= 0.0 || CO2Kg >= MaxCO2)
+            return 0.0;
+
+        double oxygenRate = OxygenPerCrewPerSec * crewCount;
+        double co2Rate = CO2PerCrewPerSec * crewCount - CO2ScrubPerSec;
+        double? oxygenSeconds = OxygenKg <= MaxOxygen * 0.2
+            ? 0.0
+            : oxygenRate > 0.0
+                ? (OxygenKg - MaxOxygen * 0.2) / oxygenRate
+                : null;
+        double? co2Seconds = CO2Kg >= MaxCO2 * 0.8
+            ? 0.0
+            : co2Rate > 0.0
+                ? (MaxCO2 * 0.8 - CO2Kg) / co2Rate
+                : null;
+
+        return MinFiniteNonNegative(oxygenSeconds, co2Seconds);
+    }
+
     public double EstimatedO2HoursRemaining(int crewCount) =>
         crewCount > 0 ? OxygenKg / (OxygenPerCrewPerSec * crewCount * 3600.0) : double.PositiveInfinity;
+
+    private static double? MinFiniteNonNegative(double? first, double? second)
+    {
+        if (first is double a && second is double b)
+            return System.Math.Min(System.Math.Max(0.0, a), System.Math.Max(0.0, b));
+        if (first is double onlyFirst)
+            return System.Math.Max(0.0, onlyFirst);
+        if (second is double onlySecond)
+            return System.Math.Max(0.0, onlySecond);
+        return null;
+    }
 }

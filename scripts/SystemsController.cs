@@ -84,13 +84,29 @@ public partial class SystemsController : Node
             || Thermal.HotAlert
             || Thermal.ColdAlert
             || (!Comms.HasSignal && !Comms.PlasmaBlackout);
+        var activeVessel = SimulationBridge.Instance?.ActiveVessel;
+        int crewCount = activeVessel != null && activeVessel.Crew.Count > 0
+            ? activeVessel.Crew.Count
+            : 4;
+        SystemsMissionPhase systemsPhase = MapMissionPhase(phase);
+        double? systemsDeadline = MinDeadline(
+            LifeSupport.GetNextAlertDeadlineSeconds(crewCount, systemsPhase),
+            Power.GetNextAlertDeadlineSeconds());
 
         return new SimulationExternalInterestInputs(
             IsMissionControlled: missionControlled,
             IsMissionCriticalState: missionCritical,
             IsAtmosphereOrReentry: MissionManager.Instance?.InDescent == true,
             HasPendingMissionCallback: false,
-            HasSystemsAlert: systemsAlert);
+            HasSystemsAlert: systemsAlert,
+            SecondsUntilNextSystemsDeadline: systemsDeadline);
+    }
+
+    private static double? MinDeadline(double? first, double? second)
+    {
+        if (first is double a && second is double b)
+            return System.Math.Min(a, b);
+        return first ?? second;
     }
 
     public override void _Ready()
