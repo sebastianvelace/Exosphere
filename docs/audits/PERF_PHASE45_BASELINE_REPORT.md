@@ -34,6 +34,23 @@ host con framebuffer X11/GPU válido.
 Los valores de fases 37–40 son históricos y sólo comparables dentro de la misma
 configuración de host/renderer; no sustituyen una medición nueva de la fase 45.
 
+## Benchmark CPU reproducible de esta fase
+
+Se ejecutó `SAMPLES=32 WARMUP=8` con
+`tools/perf/allocations_tick_phase23_benchmark.sh` en el commit de esta fase:
+
+| Escenario | p50 ms | p95 ms | p99 ms | allocations/tick |
+|---|---:|---:|---:|---:|
+| `full_single` | `0.0324` | `0.0520` | `0.0553` | `2,499.8 B` |
+| `full_fleet` | `0.0926` | `0.1127` | `0.1358` | `8,804.8 B` |
+| `rails_fleet` | `0.5044` | `0.6068` | `0.6128` | `5,972.8 B` |
+| `mixed_fleet` | `3.3517` | `4.4341` | `4.6238` | `177,060.8 B` |
+| `wake_catchup` | `0.8504` | `1.2101` | `1.2131` | `80,763.5 B` |
+
+El mismo reporte midió `hud_capture_bytes=1,601.5 B` en `full_single`. Es una
+señal administrada del presenter, no un frame-time de Godot; sirve como baseline
+para la optimización de presentación de esta oleada.
+
 ## Preflight y bloqueo de framebuffer
 
 Los contratos estáticos de render/sky y la compilación Godot pasan. La nueva A/B
