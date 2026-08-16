@@ -102,6 +102,16 @@ require_text "$SCHEDULER_TEST" "DeferredRailsProjectsCurrentEpochAndMatchesAlway
     "deferred rails equivalence regression test is present"
 require_text "$SCHEDULER_TEST" "DeferredRailsCatchesUpBeforeForceSensitiveWake" \
     "deferred rails wake-up regression test is present"
+require_text "$SCHEDULER_TEST" "BudgetedSchedulerConservesExactTemporalDebtAcrossTicksAndPause" \
+    "budgeted scheduler debt conservation test is present"
+require_text "$SCHEDULER_TEST" "ExistingTemporalDebtIsNotRescaledWhenTimeScaleChanges" \
+    "time-scale debt invariance test is present"
+require_text "$SCHEDULER_TEST" "AbsoluteTimeSeekClearsTemporalDebtAndRailDeadlines" \
+    "absolute seek debt reset test is present"
+require_text "$SCHEDULER_TEST" "UndockClearsStaleRailStateEvenWithoutSeparationImpulse" \
+    "undock wake-up invalidation test is present"
+require_text "$SCHEDULER_TEST" "CorruptedRailStateIsNeverClassifiedAsAnalyticWork" \
+    "invalid rail state fail-safe test is present"
 require_text "$SIMULATION_BRIDGE" "GetWarpPhysicsRequirements" \
     "warp-limit bridge uses one combined physics-requirements query"
 require_text "$VISUAL_PLAYTEST" "scheduler_ms=" \
@@ -118,12 +128,16 @@ require_text "$VISUAL_PLAYTEST" "catch_up_risk=" \
     "visual playtest records scheduler catch-up telemetry"
 require_text "$VISUAL_PLAYTEST" "LastSchedulerTelemetry" \
     "visual playtest reads the authoritative scheduler snapshot"
-require_text "$VISUAL_PLAYTEST" "PERF_SCHEDULER schema=1" \
+require_text "$VISUAL_PLAYTEST" "PERF_SCHEDULER schema=2" \
     "visual playtest records extended scheduler telemetry"
 require_text "$VISUAL_PLAYTEST" "SkipReason" \
     "visual playtest records scheduler skip reason"
 require_text "$VISUAL_PLAYTEST" "TotalWorkDispatches" \
     "visual playtest records scheduler work totals"
+require_text "$SCHEDULER_TELEMETRY" "PendingSimulationSeconds" \
+    "scheduler telemetry exposes exact pending simulation debt"
+require_text "$VISUAL_PLAYTEST" "pending_simulated=" \
+    "visual playtest records pending simulation debt"
 
 log_file="${PERF_ACCEPTANCE_LOG:-}"
 if [[ -z "$log_file" ]]; then
@@ -222,19 +236,25 @@ else
 
         extended_scheduler_lines="$(rg '^PERF_SCHEDULER ' "$frame_log" || true)"
         extended_scheduler_count="$(printf '%s\n' "$extended_scheduler_lines" | sed '/^$/d' | wc -l | tr -d ' ')"
-        extended_scheduler_pattern='^PERF_SCHEDULER schema=1 frame=[0-9]+ initialized=(true|false) skip_reason=(NotInitialized|None|Paused|InvalidDelta|InvalidTimeScale) branch=(None|FullPhysics|Mixed|Rails) substeps=[0-9]+ full_physics=[0-9]+ on_rails=[0-9]+ surface_settled=[0-9]+ ground_held=[0-9]+ destroyed=[0-9]+ docked_skips=[0-9]+ rails_slices=[0-9]+ docking_constraints=[0-9]+ deadline_eligible=[0-9]+ deadline_deferred=[0-9]+ deadline_catch_up=[0-9]+ deadline_projected=[0-9]+ total_work=[0-9]+ source=process_callback$'
-        valid_extended_scheduler_lines="$(printf '%s\n' "$extended_scheduler_lines" | rg "$extended_scheduler_pattern" || true)"
-        valid_extended_scheduler_count="$(printf '%s\n' "$valid_extended_scheduler_lines" | sed '/^$/d' | wc -l | tr -d ' ')"
+        extended_scheduler_pattern_v1='^PERF_SCHEDULER schema=1 frame=[0-9]+ initialized=(true|false) skip_reason=(NotInitialized|None|Paused|InvalidDelta|InvalidTimeScale) branch=(None|FullPhysics|Mixed|Rails) substeps=[0-9]+ full_physics=[0-9]+ on_rails=[0-9]+ surface_settled=[0-9]+ ground_held=[0-9]+ destroyed=[0-9]+ docked_skips=[0-9]+ rails_slices=[0-9]+ docking_constraints=[0-9]+ deadline_eligible=[0-9]+ deadline_deferred=[0-9]+ deadline_catch_up=[0-9]+ deadline_projected=[0-9]+ total_work=[0-9]+ source=process_callback$'
+        extended_scheduler_pattern_v2='^PERF_SCHEDULER schema=2 frame=[0-9]+ initialized=(true|false) skip_reason=(NotInitialized|None|Paused|InvalidDelta|InvalidTimeScale) branch=(None|FullPhysics|Mixed|Rails) substeps=[0-9]+ full_physics=[0-9]+ on_rails=[0-9]+ surface_settled=[0-9]+ ground_held=[0-9]+ destroyed=[0-9]+ docked_skips=[0-9]+ rails_slices=[0-9]+ docking_constraints=[0-9]+ deadline_eligible=[0-9]+ deadline_deferred=[0-9]+ deadline_catch_up=[0-9]+ deadline_projected=[0-9]+ requested_simulated=[0-9]+(\.[0-9]+)? processed_simulated=[0-9]+(\.[0-9]+)? pending_simulated=[0-9]+(\.[0-9]+)? budget_limited=(true|false) budget_reason=(None|Disabled|SubstepLimit) total_work=[0-9]+ source=process_callback$'
+        valid_extended_scheduler_lines_v1="$(printf '%s\n' "$extended_scheduler_lines" | rg "$extended_scheduler_pattern_v1" || true)"
+        valid_extended_scheduler_lines_v2="$(printf '%s\n' "$extended_scheduler_lines" | rg "$extended_scheduler_pattern_v2" || true)"
+        valid_extended_scheduler_count_v1="$(printf '%s\n' "$valid_extended_scheduler_lines_v1" | sed '/^$/d' | wc -l | tr -d ' ')"
+        valid_extended_scheduler_count_v2="$(printf '%s\n' "$valid_extended_scheduler_lines_v2" | sed '/^$/d' | wc -l | tr -d ' ')"
+        valid_extended_scheduler_count=$((valid_extended_scheduler_count_v1 + valid_extended_scheduler_count_v2))
         if [[ "$extended_scheduler_count" == "0" ]]; then
             skip_gate "extended scheduler telemetry (no PERF_SCHEDULER lines in supplied log)"
         elif [[ "$valid_extended_scheduler_count" == "$extended_scheduler_count" ]]; then
             pass_gate "all PERF_SCHEDULER fields are schema-valid (${valid_extended_scheduler_count}/${extended_scheduler_count})"
             extended_scheduler_invariant_failures="$(printf '%s\n' "$extended_scheduler_lines" | awk '
                 {
-                    initialized = ""; reason = ""; branch = "";
+                    initialized = ""; reason = ""; branch = ""; schema = "";
                     full = -1; rails = -1; settled = -1; ground = -1; destroyed = -1; total = -1;
+                    requested = -1; processed = -1; pending = -1; budget_limited = ""; budget_reason = "";
                     for (i = 1; i <= NF; i++) {
                         split($i, pair, "=");
+                        if (pair[1] == "schema") schema = pair[2];
                         if (pair[1] == "initialized") initialized = pair[2];
                         if (pair[1] == "skip_reason") reason = pair[2];
                         if (pair[1] == "branch") branch = pair[2];
@@ -243,11 +263,21 @@ else
                         if (pair[1] == "surface_settled") settled = pair[2] + 0;
                         if (pair[1] == "ground_held") ground = pair[2] + 0;
                         if (pair[1] == "destroyed") destroyed = pair[2] + 0;
+                        if (pair[1] == "requested_simulated") requested = pair[2] + 0;
+                        if (pair[1] == "processed_simulated") processed = pair[2] + 0;
+                        if (pair[1] == "pending_simulated") pending = pair[2] + 0;
+                        if (pair[1] == "budget_limited") budget_limited = pair[2];
+                        if (pair[1] == "budget_reason") budget_reason = pair[2];
                         if (pair[1] == "total_work") total = pair[2] + 0;
                     }
                     if (initialized == "false" && reason != "NotInitialized") bad++;
                     if (branch != "None" && reason != "None") bad++;
                     if (full + rails + settled + ground + destroyed != total) bad++;
+                    if (schema == "2") {
+                        if (requested < 0 || processed < 0 || pending < 0) bad++;
+                        if (budget_limited == "true" && (budget_reason != "SubstepLimit" || pending <= 0)) bad++;
+                        if (budget_limited == "false" && budget_reason == "SubstepLimit") bad++;
+                    }
                 }
                 END { print bad + 0 }
             ' )"

@@ -269,6 +269,23 @@ ocultar impactos/SOI/contactos.
 
 Informe reproducible: `PERF_SCHEDULER_TELEMETRY_PHASE41_REPORT.md`.
 
+## Resultado de la fase 42 — deuda temporal exacta y wake-up seguro (opt-in)
+
+Se añadió deuda temporal global exacta y telemetría separada de tiempo solicitado,
+procesado y pendiente. El presupuesto determinista se detiene sólo entre pasos globales
+completos y permanece desactivado por defecto hasta migrar los sistemas de gameplay a
+segundos procesados. `SetCurrentTime`/`SetSimulationTime` limpian deuda y sincronizan
+cuerpos; staging, docking, undock y wake-up invalidan conics obsoletas. Estados no finitos
+no se clasifican como rails analíticos.
+
+El harness usa `PERF_SCHEDULER schema=2` con deuda y razón de presupuesto. Validación:
+`613/613` xUnit, build Godot `0 warnings/0 errors`, smoke real `SMOKE_OK`, contrato
+dinámico `54 PASS / 0 FAIL / 0 SKIP`, y `50/50` líneas de scheduler válidas. El cap no se
+promueve al runtime: los sistemas físicos de gameplay todavía deben consumir el tiempo
+realmente procesado antes de activar la deuda en el juego.
+
+Informe reproducible: `PERF_SCHEDULER_DEBT_WAKEUP_PHASE42_REPORT.md`.
+
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 
 La auditoría del camino de entrada al nivel encontró que `Universe.Bodies`, `Universe.Vessels`

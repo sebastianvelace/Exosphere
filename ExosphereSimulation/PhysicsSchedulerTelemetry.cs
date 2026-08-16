@@ -22,6 +22,14 @@ public enum PhysicsSchedulerSkipReason
     InvalidTimeScale,
 }
 
+/// <summary>Why a scheduler call stopped before consuming all temporal debt.</summary>
+public enum PhysicsSchedulerBudgetReason
+{
+    None,
+    Disabled,
+    SubstepLimit,
+}
+
 /// <summary>
 /// Why a vessel did or did not receive an independent rails deadline.  A non-deferred
 /// reason always means the caller must use the conservative global scheduler cadence.
@@ -83,6 +91,26 @@ public readonly record struct PhysicsSchedulerTelemetry(
     /// <summary>Distinguishes a valid pause from rejected scheduler input.</summary>
     public PhysicsSchedulerSkipReason SkipReason { get; init; } =
         PhysicsSchedulerSkipReason.NotInitialized;
+
+    /// <summary>
+    /// Newly requested simulation seconds for this call. Kept separate from the
+    /// processed amount so a capped call can be audited without inferring state from
+    /// the wall-clock frame time.
+    /// </summary>
+    public double RequestedSimulationSeconds { get; init; }
+
+    /// <summary>Simulation seconds actually committed to <see cref="Universe.CurrentTime"/>.</summary>
+    public double ProcessedSimulationSeconds { get; init; }
+
+    /// <summary>Exact simulation seconds retained for a later scheduler call.</summary>
+    public double PendingSimulationSeconds { get; init; }
+
+    /// <summary>Whether the opt-in per-call substep budget stopped this call early.</summary>
+    public bool BudgetLimited { get; init; }
+
+    /// <summary>Reason the scheduler retained pending simulation seconds.</summary>
+    public PhysicsSchedulerBudgetReason BudgetReason { get; init; } =
+        PhysicsSchedulerBudgetReason.None;
 
     /// <summary>Total vessel work items dispatched, excluding docked secondary skips.</summary>
     public int TotalWorkDispatches =>

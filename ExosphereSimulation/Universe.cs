@@ -63,6 +63,7 @@ public class Universe
     private readonly Dictionary<string, double> _lastDeferredRailUpdate = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
     private readonly KeplerPropagator.BodyPropagationWorkspace _bodyPropagationWorkspace = new();
+    private double _pendingSimulationSeconds;
 
     public Universe()
     {
@@ -87,7 +88,10 @@ public class Universe
     /// </summary>
     public void SetCurrentTime(double t)
     {
+        if (!double.IsFinite(t))
+            throw new ArgumentOutOfRangeException(nameof(t));
         CurrentTime = t;
+        _pendingSimulationSeconds = 0.0;
         _lastDeferredRailUpdate.Clear();
         _nextDeferredRailDeadline.Clear();
         if (_bodies.Count > 0)
@@ -104,6 +108,34 @@ public class Universe
     /// above 1000 = everything on Keplerian rails.
     /// </summary>
     public double TimeScale { get; set; } = 1.0;
+
+    /// <summary>
+    /// Enables the development catch-up budget. When enabled, a frame may commit only
+    /// <see cref="MaxSchedulerSubstepsPerTick"/> complete global steps; any remainder is
+    /// retained as exact temporal debt instead of being discarded. It is disabled by
+    /// default until the Godot systems consume processed simulation time explicitly.
+    /// </summary>
+    public bool SchedulerBudgetEnabled { get; set; }
+
+    private int _maxSchedulerSubstepsPerTick = 256;
+
+    /// <summary>Maximum number of complete global scheduler steps in one budgeted call.</summary>
+    public int MaxSchedulerSubstepsPerTick
+    {
+        get => _maxSchedulerSubstepsPerTick;
+        set
+        {
+            if (value < 1)
+                throw new ArgumentOutOfRangeException(nameof(value));
+            _maxSchedulerSubstepsPerTick = value;
+        }
+    }
+
+    /// <summary>
+    /// Simulation seconds requested by previous calls but not yet committed. This is exact
+    /// debt, not an approximation and not permission to skip a physical event.
+    /// </summary>
+    public double PendingSimulationSeconds => _pendingSimulationSeconds;
 
     /// <summary>
     /// Effective cap selected for the most recent mixed/high-warp tick. Zero means the
@@ -140,6 +172,14 @@ public class Universe
         if (!double.IsFinite(secondsSinceJ2000))
             throw new ArgumentOutOfRangeException(nameof(secondsSinceJ2000));
         CurrentTime = secondsSinceJ2000;
+        _pendingSimulationSeconds = 0.0;
+        _lastDeferredRailUpdate.Clear();
+        _nextDeferredRailDeadline.Clear();
+        if (_bodies.Count > 0)
+            KeplerPropagator.PropagateAllBodies(
+                _bodies,
+                CurrentTime,
+                _bodyPropagationWorkspace);
     }
 
     /// <summary>Maximum physics sub-step (s) used in full-physics mode (50 Hz).</summary>
@@ -203,6 +243,8 @@ public class Universe
     private PhysicsSchedulerSkipReason _tickSkipReason;
     private double _tickRealDeltaTime;
     private double _tickSimulatedSeconds;
+    private double _tickProcessedSimulationSeconds;
+    private bool _tickBudgetLimited;
     private double _tickEffectiveStepCap;
     private int _tickOuterSubsteps;
     private int _tickFullPhysicsDispatches;
@@ -353,10 +395,8 @@ public class Universe
                 (primary.Orientation.Inverse() * secondary.Orientation).Normalize(),
         };
         CaptureDockingMomentum(primary, secondary);
-        primary.IsOnRails = false;
-        primary.OrbitalState = null;
-        secondary.IsOnRails = false;
-        secondary.OrbitalState = null;
+        WakeVesselFromRails(primary);
+        WakeVesselFromRails(secondary);
         _lastDeferredRailUpdate.Remove(primary.Id);
         _lastDeferredRailUpdate.Remove(secondary.Id);
         _nextDeferredRailDeadline.Remove(primary.Id);
@@ -380,7 +420,18 @@ public class Universe
         var secondary = _vessels.FirstOrDefault(
             v => v.Id == connection.SecondaryVesselId);
         _dockingConnections.Remove(connection);
-        if (primary == null || secondary == null || separationSpeedMps == 0.0)
+        if (primary == null || secondary == null)
+            return true;
+
+        // A detached assembly must leave analytic/deferred rails before any separation
+        // impulse is applied. This also covers a zero-speed manual undock.
+        WakeVesselFromRails(primary);
+        WakeVesselFromRails(secondary);
+        _lastDeferredRailUpdate.Remove(primary.Id);
+        _lastDeferredRailUpdate.Remove(secondary.Id);
+        _nextDeferredRailDeadline.Remove(primary.Id);
+        _nextDeferredRailDeadline.Remove(secondary.Id);
+        if (separationSpeedMps == 0.0)
             return true;
 
         Vector3d direction = (secondary.Position - primary.Position).Normalized;
@@ -541,8 +592,7 @@ public class Universe
         secondary.Velocity = primary.Velocity
             + primary.AngularVelocity.Cross(offset);
         secondary.AngularVelocity = primary.AngularVelocity;
-        secondary.IsOnRails = false;
-        secondary.OrbitalState = null;
+        WakeVesselFromRails(secondary);
     }
 
     /// <summary>Finds a celestial body by its <see cref="CelestialBody.Id"/>.</summary>
@@ -630,6 +680,19 @@ public class Universe
             return;
         }
 
+        double accumulated = _pendingSimulationSeconds + simDelta;
+        if (!double.IsFinite(accumulated))
+        {
+            _tickSkipReason = PhysicsSchedulerSkipReason.InvalidDelta;
+            PublishSchedulerTelemetry();
+            return;
+        }
+        _pendingSimulationSeconds = accumulated;
+
+        int substepBudget = SchedulerBudgetEnabled
+            ? MaxSchedulerSubstepsPerTick
+            : int.MaxValue;
+
         bool anyForceSensitive = _vessels.Any(RequiresBoundedWarpPropagation);
         bool anyContactSensitive = _bodies.Count > 0 && _vessels.Any(v =>
             v.HasDeployedLandingGear
@@ -643,8 +706,8 @@ public class Universe
             _lastDeferredRailUpdate.Clear();
             _nextDeferredRailDeadline.Clear();
             _tickEffectiveStepCap = anyContactSensitive ? MaxContactStep : MaxPhysicsStep;
-            double remaining = simDelta;
-            while (remaining > 1e-12)
+            double remaining = _pendingSimulationSeconds;
+            while (remaining > 1e-12 && _tickOuterSubsteps < substepBudget)
             {
                 double step  = System.Math.Min(remaining,
                     anyContactSensitive ? MaxContactStep : MaxPhysicsStep);
@@ -652,6 +715,7 @@ public class Universe
                 TickPhysics(step);
                 CurrentTime += step;
                 remaining   -= step;
+                _tickProcessedSimulationSeconds += step;
             }
         }
         else if (TimeScale <= 1000.0 || anyForceSensitive)
@@ -666,14 +730,15 @@ public class Universe
             LastMixedPhysicsStepCap = cap;
             _tickBranch = PhysicsSchedulerBranch.Mixed;
             _tickEffectiveStepCap = cap;
-            double remaining = simDelta;
-            while (remaining > 1e-12)
+            double remaining = _pendingSimulationSeconds;
+            while (remaining > 1e-12 && _tickOuterSubsteps < substepBudget)
             {
                 double step = System.Math.Min(remaining, cap);
                 _tickOuterSubsteps++;
                 TickPhysicsMixed(step);
                 CurrentTime += step;
                 remaining   -= step;
+                _tickProcessedSimulationSeconds += step;
             }
         }
         else
@@ -684,10 +749,38 @@ public class Universe
             _lastDeferredRailUpdate.Clear();
             _nextDeferredRailDeadline.Clear();
             _tickEffectiveStepCap = MaxCoastStep;
-            _tickOuterSubsteps++;
-            TickRails(simDelta);
-            CurrentTime += simDelta;
+            double remaining = _pendingSimulationSeconds;
+            if (SchedulerBudgetEnabled)
+            {
+                // TickRails has its own event-safe sampling, but a budgeted call must
+                // still stop between complete global steps so docking, SOI and wake-up
+                // decisions cannot be split across an unfinished fleet update.
+                while (remaining > 1e-12 && _tickOuterSubsteps < substepBudget)
+                {
+                    double step = System.Math.Min(remaining, MaxCoastStep);
+                    _tickOuterSubsteps++;
+                    TickRails(step);
+                    CurrentTime += step;
+                    remaining -= step;
+                    _tickProcessedSimulationSeconds += step;
+                }
+            }
+            else
+            {
+                _tickOuterSubsteps++;
+                TickRails(remaining);
+                CurrentTime += remaining;
+                _tickProcessedSimulationSeconds += remaining;
+                remaining = 0.0;
+            }
+
+            _pendingSimulationSeconds = remaining;
         }
+
+        if (_tickBranch != PhysicsSchedulerBranch.Rails)
+            _pendingSimulationSeconds =
+                System.Math.Max(0.0, _pendingSimulationSeconds - _tickProcessedSimulationSeconds);
+        _tickBudgetLimited = _pendingSimulationSeconds > 1e-12;
 
         PublishSchedulerTelemetry();
     }
@@ -701,6 +794,8 @@ public class Universe
         _tickSimulatedSeconds = simDelta > 0.0 && double.IsFinite(simDelta)
             ? simDelta
             : 0.0;
+        _tickProcessedSimulationSeconds = 0.0;
+        _tickBudgetLimited = false;
         _tickEffectiveStepCap = 0.0;
         _tickOuterSubsteps = 0;
         _tickFullPhysicsDispatches = 0;
@@ -747,6 +842,15 @@ public class Universe
         {
             IsInitialized = true,
             SkipReason = _tickSkipReason,
+            RequestedSimulationSeconds = _tickSimulatedSeconds,
+            ProcessedSimulationSeconds = _tickProcessedSimulationSeconds,
+            PendingSimulationSeconds = _pendingSimulationSeconds,
+            BudgetLimited = _tickBudgetLimited,
+            BudgetReason = _tickBudgetLimited
+                ? PhysicsSchedulerBudgetReason.SubstepLimit
+                : SchedulerBudgetEnabled
+                    ? PhysicsSchedulerBudgetReason.None
+                    : PhysicsSchedulerBudgetReason.Disabled,
         };
     }
 
@@ -952,14 +1056,13 @@ public class Universe
             if (IsDockedSecondary(vessel)
                 || vessel.IsDestroyed
                 || vessel.IsGroundHeld
-                || vessel.IsSurfaceSettled && vessel.Throttle <= 0.01)
+                || vessel.IsSurfaceSettled && !HasWakeCommand(vessel))
                 continue;
 
             if (!RequiresOffRailsPhysics(vessel))
                 continue;
 
-            bool thrusting = vessel.Throttle > 0.01
-                || HasActiveEngineAboveThrottle(vessel, 0.01);
+            bool thrusting = HasWakeCommand(vessel);
             double vesselCap = thrusting ? MaxThrustStep : MaxPhysicsStep;
             cap = System.Math.Min(cap, vesselCap);
 
@@ -979,8 +1082,8 @@ public class Universe
     public bool RequiresOffRailsPhysics(Vessel vessel)
     {
         if (vessel.IsDestroyed) return false;
-        if (vessel.IsGroundHeld || vessel.Throttle > 1e-3
-            || HasActiveEngineAboveThrottle(vessel, 1e-3))
+        if (!HasFinitePhysicalState(vessel)) return true;
+        if (vessel.IsGroundHeld || HasWakeCommand(vessel))
             return true;
         if (_bodies.Count == 0) return false;
 
@@ -1018,6 +1121,26 @@ public class Universe
         }
 
         return false;
+    }
+
+    private static bool HasWakeCommand(Vessel vessel) =>
+        vessel.Throttle > 1e-3
+        || HasActiveEngineAboveThrottle(vessel, 1e-3);
+
+    private static bool HasFinitePhysicalState(Vessel vessel) =>
+        IsFinitePosition(vessel.Position)
+        && IsFinitePosition(vessel.Velocity)
+        && IsFinitePosition(vessel.AngularVelocity)
+        && double.IsFinite(vessel.Orientation.W)
+        && double.IsFinite(vessel.Orientation.X)
+        && double.IsFinite(vessel.Orientation.Y)
+        && double.IsFinite(vessel.Orientation.Z)
+        && vessel.Orientation.NormSquared > 1e-24;
+
+    private static void WakeVesselFromRails(Vessel vessel)
+    {
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
     }
 
     /// <summary>
@@ -1175,11 +1298,17 @@ public class Universe
 
         // A settled vessel with a command must wake the solver.  The idle path
         // remains an anchored update, not a rigid-body/RK4 update.
-        if (vessel.IsSurfaceSettled && vessel.Throttle <= 0.01)
+        if (vessel.IsSurfaceSettled && !HasWakeCommand(vessel))
             return VesselPhysicsWorkload.SurfaceSettled;
 
         if (vessel.IsGroundHeld)
             return VesselPhysicsWorkload.GroundHeld;
+
+        if (!HasFinitePhysicalState(vessel))
+        {
+            requiresForces = true;
+            return VesselPhysicsWorkload.FullPhysics;
+        }
 
         requiresForces = RequiresOffRailsPhysics(vessel);
 
@@ -1225,7 +1354,7 @@ public class Universe
             if (vessel.IsSurfaceSettled)
             {
                 var settledBody = ResolveSurfaceBody(vessel);
-                if (vessel.Throttle > 0.01)
+                if (HasWakeCommand(vessel))
                 {
                     vessel.IsSurfaceSettled = false;
                     vessel.SurfaceSettledDuration = 0.0;
@@ -1258,8 +1387,7 @@ public class Universe
             {
                 if (RequiresOffRailsPhysics(vessel))
                 {
-                    vessel.IsOnRails = false;
-                    vessel.OrbitalState = null;
+                    WakeVesselFromRails(vessel);
                 }
                 else
                 {
@@ -1638,8 +1766,7 @@ public class Universe
                 }
                 else if (!shouldBeOnRails && vessel.IsOnRails)
                 {
-                    vessel.IsOnRails    = false;
-                    vessel.OrbitalState = null;
+                    WakeVesselFromRails(vessel);
                 }
 
                 if (vessel.IsOnRails)
@@ -1655,8 +1782,7 @@ public class Universe
             }
             else if (requiresForces)
             {
-                vessel.IsOnRails = false;
-                vessel.OrbitalState = null;
+                WakeVesselFromRails(vessel);
                 RecordWorkload(VesselPhysicsWorkload.FullPhysics);
                 IntegrateVesselOffRails(vessel, refBody, dt);
             }
@@ -1917,7 +2043,7 @@ public class Universe
             }
             if (vessel.IsSurfaceSettled)
             {
-                if (vessel.Throttle > 0.01)
+                if (HasWakeCommand(vessel))
                 {
                     vessel.IsSurfaceSettled = false;
                     vessel.SurfaceSettledDuration = 0.0;

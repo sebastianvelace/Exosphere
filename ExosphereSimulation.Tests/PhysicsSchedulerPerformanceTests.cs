@@ -341,6 +341,174 @@ public sealed class PhysicsSchedulerPerformanceTests
     }
 
     [Fact]
+    public void BudgetedSchedulerConservesExactTemporalDebtAcrossTicksAndPause()
+    {
+        var earth = LoadBody("earth");
+        var vessel = SafeRailVessel(earth, "budgeted-debt");
+        vessel.IsOnRails = true;
+        var universe = new Universe
+        {
+            TimeScale = 2_000.0,
+            SchedulerBudgetEnabled = true,
+            MaxSchedulerSubstepsPerTick = 2,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        universe.Tick(0.02); // 40 s requested, 2 × 2 s committed.
+
+        Assert.Equal(4.0, universe.CurrentTime, 12);
+        Assert.Equal(36.0, universe.PendingSimulationSeconds, 12);
+        Assert.True(universe.LastSchedulerTelemetry.BudgetLimited);
+        Assert.Equal(4.0, universe.LastSchedulerTelemetry.ProcessedSimulationSeconds, 12);
+        Assert.Equal(40.0, universe.LastSchedulerTelemetry.RequestedSimulationSeconds, 12);
+        Assert.Equal(36.0, universe.LastSchedulerTelemetry.PendingSimulationSeconds, 12);
+
+        universe.TimeScale = 0.0;
+        universe.Tick(0.5);
+        Assert.Equal(4.0, universe.CurrentTime, 12);
+        Assert.Equal(36.0, universe.PendingSimulationSeconds, 12);
+        Assert.Equal(PhysicsSchedulerSkipReason.Paused,
+            universe.LastSchedulerTelemetry.SkipReason);
+
+        universe.TimeScale = 2_000.0;
+        universe.SchedulerBudgetEnabled = false;
+        universe.Tick(0.0001); // drains the old debt plus the new 0.2 s request.
+
+        Assert.Equal(40.2, universe.CurrentTime, 10);
+        Assert.Equal(0.0, universe.PendingSimulationSeconds, 12);
+        Assert.Equal(36.2, universe.LastSchedulerTelemetry.ProcessedSimulationSeconds, 10);
+        Assert.False(universe.LastSchedulerTelemetry.BudgetLimited);
+    }
+
+    [Fact]
+    public void ExistingTemporalDebtIsNotRescaledWhenTimeScaleChanges()
+    {
+        var earth = LoadBody("earth");
+        var vessel = SafeRailVessel(earth, "debt-scale-change");
+        vessel.IsOnRails = true;
+        var universe = new Universe
+        {
+            TimeScale = 2_000.0,
+            SchedulerBudgetEnabled = true,
+            MaxSchedulerSubstepsPerTick = 1,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        universe.Tick(0.02); // 40 requested, 2 committed, 38 pending.
+        universe.TimeScale = 1.0;
+        universe.Tick(0.02); // one 20 ms full-physics step, not 38 × 1.
+
+        Assert.Equal(2.02, universe.CurrentTime, 12);
+        Assert.Equal(37.999999999999996, universe.PendingSimulationSeconds, 10);
+        Assert.Equal(0.02,
+            universe.LastSchedulerTelemetry.ProcessedSimulationSeconds, 12);
+        Assert.Equal(PhysicsSchedulerBranch.FullPhysics,
+            universe.LastSchedulerTelemetry.Branch);
+    }
+
+    [Fact]
+    public void InvalidInputsDoNotAddToExistingTemporalDebt()
+    {
+        var earth = LoadBody("earth");
+        var vessel = SafeRailVessel(earth, "debt-invalid-input");
+        vessel.IsOnRails = true;
+        var universe = new Universe
+        {
+            TimeScale = 2_000.0,
+            SchedulerBudgetEnabled = true,
+            MaxSchedulerSubstepsPerTick = 1,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        universe.Tick(0.02);
+        double debt = universe.PendingSimulationSeconds;
+        universe.Tick(double.NaN);
+
+        Assert.Equal(debt, universe.PendingSimulationSeconds, 12);
+        Assert.Equal(PhysicsSchedulerSkipReason.InvalidDelta,
+            universe.LastSchedulerTelemetry.SkipReason);
+        Assert.Equal(0.0, universe.LastSchedulerTelemetry.ProcessedSimulationSeconds);
+    }
+
+    [Fact]
+    public void AbsoluteTimeSeekClearsTemporalDebtAndRailDeadlines()
+    {
+        var earth = LoadBody("earth");
+        var vessel = SafeRailVessel(earth, "seek-clears-debt");
+        vessel.IsOnRails = true;
+        var universe = new Universe
+        {
+            TimeScale = 2_000.0,
+            SchedulerBudgetEnabled = true,
+            MaxSchedulerSubstepsPerTick = 1,
+        };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+        universe.Tick(0.02);
+
+        Assert.True(universe.PendingSimulationSeconds > 0.0);
+        universe.SetSimulationTime(123.0);
+        Assert.Equal(123.0, universe.CurrentTime, 12);
+        Assert.Equal(0.0, universe.PendingSimulationSeconds, 12);
+
+        universe.SetCurrentTime(456.0);
+        Assert.Equal(456.0, universe.CurrentTime, 12);
+        Assert.Equal(0.0, universe.PendingSimulationSeconds, 12);
+    }
+
+    [Fact]
+    public void CorruptedRailStateIsNeverClassifiedAsAnalyticWork()
+    {
+        var earth = LoadBody("earth");
+        var vessel = SafeRailVessel(earth, "corrupted-rail-state");
+        vessel.IsOnRails = true;
+        vessel.Velocity = new Vector3d(double.NaN, 0.0, 0.0);
+        var universe = new Universe { TimeScale = 100.0 };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        Assert.True(universe.RequiresOffRailsPhysics(vessel));
+        Assert.Equal(VesselPhysicsWorkload.FullPhysics,
+            universe.ClassifyMixedPhysicsWorkload(vessel));
+        Assert.NotEqual(VesselSimulationTier.OnRails,
+            universe.ClassifySimulationTier(vessel));
+    }
+
+    [Fact]
+    public void UndockClearsStaleRailStateEvenWithoutSeparationImpulse()
+    {
+        var universe = CreateDockingSchedulerUniverse(
+            out Vessel primary,
+            out Vessel secondary);
+        Assert.True(universe.TryDock(
+            primary.Id,
+            "primary-port",
+            secondary.Id,
+            "secondary-port",
+            "stale-rail-undock").Succeeded);
+
+        var body = universe.Bodies[0];
+        primary.IsOnRails = true;
+        primary.OrbitalState = OrbitalElements.FromStateVector(
+            primary.Position - body.Position,
+            primary.Velocity - body.Velocity,
+            body.GM,
+            body.Id,
+            universe.CurrentTime);
+        secondary.IsOnRails = true;
+        secondary.OrbitalState = primary.OrbitalState;
+
+        Assert.True(universe.Undock("stale-rail-undock"));
+        Assert.False(primary.IsOnRails);
+        Assert.Null(primary.OrbitalState);
+        Assert.False(secondary.IsOnRails);
+        Assert.Null(secondary.OrbitalState);
+    }
+
+    [Fact]
     public void DeferredRailsProjectsCurrentEpochAndMatchesAlwaysCheckedReference()
     {
         var mixedEarth = LoadBody("earth");
@@ -740,6 +908,13 @@ public sealed class PhysicsSchedulerPerformanceTests
         stack.Velocity = earth.Velocity
             + Vector3d.Up * System.Math.Sqrt(earth.GM / radius);
         stack.ReferenceBodyId = earth.Id;
+        stack.IsOnRails = true;
+        stack.OrbitalState = OrbitalElements.FromStateVector(
+            stack.Position - earth.Position,
+            stack.Velocity - earth.Velocity,
+            earth.GM,
+            earth.Id,
+            0.0);
 
         var universe = new Universe
         {
@@ -750,6 +925,10 @@ public sealed class PhysicsSchedulerPerformanceTests
         universe.AddVessel(stack);
 
         Vessel detached = Assert.IsType<Vessel>(stack.Stage());
+        Assert.False(stack.IsOnRails);
+        Assert.Null(stack.OrbitalState);
+        Assert.False(detached.IsOnRails);
+        Assert.Null(detached.OrbitalState);
         detached.IsOnRails = true;
         detached.Throttle = 0.1;
         universe.AddVessel(detached);

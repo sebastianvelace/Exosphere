@@ -611,7 +611,7 @@ public partial class _PlaytestShot : Node
                 $"scheduler_simulated={schedulerTelemetry.SimulatedSeconds:F6} " +
                 $"catch_up_risk={catchUpRisk} " +
                 "source=process_callback");
-            _log.WriteLine($"PERF_SCHEDULER schema=1 frame={_frame} " +
+            _log.WriteLine($"PERF_SCHEDULER schema=2 frame={_frame} " +
                 $"initialized={schedulerInitialized} " +
                 $"skip_reason={schedulerTelemetry.SkipReason} " +
                 $"branch={schedulerTelemetry.Branch} " +
@@ -628,6 +628,11 @@ public partial class _PlaytestShot : Node
                 $"deadline_deferred={schedulerTelemetry.DeadlineDeferredSkips} " +
                 $"deadline_catch_up={schedulerTelemetry.DeadlineCatchUpDispatches} " +
                 $"deadline_projected={schedulerTelemetry.DeadlineProjectedDispatches} " +
+                $"requested_simulated={schedulerTelemetry.RequestedSimulationSeconds:F6} " +
+                $"processed_simulated={schedulerTelemetry.ProcessedSimulationSeconds:F6} " +
+                $"pending_simulated={schedulerTelemetry.PendingSimulationSeconds:F6} " +
+                $"budget_limited={(schedulerTelemetry.BudgetLimited ? "true" : "false")} " +
+                $"budget_reason={schedulerTelemetry.BudgetReason} " +
                 $"total_work={schedulerTelemetry.TotalWorkDispatches} " +
                 "source=process_callback");
             if ((_frame & 31) == 0) _log.Flush();

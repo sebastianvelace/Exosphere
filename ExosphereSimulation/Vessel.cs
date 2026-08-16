@@ -962,6 +962,13 @@ public class Vessel
             : DefaultSeparationOpeningMs;
         ApplyMassSplitKinematics(debris, axis, gap, opening);
 
+        // The split changes both position and velocity. Any cached conic now describes
+        // the pre-separation stack and must not be reused by the next rails tick.
+        IsOnRails = false;
+        OrbitalState = null;
+        debris.IsOnRails = false;
+        debris.OrbitalState = null;
+
         return debris;
     }
 
@@ -985,6 +992,11 @@ public class Vessel
         double gap = System.Math.Max(1.0, debris.VehicleLength);
         const double relativeOpenMs = 0.5;
         ApplyMassSplitKinematics(debris, axis, gap, relativeOpenMs);
+
+        IsOnRails = false;
+        OrbitalState = null;
+        debris.IsOnRails = false;
+        debris.OrbitalState = null;
 
         return debris;
     }
@@ -1085,7 +1097,9 @@ public class Vessel
             Orientation = Orientation,
             AngularVelocity = AngularVelocity,
             ReferenceBodyId = ReferenceBodyId,
-            IsOnRails = IsOnRails,
+            // A payload split changes the carrier and payload kinematics. Recompute
+            // analytic rails from the post-separation state on the next scheduler tick.
+            IsOnRails = false,
             SASEnabled = true,
         };
         if (detached.Root != null) payload.Parts.SetRoot(detached.Root);
@@ -1101,6 +1115,11 @@ public class Vessel
             ? -relativeVelocity.Normalized
             : Vector3d.Up;
         ApplyMassSplitKinematics(payload, velocityAxis, 0.0, relativeVelocity.Magnitude);
+
+        IsOnRails = false;
+        OrbitalState = null;
+        payload.IsOnRails = false;
+        payload.OrbitalState = null;
 
         payload.ConfigureLandingContactsFromParts();
         payload.ConfigureCatchContactsFromParts();
