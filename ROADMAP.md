@@ -119,9 +119,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      juego actualmente captura/restaura sólo la nave activa en el mismo epoch. La cola de
      comandos y callbacks aún no es persistente; el runtime diferido sigue bloqueado.
    - **Fase 49 en curso:** snapshot de soporte vital, energía, térmica y comunicaciones integrado
-     en save/load con validación de identidad, epoch y límites físicos. Siguiente gate: crear
-     estado de sistemas para naves no activas y una cola de callbacks antes de comparar
-     reanudación diferida contra FullPhysics.
+     en save/load con validación de identidad, epoch y límites físicos; además, los cambios de
+     fase y `LaunchCommitted` usan un log ordenado de callbacks con entrega síncrona compatible.
+     Siguiente gate: mantener la prueba de orden de callbacks, crear estado de sistemas para
+     naves no activas y comparar reanudación diferida contra FullPhysics.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

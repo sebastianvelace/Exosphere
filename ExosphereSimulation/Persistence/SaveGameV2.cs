@@ -166,6 +166,8 @@ public sealed class MissionSaveV2
 {
     public string? MissionId { get; set; }
     public string Phase { get; set; } = "";
+    public long NextCallbackSequence { get; set; } = 1;
+    public List<MissionCallbackState> CallbackEvents { get; set; } = new();
     public VectorSaveV2? LaunchSurfaceDirection { get; set; }
     public Dictionary<string, double> ObjectiveProgress { get; set; } = new();
     public HashSet<string> CompletedObjectives { get; set; } = new();
@@ -434,6 +436,11 @@ public static class SaveGameV2Codec
                 throw new InvalidDataException(
                     $"Campaign reward '{key}' cannot be negative.");
         }
+        new MissionCallbackQueueState
+        {
+            NextSequence = save.Mission.NextCallbackSequence,
+            Events = save.Mission.CallbackEvents,
+        }.Validate();
 
         if (save.VesselSystems == null)
             throw new InvalidDataException("Vessel systems collection is null.");

@@ -49,6 +49,59 @@ public partial class MissionManager : Node
 
     private bool _maxQTriggered;
     private int  _lastTickSecond = -1;   // last whole-second countdown beep emitted
+    private readonly MissionCallbackQueue _callbackQueue = new();
+
+    /// <summary>True only when an event has been recorded but not delivered.</summary>
+    public bool HasPendingMissionCallbacks => _callbackQueue.HasPending;
+
+    public MissionCallbackQueueState CaptureCallbackState() => _callbackQueue.CaptureState();
+
+    public void RestoreCallbackState(MissionCallbackQueueState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        _callbackQueue.RestoreState(state);
+    }
+
+    /// <summary>
+    /// Delivers restored/pending callbacks in sequence order. Unknown event types remain
+    /// pending and fail closed so a future producer cannot be silently discarded.
+    /// </summary>
+    public bool DispatchPendingMissionCallbacks()
+    {
+        if (!HasPendingMissionCallbacks) return true;
+        try
+        {
+            _callbackQueue.DispatchPending(callback =>
+            {
+                switch (callback.EventType)
+                {
+                    case "PhaseChanged":
+                        EmitSignal(SignalName.PhaseChanged, callback.Payload);
+                        break;
+                    case "LaunchCommitted":
+                        EmitSignal(SignalName.LaunchCommitted);
+                        break;
+                    case "VesselStaged":
+                        SimulationBridge.Instance?.EmitSignal(
+                            SimulationBridge.SignalName.VesselStaged, callback.Payload);
+                        break;
+                    case "VesselDestroyed":
+                        SimulationBridge.Instance?.EmitSignal(
+                            SimulationBridge.SignalName.VesselDestroyed, callback.Payload);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"Unknown mission callback '{callback.EventType}'.");
+                }
+            });
+            return !HasPendingMissionCallbacks;
+        }
+        catch (InvalidOperationException ex)
+        {
+            GD.PushWarning($"[Mission] Pending callback retained: {ex.Message}");
+            return false;
+        }
+    }
 
     public override void _Ready()
     {
@@ -66,6 +119,12 @@ public partial class MissionManager : Node
         {
             SaveSystem.PendingMissionPhase = null;
             EnterPhase(pending);
+        }
+
+        if (SaveSystem.PendingCallbackState is { } callbackState)
+        {
+            SaveSystem.PendingCallbackState = null;
+            RestoreCallbackState(callbackState);
         }
     }
 
@@ -98,7 +157,8 @@ public partial class MissionManager : Node
         IsCountingDown  = false;
         _maxQTriggered  = false;
         SetPhase(MissionPhase.LIFTOFF);
-        EmitSignal(SignalName.LaunchCommitted);
+        PublishMissionCallback(
+            "LaunchCommitted", "", () => EmitSignal(SignalName.LaunchCommitted));
     }
 
     /// <summary>
@@ -112,7 +172,8 @@ public partial class MissionManager : Node
             or MissionPhase.IGNITION))
             return;
         SetPhase(MissionPhase.LIFTOFF);
-        EmitSignal(SignalName.LaunchCommitted);
+        PublishMissionCallback(
+            "LaunchCommitted", "", () => EmitSignal(SignalName.LaunchCommitted));
     }
 
     /// Call from SimulationBridge.TriggerStaging when a stage fires.
@@ -140,6 +201,8 @@ public partial class MissionManager : Node
         var vessel   = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
         if (bridge == null || universe == null) return;
+
+        DispatchPendingMissionCallbacks();
 
         // ── Crash detection (highest priority) ────────────────────────────────
         if (vessel != null && vessel.IsDestroyed && Phase != MissionPhase.CRASHED)
@@ -271,7 +334,9 @@ public partial class MissionManager : Node
             case MissionPhase.CAUGHT:      AudioManager.Instance?.PlayTouchdown(); break;
         }
 
-        EmitSignal(SignalName.PhaseChanged, newPhase.ToString());
+        PublishMissionCallback(
+            "PhaseChanged", newPhase.ToString(),
+            () => EmitSignal(SignalName.PhaseChanged, newPhase.ToString()));
 
         if (newPhase == MissionPhase.CRASHED)
         {
@@ -282,5 +347,18 @@ public partial class MissionManager : Node
         {
             GD.Print($"[Mission] → {newPhase}");
         }
+    }
+
+    /// <summary>
+    /// Records and immediately delivers a callback owned by another game controller. This
+    /// keeps external mission events in the same ordered log without changing signal timing.
+    /// </summary>
+    public MissionCallbackState PublishMissionCallback(
+        string eventType,
+        string payload,
+        Action emit)
+    {
+        double simulationTime = SimulationBridge.Instance?.Universe?.CurrentTime ?? 0.0;
+        return _callbackQueue.Publish(eventType, payload, simulationTime, emit);
     }
 }

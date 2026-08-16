@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Persistence;
 using Exosphere.Simulation.Systems;
 using Godot;
@@ -24,6 +25,7 @@ public static class SaveSystem
     /// </summary>
     public static MissionPhase? PendingMissionPhase { get; set; }
     public static VesselSystemsState? PendingSystemsState { get; set; }
+    public static MissionCallbackQueueState? PendingCallbackState { get; set; }
 
     public static void SaveGame(string slotName = "quicksave")
     {
@@ -35,6 +37,8 @@ public static class SaveSystem
         var save = SaveGameV2Codec.Capture(
             bridge.Universe, LastLoadedMetadata);
         save.VesselSystems.Clear();
+        save.Mission.NextCallbackSequence = 1;
+        save.Mission.CallbackEvents = new();
         if (bridge.ActiveVessel is { } activeVessel
             && SystemsController.Instance is { } systemsController)
         {
@@ -48,6 +52,13 @@ public static class SaveSystem
         save.Mission.Phase =
             MissionManager.Instance?.Phase.ToString()
             ?? save.Mission.Phase;
+        if (MissionManager.Instance is { } missionManager)
+        {
+            MissionCallbackQueueState callbackState =
+                missionManager.CaptureCallbackState();
+            save.Mission.NextCallbackSequence = callbackState.NextSequence;
+            save.Mission.CallbackEvents = callbackState.Events;
+        }
         string path = System.IO.Path.Combine(
             DefaultSaveDirectory, $"{safeSlot}.json");
         string temporary = path + ".tmp";
@@ -61,6 +72,7 @@ public static class SaveSystem
     public static bool LoadGame(string slotName = "quicksave")
     {
         PendingSystemsState = null;
+        PendingCallbackState = null;
         string safeSlot = NormalizeSlotName(slotName);
         string path = System.IO.Path.Combine(
             DefaultSaveDirectory, $"{safeSlot}.json");
@@ -79,6 +91,7 @@ public static class SaveSystem
             SaveGameV2Codec.Restore(bridge.Universe, save, catalog);
             LastLoadedMetadata = save;
             PendingSystemsState = null;
+            PendingCallbackState = null;
 
             if (save.ActiveVesselId is { } activeId
                 && save.VesselSystems.TryGetValue(activeId, out var systemsState))
@@ -94,6 +107,17 @@ public static class SaveSystem
                 PendingSystemsState = null;
                 SystemsController.Instance?.ResetForLoadedSimulation();
             }
+
+            var callbackState = new MissionCallbackQueueState
+            {
+                NextSequence = save.Mission.NextCallbackSequence,
+                Events = save.Mission.CallbackEvents,
+            };
+            callbackState.Validate();
+            if (MissionManager.Instance is { } missionManager)
+                missionManager.RestoreCallbackState(callbackState);
+            else
+                PendingCallbackState = callbackState;
 
             int warpIndex = Array.FindIndex(
                 SimulationBridge.WarpLevels,

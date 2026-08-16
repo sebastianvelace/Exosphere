@@ -98,7 +98,8 @@ public partial class SystemsController : Node
             IsMissionControlled: missionControlled,
             IsMissionCriticalState: missionCritical,
             IsAtmosphereOrReentry: MissionManager.Instance?.InDescent == true,
-            HasPendingMissionCallback: false,
+            HasPendingMissionCallback:
+                MissionManager.Instance?.HasPendingMissionCallbacks == true,
             HasSystemsAlert: systemsAlert,
             SecondsUntilNextSystemsDeadline: systemsDeadline);
     }

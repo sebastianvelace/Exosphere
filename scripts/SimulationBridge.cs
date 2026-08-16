@@ -1023,7 +1023,9 @@ public partial class SimulationBridge : Node
         _vesselRenderer?.BuildFromVessel(ActiveVessel);
         SpawnDebrisRenderer(debris, "SHDebris_");
 
-        EmitSignal(SignalName.VesselStaged, debris.Id);
+        PublishMissionCallback(
+            "VesselStaged", debris.Id,
+            () => EmitSignal(SignalName.VesselStaged, debris.Id));
         MissionManager.Instance?.NotifyStaged();
     }
 
@@ -1046,7 +1048,9 @@ public partial class SimulationBridge : Node
         Universe.AddVessel(detached);
         _vesselRenderer?.BuildFromVessel(carrier);
         SpawnDebrisRenderer(detached, "Separated_");
-        EmitSignal(SignalName.VesselStaged, detached.Id);
+        PublishMissionCallback(
+            "VesselStaged", detached.Id,
+            () => EmitSignal(SignalName.VesselStaged, detached.Id));
         return detached;
     }
 
@@ -1180,14 +1184,26 @@ public partial class SimulationBridge : Node
             _vesselRenderer?.BuildFromVessel(ActiveVessel);
 
         foreach (var debris in pending)
-            EmitSignal(SignalName.VesselStaged, debris.Id);
+            PublishMissionCallback(
+                "VesselStaged", debris.Id,
+                () => EmitSignal(SignalName.VesselStaged, debris.Id));
 
         if (ActiveVessel != null
             && ActiveVessel.IsDestroyed
             && ActiveVessel.DestructionCause == VesselDestructionCause.StructuralBreakup)
         {
-            EmitSignal(SignalName.VesselDestroyed, ActiveVessel.Id);
+            PublishMissionCallback(
+                "VesselDestroyed", ActiveVessel.Id,
+                () => EmitSignal(SignalName.VesselDestroyed, ActiveVessel.Id));
         }
+    }
+
+    private void PublishMissionCallback(string eventType, string payload, Action emit)
+    {
+        if (MissionManager.Instance is { } missionManager)
+            missionManager.PublishMissionCallback(eventType, payload, emit);
+        else
+            emit();
     }
 
     private void SpawnDebrisRenderer(Vessel debris, string namePrefix)

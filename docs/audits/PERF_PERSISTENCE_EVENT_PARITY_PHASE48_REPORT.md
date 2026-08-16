@@ -36,29 +36,34 @@ Every snapshot is required to use the same committed simulation epoch as the ves
 
 ## Mission callbacks
 
-`MissionManager.SetPhase` assigns `Phase` and immediately emits `PhaseChanged`; launch and
-staging notifications are also emitted synchronously. There is no pending callback queue,
-sequence number, or serialized callback timestamp. Therefore
-`SimulationExternalInterestInputs.HasPendingMissionCallback` remains `false` in the game
-adapter. A phase label must not be converted into a synthetic callback deadline.
+`MissionManager.SetPhase` still assigns `Phase` and emits `PhaseChanged` synchronously. Phase
+changes and `LaunchCommitted` now also pass through an ordered callback log with stable sequence
+IDs, simulation timestamps, payloads, delivery state, and SaveGameV2 restore coverage. This
+preserves current signal timing while making a real pending callback observable through
+`SimulationExternalInterestInputs.HasPendingMissionCallback`.
 
-Before deferred dispatch can be enabled, mission events need a small authoritative queue or
-event log with stable IDs, simulation timestamps, delivery/acknowledgement state, and save/load
-coverage. The queue must be drained on both the full-physics and deferred paths so event order
-is identical.
+The log now covers the known phase, launch, staging, and structural-destruction signals. It
+does not invent deadlines for future events that have no queue entry. A pending event is
+dispatched in sequence order; if delivery throws or its producer is unknown, it remains
+pending and later events are not reordered or dropped.
+
+Before deferred dispatch can be enabled, any new mission-event producer must use the same
+authoritative queue or event-log contract. The queue must be drained on both the full-physics
+and deferred paths so event order is identical.
 
 ## Decision and next gate
 
 Keep `SimulationInterestPolicy.EnabledByDefault == false` and keep the existing
-`FullPhysics`/mixed-rails dispatcher authoritative. The persistence extension point and
-active-vessel restore are safe, but no runtime optimization may depend on them until every
-deferred vessel has authoritative systems state, a callback queue, and a policy-off versus
-candidate-universe comparison.
+`FullPhysics`/mixed-rails dispatcher authoritative. The persistence extension point,
+active-vessel restore, and synchronous mission callback log are safe, but no runtime
+optimization may depend on them until every deferred vessel has authoritative systems state,
+every mission-event producer uses the callback queue, and a policy-off versus candidate-universe
+comparison exists.
 
 Next gate:
 
 1. instantiate/capture the typed systems map for every vessel that can be deferred;
-2. add callback queue ordering and save/load tests;
+2. keep callback queue ordering and save/load tests in the promotion matrix;
 3. compare a save/load/resume reference against a candidate deferred vessel across a systems
    deadline, a mission event, SOI, staging, docking, and EDL/catch state;
 4. run full tests, both builds, and the visual ascent/EDL harness before any scheduler switch.
