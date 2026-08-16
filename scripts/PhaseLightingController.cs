@@ -44,9 +44,18 @@ public partial class PhaseLightingController : Node
 
     private const float CockpitAmbientBoost  = 0.08f;
     private const float CockpitGlowReduction = 0.18f;
+    private const double DirectTransmittanceCadenceSeconds = 0.10;
+    private const double DirectAltitudeRefreshMeters = 2_000.0;
+    private const double DirectSunDirectionDotThreshold = 0.9995;
 
     private Godot.Environment? _env;
     private DirectionalLight3D? _light;
+    private double _directTransmittanceAccumulator = double.MaxValue;
+    private Vector3d _cachedDirectTransmittance = new(1.0, 1.0, 1.0);
+    private string? _cachedDirectBodyId;
+    private double _cachedDirectAltitude = double.NaN;
+    private double _cachedDirectSunElevation = double.NaN;
+    private Vector3d _cachedDirectSunDirection = Vector3d.Zero;
 
     public override void _Ready()
     {
@@ -61,6 +70,7 @@ public partial class PhaseLightingController : Node
 
         EnsureRefs();
         if (_env == null) return;
+        _directTransmittanceAccumulator += double.IsFinite(delta) && delta > 0.0 ? delta : 0.0;
 
         var body = bridge!.Universe.GetDominantBody(av.Position);
         double alt = av.GetAltitude(body);
@@ -102,16 +112,12 @@ public partial class PhaseLightingController : Node
         {
             var sunBody = bridge.Universe.GetBody("sun");
             var up = (av.Position - body.Position).Normalized;
-            double sunElevation = sunBody != null
-                ? up.Dot((sunBody.Position - av.Position).Normalized)
-                : 1.0;
-            var direct = optics?.DirectSolarTransmittance(
-                alt,
-                sunElevation,
-                body.Radius,
-                body.Atmosphere?.MaxAltitude ?? 0.0,
-                sampleCount: 32)
-                ?? new Vector3d(1.0, 1.0, 1.0);
+            var sunDirection = sunBody != null
+                ? (sunBody.Position - av.Position).Normalized
+                : Vector3d.Up;
+            double sunElevation = up.Dot(sunDirection);
+            var direct = GetCachedDirectTransmittance(
+                body, optics, alt, sunElevation, sunDirection);
             double peak = System.Math.Max(1e-6,
                 System.Math.Max(direct.X, System.Math.Max(direct.Y, direct.Z)));
             _light.LightColor = new Color(
@@ -121,6 +127,46 @@ public partial class PhaseLightingController : Node
             double luminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
             _light.LightEnergy = sun * (float)luminance * SunController.SolarVisibility;
         }
+    }
+
+    private Vector3d GetCachedDirectTransmittance(
+        CelestialBody body, AtmosphereOptics? optics, double altitude,
+        double sunElevation, Vector3d sunDirection)
+    {
+        if (optics == null)
+        {
+            _cachedDirectTransmittance = new Vector3d(1.0, 1.0, 1.0);
+            _cachedDirectBodyId = body.Id;
+            _cachedDirectAltitude = altitude;
+            _cachedDirectSunElevation = sunElevation;
+            _cachedDirectSunDirection = sunDirection;
+            _directTransmittanceAccumulator = 0.0;
+            return _cachedDirectTransmittance;
+        }
+
+        bool bodyChanged = _cachedDirectBodyId != body.Id;
+        bool horizonChanged = double.IsFinite(_cachedDirectSunElevation)
+            && (_cachedDirectSunElevation >= 0.0) != (sunElevation >= 0.0);
+        bool altitudeChanged = !double.IsFinite(_cachedDirectAltitude)
+            || System.Math.Abs(altitude - _cachedDirectAltitude) >= DirectAltitudeRefreshMeters;
+        bool directionChanged = _cachedDirectSunDirection == Vector3d.Zero
+            || _cachedDirectSunDirection.Dot(sunDirection) < DirectSunDirectionDotThreshold;
+        bool refresh = bodyChanged || horizonChanged || altitudeChanged || directionChanged
+            || _directTransmittanceAccumulator >= DirectTransmittanceCadenceSeconds;
+        if (!refresh) return _cachedDirectTransmittance;
+
+        _cachedDirectTransmittance = optics.DirectSolarTransmittance(
+            altitude,
+            sunElevation,
+            body.Radius,
+            body.Atmosphere?.MaxAltitude ?? 0.0,
+            sampleCount: 32);
+        _cachedDirectBodyId = body.Id;
+        _cachedDirectAltitude = altitude;
+        _cachedDirectSunElevation = sunElevation;
+        _cachedDirectSunDirection = sunDirection;
+        _directTransmittanceAccumulator = 0.0;
+        return _cachedDirectTransmittance;
     }
 
     private static float ComputeReentryFactor(SimulationBridge bridge, Vessel av,

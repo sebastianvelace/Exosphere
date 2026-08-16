@@ -6,6 +6,7 @@ COCKPIT="$ROOT/scripts/CockpitInstruments.cs"
 RENDERER="$ROOT/scripts/VesselRenderer.cs"
 CONSTRUCTION="$ROOT/scripts/ConstructionController.cs"
 CAMERA="$ROOT/scripts/CameraController.cs"
+PHASE_LIGHTING="$ROOT/scripts/PhaseLightingController.cs"
 
 fail() {
   echo "render_cadence_phase23_contract_test: FAIL: $*" >&2
@@ -17,7 +18,7 @@ require_text() {
   rg -q --fixed-strings "$pattern" "$file" || fail "$description"
 }
 
-for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION" "$CAMERA"; do
+for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION" "$CAMERA" "$PHASE_LIGHTING"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 
@@ -64,5 +65,19 @@ require_text "$CAMERA" 'private Node3D? _exteriorRenderer;' \
   "exterior renderer reference must be cached"
 require_text "$CAMERA" 'ResolvePresentationNodes();' \
   "camera presentation nodes must use the lazy cache resolver"
+
+# Direct solar transmittance is an optical presentation sample, not a physics tick. It
+# must remain bounded and must invalidate on body/horizon/geometry changes so eclipse and
+# SOI transitions cannot display a stale planet's light.
+require_text "$PHASE_LIGHTING" 'DirectTransmittanceCadenceSeconds = 0.10' \
+  "phase lighting direct-transmittance cadence missing"
+require_text "$PHASE_LIGHTING" '_cachedDirectTransmittance' \
+  "phase lighting transmittance cache missing"
+require_text "$PHASE_LIGHTING" 'GetCachedDirectTransmittance(' \
+  "phase lighting cache helper missing"
+require_text "$PHASE_LIGHTING" 'horizonChanged' \
+  "phase lighting horizon invalidation missing"
+require_text "$PHASE_LIGHTING" 'DirectAltitudeRefreshMeters' \
+  "phase lighting altitude invalidation missing"
 
 echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz gated, exterior=hidden/thermal gated+cached, VAB=demand-driven)"

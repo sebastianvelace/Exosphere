@@ -18,14 +18,22 @@ fail() {
 # Realtime sampling must remain bounded without changing the CPU/LUT oracle.
 rg -q --fixed-strings 'uniform float atmosphere_quality' "$SHADER" \
   || fail "shader quality uniform missing"
-rg -q --fixed-strings 'float view_steps = render_step_count(12.0, float(VIEW_STEPS));' "$SHADER" \
+rg -q --fixed-strings 'float effective_step_count(float requested_steps)' "$SHADER" \
+  || fail "fractional quality step normalization missing"
+rg -q --fixed-strings 'return max(ceil(requested_steps), 1.0);' "$SHADER" \
+  || fail "fractional quality step normalization is not clamped"
+rg -q --fixed-strings 'float view_steps = effective_step_count(' "$SHADER" \
   || fail "view integration minimum bound missing"
 rg -q --fixed-strings 'if (float(i) >= view_steps) break;' "$SHADER" \
   || fail "view loop does not honor quality bound"
-rg -q --fixed-strings 'float cloud_view_steps = render_step_count(8.0, float(CLOUD_VIEW_STEPS));' "$SHADER" \
+rg -q --fixed-strings 'float cloud_view_steps = effective_step_count(' "$SHADER" \
   || fail "cloud integration minimum bound missing"
 rg -q --fixed-strings 'if (float(i) >= cloud_view_steps) break;' "$SHADER" \
   || fail "cloud loop does not honor quality bound"
+rg -q --fixed-strings 'float light_steps = effective_step_count(' "$SHADER" \
+  || fail "solar integration step normalization missing"
+rg -q --fixed-strings 'float cloud_light_steps = effective_step_count(' "$SHADER" \
+  || fail "cloud-shadow step normalization missing"
 
 # The selected Godot path must be the low-frequency incremental map, not the slower
 # importance-sampling path repeatedly invalidated by dynamic uniforms.

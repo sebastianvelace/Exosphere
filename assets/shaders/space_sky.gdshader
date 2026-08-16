@@ -110,6 +110,13 @@ float render_step_count(float minimum_steps, float maximum_steps) {
 		clamp(atmosphere_quality, 0.0, 1.0));
 }
 
+// Fractional quality values select an integer number of samples. Keep the
+// normalized interval denominator identical to that integer count so the last
+// segment always ends at u=1 rather than overshooting the ray boundary.
+float effective_step_count(float requested_steps) {
+	return max(ceil(requested_steps), 1.0);
+}
+
 vec2 ray_sphere(vec3 origin, vec3 direction, float radius) {
 	float b = dot(origin, direction);
 	float c = dot(origin, origin) - radius * radius;
@@ -217,7 +224,8 @@ vec3 optical_depth_to_sun(vec3 position, vec3 direction, float outer_radius) {
 	float distance_to_space = max(atmosphere_hit.y, 0.0);
 	float closest = max(-dot(position, apparent_direction), 0.0);
 	vec3 depth = vec3(0.0);
-	float light_steps = render_step_count(8.0, float(LIGHT_STEPS));
+	float light_steps = effective_step_count(
+		render_step_count(8.0, float(LIGHT_STEPS)));
 	for (int i = 0; i < LIGHT_STEPS; i++) {
 		if (float(i) >= light_steps) break;
 		float segment_start = tangent_warped_boundary(
@@ -406,7 +414,8 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
 	float distance_to_edge = max(outer_hit.y, 0.0);
 	float closest = max(-dot(position, to_sun), 0.0);
 	float optical_depth = 0.0;
-	float cloud_light_steps = render_step_count(3.0, float(CLOUD_LIGHT_STEPS));
+	float cloud_light_steps = effective_step_count(
+		render_step_count(3.0, float(CLOUD_LIGHT_STEPS)));
 	for (int i = 0; i < CLOUD_LIGHT_STEPS; i++) {
 		if (float(i) >= cloud_light_steps) break;
 		float segment_start = tangent_warped_boundary(float(i) / cloud_light_steps,
@@ -466,7 +475,8 @@ void sky() {
 			/ (8.0 * PI * (2.0 + g2)
 			* pow(max(1.0 + g2 - 2.0 * mie_g * mu, 1e-3), 1.5));
 
-		float view_steps = render_step_count(12.0, float(VIEW_STEPS));
+		float view_steps = effective_step_count(
+			render_step_count(12.0, float(VIEW_STEPS)));
 		for (int i = 0; i < VIEW_STEPS; i++) {
 			if (float(i) >= view_steps) break;
 			float segment_start = tangent_warped_boundary(float(i) / view_steps,
@@ -554,7 +564,8 @@ void sky() {
 			float mu_cloud = dot(view_dir, to_sun);
 			float phase_cloud = 0.82 * hg_phase(mu_cloud, 0.82)
 				+ 0.18 * hg_phase(mu_cloud, -0.20);
-			float cloud_view_steps = render_step_count(8.0, float(CLOUD_VIEW_STEPS));
+			float cloud_view_steps = effective_step_count(
+				render_step_count(8.0, float(CLOUD_VIEW_STEPS)));
 			for (int i = 0; i < CLOUD_VIEW_STEPS; i++) {
 				if (float(i) >= cloud_view_steps) break;
 				float segment_start = tangent_warped_boundary(

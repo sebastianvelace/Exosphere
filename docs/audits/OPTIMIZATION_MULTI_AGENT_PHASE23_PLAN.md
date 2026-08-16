@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 39 medida; A/B de calidad del sky confirma una reducción potencial de ~28% sin retirar la atmósfera; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 40 medida; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; catch-up y validación de delta instrumentados; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -228,6 +228,26 @@ siguiente etapa debe ejecutar la matriz visual completa y medir una GPU física 
 convertirlo en preset `Low`.
 
 Informe reproducible: `PERF_SKY_QUALITY_AB_PHASE39_REPORT.md`.
+
+## Resultado de la fase 40 — integración segura y cadencia de iluminación
+
+La calidad atmosférica fraccionaria ya no sobrepasa el extremo de los rayos: el shader usa
+`ceil(requested_steps)` como denominador y como límite efectivo en vista, transmitancia solar,
+vista de nubes y sombra de nubes. Esto es una corrección numérica válida para el perfil oficial
+y para el diagnóstico, no una promoción de calidad.
+
+`PhaseLightingController` ahora mantiene `DirectSolarTransmittance` durante `100 ms` y fuerza
+invalidación por cuerpo dominante, horizonte solar, salto de `2 km` o cambio significativo de
+dirección. La visibilidad de eclipse sigue llegando desde `SunController` y el cálculo físico
+de térmica no se comparte ni se pausa.
+
+Con el shader corregido y el cache activo, el smoke llvmpipe dio `1,105.361 ms` GPU mediana en
+`0.60` frente a `944.074 ms` en `0.25` (`~14.6%`), con `SMOKE_OK` en ambos casos. La corrida
+Earth completa fue interrumpida en `7/20` capturas por el coste extremo del framebuffer, así
+que no se habilita `0.25` en el runtime. La matriz completa Earth y Mars/Venus queda como gate
+de la próxima fase en hardware físico.
+
+Informe reproducible: `PERF_PRESENTATION_PHASE40_OPTICAL_CADENCE_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 
