@@ -199,3 +199,12 @@ commit, benchmark, diferencia física, diferencia visual, coste de memoria y rie
 primera promoción recomendada es render/presentación diferida y cadencias de sistemas con
 paridad; la política `EventDriven/Dormant` sólo se promueve después de que los fixtures de
 deadlines y wake-ups sean completos.
+
+## Referencias técnicas
+
+Las técnicas de esta fase se contrastan con la documentación oficial de Godot 4.6:
+
+- [General optimization tips](https://docs.godotengine.org/en/4.6/tutorials/performance/general_optimization.html): medir primero y distinguir coste continuo, picos y carga inicial.
+- [GPU optimization](https://docs.godotengine.org/en/4.6/tutorials/performance/gpu_optimization.html): separar coste de CPU/GPU y ofrecer calidad escalonada.
+- [Mesh LOD](https://docs.godotengine.org/en/4.6/tutorials/3d/mesh_lod.html): reducir geometría cuando la distancia lo permita.
+- [Using multiple threads](https://docs.godotengine.org/en/4.6/tutorials/performance/using_multiple_threads.html) y [Thread-safe APIs](https://docs.godotengine.org/en/4.6/tutorials/performance/thread_safe_apis.html): preparar hilos con anticipación y mantener las modificaciones del SceneTree/GPU en el hilo seguro.
