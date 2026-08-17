@@ -16,13 +16,21 @@ public partial class SystemsController : Node
     private Universe? _cachedUniverse;
     private CelestialBody? _cachedEarth;
     private CelestialBody? _cachedSun;
+    private const double RuntimeEpochToleranceSeconds = 1e-7;
+    private readonly VesselSystemsRuntime _fallbackRuntime =
+        new("__unbound_systems__", simulationTime: 0.0);
+    private VesselSystemsRuntime _activeRuntime;
 
     public static SystemsController? Instance { get; private set; }
 
-    public LifeSupportSystem LifeSupport { get; } = new();
-    public PowerSystem       Power       { get; } = new();
-    public ThermalSystem     Thermal     { get; } = new();
-    public CommsSystem       Comms       { get; } = new();
+    /// <summary>Explicitly materialized systems runtimes keyed by stable vessel id.</summary>
+    public VesselSystemsRuntimeRegistry RuntimeRegistry { get; } = new();
+
+    public VesselSystemsRuntime ActiveRuntime => _activeRuntime;
+    public LifeSupportSystem LifeSupport => _activeRuntime.LifeSupport;
+    public PowerSystem       Power       => _activeRuntime.Power;
+    public ThermalSystem     Thermal     => _activeRuntime.Thermal;
+    public CommsSystem       Comms       => _activeRuntime.Comms;
     public GroundCommandRelay GroundRelay { get; } = new();
 
     public bool ControlLimited { get; private set; }
@@ -41,6 +49,11 @@ public partial class SystemsController : Node
 
     /// <summary>Mapped systems phase for the active mission phase (for HUD / tests).</summary>
     public SystemsMissionPhase CurrentSystemsPhase { get; private set; } = SystemsMissionPhase.Idle;
+
+    public SystemsController()
+    {
+        _activeRuntime = _fallbackRuntime;
+    }
 
     /// <summary>
     /// Creates the game-layer portion of the observational interest snapshot. It is only
@@ -115,17 +128,20 @@ public partial class SystemsController : Node
     {
         Instance = this;
 
-        if (SaveSystem.PendingSystemsState is { } pending)
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.ActiveVessel is { } active && bridge.Universe != null)
         {
-            var bridge = SimulationBridge.Instance;
-            if (bridge?.ActiveVessel is { } active && bridge.Universe != null)
+            if (!TryActivateVesselRuntime(active, bridge.Universe.CurrentTime))
+                GD.PushWarning("[Systems] Active vessel runtime could not be materialized.");
+
+            if (SaveSystem.PendingSystemsState is { } pending)
             {
                 SaveSystem.PendingSystemsState = null;
                 RestoreSaveState(pending, active.Id, bridge.Universe.CurrentTime);
             }
-            else
-                GD.PushWarning("[Systems] Loaded state deferred: active vessel is not ready.");
         }
+        else if (SaveSystem.PendingSystemsState is not null)
+            GD.PushWarning("[Systems] Loaded state deferred: active vessel is not ready.");
 
         // Flush delayed ground commands before HUD enqueues this frame's stick sample
         // and before onboard guidance (Ascent/EDL) overwrites PitchYawRoll.
@@ -142,15 +158,12 @@ public partial class SystemsController : Node
     /// <summary>Captures all persistent systems state at one committed simulation epoch.</summary>
     public VesselSystemsState CaptureSaveState(string vesselId, double simulationTime)
     {
-        var state = new VesselSystemsState
-        {
-            VesselId = vesselId,
-            SimulationTime = simulationTime,
-            LifeSupport = LifeSupport.CaptureState(),
-            Power = Power.CaptureState(),
-            Thermal = Thermal.CaptureState(),
-            Comms = Comms.CaptureState(),
-        };
+        if (!string.Equals(_activeRuntime.VesselId, vesselId, StringComparison.Ordinal))
+            throw new InvalidDataException(
+                $"Active systems runtime belongs to '{_activeRuntime.VesselId}', "
+                + $"not '{vesselId}'.");
+        EnsureRuntimeEpoch(_activeRuntime, simulationTime);
+        var state = _activeRuntime.CaptureState();
         state.Validate();
         return state;
     }
@@ -176,10 +189,16 @@ public partial class SystemsController : Node
                 "Loaded systems state is at another epoch.");
         }
 
-        LifeSupport.RestoreState(state.LifeSupport);
-        Power.RestoreState(state.Power);
-        Thermal.RestoreState(state.Thermal);
-        Comms.RestoreState(state.Comms);
+        // SaveGameV2 replaces the Universe's vessel instances before this method runs.
+        // Discard a runtime that belongs to the previous object/epoch, then materialize
+        // the authoritative loaded snapshot at the committed save epoch.
+        RuntimeRegistry.Remove(expectedVesselId);
+        if (string.Equals(_activeRuntime.VesselId, expectedVesselId, StringComparison.Ordinal))
+            _activeRuntime = _fallbackRuntime;
+        if (!TryActivateVesselRuntimeById(expectedVesselId, expectedSimulationTime))
+            throw new InvalidDataException(
+                $"Could not materialize systems runtime for '{expectedVesselId}'.");
+        _activeRuntime.RestoreState(state);
         GroundRelay.Clear();
         ControlLimited = false;
         CurrentSystemsPhase = MapMissionPhase(
@@ -189,10 +208,10 @@ public partial class SystemsController : Node
     /// <summary>Clears system state when loading a legacy save with no system snapshot.</summary>
     public void ResetForLoadedSimulation()
     {
-        LifeSupport.Reset();
-        Power.Reset();
-        Thermal.Reset();
-        Comms.Reset();
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.ActiveVessel is { } active && bridge.Universe != null)
+            TryActivateVesselRuntime(active, bridge.Universe.CurrentTime);
+        _activeRuntime.Reset(bridge?.Universe?.CurrentTime ?? _activeRuntime.SimulationTime);
         GroundRelay.Clear();
         ControlLimited = false;
         CurrentSystemsPhase = MapMissionPhase(
@@ -215,6 +234,94 @@ public partial class SystemsController : Node
         // SimulationBridge.AdvanceProcessedSimulation after Universe.Tick, so it uses
         // the same committed vessel state and cannot consume wall-clock time twice.
         ApplyGameplayConsequences(vessel);
+    }
+
+    /// <summary>
+    /// Activates the systems runtime for the vessel that is about to enter physics. A
+    /// vessel switch clears delayed ground commands so an uplink sample cannot cross
+    /// ownership. Unknown vessels are materialized only at this committed epoch.
+    /// </summary>
+    public bool PrepareForPhysicsTick(
+        Exosphere.Simulation.Vessel vessel,
+        double simulationTime)
+    {
+        return TryActivateVesselRuntime(vessel, simulationTime);
+    }
+
+    private bool TryActivateVesselRuntime(
+        Exosphere.Simulation.Vessel vessel,
+        double simulationTime)
+    {
+        if (!double.IsFinite(simulationTime) || simulationTime < 0.0)
+        {
+            ControlLimited = true;
+            GD.PushError("[Systems] Cannot activate runtime at an invalid epoch.");
+            return false;
+        }
+
+        if (ReferenceEquals(_activeRuntime, _fallbackRuntime)
+            || !string.Equals(_activeRuntime.VesselId, vessel.Id, StringComparison.Ordinal))
+        {
+            try
+            {
+                if (!RuntimeRegistry.TryGet(vessel.Id, out var existing)
+                    || existing is null)
+                    existing = RuntimeRegistry.Materialize(vessel.Id, simulationTime);
+                EnsureRuntimeEpoch(existing, simulationTime);
+                _activeRuntime = existing;
+                GroundRelay.Clear();
+                ControlLimited = false;
+                CurrentSystemsPhase = MapMissionPhase(
+                    MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
+            }
+            catch (System.Exception ex)
+            {
+                ControlLimited = true;
+                GD.PushError($"[Systems] Runtime handoff failed: {ex.Message}");
+                return false;
+            }
+            return true;
+        }
+
+        try
+        {
+            EnsureRuntimeEpoch(_activeRuntime, simulationTime);
+            return true;
+        }
+        catch (System.Exception ex)
+        {
+            ControlLimited = true;
+            GD.PushError($"[Systems] Runtime epoch mismatch: {ex.Message}");
+            return false;
+        }
+    }
+
+    private bool TryActivateVesselRuntimeById(string vesselId, double simulationTime)
+    {
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.Universe == null)
+            return false;
+
+        foreach (var vessel in bridge.Universe.Vessels)
+        {
+            if (string.Equals(vessel.Id, vesselId, StringComparison.Ordinal))
+                return TryActivateVesselRuntime(vessel, simulationTime);
+        }
+        return false;
+    }
+
+    private static void EnsureRuntimeEpoch(
+        VesselSystemsRuntime runtime,
+        double expectedSimulationTime)
+    {
+        if (!double.IsFinite(expectedSimulationTime)
+            || System.Math.Abs(runtime.SimulationTime - expectedSimulationTime)
+                > RuntimeEpochToleranceSeconds)
+        {
+            throw new InvalidOperationException(
+                $"Runtime '{runtime.VesselId}' is at {runtime.SimulationTime:R}, "
+                + $"expected {expectedSimulationTime:R}.");
+        }
     }
 
     /// <summary>
@@ -246,17 +353,12 @@ public partial class SystemsController : Node
         int crewCount = vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
         CurrentSystemsPhase = MapMissionPhase(MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
         var sysPhase = CurrentSystemsPhase;
-        LifeSupport.Tick(processedSimDelta, crewCount, sysPhase);
 
         var earthBody = _cachedEarth;
         var sunBody   = _cachedSun;
         double solarVisibility = SunController.SolarVisibility;
 
         Vector3d sunPos = sunBody?.Position ?? Vector3d.Zero;
-        double lsLoadKw = LifeSupport.GetEcLoadKw(crewCount, sysPhase);
-        double phaseLoadKw = SystemsPhaseLoads.AvionicsExtraKw(sysPhase);
-        Power.Tick(processedSimDelta, vessel.Position, sunPos, solarVisibility,
-            lsLoadKw + phaseLoadKw);
 
         bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
         double atmoTemp = inAtmo ? refBody.Atmosphere!.GetTemperature(alt) : 3.0;
@@ -264,7 +366,6 @@ public partial class SystemsController : Node
         double airDensity = refBody.GetAtmosphericDensity(vessel.Position);
         double heatFlux = Exosphere.Simulation.Physics.ThermalModel.ComputeHeatFlux(
             airDensity, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
-        Thermal.Tick(processedSimDelta, solarVisibility, inAtmo, atmoTemp, heatFlux, sysPhase);
 
         Vector3d earthPos = earthBody?.Position ?? Vector3d.Zero;
 
@@ -276,7 +377,20 @@ public partial class SystemsController : Node
             DensityKgM3 = airDensity,
             AirspeedMs  = airspeed,
         };
-        Comms.Tick(processedSimDelta, vessel.Position, earthPos, universe.Bodies, entryCondition);
+        _activeRuntime.Tick(new VesselSystemsTickInput(
+            DeltaSeconds: processedSimDelta,
+            SimulationTime: universe.CurrentTime,
+            CrewCount: crewCount,
+            Phase: sysPhase,
+            VesselPosition: vessel.Position,
+            EarthPosition: earthPos,
+            SunPosition: sunPos,
+            Bodies: universe.Bodies,
+            SolarVisibility: solarVisibility,
+            InAtmosphere: inAtmo,
+            AtmosphericTemperatureK: atmoTemp,
+            AeroHeatFluxWm2: heatFlux,
+            EntryCondition: entryCondition));
 
         ApplyGameplayConsequences(vessel);
     }

@@ -340,6 +340,11 @@ public partial class SimulationBridge : Node
                 SetWarpIndex(MaxAllowedWarpIndex);
         }
 
+        // Ownership handoff happens before physics so the systems runtime epoch is the
+        // same committed epoch that AdvanceProcessedSimulation will close below.
+        if (av != null)
+            SystemsController.Instance?.PrepareForPhysicsTick(av, Universe.CurrentTime);
+
         Universe.Tick(delta);
         ArmValidStarbaseReentryCatch();
         // Consumable and blackout systems integrate only the committed simulation
