@@ -121,8 +121,15 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
    - **Fase 49 en curso:** snapshot de soporte vital, energía, térmica y comunicaciones integrado
      en save/load con validación de identidad, epoch y límites físicos; además, los cambios de
      fase y `LaunchCommitted` usan un log ordenado de callbacks con entrega síncrona compatible.
-     Siguiente gate: mantener la prueba de orden de callbacks, crear estado de sistemas para
-     naves no activas y comparar reanudación diferida contra FullPhysics.
+     El estado tipado de systems y la cola de callbacks ya están integrados; el controlador
+     actual todavía sólo materializa la nave activa. La promoción del scheduler sigue bloqueada.
+   - **Fase 50:** matriz CPU de promoción en
+     `docs/audits/PERF_PROMOTION_PARITY_PHASE50_REPORT.md`. Los seis escenarios de coast,
+     save/resume, staging, docking, SOI y EDL/catch pasan contra una referencia FullPhysics
+     al mismo epoch. El caso staged sin control queda en `Active` por seguridad y el catch
+     EDL nunca entra en trabajo diferido. `SimulationInterestPolicy.EnabledByDefault` y el
+     dispatcher runtime permanecen sin cambios; faltan systems por nave, ruta diferida real,
+     medición de flota y validación visual antes de promover.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield
