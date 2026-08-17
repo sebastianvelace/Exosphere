@@ -120,4 +120,54 @@ public sealed class SystemsStatePersistenceTests
         Assert.Equal(SystemsMissionPhase.Entry, restored.Thermal.LastPhase);
         Assert.Equal(12_000.0, restored.Thermal.LastAeroHeatFluxWm2);
     }
+
+    [Fact]
+    public void MaterializedSystemsMapRoundTripsAndRestoresOnlySavedVessels()
+    {
+        const double epoch = 73.25;
+        var source = new VesselSystemsRuntimeRegistry();
+        var vesselA = source.Materialize("vessel-a", epoch);
+        var vesselB = source.Materialize("vessel-b", epoch);
+        vesselA.LifeSupport.RestoreState(new LifeSupportState
+        {
+            OxygenKg = 180.0,
+            WaterKg = 450.0,
+            FoodKg = 250.0,
+        });
+        vesselB.Power.RestoreState(new PowerState
+        {
+            BatteryKwh = 12.5,
+            SolarOutputKw = 4.0,
+            ExtraLoadKw = 1.5,
+        });
+
+        var save = new SaveGameV2
+        {
+            SimulationTime = epoch,
+            ActiveVesselId = "vessel-a",
+            Vessels =
+            [
+                new VesselSaveV2 { Id = "vessel-a" },
+                new VesselSaveV2 { Id = "vessel-b" },
+            ],
+            VesselSystems = source.CaptureStates(epoch),
+        };
+
+        var decoded = SaveGameV2Json.DeserializeOrMigrate(
+            SaveGameV2Json.Serialize(save));
+        var restored = new VesselSystemsRuntimeRegistry();
+        restored.RestoreStates(
+            decoded.VesselSystems.Values,
+            knownVesselIds: ["vessel-a", "vessel-b", "vessel-c"],
+            committedEpoch: epoch);
+
+        Assert.Equal(2, restored.Count);
+        Assert.True(restored.TryGet("vessel-a", out var restoredA));
+        Assert.True(restored.TryGet("vessel-b", out var restoredB));
+        Assert.NotNull(restoredA);
+        Assert.NotNull(restoredB);
+        Assert.Equal(180.0, restoredA!.LifeSupport.OxygenKg, 12);
+        Assert.Equal(12.5, restoredB!.Power.BatteryKwh, 12);
+        Assert.False(restored.Contains("vessel-c"));
+    }
 }

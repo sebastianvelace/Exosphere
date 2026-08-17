@@ -25,6 +25,8 @@ public static class SaveSystem
     /// </summary>
     public static MissionPhase? PendingMissionPhase { get; set; }
     public static VesselSystemsState? PendingSystemsState { get; set; }
+    public static Dictionary<string, VesselSystemsState>?
+        PendingMaterializedSystemsStates { get; set; }
     public static MissionCallbackQueueState? PendingCallbackState { get; set; }
 
     public static void SaveGame(string slotName = "quicksave")
@@ -39,11 +41,11 @@ public static class SaveSystem
         save.VesselSystems.Clear();
         save.Mission.NextCallbackSequence = 1;
         save.Mission.CallbackEvents = new();
-        if (bridge.ActiveVessel is { } activeVessel
-            && SystemsController.Instance is { } systemsController)
+        if (SystemsController.Instance is { } systemsController)
         {
-            save.VesselSystems[activeVessel.Id] = systemsController.CaptureSaveState(
-                activeVessel.Id, bridge.Universe.CurrentTime);
+            foreach (var (vesselId, state) in systemsController
+                .CaptureMaterializedSaveStates(bridge.Universe.CurrentTime))
+                save.VesselSystems[vesselId] = state;
         }
         if (CampaignRuntime.Instance?.CaptureMissionState() is { } mission)
             save.Mission = mission;
@@ -72,6 +74,7 @@ public static class SaveSystem
     public static bool LoadGame(string slotName = "quicksave")
     {
         PendingSystemsState = null;
+        PendingMaterializedSystemsStates = null;
         PendingCallbackState = null;
         string safeSlot = NormalizeSlotName(slotName);
         string path = System.IO.Path.Combine(
@@ -91,21 +94,22 @@ public static class SaveSystem
             SaveGameV2Codec.Restore(bridge.Universe, save, catalog);
             LastLoadedMetadata = save;
             PendingSystemsState = null;
+            PendingMaterializedSystemsStates = null;
             PendingCallbackState = null;
 
-            if (save.ActiveVesselId is { } activeId
-                && save.VesselSystems.TryGetValue(activeId, out var systemsState))
+            if (SystemsController.Instance is { } systemsController)
             {
-                if (SystemsController.Instance is { } systemsController)
-                    systemsController.RestoreSaveState(
-                        systemsState, activeId, save.SimulationTime);
+                if (save.VesselSystems.Count > 0)
+                    systemsController.RestoreMaterializedSaveStates(
+                        save.VesselSystems, save.SimulationTime);
                 else
-                    PendingSystemsState = systemsState;
+                    systemsController.ResetForLoadedSimulation();
             }
             else
             {
-                PendingSystemsState = null;
-                SystemsController.Instance?.ResetForLoadedSimulation();
+                if (save.VesselSystems.Count > 0)
+                    PendingMaterializedSystemsStates = new(
+                        save.VesselSystems, StringComparer.Ordinal);
             }
 
             var callbackState = new MissionCallbackQueueState

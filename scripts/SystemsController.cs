@@ -134,13 +134,20 @@ public partial class SystemsController : Node
             if (!TryActivateVesselRuntime(active, bridge.Universe.CurrentTime))
                 GD.PushWarning("[Systems] Active vessel runtime could not be materialized.");
 
-            if (SaveSystem.PendingSystemsState is { } pending)
+            if (SaveSystem.PendingMaterializedSystemsStates is { } pendingStates)
+            {
+                SaveSystem.PendingMaterializedSystemsStates = null;
+                RestoreMaterializedSaveStates(
+                    pendingStates, bridge.Universe.CurrentTime);
+            }
+            else if (SaveSystem.PendingSystemsState is { } pending)
             {
                 SaveSystem.PendingSystemsState = null;
                 RestoreSaveState(pending, active.Id, bridge.Universe.CurrentTime);
             }
         }
-        else if (SaveSystem.PendingSystemsState is not null)
+        else if (SaveSystem.PendingMaterializedSystemsStates is not null
+            || SaveSystem.PendingSystemsState is not null)
             GD.PushWarning("[Systems] Loaded state deferred: active vessel is not ready.");
 
         // Flush delayed ground commands before HUD enqueues this frame's stick sample
@@ -166,6 +173,59 @@ public partial class SystemsController : Node
         var state = _activeRuntime.CaptureState();
         state.Validate();
         return state;
+    }
+
+    /// <summary>
+    /// Captures every systems runtime currently materialized by vessel identity. The
+    /// registry rejects a mixed-epoch map before it can reach SaveGameV2.
+    /// </summary>
+    public Dictionary<string, VesselSystemsState> CaptureMaterializedSaveStates(
+        double simulationTime) => RuntimeRegistry.CaptureStates(simulationTime);
+
+    /// <summary>
+    /// Restores all materialized vessel runtimes atomically after Universe has replaced
+    /// its vessel instances. Vessels omitted from the map remain unmaterialized and cannot
+    /// be treated as dormant by a future scheduler.
+    /// </summary>
+    public void RestoreMaterializedSaveStates(
+        IReadOnlyDictionary<string, VesselSystemsState> states,
+        double simulationTime)
+    {
+        ArgumentNullException.ThrowIfNull(states);
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.Universe == null)
+            throw new InvalidDataException("Universe is not ready for systems restore.");
+
+        foreach (var (vesselId, state) in states)
+        {
+            if (state is null
+                || !string.Equals(vesselId, state.VesselId, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Systems state map key does not match its vessel id for '{vesselId}'.");
+            }
+        }
+
+        string[] knownVesselIds = bridge.Universe.Vessels
+            .Select(vessel => vessel.Id)
+            .ToArray();
+        RuntimeRegistry.RestoreStates(
+            states.Values,
+            knownVesselIds,
+            simulationTime);
+
+        _activeRuntime = _fallbackRuntime;
+        if (bridge.ActiveVessel is { } active
+            && RuntimeRegistry.TryGet(active.Id, out var restored)
+            && restored is not null)
+        {
+            EnsureRuntimeEpoch(restored, simulationTime);
+            _activeRuntime = restored;
+        }
+        GroundRelay.Clear();
+        ControlLimited = false;
+        CurrentSystemsPhase = MapMissionPhase(
+            MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
     }
 
     /// <summary>
@@ -209,6 +269,8 @@ public partial class SystemsController : Node
     public void ResetForLoadedSimulation()
     {
         var bridge = SimulationBridge.Instance;
+        RuntimeRegistry.Clear();
+        _activeRuntime = _fallbackRuntime;
         if (bridge?.ActiveVessel is { } active && bridge.Universe != null)
             TryActivateVesselRuntime(active, bridge.Universe.CurrentTime);
         _activeRuntime.Reset(bridge?.Universe?.CurrentTime ?? _activeRuntime.SimulationTime);
