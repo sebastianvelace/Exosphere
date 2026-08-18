@@ -92,6 +92,8 @@ public partial class CameraController : Node3D
     private Camera3D? _camera;
     private Node3D? _cockpitRenderer;
     private Node3D? _exteriorRenderer;
+    private double _presentationLookupCooldown;
+    private const double PresentationLookupRetrySeconds = 0.25;
     private const float CockpitFov = 60f;
     private const float CockpitNear = 0.04f;
 
@@ -152,7 +154,7 @@ public partial class CameraController : Node3D
 
     public override void _Process(double delta)
     {
-        ResolvePresentationNodes();
+        ResolvePresentationNodes(delta);
         if (_cockpit) { DriveCockpit(delta); return; }
         SetCockpitVisible(false);
 
@@ -383,11 +385,15 @@ public partial class CameraController : Node3D
 
     private void SetCockpitVisible(bool vis)
     {
-        if (_cockpitRenderer != null && _cockpitRenderer.Visible != vis)
-            _cockpitRenderer.Visible = vis;
+        if (_cockpitRenderer is { } cockpit
+            && GodotObject.IsInstanceValid(cockpit)
+            && cockpit.Visible != vis)
+            cockpit.Visible = vis;
         // Hide the rocket exterior while inside the cockpit (restore it otherwise).
-        if (_exteriorRenderer != null && _exteriorRenderer.Visible == vis)
-            _exteriorRenderer.Visible = !vis;
+        if (_exteriorRenderer is { } exterior
+            && GodotObject.IsInstanceValid(exterior)
+            && exterior.Visible == vis)
+            exterior.Visible = !vis;
     }
 
     /// <summary>
@@ -397,8 +403,26 @@ public partial class CameraController : Node3D
     /// name is retained for temporary visual harness compatibility; production uses
     /// ActiveVesselRenderer.
     /// </summary>
-    private void ResolvePresentationNodes()
+    private void ResolvePresentationNodes(double delta = 0.0)
     {
+        bool cachedFallback = _exteriorRenderer != null
+            && GodotObject.IsInstanceValid(_exteriorRenderer)
+            && _exteriorRenderer.Name == "StarshipRenderer";
+        bool needsLookup = _camera == null
+            || !GodotObject.IsInstanceValid(_camera)
+            || _cockpitRenderer == null
+            || !GodotObject.IsInstanceValid(_cockpitRenderer)
+            || _exteriorRenderer == null
+            || !GodotObject.IsInstanceValid(_exteriorRenderer)
+            || cachedFallback;
+        if (!needsLookup) return;
+
+        if (delta > 0.0)
+        {
+            _presentationLookupCooldown -= System.Math.Max(0.0, delta);
+            if (_presentationLookupCooldown > 0.0) return;
+        }
+
         if (_camera == null || !GodotObject.IsInstanceValid(_camera))
             _camera = GetNodeOrNull<Camera3D>("Camera3D");
 
@@ -406,8 +430,6 @@ public partial class CameraController : Node3D
         if (_cockpitRenderer == null || !GodotObject.IsInstanceValid(_cockpitRenderer))
             _cockpitRenderer = root.FindChild("CockpitRenderer", true, false) as Node3D;
 
-        bool cachedFallback = _exteriorRenderer != null
-            && _exteriorRenderer.Name == "StarshipRenderer";
         if (_exteriorRenderer == null
             || !GodotObject.IsInstanceValid(_exteriorRenderer)
             || cachedFallback)
@@ -417,6 +439,12 @@ public partial class CameraController : Node3D
                     ? _exteriorRenderer
                     : root.FindChild("StarshipRenderer", true, false) as Node3D);
         }
+
+        // ActiveVesselRenderer and CockpitRenderer are created lazily by
+        // SimulationBridge. Retry while a dynamic scene is incomplete, but never
+        // turn a missing-node startup state or legacy harness fallback into a
+        // full scene-tree walk on every render frame.
+        _presentationLookupCooldown = PresentationLookupRetrySeconds;
     }
 
     private static Vector3 ToG(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);

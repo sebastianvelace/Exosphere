@@ -1,8 +1,24 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 55 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; display, GPU y EventPipe externos pendientes
+Estado: fase 56 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
+
+## Resultado de la fase 56 — resolución acotada de cámara y renderer
+
+La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
+`ActiveVesselRenderer` sin recorrer el árbol de escena en cada frame estable. Los nodos que
+`SimulationBridge` crea de forma lazy siguen siendo detectados mediante reintentos de `0.25 s`;
+el fallback `StarshipRenderer` del harness también puede ser sustituido cuando aparece el
+renderer oficial. Las comprobaciones de `IsInstanceValid` evitan acceder a nodos liberados
+durante una transición de escena.
+
+El cambio es sólo de presentación: no toca `Universe.Tick`, orientación, seguimiento de
+vehículo, entrada, plumas, térmica ni la física de salto/reentrada. El contrato estático exige
+el cooldown, la cache y el retorno temprano. Se debe medir en framebuffer real antes de
+atribuir una mejora de FPS; el host actual mantiene bloqueado ese gate por X11/llvmpipe.
+
+Informe reproducible: `PERF_RENDERER_CAMERA_CACHE_PHASE56_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 

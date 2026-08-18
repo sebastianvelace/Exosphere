@@ -70,6 +70,14 @@ require_text "$CAMERA" 'private Node3D? _exteriorRenderer;' \
   "exterior renderer reference must be cached"
 require_text "$CAMERA" 'ResolvePresentationNodes();' \
   "camera presentation nodes must use the lazy cache resolver"
+require_text "$CAMERA" 'PresentationLookupRetrySeconds = 0.25' \
+  "camera node lookup retry must be bounded"
+require_text "$CAMERA" '_presentationLookupCooldown' \
+  "camera node lookup must retain retry state"
+require_text "$CAMERA" 'ResolvePresentationNodes(double delta = 0.0)' \
+  "camera resolver must receive frame delta for bounded retries"
+require_text "$CAMERA" 'if (!needsLookup) return;' \
+  "camera resolver must return without a tree walk when nodes are cached"
 
 # Direct solar transmittance is an optical presentation sample, not a physics tick. It
 # must remain bounded and must invalidate on body/horizon/geometry changes so eclipse and
