@@ -137,6 +137,7 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      `docs/audits/PERF_PER_VESSEL_SYSTEMS_PHASE51_PLAN.md` y
      `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`; G confirma que el scheduler es
      <1% del frame bajo llvmpipe, pero la matriz completa no alcanzó órbita dentro de 1200 s.
+     H confirma el mismo cuello en smoke y deja pendiente corregir el wrapper de medición.
      Falta catch-up temporal de consumibles por vessel y perfilado render/UI con GPU real antes
      de promover cualquier hibernación.
 

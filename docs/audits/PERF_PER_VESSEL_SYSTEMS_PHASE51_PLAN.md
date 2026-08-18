@@ -14,6 +14,9 @@ Estado de integración verificado:
 - Suite posterior a F: `696/696 PASS`; ambos builds en `0 warnings / 0 errors`.
 - G matriz CPU/framebuffer: CPU `62/62 PASS`; framebuffer produjo cinco hitos pero terminó
   `TIMEOUT` a 1200 s por coste llvmpipe; no se promueve ninguna optimización física.
+- H baseline render/UI: smoke directo `SMOKE_OK` con 50 frames; frame medio `1745.520 ms`
+  frente a scheduler `2.269 ms` (`0.13%`). El informe y el bug del wrapper de RSS/FPS están
+  en `docs/audits/PERF_RENDER_BASELINE_PHASE51H_REPORT.md`.
 - La decisión y los bloqueos de promoción están en
   `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`.
 
