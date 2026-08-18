@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 60 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure/ground; VFX de plumas Starship mantienen unidades agregadas; display, GPU y EventPipe externos pendientes
+Estado: fase 61 integrada como smoke de framebuffer y correlación de costes (`SMOKE_PASS / PERF_AB_BLOCKED`); scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure/ground; VFX de plumas Starship mantienen unidades agregadas; A/B GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -55,6 +55,21 @@ mantiene unidades agregadas y actualización limitada. El cambio aplicado reduce
 redundantes del shader del suelo local sin congelar sus coordenadas geográficas.
 
 Informe: `PERF_VFX_GROUND_DIRTY_CACHE_PHASE60_REPORT.md`.
+
+## Resultado de la fase 61 — smoke de framebuffer y separación de costes
+
+El smoke directo con `--run-id phase61-framebuffer` completó `SMOKE_OK` con un PNG válido,
+50 frames, build de Godot sin warnings/errores y worker atmosférico Earth asíncrono de orden
+4. En el framebuffer llvmpipe el frame medio fue `1,884.660 ms`, mientras que el scheduler
+fue `1.791 ms` medio (`1.008 ms` p50); la telemetría no mostró `catch_up_risk` ni deuda
+pendiente. El resultado refuerza que el atasco observado en este host está fuera de la física
+del universo.
+
+El A/B `0.60` frente a `0.25` no se cerró: `tools/perf/renderer_benchmark.sh` y los reintentos
+del harness encontraron un Xvfb que no puede crear listeners porque `/tmp/.X11-unix` pertenece
+a `nobody:nogroup`. No se publican FPS ni VRAM, no se promueve `sky_quality_low` y no se
+modifica el runtime. Informe reproducible:
+`PERF_FRAMEBUFFER_SMOKE_PHASE61_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
