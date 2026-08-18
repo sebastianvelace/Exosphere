@@ -43,6 +43,11 @@ public partial class EarthGroundController : Node3D
 
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;
+    private bool _groundShaderStateInitialized;
+    private float _lastFade = float.NaN;
+    private float _lastHorizonDistance = float.NaN;
+    private Color _lastHazeColor;
+    private Vector3 _lastSunDirection;
 
     public override void _Ready()
     {
@@ -95,7 +100,12 @@ public partial class EarthGroundController : Node3D
 
         var dominant = universe.GetDominantBody(vessel.Position);
         double alt   = vessel.GetAltitude(earth);
-        if (dominant.Id != "earth" || alt > FadeHi) { Visible = false; return; }
+        if (dominant.Id != "earth" || alt > FadeHi)
+        {
+            Visible = false;
+            _groundShaderStateInitialized = false;
+            return;
+        }
 
         // Cross-fade: 1 below FullAlt → 0 above FadeHi (hold 1 across FullAlt..FadeLo).
         float fade = (float)(1.0 - Smoothstep(FadeLo, FadeHi, alt));
@@ -104,7 +114,12 @@ public partial class EarthGroundController : Node3D
         // and the distant-Earth backdrop never overlap into a seam — the backdrop takes over.
         float camFade = (float)(1.0 - Smoothstep(20_000.0, 36_000.0, FloatingOrigin.CameraAltOverEarth));
         fade = System.Math.Min(fade, camFade);
-        if (fade <= 0.001f) { Visible = false; return; }
+        if (fade <= 0.001f)
+        {
+            Visible = false;
+            _groundShaderStateInitialized = false;
+            return;
+        }
         Visible = true;
 
         // ── Anchor under the vessel (vessel sits at the render origin) ────────
@@ -128,12 +143,28 @@ public partial class EarthGroundController : Node3D
 
         if (_mat != null)
         {
-            _mat.SetShaderParameter("fade", fade);
-            _mat.SetShaderParameter("haze_color", SkyController.CurrentHorizonColor);
+            var hazeColor = SkyController.CurrentHorizonColor;
+            if (!_groundShaderStateInitialized || FloatDiffers(_lastFade, fade))
+            {
+                _mat.SetShaderParameter("fade", fade);
+                _lastFade = fade;
+            }
+            if (!_groundShaderStateInitialized || ColorDiffers(_lastHazeColor, hazeColor))
+            {
+                _mat.SetShaderParameter("haze_color", hazeColor);
+                _lastHazeColor = hazeColor;
+            }
             var sun = universe.GetBody("sun");
             if (sun != null)
-                _mat.SetShaderParameter("sun_dir", ToGodot(
-                    (sun.Position - vessel.Position).Normalized));
+            {
+                var sunDirection = ToGodot((sun.Position - vessel.Position).Normalized);
+                if (!_groundShaderStateInitialized
+                    || _lastSunDirection.DistanceSquaredTo(sunDirection) > 1e-10f)
+                {
+                    _mat.SetShaderParameter("sun_dir", sunDirection);
+                    _lastSunDirection = sunDirection;
+                }
+            }
 
             // Map the patch to the real Earth texture: the sub-vessel point and the patch's
             // east/north axes, expressed in the texture/mesh-local frame (undo the planet
@@ -150,7 +181,14 @@ public partial class EarthGroundController : Node3D
             // beyond this hazes into the sky so the far curvature reads as a flat horizon.
             double cameraAltitude = System.Math.Max(FloatingOrigin.CameraAltOverEarth, 50.0);
             double hMetres = System.Math.Sqrt(2.0 * earth.Radius * cameraAltitude);
-            _mat.SetShaderParameter("horizon_dist", (float)(hMetres / MetresPerUnit));
+            float horizonDistance = (float)(hMetres / MetresPerUnit);
+            if (!_groundShaderStateInitialized
+                || FloatDiffers(_lastHorizonDistance, horizonDistance))
+            {
+                _mat.SetShaderParameter("horizon_dist", horizonDistance);
+                _lastHorizonDistance = horizonDistance;
+            }
+            _groundShaderStateInitialized = true;
         }
     }
 
@@ -173,6 +211,15 @@ public partial class EarthGroundController : Node3D
         double t = System.Math.Clamp((x - a) / (b - a), 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t);
     }
+
+    private static bool FloatDiffers(float a, float b) =>
+        float.IsNaN(a) || float.IsNaN(b) || Mathf.Abs(a - b) > 1e-4f;
+
+    private static bool ColorDiffers(Color a, Color b) =>
+        FloatDiffers(a.R, b.R)
+        || FloatDiffers(a.G, b.G)
+        || FloatDiffers(a.B, b.B)
+        || FloatDiffers(a.A, b.A);
 
     /// <summary>
     /// Flat tangent grid whose vertices drop by the TRUE sphere curvature

@@ -6,6 +6,7 @@ SHADER="$ROOT/assets/shaders/space_sky.gdshader"
 SKY="$ROOT/scripts/SkyController.cs"
 EXPOSURE="$ROOT/scripts/VisualExposureController.cs"
 PHASE_LIGHTING="$ROOT/scripts/PhaseLightingController.cs"
+GROUND="$ROOT/scripts/EarthGroundController.cs"
 
 fail() {
   echo "sky_runtime_performance_contract_test: FAIL: $*" >&2
@@ -16,6 +17,7 @@ fail() {
 [[ -f "$SKY" ]] || fail "missing SkyController"
 [[ -f "$EXPOSURE" ]] || fail "missing VisualExposureController"
 [[ -f "$PHASE_LIGHTING" ]] || fail "missing PhaseLightingController"
+[[ -f "$GROUND" ]] || fail "missing EarthGroundController"
 
 # Realtime sampling must remain bounded without changing the CPU/LUT oracle.
 rg -q --fixed-strings 'uniform float atmosphere_quality' "$SHADER" \
@@ -63,5 +65,11 @@ rg -q --fixed-strings 'if (FloatDiffers(_light.LightEnergy, lightEnergy))' "$PHA
   || fail "phase light energy dirty check missing"
 rg -q --fixed-strings 'Mathf.Abs(_environment.TonemapExposure - exposure) > 1e-4f' "$EXPOSURE" \
   || fail "tonemap exposure dirty check missing"
+rg -q --fixed-strings '_groundShaderStateInitialized' "$GROUND" \
+  || fail "earth-ground shader state cache missing"
+rg -q --fixed-strings 'FloatDiffers(_lastFade, fade)' "$GROUND" \
+  || fail "earth-ground fade dirty check missing"
+rg -q --fixed-strings '_lastSunDirection.DistanceSquaredTo(sunDirection)' "$GROUND" \
+  || fail "earth-ground sun direction dirty check missing"
 
 echo "sky_runtime_performance_contract_test: PASS (bounded quadrature, cached uniforms, low-priority LUT worker)"

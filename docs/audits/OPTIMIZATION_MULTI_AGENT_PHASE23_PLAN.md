@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 59 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure; display, GPU y EventPipe externos pendientes
+Estado: fase 60 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure/ground; VFX de plumas Starship mantienen unidades agregadas; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -47,6 +47,14 @@ familia de caches de presentación de `SkyController`, `PhaseLightingController`
 sin reducir el coste físico ni la calidad oficial del LUT.
 
 Informe: `PERF_EXPOSURE_DIRTY_CACHE_PHASE59_REPORT.md`.
+
+## Resultado de la fase 60 — VFX de motores y suelo local
+
+La auditoría confirma que la escena no crea 33/39 emisores para Starship;
+mantiene unidades agregadas y actualización limitada. El cambio aplicado reduce escrituras
+redundantes del shader del suelo local sin congelar sus coordenadas geográficas.
+
+Informe: `PERF_VFX_GROUND_DIRTY_CACHE_PHASE60_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
