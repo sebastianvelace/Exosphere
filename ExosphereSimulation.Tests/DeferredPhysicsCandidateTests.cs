@@ -71,6 +71,75 @@ public sealed class DeferredPhysicsCandidateTests
         Assert.NotEqual(Vector3d.Zero, vessel.Position);
     }
 
+    [Fact]
+    public void DisabledCandidateNeverInvokesEligibilityGuard()
+    {
+        var candidate = CreateUniverse(candidateEnabled: false, out _);
+        int calls = 0;
+        candidate.DeferredPhysicsCandidateEligibility = (_, _) =>
+        {
+            calls++;
+            return true;
+        };
+
+        candidate.Tick(0.01);
+
+        Assert.Equal(0, calls);
+        Assert.Equal(0, candidate.LastSchedulerTelemetry.CandidateDeferredSkips);
+    }
+
+    [Fact]
+    public void EligibilityGuardReceivesOnlyFiniteCommittedEpochs()
+    {
+        var candidate = CreateUniverse(candidateEnabled: true, out _);
+        var epochs = new List<double>();
+        candidate.DeferredPhysicsCandidateEligibility = (_, epoch) =>
+        {
+            epochs.Add(epoch);
+            return true;
+        };
+
+        double firstStart = candidate.CurrentTime;
+        candidate.Tick(0.01);
+        double firstEnd = candidate.CurrentTime;
+
+        Assert.NotEmpty(epochs);
+        Assert.All(epochs, epoch =>
+        {
+            Assert.True(double.IsFinite(epoch));
+            Assert.InRange(epoch, firstStart, firstEnd);
+        });
+        Assert.All(epochs, epoch =>
+            Assert.True(epoch <= firstEnd + 1e-12, $"future eligibility epoch {epoch} > {firstEnd}"));
+
+        int firstTickCalls = epochs.Count;
+        double secondStart = candidate.CurrentTime;
+        candidate.Tick(0.01);
+        double secondEnd = candidate.CurrentTime;
+
+        Assert.True(epochs.Count > firstTickCalls);
+        foreach (double epoch in epochs.Skip(firstTickCalls))
+        {
+            Assert.True(double.IsFinite(epoch));
+            Assert.InRange(epoch, secondStart, secondEnd);
+            Assert.True(epoch <= secondEnd + 1e-12, $"future eligibility epoch {epoch} > {secondEnd}");
+        }
+    }
+
+    [Fact]
+    public void CandidateTelemetryResetsForInvalidTick()
+    {
+        var candidate = CreateUniverse(candidateEnabled: true, out _);
+
+        candidate.Tick(0.01);
+        Assert.True(candidate.LastSchedulerTelemetry.CandidateDeferredSkips > 0);
+
+        candidate.Tick(double.NaN);
+
+        Assert.Equal(0, candidate.LastSchedulerTelemetry.CandidateDeferredSkips);
+        Assert.Equal(PhysicsSchedulerSkipReason.InvalidDelta, candidate.LastSchedulerTelemetry.SkipReason);
+    }
+
     private static Universe CreateUniverse(
         bool candidateEnabled,
         out Vessel distantVessel)

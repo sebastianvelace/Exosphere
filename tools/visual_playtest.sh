@@ -635,6 +635,10 @@ public partial class _PlaytestShot : Node
                 $"budget_reason={schedulerTelemetry.BudgetReason} " +
                 $"total_work={schedulerTelemetry.TotalWorkDispatches} " +
                 "source=process_callback");
+            _log.WriteLine($"PERF_SCHEDULER_CANDIDATE schema=1 frame={_frame} " +
+                $"enabled={(universe.DeferredPhysicsCandidateEnabled ? "true" : "false")} " +
+                $"deferred_skips={schedulerTelemetry.CandidateDeferredSkips} " +
+                "source=process_callback");
             if ((_frame & 31) == 0) _log.Flush();
         }
         var body = universe.GetDominantBody(vessel.Position);

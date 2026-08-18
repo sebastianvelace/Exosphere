@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEST_FILE="$ROOT_DIR/ExosphereSimulation.Tests/PerformanceAcceptanceTests.cs"
+PROJECT_FILE="$ROOT_DIR/project.godot"
 SIMULATION_BRIDGE="$ROOT_DIR/scripts/SimulationBridge.cs"
 SYSTEMS_CONTROLLER="$ROOT_DIR/scripts/SystemsController.cs"
 AUTOPILOT_CONTROLLER="$ROOT_DIR/scripts/AutopilotController.cs"
@@ -146,6 +147,12 @@ require_text "$VISUAL_PLAYTEST" "LastSchedulerTelemetry" \
     "visual playtest reads the authoritative scheduler snapshot"
 require_text "$VISUAL_PLAYTEST" "PERF_SCHEDULER schema=2" \
     "visual playtest records extended scheduler telemetry"
+require_text "$VISUAL_PLAYTEST" "PERF_SCHEDULER_CANDIDATE schema=1" \
+    "visual playtest records deferred-candidate telemetry"
+require_text "$VISUAL_PLAYTEST" "CandidateDeferredSkips" \
+    "visual playtest exposes candidate skip count"
+require_text "$PROJECT_FILE" "deferred_physics_candidate_enabled=false" \
+    "official runtime keeps deferred-physics candidate disabled"
 require_text "$VISUAL_PLAYTEST" "SkipReason" \
     "visual playtest records scheduler skip reason"
 require_text "$VISUAL_PLAYTEST" "TotalWorkDispatches" \
@@ -304,6 +311,35 @@ else
             fi
         else
             fail_gate "all PERF_SCHEDULER fields are schema-valid (${valid_extended_scheduler_count}/${extended_scheduler_count})"
+        fi
+
+        candidate_lines="$(rg '^PERF_SCHEDULER_CANDIDATE ' "$frame_log" || true)"
+        candidate_count="$(printf '%s\n' "$candidate_lines" | sed '/^$/d' | wc -l | tr -d ' ')"
+        candidate_pattern='^PERF_SCHEDULER_CANDIDATE schema=1 frame=[0-9]+ enabled=(true|false) deferred_skips=[0-9]+ source=process_callback$'
+        valid_candidate_count="$(printf '%s\n' "$candidate_lines" | rg "$candidate_pattern" | sed '/^$/d' | wc -l | tr -d ' ')"
+        if [[ "$candidate_count" == "0" ]]; then
+            skip_gate "deferred-candidate telemetry (no PERF_SCHEDULER_CANDIDATE lines in supplied log)"
+        elif [[ "$valid_candidate_count" == "$candidate_count" ]]; then
+            pass_gate "all PERF_SCHEDULER_CANDIDATE fields are schema-valid (${valid_candidate_count}/${candidate_count})"
+            candidate_invariant_failures="$(printf '%s\n' "$candidate_lines" | awk '
+                {
+                    enabled = ""; skips = -1;
+                    for (i = 1; i <= NF; i++) {
+                        split($i, pair, "=");
+                        if (pair[1] == "enabled") enabled = pair[2];
+                        if (pair[1] == "deferred_skips") skips = pair[2] + 0;
+                    }
+                    if (skips < 0 || (enabled == "false" && skips != 0)) bad++;
+                }
+                END { print bad + 0 }
+            ' )"
+            if [[ "$candidate_invariant_failures" == "0" ]]; then
+                pass_gate "deferred-candidate enabled/skip invariants hold"
+            else
+                fail_gate "deferred-candidate enabled/skip invariants hold (${candidate_invariant_failures} violations)"
+            fi
+        else
+            fail_gate "all PERF_SCHEDULER_CANDIDATE fields are schema-valid (${valid_candidate_count}/${candidate_count})"
         fi
     fi
 fi
