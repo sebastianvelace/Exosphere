@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 61 integrada como smoke de framebuffer y correlación de costes (`SMOKE_PASS / PERF_AB_BLOCKED`); scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure/ground; VFX de plumas Starship mantienen unidades agregadas; A/B GPU y EventPipe externos pendientes
+Estado: fase 62 integrada como consulta booleana de presencia de motores (`PROMOTED CPU/PRESENTATION`); fase 61 de smoke de framebuffer y correlación de costes quedó en `SMOKE_PASS / PERF_AB_BLOCKED`; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure/ground; VFX de plumas Starship mantienen unidades agregadas; A/B GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -70,6 +70,19 @@ del harness encontraron un Xvfb que no puede crear listeners porque `/tmp/.X11-u
 a `nobody:nogroup`. No se publican FPS ni VRAM, no se promueve `sky_quality_low` y no se
 modifica el runtime. Informe reproducible:
 `PERF_FRAMEBUFFER_SMOKE_PHASE61_REPORT.md`.
+
+## Resultado de la fase 62 — presencia de motores sin enumerador de interfaz
+
+La presentación consultaba cinco veces por frame `ActiveEngines` sólo para saber si existía
+algún motor de la etapa actual. `PartGraph.HasActiveEngineParts` y su wrapper de `Vessel`
+resuelven esa presencia mediante el mismo buffer concreto, sin boxear el enumerador. El
+enumerable público permanece compatible para los consumidores que sí requieren todas las
+partes.
+
+La prueba de equivalencia cubre estado normal, hot-stage y separación; la regresión de
+allocations exige una mejora superior a 512 bytes en 256 consultas y un máximo de 512 bytes
+para el camino nuevo. CI pasó `698/698`, los builds quedaron en `0/0` y los contratos de
+presentación/telemetría permanecen verdes. Informe: `PERF_ACTIVE_ENGINE_PRESENCE_PHASE62_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 

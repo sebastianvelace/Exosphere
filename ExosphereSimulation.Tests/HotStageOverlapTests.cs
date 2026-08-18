@@ -35,6 +35,26 @@ public sealed class HotStageOverlapTests
     }
 
     [Fact]
+    public void ActiveEnginePresenceQueryMatchesCompatibilityEnumerableAcrossStageChanges()
+    {
+        var (vessel, _, _, shipEngines, _) = BuildFlight7Stack();
+
+        bool beforeOverlap = vessel.Parts.ActiveEngines.GetEnumerator().MoveNext();
+        Assert.Equal(beforeOverlap, vessel.Parts.HasActiveEngineParts);
+
+        vessel.BeginHotStageOverlap(AscentStagingPolicy.HotStageOverlapSeconds);
+        bool duringOverlap = vessel.Parts.ActiveEngines.GetEnumerator().MoveNext();
+        Assert.Equal(duringOverlap, vessel.Parts.HasActiveEngineParts);
+
+        var debris = vessel.Stage();
+        Assert.NotNull(debris);
+        shipEngines.ThrottleLevel = 1.0;
+        bool afterSeparation = vessel.Parts.ActiveEngines.GetEnumerator().MoveNext();
+        Assert.Equal(afterSeparation, vessel.Parts.HasActiveEngineParts);
+        Assert.True(vessel.Parts.HasActiveEngineParts);
+    }
+
+    [Fact]
     public void OverlapDrainsBothStageTanksIndependently()
     {
         var (vessel, booster, _, shipEngines, shipTank) = BuildFlight7Stack();

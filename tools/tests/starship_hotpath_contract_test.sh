@@ -27,6 +27,8 @@ rg -q --fixed-strings 'Assert.InRange(allocatedBytesPerTick, 0.0, 1_000.0)' "$TE
   || fail "Starship allocation budget is not enforced"
 rg -q --fixed-strings 'internal List<Part> ActiveEngineList' "$GRAPH" \
   || fail "concrete active-engine buffer missing"
+rg -q --fixed-strings 'public bool HasActiveEngineParts => ActiveEngineList.Count > 0;' "$GRAPH" \
+  || fail "allocation-free active-engine presence query missing"
 rg -q --fixed-strings 'public IEnumerable<Part> ActiveEngines => ActiveEngineList;' "$GRAPH" \
   || fail "public active-engine compatibility enumerable missing"
 rg -q --fixed-strings 'internal List<Part> PartList => _parts;' "$GRAPH" \
@@ -40,5 +42,18 @@ rg -q --fixed-strings 'GetEngineInstanceGimbalAuthoritySnapshot' "$PART" "$GRAPH
 if rg -q 'foreach \(var .*GetEngineInstance(ThrustGeometry|GimbalAuthority)' "$GRAPH"; then
   fail "PartGraph still consumes engine geometry through iterator foreach"
 fi
+
+for presentation_file in \
+  "$ROOT_DIR/scripts/LaunchEffectsController.cs" \
+  "$ROOT_DIR/scripts/EngineStartupController.cs" \
+  "$ROOT_DIR/scripts/MissionManager.cs" \
+  "$ROOT_DIR/scripts/AudioManager.cs" \
+  "$ROOT_DIR/scripts/CameraShake.cs"; do
+  if rg -q 'ActiveEngines\.Any\(|ActiveEngines\.GetEnumerator\(\)\.MoveNext\(\)' "$presentation_file"; then
+    fail "presence-only engine query still enumerates compatibility view in ${presentation_file##*/}"
+  fi
+done
+rg -q --fixed-strings 'public bool HasActiveEngineParts => Parts.HasActiveEngineParts;' "$ROOT_DIR/ExosphereSimulation/Vessel.cs" \
+  || fail "Vessel presence-query wrapper missing"
 
 echo "starship_hotpath_contract_test: PASS (allocation budget, reductions and geometry snapshots)"

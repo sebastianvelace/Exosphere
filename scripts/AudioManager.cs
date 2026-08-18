@@ -213,7 +213,7 @@ public partial class AudioManager : Node
             float thr = (float)vessel.Throttle;
 
             // Engine voices only sound when engines are actually firing.
-            bool firing = thr > 0.001f && vessel.Parts.ActiveEngines.GetEnumerator().MoveNext();
+            bool firing = thr > 0.001f && vessel.HasActiveEngineParts;
 
             // Whatever body we are actually flying at — not always Earth. A Mars entry
             // has to sound like a Mars entry.

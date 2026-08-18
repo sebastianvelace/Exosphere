@@ -104,8 +104,7 @@ public sealed class CameraShake
                        ?? universe.GetBody("earth");
 
             // Engine thrust shake: only when engines are actually firing.
-            bool enginesFiring = false;
-            foreach (var _ in vessel.Parts.ActiveEngines) { enginesFiring = true; break; }
+            bool enginesFiring = vessel.HasActiveEngineParts;
             if (enginesFiring)
                 throttleActivity = Mathf.Clamp((float)vessel.Throttle, 0f, 1f);
 

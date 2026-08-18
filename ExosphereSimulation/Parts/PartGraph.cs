@@ -439,6 +439,12 @@ public class PartGraph
     /// <summary>Compatibility enumerable for presentation and external callers.</summary>
     public IEnumerable<Part> ActiveEngines => ActiveEngineList;
 
+    /// <summary>
+    /// True when the current stage exposes at least one healthy, staging-active engine part.
+    /// This avoids enumerating the compatibility view for presence-only presentation queries.
+    /// </summary>
+    public bool HasActiveEngineParts => ActiveEngineList.Count > 0;
+
     private List<Part> GetQueryActiveEngineList()
     {
         _queryActiveEngines.Clear();

@@ -1,7 +1,6 @@
 namespace Exosphere.Game;
 
 using Godot;
-using System.Linq;
 using Exosphere.Simulation.Math;
 
 /// <summary>
@@ -105,7 +104,7 @@ public partial class LaunchEffectsController : Node3D
         }
 
         // Engines must be lit (firing engines present) AND throttle open.
-        bool lit = vessel.Throttle > MinThrottle && vessel.Parts.ActiveEngines.Any();
+        bool lit = vessel.Throttle > MinThrottle && vessel.HasActiveEngineParts;
 
         double altitude = vessel.GetAltitude(body); // metres
         bool onPad = altitude < TriggerCeilingM;

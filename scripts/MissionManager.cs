@@ -307,7 +307,7 @@ public partial class MissionManager : Node
 
             case MissionPhase.SEPARATION:
                 // Auto-relight Starship engines after staging
-                if (vessel.Parts.ActiveEngines.Any())
+                if (vessel.HasActiveEngineParts)
                 {
                     bridge.SetThrottle(1.0);
                     SetPhase(MissionPhase.ASCENT_SHIP);

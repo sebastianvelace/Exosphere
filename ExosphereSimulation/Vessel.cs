@@ -409,6 +409,9 @@ public class Vessel
     /// <summary>Engines of the current stage that are lit right now.</summary>
     public int ActiveEngineCount => Parts.ActiveEngineCount;
 
+    /// <summary>True when the current stage has at least one healthy active engine part.</summary>
+    public bool HasActiveEngineParts => Parts.HasActiveEngineParts;
+
     /// <summary>Total pressure-corrected thrust (N) at the vessel's current altitude.</summary>
     public double GetCurrentThrust(CelestialBody? body) =>
         Parts.GetCurrentThrust(GetAmbientPressure(body));

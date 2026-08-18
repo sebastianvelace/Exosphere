@@ -45,7 +45,7 @@ public partial class EngineStartupController : Node3D
         double altitude = vessel.GetAltitude(body);
         bool startup = hasBooster
             && vessel.IsGroundHeld
-            && vessel.Parts.ActiveEngines.Any()
+            && vessel.HasActiveEngineParts
             && vessel.Throttle > 0.01
             && altitude < MaxStartupAltitudeM;
 

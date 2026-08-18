@@ -67,6 +67,38 @@ public sealed class StarshipPerformanceRegressionTests
     }
 
     [Fact]
+    public void ActiveEnginePresenceQueryAvoidsCompatibilityEnumeratorAllocation()
+    {
+        var vessel = BuildFlight7Stack();
+        var graph = vessel.Parts;
+
+        for (int i = 0; i < 64; i++)
+        {
+            _ = graph.ActiveEngines.GetEnumerator().MoveNext();
+            _ = graph.HasActiveEngineParts;
+        }
+
+        const int samples = 256;
+        long legacyBefore = GC.GetAllocatedBytesForCurrentThread();
+        bool legacyValue = false;
+        for (int i = 0; i < samples; i++)
+            legacyValue ^= graph.ActiveEngines.GetEnumerator().MoveNext();
+        long legacyBytes = GC.GetAllocatedBytesForCurrentThread() - legacyBefore;
+
+        long optimizedBefore = GC.GetAllocatedBytesForCurrentThread();
+        bool optimizedValue = false;
+        for (int i = 0; i < samples; i++)
+            optimizedValue ^= graph.HasActiveEngineParts;
+        long optimizedBytes = GC.GetAllocatedBytesForCurrentThread() - optimizedBefore;
+
+        Assert.Equal(legacyValue, optimizedValue);
+        Assert.True(legacyBytes > optimizedBytes + 512,
+            $"presence query did not remove interface-enumerator allocations: "
+            + $"legacy={legacyBytes} optimized={optimizedBytes}");
+        Assert.InRange(optimizedBytes, 0L, 512L);
+    }
+
+    [Fact]
     public void IdenticalFlight7TicksRemainDeterministic()
     {
         var earth = LoadBody("earth");
