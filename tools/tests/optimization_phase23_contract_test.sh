@@ -282,7 +282,7 @@ validate_atmosphere_bodies_log() {
       if (!(slug in expected)) reject("unexpected image identity " slug)
       image[slug]++
     }
-    /^SUMMARY reason=ATMOSPHERE_BODIES_OK$/ { summary++ }
+    /^SUMMARY reason=ATMOSPHERE_BODIES_OK([[:space:]]|$)/ { summary++ }
     END {
       for (slug in expected) {
         if (requested[slug] != 1 || seen[slug] != 1 || image[slug] != 1)
@@ -308,7 +308,7 @@ atmos_bodies_good="$TMP/atmos-bodies-good.log"
     echo "IMAGE slug=$slug mean=0.10 clippedFrac=0.01"
     echo "ATMOS_STATE body=$body slug=$slug actualAlt=$altitude sunElevation=$sun solarVisibility=$visibility eclipse=none eclipseVisibility=1.000000 spectralEnergy=$energy exposureSettled=True"
   done
-  echo 'SUMMARY reason=ATMOSPHERE_BODIES_OK'
+  echo 'SUMMARY reason=ATMOSPHERE_BODIES_OK frames=709'
 } > "$atmos_bodies_good"
 validate_atmosphere_bodies_log "$atmos_bodies_good"
 pass_gate 'Mars/Venus atmosphere valid fixture accepted'

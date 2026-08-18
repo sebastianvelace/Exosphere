@@ -3126,7 +3126,10 @@ verify_pngs() {
           reject("degenerate image metrics for " slug)
         image[slug]++
       }
-      /^SUMMARY reason=ATMOSPHERE_BODIES_OK$/ { summary++ }
+      # Finish() appends run metrics (for example, "frames=709") after the
+      # terminal reason. Accept those fields while still requiring exactly one
+      # terminal summary record.
+      /^SUMMARY reason=ATMOSPHERE_BODIES_OK([[:space:]]|$)/ { summary++ }
       END {
         for (slug in expected) {
           if (requested[slug] != 1) reject("expected exactly one apply for " slug)
