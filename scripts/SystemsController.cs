@@ -352,6 +352,29 @@ public partial class SystemsController : Node
         }
     }
 
+    /// <summary>
+    /// Conservative guard for the opt-in physics candidate. A systems runtime must be at
+    /// the same epoch, have no alert/callback, and expose no finite consumption deadline;
+    /// otherwise the candidate leaves the vessel on the existing scheduler path.
+    /// </summary>
+    public bool CanUseDeferredPhysicsCandidate(
+        Exosphere.Simulation.Vessel vessel,
+        double simulationTime)
+    {
+        if (!RuntimeRegistry.TryGet(vessel.Id, out var runtime)
+            || runtime is null
+            || System.Math.Abs(runtime.SimulationTime - simulationTime)
+                > RuntimeEpochToleranceSeconds)
+        {
+            return false;
+        }
+
+        var external = BuildSimulationInterestInputs(vessel);
+        return !external.HasPendingMissionCallback
+            && !external.HasSystemsAlert
+            && external.SecondsUntilNextSystemsDeadline is null;
+    }
+
     private bool TryActivateVesselRuntime(
         Exosphere.Simulation.Vessel vessel,
         double simulationTime)

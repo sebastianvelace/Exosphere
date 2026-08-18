@@ -164,6 +164,12 @@ public partial class SimulationBridge : Node
         var dataPath = ProjectSettings.GlobalizePath(DataDirectory);
         Universe = Universe.LoadFromDataDirectory(dataPath);
         Universe.TimeScale = 1.0;
+        Universe.DeferredPhysicsCandidateEnabled = ProjectSettings
+            .GetSetting("simulation/deferred_physics_candidate_enabled", false)
+            .AsBool();
+        Universe.DeferredPhysicsCandidateEligibility = (vessel, epoch) =>
+            SystemsController.Instance?.CanUseDeferredPhysicsCandidate(vessel, epoch)
+            == true;
         _running = true;
         GD.Print($"PERF_STARTUP phase=universe_loaded ms={startup.Elapsed.TotalMilliseconds:F1} bodies={Universe.Bodies.Count}");
 

@@ -13,6 +13,11 @@ public sealed class VesselSystemsState
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public string VesselId { get; set; } = "";
     public double SimulationTime { get; set; }
+    /// <summary>
+    /// Last committed systems phase. Older saves omitted this field and deserialize to
+    /// Active, which is the conservative choice for deadline materialization.
+    /// </summary>
+    public SystemsMissionPhase Phase { get; set; } = SystemsMissionPhase.Active;
     public LifeSupportState LifeSupport { get; set; } = new();
     public PowerState Power { get; set; } = new();
     public ThermalState Thermal { get; set; } = new();
@@ -24,6 +29,8 @@ public sealed class VesselSystemsState
             throw new InvalidDataException($"Unsupported systems schema {SchemaVersion}.");
         RequireId(VesselId, "systems vessel");
         RequireFinite(SimulationTime, nameof(SimulationTime));
+        if (!Enum.IsDefined(Phase))
+            throw new InvalidDataException("Invalid systems mission phase.");
         LifeSupport?.Validate();
         Power?.Validate();
         Thermal?.Validate();

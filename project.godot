@@ -33,4 +33,8 @@ project/assembly_name="Exosphere"
 
 common/physics_ticks_per_second=50
 
+[simulation]
+
+deferred_physics_candidate_enabled=false
+
 [autoload]

@@ -108,6 +108,9 @@ public readonly record struct PhysicsSchedulerTelemetry(
     /// <summary>Whether the opt-in per-call substep budget stopped this call early.</summary>
     public bool BudgetLimited { get; init; }
 
+    /// <summary>Number of slices skipped by the opt-in deferred-physics candidate.</summary>
+    public int CandidateDeferredSkips { get; init; }
+
     /// <summary>Reason the scheduler retained pending simulation seconds.</summary>
     public PhysicsSchedulerBudgetReason BudgetReason { get; init; } =
         PhysicsSchedulerBudgetReason.None;

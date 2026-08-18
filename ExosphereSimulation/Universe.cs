@@ -117,6 +117,21 @@ public class Universe
     /// </summary>
     public bool SchedulerBudgetEnabled { get; set; }
 
+    /// <summary>
+    /// Development-only candidate for skipping non-active distant rail projections. It is
+    /// deliberately false by default and has no effect unless an external owner guard is
+    /// also installed. The normal game path therefore remains on the existing mixed
+    /// scheduler until a later parity gate promotes this candidate.
+    /// </summary>
+    public bool DeferredPhysicsCandidateEnabled { get; set; }
+
+    /// <summary>
+    /// Authoritative external guard for the experimental candidate. The callback must return
+    /// true only when the vessel's non-physics state is materialized at the supplied epoch;
+    /// null or an exception fails closed to the existing scheduler path.
+    /// </summary>
+    public Func<Vessel, double, bool>? DeferredPhysicsCandidateEligibility { get; set; }
+
     private int _maxSchedulerSubstepsPerTick = 256;
 
     /// <summary>Maximum number of complete global scheduler steps in one budgeted call.</summary>
@@ -259,6 +274,7 @@ public class Universe
     private int _tickDeadlineDeferredSkips;
     private int _tickDeadlineCatchUpDispatches;
     private int _tickDeadlineProjectedDispatches;
+    private int _tickCandidateDeferredSkips;
     private long _tickStartTimestamp;
 
     // ── Object management ─────────────────────────────────────────────────
@@ -810,6 +826,7 @@ public class Universe
         _tickDeadlineDeferredSkips = 0;
         _tickDeadlineCatchUpDispatches = 0;
         _tickDeadlineProjectedDispatches = 0;
+        _tickCandidateDeferredSkips = 0;
     }
 
     private void PublishSchedulerTelemetry()
@@ -851,6 +868,7 @@ public class Universe
                 : SchedulerBudgetEnabled
                     ? PhysicsSchedulerBudgetReason.None
                     : PhysicsSchedulerBudgetReason.Disabled,
+            CandidateDeferredSkips = _tickCandidateDeferredSkips,
         };
     }
 
@@ -1759,6 +1777,11 @@ public class Universe
                 if (deadline.CanDefer)
                 {
                     _tickDeadlineEligibleEvaluations++;
+                    if (TrySkipDeferredCandidate(
+                        vessel, targetTime, deadline))
+                    {
+                        continue;
+                    }
                     bool hasLastUpdate = _lastDeferredRailUpdate.TryGetValue(
                         vessel.Id, out double lastUpdate);
                     if (!hasLastUpdate)
@@ -1888,6 +1911,59 @@ public class Universe
             }
         }
         ApplyDockingConstraints();
+    }
+
+    private bool TrySkipDeferredCandidate(
+        Vessel vessel,
+        double targetTime,
+        PhysicsSchedulerDeadlinePlan deadline)
+    {
+        if (!DeferredPhysicsCandidateEnabled
+            || DeferredPhysicsCandidateEligibility is not { } eligibility
+            || vessel == ActiveVessel
+            || ClassifySimulationTier(vessel) != VesselSimulationTier.Hibernated)
+        {
+            return false;
+        }
+
+        bool eligible;
+        try
+        {
+            eligible = eligibility(vessel, CurrentTime);
+        }
+        catch (Exception)
+        {
+            eligible = false;
+        }
+        if (!eligible)
+            return false;
+
+        if (!_lastDeferredRailUpdate.TryGetValue(vessel.Id, out double lastUpdate))
+        {
+            // A candidate can only anchor an already valid analytic state. If the first
+            // rails pass still needs to construct OrbitalState, use the old path once.
+            if (vessel.OrbitalState is null)
+                return false;
+            lastUpdate = CurrentTime;
+            _lastDeferredRailUpdate[vessel.Id] = lastUpdate;
+        }
+
+        if (!_nextDeferredRailDeadline.TryGetValue(vessel.Id, out double nextDeadline))
+        {
+            nextDeadline = lastUpdate + deadline.IntervalSeconds;
+            _nextDeferredRailDeadline[vessel.Id] = nextDeadline;
+        }
+
+        if (targetTime < nextDeadline - 1e-12)
+        {
+            _tickDeadlineDeferredSkips++;
+            _tickCandidateDeferredSkips++;
+            return true;
+        }
+
+        // Materialize from the anchored conic only at the event-safe candidate deadline.
+        // A false result falls through to the conservative existing rails branch.
+        return CatchUpDeferredRailVessel(vessel, targetTime);
     }
 
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)

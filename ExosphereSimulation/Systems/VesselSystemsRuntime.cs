@@ -170,6 +170,7 @@ public sealed class VesselSystemsRuntime
     {
         VesselId = VesselId,
         SimulationTime = SimulationTime,
+        Phase = CurrentPhase,
         LifeSupport = LifeSupport.CaptureState(),
         Power = Power.CaptureState(),
         Thermal = Thermal.CaptureState(),
@@ -190,7 +191,7 @@ public sealed class VesselSystemsRuntime
         Thermal.RestoreState(state.Thermal);
         Comms.RestoreState(state.Comms);
         SimulationTime = state.SimulationTime;
-        CurrentPhase = state.Thermal.LastPhase;
+        CurrentPhase = state.Phase;
     }
 
     /// <summary>Resets subsystem values while retaining the stable vessel identity.</summary>

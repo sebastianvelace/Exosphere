@@ -205,6 +205,7 @@ public sealed class VesselSystemsRuntimeTests
         if (compareId)
             Assert.Equal(expected.VesselId, actual.VesselId);
         Assert.Equal(expected.SimulationTime, actual.SimulationTime, 12);
+        Assert.Equal(expected.Phase, actual.Phase);
         Assert.Equal(expected.LifeSupport.OxygenKg, actual.LifeSupport.OxygenKg, 12);
         Assert.Equal(expected.LifeSupport.CO2Kg, actual.LifeSupport.CO2Kg, 12);
         Assert.Equal(expected.LifeSupport.WaterKg, actual.LifeSupport.WaterKg, 12);
