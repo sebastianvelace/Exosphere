@@ -15,6 +15,7 @@ using Exosphere.Simulation.Systems;
 // All physics-derived values arrive through FlightHudSnapshot.
 public partial class HUDController : Control
 {
+    private const double PresentationRefreshPeriodSeconds = 1.0 / 30.0;
     public static FlightHudSnapshot? LatestSnapshot { get; private set; }
 
     // ── Palette ─────────────────────────────────────────────────────────────
@@ -97,6 +98,7 @@ public partial class HUDController : Control
     private bool     _maxqSeen;
     private bool     _pastEntryInterface;   // latch: RETRO_BURN after ENTRY → landing slot
     private readonly System.Collections.Generic.List<string> _events = new();
+    private double _presentationAccumulator = double.MaxValue;
 
     /// <summary>Dot track mirrors <see cref="MissionPhaseTrack.Sequence"/> (includes COAST + RETRO_BURN).</summary>
     private static readonly MissionPhase[] PhaseSequence =
@@ -763,18 +765,33 @@ public partial class HUDController : Control
                 bridge.ThrottleDown(delta);
         }
 
+        // Toast expiry remains wall-clock driven even while the heavy presentation
+        // snapshot is cadence-limited below.
+        UpdateDensityToast(delta);
+
         var viewMode = MapViewController.Instance?.Visible == true
             ? FlightHudViewMode.Map
             : CameraController.Instance?.IsCockpitView == true
                 ? FlightHudViewMode.Cockpit
                 : FlightHudViewMode.Exterior;
         string phaseName = (mission?.Phase ?? MissionPhase.PRE_LAUNCH).ToString();
+        bool hasNavigationTarget = MapViewController.Instance?.HasNavigationTarget == true;
+        bool presentationBoundaryChanged = _snapshot == null
+            || _snapshot.VesselId != vessel.Id
+            || _snapshot.MissionPhase != phaseName
+            || _snapshot.ViewMode != viewMode;
+        _presentationAccumulator += System.Math.Max(0.0, delta);
+        if (!presentationBoundaryChanged
+            && _presentationAccumulator < PresentationRefreshPeriodSeconds)
+            return;
+        _presentationAccumulator %= PresentationRefreshPeriodSeconds;
+
         _snapshot = _presenter.Capture(
             universe,
             vessel,
             phaseName,
             viewMode,
-            MapViewController.Instance?.HasNavigationTarget == true);
+            hasNavigationTarget);
         var snapshot = _snapshot;
         LatestSnapshot = snapshot;
 
@@ -890,7 +907,6 @@ public partial class HUDController : Control
         }
         UpdateGuidanceLine();
         UpdateBoosterLine();
-        UpdateDensityToast(delta);
         _attitudeStrip.UpdateFromSnapshot(snapshot);
         ApplyViewMode(snapshot.ViewMode);
     }

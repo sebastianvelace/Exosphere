@@ -145,6 +145,11 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      `696/696`, startup y contratos pasan. El A/B framebuffer queda pendiente porque Xvfb
      perdió el display antes de cargar Godot; no se declara una ganancia de FPS. Ver
      `docs/audits/PERF_HUD_CADENCE_PHASE52_REPORT.md`.
+   - **Fase 53:** la captura del HUD principal se limita a 30 Hz; input, throttle y toast
+     siguen por frame, y cambios de nave/fase/vista fuerzan actualización. Baseline CPU:
+     `0.019567 ms` p50 y `922.2 B` por captura; suite `696/696`, build, startup y contratos
+     pasan. El A/B GPU sigue bloqueado por Xvfb. Ver
+     `docs/audits/PERF_HUD_MAIN_CADENCE_PHASE53_REPORT.md`.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 52 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario y navball limitados a cadencias acotadas; display, GPU y EventPipe externos pendientes
+Estado: fase 53 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -314,6 +314,17 @@ La compilación de ambos proyectos pasa con 0 warnings/0 errores, la suite direc
 El A/B framebuffer no se etiqueta como medido porque Xvfb falló antes de crear el display;
 el reporte reproducible es `PERF_HUD_CADENCE_PHASE52_REPORT.md`. No se afirma una ganancia
 de FPS hasta repetirlo en un host con framebuffer válido.
+
+## Resultado de la fase 53 — captura del HUD principal a 30 Hz
+
+`FlightHudPresenter.Capture` costó `0.019567 ms` p50 y `922.2 B` por operación en la
+referencia CPU Flight 7. `HUDController` conserva input y throttle por frame, pero captura
+el snapshot y actualiza sus paneles a 30 Hz; cambios de nave, fase o vista invalidan la
+cadencia inmediatamente. El toast mantiene su temporizador wall-clock.
+
+La suite completa pasa `696/696`, el build y startup pasan, y el contrato de cadencia cubre
+la frontera. El A/B de framebuffer continúa bloqueado por Xvfb; por tanto, la decisión es
+CPU/presentación y no una afirmación de FPS. Reporte: `PERF_HUD_MAIN_CADENCE_PHASE53_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 

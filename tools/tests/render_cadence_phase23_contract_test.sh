@@ -10,6 +10,7 @@ PHASE_LIGHTING="$ROOT/scripts/PhaseLightingController.cs"
 SYSTEMS_HUD="$ROOT/scripts/SystemsHUD.cs"
 ATTITUDE_STRIP="$ROOT/scripts/AttitudeDataStrip.cs"
 NAVBALL="$ROOT/scripts/AttitudeNavball.cs"
+HUD_CONTROLLER="$ROOT/scripts/HUDController.cs"
 
 fail() {
   echo "render_cadence_phase23_contract_test: FAIL: $*" >&2
@@ -22,7 +23,7 @@ require_text() {
 }
 
 for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION" "$CAMERA" "$PHASE_LIGHTING" \
-  "$SYSTEMS_HUD" "$ATTITUDE_STRIP" "$NAVBALL"; do
+  "$SYSTEMS_HUD" "$ATTITUDE_STRIP" "$NAVBALL" "$HUD_CONTROLLER"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 
@@ -101,5 +102,18 @@ require_text "$NAVBALL" 'RefreshPeriodSeconds = 1.0 / 30.0' \
   "navball refresh cadence missing"
 require_text "$NAVBALL" 'double refreshDelta = _refreshAccumulator;' \
   "navball smoothing must consume accumulated presentation time"
+require_text "$HUD_CONTROLLER" 'PresentationRefreshPeriodSeconds = 1.0 / 30.0' \
+  "main HUD presentation cadence missing"
+require_text "$HUD_CONTROLLER" 'presentationBoundaryChanged' \
+  "main HUD boundary invalidation missing"
+require_text "$HUD_CONTROLLER" 'UpdateDensityToast(delta);' \
+  "main HUD toast timer must remain wall-clock driven"
+require_text "$HUD_CONTROLLER" 'if (!presentationBoundaryChanged' \
+  "main HUD capture path is not cadence-gated"
+input_line="$(rg -n --fixed-strings 'if (Input.IsKeyPressed(Key.W))' "$HUD_CONTROLLER" | head -1 | cut -d: -f1)"
+toast_line="$(rg -n --fixed-strings 'UpdateDensityToast(delta);' "$HUD_CONTROLLER" | head -1 | cut -d: -f1)"
+gate_line="$(rg -n --fixed-strings 'if (!presentationBoundaryChanged' "$HUD_CONTROLLER" | head -1 | cut -d: -f1)"
+(( input_line < gate_line )) || fail "HUD input is behind presentation cadence gate"
+(( toast_line < gate_line )) || fail "HUD toast timer is behind presentation cadence gate"
 
 echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz, exterior/thermal gated, HUD cluster bounded, VAB=demand-driven)"
