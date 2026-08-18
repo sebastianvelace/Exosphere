@@ -50,4 +50,3 @@ del host sigue fallando antes de crear el display X11.
 Promover la cadencia CPU/presentación. Mantener sin cambios la calidad atmosférica oficial,
 el scheduler y la hibernación física. Repetir el A/B en X11/GPU válido con HUD actual, HUD
 oculto y captura a 30/60 Hz antes de declarar una ganancia visual.
-
