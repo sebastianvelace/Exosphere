@@ -130,11 +130,12 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      EDL nunca entra en trabajo diferido. `SimulationInterestPolicy.EnabledByDefault` y el
      dispatcher runtime permanecen sin cambios; faltan systems por nave, ruta diferida real,
      medición de flota y validación visual antes de promover.
-   - **Fase 51 planificada:** el despliegue multiagente para materializar systems por vessel
-     está definido en `docs/audits/PERF_PER_VESSEL_SYSTEMS_PHASE51_PLAN.md`. Se divide en
-     runtime puro, registry de ownership, save/load, callbacks/deadlines, scheduler candidate,
-     harness visual y auditoría. El orden de commits y los gates fail-closed preceden cualquier
-     activación de hibernación.
+   - **Fase 51 en HOLD controlado:** A–D materializan systems por vessel, persisten el mapa
+     y enrutan callbacks por owner; E añade un candidate de física diferida detrás de
+     `simulation/deferred_physics_candidate_enabled=false`. La evidencia está en
+     `docs/audits/PERF_PER_VESSEL_SYSTEMS_PHASE51_PLAN.md` y
+     `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`. Falta catch-up temporal de
+     consumibles por vessel y validación framebuffer antes de promover cualquier hibernación.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

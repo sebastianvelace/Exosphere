@@ -1,7 +1,18 @@
 # Phase 51 — materialización de systems por vessel y despliegue multiagente
 
 Fecha de planificación: 2026-08-17
-Estado: **plan aprobado para ejecución; runtime diferido aún desactivado**
+Estado: **A–E implementados; candidate experimental en HOLD y runtime diferido aún desactivado**
+
+Estado de integración verificado:
+
+- A runtime puro: `011d568`.
+- B registry/ownership: `5281e6e`, `b87189d`.
+- C save/load materializado: `c104e8e`.
+- D callbacks/wake boundary: `f974583`.
+- E candidate opt-in: `9504874`.
+- Suite posterior a E: `693/693 PASS`; ambos builds en `0 warnings / 0 errors`.
+- La decisión y los bloqueos de promoción están en
+  `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`.
 
 ## Objetivo
 
