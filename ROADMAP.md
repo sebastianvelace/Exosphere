@@ -131,7 +131,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      dispatcher runtime permanecen sin cambios; faltan systems por nave, ruta diferida real,
      medición de flota y validación visual antes de promover.
    - **Fase 51 en HOLD controlado:** A–D materializan systems por vessel, persisten el mapa
-     y enrutan callbacks por owner; E añade un candidate de física diferida detrás de
+     y enrutan callbacks por owner; E añade un candidate de física diferida y F cierra su
+     telemetría/contrato de paridad detrás de
      `simulation/deferred_physics_candidate_enabled=false`. La evidencia está en
      `docs/audits/PERF_PER_VESSEL_SYSTEMS_PHASE51_PLAN.md` y
      `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`. Falta catch-up temporal de

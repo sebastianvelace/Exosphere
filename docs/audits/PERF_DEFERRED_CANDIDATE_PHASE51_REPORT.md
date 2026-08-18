@@ -1,7 +1,7 @@
 # Phase 51 — deferred physics candidate gate
 
 Fecha: 2026-08-17  
-Commit: `9504874` (`perf: add opt-in deferred physics candidate`)  
+Commits: `9504874` (`perf: add opt-in deferred physics candidate`), `ca9481c` (`test: close phase51 candidate telemetry gates`)
 Decisión: **HOLD para producción**
 
 ## Resultado
@@ -24,7 +24,9 @@ Cuando se habilita explícitamente, sólo puede omitir slices de una nave no act
 El estado omitido conserva el último epoch seguro. Al alcanzar el deadline, el scheduler
 reconstruye la posición/velocidad desde el conic anclado antes de continuar. El contador
 `CandidateDeferredSkips` permite distinguir este candidate de los skips de proyección rails
-existentes.
+existentes. El harness emite una línea `PERF_SCHEDULER_CANDIDATE schema=1` por frame, con
+`enabled` y `deferred_skips`; el contrato de rendimiento rechaza campos mal formados y
+cualquier skip cuando la flag oficial está desactivada.
 
 ## Verificación
 
@@ -33,7 +35,14 @@ existentes.
 - Guard inexistente o con excepción: vuelve a la ruta existente.
 - Estado de systems: `Phase` ya forma parte del snapshot; los saves antiguos sin ese campo
   deserializan a `Active`, elección conservadora.
-- Suite completa: **693/693 PASS**.
+- Suite completa: **696/696 PASS**.
+- Tests del candidate: **6/6 PASS**, incluyendo guard desactivado, épocas finitas/no futuras,
+  guard con excepción y reset de telemetría ante delta inválido.
+- Contrato visual: **PASS**, con fixtures que aceptan reentrada orbital física y rechazan
+  ejecución demo o ausencia de catch; también quedan cubiertos los modos J, staging, docking
+  y EDL por el contrato fuente/harness existente.
+- Contrato de rendimiento: **53 PASS / 1 SKIP** (el único skip es telemetría dinámica sin
+  log de framebuffer suministrado).
 - Build `ExosphereSimulation.csproj`: **0 warnings / 0 errors**.
 - Build `Exosphere.csproj`: **0 warnings / 0 errors**.
 - Smoke Godot headless con `--log-file`: **PASS**.
