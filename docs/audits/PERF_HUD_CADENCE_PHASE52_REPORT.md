@@ -1,6 +1,6 @@
 # Fase 52 — cadencia segura de HUD y navball
 
-Fecha: 2026-08-17  
+Fecha: 2026-08-17
 Estado: **promovida como optimización CPU/presentación; FPS GPU pendiente de host válido**
 
 ## Problema aislado
@@ -48,4 +48,3 @@ era `0.13%` del frame medio y el frame completo estaba dominado por llvmpipe.
 La siguiente medición debe ejecutarse con X11/Xvfb reproducible o GPU física y comparar
 `PERF_GPU` con HUD actual, HUD oculto y navball/strip ocultos. Hasta entonces, no se cambia la
 calidad oficial del sky ni se promueve hibernación física.
-
