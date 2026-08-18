@@ -90,7 +90,9 @@ public partial class PhaseLightingController : Node
             ambient = Mathf.Lerp(ambient, AmbientEnergyReentry, reentry);
             sun     = Mathf.Lerp(sun, SunEnergyReentry, reentry);
             glow    = Mathf.Lerp(glow, GlowIntensityReentry, reentry);
-            _env.AmbientLightColor = _env.AmbientLightColor.Lerp(AmbientColorReentry, reentry);
+            var reentryColor = _env.AmbientLightColor.Lerp(AmbientColorReentry, reentry);
+            if (ColorDiffers(_env.AmbientLightColor, reentryColor))
+                _env.AmbientLightColor = reentryColor;
         }
 
         if (CameraController.Instance?.IsCockpitView == true)
@@ -99,14 +101,18 @@ public partial class PhaseLightingController : Node
             glow = Mathf.Min(glow, 0.12f);
         }
 
-        _env.AmbientLightEnergy = ambient;
+        if (FloatDiffers(_env.AmbientLightEnergy, ambient))
+            _env.AmbientLightEnergy = ambient;
 
-        _env.GlowEnabled      = true;
-        _env.GlowIntensity    = glow;
-        _env.GlowStrength     = 0.9f;
-        _env.GlowBloom        = 0.05f;
-        _env.GlowBlendMode    = Godot.Environment.GlowBlendModeEnum.Additive;
-        _env.GlowHdrThreshold = 1.0f;
+        // These are presentation properties, not per-frame state. Avoid invalidating
+        // the environment resource when the phase has converged to the same values.
+        if (!_env.GlowEnabled) _env.GlowEnabled = true;
+        if (FloatDiffers(_env.GlowIntensity, glow)) _env.GlowIntensity = glow;
+        if (FloatDiffers(_env.GlowStrength, 0.9f)) _env.GlowStrength = 0.9f;
+        if (FloatDiffers(_env.GlowBloom, 0.05f)) _env.GlowBloom = 0.05f;
+        if (_env.GlowBlendMode != Godot.Environment.GlowBlendModeEnum.Additive)
+            _env.GlowBlendMode = Godot.Environment.GlowBlendModeEnum.Additive;
+        if (FloatDiffers(_env.GlowHdrThreshold, 1.0f)) _env.GlowHdrThreshold = 1.0f;
 
         if (_light != null)
         {
@@ -120,12 +126,16 @@ public partial class PhaseLightingController : Node
                 body, optics, alt, sunElevation, sunDirection);
             double peak = System.Math.Max(1e-6,
                 System.Math.Max(direct.X, System.Math.Max(direct.Y, direct.Z)));
-            _light.LightColor = new Color(
+            var lightColor = new Color(
                 (float)(direct.X / peak),
                 (float)(direct.Y / peak),
                 (float)(direct.Z / peak));
             double luminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
-            _light.LightEnergy = sun * (float)luminance * SunController.SolarVisibility;
+            float lightEnergy = sun * (float)luminance * SunController.SolarVisibility;
+            if (ColorDiffers(_light.LightColor, lightColor))
+                _light.LightColor = lightColor;
+            if (FloatDiffers(_light.LightEnergy, lightEnergy))
+                _light.LightEnergy = lightEnergy;
         }
     }
 
@@ -216,4 +226,13 @@ public partial class PhaseLightingController : Node
         float t = Mathf.Clamp((x - edge0) / (edge1 - edge0), 0f, 1f);
         return t * t * (3f - 2f * t);
     }
+
+    private static bool FloatDiffers(float a, float b) =>
+        float.IsNaN(a) || float.IsNaN(b) || Mathf.Abs(a - b) > 1e-4f;
+
+    private static bool ColorDiffers(Color a, Color b) =>
+        FloatDiffers(a.R, b.R)
+        || FloatDiffers(a.G, b.G)
+        || FloatDiffers(a.B, b.B)
+        || FloatDiffers(a.A, b.A);
 }

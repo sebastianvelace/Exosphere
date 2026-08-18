@@ -476,12 +476,21 @@ public partial class SkyController : Node
         float earthshine = body.Id == "earth" && altitude < 1_000_000.0
             ? 0.035f * Mathf.Lerp(0.10f, 1.0f, daylight)
             : 0.0f;
-        _env.AmbientLightColor = ambient * Mathf.Max(atmosphericFill, earthshine);
-        _env.BackgroundEnergyMultiplier = 1.0f;
+        Color targetAmbient = ambient * Mathf.Max(atmosphericFill, earthshine);
+        if (ColorDiffers(_env.AmbientLightColor, targetAmbient))
+            _env.AmbientLightColor = targetAmbient;
+        if (System.Math.Abs(_env.BackgroundEnergyMultiplier - 1.0f) > 1e-4f)
+            _env.BackgroundEnergyMultiplier = 1.0f;
     }
 
     private static Vector3 ToGodot(Vector3d value) => new(
         (float)value.X, (float)value.Y, (float)value.Z);
+
+    private static bool ColorDiffers(Color a, Color b) =>
+        Mathf.Abs(a.R - b.R) > 1e-4f
+        || Mathf.Abs(a.G - b.G) > 1e-4f
+        || Mathf.Abs(a.B - b.B) > 1e-4f
+        || Mathf.Abs(a.A - b.A) > 1e-4f;
 
     private bool TryGetAtmosphereLuts(
         string bodyId,

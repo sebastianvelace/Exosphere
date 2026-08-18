@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SHADER="$ROOT/assets/shaders/space_sky.gdshader"
 SKY="$ROOT/scripts/SkyController.cs"
 EXPOSURE="$ROOT/scripts/VisualExposureController.cs"
+PHASE_LIGHTING="$ROOT/scripts/PhaseLightingController.cs"
 
 fail() {
   echo "sky_runtime_performance_contract_test: FAIL: $*" >&2
@@ -14,6 +15,7 @@ fail() {
 [[ -f "$SHADER" ]] || fail "missing sky shader"
 [[ -f "$SKY" ]] || fail "missing SkyController"
 [[ -f "$EXPOSURE" ]] || fail "missing VisualExposureController"
+[[ -f "$PHASE_LIGHTING" ]] || fail "missing PhaseLightingController"
 
 # Realtime sampling must remain bounded without changing the CPU/LUT oracle.
 rg -q --fixed-strings 'uniform float atmosphere_quality' "$SHADER" \
@@ -51,5 +53,13 @@ rg -q --fixed-strings '_lastEyeStarGain' "$EXPOSURE" \
   || fail "eye-star dirty cache missing"
 rg -q --fixed-strings 'System.Math.Abs(eyeStarGain - _lastEyeStarGain) > 0.005f' "$EXPOSURE" \
   || fail "eye-star update threshold missing"
+rg -q --fixed-strings 'ColorDiffers(_env.AmbientLightColor, targetAmbient)' "$SKY" \
+  || fail "sky ambient color dirty check missing"
+rg -q --fixed-strings 'if (FloatDiffers(_env.AmbientLightEnergy, ambient))' "$PHASE_LIGHTING" \
+  || fail "phase ambient energy dirty check missing"
+rg -q --fixed-strings 'if (ColorDiffers(_light.LightColor, lightColor))' "$PHASE_LIGHTING" \
+  || fail "phase light color dirty check missing"
+rg -q --fixed-strings 'if (FloatDiffers(_light.LightEnergy, lightEnergy))' "$PHASE_LIGHTING" \
+  || fail "phase light energy dirty check missing"
 
 echo "sky_runtime_performance_contract_test: PASS (bounded quadrature, cached uniforms, low-priority LUT worker)"
