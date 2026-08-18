@@ -85,13 +85,12 @@ public partial class EngineGridHUD : Control
 
         var body = universe.GetDominantBody(vessel.Position);
         _throttle = vessel.Throttle;
-        int nominalEngines = 0;
-        foreach (var engine in vessel.Parts.ActiveEngines)
-            nominalEngines += System.Math.Max(1, engine.Definition.EngineCount);
-        int declaredNominal = System.Math.Max(1, nominalEngines);
-        vessel.FillEngineReadouts(body, _readoutScratch);
-        bool hasOneRowPerEngine = _readoutScratch.Count == declaredNominal;
-        _nominalEngines = hasOneRowPerEngine ? _readoutScratch.Count : declaredNominal;
+        vessel.FillEngineReadouts(body, _readoutScratch, out var telemetry);
+        int declaredNominal = System.Math.Max(1, telemetry.NominalEngineCount);
+        bool hasOneRowPerEngine = telemetry.ReadoutEngineCount == declaredNominal;
+        _nominalEngines = hasOneRowPerEngine
+            ? telemetry.ReadoutEngineCount
+            : declaredNominal;
         _litEngines = hasOneRowPerEngine
             ? EngineHudPresentation.CountDelivered(_readoutScratch)
             : System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
@@ -99,10 +98,10 @@ public partial class EngineGridHUD : Control
             ? EngineHudPresentation.CountFailures(_readoutScratch)
             : 0;
 
-        double thrustN = vessel.GetCurrentThrust(body);
+        double thrustN = telemetry.ThrustN;
         _thrustKN = thrustN / 1000.0;
-        _massFlow = vessel.GetCurrentMassFlowTps(body);
-        _ispEff   = vessel.GetCurrentIsp(body);
+        _massFlow = telemetry.MassFlowKgS / 1000.0;
+        _ispEff   = telemetry.EffectiveIspSeconds;
         double localWeight = vessel.GetWeightNewtons(body);
         _twrValid = localWeight > 0 && thrustN > 0;
         _twr = _twrValid ? thrustN / localWeight : 0;

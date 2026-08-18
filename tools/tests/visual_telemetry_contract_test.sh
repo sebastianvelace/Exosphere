@@ -20,8 +20,14 @@ rg -q --fixed-strings 'public void FillEngineReadouts(double ambientPressure, Li
   || fail "PartGraph buffer fill API missing"
 rg -q --fixed-strings 'Parts.FillEngineReadouts(GetAmbientPressure(body), destination)' "$VESSEL" \
   || fail "Vessel buffer fill wrapper missing"
-rg -q --fixed-strings 'vessel.FillEngineReadouts(body, _readoutScratch);' "$HUD" \
-  || fail "EngineGridHUD does not use the reusable telemetry buffer"
+if ! rg -q --fixed-strings 'vessel.FillEngineReadouts(body, _readoutScratch);' "$HUD" \
+  && ! rg -q --fixed-strings 'vessel.FillEngineReadouts(body, _readoutScratch, out var telemetry);' "$HUD"; then
+  fail "EngineGridHUD does not use the reusable telemetry buffer"
+fi
+rg -q --fixed-strings 'out EngineTelemetrySummary summary' "$PART_GRAPH" \
+  || fail "PartGraph aggregate telemetry API missing"
+rg -q --fixed-strings 'telemetry.ThrustN' "$HUD" \
+  || fail "EngineGridHUD does not consume aggregate telemetry"
 rg -q --fixed-strings 'TargetVessel.FillEngineReadouts(body, _engineReadoutScratch);' "$RENDERER" \
   || fail "VesselRenderer does not use the reusable telemetry buffer"
 if rg -q --fixed-strings 'vessel.GetEngineReadouts(body)' "$HUD"; then

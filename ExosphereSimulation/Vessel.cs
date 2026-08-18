@@ -439,6 +439,16 @@ public class Vessel
     public void FillEngineReadouts(CelestialBody? body, List<EngineReadout> destination) =>
         Parts.FillEngineReadouts(GetAmbientPressure(body), destination);
 
+    /// <summary>
+    /// Fills engine telemetry and returns the aggregate values computed during that same
+    /// pass. This avoids repeating the active-stage thrust/mass-flow queries in HUD code.
+    /// </summary>
+    public void FillEngineReadouts(
+        CelestialBody? body,
+        List<EngineReadout> destination,
+        out EngineTelemetrySummary summary) =>
+        Parts.FillEngineReadouts(GetAmbientPressure(body), destination, out summary);
+
     public bool InjectEngineFailure(string engineInstanceId, string failureCode)
     {
         foreach (var part in Parts.Parts.Where(p => p.HasEngineRuntime))

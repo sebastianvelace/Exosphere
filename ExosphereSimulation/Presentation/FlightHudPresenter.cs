@@ -184,7 +184,7 @@ public sealed class FlightHudPresenter
         }
         double liquidFraction = liquidCapacity > 0.0 ? liquidFuel / liquidCapacity : 0.0;
         double oxidizerFraction = oxidizerCapacity > 0.0 ? oxidizer / oxidizerCapacity : 0.0;
-        vessel.FillEngineReadouts(body, _engineReadoutScratch);
+        vessel.FillEngineReadouts(body, _engineReadoutScratch, out var engineTelemetry);
         int nominalEngines = _engineReadoutScratch.Count;
         int activeEngines = 0;
         int failedEngines = 0;
@@ -214,6 +214,11 @@ public sealed class FlightHudPresenter
             nominalEngines,
             failedEngines);
 
+        double engineWeightN = vessel.GetWeightNewtons(body);
+        double thrustToWeight = engineWeightN > 0.0
+            ? engineTelemetry.ThrustN / engineWeightN
+            : 0.0;
+
         return new FlightHudSnapshot
         {
             VesselId = vessel.Id,
@@ -237,8 +242,8 @@ public sealed class FlightHudPresenter
             HasDownrangeReference = _launchCaptured,
             TotalMassKg = vessel.TotalMass,
             StageDeltaVMps = vessel.GetCurrentStageDeltaV(body),
-            CurrentThrustN = vessel.GetCurrentThrust(body),
-            ThrustToWeightRatio = vessel.GetThrustToWeightRatio(body),
+            CurrentThrustN = engineTelemetry.ThrustN,
+            ThrustToWeightRatio = thrustToWeight,
             Throttle = vessel.Throttle,
             IsGroundHeld = vessel.IsGroundHeld,
             NominalEngineCount = nominalEngines,

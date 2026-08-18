@@ -16,6 +16,22 @@ public readonly record struct EngineReadout(
     EngineLifecycleState State,
     string? FailureCode);
 
+/// <summary>
+/// Aggregate values produced together with a per-engine telemetry fill. Keeping these
+/// values beside the rows prevents presentation callers from rebuilding the active-stage
+/// query and re-evaluating every engine several times for one HUD sample.
+/// </summary>
+public readonly record struct EngineTelemetrySummary(
+    int NominalEngineCount,
+    int ReadoutEngineCount,
+    double ThrustN,
+    double MassFlowKgS)
+{
+    public double EffectiveIspSeconds => MassFlowKgS > 1e-9
+        ? ThrustN / (MassFlowKgS * 9.80665)
+        : 0.0;
+}
+
 public class PartGraph
 {
     private readonly record struct LiquidEngineDemand(
@@ -54,6 +70,7 @@ public class PartGraph
     private bool _tickMassPropertiesValid;
     private bool _engineReadoutCacheValid;
     private double _engineReadoutCacheAmbientPressure;
+    private EngineTelemetrySummary _engineReadoutCacheSummary;
     private double _tickTotalMass;
     private Vector3d _tickCenterOfMass;
     private double _tickTransverseMomentOfInertia;
@@ -895,8 +912,10 @@ public class PartGraph
     private bool TryCopyCachedEngineReadouts(
         IReadOnlyList<Part> engines,
         double ambientPressure,
-        List<EngineReadout> destination)
+        List<EngineReadout> destination,
+        out EngineTelemetrySummary summary)
     {
+        summary = default;
         // A non-finite pressure must still reach the evaluator so it preserves its existing
         // argument validation instead of accidentally becoming a cache hit.
         if (!_engineReadoutCacheValid
@@ -947,6 +966,7 @@ public class PartGraph
 
         if (rowIndex != _engineReadoutCacheRows.Count) return false;
         destination.AddRange(_engineReadoutCacheRows);
+        summary = _engineReadoutCacheSummary;
         return true;
     }
 
@@ -956,12 +976,23 @@ public class PartGraph
     /// telemetry without allocating a list or copying the compatibility enumerable.
     /// </summary>
     public void FillEngineReadouts(double ambientPressure, List<EngineReadout> destination)
+        => FillEngineReadouts(ambientPressure, destination, out _);
+
+    /// <summary>
+    /// Fills engine rows and computes their aggregate telemetry in one active-stage pass.
+    /// The overload without <paramref name="summary"/> remains the compatibility API for
+    /// callers that only need rows.
+    /// </summary>
+    public void FillEngineReadouts(
+        double ambientPressure,
+        List<EngineReadout> destination,
+        out EngineTelemetrySummary summary)
     {
         ArgumentNullException.ThrowIfNull(destination);
         destination.Clear();
 
         var engines = GetActiveEngineListForReadout();
-        if (TryCopyCachedEngineReadouts(engines, ambientPressure, destination))
+        if (TryCopyCachedEngineReadouts(engines, ambientPressure, destination, out summary))
             return;
 
         _engineReadoutCacheParts.Clear();
@@ -969,9 +1000,13 @@ public class PartGraph
         _engineReadoutCacheRows.Clear();
         _engineReadoutCacheAmbientPressure = ambientPressure;
         _engineReadoutCacheValid = false;
+        int nominalEngineCount = 0;
+        double thrustN = 0.0;
+        double massFlowKgS = 0.0;
 
         foreach (var engine in engines)
         {
+            nominalEngineCount += System.Math.Max(1, engine.Definition.EngineCount);
             if (engine.HasEngineRuntime)
             {
                 int stateIndex = 0;
@@ -986,6 +1021,8 @@ public class PartGraph
                         telemetry.State,
                         telemetry.FailureCode);
                     destination.Add(row);
+                    thrustN += row.ThrustN;
+                    massFlowKgS += row.MassFlowKgS;
                     _engineReadoutCacheParts.Add(engine);
                     _engineReadoutCacheStates.Add(engine.EngineStates[stateIndex++]);
                     _engineReadoutCacheRows.Add(row);
@@ -996,11 +1033,19 @@ public class PartGraph
 
             var staticRow = BuildStaticEngineReadout(engine, ambientPressure);
             destination.Add(staticRow);
+            thrustN += staticRow.ThrustN;
+            massFlowKgS += staticRow.MassFlowKgS;
             _engineReadoutCacheParts.Add(engine);
             _engineReadoutCacheStates.Add(null);
             _engineReadoutCacheRows.Add(staticRow);
         }
 
+        summary = new EngineTelemetrySummary(
+            nominalEngineCount,
+            destination.Count,
+            thrustN,
+            massFlowKgS);
+        _engineReadoutCacheSummary = summary;
         _engineReadoutCacheValid = true;
     }
 
