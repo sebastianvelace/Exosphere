@@ -54,6 +54,14 @@ public partial class MissionManager : Node
     /// <summary>True only when an event has been recorded but not delivered.</summary>
     public bool HasPendingMissionCallbacks => _callbackQueue.HasPending;
 
+    /// <summary>
+    /// Returns whether a pending callback can affect the specified vessel. Global mission
+    /// callbacks are conservatively visible to every vessel; owned callbacks are scoped by
+    /// stable identity so a future scheduler can wake only the correct runtime.
+    /// </summary>
+    public bool HasPendingMissionCallbackFor(string vesselId) =>
+        _callbackQueue.HasPendingFor(vesselId);
+
     public MissionCallbackQueueState CaptureCallbackState() => _callbackQueue.CaptureState();
 
     public void RestoreCallbackState(MissionCallbackQueueState state)
@@ -73,6 +81,14 @@ public partial class MissionManager : Node
         {
             _callbackQueue.DispatchPending(callback =>
             {
+                if (callback.OwnerVesselId is { } owner
+                    && SimulationBridge.Instance?.EnsureSystemsRuntimeMaterialized(
+                        owner, SimulationBridge.Instance.Universe.CurrentTime) != true)
+                {
+                    throw new InvalidOperationException(
+                        $"Callback owner vessel '{owner}' is not materialized.");
+                }
+
                 switch (callback.EventType)
                 {
                     case "PhaseChanged":
@@ -158,7 +174,8 @@ public partial class MissionManager : Node
         _maxQTriggered  = false;
         SetPhase(MissionPhase.LIFTOFF);
         PublishMissionCallback(
-            "LaunchCommitted", "", () => EmitSignal(SignalName.LaunchCommitted));
+            "LaunchCommitted", "", () => EmitSignal(SignalName.LaunchCommitted),
+            SimulationBridge.Instance?.ActiveVessel?.Id);
     }
 
     /// <summary>
@@ -173,7 +190,8 @@ public partial class MissionManager : Node
             return;
         SetPhase(MissionPhase.LIFTOFF);
         PublishMissionCallback(
-            "LaunchCommitted", "", () => EmitSignal(SignalName.LaunchCommitted));
+            "LaunchCommitted", "", () => EmitSignal(SignalName.LaunchCommitted),
+            SimulationBridge.Instance?.ActiveVessel?.Id);
     }
 
     /// Call from SimulationBridge.TriggerStaging when a stage fires.
@@ -356,9 +374,20 @@ public partial class MissionManager : Node
     public MissionCallbackState PublishMissionCallback(
         string eventType,
         string payload,
-        Action emit)
+        Action emit,
+        string? ownerVesselId = null)
     {
         double simulationTime = SimulationBridge.Instance?.Universe?.CurrentTime ?? 0.0;
-        return _callbackQueue.Publish(eventType, payload, simulationTime, emit);
+        if (ownerVesselId is { } owner
+            && SimulationBridge.Instance?.EnsureSystemsRuntimeMaterialized(
+                owner, simulationTime) != true)
+        {
+            // Keep the event ordered but pending. DispatchPending will retry the owner
+            // boundary after the Universe/controller has finished materializing vessels.
+            return _callbackQueue.Enqueue(
+                eventType, payload, simulationTime, owner);
+        }
+        return _callbackQueue.Publish(
+            eventType, payload, simulationTime, emit, ownerVesselId);
     }
 }

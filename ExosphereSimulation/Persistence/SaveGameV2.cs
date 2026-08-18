@@ -441,6 +441,15 @@ public static class SaveGameV2Codec
             NextSequence = save.Mission.NextCallbackSequence,
             Events = save.Mission.CallbackEvents,
         }.Validate();
+        foreach (var callback in save.Mission.CallbackEvents)
+        {
+            if (callback.OwnerVesselId is { } owner
+                && !vesselIds.Contains(owner))
+            {
+                throw new InvalidDataException(
+                    $"Callback {callback.Sequence} references missing owner vessel '{owner}'.");
+            }
+        }
 
         if (save.VesselSystems == null)
             throw new InvalidDataException("Vessel systems collection is null.");

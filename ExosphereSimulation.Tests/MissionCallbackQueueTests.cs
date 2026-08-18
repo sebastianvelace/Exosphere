@@ -72,4 +72,77 @@ public sealed class MissionCallbackQueueTests
             () => SaveGameV2Json.Serialize(save));
         Assert.Contains("callback", error.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void OwnerSpecificCallbacksRoundTripAndGlobalCallbacksStayVisible()
+    {
+        var ownerOnly = new MissionCallbackQueue();
+        ownerOnly.Enqueue(
+            "VesselStaged", "vessel-b", 20.0, ownerVesselId: "vessel-b");
+        Assert.False(ownerOnly.HasPendingFor("vessel-a"));
+        Assert.True(ownerOnly.HasPendingFor("vessel-b"));
+
+        var queue = new MissionCallbackQueue();
+        queue.Enqueue(
+            "VesselStaged", "vessel-b", 20.0, ownerVesselId: "vessel-b");
+        queue.Enqueue("PhaseChanged", "ORBIT", 20.1);
+
+        Assert.True(queue.HasPendingFor("vessel-a"));
+        Assert.True(queue.HasPendingFor("vessel-b"));
+
+        var restored = new MissionCallbackQueue();
+        restored.RestoreState(queue.CaptureState());
+        var callbacks = restored.CaptureState().Events;
+        Assert.Equal("vessel-b", callbacks[0].OwnerVesselId);
+        Assert.Null(callbacks[1].OwnerVesselId);
+
+        var save = new SaveGameV2
+        {
+            SimulationTime = 20.1,
+            ActiveVesselId = "vessel-a",
+            Vessels =
+            [
+                new VesselSaveV2 { Id = "vessel-a" },
+                new VesselSaveV2 { Id = "vessel-b" },
+            ],
+            Mission = new MissionSaveV2
+            {
+                NextCallbackSequence = 3,
+                CallbackEvents = callbacks,
+            },
+        };
+        var decoded = SaveGameV2Json.DeserializeOrMigrate(
+            SaveGameV2Json.Serialize(save));
+        Assert.Equal("vessel-b", decoded.Mission.CallbackEvents[0].OwnerVesselId);
+    }
+
+    [Fact]
+    public void SaveRejectsCallbackOwnerThatIsNotInTheVesselSet()
+    {
+        var save = new SaveGameV2
+        {
+            SimulationTime = 20.0,
+            ActiveVesselId = "vessel-a",
+            Vessels = [new VesselSaveV2 { Id = "vessel-a" }],
+            Mission = new MissionSaveV2
+            {
+                NextCallbackSequence = 2,
+                CallbackEvents =
+                [
+                    new MissionCallbackState
+                    {
+                        Sequence = 1,
+                        EventType = "VesselStaged",
+                        Payload = "missing-vessel",
+                        OwnerVesselId = "missing-vessel",
+                        SimulationTime = 20.0,
+                    },
+                ],
+            },
+        };
+
+        var error = Assert.Throws<InvalidDataException>(
+            () => SaveGameV2Json.Serialize(save));
+        Assert.Contains("owner vessel", error.Message);
+    }
 }

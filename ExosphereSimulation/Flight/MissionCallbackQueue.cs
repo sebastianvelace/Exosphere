@@ -8,6 +8,11 @@ public sealed class MissionCallbackState
     public long Sequence { get; set; }
     public string EventType { get; set; } = "";
     public string Payload { get; set; } = "";
+    /// <summary>
+    /// Optional stable vessel owner. Null keeps the callback global for backward
+    /// compatibility and for mission events that do not belong to one vessel.
+    /// </summary>
+    public string? OwnerVesselId { get; set; }
     public double SimulationTime { get; set; }
     public bool Delivered { get; set; }
 
@@ -16,6 +21,7 @@ public sealed class MissionCallbackState
         Sequence = Sequence,
         EventType = EventType,
         Payload = Payload,
+        OwnerVesselId = OwnerVesselId,
         SimulationTime = SimulationTime,
         Delivered = Delivered,
     };
@@ -51,6 +57,9 @@ public sealed class MissionCallbackQueueState
             }
             if (string.IsNullOrWhiteSpace(callback.EventType)
                 || callback.Payload == null
+                || callback.OwnerVesselId is { Length: 0 }
+                || callback.OwnerVesselId is { } owner
+                    && string.IsNullOrWhiteSpace(owner)
                 || !double.IsFinite(callback.SimulationTime)
                 || callback.SimulationTime < 0.0)
             {
@@ -76,7 +85,8 @@ public sealed class MissionCallbackQueue
     public MissionCallbackState Enqueue(
         string eventType,
         string payload,
-        double simulationTime)
+        double simulationTime,
+        string? ownerVesselId = null)
     {
         if (string.IsNullOrWhiteSpace(eventType))
             throw new ArgumentException("Callback event type is required.", nameof(eventType));
@@ -84,12 +94,14 @@ public sealed class MissionCallbackQueue
             throw new ArgumentNullException(nameof(payload));
         if (!double.IsFinite(simulationTime) || simulationTime < 0.0)
             throw new ArgumentOutOfRangeException(nameof(simulationTime));
+        ValidateOwnerVesselId(ownerVesselId);
 
         var callback = new MissionCallbackState
         {
             Sequence = _nextSequence++,
             EventType = eventType,
             Payload = payload,
+            OwnerVesselId = ownerVesselId,
             SimulationTime = simulationTime,
             Delivered = false,
         };
@@ -102,14 +114,30 @@ public sealed class MissionCallbackQueue
         string eventType,
         string payload,
         double simulationTime,
-        Action deliver)
+        Action deliver,
+        string? ownerVesselId = null)
     {
         ArgumentNullException.ThrowIfNull(deliver);
-        MissionCallbackState callback = Enqueue(eventType, payload, simulationTime);
+        MissionCallbackState callback = Enqueue(
+            eventType, payload, simulationTime, ownerVesselId);
         deliver();
         MarkDelivered(callback.Sequence);
         callback.Delivered = true;
         return callback;
+    }
+
+    /// <summary>
+    /// Returns whether a pending callback can affect this vessel. Global callbacks are
+    /// conservatively visible to every vessel because their target is intentionally not
+    /// encoded; owner-specific callbacks wake only their stable owner.
+    /// </summary>
+    public bool HasPendingFor(string vesselId)
+    {
+        ValidateOwnerVesselId(vesselId);
+        return _events.Any(callback => !callback.Delivered
+            && (callback.OwnerVesselId == null
+                || string.Equals(callback.OwnerVesselId, vesselId,
+                    StringComparison.Ordinal)));
     }
 
     public void MarkDelivered(long sequence)
@@ -154,5 +182,13 @@ public sealed class MissionCallbackQueue
     {
         _nextSequence = 1;
         _events.Clear();
+    }
+
+    private static void ValidateOwnerVesselId(string? ownerVesselId)
+    {
+        if (ownerVesselId is not null && string.IsNullOrWhiteSpace(ownerVesselId))
+            throw new ArgumentException(
+                "Callback owner vessel id cannot be empty.",
+                nameof(ownerVesselId));
     }
 }

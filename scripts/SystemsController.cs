@@ -56,15 +56,33 @@ public partial class SystemsController : Node
     }
 
     /// <summary>
-    /// Creates the game-layer portion of the observational interest snapshot. It is only
-    /// valid for the active vessel: these systems are intentionally not instantiated for
-    /// every distant vessel. The scheduler remains unchanged; this is a parity boundary
-    /// for a future, separately gated deferred-work implementation.
+    /// Creates the game-layer portion of the observational interest snapshot for the
+    /// active vessel. The scheduler remains unchanged; this is a parity boundary for a
+    /// future, separately gated deferred-work implementation.
     /// </summary>
     public SimulationExternalInterestInputs BuildSimulationInterestInputs()
     {
+        var activeVessel = SimulationBridge.Instance?.ActiveVessel;
+        return activeVessel is null
+            ? SimulationExternalInterestInputs.None
+            : BuildSimulationInterestInputs(activeVessel);
+    }
+
+    /// <summary>
+    /// Builds a snapshot for any vessel without borrowing the active vessel's systems.
+    /// A vessel with no materialized runtime is deliberately reported with an active
+    /// systems alert and an immediate deadline; this keeps it out of Dormant/EventDriven
+    /// until a future scheduler materializes authoritative state at the committed epoch.
+    /// </summary>
+    public SimulationExternalInterestInputs BuildSimulationInterestInputs(
+        Exosphere.Simulation.Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        var bridge = SimulationBridge.Instance;
+        bool isActive = ReferenceEquals(vessel, bridge?.ActiveVessel);
         MissionPhase phase = MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH;
-        bool missionControlled = phase is MissionPhase.COUNTDOWN
+        bool missionControlled = isActive && phase is
+            (MissionPhase.COUNTDOWN
             or MissionPhase.IGNITION
             or MissionPhase.LIFTOFF
             or MissionPhase.ASCENT_SH
@@ -76,8 +94,9 @@ public partial class SystemsController : Node
             or MissionPhase.PEAK_HEATING
             or MissionPhase.AERO_DESCENT
             or MissionPhase.RETRO_BURN
-            or MissionPhase.FINAL_DESCENT;
-        bool missionCritical = phase is MissionPhase.LIFTOFF
+            or MissionPhase.FINAL_DESCENT);
+        bool missionCritical = isActive && phase is
+            (MissionPhase.LIFTOFF
             or MissionPhase.MAX_Q
             or MissionPhase.MECO
             or MissionPhase.SEPARATION
@@ -88,31 +107,34 @@ public partial class SystemsController : Node
             or MissionPhase.FINAL_DESCENT
             or MissionPhase.LANDED
             or MissionPhase.CAUGHT
-            or MissionPhase.CRASHED;
-        bool systemsAlert = ControlLimited
-            || LifeSupport.OxygenAlert
-            || LifeSupport.CO2Alert
-            || Power.LowPowerAlert
-            || Power.NoPowerAlert
-            || Thermal.HotAlert
-            || Thermal.ColdAlert
-            || (!Comms.HasSignal && !Comms.PlasmaBlackout);
-        var activeVessel = SimulationBridge.Instance?.ActiveVessel;
-        int crewCount = activeVessel != null && activeVessel.Crew.Count > 0
-            ? activeVessel.Crew.Count
-            : 4;
-        SystemsMissionPhase systemsPhase = MapMissionPhase(phase);
-        double? systemsDeadline = MinDeadline(
-            LifeSupport.GetNextAlertDeadlineSeconds(crewCount, systemsPhase),
-            Power.GetNextAlertDeadlineSeconds());
-        systemsDeadline = MinDeadline(systemsDeadline, Thermal.GetNextAlertDeadlineSeconds());
+            or MissionPhase.CRASHED);
+
+        bool hasPendingCallback = MissionManager.Instance?
+            .HasPendingMissionCallbackFor(vessel.Id) == true;
+        bool inDescent = isActive && MissionManager.Instance?.InDescent == true;
+        if (!RuntimeRegistry.TryGet(vessel.Id, out var runtime)
+            || runtime is null)
+        {
+            return new SimulationExternalInterestInputs(
+                IsMissionControlled: missionControlled,
+                IsMissionCriticalState: missionCritical,
+                IsAtmosphereOrReentry: inDescent,
+                HasPendingMissionCallback: hasPendingCallback,
+                HasSystemsAlert: true,
+                SecondsUntilNextSystemsDeadline: 0.0);
+        }
+
+        bool systemsAlert = (isActive && ControlLimited)
+            || runtime.HasSystemsAlert
+            || (!runtime.Comms.HasSignal && !runtime.Comms.PlasmaBlackout);
+        int crewCount = vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
+        double? systemsDeadline = runtime.GetNextAlertDeadlineSeconds(crewCount);
 
         return new SimulationExternalInterestInputs(
             IsMissionControlled: missionControlled,
             IsMissionCriticalState: missionCritical,
-            IsAtmosphereOrReentry: MissionManager.Instance?.InDescent == true,
-            HasPendingMissionCallback:
-                MissionManager.Instance?.HasPendingMissionCallbacks == true,
+            IsAtmosphereOrReentry: inDescent,
+            HasPendingMissionCallback: hasPendingCallback,
             HasSystemsAlert: systemsAlert,
             SecondsUntilNextSystemsDeadline: systemsDeadline);
     }
@@ -308,6 +330,26 @@ public partial class SystemsController : Node
         double simulationTime)
     {
         return TryActivateVesselRuntime(vessel, simulationTime);
+    }
+
+    /// <summary>
+    /// Materializes one callback owner's runtime without changing the active runtime. This
+    /// is the fail-closed wake boundary used before an owner-specific callback is emitted.
+    /// </summary>
+    public bool EnsureVesselRuntimeMaterialized(
+        Exosphere.Simulation.Vessel vessel,
+        double simulationTime)
+    {
+        try
+        {
+            var runtime = RuntimeRegistry.Materialize(vessel.Id, simulationTime);
+            EnsureRuntimeEpoch(runtime, simulationTime);
+            return true;
+        }
+        catch (System.Exception)
+        {
+            return false;
+        }
     }
 
     private bool TryActivateVesselRuntime(

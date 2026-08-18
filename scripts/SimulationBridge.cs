@@ -27,11 +27,26 @@ public partial class SimulationBridge : Node
     {
         ArgumentNullException.ThrowIfNull(vessel);
         SimulationExternalInterestInputs externalInputs =
-            ReferenceEquals(vessel, ActiveVessel)
-                ? SystemsController.Instance?.BuildSimulationInterestInputs()
-                    ?? SimulationExternalInterestInputs.None
-                : SimulationExternalInterestInputs.None;
+            SystemsController.Instance?.BuildSimulationInterestInputs(vessel)
+                ?? SimulationExternalInterestInputs.None;
         return Universe.GetSimulationInterestDecision(vessel, externalInputs);
+    }
+
+    /// <summary>
+    /// Materializes a callback owner's systems runtime at the current committed epoch
+    /// without changing the player-selected vessel. Unknown owners fail closed so a
+    /// deferred callback cannot silently target a fresh default runtime.
+    /// </summary>
+    public bool EnsureSystemsRuntimeMaterialized(
+        string vesselId,
+        double simulationTime)
+    {
+        if (Universe == null || string.IsNullOrWhiteSpace(vesselId)) return false;
+        Vessel? vessel = Universe.Vessels.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, vesselId, StringComparison.Ordinal));
+        return vessel != null
+            && SystemsController.Instance?.EnsureVesselRuntimeMaterialized(
+                vessel, simulationTime) == true;
     }
 
     /// <summary>
@@ -1030,7 +1045,8 @@ public partial class SimulationBridge : Node
 
         PublishMissionCallback(
             "VesselStaged", debris.Id,
-            () => EmitSignal(SignalName.VesselStaged, debris.Id));
+            () => EmitSignal(SignalName.VesselStaged, debris.Id),
+            debris.Id);
         MissionManager.Instance?.NotifyStaged();
     }
 
@@ -1055,7 +1071,8 @@ public partial class SimulationBridge : Node
         SpawnDebrisRenderer(detached, "Separated_");
         PublishMissionCallback(
             "VesselStaged", detached.Id,
-            () => EmitSignal(SignalName.VesselStaged, detached.Id));
+            () => EmitSignal(SignalName.VesselStaged, detached.Id),
+            detached.Id);
         return detached;
     }
 
@@ -1199,14 +1216,20 @@ public partial class SimulationBridge : Node
         {
             PublishMissionCallback(
                 "VesselDestroyed", ActiveVessel.Id,
-                () => EmitSignal(SignalName.VesselDestroyed, ActiveVessel.Id));
+                () => EmitSignal(SignalName.VesselDestroyed, ActiveVessel.Id),
+                ActiveVessel.Id);
         }
     }
 
-    private void PublishMissionCallback(string eventType, string payload, Action emit)
+    private void PublishMissionCallback(
+        string eventType,
+        string payload,
+        Action emit,
+        string? ownerVesselId = null)
     {
         if (MissionManager.Instance is { } missionManager)
-            missionManager.PublishMissionCallback(eventType, payload, emit);
+            missionManager.PublishMissionCallback(
+                eventType, payload, emit, ownerVesselId);
         else
             emit();
     }
