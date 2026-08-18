@@ -135,8 +135,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      telemetría/contrato de paridad detrás de
      `simulation/deferred_physics_candidate_enabled=false`. La evidencia está en
      `docs/audits/PERF_PER_VESSEL_SYSTEMS_PHASE51_PLAN.md` y
-     `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`. Falta catch-up temporal de
-     consumibles por vessel y validación framebuffer antes de promover cualquier hibernación.
+     `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`; G confirma que el scheduler es
+     <1% del frame bajo llvmpipe, pero la matriz completa no alcanzó órbita dentro de 1200 s.
+     Falta catch-up temporal de consumibles por vessel y perfilado render/UI con GPU real antes
+     de promover cualquier hibernación.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

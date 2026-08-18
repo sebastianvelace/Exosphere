@@ -1,7 +1,7 @@
 # Phase 51 — materialización de systems por vessel y despliegue multiagente
 
 Fecha de planificación: 2026-08-17
-Estado: **A–F implementados; candidate experimental en HOLD y runtime diferido aún desactivado**
+Estado: **A–F implementados; G auditada parcialmente; candidate experimental en HOLD y runtime diferido aún desactivado**
 
 Estado de integración verificado:
 
@@ -12,6 +12,8 @@ Estado de integración verificado:
 - E candidate opt-in: `9504874`.
 - F paridad/telemetría y contrato visual: `ca9481c`.
 - Suite posterior a F: `696/696 PASS`; ambos builds en `0 warnings / 0 errors`.
+- G matriz CPU/framebuffer: CPU `62/62 PASS`; framebuffer produjo cinco hitos pero terminó
+  `TIMEOUT` a 1200 s por coste llvmpipe; no se promueve ninguna optimización física.
 - La decisión y los bloqueos de promoción están en
   `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`.
 

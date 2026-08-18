@@ -47,9 +47,34 @@ cualquier skip cuando la flag oficial está desactivada.
 - Build `Exosphere.csproj`: **0 warnings / 0 errors**.
 - Smoke Godot headless con `--log-file`: **PASS**.
 
-El smoke con framebuffer real no pudo ejecutarse en esta VM porque `/tmp/.X11-unix` está
-montado con propietario `nobody` y Xvfb rechaza crear sus sockets; no es un fallo del código
-del juego. La corrección requiere cambiar el entorno de ejecución, no el repositorio.
+El smoke framebuffer inicial no pudo ejecutarse en esta VM porque `/tmp/.X11-unix` estaba
+montado con propietario `nobody` y Xvfb rechazaba crear sus sockets; no era un fallo del
+código del juego. La matriz G siguiente sí consiguió abrir Xvfb, pero quedó limitada por el
+presupuesto de tiempo del render software.
+
+## Matriz G — ascenso framebuffer y diagnóstico de coste
+
+La repetición aislada `--ascent --flight7 --run-id phase51-g-vp1` sí consiguió abrir Xvfb y
+produjo capturas de `pad`, `liftoff`, `maxq`, `hotstage` y `separation`. La corrida no se
+etiqueta como órbita válida: terminó `TIMEOUT` al cumplir 1200 s, con `1121` frames y el
+último estado físico finito en `t=209.9 s`, `alt=117149.4 m`, `apo=147809.2 m`, seis motores
+de Ship activos y `failedEngines=0`. No hubo `NaN`, `FAIL` físico ni pérdida estructural.
+
+El contrato dinámico sobre el log parcial dio `64 PASS / 1 FAIL / 0 SKIP`: las 1120 líneas
+`PERF_FRAME` y las 1120 líneas `PERF_SCHEDULER_CANDIDATE` fueron válidas, con el candidate
+apagado y cero skips. El único fallo fue el presupuesto de frame, medido en esta VM:
+
+| Métrica | Resultado |
+|---|---:|
+| `frame_ms` medio / p95 / p99 / máximo | `1070.966 / 1741 / 1999 / 5344 ms` |
+| `scheduler_ms` medio / máximo | `9.040 / 47.494 ms` |
+| scheduler como fracción del frame medio | `0.84%` |
+
+Conclusión: esta evidencia no justifica activar hibernación física ni cambiar el scheduler;
+el coste dominante está en presentación, render, UI/telemetría o composición bajo llvmpipe.
+La siguiente oleada debe perfilar esos dominios por separado y repetir el gate en hardware
+GPU real. Las capturas de liftoff y separation muestran además `33/33` y `39/39` motores
+respectivamente, por lo que la discrepancia de HUD de motores no se reproduce en esta corrida.
 
 ## Por qué no se promueve
 
