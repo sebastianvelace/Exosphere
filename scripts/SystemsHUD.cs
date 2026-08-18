@@ -4,6 +4,7 @@ using Godot;
 
 public partial class SystemsHUD : Control
 {
+    private const double RefreshPeriodSeconds = 0.10;
     private static readonly Color NominalBar  = new(0.88f, 0.90f, 0.94f, 1f);
     private static readonly Color YellowBar   = InterfaceTheme.Warning;
     private static readonly Color RedBar      = InterfaceTheme.Alert;
@@ -12,6 +13,8 @@ public partial class SystemsHUD : Control
 
     private Font _font = null!;
     private StyleBoxFlat _panelStyle = null!;
+    private double _refreshAccumulator = double.MaxValue;
+    private bool _wasVisible;
 
     public override void _Ready()
     {
@@ -29,10 +32,33 @@ public partial class SystemsHUD : Control
     public override void _Process(double delta)
     {
         // C3: consumables and comms are reference data, not fly-the-vehicle data — FULL only.
-        Visible = CameraController.Instance?.IsCockpitView != true
+        bool shouldBeVisible = CameraController.Instance?.IsCockpitView != true
             && MapViewController.Instance?.Visible != true
             && UserInterfaceSettings.HudDensity == HudDensity.Full;
-        if (Visible) QueueRedraw();
+        if (Visible != shouldBeVisible)
+        {
+            Visible = shouldBeVisible;
+            _refreshAccumulator = double.MaxValue;
+        }
+
+        if (!shouldBeVisible)
+        {
+            _wasVisible = false;
+            return;
+        }
+
+        if (!_wasVisible)
+        {
+            _wasVisible = true;
+            _refreshAccumulator = 0.0;
+            QueueRedraw();
+            return;
+        }
+
+        _refreshAccumulator += System.Math.Max(0.0, delta);
+        if (_refreshAccumulator < RefreshPeriodSeconds) return;
+        _refreshAccumulator %= RefreshPeriodSeconds;
+        QueueRedraw();
     }
 
     public override void _Draw()

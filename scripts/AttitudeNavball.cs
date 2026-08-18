@@ -17,6 +17,7 @@ using Exosphere.Simulation.Math;
 // Attitude is expressed by projecting the vessel nose into this frame.
 public partial class AttitudeNavball : Control
 {
+    private const double RefreshPeriodSeconds = 1.0 / 30.0;
     private static readonly Color PanelBg     = InterfaceTheme.GlassStrong;
     private static readonly Color PanelBorder = InterfaceTheme.EdgeStrong;
     private static readonly Color SkyColHigh  = new(0.36f, 0.40f, 0.48f, 1f);
@@ -58,6 +59,7 @@ public partial class AttitudeNavball : Control
     // (vertical on the pad) to ~0° (horizontal) with altitude, mimicking a gravity turn.
     private bool   _directorVisible;
     private double _targetPitchDeg;
+    private double _refreshAccumulator = double.MaxValue;
     private static readonly Color DirectorCol = InterfaceTheme.Warning;
 
     public override void _Ready()
@@ -89,10 +91,24 @@ public partial class AttitudeNavball : Control
 
     public override void _Process(double delta)
     {
+        _refreshAccumulator += System.Math.Max(0.0, delta);
+
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
-        if (vessel == null || universe == null) { _valid = false; QueueRedraw(); return; }
+        if (vessel == null || universe == null)
+        {
+            if (_valid)
+            {
+                _valid = false;
+                QueueRedraw();
+            }
+            return;
+        }
+
+        if (_refreshAccumulator < RefreshPeriodSeconds) return;
+        double refreshDelta = _refreshAccumulator;
+        _refreshAccumulator = 0.0;
 
         var body = universe.GetDominantBody(vessel.Position);
 
@@ -128,7 +144,7 @@ public partial class AttitudeNavball : Control
             double diff = rawHdg - _headingDeg;
             if (diff > 180) diff -= 360;
             if (diff < -180) diff += 360;
-            _headingDeg = (_headingDeg + diff * System.Math.Min(delta * 8.0, 1.0) + 360.0) % 360.0;
+            _headingDeg = (_headingDeg + diff * System.Math.Min(refreshDelta * 8.0, 1.0) + 360.0) % 360.0;
         }
 
         // Roll: bank of the wings about the nose axis, measured against local up.

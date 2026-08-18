@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 41 instrumentada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; display, GPU y EventPipe externos pendientes
+Estado: fase 52 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario y navball limitados a cadencias acotadas; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -300,6 +300,20 @@ desactivados por defecto hasta completar paridad de consumibles, blackout, EDL, 
 docking bajo deuda.
 
 Informe reproducible: `PERF_PROCESSED_SIM_TIME_PHASE43_REPORT.md`.
+
+## Resultado de la fase 52 — cadencia acotada del HUD de presentación
+
+La auditoría de presentación encontró `QueueRedraw()` de `SystemsHUD` y
+`AttitudeDataStrip`, además del cálculo completo de `AttitudeNavball`, ejecutándose a la
+frecuencia del renderer aunque son datos de presentación. `SystemsHUD` ahora redibuja a
+10 Hz; navball y data strip a 30 Hz, con redraw inmediato al hacerse visibles y acumulación
+de tiempo para el filtro de rumbo. El cambio no toca la simulación ni los comandos.
+
+La compilación de ambos proyectos pasa con 0 warnings/0 errores, la suite directa pasa
+`696/696`, startup alcanza 60 frames y los contratos de cadencia/telemetría/hot-path pasan.
+El A/B framebuffer no se etiqueta como medido porque Xvfb falló antes de crear el display;
+el reporte reproducible es `PERF_HUD_CADENCE_PHASE52_REPORT.md`. No se afirma una ganancia
+de FPS hasta repetirlo en un host con framebuffer válido.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 

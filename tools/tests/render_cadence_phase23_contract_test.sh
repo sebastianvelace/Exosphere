@@ -7,6 +7,9 @@ RENDERER="$ROOT/scripts/VesselRenderer.cs"
 CONSTRUCTION="$ROOT/scripts/ConstructionController.cs"
 CAMERA="$ROOT/scripts/CameraController.cs"
 PHASE_LIGHTING="$ROOT/scripts/PhaseLightingController.cs"
+SYSTEMS_HUD="$ROOT/scripts/SystemsHUD.cs"
+ATTITUDE_STRIP="$ROOT/scripts/AttitudeDataStrip.cs"
+NAVBALL="$ROOT/scripts/AttitudeNavball.cs"
 
 fail() {
   echo "render_cadence_phase23_contract_test: FAIL: $*" >&2
@@ -18,7 +21,8 @@ require_text() {
   rg -q --fixed-strings "$pattern" "$file" || fail "$description"
 }
 
-for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION" "$CAMERA" "$PHASE_LIGHTING"; do
+for file in "$COCKPIT" "$RENDERER" "$CONSTRUCTION" "$CAMERA" "$PHASE_LIGHTING" \
+  "$SYSTEMS_HUD" "$ATTITUDE_STRIP" "$NAVBALL"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 
@@ -80,4 +84,22 @@ require_text "$PHASE_LIGHTING" 'horizonChanged' \
 require_text "$PHASE_LIGHTING" 'DirectAltitudeRefreshMeters' \
   "phase lighting altitude invalidation missing"
 
-echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz gated, exterior=hidden/thermal gated+cached, VAB=demand-driven)"
+# Secondary HUD panels and the attitude cluster are presentation-only. They retain
+# immediate redraw on first visibility, then run at bounded rates instead of forcing
+# a CanvasItem redraw on every render frame.
+require_text "$SYSTEMS_HUD" 'RefreshPeriodSeconds = 0.10' \
+  "systems HUD refresh cadence missing"
+require_text "$SYSTEMS_HUD" '_refreshAccumulator' \
+  "systems HUD cadence accumulator missing"
+require_text "$SYSTEMS_HUD" 'if (_refreshAccumulator < RefreshPeriodSeconds) return;' \
+  "systems HUD redraw is not cadence-gated"
+require_text "$ATTITUDE_STRIP" 'RefreshPeriodSeconds = 1.0 / 30.0' \
+  "attitude strip refresh cadence missing"
+require_text "$ATTITUDE_STRIP" '_hasPendingSnapshot' \
+  "attitude strip pending snapshot gate missing"
+require_text "$NAVBALL" 'RefreshPeriodSeconds = 1.0 / 30.0' \
+  "navball refresh cadence missing"
+require_text "$NAVBALL" 'double refreshDelta = _refreshAccumulator;' \
+  "navball smoothing must consume accumulated presentation time"
+
+echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz, exterior/thermal gated, HUD cluster bounded, VAB=demand-driven)"

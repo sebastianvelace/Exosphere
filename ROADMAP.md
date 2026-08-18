@@ -140,6 +140,11 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      H confirma el mismo cuello en smoke y deja pendiente corregir el wrapper de medición.
      Falta catch-up temporal de consumibles por vessel y perfilado render/UI con GPU real antes
      de promover cualquier hibernación.
+   - **Fase 52:** `SystemsHUD` redibuja a 10 Hz y `AttitudeNavball`/`AttitudeDataStrip` a
+     30 Hz, manteniendo redraw inmediato al aparecer y sin tocar la física. Builds, suite
+     `696/696`, startup y contratos pasan. El A/B framebuffer queda pendiente porque Xvfb
+     perdió el display antes de cargar Godot; no se declara una ganancia de FPS. Ver
+     `docs/audits/PERF_HUD_CADENCE_PHASE52_REPORT.md`.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

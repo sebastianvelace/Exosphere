@@ -9,6 +9,7 @@ using Exosphere.Simulation.Presentation;
 /// </summary>
 public partial class AttitudeDataStrip : Control
 {
+    private const double RefreshPeriodSeconds = 1.0 / 30.0;
     public const float BoardWidth = 112f;
     public const float BoardHeight = 168f;
 
@@ -26,6 +27,8 @@ public partial class AttitudeDataStrip : Control
     private double? _peKm;
     private double _fuelPct;
     private bool _useOrbit;
+    private double _refreshAccumulator = double.MaxValue;
+    private bool _hasPendingSnapshot = true;
 
     public override void _Ready()
     {
@@ -42,8 +45,12 @@ public partial class AttitudeDataStrip : Control
     {
         if (Size.X < 8f || Size.Y < 8f)
             Size = CustomMinimumSize;
-        // Snapshot is pushed from HUDController; keep redrawing so a zero-size
-        // first frame cannot leave a blank panel stuck.
+        if (!Visible) return;
+
+        _refreshAccumulator += System.Math.Max(0.0, delta);
+        if (!_hasPendingSnapshot || _refreshAccumulator < RefreshPeriodSeconds) return;
+        _refreshAccumulator %= RefreshPeriodSeconds;
+        _hasPendingSnapshot = false;
         QueueRedraw();
     }
 
@@ -51,7 +58,7 @@ public partial class AttitudeDataStrip : Control
     {
         if (snapshot == null)
         {
-            QueueRedraw();
+            _hasPendingSnapshot = true;
             return;
         }
 
@@ -67,7 +74,7 @@ public partial class AttitudeDataStrip : Control
         _useOrbit = snapshot.ApoapsisAltitudeM is { } || snapshot.PeriapsisAltitudeM is { };
         _apKm = snapshot.ApoapsisAltitudeM is { } ap ? ap / 1000.0 : null;
         _peKm = snapshot.PeriapsisAltitudeM is { } pe ? pe / 1000.0 : null;
-        QueueRedraw();
+        _hasPendingSnapshot = true;
     }
 
     public override void _Draw()
