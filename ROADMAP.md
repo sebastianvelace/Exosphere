@@ -154,6 +154,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      su segunda resolución orbital. La paridad, suite `696/696`, builds, startup y contratos
      pasan; no se declara FPS hasta disponer de framebuffer/GPU válido. Ver
      `docs/audits/PERF_HUD_ORBITAL_DEDUP_PHASE54_REPORT.md`.
+   - **Fase 55:** caches de invalidación evitan reescrituras de navegación, phase track y
+     vista/densidad cuando no cambian; F3 invalida la densidad de inmediato. Suite `696/696`,
+     build, startup y contratos pasan. El A/B GPU continúa bloqueado por Xvfb. Ver
+     `docs/audits/PERF_HUD_INVALIDATION_CACHE_PHASE55_REPORT.md`.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

@@ -99,6 +99,11 @@ public partial class HUDController : Control
     private bool     _pastEntryInterface;   // latch: RETRO_BURN after ENTRY → landing slot
     private readonly System.Collections.Generic.List<string> _events = new();
     private double _presentationAccumulator = double.MaxValue;
+    private FlightNavigationMode? _lastRenderedNavigationMode;
+    private MissionPhase? _lastPhaseTrackPhase;
+    private bool _lastPhaseTrackAfterEntry;
+    private FlightHudViewMode? _lastAppliedViewMode;
+    private HudDensity? _lastAppliedHudDensity;
 
     /// <summary>Dot track mirrors <see cref="MissionPhaseTrack.Sequence"/> (includes COAST + RETRO_BURN).</summary>
     private static readonly MissionPhase[] PhaseSequence =
@@ -937,16 +942,22 @@ public partial class HUDController : Control
         _densityToast.Text = $"HUD  {density.ToString().ToUpperInvariant()}   [F3]";
         _densityToastRoot.Visible = true;
         _densityToastTimer = 2.0;
+        _lastAppliedHudDensity = null;
+        _presentationAccumulator = double.MaxValue;
         ApplyBandScale(density == HudDensity.Full);
     }
 
     private void RenderNavigationAndAlerts(FlightHudSnapshot snapshot)
     {
-        foreach (var (mode, label) in _navLabels)
+        if (_lastRenderedNavigationMode != snapshot.NavigationMode)
         {
-            bool active = mode == snapshot.NavigationMode;
-            label.AddThemeColorOverride("font_color", active ? InterfaceTheme.Orbital : LabelDim);
-            label.AddThemeFontSizeOverride("font_size", active ? 11 : 10);
+            foreach (var (mode, label) in _navLabels)
+            {
+                bool active = mode == snapshot.NavigationMode;
+                label.AddThemeColorOverride("font_color", active ? InterfaceTheme.Orbital : LabelDim);
+                label.AddThemeFontSizeOverride("font_size", active ? 11 : 10);
+            }
+            _lastRenderedNavigationMode = snapshot.NavigationMode;
         }
 
         var alert = snapshot.Alerts.FirstOrDefault();
@@ -975,6 +986,11 @@ public partial class HUDController : Control
     private void ApplyViewMode(FlightHudViewMode viewMode)
     {
         var density = UserInterfaceSettings.HudDensity;
+        if (_lastAppliedViewMode == viewMode && _lastAppliedHudDensity == density)
+            return;
+        _lastAppliedViewMode = viewMode;
+        _lastAppliedHudDensity = density;
+
         bool exterior = viewMode == FlightHudViewMode.Exterior;
         bool cockpit = viewMode == FlightHudViewMode.Cockpit;
         bool full = density == HudDensity.Full;
@@ -1281,9 +1297,14 @@ public partial class HUDController : Control
 
     private void UpdatePhaseTrack(MissionPhase current)
     {
+        bool afterEntryInterface = _pastEntryInterface && current == MissionPhase.RETRO_BURN;
+        if (_lastPhaseTrackPhase == current
+            && _lastPhaseTrackAfterEntry == afterEntryInterface)
+            return;
+
         int currentIdx = MissionPhaseTrack.IndexOf(
             current.ToString(),
-            afterEntryInterface: _pastEntryInterface && current == MissionPhase.RETRO_BURN);
+            afterEntryInterface: afterEntryInterface);
         for (int i = 0; i < _phaseDots.Count; i++)
         {
             if (currentIdx < 0)        _phaseDots[i].Color = GaugeTrack;
@@ -1291,6 +1312,8 @@ public partial class HUDController : Control
             else if (i == currentIdx)  _phaseDots[i].Color = PhaseColor(current);
             else                       _phaseDots[i].Color = GaugeTrack;
         }
+        _lastPhaseTrackPhase = current;
+        _lastPhaseTrackAfterEntry = afterEntryInterface;
     }
 
     // ── Keyboard input ──────────────────────────────────────────────────────

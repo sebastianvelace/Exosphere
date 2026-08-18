@@ -111,6 +111,12 @@ require_text "$HUD_CONTROLLER" 'snapshot.TimeToPeriapsisS' \
 if rg -q --fixed-strings 'OrbitalElements.FromStateVector(' "$HUD_CONTROLLER"; then
   fail "main HUD still recomputes orbital elements outside the presenter"
 fi
+require_text "$HUD_CONTROLLER" '_lastRenderedNavigationMode' \
+  "navigation label cache missing"
+require_text "$HUD_CONTROLLER" '_lastAppliedViewMode' \
+  "view mode presentation cache missing"
+require_text "$HUD_CONTROLLER" '_lastPhaseTrackPhase' \
+  "phase track cache missing"
 require_text "$HUD_CONTROLLER" 'UpdateDensityToast(delta);' \
   "main HUD toast timer must remain wall-clock driven"
 require_text "$HUD_CONTROLLER" 'if (!presentationBoundaryChanged' \
