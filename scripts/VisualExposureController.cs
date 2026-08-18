@@ -98,7 +98,12 @@ public partial class VisualExposureController : Node
         if (cockpit) target = System.Math.Min(target, 1.8);
         float exposure = (float)_adaptation.Update(target, delta);
         if (cockpit) exposure = Mathf.Min(exposure, 1.8f);
-        _environment.TonemapExposure = exposure;
+        // TonemapExposure is an Environment property. Avoid invalidating the
+        // post-process resource when the adaptation has already converged to the
+        // same value; the adaptation state itself still advances every frame.
+        if (float.IsNaN(_environment.TonemapExposure)
+            || Mathf.Abs(_environment.TonemapExposure - exposure) > 1e-4f)
+            _environment.TonemapExposure = exposure;
 
         // Star visibility remains governed by local sky luminance in the shader; this gain
         // adds the slower retinal response, preventing instant stars after entering shadow.

@@ -61,5 +61,7 @@ rg -q --fixed-strings 'if (ColorDiffers(_light.LightColor, lightColor))' "$PHASE
   || fail "phase light color dirty check missing"
 rg -q --fixed-strings 'if (FloatDiffers(_light.LightEnergy, lightEnergy))' "$PHASE_LIGHTING" \
   || fail "phase light energy dirty check missing"
+rg -q --fixed-strings 'Mathf.Abs(_environment.TonemapExposure - exposure) > 1e-4f' "$EXPOSURE" \
+  || fail "tonemap exposure dirty check missing"
 
 echo "sky_runtime_performance_contract_test: PASS (bounded quadrature, cached uniforms, low-priority LUT worker)"
