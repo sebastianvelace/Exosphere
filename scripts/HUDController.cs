@@ -843,28 +843,6 @@ public partial class HUDController : Control
 
         double peAlt = snapshot.PeriapsisAltitudeM ?? double.NaN;
         double atmoMax = refBody.Atmosphere?.MaxAltitude ?? double.NaN;
-        double timeToPe = double.NaN;
-        try
-        {
-            var elements = Exosphere.Simulation.OrbitalElements.FromStateVector(
-                vessel.Position - refBody.Position,
-                vessel.Velocity - refBody.Velocity,
-                refBody.GM,
-                refBody.Id,
-                universe.CurrentTime);
-            if (!elements.IsRadial && !elements.IsHyperbolic)
-                timeToPe = MissionPhaseTrack.ApproximateTimeToPeriapsisSec(
-                    elements.SemiMajorAxis,
-                    elements.Eccentricity,
-                    elements.GetMeanAnomaly(
-                        universe.CurrentTime, refBody.GM),
-                    refBody.GM);
-        }
-        catch (System.ArgumentException)
-        {
-            // Presenter values remain authoritative when a radial pad state
-            // cannot produce conventional orbital elements.
-        }
 
         _lfValue.Text = $"{snapshot.LiquidFuelKg / 1000.0:F1} t";
         _oxValue.Text = $"{snapshot.OxidizerKg / 1000.0:F1} t";
@@ -901,7 +879,7 @@ public partial class HUDController : Control
             UpdateEventLog(mission.Phase, universe.CurrentTime);
             UpdateCountdown(mission);
             UpdateLaunchPathCallout(mission, bridge, snapshot);
-            UpdateDeorbitEdlCue(mission, peAlt, atmoMax, timeToPe);
+            UpdateDeorbitEdlCue(mission, peAlt, atmoMax, snapshot.TimeToPeriapsisS);
             UpdateControlAuthorityCue(vessel, mission);
             UpdatePadHelp(mission);
         }

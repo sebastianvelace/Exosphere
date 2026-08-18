@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
@@ -29,6 +30,19 @@ public sealed class FlightHudPresenterTests
         Assert.InRange(snapshot.AltitudeM, 199_999.0, 200_001.0);
         Assert.NotNull(snapshot.ApoapsisAltitudeM);
         Assert.NotNull(snapshot.PeriapsisAltitudeM);
+        Assert.True(double.IsFinite(snapshot.TimeToPeriapsisS));
+        var expectedElements = OrbitalElements.FromStateVector(
+            vessel.Position - body.Position,
+            vessel.Velocity - body.Velocity,
+            body.GM,
+            body.Id,
+            universe.CurrentTime);
+        var expectedTimeToPeriapsis = MissionPhaseTrack.ApproximateTimeToPeriapsisSec(
+            expectedElements.SemiMajorAxis,
+            expectedElements.Eccentricity,
+            expectedElements.GetMeanAnomaly(universe.CurrentTime, body.GM),
+            body.GM);
+        Assert.Equal(expectedTimeToPeriapsis, snapshot.TimeToPeriapsisS, 10);
         Assert.False(snapshot.IsImpactTrajectory);
         Assert.Equal(FlightNavigationMode.Orb, snapshot.NavigationMode);
         Assert.All(

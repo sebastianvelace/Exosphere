@@ -2,6 +2,7 @@ namespace Exosphere.Simulation.Presentation;
 
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Flight;
 
 public enum FlightHudViewMode
 {
@@ -71,6 +72,7 @@ public sealed record FlightHudSnapshot
     public required double OxidizerFraction { get; init; }
     public required double? ApoapsisAltitudeM { get; init; }
     public required double? PeriapsisAltitudeM { get; init; }
+    public required double TimeToPeriapsisS { get; init; }
     public required bool IsImpactTrajectory { get; init; }
     public required IReadOnlyList<FlightAlertSnapshot> Alerts { get; init; }
 }
@@ -144,6 +146,7 @@ public sealed class FlightHudPresenter
 
         double? apoapsis = null;
         double? periapsis = null;
+        double timeToPeriapsis = double.NaN;
         try
         {
             var elements = OrbitalElements.FromStateVector(
@@ -154,6 +157,14 @@ public sealed class FlightHudPresenter
                 universe.CurrentTime);
             apoapsis = elements.Apoapsis - body.Radius;
             periapsis = elements.Periapsis - body.Radius;
+            if (!elements.IsRadial && !elements.IsHyperbolic)
+            {
+                timeToPeriapsis = MissionPhaseTrack.ApproximateTimeToPeriapsisSec(
+                    elements.SemiMajorAxis,
+                    elements.Eccentricity,
+                    elements.GetMeanAnomaly(universe.CurrentTime, body.GM),
+                    body.GM);
+            }
         }
         catch
         {
@@ -240,6 +251,7 @@ public sealed class FlightHudPresenter
             OxidizerFraction = oxidizerFraction,
             ApoapsisAltitudeM = apoapsis,
             PeriapsisAltitudeM = periapsis,
+            TimeToPeriapsisS = timeToPeriapsis,
             IsImpactTrajectory = impactTrajectory,
             Alerts = alerts,
         };

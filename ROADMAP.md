@@ -150,6 +150,10 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
      `0.019567 ms` p50 y `922.2 B` por captura; suite `696/696`, build, startup y contratos
      pasan. El A/B GPU sigue bloqueado por Xvfb. Ver
      `docs/audits/PERF_HUD_MAIN_CADENCE_PHASE53_REPORT.md`.
+   - **Fase 54:** `TimeToPeriapsisS` se calcula una vez dentro del snapshot y el HUD elimina
+     su segunda resolución orbital. La paridad, suite `696/696`, builds, startup y contratos
+     pasan; no se declara FPS hasta disponer de framebuffer/GPU válido. Ver
+     `docs/audits/PERF_HUD_ORBITAL_DEDUP_PHASE54_REPORT.md`.
 
 1. **Visual fidelity Starship/Super Heavy**
    - Primera pasada cerrada: acero inoxidable, weld lines, tile layout, heat-shield

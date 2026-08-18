@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 53 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; display, GPU y EventPipe externos pendientes
+Estado: fase 54 integrada; scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; `0.25` sigue sólo en probe por falta de matriz visual completa; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; display, GPU y EventPipe externos pendientes
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -325,6 +325,18 @@ cadencia inmediatamente. El toast mantiene su temporizador wall-clock.
 La suite completa pasa `696/696`, el build y startup pasan, y el contrato de cadencia cubre
 la frontera. El A/B de framebuffer continúa bloqueado por Xvfb; por tanto, la decisión es
 CPU/presentación y no una afirmación de FPS. Reporte: `PERF_HUD_MAIN_CADENCE_PHASE53_REPORT.md`.
+
+## Resultado de la fase 54 — autoridad orbital única en el snapshot
+
+El HUD ya no recalcula `OrbitalElements.FromStateVector` para obtener el tiempo a periapsis:
+`FlightHudPresenter` entrega `TimeToPeriapsisS` junto con apoapsis/periapsis y
+`HUDController` consume ese dato. La prueba focalizada verifica finitud y paridad con
+`MissionPhaseTrack`; el contrato rechaza cualquier llamada orbital residual en el HUD.
+
+La suite completa pasa `696/696`, builds secuenciales y startup pasan. El benchmark aislado
+del presenter incluye ahora el dato adicional y por eso no se usa como mejora; la decisión
+se basa en quitar la segunda resolución confirmada en la ruta Godot. El framebuffer/GPU sigue
+pendiente por Xvfb. Reporte: `PERF_HUD_ORBITAL_DEDUP_PHASE54_REPORT.md`.
 
 ## Resultado de la fase 35 — vistas estables y consumo sin boxing por tick
 

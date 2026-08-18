@@ -106,6 +106,11 @@ require_text "$HUD_CONTROLLER" 'PresentationRefreshPeriodSeconds = 1.0 / 30.0' \
   "main HUD presentation cadence missing"
 require_text "$HUD_CONTROLLER" 'presentationBoundaryChanged' \
   "main HUD boundary invalidation missing"
+require_text "$HUD_CONTROLLER" 'snapshot.TimeToPeriapsisS' \
+  "main HUD must consume presenter orbital timing"
+if rg -q --fixed-strings 'OrbitalElements.FromStateVector(' "$HUD_CONTROLLER"; then
+  fail "main HUD still recomputes orbital elements outside the presenter"
+fi
 require_text "$HUD_CONTROLLER" 'UpdateDensityToast(delta);' \
   "main HUD toast timer must remain wall-clock driven"
 require_text "$HUD_CONTROLLER" 'if (!presentationBoundaryChanged' \
