@@ -418,8 +418,7 @@ public partial class SimulationBridge : Node
         // moving vessel. Its local +Y must follow radial up; leaving Basis.Identity makes
         // the entire tower lean by the site's latitude/axial tilt in render space.
         var padEarth = Universe.GetBody("earth");
-        var catchAnchorVessel = Universe.Vessels.FirstOrDefault(vessel =>
-            vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration)
+        var catchAnchorVessel = FindCatchAnchorVessel()
             ?? ActiveVessel;
         if (_launchPad != null && catchAnchorVessel != null && padEarth != null)
         {
@@ -439,16 +438,12 @@ public partial class SimulationBridge : Node
             var south = frame?.South ?? east.Cross(up).Normalized;
             var basis = new Basis(ToGodotVector(east), ToGodotVector(up), ToGodotVector(south));
             _launchPad.Transform = new Transform3D(basis, position);
-            bool catchApproachActive = Universe.Vessels.Any(vessel =>
-                vessel.ReferenceBodyId == padEarth.Id
-                && (vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration));
+            bool catchApproachActive = HasCatchApproach(padEarth.Id);
             bool earthReturnActive = catchAnchorVessel.ReferenceBodyId == padEarth.Id;
             bool starshipReentryActive = earthReturnActive
                 && (MissionManager.Instance?.InDescent == true
                     || catchApproachActive)
-                && catchAnchorVessel.Parts.Parts.Any(part =>
-                    part.Definition.IsStarshipFamily
-                    && part.Definition.HasVehicleRole("command"));
+                && HasStarshipRole(catchAnchorVessel, "command");
             // Keep the fixed launch complex in the scene for the complete Earth
             // Starship entry/catch track. Hiding it at 8 km made the chopsticks
             // disappear during the exact final-approach window they are meant to
@@ -468,8 +463,11 @@ public partial class SimulationBridge : Node
                 var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
                     _launchSite, padEarth, time);
                 var cradleVel = padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
-                foreach (var vessel in Universe.Vessels)
+                for (int vesselIndex = 0;
+                     vesselIndex < Universe.Vessels.Count;
+                     vesselIndex++)
                 {
+                    var vessel = Universe.Vessels[vesselIndex];
                     if (!vessel.IsAttemptingTowerCatch) continue;
                     vessel.CatchTargetPositionWorld = cradle;
                     vessel.CatchTargetUpWorld = up;
@@ -478,6 +476,54 @@ public partial class SimulationBridge : Node
                 }
             }
         }
+    }
+
+    // These helpers are deliberately index-based because Universe.Vessels exposes a
+    // stable IReadOnlyList facade. This path runs after every physics tick; using LINQ
+    // extension enumeration here would repeatedly route through the interface even when
+    // the normal session contains only the active vessel. The predicates and ordering are
+    // kept identical to the former FirstOrDefault/Any calls.
+    private Vessel? FindCatchAnchorVessel()
+    {
+        for (int vesselIndex = 0;
+             vesselIndex < Universe.Vessels.Count;
+             vesselIndex++)
+        {
+            var vessel = Universe.Vessels[vesselIndex];
+            if (vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration)
+                return vessel;
+        }
+
+        return null;
+    }
+
+    private bool HasCatchApproach(string bodyId)
+    {
+        for (int vesselIndex = 0;
+             vesselIndex < Universe.Vessels.Count;
+             vesselIndex++)
+        {
+            var vessel = Universe.Vessels[vesselIndex];
+            if (vessel.ReferenceBodyId == bodyId
+                && (vessel.IsAttemptingTowerCatch || vessel.IsTowerCatchDemonstration))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasStarshipRole(Vessel vessel, string role)
+    {
+        var parts = vessel.Parts.Parts;
+        for (int partIndex = 0; partIndex < parts.Count; partIndex++)
+        {
+            var part = parts[partIndex];
+            if (part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole(role))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -529,12 +575,8 @@ public partial class SimulationBridge : Node
         if (vessel == null || body == null || body.Id != "earth") return false;
         if (!LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
             return false;
-        bool isStarshipShip = vessel.Parts.Parts.Any(part =>
-            part.Definition.IsStarshipFamily
-            && part.Definition.HasVehicleRole("command"))
-            && vessel.Parts.Parts.Any(part =>
-                part.Definition.IsStarshipFamily
-                && part.Definition.HasVehicleRole("ship_engines"));
+        bool isStarshipShip = HasStarshipRole(vessel, "command")
+            && HasStarshipRole(vessel, "ship_engines");
         double altitude = vessel.GetAltitude(body);
         Vector3d up = (vessel.Position - body.Position).Normalized;
         double verticalSpeed = vessel.GetSurfaceVelocity(body).Dot(up);

@@ -68,6 +68,10 @@ require_text "$VISUAL" 'SPECTRAL_ORACLE' 'atmosphere matrix records spectral pro
 require_text "$MAP" 'case Key.J when Visible && _selectedTarget != null:' 'J input is target-gated'
 require_text "$BRIDGE" 'CancelGuidanceForTeleport();' 'body jump cancels stale guidance'
 require_text "$BRIDGE" 'v.PrepareForTeleport();' 'body jump clears rigid-body state'
+require_text "$BRIDGE" 'FindCatchAnchorVessel()' 'tower presentation uses indexed catch-anchor lookup'
+require_text "$BRIDGE" 'HasCatchApproach(padEarth.Id)' 'tower visibility uses indexed catch-approach lookup'
+require_text "$BRIDGE" 'for (int vesselIndex = 0;' 'tower target refresh avoids interface enumeration'
+require_text "$BRIDGE" 'HasStarshipRole(catchAnchorVessel, "command")' 'tower visibility uses bounded role scan'
 require_text "$SPECTRAL" 'decision=order4-official-order5-diagnostic' \
   'spectral promotion decision remains explicit'
 require_text "$ROOT/ExosphereSimulation/Universe.cs" '_bodiesView = _bodies.AsReadOnly();' \
