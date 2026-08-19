@@ -30,6 +30,10 @@ Fase 72 promovida como `AUDIO_PHYSICS_SAMPLE / CPU_PRESENTATION_PENDING_AUDIO_VI
 `AudioManager` calcula niveles de audio desde una muestra física de 20 Hz, mantiene el llenado
 continuo de los generadores y conserva los gates de presión, Mach, flujo térmico y reentrada.
 
+Fase 73 promovida como `ENGINE_STARTUP_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING_VISUAL`.
+`EngineStartupController` muestrea cuerpo, altitud, gates y composición del stack a 20 Hz, pero
+mantiene `Drive` y el suavizado de llama/partículas/luz por frame.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -256,6 +260,16 @@ reutiliza dentro de la muestra para el gate radial de plasma.
 
 No se modificaron el solver, las ecuaciones de q/Mach/heat flux, el gate de reentrada ni los
 generadores. Informe: `PERF_AUDIO_PHYSICS_SAMPLE_PHASE72_REPORT.md`.
+
+## Resultado de la fase 73 — muestra física del VFX de engine startup
+
+`EngineStartupController` resolvía Earth, altitud, hold-down, motores y composición del stack
+por frame. Ahora `SampleStartupState` refresca la condición a 20 Hz, usa un recorrido indexado
+para Super Heavy y mantiene `Drive` a frecuencia de render. El último anclaje válido se conserva
+durante el fade cuando el cuerpo/nave deja de ser válido, evitando un salto al origen.
+
+No se modificaron los gates de hold-down, motores, throttle, altitud ni la física de ignition.
+Informe: `PERF_ENGINE_STARTUP_PRESENTATION_PHASE73_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
