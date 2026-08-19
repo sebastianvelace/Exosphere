@@ -42,6 +42,10 @@ Fase 75 promovida como `LAUNCH_EFFECTS_PRESENTATION_SAMPLE / CPU_PRESENTATION_PE
 `LaunchEffectsController` muestrea cuerpo, altitud y gate de ignition a 20 Hz, manteniendo la
 animación de partículas y MultiMesh por frame.
 
+Fase 76 promovida como `VISUAL_EXPOSURE_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING_VISUAL`.
+`VisualExposureController` muestrea sus entradas atmosféricas y térmicas a 20 Hz, mantiene la
+adaptación ocular por frame y conserva la integración de transmitancia a 10 Hz.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -298,6 +302,16 @@ render. `SetEmitting` continúa dirty-gated.
 
 No se modificaron los gates de Earth, hold-down/ignition, throttle ni las partículas. Informe:
 `PERF_LAUNCH_EFFECTS_PRESENTATION_PHASE75_REPORT.md`.
+
+## Resultado de la fase 76 — muestra física para adaptación de exposición
+
+`VisualExposureController` repetía cuerpo, altitud, atmósfera, densidad, velocidad y flujo
+térmico por frame. Ahora `SampleExposureState` refresca esas entradas a 20 Hz, mientras la
+adaptación, sus límites y los dirty-caches de Environment/sky siguen por frame. La integración
+de transmitancia directa conserva su cadencia de 10 Hz e invalidaciones existentes.
+
+No se modificaron la exposición física, el plasma, el LUT ni el floor de cockpit. Informe:
+`PERF_VISUAL_EXPOSURE_PRESENTATION_PHASE76_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
