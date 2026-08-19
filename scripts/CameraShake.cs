@@ -56,6 +56,17 @@ public sealed class CameraShake
     private float _fovEnv;      // 0..1
     private float _entryEnv;    // 0..1, aerodynamic deceleration load
 
+    // Camera shake is a presentation consumer. Keep envelope integration per frame for
+    // smoothness, but sample the physical inputs at a bounded cadence.
+    private const double PhysicsSamplePeriodSeconds = 1.0 / 20.0;
+    private double _physicsSampleTimer;
+    private Vessel? _sampledVessel;
+    private Universe? _sampledUniverse;
+    private float _sampledThrottleActivity;
+    private float _sampledQNorm;
+    private float _sampledGNorm;
+    private float _sampledEntryNorm;
+
     // ── Noise phase accumulators ─────────────────────────────────────────────
     private float _t;
     private readonly float _seedX = (float)GD.Randf() * 100f;
@@ -92,51 +103,22 @@ public sealed class CameraShake
         if (dt <= 0f) dt = 1f / 60f;
         _t += dt;
 
-        // ── Read flight state ────────────────────────────────────────────────
-        float throttleActivity = 0f;   // throttle × engines firing
-        float qNorm            = 0f;   // dynamic pressure, normalised 0..1 (peaks at Max-Q)
-        float gNorm            = 0f;   // (g − 1) above gravity, normalised 0..1
-        float entryNorm        = 0f;   // aerodynamic deceleration, normalised 0..1
-
-        if (vessel != null && universe != null && !vessel.IsOnRails)
+        _physicsSampleTimer -= System.Math.Max(0.0, delta);
+        if (_physicsSampleTimer <= 0.0
+            || !ReferenceEquals(vessel, _sampledVessel)
+            || !ReferenceEquals(universe, _sampledUniverse))
         {
-            var body = universe.GetBody(vessel.ReferenceBodyId ?? "earth")
-                       ?? universe.GetBody("earth");
-
-            // Engine thrust shake: only when engines are actually firing.
-            bool enginesFiring = vessel.HasActiveEngineParts;
-            if (enginesFiring)
-                throttleActivity = Mathf.Clamp((float)vessel.Throttle, 0f, 1f);
-
-            if (body != null)
-            {
-                // Aerodynamic buffeting: q = ½·ρ·v².
-                double density = body.GetAtmosphericDensity(vessel.Position);
-                if (density > 0.0)
-                {
-                    double v = vessel.GetSurfaceVelocity(body).Magnitude;
-                    double q = 0.5 * density * v * v;
-                    qNorm = Mathf.Clamp((float)(q / MaxQReference), 0f, 1.4f);
-                }
-
-                // g-force from non-gravitational forces (thrust + drag) / weight.
-                double mass = vessel.TotalMass;
-                if (mass > 0.0)
-                {
-                    var thrust = vessel.ComputeThrust(body);
-                    var drag   = vessel.ComputeDrag(body);
-                    double accel = (thrust + drag).Magnitude / mass;
-                    double g = accel / 9.81;
-                    gNorm = Mathf.Clamp((float)(g / FovGReference), 0f, 1f);
-
-                    // Aerodynamic deceleration ALONE — the entry load. Isolating drag from
-                    // thrust is what makes this read as "the atmosphere is stopping us" and
-                    // not as "the engines are pushing us"; the two never coincide in EDL.
-                    double aeroG = drag.Magnitude / mass / 9.80665;
-                    entryNorm = Mathf.Clamp((float)(aeroG / EntryGReference), 0f, 1f);
-                }
-            }
+            _physicsSampleTimer = PhysicsSamplePeriodSeconds;
+            _sampledVessel = vessel;
+            _sampledUniverse = universe;
+            SampleFlightState(vessel, universe);
         }
+
+        // ── Read the latest sampled flight state ─────────────────────────────
+        float throttleActivity = _sampledThrottleActivity;
+        float qNorm            = _sampledQNorm;
+        float gNorm            = _sampledGNorm;
+        float entryNorm        = _sampledEntryNorm;
 
         // ── Smooth / damp the envelopes (ramp in faster than out) ────────────
         _thrustEnv = Damp(_thrustEnv, throttleActivity, dt, 8f, 3f);
@@ -200,6 +182,59 @@ public sealed class CameraShake
 
         // ── FOV kick under high g (subtle widen) ─────────────────────────────
         Fov = BaseFov + _fovEnv * MaxFovKick * zoom;
+    }
+
+    private void SampleFlightState(Vessel? vessel, Universe? universe)
+    {
+        float throttleActivity = 0f;   // throttle × engines firing
+        float qNorm            = 0f;   // dynamic pressure, normalised 0..1 (peaks at Max-Q)
+        float gNorm            = 0f;   // (g − 1) above gravity, normalised 0..1
+        float entryNorm        = 0f;   // aerodynamic deceleration, normalised 0..1
+
+        if (vessel != null && universe != null && !vessel.IsOnRails)
+        {
+            var body = universe.GetBody(vessel.ReferenceBodyId ?? "earth")
+                       ?? universe.GetBody("earth");
+
+            // Engine thrust shake: only when engines are actually firing.
+            bool enginesFiring = vessel.HasActiveEngineParts;
+            if (enginesFiring)
+                throttleActivity = Mathf.Clamp((float)vessel.Throttle, 0f, 1f);
+
+            if (body != null)
+            {
+                // Aerodynamic buffeting: q = ½·ρ·v².
+                double density = body.GetAtmosphericDensity(vessel.Position);
+                if (density > 0.0)
+                {
+                    double v = vessel.GetSurfaceVelocity(body).Magnitude;
+                    double q = 0.5 * density * v * v;
+                    qNorm = Mathf.Clamp((float)(q / MaxQReference), 0f, 1.4f);
+                }
+
+                // g-force from non-gravitational forces (thrust + drag) / weight.
+                double mass = vessel.TotalMass;
+                if (mass > 0.0)
+                {
+                    var thrust = vessel.ComputeThrust(body);
+                    var drag   = vessel.ComputeDrag(body);
+                    double accel = (thrust + drag).Magnitude / mass;
+                    double g = accel / 9.81;
+                    gNorm = Mathf.Clamp((float)(g / FovGReference), 0f, 1f);
+
+                    // Aerodynamic deceleration ALONE — the entry load. Isolating drag from
+                    // thrust is what makes this read as "the atmosphere is stopping us" and
+                    // not as "the engines are pushing us"; the two never coincide in EDL.
+                    double aeroG = drag.Magnitude / mass / 9.80665;
+                    entryNorm = Mathf.Clamp((float)(aeroG / EntryGReference), 0f, 1f);
+                }
+            }
+        }
+
+        _sampledThrottleActivity = throttleActivity;
+        _sampledQNorm = qNorm;
+        _sampledGNorm = gNorm;
+        _sampledEntryNorm = entryNorm;
     }
 
     private static Vector3 ClampLength(Vector3 value, float maxLength)

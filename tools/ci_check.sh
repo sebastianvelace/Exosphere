@@ -40,6 +40,7 @@ bash tools/tests/render_cadence_phase23_contract_test.sh
 bash tools/tests/launch_pad_performance_contract_test.sh
 bash tools/tests/maxq_ring_performance_contract_test.sh
 bash tools/tests/reentry_plasma_performance_contract_test.sh
+bash tools/tests/camera_shake_performance_contract_test.sh
 bash tools/tests/optimization_phase23_contract_test.sh
 
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
