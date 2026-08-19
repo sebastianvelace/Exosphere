@@ -25,6 +25,17 @@ public partial class VisualExposureController : Node
     private double _cachedAltitude;
     private double _cachedSunElevation;
     private float _lastEyeStarGain = float.NaN;
+    private const double PresentationSamplePeriodSeconds = 1.0 / 20.0;
+    private double _presentationSampleTimer;
+    private Vessel? _sampledVessel;
+    private Universe? _sampledUniverse;
+    private CelestialBody? _sampledBody;
+    private AtmosphereOptics? _sampledOptics;
+    private double _sampledAltitude;
+    private double _sampledSunElevation;
+    private double _sampledAir;
+    private double _sampledDensity;
+    private Vector3d _sampledSurfaceVelocity;
 
     public override void _Ready() => ProcessPriority = 20;
 
@@ -37,17 +48,24 @@ public partial class VisualExposureController : Node
         EnsureReferences();
         if (_environment == null) return;
 
-        var body = bridge.Universe.GetDominantBody(vessel.Position);
-        var optics = body.Atmosphere?.Optics;
-        double altitude = vessel.GetAltitude(body);
-        Vector3d up = (vessel.Position - body.Position).Normalized;
-        var sun = bridge.Universe.GetBody("sun");
-        double sunElevation = sun == null
-            ? 1.0
-            : up.Dot((sun.Position - vessel.Position).Normalized);
+        var universe = bridge.Universe;
+        _presentationSampleTimer -= System.Math.Max(0.0, delta);
+        if (_presentationSampleTimer <= 0.0
+            || !ReferenceEquals(vessel, _sampledVessel)
+            || !ReferenceEquals(universe, _sampledUniverse))
+        {
+            _presentationSampleTimer = PresentationSamplePeriodSeconds;
+            _sampledVessel = vessel;
+            _sampledUniverse = universe;
+            SampleExposureState(vessel, universe);
+        }
 
-        double air = optics == null ? 0.0 : System.Math.Max(
-            optics.RayleighDensity(altitude), optics.MieDensity(altitude));
+        var body = _sampledBody;
+        if (body == null) return;
+        var optics = _sampledOptics;
+        double altitude = _sampledAltitude;
+        double sunElevation = _sampledSunElevation;
+        double air = _sampledAir;
         double daylight = Smoothstep(-0.12, 0.03, sunElevation);
         _directTransmittanceAccumulator += delta;
         // The exposure integrator is intentionally a lower-rate consumer of flight state.
@@ -79,8 +97,8 @@ public partial class VisualExposureController : Node
         Vector3d direct = _cachedDirectTransmittance;
         double directLuminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
 
-        double density = body.GetAtmosphericDensity(vessel.Position);
-        var    surfVel = vessel.GetSurfaceVelocity(body);
+        double density = _sampledDensity;
+        var    surfVel = _sampledSurfaceVelocity;
         double heatFlux = vessel.ComputeStagnationHeatFlux(density, surfVel);
         double plasma = Smoothstep(VehicleVisualPhysics.VisibleReentryFluxWm2,
             VehicleVisualPhysics.SaturatedReentryFluxWm2, heatFlux);
@@ -121,6 +139,34 @@ public partial class VisualExposureController : Node
             _skyMaterial.SetShaderParameter("eye_star_gain", eyeStarGain);
             _lastEyeStarGain = eyeStarGain;
         }
+    }
+
+    private void SampleExposureState(Vessel vessel, Universe universe)
+    {
+        _sampledBody = universe.GetDominantBody(vessel.Position);
+        _sampledOptics = _sampledBody?.Atmosphere?.Optics;
+        _sampledAltitude = 0.0;
+        _sampledSunElevation = 1.0;
+        _sampledAir = 0.0;
+        _sampledDensity = 0.0;
+        _sampledSurfaceVelocity = Vector3d.Zero;
+
+        if (_sampledBody == null) return;
+
+        _sampledAltitude = vessel.GetAltitude(_sampledBody);
+        Vector3d up = (vessel.Position - _sampledBody.Position).Normalized;
+        var sun = universe.GetBody("sun");
+        _sampledSunElevation = sun == null
+            ? 1.0
+            : up.Dot((sun.Position - vessel.Position).Normalized);
+
+        if (_sampledOptics != null)
+            _sampledAir = System.Math.Max(
+                _sampledOptics.RayleighDensity(_sampledAltitude),
+                _sampledOptics.MieDensity(_sampledAltitude));
+
+        _sampledDensity = _sampledBody.GetAtmosphericDensity(vessel.Position);
+        _sampledSurfaceVelocity = vessel.GetSurfaceVelocity(_sampledBody);
     }
 
     private void EnsureReferences()

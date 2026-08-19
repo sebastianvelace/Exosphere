@@ -45,6 +45,7 @@ bash tools/tests/audio_manager_performance_contract_test.sh
 bash tools/tests/engine_startup_performance_contract_test.sh
 bash tools/tests/starfield_performance_contract_test.sh
 bash tools/tests/launch_effects_performance_contract_test.sh
+bash tools/tests/visual_exposure_performance_contract_test.sh
 bash tools/tests/optimization_phase23_contract_test.sh
 
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
