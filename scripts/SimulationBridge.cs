@@ -137,6 +137,11 @@ public partial class SimulationBridge : Node
     // the body needed by the initial vessel in the synchronous load path; an interplanetary
     // transition requests its presentation lazily after the physics tick.
     private readonly HashSet<string> _spawnedPlanetIds = new(StringComparer.OrdinalIgnoreCase);
+    // Every scaled-space planet uses the same unit sphere topology. MeshInstance3D keeps
+    // material overrides per instance, so sharing this procedural resource does not couple
+    // Earth/Mars/Venus colours or shader uniforms and avoids rebuilding the 96x48 topology
+    // on every lazy body transition.
+    private SphereMesh? _planetSphereMesh;
     private string? _pendingPlanetPresentationBodyId;
 
     // ── Ignition ramp state ───────────────────────────────────────────────
@@ -735,13 +740,7 @@ public partial class SimulationBridge : Node
         // Unit sphere — FloatingOrigin scales each planet per-frame to its correct angular
         // size as a precision-safe "scaled-space" backdrop. The shader supplies its own
         // atmospheric Fresnel rim, so no separate glow shell is needed.
-        var sphere = new SphereMesh
-        {
-            Radius = 1f,
-            Height = 2f,
-            RadialSegments = 96,
-            Rings = 48,
-        };
+        var sphere = GetSharedPlanetSphereMesh();
         var mat = body.Id == "earth"
             ? PlanetMaterials.CreateEarth()
             : PlanetMaterials.CreatePlanet(body.Id, GetPlanetColor(body.Id));
@@ -753,6 +752,22 @@ public partial class SimulationBridge : Node
 
         if (body.Id == "saturn") AddSaturnRing(mesh);
         return true;
+    }
+
+    private SphereMesh GetSharedPlanetSphereMesh()
+    {
+        if (_planetSphereMesh != null)
+            return _planetSphereMesh;
+
+        _planetSphereMesh = new SphereMesh
+        {
+            Radius = 1f,
+            Height = 2f,
+            RadialSegments = 96,
+            Rings = 48,
+        };
+        GD.Print("PERF_PLANETS mesh_cache=created radial=96 rings=48 shared=True");
+        return _planetSphereMesh;
     }
 
     private void QueueRequiredPlanetPresentation()

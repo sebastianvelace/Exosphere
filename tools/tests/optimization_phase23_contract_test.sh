@@ -72,6 +72,12 @@ require_text "$BRIDGE" 'FindCatchAnchorVessel()' 'tower presentation uses indexe
 require_text "$BRIDGE" 'HasCatchApproach(padEarth.Id)' 'tower visibility uses indexed catch-approach lookup'
 require_text "$BRIDGE" 'for (int vesselIndex = 0;' 'tower target refresh avoids interface enumeration'
 require_text "$BRIDGE" 'HasStarshipRole(catchAnchorVessel, "command")' 'tower visibility uses bounded role scan'
+require_text "$BRIDGE" 'private SphereMesh? _planetSphereMesh;' 'planet presentation mesh cache is declared'
+require_text "$BRIDGE" 'GetSharedPlanetSphereMesh()' 'planet presentation reuses shared geometry'
+require_text "$BRIDGE" 'var sphere = GetSharedPlanetSphereMesh();' \
+  'lazy planet spawn uses shared geometry'
+require_text "$BRIDGE" 'mesh_cache=created radial=96 rings=48 shared=True' \
+  'planet mesh cache telemetry is explicit'
 require_text "$SPECTRAL" 'decision=order4-official-order5-diagnostic' \
   'spectral promotion decision remains explicit'
 require_text "$ROOT/ExosphereSimulation/Universe.cs" '_bodiesView = _bodies.AsReadOnly();' \
