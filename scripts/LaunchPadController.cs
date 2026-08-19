@@ -1,6 +1,5 @@
 namespace Exosphere.Game;
 
-using System.Linq;
 using Godot;
 using Exosphere.Simulation;
 
@@ -43,6 +42,11 @@ public partial class LaunchPadController : Node3D
     private float _towerCenterZ;
     private float _chopstickCloseAmount;   // 0 = open/idle, 1 = fully closed on a caught ship
     private string _lastCatchVisualState = "UNARMED";
+    private bool? _lastNightFloodlightsState;
+    private double _catchStateTimer;
+    private float _lastChopstickScale = float.NaN;
+
+    private const double CatchPresentationPeriodSeconds = 1.0 / 20.0;
 
     /// <summary>Presentation telemetry for the physical catch state.</summary>
     public bool CatchApproachArmed { get; private set; }
@@ -60,10 +64,23 @@ public partial class LaunchPadController : Node3D
     public override void _Process(double delta)
     {
         bool night = SunController.SolarVisibility < 0.20f;
-        foreach (var light in _nightFloodlights)
-            light.Visible = night;
+        if (!_lastNightFloodlightsState.HasValue || _lastNightFloodlightsState.Value != night)
+        {
+            _lastNightFloodlightsState = night;
+            foreach (var light in _nightFloodlights)
+                light.Visible = night;
+        }
 
-        UpdateChopstickCatchFeedback(delta);
+        if (_chopstickArmNodes.Count == 0) return;
+
+        double safeDelta = System.Math.Max(0.0, delta);
+        _catchStateTimer -= safeDelta;
+        if (_catchStateTimer <= 0.0)
+        {
+            _catchStateTimer = CatchPresentationPeriodSeconds;
+            RefreshCatchState();
+        }
+        UpdateChopstickCatchFeedback(safeDelta);
     }
 
     /// <summary>
@@ -76,25 +93,18 @@ public partial class LaunchPadController : Node3D
     {
         if (_chopstickArmNodes.Count == 0) return;
 
-        // R12: a returning booster can be caught while Ship remains ActiveVessel.
-        var vessels = SimulationBridge.Instance?.Universe.Vessels;
-        bool caught = vessels?.Any(v => v.IsCaught) ?? false;
-        bool armed = vessels?.Any(v => v.IsAttemptingTowerCatch) ?? false;
-        CatchCaptured = caught;
-        CatchApproachArmed = armed;
-
         string visualState = CatchVisualState;
         if (visualState != _lastCatchVisualState)
         {
             _lastCatchVisualState = visualState;
             GD.Print($"[CATCH_VISUAL] state={visualState} arms=visible " +
-                $"physical={(armed || caught ? "armed" : "idle")}");
+                $"physical={(CatchApproachArmed || CatchCaptured ? "armed" : "idle")}");
         }
 
         // An armed approach keeps the arms explicitly in their ready/open pose. Only a
         // physical dual-pin settle is allowed to close them; merely entering the area or
         // missing the corridor never fakes a capture.
-        float target = caught ? 1f : 0f;
+        float target = CatchCaptured ? 1f : 0f;
         const float closeSpeedPerSecond = 0.8f;   // ~1.25 s for a full open<->close sweep
         _chopstickCloseAmount = Mathf.MoveToward(
             _chopstickCloseAmount, target, closeSpeedPerSecond * (float)delta);
@@ -103,12 +113,40 @@ public partial class LaunchPadController : Node3D
         // visibly swing together without needing per-part rotation pivots for a first pass.
         const float closedFraction = 0.55f;
         float scale = 1f - _chopstickCloseAmount * closedFraction;
-        foreach (var (node, offsetFromCenterZ) in _chopstickArmNodes)
+        if (float.IsNaN(_lastChopstickScale)
+            || Mathf.Abs(scale - _lastChopstickScale) > 0.0001f)
         {
-            var pos = node.Position;
-            pos.Z = _towerCenterZ + offsetFromCenterZ * scale;
-            node.Position = pos;
+            _lastChopstickScale = scale;
+            foreach (var (node, offsetFromCenterZ) in _chopstickArmNodes)
+            {
+                var pos = node.Position;
+                pos.Z = _towerCenterZ + offsetFromCenterZ * scale;
+                node.Position = pos;
+            }
         }
+    }
+
+    // Catch state is owned by the simulation. The pad only samples it at presentation
+    // cadence; the arm interpolation remains per-frame so the visible close/open motion is
+    // smooth. This avoids a fleet scan and repeated node writes while the pad is idle.
+    private void RefreshCatchState()
+    {
+        bool caught = false;
+        bool armed = false;
+        var vessels = SimulationBridge.Instance?.Universe.Vessels;
+        if (vessels != null)
+        {
+            for (int vesselIndex = 0; vesselIndex < vessels.Count; vesselIndex++)
+            {
+                var vessel = vessels[vesselIndex];
+                caught |= vessel.IsCaught;
+                armed |= vessel.IsAttemptingTowerCatch;
+                if (caught && armed) break;
+            }
+        }
+
+        CatchCaptured = caught;
+        CatchApproachArmed = armed;
     }
 
     private void BuildEnvironment()

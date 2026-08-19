@@ -76,7 +76,7 @@ require_pattern scripts/EDLController.cs 'CatchContactPoints' 'catch pin datum d
 require_pattern scripts/EDLController.cs 'Edl.Catch);' 'catch-phase scripted attitude scope'
 require_pattern scripts/LaunchPadController.cs 'CatchApproachArmed' 'launch pad exposes armed catch telemetry'
 require_pattern scripts/LaunchPadController.cs 'CATCH_VISUAL' 'launch pad emits catch visual telemetry'
-require_pattern scripts/LaunchPadController.cs 'float target = caught ? 1f : 0f;' 'visual closes only after physical catch'
+require_pattern scripts/LaunchPadController.cs 'float target = CatchCaptured ? 1f : 0f;' 'visual closes only after physical catch'
 require_pattern tools/visual_playtest.sh 'Finish("CAUGHT")' 'visual catch acceptance'
 require_pattern tools/visual_playtest.sh 'QueueCapture("caught")' 'visual catch capture'
 require_pattern tools/visual_playtest.sh 'bridge.SetTimeScale(3.0);' 'accelerated post-flip validation'
