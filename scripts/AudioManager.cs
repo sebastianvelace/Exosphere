@@ -108,6 +108,21 @@ public partial class AudioManager : Node
     private float _aeroBright;           // 0 = subsonic rush, 1 = hypersonic shear hiss
     private float _buffetDepth;          // 0 = smooth flow, 1 = heavy shake
 
+    // Audio synthesis consumes a presentation sample. The generator buffers continue to
+    // fill continuously, while the expensive physical inputs are refreshed at 20 Hz.
+    private const double PhysicsSamplePeriodSeconds = 1.0 / 20.0;
+    private double _physicsSampleTimer;
+    private Vessel? _sampledVessel;
+    private Universe? _sampledUniverse;
+    private float _sampledThrottle;
+    private float _sampledSlTarget;
+    private float _sampledVacTarget;
+    private float _sampledAmbTarget;
+    private float _sampledAeroTarget;
+    private float _sampledPlasmaTarget;
+    private float _sampledBrightTarget;
+    private float _sampledBuffetTarget;
+
     // ── Event one-shot state (drained by _Process buffer fill) ────────────────
     private struct EventTone
     {
@@ -198,26 +213,62 @@ public partial class AudioManager : Node
     /// <summary>Reads the live simulation state and smooths the per-voice target levels.</summary>
     private void UpdateLevels(float delta)
     {
-        float slTarget    = 0f;
-        float vacTarget   = 0f;
-        float ambTarget   = 0f;
-        float aeroTarget  = 0f;
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        _physicsSampleTimer -= System.Math.Max(0.0, delta);
+        if (_physicsSampleTimer <= 0.0
+            || !ReferenceEquals(vessel, _sampledVessel)
+            || !ReferenceEquals(universe, _sampledUniverse))
+        {
+            _physicsSampleTimer = PhysicsSamplePeriodSeconds;
+            _sampledVessel = vessel;
+            _sampledUniverse = universe;
+            SampleAudioLevels(vessel, universe);
+        }
+
+        // Smooth toward targets so volume changes are click-free.
+        float k = 1f - Mathf.Exp(-delta * 8f);
+        _slLevel     = Mathf.Lerp(_slLevel,     _sampledSlTarget,     k);
+        _vacLevel    = Mathf.Lerp(_vacLevel,    _sampledVacTarget,    k);
+        _ambLevel    = Mathf.Lerp(_ambLevel,    _sampledAmbTarget,    k);
+        _aeroLevel   = Mathf.Lerp(_aeroLevel,   _sampledAeroTarget,   k);
+        _plasmaLevel = Mathf.Lerp(_plasmaLevel, _sampledPlasmaTarget, k);
+        _buffetDepth = Mathf.Lerp(_buffetDepth, _sampledBuffetTarget, k);
+
+        // Timbre moves more slowly than level so the Mach sweep glides instead of stepping.
+        float kb = 1f - Mathf.Exp(-delta * 2f);
+        _aeroBright = Mathf.Lerp(_aeroBright, _sampledBrightTarget, kb);
+
+        // Slight pitch rise with throttle adds urgency to the roar.
+        if (_engineSlPlayer != null && _sampledVessel != null)
+            _engineSlPlayer.PitchScale = 1.0f + _sampledThrottle * 0.15f;
+
+        // Keep VolumeDb at unity here; the synthesised amplitude already carries
+        // the level. Players stay at 0 dB and we silence by emitting near-zero data.
+    }
+
+    private void SampleAudioLevels(Vessel? vessel, Universe? universe)
+    {
+        float thr = vessel != null
+            ? Mathf.Clamp((float)vessel.Throttle, 0f, 1f)
+            : 0f;
+        float slTarget     = 0f;
+        float vacTarget    = 0f;
+        float ambTarget    = 0f;
+        float aeroTarget   = 0f;
         float plasmaTarget = 0f;
         float brightTarget = 0f;
         float buffetTarget = 0f;
 
-        var bridge = SimulationBridge.Instance;
-        var vessel = bridge?.ActiveVessel;
-        if (vessel != null && bridge!.Universe != null)
+        if (vessel != null && universe != null)
         {
-            float thr = (float)vessel.Throttle;
-
             // Engine voices only sound when engines are actually firing.
             bool firing = thr > 0.001f && vessel.HasActiveEngineParts;
 
             // Whatever body we are actually flying at — not always Earth. A Mars entry
             // has to sound like a Mars entry.
-            var body = bridge.Universe.GetDominantBody(vessel.Position);
+            var body = universe.GetDominantBody(vessel.Position);
 
             double alt      = body.GetAltitude(vessel.Position);
             double rho      = body.GetAtmosphericDensity(vessel.Position);
@@ -257,7 +308,7 @@ public partial class AudioManager : Node
             // gating on flux only made the audio roar while the fireball was correctly
             // suppressed, which is the opposite of the "audio and visuals ignite together"
             // contract this class documents. Reuse the shared predicate so they cannot drift.
-            double radialSpeed = vessel.GetSurfaceVelocity(body).Dot(
+            double radialSpeed = surfVel.Dot(
                 (vessel.Position - body.Position).Normalized);
             plasmaTarget = VehicleVisualPhysics.IsVisibleReentryHeating(radialSpeed, flux)
                 ? Mathf.Clamp(
@@ -275,25 +326,14 @@ public partial class AudioManager : Node
             ambTarget = Mathf.Clamp(1f - (float)(alt / 80_000.0), 0f, 1f) * 0.30f;
         }
 
-        // Smooth toward targets so volume changes are click-free.
-        float k = 1f - Mathf.Exp(-delta * 8f);
-        _slLevel     = Mathf.Lerp(_slLevel,     slTarget,     k);
-        _vacLevel    = Mathf.Lerp(_vacLevel,    vacTarget,    k);
-        _ambLevel    = Mathf.Lerp(_ambLevel,    ambTarget,    k);
-        _aeroLevel   = Mathf.Lerp(_aeroLevel,   aeroTarget,   k);
-        _plasmaLevel = Mathf.Lerp(_plasmaLevel, plasmaTarget, k);
-        _buffetDepth = Mathf.Lerp(_buffetDepth, buffetTarget, k);
-
-        // Timbre moves more slowly than level so the Mach sweep glides instead of stepping.
-        float kb = 1f - Mathf.Exp(-delta * 2f);
-        _aeroBright = Mathf.Lerp(_aeroBright, brightTarget, kb);
-
-        // Slight pitch rise with throttle adds urgency to the roar.
-        if (_engineSlPlayer != null && vessel != null)
-            _engineSlPlayer.PitchScale = 1.0f + (float)vessel.Throttle * 0.15f;
-
-        // Keep VolumeDb at unity here; the synthesised amplitude already carries
-        // the level. Players stay at 0 dB and we silence by emitting near-zero data.
+        _sampledThrottle    = thr;
+        _sampledSlTarget    = slTarget;
+        _sampledVacTarget   = vacTarget;
+        _sampledAmbTarget   = ambTarget;
+        _sampledAeroTarget  = aeroTarget;
+        _sampledPlasmaTarget = plasmaTarget;
+        _sampledBrightTarget = brightTarget;
+        _sampledBuffetTarget = buffetTarget;
     }
 
     // ── Sea-level engine roar ──────────────────────────────────────────────────
