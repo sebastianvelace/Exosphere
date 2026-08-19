@@ -23,6 +23,11 @@ public partial class ReentryPlasmaController : Node3D
     private ShaderMaterial?     _shockMat;
     private StandardMaterial3D? _wakeMat;
     private readonly List<EdgeGlow> _edgeGlows = new();
+    private double _visualSampleTimer;
+
+    // Plasma is a presentation effect. Its physical inputs can be sampled at 20 Hz while
+    // the deterministic thermal solver continues at the simulation tick rate.
+    private const double VisualSamplePeriodSeconds = 1.0 / 20.0;
 
     private enum EdgeKind { Nose, Belly, Flap }
 
@@ -98,6 +103,10 @@ public partial class ReentryPlasmaController : Node3D
     {
         if (_shock == null || _wake == null || _shockMat == null || _wakeMat == null) return;
 
+        _visualSampleTimer -= System.Math.Max(0.0, delta);
+        if (_visualSampleTimer > 0.0) return;
+        _visualSampleTimer = VisualSamplePeriodSeconds;
+
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         if (bridge == null || vessel == null || vessel.IsDestroyed)
@@ -124,8 +133,7 @@ public partial class ReentryPlasmaController : Node3D
             return;
         }
 
-        _shock.Visible = true;
-        _wake.Visible  = true;
+        SetCoreEffectsVisible(true);
 
         // Airflow direction in render space (sim and render share axis convention).
         Vector3 flowDir = new Vector3((float)surfVel.X, (float)surfVel.Y, (float)surfVel.Z);
@@ -146,8 +154,7 @@ public partial class ReentryPlasmaController : Node3D
 
         // Vessel body centre in render space. The plasma controller is a sibling of
         // the renderer, so it must apply the vessel orientation itself.
-        bool hasSH = vessel.Parts.Parts.Any(
-            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
+        bool hasSH = HasSuperHeavy(vessel);
         Vector3 bodyCentre = ToGodot(vessel.Orientation.Rotate(new Vector3d(0.0, hasSH ? 30.0 : 8.0, 0.0)));
 
         // Shock sits on the windward (leading) face; wake streams out behind.
@@ -261,7 +268,7 @@ public partial class ReentryPlasmaController : Node3D
         // ascent/reentry, hide them rather than drawing heat on the booster stack.
         if (hasSH)
         {
-            foreach (var edge in _edgeGlows) edge.Mesh.Visible = false;
+            foreach (var edge in _edgeGlows) SetEdgeVisible(edge, false);
             return;
         }
 
@@ -277,7 +284,7 @@ public partial class ReentryPlasmaController : Node3D
             float k = Mathf.Clamp((edgeBase - edge.Delay) / (1f - edge.Delay), 0f, 1f);
             if (k <= 0.01f)
             {
-                edge.Mesh.Visible = false;
+                SetEdgeVisible(edge, false);
                 continue;
             }
 
@@ -297,7 +304,7 @@ public partial class ReentryPlasmaController : Node3D
             };
 
             k *= edge.Weight * focus * flicker * zoneMul;
-            edge.Mesh.Visible = true;
+            SetEdgeVisible(edge, true);
             edge.Mesh.Position = ToGodot(vesselOrientation.Rotate(edge.LocalPosition));
             OrientYAxis(edge.Mesh, ToGodot(vesselOrientation.Rotate(Vector3d.Up)));
             edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.65f * k);
@@ -317,10 +324,33 @@ public partial class ReentryPlasmaController : Node3D
 
     private void SetEffectsVisible(bool visible)
     {
-        if (_shock != null) _shock.Visible = visible;
-        if (_wake != null) _wake.Visible = visible;
+        SetCoreEffectsVisible(visible);
         foreach (var edge in _edgeGlows)
-            edge.Mesh.Visible = visible;
+            SetEdgeVisible(edge, visible);
+    }
+
+    private void SetCoreEffectsVisible(bool visible)
+    {
+        if (_shock != null && _shock.Visible != visible) _shock.Visible = visible;
+        if (_wake != null && _wake.Visible != visible) _wake.Visible = visible;
+    }
+
+    private static void SetEdgeVisible(EdgeGlow edge, bool visible)
+    {
+        if (edge.Mesh.Visible != visible) edge.Mesh.Visible = visible;
+    }
+
+    private static bool HasSuperHeavy(Vessel vessel)
+    {
+        var parts = vessel.Parts.Parts;
+        for (int partIndex = 0; partIndex < parts.Count; partIndex++)
+        {
+            var part = parts[partIndex];
+            if (part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("booster"))
+                return true;
+        }
+        return false;
     }
 
     private static Vector3 ToGodot(Vector3d v) =>
