@@ -147,6 +147,7 @@ public partial class SkyController : Node
     private Vector3 _lastSolarOccluderDirection;
     private float _lastSolarOccluderAngularRadius = float.NaN;
     private float _lastCloudWeatherPrefilter = float.NaN;
+    private bool _sharedSolarGeometryTelemetryPublished;
 
     public override void _Ready()
     {
@@ -259,29 +260,69 @@ public partial class SkyController : Node
             _lastSolarAngularRadius = sunAngularRadius;
         }
 
-        CelestialBody? bestOccluder = null;
-        double lowestVisibility = 1.0;
-        double atmosphericVisibility = 1.0;
-        foreach (var candidate in universe.Bodies)
+        var sunController = SunController.Instance;
+        SunController.SolarGeometrySnapshot cachedSolarGeometry = default;
+        bool hasCachedSolarGeometry = sunController != null
+            && sunController.TryGetCachedSolarGeometry(atmosphereBodyId, out cachedSolarGeometry);
+        if (hasCachedSolarGeometry && !_sharedSolarGeometryTelemetryPublished)
         {
-            if (candidate.Id == "sun") continue;
-            // The atmosphere receives irradiance from the limb-darkened photosphere,
-            // not from a uniform geometric disc.  Central occultations therefore remove
-            // slightly more radiance than equal-area limb occultations.
-            double visibility = MissionGeometry.LimbDarkenedSolarDiscVisibility(
-                observer, candidate.Position, candidate.Radius, sun.Position, sun.Radius);
-            if (candidate.Id != atmosphereBodyId)
-                atmosphericVisibility = System.Math.Min(atmosphericVisibility, visibility);
-            if (visibility < lowestVisibility)
+            GD.Print("PERF_SOLAR_GEOMETRY consumer=sky cache_hit=True");
+            _sharedSolarGeometryTelemetryPublished = true;
+        }
+        bool enabled;
+        float solarVisibility;
+        float atmosphericSolarVisibility;
+        Vector3 occluderDirection;
+        float occluderAngularRadius;
+        if (hasCachedSolarGeometry)
+        {
+            // Reuse SunController's exact 20 Hz limb-darkened sample; this path removes
+            // a second body loop from the 12 Hz sky update without changing process order.
+            enabled = cachedSolarGeometry.OccluderEnabled;
+            solarVisibility = cachedSolarGeometry.Visibility;
+            atmosphericSolarVisibility = cachedSolarGeometry.AtmosphericVisibility;
+            occluderDirection = cachedSolarGeometry.OccluderDirection;
+            occluderAngularRadius = cachedSolarGeometry.OccluderAngularRadius;
+        }
+        else
+        {
+            // Keep a first-frame fallback while SunController publishes its first sample,
+            // so scene startup cannot expose uninitialized eclipse data.
+            CelestialBody? bestOccluder = null;
+            double lowestVisibility = 1.0;
+            double atmosphericVisibility = 1.0;
+            foreach (var candidate in universe.Bodies)
             {
-                lowestVisibility = visibility;
-                bestOccluder = candidate;
+                if (candidate.Id == "sun") continue;
+                // The atmosphere receives irradiance from the limb-darkened photosphere,
+                // not from a uniform geometric disc. Central occultations therefore remove
+                // slightly more radiance than equal-area limb occultations.
+                double visibility = MissionGeometry.LimbDarkenedSolarDiscVisibility(
+                    observer, candidate.Position, candidate.Radius, sun.Position, sun.Radius);
+                if (candidate.Id != atmosphereBodyId)
+                    atmosphericVisibility = System.Math.Min(atmosphericVisibility, visibility);
+                if (visibility < lowestVisibility)
+                {
+                    lowestVisibility = visibility;
+                    bestOccluder = candidate;
+                }
+            }
+
+            enabled = bestOccluder != null && lowestVisibility < 0.999999;
+            solarVisibility = (float)lowestVisibility;
+            atmosphericSolarVisibility = (float)atmosphericVisibility;
+            occluderDirection = Vector3.Zero;
+            occluderAngularRadius = 0.0f;
+            if (enabled)
+            {
+                Vector3d direction = (bestOccluder!.Position - observer).Normalized;
+                double distance = (bestOccluder.Position - observer).Magnitude;
+                occluderDirection = ToGodot(direction);
+                occluderAngularRadius = (float)MissionGeometry.ApparentAngularRadius(
+                    bestOccluder.Radius, distance);
             }
         }
 
-        bool enabled = bestOccluder != null && lowestVisibility < 0.999999;
-        float solarVisibility = (float)lowestVisibility;
-        float atmosphericSolarVisibility = (float)atmosphericVisibility;
         if (!_solarGeometryInitialized
             || System.Math.Abs(solarVisibility - _lastSolarVisibility) > 1e-5f)
         {
@@ -305,11 +346,6 @@ public partial class SkyController : Node
             return;
         }
 
-        Vector3d direction = (bestOccluder!.Position - observer).Normalized;
-        double distance = (bestOccluder.Position - observer).Magnitude;
-        Vector3 occluderDirection = ToGodot(direction);
-        float occluderAngularRadius = (float)MissionGeometry.ApparentAngularRadius(
-            bestOccluder.Radius, distance);
         if (!_solarGeometryInitialized
             || _lastSolarOccluderDirection.DistanceSquaredTo(occluderDirection) > 1e-10f)
         {

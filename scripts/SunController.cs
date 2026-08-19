@@ -25,6 +25,15 @@ using Exosphere.Simulation.Systems;
 [GlobalClass]
 public partial class SunController : Node
 {
+    public readonly record struct SolarGeometrySnapshot(
+        string AtmosphereBodyId,
+        float Visibility,
+        float AtmosphericVisibility,
+        bool OccluderEnabled,
+        Vector3 OccluderDirection,
+        float OccluderAngularRadius);
+
+    public static SunController? Instance { get; private set; }
     public static float SolarVisibility { get; private set; } = 1f;
 
     // Lighting is presentation-only.  Twenty updates per second are enough to keep a
@@ -44,6 +53,40 @@ public partial class SunController : Node
     // Cached node lookups — re-found lazily if they go null (e.g. scene rebuild).
     private DirectionalLight3D? _light;
     private ShaderMaterial?     _earthMat;
+    private bool _solarGeometryReady;
+    private bool _solarGeometryTelemetryPublished;
+    private SolarGeometrySnapshot _solarGeometrySnapshot;
+
+    public override void _Ready()
+    {
+        Instance = this;
+    }
+
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this))
+            Instance = null;
+        _solarGeometryReady = false;
+        _solarGeometryTelemetryPublished = false;
+    }
+
+    public bool TryGetCachedSolarGeometry(
+        string atmosphereBodyId,
+        out SolarGeometrySnapshot snapshot)
+    {
+        if (!_solarGeometryReady
+            || !string.Equals(
+                _solarGeometrySnapshot.AtmosphereBodyId,
+                atmosphereBodyId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            snapshot = default;
+            return false;
+        }
+
+        snapshot = _solarGeometrySnapshot;
+        return true;
+    }
 
     public override void _Process(double delta)
     {
@@ -62,6 +105,9 @@ public partial class SunController : Node
             _lastSunDir = Vector3.Zero;
             _lastFedVisibility = -1f;
             _visualUpdateTimer = 0.0;
+            _solarGeometryReady = false;
+            _solarGeometryTelemetryPublished = false;
+            SolarVisibility = 1f;
         }
 
         var sun = _cachedSun;
@@ -87,12 +133,52 @@ public partial class SunController : Node
         if (sunDirectionChanged || materialsNeedRefresh)
             FeedSunDir(renderDir);
 
+        var atmosphereBody = universe.GetDominantBody(vessel.Position);
+        string atmosphereBodyId = atmosphereBody?.Id ?? string.Empty;
         double visibility = 1.0;
+        double atmosphericVisibility = 1.0;
+        CelestialBody? bestOccluder = null;
+        double lowestVisibility = 1.0;
         foreach (var body in universe.Bodies)
         {
             if (body.Id == "sun") continue;
-            visibility = System.Math.Min(visibility, MissionGeometry.LimbDarkenedSolarDiscVisibility(
-                vessel.Position, body.Position, body.Radius, sun.Position, sun.Radius));
+            double bodyVisibility = MissionGeometry.LimbDarkenedSolarDiscVisibility(
+                vessel.Position, body.Position, body.Radius, sun.Position, sun.Radius);
+            visibility = System.Math.Min(visibility, bodyVisibility);
+            if (body.Id != atmosphereBodyId)
+                atmosphericVisibility = System.Math.Min(atmosphericVisibility, bodyVisibility);
+            if (bodyVisibility < lowestVisibility)
+            {
+                lowestVisibility = bodyVisibility;
+                bestOccluder = body;
+            }
+        }
+        bool occluderEnabled = bestOccluder != null && lowestVisibility < 0.999999;
+        Vector3 occluderDirection = Vector3.Zero;
+        float occluderAngularRadius = 0.0f;
+        if (occluderEnabled)
+        {
+            var direction = (bestOccluder!.Position - vessel.Position).Normalized;
+            double distance = (bestOccluder.Position - vessel.Position).Magnitude;
+            occluderDirection = new Vector3(
+                (float)direction.X, (float)direction.Y, (float)direction.Z);
+            occluderAngularRadius = (float)MissionGeometry.ApparentAngularRadius(
+                bestOccluder.Radius, distance);
+        }
+        _solarGeometrySnapshot = new SolarGeometrySnapshot(
+            atmosphereBodyId,
+            (float)visibility,
+            (float)atmosphericVisibility,
+            occluderEnabled,
+            occluderDirection,
+            occluderAngularRadius);
+        _solarGeometryReady = true;
+        if (!_solarGeometryTelemetryPublished)
+        {
+            GD.Print(
+                $"PERF_SOLAR_GEOMETRY mode=shared cadenceHz=20 skyConsumerHz=12 "
+                + $"body={atmosphereBodyId} shared=True");
+            _solarGeometryTelemetryPublished = true;
         }
         float visibilityValue = (float)visibility;
         if (System.Math.Abs(visibilityValue - _lastFedVisibility) > 1e-4f)

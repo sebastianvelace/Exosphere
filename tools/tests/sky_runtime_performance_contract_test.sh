@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SHADER="$ROOT/assets/shaders/space_sky.gdshader"
 SKY="$ROOT/scripts/SkyController.cs"
+SUN="$ROOT/scripts/SunController.cs"
 EXPOSURE="$ROOT/scripts/VisualExposureController.cs"
 PHASE_LIGHTING="$ROOT/scripts/PhaseLightingController.cs"
 GROUND="$ROOT/scripts/EarthGroundController.cs"
@@ -15,6 +16,7 @@ fail() {
 
 [[ -f "$SHADER" ]] || fail "missing sky shader"
 [[ -f "$SKY" ]] || fail "missing SkyController"
+[[ -f "$SUN" ]] || fail "missing SunController"
 [[ -f "$EXPOSURE" ]] || fail "missing VisualExposureController"
 [[ -f "$PHASE_LIGHTING" ]] || fail "missing PhaseLightingController"
 [[ -f "$GROUND" ]] || fail "missing EarthGroundController"
@@ -47,6 +49,18 @@ rg -q --fixed-strings '_env.Sky.ProcessMode = Sky.ProcessModeEnum.Incremental;' 
   || fail "sky process mode is not incremental"
 rg -q --fixed-strings 'using var workerPriority = new WorkerThreadPriorityScope();' "$SKY" \
   || fail "atmosphere worker priority scope missing"
+
+# Solar disc geometry is a presentation sample. SunController owns the bounded 20 Hz
+# calculation; SkyController consumes the snapshot at its 12 Hz cadence instead of
+# running a second limb-darkened body loop.
+rg -q --fixed-strings 'VisualUpdatePeriodSeconds = 1.0 / 20.0' "$SUN" \
+  || fail "solar geometry cadence missing"
+rg -q --fixed-strings 'TryGetCachedSolarGeometry(' "$SUN" \
+  || fail "solar geometry snapshot API missing"
+rg -q --fixed-strings 'PERF_SOLAR_GEOMETRY mode=shared cadenceHz=20 skyConsumerHz=12' "$SUN" \
+  || fail "solar geometry sharing telemetry missing"
+rg -q --fixed-strings 'TryGetCachedSolarGeometry(atmosphereBodyId' "$SKY" \
+  || fail "SkyController does not consume shared solar geometry"
 
 # Custom shader uniforms must not be rewritten at render cadence when stable.
 rg -q --fixed-strings '_lastCloudWeatherPrefilter' "$SKY" \
