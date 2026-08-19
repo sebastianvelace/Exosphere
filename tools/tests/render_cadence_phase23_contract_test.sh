@@ -92,6 +92,10 @@ require_text "$CAMERA" 'if (!needsLookup) return;' \
 # SOI transitions cannot display a stale planet's light.
 require_text "$PHASE_LIGHTING" 'DirectTransmittanceCadenceSeconds = 0.10' \
   "phase lighting direct-transmittance cadence missing"
+require_text "$PHASE_LIGHTING" 'PresentationSamplePeriodSeconds = 1.0 / 20.0' \
+  "phase lighting presentation sample cadence missing"
+require_text "$PHASE_LIGHTING" 'SampleLightingState(av, universe);' \
+  "phase lighting sampled-state helper missing"
 require_text "$PHASE_LIGHTING" '_cachedDirectTransmittance' \
   "phase lighting transmittance cache missing"
 require_text "$PHASE_LIGHTING" 'GetCachedDirectTransmittance(' \

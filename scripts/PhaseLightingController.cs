@@ -56,6 +56,17 @@ public partial class PhaseLightingController : Node
     private double _cachedDirectAltitude = double.NaN;
     private double _cachedDirectSunElevation = double.NaN;
     private Vector3d _cachedDirectSunDirection = Vector3d.Zero;
+    private const double PresentationSamplePeriodSeconds = 1.0 / 20.0;
+    private double _presentationSampleTimer;
+    private Vessel? _sampledVessel;
+    private Universe? _sampledUniverse;
+    private CelestialBody? _sampledBody;
+    private AtmosphereOptics? _sampledOptics;
+    private double _sampledAltitude;
+    private double _sampledOpticalAir;
+    private float _sampledReentry;
+    private double _sampledSunElevation;
+    private Vector3d _sampledSunDirection = Vector3d.Up;
 
     public override void _Ready()
     {
@@ -67,23 +78,36 @@ public partial class PhaseLightingController : Node
         var bridge = SimulationBridge.Instance;
         var av = bridge?.ActiveVessel;
         if (av == null) return;
+        var universe = bridge?.Universe;
+        if (universe == null) return;
 
         EnsureRefs();
         if (_env == null) return;
         _directTransmittanceAccumulator += double.IsFinite(delta) && delta > 0.0 ? delta : 0.0;
 
-        var body = bridge!.Universe.GetDominantBody(av.Position);
-        double alt = av.GetAltitude(body);
-        var optics = body.Atmosphere?.Optics;
-        double opticalAir = optics == null ? 0.0 : System.Math.Max(
-            optics.RayleighDensity(alt), optics.MieDensity(alt));
+        _presentationSampleTimer -= System.Math.Max(0.0, delta);
+        if (_presentationSampleTimer <= 0.0
+            || !ReferenceEquals(av, _sampledVessel)
+            || !ReferenceEquals(universe, _sampledUniverse))
+        {
+            _presentationSampleTimer = PresentationSamplePeriodSeconds;
+            _sampledVessel = av;
+            _sampledUniverse = universe;
+            SampleLightingState(av, universe);
+        }
+
+        var body = _sampledBody;
+        if (body == null) return;
+        double alt = _sampledAltitude;
+        var optics = _sampledOptics;
+        double opticalAir = _sampledOpticalAir;
         float s = 1.0f - Smoothstep(0.0002f, 0.02f, (float)opticalAir);
 
         float ambient = Mathf.Lerp(AmbientEnergyPad, AmbientEnergySpace, s);
         float sun     = Mathf.Lerp(SunEnergyPad, SunEnergySpace, s);
         float glow    = Mathf.Lerp(0.0f, GlowIntensitySpace, s);
 
-        float reentry = ComputeReentryFactor(bridge, av, body, alt);
+        float reentry = _sampledReentry;
 
         if (reentry > 0.001f)
         {
@@ -116,12 +140,8 @@ public partial class PhaseLightingController : Node
 
         if (_light != null)
         {
-            var sunBody = bridge.Universe.GetBody("sun");
-            var up = (av.Position - body.Position).Normalized;
-            var sunDirection = sunBody != null
-                ? (sunBody.Position - av.Position).Normalized
-                : Vector3d.Up;
-            double sunElevation = up.Dot(sunDirection);
+            var sunDirection = _sampledSunDirection;
+            double sunElevation = _sampledSunElevation;
             var direct = GetCachedDirectTransmittance(
                 body, optics, alt, sunElevation, sunDirection);
             double peak = System.Math.Max(1e-6,
@@ -136,6 +156,38 @@ public partial class PhaseLightingController : Node
                 _light.LightColor = lightColor;
             if (FloatDiffers(_light.LightEnergy, lightEnergy))
                 _light.LightEnergy = lightEnergy;
+        }
+    }
+
+    private void SampleLightingState(Vessel av, Universe universe)
+    {
+        _sampledBody = universe.GetDominantBody(av.Position);
+        _sampledOptics = _sampledBody?.Atmosphere?.Optics;
+        _sampledAltitude = 0.0;
+        _sampledOpticalAir = 0.0;
+        _sampledReentry = 0.0f;
+        _sampledSunElevation = 1.0;
+        _sampledSunDirection = Vector3d.Up;
+
+        if (_sampledBody == null) return;
+
+        _sampledAltitude = av.GetAltitude(_sampledBody);
+        if (_sampledOptics != null)
+            _sampledOpticalAir = System.Math.Max(
+                _sampledOptics.RayleighDensity(_sampledAltitude),
+                _sampledOptics.MieDensity(_sampledAltitude));
+
+        double density = _sampledBody.GetAtmosphericDensity(av.Position);
+        Vector3d surfVel = av.GetSurfaceVelocity(_sampledBody);
+        _sampledReentry = ComputeReentryFactor(
+            av, _sampledBody, _sampledAltitude, density, surfVel);
+
+        Vector3d up = (av.Position - _sampledBody.Position).Normalized;
+        var sun = universe.GetBody("sun");
+        if (sun != null)
+        {
+            _sampledSunDirection = (sun.Position - av.Position).Normalized;
+            _sampledSunElevation = up.Dot(_sampledSunDirection);
         }
     }
 
@@ -179,11 +231,9 @@ public partial class PhaseLightingController : Node
         return _cachedDirectTransmittance;
     }
 
-    private static float ComputeReentryFactor(SimulationBridge bridge, Vessel av,
-        CelestialBody body, double alt)
+    private static float ComputeReentryFactor(Vessel av, CelestialBody body,
+        double alt, double density, Vector3d surfVel)
     {
-        double density  = body.GetAtmosphericDensity(av.Position);
-        var    surfVel  = av.GetSurfaceVelocity(body);
         double flux     = av.ComputeStagnationHeatFlux(density, surfVel);
         float fluxFactor  = (float)System.Math.Clamp(
             (flux - FluxThresh) / (FluxPeak - FluxThresh), 0.0, 1.0);
@@ -193,7 +243,7 @@ public partial class PhaseLightingController : Node
         if (mission?.InDescent == true && alt < 120_000.0)
         {
             Vector3d up = (av.Position - body.Position).Normalized;
-            double vUp = av.GetSurfaceVelocity(body).Dot(up);
+            double vUp = surfVel.Dot(up);
             if (vUp < -20.0)
             {
                 phaseFactor = mission.Phase switch

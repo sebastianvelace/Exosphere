@@ -50,6 +50,10 @@ Fase 77 promovida como `HUD_BODY_LOOKUP_BEHIND_PRESENTATION_GATE / CPU_PRESENTAT
 `HUDController` conserva input y comandos por frame, pero difiere el lookup del cuerpo
 dominante hasta la actualización de snapshot a 30 Hz.
 
+Fase 78 promovida como `PHASE_LIGHTING_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING_VISUAL`.
+`PhaseLightingController` muestrea cuerpo, atmósfera, flujo térmico y geometría solar a 20 Hz,
+mantiene sus writes visuales por frame y conserva la transmitancia directa a 10 Hz.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -325,6 +329,15 @@ presentación. La consulta ahora está dentro de la ruta de snapshot; input, thr
 toasts y fronteras de invalidación permanecen por frame.
 
 Informe: `PERF_HUD_BODY_LOOKUP_PHASE77_REPORT.md`.
+
+## Resultado de la fase 78 — muestra física de PhaseLightingController
+
+`PhaseLightingController` repetía cuerpo, altitud, densidad, velocidad, heat flux y geometría
+solar por frame. Ahora `SampleLightingState` refresca esas entradas a 20 Hz, fuerza refresh al
+cambiar de nave/universo y reutiliza la velocidad para la componente radial de reentrada. Los
+blends, dirty-caches de Environment/luz y la transmitancia directa de 10 Hz permanecen intactos.
+
+Informe: `PERF_PHASE_LIGHTING_PRESENTATION_PHASE78_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
