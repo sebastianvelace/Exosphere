@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 
 /// <summary>
@@ -57,8 +58,14 @@ public partial class LaunchEffectsController : Node3D
     private float _intensity;
     private bool _emitting;
     private float _ignitionAge;
-
-    // Cached Earth body id check result is cheap; we just re-resolve each frame.
+    private const double PhysicsSamplePeriodSeconds = 1.0 / 20.0;
+    private double _physicsSampleTimer;
+    private Vessel? _sampledVessel;
+    private Universe? _sampledUniverse;
+    private bool _sampledStateValid;
+    private float _sampledTarget;
+    private double _sampledAltitude;
+    private Vector3 _sampledUp = Vector3.Up;
 
     public override void _Ready()
     {
@@ -89,34 +96,25 @@ public partial class LaunchEffectsController : Node3D
     {
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
-        if (bridge == null || vessel == null)
+        var universe = bridge?.Universe;
+        _physicsSampleTimer -= System.Math.Max(0.0, delta);
+        if (_physicsSampleTimer <= 0.0
+            || !ReferenceEquals(vessel, _sampledVessel)
+            || !ReferenceEquals(universe, _sampledUniverse))
+        {
+            _physicsSampleTimer = PhysicsSamplePeriodSeconds;
+            _sampledVessel = vessel;
+            _sampledUniverse = universe;
+            SampleLaunchState(vessel, universe);
+        }
+
+        if (!_sampledStateValid)
         {
             FadeOut(delta);
             return;
         }
 
-        // Dominant body must be Earth for a pad launch.
-        var body = bridge.Universe?.GetDominantBody(vessel.Position);
-        if (body == null || body.Id != "earth")
-        {
-            FadeOut(delta);
-            return;
-        }
-
-        // Engines must be lit (firing engines present) AND throttle open.
-        bool lit = vessel.Throttle > MinThrottle && vessel.HasActiveEngineParts;
-
-        double altitude = vessel.GetAltitude(body); // metres
-        bool onPad = altitude < TriggerCeilingM;
-
-        // Target intensity: full near the deck, easing to zero by the ceiling.
-        float target = 0f;
-        if (lit && onPad)
-        {
-            float t = ((float)altitude - FullIntensityM) /
-                      (TriggerCeilingM - FullIntensityM);
-            target = 1f - Mathf.Clamp(t, 0f, 1f); // 1 at/under FullIntensityM → 0 at ceiling
-        }
+        float target = _sampledTarget;
 
         // Starbase's deluge is already flowing when the Raptors light. Seed a
         // substantial cloud on the ignition edge instead of visually ramping
@@ -142,21 +140,53 @@ public partial class LaunchEffectsController : Node3D
         // Up direction = radial from planet centre to vessel, in render space the
         // floating origin keeps the vessel at (0,0,0), so the ground sits at
         // -up * altitudeUnits below us.
-        Vector3 up = ToGodot((vessel.Position - body.Position).Normalized);
-        if (up.LengthSquared() < 1e-6f) up = Vector3.Up;
-
-        float altUnits = (float)(altitude / MetresPerUnit);
-        _pivot.Position = -up * altUnits;
+        float altUnits = (float)(_sampledAltitude / MetresPerUnit);
+        _pivot.Position = -_sampledUp * altUnits;
 
         // Orient pivot so its local +Y aligns with planet up (cloud rolls "out"
         // in the local XZ plane and boils up along +Y).
-        AlignUp(_pivot, up);
+        AlignUp(_pivot, _sampledUp);
 
         // ── Drive the layers ──────────────────────────────────────────────────
         SetEmitting(true);
         DriveAmounts(_intensity);
         _ignitionAge += (float)delta;
         DriveImmediateSteam(_intensity, _ignitionAge);
+    }
+
+    private void SampleLaunchState(Vessel? vessel, Universe? universe)
+    {
+        _sampledStateValid = false;
+        _sampledTarget = 0f;
+        _sampledAltitude = 0.0;
+        _sampledUp = Vector3.Up;
+
+        if (vessel == null || universe == null) return;
+
+        // Dominant body must be Earth for a pad launch.
+        var body = universe.GetDominantBody(vessel.Position);
+        if (body == null || body.Id != "earth") return;
+
+        double altitude = vessel.GetAltitude(body); // metres
+        bool lit = vessel.Throttle > MinThrottle && vessel.HasActiveEngineParts;
+        bool onPad = altitude < TriggerCeilingM;
+
+        // Target intensity: full near the deck, easing to zero by the ceiling.
+        float target = 0f;
+        if (lit && onPad)
+        {
+            float t = ((float)altitude - FullIntensityM) /
+                      (TriggerCeilingM - FullIntensityM);
+            target = 1f - Mathf.Clamp(t, 0f, 1f); // 1 at/under FullIntensityM → 0 at ceiling
+        }
+
+        Vector3 up = ToGodot((vessel.Position - body.Position).Normalized);
+        if (up.LengthSquared() < 1e-6f) up = Vector3.Up;
+
+        _sampledStateValid = true;
+        _sampledTarget = target;
+        _sampledAltitude = altitude;
+        _sampledUp = up;
     }
 
     // ── Per-frame intensity → emission amount (no per-frame allocations) ──────
