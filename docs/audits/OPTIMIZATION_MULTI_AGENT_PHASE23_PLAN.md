@@ -38,6 +38,10 @@ Fase 74 promovida como `STARFIELD_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING
 `StarfieldController` mantiene camera recenter por frame, pero muestrea fade atmosférico y
 air-streaks a 20 Hz con setters dirty-gated.
 
+Fase 75 promovida como `LAUNCH_EFFECTS_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING_VISUAL`.
+`LaunchEffectsController` muestrea cuerpo, altitud y gate de ignition a 20 Hz, manteniendo la
+animación de partículas y MultiMesh por frame.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -284,6 +288,16 @@ fuerzan refresh y la malla única no se reconstruye.
 
 No se modificaron el floating origin, la cámara, los umbrales de fade/streaks ni la física.
 Informe: `PERF_STARFIELD_PRESENTATION_PHASE74_REPORT.md`.
+
+## Resultado de la fase 75 — muestra física del deluge de lanzamiento
+
+`LaunchEffectsController` consultaba cuerpo, altitud, throttle y presencia de motores cada
+frame. Ahora `SampleLaunchState` refresca la condición a 20 Hz, fuerza refresh al cambiar de
+nave/universo y deja `DriveAmounts`, `DriveImmediateSteam` e `_ignitionAge` a frecuencia de
+render. `SetEmitting` continúa dirty-gated.
+
+No se modificaron los gates de Earth, hold-down/ignition, throttle ni las partículas. Informe:
+`PERF_LAUNCH_EFFECTS_PRESENTATION_PHASE75_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
