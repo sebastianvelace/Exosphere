@@ -22,6 +22,10 @@ CPU_PRESENTATION_PENDING_VISUAL`. El plasma conserva el flujo térmico y los gat
 existentes, pero muestrea sus entradas a 20 Hz y evita escrituras redundantes de visibilidad;
 la física térmica y la autoridad de destrucción/captura no se modifican.
 
+Fase 71 promovida como `CAMERA_SHAKE_PHYSICS_SAMPLE / CPU_PRESENTATION_PENDING_VISUAL`.
+`CameraShake` muestrea densidad, velocidad, thrust y drag a 20 Hz, conserva la integración de
+envolventes y osciladores por frame, y fuerza refresh al cambiar de nave/escena.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -226,6 +230,17 @@ umbrales, dentro de la nueva cadencia.
 No se movió `ComputeStagnationHeatFlux`, `ReentryPlasmaVisualIntensity`, el modelo térmico ni
 ninguna autoridad de `Vessel`. La reducción es exclusivamente de CPU/presentación, con un
 máximo de 50 ms de antigüedad visual. Informe: `PERF_REENTRY_PLASMA_PRESENTATION_PHASE70_REPORT.md`.
+
+## Resultado de la fase 71 — muestra física acotada para CameraShake
+
+`CameraShake` leía densidad, velocidad de superficie, thrust y drag cada frame para alimentar
+envolventes que ya se suavizaban por separado. Ahora esas entradas se actualizan a 20 Hz y el
+suavizado, ruido, zoom y límites de cockpit permanecen a frecuencia de render. Los cambios de
+`Vessel` o `Universe` fuerzan una muestra para no arrastrar estado entre escenas.
+
+No se modificaron las ecuaciones de presión dinámica, thrust, drag ni la física determinista.
+El máximo de antigüedad visual es 50 ms. Informe:
+`PERF_CAMERA_SHAKE_PHYSICS_SAMPLE_PHASE71_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
