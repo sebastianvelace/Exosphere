@@ -34,12 +34,17 @@ public partial class VesselRenderer : Node3D
     private double _flapInputTimer;
     private double _landingGearMotionDelta;
     private float _lastGlow = float.NaN;
+    private CelestialBody? _cachedPresentationBody;
+    private double _cachedPresentationAltitude;
+    private double _cachedPresentationPressureRatio;
+    private double _presentationSampleTimer;
     private static EngineDefinitionCatalog? _engineCatalog;
     private static bool _engineCatalogLoadAttempted;
 
     private const double EngineVisualPeriodSeconds = 1.0 / 30.0;
     private const double ThermalVisualPeriodSeconds = 1.0 / 15.0;
     private const double SecondaryVisualPeriodSeconds = 1.0 / 20.0;
+    private const double PresentationSamplePeriodSeconds = 1.0 / 20.0;
 
     private sealed class FlapRig
     {
@@ -1182,30 +1187,37 @@ public partial class VesselRenderer : Node3D
         // while hidden), keeping re-entry and cockpit exit visually synchronized.
         if (!Visible || TargetVessel == null) return;
 
-        var universe = SimulationBridge.Instance?.Universe;
-        var body = universe?.GetDominantBody(TargetVessel.Position);
-        double alt = body != null ? TargetVessel.GetAltitude(body) : 0.0;
+        _presentationSampleTimer -= System.Math.Max(0.0, delta);
+        if (_presentationSampleTimer <= 0.0)
+        {
+            _presentationSampleTimer = PresentationSamplePeriodSeconds;
+            RefreshPresentationSample();
+        }
+
+        var body = _cachedPresentationBody;
+        double alt = _cachedPresentationAltitude;
 
         _engineVisualTimer -= System.Math.Max(0.0, delta);
         if (_engineVisualTimer <= 0.0)
         {
             _engineVisualTimer = EngineVisualPeriodSeconds;
-            double pressureRatio = body?.Atmosphere != null
-                ? System.Math.Clamp(TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
-                : 0.0;
             // Commanded throttle is not the same as delivered thrust during chill/spin/ignition
             // or after an engine-out. Keep the plume consistent with the physical engine
             // telemetry; the pad startup controller supplies the separate pre-chamber glow.
-            TargetVessel.FillEngineReadouts(body, _engineReadoutScratch);
+            TargetVessel.FillEngineReadoutsAtPressure(
+                _engineReadoutScratch,
+                _cachedPresentationPressureRatio * 101_325.0);
             float throttle = (float)EngineHudPresentation.DeliveredThrottle(
                 _engineReadoutScratch);
-            _plumes?.Update(throttle, _hasSuperHeavy, alt, pressureRatio, _selectedShipEngines);
+            _plumes?.Update(throttle, _hasSuperHeavy, alt,
+                _cachedPresentationPressureRatio, _selectedShipEngines);
             if (_usesGenericPlumes && _plumes != null)
             {
                 _perEngineThrottle.Clear();
                 foreach (var row in _engineReadoutScratch)
                     _perEngineThrottle[row.InstanceId] = row.Throttle;
-                _plumes.UpdateGeneric(_perEngineThrottle, alt, pressureRatio);
+                _plumes.UpdateGeneric(_perEngineThrottle, alt,
+                    _cachedPresentationPressureRatio);
             }
         }
 
@@ -1299,6 +1311,32 @@ public partial class VesselRenderer : Node3D
         }
 
         UpdateTileCharring(body);
+    }
+
+    // VesselRenderer is presentation-only. Body selection, altitude and ambient pressure
+    // are sampled once at the secondary-visual cadence and reused by plumes, flaps and
+    // thermal materials. Universe.Tick and all gameplay consumers retain their own live
+    // physics queries; this cache only bounds redundant renderer-side reads.
+    private void RefreshPresentationSample()
+    {
+        if (TargetVessel == null)
+        {
+            _cachedPresentationBody = null;
+            _cachedPresentationAltitude = 0.0;
+            _cachedPresentationPressureRatio = 0.0;
+            return;
+        }
+
+        var universe = SimulationBridge.Instance?.Universe;
+        var body = universe?.GetDominantBody(TargetVessel.Position);
+        _cachedPresentationBody = body;
+        _cachedPresentationAltitude = body != null
+            ? TargetVessel.GetAltitude(body)
+            : 0.0;
+        _cachedPresentationPressureRatio = body?.Atmosphere != null
+            ? System.Math.Clamp(
+                TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
+            : 0.0;
     }
 
     private float ComputeFlapDeployment(CelestialBody? body)
@@ -2979,6 +3017,10 @@ public partial class VesselRenderer : Node3D
         _parachuteStateTimer = 0.0;
         _flapInputTimer = 0.0;
         _lastGlow = float.NaN;
+        _cachedPresentationBody = null;
+        _cachedPresentationAltitude = 0.0;
+        _cachedPresentationPressureRatio = 0.0;
+        _presentationSampleTimer = 0.0;
         _hullMesh = null;
     }
 

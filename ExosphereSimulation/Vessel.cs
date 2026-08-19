@@ -440,6 +440,17 @@ public class Vessel
         Parts.FillEngineReadouts(GetAmbientPressure(body), destination);
 
     /// <summary>
+    /// Fills presentation telemetry using a caller-owned ambient-pressure sample. This is
+    /// intentionally separate from the live-body overload: renderers may reuse a bounded
+    /// visual sample without making the physical pressure query part of their VFX cadence.
+    /// It does not mutate vessel or engine state.
+    /// </summary>
+    public void FillEngineReadoutsAtPressure(
+        List<EngineReadout> destination,
+        double ambientPressurePa) =>
+        Parts.FillEngineReadouts(ambientPressurePa, destination);
+
+    /// <summary>
     /// Fills engine telemetry and returns the aggregate values computed during that same
     /// pass. This avoids repeating the active-stage thrust/mass-flow queries in HUD code.
     /// </summary>

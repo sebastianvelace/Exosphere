@@ -45,6 +45,14 @@ require_text "$RENDERER" 'EngineVisualPeriodSeconds = 1.0 / 30.0' \
   "engine visual cadence guard missing"
 require_text "$RENDERER" 'ThermalVisualPeriodSeconds = 1.0 / 15.0' \
   "thermal visual cadence guard missing"
+require_text "$RENDERER" 'PresentationSamplePeriodSeconds = 1.0 / 20.0' \
+  "renderer physics sample cadence missing"
+require_text "$RENDERER" 'RefreshPresentationSample();' \
+  "renderer presentation sample refresh missing"
+require_text "$RENDERER" '_cachedPresentationPressureRatio' \
+  "renderer cached atmospheric pressure missing"
+require_text "$RENDERER" 'private void RefreshPresentationSample()' \
+  "renderer presentation sample helper missing"
 require_text "$RENDERER" 'if (_shipSteelMats.Count == 0 && _tileZoneMats.Count == 0) return;' \
   "non-Starship thermal query skip missing"
 
@@ -135,4 +143,4 @@ gate_line="$(rg -n --fixed-strings 'if (!presentationBoundaryChanged' "$HUD_CONT
 (( input_line < gate_line )) || fail "HUD input is behind presentation cadence gate"
 (( toast_line < gate_line )) || fail "HUD toast timer is behind presentation cadence gate"
 
-echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz, exterior/thermal gated, HUD cluster bounded, VAB=demand-driven)"
+echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz, exterior sample=20Hz, thermal gated, HUD cluster bounded, VAB=demand-driven)"

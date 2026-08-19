@@ -28,8 +28,10 @@ rg -q --fixed-strings 'out EngineTelemetrySummary summary' "$PART_GRAPH" \
   || fail "PartGraph aggregate telemetry API missing"
 rg -q --fixed-strings 'telemetry.ThrustN' "$HUD" \
   || fail "EngineGridHUD does not consume aggregate telemetry"
-rg -q --fixed-strings 'TargetVessel.FillEngineReadouts(body, _engineReadoutScratch);' "$RENDERER" \
-  || fail "VesselRenderer does not use the reusable telemetry buffer"
+if ! rg -q --fixed-strings 'TargetVessel.FillEngineReadouts(body, _engineReadoutScratch);' "$RENDERER" \
+  && ! rg -q --fixed-strings 'TargetVessel.FillEngineReadoutsAtPressure(' "$RENDERER"; then
+  fail "VesselRenderer does not use the reusable telemetry buffer"
+fi
 if rg -q --fixed-strings 'vessel.GetEngineReadouts(body)' "$HUD"; then
   fail "EngineGridHUD still enumerates compatibility telemetry"
 fi

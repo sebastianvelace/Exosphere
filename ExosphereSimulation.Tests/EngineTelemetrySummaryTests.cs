@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using System.Diagnostics;
+using Exosphere.Simulation;
 using Exosphere.Simulation.Data;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Parts;
@@ -75,6 +76,27 @@ public sealed class EngineTelemetrySummaryTests
         Assert.Equal(graph.GetCurrentThrust(0.0), summary.ThrustN, 8);
         Assert.Equal(graph.GetCurrentMassFlow(0.0), summary.MassFlowKgS, 8);
         Assert.Equal(3, engine.SelectedEngineCount);
+    }
+
+    [Fact]
+    public void VesselPresentationFillUsesProvidedPressureWithoutChangingRows()
+    {
+        var catalog = PartCatalog.LoadFromDirectory(
+            Path.Combine(FindRepoRoot().FullName, "data", "parts"));
+        var booster = new Part(catalog["super_heavy_booster"], "presentation-pressure-booster");
+        var vessel = new Vessel("presentation-pressure-vessel");
+        vessel.Parts.SetRoot(booster);
+
+        for (int i = 0; i < 100; i++)
+            booster.AdvanceEngineRuntime(1.0, 0.02);
+
+        var expectedRows = new List<EngineReadout>(33);
+        var sampledRows = new List<EngineReadout>(33);
+        vessel.Parts.FillEngineReadouts(SeaLevelPressure, expectedRows);
+        vessel.FillEngineReadoutsAtPressure(sampledRows, SeaLevelPressure);
+
+        Assert.Equal(expectedRows, sampledRows);
+        Assert.Equal(33, sampledRows.Count);
     }
 
     [Fact]
