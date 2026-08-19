@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 
 /// <summary>
 /// Renders a Prandtl-Glauert condensation ring around the rocket body
@@ -12,11 +13,15 @@ public partial class MaxQRingController : Node3D
 {
     private MeshInstance3D? _ring;
     private StandardMaterial3D? _mat;
+    private double _visualSampleTimer;
+    private Vessel? _lastSampledVessel;
+    private bool _lastHasSuperHeavy;
 
-    const double Q_THRESH = 12_000.0;   // Pa: ring starts appearing
-    const double Q_PEAK   = 35_000.0;   // Pa: ring at full opacity
-    const double RHO0     = 1.225;      // kg/m³ sea-level air density
-    const double H_SCALE  = 8500.0;     // m  atmosphere scale height
+    private const double VisualSamplePeriodSeconds = 1.0 / 20.0;
+    private const double Q_THRESH = 12_000.0;   // Pa: ring starts appearing
+    private const double Q_PEAK   = 35_000.0;   // Pa: ring at full opacity
+    private const double RHO0     = 1.225;      // kg/m³ sea-level air density
+    private const double H_SCALE  = 8500.0;     // m  atmosphere scale height
 
     public override void _Ready()
     {
@@ -54,10 +59,19 @@ public partial class MaxQRingController : Node3D
     {
         if (_ring == null || _mat == null) return;
 
+        _visualSampleTimer -= System.Math.Max(0.0, delta);
+        if (_visualSampleTimer > 0.0) return;
+        _visualSampleTimer = VisualSamplePeriodSeconds;
+
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var earth  = bridge?.Universe.GetBody("earth");
-        if (vessel == null || earth == null) { _ring.Visible = false; return; }
+        if (vessel == null || earth == null)
+        {
+            SetRingVisible(false);
+            _lastSampledVessel = null;
+            return;
+        }
 
         double alt      = vessel.GetAltitude(earth);
         double relSpeed = (vessel.Velocity - earth.Velocity).Magnitude;
@@ -68,17 +82,21 @@ public partial class MaxQRingController : Node3D
 
         if (intensity < 0.01)
         {
-            _ring.Visible = false;
+            SetRingVisible(false);
             return;
         }
 
-        _ring.Visible = true;
+        SetRingVisible(true);
 
         // Ring follows vessel (at render origin); position at Starship body midpoint
         // Rough heuristic: standalone Starship CoM is at y≈8; full stack is at y≈30.
-        bool hasSH = vessel.Parts.Parts.Any(
-            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
-        _ring.Position = new Vector3(0, hasSH ? 30f : 8f, 0);
+        bool hasSH = HasSuperHeavy(vessel);
+        if (!ReferenceEquals(vessel, _lastSampledVessel) || hasSH != _lastHasSuperHeavy)
+        {
+            _lastSampledVessel = vessel;
+            _lastHasSuperHeavy = hasSH;
+            _ring.Position = new Vector3(0, hasSH ? 30f : 8f, 0);
+        }
 
         // Flicker to simulate condensation turbulence
         float flicker  = 0.75f + (float)(GD.Randf() * 0.50f);
@@ -89,5 +107,24 @@ public partial class MaxQRingController : Node3D
         // Ring slightly squashes in ascent to form an ellipse perpendicular to velocity
         float squat = Mathf.Lerp(1.0f, 0.25f, (float)intensity);
         _ring.Scale = new Vector3(1f, squat, 1f);
+    }
+
+    private void SetRingVisible(bool visible)
+    {
+        if (_ring != null && _ring.Visible != visible)
+            _ring.Visible = visible;
+    }
+
+    private static bool HasSuperHeavy(Vessel vessel)
+    {
+        var parts = vessel.Parts.Parts;
+        for (int partIndex = 0; partIndex < parts.Count; partIndex++)
+        {
+            var part = parts[partIndex];
+            if (part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("booster"))
+                return true;
+        }
+        return false;
     }
 }
