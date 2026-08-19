@@ -1,6 +1,6 @@
 # Plan operativo de optimización multiagente — fase 23
 
-Estado: fase 64 promovida como `ENGINE_TELEMETRY_BATCH / CPU_PRESENTATION`: el HUD consume un snapshot agregado junto a sus filas y elimina reevaluaciones repetidas de thrust/flujo/Isp; fase 63 cerrada como `A/B_MEASURED / LOW_DIAGNOSTIC_ONLY`: el perfil oficial `0.60` conserva el valor predeterminado; `0.25` redujo aproximadamente 33.8% el render Earth en este host llvmpipe, pero queda sólo como probe por sensibilidad cromática de Venus denso y ausencia de GPU física; fase 62 integrada como consulta booleana de presencia de motores (`PROMOTED CPU/PRESENTATION`); scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure/ground; VFX de plumas Starship mantienen unidades agregadas; EventPipe externo pendiente
+Estado: fase 65 promovida como `PLANET_MESH_RESOURCE_REUSE / CPU_TRANSITION_ONLY / FRAMEBUFFER_PENDING`: la presentación lazy comparte una única esfera procedural 96×48 entre cuerpos y conserva materiales por instancia; fase 64 promovida como `ENGINE_TELEMETRY_BATCH / CPU_PRESENTATION`: el HUD consume un snapshot agregado junto a sus filas y elimina reevaluaciones repetidas de thrust/flujo/Isp; fase 63 cerrada como `A/B_MEASURED / LOW_DIAGNOSTIC_ONLY`: el perfil oficial `0.60` conserva el valor predeterminado; `0.25` redujo aproximadamente 33.8% el render Earth en este host llvmpipe, pero queda sólo como probe por sensibilidad cromática de Venus denso y ausencia de GPU física; fase 62 integrada como consulta booleana de presencia de motores (`PROMOTED CPU/PRESENTATION`); scheduler distingue pausa/entrada inválida/no inicializado y exporta dispatches Mixed/Rails con contrato dinámico; catch-up sigue sin presupuesto ni deuda temporal por seguridad; integración del sky normalizada para calidades fraccionarias y transmitancia de iluminación cacheada a 10 Hz; terreno marciano lazy y diagnóstico de render/presentación; telemetría del scheduler integrada al playtest y consulta de warp sin duplicación; vistas estables del universo y consumo de propelente sin boxing por tick; enumeración interna de partes/motores, fallos programados, interpolación de motores y consumo runtime promovidos; hot-stage promovido; gameplay Starship corregido; reentrada normal con gate físico pendiente de framebuffer; HUD secundario, navball y captura del HUD principal limitados a cadencias acotadas; tiempo a periapsis calculado una vez por snapshot y consumido por el HUD; caches de invalidación para navegación, phase track y vista/densidad; resolver de cámara/renderer con reintentos acotados; consultas de torre indexadas en el puente de simulación; dirty cache de Environment/lighting/exposure/ground; VFX de plumas Starship mantienen unidades agregadas; EventPipe externo pendiente
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
@@ -113,6 +113,18 @@ La suite terminó en 701/701 y el startup headless pasó; el smoke framebuffer q
 por la propiedad incorrecta de `/tmp/.X11-unix`, por lo que no se declara un gate visual PASS.
 
 Informe: `PERF_ENGINE_TELEMETRY_BATCH_PHASE64_REPORT.md`.
+
+## Resultado de la fase 65 — reutilización de geometría planetaria lazy
+
+La carga inicial ya materializaba sólo el cuerpo dominante, pero cada transición posterior
+reconstruía la misma `SphereMesh` unitaria de 96×48. `SimulationBridge` ahora conserva una
+esfera compartida por instancia y mantiene el material override por planeta, sin alterar
+radios, eclipses, Saturno ni el estado físico.
+
+El arranque headless confirmó una sola marca `mesh_cache=created` y `simulation_loaded` en
+1318.1 ms; frente al baseline lazy de 1323.1 ms no se declara una mejora de startup por estar
+dentro del ruido. El beneficio pendiente es el hitch de Earth→Mars/Venus/Saturn, que requiere
+framebuffer y medición de memoria. Informe: `PERF_PLANET_MESH_CACHE_PHASE65_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
