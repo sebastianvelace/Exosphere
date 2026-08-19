@@ -1,7 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
-using System.Linq;
+using Exosphere.Simulation;
 
 /// <summary>
 /// Visual-only pre-liftoff engine startup: Raptor ignition glow, deck flare and
@@ -21,6 +21,15 @@ public partial class EngineStartupController : Node3D
     private StandardMaterial3D? _flareMat;
     private StandardMaterial3D? _deckMat;
     private float _intensity;
+    private const double PhysicsSamplePeriodSeconds = 1.0 / 20.0;
+    private double _physicsSampleTimer;
+    private Vessel? _sampledVessel;
+    private Universe? _sampledUniverse;
+    private bool _sampledStartup;
+    private bool _sampledPoseValid;
+    private float _sampledThrottle;
+    private double _sampledAltitude;
+    private Vector3 _sampledUp = Vector3.Up;
 
     public override void _Ready()
     {
@@ -33,35 +42,63 @@ public partial class EngineStartupController : Node3D
     {
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
-        var body = vessel != null ? bridge?.Universe.GetDominantBody(vessel.Position) : null;
-        if (bridge == null || vessel == null || body == null || body.Id != "earth")
+        var universe = bridge?.Universe;
+        _physicsSampleTimer -= System.Math.Max(0.0, delta);
+        if (_physicsSampleTimer <= 0.0
+            || !ReferenceEquals(vessel, _sampledVessel)
+            || !ReferenceEquals(universe, _sampledUniverse))
         {
-            Drive(0f, delta);
-            return;
+            _physicsSampleTimer = PhysicsSamplePeriodSeconds;
+            _sampledVessel = vessel;
+            _sampledUniverse = universe;
+            SampleStartupState(vessel, universe);
         }
 
-        bool hasBooster = vessel.Parts.Parts.Any(
-            p => p.Definition.IsStarshipFamily && p.Definition.HasVehicleRole("booster"));
-        double altitude = vessel.GetAltitude(body);
-        bool startup = hasBooster
-            && vessel.IsGroundHeld
-            && vessel.HasActiveEngineParts
-            && vessel.Throttle > 0.01
-            && altitude < MaxStartupAltitudeM;
-
-        float throttle = startup ? (float)vessel.Throttle : 0f;
-        Drive(throttle, delta);
+        Drive(_sampledThrottle, delta);
 
         if (_intensity <= 0.01f)
             return;
 
+        // Preserve the last valid render anchor while the glow fades during a scene/body
+        // transition. The previous controller also left the node in place in this state.
+        if (!_sampledPoseValid)
+            return;
+
+        float altUnits = (float)(_sampledAltitude / MetresPerUnit);
+        Position = -_sampledUp * altUnits;
+        AlignUp(this, _sampledUp);
+    }
+
+    private void SampleStartupState(Vessel? vessel, Universe? universe)
+    {
+        _sampledStartup = false;
+        _sampledPoseValid = false;
+        _sampledThrottle = 0f;
+        _sampledAltitude = 0.0;
+        _sampledUp = Vector3.Up;
+
+        if (vessel == null || universe == null) return;
+
+        var body = universe.GetDominantBody(vessel.Position);
+        if (body == null || body.Id != "earth") return;
+
+        double altitude = vessel.GetAltitude(body);
         Vector3 up = ToGodot((vessel.Position - body.Position).Normalized);
         if (up.LengthSquared() < 1e-6f)
             up = Vector3.Up;
 
-        float altUnits = (float)(altitude / MetresPerUnit);
-        Position = -up * altUnits;
-        AlignUp(this, up);
+        bool hasBooster = HasSuperHeavy(vessel);
+        _sampledStartup = hasBooster
+            && vessel.IsGroundHeld
+            && vessel.HasActiveEngineParts
+            && vessel.Throttle > 0.01
+            && altitude < MaxStartupAltitudeM;
+        _sampledThrottle = _sampledStartup
+            ? Mathf.Clamp((float)vessel.Throttle, 0f, 1f)
+            : 0f;
+        _sampledAltitude = altitude;
+        _sampledUp = up;
+        _sampledPoseValid = true;
     }
 
     private void Drive(float targetThrottle, double delta)
@@ -129,6 +166,19 @@ public partial class EngineStartupController : Node3D
     {
         if (_steam != null) _steam.Emitting = on;
         if (_sparks != null) _sparks.Emitting = on;
+    }
+
+    private static bool HasSuperHeavy(Vessel vessel)
+    {
+        var parts = vessel.Parts.Parts;
+        for (int partIndex = 0; partIndex < parts.Count; partIndex++)
+        {
+            var part = parts[partIndex];
+            if (part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("booster"))
+                return true;
+        }
+        return false;
     }
 
     private void BuildVisuals()
