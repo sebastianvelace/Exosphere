@@ -17,6 +17,11 @@ Fase 69 promovida como `MAXQ_RING_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING
 El anillo de condensación calcula sus entradas a 20 Hz y evita setters de visibilidad/pose
 cuando no cambian; sus umbrales y ecuación de presión dinámica permanecen iguales.
 
+Fase 70 promovida como `REENTRY_PLASMA_PRESENTATION_SAMPLE /
+CPU_PRESENTATION_PENDING_VISUAL`. El plasma conserva el flujo térmico y los gates visuales
+existentes, pero muestrea sus entradas a 20 Hz y evita escrituras redundantes de visibilidad;
+la física térmica y la autoridad de destrucción/captura no se modifican.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -208,6 +213,19 @@ reducción es de presentación; el anillo no participa en fuerzas, guiado ni tel
 CI final: `EXIT=0`, xUnit `702/702 PASS`, contratos `46/46 PASS`, builds sin warnings/errores y
 smoke Flight/Construction headless PASS. El framebuffer visual sigue pendiente por X11/Xvfb.
 Informe: `PERF_MAXQ_RING_PRESENTATION_PHASE69_REPORT.md`.
+
+## Resultado de la fase 70 — muestra cacheada del plasma de reentrada
+
+`ReentryPlasmaController` consultaba densidad, velocidad, flujo de calor y forma del vehículo
+en cada frame, y reescribía visibilidad, shader y materiales aun cuando el plasma estaba
+apagado. Ahora toma una muestra de presentación a 20 Hz, cambia visibilidad sólo cuando hay
+un dirty transition y usa un recorrido indexado para detectar Super Heavy. El shock, wake y
+los heat glows localizados siguen actualizándose con las mismas ecuaciones y los mismos
+umbrales, dentro de la nueva cadencia.
+
+No se movió `ComputeStagnationHeatFlux`, `ReentryPlasmaVisualIntensity`, el modelo térmico ni
+ninguna autoridad de `Vessel`. La reducción es exclusivamente de CPU/presentación, con un
+máximo de 50 ms de antigüedad visual. Informe: `PERF_REENTRY_PLASMA_PRESENTATION_PHASE70_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
