@@ -4,6 +4,11 @@ Estado: fase 66 promovida como `SOLAR_GEOMETRY_SNAPSHOT / CPU_PRESENTATION`: Sun
 Fecha: 2026-08-14  
 Base: `main` después de la fase 27; esta corrección añade regresiones de gameplay y reentrada
 
+Actualización 2026-08-18: fase 67 promovida como `VESSEL_PRESENTATION_SAMPLE_CACHE /
+CPU_PRESENTATION`. `VesselRenderer` selecciona cuerpo, altitud y presión una vez a 20 Hz y
+reutiliza la muestra para plumas, flaps y térmica; la física del universo conserva sus
+consultas y cadences propias.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -136,6 +141,29 @@ confirma `mode=shared` y `consumer=sky cache_hit=True`.
 La reducción estructural es de 224 a 140 evaluaciones por segundo en el fixture de siete
 cuerpos no solares (**37.5%** menos). Esto es CPU de presentación y no una medición de FPS.
 Informe: `PERF_SOLAR_GEOMETRY_CACHE_PHASE66_REPORT.md`.
+
+## Resultado de la fase 67 — muestra cacheada del renderer exterior
+
+`VesselRenderer` consultaba `Universe.GetDominantBody`, altitud y presión atmosférica en cada
+frame visible, aunque las plumas se actualizan a 30 Hz y los flaps/tren a 20 Hz. La ruta ahora
+refresca una muestra de presentación a 20 Hz y la comparte con plumas, flaps y térmica. La
+primera entrada y cada reconstrucción de nave fuerzan una muestra; al ocultar el renderer no se
+hace ninguna consulta. `Universe.Tick`, `Vessel` y los sistemas de gameplay no consumen este
+cache ni reducen su frecuencia.
+
+En un cuerpo atmosférico, el caso típico pasa estructuralmente de 60 selecciones de cuerpo +
+60 altitudes + 60 presiones (presión explícita de pluma y la presión interna del llenado de
+filas) por segundo a una muestra compartida de 20 + 20 + 20 (**180 → 60 lecturas de API,
+66.7% menos**). El renderer usa un overload de presentación que recibe esa presión ya
+muestreada; el overload físico basado en cuerpo permanece intacto para HUD y simulación. Es una
+reducción de CPU de presentación calculada por cadencia, no una promesa de FPS ni una
+modificación de la física. El intervalo máximo de datos visuales obsoletos es 50 ms.
+
+Validación: contratos de cadencia/telemetría PASS; builds de la librería y Godot con 0
+warnings/0 errors; suite xUnit **702/702 PASS**; contratos de optimización **46/46 PASS**;
+Godot Flight headless/OpenGL3 exit 0 usando log temporal. La captura de framebuffer/FPS sigue
+pendiente porque este entorno no puede escribir su log persistente/Xvfb; no se publica una
+ganancia de FPS. Informe: `PERF_VESSEL_PRESENTATION_SAMPLE_PHASE67_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
