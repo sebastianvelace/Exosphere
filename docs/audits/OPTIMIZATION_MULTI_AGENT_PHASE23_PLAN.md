@@ -46,6 +46,10 @@ Fase 76 promovida como `VISUAL_EXPOSURE_PRESENTATION_SAMPLE / CPU_PRESENTATION_P
 `VisualExposureController` muestrea sus entradas atmosféricas y térmicas a 20 Hz, mantiene la
 adaptación ocular por frame y conserva la integración de transmitancia a 10 Hz.
 
+Fase 77 promovida como `HUD_BODY_LOOKUP_BEHIND_PRESENTATION_GATE / CPU_PRESENTATION`.
+`HUDController` conserva input y comandos por frame, pero difiere el lookup del cuerpo
+dominante hasta la actualización de snapshot a 30 Hz.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -312,6 +316,15 @@ de transmitancia directa conserva su cadencia de 10 Hz e invalidaciones existent
 
 No se modificaron la exposición física, el plasma, el LUT ni el floor de cockpit. Informe:
 `PERF_VISUAL_EXPOSURE_PRESENTATION_PHASE76_REPORT.md`.
+
+## Resultado de la fase 77 — lookup de cuerpo del HUD detrás del gate
+
+`HUDController` ya limitaba la captura pesada de telemetría a 30 Hz, pero resolvía el cuerpo
+dominante a 60 Hz antes del gate aunque sólo lo necesitaba para `Atmosphere.MaxAltitude` en la
+presentación. La consulta ahora está dentro de la ruta de snapshot; input, throttle, relay,
+toasts y fronteras de invalidación permanecen por frame.
+
+Informe: `PERF_HUD_BODY_LOOKUP_PHASE77_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 

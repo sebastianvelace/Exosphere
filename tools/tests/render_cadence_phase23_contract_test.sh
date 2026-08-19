@@ -140,7 +140,9 @@ require_text "$HUD_CONTROLLER" 'if (!presentationBoundaryChanged' \
 input_line="$(rg -n --fixed-strings 'if (Input.IsKeyPressed(Key.W))' "$HUD_CONTROLLER" | head -1 | cut -d: -f1)"
 toast_line="$(rg -n --fixed-strings 'UpdateDensityToast(delta);' "$HUD_CONTROLLER" | head -1 | cut -d: -f1)"
 gate_line="$(rg -n --fixed-strings 'if (!presentationBoundaryChanged' "$HUD_CONTROLLER" | head -1 | cut -d: -f1)"
+body_line="$(rg -n --fixed-strings 'var refBody = universe.GetDominantBody(vessel.Position);' "$HUD_CONTROLLER" | head -1 | cut -d: -f1)"
 (( input_line < gate_line )) || fail "HUD input is behind presentation cadence gate"
 (( toast_line < gate_line )) || fail "HUD toast timer is behind presentation cadence gate"
+(( body_line > gate_line )) || fail "HUD dominant-body lookup is outside presentation cadence gate"
 
 echo "render_cadence_phase23_contract_test: PASS (cockpit=30Hz, exterior sample=20Hz, thermal gated, HUD cluster bounded, VAB=demand-driven)"

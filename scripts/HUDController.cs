@@ -723,7 +723,6 @@ public partial class HUDController : Control
         var universe = bridge?.Universe;
         var mission  = MissionManager.Instance;
         if (bridge == null || vessel == null || universe == null) return;
-        var refBody = universe.GetDominantBody(vessel.Position);
 
         // ── Attitude / throttle ─────────────────────────────────────────────
         // Crewed craft fly an onboard FCS: stick writes the vessel directly and
@@ -847,6 +846,7 @@ public partial class HUDController : Control
             : "";
 
         double peAlt = snapshot.PeriapsisAltitudeM ?? double.NaN;
+        var refBody = universe.GetDominantBody(vessel.Position);
         double atmoMax = refBody.Atmosphere?.MaxAltitude ?? double.NaN;
 
         _lfValue.Text = $"{snapshot.LiquidFuelKg / 1000.0:F1} t";
