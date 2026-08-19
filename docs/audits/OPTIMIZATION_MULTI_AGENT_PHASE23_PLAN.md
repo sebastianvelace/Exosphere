@@ -26,6 +26,10 @@ Fase 71 promovida como `CAMERA_SHAKE_PHYSICS_SAMPLE / CPU_PRESENTATION_PENDING_V
 `CameraShake` muestrea densidad, velocidad, thrust y drag a 20 Hz, conserva la integración de
 envolventes y osciladores por frame, y fuerza refresh al cambiar de nave/escena.
 
+Fase 72 promovida como `AUDIO_PHYSICS_SAMPLE / CPU_PRESENTATION_PENDING_AUDIO_VISUAL`.
+`AudioManager` calcula niveles de audio desde una muestra física de 20 Hz, mantiene el llenado
+continuo de los generadores y conserva los gates de presión, Mach, flujo térmico y reentrada.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -241,6 +245,17 @@ suavizado, ruido, zoom y límites de cockpit permanecen a frecuencia de render. 
 No se modificaron las ecuaciones de presión dinámica, thrust, drag ni la física determinista.
 El máximo de antigüedad visual es 50 ms. Informe:
 `PERF_CAMERA_SHAKE_PHYSICS_SAMPLE_PHASE71_REPORT.md`.
+
+## Resultado de la fase 72 — muestra física acotada para AudioManager
+
+`AudioManager.UpdateLevels` consultaba el cuerpo, densidad, altitud, velocidad, presión dinámica,
+temperatura y flujo térmico cada frame. Ahora `SampleAudioLevels` refresca esas entradas a 20 Hz,
+fuerza una muestra al cambiar de nave/universo y deja el llenado de buffers, el suavizado de
+niveles y el timbre en la frecuencia de audio/presentación. La velocidad de superficie se
+reutiliza dentro de la muestra para el gate radial de plasma.
+
+No se modificaron el solver, las ecuaciones de q/Mach/heat flux, el gate de reentrada ni los
+generadores. Informe: `PERF_AUDIO_PHYSICS_SAMPLE_PHASE72_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
