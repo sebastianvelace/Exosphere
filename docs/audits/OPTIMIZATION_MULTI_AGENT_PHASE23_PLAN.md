@@ -9,6 +9,10 @@ CPU_PRESENTATION`. `VesselRenderer` selecciona cuerpo, altitud y presión una ve
 reutiliza la muestra para plumas, flaps y térmica; la física del universo conserva sus
 consultas y cadences propias.
 
+Fase 68 promovida como `LAUNCH_PAD_PRESENTATION_DIRTY_CACHE / CPU_PRESENTATION`. El pad muestrea
+estado de captura a 20 Hz, conserva interpolación suave de chopsticks, y evita escrituras
+repetidas de luces/poses cuando no cambian; la captura física sigue siendo autoritativa.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -164,6 +168,27 @@ warnings/0 errors; suite xUnit **702/702 PASS**; contratos de optimización **46
 Godot Flight headless/OpenGL3 exit 0 usando log temporal. La captura de framebuffer/FPS sigue
 pendiente porque este entorno no puede escribir su log persistente/Xvfb; no se publica una
 ganancia de FPS. Informe: `PERF_VESSEL_PRESENTATION_SAMPLE_PHASE67_REPORT.md`.
+
+## Resultado de la fase 68 — dirty-cache del pad y chopsticks
+
+`LaunchPadController` recorría la flota dos veces por frame para conocer si existía un vehículo
+armado o capturado, reescribía las ocho posiciones visuales de los chopsticks en cada frame y
+volvía a asignar `Visible` a todas las luces nocturnas aunque el día/noche no hubiera cambiado.
+La ruta ahora conserva el estado de captura muestreado a 20 Hz, interpola los brazos por frame
+para no perder suavidad y sólo escribe su pose cuando cambia más de `0.0001`. Las luces se
+actualizan sólo al cambiar el umbral nocturno. Los pads sin chopsticks salen antes de escanear
+la flota.
+
+No se movió ni relajó `Universe.EvaluateCatchContact`, `Vessel.IsCaught`, la guía de reentrada,
+la visibilidad especial del complejo durante EDL ni el criterio de dos pasadores. La demora
+máxima visual del estado es 50 ms y no puede crear un `CAUGHT` falso: el cierre sigue dependiendo
+de `CatchCaptured`, que sólo se alimenta desde `Vessel.IsCaught`.
+
+Validación final: contrato del pad PASS; CI `EXIT=0`; contratos de optimización `46/46 PASS`;
+builds `0 warnings/0 errors`; xUnit `702/702 PASS`; startup Flight y Construction headless PASS.
+El intento de framebuffer EDL no produjo harness/capturas en este host por la limitación
+X11/Xvfb, por lo que no se declara aceptación visual ni FPS. Informe reproducible:
+`PERF_LAUNCH_PAD_PRESENTATION_PHASE68_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
