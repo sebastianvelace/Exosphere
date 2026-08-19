@@ -13,6 +13,10 @@ Fase 68 promovida como `LAUNCH_PAD_PRESENTATION_DIRTY_CACHE / CPU_PRESENTATION`.
 estado de captura a 20 Hz, conserva interpolación suave de chopsticks, y evita escrituras
 repetidas de luces/poses cuando no cambian; la captura física sigue siendo autoritativa.
 
+Fase 69 promovida como `MAXQ_RING_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING_VISUAL`.
+El anillo de condensación calcula sus entradas a 20 Hz y evita setters de visibilidad/pose
+cuando no cambian; sus umbrales y ecuación de presión dinámica permanecen iguales.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -189,6 +193,21 @@ builds `0 warnings/0 errors`; xUnit `702/702 PASS`; startup Flight y Constructio
 El intento de framebuffer EDL no produjo harness/capturas en este host por la limitación
 X11/Xvfb, por lo que no se declara aceptación visual ni FPS. Informe reproducible:
 `PERF_LAUNCH_PAD_PRESENTATION_PHASE68_REPORT.md`.
+
+## Resultado de la fase 69 — muestra cacheada del anillo Max-Q
+
+`MaxQRingController` calculaba altitud, densidad, velocidad relativa, `q` y composición del
+vehículo cada frame, y reasignaba visibilidad aun cuando el efecto estaba oculto. La ruta ahora
+muestra esas entradas a 20 Hz, usa un recorrido indexado para detectar Super Heavy y sólo cambia
+visibilidad o posición cuando corresponde. El flicker y la actualización de alpha/escala se
+mantienen dentro de la nueva muestra visual, por lo que el efecto sigue reaccionando durante
+Max-Q sin pagar el coste a 60 Hz.
+
+No se modificaron `Q_THRESH`, `Q_PEAK`, la densidad exponencial ni ninguna ecuación física. La
+reducción es de presentación; el anillo no participa en fuerzas, guiado ni telemetría de vuelo.
+CI final: `EXIT=0`, xUnit `702/702 PASS`, contratos `46/46 PASS`, builds sin warnings/errores y
+smoke Flight/Construction headless PASS. El framebuffer visual sigue pendiente por X11/Xvfb.
+Informe: `PERF_MAXQ_RING_PRESENTATION_PHASE69_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
