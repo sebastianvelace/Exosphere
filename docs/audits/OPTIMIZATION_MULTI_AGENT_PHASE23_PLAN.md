@@ -34,6 +34,10 @@ Fase 73 promovida como `ENGINE_STARTUP_PRESENTATION_SAMPLE / CPU_PRESENTATION_PE
 `EngineStartupController` muestrea cuerpo, altitud, gates y composición del stack a 20 Hz, pero
 mantiene `Drive` y el suavizado de llama/partículas/luz por frame.
 
+Fase 74 promovida como `STARFIELD_PRESENTATION_SAMPLE / CPU_PRESENTATION_PENDING_VISUAL`.
+`StarfieldController` mantiene camera recenter por frame, pero muestrea fade atmosférico y
+air-streaks a 20 Hz con setters dirty-gated.
+
 ## Resultado de la fase 56 — resolución acotada de cámara y renderer
 
 La cámara conserva ahora sus referencias a `Camera3D`, `CockpitRenderer` y
@@ -270,6 +274,16 @@ durante el fade cuando el cuerpo/nave deja de ser válido, evitando un salto al 
 
 No se modificaron los gates de hold-down, motores, throttle, altitud ni la física de ignition.
 Informe: `PERF_ENGINE_STARTUP_PRESENTATION_PHASE73_REPORT.md`.
+
+## Resultado de la fase 74 — muestra atmosférica del starfield
+
+`StarfieldController` mantenía el recenter de cámara correcto, pero repetía cuerpo, altitud,
+densidad y velocidad por frame. Ahora sólo la señal atmosférica se muestra a 20 Hz y el recenter
+de cámara/transform de streaks continúa a frecuencia de render. Los cambios de nave/universo
+fuerzan refresh y la malla única no se reconstruye.
+
+No se modificaron el floating origin, la cámara, los umbrales de fade/streaks ni la física.
+Informe: `PERF_STARFIELD_PRESENTATION_PHASE74_REPORT.md`.
 
 ## Auditoría de gameplay Starship — cierre de la fase actual
 
