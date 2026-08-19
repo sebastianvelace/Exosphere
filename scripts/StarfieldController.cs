@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 
 /// <summary>
 /// Renders a dense starfield fixed in inertial space, providing a visual
@@ -47,6 +48,12 @@ public partial class StarfieldController : Node3D
     private StandardMaterial3D?   _streakMat;
 
     private float _currentAlpha = -1f;   // cached to avoid redundant shader writes
+    private const double SimulationSamplePeriodSeconds = 1.0 / 20.0;
+    private double _simulationSampleTimer;
+    private Vessel? _sampledVessel;
+    private Universe? _sampledUniverse;
+    private float _sampledTargetAlpha = 1f;
+    private bool _sampledStreaksOn;
 
     public override void _Ready()
     {
@@ -81,17 +88,45 @@ public partial class StarfieldController : Node3D
             _streaks.GlobalTransform = _camera.GlobalTransform;
 
         // ── Altitude fade + air-streak cue ─────────────────────────────────
-        UpdateFromSimulation();
+        UpdateFromSimulation(delta);
     }
 
-    private void UpdateFromSimulation()
+    private void UpdateFromSimulation(double delta)
     {
-        float targetAlpha = 1f;          // default fully visible if sim not ready
-        bool  streaksOn   = false;
-
         var bridge   = SimulationBridge.Instance;
         var vessel   = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
+
+        _simulationSampleTimer -= System.Math.Max(0.0, delta);
+        if (_simulationSampleTimer <= 0.0
+            || !ReferenceEquals(vessel, _sampledVessel)
+            || !ReferenceEquals(universe, _sampledUniverse))
+        {
+            _simulationSampleTimer = SimulationSamplePeriodSeconds;
+            _sampledVessel = vessel;
+            _sampledUniverse = universe;
+            SampleSimulationState(vessel, universe);
+        }
+
+        float targetAlpha = _sampledTargetAlpha;
+        bool streaksOn = _sampledStreaksOn;
+
+        if (!Mathf.IsEqualApprox(targetAlpha, _currentAlpha))
+        {
+            _currentAlpha = targetAlpha;
+            _starMat?.SetShaderParameter("alpha", targetAlpha);
+            if (_starMesh != null)
+                _starMesh.Visible = targetAlpha > 0.001f;
+        }
+
+        if (_streaks != null && _streaks.Emitting != streaksOn)
+            _streaks.Emitting = streaksOn;
+    }
+
+    private void SampleSimulationState(Vessel? vessel, Universe? universe)
+    {
+        float targetAlpha = 1f;          // default fully visible if sim not ready
+        bool  streaksOn   = false;
 
         if (vessel != null && universe != null)
         {
@@ -113,16 +148,8 @@ public partial class StarfieldController : Node3D
             }
         }
 
-        if (!Mathf.IsEqualApprox(targetAlpha, _currentAlpha))
-        {
-            _currentAlpha = targetAlpha;
-            _starMat?.SetShaderParameter("alpha", targetAlpha);
-            if (_starMesh != null)
-                _starMesh.Visible = targetAlpha > 0.001f;
-        }
-
-        if (_streaks != null && _streaks.Emitting != streaksOn)
-            _streaks.Emitting = streaksOn;
+        _sampledTargetAlpha = targetAlpha;
+        _sampledStreaksOn = streaksOn;
     }
 
     // ── Build the starfield as a single point-cloud mesh ──────────────────
