@@ -509,3 +509,48 @@ La revisión debe comprobar: ciudad/airglow visibles sin halo blanco amplio, est
 conservadas, limbo azul fino, `surfaceWhiteClipFrac < 0.20`, sin `neonGreenFrac` amplio
 y exposición estable. Sólo si esa comparación demuestra falta de lectura se ajustará
 `night_lights` o el término de limbo, con un nuevo A/B day/night y sin tocar la física.
+
+## Fase actual — VAB: escala de estudio y piso procedural (2026-08-20)
+
+### Hallazgo visual
+
+La captura histórica `/tmp/exo_visual_vab_selection_v1.png` mostró el Starship/Super
+Heavy sobre un fondo negro transparente, sin contacto, escala ni sombra de estudio.
+El vehículo se podía inspeccionar, pero el encuadre no permitía juzgar si flotaba, si
+la base estaba alineada o si los materiales del casco y los tiles tenían una lectura
+coherente. El defecto era de presentación del preview, no de `VesselRenderer` en Flight.
+
+### Corrección publicada
+
+`273b3f8` añade `PreviewFloor` sólo dentro del `SubViewport` de Construction:
+
+- plano procedural de 180×180 unidades con paneles, juntas, desgaste macro y grano;
+- shader aislado `assets/shaders/vab_floor.gdshader`, separado de la superficie de
+  lanzamiento;
+- posición derivada del mismo AABB renderizado que usa el auto-frame (`bottom - 0.08`),
+  de modo que un craft custom o un Starship staged no quede flotando ni atraviese el
+  piso;
+- visibilidad y procesamiento siguen siendo demand-driven: el piso se apaga cuando
+  el VAB está vacío y no cambia la física ni el coste de Flight.
+
+### Estado de aceptación
+
+| Gate | Resultado | Evidencia |
+|---|---|---|
+| Shader de piso aislado, juntas y grano | PASS | `vab_preview_lighting_contract_test.sh` |
+| Anclaje al AABB real de la geometría | PASS | contrato + build 0/0 |
+| VAB smoke y construcción | PASS | `vab_quick_check.sh`, 12 tests de construcción |
+| PNG nuevo con piso visible y sombra de contacto | PENDIENTE | X11/Wayland no disponible en esta VM |
+| Comparación de materiales Starship/tile sobre el piso | PENDIENTE | requiere framebuffer real |
+
+Captura obligatoria en un entorno con X11 funcional:
+
+```bash
+CAPTURE_VAB_SCENARIO=selection \
+CAPTURE_VAB_OUTPUT=/tmp/exosphere_vab_selection_floor.png \
+Godot --path . --script tools/capture_vab.gd
+```
+
+La revisión debe comprobar contacto visual del motor con el piso, juntas que no
+compitan con el vehículo, acero sin dominante dorada artificial, tiles distinguibles,
+ausencia de clipping y que el VAB vacío conserve el mensaje “NO VEHICLE ON THE FLOOR”.
