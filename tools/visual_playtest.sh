@@ -72,6 +72,7 @@ Options:
   --atmosphere-bodies  Capture explicit Mars/Venus day/orbit/night atmosphere cases.
   --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
+  --edl-yaw DEG Override the deterministic EDL exterior camera yaw in degrees (default 0).
   --orbital-reentry  Seed a Starbase Starship in circular orbit, arm the real map deorbit
                 autopilot, and verify normal atmospheric entry through tower catch.
   --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
@@ -182,6 +183,7 @@ while [[ $# -gt 0 ]]; do
     --atmosphere-bodies) MODE="atmosphere_bodies"; shift ;;
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
+    --edl-yaw) EDL_YAW_DEG="$2"; shift 2 ;;
     --orbital-reentry)
       MODE="orbital_reentry"
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -207,6 +209,13 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ ! "${EDL_YAW_DEG:-0}" =~ ^-?[0-9]+([.][0-9]+)?$ ]] \
+  || ! awk -v yaw="${EDL_YAW_DEG:-0}" 'BEGIN { exit !(yaw >= -180.0 && yaw <= 180.0) }'; then
+  echo "ERROR: --edl-yaw must be a number between -180 and 180 degrees" >&2
+  exit 2
+fi
+EDL_YAW_DEG="${EDL_YAW_DEG:-0}"
 
 if [[ ! "$RESOLUTION" =~ ^([0-9]{1,4})x([0-9]{1,4})$ ]]; then
   echo "ERROR: --resolution must use WIDTHxHEIGHT (for example 1280x720)" >&2
@@ -1254,6 +1263,8 @@ public partial class _PlaytestShot : Node
                 Finish("EDL_DEMO_START_FAILED");
                 return;
             }
+            CameraController.Instance?.SetExternalChaseFrame(${EDL_YAW_DEG}f, 12.0f, 28.0f);
+            _log.WriteLine("EDL_CAMERA yawDeg=${EDL_YAW_DEG} pitchDeg=12 distance=28");
             vessel = bridge.ActiveVessel!;
             body = universe.Bodies.First(b => b.Name == "Earth");
             bridge.SetTimeScale(3.0); // verification speed only; the HUD button starts at x1
