@@ -1,6 +1,6 @@
 # Next Visual Realism Specification
 
-**Date:** 2026-08-20  
+**Date:** 2026-08-20
 **Status:** Ready for next implementation session after `172dab7` and `a7176c7`.
 
 ## Goal
