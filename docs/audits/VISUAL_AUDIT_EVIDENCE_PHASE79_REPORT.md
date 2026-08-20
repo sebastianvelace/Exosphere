@@ -913,3 +913,81 @@ Evidencia post-cambio:
 Límite: la captura `liftoff` valida carga, composición y ausencia de geometría rota,
 pero todavía no es una comparación fotográfica fina contra metraje Starbase diurno;
 eso sigue como tarea visual de referencia.
+
+## Fase 101 — matriz espectral/atmosférica post-cambio y EDL multi-yaw
+
+Esta fase cierra la revisión fotográfica de los estados que faltaban después de la
+corrección de nubes de baja altitud, el suelo multi-escala y la presentación EDL. La
+ruta oficial continúa siendo RGB con LUT de orden 4; el orden espectral 5 que aparece
+en la telemetría es únicamente referencia CPU (`spectralOrder=5`) y no se conecta al
+renderer por frame.
+
+### Earth: altitud, ciclo solar y eclipses
+
+- Evidencia: `/tmp/exo_visual_atmosphere_v2/`, `SUMMARY reason=ATMOSPHERE_OK
+  frames=1729`, 20/20 capturas a 1280×720 con OpenGL3/llvmpipe.
+- `ground_day` no tiene clipping de superficie (`surfaceClippedFrac=0.00000`) y el
+  parche local muestra textura multi-escala. La matriz registra el ciclo esperado:
+  `45° DAY`, `-1° CIVIL_TWILIGHT`, `+1°` cálido y `-35° NIGHT`.
+- La captura A/B sin nubes `/tmp/exo_visual_atmosphere_low_nocloud_v1/` confirmó
+  que la banda horizontal anterior venía del shell volumétrico, no del suelo. La
+  captura corregida `/tmp/exo_visual_atmosphere_low_v6/` queda en
+  `clippedFrac=0.00000`, `horizonContrast=0.01391`, sin neon-green.
+- La captura `10km_day` conserva el horizonte suave y el suelo texturado
+  (`clippedFrac=0.00000`). A 70 km la textura de nube orbital es deliberadamente
+  clara y alcanza `surfaceClippedFrac=0.02646`; es clipping localizado de la capa
+  nubosa, no un framebuffer saturado. Se conserva como observación para una futura
+  calibración fotométrica con material de referencia.
+- La visibilidad solar de eclipse es monótona y físicamente gated: `clear=1.000000`,
+  `partial_central=0.351490`, `partial_limb=0.692239`, `total=0.000000`. La captura
+  total muestra estrellas y el limbo nocturno sin un disco solar directo.
+- `cockpit_120km_day` y `cockpit_120km_night` tienen exposición estable y HUD
+  legible; el día registra `clippedFrac=0.00880` y la noche `0.00314`, sin clipping
+  amplio ni emisión verde artificial.
+
+### Mars/Venus y presentación orbital
+
+- Evidencia: `/tmp/exo_visual_bodies_v4/`, `SUMMARY reason=ATMOSPHERE_BODIES_OK`.
+  Mars 10 km día/noche registra `clippedFrac=0.00004/0.00000`; Venus 10 km
+  día/noche `0.00000/0.00000`. Los casos orbitales no pierden identidad de cuerpo y
+  no tienen clipping de superficie amplio.
+- El relieve de Mars es una reconstrucción procedural acotada sobre su textura, no
+  topografía medida. Venus conserva una cubierta nubosa de baja frecuencia; los JSON
+  actuales siguen aportando RGB, no un espectro medido.
+
+### EDL, casco y chopsticks
+
+- Evidencia: `/tmp/exo_visual_edl_yaw0_v1/`, `/tmp/exo_visual_edl_yaw90_v1/` y
+  `/tmp/exo_visual_edl_yawminus90_v1/`. Las tres ejecuciones terminan en
+  `SUMMARY reason=CAUGHT`, `pins=2`, con el tower y ambos brazos presentes.
+- `yaw=0/90/-90` registra `relativeSpeed=0.029/0.032/0.028` y
+  `angularSpeed=0.000/0.000/0.000`; por tanto la captura depende de la condición
+  física de catch y no de una fotografía estática.
+- En el yaw nocturno lateral el casco se lee principalmente por silueta, mientras
+  que la pluma y la torre tienen más contraste. Esto es una limitación de iluminación
+  de la toma, no pérdida de la geometría de los palillos; queda como mejora de
+  iluminación de presentación y no se debe “resolver” aumentando sin límite la
+  emisión del acero.
+
+### Menú, campaña y VAB
+
+- `/tmp/exo_visual_menu_v1.png`, `/tmp/exo_visual_menu_campaign_v1.png`,
+  `/tmp/exo_visual_vab_empty_v1.png` y `/tmp/exo_visual_vab_selection_v1.png`
+  verifican el menú, modal centrado, VAB vacío y selección de Starship/Super Heavy.
+  No hay clipping de texto ni selección fuera del panel.
+
+### Verificación y límites de ejecución
+
+- Los cambios relevantes están separados en `172dab7` (realismo de suelo, atmósfera,
+  EDL y contratos) y `9a2a0be` (parámetro reproducible `--edl-yaw`).
+- La repetición de lanzamiento solicitada en esta sesión compiló con 0 warnings y 0
+  errores, pero no arrancó porque el entorno dejó `/tmp/.X11-unix` con propietario
+  `nobody` y Xvfb rechazó crear sockets. No se altera el repositorio para esconder
+  este bloqueo; las capturas framebuffer post-cambio ya existentes siguen siendo la
+  evidencia válida y el smoke/headless permanece separado de la validación visual.
+- La reconstrucción del suelo usa Blue Marble + detalle procedural acotado y no es
+  fotogrametría ni un heightmap local. La matriz se ejecuta en llvmpipe, por lo que
+  el coste medido allí no sustituye una medición en GPU objetivo.
+- Decisión: orden RGB 4 permanece oficial; orden 5 queda experimental/oráculo. No
+  hay base visual consistente para promoverlo ni para afirmar realismo fotográfico
+  absoluto de los materiales sin referencias calibradas por planeta.
