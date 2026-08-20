@@ -93,6 +93,12 @@ if ! grep -q -- '--atmosphere-orbit' "$HARNESS_SCRIPT" \
   echo "FAIL scaled-space Earth shader A/B harness is not wired" >&2
   exit 1
 fi
+if ! grep -q -- '--clear-solar-eclipse' "$HARNESS_SCRIPT" \
+  || ! grep -q 'SetVisualClearSolarOcclusion' "$ROOT/scripts/SunController.cs" \
+  || ! grep -q 'clearSolarEclipse' "$HARNESS_SCRIPT"; then
+  echo "FAIL deterministic clear-solar-eclipse visual fixture is not wired" >&2
+  exit 1
+fi
 if awk '
   /private void ProcessOrbitalReentry\(/ { inside = 1 }
   inside && /BeginReentryDemonstration/ { found = 1 }

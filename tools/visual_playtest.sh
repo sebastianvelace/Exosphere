@@ -34,6 +34,7 @@ CAMERA_PRESET=""
 VARIANT_FILE=""
 VARIANT_SITE=""
 VARIANT_PROFILE=""
+CLEAR_SOLAR_ECLIPSE=0
 SKIP_BUILD=0
 PROJECT_BACKUP=""
 APOLLO11_HARDWARE=0
@@ -80,6 +81,9 @@ Options:
   --sun-elevation DEG
                 Presentation-only solar elevation for comparable captures (range -90..90;
                 physical Sun position and forces remain unchanged).
+  --clear-solar-eclipse
+                Presentation-only EDL fixture: disable unrelated solar occlusion while
+                retaining physical Sun/Moon positions and physics.
   --camera-preset NAME
                 Deterministic composition: pad_side|tower_side|tracking|orbit_beauty|edl_side.
   --orbital-reentry  Seed a Starbase Starship in circular orbit, arm the real map deorbit
@@ -195,6 +199,7 @@ while [[ $# -gt 0 ]]; do
     --edl) MODE="edl"; shift ;;
     --edl-yaw) EDL_YAW_DEG="$2"; shift 2 ;;
     --sun-elevation) SUN_ELEVATION_DEG="$2"; shift 2 ;;
+    --clear-solar-eclipse) CLEAR_SOLAR_ECLIPSE=1; shift ;;
     --camera-preset) CAMERA_PRESET="$2"; shift 2 ;;
     --orbital-reentry)
       MODE="orbital_reentry"
@@ -2198,17 +2203,21 @@ public partial class _PlaytestShot : Node
             return;
 
         bool hasCameraPreset = VisualCameraPreset.Length > 0;
-        if (!HasVisualSunElevation && !hasCameraPreset)
+        bool clearSolarEclipse = "${CLEAR_SOLAR_ECLIPSE}" == "1";
+        if (!HasVisualSunElevation && !hasCameraPreset && !clearSolarEclipse)
         {
             _visualConfigurationApplied = true;
             return;
         }
         if ((HasVisualSunElevation && SunController.Instance == null)
+            || (clearSolarEclipse && SunController.Instance == null)
             || (hasCameraPreset && CameraController.Instance == null))
             return;
 
         if (HasVisualSunElevation)
             SunController.Instance!.SetVisualSunElevationOverride(VisualSunElevationDeg);
+        if (clearSolarEclipse)
+            SunController.Instance!.SetVisualClearSolarOcclusion(true);
 
         string phase = HasVisualSunElevation
             ? SunController.ClassifySolarPhase(VisualSunElevationDeg)
@@ -2216,7 +2225,8 @@ public partial class _PlaytestShot : Node
         _log.WriteLine(
             $"VISUAL_SUN override={HasVisualSunElevation} "
             + $"elevationDeg={(HasVisualSunElevation ? VisualSunElevationDeg.ToString("F2") : "physical")} "
-            + $"phase={phase} physicalSunPositionUnchanged=True");
+            + $"phase={phase} clearSolarEclipse={clearSolarEclipse} "
+            + $"physicalSunPositionUnchanged=True");
 
         if (hasCameraPreset)
         {
@@ -3355,6 +3365,11 @@ verify_pngs() {
       fi
     else
       echo "ERROR: deterministic EDL did not end in a verified catch or landing" >&2
+      return 1
+    fi
+    if (( CLEAR_SOLAR_ECLIPSE == 1 )) \
+      && ! grep -q 'VISUAL_SUN .*clearSolarEclipse=True .*physicalSunPositionUnchanged=True' "$LOG"; then
+      echo "ERROR: requested clear-solar-eclipse EDL fixture was not recorded" >&2
       return 1
     fi
   elif [[ "$MODE" == "orbital_reentry" ]]; then

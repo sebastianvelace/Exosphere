@@ -46,9 +46,23 @@ public partial class SunController : Node
     // teleporting the physical Sun body.  The override is presentation-only: eclipse
     // geometry, gravity and ephemeris state continue to use the real body positions.
     private double? _visualSunElevationOverrideDegrees;
+    // Presentation-only fixture for deterministic daylight captures. It never changes
+    // Sun/Moon positions, ephemeris, gravity or the physical eclipse calculation.
+    private bool _visualClearSolarOcclusion;
 
     /// <summary>Requested presentation-only solar elevation, or null for physical time.</summary>
     public double? VisualSunElevationOverrideDegrees => _visualSunElevationOverrideDegrees;
+
+    /// <summary>
+    /// Clears only the presentation-side solar-disc occlusion for a visual capture.
+    /// Physical positions and eclipse state remain authoritative in the simulation.
+    /// </summary>
+    public void SetVisualClearSolarOcclusion(bool clear)
+    {
+        _visualClearSolarOcclusion = clear;
+        _lastFedVisibility = -1f;
+        _solarGeometryReady = false;
+    }
 
     /// <summary>
     /// Applies a bounded solar-elevation override to render consumers.  This does not
@@ -221,6 +235,16 @@ public partial class SunController : Node
                 (float)direction.X, (float)direction.Y, (float)direction.Z);
             occluderAngularRadius = (float)MissionGeometry.ApparentAngularRadius(
                 bestOccluder.Radius, distance);
+        }
+        if (_visualClearSolarOcclusion)
+        {
+            visibility = 1.0;
+            atmosphericVisibility = 1.0;
+            lowestVisibility = 1.0;
+            bestOccluder = null;
+            occluderEnabled = false;
+            occluderDirection = Vector3.Zero;
+            occluderAngularRadius = 0.0f;
         }
         _solarGeometrySnapshot = new SolarGeometrySnapshot(
             atmosphereBodyId,
