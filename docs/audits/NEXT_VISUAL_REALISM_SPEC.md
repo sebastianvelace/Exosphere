@@ -1,7 +1,7 @@
 # Next Visual Realism Specification
 
 **Date:** 2026-08-20
-**Status:** Ready for next implementation session after `172dab7` and `a7176c7`.
+**Status:** In progress after `f633ab7` and `f0c4656`; daylight framebuffer review remains open.
 
 ## Goal
 
@@ -315,3 +315,82 @@ bash tools/visual_playtest.sh --orbit --run-id next-orbit --skip-build
 ```
 
 Manual review must inspect the PNGs, not just command exit codes.
+
+## Fase actual — hot-stage: anclaje y evidencia (2026-08-20)
+
+### Decisión
+
+El VFX de hot-stage queda anclado al plano de separación de Flight 7 y se activa
+al comenzar el solape de empuje, no al recibir la señal tardía de `VesselStaged`.
+La señal tardía se conserva sólo como respaldo para rutas de staging no estándar.
+La física, el consumo de propelente y la separación no se modifican.
+
+### Defecto reproducido
+
+La corrida previa `/tmp/exo_hotstage_anchor_compile_v4.log` registró en el hito de
+solape:
+
+```text
+VISUAL_HOTSTAGE slug=hotstage visible=False frameSynced=False interfaceY=25.36
+```
+
+El mismo proceso sólo mostraba el efecto en `hotstage_separation`. El origen antiguo
+estaba en `y≈0`, junto a las campanas del booster, aunque la geometría del stack
+sitúa la interfaz Ship/Super Heavy en `71 m / 2.8 = 25.36` unidades de render.
+
+### Corrección y prueba
+
+- `HotStageFlashController` usa `HotStageInterfaceRenderY = 25.36` para pluma,
+  anillo, hollín y luz.
+- El root replica posición y orientación de `ActiveVesselRenderer`, respetando
+  FloatingOrigin durante pitch/yaw.
+- La transición autoritativa `IsHotStageOverlapping: false → true` inicia el burst.
+- `tools/visual_playtest.sh --hotstage` produce `hotstage` y
+  `hotstage_separation`, con telemetría espacial y estado físico separado.
+- La repetición `/tmp/exo_hotstage_anchor_compile_v5.log` confirmó para ambos hitos:
+
+```text
+VISUAL_HOTSTAGE slug=hotstage visible=True frameSynced=True interfaceY=25.36
+VISUAL_HOTSTAGE slug=hotstage_separation visible=True frameSynced=True interfaceY=25.36
+SUMMARY reason=HOTSTAGE_OK
+```
+
+Esta repetición fue `--headless`: demuestra compilación, orden temporal y anclaje
+de nodos, pero no demuestra calidad de píxel.
+
+### Estado de aceptación
+
+| Gate | Resultado | Evidencia |
+|---|---|---|
+| Anclaje al plano de separación | PASS | `hotstage_visual_anchor_contract_test.sh` |
+| Activación durante solape real | PASS | `compile_v5.log`, `visible=True`, `frameSynced=True` |
+| Captura post-separación | PASS lógico | `hotstage_separation`, `SUMMARY=HOTSTAGE_OK` |
+| PNG daylight overlap/separation | PENDIENTE | framebuffer X11 no disponible en esta VM |
+| Comparación de exposición y lectura de ambos vehículos | PENDIENTE | requiere captura real |
+
+El bloqueo de framebuffer está registrado en `/tmp/exo_visual_daylight_preset_v1/run-summary.txt`:
+Godot no pudo abrir X11 ni Wayland (`X11 Display is not available`). Por rigor, la
+fase no se marca como visualmente cerrada hasta repetirla con PNG reales.
+
+### Publicación y regresión
+
+El work unit está publicado como `f0c4656` en `origin/main`. Antes del push pasaron:
+
+- `bash tools/ci_check.sh`;
+- build de simulación y juego con 0 warnings/0 errores;
+- `703/703` tests xUnit;
+- startup quick check y smoke Godot;
+- limpieza del autoload temporal y `git diff --check`.
+
+### Siguiente captura obligatoria
+
+```bash
+bash tools/visual_playtest.sh --hotstage --flight7 \
+  --sun-elevation 35 --camera-preset tower_side \
+  --run-id next-hotstage-daylight
+```
+
+La revisión humana debe comprobar simultáneamente: Ship encendido sobre el booster,
+pluma localizada en el interstage, ausencia de humo de pad en vacío, separación visible,
+sin clipping amplio y sin que el HUD tape el plano de staging. Después se repite la
+misma matriz para EDL y órbita antes de cerrar P1.
