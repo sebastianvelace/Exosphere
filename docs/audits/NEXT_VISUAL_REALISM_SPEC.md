@@ -650,6 +650,79 @@ La decisión es conservar las cuatro luces sectorizadas con sombras acotadas y e
 campo de 16 boquillas en la ruta activa. No se añadieron shadow maps adicionales ni
 un fill global que aplane la noche.
 
+## Matriz visual real — VAB, cabina, órbita y EDL (2026-08-20)
+
+### VAB: vacío y Starship en piso de estudio
+
+La captura real del VAB ya no queda sólo respaldada por contratos de código:
+
+```text
+/tmp/exosphere_vab_empty_floor-v1.png
+/tmp/exosphere_vab_selection_floor-v1.png
+```
+
+El estado vacío conserva `NO VEHICLE ON THE FLOOR`. El estado Starship muestra el
+vehículo apoyado sobre el plano procedural, juntas y grano visibles sin competir con
+la silueta, y el panel lateral mantiene masa, propelente, TWR y `READY FOR FLIGHT`.
+La base no queda flotando ni atraviesa el piso. La captura fue 1920×1080 con
+framebuffer real; la prueba no cambia la escena de Flight ni la física.
+
+### Cabina y órbita nocturna
+
+Artefactos reales:
+
+```text
+/tmp/exo_play-visual-cockpit-final-v1/exo_play_cockpit.png
+/tmp/exo_play-visual-orbit-night-final-v1/exo_play_orbit_direct.png
+```
+
+La cabina finalizó `COCKPIT_OK` a 118 km: los tres paneles tienen borde y contraste
+legibles, el horizonte/espacio no lava el HUD y los valores quedan finitos
+(`clippedFrac=0.00433`, `surfaceClippedFrac=0.01547`, `neonGreenFrac=0`). En órbita,
+`VISUAL_PLANET` confirma Tierra visible con diámetro angular `118.7024°` y alineación
+de cámara `cameraForwardCos=0.77872`; el limbo azul es continuo y las estrellas no
+desaparecen (`sharpStarCount=78`). La imagen orbital tiene
+`surfaceWhiteClipFrac=0` y `neonGreenFrac=0`.
+
+El indicador orbital `ENG 0/6` es correcto en esta escena: el vehículo está en
+coast con throttle `0%`; no representa una pérdida de motores. La semántica de
+motor durante ignición/liftoff se valida separadamente con `33/33 delivered` en el
+gate de lanzamiento.
+
+### EDL y palillos chinos
+
+La corrida real completa revalidada con el gate actual es:
+
+```text
+OUT_DIR=/tmp/exo_visual_edl_v4 \
+LOG=/tmp/exo_visual_edl_v4.log \
+bash tools/visual_playtest.sh --edl --run-id visual-audit-edl-v4 --verify-only
+```
+
+Resultado: `SUMMARY reason=CAUGHT`, `pins=2`, y cinco PNGs (`entry`,
+`peak_heating`, `retro_burn`, `flip_complete`, `caught`). La inspección muestra el
+shock térmico concentrado en el lado de avance, los tres motores en retro-burn y los
+dos brazos de Mechazilla visibles junto al vehículo capturado. `clippedFrac` queda
+entre `0.00087` y `0.00302` en las fases de descenso/catch; el catch no es una
+animación inventada, porque el log prueba dos pines físicos asentados.
+
+La repetición fresca con la revisión nocturna de esta fase no se declara como un
+PASS artificial: `visual-edl-final-v1` llegó a 11.6 km en 300 s y
+`visual-edl-final-v2` a 4.6 km en 720 s, ambos con progreso físico continuo pero sin
+alcanzar `retro_burn` antes del límite de llvmpipe. Se conserva esa evidencia parcial
+para diagnosticar coste de simulación/framebuffer; el artefacto completo anterior se
+acepta porque el gate lo reevalúa sin relanzar Godot y el cambio posterior sólo toca
+la geometría nocturna del pad.
+
+### Decisión de esta pasada
+
+No se modifica exposición ni material del casco basándose en una sola captura EDL
+parcial: el shock ya es visible, no hay clipping masivo ni NaN, y la diferencia de
+lectura entre la silueta oscura y el limbo corresponde a `solarVisibility=0` del
+escenario. Queda como siguiente A/B visual medir un EDL diurno con visibilidad solar
+directa y comparar luminancia del casco contra `peak_heating`; cualquier ajuste debe
+preservar el flujo térmico y no levantar artificialmente el cielo nocturno.
+
 ## Ciclo solar y amanecer — verificación de comportamiento (2026-08-20)
 
 El paso de tiempo ya está conectado a la física y al renderer, no a un contador de
