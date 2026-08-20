@@ -457,3 +457,55 @@ casco, que el lado de sotavento sigue legible, que el plasma no se convierte en 
 halo uniforme y que el HUD no queda lavado. Si el PNG muestra sobreexposición, se
 ajusta el material/shader con una nueva captura; no se revertirá a una ganancia global
 que oculte la relación entre flujo y VFX.
+
+## Fase actual — órbita nocturna: observabilidad antes de calibración (2026-08-20)
+
+### Evidencia visual disponible
+
+Las capturas reales ya existentes (`/tmp/exo_visual_ship_v7/exo_play_ship_vacuum.png`,
+`/tmp/exo_visual_atmosphere_v2/exo_play_120km_night.png` y
+`/tmp/exo_visual_atmosphere_v2/exo_play_400km_night.png`) muestran una Tierra azul
+oscura y un limbo legible, pero no permiten afirmar que las ciudades sean visibles en
+ese encuadre: la cámara mira hacia la zona de terminador y el mapa nocturno queda por
+debajo del umbral de lectura. No se cambia el gain del mapa con esa sola observación,
+porque una ganancia global podría convertir el lado nocturno en una superficie plana y
+romper la adaptación de exposición.
+
+El material actual ya tiene los tres términos esperados y acotados:
+
+- `earth_night.jpg` para ciudades;
+- `night_floor`/earthshine para que el disco no desaparezca;
+- `limb_strength` y el airglow del cielo para el borde atmosférico.
+
+### Diagnóstico reproducible
+
+El nuevo work unit `af6f14e` conserva telemetría geométrica también en la ruta dummy.
+La corrida `/tmp/exo_play-orbit-night-observable.log` registró:
+
+```text
+VISUAL_SUN override=True elevationDeg=-35.00 phase=NIGHT physicalSunPositionUnchanged=True
+VISUAL_CAMERA preset=orbit_beauty yawDeg=0.00 pitchDeg=45.00 distance=400000.00 fov=75.00 mode=Chase
+VISUAL_PLANET body=earth slug=orbit_direct visible=True cameraDistanceM=7405432.3 angularDiameterDeg=118.7038 cameraForwardCos=0.77867
+CAPTURE orbit_direct path=headless://orbit_direct alt=200000.0 spd=7400.4 vSpeed=-0.0 apo=200000.0 pe=200000.0
+SUMMARY reason=ORBIT_DIRECT_OK frames=115
+```
+
+Esto descarta que el diagnóstico anterior fuera simplemente una Tierra fuera de
+cuadro: el planeta queda visible, con un diámetro angular amplio y alineación de
+cámara válida. La corrida no produce PNG porque esta VM no puede abrir X11/Wayland;
+por tanto no se declara todavía una mejora de píxel para city lights o airglow.
+
+### Decisión y gate pendiente
+
+Se mantiene el shader sin cambio de energía hasta disponer de framebuffer real. La
+siguiente captura debe repetirse en una máquina con X11 funcional:
+
+```bash
+bash tools/visual_playtest.sh --orbit --sun-elevation -35 \
+  --camera-preset orbit_beauty --run-id next-orbit-night
+```
+
+La revisión debe comprobar: ciudad/airglow visibles sin halo blanco amplio, estrellas
+conservadas, limbo azul fino, `surfaceWhiteClipFrac < 0.20`, sin `neonGreenFrac` amplio
+y exposición estable. Sólo si esa comparación demuestra falta de lectura se ajustará
+`night_lights` o el término de limbo, con un nuevo A/B day/night y sin tocar la física.
