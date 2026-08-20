@@ -597,6 +597,59 @@ La revisión debe comprobar contacto visual del motor con el piso, juntas que no
 compitan con el vehículo, acero sin dominante dorada artificial, tiles distinguibles,
 ausencia de clipping y que el VAB vacío conserve el mensaje “NO VEHICLE ON THE FLOOR”.
 
+## Complejo de lanzamiento nocturno — ruta activa y campo de deluge (2026-08-20)
+
+### Discrepancia corregida
+
+La primera captura nocturna del complejo mostraba iluminación útil, pero la telemetría
+del árbol activo registraba `delugeOutlets=0`. Existía un anillo de boquillas en un
+constructor costero antiguo que no participa en `BuildEnvironment` para el Starbase
+post-deluge actual. Por tanto, el problema era real: el pad tenía tuberías y vapor
+visual, pero no tenía el campo explícito de boquillas en la ruta que usa el juego.
+
+`1f550c4` añade en `BuildStarbaseCivilWorks` un anillo de 16 salidas nombradas
+`DelugeOutlet0..15`, ancladas sobre la cota superior de `OlmFoundationMat`. No se
+colocan en `GradeY`, porque quedarían enterradas dentro de la fundación. El cambio es
+presentación local: no modifica caudal, empuje, masa ni la simulación de fluidos.
+
+También se endureció el gate de `--launch`: una captura válida debe probar dos PNG
+(`pad`, `liftoff`), `SUMMARY reason=LAUNCH_OK`, 4 floodlights, 16 outlets, 15 cuerpos
+de tanques, 2 brazos de Mechazilla, 33 filas de motores y `delivered=33`, además de
+clipping amplio y contaminación neón-verde por debajo del límite.
+
+### Evidencia real reproducible
+
+Artefactos:
+
+```text
+/tmp/exo_play-launch-night-deluge-v1/exo_play_pad.png
+/tmp/exo_play-launch-night-deluge-v1/exo_play_liftoff.png
+/tmp/exo_play-launch-night-deluge-v1.log
+```
+
+La corrida se ejecutó con framebuffer real llvmpipe, `--sun-elevation -35`,
+`--camera-preset pad_side` y finalizó `LAUNCH_OK`. Las líneas estructurales fueron:
+
+```text
+VISUAL_LAUNCH slug=pad ... children=545 nightFloodlights=4 floodlightsActive=True delugeOutlets=16 tankBodies=15 chopsticks=2
+VISUAL_LAUNCH slug=liftoff ... children=545 nightFloodlights=4 floodlightsActive=True delugeOutlets=16 tankBodies=15 chopsticks=2
+VISUAL_ENGINES slug=liftoff ... nominal=33 rows=33 delivered=33 failed=0
+```
+
+Las métricas de imagen fueron `clippedFrac=0.00138/0.00144`,
+`surfaceClippedFrac=0.00378/0.00463` y `neonGreenFrac=0.000000` en pad/liftoff.
+La inspección visual confirma que el aprón, el tanqueado, el OLM, los brazos y la
+pluma permanecen legibles en noche; el gate puede repetirse sin lanzar Godot con:
+
+```bash
+bash tools/visual_playtest.sh --launch \
+  --run-id launch-night-deluge-v1 --verify-only
+```
+
+La decisión es conservar las cuatro luces sectorizadas con sombras acotadas y el
+campo de 16 boquillas en la ruta activa. No se añadieron shadow maps adicionales ni
+un fill global que aplane la noche.
+
 ## Ciclo solar y amanecer — verificación de comportamiento (2026-08-20)
 
 El paso de tiempo ya está conectado a la física y al renderer, no a un contador de
