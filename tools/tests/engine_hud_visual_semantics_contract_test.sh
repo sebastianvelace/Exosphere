@@ -28,5 +28,17 @@ rg -q --fixed-strings '? InterfaceTheme.Alert' "$HUD" \
   || fail "failure state is not mapped to alert red"
 rg -q --fixed-strings '? InterfaceTheme.Warning' "$HUD" \
   || fail "startup state is not mapped to warning yellow"
+rg -q --fixed-strings 'EngineHudPresentation.CountDelivered(_engineReadoutScratch)' \
+  "$ROOT_DIR/ExosphereSimulation/Presentation/FlightHudPresenter.cs" \
+  || fail "attitude strip snapshot is not based on delivered engine telemetry"
+rg -q --fixed-strings 'engineTelemetry.NominalEngineCount' \
+  "$ROOT_DIR/ExosphereSimulation/Presentation/FlightHudPresenter.cs" \
+  || fail "attitude strip snapshot loses declared aggregate engine count"
+rg -q --fixed-strings 'LogEngineVisualTelemetry(slug)' \
+  "$ROOT_DIR/tools/visual_playtest.sh" \
+  || fail "visual harness does not record engine-state evidence"
+rg -q --fixed-strings 'VISUAL_ENGINES slug={slug} commandThrottle=' \
+  "$ROOT_DIR/tools/visual_playtest.sh" \
+  || fail "engine-state telemetry omits command/delivered distinction"
 
 echo "engine_hud_visual_semantics_contract_test: PASS"

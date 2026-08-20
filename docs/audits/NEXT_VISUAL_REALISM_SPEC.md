@@ -55,6 +55,18 @@ alter solar phase, launch-site coordinates, physics, or the daylight path. The h
 records `VISUAL_LAUNCH` component counts for pad/liftoff so a future dark capture cannot be
 mistaken for missing OLM, deluge, tanks, or chopsticks.
 
+The engine HUD audit reaches a similar conclusion for the original screenshot: the intended
+visual vocabulary is `track` for off, amber for startup, white for delivered thrust, and red
+only for a failure. The left engine grid already followed that rule, but the right attitude
+strip snapshot still derived its count from raw rows. It now uses the shared delivered/failure
+classifier and preserves declared aggregate counts (for example, a three-selected cluster
+still reports `3/6`, not `1/1`). A command throttle of 100% during chill/ignition may still
+show zero delivered engines for the short startup interval; that is intentional and is now
+auditable rather than being represented as red failure dots.
+Pad/liftoff captures now also emit `VISUAL_ENGINES` with command throttle, declared rows,
+delivered, starting, and failed counts so a screenshot can be diagnosed without guessing
+from color alone.
+
 Important limitations:
 
 - Launch/catch captures still happen in dark/twilight conditions too often for

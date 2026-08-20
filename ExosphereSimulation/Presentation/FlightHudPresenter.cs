@@ -185,18 +185,24 @@ public sealed class FlightHudPresenter
         double liquidFraction = liquidCapacity > 0.0 ? liquidFuel / liquidCapacity : 0.0;
         double oxidizerFraction = oxidizerCapacity > 0.0 ? oxidizer / oxidizerCapacity : 0.0;
         vessel.FillEngineReadouts(body, _engineReadoutScratch, out var engineTelemetry);
-        int nominalEngines = _engineReadoutScratch.Count;
-        int activeEngines = 0;
-        int failedEngines = 0;
+        int declaredNominal = System.Math.Max(1, engineTelemetry.NominalEngineCount);
+        bool hasOneRowPerEngine = engineTelemetry.ReadoutEngineCount == declaredNominal;
+        int nominalEngines = hasOneRowPerEngine
+            ? engineTelemetry.ReadoutEngineCount
+            : declaredNominal;
+        int activeEngines = hasOneRowPerEngine
+            ? EngineHudPresentation.CountDelivered(_engineReadoutScratch)
+            : System.Math.Clamp(vessel.ActiveEngineCount, 0, nominalEngines);
+        int failedEngines = hasOneRowPerEngine
+            ? EngineHudPresentation.CountFailures(_engineReadoutScratch)
+            : 0;
         string? primaryEngineFailureCode = null;
         for (int i = 0; i < _engineReadoutScratch.Count; i++)
         {
             var readout = _engineReadoutScratch[i];
-            if (readout.Throttle > 1e-3) activeEngines++;
-            if (readout.FailureCode != null)
+            if (readout.FailureCode != null && primaryEngineFailureCode == null)
             {
-                failedEngines++;
-                primaryEngineFailureCode ??= readout.FailureCode;
+                primaryEngineFailureCode = readout.FailureCode;
             }
         }
 

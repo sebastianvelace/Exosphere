@@ -133,6 +133,37 @@ public sealed class FlightHudPresenterTests
         Assert.Contains("guidance", alert.RecommendedAction, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void AggregateEnginePart_PreservesDeclaredClusterCountInHud()
+    {
+        var root = FindRepoRoot();
+        var catalog = PartCatalog.LoadFromDirectory(
+            Path.Combine(root.FullName, "data", "parts"));
+        var body = CelestialBody.LoadFromJson(
+            Path.Combine(root.FullName, "data", "bodies", "earth.json"));
+        var engine = new Part(catalog["starship_engines"], "hud-cluster");
+        engine.SelectEngineCount(3);
+        engine.ThrottleLevel = 1.0;
+        for (int i = 0; i < 100; i++)
+            engine.AdvanceEngineRuntime(1.0, 0.02);
+        var vessel = new Vessel("hud-cluster-vessel")
+        {
+            Position = body.Position + Vector3d.Right * (body.Radius + 1_000.0),
+            ReferenceBodyId = body.Id,
+        };
+        vessel.Parts.SetRoot(engine);
+        var universe = new Universe { ActiveVessel = vessel };
+        universe.AddBody(body);
+        universe.AddVessel(vessel);
+
+        var snapshot = new FlightHudPresenter().Capture(
+            universe, vessel, "ASCENT_SH", FlightHudViewMode.Exterior);
+
+        Assert.Equal(6, snapshot.NominalEngineCount);
+        Assert.Equal(3, snapshot.ActiveEngineCount);
+        Assert.Equal(0, snapshot.FailedEngineCount);
+    }
+
     private static (Universe universe, CelestialBody body, Vessel vessel, Part tank)
         CreateVehicle()
     {

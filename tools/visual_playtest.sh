@@ -468,6 +468,7 @@ using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
+using Exosphere.Simulation.Presentation;
 using Exosphere.Simulation.Propulsion;
 using Exosphere.Simulation.Systems;
 
@@ -2711,6 +2712,7 @@ public partial class _PlaytestShot : Node
         LogHotStageVisualTelemetry(slug);
         LogReentryVisualTelemetry(slug);
         LogLaunchComplexVisualTelemetry(slug);
+        LogEngineVisualTelemetry(slug);
         // Headless runs are telemetry-only diagnostics: the dummy renderer has no
         // framebuffer texture, but scene framing/planet placement telemetry still
         // remains valid. Keep that evidence identical across real and dummy paths so
@@ -2804,6 +2806,34 @@ public partial class _PlaytestShot : Node
             + $"floodlightsActive={pad.NightFloodlightsActive} "
             + $"delugeOutlets={delugeOutlets} tankBodies={tankBodies} "
             + $"chopsticks={chopsticks}");
+        _log.Flush();
+    }
+
+    private void LogEngineVisualTelemetry(string slug)
+    {
+        if (slug is not ("pad" or "liftoff")) return;
+
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        if (vessel == null || universe == null) return;
+        var body = universe.GetDominantBody(vessel.Position);
+        if (body == null) return;
+
+        var rows = new List<EngineReadout>(39);
+        vessel.FillEngineReadouts(body, rows, out var summary);
+        int delivered = EngineHudPresentation.CountDelivered(rows);
+        int failed = EngineHudPresentation.CountFailures(rows);
+        int starting = 0;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (EngineHudPresentation.Classify(rows[i]) == EngineHudIndicatorState.Starting)
+                starting++;
+        }
+
+        _log.WriteLine($"VISUAL_ENGINES slug={slug} commandThrottle={vessel.Throttle:F3} "
+            + $"nominal={summary.NominalEngineCount} rows={summary.ReadoutEngineCount} "
+            + $"delivered={delivered} starting={starting} failed={failed}");
         _log.Flush();
     }
 
