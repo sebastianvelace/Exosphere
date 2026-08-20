@@ -29,6 +29,20 @@ public partial class ReentryPlasmaController : Node3D
     // Plasma is a presentation effect. Its physical inputs can be sampled at 20 Hz while
     // the deterministic thermal solver continues at the simulation tick rate.
     private const double VisualSamplePeriodSeconds = 1.0 / 20.0;
+    // The Sutton-Graves flux range is physically linear, but a linear display response
+    // leaves the lower half of the visible regime below one pixel at normal exposure.
+    // This bounded exponent changes only presentation contrast; the heat flux and damage
+    // equations remain untouched.
+    private const double VisualFluxResponseExponent = 0.65;
+
+    // Last presentation sample, exposed only for deterministic visual evidence. These
+    // values never feed the simulation, damage model or guidance.
+    public double LastHeatFluxWm2 { get; private set; }
+    public float LastFluxIntensity01 { get; private set; }
+    public float LastVisualFluxInput01 { get; private set; }
+    public float LastVisualIntensity01 { get; private set; }
+    public float LastShockHeatLevel { get; private set; }
+    public bool CoreEffectsVisible { get; private set; }
 
     private enum EdgeKind { Nose, Belly, Flap }
 
@@ -112,6 +126,11 @@ public partial class ReentryPlasmaController : Node3D
         var vessel = bridge?.ActiveVessel;
         if (bridge == null || vessel == null || vessel.IsDestroyed)
         {
+            LastHeatFluxWm2 = 0.0;
+            LastFluxIntensity01 = 0f;
+            LastVisualFluxInput01 = 0f;
+            LastVisualIntensity01 = 0f;
+            LastShockHeatLevel = 0f;
             SetEffectsVisible(false);
             return;
         }
@@ -130,11 +149,18 @@ public partial class ReentryPlasmaController : Node3D
         double fluxIntensity = System.Math.Clamp(
             (flux - FLUX_THRESH) / (FLUX_PEAK - FLUX_THRESH), 0.0, 1.0);
         string? phaseName = MissionManager.Instance?.Phase.ToString();
+        double visualFluxInput = System.Math.Pow(
+            fluxIntensity, VisualFluxResponseExponent);
         double intensity = VehicleVisualPhysics.ReentryPlasmaVisualIntensity(
-            fluxIntensity, phaseName);
+            visualFluxInput, phaseName);
+        LastHeatFluxWm2 = double.IsFinite(flux) ? flux : 0.0;
+        LastFluxIntensity01 = (float)fluxIntensity;
+        LastVisualFluxInput01 = (float)visualFluxInput;
+        LastVisualIntensity01 = (float)intensity;
 
         if (intensity < 0.01)
         {
+            LastShockHeatLevel = 0f;
             SetEffectsVisible(false);
             return;
         }
@@ -189,6 +215,7 @@ public partial class ReentryPlasmaController : Node3D
 
         float heatLevel = Mathf.Clamp(
             (float)intensity * concentr * hudGuard * dangerMul * flicker, 0f, 1f);
+        LastShockHeatLevel = heatLevel;
         _shockMat.SetShaderParameter("heat_level", heatLevel);
 
         float wakeAlpha = (float)(intensity * 0.20f) * Mathf.Lerp(0.55f, 1.0f, misalign);
@@ -340,6 +367,7 @@ public partial class ReentryPlasmaController : Node3D
 
     private void SetCoreEffectsVisible(bool visible)
     {
+        CoreEffectsVisible = visible;
         if (_shock != null && _shock.Visible != visible) _shock.Visible = visible;
         if (_wake != null && _wake.Visible != visible) _wake.Visible = visible;
     }

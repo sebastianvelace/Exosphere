@@ -44,5 +44,15 @@ rg -q --fixed-strings 'VehicleVisualPhysics.ReentryPlasmaVisualIntensity' "$PLAS
   || fail "re-entry visual intensity gate was removed"
 rg -q --fixed-strings 'UpdateLocalizedEdgeGlows((float)intensity' "$PLASMA" \
   || fail "localized re-entry heat cues were removed"
+rg -q --fixed-strings 'public double LastHeatFluxWm2' "$PLASMA" \
+  || fail "re-entry visual heat telemetry is missing"
+rg -q --fixed-strings 'public float LastShockHeatLevel' "$PLASMA" \
+  || fail "re-entry shader heat telemetry is missing"
+rg -q --fixed-strings 'VisualFluxResponseExponent = 0.65' "$PLASMA" \
+  || fail "bounded perceptual flux response is missing"
+rg -q --fixed-strings 'System.Math.Pow(' "$PLASMA" \
+  || fail "re-entry visual flux response is not bounded by a power curve"
+rg -q --fixed-strings 'VISUAL_REENTRY slug=' "$ROOT_DIR/tools/visual_playtest.sh" \
+  || fail "visual harness does not record plasma presentation state"
 
 echo "reentry_plasma_performance_contract_test: PASS (sample=20Hz, visibility dirty-gated, heat physics preserved)"

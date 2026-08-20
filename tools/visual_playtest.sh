@@ -2709,6 +2709,7 @@ public partial class _PlaytestShot : Node
     private void CaptureNow(string slug)
     {
         LogHotStageVisualTelemetry(slug);
+        LogReentryVisualTelemetry(slug);
         // Headless runs are telemetry-only diagnostics: the dummy renderer has no
         // framebuffer texture, but physics and milestone logging remain valid.
         if (DisplayServer.GetName() == "headless")
@@ -2743,6 +2744,25 @@ public partial class _PlaytestShot : Node
             $"plumeLocalY={(plume != null ? plume.Position.Y : float.NaN):F2} " +
             $"rendererY={(renderer != null ? renderer.Position.Y : float.NaN):F2} " +
             $"rootY={(effect != null ? effect.Position.Y : float.NaN):F2}");
+        _log.Flush();
+    }
+
+    private void LogReentryVisualTelemetry(string slug)
+    {
+        if (!slug.Contains("entry", StringComparison.Ordinal)
+            && slug is not ("peak_heating" or "retro_burn" or "flip_complete")) return;
+
+        var plasma = GetTree().Root.FindChild(
+            "ReentryPlasma", true, false) as ReentryPlasmaController;
+        string phase = MissionManager.Instance?.Phase.ToString() ?? "UNKNOWN";
+        _log.WriteLine(
+            $"VISUAL_REENTRY slug={slug} coreVisible={plasma?.CoreEffectsVisible ?? false} " +
+            $"phase={phase} " +
+            $"flux={plasma?.LastHeatFluxWm2 ?? double.NaN:E3} " +
+            $"fluxIntensity={plasma?.LastFluxIntensity01 ?? float.NaN:F3} " +
+            $"visualFluxInput={plasma?.LastVisualFluxInput01 ?? float.NaN:F3} " +
+            $"visualIntensity={plasma?.LastVisualIntensity01 ?? float.NaN:F3} " +
+            $"shockHeat={plasma?.LastShockHeatLevel ?? float.NaN:F3}");
         _log.Flush();
     }
 
