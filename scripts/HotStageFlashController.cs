@@ -10,6 +10,12 @@ using System.Linq;
 [GlobalClass]
 public partial class HotStageFlashController : Node3D
 {
+    // Flight-7 geometry uses 1 render unit ≈ 2.8 m and places the Ship/booster
+    // separation plane at 71 m above the booster engine bells. The effect root
+    // follows the active vessel frame; all children below are local to that frame.
+    // El VFX debe vivir en el plano hot-stage, no en la base de los motores.
+    public const float HotStageInterfaceRenderY = 71f / 2.8f;
+
     // Slightly longer so a single state-gated capture during IsHotStageOverlapping
     // still shows interstage flash + soot rather than catching only the fade tail.
     private const float Duration = 1.75f;
@@ -22,6 +28,17 @@ public partial class HotStageFlashController : Node3D
     private StandardMaterial3D? _ringMat;
     private float _age = Duration + 1f;
     private bool _wired;
+    private Node3D? _vesselFrame;
+    private bool _lastHotStageOverlap;
+    private bool _overlapBurstStarted;
+
+    /// <summary>
+    /// True once the presentation root has found the renderer frame that owns the
+    /// active vessel's floating-origin transform. Exposed for deterministic visual
+    /// telemetry; it has no gameplay meaning.
+    /// </summary>
+    public bool IsVesselFrameSynchronized =>
+        _vesselFrame != null && GodotObject.IsInstanceValid(_vesselFrame);
 
     public override void _Ready()
     {
@@ -36,8 +53,25 @@ public partial class HotStageFlashController : Node3D
         if (!_wired)
             TryWireSignal();
 
+        // VesselStaged is emitted after the overlap window has completed. Poll the
+        // authoritative state transition as well so the flash is visible while Ship
+        // thrust overlaps the attached booster, which is the event the player needs to
+        // read. La señal queda como fallback para non-standard staging paths.
+        var overlap = SimulationBridge.Instance?.ActiveVessel?.IsHotStageOverlapping == true;
+        if (overlap && !_lastHotStageOverlap)
+        {
+            StartBurst();
+            _overlapBurstStarted = true;
+        }
+        _lastHotStageOverlap = overlap;
+
         if (_age > Duration)
             return;
+
+        // The active vessel can pitch/yaw during ascent. Mirror the same render frame
+        // used by VesselRenderer so the flash, shock ring and soot stay on the
+        // interstage instead of remaining in the old inertial orientation.
+        SyncToVesselFrame();
 
         _age += (float)delta;
         float t = Mathf.Clamp(_age / Duration, 0f, 1f);
@@ -106,7 +140,8 @@ public partial class HotStageFlashController : Node3D
         if (!detachedBooster || !activeShip)
             return;
 
-        StartBurst();
+        if (!_overlapBurstStarted)
+            StartBurst();
     }
 
     private void StartBurst()
@@ -138,7 +173,9 @@ public partial class HotStageFlashController : Node3D
 
     private void BuildVisuals()
     {
-        Position = new Vector3(0f, -0.15f, 0f);
+        // Root is colocated with ActiveVesselRenderer. The hot-stage interface offset
+        // is applied to each child below so orientation and floating origin are shared.
+        Position = Vector3.Zero;
 
         _plumeMat = new StandardMaterial3D
         {
@@ -168,7 +205,7 @@ public partial class HotStageFlashController : Node3D
         {
             Name = "HotStagePlume",
             Mesh = plumeMesh,
-            Position = new Vector3(0f, -0.55f, 0f),
+            Position = new Vector3(0f, HotStageInterfaceRenderY - 0.55f, 0f),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
             CustomAabb = new Aabb(new Vector3(-7f, -14f, -7f), new Vector3(14f, 16f, 14f)),
@@ -193,7 +230,7 @@ public partial class HotStageFlashController : Node3D
         {
             Name = "HotStageShockRing",
             Mesh = new TorusMesh { InnerRadius = 1.45f, OuterRadius = 1.92f, Rings = 64, RingSegments = 12 },
-            Position = new Vector3(0f, -0.25f, 0f),
+            Position = new Vector3(0f, HotStageInterfaceRenderY - 0.25f, 0f),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
             MaterialOverride = _ringMat,
@@ -201,12 +238,13 @@ public partial class HotStageFlashController : Node3D
         AddChild(_shockRing);
 
         _soot = BuildSootParticles();
+        _soot.Position = new Vector3(0f, HotStageInterfaceRenderY, 0f);
         AddChild(_soot);
 
         _flashLight = new OmniLight3D
         {
             Name = "HotStageFlashLight",
-            Position = new Vector3(0f, -0.35f, 0f),
+            Position = new Vector3(0f, HotStageInterfaceRenderY - 0.35f, 0f),
             LightColor = new Color(1.0f, 0.76f, 0.44f),
             OmniRange = 52f,
             LightEnergy = 0f,
@@ -215,6 +253,19 @@ public partial class HotStageFlashController : Node3D
             Visible = false,
         };
         AddChild(_flashLight);
+    }
+
+    private void SyncToVesselFrame()
+    {
+        if (_vesselFrame == null || !GodotObject.IsInstanceValid(_vesselFrame))
+        {
+            _vesselFrame = GetTree().Root.FindChild(
+                "ActiveVesselRenderer", true, false) as Node3D;
+        }
+
+        if (_vesselFrame == null) return;
+        Position = _vesselFrame.Position;
+        Quaternion = _vesselFrame.Quaternion;
     }
 
     private static GpuParticles3D BuildSootParticles()

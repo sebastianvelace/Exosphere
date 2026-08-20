@@ -525,7 +525,7 @@ public partial class _PlaytestShot : Node
     double _lastProgressPeriapsis = double.NaN;
 
     // ── hotstage mode ────────────────────────────────────────────────────
-    bool _hotstage;
+    bool _hotstage, _hotstageSeparation;
 
     // ── reentry_variant mode (one attitude per process; --reentry-compare drives two
     // separate Godot launches — see tools/visual_playtest.sh orchestration below) ──────
@@ -1150,7 +1150,19 @@ public partial class _PlaytestShot : Node
             _log.WriteLine($"ACTION hot-stage overlap detected phase={phase} alt={alt:F0} spd={spd:F0}");
             _log.Flush();
         }
-        if (_mode == "hotstage" && _hotstage && _pendingSlug == null)
+        if (_mode is "hotstage" or "ascent" or "full"
+            && _hotstage
+            && !_hotstageSeparation
+            && _pendingSlug == null
+            && bridge.ActiveVessel?.IsHotStageOverlapping == false
+            && mission?.Phase is MissionPhase.SEPARATION or MissionPhase.ASCENT_SHIP)
+        {
+            QueueCapture("hotstage_separation");
+            _hotstageSeparation = true;
+            _log.WriteLine($"ACTION hot-stage separation detected phase={phase} alt={alt:F0} spd={spd:F0}");
+            _log.Flush();
+        }
+        if (_mode == "hotstage" && _hotstageSeparation && _pendingSlug == null)
         {
             Finish("HOTSTAGE_OK");
             return;
@@ -2696,6 +2708,7 @@ public partial class _PlaytestShot : Node
 
     private void CaptureNow(string slug)
     {
+        LogHotStageVisualTelemetry(slug);
         // Headless runs are telemetry-only diagnostics: the dummy renderer has no
         // framebuffer texture, but physics and milestone logging remain valid.
         if (DisplayServer.GetName() == "headless")
@@ -2710,6 +2723,27 @@ public partial class _PlaytestShot : Node
         LogTelemetry(slug, path);
         LogImageMetrics(slug, img);
         GD.Print($"[Playtest] captured {slug} -> {path}");
+    }
+
+    private void LogHotStageVisualTelemetry(string slug)
+    {
+        if (slug is not ("hotstage" or "hotstage_separation")) return;
+
+        var effect = GetTree().Root.FindChild(
+            "HotStageFlashController", true, false) as HotStageFlashController;
+        var plume = effect?.GetNodeOrNull<Node3D>("HotStagePlume");
+        var renderer = GetTree().Root.FindChild(
+            "ActiveVesselRenderer", true, false) as Node3D;
+        bool overlap = SimulationBridge.Instance?.ActiveVessel?.IsHotStageOverlapping == true;
+        _log.WriteLine(
+            $"VISUAL_HOTSTAGE slug={slug} visible={effect?.Visible ?? false} " +
+            $"frameSynced={effect?.IsVesselFrameSynchronized ?? false} " +
+            $"overlap={overlap} " +
+            $"interfaceY={HotStageFlashController.HotStageInterfaceRenderY:F2} " +
+            $"plumeLocalY={(plume != null ? plume.Position.Y : float.NaN):F2} " +
+            $"rendererY={(renderer != null ? renderer.Position.Y : float.NaN):F2} " +
+            $"rootY={(effect != null ? effect.Position.Y : float.NaN):F2}");
+        _log.Flush();
     }
 
     private void LogImageMetrics(string slug, Image image)
@@ -2951,6 +2985,7 @@ public partial class _PlaytestShot : Node
             $"apo={apo:F1} pe={pe:F1} atmoTop={atmosphereTop:F1} q={q:F0} g={g:F2} " +
             $"phase={phase} heatRatio={heatRatio:F3} maxT={maxT:F0} flux={flux:E2} " +
             $"omega={vessel.AngularVelocity.Magnitude:F4} selectedEngines={selectedEngines} " +
+            $"hotStageOverlap={vessel.IsHotStageOverlapping} " +
             $"landingParts={landingParts} approachSpeed={_lastApproachSpeed:F2} " +
             $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
             $"settled={vessel.IsSurfaceSettled}");
@@ -3214,8 +3249,24 @@ verify_pngs() {
       echo "ERROR: missing required hot-stage milestone PNG: exo_play_hotstage.png" >&2
       return 1
     fi
+    if [[ ! -f "$OUT_DIR/exo_play_hotstage_separation.png" ]]; then
+      echo "ERROR: missing required post-separation hot-stage milestone PNG: exo_play_hotstage_separation.png" >&2
+      return 1
+    fi
     if ! grep -q 'SUMMARY reason=HOTSTAGE_OK' "$LOG"; then
       echo "ERROR: hot-stage capture did not confirm the dual-thrust overlap state" >&2
+      return 1
+    fi
+    if ! grep -Eq 'VISUAL_HOTSTAGE slug=hotstage .*frameSynced=True .*interfaceY=25\.36' "$LOG"; then
+      echo "ERROR: hot-stage overlap capture lacks synchronized interstage anchor telemetry" >&2
+      return 1
+    fi
+    if ! grep -Eq 'VISUAL_HOTSTAGE slug=hotstage .*frameSynced=True .*overlap=True .*interfaceY=25\.36' "$LOG"; then
+      echo "ERROR: hot-stage overlap capture did not prove live overlap or synchronized interstage anchor" >&2
+      return 1
+    fi
+    if ! grep -Eq 'VISUAL_HOTSTAGE slug=hotstage_separation .*frameSynced=True .*overlap=False .*interfaceY=25\.36' "$LOG"; then
+      echo "ERROR: hot-stage separation capture lacks synchronized interstage anchor telemetry" >&2
       return 1
     fi
   elif [[ "$MODE" == "saturn" ]]; then
