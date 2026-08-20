@@ -71,6 +71,8 @@ Options:
   --atmosphere-ground
                  Capture only Earth ground day/sunrise/sunset/night cases for fast lighting A/B.
   --atmosphere-low  Capture only the deterministic Earth 10 km daylight case for shader A/B work.
+  --atmosphere-orbit
+                 Capture only the deterministic Earth 400 km daylight case for scaled-space A/B.
   --atmosphere-bodies  Capture explicit Mars/Venus day/orbit/night atmosphere cases.
   --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
@@ -187,6 +189,7 @@ while [[ $# -gt 0 ]]; do
     --atmosphere) MODE="atmosphere"; shift ;;
     --atmosphere-ground) MODE="atmosphere_ground"; shift ;;
     --atmosphere-low) MODE="atmosphere_low"; shift ;;
+    --atmosphere-orbit) MODE="atmosphere_orbit"; shift ;;
     --atmosphere-bodies) MODE="atmosphere_bodies"; shift ;;
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
@@ -575,10 +578,14 @@ public partial class _PlaytestShot : Node
         ("cockpit_120km_day",   120_000.0,  35.0, true, "none"),
         ("cockpit_120km_night", 120_000.0, -35.0, true, "none"),
     };
-    private bool IsSingleAtmosphereCase => _mode == "atmosphere_low";
+    private bool IsSingleAtmosphereCase => _mode is "atmosphere_low" or "atmosphere_orbit";
     private bool IsGroundAtmosphereCase => _mode == "atmosphere_ground";
     private (string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit, string Eclipse)
-        CurrentAtmosphereCase() => IsSingleAtmosphereCase ? _atmosCases[4] : _atmosCases[_atmosIndex];
+        CurrentAtmosphereCase() => _mode == "atmosphere_low"
+            ? _atmosCases[4]
+            : _mode == "atmosphere_orbit"
+                ? _atmosCases[8]
+                : _atmosCases[_atmosIndex];
     // Mars/Venus are deliberately a separate matrix.  The Earth set above is an existing
     // acceptance baseline and must remain byte-for-byte reproducible; this set exercises
     // the same renderer contract after a real body transition, including the lazy planet
@@ -774,7 +781,7 @@ public partial class _PlaytestShot : Node
             return;
         }
 
-        if (_mode == "atmosphere_low")
+        if (_mode is "atmosphere_low" or "atmosphere_orbit")
         {
             ProcessAtmosphereMatrix(delta, bridge, vessel, universe, body);
             return;
@@ -2187,7 +2194,7 @@ public partial class _PlaytestShot : Node
     {
         if (_visualConfigurationApplied
             || _mode is "atmosphere" or "atmosphere_ground" or "atmosphere_low"
-                or "atmosphere_bodies" or "spectral")
+                or "atmosphere_orbit" or "atmosphere_bodies" or "spectral")
             return;
 
         bool hasCameraPreset = VisualCameraPreset.Length > 0;
@@ -2293,7 +2300,9 @@ public partial class _PlaytestShot : Node
         if (IsSingleAtmosphereCase
             || (IsGroundAtmosphereCase && _atmosIndex >= 4))
         {
-            Finish(IsSingleAtmosphereCase ? "ATMOSPHERE_LOW_OK" : "ATMOSPHERE_GROUND_OK");
+                Finish(_mode == "atmosphere_orbit"
+                    ? "ATMOSPHERE_ORBIT_OK"
+                    : "ATMOSPHERE_LOW_OK");
             return;
         }
         if (_atmosIndex >= _atmosCases.Length)
@@ -3617,6 +3626,40 @@ verify_pngs() {
     ' "$LOG"; then
       return 1
     fi
+  elif [[ "$MODE" == "atmosphere_orbit" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_400km_day.png" ]]; then
+      echo "ERROR: missing scaled-space 400 km diagnostic PNG" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=ATMOSPHERE_ORBIT_OK' "$LOG"; then
+      echo "ERROR: scaled-space atmosphere capture did not finish cleanly" >&2
+      return 1
+    fi
+    if ! grep -q '^ATMOS_APPLY .*slug=400km_day .*targetAlt=400000.0 .*targetSunElevation=35.0' "$LOG" \
+      || ! grep -q '^ATMOS_STATE .*slug=400km_day .*actualAlt=400000.0 .*sunElevation=35.00 .*exposureSettled=True' "$LOG"; then
+      echo "ERROR: scaled-space capture lacks matching physical altitude/sun telemetry" >&2
+      return 1
+    fi
+    if [[ -n "${EXOSPHERE_RENDER_AB:-}" ]] \
+      && ! grep -q "PERF_GPU_AB mode=${EXOSPHERE_RENDER_AB} applied=true" "$CONSOLE_LOG"; then
+      echo "ERROR: requested Earth A/B profile was not applied to Earth_mesh" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=400km_day / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+          if ($i ~ /^surfaceWhiteClipFrac=/) { split($i, p, "="); white = p[2] + 0 }
+          if ($i ~ /^neonGreenFrac=/) { split($i, p, "="); neon = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && mean > 0.005 && mean < 0.9995 && clipped < 0.20 && white < 0.20 && neon < 0.01) }
+    ' "$LOG"; then
+      echo "ERROR: scaled-space Earth image is empty, clipped or contaminated" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "atmosphere_ground" ]]; then
     local required=(ground_day ground_sunrise ground_sunset ground_night)
     for slug in "${required[@]}"; do
@@ -4097,6 +4140,8 @@ elif [[ "$MODE" == "atmosphere_bodies" ]]; then
   echo "visual_playtest: Mars/Venus atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "atmosphere_low" ]]; then
   echo "visual_playtest: low-atmosphere shader diagnostic OK — compare IMAGE/PERF rows in $LOG"
+elif [[ "$MODE" == "atmosphere_orbit" ]]; then
+  echo "visual_playtest: scaled-space 400 km shader diagnostic OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "atmosphere_ground" ]]; then
   echo "visual_playtest: Earth-ground lighting matrix OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "atmosphere" ]]; then

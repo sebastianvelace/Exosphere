@@ -100,6 +100,12 @@ public partial class RenderPerformanceProbe : Node
             "sky_quality_low" => SetSkyQuality(root, 0.25f),
             "sky_quality_min" => SetSkyQuality(root, 0.0f),
             "no_directional_shadows" => DisableDirectionalShadows(root),
+            // Isolated scaled-space Earth A/B profiles. These are deliberately opt-in
+            // diagnostics; the official material values remain in PlanetMaterials.
+            "earth_day_gain_090" => SetEarthShaderParameter(
+                root, "day_gain", 0.90f, _abOverride),
+            "earth_cloud_amount_065" => SetEarthShaderParameter(
+                root, "cloud_amount", 0.65f, _abOverride),
             _ => false,
         };
 
@@ -150,6 +156,20 @@ public partial class RenderPerformanceProbe : Node
             || world.Environment?.Sky?.SkyMaterial is not ShaderMaterial material)
             return false;
         material.SetShaderParameter("atmosphere_quality", quality);
+        return true;
+    }
+
+    private static bool SetEarthShaderParameter(
+        Node root, string parameter, float value, string mode)
+    {
+        if (root.FindChild("Earth_mesh", true, false) is not MeshInstance3D earth)
+            return false;
+        if ((earth.GetSurfaceOverrideMaterial(0) ?? earth.GetActiveMaterial(0))
+            is not ShaderMaterial material)
+            return false;
+
+        material.SetShaderParameter(parameter, value);
+        GD.Print($"PERF_GPU_AB mode={mode} applied=true parameter={parameter} value={value:F3}");
         return true;
     }
 
