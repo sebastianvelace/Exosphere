@@ -42,6 +42,45 @@ public partial class SunController : Node
     /// <summary>Simulation epoch used for the last solar-cycle sample.</summary>
     public static double SolarSimulationTime { get; private set; } = double.NaN;
 
+    // Visual acceptance captures may request a deterministic daylight angle without
+    // teleporting the physical Sun body.  The override is presentation-only: eclipse
+    // geometry, gravity and ephemeris state continue to use the real body positions.
+    private double? _visualSunElevationOverrideDegrees;
+
+    /// <summary>Requested presentation-only solar elevation, or null for physical time.</summary>
+    public double? VisualSunElevationOverrideDegrees => _visualSunElevationOverrideDegrees;
+
+    /// <summary>
+    /// Applies a bounded solar-elevation override to render consumers.  This does not
+    /// change the simulation's Sun position or any force calculation.
+    /// </summary>
+    public void SetVisualSunElevationOverride(double? elevationDegrees)
+    {
+        _visualSunElevationOverrideDegrees = elevationDegrees.HasValue
+            ? System.Math.Clamp(elevationDegrees.Value, -90.0, 90.0)
+            : null;
+        _lastSunDir = Vector3.Zero;
+        _lastFedVisibility = -1f;
+    }
+
+    /// <summary>Returns the physical or presentation-overridden direction toward the Sun.</summary>
+    public Vector3d GetVisualSunDirection(
+        CelestialBody body, Vector3d observer, Vector3d physicalDirection)
+    {
+        if (!_visualSunElevationOverrideDegrees.HasValue)
+            return physicalDirection;
+
+        Vector3d up = (observer - body.Position).Normalized;
+        Vector3d horizontal = physicalDirection - up * physicalDirection.Dot(up);
+        if (horizontal.MagnitudeSquared < 1e-12)
+            horizontal = body.GetEastDirection(observer);
+        horizontal = horizontal.Normalized;
+        double elevation = _visualSunElevationOverrideDegrees.Value
+            * System.Math.PI / 180.0;
+        return (horizontal * System.Math.Cos(elevation)
+            + up * System.Math.Sin(elevation)).Normalized;
+    }
+
     // Lighting is presentation-only.  Twenty updates per second are enough to keep a
     // moving terminator/eclipsing body visually locked while avoiding a tree walk and
     // several material writes on every render frame.
@@ -126,13 +165,16 @@ public partial class SunController : Node
         var sun = _cachedSun;
         if (vessel == null || universe == null || sun == null) return;
 
-        Vector3d simDir = (sun.Position - vessel.Position).Normalized;
+        var atmosphereBody = universe.GetDominantBody(vessel.Position);
+        Vector3d physicalDir = (sun.Position - vessel.Position).Normalized;
+        Vector3d simDir = atmosphereBody == null
+            ? physicalDir
+            : GetVisualSunDirection(atmosphereBody, vessel.Position, physicalDir);
         var renderDir = new Vector3((float)simDir.X, (float)simDir.Y, (float)simDir.Z);
         _visualUpdateTimer -= System.Math.Max(0.0, delta);
         if (_visualUpdateTimer > 0.0) return;
         _visualUpdateTimer = VisualUpdatePeriodSeconds;
 
-        var atmosphereBody = universe.GetDominantBody(vessel.Position);
         UpdateSolarCycle(universe.CurrentTime, vessel, atmosphereBody, renderDir);
 
         bool sunDirectionChanged = _lastSunDir == Vector3.Zero

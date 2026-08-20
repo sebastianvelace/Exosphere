@@ -189,7 +189,11 @@ public partial class EarthGroundController : Node3D
             var sun = universe.GetBody("sun");
             if (sun != null)
             {
-                var sunDirection = ToGodot((sun.Position - vessel.Position).Normalized);
+                var physicalDirection = (sun.Position - vessel.Position).Normalized;
+                var sunDirection = ToGodot(SunController.Instance != null
+                    ? SunController.Instance.GetVisualSunDirection(
+                        earth, vessel.Position, physicalDirection)
+                    : physicalDirection);
                 if (!_groundShaderStateInitialized
                     || _lastSunDirection.DistanceSquaredTo(sunDirection) > 1e-10f)
                 {

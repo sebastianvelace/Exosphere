@@ -15,6 +15,13 @@ public partial class CameraController : Node3D
     /// <summary>True while the first-person cockpit camera is active ([C] cycle).</summary>
     public bool IsCockpitView => _cockpit;
 
+    /// <summary>Last deterministic visual preset applied by a capture harness, if any.</summary>
+    public string? VisualPreset { get; private set; }
+    public float PresentationYawDegrees => _yaw;
+    public float PresentationPitchDegrees => _pitch;
+    public float PresentationDistance => _distance;
+    public float PresentationFov => _externalFov;
+
     /// <summary>Switch to first-person cockpit (used by debug/visual harnesses).</summary>
     public void EnterCockpitView()
     {
@@ -50,6 +57,50 @@ public partial class CameraController : Node3D
         _cockpit = false;
         _padPresetIdx = 0;
         Mode = CameraMode.Chase;
+        _presentationDistanceTarget = null;
+        _hasSmoothedFrame = false;
+        _yaw = yaw;
+        _pitch = Mathf.Clamp(pitch, -89f, 89f);
+        _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
+    }
+
+    /// <summary>
+    /// Applies a named, reviewable camera composition for visual acceptance captures.
+    /// These presets only set presentation state; they do not change tracking physics.
+    /// </summary>
+    public bool TryApplyVisualPreset(string preset)
+    {
+        string normalized = (preset ?? string.Empty).Trim().ToLowerInvariant();
+        switch (normalized)
+        {
+            case "pad_side":
+                SetExternalPadFrame(30f, 8f, 95f);
+                break;
+            case "tower_side":
+                SetExternalPadFrame(180f, 4f, 75f);
+                break;
+            case "tracking":
+                SetExternalPadFrame(28f, 12f, 95f);
+                break;
+            case "orbit_beauty":
+                SetExternalChaseFrame(0f, 45f, 400_000f);
+                break;
+            case "edl_side":
+                SetExternalChaseFrame(0f, 12f, EdlPresentationDistance);
+                break;
+            default:
+                return false;
+        }
+
+        VisualPreset = normalized;
+        return true;
+    }
+
+    private void SetExternalPadFrame(float yaw, float pitch, float distance)
+    {
+        _cockpit = false;
+        _padPresetIdx = 0;
+        Mode = CameraMode.Pad;
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
         _yaw = yaw;
@@ -209,8 +260,13 @@ public partial class CameraController : Node3D
                 var sun = bridge.Universe.GetBody("sun");
                 if (sun != null)
                 {
+                    var physicalDirection = (sun.Position - bridge.ActiveVessel.Position).Normalized;
+                    var visualDirection = SunController.Instance != null
+                        ? SunController.Instance.GetVisualSunDirection(
+                            body, bridge.ActiveVessel.Position, physicalDirection)
+                        : physicalDirection;
                     var localSun = BuildSurfaceFrame(body, bridge.ActiveVessel.Position).Inverse()
-                        * ToG((sun.Position - bridge.ActiveVessel.Position).Normalized);
+                        * ToG(visualDirection);
                     _yaw = Mathf.RadToDeg(Mathf.Atan2(localSun.X, localSun.Z));
                     _pitch = Mathf.Clamp(
                         Mathf.RadToDeg(Mathf.Asin(localSun.Y)),

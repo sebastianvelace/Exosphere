@@ -77,10 +77,15 @@ public partial class MarsTerrainController : Node3D
             var sun = universe.GetBody("sun");
             if (sun != null)
             {
+                var physicalDirection = (sun.Position - vessel.Position).Normalized;
+                var visualDirection = SunController.Instance != null
+                    ? SunController.Instance.GetVisualSunDirection(
+                        mars, vessel.Position, physicalDirection)
+                    : physicalDirection;
                 var sunDir = new Vector3(
-                    (float)(sun.Position.X - vessel.Position.X),
-                    (float)(sun.Position.Y - vessel.Position.Y),
-                    (float)(sun.Position.Z - vessel.Position.Z)).Normalized();
+                    (float)visualDirection.X,
+                    (float)visualDirection.Y,
+                    (float)visualDirection.Z).Normalized();
                 if (_lastSunDir == Vector3.Zero
                     || _lastSunDir.DistanceSquaredTo(sunDir) > 1e-10f)
                 {

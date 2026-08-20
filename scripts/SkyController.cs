@@ -222,9 +222,12 @@ public partial class SkyController : Node
         var body = universe.GetDominantBody(vessel.Position);
         var sun = universe.GetBody("sun");
         Vector3d upD = (vessel.Position - body.Position).Normalized;
-        Vector3d sunD = sun != null
+        Vector3d physicalSunD = sun != null
             ? (sun.Position - vessel.Position).Normalized
             : new Vector3d(0.4, 0.5, 0.8).Normalized;
+        Vector3d sunD = sun != null && SunController.Instance != null
+            ? SunController.Instance.GetVisualSunDirection(body, vessel.Position, physicalSunD)
+            : physicalSunD;
         double altitude = vessel.GetAltitude(body);
 
         // Incremental skies rebuild one cubemap face at a time. Reassigning every

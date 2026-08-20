@@ -186,7 +186,11 @@ public partial class PhaseLightingController : Node
         var sun = universe.GetBody("sun");
         if (sun != null)
         {
-            _sampledSunDirection = (sun.Position - av.Position).Normalized;
+            var physicalDirection = (sun.Position - av.Position).Normalized;
+            _sampledSunDirection = SunController.Instance != null
+                ? SunController.Instance.GetVisualSunDirection(
+                    _sampledBody, av.Position, physicalDirection)
+                : physicalDirection;
             _sampledSunElevation = up.Dot(_sampledSunDirection);
         }
     }

@@ -156,9 +156,19 @@ public partial class VisualExposureController : Node
         _sampledAltitude = vessel.GetAltitude(_sampledBody);
         Vector3d up = (vessel.Position - _sampledBody.Position).Normalized;
         var sun = universe.GetBody("sun");
-        _sampledSunElevation = sun == null
-            ? 1.0
-            : up.Dot((sun.Position - vessel.Position).Normalized);
+        if (sun == null)
+        {
+            _sampledSunElevation = 1.0;
+        }
+        else
+        {
+            Vector3d physicalDirection = (sun.Position - vessel.Position).Normalized;
+            Vector3d visualDirection = SunController.Instance != null
+                ? SunController.Instance.GetVisualSunDirection(
+                    _sampledBody, vessel.Position, physicalDirection)
+                : physicalDirection;
+            _sampledSunElevation = up.Dot(visualDirection);
+        }
 
         if (_sampledOptics != null)
             _sampledAir = System.Math.Max(

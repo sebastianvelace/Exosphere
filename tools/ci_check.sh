@@ -44,6 +44,7 @@ bash tools/tests/edl_catch_guidance_contract_test.sh
 bash tools/tests/planet_body_lighting_contract_test.sh
 bash tools/tests/visual_camera_planet_framing_contract_test.sh
 bash tools/tests/visual_camera_transition_contract_test.sh
+bash tools/tests/visual_daylight_capture_contract_test.sh
 bash tools/tests/engine_hud_semantics_contract_test.sh
 bash tools/tests/engine_hud_visual_semantics_contract_test.sh
 bash tools/tests/cockpit_subviewport_contract_test.sh

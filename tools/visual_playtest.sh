@@ -29,6 +29,8 @@ MODE="full"
 HARNESS_MODE=""
 REENTRY_BELLY_FIRST=""
 REENTRY_SLUG=""
+SUN_ELEVATION_DEG=""
+CAMERA_PRESET=""
 VARIANT_FILE=""
 VARIANT_SITE=""
 VARIANT_PROFILE=""
@@ -73,6 +75,11 @@ Options:
   --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
   --edl-yaw DEG Override the deterministic EDL exterior camera yaw in degrees (default 0).
+  --sun-elevation DEG
+                Presentation-only solar elevation for comparable captures (range -90..90;
+                physical Sun position and forces remain unchanged).
+  --camera-preset NAME
+                Deterministic composition: pad_side|tower_side|tracking|orbit_beauty|edl_side.
   --orbital-reentry  Seed a Starbase Starship in circular orbit, arm the real map deorbit
                 autopilot, and verify normal atmospheric entry through tower catch.
   --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
@@ -184,6 +191,8 @@ while [[ $# -gt 0 ]]; do
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
     --edl-yaw) EDL_YAW_DEG="$2"; shift 2 ;;
+    --sun-elevation) SUN_ELEVATION_DEG="$2"; shift 2 ;;
+    --camera-preset) CAMERA_PRESET="$2"; shift 2 ;;
     --orbital-reentry)
       MODE="orbital_reentry"
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -216,6 +225,27 @@ if [[ ! "${EDL_YAW_DEG:-0}" =~ ^-?[0-9]+([.][0-9]+)?$ ]] \
   exit 2
 fi
 EDL_YAW_DEG="${EDL_YAW_DEG:-0}"
+
+SUN_ELEVATION_SET=0
+if [[ -n "$SUN_ELEVATION_DEG" ]]; then
+  if [[ ! "$SUN_ELEVATION_DEG" =~ ^-?[0-9]+([.][0-9]+)?$ ]] \
+    || ! awk -v elevation="$SUN_ELEVATION_DEG" \
+      'BEGIN { exit !(elevation >= -90.0 && elevation <= 90.0) }'; then
+    echo "ERROR: --sun-elevation must be a number between -90 and 90 degrees" >&2
+    exit 2
+  fi
+  SUN_ELEVATION_SET=1
+else
+  SUN_ELEVATION_DEG="0"
+fi
+
+case "$CAMERA_PRESET" in
+  ""|pad_side|tower_side|tracking|orbit_beauty|edl_side) ;;
+  *)
+    echo "ERROR: --camera-preset must be pad_side, tower_side, tracking, orbit_beauty or edl_side" >&2
+    exit 2
+    ;;
+esac
 
 if [[ ! "$RESOLUTION" =~ ^([0-9]{1,4})x([0-9]{1,4})$ ]]; then
   echo "ERROR: --resolution must use WIDTHxHEIGHT (for example 1280x720)" >&2
@@ -450,6 +480,9 @@ public partial class _PlaytestShot : Node
     const int SettleFrames = 4;
     const double MaxRuntimeSec = ${MAX_RUNTIME_SEC}.0;
     const double AscentFallbackSec = 720.0;
+    const bool HasVisualSunElevation = ${SUN_ELEVATION_SET} == 1;
+    const double VisualSunElevationDeg = ${SUN_ELEVATION_DEG};
+    const string VisualCameraPreset = "${CAMERA_PRESET}";
 
     readonly string _mode;
     readonly string _outDir;
@@ -476,6 +509,7 @@ public partial class _PlaytestShot : Node
     bool _moonSnapshot;
     bool _finished;
     bool _authorized;
+    bool _visualConfigurationApplied;
 
     // ── ascent diagnostics ─────────────────────────────────────────────────
     double _nextAscentTelemetry;
@@ -720,6 +754,7 @@ public partial class _PlaytestShot : Node
         double fluxRatio = flux / FluxPeak;
 
         TryCapturePending();
+        ApplyVisualCaptureConfiguration(bridge, vessel, universe, body);
 
         if (_mode == "atmosphere_bodies")
         {
@@ -2127,6 +2162,57 @@ public partial class _PlaytestShot : Node
             $"upright={upright:F4} authority={vessel.ControlAuthorityFactor:F2}");
         _log.Flush();
         _nextFullTelemetry = universe.CurrentTime + 20.0;
+    }
+
+    private void ApplyVisualCaptureConfiguration(
+        SimulationBridge bridge, Vessel vessel, Universe universe, CelestialBody body)
+    {
+        if (_visualConfigurationApplied
+            || _mode is "atmosphere" or "atmosphere_ground" or "atmosphere_low"
+                or "atmosphere_bodies" or "spectral")
+            return;
+
+        bool hasCameraPreset = VisualCameraPreset.Length > 0;
+        if (!HasVisualSunElevation && !hasCameraPreset)
+        {
+            _visualConfigurationApplied = true;
+            return;
+        }
+        if ((HasVisualSunElevation && SunController.Instance == null)
+            || (hasCameraPreset && CameraController.Instance == null))
+            return;
+
+        if (HasVisualSunElevation)
+            SunController.Instance!.SetVisualSunElevationOverride(VisualSunElevationDeg);
+
+        string phase = HasVisualSunElevation
+            ? SunController.ClassifySolarPhase(VisualSunElevationDeg)
+            : SunController.SolarPhase;
+        _log.WriteLine(
+            $"VISUAL_SUN override={HasVisualSunElevation} "
+            + $"elevationDeg={(HasVisualSunElevation ? VisualSunElevationDeg.ToString("F2") : "physical")} "
+            + $"phase={phase} physicalSunPositionUnchanged=True");
+
+        if (hasCameraPreset)
+        {
+            if (!CameraController.Instance!.TryApplyVisualPreset(VisualCameraPreset))
+            {
+                _log.WriteLine($"FAIL visual_camera_preset_invalid preset={VisualCameraPreset}");
+                _log.Flush();
+                Finish("VISUAL_CAMERA_PRESET_INVALID");
+                return;
+            }
+
+            var camera = CameraController.Instance;
+            _log.WriteLine(
+                $"VISUAL_CAMERA preset={camera.VisualPreset} "
+                + $"yawDeg={camera.PresentationYawDegrees:F2} "
+                + $"pitchDeg={camera.PresentationPitchDegrees:F2} "
+                + $"distance={camera.PresentationDistance:F2} "
+                + $"fov={camera.PresentationFov:F2} mode={camera.Mode}");
+        }
+        _log.Flush();
+        _visualConfigurationApplied = true;
     }
 
     private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
@@ -3767,6 +3853,18 @@ else
 fi
 
 verify_pngs
+
+if (( SUN_ELEVATION_SET == 1 )) || [[ -n "$CAMERA_PRESET" ]]; then
+  if ! grep -q '^VISUAL_SUN .*physicalSunPositionUnchanged=True' "$LOG"; then
+    echo "ERROR: deterministic visual run is missing VISUAL_SUN telemetry" >&2
+    exit 1
+  fi
+  if [[ -n "$CAMERA_PRESET" ]] \
+    && ! grep -q "^VISUAL_CAMERA preset=${CAMERA_PRESET} " "$LOG"; then
+    echo "ERROR: deterministic visual run is missing VISUAL_CAMERA preset telemetry" >&2
+    exit 1
+  fi
+fi
 
 if [[ "$MODE" == "gemini_docking" ]]; then
   omega="$(awk '

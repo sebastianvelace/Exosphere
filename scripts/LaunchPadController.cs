@@ -69,7 +69,7 @@ public partial class LaunchPadController : Node3D
 
     public override void _Process(double delta)
     {
-        bool night = SunController.SolarVisibility < 0.20f;
+        bool night = SunController.SolarPhase is "ASTRONOMICAL_TWILIGHT" or "NIGHT";
         if (!_lastNightFloodlightsState.HasValue || _lastNightFloodlightsState.Value != night)
         {
             _lastNightFloodlightsState = night;
