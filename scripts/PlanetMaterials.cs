@@ -44,6 +44,8 @@ public static class PlanetMaterials
         mat.SetShaderParameter("cloud_amount", 0.85f);
         mat.SetShaderParameter("night_lights", 2.4f);
         mat.SetShaderParameter("day_gain", 1.15f);
+        mat.SetShaderParameter("night_floor", 0.12f);
+        mat.SetShaderParameter("limb_strength", 0.85f);
         return mat;
     }
 
@@ -95,14 +97,22 @@ public static class PlanetMaterials
                     detail:  new Color(0.34f, 0.16f, 0.10f),   // darker maria/lowlands
                     detailScale: 4.0f, roughness: 0.97f,
                     rimColor: new Color(0.80f, 0.45f, 0.30f), rimStrength: 0.35f,
-                    texturePath: "res://assets/textures/mars.jpg");
+                    texturePath: "res://assets/textures/mars.jpg",
+                    // Orbital captures left 96.46% of the frame at black on the
+                    // nightside. A small earthshine proxy keeps the limb readable
+                    // without changing direct solar response or low-altitude terrain.
+                    dayGain: 0.92f, nightFloor: 0.012f);
 
             case "venus":
                 return SmoothCloudBody(
                     surface: new Color(0.90f, 0.78f, 0.52f),
                     detail:  new Color(0.78f, 0.62f, 0.38f),
                     rimColor: new Color(0.95f, 0.80f, 0.55f), rimStrength: 0.8f,
-                    texturePath: "res://assets/textures/venus.jpg");
+                    texturePath: "res://assets/textures/venus.jpg",
+                    // Venus at 10 km was clipping in the lit cloud deck. Keep the
+                    // night floor and rim strength unchanged; only reduce direct
+                    // daytime response before the shader's Venus-specific rim cap.
+                    dayGain: 0.22f, nightFloor: 0.004f);
 
             case "jupiter":
                 return BandedBody(
@@ -134,12 +144,16 @@ public static class PlanetMaterials
     {
         var mat = new ShaderMaterial { Shader = GD.Load<Shader>(BodyShaderPath) };
         mat.SetShaderParameter("sun_dir", DefaultSunDir);
+        mat.SetShaderParameter("solar_visibility", 1.0f);
+        mat.SetShaderParameter("day_gain", 1.0f);
+        mat.SetShaderParameter("night_floor", 0.006f);
         return mat;
     }
 
     private static Material RockyBody(Color surface, Color detail, float detailScale,
                                       float roughness, Color? rimColor = null,
-                                      float rimStrength = 0.0f, string? texturePath = null)
+                                      float rimStrength = 0.0f, string? texturePath = null,
+                                      float dayGain = 1.0f, float nightFloor = 0.006f)
     {
         var mat = BodyMaterial();
         mat.SetShaderParameter("mode", 0);
@@ -149,6 +163,8 @@ public static class PlanetMaterials
         mat.SetShaderParameter("roughness_val", roughness);
         mat.SetShaderParameter("rim_color", rimColor ?? new Color(0.4f, 0.5f, 0.7f));
         mat.SetShaderParameter("rim_strength", rimStrength);
+        mat.SetShaderParameter("day_gain", dayGain);
+        mat.SetShaderParameter("night_floor", nightFloor);
         if (texturePath != null)
         {
             mat.SetShaderParameter("surface_tex", LoadTexture(texturePath));
@@ -174,7 +190,8 @@ public static class PlanetMaterials
     }
 
     private static Material SmoothCloudBody(Color surface, Color detail,
-                                            Color rimColor, float rimStrength, string? texturePath = null)
+                                            Color rimColor, float rimStrength, string? texturePath = null,
+                                            float dayGain = 1.0f, float nightFloor = 0.006f)
     {
         var mat = BodyMaterial();
         mat.SetShaderParameter("mode", 2);
@@ -184,6 +201,9 @@ public static class PlanetMaterials
         mat.SetShaderParameter("roughness_val", 0.6f);
         mat.SetShaderParameter("rim_color", rimColor);
         mat.SetShaderParameter("rim_strength", rimStrength);
+        mat.SetShaderParameter("day_gain", dayGain);
+        mat.SetShaderParameter("night_floor", nightFloor);
+        mat.SetShaderParameter("cloud_band_strength", 0.55f);
         if (texturePath != null) { mat.SetShaderParameter("surface_tex", LoadTexture(texturePath)); mat.SetShaderParameter("tex_amount", 1.0f); }
         return mat;
     }

@@ -31,6 +31,7 @@ public partial class ConstructionController : Control
     private VesselRenderer? _previewRenderer;
     private readonly Stack<VesselCraftDefinition> _undo = new();
     private readonly Stack<VesselCraftDefinition> _redo = new();
+    private readonly List<Control> _compactOptionalControls = new();
 
     // ── Direct 3D manipulation (preview picking) ──────────────────────────
     private SubViewport?        _previewViewport;
@@ -57,6 +58,8 @@ public partial class ConstructionController : Control
     public override void _Ready()
     {
         BuildUi();
+        Resized += UpdateResponsiveLayout;
+        UpdateResponsiveLayout();
         LoadCatalog();
     }
 
@@ -206,14 +209,18 @@ public partial class ConstructionController : Control
 
         // Navegador de craft files guardados / Saved craft-file browser — pinned at a
         // fixed, compact height (secondary to the catalog, not another full column).
-        catalogBox.AddChild(InterfaceTheme.SectionLabel("SAVED VEHICLES"));
+        var savedVehiclesLabel = InterfaceTheme.SectionLabel("SAVED VEHICLES");
+        catalogBox.AddChild(savedVehiclesLabel);
+        _compactOptionalControls.Add(savedVehiclesLabel);
         _craftBrowser = new ItemList { Name = "CraftBrowser", CustomMinimumSize = new Vector2(0, 84) };
         _craftBrowser.ItemActivated += OnCraftBrowserActivated;
         InterfaceTheme.StyleField(_craftBrowser);
         catalogBox.AddChild(_craftBrowser);
+        _compactOptionalControls.Add(_craftBrowser);
 
         var browserRow = ButtonRow();
         catalogBox.AddChild(browserRow);
+        _compactOptionalControls.Add(browserRow);
         var refreshCrafts = CompactButton("Refresh");
         refreshCrafts.Pressed += RefreshCraftBrowser;
         browserRow.AddChild(refreshCrafts);
@@ -250,6 +257,10 @@ public partial class ConstructionController : Control
             // DirectSpaceState; Godot's automatic object picking stays off.
             PhysicsObjectPicking = false,
         };
+        // Give the preview its own 3D world explicitly. Without this, the
+        // viewport can render its nodes but World3D may remain null on the first
+        // input event, making the VAB raycast throw instead of selecting a part.
+        viewport.World3D = new World3D();
         viewportContainer.AddChild(viewport);
         _previewViewport = viewport;
         SetPreviewRenderingActive(active: false);
@@ -272,7 +283,21 @@ public partial class ConstructionController : Control
         {
             Name = "PreviewLight",
             LightEnergy = 1.8f,
+            LightColor = new Color(1.0f, 0.98f, 0.94f),
             RotationDegrees = new Vector3(-45f, -35f, 0f),
+        });
+        // The preview has no flight-scene WorldEnvironment or solar sky. A single
+        // key therefore leaves the metallic hull nearly black on its unlit side,
+        // especially on the Super Heavy stack. This bounded cool fill is a studio
+        // presentation light only; it does not participate in flight lighting or
+        // atmospheric physics and keeps the silhouette/material cues readable.
+        previewRoot.AddChild(new DirectionalLight3D
+        {
+            Name = "PreviewFill",
+            LightEnergy = 0.62f,
+            LightColor = new Color(0.62f, 0.72f, 0.88f),
+            ShadowEnabled = false,
+            RotationDegrees = new Vector3(24f, 145f, 0f),
         });
         var camera = new Camera3D
         {
@@ -368,9 +393,12 @@ public partial class ConstructionController : Control
         starship.Pressed += OnStarshipTemplate;
         quickRow.AddChild(starship);
 
-        mid.AddChild(InterfaceTheme.SectionLabel("HISTORICAL PRESETS"));
+        var historicalLabel = InterfaceTheme.SectionLabel("HISTORICAL PRESETS");
+        mid.AddChild(historicalLabel);
+        _compactOptionalControls.Add(historicalLabel);
         var presetRow = ButtonRow();
         mid.AddChild(presetRow);
+        _compactOptionalControls.Add(presetRow);
         var falcon9 = CompactButton("Falcon 9 B5", muted: true);
         falcon9.TooltipText = "Dated May 2025 preset with standard fairing";
         falcon9.Pressed += () => OnVehicleVariant("falcon9_block5_standard_2025.json");
@@ -384,9 +412,12 @@ public partial class ConstructionController : Control
         flight12.Pressed += () => OnVehicleVariant("starship_flight12_v3_2026.json");
         presetRow.AddChild(flight12);
 
-        mid.AddChild(InterfaceTheme.SectionLabel("EDIT"));
+        var editLabel = InterfaceTheme.SectionLabel("EDIT");
+        mid.AddChild(editLabel);
+        _compactOptionalControls.Add(editLabel);
         var editRow = ButtonRow();
         mid.AddChild(editRow);
+        _compactOptionalControls.Add(editRow);
         _undoButton = CompactButton("Undo");
         _undoButton.Pressed += OnUndo;
         editRow.AddChild(_undoButton);
@@ -411,10 +442,12 @@ public partial class ConstructionController : Control
         advancedToggle.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         advancedToggle.AddThemeColorOverride("font_hover_color", InterfaceTheme.Text);
         mid.AddChild(advancedToggle);
+        _compactOptionalControls.Add(advancedToggle);
 
         var advancedBody = new VBoxContainer { Visible = false };
         advancedBody.AddThemeConstantOverride("separation", 8);
         mid.AddChild(advancedBody);
+        _compactOptionalControls.Add(advancedBody);
         advancedToggle.Pressed += () =>
         {
             advancedBody.Visible = !advancedBody.Visible;
@@ -451,9 +484,12 @@ public partial class ConstructionController : Control
         attach.Pressed += OnAttach;
         advancedRow.AddChild(attach);
 
-        mid.AddChild(InterfaceTheme.SectionLabel("FILE"));
+        var fileLabel = InterfaceTheme.SectionLabel("FILE");
+        mid.AddChild(fileLabel);
+        _compactOptionalControls.Add(fileLabel);
         var fileRow = ButtonRow();
         mid.AddChild(fileRow);
+        _compactOptionalControls.Add(fileRow);
         var save = CompactButton("Save");
         save.Pressed += OnSave;
         fileRow.AddChild(save);
@@ -471,6 +507,26 @@ public partial class ConstructionController : Control
         InterfaceTheme.StyleButton(_launchButton, primary: true, minSize: new Vector2(0, 48), fontSize: 16);
         _launchButton.Pressed += OnLaunch;
         mid.AddChild(_launchButton);
+
+        // The compact profile hides secondary authoring tools, not the build
+        // result, validation or launch action. This leaves the central preview
+        // and the primary flight path usable at 1280×720 without clipping the
+        // bottom of the right panel.
+        UpdateResponsiveLayout();
+    }
+
+    private void UpdateResponsiveLayout()
+    {
+        float width = Size.X;
+        float height = Size.Y;
+        bool compact = width < 1500f || height < 820f;
+        foreach (var control in _compactOptionalControls)
+            control.Visible = !compact;
+
+        if (_catalogList != null)
+            _catalogList.CustomMinimumSize = new Vector2(0, compact ? 0 : 260);
+        if (_stackList != null)
+            _stackList.CustomMinimumSize = new Vector2(0, compact ? 98 : 130);
     }
 
     /// <summary>Card: a glass-panel-backed column added to <paramref name="parent"/>,
@@ -1232,7 +1288,13 @@ public partial class ConstructionController : Control
         Vector3 from = _previewCamera.ProjectRayOrigin(vpPos);
         Vector3 dir  = _previewCamera.ProjectRayNormal(vpPos);
 
-        var space = _previewViewport.World3D.DirectSpaceState;
+        var world = _previewViewport.World3D;
+        if (world == null)
+        {
+            SetStatus("Preview physics is not ready yet.");
+            return;
+        }
+        var space = world.DirectSpaceState;
         var query = new PhysicsRayQueryParameters3D
         {
             From = from,

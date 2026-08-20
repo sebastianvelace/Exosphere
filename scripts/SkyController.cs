@@ -73,6 +73,17 @@ public partial class SkyController : Node
     // Runtime-only shader quadrature quality. Offline LUT/reference sampling is
     // intentionally independent and remains at its validated resolution.
     private const float InteractiveAtmosphereQuality = 0.60f;
+    // Low-altitude tangent rays cross the cloud shell at a grazing angle. A small
+    // quality lift removes the last shell-step contour without exceeding the shader's
+    // 24-sample ceiling; orbital views keep the cheaper default.
+    private const float LowAltitudeAtmosphereQuality = 0.82f;
+    private float _lastAtmosphereQuality = float.NaN;
+    // Test-only escape hatch used by the visual harness to separate cloud-shell aliasing
+    // from the spherical Rayleigh/Mie integration. It is inert unless explicitly exported
+    // by a diagnostic process; normal launches keep the authored cloud layer enabled.
+    private static bool DiagnosticCloudsDisabled =>
+        string.Equals(System.Environment.GetEnvironmentVariable("EXO_VISUAL_DISABLE_CLOUDS"),
+            "1", StringComparison.Ordinal);
 
     private enum AtmosphereLutWorkerState
     {
@@ -172,6 +183,7 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("multiple_scattering_mu_layers",
             (float)AngularScatteringMuLayers);
         _skyMat.SetShaderParameter("atmosphere_quality", InteractiveAtmosphereQuality);
+        _lastAtmosphereQuality = InteractiveAtmosphereQuality;
         _skyMat.SetShaderParameter("density_lut_enabled", false);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
@@ -444,7 +456,8 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("refractive_scale_height", (float)optics.RefractiveScaleHeight);
         _skyMat.SetShaderParameter("low_order_diffuse_strength",
             (float)optics.LowOrderDiffuseStrength);
-        _skyMat.SetShaderParameter("cloud_enabled", optics.HasCloudLayer);
+        _skyMat.SetShaderParameter("cloud_enabled",
+            optics.HasCloudLayer && !DiagnosticCloudsDisabled);
         _skyMat.SetShaderParameter("cloud_base_altitude", (float)optics.CloudBaseAltitude);
         _skyMat.SetShaderParameter("cloud_top_altitude", (float)optics.CloudTopAltitude);
         _skyMat.SetShaderParameter("cloud_extinction", (float)optics.CloudExtinction);
@@ -476,12 +489,27 @@ public partial class SkyController : Node
         double column = optics?.RayleighDensity(altitude) ?? 0.0;
         float daylight = Smoothstep(-0.12f, 0.03f, (float)sunElevationSin);
         float air = (float)System.Math.Clamp(column, 0.0, 1.0);
-        // At low solar elevations, the long tangent path magnifies individual
-        // latitude rows in the equirectangular cloud map.  Fade in the shader's
-        // narrow latitude prefilter only there; full daylight keeps the original
-        // high-frequency weather detail intact.
-        float cloudWeatherPrefilter =
+        // At low solar elevations OR low observer altitudes, the long tangent path
+        // magnifies individual latitude rows in the equirectangular cloud map. The
+        // latter was the remaining source of horizontal cloud stripes at 10 km in
+        // daylight. Keep full-resolution weather in the upper atmosphere, but blend
+        // to the existing latitude-aware prefilter close to the planet.
+        float solarPrefilter =
             1.0f - Smoothstep(0.02f, 0.18f, (float)sunElevationSin);
+        float altitudePrefilter =
+            1.0f - Smoothstep(6_000.0f, 45_000.0f, (float)System.Math.Max(0.0, altitude));
+        float cloudWeatherPrefilter = Mathf.Max(
+            solarPrefilter, altitudePrefilter);
+        float atmosphereQuality = altitude < 45_000.0
+            ? LowAltitudeAtmosphereQuality
+            : InteractiveAtmosphereQuality;
+        if (_skyMat != null
+            && (float.IsNaN(_lastAtmosphereQuality)
+                || Mathf.Abs(atmosphereQuality - _lastAtmosphereQuality) > 1e-3f))
+        {
+            _skyMat.SetShaderParameter("atmosphere_quality", atmosphereQuality);
+            _lastAtmosphereQuality = atmosphereQuality;
+        }
         if (_skyMat != null
             && (float.IsNaN(_lastCloudWeatherPrefilter)
                 || System.Math.Abs(cloudWeatherPrefilter - _lastCloudWeatherPrefilter) > 1e-3f))

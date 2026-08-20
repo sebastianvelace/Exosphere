@@ -67,12 +67,15 @@ public partial class HUDController : Control
     private readonly System.Collections.Generic.List<ColorRect> _phaseDots = new();
     private Label _countdownLabel = null!;
     private Label _countdownMilestone = null!;
+    private bool _countdownRequestedVisible;
     private Label _guidanceLabel = null!;
     private Label _boosterLabel = null!;
     private Label _densityToast = null!;
     private double _densityToastTimer;
     private Label _alertLabel = null!;
     private Label _alertAction = null!;
+    private PanelContainer _alertRoot = null!;
+    private bool _hasRenderedAlert;
     private readonly System.Collections.Generic.Dictionary<FlightNavigationMode, Label> _navLabels = new();
 
     private Control _leftRoot = null!;
@@ -266,13 +269,19 @@ public partial class HUDController : Control
         vbox.AddThemeConstantOverride("separation", 6);
         center.AddChild(vbox);
 
-        _phaseLabel = new Label { Text = "PRE-LAUNCH" };
+        // The phase title owns its own row. Alerts are deliberately mounted below in
+        // AlertLane so a critical alert can never share a line with the phase title.
+        var phaseTitle = new VBoxContainer { Name = "PhaseTitle" };
+        phaseTitle.AddThemeConstantOverride("separation", 2);
+        vbox.AddChild(phaseTitle);
+
+        _phaseLabel = new Label { Text = "PRE-LAUNCH", Name = "PhaseTitleLabel" };
         _phaseLabel.HorizontalAlignment = HorizontalAlignment.Center;
         InterfaceTheme.ApplyDisplay(_phaseLabel, 20);
         _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(MissionPhase.PRE_LAUNCH));
         _phaseLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
         _phaseLabel.AddThemeConstantOverride("outline_size", 3);
-        vbox.AddChild(_phaseLabel);
+        phaseTitle.AddChild(_phaseLabel);
 
         _launchPathLabel = new Label { Text = "" };
         _launchPathLabel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -316,22 +325,49 @@ public partial class HUDController : Control
             _navLabels[mode] = label;
         }
 
+        // AlertLane is a separate visual region from PhaseTitle. It has exactly two
+        // rows: a compact severity/title summary and a detail/action row. Keeping each
+        // row to one visible line prevents critical text from pushing the flight phase
+        // title onto the same line or expanding the banner unpredictably.
+        _alertRoot = new PanelContainer
+        {
+            Name = "AlertLane",
+            CustomMinimumSize = new Vector2(580, 0),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            Visible = false,
+        };
+        _alertRoot.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.80f, 8, 12, 7));
+        var alertBox = new VBoxContainer { Name = "AlertRows" };
+        alertBox.AddThemeConstantOverride("separation", 2);
+        _alertRoot.AddChild(alertBox);
+
         _alertLabel = new Label
         {
+            Name = "AlertSummary",
             Text = "",
             HorizontalAlignment = HorizontalAlignment.Center,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            MaxLinesVisible = 1,
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimWordEllipsis,
         };
         InterfaceTheme.ApplyBody(_alertLabel, 12, medium: true);
-        vbox.AddChild(_alertLabel);
+        alertBox.AddChild(_alertLabel);
 
         _alertAction = new Label
         {
+            Name = "AlertDetail",
             Text = "",
             HorizontalAlignment = HorizontalAlignment.Center,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            MaxLinesVisible = 1,
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimWordEllipsis,
         };
         InterfaceTheme.ApplyBody(_alertAction, 10);
         _alertAction.AddThemeColorOverride("font_color", LabelDim);
-        vbox.AddChild(_alertAction);
+        alertBox.AddChild(_alertAction);
+        vbox.AddChild(_alertRoot);
 
         _phaseTrack = new HBoxContainer();
         _phaseTrack.Alignment = BoxContainer.AlignmentMode.Center;
@@ -963,19 +999,21 @@ public partial class HUDController : Control
         var alert = snapshot.Alerts.FirstOrDefault();
         if (alert == null)
         {
+            _hasRenderedAlert = false;
             _alertLabel.Text = "";
             _alertAction.Text = "";
             return;
         }
 
+        _hasRenderedAlert = true;
         string acknowledgement = alert.Acknowledged ? "  ACK" : "  F2 ACK";
         _alertLabel.Text =
-            $"{alert.Severity.ToString().ToUpperInvariant()}  {alert.Title}  " +
-            $"{alert.Value} / LIMIT {alert.Limit}{acknowledgement}";
+            $"{alert.Severity.ToString().ToUpperInvariant()}  {alert.Title}";
         _alertLabel.AddThemeColorOverride(
             "font_color",
             alert.Severity == FlightAlertSeverity.Critical ? FuelLowCol : WarnCol);
-        _alertAction.Text = $"ACTION: {alert.RecommendedAction}";
+        _alertAction.Text =
+            $"{alert.Value} / LIMIT {alert.Limit}  ·  ACTION: {alert.RecommendedAction}{acknowledgement}";
     }
 
     /// <summary>
@@ -986,15 +1024,21 @@ public partial class HUDController : Control
     private void ApplyViewMode(FlightHudViewMode viewMode)
     {
         var density = UserInterfaceSettings.HudDensity;
-        if (_lastAppliedViewMode == viewMode && _lastAppliedHudDensity == density)
-            return;
-        _lastAppliedViewMode = viewMode;
-        _lastAppliedHudDensity = density;
-
         bool exterior = viewMode == FlightHudViewMode.Exterior;
         bool cockpit = viewMode == FlightHudViewMode.Cockpit;
         bool full = density == HudDensity.Full;
         bool clean = density == HudDensity.Clean;
+        bool banner = (exterior || cockpit) && !clean;
+        bool criticalOnly = clean && (exterior || cockpit) && HasCriticalAlert();
+
+        // Alert state can change without a view-mode/density transition. Keep this before
+        // the layout cache early-return so new alerts appear and cleared alerts disappear.
+        _alertRoot.Visible = _hasRenderedAlert && (banner || criticalOnly);
+
+        if (_lastAppliedViewMode == viewMode && _lastAppliedHudDensity == density)
+            return;
+        _lastAppliedViewMode = viewMode;
+        _lastAppliedHudDensity = density;
 
         // Secondary reference panels (loads/trajectory, orbit/vehicle, event log) are the
         // first thing to go: everything they carry is diagnostic, not fly-the-vehicle data.
@@ -1004,8 +1048,6 @@ public partial class HUDController : Control
         _timeRoot.Visible = exterior && !clean;
         ApplyBandScale(full);
 
-        bool banner = (exterior || cockpit) && !clean;
-        bool criticalOnly = clean && (exterior || cockpit) && HasCriticalAlert();
         _phaseRoot.Visible = banner || criticalOnly;
         _phaseLabel.Visible = banner;
         _launchPathLabel.Visible = banner;
@@ -1013,7 +1055,11 @@ public partial class HUDController : Control
         _boosterLabel.Visible = banner && _boosterLabel.Text.Length > 0;
         _navRow.Visible = banner && full;
         _phaseTrack.Visible = banner;
-        _countdownRoot.Visible &= (exterior || cockpit) && !clean;
+        // Keep mission state separate from presentation filtering. Using `&=` here
+        // made the visibility one-way: once cockpit/clean hid the countdown, a later
+        // return to exterior could not show it again until the node was rebuilt.
+        _countdownRoot.Visible = _countdownRequestedVisible
+            && (exterior || cockpit) && !clean;
 
         // Attitude cluster (navball + child engines/strip) in every exterior density.
         bool cluster = exterior;
@@ -1233,8 +1279,11 @@ public partial class HUDController : Control
     private void UpdateCountdown(MissionManager mission)
     {
         bool show = mission.Phase is MissionPhase.COUNTDOWN or MissionPhase.IGNITION;
+        _countdownRequestedVisible = show;
         if (!show) { _countdownRoot.Visible = false; return; }
 
+        // ApplyViewMode will apply the current cockpit/density policy after the
+        // mission text is refreshed; the requested state must survive that filter.
         _countdownRoot.Visible = true;
         double t = mission.CountdownTimer;
         int secs = (int)System.Math.Ceiling(t);
@@ -1321,6 +1370,8 @@ public partial class HUDController : Control
     {
         var bridge = SimulationBridge.Instance;
         if (bridge == null) return;
+        var viewport = GetViewport();
+        if (viewport == null) return;
 
         if (@event is InputEventKey key && key.Pressed && !key.Echo)
         {
@@ -1328,7 +1379,7 @@ public partial class HUDController : Control
             {
                 case Key.Escape:
                     GetTree().ChangeSceneToFile("res://scenes/ui/MainMenu.tscn");
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 // [Z]/[X] son hold-throttle: se sondean en _Process (mantener para
                 // encender/acelerar / bajar). Aquí solo van las acciones de pulsación única.
@@ -1347,26 +1398,26 @@ public partial class HUDController : Control
                     break;
                 case Key.R:
                     OnReentryDemoPressed();
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 case Key.V:
                     GetTree().ChangeSceneToFile("res://scenes/construction/Construction.tscn");
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 // [,] / [.] time warp is handled by WarpController alone (C2 dedupe):
                 // both handlers used to fire, stepping the warp index twice per press.
                 case Key.F1:
                     _padHelpDismissed = !_padHelpDismissed;
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 case Key.F3:
                     CycleHudDensity();
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 case Key.F2:
                     if (_snapshot?.Alerts.FirstOrDefault(a => !a.Acknowledged) is { } alert)
                         _presenter.AcknowledgeAlert(alert.Code);
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 case Key.F8:
                     if (bridge.InjectActiveEngineFailure())
@@ -1377,19 +1428,19 @@ public partial class HUDController : Control
                         if (_events.Count > 5)
                             _events.RemoveAt(_events.Count - 1);
                     }
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 case Key.F5:
                     SaveSystem.SaveGame("quicksave");
                     PushToast("QUICKSAVE");
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
                 case Key.F9:
                     if (SaveSystem.LoadGame("quicksave"))
                         PushToast("QUICKLOAD");
                     else
                         PushToast("NO QUICKSAVE");
-                    GetViewport().SetInputAsHandled();
+                    viewport.SetInputAsHandled();
                     break;
             }
         }

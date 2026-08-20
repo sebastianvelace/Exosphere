@@ -16,6 +16,10 @@ render_mode cull_back, unshaded;
 
 uniform int   mode : hint_range(0, 2) = 0;
 uniform vec3  sun_dir = vec3(0.4, 0.5, 0.8);
+// Shared solar-disc visibility from SunController. This includes the body's own
+// horizon occlusion and external eclipses, so the procedural surface cannot stay
+// fully sunlit while the atmosphere/sky is in shadow.
+uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform vec3  surface_tint : source_color = vec3(0.5, 0.5, 0.5);
 uniform vec3  detail_tint  : source_color = vec3(0.3, 0.3, 0.3);
 uniform vec3  rim_color    : source_color = vec3(0.4, 0.5, 0.7);
@@ -23,6 +27,19 @@ uniform float detail_scale : hint_range(0.5, 12.0) = 4.0;
 uniform float roughness_val : hint_range(0.0, 1.0) = 0.95;
 uniform float rim_strength  : hint_range(0.0, 2.0) = 0.0;
 uniform float band_warp     : hint_range(0.0, 0.5) = 0.08;
+uniform float cloud_band_strength : hint_range(0.0, 1.0) = 0.0;
+// The night term is a bounded presentation proxy for starlight/ambient glow.
+// It is deliberately much lower than the former 0.05 floor because exposure
+// adapts upward in darkness. Direct daylight remains controlled independently.
+uniform float day_gain       : hint_range(0.0, 1.5) = 1.0;
+uniform float night_floor    : hint_range(0.0, 0.05) = 0.006;
+
+// Orbital rocky bodies need a separate, bounded earthshine/starlight proxy:
+// at orbital scale their illuminated disc can occupy very few pixels, making
+// the configured Mars floor (0.012) numerically finite but visually unreadable.
+// Keep this calibration local to mode 0; Venus clouds and gas giants retain
+// their material-provided floor. This never contributes to direct sunlight.
+const float ROCKY_ORBITAL_NIGHT_FLOOR = 0.024;
 
 // Optional real surface map (Mars, Moon, …). When tex_amount > 0 the equirect texture
 // replaces the procedural base colour; procedural micro-detail still modulates it.
@@ -129,16 +146,31 @@ void fragment() {
 		texCol *= 0.92 + 0.16 * fbm(p * detail_scale * 6.0, 3);
 		col = mix(col, texCol, tex_amount);
 	}
+	if (mode == 2 && cloud_band_strength > 0.001) {
+		// Venus' deck is not a flat beige sphere. Broad latitude streaks and a
+		// low-frequency shear remain visible in near-cloud and orbital views while
+		// the loaded texture still supplies the base colour.
+		float shear = fbm(p * vec3(7.0, 1.4, 7.0), 3);
+		float band = 0.5 + 0.5 * sin((p.y + shear * 0.055) * 46.0);
+		vec3 band_tint = mix(vec3(0.72, 0.61, 0.47), vec3(1.08, 0.96, 0.76), band);
+		col *= mix(vec3(1.0), band_tint, cloud_band_strength);
+	}
 
 	// Day/night lighting.
 	float ndl = dot(N, L);
 	float day = smoothstep(-0.12, 0.22, ndl);
-	col *= 0.05 + day * 1.1;
+	float direct = day * day_gain * solar_visibility;
+	float mode_night_floor = mode == 0 ? max(night_floor, ROCKY_ORBITAL_NIGHT_FLOOR) : night_floor;
+	col *= mode_night_floor + direct;
 
 	// Faint atmospheric rim (Venus / gas giants set rim_strength > 0).
 	float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
-	float rim_day = smoothstep(-0.3, 0.4, ndl);
-	col += rim_color * fres * rim_strength * (0.2 + 0.9 * rim_day);
+	float rim_day = smoothstep(-0.3, 0.4, ndl) * solar_visibility;
+	// Venus' bright cloud deck needs a bounded sun-facing limb. Preserve the
+	// 0.2 night-side rim term exactly, while reducing only the daylight portion;
+	// solar_visibility remains the authority for the illuminated contribution.
+	float rim_day_response = mode == 2 ? 0.55 : 0.9;
+	col += rim_color * fres * rim_strength * (0.2 + rim_day_response * rim_day);
 
 	ALBEDO = col;
 	ROUGHNESS = roughness_val;

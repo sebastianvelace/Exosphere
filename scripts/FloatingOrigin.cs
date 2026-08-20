@@ -21,6 +21,17 @@ public partial class FloatingOrigin : Node
     private readonly Dictionary<string, Node3D> _planetNodes = new();
     private Camera3D? _camera;
 
+    // Last scaled-space sample consumed by the visual harness/telemetry. Keeping this
+    // presentation-only snapshot makes an invisible planet diagnosable without changing
+    // the simulation or walking the scene tree from the capture tool.
+    public string LastPresentationBodyId { get; private set; } = string.Empty;
+    public bool LastPresentationVisible { get; private set; }
+    public double LastPresentationCameraDistance { get; private set; }
+    public float LastPresentationAngularDiameterDeg { get; private set; }
+    public float LastPresentationForwardCosine { get; private set; }
+    public Vector3 LastPresentationDirection { get; private set; } = Vector3.Zero;
+    public Vector3 LastPresentationBackdropPosition { get; private set; } = Vector3.Zero;
+
     /// <summary>
     /// Rotation carrying the Earth texture's own lat/lon frame onto the simulation's
     /// body-fixed frame, so a point at (lat, lon) in the texture is drawn exactly where
@@ -168,6 +179,20 @@ public partial class FloatingOrigin : Node
                 float  rBackdrop = BackdropDistance * (float)sinA;   // subtends asin(R/d)
 
                 var dir = toBody.Normalized;
+                if (_camera != null && body.Id ==
+                    (bridge.Universe.GetDominantBody(activeVessel.Position)?.Id ?? string.Empty))
+                {
+                    var dirRender = new Godot.Vector3((float)dir.X, (float)dir.Y, (float)dir.Z);
+                    var forward = -_camera.GlobalTransform.Basis.Z.Normalized();
+                    LastPresentationBodyId = body.Id;
+                    LastPresentationVisible = node.Visible;
+                    LastPresentationCameraDistance = d;
+                    LastPresentationAngularDiameterDeg =
+                        Mathf.RadToDeg(2.0f * Mathf.Asin((float)sinA));
+                    LastPresentationForwardCosine = forward.Dot(dirRender);
+                    LastPresentationDirection = dirRender;
+                    LastPresentationBackdropPosition = camRender + dirRender * BackdropDistance;
+                }
                 node.Position = camRender + new Godot.Vector3(
                     (float)dir.X, (float)dir.Y, (float)dir.Z) * BackdropDistance;
                 node.Quaternion = body.Id == "earth" ? PlanetOrientation : PlanetTilt;

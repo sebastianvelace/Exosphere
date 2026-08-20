@@ -123,6 +123,7 @@ public partial class SimulationBridge : Node
     private VesselRenderer?      _vesselRenderer = null;
     private Camera3D?            _camera         = null;
     private LaunchPadController? _launchPad      = null;
+    private bool?                _lastLaunchPadVisibility;
 
     // ── Launch site ───────────────────────────────────────────────────────
     /// <summary>Id of the pad every vessel launches from (see data/launch_sites).</summary>
@@ -444,18 +445,33 @@ public partial class SimulationBridge : Node
             var basis = new Basis(ToGodotVector(east), ToGodotVector(up), ToGodotVector(south));
             _launchPad.Transform = new Transform3D(basis, position);
             bool catchApproachActive = HasCatchApproach(padEarth.Id);
-            bool earthReturnActive = catchAnchorVessel.ReferenceBodyId == padEarth.Id;
-            bool starshipReentryActive = earthReturnActive
-                && (MissionManager.Instance?.InDescent == true
-                    || catchApproachActive)
-                && HasStarshipRole(catchAnchorVessel, "command");
-            // Keep the fixed launch complex in the scene for the complete Earth
-            // Starship entry/catch track. Hiding it at 8 km made the chopsticks
-            // disappear during the exact final-approach window they are meant to
-            // explain, while the physical catch solver continued running.
-            _launchPad.Visible = alt < 8_000
-                || catchApproachActive
-                || starshipReentryActive;
+            var activeVessel = ActiveVessel;
+            bool activeEarth = activeVessel != null
+                && activeVessel.ReferenceBodyId == padEarth.Id;
+            double activeAlt = activeEarth
+                ? activeVessel!.GetAltitude(padEarth)
+                : double.PositiveInfinity;
+            bool activeCatch = activeVessel != null
+                && (activeVessel.IsAttemptingTowerCatch || activeVessel.IsTowerCatchDemonstration);
+            bool catchAnchorIsStarship = HasStarshipRole(catchAnchorVessel, "command")
+                || HasStarshipRole(catchAnchorVessel, "booster");
+            // The pad is a local presentation anchored to the vessel being viewed. A
+            // returning booster may be in its catch approach while the player is still
+            // looking at a Starship in orbit; using any fleet vessel here made the pad
+            // reappear at the floating origin and filled the orbital beauty shot with
+            // launch hardware. Keep it for low active-vessel views and validated
+            // Starship-family catches only; a generic vessel must never summon the
+            // launch complex into an unrelated orbital shot.
+            bool padVisible = activeEarth
+                && (activeAlt <= LaunchPadController.PadVisibilityCeilingM
+                    || (activeCatch && catchAnchorIsStarship));
+            if (!_lastLaunchPadVisibility.HasValue || _lastLaunchPadVisibility.Value != padVisible)
+            {
+                _lastLaunchPadVisibility = padVisible;
+                _launchPad.Visible = padVisible;
+                GD.Print($"[PAD_VISUAL] visible={padVisible} body={padEarth.Id} alt={activeAlt:F0} " +
+                    $"fleetCatchApproach={catchApproachActive} activeCatch={activeCatch}");
+            }
 
             // While a catch approach is armed, refresh the sim-side cradle target every
             // frame from the same site/spec data the render tower uses — the tower is
@@ -1559,7 +1575,15 @@ public partial class SimulationBridge : Node
         double r;
         if (bodyId == "saturn")
         {
-            up = new Vector3d(0.45, 0.65, 0.5).Normalized;
+            // Use a sun-facing 3/4 arrival vector. The former fixed vector could put
+            // the vessel behind Saturn relative to the Sun, making the correctly
+            // textured planet read as a black cutout while the rings stayed bright.
+            var sun = Universe.GetBody("sun");
+            var toSun = sun == null
+                ? new Vector3d(0.45, 0.65, 0.5).Normalized
+                : (sun.Position - body.Position).Normalized;
+            var axial = body.RotationAxis.Normalized;
+            up = (toSun * 0.82 + axial * 0.57).Normalized;
             r  = body.Radius * 5.0;
         }
         else

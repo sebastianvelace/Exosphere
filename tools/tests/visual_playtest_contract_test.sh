@@ -7,12 +7,48 @@ source "$ROOT/tools/lib/playtest_contracts.sh"
 HARNESS_SCRIPT="$ROOT/tools/visual_playtest.sh"
 bash -n "$HARNESS_SCRIPT"
 
+# Resolution must be explicit, bounded, and shared by both Xvfb/Godot launch paths.
+if ! grep -q '^RESOLUTION="1920x1080"$' "$HARNESS_SCRIPT"; then
+  echo "FAIL default capture resolution is not 1920x1080" >&2
+  exit 1
+fi
+if ! grep -q -- '--resolution) RESOLUTION="\$2"' "$HARNESS_SCRIPT"; then
+  echo "FAIL --resolution parser is missing" >&2
+  exit 1
+fi
+if ! grep -q -- '--display) EXTERNAL_DISPLAY="\$2"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'DISPLAY="\$EXTERNAL_DISPLAY" xdpyinfo' "$HARNESS_SCRIPT"; then
+  echo "FAIL external display path is missing" >&2
+  exit 1
+fi
+if ! grep -q 'RESOLUTION_WIDTH < 640' "$HARNESS_SCRIPT" \
+  || ! grep -q 'RESOLUTION_HEIGHT < 360' "$HARNESS_SCRIPT" \
+  || ! grep -q 'RESOLUTION_WIDTH \* RESOLUTION_HEIGHT > 33177600' "$HARNESS_SCRIPT"; then
+  echo "FAIL --resolution bounds are missing or too permissive" >&2
+  exit 1
+fi
+screen_count="$(grep -c -- '-screen 0 \${RESOLUTION}x24' "$HARNESS_SCRIPT")"
+if [[ "$screen_count" -ne 2 ]]; then
+  echo "FAIL expected both xvfb-run paths to use the validated resolution, got $screen_count" >&2
+  exit 1
+fi
+godot_resolution_count="$(grep -c -- '--resolution "\$RESOLUTION"' "$HARNESS_SCRIPT")"
+if [[ "$godot_resolution_count" -ne 4 ]]; then
+  echo "FAIL expected both display paths in both Godot launches to receive --resolution, got $godot_resolution_count" >&2
+  exit 1
+fi
+if grep -q -- '-screen 0 1920x1080x24' "$HARNESS_SCRIPT"; then
+  echo "FAIL hard-coded 1920x1080 Xvfb screen remains" >&2
+  exit 1
+fi
+echo "PASS bounded --resolution is wired to both Xvfb/Godot launches"
+
 # Both Godot launch paths must override the default user://logs destination.
 # That default can fail to create its parent directory in the Xvfb environment
 # and caused Godot 4.6.3 to abort before the scene loaded.
 launch_count="$(grep -c -- '--log-file "\$GODOT_LOG_FILE"' "$HARNESS_SCRIPT")"
-if [[ "$launch_count" -ne 2 ]]; then
-  echo "FAIL expected 2 explicit Godot --log-file launch arguments, got $launch_count" >&2
+if [[ "$launch_count" -ne 4 ]]; then
+  echo "FAIL expected 4 explicit Godot --log-file arguments across display paths, got $launch_count" >&2
   exit 1
 fi
 if ! grep -q 'GODOT_LOG_FILE="\${CONSOLE_LOG}.godot"' "$HARNESS_SCRIPT"; then
@@ -29,6 +65,18 @@ if ! grep -q -- '--orbital-reentry' "$HARNESS_SCRIPT" \
   || ! grep -q 'MODE="orbital_reentry"' "$HARNESS_SCRIPT" \
   || ! grep -q 'ProcessOrbitalReentry' "$HARNESS_SCRIPT"; then
   echo "FAIL normal orbital reentry mode is not wired into the harness" >&2
+  exit 1
+fi
+if ! grep -q -- '--orbit' "$HARNESS_SCRIPT" \
+  || ! grep -q 'MODE="orbit"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ORBIT_DIRECT_OK' "$HARNESS_SCRIPT"; then
+  echo "FAIL direct orbital visual mode is not wired into the harness" >&2
+  exit 1
+fi
+if ! grep -q -- '--atmosphere-ground' "$HARNESS_SCRIPT" \
+  || ! grep -q 'MODE="atmosphere_ground"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ATMOSPHERE_GROUND_OK' "$HARNESS_SCRIPT"; then
+  echo "FAIL fast Earth-ground atmosphere matrix is not wired into the harness" >&2
   exit 1
 fi
 if awk '

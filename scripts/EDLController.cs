@@ -22,6 +22,14 @@ public partial class EDLController : Control
     private enum Edl { Inactive, Entry, Peak, Aero, Retro, Catch, Final, Caught, Touchdown }
     private Edl _phase = Edl.Inactive;
 
+    /// <summary>
+    /// Presentation-only state consumed by the exterior camera.  It deliberately exposes
+    /// no guidance or contact data: the camera may tighten the shot while EDL is visible,
+    /// but the simulation remains the sole owner of the flight sequence.
+    /// </summary>
+    public bool IsPresentationActive => _phase != Edl.Inactive;
+    public bool IsCatchPresentation => _phase is Edl.Catch or Edl.Caught;
+
     // ── Tower catch (Mechazilla) ───────────────────────────────────────────
     // Abort decision: below this altitude, a catch attempt still outside tolerance must
     // divert to a normal leg landing rather than risk a low, slow collision with tower
@@ -512,6 +520,25 @@ public partial class EDLController : Control
                 + g / thrustUpComponent
                 + descentBias
                 - 1.2 * System.Math.Max(0.0, _vUp);
+
+            // A single Raptor cannot command below its physical minimum throttle. Near the
+            // cradle that minimum is enough to hover a catch-only Ship a few decimetres above
+            // the pin plane indefinitely (the observed ~52 m FINAL_DESCENT plateau). Once the
+            // approach is centred and inside the last 1.5 m of the contact datum, release the
+            // engine for the short final drop; the pin springs then absorb the bounded impact.
+            // This is a narrow physical hand-off, not a scripted catch or teleport.
+            bool finalCatchRelease = _phase == Edl.Catch
+                && heightToContact <= 1.5
+                && vDown < 0.65
+                && horizontalError <= 2.0;
+            if (finalCatchRelease)
+            {
+                shipEngines?.SelectEngineCount(0);
+                vessel.Throttle = 0.0;
+                _landingEngineCount = 0;
+                return;
+            }
+
             bool alignedForBurn = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(aimAxis)
                 > System.Math.Cos(15.0 * MathUtils.DEG_TO_RAD);
             if (!alignedForBurn && _phase == Edl.Retro)
@@ -591,13 +618,14 @@ public partial class EDLController : Control
             DrawPlasma(vp, intensity);
         }
 
-        DrawAltimeter(vp);
-        DrawTelemetry(vp);
+        var layout = EdlOverlayLayout.Build(vp);
+        DrawAltimeter(layout);
+        DrawTelemetry(layout);
 
         // The aero phases are the ones that can burn the vehicle; below them the panel would
         // just be noise on a descent that is already thermally over.
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero)
-            DrawThermal(vp);
+            DrawThermal(layout);
 
         if (_blackout)
             DrawBlackoutBanner(vp);
@@ -618,10 +646,80 @@ public partial class EDLController : Control
         }
     }
 
-    private void DrawAltimeter(Vector2 vp)
+    /// <summary>
+    /// Screen-space reservation for the EDL readouts.  The columns intentionally do not
+    /// share x coordinates: telemetry (including HIGH G) occupies the middle column and
+    /// thermal occupies the next column.  Keeping the reservation in one value object makes
+    /// it impossible for a later readout adjustment to silently reintroduce an overlap.
+    /// </summary>
+    private readonly struct EdlOverlayLayout
     {
-        const float maxAlt = 5000f;
-        float x = 70f, top = vp.Y * 0.25f, h = vp.Y * 0.5f, w = 22f;
+        public readonly float Scale;
+        public readonly Rect2 AltimeterRect;
+        public readonly Rect2 TelemetryRect;
+        public readonly Rect2 ThermalRect;
+        public readonly Vector2 TelemetryOrigin;
+        public readonly Vector2 GLoadOrigin;
+        public readonly Vector2 HighGOrigin;
+
+        private EdlOverlayLayout(
+            float scale,
+            Rect2 altimeterRect,
+            Rect2 telemetryRect,
+            Rect2 thermalRect,
+            Vector2 telemetryOrigin,
+            Vector2 gLoadOrigin,
+            Vector2 highGOrigin)
+        {
+            Scale = scale;
+            AltimeterRect = altimeterRect;
+            TelemetryRect = telemetryRect;
+            ThermalRect = thermalRect;
+            TelemetryOrigin = telemetryOrigin;
+            GLoadOrigin = gLoadOrigin;
+            HighGOrigin = highGOrigin;
+        }
+
+        public static EdlOverlayLayout Build(Vector2 viewport)
+        {
+            // The reference layout is authored at 1280x720.  Growing every panel to 1.4x
+            // on a 1920x1080 framebuffer moved THERMAL over the vehicle in the EDL captures.
+            // Keep the readable reference size on larger viewports; this is a HUD-only
+            // composition bound and does not affect simulation resolution or timing.
+            float scale = Mathf.Clamp(
+                Mathf.Min(viewport.X / 1280f, viewport.Y / 720f), 0.85f, 1.00f);
+            float margin = 56f * scale;
+
+            // At the supported 1280×720 baseline: altimeter [56,86], telemetry
+            // [176,406], and thermal [456,706].  The explicit gaps also keep the
+            // 70.0 km marker text outside telemetry, while HIGH G stays inside its panel.
+            Rect2 altimeter = new(
+                new Vector2(margin, viewport.Y * 0.22f),
+                new Vector2(30f * scale, viewport.Y * 0.56f));
+            Rect2 telemetry = new(
+                new Vector2(margin + 120f * scale, viewport.Y * 0.18f),
+                new Vector2(230f * scale, 250f * scale));
+            Rect2 thermal = new(
+                new Vector2(margin + 400f * scale, viewport.Y * 0.28f),
+                new Vector2(250f * scale, 250f * scale));
+
+            Vector2 telemetryOrigin = telemetry.Position + new Vector2(12f, 28f) * scale;
+            Vector2 gLoadOrigin = telemetryOrigin + new Vector2(0f, 104f) * scale;
+            Vector2 highGOrigin = gLoadOrigin + new Vector2(138f, 20f) * scale;
+            return new EdlOverlayLayout(
+                scale, altimeter, telemetry, thermal,
+                telemetryOrigin, gLoadOrigin, highGOrigin);
+        }
+    }
+
+    private void DrawAltimeter(EdlOverlayLayout layout)
+    {
+        float maxAlt = AltimeterMaxAltitude(_phase);
+        Rect2 rail = layout.AltimeterRect;
+        float x = rail.Position.X;
+        float top = rail.Position.Y;
+        float h = rail.Size.Y;
+        float w = rail.Size.X;
         DrawRect(new Rect2(x, top, w, h), new Color(0.05f, 0.07f, 0.10f, 0.75f));
         DrawRect(new Rect2(x, top, w, h), new Color(0.45f, 0.65f, 0.95f, 0.6f), false, 1.4f);
 
@@ -629,16 +727,30 @@ public partial class EDLController : Control
         float markY = top + h * (1f - frac);
         var col = _legsDeployed ? new Color(0.45f, 1f, 0.6f) : new Color(1f, 0.8f, 0.25f);
         DrawRect(new Rect2(x - 5, markY - 2, w + 10, 4), col);
-        Text($"{_alt:F0} m", new Vector2(x + w + 10, markY + 5), col, 16);
+        Text(FormatAltitudeReadout(_alt),
+            new Vector2(x + w + 10f * layout.Scale, markY + 5f), col, 16);
 
-        // ticks
+        // Five fixed ticks keep the rail readable at both the 70 km entry scale and the
+        // 5 km landing scale without changing the physical altitude readout.
         for (int i = 0; i <= 5; i++)
         {
             float ty = top + h * (i / 5f);
             DrawLine(new Vector2(x, ty), new Vector2(x + 6, ty), new Color(0.5f, 0.6f, 0.7f, 0.7f), 1f);
-            Text($"{(5 - i) * 1000}", new Vector2(x - 50, ty + 5), new Color(0.55f, 0.62f, 0.72f), 11);
+            float tickAltitude = maxAlt * (1f - i / 5f);
+            Text(FormatAltitudeTick(tickAltitude),
+                new Vector2(x - 48f * layout.Scale, ty + 5f),
+                new Color(0.55f, 0.62f, 0.72f), 11);
         }
     }
+
+    private static float AltimeterMaxAltitude(Edl phase) =>
+        phase is Edl.Entry or Edl.Peak or Edl.Aero ? 70_000f : 5_000f;
+
+    private static string FormatAltitudeReadout(double altitude) =>
+        altitude >= 10_000.0 ? $"{altitude / 1000.0:F1} km" : $"{altitude:F0} m";
+
+    private static string FormatAltitudeTick(float altitude) =>
+        altitude >= 10_000f ? $"{altitude / 1000f:F0} km" : $"{altitude:F0} m";
 
     /// <summary>
     /// Reads the same thermal state the simulation is actually integrating, so the crew sees
@@ -670,64 +782,73 @@ public partial class EDLController : Control
         }
     }
 
-    private void DrawThermal(Vector2 vp)
+    private void DrawThermal(EdlOverlayLayout layout)
     {
-        // Left-hand column, clear of the flight/orbit panels the rest of the HUD owns.
-        float px = 260f, py = vp.Y * 0.30f;
-        const float pw = 230f, ph = 200f;
+        // Thermal owns a separate column to the right of telemetry.  Its bounds are
+        // reserved by EdlOverlayLayout so the warning cannot collide with HIGH G.
+        Rect2 panel = layout.ThermalRect;
+        float scale = layout.Scale;
+        float px = panel.Position.X + 12f * scale;
+        float py = panel.Position.Y + 50f * scale;
 
-        DrawRect(new Rect2(px - 14, py - 26, pw, ph), new Color(0.04f, 0.06f, 0.09f, 0.78f));
-        DrawRect(new Rect2(px - 14, py - 26, pw, ph), new Color(0.45f, 0.65f, 0.95f, 0.35f), false, 1.2f);
-        Text("THERMAL", new Vector2(px - 6, py - 8), new Color(0.55f, 0.68f, 0.85f), 13);
+        DrawRect(panel, new Color(0.04f, 0.06f, 0.09f, 0.78f));
+        DrawRect(panel, new Color(0.45f, 0.65f, 0.95f, 0.35f), false, 1.2f);
+        Text("THERMAL", new Vector2(panel.Position.X + 8f * scale,
+            panel.Position.Y + 20f * scale), new Color(0.55f, 0.68f, 0.85f), 13);
 
-        float x = px, y = py + 14f;
+        float x = px, y = py + 14f * scale;
         var label = new Color(0.6f, 0.7f, 0.82f);
 
         Text("TPS FACE", new Vector2(x, y), label, 13);
-        Text($"{_skinTemp:F0} K", new Vector2(x, y + 20),
+        Text($"{_skinTemp:F0} K", new Vector2(x, y + 20f * scale),
             _skinTemp > 1200 ? new Color(1f, 0.62f, 0.25f) : new Color(0.9f, 0.95f, 1f), 20);
 
         // The hull bar is the one that matters: at 1.0 the structure is failing.
-        Text("HULL", new Vector2(x, y + 52), label, 13);
+        Text("HULL", new Vector2(x, y + 52f * scale), label, 13);
         float ratio = (float)System.Math.Clamp(_hullRatio, 0.0, 1.2);
         Color hullCol = _hullRatio > 0.9 ? new Color(1f, 0.3f, 0.25f)
                       : _hullRatio > 0.65 ? new Color(1f, 0.8f, 0.3f)
                       : new Color(0.45f, 1f, 0.6f);
 
-        const float barW = 130f, barH = 12f;
-        DrawRect(new Rect2(x, y + 60, barW, barH), new Color(0.05f, 0.07f, 0.10f, 0.8f));
-        DrawRect(new Rect2(x, y + 60, barW * ratio / 1.2f, barH), hullCol);
-        DrawRect(new Rect2(x, y + 60, barW, barH), new Color(0.45f, 0.65f, 0.95f, 0.5f), false, 1.2f);
-        Text($"{_hullRatio * 100.0:F0}%", new Vector2(x + barW + 10, y + 71), hullCol, 16);
+        float barW = 130f * scale, barH = 12f * scale;
+        DrawRect(new Rect2(x, y + 60f * scale, barW, barH), new Color(0.05f, 0.07f, 0.10f, 0.8f));
+        DrawRect(new Rect2(x, y + 60f * scale, barW * ratio / 1.2f, barH), hullCol);
+        DrawRect(new Rect2(x, y + 60f * scale, barW, barH), new Color(0.45f, 0.65f, 0.95f, 0.5f), false, 1.2f);
+        Text($"{_hullRatio * 100.0:F0}%", new Vector2(x + barW + 10f * scale, y + 71f * scale), hullCol, 16);
 
         // Shield alignment is the ACTIONABLE number — it is the one the pilot can fix.
-        Text("SHIELD", new Vector2(x, y + 92), label, 13);
+        Text("SHIELD", new Vector2(x, y + 92f * scale), label, 13);
         Color alignCol = _shieldAlign > 0.85 ? new Color(0.45f, 1f, 0.6f)
                        : _shieldAlign > 0.5  ? new Color(1f, 0.8f, 0.3f)
                        : new Color(1f, 0.3f, 0.25f);
-        Text($"{_shieldAlign * 100.0:F0}%", new Vector2(x, y + 112), alignCol, 20);
+        Text($"{_shieldAlign * 100.0:F0}%", new Vector2(x, y + 112f * scale), alignCol, 20);
 
         // Only shout when it actually matters: a shield off the flow with real heat behind it.
         if (_shieldAlign < 0.7 && _fluxNow > 5.0e4)
-            Text("SHIELD OFF FLOW", new Vector2(x, y + 140), new Color(1f, 0.3f, 0.25f), 18);
+            Text("SHIELD OFF FLOW", new Vector2(x, y + 140f * scale), new Color(1f, 0.3f, 0.25f), 18);
 
         if (_thermalDamage > 0.0)
             Text($"TPS DAMAGE {_thermalDamage * 100.0:F0}%",
-                new Vector2(x, y + 164), new Color(1f, 0.45f, 0.3f), 16);
+                new Vector2(x, y + 164f * scale), new Color(1f, 0.45f, 0.3f), 16);
     }
 
-    private void DrawTelemetry(Vector2 vp)
+    private void DrawTelemetry(EdlOverlayLayout layout)
     {
-        float x = 120f, y = vp.Y * 0.25f - 70f;
+        DrawRect(layout.TelemetryRect, new Color(0.04f, 0.06f, 0.09f, 0.56f));
+        DrawRect(layout.TelemetryRect, new Color(0.45f, 0.65f, 0.95f, 0.30f), false, 1.2f);
+
+        float x = layout.TelemetryOrigin.X;
+        float y = layout.TelemetryOrigin.Y;
+        float scale = layout.Scale;
         double vDown = -_vUp;
         Color vsCol = System.Math.Abs(vDown) > 50 ? new Color(1f, 0.35f, 0.3f)
                     : System.Math.Abs(vDown) > 10 ? new Color(1f, 0.82f, 0.3f)
                     : new Color(0.4f, 1f, 0.5f);
         Text("VERTICAL",   new Vector2(x, y),      new Color(0.6f, 0.7f, 0.82f), 13);
-        Text($"{vDown:+0;-0} m/s", new Vector2(x, y + 20), vsCol, 22);
-        Text("HORIZONTAL", new Vector2(x, y + 52), new Color(0.6f, 0.7f, 0.82f), 13);
-        Text($"{_horiz:F0} m/s", new Vector2(x, y + 72), new Color(0.9f, 0.95f, 1f), 20);
-        DrawGLoad(new Vector2(x, y + 104));
+        Text($"{vDown:+0;-0} m/s", new Vector2(x, y + 20f * scale), vsCol, 22);
+        Text("HORIZONTAL", new Vector2(x, y + 52f * scale), new Color(0.6f, 0.7f, 0.82f), 13);
+        Text($"{_horiz:F0} m/s", new Vector2(x, y + 72f * scale), new Color(0.9f, 0.95f, 1f), 20);
+        DrawGLoad(layout.GLoadOrigin, layout);
     }
 
     /// <summary>
@@ -736,23 +857,24 @@ public partial class EDLController : Control
     /// <see cref="EntryLoadTracker.SevereG"/> and switches to the shared Warning / Alert
     /// tokens exactly at the band edges instead of fading continuously.
     /// </summary>
-    private void DrawGLoad(Vector2 origin)
+    private void DrawGLoad(Vector2 origin, EdlOverlayLayout layout)
     {
         float x = origin.X, y = origin.Y;
+        float scale = layout.Scale;
         var label = new Color(0.6f, 0.7f, 0.82f);
         Color gCol = BandColor(_load.Band);
 
         Text("G-FORCE", new Vector2(x, y), label, 13);
-        Text($"{_gForce:F1} g", new Vector2(x, y + 20), gCol, 20);
+        Text($"{_gForce:F1} g", new Vector2(x, y + 20f * scale), gCol, 20);
 
         // Escalation bar: full scale is the severe band, with a tick at the 4 g wall.
-        const float barW = 130f, barH = 8f;
-        float barY = y + 28f;
+        float barW = 130f * scale, barH = 8f * scale;
+        float barY = y + 28f * scale;
         float frac = (float)System.Math.Clamp(_gForce / EntryLoadTracker.SevereG, 0.0, 1.0);
         DrawRect(new Rect2(x, barY, barW, barH), new Color(0.05f, 0.07f, 0.10f, 0.8f));
         DrawRect(new Rect2(x, barY, barW * frac, barH), gCol);
         float wallX = x + barW * (float)(EntryLoadTracker.HighG / EntryLoadTracker.SevereG);
-        DrawLine(new Vector2(wallX, barY - 2), new Vector2(wallX, barY + barH + 2),
+        DrawLine(new Vector2(wallX, barY - 2f * scale), new Vector2(wallX, barY + barH + 2f * scale),
             InterfaceTheme.Alert, 1.4f);
         DrawRect(new Rect2(x, barY, barW, barH), new Color(0.45f, 0.65f, 0.95f, 0.45f), false, 1.1f);
 
@@ -760,10 +882,11 @@ public partial class EDLController : Control
         if (_load.HasSample && _load.PeakG > 0.05)
         {
             Color peakCol = BandColor(_load.PeakBand);
-            Text($"PEAK {_load.PeakG:F1} g", new Vector2(x, barY + barH + 16), peakCol, 15);
+            Text($"PEAK {_load.PeakG:F1} g",
+                new Vector2(x, barY + barH + 16f * scale), peakCol, 15);
             // Only shout while the wall is actually being felt.
             if (_load.Band >= GLoadBand.High)
-                Text("HIGH G", new Vector2(x + barW - 34, y + 20), InterfaceTheme.Alert, 15);
+                Text("HIGH G", layout.HighGOrigin, InterfaceTheme.Alert, 15);
         }
     }
 

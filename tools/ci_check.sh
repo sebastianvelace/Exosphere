@@ -20,13 +20,32 @@ fi
 
 bash -n tools/visual_playtest.sh
 bash tools/tests/visual_playtest_contract_test.sh
+bash tools/tests/godot_smoke_log_contract_test.sh
 bash tools/tests/gameplay_regression_contract_test.sh
 bash tools/tests/flight_startup_contract_test.sh
 bash tools/tests/sky_runtime_performance_contract_test.sh
 bash tools/tests/physics_hotpath_contract_test.sh
 bash tools/tests/starship_hotpath_contract_test.sh
 bash tools/tests/visual_telemetry_contract_test.sh
+bash tools/tests/visual_material_fill_contract_test.sh
+bash tools/tests/main_menu_responsive_contract_test.sh
+bash tools/tests/vab_preview_lighting_contract_test.sh
+bash tools/tests/vab_picking_alignment_contract_test.sh
+bash tools/tests/hud_alert_layout_contract_test.sh
+bash tools/tests/edl_overlay_layout_contract_test.sh
+bash tools/tests/edl_visual_presentation_contract_test.sh
+bash tools/tests/cockpit_visual_material_contract_test.sh
+bash tools/tests/atmosphere_low_altitude_prefilter_contract_test.sh
+bash tools/tests/space_sky_banding_contract_test.sh
+bash tools/tests/earth_ground_lighting_contract_test.sh
+bash tools/tests/solar_cycle_contract_test.sh
+bash tools/tests/mars_terrain_lighting_contract_test.sh
+bash tools/tests/edl_catch_guidance_contract_test.sh
+bash tools/tests/planet_body_lighting_contract_test.sh
+bash tools/tests/visual_camera_planet_framing_contract_test.sh
+bash tools/tests/visual_camera_transition_contract_test.sh
 bash tools/tests/engine_hud_semantics_contract_test.sh
+bash tools/tests/engine_hud_visual_semantics_contract_test.sh
 bash tools/tests/cockpit_subviewport_contract_test.sh
 bash tools/tests/render_performance_probe_contract_test.sh
 bash tools/tests/saturn_ring_contract_test.sh
@@ -57,8 +76,13 @@ DEFAULT_GODOT="/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64
 GODOT="${GODOT_BIN:-$DEFAULT_GODOT}"
 
 if [[ -x "$GODOT" ]]; then
-  "$GODOT" --headless --path . --quit-after 3 --rendering-driver opengl3
-  "$GODOT" --headless --path . --quit-after 3 --rendering-driver opengl3 res://scenes/construction/Construction.tscn
+  # Godot 4.6.3 can abort while copying its crash log when user://logs is absent
+  # in a clean CI/Xvfb profile. Keep smoke output explicit and outside user://.
+  "$GODOT" --headless --path . --quit-after 3 --rendering-driver opengl3 \
+    --log-file /tmp/exo_ci_main.godot.log
+  "$GODOT" --headless --path . --quit-after 3 --rendering-driver opengl3 \
+    --log-file /tmp/exo_ci_construction.godot.log \
+    res://scenes/construction/Construction.tscn
 
   # Captura de viewport con framebuffer real: --headless usa el renderer dummy y no
   # produce píxeles. Para aceptación visual completa usar:

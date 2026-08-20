@@ -24,6 +24,7 @@ public partial class ReentryPlasmaController : Node3D
     private StandardMaterial3D? _wakeMat;
     private readonly List<EdgeGlow> _edgeGlows = new();
     private double _visualSampleTimer;
+    private Node3D? _vesselFrame;
 
     // Plasma is a presentation effect. Its physical inputs can be sampled at 20 Hz while
     // the deterministic thermal solver continues at the simulation tick rate.
@@ -115,6 +116,11 @@ public partial class ReentryPlasmaController : Node3D
             return;
         }
 
+        // Follow the authoritative floating-origin frame used by the vessel renderer. A
+        // second world transform reconstructed here can drift visually during the EDL flip,
+        // leaving the shock ring detached from the ship even while the physics is correct.
+        SyncToVesselFrame();
+
         var body = bridge.Universe.GetDominantBody(vessel.Position);
 
         double density  = body.GetAtmosphericDensity(vessel.Position);
@@ -135,8 +141,11 @@ public partial class ReentryPlasmaController : Node3D
 
         SetCoreEffectsVisible(true);
 
-        // Airflow direction in render space (sim and render share axis convention).
-        Vector3 flowDir = new Vector3((float)surfVel.X, (float)surfVel.Y, (float)surfVel.Z);
+        // The plasma root inherits the vessel orientation, so use local airflow coordinates
+        // for every child effect. This keeps shock, wake and edge glows attached through
+        // belly-flop, flip and the vertical catch approach.
+        Vector3 flowDir = ToGodot(vessel.Orientation.Inverse().Rotate(
+            new Vector3d(surfVel.X, surfVel.Y, surfVel.Z)));
         flowDir = flowDir.LengthSquared() > 1e-6f ? flowDir.Normalized() : Vector3.Up;
 
         // ── Windward concentration ─────────────────────────────────────────
@@ -155,7 +164,7 @@ public partial class ReentryPlasmaController : Node3D
         // Vessel body centre in render space. The plasma controller is a sibling of
         // the renderer, so it must apply the vessel orientation itself.
         bool hasSH = HasSuperHeavy(vessel);
-        Vector3 bodyCentre = ToGodot(vessel.Orientation.Rotate(new Vector3d(0.0, hasSH ? 30.0 : 8.0, 0.0)));
+        Vector3 bodyCentre = new(0f, hasSH ? 30f : 8f, 0f);
 
         // Shock sits on the windward (leading) face; wake streams out behind.
         _shock.Position = bodyCentre + flowDir * (hasSH ? 5f : 1.35f);
@@ -193,7 +202,7 @@ public partial class ReentryPlasmaController : Node3D
         // squash Y to press the cap onto the windward face.
         _shock.Scale = new Vector3(sizeScale * (1f + 0.4f * align), sizeScale * flatten, sizeScale * (1f + 0.4f * align));
 
-        UpdateLocalizedEdgeGlows(vessel.Orientation, (float)intensity, align, exposure, hasSH, flicker);
+        UpdateLocalizedEdgeGlows((float)intensity, align, exposure, hasSH, flicker);
     }
 
     private void BuildLocalizedEdgeGlows()
@@ -261,7 +270,7 @@ public partial class ReentryPlasmaController : Node3D
         });
     }
 
-    private void UpdateLocalizedEdgeGlows(Quaterniond vesselOrientation, float intensity,
+    private void UpdateLocalizedEdgeGlows(float intensity,
         float align, float exposure, bool hasSH, float flicker)
     {
         // The localized cues are authored for standalone Starship. During full-stack
@@ -305,8 +314,8 @@ public partial class ReentryPlasmaController : Node3D
 
             k *= edge.Weight * focus * flicker * zoneMul;
             SetEdgeVisible(edge, true);
-            edge.Mesh.Position = ToGodot(vesselOrientation.Rotate(edge.LocalPosition));
-            OrientYAxis(edge.Mesh, ToGodot(vesselOrientation.Rotate(Vector3d.Up)));
+            edge.Mesh.Position = ToGodot(edge.LocalPosition);
+            OrientYAxis(edge.Mesh, Vector3.Up);
             edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.65f * k);
 
             float white = Mathf.Clamp(k * 1.25f, 0f, 1f);
@@ -355,6 +364,19 @@ public partial class ReentryPlasmaController : Node3D
 
     private static Vector3 ToGodot(Vector3d v) =>
         new((float)v.X, (float)v.Y, (float)v.Z);
+
+    private void SyncToVesselFrame()
+    {
+        if (_vesselFrame == null || !GodotObject.IsInstanceValid(_vesselFrame))
+        {
+            _vesselFrame = GetTree().Root.FindChild(
+                "ActiveVesselRenderer", true, false) as Node3D;
+        }
+
+        if (_vesselFrame == null) return;
+        Position = _vesselFrame.Position;
+        Quaternion = _vesselFrame.Quaternion;
+    }
 
     // Rotate a mesh whose local +Y should point along <paramref name="dir"/>.
     private static void OrientYAxis(Node3D node, Vector3 dir)

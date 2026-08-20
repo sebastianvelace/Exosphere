@@ -93,12 +93,17 @@ uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
 // through the long tangent path without introducing a second artistic halo.
 const int VIEW_STEPS = 28;
 const int LIGHT_STEPS = 14;
-const int CLOUD_VIEW_STEPS = 20;
+const int CLOUD_VIEW_STEPS = 24;
 // Keep the light integral cheaper than the camera integral, but sample the same
 // volumetric field in both directions.  Five warped samples are enough to resolve
 // the compact cloud shell while avoiding the old base-mask shortcut that made the
 // projected shadow disagree with the billows visible to the camera.
 const int CLOUD_LIGHT_STEPS = 5;
+// Wider, deterministic in-segment jitter disperses the finite shell samples
+// that otherwise line up as horizontal cloud bands near the tangent horizon.
+// Once the phase selects its 24-sample loop, this jitter only redistributes the
+// existing samples; it does not add another pass or change the shader budget.
+const float CLOUD_VIEW_JITTER = 0.40;
 // The finite ray integral under-resolves the very thin, sunlit limb at a
 // surface observer.  This bounded Chapman closure is a pre-exposure radiance
 // gain (not a post-tonemap colour): the calibrated solar irradiance and the
@@ -359,16 +364,58 @@ float cloud_value_noise3(vec3 position) {
 // single texel row can be magnified over many view samples, exposing JPEG
 // latitude bands as unstable stripes.  A narrow latitude-aware prefilter keeps
 // the synoptic pattern while removing that projection aliasing.
-float cloud_weather_sample(vec2 uv) {
-	vec2 texel = vec2(1.0 / 8192.0, 1.0 / 4096.0);
-	float center = texture(cloud_coverage_tex, uv).r;
-	float north_near = textureLod(cloud_coverage_tex, uv - vec2(0.0, texel.y * 64.0), 3.0).r;
-	float south_near = textureLod(cloud_coverage_tex, uv + vec2(0.0, texel.y * 64.0), 3.0).r;
-	float north_far = textureLod(cloud_coverage_tex, uv - vec2(0.0, texel.y * 128.0), 3.0).r;
-	float south_far = textureLod(cloud_coverage_tex, uv + vec2(0.0, texel.y * 128.0), 3.0).r;
-	float prefiltered = center * 0.20
-		+ (north_near + south_near + north_far + south_far) * 0.20;
-	return mix(center, prefiltered, clamp(cloud_weather_prefilter, 0.0, 1.0));
+float cloud_weather_spherical_sample(vec3 direction) {
+	float prefilter = clamp(cloud_weather_prefilter, 0.0, 1.0);
+	vec3 tangent = cross(direction, vec3(0.0, 1.0, 0.0));
+	if (dot(tangent, tangent) < 1e-5)
+		tangent = cross(direction, vec3(1.0, 0.0, 0.0));
+	tangent = normalize(tangent);
+	vec3 bitangent = normalize(cross(direction, tangent));
+	vec2 center_uv = dir_to_equirect(direction)
+		+ vec2(cloud_longitude_offset, 0.0);
+	float center = texture(cloud_coverage_tex, center_uv).r;
+	// Preserve the same four textureLod reads, but widen the meridional
+	// footprint slightly more than the horizontal one. This is a cheap
+	// anisotropic blend targeted at the latitude-row artifact, not a new
+	// scattering or cloud-resolution path. The isotropic reference form is
+	// normalize(direction + tangent * footprint), split here into bounded
+	// tangential and meridional radii.
+	float tangential_footprint = 0.035 * prefilter
+		* 0.78;
+	float meridional_footprint = 0.035 * prefilter
+		* 1.30;
+	float tangent_a = textureLod(cloud_coverage_tex,
+		dir_to_equirect(normalize(direction + tangent * tangential_footprint))
+			+ vec2(cloud_longitude_offset, 0.0), 6.0).r;
+	float tangent_b = textureLod(cloud_coverage_tex,
+		dir_to_equirect(normalize(direction - tangent * tangential_footprint))
+			+ vec2(cloud_longitude_offset, 0.0), 6.0).r;
+	float bitangent_a = textureLod(cloud_coverage_tex,
+		dir_to_equirect(normalize(direction + bitangent * meridional_footprint))
+			+ vec2(cloud_longitude_offset, 0.0), 6.0).r;
+	float bitangent_b = textureLod(cloud_coverage_tex,
+		dir_to_equirect(normalize(direction - bitangent * meridional_footprint))
+			+ vec2(cloud_longitude_offset, 0.0), 6.0).r;
+	// At 10 km the tangent ray magnifies one weather-map latitude row across
+	// thousands of pixels. Prefer the broad mip footprint here; retaining only a
+	// small centre contribution prevents a horizontal stippled cloud stripe.
+	float prefiltered = center * 0.08
+		+ (tangent_a + tangent_b + bitangent_a + bitangent_b) * 0.23;
+	return mix(center, prefiltered, prefilter);
+}
+
+// The erosion/detail lookup is repeated at 3x frequency. It needs the same
+// horizon-aware filtering as the weather mask; otherwise a prefiltered macro
+// field can still expose the source texture's latitude rows at 10 km.
+float cloud_detail_sample(vec2 uv) {
+	float detail_prefilter = clamp(cloud_weather_prefilter, 0.0, 1.0);
+	// The macro weather lookup owns the latitude-row prefilter. Keep the
+	// repeated erosion lookup aligned with the same spherical direction; its
+	// two existing reads are blended into the coarse mip below.
+	vec2 detail_uv = uv * 3.07 + vec2(0.17, 0.31);
+	float detail = texture(cloud_coverage_tex, detail_uv).r;
+	float coarse = textureLod(cloud_coverage_tex, detail_uv, 6.0).r;
+	return mix(detail, coarse, detail_prefilter);
 }
 
 float cloud_density_base(vec3 position) {
@@ -377,8 +424,8 @@ float cloud_density_base(vec3 position) {
 	if (shape <= 0.0) return 0.0;
 	vec3 texture_direction = normalize(cloud_world_to_texture * normalize(position));
 	vec2 uv = dir_to_equirect(texture_direction) + vec2(cloud_longitude_offset, 0.0);
-	float weather = cloud_weather_sample(uv);
-	float detail = texture(cloud_coverage_tex, uv * 3.07 + vec2(0.17, 0.31)).r;
+	float weather = cloud_weather_spherical_sample(texture_direction);
+	float detail = cloud_detail_sample(uv);
 	float threshold = 1.0 - cloud_coverage;
 	return shape * smoothstep(threshold - 0.12, threshold + 0.10,
 		weather + (detail - 0.5) * 0.20);
@@ -390,8 +437,8 @@ float cloud_density(vec3 position) {
 	if (shape <= 0.0) return 0.0;
 	vec3 texture_direction = normalize(cloud_world_to_texture * normalize(position));
 	vec2 uv = dir_to_equirect(texture_direction) + vec2(cloud_longitude_offset, 0.0);
-	float weather = cloud_weather_sample(uv);
-	float detail = texture(cloud_coverage_tex, uv * 3.07 + vec2(0.17, 0.31)).r;
+	float weather = cloud_weather_spherical_sample(texture_direction);
+	float detail = cloud_detail_sample(uv);
 	float threshold = 1.0 - cloud_coverage;
 	// Sample one oriented world-space macro field. The high-frequency texture
 	// detail below supplies erosion; keeping only one 3D field is important on
@@ -404,8 +451,27 @@ float cloud_density(vec3 position) {
 	float weather_field = weather
 		+ (macro - 0.5) * cloud_macro_strength
 		+ (detail - 0.5) * 0.20;
-	return shape * smoothstep(threshold - 0.12, threshold + 0.10,
-		weather_field);
+	float low_altitude_shell = 1.0 - smoothstep(6000.0, 45000.0,
+		max(observer_altitude, 0.0));
+	// Stable world-space coverage dither breaks coherent latitude rows at the
+	// cloud threshold. cloud_hash3 is arithmetic-only and reuses the existing
+	// bounded noise family, so this adds no texture reads or ray steps. Reduce the
+	// dither at low altitude: the grazing shell already has a broad footprint and
+	// extra binary variation becomes a visible horizontal stipple.
+	float dither_strength = mix(0.004, 0.025, 1.0 - low_altitude_shell);
+	float coverage_dither = (cloud_hash3(noise_position * 0.00037
+		+ vec3(17.0, 43.0, 71.0)) * 2.0 - 1.0)
+		* dither_strength * clamp(cloud_weather_prefilter, 0.0, 1.0);
+	// A surface observer sees the cloud shell almost edge-on. A hard coverage
+	// threshold then turns the finite shell quadrature into a bright staircase at
+	// the horizon. Widen only this low-altitude coverage transition; orbital
+	// weather retains the sharper authored boundary and the cloud extinction/
+	// radiance budget is unchanged.
+	float threshold_softness = mix(0.055, 0.175,
+		low_altitude_shell * clamp(cloud_weather_prefilter, 0.0, 1.0));
+	return shape * smoothstep(threshold - 0.12 - threshold_softness,
+		threshold + 0.10 + threshold_softness,
+		weather_field + coverage_dither);
 }
 
 float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
@@ -566,6 +632,7 @@ void sky() {
 				+ 0.18 * hg_phase(mu_cloud, -0.20);
 			float cloud_view_steps = effective_step_count(
 				render_step_count(8.0, float(CLOUD_VIEW_STEPS)));
+			float previous_cloud_density = 0.0;
 			for (int i = 0; i < CLOUD_VIEW_STEPS; i++) {
 				if (float(i) >= cloud_view_steps) break;
 				float segment_start = tangent_warped_boundary(
@@ -574,12 +641,19 @@ void sky() {
 					float(i + 1) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
 				float cloud_step = max(segment_end - segment_start, 0.0);
 				float jitter = stable_jitter(view_dir + up * 11.0 + float(i) * vec3(0.29, 0.53, 0.71));
-				float t = mix(segment_start, segment_end, clamp(0.5 + jitter * 0.18, 0.22, 0.78));
+				float t = mix(segment_start, segment_end,
+					clamp(0.5 + jitter * CLOUD_VIEW_JITTER, 0.14, 0.86));
 				vec3 p = origin + view_dir * t;
 				float rho = cloud_density(p);
-				if (rho > 0.001) {
+				// Trapezoidal density smoothing reuses the previous quadrature
+				// sample instead of adding a second lookup. It removes visible
+				// shell-step bands while preserving the same bounded integral.
+				float smoothed_rho = i == 0
+					? rho : 0.5 * (previous_cloud_density + rho);
+				previous_cloud_density = rho;
+				if (smoothed_rho > 0.001) {
 					float segment_alpha = 1.0
-						- exp(-rho * cloud_extinction * cloud_step);
+						- exp(-smoothed_rho * cloud_extinction * cloud_step);
 					float direct_light = cloud_sun_transmittance(p, to_sun);
 					vec3 atmospheric_sun = solar_transmittance(p, to_sun, outer_radius);
 					vec3 source = atmospheric_sun

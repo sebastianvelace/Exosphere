@@ -167,6 +167,9 @@ Mejoras:
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
   opcional si no distrae.
+- [x] Starbase tower detail V1.1: carriage rails/sheaves, catch-arm rub rails,
+  nose rollers, support cables and upper Ship QD arm cues in `LaunchPadController`.
+  Pending: screenshot/reference comparison against current Starbase tower footage.
 
 Aceptacion:
 - Liftoff y hot-staging son legibles en una captura estatica.
@@ -334,6 +337,9 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
 - **Starship close-up cues V1**: `VesselRenderer` agrega access panels, vents,
   serial-style bars, leading edges y seams en flaps. Validado con
   `/tmp/exosphere_ship_closeup.png`; falta comparacion fina contra referencias reales.
+- **Starbase tower detail V1.1**: `LaunchPadController` agrega rieles/sheaves
+  del carriage, rub rails/rollers/cables en chopsticks y cues del Ship QD upper arm.
+  Falta captura comparativa con referencia real de torre/pad.
 
 **Como tunear plumas (mapa rapido):**
 - Tamaño/colores/brillo por anillo: `PlumeSystem.SetupSH` / `SetupStarship` (mouthR, length, core).

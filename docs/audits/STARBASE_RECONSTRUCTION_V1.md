@@ -30,7 +30,9 @@ radialmente en lugar de una trinchera ficticia.
 La OLIT usa la cota oficial de 480 ft más pararrayos de 10 ft. Se retiró la grúa superior inventada.
 Los chopsticks mantienen una longitud estimada de 30 m, pero su abertura interior pasó de 7 a 10 m,
 por encima del diámetro de 9 m del booster. El QD genérico duplicado se eliminó; permanecen BQD y
-Ship QD con funciones diferenciadas.
+Ship QD con funciones diferenciadas. La presentación V1.1 suma rieles/sheaves de carriage, rub
+rails, rollers frontales, cables de soporte y cues del upper Ship QD para que la torre se lea como
+hardware funcional en capturas laterales.
 
 El commodity farm crece de una cuadrícula genérica de ocho depósitos a quince siluetas verticales
 con alturas hasta 100 ft, headers por fila y containment bund. El layout exacto sigue siendo una

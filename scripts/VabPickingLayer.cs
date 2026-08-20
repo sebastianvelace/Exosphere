@@ -34,11 +34,13 @@ public partial class VabPickingLayer : Node3D
     // hits unrelated colliders. Bit 20 is well away from gameplay layers.
     private const uint PickLayer = 1u << 19;
 
-    // Node positions in the JSON are authored in the SAME units the renderer
-    // lays parts out in (e.g. Super Heavy "top" at y=20 maps to the renderer's
-    // y=20 body top), so we build the picking bodies directly in that space.
-    // Las posiciones de nodo del JSON están en las MISMAS unidades en que el
-    // renderer coloca las piezas, así que construimos en ese espacio sin escalar.
+    // JSON node positions are metres. The preview renderer uses 1 Godot unit =
+    // 2.8 m, and its generic path applies a bottom datum shift. Keeping the
+    // conversion here prevents selection/highlight/markers from drifting away
+    // from the rendered geometry. Specialized Starship geometry has fixed visual
+    // anchors below because its procedural renderer intentionally ignores the
+    // arbitrary order of VAB assembly connections.
+    private const float MetresPerUnit = 2.8f;
 
     public uint PickCollisionMask => PickLayer;
 
@@ -52,7 +54,7 @@ public partial class VabPickingLayer : Node3D
         "super_heavy_booster" => 1.7f,
         "starship_engines"    => 1.7f,
         "starship_command"    => 1.7f,
-        _ when def.DiameterM > 0.0 => (float)def.DiameterM * 0.5f,
+        _ when def.DiameterM > 0.0 => (float)(def.DiameterM / MetresPerUnit) * 0.5f,
         _ => def.Category switch
         {
             PartCategory.FuelTank => 0.75f,
@@ -68,7 +70,7 @@ public partial class VabPickingLayer : Node3D
         "super_heavy_booster" => 11f,   // SH body spans ~y=2..20
         "starship_engines"    => 8f,    // ship section spans ~16 u
         "starship_command"    => 8f,
-        _ when def.LengthM > 0.0 => (float)def.LengthM * 0.5f,
+        _ when def.LengthM > 0.0 => (float)(def.LengthM / MetresPerUnit) * 0.5f,
         _ => def.Category switch
         {
             PartCategory.FuelTank => MaxStackHalf(def, 1.8f),
@@ -147,7 +149,7 @@ public partial class VabPickingLayer : Node3D
                 }
             }
 
-            var local = new Vector3((float)node.Position[0], (float)node.Position[1], (float)node.Position[2]);
+            var local = ToRenderUnits(node.Position);
             AddNodeMarker(selectedInstanceId, node.Id, parentPos + local, fits);
         }
     }
@@ -299,21 +301,25 @@ public partial class VabPickingLayer : Node3D
 
     // ── Position helpers ──────────────────────────────────────────────────
 
-    // Recorre la asamblea desde la raíz acumulando offsets de nodo (mismo
-    // algoritmo que PartGraph.ComputePartLocalPositions, pero sobre AssemblyPart).
-    // Walks the assembly from the root accumulating node offsets (same algorithm
-    // as PartGraph.ComputePartLocalPositions, but over AssemblyPart records).
+    // Recorre la asamblea desde la raíz acumulando offsets de nodo en metros y
+    // después los convierte al espacio de preview. Para familias con renderer
+    // procedural fijo (Starship/Super Heavy), usa los anclajes que corresponden a
+    // la geometría dibujada; de otro modo replica el datum inferior del renderer
+    // genérico.
+    // Walk the assembly in metres, then convert to preview space. Procedural
+    // Starship/Super Heavy uses the rendered geometry's fixed anchors; other craft
+    // mirror the generic renderer's bottom datum.
     private System.Collections.Generic.Dictionary<string, Vector3> BuildPositionMap()
     {
-        var map = new System.Collections.Generic.Dictionary<string, Vector3>();
-        if (_assembly == null || _catalog == null) return map;
+        var raw = new System.Collections.Generic.Dictionary<string, Vector3>();
+        if (_assembly == null || _catalog == null) return raw;
 
         var rootId = _assembly.RootInstanceId;
-        if (rootId == null) return map;
+        if (rootId == null) return raw;
 
         void Assign(string id, Vector3 pos)
         {
-            map[id] = pos;
+            raw[id] = pos;
             var parentPart = FindPart(id);
             if (parentPart == null) return;
             var parentDef = _catalog[parentPart.DefinitionId];
@@ -332,8 +338,84 @@ public partial class VabPickingLayer : Node3D
         }
 
         Assign(rootId, Vector3.Zero);
-        return map;
+
+        if (HasProceduralStarship())
+            return BuildProceduralStarshipMap(raw);
+
+        float minY = float.PositiveInfinity;
+        foreach (var part in _assembly.Parts)
+        {
+            if (!raw.TryGetValue(part.InstanceId, out var pos)) continue;
+            var def = _catalog[part.DefinitionId];
+            float halfHeight = (float)Math.Max(0.0, def.LengthM * 0.5);
+            minY = Mathf.Min(minY, pos.Y - halfHeight);
+        }
+        if (float.IsPositiveInfinity(minY)) minY = 0f;
+        float datumShift = -minY / MetresPerUnit;
+
+        var render = new System.Collections.Generic.Dictionary<string, Vector3>();
+        foreach (var pair in raw)
+            render[pair.Key] = pair.Value / MetresPerUnit + Vector3.Up * datumShift;
+        return render;
     }
+
+    private bool HasProceduralStarship()
+    {
+        if (_assembly == null) return false;
+        return _assembly.Parts.Any(part => _catalog![part.DefinitionId].IsStarshipFamily);
+    }
+
+    private System.Collections.Generic.Dictionary<string, Vector3> BuildProceduralStarshipMap(
+        System.Collections.Generic.Dictionary<string, Vector3> raw)
+    {
+        var result = new System.Collections.Generic.Dictionary<string, Vector3>();
+        bool hasBooster = _assembly!.Parts.Any(part =>
+            _catalog![part.DefinitionId].HasVehicleRole("booster"));
+        bool hasShip = _assembly.Parts.Any(part =>
+            _catalog![part.DefinitionId].HasVehicleRole("command")
+            || _catalog[part.DefinitionId].HasVehicleRole("ship_engines")
+            || _catalog[part.DefinitionId].HasVehicleRole("tank"));
+
+        // These anchors mirror VesselRenderer's procedural Flight-7 layout:
+        // SH body ~= y 2..23.36, hot-stage ~= 23.36..25.36 and the ship skirt
+        // starts at 25.36. They are presentation coordinates, never simulation
+        // coordinates; changing the renderer's layout requires changing this map.
+        float boosterCenter = 12.7f;
+        float shipEngineCenter = hasBooster ? 25.2f : 0.0f;
+        float shipSectionCenter = hasBooster ? 34.0f : 8.0f;
+        float hotStageCenter = hasBooster ? 24.35f : 0.0f;
+
+        foreach (var part in _assembly.Parts)
+        {
+            var def = _catalog![part.DefinitionId];
+            string role = def.VehicleRole;
+            float y;
+            if (role.Equals("booster", StringComparison.OrdinalIgnoreCase))
+                y = boosterCenter;
+            else if (role.Equals("ship_engines", StringComparison.OrdinalIgnoreCase))
+                y = shipEngineCenter;
+            else if (role.Equals("hotstage", StringComparison.OrdinalIgnoreCase))
+                y = hotStageCenter;
+            else if (role.Equals("tank", StringComparison.OrdinalIgnoreCase)
+                     || role.Equals("command", StringComparison.OrdinalIgnoreCase))
+                y = shipSectionCenter;
+            else if (def.Id.Equals("starship_landing_gear", StringComparison.OrdinalIgnoreCase))
+                y = shipEngineCenter;
+            else if (hasBooster && hasShip)
+                y = shipSectionCenter;
+            else
+                y = raw.TryGetValue(part.InstanceId, out var fallback)
+                    ? fallback.Y / MetresPerUnit
+                    : 0f;
+            result[part.InstanceId] = new Vector3(0f, y, 0f);
+        }
+        return result;
+    }
+
+    private static Vector3 ToRenderUnits(double[] position) => new(
+        (float)(position[0] / MetresPerUnit),
+        (float)(position[1] / MetresPerUnit),
+        (float)(position[2] / MetresPerUnit));
 
     private static Vector3 NodeOffset(PartDefinition def, string nodeId)
     {

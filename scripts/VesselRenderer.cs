@@ -1287,9 +1287,25 @@ public partial class VesselRenderer : Node3D
                 body.GetAtmosphericDensity(TargetVessel.Position), surfaceVelocity);
         }
         double hottestSkin = 290.0;
+        double hottestThermalRatio = 0.0;
         foreach (var part in TargetVessel.Parts.Parts)
+        {
             if (part.SkinTemperature > hottestSkin) hottestSkin = part.SkinTemperature;
+            if (double.IsFinite(part.ThermalRatio))
+                hottestThermalRatio = System.Math.Max(hottestThermalRatio, part.ThermalRatio);
+        }
         float glow = (float)VehicleVisualPhysics.ReentryGlow(radialSpeed, heatFlux, hottestSkin);
+
+        // Some deterministic EDL profiles expose a high structural heat ratio before the
+        // simplified skin-temperature integrator has risen to its photographic value. Keep
+        // the physically-gated reentry read visible in that interval: this is an emissive
+        // presentation floor, not a change to thermal damage or survival physics.
+        if (VehicleVisualPhysics.IsVisibleReentryHeating(radialSpeed, heatFlux))
+        {
+            float ratioGlow = Mathf.Clamp(
+                (float)((hottestThermalRatio - 0.15) / 0.85), 0f, 1f);
+            glow = Mathf.Max(glow, ratioGlow * 0.72f);
+        }
 
         if (!float.IsNaN(_lastGlow) && Mathf.Abs(glow - _lastGlow) < 0.001f)
         {
@@ -1298,16 +1314,23 @@ public partial class VesselRenderer : Node3D
         }
         _lastGlow = glow;
 
-        // Bare leeward steel only catches a faint reflected plasma glow. The TPS
-        // materials carry the strong orange-white incandescence.
+        // Bare leeward steel only catches a faint reflected plasma glow. Keep it
+        // subordinate to the TPS/plasma effects, but make the flux-driven cue
+        // readable at peak heating when the hull is silhouetted against space.
+        // The scale is intentionally bounded: it is a presentation cue, not a
+        // second thermal solver or a substitute for the plasma controller.
         foreach (var steelMat in _shipSteelMats)
-            steelMat.SetShaderParameter("emit_strength", glow * glow * 0.16f);
+            steelMat.SetShaderParameter("emit_strength", glow * glow * 0.28f);
         foreach (var mats in _tileZoneMats.Values)
         foreach (var tileMat in mats)
         {
-            tileMat.EmissionEnabled = glow > 0.01f;
-            tileMat.Emission = new Color(1.0f, 0.24f + glow * 0.48f, 0.05f) * (glow * 1.8f);
-            tileMat.EmissionEnergyMultiplier = 0.6f + glow * 2.4f;
+            // Preserve the baseline fill even when glow is zero; thermal
+            // emission is additive so the hull never disappears between
+            // reentry samples.
+            tileMat.EmissionEnabled = true;
+            tileMat.Emission = new Color(0.050f, 0.050f, 0.060f)
+                + new Color(1.0f, 0.24f + glow * 0.48f, 0.05f) * (glow * 1.8f);
+            tileMat.EmissionEnergyMultiplier = 1.0f + glow * 2.4f;
         }
 
         UpdateTileCharring(body);
@@ -1436,12 +1459,20 @@ public partial class VesselRenderer : Node3D
             mat.Roughness   = Mathf.Lerp(0.92f, 0.99f, dmg);
 
             bool glow = ember > 0.02f;
-            mat.EmissionEnabled = glow;
+            // Keep the low, neutral TPS readability floor when the vehicle is
+            // cold. Thermal emission is additive and must not be the switch
+            // that makes the entire windward shell disappear in shadow.
+            mat.EmissionEnabled = true;
             if (glow)
             {
                 float e = ember * (0.35f + 0.65f * dmg);
                 mat.Emission                 = new Color(0.9f, 0.18f, 0.04f);
                 mat.EmissionEnergyMultiplier = e * 1.6f;
+            }
+            else
+            {
+                mat.Emission = new Color(0.050f, 0.050f, 0.060f);
+                mat.EmissionEnergyMultiplier = 1.0f;
             }
         }
     }
@@ -2547,6 +2578,12 @@ public partial class VesselRenderer : Node3D
         m.SetShaderParameter("soot_y0",      sootTop);   // clean above
         m.SetShaderParameter("soot_y1",      sootBot);   // sooty toward engine
         m.SetShaderParameter("soot_color",   new Color(0.16f, 0.15f, 0.15f));
+        // Presentation-only fill: without direct solar light a metallic hull
+        // has no readable silhouette against the space background.
+        // Keep the cold stainless silhouette readable during peak/retro entry.
+        // This is the shader's hard upper bound and remains presentation-only;
+        // thermal emission is still driven independently below.
+        m.SetShaderParameter("fill_strength", 0.12f);
         m.SetShaderParameter("emit_strength", 0.0f);
         return m;
     }
@@ -2560,6 +2597,11 @@ public partial class VesselRenderer : Node3D
             Metallic         = 0.0f,
             MetallicSpecular = 0.18f,
             Roughness        = 0.92f,
+            // Minimum fill keeps TPS tiles visible in eclipse/night. Reentry
+            // glow is layered on top by UpdateThermalVisuals.
+            EmissionEnabled  = true,
+            Emission         = new Color(0.050f, 0.050f, 0.060f),
+            EmissionEnergyMultiplier = 1.0f,
         };
 
     private MeshInstance3D AddMesh(string name, Mesh mesh, Material mat, Vector3 pos)

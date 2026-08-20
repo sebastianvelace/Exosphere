@@ -22,6 +22,8 @@ GODOT_LOG_FILE=""
 RUN_ID=""
 RUN_TOKEN=""
 MAX_RUNTIME_SEC="${PLAYTEST_MAX_RUNTIME_SEC:-}"
+RESOLUTION="1920x1080"
+EXTERNAL_DISPLAY="${EXO_VISUAL_DISPLAY:-}"
 VERIFY_ONLY=0
 MODE="full"
 HARNESS_MODE=""
@@ -60,9 +62,13 @@ Options:
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
+  --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
   --saturn      Jump to Saturn and capture the imported ring texture.
   --atmosphere  Capture a deterministic day/twilight/night altitude matrix with image metrics.
+  --atmosphere-ground
+                 Capture only Earth ground day/sunrise/sunset/night cases for fast lighting A/B.
+  --atmosphere-low  Capture only the deterministic Earth 10 km daylight case for shader A/B work.
   --atmosphere-bodies  Capture explicit Mars/Venus day/orbit/night atmosphere cases.
   --spectral    Run the offline 9-band RGB/LUT comparison for Earth, Mars and Venus.
   --edl         Seed a deterministic 70 km entry and verify physical flip/touchdown.
@@ -74,6 +80,11 @@ Options:
   --reentry-compare  Capture nominal belly-flop vs. forced bad-attitude (nose-first,
                 tumbling) EDL, gated on PEAK_HEATING/destruction, for VFX/thermal comparison.
   --run-id ID    Isolate default artifacts as /tmp/exo_play-ID{,.log}; recommended for agents.
+  --resolution WIDTHxHEIGHT
+                 Capture framebuffer size (default: 1920x1080; limits: 640x360..7680x4320).
+  --display DISPLAY
+                 Use an already-running X display (for example localhost:101) instead of
+                 starting xvfb-run. The display must already match --resolution.
   --max-runtime SEC  Wall-clock budget (default: 3600 full mission, 1200 ascent,
                       1800 orbital reentry/other modes).
   --verify-only  Re-run artifact/log gates without building or launching Godot.
@@ -85,6 +96,7 @@ Options:
 Environment:
   GODOT_BIN     Path to Godot 4.6 mono binary
   PLAYTEST_MAX_RUNTIME_SEC  Same override as --max-runtime
+  EXO_VISUAL_DISPLAY  Optional external X display, equivalent to --display
 
 Outputs:
   ${OUT_DIR}/exo_play_<milestone>.png
@@ -161,9 +173,12 @@ while [[ $# -gt 0 ]]; do
     --ascent) MODE="ascent"; shift ;;
     --launch) MODE="launch"; shift ;;
     --ship) MODE="ship"; shift ;;
+    --orbit) MODE="orbit"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
     --saturn) MODE="saturn"; shift ;;
     --atmosphere) MODE="atmosphere"; shift ;;
+    --atmosphere-ground) MODE="atmosphere_ground"; shift ;;
+    --atmosphere-low) MODE="atmosphere_low"; shift ;;
     --atmosphere-bodies) MODE="atmosphere_bodies"; shift ;;
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
@@ -181,6 +196,8 @@ while [[ $# -gt 0 ]]; do
       shift ;;
     --reentry-compare) MODE="reentry_compare"; shift ;;
     --run-id) RUN_ID="$2"; shift 2 ;;
+    --resolution) RESOLUTION="$2"; shift 2 ;;
+    --display) EXTERNAL_DISPLAY="$2"; shift 2 ;;
     --max-runtime) MAX_RUNTIME_SEC="$2"; shift 2 ;;
     --verify-only) VERIFY_ONLY=1; shift ;;
     --out-dir) OUT_DIR="$2"; OUT_DIR_SET=1; shift 2 ;;
@@ -190,6 +207,23 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ ! "$RESOLUTION" =~ ^([0-9]{1,4})x([0-9]{1,4})$ ]]; then
+  echo "ERROR: --resolution must use WIDTHxHEIGHT (for example 1280x720)" >&2
+  exit 2
+fi
+RESOLUTION_WIDTH="${BASH_REMATCH[1]}"
+RESOLUTION_HEIGHT="${BASH_REMATCH[2]}"
+if [[ -n "$EXTERNAL_DISPLAY" && ! "$EXTERNAL_DISPLAY" =~ ^[A-Za-z0-9._-]+:[0-9]+$ ]]; then
+  echo "ERROR: --display must use DISPLAY syntax such as localhost:101 or :101" >&2
+  exit 2
+fi
+if (( RESOLUTION_WIDTH < 640 || RESOLUTION_WIDTH > 7680
+    || RESOLUTION_HEIGHT < 360 || RESOLUTION_HEIGHT > 4320
+    || RESOLUTION_WIDTH * RESOLUTION_HEIGHT > 33177600 )); then
+  echo "ERROR: --resolution must be between 640x360 and 7680x4320, with at most 33177600 pixels" >&2
+  exit 2
+fi
 
 if [[ "$MODE" == "ascent" && -z "$VARIANT_FILE" ]]; then
   VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -348,8 +382,17 @@ if [[ ! -x "$GODOT" ]]; then
   echo "ERROR: Godot not found at $GODOT (set GODOT_BIN)" >&2
   exit 1
 fi
-if ! command -v xvfb-run >/dev/null 2>&1; then
-  echo "ERROR: xvfb-run not found (install xvfb)" >&2
+if [[ -n "$EXTERNAL_DISPLAY" ]]; then
+  if ! command -v xdpyinfo >/dev/null 2>&1; then
+    echo "ERROR: xdpyinfo is required to validate --display" >&2
+    exit 1
+  fi
+  if ! DISPLAY="$EXTERNAL_DISPLAY" xdpyinfo >/dev/null 2>&1; then
+    echo "ERROR: external display is not reachable: $EXTERNAL_DISPLAY" >&2
+    exit 1
+  fi
+elif ! command -v xvfb-run >/dev/null 2>&1; then
+  echo "ERROR: xvfb-run not found (install xvfb), or pass --display DISPLAY" >&2
   exit 1
 fi
 
@@ -483,6 +526,10 @@ public partial class _PlaytestShot : Node
         ("cockpit_120km_day",   120_000.0,  35.0, true, "none"),
         ("cockpit_120km_night", 120_000.0, -35.0, true, "none"),
     };
+    private bool IsSingleAtmosphereCase => _mode == "atmosphere_low";
+    private bool IsGroundAtmosphereCase => _mode == "atmosphere_ground";
+    private (string Slug, double AltitudeM, double SunElevationDeg, bool Cockpit, string Eclipse)
+        CurrentAtmosphereCase() => IsSingleAtmosphereCase ? _atmosCases[4] : _atmosCases[_atmosIndex];
     // Mars/Venus are deliberately a separate matrix.  The Earth set above is an existing
     // acceptance baseline and must remain byte-for-byte reproducible; this set exercises
     // the same renderer contract after a real body transition, including the lazy planet
@@ -671,7 +718,13 @@ public partial class _PlaytestShot : Node
             return;
         }
 
-        if (_mode == "atmosphere")
+        if (_mode == "atmosphere" || _mode == "atmosphere_ground")
+        {
+            ProcessAtmosphereMatrix(delta, bridge, vessel, universe, body);
+            return;
+        }
+
+        if (_mode == "atmosphere_low")
         {
             ProcessAtmosphereMatrix(delta, bridge, vessel, universe, body);
             return;
@@ -708,7 +761,7 @@ public partial class _PlaytestShot : Node
                 bridge.JumpToBody("saturn");
                 // The public jump positions the vessel at Saturn, while this frame places
                 // the camera almost on the outward radial so the body/ring is in view.
-                CameraController.Instance?.SetExternalChaseFrame(0f, 70f, 38f);
+                CameraController.Instance?.SetExternalChaseFrame(0f, 82f, 38f);
                 _shipSeeded = true;
                 _readyFrames = 0;
                 return;
@@ -794,16 +847,53 @@ public partial class _PlaytestShot : Node
                 bridge.TriggerStaging();
                 bridge.JumpToOrbit(118_000.0);
                 bridge.SetThrottle(1.0);
+                // The ship-only row is an exterior beauty capture, not a continuation of
+                // the pad preset. Explicitly select the production chase framing after the
+                // teleport so stale pad yaw/distance cannot contaminate the orbital image.
+                CameraController.Instance?.EnterShipChaseView();
                 _shipSeeded = true;
                 return;
             }
             if (_shipSeeded && _pendingSlug == null && _readyFrames >= 110 && !_orbitBeauty)
             {
+                var padNode = GetTree().Root.FindChild("LaunchPadController", true, false) as Node3D;
+                var rendererNode = GetTree().Root.FindChild("ActiveVesselRenderer", true, false) as Node3D;
+                _log.WriteLine($"VISUAL_NODES ship padVisible={padNode?.Visible.ToString() ?? "missing"} " +
+                    $"padChildren={padNode?.GetChildCount() ?? -1} " +
+                    $"rendererPos={rendererNode?.Position.ToString() ?? "missing"} " +
+                    $"rendererVisible={rendererNode?.Visible.ToString() ?? "missing"}");
+                _log.Flush();
                 QueueCapture("ship_vacuum");
                 _orbitBeauty = true;
             }
             if (_orbitBeauty && _pendingSlug == null)
                 Finish("SHIP_OK");
+            return;
+        }
+
+        if (_mode == "orbit")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                // This is a presentation-only seed for visual shader validation. It
+                // uses the same public staging/jump path as --ship, but leaves the
+                // engines off so the planetary backdrop can be inspected directly.
+                bridge.TriggerStaging();
+                bridge.JumpToOrbit(200_000.0);
+                bridge.SetThrottle(0.0);
+                // Pull the chase camera back so the direct orbital Earth test measures
+                // the planetary presentation rather than a close-up of the ship mesh.
+                CameraController.Instance?.SetExternalChaseFrame(0f, 45f, 400_000f);
+                _shipSeeded = true;
+                return;
+            }
+            if (_shipSeeded && _pendingSlug == null && _readyFrames >= 110 && !_orbitBeauty)
+            {
+                QueueCapture("orbit_direct");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("ORBIT_DIRECT_OK");
             return;
         }
 
@@ -2080,11 +2170,17 @@ public partial class _PlaytestShot : Node
         bool safetyLimit = _atmosFrameSeconds >= AtmosphereMaximumSettleSeconds;
         if (!safetyLimit && !(enoughFrames && enoughTime && stableExposure)) return;
 
-        var shot = _atmosCases[_atmosIndex];
+        var shot = CurrentAtmosphereCase();
         CaptureNow(shot.Slug);
         LogAtmosphereState(bridge, vessel, universe, body, shot);
 
         _atmosIndex++;
+        if (IsSingleAtmosphereCase
+            || (IsGroundAtmosphereCase && _atmosIndex >= 4))
+        {
+            Finish(IsSingleAtmosphereCase ? "ATMOSPHERE_LOW_OK" : "ATMOSPHERE_GROUND_OK");
+            return;
+        }
         if (_atmosIndex >= _atmosCases.Length)
         {
             Finish("ATMOSPHERE_OK");
@@ -2187,7 +2283,7 @@ public partial class _PlaytestShot : Node
     private void ApplyAtmosphereCase(SimulationBridge bridge, Vessel vessel,
         Universe universe, CelestialBody earth)
     {
-        var shot = _atmosCases[_atmosIndex];
+        var shot = CurrentAtmosphereCase();
         var sun = universe.GetBody("sun");
         Vector3d sunDir = sun == null
             ? new Vector3d(0.4, 0.5, 0.8).Normalized
@@ -2337,7 +2433,7 @@ public partial class _PlaytestShot : Node
 
     private void ApplyAtmosphereCamera()
     {
-        var shot = _atmosCases[_atmosIndex];
+        var shot = CurrentAtmosphereCase();
         if (shot.Cockpit) return;
 
         if (CameraController.Instance != null)
@@ -2375,7 +2471,14 @@ public partial class _PlaytestShot : Node
             camera.Position = Vector3.Zero;
             camera.Near = 0.1f;
             camera.Fov = 60.0f;
-            camera.LookAt(ToGodot(_atmosLook) * 100.0f, ToGodot(_atmosUp));
+            // A level horizon leaves Mars/Venus as a thin lower strip and makes the
+            // orbital cases look empty. Tilt the body dossier 28° toward the surface;
+            // this keeps the limb and terminator in frame while exposing texture scale
+            // and the low-altitude terrain patch.
+            double bodyViewAngle = 28.0 * System.Math.PI / 180.0;
+            Vector3d bodyLook = (_atmosLook * System.Math.Cos(bodyViewAngle)
+                - _atmosUp * System.Math.Sin(bodyViewAngle)).Normalized;
+            camera.LookAt(ToGodot(bodyLook) * 100.0f, ToGodot(_atmosUp));
         }
     }
 
@@ -2694,6 +2797,25 @@ public partial class _PlaytestShot : Node
         var body = universe.GetDominantBody(vessel.Position);
         if (body == null) return;
 
+        var floating = GetTree().Root.FindChild("FloatingOrigin", true, false)
+            as FloatingOrigin;
+        if (floating != null
+            && string.Equals(floating.LastPresentationBodyId, body.Id,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _log.WriteLine($"VISUAL_PLANET body={body.Id} slug={slug} " +
+                $"visible={floating.LastPresentationVisible} " +
+                $"cameraDistanceM={floating.LastPresentationCameraDistance:F1} " +
+                $"angularDiameterDeg={floating.LastPresentationAngularDiameterDeg:F4} " +
+                $"cameraForwardCos={floating.LastPresentationForwardCosine:F5} " +
+                $"direction={floating.LastPresentationDirection.X:F4}," +
+                $"{floating.LastPresentationDirection.Y:F4}," +
+                $"{floating.LastPresentationDirection.Z:F4} " +
+                $"backdrop={floating.LastPresentationBackdropPosition.X:F1}," +
+                $"{floating.LastPresentationBackdropPosition.Y:F1}," +
+                $"{floating.LastPresentationBackdropPosition.Z:F1}");
+        }
+
         double alt = vessel.GetAltitude(body);
         Vector3d surfVel = vessel.GetSurfaceVelocity(body);
         Vector3d up = (vessel.Position - body.Position).Normalized;
@@ -2897,6 +3019,33 @@ verify_pngs() {
     done
     if ! verify_ascent_log_contract "$LOG" "ASCENT_ORBIT_OK"; then
       echo "ERROR: focused ascent did not reach a verified stable orbit" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "orbit" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_orbit_direct.png" ]]; then
+      echo "ERROR: missing direct orbital visual milestone PNG" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=ORBIT_DIRECT_OK' "$LOG"; then
+      echo "ERROR: direct orbital visual capture did not finish cleanly" >&2
+      return 1
+    fi
+    if ! grep -Eq 'VISUAL_PLANET body=earth slug=orbit_direct visible=True .*angularDiameterDeg=1[1-9][0-9]\.[0-9]+ .*cameraForwardCos=0\.[5-9][0-9]*' "$LOG"; then
+      echo "ERROR: direct orbital capture did not prove Earth is visible and framed" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=orbit_direct / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^darkFrac=/) { split($i, p, "="); dark = p[2] + 0 }
+          if ($i ~ /^surfaceWhiteClipFrac=/) { split($i, p, "="); white = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && mean > 0.005 && dark < 0.90 && white < 0.20) }
+    ' "$LOG"; then
+      echo "ERROR: direct orbital Earth image is empty or broadly clipped" >&2
       return 1
     fi
   elif [[ "$MODE" == "edl" ]]; then
@@ -3140,6 +3289,70 @@ verify_pngs() {
         exit bad
       }
     ' "$LOG"; then
+      return 1
+    fi
+  elif [[ "$MODE" == "atmosphere_low" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_10km_day.png" ]]; then
+      echo "ERROR: missing low-atmosphere diagnostic PNG" >&2
+      return 1
+    fi
+    if ! awk '
+      function value(prefix,    i, pair) {
+        for (i = 1; i <= NF; i++)
+          if ($i ~ ("^" prefix "=")) { split($i, pair, "="); return pair[2] }
+        return ""
+      }
+      function finite(value) { return value != "" && value == value && value !~ /^(nan|NaN|inf|Inf|-inf|-Inf)$/ }
+      function reject(message) { print "ERROR: low-atmosphere gate: " message > "/dev/stderr"; bad = 1 }
+      /^ATMOS_APPLY / {
+        if (value("slug") != "10km_day") reject("unexpected apply slug=" value("slug"))
+        targetAlt = value("targetAlt") + 0; targetSun = value("targetSunElevation") + 0; requested++
+      }
+      /^ATMOS_STATE / {
+        if (value("slug") != "10km_day") reject("unexpected state slug=" value("slug"))
+        if (!finite(value("actualAlt")) || !finite(value("sunElevation"))) reject("non-finite physical state")
+        if (value("actualAlt") + 0 < targetAlt - 2.0 || value("actualAlt") + 0 > targetAlt + 2.0) reject("altitude mismatch")
+        if (value("sunElevation") + 0 < targetSun - 0.25 || value("sunElevation") + 0 > targetSun + 0.25) reject("solar-elevation mismatch")
+        if (value("exposureSettled") != "True") reject("exposure did not settle")
+        state++
+      }
+      /^IMAGE / {
+        if (value("slug") != "10km_day" || !finite(value("mean")) || !finite(value("clippedFrac"))) reject("invalid image metrics")
+        image++
+      }
+      /^SUMMARY reason=ATMOSPHERE_LOW_OK([[:space:]]|$)/ { summary++ }
+      END {
+        if (requested != 1) reject("expected one apply, got " requested)
+        if (state != 1) reject("expected one physical state, got " state)
+        if (image != 1) reject("expected one image, got " image)
+        if (summary != 1) reject("missing low-atmosphere summary")
+        exit bad
+      }
+    ' "$LOG"; then
+      return 1
+    fi
+  elif [[ "$MODE" == "atmosphere_ground" ]]; then
+    local required=(ground_day ground_sunrise ground_sunset ground_night)
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing Earth-ground matrix PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+      if ! grep -q "^IMAGE slug=${slug} " "$LOG"; then
+        echo "ERROR: missing image metrics for Earth-ground case: ${slug}" >&2
+        return 1
+      fi
+      if ! grep -q "^ATMOS_STATE slug=${slug} " "$LOG"; then
+        echo "ERROR: missing physical state evidence for Earth-ground case: ${slug}" >&2
+        return 1
+      fi
+    done
+    if ! grep -q 'SUMMARY reason=ATMOSPHERE_GROUND_OK' "$LOG"; then
+      echo "ERROR: Earth-ground matrix did not finish cleanly" >&2
+      return 1
+    fi
+    if grep '^ATMOS_STATE ' "$LOG" | grep -qv ' exposureSettled=True'; then
+      echo "ERROR: Earth-ground capture reached its safety limit before exposure settled" >&2
       return 1
     fi
   elif [[ "$MODE" == "atmosphere" ]]; then
@@ -3499,11 +3712,21 @@ if [[ "$MODE" == "reentry_compare" ]]; then
     prepare_godot_log_file
     write_harness
     dotnet build Exosphere.csproj --no-restore --nologo -v quiet
-    xvfb-run -a -s "-screen 0 1920x1080x24" env \
-      EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
-      --path . --rendering-driver opengl3 \
-      --log-file "$GODOT_LOG_FILE" \
-      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+    if [[ -n "$EXTERNAL_DISPLAY" ]]; then
+      DISPLAY="$EXTERNAL_DISPLAY" env \
+        EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
+        --path . --rendering-driver opengl3 \
+        --resolution "$RESOLUTION" \
+        --log-file "$GODOT_LOG_FILE" \
+        res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+    else
+      xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" env \
+        EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
+        --path . --rendering-driver opengl3 \
+        --resolution "$RESOLUTION" \
+        --log-file "$GODOT_LOG_FILE" \
+        res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+    fi
     cat "$LOG" >> "$COMBINED_LOG"
     cat "$CONSOLE_LOG" >> "$COMBINED_CONSOLE_LOG"
     rm -f "$LOG" "$CONSOLE_LOG"
@@ -3515,11 +3738,21 @@ else
   write_harness
   dotnet build Exosphere.csproj --no-restore --nologo -v quiet
   prepare_godot_log_file
-  xvfb-run -a -s "-screen 0 1920x1080x24" env \
-    EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
-    --path . --rendering-driver opengl3 \
-    --log-file "$GODOT_LOG_FILE" \
-    res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+  if [[ -n "$EXTERNAL_DISPLAY" ]]; then
+    DISPLAY="$EXTERNAL_DISPLAY" env \
+      EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
+      --path . --rendering-driver opengl3 \
+      --resolution "$RESOLUTION" \
+      --log-file "$GODOT_LOG_FILE" \
+      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+  else
+    xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" env \
+      EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
+      --path . --rendering-driver opengl3 \
+      --resolution "$RESOLUTION" \
+      --log-file "$GODOT_LOG_FILE" \
+      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
+  fi
 fi
 
 verify_pngs
@@ -3564,6 +3797,10 @@ elif [[ "$MODE" == "reentry_compare" ]]; then
   echo "visual_playtest: reentry attitude compare OK — see REENTRY_COMPARE rows in $LOG"
 elif [[ "$MODE" == "atmosphere_bodies" ]]; then
   echo "visual_playtest: Mars/Venus atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
+elif [[ "$MODE" == "atmosphere_low" ]]; then
+  echo "visual_playtest: low-atmosphere shader diagnostic OK — compare IMAGE/PERF rows in $LOG"
+elif [[ "$MODE" == "atmosphere_ground" ]]; then
+  echo "visual_playtest: Earth-ground lighting matrix OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "atmosphere" ]]; then
   echo "visual_playtest: atmosphere matrix OK — compare IMAGE/PERF rows in $LOG"
 elif [[ "$MODE" == "lunar_map" ]]; then

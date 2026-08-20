@@ -99,6 +99,21 @@ public static class UiText
         ["settings"] = ("SETTINGS", "AJUSTES"),
         ["quit"] = ("QUIT", "SALIR"),
         ["mission"] = ("SELECTED DOSSIER", "DOSSIER SELECCIONADO"),
+        ["dossier_vehicle_title"] = ("FALCON 9 BLOCK 5\nPAYLOAD DEPLOYMENT",
+            "FALCON 9 BLOCK 5\nDESPLIEGUE DE CARGA"),
+        ["dossier_vehicle_value"] = ("F9 B5 / STANDARD FAIRING", "F9 B5 / COFIA ESTÁNDAR"),
+        ["dossier_site_value"] = ("KENNEDY LC-39A", "KENNEDY LC-39A"),
+        ["dossier_objective_value"] = ("200 KM PARKING ORBIT", "ÓRBITA DE ESTACIONAMIENTO 200 KM"),
+        ["dossier_physics_value"] = ("FULL / ASSISTS AVAILABLE", "COMPLETA / ASISTENCIAS DISPONIBLES"),
+        ["dossier_note"] = (
+            "Published performance values remain distinct from simulator estimates. " +
+            "Open Vehicle Assembly to inspect the dated preset and its sources.",
+            "Los valores publicados se mantienen separados de las estimaciones del simulador. " +
+            "Abre el ensamblaje para revisar el preset fechado y sus fuentes."),
+        ["dossier_profile"] = ("PROFILE  F9-B5-2025-05", "PERFIL  F9-B5-2025-05"),
+        ["flight_operations"] = ("FLIGHT OPERATIONS", "OPERACIONES DE VUELO"),
+        ["footer_controls"] = ("ENTER  SELECT     ESC  BACK", "ENTER  SELECCIONAR     ESC  ATRÁS"),
+        ["physics_ready"] = ("PHYSICS CORE READY", "NÚCLEO FÍSICO LISTO"),
         ["vehicle"] = ("VEHICLE", "VEHÍCULO"),
         ["site"] = ("LAUNCH SITE", "SITIO DE LANZAMIENTO"),
         ["objective"] = ("OBJECTIVE", "OBJETIVO"),

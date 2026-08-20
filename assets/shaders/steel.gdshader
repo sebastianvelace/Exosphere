@@ -29,6 +29,11 @@ uniform float soot_y0      = -1000.0;   // below: clean steel
 uniform float soot_y1      = -1000.0;   // above this toward engines: full soot
 uniform vec3  soot_color   : source_color = vec3(0.16, 0.15, 0.15);
 
+// A very small presentation fill keeps the spacecraft silhouette readable when
+// the solar key is occluded or below the horizon. This is not extra simulated
+// radiance: it is a bounded material cue for the player and HUD camera.
+uniform float fill_strength : hint_range(0.0, 0.12) = 0.10;
+
 // Emission for reentry heat glow (driven from code by raising emit_strength).
 uniform vec3  emit_color   : source_color = vec3(1.0, 0.35, 0.0);
 uniform float emit_strength : hint_range(0.0, 4.0) = 0.0;
@@ -87,7 +92,10 @@ void fragment() {
                 + brush * brush_amt + soot * 0.35;
     ROUGHNESS = clamp(rough, 0.04, 1.0);
 
+    // Keep dark stainless legible in eclipse/night/reentry shadow. Thermal
+    // emission is additive and remains independently driven by the renderer.
+    EMISSION = base_tint * fill_strength;
     if (emit_strength > 0.001) {
-        EMISSION = emit_color * emit_strength;
+        EMISSION += emit_color * emit_strength;
     }
 }

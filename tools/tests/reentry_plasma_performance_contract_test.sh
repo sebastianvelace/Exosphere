@@ -25,6 +25,8 @@ rg -q --fixed-strings 'if (_wake != null && _wake.Visible != visible)' "$PLASMA"
   || fail "wake visibility setter is not dirty-gated"
 rg -q --fixed-strings 'if (edge.Mesh.Visible != visible)' "$PLASMA" \
   || fail "localized edge visibility setter is not dirty-gated"
+rg -q --fixed-strings 'SyncToVesselFrame();' "$PLASMA" \
+  || fail "re-entry plasma is not synchronized to the active vessel frame"
 
 # Vehicle-shape detection must remain bounded and allocation-free in the visual sample.
 rg -q --fixed-strings 'private static bool HasSuperHeavy(Vessel vessel)' "$PLASMA" \
@@ -40,7 +42,7 @@ rg -q --fixed-strings 'vessel.ComputeStagnationHeatFlux(density, surfVel)' "$PLA
   || fail "stagnation heat-flux source was removed"
 rg -q --fixed-strings 'VehicleVisualPhysics.ReentryPlasmaVisualIntensity' "$PLASMA" \
   || fail "re-entry visual intensity gate was removed"
-rg -q --fixed-strings 'UpdateLocalizedEdgeGlows(vessel.Orientation' "$PLASMA" \
+rg -q --fixed-strings 'UpdateLocalizedEdgeGlows((float)intensity' "$PLASMA" \
   || fail "localized re-entry heat cues were removed"
 
 echo "reentry_plasma_performance_contract_test: PASS (sample=20Hz, visibility dirty-gated, heat physics preserved)"

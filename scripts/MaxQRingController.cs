@@ -16,6 +16,7 @@ public partial class MaxQRingController : Node3D
     private double _visualSampleTimer;
     private Vessel? _lastSampledVessel;
     private bool _lastHasSuperHeavy;
+    private Node3D? _vesselFrame;
 
     private const double VisualSamplePeriodSeconds = 1.0 / 20.0;
     private const double Q_THRESH = 12_000.0;   // Pa: ring starts appearing
@@ -73,6 +74,12 @@ public partial class MaxQRingController : Node3D
             return;
         }
 
+        // The ring is a child of Vessels, not of the active renderer. Mirror the renderer's
+        // floating-origin transform so the condensation cue follows attitude changes instead
+        // of remaining in the old inertial frame (which looked like a detached white halo in
+        // EDL captures).
+        SyncToVesselFrame();
+
         double alt      = vessel.GetAltitude(earth);
         double relSpeed = (vessel.Velocity - earth.Velocity).Magnitude;
         double rho      = RHO0 * System.Math.Exp(-alt / H_SCALE);
@@ -126,5 +133,18 @@ public partial class MaxQRingController : Node3D
                 return true;
         }
         return false;
+    }
+
+    private void SyncToVesselFrame()
+    {
+        if (_vesselFrame == null || !GodotObject.IsInstanceValid(_vesselFrame))
+        {
+            _vesselFrame = GetTree().Root.FindChild(
+                "ActiveVesselRenderer", true, false) as Node3D;
+        }
+
+        if (_vesselFrame == null) return;
+        Position = _vesselFrame.Position;
+        Quaternion = _vesselFrame.Quaternion;
     }
 }

@@ -17,11 +17,11 @@ public partial class WarpController : Control
         _font = InterfaceTheme.MonoFont;
         _panelStyle = InterfaceTheme.GlassPanel(0.68f, 12, 0, 0);
         SetAnchorsPreset(LayoutPreset.TopLeft);
-        CustomMinimumSize = new Vector2(178, 50);
+        CustomMinimumSize = new Vector2(178, 68);
         OffsetLeft   = 320;
         OffsetTop    = 18;
         OffsetRight  = 498;
-        OffsetBottom = 68;
+        OffsetBottom = 86;
         MouseFilter  = MouseFilterEnum.Ignore;
     }
 
@@ -58,14 +58,24 @@ public partial class WarpController : Control
         double maxRate     = SimulationBridge.WarpLevels[bridge.MaxAllowedWarpIndex];
 
         string line1 = $"TIME  x{currentRate:G}";
-        string line2 = $"MAXIMUM  x{maxRate:G}";
+        string solarPhase = SunController.SolarPhase switch
+        {
+            "CIVIL_TWILIGHT" => "CIVIL",
+            "NAUTICAL_TWILIGHT" => "NAUTICAL",
+            "ASTRONOMICAL_TWILIGHT" => "ASTRO",
+            _ => SunController.SolarPhase,
+        };
+        string solarLine = double.IsFinite(SunController.SolarElevationDegrees)
+            ? $"SUN  {SunController.SolarElevationDegrees:+0.0;-0.0;0.0}° {solarPhase}"
+            : "SUN  -- UNKNOWN";
+        string line3 = $"MAXIMUM  x{maxRate:G}";
 
         var universe = bridge.Universe;
         bool showClamp = bridge.WarpClampReason != null
             && universe != null
             && universe.CurrentTime < bridge.WarpClampReasonUntil;
 
-        float panelH = showClamp ? 68f : 50f;
+        float panelH = showClamp ? 87f : 68f;
         CustomMinimumSize = new Vector2(178, panelH);
         OffsetBottom = OffsetTop + panelH;
 
@@ -73,12 +83,15 @@ public partial class WarpController : Control
 
         var col1 = bridge.WarpIndex > 0 ? InterfaceTheme.Warning : InterfaceTheme.Text;
         DrawString(_font, new Vector2(14, 20), line1, HorizontalAlignment.Left, -1, 13, col1);
-        DrawString(_font, new Vector2(14, 39), line2, HorizontalAlignment.Left, -1, 10, InterfaceTheme.TextMuted);
+        DrawString(_font, new Vector2(14, 39), solarLine, HorizontalAlignment.Left, -1, 10,
+            InterfaceTheme.TextMuted);
+        DrawString(_font, new Vector2(14, 58), line3, HorizontalAlignment.Left, -1, 10,
+            InterfaceTheme.TextMuted);
 
         if (showClamp)
         {
-            string line3 = $"CLAMP — {bridge.WarpClampReason}";
-            DrawString(_font, new Vector2(14, 58), line3, HorizontalAlignment.Left, -1, 10, InterfaceTheme.Warning);
+            string line4 = $"CLAMP — {bridge.WarpClampReason}";
+            DrawString(_font, new Vector2(14, 77), line4, HorizontalAlignment.Left, -1, 10, InterfaceTheme.Warning);
         }
     }
 

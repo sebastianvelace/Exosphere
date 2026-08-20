@@ -124,6 +124,10 @@ Flight:
 - `O`: jump to orbit debug helper
 - `.` / `,`: warp up / down
 - `Backspace`: warp x1
+- The local Sun/terrain lighting follows simulation time continuously. At x1, one
+  sidereal surface rotation is 86,164 seconds; the solar day also includes the Sun's
+  ephemeris motion. Use time warp to observe dawn, twilight and night, and enable the
+  Full HUD density to see the live `SUN` elevation/phase.
 - `C`: cycle camera presets and cockpit
 - `V`: open VAB / construction scene
 - Mouse right-drag: orbit/free-look camera
@@ -206,7 +210,7 @@ The Starship default stack currently uses:
 - One physical engine part per stage; 33/6 engines are visual, not individual physical engines.
 - VAB V1.5 has 3D preview, click-to-attach node picking, craft-file persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks drag/rotate gizmos and a dedicated main-menu flow.
 - Reentry has windward plasma glow, progressive heat-shield tile charring, survivable belly-flop EDL, and a thermal break-up VFX when a vessel burns up. Still limited: per-piece structural break-up, control-loss consequences, and richer plasma/shock visuals.
-- Starship hull is modelled at the real 9 m diameter with procedural steel, weld seams, windward tiles, heat-shield borders, flaps, raceways, payload-door cues, access panels, vent/drain ports, flap leading-edge/tile-seam cues, Raptor clusters, denser liftoff plume/smoke, and refined Super Heavy grid fins with hinge/lattice detail. Engine startup now has pre-release glow/vapor/flicker, hot-staging has flash/plume VFX, vacuum burns suppress pad-like smoke, and reentry plasma uses heat-flux-driven cap/wake plus first-pass localized nose/belly/flap glow. Remaining visual work is fine reference matching, EDL/reference captures, lighting/camera polish, and verified screenshots.
+- Starship hull is modelled at the real 9 m diameter with procedural steel, weld seams, windward tiles, heat-shield borders, flaps, raceways, payload-door cues, access panels, vent/drain ports, flap leading-edge/tile-seam cues, Raptor clusters, denser liftoff plume/smoke, and refined Super Heavy grid fins with hinge/lattice detail. The Starbase tower has added carriage rails, catch-arm rub rails/rollers/cables and Ship QD cues. Engine startup now has pre-release glow/vapor/flicker, hot-staging has flash/plume VFX, vacuum burns suppress pad-like smoke, and reentry plasma uses heat-flux-driven cap/wake plus first-pass localized nose/belly/flap glow. Remaining visual work is fine reference matching, EDL/reference captures, lighting/camera polish, and verified screenshots.
 - CI provisions Godot in the workflow and runs the headless smoke checks strictly, with an anti-harness guard; full PNG capture in CI is still a follow-up.
 - Interplanetary planning has tested Hohmann planetary transfers, a geocentric
   Lambert/B-plane Moon route, patched-conic SOI transitions, encounter prediction,

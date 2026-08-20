@@ -41,6 +41,24 @@ public partial class EarthGroundController : Node3D
     private const double FadeLo  = 14_000.0;   // start fading out here
     private const double FadeHi  = 26_000.0;   // fully gone above here (backdrop takes over)
 
+    // Local-ground calibration: a small blue-biased indirect floor keeps the
+    // surface readable at night/twilight without changing the direct solar path.
+    // The first .032 and .08 calibrations remained crushed in the real 1280x720
+    // sunrise/night framebuffer. .12 is the shader's bounded ceiling and is still
+    // earthshine only; direct sunlight remains visibility-gated in the shader.
+    private const float NightFloor = 0.12f;
+    private const float NightFloorTintR = 0.72f;
+    private const float NightFloorTintG = 0.84f;
+    private const float NightFloorTintB = 1.00f;
+    private const float EarthshineGain = 2.80f;
+    private const float EarthshineMinReflectance = 0.055f;
+    private const float DetailStrength = 0.18f;
+    private const float CoastalGrade = 0.28f;
+    private const float TerrainReliefStrength = 0.18f;
+    private const float NightCityGain = 0.34f;
+    private const float TerminatorWidth = 0.16f;
+    private const float HorizonHazeStrength = 0.35f;
+
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;
     private bool _groundShaderStateInitialized;
@@ -59,11 +77,25 @@ public partial class EarthGroundController : Node3D
             _mat = new ShaderMaterial { Shader = shader };
             _mat.SetShaderParameter("fade", 1.0f);
             _mat.SetShaderParameter("earth_radius", 6_371_000.0f);
+            _mat.SetShaderParameter("metres_per_unit", MetresPerUnit);
             var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
             _mat.SetShaderParameter("vertical_optical_depth", new Vector3(
                 (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
+            _mat.SetShaderParameter("night_floor", NightFloor);
+            _mat.SetShaderParameter("night_floor_tint", new Vector3(
+                NightFloorTintR, NightFloorTintG, NightFloorTintB));
+            _mat.SetShaderParameter("earthshine_gain", EarthshineGain);
+            _mat.SetShaderParameter("earthshine_min_reflectance", EarthshineMinReflectance);
+            _mat.SetShaderParameter("detail_strength", DetailStrength);
+            _mat.SetShaderParameter("coastal_grade", CoastalGrade);
+            _mat.SetShaderParameter("terrain_relief_strength", TerrainReliefStrength);
+            _mat.SetShaderParameter("night_city_gain", NightCityGain);
+            _mat.SetShaderParameter("terminator_width", TerminatorWidth);
+            _mat.SetShaderParameter("horizon_haze_strength", HorizonHazeStrength);
             var dayTexture = GD.Load<Texture2D>("res://assets/textures/earth_day.jpg");
             if (dayTexture != null) _mat.SetShaderParameter("day_tex", dayTexture);
+            var nightTexture = GD.Load<Texture2D>("res://assets/textures/earth_night.jpg");
+            if (nightTexture != null) _mat.SetShaderParameter("night_tex", nightTexture);
             _mesh.SetSurfaceOverrideMaterial(0, _mat);
         }
         else

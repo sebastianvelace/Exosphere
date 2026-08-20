@@ -21,6 +21,10 @@ rg -q --fixed-strings 'SetRingVisible(false);' "$RING" \
   || fail "Max-Q hidden-state dirty gate missing"
 rg -q --fixed-strings 'if (_ring != null && _ring.Visible != visible)' "$RING" \
   || fail "Max-Q visibility setter is not dirty-gated"
+rg -q --fixed-strings 'SyncToVesselFrame();' "$RING" \
+  || fail "Max-Q ring is not synchronized to the active vessel frame"
+rg -q --fixed-strings '"ActiveVesselRenderer"' "$RING" \
+  || fail "Max-Q renderer frame lookup missing"
 
 # The vehicle-shape lookup must remain allocation-free and bounded; the effect must not
 # enumerate the compatibility enumerable through LINQ every sample.

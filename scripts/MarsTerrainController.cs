@@ -10,11 +10,18 @@ using Godot;
 /// </summary>
 public partial class MarsTerrainController : Node3D
 {
-    private const float PatchSize = 6000f;   // metres across
-    private const int   Grid      = 96;      // subdivisions per side
+    // A 6 km patch disappeared almost completely below the 10 km atmosphere
+    // capture: the geometric horizon is hundreds of kilometres away. Use a
+    // broad local relief patch so Mars reads as terrain rather than a smooth
+    // red sphere, while the high-altitude scaled body still owns the view.
+    private const float PatchSize = 120_000f; // metres across
+    private const int   Grid      = 96;       // subdivisions per side
     private const float ShowAlt   = 12000f;  // m: terrain visible below this altitude
 
     private MeshInstance3D? _mesh;
+    private ShaderMaterial? _material;
+    private Vector3 _lastSunDir;
+    private float _lastSolarVisibility = float.NaN;
 
     public override void _Ready()
     {
@@ -29,14 +36,13 @@ public partial class MarsTerrainController : Node3D
         if (_mesh != null) return;
 
         _mesh = new MeshInstance3D { Name = "MarsSurface", Mesh = BuildMesh() };
-        var mat = new StandardMaterial3D
+        _material = new ShaderMaterial
         {
-            AlbedoColor = new Color(0.55f, 0.27f, 0.16f),
-            Roughness   = 0.97f,
-            Metallic    = 0.0f,
-            VertexColorUseAsAlbedo = true,
+            Shader = GD.Load<Shader>("res://assets/shaders/mars_terrain.gdshader")
         };
-        _mesh.SetSurfaceOverrideMaterial(0, mat);
+        _material.SetShaderParameter("solar_visibility", 1.0f);
+        _material.SetShaderParameter("night_floor", 0.006f);
+        _mesh.SetSurfaceOverrideMaterial(0, _material);
         AddChild(_mesh);
         GD.Print($"PERF_RENDER stage=mars_terrain_build grid={Grid} vertices={Grid * Grid * 6}");
     }
@@ -57,6 +63,32 @@ public partial class MarsTerrainController : Node3D
 
         EnsureMesh();
         Visible = true;
+
+        if (_material != null)
+        {
+            float visibility = SunController.SolarVisibility;
+            if (float.IsNaN(_lastSolarVisibility)
+                || Mathf.Abs(visibility - _lastSolarVisibility) > 1e-4f)
+            {
+                _material.SetShaderParameter("solar_visibility", visibility);
+                _lastSolarVisibility = visibility;
+            }
+
+            var sun = universe.GetBody("sun");
+            if (sun != null)
+            {
+                var sunDir = new Vector3(
+                    (float)(sun.Position.X - vessel.Position.X),
+                    (float)(sun.Position.Y - vessel.Position.Y),
+                    (float)(sun.Position.Z - vessel.Position.Z)).Normalized();
+                if (_lastSunDir == Vector3.Zero
+                    || _lastSunDir.DistanceSquaredTo(sunDir) > 1e-10f)
+                {
+                    _material.SetShaderParameter("sun_dir", sunDir);
+                    _lastSunDir = sunDir;
+                }
+            }
+        }
 
         // Surface point directly beneath the vessel, expressed relative to the vessel
         // (which sits at the render origin under FloatingOrigin).
@@ -85,13 +117,13 @@ public partial class MarsTerrainController : Node3D
         var noise = new FastNoiseLite
         {
             NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth,
-            Frequency = 0.00035f,
-            FractalOctaves = 5,
+            Frequency = 0.00008f,
+            FractalOctaves = 6,
         };
         var detail = new FastNoiseLite
         {
             NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth,
-            Frequency = 0.004f,
+            Frequency = 0.0008f,
             FractalOctaves = 3,
         };
 
@@ -102,7 +134,7 @@ public partial class MarsTerrainController : Node3D
         float half = PatchSize * 0.5f;
 
         float Height(float x, float z) =>
-            noise.GetNoise2D(x, z) * 220f + detail.GetNoise2D(x, z) * 28f;
+            noise.GetNoise2D(x, z) * 520f + detail.GetNoise2D(x, z) * 70f;
 
         for (int j = 0; j < Grid; j++)
         {

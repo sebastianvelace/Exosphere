@@ -2,8 +2,8 @@
 // Exosphere — Photoreal Earth from NASA Blue Marble textures.
 // Equirectangular day (natural-colour land/ocean), night (Black Marble city lights)
 // and cloud textures, sampled from the sphere's local position. Day/night blend from
-// `sun_dir` and spectrally attenuated direct sunlight. The atmospheric limb is rendered
-// only by space_sky.gdshader, avoiding a second artistic Fresnel halo on the solid sphere.
+// `sun_dir` and spectrally attenuated direct sunlight. The sky owns the broad atmosphere;
+// the solid sphere only gets a bounded night-side earthshine floor and a thin edge.
 // Unshaded — the
 // shader does its own lighting (so Godot's DirectionalLight does not double-light it).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,6 +26,14 @@ uniform float cloud_amount : hint_range(0.0, 1.0) = 0.85;
 uniform float cloud_speed  = 0.000000375;
 uniform float night_lights : hint_range(0.0, 4.0) = 2.4;
 uniform float day_gain     : hint_range(0.5, 2.0) = 1.15;
+// Bounded earthshine for the scaled-space night hemisphere. The actual city-light
+// texture remains additive; this floor only keeps land/ocean readable when the
+// physically direct beam is absent and exposure is driven by the star field.
+uniform float night_floor : hint_range(0.0, 0.16) = 0.12;
+// The scaled-space Earth is a real mesh, so the sky integrator cannot draw its
+// atmospheric limb over it. This bounded blue edge preserves the planetary
+// silhouette on the night side without adding a broad emissive halo.
+uniform float limb_strength : hint_range(0.0, 1.5) = 0.85;
 // Fades the whole distant-Earth backdrop in/out. Driven by FloatingOrigin from the CAMERA's
 // altitude: ~0 in the low launch view (so the local ground patch + sky own the horizon, no
 // grey seam between the two Earth representations) → 1 once the viewpoint is high enough that
@@ -84,6 +92,7 @@ void fragment() {
 	vec3 p = normalize(v_local);
 	vec3 N = normalize(v_world_normal);
 	vec3 L = normalize(sun_dir);
+	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 
 	vec2 uv = equirect(p);
 
@@ -125,9 +134,17 @@ void fragment() {
 	float diff = clamp(ndl, 0.0, 1.0);
 	float air_mass = 1.0 / max(diff + 0.025 * exp(-11.0 * diff), 0.025);
 	vec3 direct_transmittance = exp(-vertical_optical_depth * min(air_mass, 40.0));
-	float diffuse_fill = mix(0.012, 0.045, smoothstep(-0.18, 0.30, ndl));
+	float diffuse_fill = mix(night_floor, 0.045, smoothstep(-0.18, 0.30, ndl));
 	vec3 lit = surface * (vec3(diffuse_fill)
 		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility);
+
+	// A thin, physically motivated atmospheric edge remains visible when the
+	// unlit surface and city-light texture are below the adapted exposure.
+	float fresnel = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+	float limb_visibility = 0.20 + 0.80 * solar_visibility;
+	vec3 atmosphere_limb = vec3(0.012, 0.045, 0.16)
+		* fresnel * limb_strength * limb_visibility;
+	lit += atmosphere_limb;
 
 	// City lights on the night side (emissive). Threshold on luminance so ONLY genuine
 	// bright lights pass — the Black Marble texture has a dark, blocky data floor in
@@ -139,6 +156,6 @@ void fragment() {
 	lit += cities;
 
 	ALBEDO = lit;
-	EMISSION = cities * 0.6;
+	EMISSION = cities * 0.6 + atmosphere_limb * 0.35;
 	ALPHA = planet_alpha;
 }

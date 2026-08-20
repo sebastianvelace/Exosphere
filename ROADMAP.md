@@ -186,6 +186,8 @@ fidelidad visual y asegurar que lo existente se pueda validar con capturas:
 
 3. **Entorno y camaras**
    - Pad costero ya tiene primera pasada visual.
+   - Torre Starbase V1.1 agrega rieles de carriage, sheaves, rub rails/rollers
+     de chopsticks, cables y cues del Ship QD upper arm.
    - Siguiente: iluminacion solar, exposicion, sky/atmosfera y camaras para que
      launch/orbit/reentry/cockpit se lean como escalas reales.
 

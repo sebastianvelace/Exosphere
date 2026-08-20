@@ -178,6 +178,20 @@ public class LaunchSiteFrameTests
     }
 
     [Fact]
+    public void TimedSurfacePositionCompletesOneSiderealDay()
+    {
+        var earth = LoadBody("earth");
+        var site = LoadSite("starbase");
+        var start = site.GetPosition(earth, 0.0);
+        var quarterDay = site.GetPosition(earth, earth.RotationalPeriod * 0.25);
+        var fullDay = site.GetPosition(earth, earth.RotationalPeriod);
+
+        Assert.True((quarterDay - start).Magnitude > earth.Radius * 0.9,
+            "the launch surface must visibly rotate during a quarter day");
+        Assert.InRange((fullDay - start).Magnitude, 0.0, 0.05);
+    }
+
+    [Fact]
     public void TimedLaunchFrameRemainsUprightAndRightHanded()
     {
         var earth = LoadBody("earth");

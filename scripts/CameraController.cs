@@ -28,16 +28,20 @@ public partial class CameraController : Node3D
         _cockpit = false;
         _padPresetIdx = 0;
         Mode = CameraMode.Chase;
+        _presentationDistanceTarget = null;
+        _hasSmoothedFrame = false;
         _yaw = 28f;
         _pitch = 10f;
-        // Frame the active geometry instead of assuming a 50 m Starship. Capsules,
-        // payloads and rovers otherwise become sub-pixel dots at the old fixed distance.
+        // Frame the active geometry instead of assuming a 50 m Starship. Keep the
+        // exterior beauty distance close enough to read hull detail and engine layout;
+        // the former 2.5x length multiplier left an orbital Starship as a sub-pixel
+        // silhouette even though the chase camera itself was correctly positioned.
         double lengthM = SimulationBridge.Instance?.ActiveVessel?.VehicleLength
             ?? 50.0;
         _distance = Mathf.Clamp(
-            (float)(lengthM / 2.8 * 2.5),
-            8f,
-            48f);
+            (float)(lengthM / 2.8 * 1.7),
+            10f,
+            36f);
     }
 
     /// <summary>Set a deterministic external chase frame for visual acceptance scenes.</summary>
@@ -46,6 +50,8 @@ public partial class CameraController : Node3D
         _cockpit = false;
         _padPresetIdx = 0;
         Mode = CameraMode.Chase;
+        _presentationDistanceTarget = null;
+        _hasSmoothedFrame = false;
         _yaw = yaw;
         _pitch = Mathf.Clamp(pitch, -89f, 89f);
         _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
@@ -55,6 +61,16 @@ public partial class CameraController : Node3D
     private float _yaw      = 25f;
     private float _pitch    = 12f;
     private float _distance = 80f;   // full stack is ~43 units tall; 80 gives a nice frame
+    private float? _presentationDistanceTarget;
+
+    // Event changes (Pad -> Chase, staging, and the return from EDL presentation) update
+    // the requested frame below. Keep the rendered frame in local vessel coordinates and
+    // ease it before applying the floating-origin surface frame; this removes camera pops
+    // without taking ownership of the player's yaw/pitch/zoom controls after presentation.
+    private const float CameraFrameTransitionSeconds = 0.42f;
+    private Vector3 _smoothedFramePosition;
+    private Vector3 _smoothedFrameTarget;
+    private bool _hasSmoothedFrame;
 
     [Export] public float OrbitSensitivity { get; set; } = 0.3f;
     [Export] public float ZoomSensitivity  { get; set; } = 1.2f;
@@ -96,6 +112,16 @@ public partial class CameraController : Node3D
     private const double PresentationLookupRetrySeconds = 0.25;
     private const float CockpitFov = 60f;
     private const float CockpitNear = 0.04f;
+    // After staging, keep the automatic chase camera on the outward hemisphere so
+    // the active body's limb remains in front of the camera. The player can still
+    // orbit freely afterwards; this only prevents a sun-facing pitch from hiding
+    // the planet during the deterministic transition into orbit.
+    private const float MinimumOrbitPlanetPitchDeg = 45f;
+    // EDL is a presentation-critical exterior shot: at the old 38-unit staging frame the
+    // separated Ship occupied only a small fraction of the 1920px capture during entry.
+    // This bound is applied only while the EDL overlay is active and eases through the same
+    // frame interpolation as staging; it does not alter vessel state or player zoom input.
+    private const float EdlPresentationDistance = 28f;
 
     public override void _Ready()
     {
@@ -116,9 +142,15 @@ public partial class CameraController : Node3D
                 _dragging = mb.Pressed;
 
             if (mb.ButtonIndex == MouseButton.WheelUp)
+            {
+                _presentationDistanceTarget = null;
                 _distance = Mathf.Clamp(_distance / ZoomSensitivity, MinDistance, MaxDistance);
+            }
             if (mb.ButtonIndex == MouseButton.WheelDown)
+            {
+                _presentationDistanceTarget = null;
                 _distance = Mathf.Clamp(_distance * ZoomSensitivity, MinDistance, MaxDistance);
+            }
         }
 
         if (@event is InputEventMouseMotion mm && _dragging)
@@ -131,6 +163,7 @@ public partial class CameraController : Node3D
             }
             else
             {
+                _presentationDistanceTarget = null;
                 _yaw   -= mm.Relative.X * OrbitSensitivity;
                 _pitch -= mm.Relative.Y * OrbitSensitivity;
                 _pitch  = Mathf.Clamp(_pitch, -89f, 89f);
@@ -144,6 +177,7 @@ public partial class CameraController : Node3D
             _cockpit = _padPresetIdx == PadPresets.Length;
             if (!_cockpit)
             {
+                _presentationDistanceTarget = null;
                 var preset = PadPresets[_padPresetIdx];
                 _yaw      = preset.yaw;
                 _pitch    = preset.pitch;
@@ -169,7 +203,7 @@ public partial class CameraController : Node3D
             if (_trackedVehicleInitialized && _trackedHadBooster && !hasBooster
                 && _distance is > 70f and < 105f)
             {
-                _distance = 38f; // keep the 50 m Ship readable after the 121 m stack separates
+                _presentationDistanceTarget = 38f;
                 // Start the separated-stage view from the illuminated quarter.
                 // The user can still orbit freely afterwards.
                 var sun = bridge.Universe.GetBody("sun");
@@ -178,7 +212,9 @@ public partial class CameraController : Node3D
                     var localSun = BuildSurfaceFrame(body, bridge.ActiveVessel.Position).Inverse()
                         * ToG((sun.Position - bridge.ActiveVessel.Position).Normalized);
                     _yaw = Mathf.RadToDeg(Mathf.Atan2(localSun.X, localSun.Z));
-                    _pitch = Mathf.Clamp(Mathf.RadToDeg(Mathf.Asin(localSun.Y)), -25f, 35f);
+                    _pitch = Mathf.Clamp(
+                        Mathf.RadToDeg(Mathf.Asin(localSun.Y)),
+                        MinimumOrbitPlanetPitchDeg, 65f);
                 }
             }
             _trackedHadBooster = hasBooster;
@@ -217,8 +253,8 @@ public partial class CameraController : Node3D
             renderUp = surfaceFrame.Y;
         }
 
-        Vector3 camPos;
-        Vector3 lookTarget;
+        Vector3 targetCamPos;
+        Vector3 targetLookTarget;
         if (Mode == CameraMode.Pad && trackAlt < 1100.0)
         {
             // Ground-anchored tracking shot: the pad sits at groundY, the rocket at the
@@ -232,15 +268,19 @@ public partial class CameraController : Node3D
             float dist = (float)VehicleCameraFraming.PadTrackingDistance(
                 vehicleHeight, groundY);
             float midY = (groundY + vehicleHeight) * 0.5f;
-            camPos = new Vector3(dist * Mathf.Sin(yawRad), midY, dist * Mathf.Cos(yawRad));
-            lookTarget = new Vector3(0f, midY, 0f);
+            targetCamPos = new Vector3(dist * Mathf.Sin(yawRad), midY, dist * Mathf.Cos(yawRad));
+            targetLookTarget = new Vector3(0f, midY, 0f);
         }
         else
         {
             // Pad/chase orbit framing.
             var active = bridge?.ActiveVessel;
             float lookAtY = Mode == CameraMode.Pad ? 22f : 0f;
-            float effectiveDistance = _distance;
+            float requestedDistance = _presentationDistanceTarget ?? _distance;
+            if (EDLController.Instance?.IsPresentationActive == true
+                && Mode == CameraMode.Chase)
+                requestedDistance = Mathf.Min(requestedDistance, EdlPresentationDistance);
+            float effectiveDistance = requestedDistance;
             Vector3 vesselCenter = Vector3.Zero;
             if (Mode == CameraMode.Chase && active != null)
             {
@@ -250,22 +290,35 @@ public partial class CameraController : Node3D
                 float centerU = (float)(active.VehicleLength / (2.0 * 2.8));
                 vesselCenter = ToGQuat(active.Orientation) * (Vector3.Up * centerU);
             }
-            camPos = new Vector3(
+            targetCamPos = new Vector3(
                 effectiveDistance * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
                 effectiveDistance * Mathf.Sin(pitchRad) + lookAtY,
                 effectiveDistance * Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
-            lookTarget = new Vector3(0f, lookAtY, 0f);
+            targetLookTarget = new Vector3(0f, lookAtY, 0f);
             if (Mode == CameraMode.Chase)
             {
-                camPos += surfaceFrame.Inverse() * vesselCenter;
-                lookTarget = surfaceFrame.Inverse() * vesselCenter;
+                targetCamPos += surfaceFrame.Inverse() * vesselCenter;
+                targetLookTarget = surfaceFrame.Inverse() * vesselCenter;
             }
+        }
+
+        if (!_hasSmoothedFrame)
+        {
+            _smoothedFramePosition = targetCamPos;
+            _smoothedFrameTarget = targetLookTarget;
+            _hasSmoothedFrame = true;
+        }
+        else
+        {
+            float blend = CameraFrameBlend(delta);
+            _smoothedFramePosition = _smoothedFramePosition.Lerp(targetCamPos, blend);
+            _smoothedFrameTarget = _smoothedFrameTarget.Lerp(targetLookTarget, blend);
         }
 
         // The presets above are authored in local launch coordinates. Rotate them into the
         // vessel's geodetic frame so screen-up follows radial up instead of inertial +Y.
-        camera.Position = surfaceFrame * camPos;
-        lookTarget = surfaceFrame * lookTarget;
+        camera.Position = surfaceFrame * _smoothedFramePosition;
+        Vector3 lookTarget = surfaceFrame * _smoothedFrameTarget;
         camera.LookAt(lookTarget, renderUp);
 
         // ── Force-feel shake — applied AFTER LookAt so the orbit framing is intact.
@@ -449,6 +502,12 @@ public partial class CameraController : Node3D
 
     private static Vector3 ToG(Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
     private static Quaternion ToGQuat(Quaterniond q) => new((float)q.X, (float)q.Y, (float)q.Z, (float)q.W);
+
+    private static float CameraFrameBlend(double delta)
+    {
+        if (delta <= 0.0) return 1f;
+        return 1f - Mathf.Exp(-(float)delta / CameraFrameTransitionSeconds);
+    }
 
     private static Basis BuildSurfaceFrame(Exosphere.Simulation.CelestialBody body, Vector3d position)
     {

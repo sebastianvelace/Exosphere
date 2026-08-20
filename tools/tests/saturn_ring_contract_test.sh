@@ -29,7 +29,7 @@ if ! rg -n -- '--saturn\)' "$harness" >/dev/null || ! rg -n '_mode == "saturn"' 
   echo "FAIL Saturn visual acceptance mode is missing" >&2
   exit 1
 fi
-if ! rg -n 'SetExternalChaseFrame\(0f, 70f, 38f\)' "$harness" >/dev/null; then
+if ! rg -n 'SetExternalChaseFrame\(0f, 82f, 38f\)' "$harness" >/dev/null; then
   echo "FAIL Saturn visual acceptance does not frame the dominant body" >&2
   exit 1
 fi

@@ -14,6 +14,10 @@ public partial class CockpitRenderer : Node3D
 {
     public const float AuthoredEyeY = 36f;
     public const float AuthoredEyeZ = 0.6f;
+    // Presentation-only fill: the IVA shell is closed to the scene sun, so a small
+    // emissive floor keeps the frame/console readable without lighting the exterior.
+    private const float InteriorKeyEnergy = 0.62f;
+    private const float InteriorFillEnergy = 0.36f;
     private const float EyeY = AuthoredEyeY;
     private const float EyeZ = AuthoredEyeZ;
 
@@ -34,6 +38,18 @@ public partial class CockpitRenderer : Node3D
         var frameM = Mat(new Color(0.12f, 0.14f, 0.17f), 0.50f, 0.35f);
         var seatM  = Mat(new Color(0.12f, 0.13f, 0.16f), 0.72f, 0.0f);
         var accent = Mat(new Color(0.28f, 0.32f, 0.37f), 0.42f, 0.48f);
+
+        // Keep the sealed shell from collapsing to pure black during eclipse/night
+        // captures. These values are deliberately below the display emission and do
+        // not replace the two local lights below.
+        wall.EmissionEnabled = true;
+        wall.Emission = new Color(0.008f, 0.012f, 0.020f);
+        trim.EmissionEnabled = true;
+        trim.Emission = new Color(0.012f, 0.018f, 0.030f);
+        frameM.EmissionEnabled = true;
+        frameM.Emission = new Color(0.009f, 0.015f, 0.026f);
+        accent.EmissionEnabled = true;
+        accent.Emission = new Color(0.018f, 0.030f, 0.050f);
 
         var screenM = Mat(new Color(0.02f, 0.04f, 0.08f), 0.2f, 0f);
         screenM.EmissionEnabled = true; screenM.Emission = new Color(0.06f, 0.12f, 0.22f);
@@ -76,8 +92,8 @@ public partial class CockpitRenderer : Node3D
         }
 
         // ── Soft interior lighting (sealed hull gets no sun) ───────────────────────
-        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 0.4f, -0.5f), OmniRange = 4.0f, LightEnergy = 0.48f, LightColor = new Color(0.72f, 0.79f, 0.92f) });
-        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 1.0f, 0.7f),  OmniRange = 2.8f, LightEnergy = 0.28f, LightColor = new Color(0.45f, 0.61f, 0.84f) });
+        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 0.4f, -0.5f), OmniRange = 4.0f, LightEnergy = InteriorKeyEnergy, LightColor = new Color(0.72f, 0.79f, 0.92f) });
+        AddChild(new OmniLight3D { Position = new Vector3(0, EyeY + 1.0f, 0.7f),  OmniRange = 2.8f, LightEnergy = InteriorFillEnergy, LightColor = new Color(0.45f, 0.61f, 0.84f) });
         _ = EyeZ;
     }
 

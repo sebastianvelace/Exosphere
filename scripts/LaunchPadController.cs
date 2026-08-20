@@ -29,6 +29,7 @@ public partial class LaunchPadController : Node3D
     // 1 render unit ≈ 2.8 m. Helper so the code below can read in metres.
     private const float U = 1f / 2.8f;   // metres → render units
     private static readonly LaunchComplexSpec Spec = LaunchComplexSpec.StarbasePostDeluge;
+    private static Shader? _launchSurfaceShader;
     private const float GradeY = 0f;
     private static readonly float VehicleInterfaceY = (float)Spec.VehicleInterfaceElevation * U;
 
@@ -47,6 +48,11 @@ public partial class LaunchPadController : Node3D
     private float _lastChopstickScale = float.NaN;
 
     private const double CatchPresentationPeriodSeconds = 1.0 / 20.0;
+    // The launch complex is a local-scene presentation. Once the active vessel is more
+    // than 12 km above Earth, keeping the pad at the floating origin makes it appear in
+    // orbital chase shots as if the vehicle never left the ground. SimulationBridge also
+    // keeps it alive while a returning vessel is in the final catch approach.
+    public const double PadVisibilityCeilingM = 12_000.0;
 
     /// <summary>Presentation telemetry for the physical catch state.</summary>
     public bool CatchApproachArmed { get; private set; }
@@ -173,6 +179,7 @@ public partial class LaunchPadController : Node3D
                 LaunchSiteId == "cape_canaveral_lc36",
                 concrete, concDark, burnt, steel, darkSteel, insul,
                 tarmac, asphalt, paint);
+            ApplyLaunchSurfaceMaterials();
             BuildNightFloodlights();
             return;
         }
@@ -183,7 +190,63 @@ public partial class LaunchPadController : Node3D
         BuildMechazillaTower(steel, darkSteel);
         BuildTankFarm(insul, steel);
         BuildGroundSupport(insul, steel, darkSteel, concrete, concDark);
+        ApplyLaunchSurfaceMaterials();
         BuildNightFloodlights();
+    }
+
+    private void ApplyLaunchSurfaceMaterials()
+    {
+        // Primitive civil meshes remain cheap to build, while dominant horizontal
+        // surfaces receive deterministic concrete/asphalt/sand grain. Keep the
+        // material families few so the launch complex still batches efficiently.
+        var concrete = CreateLaunchSurfaceMaterial(
+            new Color(0.34f, 0.33f, 0.31f), 0.24f, 0.18f, 0.08f, 0.04f);
+        var asphalt = CreateLaunchSurfaceMaterial(
+            new Color(0.08f, 0.085f, 0.08f), 0.32f, 0.25f, 0.11f, 0.12f);
+        var sand = CreateLaunchSurfaceMaterial(
+            new Color(0.31f, 0.28f, 0.21f), 0.18f, 0.34f, 0.16f, 0.0f);
+        var gravel = CreateLaunchSurfaceMaterial(
+            new Color(0.20f, 0.19f, 0.17f), 0.46f, 0.38f, 0.20f, 0.0f);
+        var burnt = CreateLaunchSurfaceMaterial(
+            new Color(0.09f, 0.08f, 0.07f), 0.36f, 0.16f, 0.06f, 0.28f);
+
+        if (IsStarbaseSite)
+        {
+            ApplySurface("StarbaseCoastalFill", sand);
+            ApplySurface("OrbitalPadApron", concrete);
+            ApplySurface("OlmFoundationMat", gravel);
+            ApplySurface("StateHighway4Access", asphalt);
+            ApplySurface("TankFarmServiceLane", asphalt);
+        }
+        else
+        {
+            ApplySurface("SpaceportApron", asphalt);
+            ApplySurface("RaisedLaunchDeck", concrete);
+            ApplySurface("PadBase", concrete);
+            ApplySurface("Ground", concrete);
+            ApplySurface("FlameTrench", burnt);
+            ApplySurface("TrenchFloor", burnt);
+            ApplySurface("ScorchApron", burnt);
+        }
+    }
+
+    private void ApplySurface(string nodeName, ShaderMaterial material)
+    {
+        if (GetNodeOrNull<MeshInstance3D>(nodeName) is { } mesh)
+            mesh.SetSurfaceOverrideMaterial(0, material);
+    }
+
+    private static ShaderMaterial CreateLaunchSurfaceMaterial(
+        Color color, float scale, float detail, float grain, float wetness)
+    {
+        _launchSurfaceShader ??= GD.Load<Shader>("res://assets/shaders/launch_surface.gdshader");
+        var material = new ShaderMaterial { Shader = _launchSurfaceShader };
+        material.SetShaderParameter("base_color", color);
+        material.SetShaderParameter("detail_scale", scale);
+        material.SetShaderParameter("detail_strength", detail);
+        material.SetShaderParameter("grain_strength", grain);
+        material.SetShaderParameter("wetness", wetness);
+        return material;
     }
 
     private void BuildConventionalLaunchComplex(

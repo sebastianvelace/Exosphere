@@ -9,6 +9,10 @@ public partial class MainMenu : Control
 {
     private VBoxContainer _navigation = null!;
     private PanelContainer _dossier = null!;
+    private MarginContainer _bodyMargin = null!;
+    private VBoxContainer _primaryColumn = null!;
+    private Label _bodyTitle = null!;
+    private Label _bodySubtitle = null!;
     private Control? _modal;
     private Button? _firstButton;
 
@@ -140,55 +144,55 @@ public partial class MainMenu : Control
 
     private void BuildBody()
     {
-        var margin = new MarginContainer();
-        margin.SetAnchorsPreset(LayoutPreset.FullRect);
-        margin.OffsetLeft = 70;
-        margin.OffsetTop = 112;
-        margin.OffsetRight = -70;
-        margin.OffsetBottom = -74;
-        AddChild(margin);
+        _bodyMargin = new MarginContainer { Name = "BodyMargin" };
+        _bodyMargin.SetAnchorsPreset(LayoutPreset.FullRect);
+        _bodyMargin.OffsetLeft = 70;
+        _bodyMargin.OffsetTop = 112;
+        _bodyMargin.OffsetRight = -70;
+        _bodyMargin.OffsetBottom = -74;
+        AddChild(_bodyMargin);
 
         var split = new HBoxContainer();
         split.AddThemeConstantOverride("separation", 72);
-        margin.AddChild(split);
+        _bodyMargin.AddChild(split);
 
-        var left = new VBoxContainer
+        _primaryColumn = new VBoxContainer
         {
             Name = "PrimaryNavigation",
             CustomMinimumSize = new Vector2(430, 0),
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        left.AddThemeConstantOverride("separation", 16);
-        split.AddChild(left);
+        _primaryColumn.AddThemeConstantOverride("separation", 16);
+        split.AddChild(_primaryColumn);
 
-        var classification = new Label { Text = "FLIGHT OPERATIONS" };
+        var classification = new Label { Text = UiText.Get("flight_operations") };
         InterfaceTheme.ApplyMono(classification, 11);
         classification.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
-        left.AddChild(classification);
+        _primaryColumn.AddChild(classification);
 
-        var title = new Label
+        _bodyTitle = new Label
         {
             Text = UiText.Get("dossier"),
             AutowrapMode = TextServer.AutowrapMode.Off,
         };
-        InterfaceTheme.ApplyDisplay(title, 55);
-        title.AddThemeColorOverride("font_color", InterfaceTheme.Text);
-        title.AddThemeConstantOverride("line_spacing", -8);
-        left.AddChild(title);
+        InterfaceTheme.ApplyDisplay(_bodyTitle, 55);
+        _bodyTitle.AddThemeColorOverride("font_color", InterfaceTheme.Text);
+        _bodyTitle.AddThemeConstantOverride("line_spacing", -8);
+        _primaryColumn.AddChild(_bodyTitle);
 
-        var subtitle = new Label
+        _bodySubtitle = new Label
         {
             Text = UiText.Get("subtitle"),
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             CustomMinimumSize = new Vector2(390, 54),
         };
-        InterfaceTheme.ApplyBody(subtitle, 14);
-        subtitle.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        left.AddChild(subtitle);
+        InterfaceTheme.ApplyBody(_bodySubtitle, 14);
+        _bodySubtitle.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        _primaryColumn.AddChild(_bodySubtitle);
 
         _navigation = new VBoxContainer();
         _navigation.AddThemeConstantOverride("separation", 7);
-        left.AddChild(_navigation);
+        _primaryColumn.AddChild(_navigation);
 
         string[] saves = SaveSystem.ListSaveSlots();
         AddNavButton(UiText.Get("continue"), () => ContinueSave(saves), primary: true,
@@ -254,28 +258,27 @@ public partial class MainMenu : Control
         label.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
         content.AddChild(label);
 
-        var mission = new Label { Text = "FALCON 9 BLOCK 5\nPAYLOAD DEPLOYMENT" };
+        var mission = new Label { Text = UiText.Get("dossier_vehicle_title") };
         InterfaceTheme.ApplyDisplay(mission, 30);
         mission.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         content.AddChild(mission);
         content.AddChild(Divider());
-        content.AddChild(Metric(UiText.Get("vehicle"), "F9 B5 / STANDARD FAIRING"));
-        content.AddChild(Metric(UiText.Get("site"), "KENNEDY LC-39A"));
-        content.AddChild(Metric(UiText.Get("objective"), "200 KM PARKING ORBIT"));
-        content.AddChild(Metric(UiText.Get("physics"), "FULL / ASSISTS AVAILABLE"));
+        content.AddChild(Metric(UiText.Get("vehicle"), UiText.Get("dossier_vehicle_value")));
+        content.AddChild(Metric(UiText.Get("site"), UiText.Get("dossier_site_value")));
+        content.AddChild(Metric(UiText.Get("objective"), UiText.Get("dossier_objective_value")));
+        content.AddChild(Metric(UiText.Get("physics"), UiText.Get("dossier_physics_value")));
         content.AddChild(Divider());
 
         var note = new Label
         {
-            Text = "Published performance values remain distinct from simulator estimates. " +
-                   "Open Vehicle Assembly to inspect the dated preset and its sources.",
+            Text = UiText.Get("dossier_note"),
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         InterfaceTheme.ApplyBody(note, 12);
         note.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         content.AddChild(note);
 
-        var profile = new Label { Text = "PROFILE  F9-B5-2025-05" };
+        var profile = new Label { Text = UiText.Get("dossier_profile") };
         InterfaceTheme.ApplyMono(profile, 10);
         profile.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
         content.AddChild(profile);
@@ -297,14 +300,14 @@ public partial class MainMenu : Control
 
         var note = new Label
         {
-            Text = "ENTER  SELECT     ESC  BACK",
+            Text = UiText.Get("footer_controls"),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
         InterfaceTheme.ApplyMono(note, 10);
         note.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
         row.AddChild(note);
 
-        var status = new Label { Text = "PHYSICS CORE READY" };
+        var status = new Label { Text = UiText.Get("physics_ready") };
         InterfaceTheme.ApplyMono(status, 10);
         status.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         row.AddChild(status);
@@ -669,9 +672,29 @@ public partial class MainMenu : Control
 
     private void UpdateResponsiveLayout()
     {
-        if (_dossier == null) return;
+        if (_dossier == null || _bodyMargin == null || _primaryColumn == null) return;
         float effectiveWidth = Size.X / System.Math.Max(1.0f, UserInterfaceSettings.UiScale);
-        _dossier.Visible = effectiveWidth >= 1380f;
+        float effectiveHeight = Size.Y / System.Math.Max(1.0f, UserInterfaceSettings.UiScale);
+        bool compact = effectiveHeight < 820f || effectiveWidth < 1380f;
+        bool narrow = effectiveWidth < 1380f;
+
+        // At 1280×720 the dossier is intentionally removed, but the original
+        // desktop spacing still left the last nav rows behind the footer. Compress
+        // only the presentation chrome; hit targets remain at least 36 px high.
+        _dossier.Visible = !narrow;
+        _bodyMargin.OffsetLeft = narrow ? 54 : 70;
+        _bodyMargin.OffsetTop = compact ? 86 : 112;
+        _bodyMargin.OffsetRight = narrow ? -54 : -70;
+        _bodyMargin.OffsetBottom = compact ? -50 : -74;
+        _primaryColumn.AddThemeConstantOverride("separation", compact ? 8 : 16);
+        _navigation.AddThemeConstantOverride("separation", compact ? 4 : 7);
+        _bodyTitle.AddThemeFontSizeOverride("font_size", compact ? 46 : 55);
+        _bodySubtitle.CustomMinimumSize = new Vector2(390, compact ? 40 : 54);
+        foreach (Node child in _navigation.GetChildren())
+        {
+            if (child is Button button)
+                button.CustomMinimumSize = new Vector2(360, compact ? 36 : 43);
+        }
     }
 
     private static Control Divider() => new ColorRect

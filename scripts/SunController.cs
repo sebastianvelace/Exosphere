@@ -35,12 +35,19 @@ public partial class SunController : Node
 
     public static SunController? Instance { get; private set; }
     public static float SolarVisibility { get; private set; } = 1f;
+    /// <summary>True geometric solar elevation at the active body's surface, in degrees.</summary>
+    public static double SolarElevationDegrees { get; private set; } = double.NaN;
+    /// <summary>Standard civil-lighting bucket derived from solar elevation.</summary>
+    public static string SolarPhase { get; private set; } = "UNKNOWN";
+    /// <summary>Simulation epoch used for the last solar-cycle sample.</summary>
+    public static double SolarSimulationTime { get; private set; } = double.NaN;
 
     // Lighting is presentation-only.  Twenty updates per second are enough to keep a
     // moving terminator/eclipsing body visually locked while avoiding a tree walk and
     // several material writes on every render frame.
     private const double VisualUpdatePeriodSeconds = 1.0 / 20.0;
     private double _visualUpdateTimer;
+    private double _solarTelemetryTimer;
     private Vector3 _lastSunDir;
     private float _lastFedVisibility = -1f;
     private Universe? _cachedUniverse;
@@ -53,6 +60,7 @@ public partial class SunController : Node
     // Cached node lookups — re-found lazily if they go null (e.g. scene rebuild).
     private DirectionalLight3D? _light;
     private ShaderMaterial?     _earthMat;
+    private int _planetNodeCount = -1;
     private bool _solarGeometryReady;
     private bool _solarGeometryTelemetryPublished;
     private SolarGeometrySnapshot _solarGeometrySnapshot;
@@ -102,12 +110,17 @@ public partial class SunController : Node
             _groundMesh = null;
             _groundMaterial = null;
             _earthMat = null;
+            _planetNodeCount = -1;
             _lastSunDir = Vector3.Zero;
             _lastFedVisibility = -1f;
             _visualUpdateTimer = 0.0;
+            _solarTelemetryTimer = 0.0;
             _solarGeometryReady = false;
             _solarGeometryTelemetryPublished = false;
             SolarVisibility = 1f;
+            SolarElevationDegrees = double.NaN;
+            SolarPhase = "UNKNOWN";
+            SolarSimulationTime = double.NaN;
         }
 
         var sun = _cachedSun;
@@ -119,12 +132,15 @@ public partial class SunController : Node
         if (_visualUpdateTimer > 0.0) return;
         _visualUpdateTimer = VisualUpdatePeriodSeconds;
 
+        var atmosphereBody = universe.GetDominantBody(vessel.Position);
+        UpdateSolarCycle(universe.CurrentTime, vessel, atmosphereBody, renderDir);
+
         bool sunDirectionChanged = _lastSunDir == Vector3.Zero
             || _lastSunDir.DistanceSquaredTo(renderDir) > 1e-10f;
         bool materialsNeedRefresh = _earthMat == null
-            || _planetMaterials.Count == 0
             || _planetsNode == null
-            || !IsInstanceValid(_planetsNode);
+            || !IsInstanceValid(_planetsNode)
+            || (_planetsNode != null && _planetNodeCount != _planetsNode.GetChildCount());
         if (sunDirectionChanged)
         {
             OrientLight(renderDir);
@@ -133,7 +149,6 @@ public partial class SunController : Node
         if (sunDirectionChanged || materialsNeedRefresh)
             FeedSunDir(renderDir);
 
-        var atmosphereBody = universe.GetDominantBody(vessel.Position);
         string atmosphereBodyId = atmosphereBody?.Id ?? string.Empty;
         double visibility = 1.0;
         double atmosphericVisibility = 1.0;
@@ -189,6 +204,50 @@ public partial class SunController : Node
         }
     }
 
+    private void UpdateSolarCycle(
+        double simulationTime,
+        Vessel vessel,
+        CelestialBody? atmosphereBody,
+        Vector3 sunDirection)
+    {
+        if (atmosphereBody == null)
+        {
+            SolarElevationDegrees = double.NaN;
+            SolarPhase = "UNKNOWN";
+            SolarSimulationTime = simulationTime;
+            return;
+        }
+
+        Vector3d up = (vessel.Position - atmosphereBody.Position).Normalized;
+        double elevation = System.Math.Asin(System.Math.Clamp(
+            up.Dot(new Vector3d(sunDirection.X, sunDirection.Y, sunDirection.Z)), -1.0, 1.0))
+            * 180.0 / System.Math.PI;
+        SolarElevationDegrees = elevation;
+        SolarPhase = ClassifySolarPhase(elevation);
+        SolarSimulationTime = simulationTime;
+
+        _solarTelemetryTimer -= VisualUpdatePeriodSeconds;
+        if (_solarTelemetryTimer > 0.0) return;
+        _solarTelemetryTimer = 1.0;
+        GD.Print(
+            $"PERF_SOLAR_CYCLE time={simulationTime:F2} body={atmosphereBody.Id} "
+            + $"elevationDeg={elevation:F3} phase={SolarPhase} "
+            + $"timeScale={_cachedUniverse?.TimeScale ?? 0.0:F3} "
+            + $"solarVisibility={SolarVisibility:F3}");
+    }
+
+    /// <summary>
+    /// Maps geometric solar elevation to the standard twilight bands used by
+    /// observers: civil, nautical and astronomical twilight. The thresholds are
+    /// presentation labels only; the shader continues to use the continuous angle.
+    /// </summary>
+    public static string ClassifySolarPhase(double elevationDegrees) =>
+        elevationDegrees >= -0.833 ? "DAY"
+        : elevationDegrees >= -6.0 ? "CIVIL_TWILIGHT"
+        : elevationDegrees >= -12.0 ? "NAUTICAL_TWILIGHT"
+        : elevationDegrees >= -18.0 ? "ASTRONOMICAL_TWILIGHT"
+        : "NIGHT";
+
     /// <summary>
     /// Aims the directional light so it emits FROM the Sun toward the scene: a
     /// DirectionalLight3D shines along its forward/−Z axis, so to light the
@@ -230,6 +289,14 @@ public partial class SunController : Node
             _earthMat = FindBodyMaterial("Earth_mesh");
         _earthMat?.SetShaderParameter("solar_visibility", visibility);
 
+        // Generic body shaders use the same solar-disc visibility for Mars,
+        // Venus and other scaled-space bodies. Without this propagation their
+        // surface remains in full direct-light mode while the sky/exposure is
+        // correctly in eclipse or planetary night.
+        RefreshPlanetMaterials();
+        foreach (var material in _planetMaterials)
+            material.SetShaderParameter("solar_visibility", visibility);
+
         // The low-altitude tangent patch is a separate unshaded material.  It uses the
         // same parameter so a synthetic or real eclipse cannot leave the local terrain
         // at full direct-light strength while the atmosphere is in shadow.
@@ -250,6 +317,7 @@ public partial class SunController : Node
         {
             _planetsNode = GetTree().Root.FindChild("Planets", true, false) as Node3D;
             _planetMaterials.Clear();
+            _planetNodeCount = _planetsNode?.GetChildCount() ?? -1;
             if (_planetsNode == null) return;
 
             foreach (var child in _planetsNode.GetChildren())
@@ -258,6 +326,21 @@ public partial class SunController : Node
                 // Body shaders (planet_body / earth_surface) all declare `sun_dir`.
                 // Keep only valid ShaderMaterial references so this traversal happens
                 // once per scene/universe instead of once per render frame.
+                if ((mesh.GetSurfaceOverrideMaterial(0) ?? mesh.GetActiveMaterial(0))
+                    is ShaderMaterial material)
+                    _planetMaterials.Add(material);
+            }
+        }
+        else if (_planetNodeCount != _planetsNode.GetChildCount())
+        {
+            // Lazy body presentation can add Mars/Venus after the first frame.
+            // Rebuild this small cache only when the Planets child set changes;
+            // do not walk the scene tree on every lighting sample.
+            _planetMaterials.Clear();
+            _planetNodeCount = _planetsNode.GetChildCount();
+            foreach (var child in _planetsNode.GetChildren())
+            {
+                if (child is not MeshInstance3D mesh || mesh.Name == "Earth_mesh") continue;
                 if ((mesh.GetSurfaceOverrideMaterial(0) ?? mesh.GetActiveMaterial(0))
                     is ShaderMaterial material)
                     _planetMaterials.Add(material);

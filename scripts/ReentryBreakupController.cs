@@ -89,10 +89,11 @@ public partial class ReentryBreakupController : Node3D
     // ── Spawn the debris shower ───────────────────────────────────────────
     private void SpawnBreakup(Exosphere.Simulation.Vessel vessel)
     {
-        // Airflow direction in render space, so fragments stream the way the plasma did.
+        // The plasma controller follows the floating-origin vessel frame. Convert airflow
+        // to that same local frame so breakup fragments do not rotate away from the hull.
         var    body    = vessel != null ? SimulationBridge.Instance!.Universe.GetDominantBody(vessel.Position) : null;
         var    surfVel = body != null ? vessel!.GetSurfaceVelocity(body) : Exosphere.Simulation.Math.Vector3d.Zero;
-        Vector3 flow   = new((float)surfVel.X, (float)surfVel.Y, (float)surfVel.Z);
+        Vector3 flow   = ToGodot(vessel!.Orientation.Inverse().Rotate(surfVel));
         flow = flow.LengthSquared() > 1e-6f ? flow.Normalized() : Vector3.Up;
 
         bool hasSH = vessel!.Parts.Parts.Any(
@@ -187,4 +188,7 @@ public partial class ReentryBreakupController : Node3D
             }
         }
     }
+
+    private static Vector3 ToGodot(Exosphere.Simulation.Math.Vector3d v) =>
+        new((float)v.X, (float)v.Y, (float)v.Z);
 }
