@@ -45,6 +45,9 @@ Validated locally:
 - `bash tools/ci_check.sh` -> pass.
 - `bash tools/visual_playtest.sh --launch --run-id pad-tower-v11-launch2 --skip-build`
   -> `LAUNCH_OK`, pad/liftoff PNGs verified.
+- `bash tools/visual_playtest.sh --atmosphere-bodies --run-id mars-venus-framebuffer-v2
+  --skip-build --max-runtime 420` -> `ATMOSPHERE_BODIES_OK`, 6/6 PNG reales a
+  1920×1080 en llvmpipe.
 
 The launch-night baseline also exposed a presentation issue: the complex geometry was
 present, but all four work lights aimed at the OLM centre, making the tower readable while
@@ -54,6 +57,24 @@ four shadow maps, lowers each pool from 42 to 30 energy units, widens the cone/r
 alter solar phase, launch-site coordinates, physics, or the daylight path. The harness now
 records `VISUAL_LAUNCH` component counts for pad/liftoff so a future dark capture cannot be
 mistaken for missing OLM, deluge, tanks, or chopsticks.
+
+### Mars/Venus framebuffer review — 2026-08-20
+
+La matriz real quedó en `/tmp/exo_play-mars-venus-framebuffer-v2/` y su log en
+`/tmp/exo_play-mars-venus-framebuffer-v2.log`. Las seis capturas terminaron con identidad
+de cuerpo correcta y `exposureSettled=True`. Mars a 10 km conserva el relieve procedural
+local; a 400 km vuelve al mapa orbital. Venus conserva la cubierta nubosa de baja
+frecuencia y la lectura diferenciada de día/noche. No se promovió ningún ajuste de shader:
+el clipping de superficie fue 0 en los cuatro casos de baja altitud, no hubo fracción de
+verde neón y los estados solares fueron coherentes (`solarVisibility=1` de día, `0` de
+noche). El relieve de Mars sigue siendo una reconstrucción procedural y no topografía
+medida.
+
+La matriz inicialmente quedó parcial por un límite externo de 180 s debido al precálculo
+de Venus en llvmpipe (~55 s por LUT); se repitió con un presupuesto de 420 s y terminó
+correctamente. El harness temporal también dejó de emitir `CS0162`: las banderas de
+override visual son `static readonly`, para que los modos sin override compilen la rama
+compartida sin código inalcanzable.
 
 The engine HUD audit reaches a similar conclusion for the original screenshot: the intended
 visual vocabulary is `track` for off, amber for startup, white for delivered thrust, and red

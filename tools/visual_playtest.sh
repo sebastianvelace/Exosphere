@@ -481,8 +481,11 @@ public partial class _PlaytestShot : Node
     const int SettleFrames = 4;
     const double MaxRuntimeSec = ${MAX_RUNTIME_SEC}.0;
     const double AscentFallbackSec = 720.0;
-    const bool HasVisualSunElevation = ${SUN_ELEVATION_SET} == 1;
-    const double VisualSunElevationDeg = ${SUN_ELEVATION_DEG};
+    // Keep these runtime fields rather than compile-time constants. A matrix mode that
+    // does not request a visual override must still compile the shared branch without
+    // CS0162 unreachable-code warnings in the temporary harness.
+    static readonly bool HasVisualSunElevation = ${SUN_ELEVATION_SET} == 1;
+    static readonly double VisualSunElevationDeg = ${SUN_ELEVATION_DEG};
     const string VisualCameraPreset = "${CAMERA_PRESET}";
 
     readonly string _mode;
