@@ -723,6 +723,36 @@ escenario. Queda como siguiente A/B visual medir un EDL diurno con visibilidad s
 directa y comparar luminancia del casco contra `peak_heating`; cualquier ajuste debe
 preservar el flujo térmico y no levantar artificialmente el cielo nocturno.
 
+## Ciclo solar de superficie — evidencia temporal real (2026-08-20)
+
+La matriz completa revalidada con el gate actual es:
+
+```text
+OUT_DIR=/tmp/exo_visual_ground_v1 \
+LOG=/tmp/exo_visual_ground_v1.log \
+bash tools/visual_playtest.sh --atmosphere-ground \
+  --run-id visual-audit-ground-v1 --verify-only
+```
+
+Sus cuatro PNGs 1920×1080 son `ground_day`, `ground_sunrise`, `ground_sunset` y
+`ground_night`. Todos llevan `exposureSettled=True`, radiancia espectral finita y
+`surfaceClippedFrac=0`; amanecer y noche tienen `clippedFrac=0`, mientras atardecer
+queda en `0.00457`. El día tiene `clippedFrac=0.02748` y
+`skyWhiteClipFrac=0.02440`, localizado en la zona del disco/cúpula solar, no en el
+suelo. La noche conserva 28 estrellas nítidas y `neonGreenFrac=0`.
+
+La inspección de los PNG confirma una transición continua de cielo azul a banda civil
+oscura, horizonte naranja en atardecer y cielo estelar nocturno. El atlas de suelo
+mantiene textura y no cambia de exposición de forma abrupta. La repetición fresca
+`visual-ground-cycle-final-v1` se detuvo tras `ground_day` y `ground_sunrise` por el
+límite de 360 s de llvmpipe, sin GAP físico; no reemplaza el PASS del artefacto
+completo revalidado.
+
+Decisión: no se toca el shader ni la física solar en esta pasada. El recorte medido
+está confinado al sol visible y el resto de la matriz mantiene continuidad; cualquier
+reducción posterior debe ser un A/B de luminancia solar para no desaturar el amanecer
+ni quitar detalle a la noche.
+
 ## Ciclo solar y amanecer — verificación de comportamiento (2026-08-20)
 
 El paso de tiempo ya está conectado a la física y al renderer, no a un contador de
@@ -740,8 +770,9 @@ La cobertura automatizada actual es:
 - `solar_cycle_contract_test.sh` verifica que la iluminación consuma
   `Universe.CurrentTime`, publique fase/elevación y exponga `TimeScale`.
 
-Esto prueba el comportamiento físico y temporal, pero no sustituye una secuencia de
-PNG. La evidencia visual pendiente debe capturar una misma cámara en amanecer,
-mediodía, atardecer y noche, comprobando continuidad de exposición, terminador y
-rotación de cobertura sin saltos. No se debe simular ese resultado con cuatro imágenes
-estáticas y declararlo como tiempo real.
+La cobertura física y la secuencia real de PNG están cerradas para esta revisión en
+`/tmp/exo_visual_ground_v1`: la misma cámara conserva continuidad entre día,
+amanecer, atardecer y noche, con `ATMOS_STATE` y exposición asentada por caso. La
+matriz no simula el paso del tiempo con cuatro frames de una misma fase; cada captura
+se aplica a una elevación solar distinta y el gate comprueba la correspondencia
+física antes de aceptar el PNG.
