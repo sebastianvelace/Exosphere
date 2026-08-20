@@ -104,8 +104,12 @@ public partial class RenderPerformanceProbe : Node
             // diagnostics; the official material values remain in PlanetMaterials.
             "earth_day_gain_090" => SetEarthShaderParameter(
                 root, "day_gain", 0.90f, _abOverride),
+            "earth_day_gain_075" => SetEarthShaderParameter(
+                root, "day_gain", 0.75f, _abOverride),
             "earth_cloud_amount_065" => SetEarthShaderParameter(
                 root, "cloud_amount", 0.65f, _abOverride),
+            "earth_cloud_amount_040" => SetEarthShaderParameter(
+                root, "cloud_amount", 0.40f, _abOverride),
             _ => false,
         };
 

@@ -30,8 +30,12 @@ require_text "$PROBE" 'sky_quality_low' \
   "probe must expose a low-atmosphere-quality A/B variant"
 require_text "$PROBE" 'earth_day_gain_090' \
   "probe must expose an isolated scaled-space Earth gain A/B variant"
+require_text "$PROBE" 'earth_day_gain_075' \
+  "probe must expose a stronger scaled-space Earth gain A/B variant"
 require_text "$PROBE" 'earth_cloud_amount_065' \
   "probe must expose an isolated scaled-space Earth cloud A/B variant"
+require_text "$PROBE" 'earth_cloud_amount_040' \
+  "probe must expose a stronger scaled-space Earth cloud A/B variant"
 require_text "$PROBE" 'Earth_mesh' \
   "probe must target the scaled-space Earth material explicitly"
 require_text "$PROBE" 'ViewportSetMeasureRenderTime' \

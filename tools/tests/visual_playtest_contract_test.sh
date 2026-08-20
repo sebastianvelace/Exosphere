@@ -87,7 +87,9 @@ if ! grep -q -- '--atmosphere-orbit' "$HARNESS_SCRIPT" \
   || ! grep -q 'MODE="atmosphere_orbit"' "$HARNESS_SCRIPT" \
   || ! grep -q 'ATMOSPHERE_ORBIT_OK' "$HARNESS_SCRIPT" \
   || ! grep -q 'earth_day_gain_090' "$ROOT/scripts/RenderPerformanceProbe.cs" \
-  || ! grep -q 'earth_cloud_amount_065' "$ROOT/scripts/RenderPerformanceProbe.cs"; then
+  || ! grep -q 'earth_day_gain_075' "$ROOT/scripts/RenderPerformanceProbe.cs" \
+  || ! grep -q 'earth_cloud_amount_065' "$ROOT/scripts/RenderPerformanceProbe.cs" \
+  || ! grep -q 'earth_cloud_amount_040' "$ROOT/scripts/RenderPerformanceProbe.cs"; then
   echo "FAIL scaled-space Earth shader A/B harness is not wired" >&2
   exit 1
 fi
