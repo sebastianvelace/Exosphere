@@ -30,6 +30,7 @@ bash tools/tests/visual_telemetry_contract_test.sh
 bash tools/tests/visual_material_fill_contract_test.sh
 bash tools/tests/main_menu_responsive_contract_test.sh
 bash tools/tests/vab_preview_lighting_contract_test.sh
+bash tools/tests/launch_visual_lighting_contract_test.sh
 bash tools/tests/vab_picking_alignment_contract_test.sh
 bash tools/tests/hud_alert_layout_contract_test.sh
 bash tools/tests/edl_overlay_layout_contract_test.sh

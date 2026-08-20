@@ -46,6 +46,15 @@ Validated locally:
 - `bash tools/visual_playtest.sh --launch --run-id pad-tower-v11-launch2 --skip-build`
   -> `LAUNCH_OK`, pad/liftoff PNGs verified.
 
+The launch-night baseline also exposed a presentation issue: the complex geometry was
+present, but all four work lights aimed at the OLM centre, making the tower readable while
+the tank farm and service apron collapsed into a black silhouette. The bounded fix keeps
+four shadow maps, lowers each pool from 42 to 30 energy units, widens the cone/range to
+50°/170 m, and targets four work sectors. This is a presentation-only change; it does not
+alter solar phase, launch-site coordinates, physics, or the daylight path. The harness now
+records `VISUAL_LAUNCH` component counts for pad/liftoff so a future dark capture cannot be
+mistaken for missing OLM, deluge, tanks, or chopsticks.
+
 Important limitations:
 
 - Launch/catch captures still happen in dark/twilight conditions too often for

@@ -2710,6 +2710,7 @@ public partial class _PlaytestShot : Node
     {
         LogHotStageVisualTelemetry(slug);
         LogReentryVisualTelemetry(slug);
+        LogLaunchComplexVisualTelemetry(slug);
         // Headless runs are telemetry-only diagnostics: the dummy renderer has no
         // framebuffer texture, but scene framing/planet placement telemetry still
         // remains valid. Keep that evidence identical across real and dummy paths so
@@ -2766,6 +2767,43 @@ public partial class _PlaytestShot : Node
             $"visualFluxInput={plasma?.LastVisualFluxInput01 ?? float.NaN:F3} " +
             $"visualIntensity={plasma?.LastVisualIntensity01 ?? float.NaN:F3} " +
             $"shockHeat={plasma?.LastShockHeatLevel ?? float.NaN:F3}");
+        _log.Flush();
+    }
+
+    private void LogLaunchComplexVisualTelemetry(string slug)
+    {
+        if (slug is not ("pad" or "liftoff")) return;
+
+        var pad = GetTree().Root.FindChild(
+            "LaunchPadController", true, false) as LaunchPadController;
+        if (pad == null)
+        {
+            _log.WriteLine($"VISUAL_LAUNCH slug={slug} present=False");
+            _log.Flush();
+            return;
+        }
+
+        int delugeOutlets = 0;
+        int tankBodies = 0;
+        int chopsticks = 0;
+        foreach (Node child in pad.GetChildren())
+        {
+            string childName = child.Name.ToString();
+            if (childName.StartsWith("DelugeOutlet", StringComparison.Ordinal))
+                delugeOutlets++;
+            if (childName.EndsWith("Body", StringComparison.Ordinal)
+                && childName.StartsWith("Tank", StringComparison.Ordinal))
+                tankBodies++;
+            if (childName == "ChopstickL" || childName == "ChopstickR")
+                chopsticks++;
+        }
+
+        _log.WriteLine($"VISUAL_LAUNCH slug={slug} present=True "
+            + $"visible={pad.Visible} children={pad.GetChildCount()} "
+            + $"nightFloodlights={pad.NightFloodlightCount} "
+            + $"floodlightsActive={pad.NightFloodlightsActive} "
+            + $"delugeOutlets={delugeOutlets} tankBodies={tankBodies} "
+            + $"chopsticks={chopsticks}");
         _log.Flush();
     }
 

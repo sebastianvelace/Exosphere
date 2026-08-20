@@ -61,6 +61,20 @@ public partial class LaunchPadController : Node3D
         ? "CAUGHT"
         : CatchApproachArmed ? "ARMED" : "UNARMED";
 
+    /// <summary>Number of presentation-only night work lights on the launch complex.</summary>
+    public int NightFloodlightCount => _nightFloodlights.Count;
+
+    /// <summary>Whether at least one night work light is currently enabled.</summary>
+    public bool NightFloodlightsActive
+    {
+        get
+        {
+            foreach (var light in _nightFloodlights)
+                if (light.Visible) return true;
+            return false;
+        }
+    }
+
     public override void _Ready()
     {
         Instance = this;
@@ -506,28 +520,34 @@ public partial class LaunchPadController : Node3D
     {
         // High-mast industrial floodlights keep the vehicle and working deck visible during
         // a physically dark launch window. They switch off in daylight instead of adding a
-        // permanent fill light to every exterior scene.
-        var positions = new[]
+        // permanent fill light to every exterior scene. Each fixture aims at a different
+        // work sector: keeping all four aimed at the OLM made the centre readable while
+        // leaving the tank farm and service apron as an uninformative black silhouette.
+        // Keep this at four shadow-casting lights; the launch complex is already one of the
+        // denser local scenes and a fifth shadow map would be a needless frame-cost jump.
+        var fixtures = new (Vector3 position, Vector3 target)[]
         {
-            new Vector3(-18f, 24f,  16f),
-            new Vector3( 18f, 24f,  16f),
-            new Vector3(-14f, 18f, -18f),
-            new Vector3( 14f, 18f, -18f),
+            (new Vector3(-26f, 30f, -30f), new Vector3(-4f, 3f, -2f)),
+            (new Vector3( 26f, 30f, -30f), new Vector3( 34f, 3f, 28f)),
+            (new Vector3(-28f, 24f,  32f), new Vector3(-42f, 3f, 38f)),
+            (new Vector3( 30f, 24f,  38f), new Vector3( 52f, 3f, 48f)),
         };
-        foreach (var pos in positions)
+        foreach (var (position, target) in fixtures)
         {
             var light = new SpotLight3D
             {
                 Name = "NightFloodlight",
                 LightColor = new Color(1.0f, 0.86f, 0.68f),
-                LightEnergy = 42f,
-                SpotRange = 130f,
-                SpotAngle = 42f,
+                // Four lower-energy pools read as industrial work lights without
+                // flattening the night sky or clipping the white stack.
+                LightEnergy = 30f,
+                SpotRange = 170f,
+                SpotAngle = 50f,
                 ShadowEnabled = true,
                 Visible = false,
             };
             AddChild(light);
-            light.LookAtFromPosition(pos, new Vector3(0f, 20f, 0f), Vector3.Up);
+            light.LookAtFromPosition(position, target, Vector3.Up);
             _nightFloodlights.Add(light);
         }
     }
