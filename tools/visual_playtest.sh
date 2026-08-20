@@ -2711,9 +2711,12 @@ public partial class _PlaytestShot : Node
         LogHotStageVisualTelemetry(slug);
         LogReentryVisualTelemetry(slug);
         // Headless runs are telemetry-only diagnostics: the dummy renderer has no
-        // framebuffer texture, but physics and milestone logging remain valid.
+        // framebuffer texture, but scene framing/planet placement telemetry still
+        // remains valid. Keep that evidence identical across real and dummy paths so
+        // a failed PNG gate cannot be misread as an out-of-frame planet.
         if (DisplayServer.GetName() == "headless")
         {
+            LogTelemetry(slug, $"headless://{slug}");
             _log.WriteLine($"CAPTURE {slug} headless=True");
             _log.Flush();
             return;

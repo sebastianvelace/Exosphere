@@ -73,6 +73,10 @@ if ! grep -q -- '--orbit' "$HARNESS_SCRIPT" \
   echo "FAIL direct orbital visual mode is not wired into the harness" >&2
   exit 1
 fi
+if ! grep -q 'LogTelemetry(slug, \$"headless://' "$HARNESS_SCRIPT"; then
+  echo "FAIL headless captures do not preserve planet framing telemetry" >&2
+  exit 1
+fi
 if ! grep -q -- '--atmosphere-ground' "$HARNESS_SCRIPT" \
   || ! grep -q 'MODE="atmosphere_ground"' "$HARNESS_SCRIPT" \
   || ! grep -q 'ATMOSPHERE_GROUND_OK' "$HARNESS_SCRIPT"; then
