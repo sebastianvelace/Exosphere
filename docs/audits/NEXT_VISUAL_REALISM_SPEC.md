@@ -1,7 +1,7 @@
 # Next Visual Realism Specification
 
 **Date:** 2026-08-20
-**Status:** In progress after `f633ab7` and `f0c4656`; daylight framebuffer review remains open.
+**Status:** In progress after `03d65c3`; daylight framebuffer review remains open.
 
 ## Goal
 
@@ -394,3 +394,66 @@ La revisión humana debe comprobar simultáneamente: Ship encendido sobre el boo
 pluma localizada en el interstage, ausencia de humo de pad en vacío, separación visible,
 sin clipping amplio y sin que el HUD tape el plano de staging. Después se repite la
 misma matriz para EDL y órbita antes de cerrar P1.
+
+## Fase actual — reentrada: respuesta térmica de baja intensidad (2026-08-20)
+
+### Hallazgo medido
+
+Las capturas históricas de `/tmp/exo_visual_edl_yaw0_v1/` mostraban un `peak_heating`
+con el casco casi negro y sólo una brasa roja. La causa no era que el plasma estuviera
+desconectado: el controlador recibía un flujo finito, pero el rango lineal reservaba
+demasiado contraste para la zona cercana a saturación.
+
+La corrida de diagnóstico `/tmp/exo_reentry_telemetry_v1.log` registró:
+
+```text
+VISUAL_REENTRY slug=peak_heating coreVisible=True flux=4.491E+004 fluxIntensity=0.072 visualIntensity=0.072 shockHeat=0.072
+```
+
+### Corrección
+
+`ReentryPlasmaController` aplica una respuesta perceptual acotada
+`pow(fluxIntensity, 0.65)` antes del perfil de fase. Es exclusivamente presentación:
+el flujo Sutton-Graves, temperatura, daño estructural, guidance y supervivencia no
+cambian. El umbral mantiene entrada cero y la saturación mantiene salida uno.
+
+### Resultado reproducible
+
+La repetición `/tmp/exo_reentry_telemetry_v2.log` registró en la misma matriz:
+
+```text
+VISUAL_REENTRY slug=entry phase=ENTRY flux=4.919E+003 fluxIntensity=0.000 visualFluxInput=0.000 visualIntensity=0.000 shockHeat=0.000
+VISUAL_REENTRY slug=peak_heating phase=AERO_DESCENT flux=4.547E+004 fluxIntensity=0.074 visualFluxInput=0.185 visualIntensity=0.181 shockHeat=0.176
+VISUAL_REENTRY slug=retro_burn phase=RETRO_BURN flux=8.849E+001 fluxIntensity=0.000 visualFluxInput=0.000 visualIntensity=0.000 shockHeat=0.000
+SUMMARY reason=CAUGHT
+```
+
+La comparación muestra un aumento de lectura térmica en el régimen visible bajo sin
+crear plasma por debajo del umbral. La ejecución fue headless: prueba orden temporal,
+valores finitos y cierre físico `CAUGHT`, pero no sustituye la inspección de PNG.
+
+### Estado de aceptación
+
+| Gate | Resultado | Evidencia |
+|---|---|---|
+| Flujo térmico finito y derivado del vehículo | PASS | `VISUAL_REENTRY`, `ComputeStagnationHeatFlux` |
+| Plasma apagado bajo umbral | PASS | `entry`, `flux=4.919E+003`, `coreVisible=False` |
+| Plasma legible en régimen bajo visible | PASS lógico | `peak_heating`, `shockHeat=0.176` |
+| Catch físico sin regresión | PASS | `SUMMARY reason=CAUGHT`, 2 contactos en el log |
+| PNG peak-heating nominal | PENDIENTE | framebuffer X11 no disponible |
+| Comparación nominal/bad-attitude en píxeles | PENDIENTE | requiere `--reentry-compare` con framebuffer real |
+
+### Siguiente revisión visual
+
+```bash
+bash tools/visual_playtest.sh --edl --sun-elevation 25 \
+  --camera-preset edl_side --run-id next-edl-daylight
+bash tools/visual_playtest.sh --reentry-compare \
+  --sun-elevation 25 --camera-preset edl_side --run-id next-reentry-compare
+```
+
+La revisión humana debe confirmar que el shock windward ocupa la zona correcta del
+casco, que el lado de sotavento sigue legible, que el plasma no se convierte en un
+halo uniforme y que el HUD no queda lavado. Si el PNG muestra sobreexposición, se
+ajusta el material/shader con una nueva captura; no se revertirá a una ganancia global
+que oculte la relación entre flujo y VFX.
