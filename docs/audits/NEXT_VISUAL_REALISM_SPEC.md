@@ -776,3 +776,73 @@ amanecer, atardecer y noche, con `ATMOS_STATE` y exposición asentada por caso. 
 matriz no simula el paso del tiempo con cuatro frames de una misma fase; cada captura
 se aplica a una elevación solar distinta y el gate comprueba la correspondencia
 física antes de aceptar el PNG.
+
+## A/B orbital de Tierra a 400 km — ganancia solar frente a nubes (2026-08-20)
+
+### Objetivo y método
+
+La captura de `400km_day` del atlas completo era físicamente válida y no tenía clipping
+duro amplio, pero la revisión fotográfica mostraba una superficie demasiado crema y con
+poca separación entre continentes, nubes y océano. Para evitar confundir una impresión
+visual con una regresión de la física se añadió un modo de una sola escena al harness:
+
+```bash
+EXOSPHERE_RENDER_PROBE=1 EXOSPHERE_RENDER_AB=<perfil> \
+bash tools/visual_playtest.sh --atmosphere-orbit --run-id <id> \
+  --skip-build --max-runtime 300
+```
+
+Cada proceso vuelve a construir la escena, congela el reloj, coloca el vehículo a
+400 000 m, fija `+35°` de elevación solar, espera la LUT y la exposición, y exige
+`ATMOSPHERE_ORBIT_OK`. El probe sólo cambia un parámetro del `Earth_mesh` durante ese
+proceso; los valores oficiales de `PlanetMaterials` no se modifican. Los cambios de
+instrumentación están en `28aa1c0` y `008cdba`, ambos publicados.
+
+### Evidencia fotográfica y métricas
+
+Artefactos reales de framebuffer 1920×1080 sobre llvmpipe:
+
+```text
+/tmp/exo_play-visual-earth-orbit-baseline-v1/exo_play_400km_day.png
+/tmp/exo_play-visual-earth-orbit-gain090-v1/exo_play_400km_day.png
+/tmp/exo_play-visual-earth-orbit-gain075-v1/exo_play_400km_day.png
+/tmp/exo_play-visual-earth-orbit-cloud065-v1/exo_play_400km_day.png
+/tmp/exo_play-visual-earth-orbit-cloud040-v1/exo_play_400km_day.png
+```
+
+La fila `IMAGE` de cada log y la inspección directa de los PNG producen esta lectura:
+
+| Perfil | mean | p95 | horizonContrast | Lectura visual |
+|---|---:|---:|---:|---|
+| oficial `day_gain=1.15`, `cloud_amount=0.85` | 0.10182 | 0.80784 | 0.24330 | Superficie crema, detalle continental lavado |
+| `day_gain=0.90` | 0.08578 | 0.68627 | 0.20496 | Menos luminosa, pero también menos profundidad |
+| `day_gain=0.75` | 0.07470 | 0.59608 | 0.17848 | Sigue plana; oscurece sin recuperar color |
+| `cloud_amount=0.65` | 0.09674 | 0.74510 | 0.23114 | Cambio leve; continentes aún lavados |
+| `cloud_amount=0.40` | 0.08933 | 0.65490 | 0.21343 | Más masa verde, pero sin lectura orbital convincente |
+
+Todos los procesos terminaron con `actualAlt=400000.0`, `sunElevation=35.00`,
+`exposureSettled=True`, `clippedFrac=0`, `surfaceClippedFrac=0` y
+`neonGreenFrac=0`. El probe confirmó en consola cada aplicación, por ejemplo
+`PERF_GPU_AB mode=earth_day_gain_090 applied=true parameter=day_gain value=0.900`.
+La foto es necesaria aquí: la métrica de clipping no detecta una imagen lavada si los
+píxeles quedan debajo de 0.995.
+
+### Decisión
+
+No se promueve ningún perfil. El ajuste de `day_gain` reduce energía pero empeora el
+contraste, y `cloud_amount` sólo redistribuye la luminancia sin recuperar una lectura
+azul/verde estable. Se mantienen los valores oficiales y se evita contaminar la matriz
+de 10–120 km, el terminador, eclipse y Mars/Venus con un ajuste calibrado sólo para una
+orientación de 400 km.
+
+El siguiente A/B visual debe separar dos causas que todavía no están aisladas:
+
+- composición: repetir 400 km con dos longitudes/latitudes visibles para distinguir
+  una región continental árida real de una textura global incorrectamente orientada;
+- exposición: medir `TonemapExposure` y probar un límite específico de la transición
+  scaled-space, manteniendo intactos `solar_visibility`, el LUT y la ruta de baja
+  atmósfera.
+
+No se acepta una promoción hasta que el candidato mejore simultáneamente lectura de
+continentes/océanos y contraste del limbo, sin degradar las capturas de día bajo,
+terminador, noche y eclipse.
