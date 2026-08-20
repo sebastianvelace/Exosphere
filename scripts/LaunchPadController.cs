@@ -490,6 +490,26 @@ public partial class LaunchPadController : Node3D
                 Height = 1.2f * U, RadialSegments = 48 },
             gravel, new Vector3(0, GradeY + 0.6f * U, 0));
 
+        // Active Starbase path: the deluge field must sit above the OLM foundation.
+        // The older coastal-site constructor also had a ring, but it is not called by
+        // this post-deluge layout; keeping the named children here makes the visible
+        // water-deluge hardware and its visual telemetry agree with the live scene.
+        float delugeDeckY = GradeY + 1.2f * U;
+        Spawn("DelugePadRing", new TorusMesh
+            { InnerRadius = 13f * U, OuterRadius = 14.2f * U,
+                RingSegments = 32, Rings = 6 },
+            joint, new Vector3(0, delugeDeckY + 0.06f * U, 0));
+        for (int i = 0; i < 16; i++)
+        {
+            float a = i * Mathf.Tau / 16f;
+            SpawnRot($"DelugeOutlet{i}",
+                new BoxMesh { Size = new Vector3(1.4f * U, 0.6f * U, 2.4f * U) },
+                joint,
+                new Vector3(13.8f * U * Mathf.Cos(a), delugeDeckY + 0.35f * U,
+                    13.8f * U * Mathf.Sin(a)),
+                new Vector3(0, -Mathf.RadToDeg(a), 0));
+        }
+
         // Highway 4 / site access approaches from inland and terminates west of the pad.
         SpawnRot("StateHighway4Access",
             new BoxMesh { Size = new Vector3(14f * U, 0.18f * U, 330f * U) },

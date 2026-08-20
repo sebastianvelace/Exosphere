@@ -291,6 +291,8 @@ fi
 if [[ -z "$MAX_RUNTIME_SEC" ]]; then
   if [[ "$MODE" == "full" ]]; then
     MAX_RUNTIME_SEC=3600
+  elif [[ "$MODE" == "launch" ]]; then
+    MAX_RUNTIME_SEC=1800
   elif [[ "$MODE" == "ascent" ]]; then
     MAX_RUNTIME_SEC=1200
   elif [[ "$MODE" == "orbital_reentry" ]]; then
@@ -3233,6 +3235,48 @@ verify_pngs() {
       }
     ' "$LOG"; then
       echo "ERROR: full-mission touchdown is neither a 3-contact gear landing nor a <=3 m/s settled historical gearless landing" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "launch" ]]; then
+    for slug in pad liftoff; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing required launch visual milestone PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+    done
+    if ! grep -q 'SUMMARY reason=LAUNCH_OK' "$LOG"; then
+      echo "ERROR: launch visual capture did not finish cleanly" >&2
+      return 1
+    fi
+    for slug in pad liftoff; do
+      if ! grep -Eq "^VISUAL_LAUNCH slug=${slug} present=True .*nightFloodlights=4 .*delugeOutlets=16 .*tankBodies=15 .*chopsticks=2" "$LOG"; then
+        echo "ERROR: ${slug} capture did not prove the active launch complex structure" >&2
+        return 1
+      fi
+    done
+    if grep -q 'VISUAL_SUN .*phase=NIGHT' "$LOG" \
+      && ! grep -Eq '^VISUAL_LAUNCH slug=(pad|liftoff) .*floodlightsActive=True ' "$LOG"; then
+      echo "ERROR: night launch capture did not prove sector floodlights are active" >&2
+      return 1
+    fi
+    if ! grep -Eq '^VISUAL_ENGINES slug=liftoff .*nominal=33 .*rows=33 .*delivered=33 .*failed=0' "$LOG"; then
+      echo "ERROR: launch capture did not prove all 33 engines delivered thrust" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=(pad|liftoff) / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+          if ($i ~ /^surfaceClippedFrac=/) { split($i, p, "="); surface = p[2] + 0 }
+          if ($i ~ /^neonGreenFrac=/) { split($i, p, "="); neon = p[2] + 0 }
+        }
+        if (clipped > 0.10 || surface > 0.10 || neon > 0.001)
+          bad = 1
+        found++
+      }
+      END { exit !(found == 2 && !bad) }
+    ' "$LOG"; then
+      echo "ERROR: launch capture has broad clipping or neon-green contamination" >&2
       return 1
     fi
   elif [[ "$MODE" == "ascent" ]]; then

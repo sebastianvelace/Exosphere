@@ -19,6 +19,12 @@ rg -q 'SpotRange = 170f' "$controller" \
   || fail "night floodlight range changed without a bounded contract"
 rg -q 'SpotAngle = 50f' "$controller" \
   || fail "night floodlight cone changed without a bounded contract"
+rg -q 'float delugeDeckY = GradeY \+ 1\.2f \* U;' "$controller" \
+  || fail "active Starbase deluge field is not anchored above the OLM foundation"
+rg -q 'SpawnRot\(\$"DelugeOutlet\{i\}"' "$controller" \
+  || fail "active Starbase path does not build named deluge outlets"
+rg -q 'for \(int i = 0; i < 16; i\+\+\)' "$controller" \
+  || fail "active Starbase deluge field is not the documented 16-nozzle ring"
 
 fixture_count="$(grep -Ec '^[[:space:]]+\(new Vector3' "$controller")"
 [[ "$fixture_count" == "4" ]] \
@@ -31,4 +37,4 @@ rg -q 'VISUAL_LAUNCH slug=\{slug\} present=True' "$harness" \
 rg -q 'delugeOutlets=\{delugeOutlets\} tankBodies=\{tankBodies\} ' "$harness" \
   || fail "launch telemetry omits structural readability counts"
 
-echo "launch_visual_lighting_contract_test: PASS (four sector-targeted shadow pools and structural telemetry)"
+echo "launch_visual_lighting_contract_test: PASS (sector lights, active deluge field and structural telemetry)"
