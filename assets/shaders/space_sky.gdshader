@@ -664,6 +664,14 @@ void sky() {
 			}
 		}
 	}
+	// Near the surface the first visible cloud samples sit exactly on the
+	// geometric horizon. Keep the cloud bank volumetric above that edge, but fade
+	// the tangent silhouette over a small angular interval so the shell does not
+	// become a one-pixel white seam against the ground. Orbital views are untouched.
+	float low_altitude_cloud_fade = 1.0 - smoothstep(6000.0, 45000.0,
+		max(observer_altitude, 0.0));
+	float horizon_cloud_fade = smoothstep(-0.01, 0.10, dot(view_dir, up));
+	cloud_radiance *= mix(1.0, horizon_cloud_fade, low_altitude_cloud_fade);
 
 	vec3 stars = texture(star_tex, dir_to_equirect(view_dir)).rgb * star_energy;
 	vec3 star_transmittance = crosses_atmosphere ? transmittance(optical_depth) : vec3(1.0);

@@ -34,6 +34,8 @@ rg -q 'float threshold_softness = mix\(0\.055, 0\.175' "$SHADER" \
   || fail "cloud coverage threshold is not softened at low altitude"
 rg -q 'float dither_strength = mix\(0\.004, 0\.025' "$SHADER" \
   || fail "low-altitude cloud dither is not bounded"
+rg -q 'float horizon_cloud_fade = smoothstep\(-0\.01, 0\.10' "$SHADER" \
+  || fail "low-altitude cloud horizon silhouette is not softened"
 IMPORT="$ROOT/assets/textures/earth_clouds.jpg.import"
 [[ -f "$IMPORT" ]] || fail "Earth cloud import metadata missing"
 rg -q '^mipmaps/generate=true$' "$IMPORT" \
