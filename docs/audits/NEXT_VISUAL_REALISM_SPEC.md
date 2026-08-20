@@ -554,3 +554,26 @@ Godot --path . --script tools/capture_vab.gd
 La revisión debe comprobar contacto visual del motor con el piso, juntas que no
 compitan con el vehículo, acero sin dominante dorada artificial, tiles distinguibles,
 ausencia de clipping y que el VAB vacío conserve el mensaje “NO VEHICLE ON THE FLOOR”.
+
+## Ciclo solar y amanecer — verificación de comportamiento (2026-08-20)
+
+El paso de tiempo ya está conectado a la física y al renderer, no a un contador de
+frames: `Universe.CurrentTime` avanza con `realDelta × TimeScale`,
+`SunController` calcula la elevación solar continua y los shaders reciben la dirección
+actualizada. La clasificación visual conserva las bandas `DAY`, civil, náutica,
+astronómica y `NIGHT`; el HUD muestra la elevación y el warp activo.
+
+La cobertura automatizada actual es:
+
+- `TimedSurfacePositionMovesAtRotationalSurfaceVelocity` verifica la derivada de la
+  superficie frente a la velocidad rotacional.
+- `TimedSurfacePositionCompletesOneSiderealDay` verifica que la superficie vuelva a
+  su posición después de 86 164 s y cambie claramente durante un cuarto de día.
+- `solar_cycle_contract_test.sh` verifica que la iluminación consuma
+  `Universe.CurrentTime`, publique fase/elevación y exponga `TimeScale`.
+
+Esto prueba el comportamiento físico y temporal, pero no sustituye una secuencia de
+PNG. La evidencia visual pendiente debe capturar una misma cámara en amanecer,
+mediodía, atardecer y noche, comprobando continuidad de exposición, terminador y
+rotación de cobertura sin saltos. No se debe simular ese resultado con cuatro imágenes
+estáticas y declararlo como tiempo real.
