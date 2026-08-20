@@ -36,6 +36,7 @@ public partial class ConstructionController : Control
     // ── Direct 3D manipulation (preview picking) ──────────────────────────
     private SubViewport?        _previewViewport;
     private Camera3D?           _previewCamera;
+    private MeshInstance3D?     _previewFloor;
     private VabPickingLayer?    _picking;
     private MeshInstance3D?     _highlight;
     private StandardMaterial3D? _highlightMat;
@@ -279,6 +280,34 @@ public partial class ConstructionController : Control
 
         var previewRoot = new Node3D { Name = "PreviewRoot" };
         viewport.AddChild(previewRoot);
+
+        // A real assembly preview needs a scale cue and contact shadow. Keep the
+        // floor local to the VAB SubViewport so it cannot leak into Flight or change
+        // any launch-site surface. Its material is procedural, bounded and authored
+        // for studio epoxy/concrete panels rather than a flat unlit rectangle.
+        var floor = new MeshInstance3D
+        {
+            Name = "PreviewFloor",
+            Mesh = new PlaneMesh
+            {
+                Size = new Vector2(180f, 180f),
+                SubdivideWidth = 2,
+                SubdivideDepth = 2,
+            },
+            Visible = false,
+        };
+        var floorShader = GD.Load<Shader>("res://assets/shaders/vab_floor.gdshader");
+        var floorMaterial = new ShaderMaterial { Shader = floorShader };
+        floorMaterial.SetShaderParameter("base_color", new Color(0.14f, 0.16f, 0.18f));
+        floorMaterial.SetShaderParameter("seam_color", new Color(0.028f, 0.036f, 0.045f));
+        floorMaterial.SetShaderParameter("panel_size", new Vector2(12f, 12f));
+        floorMaterial.SetShaderParameter("seam_width", 0.12f);
+        floorMaterial.SetShaderParameter("wear_strength", 0.16f);
+        floorMaterial.SetShaderParameter("grain_strength", 0.055f);
+        floor.SetSurfaceOverrideMaterial(0, floorMaterial);
+        previewRoot.AddChild(floor);
+        _previewFloor = floor;
+
         previewRoot.AddChild(new DirectionalLight3D
         {
             Name = "PreviewLight",
@@ -893,6 +922,7 @@ public partial class ConstructionController : Control
             {
                 SetPreviewRenderingActive(active: false);
                 _previewRenderer.Visible = false;
+                if (_previewFloor != null) _previewFloor.Visible = false;
                 _previewEmpty.Visible = true;
                 _picking?.RebuildSelectionBodies(_assembly);
                 ClearSelection();
@@ -901,6 +931,7 @@ public partial class ConstructionController : Control
 
             SetPreviewRenderingActive(active: true);
             _previewRenderer.Visible = true;
+            if (_previewFloor != null) _previewFloor.Visible = true;
             _previewEmpty.Visible = false;
             _previewRenderer.BuildFromVessel(_assembly.ToVessel(CraftName()));
         }
@@ -908,6 +939,7 @@ public partial class ConstructionController : Control
         {
             SetPreviewRenderingActive(active: false);
             _previewRenderer.Visible = false;
+            if (_previewFloor != null) _previewFloor.Visible = false;
         }
 
         // Reconstruimos los cuerpos de picking tras cada cambio de asamblea, y
@@ -1261,6 +1293,12 @@ public partial class ConstructionController : Control
         float height = Mathf.Max(box.Size.Y, 1f);
         float radius = Mathf.Max(box.Size.X, box.Size.Z) * 0.5f;
         _camTargetY = box.Position.Y + box.Size.Y * 0.5f;
+
+        // Put the floor just below the actual rendered bounds. This is derived from
+        // the same AABB used to frame the camera, so custom craft scales and staged
+        // Starship sections cannot float above or clip through the studio surface.
+        if (_previewFloor != null)
+            _previewFloor.Position = new Vector3(0f, box.Position.Y - 0.08f, 0f);
 
         float halfFov = Mathf.DegToRad(_previewCamera.Fov * 0.5f);
         float byHeight = (height * 0.52f) / Mathf.Max(0.05f, Mathf.Tan(halfFov));
