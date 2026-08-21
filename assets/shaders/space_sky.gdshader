@@ -680,6 +680,11 @@ void sky() {
 	vec3 stars = texture(star_tex, dir_to_equirect(view_dir)).rgb * star_energy;
 	vec3 star_transmittance = crosses_atmosphere ? transmittance(optical_depth) : vec3(1.0);
 	if (hits_ground) stars = vec3(0.0);
+	// Play-camera daylight: the starmap must not punch through a thick column
+	// even if exposure still thinks the scene is dark (T=0 pad, 19 km ascent).
+	float sun_up = smoothstep(-0.06, 0.10, dot(up, to_sun));
+	float thick_column = 1.0 - smoothstep(12000.0, 92000.0, max(observer_altitude, 0.0));
+	stars *= 1.0 - sun_up * thick_column;
 
 	// Return one linear HDR radiance domain. Godot's environment applies exposure and
 	// tonemapping exactly once; compressing here previously clipped the limb before the
@@ -727,6 +732,21 @@ void sky() {
 		* twilight_band * twilight_horizon * sun_facing * twilight_column
 		* (hits_ground ? 0.0 : 1.0))
 		* atmospheric_solar_visibility * sun_illuminance;
+	// Closed-form daylight dome used as a luminance floor. The 28-step integral
+	// plus Incremental/Realtime cubemaps often under-fill the play camera, while
+	// VisualExposure still closes down for daylight. A 1/mu air-mass term blows
+	// the whole pad frame to white (the chase camera looks at the horizon, not
+	// the zenith), so this is a bounded elevation mix in the same HDR domain.
+	if (!hits_ground) {
+		float elev = dot(view_dir, up);
+		float above = smoothstep(-0.012, 0.035, elev);
+		float h = clamp(elev, 0.0, 1.0);
+		vec3 dome = mix(vec3(0.68, 0.95, 1.15), vec3(0.22, 0.55, 1.05), pow(h, 0.55));
+		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);
+		dome += vec3(sun_glare, sun_glare * 0.85, sun_glare * 0.55);
+		float pad_sky = sun_up * thick_column * above * atmospheric_solar_visibility;
+		atmosphere = mix(atmosphere, dome, pad_sky);
+	}
 	vec3 airglow = airglow_radiance * sun_illuminance;
 	float sky_luminance = dot(atmosphere, vec3(0.2126, 0.7152, 0.0722));
 	float eye_star_visibility = 1.0 - smoothstep(0.002, 0.035, sky_luminance);

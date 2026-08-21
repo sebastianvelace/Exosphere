@@ -152,6 +152,8 @@ public partial class PhaseLightingController : Node
                 (float)(direct.Z / peak));
             double luminance = 0.2126 * direct.X + 0.7152 * direct.Y + 0.0722 * direct.Z;
             float lightEnergy = sun * (float)luminance * SunController.SolarVisibility;
+            float elevationGate = Smoothstep(-0.04f, 0.08f, (float)_sampledSunElevation);
+            lightEnergy *= elevationGate;
             if (ColorDiffers(_light.LightColor, lightColor))
                 _light.LightColor = lightColor;
             if (FloatDiffers(_light.LightEnergy, lightEnergy))

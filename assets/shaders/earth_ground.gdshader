@@ -130,28 +130,44 @@ void fragment() {
 	// At 20–100 m camera altitude the visible footprint is only tens of metres;
 	// kilometre-scale noise is invisible there. These two final bands represent
 	// scrub/soil breakup and compact launch-site grain at the correct screen scale.
-	float local_scrub = noise01(gnoise(v_patch * 0.035 + vec2(-13.0, 29.0)));
-	float ground_grain = noise01(gnoise(v_patch * 0.16 + vec2(47.0, -37.0)));
+	vec2 warp = vec2(gnoise(v_patch * 0.0009), gnoise(v_patch * 0.0009 + 19.0));
+	vec2 warped = v_patch + warp * 1800.0;
+	float local_scrub = noise01(gnoise(warped * 0.012 + vec2(-13.0, 29.0)));
+	float ground_grain = noise01(gnoise(warped * 0.045 + vec2(47.0, -37.0)));
 	float land_mask = 1.0 - water_hint;
 	float macro_grade = mix(macro, regional, 0.68);
 	float soil_breakup = (terrain - 0.5) * 0.16 + (fine - 0.5) * 0.075
-		+ (local_scrub - 0.5) * 0.14 + (ground_grain - 0.5) * 0.06;
+		+ (local_scrub - 0.5) * 0.08 + (ground_grain - 0.5) * 0.03;
 	vec3 soil_tint = vec3(1.00, 0.86, 0.66);
 	surface *= 0.62 + 0.80 * macro_grade;
 	surface += land_mask * soil_breakup * soil_tint;
 	float det = gnoise(v_patch * 0.0006) + 0.5 * gnoise(v_patch * 0.0028);
 	surface *= 1.0 + detail_strength * det;
 
-	// Within a few kilometres of the pad the 8K orbital map is a single stretched
-	// texel. Grade that footprint toward Boca Chica / Cape flats: pale sand, dark
-	// marsh and muted water, while keeping the Blue Marble macro-shapes farther out.
+	// Within tens of kilometres of the pad the 8K orbital map is a few stretched
+	// texels — at Boca Chica and Kennedy those texels are open water, which is why
+	// the play camera used to show a toy-blue tiled plane to the horizon. Rebuild
+	// sand, marsh and a noisy coastline out to the geometric horizon (~25–40 km
+	// from a 60 m pad camera) and only then hand back to Blue Marble.
 	float pad_range = length(v_patch);
-	float near_pad = 1.0 - smoothstep(120.0, 5200.0, pad_range);
-	vec3 marsh = mix(vec3(0.18, 0.22, 0.15), vec3(0.22, 0.20, 0.14), regional);
-	vec3 flats = mix(vec3(0.40, 0.34, 0.24), marsh, 0.45 + 0.35 * local_scrub);
-	vec3 near_water = vec3(0.07, 0.16, 0.20);
-	vec3 pad_ground = mix(flats, near_water, water_hint);
-	surface = mix(surface, pad_ground, near_pad * 0.78 * (0.55 + 0.45 * land_mask));
+	float site_core = 1.0 - smoothstep(80.0, 900.0, pad_range);
+	float coastal_belt = 1.0 - smoothstep(400.0, 28000.0, pad_range);
+	float map_blend = smoothstep(22000.0, 42000.0, pad_range);
+	float coast_noise = noise01(gnoise(v_patch * 0.00018 + vec2(91.0, -17.0)));
+	float inlet = noise01(gnoise(v_patch * 0.00048 + vec2(-41.0, 23.0)));
+	float gulf = smoothstep(280.0, 1600.0, v_patch.x);
+	float lagoon = smoothstep(500.0, 2400.0, -v_patch.x);
+	float reconstructed_water = max(
+		(1.0 - site_core) * coastal_belt
+			* smoothstep(0.52, 0.80, mix(inlet, coast_noise, 0.42)),
+		max(gulf, lagoon * 0.88) * coastal_belt * (1.0 - site_core * 0.55));
+	float flats_var = noise01(gnoise(warped * 0.000018 + vec2(3.0, 8.0)));
+	vec3 marsh = mix(vec3(0.16, 0.21, 0.14), vec3(0.24, 0.22, 0.15), flats_var);
+	vec3 flats = mix(vec3(0.39, 0.34, 0.24), marsh, 0.42 * flats_var);
+	vec3 near_water = vec3(0.06, 0.15, 0.18);
+	vec3 pad_ground = mix(flats, near_water, reconstructed_water);
+	surface = mix(pad_ground, surface, map_blend);
+	surface = mix(surface, pad_ground, site_core * 0.92);
 
 	// A small normal perturbation makes the multi-scale breakup respond to the
 	// sun direction. It is deliberately low amplitude: this gives texture relief
@@ -196,12 +212,12 @@ void fragment() {
 	// dissolves to transparent, so it blends seamlessly into the sky/backdrop with no grey
 	// band. The colour blend leads the alpha fade so the seam is never a hard line.
 	float dist = length(v_world_pos - CAMERA_POSITION_WORLD);
-	float distance_haze = smoothstep(horizon_dist * 0.60, horizon_dist * 1.05, dist);
+	float distance_haze = smoothstep(horizon_dist * 0.12, horizon_dist * 0.95, dist);
 	// At the true grazing angle the local tangent patch and the atmospheric
 	// backdrop meet at a single high-contrast line. Fade its colour toward the
 	// same live sky horizon even when the fragment is inside horizon_dist.
 	float view_up = max(dot(N, V), 0.0);
-	float grazing_haze = 1.0 - smoothstep(0.015, 0.16, view_up);
+	float grazing_haze = 1.0 - smoothstep(0.008, 0.22, view_up);
 	float haze = max(distance_haze, grazing_haze * horizon_haze_strength);
 	ground_radiance = mix(ground_radiance, haze_color, haze);
 	float edge = smoothstep(horizon_dist * 0.90, horizon_dist * 1.12, dist);

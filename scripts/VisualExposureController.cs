@@ -105,7 +105,7 @@ public partial class VisualExposureController : Node
 
         // Relative field luminance: diffuse sky dominates in atmosphere; direct light
         // represents sunlit cabin/vehicle surfaces, with plasma acting as a bright source.
-        double skyLuminance = 0.22 * System.Math.Clamp(air, 0.0, 1.0) * daylight;
+        double skyLuminance = 0.12 * System.Math.Clamp(air, 0.0, 1.0) * daylight;
         double surfaceLuminance = 0.16 * directLuminance * SunController.SolarVisibility;
         double sceneLuminance = 0.0004 + skyLuminance + surfaceLuminance + 0.55 * plasma;
         bool cockpit = CameraController.Instance?.IsCockpitView == true;
@@ -128,7 +128,10 @@ public partial class VisualExposureController : Node
         float darkAdaptation = Mathf.Clamp((exposure - 1.45f) / 3.55f, 0.0f, 1.0f);
         float photopicSuppression = (float)System.Math.Clamp(
             skyLuminance * 4.0 + surfaceLuminance * 6.0 + plasma, 0.0, 1.0);
-        float eyeStarGain = darkAdaptation * (1.0f - photopicSuppression);
+        float columnSuppression = (float)System.Math.Clamp(
+            _sampledAir * System.Math.Clamp(daylight, 0.0, 1.0) * 8.0, 0.0, 1.0);
+        float eyeStarGain = darkAdaptation
+            * (1.0f - Mathf.Max(photopicSuppression, columnSuppression));
         // This is a custom sky uniform. Rewriting it every frame invalidates the
         // incremental sky cubemap even after exposure has settled. A 0.005 step is
         // below a visible star-luminance change but prevents a permanent rebuild loop.

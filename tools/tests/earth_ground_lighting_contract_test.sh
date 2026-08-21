@@ -69,7 +69,7 @@ rg -q 'earth_night\.jpg' "$controller" \
   || fail "Earth ground does not bind the night texture"
 rg -q 'private const float CoastalGrade = 0\.28f;' "$controller" \
   || fail "Earth ground coastal grade is not configured"
-rg -q 'private const float HorizonHazeStrength = 0\.35f;' "$controller" \
+rg -q 'private const float HorizonHazeStrength = 0\.78f;' "$controller" \
   || fail "Earth ground horizon haze is too broad or unconfigured"
 rg -q 'HorizonHazeStrength' "$controller" \
   || fail "Earth ground horizon seam mitigation is not bounded/configured"
@@ -88,7 +88,11 @@ rg -q 'VisualSurfaceRadiusMetres' "$ROOT/scripts/FloatingOrigin.cs" \
   || fail "scaled-space Earth does not read live surface radius"
 rg -q 'ApplySurface\("StarbaseWetlandSkirt"' "$launch_pad" \
   || fail "starbase wetland skirt is not textured"
-rg -q 'float near_pad = 1.0 - smoothstep' "$shader" \
-  || fail "Earth ground has no near-pad coastal reconstruction"
+rg -q 'float site_core = 1.0 - smoothstep' "$shader" \
+  || fail "Earth ground does not reconstruct land out to the play-camera horizon"
+rg -q 'float coastal_belt = 1.0 - smoothstep' "$shader" \
+  || fail "Earth ground has no coastal belt beyond the pad island"
+rg -q '5200f \* U' "$launch_pad" \
+  || fail "starbase wetland skirt is still the old 1.6 km island"
 
 echo "earth_ground_lighting_contract_test: PASS (bounded night floor, ellipsoid anchor, complementary globe handoff)"

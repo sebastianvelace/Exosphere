@@ -44,19 +44,21 @@ rg -q '^const int CLOUD_VIEW_STEPS = 24;$' "$SHADER" \
   || fail "cloud view ceiling is not the validated 24-sample path"
 rg -q '^const int CLOUD_LIGHT_STEPS = 5;$' "$SHADER" \
   || fail "cloud shadow ceiling is not the bounded five-sample path"
-rg -q --fixed-strings 'private const float LowAltitudeAtmosphereQuality = 0.82f;' "$SKY" \
-  || fail "low-altitude visual quality lift is not bounded explicitly"
+rg -q --fixed-strings 'private const float LowAltitudeAtmosphereQuality = 0.48f;' "$SKY" \
+  || fail "low-altitude visual quality is not bounded explicitly"
 rg -q --fixed-strings 'float atmosphereQuality = altitude < 45_000.0' "$SKY" \
   || fail "low-altitude quality is not altitude-gated"
 rg -q --fixed-strings '_lastAtmosphereQuality' "$SKY" \
   || fail "atmosphere quality updates are not dirty-gated"
 
-# The selected Godot path must be the low-frequency incremental map, not the slower
-# importance-sampling path repeatedly invalidated by dynamic uniforms.
+# Pad uses Realtime so the play camera is not stuck on a black Incremental
+# cubemap at T=0. Incremental remains the high-altitude path.
 rg -q --fixed-strings '_env.Sky.RadianceSize = Sky.RadianceSizeEnum.Size128;' "$SKY" \
   || fail "radiance map is not bounded to 128"
-rg -q --fixed-strings '_env.Sky.ProcessMode = Sky.ProcessModeEnum.Incremental;' "$SKY" \
-  || fail "sky process mode is not incremental"
+rg -q --fixed-strings '_env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;' "$SKY" \
+  || fail "pad sky process mode is not realtime"
+rg -q --fixed-strings 'bool realtime = altitude < 28_000.0;' "$SKY" \
+  || fail "sky process mode is not altitude-gated back to incremental"
 rg -q --fixed-strings 'using var workerPriority = new WorkerThreadPriorityScope();' "$SKY" \
   || fail "atmosphere worker priority scope missing"
 

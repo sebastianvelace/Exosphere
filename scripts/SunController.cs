@@ -206,6 +206,14 @@ public partial class SunController : Node
             FeedSunDir(renderDir);
 
         string atmosphereBodyId = atmosphereBody?.Id ?? string.Empty;
+        double sunDistance = (sun.Position - vessel.Position).Magnitude;
+        // When a presentation elevation override is active, occultation must use the
+        // same sun the sky and the directional light are aiming at. Otherwise the
+        // physical night-side Earth extinguishes a visually risen sun (J2000 Starbase
+        // is astronomical twilight; play daylight is a 28° override).
+        Vector3d sunSamplePosition = _visualSunElevationOverrideDegrees.HasValue
+            ? vessel.Position + simDir * sunDistance
+            : sun.Position;
         double visibility = 1.0;
         double atmosphericVisibility = 1.0;
         CelestialBody? bestOccluder = null;
@@ -214,7 +222,7 @@ public partial class SunController : Node
         {
             if (body.Id == "sun") continue;
             double bodyVisibility = MissionGeometry.LimbDarkenedSolarDiscVisibility(
-                vessel.Position, body.Position, body.Radius, sun.Position, sun.Radius);
+                vessel.Position, body.Position, body.Radius, sunSamplePosition, sun.Radius);
             visibility = System.Math.Min(visibility, bodyVisibility);
             if (body.Id != atmosphereBodyId)
                 atmosphericVisibility = System.Math.Min(atmosphericVisibility, bodyVisibility);

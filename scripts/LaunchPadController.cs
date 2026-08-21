@@ -290,8 +290,8 @@ public partial class LaunchPadController : Node3D
             tarmac, new Vector3(0, -0.5f * U, 0));
         var marsh = Mat(new Color(0.17f, 0.21f, 0.16f), 0.98f, 0.0f);
         Spawn("SpaceportWetlandSkirt",
-            new BoxMesh { Size = new Vector3(900f * U, 0.28f * U, 720f * U) },
-            marsh, new Vector3(-12f * U, GradeY + 0.06f * U, 8f * U));
+            new BoxMesh { Size = new Vector3(4800f * U, 0.28f * U, 3600f * U) },
+            marsh, new Vector3(-40f * U, GradeY + 0.06f * U, 20f * U));
         Spawn("RaisedLaunchDeck",
             new CylinderMesh
             {
@@ -496,10 +496,10 @@ public partial class LaunchPadController : Node3D
         // below the OLM apron.
         var marsh = Mat(new Color(0.17f, 0.21f, 0.16f), 0.98f, 0.0f);
         Spawn("StarbaseWetlandSkirt",
-            new BoxMesh { Size = new Vector3(1600f * U, 0.30f * U, 1200f * U) },
-            marsh, new Vector3(-40f * U, GradeY + 0.08f * U, 40f * U));
+            new BoxMesh { Size = new Vector3(5200f * U, 0.30f * U, 4000f * U) },
+            marsh, new Vector3(-80f * U, GradeY + 0.08f * U, 60f * U));
         Spawn("StarbaseDuneShoulder",
-            new BoxMesh { Size = new Vector3(720f * U, 0.22f * U, 520f * U) },
+            new BoxMesh { Size = new Vector3(1600f * U, 0.22f * U, 1200f * U) },
             sandFill, new Vector3(-28f * U, GradeY + 0.12f * U, 12f * U));
         Spawn("OrbitalPadApron",
             new BoxMesh { Size = new Vector3(126f * U, 0.35f * U, 112f * U) },

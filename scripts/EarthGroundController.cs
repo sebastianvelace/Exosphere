@@ -58,7 +58,7 @@ public partial class EarthGroundController : Node3D
     private const float TerrainReliefStrength = 0.18f;
     private const float NightCityGain = 0.34f;
     private const float TerminatorWidth = 0.16f;
-    private const float HorizonHazeStrength = 0.35f;
+    private const float HorizonHazeStrength = 0.78f;
 
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;
@@ -117,6 +117,7 @@ public partial class EarthGroundController : Node3D
             new Vector3(-PatchHalfUnits, -8000f, -PatchHalfUnits),
             new Vector3(2f * PatchHalfUnits, 16000f, 2f * PatchHalfUnits));
         _mesh.Transparency = 0f;
+        _mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
 
         AddChild(_mesh);
         Visible = false;
