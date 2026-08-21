@@ -37,7 +37,8 @@ uniform float limb_strength : hint_range(0.0, 1.5) = 0.85;
 // Fades the whole distant-Earth backdrop in/out. Driven by FloatingOrigin from the CAMERA's
 // altitude: ~0 in the low launch view (so the local ground patch + sky own the horizon, no
 // grey seam between the two Earth representations) → 1 once the viewpoint is high enough that
-// the curved planet is what you should actually be seeing.
+// the curved planet is what you should actually be seeing. The handoff is complementary with
+// the ground patch (18–42 km camera altitude).
 uniform float planet_alpha : hint_range(0.0, 1.0) = 1.0;
 
 // N3: high-frequency FBM micro-detail strength (0 = off, 0.18 = default).
@@ -102,6 +103,10 @@ void fragment() {
 	vec3 dayCol = texture(day_tex, uv).rgb;
 	float detail = es_fbm(uv * 180.0) * 2.0 - 1.0;   // range -1..1
 	dayCol = clamp(dayCol + detail * detail_strength, 0.0, 1.0);
+	// Oceans from orbit are darker and more blue than the raw Blue Marble average;
+	// this restores disc contrast without touching day_gain (A/B rejected lowering it).
+	float water = smoothstep(0.04, 0.16, dayCol.b - max(dayCol.r, dayCol.g) * 0.70);
+	dayCol = mix(dayCol, dayCol * vec3(0.70, 0.84, 1.08), water * 0.55);
 
 	vec3 nightCol = texture(night_tex, uv).rgb;            // city lights (bright on black)
 
@@ -140,10 +145,23 @@ void fragment() {
 
 	// A thin, physically motivated atmospheric edge remains visible when the
 	// unlit surface and city-light texture are below the adapted exposure.
-	float fresnel = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
-	float limb_visibility = 0.20 + 0.80 * solar_visibility;
-	vec3 atmosphere_limb = vec3(0.012, 0.045, 0.16)
-		* fresnel * limb_strength * limb_visibility;
+	float ndotv = clamp(dot(N, V), 0.0, 1.0);
+	float limb = 1.0 - ndotv;
+	// View-path haze: continents stay colorful at nadir and pick up Rayleigh blue
+	// toward the limb, matching ISS/NASA limb photos instead of a toy marble glow.
+	float path_air = pow(limb, 2.15);
+	vec3 rayleigh_haze = vec3(0.34, 0.56, 0.92);
+	lit = mix(lit, mix(lit, rayleigh_haze, 0.62), path_air * 0.48 * solar_visibility);
+
+	// Thin atmospheric edge: inner cyan-white scattering, outer Chappuis ozone.
+	float inner = pow(limb, 5.0);
+	float outer = pow(limb, 13.0);
+	float limb_visibility = 0.22 + 0.78 * solar_visibility;
+	vec3 atmosphere_limb = (
+		vec3(0.22, 0.50, 0.95) * inner
+		+ vec3(0.82, 0.92, 1.0) * pow(limb, 8.0) * 0.55
+		+ vec3(0.58, 0.20, 0.08) * outer
+	) * limb_strength * limb_visibility;
 	lit += atmosphere_limb;
 
 	// City lights on the night side (emissive). Threshold on luminance so ONLY genuine

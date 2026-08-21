@@ -74,4 +74,21 @@ rg -q 'private const float HorizonHazeStrength = 0\.35f;' "$controller" \
 rg -q 'HorizonHazeStrength' "$controller" \
   || fail "Earth ground horizon seam mitigation is not bounded/configured"
 
-echo "earth_ground_lighting_contract_test: PASS (bounded night floor, terminator and visibility-gated direct light)"
+rg -q 'GetSurfacePoint\(vessel.Position, 0.0\)' "$controller" \
+  || fail "Earth ground is not anchored to the live ellipsoid surface"
+rg -q 'GetGeodeticUp\(vessel.Position\)' "$controller" \
+  || fail "Earth ground does not use geodetic up"
+rg -q 'EarthGlobeAlpha' "$controller" \
+  || fail "Earth ground fade is not complementary with the scaled-space globe"
+rg -q 'EarthVisualHandoffLowM = 18_000.0' "$ROOT/scripts/FloatingOrigin.cs" \
+  || fail "Earth visual handoff low altitude changed"
+rg -q 'EarthVisualHandoffHighM = 42_000.0' "$ROOT/scripts/FloatingOrigin.cs" \
+  || fail "Earth visual handoff high altitude changed"
+rg -q 'VisualSurfaceRadiusMetres' "$ROOT/scripts/FloatingOrigin.cs" \
+  || fail "scaled-space Earth does not read live surface radius"
+rg -q 'ApplySurface\("StarbaseWetlandSkirt"' "$launch_pad" \
+  || fail "starbase wetland skirt is not textured"
+rg -q 'float near_pad = 1.0 - smoothstep' "$shader" \
+  || fail "Earth ground has no near-pad coastal reconstruction"
+
+echo "earth_ground_lighting_contract_test: PASS (bounded night floor, ellipsoid anchor, complementary globe handoff)"

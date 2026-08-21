@@ -158,6 +158,7 @@ public partial class SkyController : Node
     private Vector3 _lastSolarOccluderDirection;
     private float _lastSolarOccluderAngularRadius = float.NaN;
     private float _lastCloudWeatherPrefilter = float.NaN;
+    private float _lastGroundFillStrength = float.NaN;
     private bool _sharedSolarGeometryTelemetryPublished;
 
     public override void _Ready()
@@ -221,7 +222,7 @@ public partial class SkyController : Node
 
         var body = universe.GetDominantBody(vessel.Position);
         var sun = universe.GetBody("sun");
-        Vector3d upD = (vessel.Position - body.Position).Normalized;
+        Vector3d upD = body.GetGeodeticUp(vessel.Position);
         Vector3d physicalSunD = sun != null
             ? (sun.Position - vessel.Position).Normalized
             : new Vector3d(0.4, 0.5, 0.8).Normalized;
@@ -388,7 +389,11 @@ public partial class SkyController : Node
 
         _skyMat!.SetShaderParameter("local_up", ToGodot(up));
         _skyMat.SetShaderParameter("sun_dir", ToGodot(toSun));
-        _skyMat.SetShaderParameter("planet_radius", (float)body.Radius);
+        double visualRadius = body.Id == "earth"
+            ? FloatingOrigin.VisualSurfaceRadiusMetres(body,
+                SimulationBridge.Instance!.ActiveVessel?.Position ?? body.Position)
+            : body.Radius;
+        _skyMat.SetShaderParameter("planet_radius", (float)visualRadius);
         _skyMat.SetShaderParameter("observer_altitude", (float)System.Math.Max(1.0, altitude));
         // Disable before resolving a new body/profile so a missing texture can never
         // replace the established exponential fallback with the black default sampler.
@@ -519,6 +524,16 @@ public partial class SkyController : Node
         {
             _skyMat.SetShaderParameter("cloud_weather_prefilter", cloudWeatherPrefilter);
             _lastCloudWeatherPrefilter = cloudWeatherPrefilter;
+        }
+
+        float groundFill = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
+        if (body.Id != "earth") groundFill = 1f;
+        if (_skyMat != null
+            && (float.IsNaN(_lastGroundFillStrength)
+                || Mathf.Abs(groundFill - _lastGroundFillStrength) > 1e-3f))
+        {
+            _skyMat.SetShaderParameter("ground_fill_strength", groundFill);
+            _lastGroundFillStrength = groundFill;
         }
 
         Color horizon = body.Id switch

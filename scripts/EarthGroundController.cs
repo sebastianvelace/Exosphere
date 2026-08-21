@@ -26,8 +26,9 @@ public partial class EarthGroundController : Node3D
 {
     // ── Render scale ─────────────────────────────────────────────────────────
     private const float  MetresPerUnit = 2.8f;
-    // Earth radius in render units: 6,371,000 m / 2.8 ≈ 2.275e6.
-    private const double EarthRadiusUnits = 6_371_000.0 / MetresPerUnit;
+    // Fallback only until the live sim body is available. Curvature of the patch
+    // is weakly sensitive to the ~20 km ellipsoid vs mean-radius difference;
+    // anchoring is not, and always reads the body through SimulationBridge.
 
     // ── Patch geometry (in render UNITS) ─────────────────────────────────────
     // ~900 km across → half-extent ~450 km. 450,000 m / 2.8 ≈ 160,700 units.
@@ -36,10 +37,10 @@ public partial class EarthGroundController : Node3D
     private const float PatchHalfUnits = 160_700f;        // half-width in units
     private const int   Grid           = 96;              // 55k vertices; curvature stays smooth
 
-    // ── Altitude fade bands (metres) ─────────────────────────────────────────
-    private const double FullAlt = 10_000.0;   // fully opaque at/below this
-    private const double FadeLo  = 14_000.0;   // start fading out here
-    private const double FadeHi  = 26_000.0;   // fully gone above here (backdrop takes over)
+    // Vessel-altitude safety: hide the tangent patch once the rocket itself is
+    // well into the scaled-space regime even if a chase camera is somehow low.
+    // The visible pad→globe cross-fade is owned by FloatingOrigin.EarthGlobeAlpha.
+    private const double FadeHi = 48_000.0;
 
     // Local-ground calibration: a small blue-biased indirect floor keeps the
     // surface readable at night/twilight without changing the direct solar path.
@@ -64,6 +65,7 @@ public partial class EarthGroundController : Node3D
     private bool _groundShaderStateInitialized;
     private float _lastFade = float.NaN;
     private float _lastHorizonDistance = float.NaN;
+    private float _lastEarthRadius = float.NaN;
     private Color _lastHazeColor;
     private Vector3 _lastSunDirection;
 
@@ -76,7 +78,7 @@ public partial class EarthGroundController : Node3D
         {
             _mat = new ShaderMaterial { Shader = shader };
             _mat.SetShaderParameter("fade", 1.0f);
-            _mat.SetShaderParameter("earth_radius", 6_371_000.0f);
+            _mat.SetShaderParameter("earth_radius", (float)InitialEarthRadiusMetres());
             _mat.SetShaderParameter("metres_per_unit", MetresPerUnit);
             var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
             _mat.SetShaderParameter("vertical_optical_depth", new Vector3(
@@ -139,13 +141,10 @@ public partial class EarthGroundController : Node3D
             return;
         }
 
-        // Cross-fade: 1 below FullAlt → 0 above FadeHi (hold 1 across FullAlt..FadeLo).
-        float fade = (float)(1.0 - Smoothstep(FadeLo, FadeHi, alt));
-        if (alt <= FullAlt) fade = 1f;
-        // Also fade out by CAMERA altitude (e.g. zooming far out at the pad) so the local patch
-        // and the distant-Earth backdrop never overlap into a seam — the backdrop takes over.
-        float camFade = (float)(1.0 - Smoothstep(20_000.0, 36_000.0, FloatingOrigin.CameraAltOverEarth));
-        fade = System.Math.Min(fade, camFade);
+        // Complementary to FloatingOrigin.EarthGlobeAlpha: the patch owns the
+        // horizon on the pad, the globe owns it in space, and they share one
+        // 18–42 km camera-altitude handoff so neither a double-Earth nor a gap.
+        float fade = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
         if (fade <= 0.001f)
         {
             Visible = false;
@@ -154,9 +153,11 @@ public partial class EarthGroundController : Node3D
         }
         Visible = true;
 
-        // ── Anchor under the vessel (vessel sits at the render origin) ────────
-        var up         = (vessel.Position - earth.Position).Normalized;   // local up
-        var surfacePos = earth.Position + up * earth.Radius;              // metres
+        // Anchor to the live ellipsoid (or sphere), never centre + R_mean · r̂.
+        // A mean-radius sphere buries Kennedy/Starbase by kilometres relative to
+        // the geodetic pad frame SimulationBridge already uses.
+        var up         = earth.GetGeodeticUp(vessel.Position);
+        var surfacePos = earth.GetSurfacePoint(vessel.Position, 0.0);
         var offsetM    = surfacePos - vessel.Position;                    // metres
         var renderUp   = new Vector3((float)up.X, (float)up.Y, (float)up.Z);
         var rotationAxis = ToGodot(earth.RotationAxis).Normalized();
@@ -215,8 +216,15 @@ public partial class EarthGroundController : Node3D
 
             // True geometric horizon distance d = sqrt(2·R·h), in render units. Ground
             // beyond this hazes into the sky so the far curvature reads as a flat horizon.
+            double localRadius = FloatingOrigin.VisualSurfaceRadiusMetres(earth, vessel.Position);
+            if (!_groundShaderStateInitialized
+                || FloatDiffers(_lastEarthRadius, (float)localRadius))
+            {
+                _mat.SetShaderParameter("earth_radius", (float)localRadius);
+                _lastEarthRadius = (float)localRadius;
+            }
             double cameraAltitude = System.Math.Max(FloatingOrigin.CameraAltOverEarth, 50.0);
-            double hMetres = System.Math.Sqrt(2.0 * earth.Radius * cameraAltitude);
+            double hMetres = System.Math.Sqrt(2.0 * localRadius * cameraAltitude);
             float horizonDistance = (float)(hMetres / MetresPerUnit);
             if (!_groundShaderStateInitialized
                 || FloatDiffers(_lastHorizonDistance, horizonDistance))
@@ -238,15 +246,15 @@ public partial class EarthGroundController : Node3D
         return new Basis(x, up, z);
     }
 
+    private static double InitialEarthRadiusMetres()
+    {
+        var earth = SimulationBridge.Instance?.Universe?.GetBody("earth");
+        if (earth == null) return 6_371_000.0;
+        return earth.MaximumRadius > 1.0 ? earth.MaximumRadius : earth.Radius;
+    }
+
     private static Vector3 ToGodot(Vector3d value) => new(
         (float)value.X, (float)value.Y, (float)value.Z);
-
-    private static double Smoothstep(double a, double b, double x)
-    {
-        if (b <= a) return x >= b ? 1.0 : 0.0;
-        double t = System.Math.Clamp((x - a) / (b - a), 0.0, 1.0);
-        return t * t * (3.0 - 2.0 * t);
-    }
 
     private static bool FloatDiffers(float a, float b) =>
         float.IsNaN(a) || float.IsNaN(b) || Mathf.Abs(a - b) > 1e-4f;
@@ -268,7 +276,8 @@ public partial class EarthGroundController : Node3D
         st.Begin(Mesh.PrimitiveType.Triangles);
 
         float step = (2f * PatchHalfUnits) / Grid;
-        double invTwoR = 1.0 / (2.0 * EarthRadiusUnits);
+        double radiusUnits = InitialEarthRadiusMetres() / MetresPerUnit;
+        double invTwoR = 1.0 / (2.0 * radiusUnits);
 
         float Curve(float x, float z) => (float)(-(x * (double)x + z * (double)z) * invTwoR);
 

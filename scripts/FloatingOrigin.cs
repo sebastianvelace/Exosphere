@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 
 public partial class FloatingOrigin : Node
@@ -76,6 +77,35 @@ public partial class FloatingOrigin : Node
     // Camera altitude over Earth's surface (metres), updated each frame. Both the distant-Earth
     // backdrop and the local ground patch fade on this axis so they never overlap into a seam.
     public static double CameraAltOverEarth { get; private set; } = 0.0;
+
+    /// <summary>
+    /// Shared pad→globe handoff. Below this camera altitude the local ground patch
+    /// owns the horizon; above the high mark the scaled-space Earth disc owns it.
+    /// </summary>
+    public const double EarthVisualHandoffLowM = 18_000.0;
+    public const double EarthVisualHandoffHighM = 42_000.0;
+
+    /// <summary>
+    /// Opacity of the scaled-space Earth globe for the current camera altitude.
+    /// Complementary to the local ground-patch fade so the two representations
+    /// never stack into a double-Earth seam and never leave a gap.
+    /// </summary>
+    public static float EarthGlobeAlpha(double cameraAltitudeM) =>
+        (float)Smoothstep01(EarthVisualHandoffLowM, EarthVisualHandoffHighM, cameraAltitudeM);
+
+    /// <summary>
+    /// Geocentric radius of the reference surface under <paramref name="worldPos"/>.
+    /// Reads the live sim body (WGS ellipsoid when oblate) so render code does not
+    /// fork a second Earth model.
+    /// </summary>
+    public static double VisualSurfaceRadiusMetres(CelestialBody body, Vector3d worldPos)
+    {
+        var surface = body.GetSurfacePoint(worldPos, 0.0);
+        double radius = (surface - body.Position).Magnitude;
+        if (!double.IsFinite(radius) || radius < 1.0)
+            return body.MaximumRadius > 1.0 ? body.MaximumRadius : body.Radius;
+        return radius;
+    }
 
     private static double Smoothstep01(double a, double b, double x)
     {
@@ -159,7 +189,12 @@ public partial class FloatingOrigin : Node
             {
                 var toBody = body.Position - camSim;            // from the camera (metres)
                 double d   = toBody.Magnitude;
-                double R   = body.Radius;
+                // Use the live ellipsoid (or sphere) under the camera so angular size and
+                // altitude match pad geodesy instead of a mean-radius sphere that buries
+                // Kennedy/Starbase by kilometres.
+                double R = body.Id == "earth"
+                    ? VisualSurfaceRadiusMetres(body, camSim)
+                    : body.Radius;
                 if (d < R + 1.0) d = R + 1.0;                   // never inside the surface
 
                 // Earth: fade the distant backdrop in only as the CAMERA climbs (real ascent
@@ -167,8 +202,8 @@ public partial class FloatingOrigin : Node
                 // patch + procedural sky own the horizon — no grey seam where the two meet.
                 if (body.Id == "earth")
                 {
-                    CameraAltOverEarth = d - R;
-                    float a = (float)Smoothstep01(15_000.0, 32_000.0, CameraAltOverEarth);
+                    CameraAltOverEarth = System.Math.Max(0.0, body.GetAltitude(camSim));
+                    float a = EarthGlobeAlpha(CameraAltOverEarth);
                     if (node is MeshInstance3D mi &&
                         mi.GetSurfaceOverrideMaterial(0) is ShaderMaterial sm)
                         sm.SetShaderParameter("planet_alpha", a);

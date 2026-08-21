@@ -182,7 +182,7 @@ public partial class PhaseLightingController : Node
         _sampledReentry = ComputeReentryFactor(
             av, _sampledBody, _sampledAltitude, density, surfVel);
 
-        Vector3d up = (av.Position - _sampledBody.Position).Normalized;
+        Vector3d up = _sampledBody.GetGeodeticUp(av.Position);
         var sun = universe.GetBody("sun");
         if (sun != null)
         {
