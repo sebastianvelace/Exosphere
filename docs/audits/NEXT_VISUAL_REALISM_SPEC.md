@@ -966,3 +966,69 @@ La matriz visual debe conservar al menos tres vistas terrestres etiquetadas —c
 océano y terminador— antes de aceptar una futura modificación de `day_gain`, nubes o
 exposición. El siguiente A/B pendiente es comparar dos composiciones del vehículo en EDL
 diurno hasta `CAUGHT`; no se cambia el renderer oficial en esta fase.
+
+## EDL diurno completo y A/B de cámara — captura física frente a cadencia de render (2026-08-21)
+
+### Corrida de referencia: `CAUGHT` en llvmpipe
+
+La corrida extendida resolvió el pendiente anterior sin alterar la física por la opción
+visual de eclipse:
+
+```text
+/tmp/exo_play-visual-edl-day-caught-v1/
+VISUAL_SUN override=True elevationDeg=25.00 phase=DAY clearSolarEclipse=True physicalSunPositionUnchanged=True
+EDL_CAMERA yawDeg=0 pitchDeg=12 distance=28
+CHECK tower_catch caught=True pins=2 relativeSpeed=0.033 angularSpeed=0.0000
+SUMMARY reason=CAUGHT frames=509
+```
+
+Los cinco PNGs 1920×1080 fueron inspeccionados directamente:
+
+```text
+entry          mean=0.07159 p95=0.31765 clippedFrac=0.00368
+peak_heating   mean=0.07328 p95=0.27843 clippedFrac=0.00284
+retro_burn    mean=0.15064 p95=0.49020 clippedFrac=0.00119
+flip_complete mean=0.15065 p95=0.48627 clippedFrac=0.00101
+caught        mean=0.16735 p95=0.42745 clippedFrac=0.00068
+```
+
+La imagen `caught` muestra la nave detenida junto a la torre y los dos brazos de
+Mechazilla; el log confirma dos pines físicos, no una animación de UI. La visibilidad
+solar permaneció en `1.000` y el flujo de entrada fue finito. El coste de la ejecución
+fue sólo de precálculo/validación: el runtime oficial no usa el override.
+
+### Segundo encuadre: yaw +60°
+
+Se ejecutó la misma escena con `--edl-yaw 60` y la misma elevación solar. El display X11
+del escritorio entregó 1920×1140 y GPU AMD, por lo que estas métricas no se comparan
+píxel a píxel contra llvmpipe; sí sirven para evaluar composición y legibilidad:
+
+```text
+/tmp/exo_play-visual-edl-day-caught-yaw60-x0-v2/
+EDL_CAMERA yawDeg=60 pitchDeg=12 distance=28
+PARTIAL reason=INTERRUPTED exit=130 mode=edl
+```
+
+Los cuatro estados anteriores al catch sí quedaron capturados:
+
+| Estado | mean | p95 | clippedFrac | Hallazgo visual |
+|---|---:|---:|---:|---|
+| `entry` | 0.10569 | 0.49804 | 0.00662 | La silueta y el plasma entran más grandes, pero el HUD ocupa más competencia visual |
+| `peak_heating` | 0.08143 | 0.30588 | 0.00200 | El casco sigue legible y el shock queda localizado |
+| `retro_burn` | 0.13494 | 0.37255 | 0.00099 | La orientación deja gran parte del casco en contraluz |
+| `flip_complete` | 0.13535 | 0.37255 | 0.00076 | La nave queda centrada, pero demasiado oscura para una lectura clara |
+
+La misma prueba descubrió una condición real de robustez del cierre EDL: con esa
+cadencia de render el vehículo alcanzó `catchMiss≈0.5 m`, descendió a `50.6 m` y quedó
+oscilando en `FINAL_DESCENT` con `contacts=0`, mientras el primer encuadre llvmpipe sí
+alcanzó `CAUGHT`. Esto no se promociona como éxito ni se corrige con un teleport visual:
+indica que el hand-off de los pines debe tolerar pasos de simulación/cadencias distintas.
+
+### Decisión
+
+Se conserva `yaw=0` como composición oficial de EDL: es el único encuadre de esta matriz
+que tiene `CAUGHT` diurno probado y mantiene casco, llama, limbo y palillos legibles al
+mismo tiempo. `yaw=60` queda como herramienta de diagnóstico, no como preset de runtime.
+Queda abierto un fix físico acotado para hacer determinista el contacto de ambos pines
+ante distinta cadencia de render, con prueba de regresión y una nueva matriz `CAUGHT` antes
+de cambiar la cámara oficial.
