@@ -89,7 +89,7 @@
       "dataId": "atlas-lr105-ma6-1962", "field": "ratedThrustVacuumN",
       "status": "calibrated", "source": "NASA published sea-level rating, MA-6 insertion state and Exosphere aggregate propulsion model",
       "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
-      "conditions": "610 kN effective high-altitude thrust closes the public MA-6 trajectory in a model that omits separate verniers, turbopump exhaust and detailed guidance",
+      "conditions": "625 kN effective high-altitude thrust closes the public MA-6 trajectory on a WGS84 sea-level Cape in a model that omits separate verniers, turbopump exhaust and detailed guidance. 610 kN was the spherical mean-radius calibration.",
       "uncertainty": "simulator aggregate, not a component acceptance rating; do not interpret as YLR-105 hardware thrust"
     },
     {
@@ -103,7 +103,7 @@
       "dataId": "atlas-lr105-ma6-1962", "field": "specificImpulseVacuumS",
       "status": "calibrated", "source": "NASA MA-6 orbital insertion state; Exosphere aggregate propulsion reconstruction",
       "accessedDate": "2026-07-28", "variant": "Atlas 109-D YLR-105",
-      "conditions": "343 s effective value used with the calibrated aggregate high-altitude thrust",
+      "conditions": "350 s effective value used with the calibrated aggregate high-altitude thrust on WGS84. 343 s was the spherical mean-radius calibration.",
       "uncertainty": "simulator aggregate, not a YLR-105 component acceptance value"
     },
     {
