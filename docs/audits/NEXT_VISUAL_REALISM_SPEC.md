@@ -908,3 +908,61 @@ pasada. El renderer oficial conserva su comportamiento; la separación de oclusi
 queda disponible sólo para pruebas visuales reproducibles. El próximo experimento debe
 ser una captura diurna extendida hasta `CAUGHT` y, por separado, comparar la composición
 del casco con dos ángulos de cámara antes de tocar luminancia o color.
+
+## A/B de composición terrestre a 400 km — exposición frente a textura (2026-08-21)
+
+### Hipótesis y control
+
+La captura orbital de referencia parecía demasiado crema. Antes de cambiar `day_gain`,
+`cloud_amount` o el tonemapper había que separar dos hipótesis: una exposición incorrecta
+o una región terrestre legítimamente dominada por masas continentales claras.
+
+El harness ahora acepta `--earth-view default|rotated`. `rotated` gira 137.5° el punto
+subsolar alrededor de la dirección solar física, conservando exactamente la altitud,
+la elevación, el FOV, la visibilidad solar, el LUT y la ruta de exposición. No se toca el
+material oficial ni el reloj de la simulación.
+
+```bash
+EXOSPHERE_RENDER_PROBE=1 \
+bash tools/visual_playtest.sh --atmosphere-orbit --earth-view default \
+  --run-id visual-earth-orbit-view-default-v1 --skip-build --max-runtime 300
+
+EXOSPHERE_RENDER_PROBE=1 \
+bash tools/visual_playtest.sh --atmosphere-orbit --earth-view rotated \
+  --run-id visual-earth-orbit-view-rotated-v1 --skip-build --max-runtime 300
+```
+
+Cada artefacto fue revalidado después con `--verify-only`; ambos terminaron en
+`ATMOSPHERE_ORBIT_OK`.
+
+### Evidencia fotográfica y telemetría
+
+```text
+/tmp/exo_play-visual-earth-orbit-view-default-v1/exo_play_400km_day.png
+/tmp/exo_play-visual-earth-orbit-view-rotated-v1/exo_play_400km_day.png
+```
+
+| Vista | `viewUp` | mean | p95 | horizonContrast | exposure | clippedFrac |
+|---|---|---:|---:|---:|---:|---:|
+| `default` | `0.9091,-0.4166,0.0000` | 0.10182 | 0.80784 | 0.24328 | 1.076 | 0.00000 |
+| `rotated` | `-0.4907,-0.6730,0.5534` | 0.08474 | 0.76078 | 0.20249 | 1.075 | 0.00000 |
+
+Ambos estados prueban `actualAlt=400000.0`, `sunElevation=35.00`,
+`solarVisibility=1.000`, `eclipseVisibility=1.000000`, `lutOrder=4`,
+`spectralOrder=5` y `exposureSettled=True`. La diferencia de exposición es 0.001,
+demasiado pequeña para explicar el cambio visual. La inspección directa confirma la
+causa: `default` muestra una región continental crema; `rotated` muestra océano azul,
+nubes y separación de masas terrestres. La textura sí responde a la composición de la
+esfera y no está congelada en un único mapa.
+
+### Decisión
+
+No se promueve ningún cambio de luminancia global. Reducir `day_gain` para corregir la
+primera foto habría oscurecido una región válida y habría degradado la lectura de la
+segunda. El problema de calibración anterior se reclasifica como un riesgo de selección
+de encuadre, no como evidencia suficiente de tonemapping defectuoso.
+
+La matriz visual debe conservar al menos tres vistas terrestres etiquetadas —continente,
+océano y terminador— antes de aceptar una futura modificación de `day_gain`, nubes o
+exposición. El siguiente A/B pendiente es comparar dos composiciones del vehículo en EDL
+diurno hasta `CAUGHT`; no se cambia el renderer oficial en esta fase.
