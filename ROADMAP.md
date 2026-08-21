@@ -85,7 +85,11 @@ Base tecnica cerrada en `main`:
 ## Prioridad Inmediata
 
 La siguiente etapa no debe abrir un sistema grande nuevo. Primero hay que subir la
-fidelidad visual y asegurar que lo existente se pueda validar con capturas:
+fidelidad visual y asegurar que lo existente se pueda validar con capturas.
+
+Frente paralelo de física (no pisa visual; plan en
+`docs/audits/REALISM_UNRESOLVED_FRONTS_AUG2026.md`): Tierra WGS84 + J2 armado
+en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
 
 0. **Optimización multiagente fase 23**
    - El plan operativo, ownership, worktrees, baselines y gates viven en
