@@ -142,6 +142,17 @@ void fragment() {
 	float det = gnoise(v_patch * 0.0006) + 0.5 * gnoise(v_patch * 0.0028);
 	surface *= 1.0 + detail_strength * det;
 
+	// Within a few kilometres of the pad the 8K orbital map is a single stretched
+	// texel. Grade that footprint toward Boca Chica / Cape flats: pale sand, dark
+	// marsh and muted water, while keeping the Blue Marble macro-shapes farther out.
+	float pad_range = length(v_patch);
+	float near_pad = 1.0 - smoothstep(120.0, 5200.0, pad_range);
+	vec3 marsh = mix(vec3(0.18, 0.22, 0.15), vec3(0.22, 0.20, 0.14), regional);
+	vec3 flats = mix(vec3(0.40, 0.34, 0.24), marsh, 0.45 + 0.35 * local_scrub);
+	vec3 near_water = vec3(0.07, 0.16, 0.20);
+	vec3 pad_ground = mix(flats, near_water, water_hint);
+	surface = mix(surface, pad_ground, near_pad * 0.78 * (0.55 + 0.45 * land_mask));
+
 	// A small normal perturbation makes the multi-scale breakup respond to the
 	// sun direction. It is deliberately low amplitude: this gives texture relief
 	// without turning the tangent patch into a noisy tessellation substitute.

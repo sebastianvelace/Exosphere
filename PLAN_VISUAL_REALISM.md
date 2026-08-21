@@ -250,6 +250,14 @@ Mejoras:
 - Camaras de seguimiento con encuadre estable para stack completo y Ship sola.
 - Mejor percepcion de escala en pad y cerca de superficie.
 - Evitar bloom/exposicion que lave el acero o la UI.
+- [x] Tierra visual V4.1 (rama `visual/earth-pad-ascent`): parche local y globo scaled-space
+  anclados al elipsoide vivo (`CelestialBody.GetSurfacePoint` / radio geocentrico local),
+  no a `centre + R_mean`. Handoff pad→globo complementario (`EarthVisualHandoff` 18–42 km)
+  para que no haya doble Tierra ni hueco. Cielo geometria con `GetGeodeticUp` y
+  `ground_fill_strength` que apaga el suelo toy-blue del sky cuando el mesh toma el disco.
+  Limbo orbital: haze Rayleigh + borde cian/ozono Chappuis, oceanos un poco mas oscuros;
+  `day_gain=1.15` se mantiene (A/B 400 km). Complejo: falda de humedal/dunas ~1.6 km en
+  Starbase y skirt en pads convencionales. No se toco fisica ni `earth.json` fisico.
 
 Aceptacion:
 - Pad, orbita y reentry se distinguen por luz/color sin filtros exagerados.

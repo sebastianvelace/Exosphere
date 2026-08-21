@@ -84,7 +84,7 @@ public partial class SunController : Node
         if (!_visualSunElevationOverrideDegrees.HasValue)
             return physicalDirection;
 
-        Vector3d up = (observer - body.Position).Normalized;
+        Vector3d up = body.GetGeodeticUp(observer);
         Vector3d horizontal = physicalDirection - up * physicalDirection.Dot(up);
         if (horizontal.MagnitudeSquared < 1e-12)
             horizontal = body.GetEastDirection(observer);

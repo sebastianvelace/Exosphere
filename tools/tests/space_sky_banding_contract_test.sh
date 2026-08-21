@@ -22,4 +22,9 @@ if rg -q 'CLOUD_VIEW_STEPS = (1[0-9]|2[0-3]);' "$SHADER"; then
   fail "cloud view quadrature is in the known banding-prone range"
 fi
 
+rg -q 'uniform float ground_fill_strength' "$SHADER" \
+  || fail "sky ground fill is not altitude-gated during the globe handoff"
+rg -q 'clamp\(ground_fill_strength, 0.0, 1.0\)' "$SHADER" \
+  || fail "sky ground fill strength is not applied to the geometric ground"
+
 echo "space_sky_banding_contract_test: PASS (24-sample stable cloud-shell quadrature)"

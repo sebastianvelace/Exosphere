@@ -87,6 +87,10 @@ uniform float solar_occluder_angular_radius = 0.0;
 
 uniform vec3 ground_horizon : source_color = vec3(0.30, 0.55, 0.90);
 uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
+// 1 on the pad (sky may fill rays that hit the spherical ground). Fades out as
+// the scaled-space Earth mesh takes over the disc so a toy-blue sky ground cannot
+// show through a semi-transparent globe during the 18–42 km handoff.
+uniform float ground_fill_strength : hint_range(0.0, 1.0) = 1.0;
 
 // The old 16/8 integration visibly banded the blue limb into radial spokes on
 // llvmpipe and on lower-end GPUs. These counts keep the spherical model stable
@@ -759,7 +763,8 @@ void sky() {
 		float ground_sun = max(dot(normalize(ground_position), to_sun), 0.0);
 		vec3 ground_direct = solar_transmittance(ground_position, to_sun, outer_radius);
 		color += ground * transmittance(optical_depth)
-			* (0.012 + 0.24 * ground_sun * ground_direct * solar_visibility);
+			* (0.012 + 0.24 * ground_sun * ground_direct * solar_visibility)
+			* clamp(ground_fill_strength, 0.0, 1.0);
 	}
 
 	// The sky is finally quantised by the framebuffer/tonemapper. A tiny deterministic

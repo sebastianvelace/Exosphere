@@ -221,12 +221,16 @@ public partial class LaunchPadController : Node3D
             new Color(0.31f, 0.28f, 0.21f), 0.18f, 0.34f, 0.16f, 0.0f);
         var gravel = CreateLaunchSurfaceMaterial(
             new Color(0.20f, 0.19f, 0.17f), 0.46f, 0.38f, 0.20f, 0.0f);
+        var marsh = CreateLaunchSurfaceMaterial(
+            new Color(0.17f, 0.21f, 0.16f), 0.14f, 0.28f, 0.12f, 0.38f);
         var burnt = CreateLaunchSurfaceMaterial(
             new Color(0.09f, 0.08f, 0.07f), 0.36f, 0.16f, 0.06f, 0.28f);
 
         if (IsStarbaseSite)
         {
             ApplySurface("StarbaseCoastalFill", sand);
+            ApplySurface("StarbaseWetlandSkirt", marsh);
+            ApplySurface("StarbaseDuneShoulder", sand);
             ApplySurface("OrbitalPadApron", concrete);
             ApplySurface("OlmFoundationMat", gravel);
             ApplySurface("StateHighway4Access", asphalt);
@@ -235,6 +239,7 @@ public partial class LaunchPadController : Node3D
         else
         {
             ApplySurface("SpaceportApron", asphalt);
+            ApplySurface("SpaceportWetlandSkirt", marsh);
             ApplySurface("RaisedLaunchDeck", concrete);
             ApplySurface("PadBase", concrete);
             ApplySurface("Ground", concrete);
@@ -283,6 +288,10 @@ public partial class LaunchPadController : Node3D
         Spawn("SpaceportApron",
             new BoxMesh { Size = new Vector3(260f * U, 1.0f * U, 230f * U) },
             tarmac, new Vector3(0, -0.5f * U, 0));
+        var marsh = Mat(new Color(0.17f, 0.21f, 0.16f), 0.98f, 0.0f);
+        Spawn("SpaceportWetlandSkirt",
+            new BoxMesh { Size = new Vector3(900f * U, 0.28f * U, 720f * U) },
+            marsh, new Vector3(-12f * U, GradeY + 0.06f * U, 8f * U));
         Spawn("RaisedLaunchDeck",
             new CylinderMesh
             {
@@ -482,6 +491,16 @@ public partial class LaunchPadController : Node3D
         Spawn("StarbaseCoastalFill",
             new BoxMesh { Size = new Vector3(300f * U, 2.0f * U, 240f * U) },
             sandFill, new Vector3(-18f * U, GradeY - 1.0f * U, 0));
+        // Wide wetland/dune skirt so the 300 m civil island does not drop into a
+        // featureless satellite smear. Sits just above the Earth ground patch and
+        // below the OLM apron.
+        var marsh = Mat(new Color(0.17f, 0.21f, 0.16f), 0.98f, 0.0f);
+        Spawn("StarbaseWetlandSkirt",
+            new BoxMesh { Size = new Vector3(1600f * U, 0.30f * U, 1200f * U) },
+            marsh, new Vector3(-40f * U, GradeY + 0.08f * U, 40f * U));
+        Spawn("StarbaseDuneShoulder",
+            new BoxMesh { Size = new Vector3(720f * U, 0.22f * U, 520f * U) },
+            sandFill, new Vector3(-28f * U, GradeY + 0.12f * U, 12f * U));
         Spawn("OrbitalPadApron",
             new BoxMesh { Size = new Vector3(126f * U, 0.35f * U, 112f * U) },
             concrete, new Vector3(0, GradeY + 0.175f * U, 0));
