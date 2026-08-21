@@ -846,3 +846,65 @@ El siguiente A/B visual debe separar dos causas que todavía no están aisladas:
 No se acepta una promoción hasta que el candidato mejore simultáneamente lectura de
 continentes/océanos y contraste del limbo, sin degradar las capturas de día bajo,
 terminador, noche y eclipse.
+
+## EDL diurno — separación de oclusión solar y evidencia de framebuffer (2026-08-21)
+
+### Problema aislado
+
+Las corridas EDL anteriores no podían usarse como referencia diurna: el harness fijaba
+la elevación solar y mostraba `phase=DAY`, pero la geometría física Sol/Luna todavía podía
+dejar `solarVisibility=0`. Eso hacía que una lectura oscura del casco pareciera un
+problema de exposición cuando en realidad el vehículo estaba en sombra.
+
+Se añadió en `98a62ea` una opción de desarrollo explícita:
+
+```bash
+bash tools/visual_playtest.sh --edl --sun-elevation 25 \
+  --clear-solar-eclipse --camera-preset edl_side \
+  --run-id visual-edl-day-clear-v2 --skip-build --max-runtime 1080
+```
+
+`--clear-solar-eclipse` sólo limpia la oclusión visual que alimenta la presentación
+solar; no cambia posiciones, efemérides, gravedad, transferencia de calor ni la
+visibilidad física usada por la simulación. El log prueba esta separación con
+`physicalSunPositionUnchanged=True` y `solarVisibility=1.000` durante toda la captura.
+La opción no se activa en el juego normal.
+
+### Evidencia real
+
+La corrida produjo cuatro PNGs 1920×1080 sobre llvmpipe:
+
+```text
+/tmp/exo_play-visual-edl-day-clear-v2/exo_play_entry.png
+/tmp/exo_play-visual-edl-day-clear-v2/exo_play_peak_heating.png
+/tmp/exo_play-visual-edl-day-clear-v2/exo_play_retro_burn.png
+/tmp/exo_play-visual-edl-day-clear-v2/exo_play_flip_complete.png
+```
+
+| Estado | Evidencia física | mean | p95 | clippedFrac | Lectura visual |
+|---|---|---:|---:|---:|---|
+| `entry` | 64.7 km, 1.83 km/s, flux 1.45e4 W/m² | 0.07156 | 0.31765 | 0.00350 | Limbo azul continuo, Tierra legible y HUD no lavado; el plasma no aparece por debajo del umbral físico |
+| `peak_heating` | 31.6 km, 1.78 km/s, flux 1.23e5 W/m² | 0.07371 | 0.27451 | 0.00278 | Casco y actitud legibles; incandescencia localizada en el lado de avance, sin halo global |
+| `retro_burn` | 2.84 km, 3 motores, TWR 1.11 | 0.15062 | 0.49020 | 0.00123 | Cielo diurno graduado, vehículo vertical y plume visible; no hay clipping amplio |
+| `flip_complete` | 2.39 km, 3 motores, TWR 1.31 | 0.15069 | 0.48627 | 0.00105 | Actitud vertical estable y separación casco/cielo consistente con el estado anterior |
+
+La inspección directa de las imágenes confirma que `peak_heating` no es una emisión
+decorativa desconectada del modelo: `coreVisible=True`, `fluxIntensity=0.126`,
+`visualIntensity=0.215` y `shockHeat=0.244`. En `entry`, `retro_burn` y
+`flip_complete`, `coreVisible=False` coincide con los flujos por debajo del umbral.
+El coste restante fue de ejecución, no de render: la corrida avanzó físicamente hasta
+200 m con `upright=1.0000`, pero agotó 1080 s antes de los 56 m del gate de catch.
+
+### Catch y decisión
+
+El atrapamiento sigue validado por la corrida completa anterior
+`/tmp/exo_visual_edl_v4`, cuyo gate re-evaluado dio `SUMMARY reason=CAUGHT`, `pins=2`
+y cinco capturas. La corrida diurna se registra como `PARTIAL/TIMEOUT`, no como PASS:
+su evidencia de luz, plasma, retro-burn y flip es válida; su captura diurna del
+atrapamiento todavía requiere ampliar el presupuesto del harness.
+
+Decisión: no se cambia el shader de plasma, la exposición ni la física EDL en esta
+pasada. El renderer oficial conserva su comportamiento; la separación de oclusión
+queda disponible sólo para pruebas visuales reproducibles. El próximo experimento debe
+ser una captura diurna extendida hasta `CAUGHT` y, por separado, comparar la composición
+del casco con dos ángulos de cámara antes de tocar luminancia o color.
