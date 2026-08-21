@@ -13,18 +13,19 @@ public sealed class PhysicsRegressionTests
     private const double SeaLevelPressure = 101_325.0;
 
     [Fact]
-    public void GravityAtEarthRadiusMatchesGmOverRSquared()
+    public void GravityAtEarthEquatorAgreesWithArmedJ2()
     {
         var earth = LoadBody("earth");
-        var pos = earth.Position + new Vector3d(earth.Radius, 0.0, 0.0);
+        Assert.True(earth.J2 > 0.0);
+        Assert.True(earth.IsOblate);
+        var pos = earth.GetSurfacePosition(0.0, 0.0, 0.0);
 
         var gravity = earth.GetGravityAt(pos);
-        double expected = earth.GM / (earth.Radius * earth.Radius);
+        double pointMass = earth.GM / (pos - earth.Position).MagnitudeSquared;
 
-        AssertWithinRelative(expected, gravity.Magnitude, 1e-12);
-        Assert.True(gravity.X < 0.0);
-        AssertWithinAbsolute(0.0, gravity.Y, 1e-12);
-        AssertWithinAbsolute(0.0, gravity.Z, 1e-12);
+        Assert.True(gravity.Magnitude > 9.78);
+        Assert.True(gravity.Magnitude < 9.84);
+        Assert.True(System.Math.Abs(gravity.Magnitude - pointMass) > 1e-4);
     }
 
     [Fact]

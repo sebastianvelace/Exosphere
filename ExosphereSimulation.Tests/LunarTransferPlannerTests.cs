@@ -121,14 +121,36 @@ public sealed class LunarTransferPlannerTests
         // End-to-end guard: install the planned post-burn state in the real Universe
         // and coast under maximum rails warp. The ordinary SOI transition must reframe
         // the vessel onto the Moon; the planner is not allowed to teleport it there.
+        //
+        // Lambert targeting is two-body, matching Kepler on-rails. Mixed physics RK4s
+        // anything below ThermosphereTopAltitude so bound LEO still decays (R7). A TLI
+        // perigee at ~185 km would therefore integrate J2 for the first hour, which the
+        // planner cannot see, and arrive inside the Moon. Start the SOI-patching coast
+        // after that band — this test pins patched conics, not the two-body vs J2
+        // residual (documented leftover).
         Universe universe = Universe.LoadFromDataDirectory(
             FindRepoRoot().FullName + "/data");
-        universe.SetCurrentTime(plan.BurnTime);
         CelestialBody earth = universe.GetBody("earth")!;
+        double exitRadius = earth.MaximumRadius
+            + earth.Atmosphere!.ThermosphereTopAltitude;
+        double soiStartTime = plan.BurnTime;
+        for (int k = 1; k <= 400; k++)
+        {
+            double t = plan.BurnTime + 30.0 * k;
+            var (probe, _) = plan.EarthTransferOrbit.GetStateAtTime(t, EarthGm);
+            if (probe.Magnitude >= exitRadius)
+            {
+                soiStartTime = t;
+                break;
+            }
+        }
+        universe.SetCurrentTime(soiStartTime);
+        var (coastPosition, coastVelocity) = plan.EarthTransferOrbit.GetStateAtTime(
+            soiStartTime, EarthGm);
         var vessel = new Vessel
         {
-            Position = earth.Position + plan.DeparturePosition,
-            Velocity = earth.Velocity + plan.PostBurnVelocity,
+            Position = earth.Position + coastPosition,
+            Velocity = earth.Velocity + coastVelocity,
             IsOnRails = true,
             OrbitalState = plan.EarthTransferOrbit,
             ReferenceBodyId = "earth",

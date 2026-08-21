@@ -1487,9 +1487,7 @@ public class Universe
                 // Vessel is clamped to the body surface — follow the body's orbit
                 var heldBody = GetDominantBody(vessel.Position);
                 AdvanceGroundHoldFrame(vessel, heldBody, dt);
-                vessel.Position = heldBody.Position
-                    + vessel.GroundNormal
-                        * (heldBody.Radius + vessel.GroundOffset);
+                vessel.Position = SurfaceWorldPosition(heldBody, vessel);
                 vessel.Velocity = heldBody.Velocity
                     + heldBody.GetSurfaceVelocity(vessel.Position);
                 vessel.Tick(dt, heldBody);
@@ -1538,8 +1536,7 @@ public class Universe
         double dt)
     {
         AdvanceGroundHoldFrame(vessel, body, dt);
-        vessel.Position = body.Position
-            + vessel.GroundNormal * (body.Radius + vessel.GroundOffset);
+        vessel.Position = SurfaceWorldPosition(body, vessel);
         vessel.Velocity = body.Velocity
             + body.GetSurfaceVelocity(vessel.Position);
         vessel.AngularVelocity = Vector3d.Zero;
@@ -1556,21 +1553,39 @@ public class Universe
         AdvanceSurfaceAnchor(vessel, ResolveSurfaceBody(vessel), dt);
     }
 
+    /// <summary>
+    /// Places a grounded vessel on the body's reference surface. Bodies may have
+    /// already been Kepler-advanced this tick, so the seed is the current body
+    /// centre plus the stored <see cref="Vessel.GroundNormal"/> (geocentric), not
+    /// the previous inertial <see cref="Vessel.Position"/>. A geodetic n̂ reconstructed
+    /// as centre + R·n̂ would slide a mid-latitude pad tens of kilometres; the
+    /// geocentric ray is intersected with the ellipsoid first so geodetic latitude
+    /// does not walk equatorward.
+    /// </summary>
+    private static Vector3d SurfaceWorldPosition(CelestialBody body, Vessel vessel)
+    {
+        var seed = vessel.GroundNormal.MagnitudeSquared > 1e-12
+            ? body.GetPositionAlongDirection(
+                vessel.GroundNormal, vessel.GroundOffset)
+            : vessel.Position;
+        return seed;
+    }
+
     private static void AnchorToSurface(
         Vessel vessel,
         CelestialBody body,
         Vector3d direction,
         double offsetM)
     {
-        vessel.GroundNormal = direction.MagnitudeSquared > 1e-12
-            ? direction.Normalized
-            : Vector3d.Up;
+        var seedPos = vessel.Position.MagnitudeSquared > 1.0
+            ? vessel.Position
+            : body.Position + direction * body.MaximumRadius;
         vessel.GroundOffset = System.Math.Max(0.0, offsetM);
+        vessel.Position = body.GetSurfacePoint(seedPos, vessel.GroundOffset);
+        vessel.GroundNormal = (vessel.Position - body.Position).Normalized;
         vessel.ReferenceBodyId = body.Id;
         vessel.IsSurfaceSettled = true;
         vessel.SurfaceSettledDuration = 0.5;
-        vessel.Position = body.Position
-            + vessel.GroundNormal * (body.Radius + vessel.GroundOffset);
         vessel.Velocity = body.Velocity
             + body.GetSurfaceVelocity(vessel.Position);
         vessel.AngularVelocity = Vector3d.Zero;
@@ -1700,19 +1715,33 @@ public class Universe
 
     private static void HandleSurfaceImpact(Vessel vessel, CelestialBody refBody)
     {
-        if (refBody.GetAltitude(vessel.Position) >= 0.0) return;
+        double altitude = refBody.GetAltitude(vessel.Position);
+        if (altitude >= 0.0) return;
 
+        var up = refBody.GetGeodeticUp(vessel.Position);
+        double climbRate = vessel.GetSurfaceVelocity(refBody).Dot(up);
         double impactSpeed = vessel.GetSurfaceVelocity(refBody).Magnitude;
+        // A splashdown-capable stack can numerically kiss alt < 0 at T-0 with
+        // airspeed near zero. That is liftoff, not a landing. Only apply this
+        // near the surface — a Bowring glitch at altitude must not teleport
+        // the vehicle back to the pad. Horizontal speed must also be pad-like:
+        // a grazing skip with climbRate > 0.5 m/s is still an impact.
+        if (altitude > -20.0 && climbRate > 0.5 && impactSpeed < 50.0)
+        {
+            vessel.Position = refBody.GetSurfacePoint(vessel.Position, 0.05);
+            vessel.IsSurfaceSettled = false;
+            return;
+        }
+
         double splashdownLimit = vessel.MaximumSplashdownSpeedMps;
         bool softLanding = vessel.IsGroundHeld
             || impactSpeed <= SoftLandingThreshold
             || refBody.Id == "earth"
                 && splashdownLimit > 0.0
                 && impactSpeed <= splashdownLimit;
-        var dir = (vessel.Position - refBody.Position).Normalized;
         if (softLanding)
         {
-            AnchorToSurface(vessel, refBody, dir, 1.0);
+            AnchorToSurface(vessel, refBody, up, 1.0);
         }
         else
         {
@@ -1720,7 +1749,7 @@ public class Universe
             vessel.DestructionCause = VesselDestructionCause.GroundImpact;
             vessel.CrashImpactSpeed = impactSpeed;
             vessel.CrashSimPosition = vessel.Position;
-            AnchorToSurface(vessel, refBody, dir, 0.5);
+            AnchorToSurface(vessel, refBody, up, 0.5);
         }
     }
 
@@ -1858,9 +1887,7 @@ public class Universe
             {
                 RecordWorkload(workload);
                 AdvanceGroundHoldFrame(vessel, refBody, dt);
-                vessel.Position = refBody.Position
-                    + vessel.GroundNormal
-                        * (refBody.Radius + vessel.GroundOffset);
+                vessel.Position = SurfaceWorldPosition(refBody, vessel);
                 vessel.Velocity = refBody.Velocity
                     + refBody.GetSurfaceVelocity(vessel.Position);
                 vessel.IsOnRails = false;
@@ -2341,7 +2368,7 @@ public class Universe
             // frozen at end-of-tick; the crossing/impact happens earlier).
             var (refPosAt, refVelAt) = BodyStateAt(reference, sampleTime);
 
-            if (lastRelP.Magnitude < reference.Radius)
+            if (reference.GetAltitude(reference.Position + lastRelP) < 0.0)
             {
                 // The conic crosses the surface inside this step — impact here.
                 vessel.Position = refPosAt + lastRelP;

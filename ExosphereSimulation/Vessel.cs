@@ -350,7 +350,7 @@ public class Vessel
     public double    NoseRadius      => Parts.NoseRadius;
 
     public double GetAltitude(CelestialBody body) =>
-        (Position - body.Position).Magnitude - body.Radius;
+        body.GetAltitude(Position);
 
     /// <summary>Local gravitational acceleration from one body at the vessel position.</summary>
     public double GetLocalGravity(CelestialBody body) =>

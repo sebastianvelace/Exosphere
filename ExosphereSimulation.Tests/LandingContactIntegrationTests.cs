@@ -53,7 +53,7 @@ public sealed class LandingContactIntegrationTests
         // first compression briefly loads each foot above its purely static share of weight.
         var (universe, _, vessel) = CreateLandingCase(verticalSpeed: -2.2, lateralSpeed: 1.3);
         vessel.Orientation = Quaterniond.FromAxisAngle(
-            Vector3d.Forward, 2.5 * MathUtils.DEG_TO_RAD);
+            Vector3d.Forward, 2.5 * MathUtils.DEG_TO_RAD) * vessel.Orientation;
 
         for (int i = 0; i < 2_000 && !vessel.IsSurfaceSettled && !vessel.IsDestroyed; i++)
             universe.Tick(0.005);
@@ -102,13 +102,14 @@ public sealed class LandingContactIntegrationTests
         vessel.Parts.AddPart(gear);
         vessel.ConfigureLandingContactsFromParts();
 
-        var up = Vector3d.Up;
-        vessel.Position = body.Position + up * (body.Radius + 8.1);
+        var surface = body.GetSurfacePosition(0.0, 0.0, 8.1);
+        var up = body.GetGeodeticUp(surface);
+        vessel.Position = surface;
         var surfaceVelocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
         vessel.Velocity = surfaceVelocity
             + up * verticalSpeed
             + Vector3d.Right * lateralSpeed;
-        vessel.Orientation = Quaterniond.Identity;
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, up);
 
         var universe = new Universe { TimeScale = 1.0, ActiveVessel = vessel };
         universe.AddBody(body);

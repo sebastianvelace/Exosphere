@@ -7,7 +7,7 @@ using Exosphere.Simulation.Math;
 /// Static properties are loaded from JSON; dynamic state (Position, Velocity) is
 /// updated at runtime by the integrator.
 /// </summary>
-public class CelestialBody
+public partial class CelestialBody
 {
     // ── Static properties (loaded from JSON) ──────────────────────────────
 
@@ -22,6 +22,28 @@ public class CelestialBody
 
     /// <summary>Mean radius (m).</summary>
     public double Radius            { get; init; }
+
+    /// <summary>
+    /// Equatorial radius (m) used by the J2 term and the WGS-style ellipsoid.
+    /// Distinct from <see cref="Radius"/> (mean radius). Required when <see cref="J2"/>
+    /// is non-zero.
+    /// </summary>
+    public double EquatorialRadius  { get; init; }
+
+    /// <summary>
+    /// Polar radius (m) of the reference ellipsoid. Required with
+    /// <see cref="EquatorialRadius"/> when <see cref="J2"/> is non-zero so surface
+    /// gravity, altitude and pad placement share the same datum as the field.
+    /// </summary>
+    public double PolarRadius       { get; init; }
+
+    /// <summary>
+    /// Unnormalised J2 zonal harmonic (dimensionless). Zero (the default) keeps a
+    /// point-mass field. First-order oblateness only; Kepler-on-rails remains two-body
+    /// (same class as no third body). Active/RK4 vessels feel J2 through
+    /// <see cref="GetGravityAt"/>.
+    /// </summary>
+    public double J2                { get; init; }
 
     /// <summary>Standard gravitational parameter μ = GM (m³/s²).</summary>
     public double GM                { get; init; }
@@ -54,15 +76,36 @@ public class CelestialBody
 
     // ── Computed helpers ──────────────────────────────────────────────────
 
-    /// <summary>Surface gravitational acceleration (m/s²).</summary>
-    public double GetSurfaceGravity() => GM / (Radius * Radius);
+    /// <summary>
+    /// True when this body has a distinct equatorial/polar radius. Surface geometry,
+    /// geodetic altitude and pad frames then use the ellipsoid instead of the mean sphere.
+    /// </summary>
+    public bool IsOblate =>
+        EquatorialRadius > PolarRadius + 1.0 && PolarRadius > 0.0;
+
+    /// <summary>Largest body radius (m): equatorial if oblate, otherwise mean.</summary>
+    public double MaximumRadius => IsOblate ? EquatorialRadius : Radius;
+
+    /// <summary>Smallest body radius (m): polar if oblate, otherwise mean.</summary>
+    public double MinimumRadius => IsOblate ? PolarRadius : Radius;
 
     /// <summary>
-    /// Altitude of <paramref name="worldPos"/> above the surface (m).
-    /// Negative values mean the point is below the surface.
+    /// Gravitational acceleration (m/s²) at the equatorial surface. Includes J2 when
+    /// armed; does not include the centrifugal term of the rotating frame.
     /// </summary>
-    public double GetAltitude(Vector3d worldPos) =>
-        (worldPos - Position).Magnitude - Radius;
+    public double GetSurfaceGravity() =>
+        GetGravityAt(GetSurfacePosition(0.0, 0.0, 0.0)).Magnitude;
+
+    /// <summary>
+    /// Height of <paramref name="worldPos"/> above the reference surface (m).
+    /// Geodetic height on an oblate ellipsoid; |r| − R on a sphere. Negative values
+    /// mean the point is below the surface.
+    /// </summary>
+    public double GetAltitude(Vector3d worldPos)
+    {
+        GetGeodeticCoordinates(worldPos, out _, out _, out double height);
+        return height;
+    }
 
     /// <summary>Returns true if <paramref name="worldPos"/> is inside the atmosphere.</summary>
     public bool IsInAtmosphere(Vector3d worldPos) =>
@@ -84,16 +127,46 @@ public class CelestialBody
 
     /// <summary>
     /// Gravitational acceleration vector (m/s²) at <paramref name="worldPos"/>.
-    /// Points toward the body's centre with magnitude GM/r².
+    /// Point-mass GM/r² plus, when <see cref="J2"/> is set, the first-order zonal
+    /// perturbation in the body equatorial frame (+Z = <see cref="RotationAxis"/>).
     /// Returns zero if the position coincides with the body's centre.
     /// </summary>
     public Vector3d GetGravityAt(Vector3d worldPos)
     {
-        var    r      = worldPos - Position;
-        double distSq = r.MagnitudeSquared;
+        var    rVec   = worldPos - Position;
+        double distSq = rVec.MagnitudeSquared;
         if (distSq < 1.0) return Vector3d.Zero;
 
-        return r.Normalized * (-GM / distSq);
+        if (J2 == 0.0)
+            return rVec.Normalized * (-GM / distSq);
+
+        double r = System.Math.Sqrt(distSq);
+        GetBodyFixedEquatorialBasis(out var eastOfPrime, out var ninetyEast, out var north);
+        double x = rVec.Dot(eastOfPrime);
+        double y = rVec.Dot(ninetyEast);
+        double z = rVec.Dot(north);
+        double muOverR3 = GM / (distSq * r);
+        double reOverR = EquatorialRadius / r;
+        double j2Scale = 1.5 * J2 * reOverR * reOverR;
+        double zr2 = (z / r) * (z / r);
+        double ax = -muOverR3 * x * (1.0 - j2Scale * (5.0 * zr2 - 1.0));
+        double ay = -muOverR3 * y * (1.0 - j2Scale * (5.0 * zr2 - 1.0));
+        double az = -muOverR3 * z * (1.0 - j2Scale * (5.0 * zr2 - 3.0));
+        return eastOfPrime * ax + ninetyEast * ay + north * az;
+    }
+
+    /// <summary>
+    /// Body-fixed equatorial basis: prime meridian, 90° east, and spin axis (north).
+    /// Same construction as <see cref="GetSurfacePosition"/> so gravity latitude and
+    /// geodetic latitude cannot drift apart.
+    /// </summary>
+    private void GetBodyFixedEquatorialBasis(
+        out Vector3d primeMeridian, out Vector3d ninetyEast, out Vector3d north)
+    {
+        north = RotationAxis;
+        var seed = System.Math.Abs(north.Z) < 0.9 ? new Vector3d(0, 0, 1) : new Vector3d(1, 0, 0);
+        primeMeridian = seed.Cross(north).Normalized;
+        ninetyEast = north.Cross(primeMeridian).Normalized;
     }
 
     /// <summary>
@@ -148,15 +221,87 @@ public class CelestialBody
 
     /// <summary>
     /// Geodetic latitude (degrees, +N) of <paramref name="worldPos"/>, measured from the
-    /// equatorial plane normal to <see cref="RotationAxis"/>.
+    /// equatorial plane normal to <see cref="RotationAxis"/>. On a sphere this equals
+    /// geocentric latitude; on an oblate ellipsoid it is the WGS-style geodetic latitude.
     /// </summary>
     public double GetLatitude(Vector3d worldPos)
     {
-        var relPos = worldPos - Position;
-        if (relPos.MagnitudeSquared < 1.0) return 0.0;
+        GetGeodeticCoordinates(worldPos, out double latitudeDeg, out _, out _);
+        return latitudeDeg;
+    }
 
-        double sinLat = System.Math.Clamp(relPos.Normalized.Dot(RotationAxis), -1.0, 1.0);
-        return System.Math.Asin(sinLat) * MathUtils.RAD_TO_DEG;
+    /// <summary>
+    /// Outward geodetic unit normal at <paramref name="worldPos"/> (local vertical).
+    /// On a sphere this is the geocentric radial.
+    /// </summary>
+    public Vector3d GetGeodeticUp(Vector3d worldPos)
+    {
+        GetGeodeticCoordinates(worldPos, out double latitudeDeg, out double longitudeDeg, out _);
+        return GeodeticUp(latitudeDeg, longitudeDeg);
+    }
+
+    /// <summary>
+    /// Projects <paramref name="worldPos"/> onto the reference surface plus
+    /// <paramref name="heightAboveSurface"/> along the local geodetic vertical.
+    /// </summary>
+    public Vector3d GetSurfacePoint(Vector3d worldPos, double heightAboveSurface)
+    {
+        GetGeodeticCoordinates(worldPos, out double latitudeDeg, out double longitudeDeg, out _);
+        return GetSurfacePosition(latitudeDeg, longitudeDeg, heightAboveSurface);
+    }
+
+    /// <summary>
+    /// Geodetic (φ, λ, h) of <paramref name="worldPos"/> in the body equatorial frame.
+    /// Longitude is measured from the inertial prime meridian (seed × spin axis); it is
+    /// not Greenwich. Height is metres above the ellipsoid or mean sphere.
+    /// </summary>
+    public void GetGeodeticCoordinates(
+        Vector3d worldPos, out double latitudeDeg, out double longitudeDeg, out double heightM)
+    {
+        GetBodyFixedEquatorialBasis(out var primeMeridian, out var ninetyEast, out var north);
+        var rel = worldPos - Position;
+        double x = rel.Dot(primeMeridian);
+        double y = rel.Dot(ninetyEast);
+        double z = rel.Dot(north);
+        double p = System.Math.Sqrt(x * x + y * y);
+        longitudeDeg = System.Math.Atan2(y, x) * MathUtils.RAD_TO_DEG;
+
+        if (!IsOblate)
+        {
+            double r = System.Math.Sqrt(p * p + z * z);
+            if (r < 1.0)
+            {
+                latitudeDeg = 0.0;
+                heightM = -Radius;
+                return;
+            }
+
+            latitudeDeg = System.Math.Atan2(z, p) * MathUtils.RAD_TO_DEG;
+            heightM = r - Radius;
+            return;
+        }
+
+        if (p < 1e-12 * System.Math.Max(EquatorialRadius, System.Math.Sqrt(p * p + z * z)))
+        {
+            latitudeDeg = z >= 0.0 ? 90.0 : -90.0;
+            heightM = System.Math.Abs(z) - PolarRadius;
+            return;
+        }
+
+        double a = EquatorialRadius;
+        double b = PolarRadius;
+        double e2 = 1.0 - (b * b) / (a * a);
+        double ep2 = (a * a) / (b * b) - 1.0;
+        double theta = System.Math.Atan2(z * a, p * b);
+        double sinTheta = System.Math.Sin(theta);
+        double cosTheta = System.Math.Cos(theta);
+        double lat = System.Math.Atan2(
+            z + ep2 * b * sinTheta * sinTheta * sinTheta,
+            p - e2 * a * cosTheta * cosTheta * cosTheta);
+        double sinLat = System.Math.Sin(lat);
+        double n = a / System.Math.Sqrt(1.0 - e2 * sinLat * sinLat);
+        latitudeDeg = lat * MathUtils.RAD_TO_DEG;
+        heightM = p / System.Math.Cos(lat) - n;
     }
 
     /// <summary>
@@ -164,30 +309,108 @@ public class CelestialBody
     ///
     /// The body-fixed basis is built from <see cref="RotationAxis"/>, so the co-latitude —
     /// and therefore the rotational boost a launch site inherits — is physically correct:
-    /// a site at latitude φ is carried east at ω·R·cos φ.
+    /// a site at latitude φ is carried east at ω·ρ, with ρ the distance from the spin axis
+    /// on the ellipsoid (ω·a·cos φ at the equator).
     ///
     /// Longitude is measured about the spin axis from an arbitrary but fixed prime
-    /// meridian. The simulation does not track a sidereal spin phase, so longitude only
-    /// fixes where sites sit relative to each other, not where they sit at an epoch.
+    /// meridian. The simulation does not track a Greenwich sidereal phase at J2000, so
+    /// longitude only fixes where sites sit relative to each other, not where they sit
+    /// against the stars at an epoch. <see cref="GetSurfacePositionAtTime"/> still
+    /// advances that meridian at the sidereal angular speed.
     /// </summary>
     /// <param name="latitudeDeg">Geodetic latitude, +N (degrees).</param>
     /// <param name="longitudeDeg">Longitude, +E (degrees).</param>
-    /// <param name="altitudeM">Height above mean radius (m).</param>
+    /// <param name="altitudeM">Height above the reference ellipsoid or mean sphere (m).</param>
     public Vector3d GetSurfacePosition(double latitudeDeg, double longitudeDeg, double altitudeM = 0.0)
     {
         double lat = latitudeDeg  * MathUtils.DEG_TO_RAD;
         double lon = longitudeDeg * MathUtils.DEG_TO_RAD;
-
-        // Orthonormal body-fixed basis: axis (north) + two equatorial vectors.
-        var north = RotationAxis;
-        var seed  = System.Math.Abs(north.Z) < 0.9 ? new Vector3d(0, 0, 1) : new Vector3d(1, 0, 0);
-        var primeMeridian = seed.Cross(north).Normalized;      // in the equatorial plane
-        var ninetyEast    = north.Cross(primeMeridian).Normalized;
-
+        GetBodyFixedEquatorialBasis(out var primeMeridian, out var ninetyEast, out var north);
         var equatorial = primeMeridian * System.Math.Cos(lon) + ninetyEast * System.Math.Sin(lon);
-        var up         = equatorial * System.Math.Cos(lat) + north * System.Math.Sin(lat);
 
-        return Position + up.Normalized * (Radius + altitudeM);
+        if (!IsOblate)
+        {
+            var up = equatorial * System.Math.Cos(lat) + north * System.Math.Sin(lat);
+            return Position + up.Normalized * (Radius + altitudeM);
+        }
+
+        double sinLat = System.Math.Sin(lat);
+        double cosLat = System.Math.Cos(lat);
+        double a = EquatorialRadius;
+        double e2 = 1.0 - (PolarRadius * PolarRadius) / (a * a);
+        double n = a / System.Math.Sqrt(1.0 - e2 * sinLat * sinLat);
+        double rho = (n + altitudeM) * cosLat;
+        double z = (n * (1.0 - e2) + altitudeM) * sinLat;
+        return Position + equatorial * rho + north * z;
+    }
+
+    /// <summary>
+    /// Point at geodetic height <paramref name="heightAboveSurface"/> along
+    /// <paramref name="inertialDirectionFromCentre"/>. Tests and probes that used
+    /// <c>centre + R̂·(R + h)</c> on a sphere should call this so they are not buried
+    /// inside an oblate Earth.
+    ///
+    /// The seed sits on the ellipsoid along the geocentric ray, not at the equatorial
+    /// radius. Geodetic latitude is not constant along a ray from the centre; seeding
+    /// at <see cref="MaximumRadius"/> would walk a mid-latitude pad tens of metres
+    /// equatorward on every hold snap.
+    /// </summary>
+    public Vector3d GetPositionAlongDirection(
+        Vector3d inertialDirectionFromCentre, double heightAboveSurface)
+    {
+        var dir = inertialDirectionFromCentre.MagnitudeSquared > 1e-24
+            ? inertialDirectionFromCentre.Normalized
+            : Vector3d.Up;
+        double radius = GeocentricRadiusOfEllipsoid(dir);
+        var guess = Position + dir * radius;
+        return GetSurfacePoint(guess, heightAboveSurface);
+    }
+
+    /// <summary>
+    /// Radial distance (m) from the body centre to the reference ellipsoid along
+    /// <paramref name="inertialDirectionFromCentre"/>. Equals <see cref="Radius"/>
+    /// on a sphere.
+    /// </summary>
+    public double GeocentricRadiusOfEllipsoid(Vector3d inertialDirectionFromCentre)
+    {
+        if (!IsOblate) return Radius;
+        var dir = inertialDirectionFromCentre.MagnitudeSquared > 1e-24
+            ? inertialDirectionFromCentre.Normalized
+            : Vector3d.Up;
+        GetBodyFixedEquatorialBasis(out _, out _, out var north);
+        double sinLatc = System.Math.Clamp(dir.Dot(north), -1.0, 1.0);
+        double cosLatcSq = System.Math.Max(0.0, 1.0 - sinLatc * sinLatc);
+        double a = EquatorialRadius;
+        double b = PolarRadius;
+        return (a * b) / System.Math.Sqrt(b * b * cosLatcSq + a * a * sinLatc * sinLatc);
+    }
+
+    /// <summary>
+    /// Surface point at <paramref name="heightAboveSurface"/> whose geodetic up is
+    /// <paramref name="geodeticUp"/>. The geodetic normal does not pass through the
+    /// centre, so this must not be implemented as centre + R·n̂.
+    /// </summary>
+    public Vector3d GetSurfacePositionFromGeodeticUp(Vector3d geodeticUp, double heightAboveSurface)
+    {
+        var n = geodeticUp.MagnitudeSquared > 1e-24 ? geodeticUp.Normalized : Vector3d.Up;
+        GetBodyFixedEquatorialBasis(out var primeMeridian, out var ninetyEast, out var north);
+        double sinLat = System.Math.Clamp(n.Dot(north), -1.0, 1.0);
+        double latitudeDeg = System.Math.Asin(sinLat) * MathUtils.RAD_TO_DEG;
+        var equatorial = n - north * sinLat;
+        double longitudeDeg = equatorial.MagnitudeSquared < 1e-24
+            ? 0.0
+            : System.Math.Atan2(equatorial.Dot(ninetyEast), equatorial.Dot(primeMeridian))
+                * MathUtils.RAD_TO_DEG;
+        return GetSurfacePosition(latitudeDeg, longitudeDeg, heightAboveSurface);
+    }
+
+    private Vector3d GeodeticUp(double latitudeDeg, double longitudeDeg)
+    {
+        double lat = latitudeDeg * MathUtils.DEG_TO_RAD;
+        double lon = longitudeDeg * MathUtils.DEG_TO_RAD;
+        GetBodyFixedEquatorialBasis(out var primeMeridian, out var ninetyEast, out var north);
+        var equatorial = primeMeridian * System.Math.Cos(lon) + ninetyEast * System.Math.Sin(lon);
+        return (equatorial * System.Math.Cos(lat) + north * System.Math.Sin(lat)).Normalized;
     }
 
     /// <summary>
@@ -250,9 +473,31 @@ public class CelestialBody
             };
         }
 
+        double j2 = 0.0;
+        if (root.TryGetProperty("j2", out var j2El) && j2El.ValueKind != System.Text.Json.JsonValueKind.Null)
+            j2 = j2El.GetDouble();
+        if (!double.IsFinite(j2) || j2 < 0.0)
+            throw new InvalidDataException($"Body '{root.GetProperty("id").GetString()}' has invalid j2.");
+
+        double equatorialRadius = 0.0;
+        if (root.TryGetProperty("equatorial_radius", out var eqEl)
+            && eqEl.ValueKind != System.Text.Json.JsonValueKind.Null)
+            equatorialRadius = eqEl.GetDouble();
+        double polarRadius = 0.0;
+        if (root.TryGetProperty("polar_radius", out var polEl)
+            && polEl.ValueKind != System.Text.Json.JsonValueKind.Null)
+            polarRadius = polEl.GetDouble();
+        string bodyId = root.GetProperty("id").GetString() ?? "";
+        if (j2 > 0.0 && !(equatorialRadius > 0.0 && double.IsFinite(equatorialRadius)))
+            throw new InvalidDataException(
+                $"Body '{bodyId}' sets j2 but is missing a positive equatorial_radius.");
+        if (j2 > 0.0 && !(polarRadius > 0.0 && polarRadius < equatorialRadius && double.IsFinite(polarRadius)))
+            throw new InvalidDataException(
+                $"Body '{bodyId}' sets j2 but is missing a polar_radius smaller than equatorial_radius.");
+
         return new CelestialBody
         {
-            Id                = root.GetProperty("id").GetString()   ?? "",
+            Id                = bodyId,
             Name              = root.GetProperty("name").GetString() ?? "",
             Mass              = root.GetProperty("mass").GetDouble(),
             Radius            = root.GetProperty("radius").GetDouble(),
@@ -260,10 +505,36 @@ public class CelestialBody
             SphereOfInfluence = root.GetProperty("soi").GetDouble(),
             RotationalPeriod  = root.GetProperty("rotational_period").GetDouble(),
             AxialTilt         = root.GetProperty("axial_tilt").GetDouble(),
+            J2                = j2,
+            EquatorialRadius  = equatorialRadius,
+            PolarRadius       = polarRadius,
             Atmosphere        = atmo,
             OrbitalElements   = orbEl,
         };
     }
+
+    /// <summary>
+    /// Copy with J2 and ellipsoid radii cleared. Scheduler tests that prove Kepler ≡ RK4
+    /// need a spherical point-mass Earth so oblateness cannot masquerade as a warp bug.
+    /// </summary>
+    public CelestialBody WithoutOblateness() => new()
+    {
+        Id = Id,
+        Name = Name,
+        Mass = Mass,
+        Radius = Radius,
+        GM = GM,
+        SphereOfInfluence = SphereOfInfluence,
+        RotationalPeriod = RotationalPeriod,
+        AxialTilt = AxialTilt,
+        J2 = 0.0,
+        EquatorialRadius = 0.0,
+        PolarRadius = 0.0,
+        Atmosphere = Atmosphere,
+        OrbitalElements = OrbitalElements,
+        Position = Position,
+        Velocity = Velocity,
+    };
 
     /// <summary>
     /// Loads all <c>*.json</c> files in <paramref name="dirPath"/> as celestial bodies,

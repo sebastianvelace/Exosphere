@@ -155,8 +155,10 @@ public sealed class FlightHudPresenter
                 body.GM,
                 body.Id,
                 universe.CurrentTime);
-            apoapsis = elements.Apoapsis - body.Radius;
-            periapsis = elements.Periapsis - body.Radius;
+            periapsis = GeodeticAltitudeAtTrueAnomaly(body, elements, 0.0);
+            if (!elements.IsHyperbolic && !elements.IsRadial
+                && double.IsFinite(elements.Apoapsis))
+                apoapsis = GeodeticAltitudeAtTrueAnomaly(body, elements, System.Math.PI);
             if (!elements.IsRadial && !elements.IsHyperbolic)
             {
                 timeToPeriapsis = MissionPhaseTrack.ApproximateTimeToPeriapsisSec(
@@ -478,6 +480,29 @@ public sealed class FlightHudPresenter
             System.Math.Atan2(horizontal.Dot(east), horizontal.Dot(north))
             * 180.0 / System.Math.PI + 360.0) % 360.0;
         return (flightPath, heading);
+    }
+
+    /// <summary>
+    /// Height of the osculating apside above the reference ellipsoid (or mean sphere).
+    /// <c>r_a − R_mean</c> on WGS84 is several kilometres too high at the equator.
+    /// </summary>
+    private static double GeodeticAltitudeAtTrueAnomaly(
+        CelestialBody body,
+        OrbitalElements elements,
+        double trueAnomalyRad)
+    {
+        if (elements.IsRadial)
+            return body.GetAltitude(body.Position);
+
+        var (relative, _) = MathUtils.OrbitalToInertialStateVector(
+            elements.SemiMajorAxis,
+            elements.Eccentricity,
+            trueAnomalyRad,
+            elements.Inclination,
+            elements.LongitudeOfAscendingNode,
+            elements.ArgumentOfPeriapsis,
+            body.GM);
+        return body.GetAltitude(body.Position + relative);
     }
 
     private static double ResolveVehiclePitch(Vessel vessel, Vector3d up)

@@ -6,7 +6,7 @@ using System.Text.Json;
 using Exosphere.Simulation.Math;
 
 /// <summary>
-/// Right-handed local render frame for a surface site. Local +X is east, +Y is radial up,
+/// Right-handed local render frame for a surface site. Local +X is east, +Y is geodetic up,
 /// and +Z is south (therefore local -Z is geographic north, matching Godot's -Z forward).
 /// </summary>
 public readonly record struct LaunchSiteFrame(Vector3d East, Vector3d Up, Vector3d South)
@@ -20,7 +20,8 @@ public readonly record struct LaunchSiteFrame(Vector3d East, Vector3d Up, Vector
 ///
 /// Latitude is the physically load-bearing field: it fixes the site's co-latitude from
 /// the body's spin axis, and therefore the eastward velocity the pad hands a vehicle for
-/// free (ω·R·cos φ). Kennedy at 28.6° N inherits ≈408 m/s; a polar pad inherits nothing.
+/// free (ω·ρ, with ρ the distance from the spin axis). Kennedy at 28.6° N inherits ≈408 m/s;
+/// a polar pad inherits nothing.
 /// </summary>
 public class LaunchSite
 {
@@ -39,7 +40,7 @@ public class LaunchSite
     /// <summary>Longitude, +E (degrees).</summary>
     public double Longitude { get; init; }
 
-    /// <summary>Pad height above mean radius (m).</summary>
+    /// <summary>Pad height above the reference ellipsoid or mean sphere (m).</summary>
     public double Altitude  { get; init; }
 
     /// <summary>Launch azimuth (degrees clockwise from north). 90 ⇒ due east.</summary>
@@ -52,9 +53,9 @@ public class LaunchSite
     public Vector3d GetPosition(CelestialBody body, double simulationTime) =>
         body.GetSurfacePositionAtTime(Latitude, Longitude, simulationTime, Altitude);
 
-    /// <summary>Local vertical (radial up) at the pad.</summary>
+    /// <summary>Local vertical (geodetic up) at the pad.</summary>
     public Vector3d GetUpDirection(CelestialBody body) =>
-        (GetPosition(body) - body.Position).Normalized;
+        body.GetGeodeticUp(GetPosition(body));
 
     /// <summary>Orthonormal ENU-derived frame used by launch geometry and cameras.</summary>
     public LaunchSiteFrame GetLocalFrame(CelestialBody body)
@@ -65,13 +66,19 @@ public class LaunchSite
 
     private static LaunchSiteFrame BuildLocalFrame(CelestialBody body, Vector3d position)
     {
-        Vector3d up = (position - body.Position).Normalized;
+        Vector3d up = body.GetGeodeticUp(position);
         Vector3d east = body.GetEastDirection(position);
         if (east.MagnitudeSquared < 1e-12)
         {
             Vector3d reference = System.Math.Abs(up.X) < 0.9
                 ? Vector3d.Right : Vector3d.Forward;
             east = reference.Cross(up).Normalized;
+        }
+        else
+        {
+            // Re-orthonormalize against geodetic up so the pad frame matches WGS-style
+            // local vertical instead of the geocentric radial.
+            east = up.Cross(east).Cross(up).Normalized;
         }
         return new LaunchSiteFrame(east, up, east.Cross(up).Normalized);
     }
@@ -85,7 +92,7 @@ public class LaunchSite
 
     /// <summary>
     /// Speed of the eastward boost alone (m/s), excluding the body's orbital motion.
-    /// This is ω·R·cos(latitude).
+    /// This is ω·ρ, with ρ the cylindrical distance from the spin axis.
     /// </summary>
     public double GetRotationalBoost(CelestialBody body) =>
         body.GetSurfaceVelocity(GetPosition(body)).Magnitude;
