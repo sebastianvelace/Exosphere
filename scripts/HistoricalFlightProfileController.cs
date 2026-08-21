@@ -367,16 +367,15 @@ public partial class HistoricalFlightProfileController : Node
             return;
         }
         double altitude = vessel.GetAltitude(earth);
-        Vector3d up = (vessel.Position - earth.Position).Normalized;
+        Vector3d up = earth.GetGeodeticUp(vessel.Position);
         Vector3d downrange = bridge.GetLaunchHeadingDirection();
 
         if (!_meco)
         {
             double elevation = MercuryRedstoneFlightProfile
                 .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-            Vector3d target = (
-                downrange * System.Math.Cos(elevation)
-                + up * System.Math.Sin(elevation)).Normalized;
+            Vector3d target = AttitudeGuidance.AimFromElevation(
+                up, downrange, elevation);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation,
                 Vector3d.Up,
@@ -502,7 +501,7 @@ public partial class HistoricalFlightProfileController : Node
         if (moon == null) return;
 
         CelestialBody dominant = universe.GetDominantBody(vessel.Position);
-        Vector3d earthUp = (vessel.Position - earth.Position).Normalized;
+        Vector3d earthUp = earth.GetGeodeticUp(vessel.Position);
         Vector3d downrange = bridge.GetLaunchHeadingDirection();
 
         if (!_apolloSicSeparated)
@@ -867,9 +866,8 @@ public partial class HistoricalFlightProfileController : Node
     {
         double elevation = Apollo8FlightProfile
             .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-        Vector3d desired = (
-            downrange * System.Math.Cos(elevation)
-            + up * System.Math.Sin(elevation)).Normalized;
+        Vector3d desired = AttitudeGuidance.AimFromElevation(
+            up, downrange, elevation);
         vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
             vessel.Orientation,
             Vector3d.Up,
@@ -1056,16 +1054,15 @@ public partial class HistoricalFlightProfileController : Node
     {
         Vessel? target = bridge.EnsureGemini8AgenaTarget();
         double altitude = vessel.GetAltitude(earth);
-        Vector3d up = (vessel.Position - earth.Position).Normalized;
+        Vector3d up = earth.GetGeodeticUp(vessel.Position);
         Vector3d downrange = bridge.GetLaunchHeadingDirection();
 
         if (!_geminiStageOneSeparated)
         {
             double elevation = Gemini8FlightProfile
                 .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-            Vector3d desired = (
-                downrange * System.Math.Cos(elevation)
-                + up * System.Math.Sin(elevation)).Normalized;
+            Vector3d desired = AttitudeGuidance.AimFromElevation(
+                up, downrange, elevation);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation,
                 Vector3d.Up,
@@ -1091,9 +1088,8 @@ public partial class HistoricalFlightProfileController : Node
         {
             double elevation = Gemini8FlightProfile
                 .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-            Vector3d desired = (
-                downrange * System.Math.Cos(elevation)
-                + up * System.Math.Sin(elevation)).Normalized;
+            Vector3d desired = AttitudeGuidance.AimFromElevation(
+                up, downrange, elevation);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation,
                 Vector3d.Up,
@@ -1577,16 +1573,15 @@ public partial class HistoricalFlightProfileController : Node
         double elapsed)
     {
         double altitude = vessel.GetAltitude(earth);
-        Vector3d up = (vessel.Position - earth.Position).Normalized;
+        Vector3d up = earth.GetGeodeticUp(vessel.Position);
         Vector3d downrange = bridge.GetLaunchHeadingDirection();
 
         if (!_meco)
         {
             double elevation = MercuryAtlasFlightProfile
                 .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-            Vector3d target = (
-                downrange * System.Math.Cos(elevation)
-                + up * System.Math.Sin(elevation)).Normalized;
+            Vector3d target = AttitudeGuidance.AimFromElevation(
+                up, downrange, elevation);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation,
                 Vector3d.Up,

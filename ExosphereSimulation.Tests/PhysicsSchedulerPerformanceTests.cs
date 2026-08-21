@@ -1291,8 +1291,12 @@ public sealed class PhysicsSchedulerPerformanceTests
         return vessel;
     }
 
-    private static CelestialBody LoadBody(string id) =>
-        CelestialBody.LoadFromJson(Path.Combine(FindRepoRoot().FullName, "data", "bodies", $"{id}.json"));
+    private static CelestialBody LoadBody(string id)
+    {
+        var body = CelestialBody.LoadFromJson(
+            Path.Combine(FindRepoRoot().FullName, "data", "bodies", $"{id}.json"));
+        return id == "earth" ? body.WithoutOblateness() : body;
+    }
 
     private static DirectoryInfo FindRepoRoot()
     {

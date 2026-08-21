@@ -136,4 +136,27 @@ public sealed class AttitudeGuidanceTests
         Assert.True(angularVelocity.Magnitude < 0.04,
             $"exact retrograde axis must settle: rate={angularVelocity.Magnitude:F6}");
     }
+
+    [Fact]
+    public void AimFromElevationMatchesTheGeodeticHorizonEvenIfDownrangeLeansRadial()
+    {
+        var up = new Vector3d(0.12, 0.99, 0.02).Normalized;
+        var downrange = (Vector3d.Right + up * 0.4).Normalized;
+        var aim = AttitudeGuidance.AimFromElevation(up, downrange, 0.0);
+        Assert.InRange(aim.Dot(up), -1e-12, 1e-12);
+        var horizon = (downrange - up * downrange.Dot(up)).Normalized;
+        Assert.True(aim.Dot(horizon) > 0.999);
+    }
+
+    [Fact]
+    public void AimFromElevationStaysInTheUpDownrangePlane()
+    {
+        var up = new Vector3d(0.08, 0.995, 0.04).Normalized;
+        var downrange = new Vector3d(0.9, 0.1, 0.3);
+        double elevation = 35.0 * MathUtils.DEG_TO_RAD;
+        var aim = AttitudeGuidance.AimFromElevation(up, downrange, elevation);
+        Assert.Equal(System.Math.Sin(elevation), aim.Dot(up), 8);
+        var horizon = (downrange - up * downrange.Dot(up)).Normalized;
+        Assert.InRange(aim.Dot(up.Cross(horizon)), -1e-12, 1e-12);
+    }
 }

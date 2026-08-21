@@ -14,10 +14,9 @@ public sealed class FlightHudPresenterTests
     public void Capture_ProducesOrbitalSnapshotWithoutUiPhysics()
     {
         var (universe, body, vessel, _) = CreateVehicle();
-        double radius = body.Radius + 200_000.0;
-        vessel.Position = body.Position + Vector3d.Right * radius;
+        vessel.Position = body.GetPositionAlongDirection(Vector3d.Right, 200_000.0);
         vessel.Velocity = body.Velocity
-            + new Vector3d(0.0, 0.0, System.Math.Sqrt(body.GM / radius));
+            + new Vector3d(0.0, 0.0, System.Math.Sqrt(body.GM / (vessel.Position - body.Position).Magnitude));
 
         var snapshot = new FlightHudPresenter().Capture(
             universe,
@@ -43,6 +42,22 @@ public sealed class FlightHudPresenterTests
             expectedElements.GetMeanAnomaly(universe.CurrentTime, body.GM),
             body.GM);
         Assert.Equal(expectedTimeToPeriapsis, snapshot.TimeToPeriapsisS, 10);
+        var (periapsisRel, _) = MathUtils.OrbitalToInertialStateVector(
+            expectedElements.SemiMajorAxis,
+            expectedElements.Eccentricity,
+            0.0,
+            expectedElements.Inclination,
+            expectedElements.LongitudeOfAscendingNode,
+            expectedElements.ArgumentOfPeriapsis,
+            body.GM);
+        Assert.Equal(
+            body.GetAltitude(body.Position + periapsisRel),
+            snapshot.PeriapsisAltitudeM!.Value,
+            3);
+        double meanSpherePeriapsis = expectedElements.Periapsis - body.Radius;
+        Assert.True(
+            System.Math.Abs(snapshot.PeriapsisAltitudeM.Value - meanSpherePeriapsis) > 1_000.0,
+            "HUD periapsis must be geodetic height, not r − R_mean");
         Assert.False(snapshot.IsImpactTrajectory);
         Assert.Equal(FlightNavigationMode.Orb, snapshot.NavigationMode);
         Assert.All(
@@ -111,7 +126,7 @@ public sealed class FlightHudPresenterTests
         var engine = new Part(catalog["merlin1d_cluster9_block5"], "alert-octaweb");
         var vessel = new Vessel("alert-vessel")
         {
-            Position = body.Position + Vector3d.Right * (body.Radius + 1_000.0),
+            Position = body.GetPositionAlongDirection(Vector3d.Right, 1_000.0),
             ReferenceBodyId = body.Id,
         };
         vessel.Parts.SetRoot(engine);
@@ -148,7 +163,7 @@ public sealed class FlightHudPresenterTests
             engine.AdvanceEngineRuntime(1.0, 0.02);
         var vessel = new Vessel("hud-cluster-vessel")
         {
-            Position = body.Position + Vector3d.Right * (body.Radius + 1_000.0),
+            Position = body.GetPositionAlongDirection(Vector3d.Right, 1_000.0),
             ReferenceBodyId = body.Id,
         };
         vessel.Parts.SetRoot(engine);
@@ -181,7 +196,7 @@ public sealed class FlightHudPresenterTests
         {
             Name = "HUD Test Vehicle",
             ReferenceBodyId = body.Id,
-            Position = body.Position + Vector3d.Right * (body.Radius + 100.0),
+            Position = body.GetPositionAlongDirection(Vector3d.Right, 100.0),
             Velocity = body.Velocity,
         };
         vessel.Parts.SetRoot(tank);

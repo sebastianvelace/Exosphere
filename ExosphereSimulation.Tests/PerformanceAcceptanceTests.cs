@@ -185,7 +185,9 @@ public sealed class PerformanceAcceptanceTests
         var vessel = CreateProbe(earth, 100_000.0, 0.0, 3_000.0);
         vessel.Parts.Parts[0].Definition.HeatTolerance = 10_000.0;
         var initialAltitude = vessel.GetAltitude(earth);
-        var initialVelocity = vessel.Velocity;
+        var initialRadius = (vessel.Position - earth.Position).Magnitude;
+        var initialRadialSpeed = (vessel.Velocity - earth.Velocity)
+            .Dot((vessel.Position - earth.Position).Normalized);
         var universe = new Universe { ActiveVessel = vessel, TimeScale = 1.0 };
         universe.AddBody(earth);
         universe.AddVessel(vessel);
@@ -198,9 +200,13 @@ public sealed class PerformanceAcceptanceTests
         }
 
         Assert.True(universe.CurrentTime > 0.0);
-        Assert.True(vessel.GetAltitude(earth) < initialAltitude,
+        Assert.True(
+            vessel.GetAltitude(earth) < initialAltitude
+            || (vessel.Position - earth.Position).Magnitude < initialRadius,
             "the entry probe did not descend under gravity");
-        Assert.True(vessel.Velocity.X < initialVelocity.X,
+        double radialSpeed = (vessel.Velocity - earth.Velocity)
+            .Dot((vessel.Position - earth.Position).Normalized);
+        Assert.True(radialSpeed < initialRadialSpeed,
             "the entry probe did not acquire downward acceleration");
         Assert.All(vessel.Parts.Parts, part =>
         {
@@ -271,8 +277,13 @@ public sealed class PerformanceAcceptanceTests
             DiameterM = 9.0,
             HeatTolerance = 10_000.0,
         }));
-        vessel.Position = body.Position + Vector3d.Right * (body.Radius + altitude);
-        vessel.Velocity = body.Velocity + new Vector3d(velocityX, velocityY, 0.0);
+        var pos = body.GetSurfacePosition(0.0, 0.0, altitude);
+        var up = body.GetGeodeticUp(pos);
+        var east = body.GetEastDirection(pos);
+        if (east.MagnitudeSquared < 1e-12)
+            east = Vector3d.Forward;
+        vessel.Position = pos;
+        vessel.Velocity = body.Velocity + east.Normalized * velocityY + up * velocityX;
         vessel.SASEnabled = false;
         return vessel;
     }

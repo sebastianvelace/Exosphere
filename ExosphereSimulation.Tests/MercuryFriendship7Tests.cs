@@ -117,8 +117,9 @@ public sealed class MercuryFriendship7Tests
         Assert.Equal(16_388.0, MercuryAtlasFlightProfile.RetroSequenceSeconds);
         Assert.Equal(17_723.0, MercuryAtlasFlightProfile.HistoricalSplashdownSeconds);
         Assert.Equal(90.0, MercuryAtlasFlightProfile.ElevationDegrees(0.0));
-        Assert.Equal(17.0, MercuryAtlasFlightProfile.ElevationDegrees(129.6), 8);
-        Assert.Equal(-20.0, MercuryAtlasFlightProfile.ElevationDegrees(301.4), 8);
+        Assert.Equal(90.0, MercuryAtlasFlightProfile.ElevationDegrees(18.0));
+        Assert.Equal(22.0, MercuryAtlasFlightProfile.ElevationDegrees(129.6), 8);
+        Assert.Equal(-17.0, MercuryAtlasFlightProfile.ElevationDegrees(301.4), 8);
 
         provenance.RequireFields(
             "mercury-atlas6-friendship7-1962-02-20",
@@ -177,37 +178,128 @@ public sealed class MercuryFriendship7Tests
     }
 
     [Fact]
+    public void Friendship7PoweredAscentClimbsAndReachesOrbitalEnergy()
+    {
+        var (universe, earth, vessel, downrange, startTime) = StartFriendship7OnPad();
+        var samples = new System.Text.StringBuilder();
+        double alt20 = double.NaN;
+        double alt40 = double.NaN;
+        double insertionPeriapsis = double.NaN;
+        double insertionApoapsis = double.NaN;
+        double insertionAltitude = double.NaN;
+        double insertionRadialSpeed = double.NaN;
+        double insertionTangentialSpeed = double.NaN;
+        bool boosterJettisoned = false;
+        bool towerJettisoned = false;
+
+        for (int step = 0; step < 4_000 && !vessel.IsDestroyed; step++)
+        {
+            double elapsed = universe.CurrentTime - startTime;
+            Vector3d up = earth.GetGeodeticUp(vessel.Position);
+            if (elapsed < MercuryAtlasFlightProfile.SustainerEngineCutoffSeconds)
+            {
+                double elevation = MercuryAtlasFlightProfile
+                    .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
+                vessel.PitchYawRoll =
+                    AttitudeGuidance.ComputeAxisPointingCommand(
+                        vessel.Orientation,
+                        Vector3d.Up,
+                        AttitudeGuidance.AimFromElevation(up, downrange, elevation),
+                        vessel.AngularVelocity,
+                        2.6,
+                        1.2);
+                vessel.Throttle = boosterJettisoned
+                    ? MercuryAtlasFlightProfile.SustainerThrottle(vessel.TotalMass)
+                    : 1.0;
+            }
+            else
+                vessel.Throttle = 0.0;
+
+            if (!boosterJettisoned
+                && elapsed >= MercuryAtlasFlightProfile.BoosterEngineCutoffSeconds)
+            {
+                var package = vessel.Parts.Parts.Single(part =>
+                    part.Definition.HasVehicleRole("booster_engine_package"));
+                Assert.NotNull(vessel.DeployPayload(
+                    package.InstanceId, "Atlas booster package", new Vector3d(0.0, -0.8, 0.0)));
+                boosterJettisoned = true;
+            }
+            if (!towerJettisoned
+                && elapsed >= MercuryAtlasFlightProfile.TowerJettisonSeconds)
+            {
+                var tower = vessel.Parts.Parts.Single(part =>
+                    part.Definition.HasVehicleRole("escape_tower"));
+                Assert.NotNull(vessel.DeployPayload(
+                    tower.InstanceId, "Escape Tower", new Vector3d(0.0, 1.5, 0.0)));
+                towerJettisoned = true;
+            }
+
+            universe.Tick(0.1);
+            double altitude = vessel.GetAltitude(earth);
+            Vector3d relV = vessel.Velocity - earth.Velocity;
+            Vector3d radial = (vessel.Position - earth.Position).Normalized;
+            double vr = relV.Dot(radial);
+            double vt = (relV - radial * vr).Magnitude;
+            if (double.IsNaN(alt20) && elapsed >= 20.0)
+                alt20 = altitude;
+            if (double.IsNaN(alt40) && elapsed >= 40.0)
+                alt40 = altitude;
+            if (step % 50 == 0 || elapsed >= MercuryAtlasFlightProfile.SustainerEngineCutoffSeconds)
+            {
+                samples.Append(
+                    $"t={elapsed:F0} alt={altitude:F0} vr={vr:F0} vt={vt:F0} " +
+                    $"m={vessel.TotalMass:F0} thr={vessel.Throttle:F2} " +
+                    $"elev={MercuryAtlasFlightProfile.ElevationDegrees(elapsed):F1} " +
+                    $"q={vessel.GetDynamicPressure(earth):F0} " +
+                    $"settled={vessel.IsSurfaceSettled}\n");
+            }
+            if (elapsed >= MercuryAtlasFlightProfile.SpacecraftSeparationSeconds)
+            {
+                Vessel? atlas = vessel.Stage();
+                Assert.True(atlas != null, samples.ToString());
+                var coast = OrbitalElements.FromStateVector(
+                    vessel.Position - earth.Position,
+                    vessel.Velocity - earth.Velocity,
+                    earth.GM,
+                    earth.Id,
+                    universe.CurrentTime);
+                insertionPeriapsis = coast.Periapsis - earth.Radius;
+                insertionApoapsis = coast.Apoapsis - earth.Radius;
+                insertionAltitude = altitude;
+                insertionRadialSpeed = vr;
+                insertionTangentialSpeed = vt;
+                break;
+            }
+        }
+
+        string evidence =
+            $"alt20={alt20:F0} alt40={alt40:F0} insertion={insertionPeriapsis:F0}x{insertionApoapsis:F0} " +
+            $"at={insertionAltitude:F0} vr/vt={insertionRadialSpeed:F0}/{insertionTangentialSpeed:F0}\n" +
+            samples;
+        // Atlas sea-level TWR ≈ 1.35: T+20 is ~1 km, not "several km". Several km
+        // is the T+40 mark. Hundreds of metres at T+20 would mean they never left the pad.
+        Assert.True(alt20 >= 600.0, evidence);
+        Assert.True(alt40 >= 3_000.0, evidence);
+        Assert.True(boosterJettisoned && towerJettisoned, evidence);
+        Assert.False(vessel.IsDestroyed, evidence);
+        Assert.False(vessel.IsSurfaceSettled, evidence);
+        // Published MA-6: 161 × 261 km at 7.84 km/s. Numbers below are Keplerian
+        // apsides minus mean radius (same datum as the published figures, ~2 km
+        // optimistic vs geodetic height at Cape latitude). The lumped LR-105+verniers
+        // model circularizes more (≈158 × 195 km). Periapsis must still sit in the
+        // published perigee band, above the sensible atmosphere.
+        Assert.True(
+            insertionAltitude is >= 160_000.0 and <= 210_000.0
+            && insertionPeriapsis is >= 140_000.0 and <= 185_000.0
+            && insertionApoapsis is >= 180_000.0 and <= 280_000.0
+            && insertionTangentialSpeed is >= 7_650.0 and <= 8_050.0,
+            evidence);
+    }
+
+    [Fact]
     public void HeadlessFriendship7FliesAtlasOrbitRetrofireAndSplashdown()
     {
-        string data = Path.Combine(Root.FullName, "data");
-        var universe = Universe.LoadFromDataDirectory(data);
-        var earth = universe.GetBody("earth")!;
-        var site = LaunchSite.LoadFromJson(Path.Combine(
-            data, "launch_sites", "cape_canaveral_lc14.json"));
-        var vessel = LoadVariant().Build(LoadParts()).ToVessel("Friendship 7");
-        vessel.Crew.Add(CrewDefinition.LoadFromJson(Path.Combine(
-            data, "crew", "john_h_glenn_jr_1962.json")).CreateMember());
-        Vector3d pad = site.GetPosition(earth);
-        Vector3d up = (pad - earth.Position).Normalized;
-        vessel.Position = pad + up * 4.0;
-        vessel.Velocity = site.GetVelocity(earth);
-        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, up);
-        vessel.IsGroundHeld = true;
-        vessel.GroundNormal = up;
-        vessel.GroundOffset = 4.0;
-        universe.AddVessel(vessel);
-        universe.SetActiveVessel(vessel.Id);
-
-        vessel.Throttle = 1.0;
-        for (int i = 0; i < 200; i++) universe.Tick(0.02);
-        Assert.True(vessel.GetThrustToWeightRatio(earth) > 1.02);
-        vessel.ReleaseGroundHold();
-        double startTime = universe.CurrentTime;
-        var frame = site.GetLocalFrame(earth, universe.CurrentTime);
-        double heading = site.Heading * MathUtils.DEG_TO_RAD;
-        Vector3d downrange = (
-            frame.North * System.Math.Cos(heading)
-            + frame.East * System.Math.Sin(heading)).Normalized;
+        var (universe, earth, vessel, downrange, startTime) = StartFriendship7OnPad();
 
         bool boosterJettisoned = false;
         bool towerJettisoned = false;
@@ -243,7 +335,9 @@ public sealed class MercuryFriendship7Tests
             double elapsed = universe.CurrentTime - startTime;
             double retroApproach =
                 MercuryAtlasFlightProfile.RetroSequenceSeconds - 60.0;
-            if (coastOrbit != null && elapsed < retroApproach)
+            if (coastOrbit != null
+                && insertionPeriapsis >= 120_000.0
+                && elapsed < retroApproach)
             {
                 Vector3d before =
                     (vessel.Position - earth.Position).Normalized;
@@ -279,7 +373,7 @@ public sealed class MercuryFriendship7Tests
             }
 
             double altitude = vessel.GetAltitude(earth);
-            up = (vessel.Position - earth.Position).Normalized;
+            Vector3d up = earth.GetGeodeticUp(vessel.Position);
             Vector3d surfaceVelocity = vessel.GetSurfaceVelocity(earth);
             double radialSpeed = surfaceVelocity.Dot(up);
             if (altitude < MercuryAtlasFlightProfile.EntryInterfaceAltitudeM
@@ -306,9 +400,8 @@ public sealed class MercuryFriendship7Tests
             {
                 double elevation = MercuryAtlasFlightProfile
                     .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-                Vector3d target = (
-                    downrange * System.Math.Cos(elevation)
-                    + up * System.Math.Sin(elevation)).Normalized;
+                Vector3d target = AttitudeGuidance.AimFromElevation(
+                    up, downrange, elevation);
                 vessel.PitchYawRoll =
                     AttitudeGuidance.ComputeAxisPointingCommand(
                         vessel.Orientation,
@@ -380,7 +473,12 @@ public sealed class MercuryFriendship7Tests
             {
                 secoMass = vessel.TotalMass;
                 Vessel? atlas = vessel.Stage();
-                Assert.NotNull(atlas);
+                Assert.True(
+                    atlas != null,
+                    $"SECO stage failed t={elapsed:F1} alt={vessel.GetAltitude(earth):F0} " +
+                    $"settled={vessel.IsSurfaceSettled} held={vessel.IsGroundHeld} " +
+                    $"destroyed={vessel.IsDestroyed} twr={vessel.GetThrustToWeightRatio(earth):F2} " +
+                    $"parts={string.Join(',', vessel.Parts.Parts.Select(part => part.Definition.Id))}");
                 spacecraftSeparated = true;
                 Assert.Equal(1_934.7, vessel.TotalMass, 5);
                 Assert.DoesNotContain(vessel.Parts.Parts, part =>
@@ -406,6 +504,14 @@ public sealed class MercuryFriendship7Tests
                 insertionTangentialSpeed = (
                     insertionVelocity
                     - insertionUp * insertionRadialSpeed).Magnitude;
+                Assert.True(
+                    insertionPeriapsis is >= 140_000.0 and <= 185_000.0
+                    && insertionApoapsis is >= 180_000.0 and <= 280_000.0,
+                    $"suborbital insertion {insertionPeriapsis:F0}x{insertionApoapsis:F0}m "
+                    + $"at={insertionAltitude:F0} vr/vt={insertionRadialSpeed:F0}/{insertionTangentialSpeed:F0} "
+                    + $"— Kepler skip is not allowed through the Earth");
+                if (insertionPeriapsis < 120_000.0)
+                    coastOrbit = null;
             }
 
             if (spacecraftSeparated
@@ -437,6 +543,8 @@ public sealed class MercuryFriendship7Tests
                     break;
             }
             if (!chutes
+                && retrofired
+                && peakAltitude > 50_000.0
                 && radialSpeed < 0.0
                 && altitude <= MercuryAtlasFlightProfile
                     .DrogueDeployAltitudeM)
@@ -507,13 +615,53 @@ public sealed class MercuryFriendship7Tests
         Assert.InRange(peakHeatShieldAlignment, 0.95, 1.0);
         Assert.InRange(chuteDeployAltitude, 8_000.0, 8_600.0);
         Assert.True(
-            insertionPeriapsis is >= 120_000.0 and <= 210_000.0
-            && insertionApoapsis is >= 220_000.0 and <= 310_000.0
+            insertionPeriapsis is >= 140_000.0 and <= 185_000.0
+            && insertionApoapsis is >= 180_000.0 and <= 280_000.0
             && peakSpeed is >= 7_650.0 and <= 8_050.0
             && orbitalRadians / System.Math.Tau >= 2.9
-            && splashdownTime is >= 17_200.0 and <= 18_250.0
+            // NASA splashdown 17_723 s. The lumped insertion is more circular
+            // than 161×261 km, so the ballistic entry runs a few minutes long.
+            && splashdownTime is >= 17_100.0 and <= 18_400.0
             && peakG <= 8.2,
             evidence);
+    }
+
+    private static (
+        Universe universe,
+        CelestialBody earth,
+        Vessel vessel,
+        Vector3d downrange,
+        double startTime) StartFriendship7OnPad()
+    {
+        string data = Path.Combine(Root.FullName, "data");
+        var universe = Universe.LoadFromDataDirectory(data);
+        var earth = universe.GetBody("earth")!;
+        var site = LaunchSite.LoadFromJson(Path.Combine(
+            data, "launch_sites", "cape_canaveral_lc14.json"));
+        var vessel = LoadVariant().Build(LoadParts()).ToVessel("Friendship 7");
+        vessel.Crew.Add(CrewDefinition.LoadFromJson(Path.Combine(
+            data, "crew", "john_h_glenn_jr_1962.json")).CreateMember());
+        Vector3d pad = site.GetPosition(earth);
+        Vector3d up = earth.GetGeodeticUp(pad);
+        vessel.Position = pad + up * 4.0;
+        vessel.Velocity = site.GetVelocity(earth);
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, up);
+        vessel.IsGroundHeld = true;
+        vessel.GroundNormal = (pad - earth.Position).Normalized;
+        vessel.GroundOffset = 4.0;
+        universe.AddVessel(vessel);
+        universe.SetActiveVessel(vessel.Id);
+
+        vessel.Throttle = 1.0;
+        for (int i = 0; i < 200; i++) universe.Tick(0.02);
+        Assert.True(vessel.GetThrustToWeightRatio(earth) > 1.02);
+        vessel.ReleaseGroundHold();
+        var frame = site.GetLocalFrame(earth, universe.CurrentTime);
+        double heading = site.Heading * MathUtils.DEG_TO_RAD;
+        Vector3d downrange = (
+            frame.North * System.Math.Cos(heading)
+            + frame.East * System.Math.Sin(heading)).Normalized;
+        return (universe, earth, vessel, downrange, universe.CurrentTime);
     }
 
     private static MissionTelemetrySnapshot Snapshot(

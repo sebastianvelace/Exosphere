@@ -96,8 +96,7 @@ public sealed class Gemini8DataTests
         var vessel = LoadVariant("gemini8_titan2_1966.json")
             .Build(LoadParts())
             .ToVessel("Gemini VIII");
-        vessel.Position = earth.Position
-            + Vector3d.Right * (earth.Radius + 4.0);
+        vessel.Position = earth.GetPositionAlongDirection(Vector3d.Right, 4.0);
         vessel.Throttle = 1.0;
 
         for (int step = 0; step < 250; step++)

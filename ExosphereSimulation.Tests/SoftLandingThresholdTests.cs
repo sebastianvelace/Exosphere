@@ -32,8 +32,8 @@ public sealed class SoftLandingThresholdTests
         universe.AddBody(body);
         universe.AddVessel(vessel);
 
-        var up = new Vector3d(1.0, 0.0, 0.0);
-        var pos = body.Position + up * (body.Radius + 0.001);
+        var up = body.GetGeodeticUp(body.GetPositionAlongDirection(Vector3d.Right, 0.001));
+        var pos = body.GetPositionAlongDirection(Vector3d.Right, 0.001);
         var surfacePointVel = body.Velocity + body.GetSurfaceVelocity(pos);
 
         vessel.Position = pos;
@@ -50,6 +50,36 @@ public sealed class SoftLandingThresholdTests
             universe.Tick(0.1);
         Assert.InRange(body.GetAltitude(vessel.Position), 0.99, 1.01);
         Assert.InRange(vessel.GetSurfaceVelocity(body).Magnitude, 0.0, 1e-8);
+    }
+
+    [Fact]
+    public void PoweredLiftoffThroughTheEllipsoidIsNotASplashdown()
+    {
+        var earth = LoadBody("earth");
+        var pad = earth.GetSurfacePosition(28.5, -80.6, 3.0);
+        var up = earth.GetGeodeticUp(pad);
+        var vessel = new Vessel { ReferenceBodyId = earth.Id, Throttle = 1.0 };
+        vessel.Parts.SetRoot(new Part(new PartDefinition
+        {
+            Id = "capsule",
+            CategoryStr = "command",
+            MassDry = 1_000.0,
+            SplashdownCapable = true,
+            MaxSplashdownSpeedMps = 12.5,
+        }));
+        vessel.Position = earth.GetSurfacePosition(28.5, -80.6, -0.4);
+        vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(pad) + up * 8.0;
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, up);
+
+        var universe = new Universe { ActiveVessel = vessel };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+        universe.Tick(0.02);
+
+        Assert.False(vessel.IsSurfaceSettled);
+        Assert.False(vessel.IsDestroyed);
+        Assert.True(earth.GetAltitude(vessel.Position) >= 0.0);
+        Assert.True(vessel.GetSurfaceVelocity(earth).Dot(earth.GetGeodeticUp(vessel.Position)) > 0.0);
     }
 
     private static CelestialBody LoadBody(string id) =>

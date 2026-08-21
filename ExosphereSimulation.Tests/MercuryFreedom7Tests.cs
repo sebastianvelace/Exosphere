@@ -155,8 +155,8 @@ public sealed class MercuryFreedom7Tests
         var vessel = new Vessel();
         var capsule = new Part(capsuleDefinition);
         vessel.Parts.SetRoot(capsule);
-        var up = Vector3d.Right;
-        vessel.Position = earth.Position + up * (earth.Radius + 6_000.0);
+        vessel.Position = earth.GetPositionAlongDirection(Vector3d.Right, 6_000.0);
+        var up = earth.GetGeodeticUp(vessel.Position);
         vessel.Velocity = earth.Velocity
             + earth.GetSurfaceVelocity(vessel.Position)
             - up * 150.0;
@@ -166,12 +166,12 @@ public sealed class MercuryFreedom7Tests
         Assert.Equal(4.0, vessel.GetDeployedParachuteDragArea(earth), 8);
         Vector3d reefedDrag = vessel.ComputeDrag(earth);
 
-        vessel.Position = earth.Position + up * (earth.Radius + 2_000.0);
+        vessel.Position = earth.GetPositionAlongDirection(Vector3d.Right, 2_000.0);
         Assert.Equal(300.0, vessel.GetDeployedParachuteDragArea(earth), 8);
         Vector3d mainDrag = vessel.ComputeDrag(earth);
         Assert.True(mainDrag.Magnitude > reefedDrag.Magnitude * 20.0);
 
-        vessel.Position = earth.Position + up * (earth.Radius + 0.001);
+        vessel.Position = earth.GetPositionAlongDirection(Vector3d.Right, 0.001);
         vessel.Velocity = earth.Velocity
             + earth.GetSurfaceVelocity(vessel.Position)
             - up * 10.0;
@@ -196,12 +196,12 @@ public sealed class MercuryFreedom7Tests
         vessel.Crew.Add(CrewDefinition.LoadFromJson(Path.Combine(
             data, "crew", "alan_b_shepard_jr_1961.json")).CreateMember());
         Vector3d pad = site.GetPosition(earth);
-        Vector3d up = (pad - earth.Position).Normalized;
+        Vector3d up = earth.GetGeodeticUp(pad);
         vessel.Position = pad + up * 4.0;
         vessel.Velocity = site.GetVelocity(earth);
         vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, up);
         vessel.IsGroundHeld = true;
-        vessel.GroundNormal = up;
+        vessel.GroundNormal = (pad - earth.Position).Normalized;
         vessel.GroundOffset = 4.0;
         universe.AddVessel(vessel);
         universe.SetActiveVessel(vessel.Id);
@@ -231,22 +231,27 @@ public sealed class MercuryFreedom7Tests
         double peakGCosAlpha = 0.0;
         double maxDownrange = 0.0;
         double splashdownTime = double.NaN;
+        double alt20 = double.NaN;
+        double alt40 = double.NaN;
 
         for (int step = 0; step < 12_000 && !vessel.IsDestroyed; step++)
         {
             double elapsed = universe.CurrentTime - startTime;
             double altitude = vessel.GetAltitude(earth);
-            up = (vessel.Position - earth.Position).Normalized;
+            up = earth.GetGeodeticUp(vessel.Position);
             Vector3d surfaceVelocity = vessel.GetSurfaceVelocity(earth);
             double radialSpeed = surfaceVelocity.Dot(up);
+            if (double.IsNaN(alt20) && elapsed >= 20.0)
+                alt20 = altitude;
+            if (double.IsNaN(alt40) && elapsed >= 40.0)
+                alt40 = altitude;
 
             if (elapsed < MercuryRedstoneFlightProfile.MainEngineCutoffSeconds)
             {
                 double elevation = MercuryRedstoneFlightProfile
                     .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-                Vector3d target = (
-                    downrange * System.Math.Cos(elevation)
-                    + up * System.Math.Sin(elevation)).Normalized;
+                Vector3d target = AttitudeGuidance.AimFromElevation(
+                    up, downrange, elevation);
                 vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                     vessel.Orientation,
                     Vector3d.Up,
@@ -299,6 +304,8 @@ public sealed class MercuryFreedom7Tests
                 towerJettisoned = true;
             }
             if (!chutes
+                && towerJettisoned
+                && peakAltitude > 50_000.0
                 && radialSpeed < 0.0
                 && altitude <= MercuryRedstoneFlightProfile
                     .DrogueDeployAltitudeM)
@@ -347,10 +354,14 @@ public sealed class MercuryFreedom7Tests
             $"capsule destroyed at {vessel.CrashImpactSpeed:F1} m/s");
         Assert.True(double.IsFinite(splashdownTime), "capsule never splashed down");
         string evidence =
+            $"alt20={alt20:F0} alt40={alt40:F0} " +
             $"apogee={peakAltitude:F1}m speed={peakSpeed:F1}m/s " +
             $"range={maxDownrange:F1}m duration={splashdownTime:F1}s " +
             $"maxG={peakG:F2}@{peakGAltitude:F0}m/{peakGTime:F1}s " +
             $"cosA={peakGCosAlpha:F3}";
+        // Redstone sea-level TWR ≈ 1.18: T+20 is ~0.6–1 km; several km is T+40.
+        Assert.True(alt20 >= 400.0, evidence);
+        Assert.True(alt40 >= 2_000.0, evidence);
         Assert.True(
             peakAltitude is >= 160_000.0 and <= 220_000.0
             && peakSpeed is >= 2_100.0 and <= 2_600.0

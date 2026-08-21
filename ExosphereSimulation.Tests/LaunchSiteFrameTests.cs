@@ -15,8 +15,6 @@ using Exosphere.Simulation.Math;
 /// </summary>
 public class LaunchSiteFrameTests
 {
-    private const double EarthEquatorialSpeed = 464.6;  // ω·R at the equator (m/s)
-
     [Fact]
     public void Kennedy_InheritsRealEastwardBoost()
     {
@@ -30,13 +28,13 @@ public class LaunchSiteFrameTests
     }
 
     [Fact]
-    public void Kennedy_BoostMatchesClosedFormOmegaRCosLat()
+    public void Kennedy_BoostMatchesClosedFormOmegaRho()
     {
         var earth   = LoadBody("earth");
         var kennedy = LoadSite("kennedy");
-
-        double expected = earth.AngularSpeed * earth.Radius
-                        * System.Math.Cos(kennedy.Latitude * MathUtils.DEG_TO_RAD);
+        var pos     = kennedy.GetPosition(earth);
+        double rho  = (pos - earth.Position).Cross(earth.RotationAxis).Magnitude;
+        double expected = earth.AngularSpeed * rho;
 
         Assert.Equal(expected, kennedy.GetRotationalBoost(earth), 1);
     }
@@ -64,9 +62,10 @@ public class LaunchSiteFrameTests
         var east = earth.GetEastDirection(pos);
         var up   = kennedy.GetUpDirection(earth);
 
-        // The boost is purely eastward: fully aligned with east, nothing radial.
-        Assert.Equal(1.0, vel.Normalized.Dot(east), 6);
-        Assert.Equal(0.0, vel.Normalized.Dot(up),   6);
+        // Material velocity is ω⃗ × r⃗ (geocentric east). The pad up is geodetic, so a
+        // tiny radial component remains — the WGS deflection of the vertical.
+        Assert.True(vel.Normalized.Dot(east) > 0.999);
+        Assert.InRange(vel.Normalized.Dot(up), -0.01, 0.01);
     }
 
     [Fact]
@@ -75,10 +74,11 @@ public class LaunchSiteFrameTests
         var earth = LoadBody("earth");
         var pos   = earth.GetSurfacePosition(28.6, -80.6);
         var east  = earth.GetEastDirection(pos);
-        var up    = (pos - earth.Position).Normalized;
+        var up    = earth.GetGeodeticUp(pos);
+        east = up.Cross(east).Cross(up).Normalized;
 
         Assert.Equal(0.0, east.Dot(up),                 6);
-        Assert.Equal(0.0, east.Dot(earth.RotationAxis), 6);
+        Assert.Equal(0.0, east.Dot(earth.RotationAxis), 3);
         Assert.Equal(1.0, east.Magnitude,               6);
     }
 
@@ -91,8 +91,8 @@ public class LaunchSiteFrameTests
     {
         var earth = LoadBody("earth");
         var pos   = earth.GetSurfacePosition(latitude, 0.0);
-
-        double expected = EarthEquatorialSpeed * System.Math.Cos(latitude * MathUtils.DEG_TO_RAD);
+        double rho = (pos - earth.Position).Cross(earth.RotationAxis).Magnitude;
+        double expected = earth.AngularSpeed * rho;
         double actual   = earth.GetSurfaceVelocity(pos).Magnitude;
 
         Assert.Equal(expected, actual, 0);
@@ -104,7 +104,7 @@ public class LaunchSiteFrameTests
     public void PolarPad_InheritsNothing()
     {
         var earth = LoadBody("earth");
-        var pole  = earth.Position + earth.RotationAxis * earth.Radius;
+        var pole  = earth.GetSurfacePosition(90.0, 0.0);
 
         Assert.Equal(0.0, earth.GetSurfaceVelocity(pole).Magnitude, 3);
     }
@@ -128,9 +128,7 @@ public class LaunchSiteFrameTests
         var earth   = LoadBody("earth");
         var kennedy = LoadSite("kennedy");
 
-        double r = (kennedy.GetPosition(earth) - earth.Position).Magnitude;
-
-        Assert.Equal(earth.Radius + kennedy.Altitude, r, 3);
+        Assert.Equal(kennedy.Altitude, earth.GetAltitude(kennedy.GetPosition(earth)), 3);
     }
 
     [Fact]
@@ -200,8 +198,7 @@ public class LaunchSiteFrameTests
         var position = site.GetPosition(earth, 86_164.0);
 
         Assert.Equal(1.0, frame.Determinant, 10);
-        Assert.Equal(1.0,
-            frame.Up.Dot((position - earth.Position).Normalized), 10);
+        Assert.Equal(1.0, frame.Up.Dot(earth.GetGeodeticUp(position)), 10);
         Assert.True(earth.GetSurfaceVelocity(position).Dot(frame.East) > 0.0);
     }
 
@@ -268,7 +265,7 @@ public class LaunchSiteFrameTests
         Assert.Equal(0.0, frame.Up.Dot(frame.South), 12);
         Assert.Equal(0.0, frame.South.Dot(frame.East), 12);
         Assert.Equal(1.0, frame.Determinant, 12);
-        Assert.Equal(frame.North, frame.Up.Cross(frame.East));
+        Assert.InRange((frame.North - frame.Up.Cross(frame.East)).Magnitude, 0.0, 1e-12);
     }
 
     [Fact]

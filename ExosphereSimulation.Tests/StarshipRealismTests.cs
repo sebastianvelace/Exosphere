@@ -149,13 +149,17 @@ public sealed class StarshipRealismTests
     {
         var body = LoadBody(bodyId);
         var (vessel, booster, _, _, _) = BuildFlight7Stack();
-        vessel.Position = body.Position + new Vector3d(body.Radius + 12.0, 0.0, 0.0);
+        vessel.Position = body.GetSurfacePosition(0.0, 0.0, 12.0);
         booster.ThrottleLevel = 1.0;
 
         double localGravity = vessel.GetLocalGravity(body);
-        double expectedGravity = body.GM /
-            ((body.Radius + 12.0) * (body.Radius + 12.0));
-        AssertClose(expectedGravity, localGravity, 1e-12);
+        double pointMassGravity = body.GM /
+            (vessel.Position - body.Position).MagnitudeSquared;
+        if (body.J2 == 0.0)
+            AssertClose(pointMassGravity, localGravity, 1e-12);
+        else
+            Assert.True(System.Math.Abs(localGravity - pointMassGravity) > 1e-4);
+        AssertClose(localGravity, body.GetGravityAt(vessel.Position).Magnitude, 1e-12);
         AssertClose(vessel.TotalMass * localGravity, vessel.GetWeightNewtons(body), 1e-12);
         Assert.InRange(vessel.GetThrustToWeightRatio(body), minimumTwr, maximumTwr);
     }
@@ -165,7 +169,7 @@ public sealed class StarshipRealismTests
     {
         var earth = LoadBody("earth");
         var (vessel, booster, _, _, _) = BuildFlight7Stack();
-        vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 12.0);
+        vessel.Position = earth.GetSurfacePosition(0.0, 0.0, 12.0);
         vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
 
         vessel.IsGroundHeld = true;

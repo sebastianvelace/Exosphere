@@ -12,14 +12,13 @@ public readonly record struct SurfaceSample(
     Vector3d NormalWorld,
     Vector3d VelocityWorld)
 {
-    /// <summary>Samples the mean-radius sphere of a rotating celestial body.</summary>
+    /// <summary>Samples the reference surface of a rotating celestial body.</summary>
     public static SurfaceSample FromSphere(CelestialBody body, Vector3d queryWorld)
     {
-        var radial = queryWorld - body.Position;
-        var normal = radial.Magnitude > 1e-9 ? radial.Normalized : Vector3d.Up;
-        var point = body.Position + normal * body.Radius;
+        var up = body.GetGeodeticUp(queryWorld);
+        var point = body.GetSurfacePoint(queryWorld, 0.0);
         var velocity = body.Velocity + body.GetSurfaceVelocity(point);
-        return new SurfaceSample(point, normal, velocity);
+        return new SurfaceSample(point, up, velocity);
     }
 
     /// <summary>

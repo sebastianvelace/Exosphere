@@ -26,9 +26,8 @@ public sealed class SurfaceImpactAnchoringTests
         var command = new Part(catalog["command_pod_mk1"]);
         vessel.Parts.SetRoot(command);
 
-        Vector3d up = Vector3d.Up;
-        vessel.Position = earth.Position
-            + up * (earth.Radius + 0.5);
+        vessel.Position = earth.GetPositionAlongDirection(Vector3d.Up, 0.5);
+        var up = earth.GetGeodeticUp(vessel.Position);
         vessel.Velocity = earth.Velocity
             + earth.GetSurfaceVelocity(vessel.Position)
             - up * 250.0;

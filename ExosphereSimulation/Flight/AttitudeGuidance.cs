@@ -51,6 +51,25 @@ public static class AttitudeGuidance
             0.0);
     }
 
+    /// <summary>
+    /// Unit aim for a pitch program: <paramref name="elevationRad"/> above the local
+    /// horizon, in the plane of <paramref name="localUp"/> and <paramref name="downrange"/>.
+    /// Downrange is re-orthonormalized so geodetic vertical and a geodetic-horizon
+    /// heading cannot mix into a below-horizon aim.
+    /// </summary>
+    public static Vector3d AimFromElevation(
+        Vector3d localUp,
+        Vector3d downrange,
+        double elevationRad)
+    {
+        var up = localUp.Normalized;
+        var horizon = downrange - up * downrange.Dot(up);
+        if (horizon.MagnitudeSquared < 1e-16)
+            return up;
+        return (horizon.Normalized * System.Math.Cos(elevationRad)
+            + up * System.Math.Sin(elevationRad)).Normalized;
+    }
+
     public static Vector3d ComputeCommand(
         Quaterniond current,
         Quaterniond desired,

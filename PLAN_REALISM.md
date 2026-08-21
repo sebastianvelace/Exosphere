@@ -397,9 +397,20 @@ equivocada hace la órbita.
   `ComputeStagnationHeatFlux` (mismo blend actitud que plasma/lighting).
 - **R15b.** Fase orbital J2000 de Júpiter/Saturno (~0.3-0.5° off) — excluida a propósito de
   `EphemerisPhaseTests`, necesita su propia corrección, no aflojar la tolerancia.
+- **Earth J2 + WGS84 ellipsoid** ✅ HECHO — `data/bodies/earth.json` arma `j2`,
+  `equatorial_radius` y `polar_radius`. `GetGravityAt` es Vallado en el frame equatorial
+  (+Z = eje de spin). `GetSurfacePosition` / `GetAltitude` / pads / contacto usan el
+  elipsoide, así g polar > g ecuatorial en superficie. Kepler on-rails sigue siendo
+  dos-cuerpos (el vessel activo en RK4 sí siente J2). Tests de scheduler prueban Kepler≡RK4
+  contra `WithoutOblateness()`. Limitación documentada: el planner lunar Lambert es
+  dos-cuerpos, y `RequiresOffRailsPhysics` fuerza RK4+J2 bajo `ThermosphereTopAltitude`
+  (1 000 km) para que LEO decaiga (R7); un TLI con perigeo ~185 km no puede usar ese
+  arco como prueba de targeting. Isp de Atlas LR-105 lumped 350 s es calibración del
+  agregado (no química LOX/RP-1 publicada).
 - **Limitaciones conocidas, no tocadas esta pasada** (registradas para no "redescubrirlas" como
-  bugs nuevos — detalle completo en `docs/audits/PHYSICS_AUDIT_JUL2026.md` §7): sin oblatez J2 (sin
-  regresión nodal, sin órbitas heliosíncronas); sin fase sideral real de rotación en t=0 (longitud
+  bugs nuevos — detalle completo en `docs/audits/PHYSICS_AUDIT_JUL2026.md` §7): Kepler on-rails
+  omite J2 (SSO bajo warp no precesa; el jugador en LEO a ×1 sí). Lambert/Apollo 8 es dos
+  cuerpos — coherente con el coast on-rails. Más: sin fase sideral Greenwich en t=0 (longitud
   medida desde un meridiano arbitrario — por eso `BeginReentryDemonstration` reubica manualmente el
   reingreso al lado diurno); sin corrección baricéntrica; Luna en cónica osculante fija (ya
   flagueado en `CLAUDE.md` como "dated lunar ephemerides"); termosfera sin variabilidad solar
@@ -445,7 +456,8 @@ equivocada hace la órbita.
 3. Backlog de la auditoria Jul 2026 (motores/staging/Tierra/reingreso, ver seccion "OLA JUL2026"
    arriba): R18b correccion broadside 1/√2 de Sutton-Graves (necesita re-baseline propio), R18c
    `VesselRenderer.cs` con `noseRadius=1.0` por defecto, R15b fase J2000 de Jupiter/Saturno. Mas
-   limitaciones conocidas sin tocar: sin J2, sin fase sideral en epoch, sin correccion baricentrica,
+   limitaciones conocidas sin tocar: Kepler on-rails omite J2 (el jugador RK4 en LEO si lo
+   siente), sin fase sideral Greenwich en epoch, sin correccion baricentrica,
    Luna en conica fija, termosfera sin variabilidad solar, sin fallo estructural por presion
    dinamica pura, EDL sin ley de guiado real.
 4. Backlog mision/sistemas: R11 ✅; R12 ✅ (Ship catch + booster boostback/entry/catch + HUD).

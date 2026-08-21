@@ -7,9 +7,9 @@
   "oxidizer": "LOX",
   "mixtureRatioOxidizerToFuel": 2.25,
   "ratedThrustSeaLevelN": 266880,
-  "ratedThrustVacuumN": 610000,
+  "ratedThrustVacuumN": 625000,
   "specificImpulseSeaLevelS": 215,
-  "specificImpulseVacuumS": 343,
+  "specificImpulseVacuumS": 350,
   "minimumThrottle": 0.5,
   "maximumThrottle": 1.0,
   "gimbalRangeDeg": 3.0,
@@ -32,8 +32,8 @@
     {
       "ambientPressurePa": 0,
       "throttle": 1.0,
-      "thrustN": 610000,
-      "specificImpulseS": 343
+      "thrustN": 625000,
+      "specificImpulseS": 350
     }
   ]
 }

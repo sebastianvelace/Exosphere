@@ -962,16 +962,18 @@ public partial class SimulationBridge : Node
             ? _launchSite.GetPosition(body)
             : body.GetSurfacePosition(0.0, 0.0);   // fallback: the equator, not the pole
 
-        var upDir = (padSurface - body.Position).Normalized;
+        var upDir = body.GetGeodeticUp(padSurface);
 
         vessel.Position    = padSurface + upDir * mountHeightM;
         vessel.Velocity    = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
-        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, upDir);  // hull +Y → local vertical
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, upDir);
         vessel.SASEnabled  = true;
 
-        // Ground hold: keeps the vessel locked to the surface until T-0.
         vessel.IsGroundHeld = true;
-        vessel.GroundNormal = upDir;
+        // Hold snap reconstructs from a geocentric ray after the body has already
+        // moved this tick; storing the geodetic normal here would slide the pad
+        // tens of kilometres on the first tick.
+        vessel.GroundNormal = (padSurface - body.Position).Normalized;
         vessel.GroundOffset = mountHeightM;
 
     }
