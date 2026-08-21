@@ -31,6 +31,7 @@ REENTRY_BELLY_FIRST=""
 REENTRY_SLUG=""
 SUN_ELEVATION_DEG=""
 CAMERA_PRESET=""
+EARTH_VIEW=""
 VARIANT_FILE=""
 VARIANT_SITE=""
 VARIANT_PROFILE=""
@@ -86,6 +87,8 @@ Options:
                 retaining physical Sun/Moon positions and physics.
   --camera-preset NAME
                 Deterministic composition: pad_side|tower_side|tracking|orbit_beauty|edl_side.
+  --earth-view NAME
+                Scaled-space Earth composition: default|rotated (atmosphere-orbit only).
   --orbital-reentry  Seed a Starbase Starship in circular orbit, arm the real map deorbit
                 autopilot, and verify normal atmospheric entry through tower catch.
   --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
@@ -201,6 +204,7 @@ while [[ $# -gt 0 ]]; do
     --sun-elevation) SUN_ELEVATION_DEG="$2"; shift 2 ;;
     --clear-solar-eclipse) CLEAR_SOLAR_ECLIPSE=1; shift ;;
     --camera-preset) CAMERA_PRESET="$2"; shift 2 ;;
+    --earth-view) EARTH_VIEW="$2"; shift 2 ;;
     --orbital-reentry)
       MODE="orbital_reentry"
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -254,6 +258,18 @@ case "$CAMERA_PRESET" in
     exit 2
     ;;
 esac
+
+case "$EARTH_VIEW" in
+  ""|default|rotated) ;;
+  *)
+    echo "ERROR: --earth-view must be default or rotated" >&2
+    exit 2
+    ;;
+esac
+if [[ -n "$EARTH_VIEW" && "$MODE" != "atmosphere_orbit" ]]; then
+  echo "ERROR: --earth-view is only valid with --atmosphere-orbit" >&2
+  exit 2
+fi
 
 if [[ ! "$RESOLUTION" =~ ^([0-9]{1,4})x([0-9]{1,4})$ ]]; then
   echo "ERROR: --resolution must use WIDTHxHEIGHT (for example 1280x720)" >&2
@@ -497,6 +513,7 @@ public partial class _PlaytestShot : Node
     static readonly bool HasVisualSunElevation = ${SUN_ELEVATION_SET} == 1;
     static readonly double VisualSunElevationDeg = ${SUN_ELEVATION_DEG};
     const string VisualCameraPreset = "${CAMERA_PRESET}";
+    static readonly string VisualEarthView = "${EARTH_VIEW}";
 
     readonly string _mode;
     readonly string _outDir;
@@ -2428,6 +2445,14 @@ public partial class _PlaytestShot : Node
         Vector3d seed = System.Math.Abs(sunDir.Dot(Vector3d.Up)) < 0.92
             ? Vector3d.Up : Vector3d.Right;
         Vector3d terminatorUp = (seed - sunDir * seed.Dot(sunDir)).Normalized;
+        if (VisualEarthView == "rotated")
+        {
+            // Rotate the sampled surface point around the physical Sun axis. This keeps
+            // solar elevation, view geometry and direct-beam physics fixed while exposing
+            // a different Earth longitude/latitude composition to the scaled-space shader.
+            terminatorUp = Quaterniond.FromAxisAngle(
+                sunDir, 137.5 * System.Math.PI / 180.0).Rotate(terminatorUp).Normalized;
+        }
         double elev = shot.SunElevationDeg * System.Math.PI / 180.0;
         _atmosUp = (terminatorUp * System.Math.Cos(elev)
             + sunDir * System.Math.Sin(elev)).Normalized;
@@ -2470,7 +2495,8 @@ public partial class _PlaytestShot : Node
         _atmosExposureStableFrames = 0;
         _log.WriteLine($"ATMOS_APPLY slug={shot.Slug} targetAlt={shot.AltitudeM:F1} " +
             $"targetSunElevation={shot.SunElevationDeg:F1} cockpit={shot.Cockpit} " +
-            $"eclipse={shot.Eclipse}");
+            $"eclipse={shot.Eclipse} view={(VisualEarthView.Length == 0 ? "default" : VisualEarthView)} " +
+            $"viewUp={_atmosUp.X:F4},{_atmosUp.Y:F4},{_atmosUp.Z:F4}");
         _log.Flush();
     }
 
@@ -2656,6 +2682,8 @@ public partial class _PlaytestShot : Node
 
         _log.WriteLine($"ATMOS_STATE slug={shot.Slug} actualAlt={vessel.GetAltitude(earth):F1} " +
             $"sunElevation={solarElevation:F2} solarVisibility={SunController.SolarVisibility:F3} " +
+            $"view={(VisualEarthView.Length == 0 ? "default" : VisualEarthView)} " +
+            $"viewUp={_atmosUp.X:F4},{_atmosUp.Y:F4},{_atmosUp.Z:F4} " +
             $"eclipse={shot.Eclipse} eclipseVisibility={eclipseVisibility:F6} " +
             $"lutVersion={SkyController.MultipleScatteringLutVersion} " +
             $"lutOrder={SkyController.RuntimeMultipleScatteringOrder} " +
@@ -3653,6 +3681,11 @@ verify_pngs() {
     if ! grep -q '^ATMOS_APPLY .*slug=400km_day .*targetAlt=400000.0 .*targetSunElevation=35.0' "$LOG" \
       || ! grep -q '^ATMOS_STATE .*slug=400km_day .*actualAlt=400000.0 .*sunElevation=35.00 .*exposureSettled=True' "$LOG"; then
       echo "ERROR: scaled-space capture lacks matching physical altitude/sun telemetry" >&2
+      return 1
+    fi
+    if [[ -n "$EARTH_VIEW" ]] \
+      && ! grep -q "^ATMOS_STATE .*slug=400km_day .*view=${EARTH_VIEW} .*viewUp=" "$LOG"; then
+      echo "ERROR: requested Earth composition view was not recorded" >&2
       return 1
     fi
     if [[ -n "${EXOSPHERE_RENDER_AB:-}" ]] \

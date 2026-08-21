@@ -86,6 +86,9 @@ fi
 if ! grep -q -- '--atmosphere-orbit' "$HARNESS_SCRIPT" \
   || ! grep -q 'MODE="atmosphere_orbit"' "$HARNESS_SCRIPT" \
   || ! grep -q 'ATMOSPHERE_ORBIT_OK' "$HARNESS_SCRIPT" \
+  || ! grep -q -- '--earth-view' "$HARNESS_SCRIPT" \
+  || ! grep -q 'VisualEarthView' "$HARNESS_SCRIPT" \
+  || ! grep -q 'viewUp=' "$HARNESS_SCRIPT" \
   || ! grep -q 'earth_day_gain_090' "$ROOT/scripts/RenderPerformanceProbe.cs" \
   || ! grep -q 'earth_day_gain_075' "$ROOT/scripts/RenderPerformanceProbe.cs" \
   || ! grep -q 'earth_cloud_amount_065' "$ROOT/scripts/RenderPerformanceProbe.cs" \
