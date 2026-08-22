@@ -228,16 +228,16 @@ public partial class LaunchEffectsController : Node3D
 
     private MultiMeshInstance3D BuildImmediateSteamBank()
     {
-        var mat = SteamDrawMaterial(energy: 1.18f);
+        var mat = SteamDrawMaterial(energy: 0.52f);
         mat.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-        var quad = new QuadMesh { Size = new Vector2(5.8f, 5.8f) };
+        var quad = new QuadMesh { Size = new Vector2(8.8f, 3.1f) };
         quad.SurfaceSetMaterial(0, mat);
         var mm = new MultiMesh
         {
             TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             UseColors = true,
             Mesh = quad,
-            InstanceCount = 160,
+            InstanceCount = 220,
         };
         var bank = new MultiMeshInstance3D
         {
@@ -253,37 +253,29 @@ public partial class LaunchEffectsController : Node3D
     private Node3D BuildBillowBank()
     {
         var bank = new Node3D { Name = "ImmediateDelugeBillows", Visible = false };
-        _billowMaterial = SteamDrawMaterial(energy: 0.0f);
-        // A sphere cannot use the radial billboard atlas without producing
-        // UV seams.  Its own silhouette supplies the soft lobe; restrained
-        // emission lets the exhaust light the cloud without clipping white.
-        _billowMaterial.AlbedoTexture = null;
-        _billowMaterial.AlbedoColor = new Color(0.46f, 0.49f, 0.52f, 0.34f);
+        // Soft irregular billboards, not SphereMesh lobes. Play-camera ignition
+        // was reading as a pile of white balls on the OLM; the GPU steam and the
+        // MultiMesh bank already supply volume, this layer only guarantees a
+        // horizontal sheet on the first frames of the compatibility renderer.
+        _billowMaterial = SteamDrawMaterial(energy: 0.22f);
+        _billowMaterial.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
+        _billowMaterial.AlbedoColor = new Color(0.80f, 0.78f, 0.76f, 0.14f);
         _billowMaterial.EmissionEnabled = false;
-        for (int i = 0; i < 28; i++)
+        for (int i = 0; i < 40; i++)
         {
             float phase = Mathf.PosMod(i * 0.618034f, 1f);
             float angle = i * 2.399963f;
-            float radius = 7f + (i % 9) * 4.2f;
-            float lobeRadius = 2.8f + phase * 2.6f;
+            float radius = 4.0f + (i % 12) * 2.8f;
+            // Wide, low sheets merge into a deluge wall. Circular puffs read as
+            // the white spheres on the play-camera pad.
+            float width = 10.0f + phase * 7.0f;
+            float height = 2.1f + phase * 1.6f;
             var puff = new MeshInstance3D
             {
                 Name = $"DelugeBillow{i}",
-                // A low-poly volumetric lobe remains visible from every pad
-                // camera angle.  The former camera-facing quads disappeared
-                // intermittently on the compatibility renderer during the
-                // exact ignition frames this bank exists to guarantee.
-                Mesh = new SphereMesh
-                {
-                    Radius = lobeRadius,
-                    Height = lobeRadius * (1.45f + phase * 0.35f),
-                    RadialSegments = 12,
-                    Rings = 6,
-                },
+                Mesh = new QuadMesh { Size = new Vector2(width, height) },
                 Position = new Vector3(Mathf.Cos(angle) * radius,
-                    4f + (i % 7) * 3.0f, Mathf.Sin(angle) * radius),
-                Scale = new Vector3(1.15f + phase * 0.45f, 0.80f + phase * 0.25f,
-                    1.05f + (1f - phase) * 0.35f),
+                    0.9f + (i % 6) * 0.85f, Mathf.Sin(angle) * radius),
                 MaterialOverride = _billowMaterial,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             };
@@ -300,7 +292,7 @@ public partial class LaunchEffectsController : Node3D
         DriveImmediateSteam(_instantSteam, intensity, age);
         float life = Mathf.Clamp(1f - Mathf.Max(0f, age - 5f) / 7f, 0f, 1f);
         Color color = _billowMaterial.AlbedoColor;
-        color.A = Mathf.Clamp(Mathf.Lerp(0.24f, 0.44f, intensity) * life, 0f, 0.44f);
+        color.A = Mathf.Clamp(Mathf.Lerp(0.08f, 0.18f, intensity) * life, 0f, 0.18f);
         _billowMaterial.AlbedoColor = color;
     }
 
@@ -317,11 +309,14 @@ public partial class LaunchEffectsController : Node3D
             float radius = 5.0f + (i % 19) * 2.7f + Mathf.Min(age, 7f) * speed;
             float height = 2.0f + (i % 13) * 1.75f + Mathf.Min(age, 7f) * (0.55f + phase * 0.70f);
             float size = (1.9f + phase * 2.30f) * (1f + Mathf.Min(age, 6f) * 0.12f);
-            var basis = Basis.Identity.Scaled(new Vector3(size * (1.15f + phase * 0.25f), size, 1f));
+            var basis = Basis.Identity.Scaled(new Vector3(size * (2.05f + phase * 0.55f), size * 0.52f, 1f));
             var origin = new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
             mm.SetInstanceTransform(i, new Transform3D(basis, origin));
-            mm.SetInstanceColor(i, new Color(1.0f, 0.88f + phase * 0.11f, 0.80f + phase * 0.18f,
-                Mathf.Clamp(Mathf.Lerp(0.68f, 0.96f, intensity) * life, 0f, 0.96f)));
+            mm.SetInstanceColor(i, new Color(
+                0.90f + phase * 0.05f,
+                0.74f + phase * 0.08f,
+                0.58f + phase * 0.10f,
+                Mathf.Clamp(Mathf.Lerp(0.22f, 0.48f, intensity) * life, 0f, 0.48f)));
         }
     }
 
@@ -409,15 +404,15 @@ public partial class LaunchEffectsController : Node3D
         SetGrowCurve(pm, 0.30f, 1.0f); // N5: start smaller and grow more aggressively
 
         // N5: larger quad mesh — each billboard covers more screen area.
-        var quad = new QuadMesh { Size = new Vector2(4.0f, 4.0f) };
-        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 1.30f)); // N5: brighter (was 1.15)
+        var quad = new QuadMesh { Size = new Vector2(6.8f, 2.6f) };
+        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 0.72f)); // N5: brighter (was 1.15)
 
         return new GpuParticles3D
         {
             Name            = "DelugeSteamCore",
             Amount          = 560,
             Lifetime        = 7.5f,           // N5: longer-lived (was 6.5)
-            Preprocess      = 1.25f,          // dense, already-developed ignition frame
+            Preprocess      = 1.85f,          // dense, already-developed ignition frame
             Explosiveness   = 0.12f,          // N5: more burst-like at ignition (was 0.08)
             Randomness      = 0.5f,
             ProcessMaterial = pm,
@@ -481,8 +476,8 @@ public partial class LaunchEffectsController : Node3D
         };
         SetGrowCurve(pm, 0.40f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(4.5f, 4.5f) };
-        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 1.05f));   // N5: slightly brighter (was 0.9)
+        var quad = new QuadMesh { Size = new Vector2(7.2f, 2.8f) };
+        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 0.62f));   // N5: slightly brighter (was 0.9)
 
         return new GpuParticles3D
         {
@@ -552,7 +547,7 @@ public partial class LaunchEffectsController : Node3D
         };
         SetGrowCurve(pm, 0.50f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(6.0f, 6.0f) };  // N5: was 5x5
+        var quad = new QuadMesh { Size = new Vector2(9.5f, 3.4f) };
         // Dust is lit-ish but still unshaded soft; alpha blend (not additive) so
         // it reads as dark, occluding debris rather than glowing vapour.
         var drawMat = new StandardMaterial3D
@@ -635,7 +630,7 @@ public partial class LaunchEffectsController : Node3D
         };
         SetGrowCurve(pm, 0.6f, 1.0f);
 
-        var quad = new QuadMesh { Size = new Vector2(11.0f, 11.0f) };
+        var quad = new QuadMesh { Size = new Vector2(14.0f, 4.2f) };
         // Soft alpha-blended haze — not additive, so it reads as a dim pall.
         var drawMat = new StandardMaterial3D
         {

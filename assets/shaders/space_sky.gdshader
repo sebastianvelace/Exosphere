@@ -737,11 +737,14 @@ void sky() {
 	// VisualExposure still closes down for daylight. A 1/mu air-mass term blows
 	// the whole pad frame to white (the chase camera looks at the horizon, not
 	// the zenith), so this is a bounded elevation mix in the same HDR domain.
-	if (!hits_ground) {
+	// Closed-form daylight dome used as a luminance floor. Apply it across the
+	// mathematical horizon so pad play-camera pixels that miss the ground mesh
+	// stay pale sky instead of snapping to a dark planet fill.
+	{
 		float elev = dot(view_dir, up);
-		float above = smoothstep(-0.012, 0.035, elev);
+		float above = smoothstep(-0.045, 0.050, elev);
 		float h = clamp(elev, 0.0, 1.0);
-		vec3 dome = mix(vec3(0.68, 0.95, 1.15), vec3(0.22, 0.55, 1.05), pow(h, 0.55));
+		vec3 dome = mix(vec3(0.84, 0.90, 0.97), vec3(0.26, 0.50, 0.90), pow(h, 0.62));
 		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);
 		dome += vec3(sun_glare, sun_glare * 0.85, sun_glare * 0.55);
 		float pad_sky = sun_up * thick_column * above * atmospheric_solar_visibility;
@@ -782,9 +785,12 @@ void sky() {
 		vec3 ground_position = origin + view_dir * ray_end;
 		float ground_sun = max(dot(normalize(ground_position), to_sun), 0.0);
 		vec3 ground_direct = solar_transmittance(ground_position, to_sun, outer_radius);
+		// Soften the geometric planet edge so pad play-camera horizon is haze,
+		// not a one-pixel black seam against the daylight dome.
+		float ground_mix = smoothstep(-0.018, 0.040, -dot(view_dir, up));
 		color += ground * transmittance(optical_depth)
 			* (0.012 + 0.24 * ground_sun * ground_direct * solar_visibility)
-			* clamp(ground_fill_strength, 0.0, 1.0);
+			* clamp(ground_fill_strength, 0.0, 1.0) * ground_mix;
 	}
 
 	// The sky is finally quantised by the framebuffer/tonemapper. A tiny deterministic

@@ -177,7 +177,7 @@ public partial class LaunchPadController : Node3D
         var burnt     = Mat(new Color(0.09f, 0.08f, 0.07f), 0.98f, 0.0f);
         var steel     = Mat(new Color(0.55f, 0.56f, 0.58f), 0.55f, 0.85f); // grey lattice steel
         var darkSteel = Mat(new Color(0.28f, 0.28f, 0.31f), 0.60f, 0.80f); // OLM / dark steel
-        var insul     = Mat(new Color(0.86f, 0.86f, 0.88f), 0.80f, 0.10f); // white cryo tanks
+        var insul     = Mat(new Color(0.74f, 0.72f, 0.68f), 0.82f, 0.12f); // weathered cryo tanks
         // Weathered, slightly lighter concrete for the wide tarmac, plus a mid
         // scorch tone between clean concrete and fully-charred burnt.
         var tarmac    = Mat(new Color(0.30f, 0.30f, 0.28f), 0.96f, 0.0f); // weathered apron
@@ -222,7 +222,8 @@ public partial class LaunchPadController : Node3D
         var gravel = CreateLaunchSurfaceMaterial(
             new Color(0.20f, 0.19f, 0.17f), 0.46f, 0.38f, 0.20f, 0.0f);
         var marsh = CreateLaunchSurfaceMaterial(
-            new Color(0.17f, 0.21f, 0.16f), 0.14f, 0.28f, 0.12f, 0.38f);
+            new Color(0.20f, 0.22f, 0.17f), 0.14f, 0.28f, 0.12f, 0.38f,
+            edgeFade: 1f, edgeHalfX: 11000f * U, edgeHalfZ: 8000f * U);
         var burnt = CreateLaunchSurfaceMaterial(
             new Color(0.09f, 0.08f, 0.07f), 0.36f, 0.16f, 0.06f, 0.28f);
 
@@ -230,6 +231,8 @@ public partial class LaunchPadController : Node3D
         {
             ApplySurface("StarbaseCoastalFill", sand);
             ApplySurface("StarbaseWetlandSkirt", marsh);
+            if (GetNodeOrNull<MeshInstance3D>("StarbaseWetlandSkirt") is { } skirt)
+                skirt.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
             ApplySurface("StarbaseDuneShoulder", sand);
             ApplySurface("OrbitalPadApron", concrete);
             ApplySurface("OlmFoundationMat", gravel);
@@ -256,7 +259,8 @@ public partial class LaunchPadController : Node3D
     }
 
     private static ShaderMaterial CreateLaunchSurfaceMaterial(
-        Color color, float scale, float detail, float grain, float wetness)
+        Color color, float scale, float detail, float grain, float wetness,
+        float edgeFade = 0f, float edgeHalfX = 1f, float edgeHalfZ = 1f)
     {
         _launchSurfaceShader ??= GD.Load<Shader>("res://assets/shaders/launch_surface.gdshader");
         var material = new ShaderMaterial { Shader = _launchSurfaceShader };
@@ -265,6 +269,8 @@ public partial class LaunchPadController : Node3D
         material.SetShaderParameter("detail_strength", detail);
         material.SetShaderParameter("grain_strength", grain);
         material.SetShaderParameter("wetness", wetness);
+        material.SetShaderParameter("edge_fade", edgeFade);
+        material.SetShaderParameter("edge_half", new Vector2(edgeHalfX, edgeHalfZ));
         return material;
     }
 
@@ -496,7 +502,7 @@ public partial class LaunchPadController : Node3D
         // below the OLM apron.
         var marsh = Mat(new Color(0.17f, 0.21f, 0.16f), 0.98f, 0.0f);
         Spawn("StarbaseWetlandSkirt",
-            new BoxMesh { Size = new Vector3(5200f * U, 0.30f * U, 4000f * U) },
+            new BoxMesh { Size = new Vector3(22000f * U, 0.30f * U, 16000f * U) },
             marsh, new Vector3(-80f * U, GradeY + 0.08f * U, 60f * U));
         Spawn("StarbaseDuneShoulder",
             new BoxMesh { Size = new Vector3(1600f * U, 0.22f * U, 1200f * U) },

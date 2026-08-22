@@ -473,8 +473,8 @@ public partial class PlumeSystem : Node3D
             DampingMin = 2f,
             DampingMax = 5f,
 
-            ScaleMin = sh ? 2.0f : 1.0f,
-            ScaleMax = sh ? 6.2f : 3.0f,
+            ScaleMin = sh ? 0.7f : 1.0f,
+            ScaleMax = sh ? 1.8f : 3.0f,
 
             ColorRamp = gradTex,
         };

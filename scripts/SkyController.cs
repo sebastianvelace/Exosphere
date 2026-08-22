@@ -487,7 +487,7 @@ public partial class SkyController : Node
         {
             "mars" => new Color(0.72f, 0.38f, 0.20f),
             "venus" => new Color(0.92f, 0.72f, 0.38f),
-            _ => new Color(0.22f, 0.36f, 0.48f),
+            _ => new Color(0.82f, 0.88f, 0.95f),
         };
         _skyMat.SetShaderParameter("ground_horizon", groundHorizon);
         _skyMat.SetShaderParameter("ground_bottom", groundHorizon.Darkened(0.45f));
@@ -530,6 +530,13 @@ public partial class SkyController : Node
 
         float groundFill = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
         if (body.Id != "earth") groundFill = 1f;
+        else if (altitude < 12_000.0)
+        {
+            // Pad/ascent play camera: the tangent patch owns the disc. Sky-sphere
+            // ground fill was a darker band than the daylight dome, which drew the
+            // one-pixel black horizon in T=0 captures.
+            groundFill *= Smoothstep(4_000.0f, 12_000.0f, (float)altitude);
+        }
         if (_skyMat != null
             && (float.IsNaN(_lastGroundFillStrength)
                 || Mathf.Abs(groundFill - _lastGroundFillStrength) > 1e-3f))
@@ -545,7 +552,7 @@ public partial class SkyController : Node
         {
             "mars" => new Color(0.82f, 0.46f, 0.24f),
             "venus" => new Color(0.95f, 0.78f, 0.45f),
-            _ => new Color(0.55f, 0.72f, 0.95f),
+            _ => new Color(0.82f, 0.88f, 0.95f),
         };
         CurrentHorizonColor = horizon.Lerp(Colors.Black, 1.0f - air * daylight);
 

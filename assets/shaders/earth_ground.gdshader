@@ -134,15 +134,23 @@ void fragment() {
 	vec2 warped = v_patch + warp * 1800.0;
 	float local_scrub = noise01(gnoise(warped * 0.012 + vec2(-13.0, 29.0)));
 	float ground_grain = noise01(gnoise(warped * 0.045 + vec2(47.0, -37.0)));
+	float dist = length(v_world_pos - CAMERA_POSITION_WORLD);
+	float view_up = max(dot(N, V), 0.0);
+	// Preview the later atmospheric-perspective term so high-frequency ground
+	// noise (the play-camera moiré) dies before the far field is hazed.
+	float haze_preview = max(
+		smoothstep(horizon_dist * 0.008, horizon_dist * 0.50, dist),
+		(1.0 - smoothstep(0.002, 0.38, view_up)) * horizon_haze_strength);
+	float close_detail = (1.0 - haze_preview) * smoothstep(0.03, 0.30, view_up);
 	float land_mask = 1.0 - water_hint;
 	float macro_grade = mix(macro, regional, 0.68);
-	float soil_breakup = (terrain - 0.5) * 0.16 + (fine - 0.5) * 0.075
-		+ (local_scrub - 0.5) * 0.08 + (ground_grain - 0.5) * 0.03;
+	float soil_breakup = ((terrain - 0.5) * 0.16 + (fine - 0.5) * 0.075
+		+ (local_scrub - 0.5) * 0.08 + (ground_grain - 0.5) * 0.03) * close_detail;
 	vec3 soil_tint = vec3(1.00, 0.86, 0.66);
 	surface *= 0.62 + 0.80 * macro_grade;
 	surface += land_mask * soil_breakup * soil_tint;
 	float det = gnoise(v_patch * 0.0006) + 0.5 * gnoise(v_patch * 0.0028);
-	surface *= 1.0 + detail_strength * det;
+	surface *= 1.0 + detail_strength * det * close_detail;
 
 	// Within tens of kilometres of the pad the 8K orbital map is a few stretched
 	// texels — at Boca Chica and Kennedy those texels are open water, which is why
@@ -150,9 +158,9 @@ void fragment() {
 	// sand, marsh and a noisy coastline out to the geometric horizon (~25–40 km
 	// from a 60 m pad camera) and only then hand back to Blue Marble.
 	float pad_range = length(v_patch);
-	float site_core = 1.0 - smoothstep(80.0, 900.0, pad_range);
-	float coastal_belt = 1.0 - smoothstep(400.0, 28000.0, pad_range);
-	float map_blend = smoothstep(22000.0, 42000.0, pad_range);
+	float site_core = 1.0 - smoothstep(80.0, 1400.0, pad_range);
+	float coastal_belt = 1.0 - smoothstep(400.0, 48000.0, pad_range);
+	float map_blend = smoothstep(36000.0, 62000.0, pad_range);
 	float coast_noise = noise01(gnoise(v_patch * 0.00018 + vec2(91.0, -17.0)));
 	float inlet = noise01(gnoise(v_patch * 0.00048 + vec2(-41.0, 23.0)));
 	float gulf = smoothstep(280.0, 1600.0, v_patch.x);
@@ -162,9 +170,9 @@ void fragment() {
 			* smoothstep(0.52, 0.80, mix(inlet, coast_noise, 0.42)),
 		max(gulf, lagoon * 0.88) * coastal_belt * (1.0 - site_core * 0.55));
 	float flats_var = noise01(gnoise(warped * 0.000018 + vec2(3.0, 8.0)));
-	vec3 marsh = mix(vec3(0.16, 0.21, 0.14), vec3(0.24, 0.22, 0.15), flats_var);
-	vec3 flats = mix(vec3(0.39, 0.34, 0.24), marsh, 0.42 * flats_var);
-	vec3 near_water = vec3(0.06, 0.15, 0.18);
+	vec3 marsh = mix(vec3(0.22, 0.24, 0.18), vec3(0.30, 0.27, 0.20), flats_var);
+	vec3 flats = mix(vec3(0.36, 0.32, 0.24), marsh, 0.38 * flats_var);
+	vec3 near_water = vec3(0.10, 0.18, 0.22);
 	vec3 pad_ground = mix(flats, near_water, reconstructed_water);
 	surface = mix(pad_ground, surface, map_blend);
 	surface = mix(surface, pad_ground, site_core * 0.92);
@@ -175,7 +183,7 @@ void fragment() {
 	float relief = gnoise(v_patch * 0.045 + vec2(61.0, -13.0));
 	float relief_e = gnoise((v_patch + vec2(2.0, 0.0)) * 0.045 + vec2(61.0, -13.0));
 	float relief_n = gnoise((v_patch + vec2(0.0, 2.0)) * 0.045 + vec2(61.0, -13.0));
-	float relief_scale = terrain_relief_strength * land_mask;
+	float relief_scale = terrain_relief_strength * land_mask * close_detail;
 	N = normalize(N
 		+ v_world_tangent_e * (relief - relief_e) * relief_scale
 		+ v_world_tangent_n * (relief - relief_n) * relief_scale);
@@ -208,19 +216,16 @@ void fragment() {
 	vec3 city_lights = night_map * city_mask * night_side * night_city_gain;
 	vec3 ground_radiance = lit + indirect_emission + city_lights;
 
-	// Atmospheric perspective: distant ground fades toward the SKY-horizon colour and then
-	// dissolves to transparent, so it blends seamlessly into the sky/backdrop with no grey
-	// band. The colour blend leads the alpha fade so the seam is never a hard line.
-	float dist = length(v_world_pos - CAMERA_POSITION_WORLD);
-	float distance_haze = smoothstep(horizon_dist * 0.12, horizon_dist * 0.95, dist);
-	// At the true grazing angle the local tangent patch and the atmospheric
-	// backdrop meet at a single high-contrast line. Fade its colour toward the
-	// same live sky horizon even when the fragment is inside horizon_dist.
-	float view_up = max(dot(N, V), 0.0);
-	float grazing_haze = 1.0 - smoothstep(0.008, 0.22, view_up);
-	float haze = max(distance_haze, grazing_haze * horizon_haze_strength);
+	// Atmospheric perspective: Gulf-coast daylight has visible haze well inside
+	// the geometric horizon. Start the wash early, prefer a pale sky-horizon
+	// colour, and keep the patch opaque past the knife-edge so the sky's dark
+	// ground fill cannot draw a black seam.
+	float distance_haze = smoothstep(horizon_dist * 0.008, horizon_dist * 0.62, dist);
+	float grazing_haze = 1.0 - smoothstep(0.002, 0.38, view_up);
+	float air_wash = smoothstep(0.0, 0.28, 1.0 - view_up);
+	float haze = clamp(max(distance_haze, max(grazing_haze * horizon_haze_strength, air_wash * 0.72)), 0.0, 1.0);
 	ground_radiance = mix(ground_radiance, haze_color, haze);
-	float edge = smoothstep(horizon_dist * 0.90, horizon_dist * 1.12, dist);
+	float edge = smoothstep(horizon_dist * 1.08, horizon_dist * 1.55, dist);
 
 	// Unshaded materials do not receive the scene light a second time. Add the
 	// bounded earthshine to the manually computed radiance so it survives the

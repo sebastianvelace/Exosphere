@@ -58,7 +58,7 @@ public partial class EarthGroundController : Node3D
     private const float TerrainReliefStrength = 0.18f;
     private const float NightCityGain = 0.34f;
     private const float TerminatorWidth = 0.16f;
-    private const float HorizonHazeStrength = 0.78f;
+    private const float HorizonHazeStrength = 0.92f;
 
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;

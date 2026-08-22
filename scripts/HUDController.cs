@@ -18,6 +18,15 @@ public partial class HUDController : Control
     private const double PresentationRefreshPeriodSeconds = 1.0 / 30.0;
     public static FlightHudSnapshot? LatestSnapshot { get; private set; }
 
+    /// <summary>Hide the pad mission-controls sheet (F1 / visual capture).</summary>
+    public void DismissPadHelp()
+    {
+        _padHelpDismissed = true;
+        _padHelpAutoDismissed = true;
+        if (_padHelpRoot != null)
+            _padHelpRoot.Visible = false;
+    }
+
     // ── Palette ─────────────────────────────────────────────────────────────
     private static readonly Color PanelBg     = InterfaceTheme.Glass;
     private static readonly Color PanelBorder = InterfaceTheme.Edge;
