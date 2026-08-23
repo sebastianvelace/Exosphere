@@ -1,6 +1,6 @@
 # Pad → 60 km visual brief (Starbase daylight / IFT)
 
-**Status:** research brief only. Do not implement shaders in this sprint.  
+**Status:** environment pass implemented on `visual/pad-ascent-realism` (disc-to-horizon, pad shadows, limb AA, daytime stars off). Plume/deluge remain a sibling owner.  
 **Scope:** play-camera look from OLM hold-down through ~60 km, Super Heavy + Starship, daylight.  
 **Date:** 2026-08-23  
 **Branch intent:** `visual/pad-ascent-realism` from `fix/pad-sky-engine-cap`.  

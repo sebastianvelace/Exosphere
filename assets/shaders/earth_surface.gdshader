@@ -8,7 +8,7 @@
 // shader does its own lighting (so Godot's DirectionalLight does not double-light it).
 // ─────────────────────────────────────────────────────────────────────────────
 shader_type spatial;
-render_mode cull_back, unshaded;
+render_mode cull_back, unshaded, blend_mix;
 
 uniform vec3 sun_dir = vec3(0.42, 0.78, 0.46);
 // Limb-darkened solar-disc visibility supplied by SunController.  This keeps the
@@ -153,14 +153,20 @@ void fragment() {
 	vec3 rayleigh_haze = vec3(0.34, 0.56, 0.92);
 	lit = mix(lit, mix(lit, rayleigh_haze, 0.62), path_air * 0.48 * solar_visibility);
 
-	// Thin atmospheric edge: inner cyan-white scattering, outer Chappuis ozone.
-	float inner = pow(limb, 5.0);
-	float outer = pow(limb, 13.0);
+	// Thin atmospheric edge: inner cyan scattering, outer Chappuis ozone.
+	// fwidth keeps the silhouette from aliasing into a white sawtooth against
+	// the sky; keep the band thin so 50–80 km reads as a cyan line, not a
+	// blown white hemisphere.
+	float limb_aa = max(fwidth(limb), 0.004);
+	float inner = smoothstep(0.02, 0.02 + limb_aa * 4.0, limb)
+		* (1.0 - smoothstep(0.10, 0.28, limb));
+	float outer = smoothstep(0.16, 0.16 + limb_aa * 6.0, limb)
+		* (1.0 - smoothstep(0.32, 0.55, limb));
 	float limb_visibility = 0.22 + 0.78 * solar_visibility;
 	vec3 atmosphere_limb = (
-		vec3(0.22, 0.50, 0.95) * inner
-		+ vec3(0.82, 0.92, 1.0) * pow(limb, 8.0) * 0.55
-		+ vec3(0.58, 0.20, 0.08) * outer
+		vec3(0.28, 0.68, 1.00) * inner * 0.70
+		+ vec3(0.55, 0.82, 1.00) * pow(limb, 11.0) * 0.10
+		+ vec3(0.58, 0.22, 0.10) * outer * 0.22
 	) * limb_strength * limb_visibility;
 	lit += atmosphere_limb;
 
@@ -174,6 +180,11 @@ void fragment() {
 	lit += cities;
 
 	ALBEDO = lit;
-	EMISSION = cities * 0.6 + atmosphere_limb * 0.35;
-	ALPHA = planet_alpha;
+	EMISSION = cities * 0.6 + atmosphere_limb * 0.10;
+	// Soften the geometric silhouette so a tessellated sphere does not print
+	// a white sawtooth against the sky; the cyan band stays on the disc.
+	// Without blend_mix this ALPHA is ignored and the faceted sphere edge
+	// aliases as a blown white limb at 50–80 km.
+	float silhouette = 1.0 - smoothstep(0.70, 0.92, limb);
+	ALPHA = planet_alpha * silhouette;
 }

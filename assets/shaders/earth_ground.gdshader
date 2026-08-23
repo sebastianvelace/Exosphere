@@ -14,6 +14,9 @@ shader_type spatial;
 // The patch owns its physically bounded direct/earthshine response. Keeping it
 // unshaded avoids the scene DirectionalLight multiplying the already attenuated
 // direct term and erasing the twilight/night floor on the real framebuffer.
+// Stay in the opaque pipeline. blend_mix put this 784 km disc on the
+// transparent pass; nadir views then sorted behind the sky and read as blue soup
+// with a postage-stamp civil apron. Rim fade is RGB into haze_color, not ALPHA.
 render_mode cull_back, unshaded, depth_draw_opaque;
 
 uniform sampler2D day_tex : source_color, filter_linear_mipmap;
@@ -153,26 +156,26 @@ void fragment() {
 	surface *= 1.0 + detail_strength * det * close_detail;
 
 	// Within tens of kilometres of the pad the 8K orbital map is a few stretched
-	// texels — at Boca Chica and Kennedy those texels are open water, which is why
-	// the play camera used to show a toy-blue tiled plane to the horizon. Rebuild
-	// sand, marsh and a noisy coastline out to the geometric horizon (~25–40 km
-	// from a 60 m pad camera) and only then hand back to Blue Marble.
+	// texels — at Boca Chica those texels are open water, which is why the play
+	// camera used to show a toy-blue tiled plane. Rebuild sand, marsh, lagoon and
+	// Gulf out to ~80 km (nadir at 6–20 km still has to read as a peninsula, not
+	// a cookie) and only then hand back to Blue Marble.
 	float pad_range = length(v_patch);
 	float site_core = 1.0 - smoothstep(80.0, 1400.0, pad_range);
-	float coastal_belt = 1.0 - smoothstep(400.0, 48000.0, pad_range);
-	float map_blend = smoothstep(36000.0, 62000.0, pad_range);
+	float coastal_belt = 1.0 - smoothstep(400.0, 140000.0, pad_range);
+	float map_blend = smoothstep(90000.0, 180000.0, pad_range);
 	float coast_noise = noise01(gnoise(v_patch * 0.00018 + vec2(91.0, -17.0)));
 	float inlet = noise01(gnoise(v_patch * 0.00048 + vec2(-41.0, 23.0)));
-	float gulf = smoothstep(280.0, 1600.0, v_patch.x);
-	float lagoon = smoothstep(500.0, 2400.0, -v_patch.x);
+	float gulf = smoothstep(200.0, 8000.0, v_patch.x);
+	float lagoon = smoothstep(300.0, 12000.0, -v_patch.x);
 	float reconstructed_water = max(
 		(1.0 - site_core) * coastal_belt
 			* smoothstep(0.52, 0.80, mix(inlet, coast_noise, 0.42)),
 		max(gulf, lagoon * 0.88) * coastal_belt * (1.0 - site_core * 0.55));
 	float flats_var = noise01(gnoise(warped * 0.000018 + vec2(3.0, 8.0)));
-	vec3 marsh = mix(vec3(0.22, 0.24, 0.18), vec3(0.30, 0.27, 0.20), flats_var);
-	vec3 flats = mix(vec3(0.36, 0.32, 0.24), marsh, 0.38 * flats_var);
-	vec3 near_water = vec3(0.10, 0.18, 0.22);
+	vec3 marsh = mix(vec3(0.20, 0.26, 0.16), vec3(0.32, 0.30, 0.18), flats_var);
+	vec3 flats = mix(vec3(0.42, 0.38, 0.26), marsh, 0.40 * flats_var);
+	vec3 near_water = vec3(0.05, 0.14, 0.20);
 	vec3 pad_ground = mix(flats, near_water, reconstructed_water);
 	surface = mix(pad_ground, surface, map_blend);
 	surface = mix(surface, pad_ground, site_core * 0.92);
@@ -216,23 +219,28 @@ void fragment() {
 	vec3 city_lights = night_map * city_mask * night_side * night_city_gain;
 	vec3 ground_radiance = lit + indirect_emission + city_lights;
 
-	// Atmospheric perspective: Gulf-coast daylight has visible haze well inside
-	// the geometric horizon. Start the wash early, prefer a pale sky-horizon
-	// colour, and keep the patch opaque past the knife-edge so the sky's dark
-	// ground fill cannot draw a black seam.
-	float distance_haze = smoothstep(horizon_dist * 0.008, horizon_dist * 0.62, dist);
-	float grazing_haze = 1.0 - smoothstep(0.002, 0.38, view_up);
-	float air_wash = smoothstep(0.0, 0.28, 1.0 - view_up);
-	float haze = clamp(max(distance_haze, max(grazing_haze * horizon_haze_strength, air_wash * 0.72)), 0.0, 1.0);
+	// Atmospheric perspective in RGB only. Nadir views (6–20 km) must keep
+	// coast/Gulf contrast — washing to haze_color made a 450 km mesh look like
+	// sky, leaving the civil apron as a floating square.
+	// view_up ≈ 1 when the camera looks at the ground face-on (nadir). Only
+	// apply grazing wash when the look is actually toward the horizon.
+	float look_down = smoothstep(0.55, 0.88, view_up);
+	float distance_haze = smoothstep(horizon_dist * 0.42, horizon_dist * 1.05, dist);
+	float grazing_haze = (1.0 - smoothstep(0.04, 0.52, view_up)) * (1.0 - look_down);
+	float haze = clamp(max(distance_haze * 0.48, grazing_haze * horizon_haze_strength * 0.50), 0.0, 0.70)
+		* (1.0 - look_down * 0.85);
 	ground_radiance = mix(ground_radiance, haze_color, haze);
-	float edge = smoothstep(horizon_dist * 1.08, horizon_dist * 1.55, dist);
+	// Circular rim at the geometric horizon (not a camera-distance kill, and
+	// not the square mesh border).
+	float horizon_m = max(horizon_dist * metres_per_unit, 4000.0);
+	float rim = 1.0 - smoothstep(horizon_m * 0.90, horizon_m * 1.14, length(v_patch));
 
 	// Unshaded materials do not receive the scene light a second time. Add the
 	// bounded earthshine to the manually computed radiance so it survives the
 	// zero-direct-light sunrise/night/eclipsed states.
-	ALBEDO    = ground_radiance;
+	ALBEDO    = mix(haze_color, ground_radiance, clamp(fade, 0.0, 1.0) * rim);
 	EMISSION  = vec3(0.0);
 	ROUGHNESS = 0.85;
 	METALLIC  = 0.0;
-	ALPHA     = clamp(fade, 0.0, 1.0) * (1.0 - edge);
+	ALPHA     = 1.0;
 }

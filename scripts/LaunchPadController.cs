@@ -506,8 +506,14 @@ public partial class LaunchPadController : Node3D
         StandardMaterial3D paint)
     {
         Spawn("StarbaseCoastalFill",
-            new BoxMesh { Size = new Vector3(300f * U, 2.0f * U, 240f * U) },
-            sandFill, new Vector3(-18f * U, GradeY - 1.0f * U, 0));
+            new CylinderMesh
+            {
+                TopRadius = 220f * U,
+                BottomRadius = 260f * U,
+                Height = 0.8f * U,
+                RadialSegments = 32,
+            },
+            sandFill, new Vector3(-40f * U, GradeY - 0.3f * U, 20f * U));
         // Wide wetland/dune skirt so the 300 m civil island does not drop into a
         // featureless satellite smear. Sits just above the Earth ground patch and
         // below the OLM apron.
@@ -522,8 +528,14 @@ public partial class LaunchPadController : Node3D
             },
             marsh, new Vector3(-80f * U, GradeY + 0.08f * U, 60f * U));
         Spawn("StarbaseDuneShoulder",
-            new BoxMesh { Size = new Vector3(1600f * U, 0.22f * U, 1200f * U) },
-            sandFill, new Vector3(-28f * U, GradeY + 0.12f * U, 12f * U));
+            new CylinderMesh
+            {
+                TopRadius = 420f * U,
+                BottomRadius = 480f * U,
+                Height = 0.22f * U,
+                RadialSegments = 48,
+            },
+            sandFill, new Vector3(-180f * U, GradeY + 0.12f * U, 40f * U));
         Spawn("OrbitalPadApron",
             new BoxMesh { Size = new Vector3(126f * U, 0.35f * U, 112f * U) },
             concrete, new Vector3(0, GradeY + 0.175f * U, 0));
