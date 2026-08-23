@@ -259,7 +259,7 @@ public partial class LaunchEffectsController : Node3D
         // horizontal sheet on the first frames of the compatibility renderer.
         _billowMaterial = SteamDrawMaterial(energy: 0.22f);
         _billowMaterial.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _billowMaterial.AlbedoColor = new Color(0.80f, 0.78f, 0.76f, 0.14f);
+        _billowMaterial.AlbedoColor = new Color(0.88f, 0.86f, 0.82f, 0.58f);
         _billowMaterial.EmissionEnabled = false;
         for (int i = 0; i < 40; i++)
         {
@@ -292,7 +292,7 @@ public partial class LaunchEffectsController : Node3D
         DriveImmediateSteam(_instantSteam, intensity, age);
         float life = Mathf.Clamp(1f - Mathf.Max(0f, age - 5f) / 7f, 0f, 1f);
         Color color = _billowMaterial.AlbedoColor;
-        color.A = Mathf.Clamp(Mathf.Lerp(0.08f, 0.18f, intensity) * life, 0f, 0.18f);
+        color.A = Mathf.Clamp(Mathf.Lerp(0.42f, 0.78f, intensity) * life, 0f, 0.78f);
         _billowMaterial.AlbedoColor = color;
     }
 
@@ -316,7 +316,7 @@ public partial class LaunchEffectsController : Node3D
                 0.90f + phase * 0.05f,
                 0.74f + phase * 0.08f,
                 0.58f + phase * 0.10f,
-                Mathf.Clamp(Mathf.Lerp(0.22f, 0.48f, intensity) * life, 0f, 0.48f)));
+                Mathf.Clamp(Mathf.Lerp(0.55f, 0.88f, intensity) * life, 0f, 0.88f)));
         }
     }
 
@@ -759,7 +759,7 @@ public partial class LaunchEffectsController : Node3D
     {
         return new StandardMaterial3D
         {
-            BillboardMode            = BaseMaterial3D.BillboardModeEnum.Particles,
+            BillboardMode            = BaseMaterial3D.BillboardModeEnum.Disabled,
             ShadingMode              = BaseMaterial3D.ShadingModeEnum.Unshaded,
             // Alpha mixing lets hundreds of overlapping billows become an
             // optically dense wall instead of isolated glowing discs.
