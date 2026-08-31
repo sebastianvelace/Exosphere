@@ -29,10 +29,11 @@ using Exosphere.Simulation.Physics;
 [GlobalClass]
 public partial class PhaseLightingController : Node
 {
-    private const float AmbientEnergyPad   = 0.45f;
+    private const float AmbientEnergyPad   = 0.22f;
     private const float AmbientEnergySpace = 0.18f;
-    private const float SunEnergyPad   = 1.5f;
+    private const float SunEnergyPad   = 1.85f;
     private const float SunEnergySpace = 1.95f;
+    private const float PadShadowMaxDistance = 900f;
     private const float GlowIntensitySpace = 0.6f;
 
     private const double FluxThresh = VehicleVisualPhysics.VisibleReentryFluxWm2;
@@ -275,6 +276,28 @@ public partial class PhaseLightingController : Node
         }
         if (_light == null || !IsInstanceValid(_light))
             _light = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
+        ConfigurePadShadows();
+    }
+
+    /// <summary>
+    /// Default Godot directional shadows only cover ~100 units (~280 m), so the
+    /// 146 m tower and 121 m stack never mark the apron. Stretch the cascade to
+    /// the pad complex and keep the light as the shadow caster.
+    /// </summary>
+    private void ConfigurePadShadows()
+    {
+        if (_light == null) return;
+        if (!_light.ShadowEnabled) _light.ShadowEnabled = true;
+        if (_light.DirectionalShadowMode != DirectionalLight3D.ShadowMode.Parallel2Splits)
+            _light.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits;
+        if (FloatDiffers(_light.DirectionalShadowMaxDistance, PadShadowMaxDistance))
+            _light.DirectionalShadowMaxDistance = PadShadowMaxDistance;
+        if (FloatDiffers(_light.ShadowBias, 0.04f))
+            _light.ShadowBias = 0.04f;
+        if (!_light.DirectionalShadowBlendSplits)
+            _light.DirectionalShadowBlendSplits = true;
+        if (FloatDiffers(_light.ShadowNormalBias, 1.0f))
+            _light.ShadowNormalBias = 1.0f;
     }
 
     private static float Smoothstep(float edge0, float edge1, float x)

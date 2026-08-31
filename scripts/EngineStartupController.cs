@@ -186,11 +186,11 @@ public partial class EngineStartupController : Node3D
         _flareMat = new StandardMaterial3D
         {
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+            BlendMode = BaseMaterial3D.BlendModeEnum.Mix,
             DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoColor = new Color(0.95f, 0.56f, 0.18f, 0.35f),
+            AlbedoColor = new Color(0.95f, 0.56f, 0.18f, 0.72f),
             EmissionEnabled = true,
             Emission = new Color(1.0f, 0.55f, 0.18f),
             EmissionEnergyMultiplier = 4.5f,
@@ -220,11 +220,11 @@ public partial class EngineStartupController : Node3D
         _deckMat = new StandardMaterial3D
         {
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+            BlendMode = BaseMaterial3D.BlendModeEnum.Mix,
             DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoColor = new Color(0.85f, 0.92f, 1.0f, 0.35f),
+            AlbedoColor = new Color(0.85f, 0.92f, 1.0f, 0.70f),
             EmissionEnabled = true,
             Emission = new Color(0.75f, 0.88f, 1.0f),
             EmissionEnergyMultiplier = 3.5f,

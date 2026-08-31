@@ -21,6 +21,8 @@ public partial class FloatingOrigin : Node
     private const double MetresPerUnit   = 2.8;   // render scale (matches the vessel)
     private readonly Dictionary<string, Node3D> _planetNodes = new();
     private Camera3D? _camera;
+    private bool _earthGlobeRefined;
+    private float _lastCameraFar = float.NaN;
 
     // Last scaled-space sample consumed by the visual harness/telemetry. Keeping this
     // presentation-only snapshot makes an invisible planet diagnosable without changing
@@ -204,10 +206,27 @@ public partial class FloatingOrigin : Node
                 {
                     CameraAltOverEarth = System.Math.Max(0.0, body.GetAltitude(camSim));
                     float a = EarthGlobeAlpha(CameraAltOverEarth);
-                    if (node is MeshInstance3D mi &&
-                        mi.GetSurfaceOverrideMaterial(0) is ShaderMaterial sm)
-                        sm.SetShaderParameter("planet_alpha", a);
+                    if (node is MeshInstance3D mi)
+                    {
+                        if (!_earthGlobeRefined && a > 0.02f)
+                        {
+                            // Shared 96-segment sphere aliases as a white sawtooth
+                            // limb at 50–80 km. Earth-only tessellation; other
+                            // bodies keep the cheap shared mesh.
+                            mi.Mesh = new SphereMesh
+                            {
+                                Radius = 1f,
+                                Height = 2f,
+                                RadialSegments = 384,
+                                Rings = 192,
+                            };
+                            _earthGlobeRefined = true;
+                        }
+                        if (mi.GetSurfaceOverrideMaterial(0) is ShaderMaterial sm)
+                            sm.SetShaderParameter("planet_alpha", a);
+                    }
                     node.Visible = a > 0.002f;
+                    ExpandCameraFarForHorizon(R, CameraAltOverEarth);
                 }
 
                 double sinA      = System.Math.Min(R / d, 0.999999);
@@ -243,6 +262,28 @@ public partial class FloatingOrigin : Node
 
     // Registrar un nodo de planeta que se posiciona con PlanetRenderScale
     public void RegisterPlanetNode(string bodyId, Node3D node) => _planetNodes[bodyId] = node;
+
+    /// <summary>
+    /// SimulationBridge caps Far at 120 km of render range. Geometric horizon
+    /// at 20 km is already ~490 km, so the far plane cut the ground disc into
+    /// a cookie. Expand Far with the horizon while the local Earth patch is up.
+    /// </summary>
+    private void ExpandCameraFarForHorizon(double surfaceRadiusM, double cameraAltM)
+    {
+        if (_camera == null || !IsInstanceValid(_camera)) return;
+        double alt = System.Math.Max(cameraAltM, 50.0);
+        double horizonM = System.Math.Sqrt(System.Math.Max(0.0,
+            2.0 * surfaceRadiusM * alt + alt * alt));
+        float far = Mathf.Clamp(
+            (float)(horizonM / MetresPerUnit) * 1.30f + 8000f,
+            120_000f,
+            420_000f);
+        if (float.IsNaN(_lastCameraFar) || Mathf.Abs(_lastCameraFar - far) > 400f)
+        {
+            _camera.Far = far;
+            _lastCameraFar = far;
+        }
+    }
 
     // Helpers de conversión double → float
     private static Godot.Vector3 ToGodotV3(Vector3d v) =>

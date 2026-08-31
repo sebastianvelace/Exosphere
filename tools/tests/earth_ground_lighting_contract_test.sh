@@ -3,100 +3,71 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fail() { echo "earth_ground_lighting_contract_test: FAIL: $*" >&2; exit 1; }
+has() { rg -qF "$1" "$2" || fail "$3"; }
 
 shader="$ROOT/assets/shaders/earth_ground.gdshader"
 controller="$ROOT/scripts/EarthGroundController.cs"
 launch_shader="$ROOT/assets/shaders/launch_surface.gdshader"
 launch_pad="$ROOT/scripts/LaunchPadController.cs"
+surface="$ROOT/assets/shaders/earth_surface.gdshader"
+origin="$ROOT/scripts/FloatingOrigin.cs"
+lighting="$ROOT/scripts/PhaseLightingController.cs"
 
 [[ -f "$launch_shader" ]] || fail "launch surface shader is missing"
-rg -q 'v_world_position = \(MODEL_MATRIX \* vec4\(VERTEX, 1\.0\)\)\.xyz' "$launch_shader" \
-  || fail "launch surface detail is not world-space stable"
-rg -q 'float aggregate = noise01' "$launch_shader" \
-  || fail "launch surface has no aggregate breakup"
-rg -q 'float grain = noise01' "$launch_shader" \
-  || fail "launch surface has no fine grain"
-rg -q 'CreateLaunchSurfaceMaterial' "$launch_pad" \
-  || fail "launch pad does not bind procedural surface materials"
-rg -q 'ApplySurface\("OrbitalPadApron"' "$launch_pad" \
-  || fail "starbase apron is not textured"
+has 'v_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz' "$launch_shader" "launch surface detail is not world-space stable"
+has 'float aggregate = noise01' "$launch_shader" "launch surface has no aggregate breakup"
+has 'float grain = noise01' "$launch_shader" "launch surface has no fine grain"
+has 'CreateLaunchSurfaceMaterial' "$launch_pad" "launch pad does not bind procedural surface materials"
+has 'ApplySurface("OrbitalPadApron"' "$launch_pad" "starbase apron is not textured"
 
-rg -q 'uniform float night_floor' "$shader" \
-  || fail "Earth ground has no bounded indirect night floor"
-rg -q 'uniform sampler2D night_tex' "$shader" \
-  || fail "Earth ground has no real night-side texture input"
-rg -q 'uniform float terrain_relief_strength' "$shader" \
-  || fail "Earth ground has no bounded local relief control"
-rg -q 'v_patch[[:space:]]*=[[:space:]]*VERTEX\.xz \* metres_per_unit' "$shader" \
-  || fail "Earth ground detail coordinate depends on unreliable UV2 interpolation"
-rg -q 'float macro = noise01' "$shader" \
-  || fail "Earth ground has no multi-scale macro terrain breakup"
-rg -q 'float regional = noise01' "$shader" \
-  || fail "Earth ground has no regional terrain breakup"
-rg -q 'float relief_scale = terrain_relief_strength \* land_mask' "$shader" \
-  || fail "Earth ground relief is not restricted to land"
-rg -q 'vec3 city_lights = night_map \* city_mask \* night_side' "$shader" \
-  || fail "Earth ground city lights do not follow the night side"
-rg -q 'uniform float terminator_width' "$shader" \
-  || fail "Earth ground has no bounded terminator transition"
-rg -q 'float terminator = smoothstep' "$shader" \
-  || fail "Earth ground terminator transition is not explicit"
-rg -q 'vec3 direct = vec3\(1\.05 \* ndl \* solar_visibility\)' "$shader" \
-  || fail "Earth ground direct solar term is not visibility-gated"
-rg -q 'render_mode cull_back, unshaded, depth_draw_opaque' "$shader" \
-  || fail "Earth ground must own its manual radiance"
-rg -q 'earthshine_gain' "$shader" \
-  || fail "Earth ground earthshine gain is missing"
-rg -q 'earthshine_min_reflectance' "$shader" \
-  || fail "Earth ground minimum earthshine reflectance is missing"
-rg -q 'ground_radiance = lit \+ indirect_emission' "$shader" \
-  || fail "Earth ground earthshine is not composed into radiance"
-rg -q 'night_floor", NightFloor' "$controller" \
-  || fail "Earth ground calibration is not configured from C#"
-rg -q 'private const float NightFloor = 0\.12f;' "$controller" \
-  || fail "Earth ground floor is not at the validated bounded ceiling"
-rg -q 'private const float EarthshineGain = 2\.80f;' "$controller" \
-  || fail "Earth ground earthshine gain is not configured"
-rg -q 'private const float EarthshineMinReflectance = 0\.055f;' "$controller" \
-  || fail "Earth ground minimum reflectance is not configured"
-rg -q 'private const float DetailStrength = 0\.18f;' "$controller" \
-  || fail "Earth ground detail strength is not configured"
-rg -q 'private const float TerrainReliefStrength = 0\.18f;' "$controller" \
-  || fail "Earth ground relief strength is not configured"
-rg -q 'private const float NightCityGain = 0\.34f;' "$controller" \
-  || fail "Earth ground city-light gain is not configured"
-rg -q 'earth_night\.jpg' "$controller" \
-  || fail "Earth ground does not bind the night texture"
-rg -q 'private const float CoastalGrade = 0\.28f;' "$controller" \
-  || fail "Earth ground coastal grade is not configured"
-rg -q 'private const float HorizonHazeStrength = 0\.92f;' "$controller" \
-  || fail "Earth ground horizon haze is too broad or unconfigured"
-rg -q 'HorizonHazeStrength' "$controller" \
-  || fail "Earth ground horizon seam mitigation is not bounded/configured"
+has 'uniform float night_floor' "$shader" "Earth ground has no bounded indirect night floor"
+has 'uniform sampler2D night_tex' "$shader" "Earth ground has no real night-side texture input"
+has 'uniform float terrain_relief_strength' "$shader" "Earth ground has no bounded local relief control"
+has 'v_patch        = VERTEX.xz * metres_per_unit;' "$shader" "Earth ground detail coordinate depends on unreliable UV2 interpolation"
+has 'float macro = noise01' "$shader" "Earth ground has no multi-scale macro terrain breakup"
+has 'float regional = noise01' "$shader" "Earth ground has no regional terrain breakup"
+has 'float relief_scale = terrain_relief_strength * land_mask' "$shader" "Earth ground relief is not restricted to land"
+has 'vec3 city_lights = night_map * city_mask * night_side' "$shader" "Earth ground city lights do not follow the night side"
+has 'uniform float terminator_width' "$shader" "Earth ground has no bounded terminator transition"
+has 'float terminator = smoothstep' "$shader" "Earth ground terminator transition is not explicit"
+has 'vec3 direct = vec3(1.05 * ndl * solar_visibility)' "$shader" "Earth ground direct solar term is not visibility-gated"
+has 'render_mode cull_back, unshaded, depth_draw_opaque' "$shader" "Earth ground must own its manual radiance on the opaque pass"
+has 'earthshine_gain' "$shader" "Earth ground earthshine gain is missing"
+has 'earthshine_min_reflectance' "$shader" "Earth ground minimum earthshine reflectance is missing"
+has 'ground_radiance = lit + indirect_emission + city_lights' "$shader" "Earth ground earthshine is not composed into radiance"
+has 'night_floor", NightFloor' "$controller" "Earth ground calibration is not configured from C#"
+has 'private const float NightFloor = 0.12f;' "$controller" "Earth ground floor is not at the validated bounded ceiling"
+has 'private const float EarthshineGain = 2.80f;' "$controller" "Earth ground earthshine gain is not configured"
+has 'private const float EarthshineMinReflectance = 0.055f;' "$controller" "Earth ground minimum reflectance is not configured"
+has 'private const float DetailStrength = 0.18f;' "$controller" "Earth ground detail strength is not configured"
+has 'private const float TerrainReliefStrength = 0.18f;' "$controller" "Earth ground relief strength is not configured"
+has 'private const float NightCityGain = 0.34f;' "$controller" "Earth ground city-light gain is not configured"
+has 'earth_night.jpg' "$controller" "Earth ground does not bind the night texture"
+has 'private const float CoastalGrade = 0.28f;' "$controller" "Earth ground coastal grade is not configured"
+has 'private const float HorizonHazeStrength = 0.92f;' "$controller" "Earth ground horizon haze is too broad or unconfigured"
+has 'HorizonHazeStrength' "$controller" "Earth ground horizon seam mitigation is not bounded/configured"
 
-rg -q 'GetSurfacePoint\(vessel.Position, 0.0\)' "$controller" \
-  || fail "Earth ground is not anchored to the live ellipsoid surface"
-rg -q 'GetGeodeticUp\(vessel.Position\)' "$controller" \
-  || fail "Earth ground does not use geodetic up"
-rg -q 'EarthGlobeAlpha' "$controller" \
-  || fail "Earth ground fade is not complementary with the scaled-space globe"
-rg -q 'EarthVisualHandoffLowM = 18_000.0' "$ROOT/scripts/FloatingOrigin.cs" \
-  || fail "Earth visual handoff low altitude changed"
-rg -q 'EarthVisualHandoffHighM = 42_000.0' "$ROOT/scripts/FloatingOrigin.cs" \
-  || fail "Earth visual handoff high altitude changed"
-rg -q 'VisualSurfaceRadiusMetres' "$ROOT/scripts/FloatingOrigin.cs" \
-  || fail "scaled-space Earth does not read live surface radius"
-rg -q 'ApplySurface\("StarbaseWetlandSkirt"' "$launch_pad" \
-  || fail "starbase wetland skirt is not textured"
-rg -q 'float site_core = 1.0 - smoothstep' "$shader" \
-  || fail "Earth ground does not reconstruct land out to the play-camera horizon"
-rg -q 'float coastal_belt = 1.0 - smoothstep' "$shader" \
-  || fail "Earth ground has no coastal belt beyond the pad island"
-rg -q '22000f \* U' "$launch_pad" \
-  || fail "starbase wetland skirt is still the old 1.6 km island"
-rg -q 'uniform float edge_fade' "$launch_shader" \
-  || fail "launch surface has no skirt edge fade"
-rg -q 'edgeFade: 1f' "$launch_pad" \
-  || fail "starbase wetland skirt does not fade into the planetary patch"
+has 'GetSurfacePoint(vessel.Position, 0.0)' "$controller" "Earth ground is not anchored to the live ellipsoid surface"
+has 'GetGeodeticUp(vessel.Position)' "$controller" "Earth ground does not use geodetic up"
+has 'EarthGlobeAlpha' "$controller" "Earth ground fade is not complementary with the scaled-space globe"
+has 'EarthVisualHandoffLowM = 18_000.0' "$origin" "Earth visual handoff low altitude changed"
+has 'EarthVisualHandoffHighM = 42_000.0' "$origin" "Earth visual handoff high altitude changed"
+has 'VisualSurfaceRadiusMetres' "$origin" "scaled-space Earth does not read live surface radius"
+has 'ApplySurface("StarbaseWetlandSkirt"' "$launch_pad" "starbase wetland skirt is not textured"
+has 'float site_core = 1.0 - smoothstep' "$shader" "Earth ground does not reconstruct land out to the play-camera horizon"
+has 'float coastal_belt = 1.0 - smoothstep' "$shader" "Earth ground has no coastal belt beyond the pad island"
+has '22000f * U' "$launch_pad" "starbase wetland skirt is still the old 1.6 km island"
+has 'uniform float edge_fade' "$launch_shader" "launch surface has no skirt edge fade"
+has 'edgeFade: 1f' "$launch_pad" "starbase wetland skirt does not fade into the planetary patch"
+has 'PatchRadiusUnits = 280_000f' "$controller" "Earth ground disc does not reach the geometric horizon"
+has 'FadeCivilGroundBox' "$controller" "civil Ground/wetland cookie is not faded on ascent"
+has 'StarbaseWetlandSkirt' "$controller" "starbase wetland skirt is not faded with the civil cookie"
+has 'OrbitalPadApron' "$controller" "orbital pad apron cookie is not faded with the civil ground"
+has 'float look_down = smoothstep' "$shader" "Earth ground nadir views still apply grazing haze"
+has 'float horizon_m = max(horizon_dist * metres_per_unit' "$shader" "Earth ground rim is not a circular geometric-horizon fade"
+has 'PadShadowMaxDistance = 900f' "$lighting" "pad directional shadows do not cover the tower/stack"
+has 'RadialSegments = 384' "$origin" "scaled-space Earth globe is still the low-tessellation sawtooth sphere"
+has 'float limb_aa = max(fwidth(limb)' "$surface" "Earth limb has no fwidth antialias against the sky"
+has 'render_mode cull_back, unshaded, blend_mix' "$surface" "Earth limb ALPHA is ignored without blend_mix"
 
-echo "earth_ground_lighting_contract_test: PASS (bounded night floor, ellipsoid anchor, complementary globe handoff)"
+echo "earth_ground_lighting_contract_test: PASS (bounded night floor, ellipsoid disc, nadir haze gate, limb blend_mix)"

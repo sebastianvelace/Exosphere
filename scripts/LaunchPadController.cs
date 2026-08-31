@@ -12,8 +12,9 @@ using Exosphere.Simulation;
 ///
 /// Scale: render units are ~2.8 m/unit (see VesselRenderer). The vessel sits
 /// at the render origin with its base (booster engine tips) at y≈0 and a body
-/// radius of ~1.607 units (~9 m diameter, matches VesselRenderer.BodyR). Everything
-/// here is positioned so the booster fires down through the centre of the launch mount.
+/// radius of ~1.607 units (~9 m diameter, matches VesselRenderer.BodyR). The
+/// complex is translated down by the vehicle-interface height so civil grade,
+/// the OLM deck, and the engine datum share one local vertical.
 /// </summary>
 public partial class LaunchPadController : Node3D
 {
@@ -36,6 +37,12 @@ public partial class LaunchPadController : Node3D
     // Match VesselRenderer.BodyR — 9 m Ø hull (4.5 m radius).
     private const float VesselBodyR = 1.607f;
     private readonly List<SpotLight3D> _nightFloodlights = new();
+    private Node3D? _padExhaustRoot;
+    private MeshInstance3D? _wellFlame;
+    private ShaderMaterial? _wellFlameMat;
+    private OmniLight3D? _padExhaustLight;
+    private StandardMaterial3D? _steamSheetMat;
+    private float _padExhaustIntensity;
 
     // ── Mechazilla catch feedback (cosmetic only — the sim decides the catch, see
     // Vessel.IsCaught / Universe.EvaluateCatchContact; this only animates the render) ──
@@ -78,11 +85,18 @@ public partial class LaunchPadController : Node3D
     public override void _Ready()
     {
         Instance = this;
+        // SimulationBridge places the vessel origin at the real vehicle-interface
+        // elevation above grade. Keep the static launch complex on that same datum:
+        // its GradeY=0 becomes the ground below the vessel instead of coinciding
+        // with the engine tips in the floating-origin scene.
+        Position = new Vector3(0f, -(float)(VehicleInterfaceElevationM * U), 0f);
         BuildEnvironment();
     }
 
     public override void _Process(double delta)
     {
+        UpdatePadExhaustFx(delta);
+
         bool night = SunController.SolarPhase is "ASTRONOMICAL_TWILIGHT" or "NIGHT";
         if (!_lastNightFloodlightsState.HasValue || _lastNightFloodlightsState.Value != night)
         {
@@ -177,7 +191,8 @@ public partial class LaunchPadController : Node3D
         var burnt     = Mat(new Color(0.09f, 0.08f, 0.07f), 0.98f, 0.0f);
         var steel     = Mat(new Color(0.55f, 0.56f, 0.58f), 0.55f, 0.85f); // grey lattice steel
         var darkSteel = Mat(new Color(0.28f, 0.28f, 0.31f), 0.60f, 0.80f); // OLM / dark steel
-        var insul     = Mat(new Color(0.74f, 0.72f, 0.68f), 0.82f, 0.12f); // weathered cryo tanks
+        var insul     = Mat(new Color(0.42f, 0.32f, 0.24f), 0.92f, 0.06f); // oxidized cryo tanks
+        var cladding  = Mat(new Color(0.28f, 0.24f, 0.20f), 0.93f, 0.08f); // rusted campus walls
         // Weathered, slightly lighter concrete for the wide tarmac, plus a mid
         // scorch tone between clean concrete and fully-charred burnt.
         var tarmac    = Mat(new Color(0.30f, 0.30f, 0.28f), 0.96f, 0.0f); // weathered apron
@@ -199,13 +214,14 @@ public partial class LaunchPadController : Node3D
         }
 
         BuildStarbaseCivilWorks(sandFill, gravel, asphalt, tarmac, concDark, paint);
-        BuildSupportCampus(concrete, darkSteel, asphalt, paint, insul, steel);
+        BuildSupportCampus(cladding, darkSteel, asphalt, paint, insul, steel);
         BuildOrbitalLaunchMount(darkSteel, concDark);
         BuildMechazillaTower(steel, darkSteel);
         BuildTankFarm(insul, steel);
         BuildGroundSupport(insul, steel, darkSteel, concrete, concDark);
         ApplyLaunchSurfaceMaterials();
         BuildNightFloodlights();
+        BuildPadExhaustFx();
     }
 
     private void ApplyLaunchSurfaceMaterials()
@@ -222,7 +238,9 @@ public partial class LaunchPadController : Node3D
         var gravel = CreateLaunchSurfaceMaterial(
             new Color(0.20f, 0.19f, 0.17f), 0.46f, 0.38f, 0.20f, 0.0f);
         var marsh = CreateLaunchSurfaceMaterial(
-            new Color(0.20f, 0.22f, 0.17f), 0.14f, 0.28f, 0.12f, 0.38f,
+            // Keep the broad marsh variation, but avoid sub-pixel grain across the
+            // 22 km skirt: the old settings produced moire bands in the pad camera.
+            new Color(0.20f, 0.23f, 0.18f), 0.045f, 0.12f, 0.025f, 0.18f,
             edgeFade: 1f, edgeHalfX: 11000f * U, edgeHalfZ: 8000f * U);
         var burnt = CreateLaunchSurfaceMaterial(
             new Color(0.09f, 0.08f, 0.07f), 0.36f, 0.16f, 0.06f, 0.28f);
@@ -495,18 +513,36 @@ public partial class LaunchPadController : Node3D
         StandardMaterial3D paint)
     {
         Spawn("StarbaseCoastalFill",
-            new BoxMesh { Size = new Vector3(300f * U, 2.0f * U, 240f * U) },
-            sandFill, new Vector3(-18f * U, GradeY - 1.0f * U, 0));
+            new CylinderMesh
+            {
+                TopRadius = 220f * U,
+                BottomRadius = 260f * U,
+                Height = 0.8f * U,
+                RadialSegments = 32,
+            },
+            sandFill, new Vector3(-40f * U, GradeY - 0.3f * U, 20f * U));
         // Wide wetland/dune skirt so the 300 m civil island does not drop into a
         // featureless satellite smear. Sits just above the Earth ground patch and
         // below the OLM apron.
         var marsh = Mat(new Color(0.17f, 0.21f, 0.16f), 0.98f, 0.0f);
         Spawn("StarbaseWetlandSkirt",
-            new BoxMesh { Size = new Vector3(22000f * U, 0.30f * U, 16000f * U) },
+            new CylinderMesh
+            {
+                TopRadius = 22000f * U,
+                BottomRadius = 22000f * U,
+                Height = 0.30f * U,
+                RadialSegments = 64,
+            },
             marsh, new Vector3(-80f * U, GradeY + 0.08f * U, 60f * U));
         Spawn("StarbaseDuneShoulder",
-            new BoxMesh { Size = new Vector3(1600f * U, 0.22f * U, 1200f * U) },
-            sandFill, new Vector3(-28f * U, GradeY + 0.12f * U, 12f * U));
+            new CylinderMesh
+            {
+                TopRadius = 420f * U,
+                BottomRadius = 480f * U,
+                Height = 0.22f * U,
+                RadialSegments = 48,
+            },
+            sandFill, new Vector3(-180f * U, GradeY + 0.12f * U, 40f * U));
         Spawn("OrbitalPadApron",
             new BoxMesh { Size = new Vector3(126f * U, 0.35f * U, 112f * U) },
             concrete, new Vector3(0, GradeY + 0.175f * U, 0));
@@ -1031,10 +1067,13 @@ public partial class LaunchPadController : Node3D
                 { Size = new Vector3(panelW, 7f * U, 0.45f * U) }, steel,
                 new Vector3(outerR * Mathf.Cos(a), tableTopY - tableThick - 3.5f * U,
                     outerR * Mathf.Sin(a)), new Vector3(0, -Mathf.RadToDeg(a), 0));
-            SpawnRot($"OLMInnerSkirt{i}", new BoxMesh
-                { Size = new Vector3(innerR * Mathf.Tau / segs * 1.03f, 6f * U, 0.35f * U) }, steel,
-                new Vector3(innerR * Mathf.Cos(a), tableTopY - tableThick - 3f * U,
-                    innerR * Mathf.Sin(a)), new Vector3(0, -Mathf.RadToDeg(a), 0));
+            // Open well: a solid inner skirt boxed the 33-Raptor column inside a
+            // steel bucket, so pad cameras saw a dry stack. Keep sparse columns.
+            if (i % 4 == 0)
+                SpawnRot($"OLMWellColumn{i}", new BoxMesh
+                    { Size = new Vector3(0.55f * U, 6f * U, 0.55f * U) }, steel,
+                    new Vector3(innerR * Mathf.Cos(a), tableTopY - tableThick - 3f * U,
+                        innerR * Mathf.Sin(a)), new Vector3(0, -Mathf.RadToDeg(a), 0));
         }
 
         // ── Hold-down clamps + QD plate hardware around the centre hole ───────
@@ -1060,9 +1099,22 @@ public partial class LaunchPadController : Node3D
         // ── Water-cooled steel flame deflector plate beneath the centre hole ──
         // A heavy plate slung under the table that the booster exhaust strikes,
         // sitting above the concrete trench. Reads as the steel "shower head".
-        Spawn("DeflectorPlate", new CylinderMesh
-            { TopRadius = innerR + 2.5f * U, BottomRadius = innerR + 2.5f * U, Height = 1.2f * U, RadialSegments = 24 },
-            steel, new Vector3(0, GradeY + 0.8f * U, 0));
+        // Water-cooled showerhead: an annular ring, not a solid lid that hid the flame.
+        Spawn("DeflectorRing", new TorusMesh
+        {
+            InnerRadius = innerR * 0.20f,
+            OuterRadius = innerR * 0.70f,
+            RingSegments = 28,
+            Rings = 10,
+        }, steel, new Vector3(0, GradeY + 0.8f * U, 0));
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.Tau / 8f;
+            SpawnRot($"DeflectorRib{i}", new BoxMesh
+                { Size = new Vector3(innerR * 1.15f, 0.35f * U, 0.45f * U) }, steel,
+                new Vector3(0, GradeY + 0.8f * U, 0),
+                new Vector3(0, -Mathf.RadToDeg(a), 0));
+        }
 
         // ── Splayed support legs (~6, ~20 m tall) ─────────────────────────
         // Legs run from under the table skirt down to the pad footing, splayed
@@ -1613,7 +1665,13 @@ public partial class LaunchPadController : Node3D
 
     private MeshInstance3D Spawn(string name, Mesh mesh, StandardMaterial3D mat, Vector3 pos)
     {
-        var node = new MeshInstance3D { Name = name, Mesh = mesh, Position = pos };
+        var node = new MeshInstance3D
+        {
+            Name = name,
+            Mesh = mesh,
+            Position = pos,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+        };
         node.SetSurfaceOverrideMaterial(0, mat);
         AddChild(node);
         return node;
@@ -1626,4 +1684,152 @@ public partial class LaunchPadController : Node3D
         node.RotationDegrees = rotationDegrees;
         return node;
     }
+
+    /// <summary>
+    /// Pad-anchored IFT exhaust: a well flame plus a steam wall that stays on the
+    /// OLM while the vehicle climbs. Vessel plumes travel with the stack; this is
+    /// the ground cloud the pad camera must see at T=0.
+    /// </summary>
+    private void BuildPadExhaustFx()
+    {
+        _padExhaustRoot = new Node3D { Name = "PadExhaustFx", Visible = false };
+        AddChild(_padExhaustRoot);
+
+        var plumeShader = GD.Load<Shader>("res://assets/shaders/raptor_plume.gdshader");
+        _wellFlameMat = new ShaderMaterial { Shader = plumeShader, RenderPriority = 2 };
+        _wellFlameMat.SetShaderParameter("core_color", new Color(0.95f, 0.97f, 1.00f));
+        _wellFlameMat.SetShaderParameter("edge_color", new Color(1.0f, 0.48f, 0.14f));
+        _wellFlameMat.SetShaderParameter("diamond_count", 7.0f);
+        _wellFlameMat.SetShaderParameter("tail_radius", 0.42f);
+        _wellFlameMat.SetShaderParameter("energy", 3.4f);
+        _wellFlameMat.SetShaderParameter("throttle", 1f);
+        _wellFlameMat.SetShaderParameter("expansion", 0f);
+        _wellFlameMat.SetShaderParameter("atmo_pressure", 1f);
+        _wellFlameMat.SetShaderParameter("throttle_level", 1f);
+
+        float wellLen = Mathf.Max(2.4f, VehicleInterfaceY - GradeY);
+        _wellFlame = new MeshInstance3D
+        {
+            Name = "WellFlame",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = VesselBodyR * 0.72f,
+                BottomRadius = VesselBodyR * 1.15f,
+                Height = 1f,
+                RadialSegments = 20,
+                Rings = 10,
+                CapTop = false,
+                CapBottom = false,
+            },
+            Position = new Vector3(0f, VehicleInterfaceY - wellLen * 0.5f, 0f),
+            Scale = new Vector3(1f, wellLen, 1f),
+            MaterialOverride = _wellFlameMat,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            SortingOffset = 3f,
+            CustomAabb = new Aabb(new Vector3(-6f, -2f, -6f), new Vector3(12f, 4f, 12f)),
+        };
+        _padExhaustRoot.AddChild(_wellFlame);
+
+        _steamSheetMat = new StandardMaterial3D
+        {
+            // The pad-side camera can approach from any azimuth. Face the steam
+            // sheets toward it instead of relying on the authored radial rotation,
+            // which leaves most of the deluge edge-on in the acceptance shot.
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            BlendMode = BaseMaterial3D.BlendModeEnum.Mix,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+            AlbedoColor = new Color(0.88f, 0.86f, 0.82f, 0.58f),
+            EmissionEnabled = true,
+            Emission = new Color(0.78f, 0.76f, 0.72f),
+            EmissionEnergyMultiplier = 0.55f,
+        };
+
+        const int sheets = 18;
+        float ringR = 5.2f;
+        for (int i = 0; i < sheets; i++)
+        {
+            float a = i * Mathf.Tau / sheets;
+            var sheet = new MeshInstance3D
+            {
+                Name = $"DelugeSheet{i}",
+                Mesh = new QuadMesh { Size = new Vector2(9.2f, 6.2f) },
+                Position = new Vector3(Mathf.Cos(a) * ringR, GradeY + 2.2f, Mathf.Sin(a) * ringR),
+                RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a) + 90f, 0f),
+                MaterialOverride = _steamSheetMat,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            _padExhaustRoot.AddChild(sheet);
+        }
+
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.Tau / 8f + 0.2f;
+            var sheet = new MeshInstance3D
+            {
+                Name = $"DelugeWall{i}",
+                Mesh = new QuadMesh { Size = new Vector2(9.5f, 6.4f) },
+                Position = new Vector3(Mathf.Cos(a) * 9.5f, GradeY + 3.4f, Mathf.Sin(a) * 9.5f),
+                RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a) + 90f, 0f),
+                MaterialOverride = _steamSheetMat,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            _padExhaustRoot.AddChild(sheet);
+        }
+
+        _padExhaustLight = new OmniLight3D
+        {
+            Name = "PadExhaustLight",
+            Position = new Vector3(0f, VehicleInterfaceY - 1.2f, 0f),
+            LightColor = new Color(0.92f, 0.88f, 0.78f),
+            LightEnergy = 0f,
+            OmniRange = 38f,
+            ShadowEnabled = false,
+            LightSpecular = 0.25f,
+        };
+        _padExhaustRoot.AddChild(_padExhaustLight);
+    }
+
+    private void UpdatePadExhaustFx(double delta)
+    {
+        if (_padExhaustRoot == null) return;
+
+        float target = 0f;
+        var vessel = SimulationBridge.Instance?.ActiveVessel;
+        if (vessel != null && vessel.Throttle > 0.02 && vessel.HasActiveEngineParts)
+        {
+            var body = SimulationBridge.Instance?.Universe?.GetDominantBody(vessel.Position);
+            double alt = body != null ? vessel.GetAltitude(body) : 0.0;
+            if (alt < 480.0)
+                target = (float)vessel.Throttle * (1f - Mathf.Clamp((float)((alt - 80.0) / 400.0), 0f, 1f));
+        }
+
+        float rate = target > _padExhaustIntensity ? 10f : 2.2f;
+        _padExhaustIntensity = Mathf.Lerp(_padExhaustIntensity, target,
+            Mathf.Clamp((float)delta * rate, 0f, 1f));
+
+        bool on = _padExhaustIntensity > 0.02f;
+        _padExhaustRoot.Visible = on;
+        if (!on) return;
+
+        float k = _padExhaustIntensity;
+        _wellFlameMat?.SetShaderParameter("throttle", k);
+        _wellFlameMat?.SetShaderParameter("throttle_level", k);
+        _wellFlameMat?.SetShaderParameter("energy", 4.4f + 2.2f * k);
+        if (_wellFlame != null)
+            _wellFlame.Scale = new Vector3(0.85f + 0.45f * k, _wellFlame.Scale.Y, 0.85f + 0.45f * k);
+
+        if (_steamSheetMat != null)
+        {
+            float a = Mathf.Clamp(0.38f + 0.40f * k, 0.2f, 0.82f);
+            _steamSheetMat.AlbedoColor = new Color(0.86f, 0.84f, 0.80f, a);
+            _steamSheetMat.EmissionEnergyMultiplier = 0.35f + 0.55f * k;
+        }
+
+        if (_padExhaustLight != null)
+            _padExhaustLight.LightEnergy = 8f + 18f * k;
+    }
+
 }

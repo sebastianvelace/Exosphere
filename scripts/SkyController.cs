@@ -48,7 +48,10 @@ public partial class SkyController : Node
     // The optical coefficients are physical cross-sections; the realtime sky
     // integrates a visible-band solar irradiance proxy.  Calibrate that proxy
     // once here so the accumulated HDR sky does not white-clip the lower limb.
-    private const float VisibleSolarRadianceScale = 0.35f;
+    // 0.35 crushed zenith blue so the play camera read as a white slab. 0.55
+    // restores Rayleigh blue; sun-disc radiance in the sky shader is lowered
+    // separately so the photosphere does not bleach the frame.
+    private const float VisibleSolarRadianceScale = 0.55f;
     // Interactive runtime profile: preserve the same physical model and official order 4,
     // but bound CPU work tightly enough that llvmpipe/Godot remains responsive while the
     // worker builds. The offline spectral/reference tools keep their independent high-
@@ -169,6 +172,10 @@ public partial class SkyController : Node
         var worldEnvironment = GetTree().Root.FindChild(
             "WorldEnvironment", true, false) as WorldEnvironment;
         _env = worldEnvironment?.Environment;
+
+        var viewport = GetViewport();
+        if (viewport != null && viewport.Msaa3D == Viewport.Msaa.Disabled)
+            viewport.Msaa3D = Viewport.Msaa.Msaa2X;
 
         if (_env?.Sky == null) return;
         _skyMat = new ShaderMaterial { Shader = GD.Load<Shader>(SkyShaderPath) };
@@ -528,15 +535,11 @@ public partial class SkyController : Node
             _lastCloudWeatherPrefilter = cloudWeatherPrefilter;
         }
 
-        float groundFill = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
-        if (body.Id != "earth") groundFill = 1f;
-        else if (altitude < 12_000.0)
-        {
-            // Pad/ascent play camera: the tangent patch owns the disc. Sky-sphere
-            // ground fill was a darker band than the daylight dome, which drew the
-            // one-pixel black horizon in T=0 captures.
-            groundFill *= Smoothstep(4_000.0f, 12_000.0f, (float)altitude);
-        }
+        // Earth: the tangent disc + scaled globe own the ground. Sky-sphere fill
+        // between 4–18 km was the grey soup around the civil cookie.
+        float groundFill = body.Id == "earth"
+            ? 0f
+            : 1f;
         if (_skyMat != null
             && (float.IsNaN(_lastGroundFillStrength)
                 || Mathf.Abs(groundFill - _lastGroundFillStrength) > 1e-3f))

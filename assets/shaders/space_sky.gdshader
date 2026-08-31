@@ -74,7 +74,7 @@ uniform float cloud_macro_strength = 0.25;
 // retains the full-resolution weather texture and its synoptic detail.
 uniform float cloud_weather_prefilter : hint_range(0.0, 1.0) = 0.0;
 uniform float sun_angular_radius = 0.00465;
-uniform float sun_disc_radiance = 32.0;
+uniform float sun_disc_radiance = 12.0;
 uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform float atmospheric_solar_visibility : hint_range(0.0, 1.0) = 1.0;
 // Interactive quadrature quality. The CPU/LUT oracle and the official order-4
@@ -683,7 +683,7 @@ void sky() {
 	// Play-camera daylight: the starmap must not punch through a thick column
 	// even if exposure still thinks the scene is dark (T=0 pad, 19 km ascent).
 	float sun_up = smoothstep(-0.06, 0.10, dot(up, to_sun));
-	float thick_column = 1.0 - smoothstep(12000.0, 92000.0, max(observer_altitude, 0.0));
+	float thick_column = 1.0 - smoothstep(8000.0, 38000.0, max(observer_altitude, 0.0));
 	stars *= 1.0 - sun_up * thick_column;
 
 	// Return one linear HDR radiance domain. Godot's environment applies exposure and
@@ -744,7 +744,7 @@ void sky() {
 		float elev = dot(view_dir, up);
 		float above = smoothstep(-0.045, 0.050, elev);
 		float h = clamp(elev, 0.0, 1.0);
-		vec3 dome = mix(vec3(0.84, 0.90, 0.97), vec3(0.26, 0.50, 0.90), pow(h, 0.62));
+		vec3 dome = mix(vec3(0.70, 0.82, 0.94), vec3(0.18, 0.42, 0.84), pow(h, 0.55));
 		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);
 		dome += vec3(sun_glare, sun_glare * 0.85, sun_glare * 0.55);
 		float pad_sky = sun_up * thick_column * above * atmospheric_solar_visibility;
