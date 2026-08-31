@@ -10,9 +10,6 @@ using Exosphere.Simulation.Propulsion;
 // not viewport anchors (CenterBottom+HBox was leaving Size at 0 for some boots).
 public partial class EngineGridHUD : Control
 {
-    private const int RingInner = 3;
-    private const int RingMid   = 10;
-    private const int RingOuter = 20;
     private const double TelemetryUpdatePeriodSeconds = 0.10;
 
     public const float BoardWidth = 120f;
@@ -32,8 +29,9 @@ public partial class EngineGridHUD : Control
     private bool _showReadouts;
 
     private int    _litEngines;
-    private int    _nominalEngines = 33;
+    private int    _nominalEngines = 1;
     private int    _failedEngines;
+    private readonly List<int> _boardRings = new();
     private double _throttle;
     private double _thrustKN;
     private double _twr;
@@ -93,7 +91,7 @@ public partial class EngineGridHUD : Control
             : declaredNominal;
         _litEngines = hasOneRowPerEngine
             ? EngineHudPresentation.CountDelivered(_readoutScratch)
-            : System.Math.Clamp(vessel.ActiveEngineCount, 0, _nominalEngines);
+            : System.Math.Clamp(vessel.ActiveEngineCount, 0, System.Math.Max(1, _nominalEngines));
         _failedEngines = hasOneRowPerEngine
             ? EngineHudPresentation.CountFailures(_readoutScratch)
             : 0;
@@ -124,15 +122,12 @@ public partial class EngineGridHUD : Control
         float cy = 66f;
         int litRemaining = _litEngines;
         _drawEngineIndex = 0;
-        if (_nominalEngines == 33)
+        EngineHudPresentation.FillBoardRings(_nominalEngines, _boardRings);
+        int ringCount = _boardRings.Count;
+        for (int i = 0; i < ringCount; i++)
         {
-            litRemaining = DrawRing(cx, cy, 40f, RingOuter, litRemaining);
-            litRemaining = DrawRing(cx, cy, 26f, RingMid, litRemaining);
-            DrawRing(cx, cy, 11f, RingInner, litRemaining);
-        }
-        else
-        {
-            DrawRing(cx, cy, 26f, _nominalEngines, litRemaining);
+            float radius = RingRadius(i, ringCount, _nominalEngines);
+            litRemaining = DrawRing(cx, cy, radius, _boardRings[i], litRemaining);
         }
 
         string centre = $"{_litEngines}/{_nominalEngines}";
@@ -151,6 +146,16 @@ public partial class EngineGridHUD : Control
             _ispEff > 0 ? $"{_ispEff:F0} s" : "---", ValueBright);
         DrawReadout(10, ry, "ṁ",
             _massFlow > 0.001 ? $"{_massFlow:F2} t/s" : "---", ValueBright);
+    }
+
+    private static float RingRadius(int ringIndex, int ringCount, int nominalEngines)
+    {
+        if (nominalEngines == EngineHudPresentation.SuperHeavyTemplateCount)
+            return ringIndex switch { 0 => 40f, 1 => 26f, _ => 11f };
+
+        if (ringCount <= 1) return 26f;
+        float t = ringCount == 1 ? 1f : 1f - ringIndex / (float)(ringCount - 1);
+        return Mathf.Lerp(11f, 40f, t);
     }
 
     private int DrawRing(float cx, float cy, float radius, int count, int lit)

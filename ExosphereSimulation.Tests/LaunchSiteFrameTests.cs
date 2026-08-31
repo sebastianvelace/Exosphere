@@ -253,6 +253,25 @@ public class LaunchSiteFrameTests
     }
 
     [Fact]
+    public void StarbaseJ2000SolarElevationIsFinite()
+    {
+        var universe = Universe.LoadFromDataDirectory(
+            Path.Combine(FindRepoRoot().FullName, "data"));
+        var earth = universe.GetBody("earth");
+        var sun = universe.GetBody("sun");
+        Assert.NotNull(earth);
+        Assert.NotNull(sun);
+
+        var pad = LoadSite("starbase").GetPosition(earth);
+        var up = earth.GetGeodeticUp(pad);
+        double sinEl = up.Dot((sun.Position - pad).Normalized);
+        double deg = System.Math.Asin(System.Math.Clamp(sinEl, -1.0, 1.0))
+            * 180.0 / System.Math.PI;
+
+        Assert.True(double.IsFinite(deg), $"Starbase solar elevation at t=0 was {deg}");
+    }
+
+    [Fact]
     public void KennedyRenderFrameIsOrthonormalRightHandedAndRadiallyUpright()
     {
         var earth = LoadBody("earth");

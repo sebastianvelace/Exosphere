@@ -31,11 +31,12 @@ public partial class EarthGroundController : Node3D
     // anchoring is not, and always reads the body through SimulationBridge.
 
     // ── Patch geometry (in render UNITS) ─────────────────────────────────────
-    // ~900 km across → half-extent ~450 km. 450,000 m / 2.8 ≈ 160,700 units.
-    // Curvature drop at the edge ≈ 160700² / (2·2.275e6) ≈ 5,680 units (~16 km),
-    // so every coordinate stays comfortably float-precise (±~160k horiz).
-    private const float PatchHalfUnits = 160_700f;        // half-width in units
-    private const int   Grid           = 96;              // 55k vertices; curvature stays smooth
+    // Circular disc to the geometric horizon at ~50 km (√(2 R h) ≈ 800 km).
+    // 800,000 m / 2.8 ≈ 286,000 units. A square of any size reads as a cookie
+    // from the play camera; the silhouette is a disc with a shader rim fade.
+    private const float PatchRadiusUnits = 280_000f;
+    private const int   DiscRings        = 48;
+    private const int   DiscSegments     = 72;
 
     // Vessel-altitude safety: hide the tangent patch once the rocket itself is
     // well into the scaled-space regime even if a chase camera is somehow low.
@@ -58,7 +59,7 @@ public partial class EarthGroundController : Node3D
     private const float TerrainReliefStrength = 0.18f;
     private const float NightCityGain = 0.34f;
     private const float TerminatorWidth = 0.16f;
-    private const float HorizonHazeStrength = 0.35f;
+    private const float HorizonHazeStrength = 0.92f;
 
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;
@@ -68,6 +69,8 @@ public partial class EarthGroundController : Node3D
     private float _lastEarthRadius = float.NaN;
     private Color _lastHazeColor;
     private Vector3 _lastSunDirection;
+    private MeshInstance3D? _civilGround;
+    private readonly List<MeshInstance3D> _civilMeshes = new();
 
     public override void _Ready()
     {
@@ -112,11 +115,15 @@ public partial class EarthGroundController : Node3D
             _mesh.SetSurfaceOverrideMaterial(0, fallback);
         }
 
-        // Big patch — keep it from being frustum-culled at grazing angles.
+        // Big disc — keep it from being frustum-culled at grazing angles.
         _mesh.CustomAabb = new Aabb(
-            new Vector3(-PatchHalfUnits, -8000f, -PatchHalfUnits),
-            new Vector3(2f * PatchHalfUnits, 16000f, 2f * PatchHalfUnits));
+            new Vector3(-PatchRadiusUnits, -12000f, -PatchRadiusUnits),
+            new Vector3(2f * PatchRadiusUnits, 24000f, 2f * PatchRadiusUnits));
         _mesh.Transparency = 0f;
+        // The planetary disc is too large for a useful shadow map. Pad concrete
+        // (launch_surface) still receives DirectionalLight shadows.
+        _mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        _mesh.SortingOffset = -2f;
 
         AddChild(_mesh);
         Visible = false;
@@ -167,12 +174,14 @@ public partial class EarthGroundController : Node3D
         var north = renderUp.Cross(east).Normalized();
         var basis = new Basis(east, renderUp, north);
 
-        // metres → units for the render-space translation.
+        // metres → units for the render-space translation. Sit the unshaded
+        // disc ~1.5 m below civil concrete/wetland so DirectionalLight shadows
+        // land on the shaded apron instead of being overwritten by this mesh.
         var offsetU = new Vector3(
             (float)(offsetM.X / MetresPerUnit),
             (float)(offsetM.Y / MetresPerUnit),
             (float)(offsetM.Z / MetresPerUnit));
-        GlobalTransform = new Transform3D(basis, offsetU);
+        GlobalTransform = new Transform3D(basis, offsetU - renderUp * 0.55f);
 
         if (_mat != null)
         {
@@ -234,6 +243,60 @@ public partial class EarthGroundController : Node3D
             }
             _groundShaderStateInitialized = true;
         }
+
+        FadeCivilGroundBox(FloatingOrigin.CameraAltOverEarth);
+    }
+
+    /// <summary>
+    /// Civil apron, wetland skirt and dune boxes read as cookies from a few
+    /// kilometres up. Fade them as soon as the planetary disc owns the nadir.
+    /// </summary>
+    private void FadeCivilGroundBox(double cameraAltitudeM)
+    {
+        if (_civilMeshes.Count == 0)
+            CollectCivilGroundMeshes();
+        if (_civilMeshes.Count == 0) return;
+
+        float hide = Smoothstep(150f, 700f, (float)cameraAltitudeM);
+        for (int i = _civilMeshes.Count - 1; i >= 0; i--)
+        {
+            var mesh = _civilMeshes[i];
+            if (mesh == null || !IsInstanceValid(mesh))
+            {
+                _civilMeshes.RemoveAt(i);
+                continue;
+            }
+            mesh.Transparency = hide;
+            mesh.Visible = hide < 0.97f;
+        }
+    }
+
+    private void CollectCivilGroundMeshes()
+    {
+        _civilMeshes.Clear();
+        Node? pad = LaunchPadController.Instance
+            ?? GetTree().Root.FindChild("LaunchPadController", true, false);
+        if (pad == null) return;
+        foreach (string name in new[]
+                 {
+                     "Ground",
+                     "StarbaseWetlandSkirt",
+                     "StarbaseDuneShoulder",
+                     "StarbaseCoastalFill",
+                     "OrbitalPadApron",
+                     "OlmFoundationMat",
+                 })
+        {
+            if (pad.FindChild(name, true, false) is MeshInstance3D mesh)
+                _civilMeshes.Add(mesh);
+        }
+        _civilGround = _civilMeshes.Count > 0 ? _civilMeshes[0] : null;
+    }
+
+    private static float Smoothstep(float edge0, float edge1, float x)
+    {
+        float t = Mathf.Clamp((x - edge0) / (edge1 - edge0), 0f, 1f);
+        return t * t * (3f - 2f * t);
     }
 
     // Orient the patch (default +Y normal) so it lies tangent to the surface.
@@ -266,40 +329,66 @@ public partial class EarthGroundController : Node3D
         || FloatDiffers(a.A, b.A);
 
     /// <summary>
-    /// Flat tangent grid whose vertices drop by the TRUE sphere curvature
-    /// <c>y = -(x²+z²)/(2R)</c>. UV2 carries the patch-local (x,z) in units so the
-    /// shader can offset it by the world ground coordinate for scrolling.
+    /// Geodetic disc whose vertices drop by ellipsoid sagitta
+    /// <c>y = -(x²+z²)/(2R)</c>. Polar rings keep a circular silhouette so the
+    /// play camera never sees a square cookie. UV2 carries patch-local (x,z) in metres.
     /// </summary>
     private static ArrayMesh BuildMesh()
     {
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
 
-        float step = (2f * PatchHalfUnits) / Grid;
         double radiusUnits = InitialEarthRadiusMetres() / MetresPerUnit;
         double invTwoR = 1.0 / (2.0 * radiusUnits);
 
         float Curve(float x, float z) => (float)(-(x * (double)x + z * (double)z) * invTwoR);
-
         Vector3 Vert(float x, float z) => new(x, Curve(x, z), z);
 
-        for (int j = 0; j < Grid; j++)
+        Vector3 centre = Vert(0f, 0f);
+        for (int ring = 0; ring < DiscRings; ring++)
         {
-            float z0 = -PatchHalfUnits + j * step, z1 = z0 + step;
-            for (int i = 0; i < Grid; i++)
+            float t0 = ring / (float)DiscRings;
+            float t1 = (ring + 1) / (float)DiscRings;
+            float r0 = RingRadius(t0);
+            float r1 = RingRadius(t1);
+            for (int s = 0; s < DiscSegments; s++)
             {
-                float x0 = -PatchHalfUnits + i * step, x1 = x0 + step;
-
-                Vector3 a = Vert(x0, z0), b = Vert(x1, z0);
-                Vector3 c = Vert(x1, z1), d = Vert(x0, z1);
-
-                AddTri(st, a, b, c);
-                AddTri(st, a, c, d);
+                float a0 = s * Mathf.Tau / DiscSegments;
+                float a1 = (s + 1) * Mathf.Tau / DiscSegments;
+                float c0 = Mathf.Cos(a0), s0 = Mathf.Sin(a0);
+                float c1 = Mathf.Cos(a1), s1 = Mathf.Sin(a1);
+                Vector3 inner0 = Vert(r0 * c0, r0 * s0);
+                Vector3 outer0 = Vert(r1 * c0, r1 * s0);
+                Vector3 outer1 = Vert(r1 * c1, r1 * s1);
+                Vector3 inner1 = Vert(r0 * c1, r0 * s1);
+                if (ring == 0)
+                {
+                    AddTri(st, centre, outer0, outer1);
+                }
+                else
+                {
+                    AddTri(st, inner0, outer0, outer1);
+                    AddTri(st, inner0, outer1, inner1);
+                }
             }
         }
 
         st.GenerateNormals();
         return st.Commit();
+    }
+
+    /// <summary>
+    /// Pack rings so the inner ~30 km (play-camera nadir at 6–20 km) has small
+    /// triangles instead of a 5 km centre fan that under-samples the coast.
+    /// </summary>
+    private static float RingRadius(float t)
+    {
+        const float innerFrac = 0.42f;
+        float innerR = 30_000f / MetresPerUnit;
+        if (t <= innerFrac)
+            return innerR * (t / innerFrac);
+        float u = (t - innerFrac) / (1f - innerFrac);
+        return Mathf.Lerp(innerR, PatchRadiusUnits, Mathf.Pow(u, 1.20f));
     }
 
     private static void AddTri(SurfaceTool st, Vector3 a, Vector3 b, Vector3 c)

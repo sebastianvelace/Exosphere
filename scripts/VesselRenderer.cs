@@ -76,9 +76,13 @@ public partial class VesselRenderer : Node3D
 
     // Windward heat-shield tile materials grouped by zone so belly, nose and flaps
     // char at different rates during re-entry.
-    private readonly Dictionary<TileCharZone, List<StandardMaterial3D>> _tileZoneMats = new();
+    private readonly Dictionary<TileCharZone, List<ShaderMaterial>> _tileZoneMats = new();
     private readonly List<ShaderMaterial> _shipSteelMats = new();
-    private static readonly Color TileBaseColor = new(0.045f, 0.045f, 0.055f);
+    private readonly List<ShaderMaterial> _steelMats = new();
+    private static readonly Color TileBaseColor = new(0.070f, 0.068f, 0.072f);
+    private OmniLight3D? _engineBayLight;
+    private OmniLight3D? _engineRimLight;
+    private OmniLight3D? _skyFillLight;
 
     // ── Real-scale hull radius ────────────────────────────────────────────
     // Starship/Super Heavy are 9 m in diameter → 4.5 m radius. At the render
@@ -204,13 +208,15 @@ public partial class VesselRenderer : Node3D
         // steel shader supplies weld banding + a soot gradient toward the engines,
         // so the body is ONE continuous cylinder — no overlaid band/soot rings
         // that would create visible steps.
-        var darkSteel = Mat(new Color(0.46f, 0.46f, 0.49f), 0.88f, 0.34f);
+        var darkSteel = SteelMat(new Color(0.46f, 0.46f, 0.49f), 0.58f, 0.36f,
+            weldSpacing: 2.4f);
         // Soot-darkened steel for the engine skirt: heat/exhaust staining.
-        var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
+        var sootSteel = SteelMat(new Color(0.22f, 0.21f, 0.20f), 0.48f, 0.55f,
+            weldSpacing: 1.6f, sootBot: -1.2f, sootTop: 1.1f);
 
         // Main body (y=2 → y=20), a single tall barrel. Body-local y runs
         // [-9, +9]; soot fades in over the bottom ~3 units (toward the engines).
-        var shSteel = SteelMat(new Color(0.80f, 0.80f, 0.82f), 0.93f, 0.22f,
+        var shSteel = SteelMat(new Color(0.68f, 0.67f, 0.65f), 0.22f, 0.32f,
             weldSpacing: 1.6f, sootBot: -ShBodyH * 0.5f, sootTop: -ShBodyH * 0.5f + 3.5f);
         _hullMesh = AddMesh("SHBody", new CylinderMesh
             { TopRadius = BodyR, BottomRadius = BodyR, Height = ShBodyH, RadialSegments = 64 },
@@ -222,6 +228,7 @@ public partial class VesselRenderer : Node3D
         AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
             darkSteel, new Vector3(BodyR + 0.01f, ShBodyBot + ShBodyH * 0.5f, 0f));
         AddBoosterLongitudinalSeams(darkSteel);
+        AddSHChines(darkSteel);
 
         // Engine skirt (y=0 → y=2) — sooty, blended into the body bottom so the
         // booster/engine transition has no hard cap. Slight outward flare.
@@ -272,6 +279,7 @@ public partial class VesselRenderer : Node3D
         // GPU plumes
         if (_plumes == null) { _plumes = new PlumeSystem { Name = "Plumes" }; AddChild(_plumes); }
         _plumes.SetupSH(shInnerR, shMidR, shOuterR, shBellY);
+        AttachVehicleLights(shBellY, superHeavy: true);
     }
 
     // ── Exposed hot-stage interstage (standalone SH after separation) ─────
@@ -322,9 +330,9 @@ public partial class VesselRenderer : Node3D
         // Real SH grid fins: 4 near the top, offset ~90° apart. They read as
         // thick cast lattice panels with a tapered outer silhouette, hinge drum
         // and diagonal webbing, not flat rectangular paddles.
-        var finMat   = Mat(new Color(0.34f, 0.34f, 0.37f), 0.90f, 0.38f);
-        var mountMat = Mat(new Color(0.34f, 0.34f, 0.37f), 0.86f, 0.42f);
-        var gridMat  = Mat(new Color(0.13f, 0.13f, 0.15f), 0.86f, 0.52f);
+        var finMat   = SteelMat(new Color(0.48f, 0.47f, 0.46f), 0.58f, 0.34f, weldSpacing: 0.55f);
+        var mountMat = SteelMat(new Color(0.30f, 0.30f, 0.32f), 0.55f, 0.40f, weldSpacing: 0.8f);
+        var gridMat  = SteelMat(new Color(0.12f, 0.12f, 0.13f), 0.42f, 0.55f, weldSpacing: 0.4f);
 
         for (int i = 0; i < 4; i++)
         {
@@ -439,7 +447,7 @@ public partial class VesselRenderer : Node3D
         float skirtMid = o + ShipSkirtBase + ShipSkirtH * 0.5f;
         float skirtTop = o + ShipBodyBase;
 
-        var shipSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.16f, weldSpacing: 1.55f);
+        var shipSteel = SteelMat(new Color(0.74f, 0.74f, 0.76f), 0.24f, 0.26f, weldSpacing: 1.55f);
         _shipSteelMats.Add(shipSteel);
         _hullMesh = AddMesh("Body",
             new CylinderMesh { TopRadius = BodyR, BottomRadius = BodyR, Height = ShipBodyH, RadialSegments = 64 },
@@ -460,7 +468,7 @@ public partial class VesselRenderer : Node3D
         const float noseBase = ShipNoseBase;
         const float noseLen  = ShipNoseH;
         const float noseR    = BodyR;
-        var noseSteel = SteelMat(new Color(0.88f, 0.88f, 0.90f), 0.93f, 0.18f,
+        var noseSteel = SteelMat(new Color(0.74f, 0.74f, 0.76f), 0.24f, 0.26f,
             weldSpacing: 1.3f);
         _shipSteelMats.Add(noseSteel);
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
@@ -543,6 +551,8 @@ public partial class VesselRenderer : Node3D
         // GPU plumes for Starship engines
         if (_plumes == null) { _plumes = new PlumeSystem { Name = "Plumes" }; AddChild(_plumes); }
         _plumes.SetupStarship(vacR, slR, vacExitY, slExitY, vacExitR, slExitR);
+        if (_engineBayLight == null)
+            AttachVehicleLights(slExitY, superHeavy: false);
 
         if (yOffset == -22f)
         {
@@ -1219,6 +1229,7 @@ public partial class VesselRenderer : Node3D
                 _plumes.UpdateGeneric(_perEngineThrottle, alt,
                     _cachedPresentationPressureRatio);
             }
+            UpdateVehicleLighting(throttle, alt);
         }
 
         _flapInputTimer -= System.Math.Max(0.0, delta);
@@ -1324,13 +1335,8 @@ public partial class VesselRenderer : Node3D
         foreach (var mats in _tileZoneMats.Values)
         foreach (var tileMat in mats)
         {
-            // Preserve the baseline fill even when glow is zero; thermal
-            // emission is additive so the hull never disappears between
-            // reentry samples.
-            tileMat.EmissionEnabled = true;
-            tileMat.Emission = new Color(0.050f, 0.050f, 0.060f)
-                + new Color(1.0f, 0.24f + glow * 0.48f, 0.05f) * (glow * 1.8f);
-            tileMat.EmissionEnergyMultiplier = 1.0f + glow * 2.4f;
+            tileMat.SetShaderParameter("emit_strength", glow * 1.6f);
+            tileMat.SetShaderParameter("rim_strength", 0.035f + glow * 0.04f);
         }
 
         UpdateTileCharring(body);
@@ -1381,7 +1387,7 @@ public partial class VesselRenderer : Node3D
             }
         }
 
-        return aeroDeployment;
+        return Mathf.Max(aeroDeployment, 0.28f);
     }
 
     private void UpdateFlaps(double delta, float aeroDeployment, float pitch, float roll)
@@ -1449,30 +1455,24 @@ public partial class VesselRenderer : Node3D
 
         float dmg = (float)System.Math.Clamp(rawDamage * dmgScale, 0.0, 1.0);
         float ember = (float)System.Math.Clamp((peakTemp - 1100.0) / 900.0, 0.0, 1.0);
+        bool glow = ember > 0.02f;
 
         var scorch = new Color(0.085f, 0.050f, 0.038f);
         Color albedo = TileBaseColor.Lerp(scorch, dmg);
 
         foreach (var mat in mats)
         {
-            mat.AlbedoColor = albedo;
-            mat.Roughness   = Mathf.Lerp(0.92f, 0.99f, dmg);
-
-            bool glow = ember > 0.02f;
-            // Keep the low, neutral TPS readability floor when the vehicle is
-            // cold. Thermal emission is additive and must not be the switch
-            // that makes the entire windward shell disappear in shadow.
-            mat.EmissionEnabled = true;
+            mat.SetShaderParameter("albedo_color", albedo);
+            mat.SetShaderParameter("roughness_val", Mathf.Lerp(0.92f, 0.99f, dmg));
+            mat.SetShaderParameter("char_amt", dmg);
             if (glow)
             {
                 float e = ember * (0.35f + 0.65f * dmg);
-                mat.Emission                 = new Color(0.9f, 0.18f, 0.04f);
-                mat.EmissionEnergyMultiplier = e * 1.6f;
+                mat.SetShaderParameter("emit_strength", e * 1.6f);
             }
             else
             {
-                mat.Emission = new Color(0.050f, 0.050f, 0.060f);
-                mat.EmissionEnergyMultiplier = 1.0f;
+                mat.SetShaderParameter("emit_strength", 0.0f);
             }
         }
     }
@@ -1560,11 +1560,141 @@ public partial class VesselRenderer : Node3D
         }
     }
 
-    private void RegisterTileMat(TileCharZone zone, StandardMaterial3D mat)
+    // Everyday Astronaut IFT-3: four elongated triangular chines near the aft
+    // hold COPVs. Visual fairings only — not a mass/aero model.
+    private void AddSHChines(Material mat)
+    {
+        float y = ShBodyBot + 3.4f;
+        float h = 6.2f;
+        for (int i = 0; i < 4; i++)
+        {
+            float a = i * Mathf.Pi * 0.5f + Mathf.Pi * 0.25f;
+            AddSurfaceBox($"SHChine{i}", a, y, h, 0.55f, 0.22f, mat, BodyR + 0.09f);
+        }
+    }
+
+    private void AttachVehicleLights(float engineY, bool superHeavy)
+    {
+        _engineBayLight?.QueueFree();
+        _engineRimLight?.QueueFree();
+        _skyFillLight?.QueueFree();
+
+        float skirtY = engineY + (superHeavy ? 1.8f : 1.15f);
+        float midY = superHeavy ? ShBodyBot + ShBodyH * 0.45f : engineY + 8.0f;
+
+        _engineBayLight = new OmniLight3D
+        {
+            Name = "EngineBayBounce",
+            Position = new Vector3(0f, skirtY, 0f),
+            LightColor = new Color(1.0f, 0.62f, 0.32f),
+            LightEnergy = 0f,
+            OmniRange = superHeavy ? 24f : 12f,
+            OmniAttenuation = 0.85f,
+            LightSpecular = 0.55f,
+            ShadowEnabled = false,
+            Visible = false,
+        };
+        AddChild(_engineBayLight);
+
+        _engineRimLight = new OmniLight3D
+        {
+            Name = "EngineClusterRim",
+            Position = new Vector3(0f, engineY - 0.85f, 0f),
+            LightColor = new Color(0.72f, 0.88f, 1.0f),
+            LightEnergy = 0f,
+            OmniRange = superHeavy ? 16f : 8f,
+            OmniAttenuation = 1.05f,
+            LightSpecular = 0.70f,
+            ShadowEnabled = false,
+            Visible = false,
+        };
+        AddChild(_engineRimLight);
+
+        _skyFillLight = new OmniLight3D
+        {
+            Name = "VehicleSkyFill",
+            Position = new Vector3(0f, midY, 0f),
+            LightColor = new Color(0.55f, 0.72f, 1.0f),
+            LightEnergy = 4.8f,
+            OmniRange = superHeavy ? 56f : 32f,
+            OmniAttenuation = 1.15f,
+            LightSpecular = 0.15f,
+            ShadowEnabled = false,
+        };
+        AddChild(_skyFillLight);
+    }
+
+    private void UpdateVehicleLighting(float throttle, double altitudeM)
+    {
+        float t = Mathf.Clamp(throttle, 0f, 1f);
+        float space = Mathf.Clamp(((float)altitudeM - 70_000f) / 50_000f, 0f, 1f);
+        float fill = Mathf.Lerp(0.028f, 0.042f, space);
+        float rim = Mathf.Lerp(0.28f, 0.10f, space);
+        float bounce = Mathf.Lerp(0.92f, 0.55f, space);
+        Vector3 sunDir = new Vector3(0.35f, 0.78f, 0.25f);
+        var key = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
+        if (key != null)
+            sunDir = -key.GlobalTransform.Basis.Z.Normalized();
+        foreach (var mat in _steelMats)
+        {
+            mat.SetShaderParameter("fill_strength", fill);
+            mat.SetShaderParameter("rim_strength", rim);
+            mat.SetShaderParameter("sky_bounce", bounce);
+            mat.SetShaderParameter("sun_dir", sunDir);
+            mat.SetShaderParameter("engine_light", t * (1.4f - space * 0.5f));
+        }
+        foreach (var list in _tileZoneMats.Values)
+        {
+            foreach (var tile in list)
+            {
+                tile.SetShaderParameter("sky_bounce", Mathf.Lerp(1.15f, 0.45f, space));
+                tile.SetShaderParameter("sun_dir", sunDir);
+            }
+        }
+
+        bool firing = t > 0.02f;
+        if (_engineBayLight != null)
+        {
+            _engineBayLight.Visible = firing;
+            _engineBayLight.LightEnergy = firing
+                ? (18f + 42f * t) * (1f - space * 0.35f)
+                : 0f;
+        }
+        if (_engineRimLight != null)
+        {
+            _engineRimLight.Visible = firing;
+            _engineRimLight.LightEnergy = firing
+                ? (10f + 22f * t) * (1f - space * 0.25f)
+                : 0f;
+        }
+        if (_skyFillLight != null)
+            _skyFillLight.LightEnergy = Mathf.Lerp(4.8f, 1.1f, space);
+
+        if (_bellMat != null)
+        {
+            _bellMat.EmissionEnabled = firing;
+            _bellMat.Emission = new Color(1.0f, 0.42f, 0.12f);
+            _bellMat.EmissionEnergyMultiplier = t * 3.8f;
+        }
+        if (_throatMat != null)
+        {
+            _throatMat.EmissionEnabled = firing;
+            _throatMat.Emission = new Color(1.0f, 0.72f, 0.35f);
+            _throatMat.EmissionEnergyMultiplier = t * 6.5f;
+        }
+        if (_bellLipMat != null)
+        {
+            _bellLipMat.EmissionEnabled = firing;
+            _bellLipMat.Emission = new Color(1.0f, 0.85f, 0.55f);
+            _bellLipMat.EmissionEnergyMultiplier = t * 2.2f;
+        }
+    }
+
+    private void RegisterTileMat(TileCharZone zone, ShaderMaterial mat)
     {
         if (!_tileZoneMats.TryGetValue(zone, out var list))
         {
-            list = new List<StandardMaterial3D>();
+            list = new List<ShaderMaterial>();
             _tileZoneMats[zone] = list;
         }
         list.Add(mat);
@@ -2547,11 +2677,13 @@ public partial class VesselRenderer : Node3D
         => new()
         {
             AlbedoColor      = albedo,
-            Metallic         = metallic,
+            Metallic         = metallic > 0.45f ? Mathf.Min(metallic, 0.62f) : metallic,
             MetallicSpecular = 0.55f,
             Roughness        = roughness,
-            // Brighter steels read as bare metal; pick up the sky/IBL strongly.
             RimEnabled       = false,
+            EmissionEnabled  = metallic > 0.45f,
+            Emission         = albedo * new Color(0.55f, 0.72f, 1.0f),
+            EmissionEnergyMultiplier = metallic > 0.45f ? 2.2f : 0f,
         };
 
     // The procedural stainless-steel shader, loaded once and shared.
@@ -2564,49 +2696,62 @@ public partial class VesselRenderer : Node3D
     // near the engines (soot fades in below `sootTop` down to `sootBot`, in the
     // SAME local space as the mesh that uses it). Pass sootTop<=sootBot to disable.
     private ShaderMaterial SteelMat(
-        Color tint, float metallic = 0.92f, float roughness = 0.20f,
+        Color tint, float metallic = 0.58f, float roughness = 0.28f,
         float weldSpacing = 1.6f, float sootBot = -1000f, float sootTop = -1000f)
     {
         var m = new ShaderMaterial { Shader = SteelShader };
         m.SetShaderParameter("base_tint",    tint);
         m.SetShaderParameter("metallic_val", metallic);
         m.SetShaderParameter("rough_val",    roughness);
-        m.SetShaderParameter("spec_val",     0.55f);
+        m.SetShaderParameter("spec_val",     0.62f);
         m.SetShaderParameter("weld_spacing", weldSpacing);
-        m.SetShaderParameter("weld_depth",   0.10f);
-        m.SetShaderParameter("brush_amt",    0.10f);
+        m.SetShaderParameter("weld_depth",   0.08f);
+        m.SetShaderParameter("brush_amt",    0.06f);
         m.SetShaderParameter("soot_y0",      sootTop);   // clean above
         m.SetShaderParameter("soot_y1",      sootBot);   // sooty toward engine
         m.SetShaderParameter("soot_color",   new Color(0.16f, 0.15f, 0.15f));
-        // Presentation-only fill: without direct solar light a metallic hull
-        // has no readable silhouette against the space background.
-        // Keep the cold stainless silhouette readable during peak/retro entry.
-        // This is the shader's hard upper bound and remains presentation-only;
-        // thermal emission is still driven independently below.
-        m.SetShaderParameter("fill_strength", 0.12f);
+        m.SetShaderParameter("fill_strength", 0.038f);
+        m.SetShaderParameter("rim_color",    new Color(0.55f, 0.72f, 1.0f));
+        m.SetShaderParameter("rim_strength", 0.18f);
+        m.SetShaderParameter("sky_bounce",   0.92f);
+        m.SetShaderParameter("sun_dir",      new Vector3(0.35f, 0.78f, 0.25f));
+        m.SetShaderParameter("engine_light", 0.0f);
         m.SetShaderParameter("emit_strength", 0.0f);
+        _steelMats.Add(m);
         return m;
     }
 
     // Black hexagonal heat-shield tiles: dark, matte, dielectric (non-metal),
     // with a touch of micro-specular so panel edges still catch light.
-    private static StandardMaterial3D TileMat()
-        => new()
-        {
-            AlbedoColor      = new Color(0.045f, 0.045f, 0.055f),
-            Metallic         = 0.0f,
-            MetallicSpecular = 0.18f,
-            Roughness        = 0.92f,
-            // Minimum fill keeps TPS tiles visible in eclipse/night. Reentry
-            // glow is layered on top by UpdateThermalVisuals.
-            EmissionEnabled  = true,
-            Emission         = new Color(0.050f, 0.050f, 0.060f),
-            EmissionEnergyMultiplier = 1.0f,
-        };
+    private static Shader? _tileShader;
+    private static Shader TileShader =>
+        _tileShader ??= GD.Load<Shader>("res://assets/shaders/heat_tile.gdshader");
+
+    private static ShaderMaterial TileMat()
+    {
+        var m = new ShaderMaterial { Shader = TileShader };
+        m.SetShaderParameter("albedo_color", TileBaseColor);
+        m.SetShaderParameter("roughness_val", 0.93f);
+        // Kept for material compatibility; panel gaps are geometry, not a
+        // fragment-level procedural pattern.
+        m.SetShaderParameter("hex_scale", 1.0f);
+        m.SetShaderParameter("gap_width", 0.0f);
+        m.SetShaderParameter("char_amt", 0.0f);
+        m.SetShaderParameter("rim_strength", 0.06f);
+        m.SetShaderParameter("sky_bounce", 1.0f);
+        m.SetShaderParameter("emit_strength", 0.0f);
+        return m;
+    }
 
     private MeshInstance3D AddMesh(string name, Mesh mesh, Material mat, Vector3 pos)
     {
-        var node = new MeshInstance3D { Name = name, Mesh = mesh, Position = pos };
+        var node = new MeshInstance3D
+        {
+            Name = name,
+            Mesh = mesh,
+            Position = pos,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+        };
         node.SetSurfaceOverrideMaterial(0, mat);
         AddChild(node);
         return node;
@@ -2868,7 +3013,7 @@ public partial class VesselRenderer : Node3D
     // A Starship aerodynamic flap: a tile-covered slab plus a steel root, both
     // mounted on the windward (-X) side and offset around the body by `angOff`
     // radians from the -X axis.
-    private void AddFlap(string name, float y, float length, float chord, float angOff, StandardMaterial3D mat)
+    private void AddFlap(string name, float y, float length, float chord, float angOff, Material mat)
     {
         float a   = Mathf.Pi + angOff;
         float cos = Mathf.Cos(a);
@@ -2955,6 +3100,9 @@ public partial class VesselRenderer : Node3D
         _bellLipMat ??= Mat(new Color(0.38f, 0.35f, 0.32f), 0.96f, 0.24f);
         // Recessed throat: very dark, slightly rough (soot + shadow up the bell).
         _throatMat ??= Mat(new Color(0.06f, 0.055f, 0.05f), 0.55f, 0.70f);
+        _bellMat.EmissionEnabled = true;
+        _bellLipMat.EmissionEnabled = true;
+        _throatMat.EmissionEnabled = true;
         // Powerhead plumbing: greenish-grey inconel/steel.
         _powerMat  ??= Mat(new Color(0.34f, 0.35f, 0.33f), 0.88f, 0.40f);
 
@@ -3044,6 +3192,10 @@ public partial class VesselRenderer : Node3D
         _parachuteVisuals.Clear();
         _tileZoneMats.Clear();
         _shipSteelMats.Clear();
+        _steelMats.Clear();
+        _engineBayLight = null;
+        _engineRimLight = null;
+        _skyFillLight = null;
         _flapRigs.Clear();
         _landingLegRigs.Clear();
         _landingGearDeployment = 0f;

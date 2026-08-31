@@ -258,6 +258,13 @@ Mejoras:
   Limbo orbital: haze Rayleigh + borde cian/ozono Chappuis, oceanos un poco mas oscuros;
   `day_gain=1.15` se mantiene (A/B 400 km). Complejo: falda de humedal/dunas ~1.6 km en
   Starbase y skirt en pads convencionales. No se toco fisica ni `earth.json` fisico.
+- [x] Pad→60 km entorno V4.2 (rama `visual/pad-ascent-realism`): disco geodetico hasta el
+  horizonte (`PatchRadiusUnits` ~784 km, sagitta elipsoidal, fade circular no galleta
+  cuadrada), falda humedal cilindrica + fade de apron/wetland con altitud, sombras
+  direccionales en concreto (`PadShadowMaxDistance` ~2.5 km, ambient pad 0.22),
+  `ground_fill_strength=0` en Tierra, globo 256/128 segmentos, far de camara al horizonte
+  geometrico, limbo cian con `fwidth` (sin sierra blanca), cúpula diurna azul y stars
+  apagadas de dia. Pluma/deluge: agente hermano.
 
 Aceptacion:
 - Pad, orbita y reentry se distinguen por luz/color sin filtros exagerados.

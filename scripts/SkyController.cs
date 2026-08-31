@@ -48,7 +48,10 @@ public partial class SkyController : Node
     // The optical coefficients are physical cross-sections; the realtime sky
     // integrates a visible-band solar irradiance proxy.  Calibrate that proxy
     // once here so the accumulated HDR sky does not white-clip the lower limb.
-    private const float VisibleSolarRadianceScale = 0.35f;
+    // 0.35 crushed zenith blue so the play camera read as a white slab. 0.55
+    // restores Rayleigh blue; sun-disc radiance in the sky shader is lowered
+    // separately so the photosphere does not bleach the frame.
+    private const float VisibleSolarRadianceScale = 0.55f;
     // Interactive runtime profile: preserve the same physical model and official order 4,
     // but bound CPU work tightly enough that llvmpipe/Godot remains responsive while the
     // worker builds. The offline spectral/reference tools keep their independent high-
@@ -73,10 +76,10 @@ public partial class SkyController : Node
     // Runtime-only shader quadrature quality. Offline LUT/reference sampling is
     // intentionally independent and remains at its validated resolution.
     private const float InteractiveAtmosphereQuality = 0.60f;
-    // Low-altitude tangent rays cross the cloud shell at a grazing angle. A small
-    // quality lift removes the last shell-step contour without exceeding the shader's
-    // 24-sample ceiling; orbital views keep the cheaper default.
-    private const float LowAltitudeAtmosphereQuality = 0.82f;
+    // Pad/ascent used to raise quality, which made the Realtime cubemap miss its
+    // budget on the play camera and stay black. Keep pad cheaper; the shader's
+    // analytic daylight floor covers zenith luminance until the LUT settles.
+    private const float LowAltitudeAtmosphereQuality = 0.48f;
     private float _lastAtmosphereQuality = float.NaN;
     // Test-only escape hatch used by the visual harness to separate cloud-shell aliasing
     // from the spherical Rayleigh/Mie integration. It is inert unless explicitly exported
@@ -159,6 +162,8 @@ public partial class SkyController : Node
     private float _lastSolarOccluderAngularRadius = float.NaN;
     private float _lastCloudWeatherPrefilter = float.NaN;
     private float _lastGroundFillStrength = float.NaN;
+    private float _lastStarEnergy = float.NaN;
+    private bool _lastSkyProcessRealtime;
     private bool _sharedSolarGeometryTelemetryPublished;
 
     public override void _Ready()
@@ -168,11 +173,15 @@ public partial class SkyController : Node
             "WorldEnvironment", true, false) as WorldEnvironment;
         _env = worldEnvironment?.Environment;
 
+        var viewport = GetViewport();
+        if (viewport != null && viewport.Msaa3D == Viewport.Msaa.Disabled)
+            viewport.Msaa3D = Viewport.Msaa.Msaa2X;
+
         if (_env?.Sky == null) return;
         _skyMat = new ShaderMaterial { Shader = GD.Load<Shader>(SkyShaderPath) };
         _skyMat.SetShaderParameter("star_tex", LoadStarTexture());
         _skyMat.SetShaderParameter("cloud_coverage_tex", LoadTexture(EarthCloudTexPath, Colors.Black));
-        _skyMat.SetShaderParameter("star_energy", StarEnergy);
+        _skyMat.SetShaderParameter("star_energy", 0.0f);
         _skyMat.SetShaderParameter("transmittance_lut_min_solar_sin",
             (float)AtmosphereTransmittanceLut.MinimumSolarElevationSin);
         _skyMat.SetShaderParameter("transmittance_lut_height",
@@ -193,8 +202,9 @@ public partial class SkyController : Node
         // 128² keeps the six-face cubemap cheap on integrated/llvmpipe renderers;
         // the full-screen background still uses the filtered cubemap.
         _env.Sky.RadianceSize = Sky.RadianceSizeEnum.Size128;
-        _env.Sky.ProcessMode = Sky.ProcessModeEnum.Incremental;
-        GD.Print($"PERF_RENDER stage=sky_config radiance=128 process=incremental "
+        _env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;
+        _lastSkyProcessRealtime = true;
+        GD.Print($"PERF_RENDER stage=sky_config radiance=128 process=realtime "
             + $"atmosphereQuality={InteractiveAtmosphereQuality:F2}");
     }
 
@@ -400,7 +410,6 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("density_lut_enabled", false);
         _skyMat.SetShaderParameter("atmosphere_height",
             enabled ? (float)atmosphere!.MaxAltitude : 1.0f);
-        _skyMat.SetShaderParameter("star_energy", StarEnergy);
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
 
@@ -485,7 +494,7 @@ public partial class SkyController : Node
         {
             "mars" => new Color(0.72f, 0.38f, 0.20f),
             "venus" => new Color(0.92f, 0.72f, 0.38f),
-            _ => new Color(0.30f, 0.55f, 0.90f),
+            _ => new Color(0.82f, 0.88f, 0.95f),
         };
         _skyMat.SetShaderParameter("ground_horizon", groundHorizon);
         _skyMat.SetShaderParameter("ground_bottom", groundHorizon.Darkened(0.45f));
@@ -526,8 +535,11 @@ public partial class SkyController : Node
             _lastCloudWeatherPrefilter = cloudWeatherPrefilter;
         }
 
-        float groundFill = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
-        if (body.Id != "earth") groundFill = 1f;
+        // Earth: the tangent disc + scaled globe own the ground. Sky-sphere fill
+        // between 4–18 km was the grey soup around the civil cookie.
+        float groundFill = body.Id == "earth"
+            ? 0f
+            : 1f;
         if (_skyMat != null
             && (float.IsNaN(_lastGroundFillStrength)
                 || Mathf.Abs(groundFill - _lastGroundFillStrength) > 1e-3f))
@@ -536,11 +548,14 @@ public partial class SkyController : Node
             _lastGroundFillStrength = groundFill;
         }
 
+        ApplyLowAltitudeSkyProcessMode(altitude);
+        ApplyStarEnergy(air, daylight);
+
         Color horizon = body.Id switch
         {
             "mars" => new Color(0.82f, 0.46f, 0.24f),
             "venus" => new Color(0.95f, 0.78f, 0.45f),
-            _ => new Color(0.40f, 0.65f, 1.00f),
+            _ => new Color(0.82f, 0.88f, 0.95f),
         };
         CurrentHorizonColor = horizon.Lerp(Colors.Black, 1.0f - air * daylight);
 
@@ -563,6 +578,40 @@ public partial class SkyController : Node
             _env.AmbientLightColor = targetAmbient;
         if (System.Math.Abs(_env.BackgroundEnergyMultiplier - 1.0f) > 1e-4f)
             _env.BackgroundEnergyMultiplier = 1.0f;
+    }
+
+    private void ApplyLowAltitudeSkyProcessMode(double altitude)
+    {
+        if (_env?.Sky == null) return;
+        // Incremental cubemap faces stay black/star-filled for seconds on the play
+        // camera, which is why xvfb captures (long waits + sun override) did not
+        // match what the player sees at T=0. Bake the full sky while the column is
+        // thick; return to incremental once the vehicle is in space.
+        bool realtime = altitude < 28_000.0;
+        if (realtime == _lastSkyProcessRealtime
+            && _env.Sky.ProcessMode == (realtime
+                ? Sky.ProcessModeEnum.Realtime
+                : Sky.ProcessModeEnum.Incremental))
+            return;
+        _env.Sky.ProcessMode = realtime
+            ? Sky.ProcessModeEnum.Realtime
+            : Sky.ProcessModeEnum.Incremental;
+        _lastSkyProcessRealtime = realtime;
+    }
+
+    private void ApplyStarEnergy(float air, float daylight)
+    {
+        if (_skyMat == null) return;
+        // Daylight pad/ascent: kill the starmap. Night pad keeps a dim field.
+        // Stars return as the Rayleigh column thins through the upper atmosphere.
+        float daytimeColumn = air * Mathf.Lerp(0.08f, 1.0f, daylight);
+        float visibility = 1.0f - Smoothstep(0.012f, 0.14f, daytimeColumn);
+        float energy = StarEnergy * visibility;
+        if (float.IsNaN(_lastStarEnergy) || Mathf.Abs(energy - _lastStarEnergy) > 0.008f)
+        {
+            _skyMat.SetShaderParameter("star_energy", energy);
+            _lastStarEnergy = energy;
+        }
     }
 
     private static Vector3 ToGodot(Vector3d value) => new(

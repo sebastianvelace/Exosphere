@@ -124,6 +124,8 @@ public partial class SimulationBridge : Node
     private Camera3D?            _camera         = null;
     private LaunchPadController? _launchPad      = null;
     private bool?                _lastLaunchPadVisibility;
+    private bool                 _skipDefaultPadDaylight;
+    private bool                 _defaultPadDaylightApplied;
 
     // ── Launch site ───────────────────────────────────────────────────────
     /// <summary>Id of the pad every vessel launches from (see data/launch_sites).</summary>
@@ -289,6 +291,7 @@ public partial class SimulationBridge : Node
         AddChild(campaignRuntime);
         bool continuingSave =
             !string.IsNullOrWhiteSpace(pendingIntent?.SaveSlot);
+        _skipDefaultPadDaylight = continuingSave;
         campaignRuntime.Initialize(
             dataPath,
             pendingIntent?.MissionId
@@ -321,6 +324,7 @@ public partial class SimulationBridge : Node
     public override void _Process(double delta)
     {
         if (!_running || Universe == null) return;
+        ApplyDefaultPadDaylightIfNeeded();
 
         // ── Recalculate MaxAllowedWarpIndex ──────────────────────────────
         var av = ActiveVessel;
@@ -1050,6 +1054,24 @@ public partial class SimulationBridge : Node
     /// throttle reaches 1.0.
     /// </summary>
     public bool IsIgnitionActive => _ignitionActive;
+
+    /// <summary>
+    /// Fresh pad flights start at J2000, which puts Starbase in astronomical twilight
+    /// (~−17°). That is why the play camera showed a black star field while the
+    /// DirectionalLight still looked like day. Presentation-only daylight keeps
+    /// ephemeris/forces unchanged.
+    /// </summary>
+    private void ApplyDefaultPadDaylightIfNeeded()
+    {
+        if (_defaultPadDaylightApplied || _skipDefaultPadDaylight) return;
+        var sun = SunController.Instance;
+        if (sun == null) return;
+        _defaultPadDaylightApplied = true;
+        if (sun.VisualSunElevationOverrideDegrees.HasValue) return;
+        sun.SetVisualSunElevationOverride(28.0);
+        GD.Print("PERF_SOLAR_CYCLE default_pad_daylight elevationDeg=28.0 "
+            + "presentationOnly=True");
+    }
 
     /// <summary>
     /// Secuencia de ignición: arranca la rampa de throttle comandado hacia 1.0 y suelta

@@ -30,7 +30,10 @@
 //   throttle_level 0.0 = off, 1.0 = full thrust. Alias for `throttle`.
 // ─────────────────────────────────────────────────────────────────────────────
 shader_type spatial;
-render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;
+// Mix (not additive): additive methalox cores vanish against a daylight sky and
+// the pale pad concrete — that is why THR 100% / 33/33 read as a dry stack.
+// Mix keeps a bright, readable column at sea level and a thinner vacuum plume.
+render_mode unshaded, blend_mix, cull_disabled, depth_draw_never, shadows_disabled;
 
 // 0 = off, 1 = full thrust. Scales brightness & opacity.
 uniform float throttle : hint_range(0.0, 1.0) = 1.0;
@@ -122,7 +125,12 @@ void fragment() {
 	// CylinderMesh exposes the plume envelope, not volume samples through its
 	// axis. Preserve a luminous optically-thin sheath so the whole exhaust does
 	// not disappear when every visible fragment lies close to r=1.
-	radial = max(radial, 0.48 * (1.0 - 0.35 * a));
+	// Keep a faint envelope so CylinderMesh skin is visible, but do not fill the
+	// whole cone to 0.48 — that reads as a solid white teardrop in daylight.
+	// CylinderMesh only shades the envelope (r≈1). A tiny floor makes daylight mix
+	// erase the column; a 0.48 floor plus 2.3× energy made a white teardrop.
+	float skin = mix(0.36, 0.10, effExpansion) * (1.0 - 0.40 * a);
+	radial = max(radial, skin);
 
 	// ── Axial envelope: full near the nozzle, fades toward the tip. Vacuum
 	// plumes reach much farther before fading (the long faint core). ─────────
@@ -183,15 +191,16 @@ void fragment() {
 
 	// Sea-level plumes are visually punchier per unit length; vacuum a touch
 	// dimmer (very thin gas), but its length makes it dominant in frame.
-	float eScale = mix(1.15, 0.58, effExpansion) * vacuumDim;
-	float e   = energy * eScale * (0.35 + 0.65 * effThrottle);
+	// Daylight pad needs a photosphere-white core, not a faint additive haze.
+	float eScale = mix(1.45, 0.52, effExpansion) * vacuumDim;
+	float e   = energy * eScale * (0.45 + 0.55 * effThrottle);
 
 	vec3 emission = col * bright * e;
 
 	ALBEDO   = emission;
 	EMISSION = emission;
-	// N7: alpha — at SL the plume is opaque/bright; in vacuum it is translucent.
-	// Vacuum alpha reduced so the halo reads as diffuse, not solid.
-	float vacuumAlpha = mix(1.0, 0.42, effExpansion);
-	ALPHA = clamp(bright * (0.55 + 0.45 * effThrottle) * vacuumAlpha, 0.0, 1.0);
+	// Mix blend against daylight: keep a readable SL core without a solid white capsule.
+	// Vacuum stays optically thin so ascent does not become a teardrop billboard.
+	float vacuumAlpha = mix(0.78, 0.20, effExpansion);
+	ALPHA = clamp(bright * (0.62 + 0.28 * effThrottle) * vacuumAlpha, 0.0, 0.88);
 }

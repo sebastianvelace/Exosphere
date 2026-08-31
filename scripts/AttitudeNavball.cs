@@ -89,6 +89,14 @@ public partial class AttitudeNavball : Control
         OffsetTop = bottom - height;
     }
 
+    /// <summary>Move the complete attitude cluster horizontally for exterior compositions.</summary>
+    public void SetClusterHorizontalOffset(float centerOffset)
+    {
+        float width = CustomMinimumSize.X > 0f ? CustomMinimumSize.X : (2 * Radius + 28);
+        OffsetLeft = centerOffset - width * 0.5f;
+        OffsetRight = centerOffset + width * 0.5f;
+    }
+
     public override void _Process(double delta)
     {
         _refreshAccumulator += System.Math.Max(0.0, delta);
