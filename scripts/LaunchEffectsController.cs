@@ -230,14 +230,14 @@ public partial class LaunchEffectsController : Node3D
     {
         var mat = SteamDrawMaterial(energy: 0.52f);
         mat.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-        var quad = new QuadMesh { Size = new Vector2(8.8f, 3.1f) };
+        var quad = new QuadMesh { Size = new Vector2(12.5f, 4.2f) };
         quad.SurfaceSetMaterial(0, mat);
         var mm = new MultiMesh
         {
             TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             UseColors = true,
             Mesh = quad,
-            InstanceCount = 220,
+            InstanceCount = 120,
         };
         var bank = new MultiMeshInstance3D
         {
@@ -259,23 +259,23 @@ public partial class LaunchEffectsController : Node3D
         // horizontal sheet on the first frames of the compatibility renderer.
         _billowMaterial = SteamDrawMaterial(energy: 0.22f);
         _billowMaterial.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _billowMaterial.AlbedoColor = new Color(0.80f, 0.78f, 0.76f, 0.14f);
+        _billowMaterial.AlbedoColor = new Color(0.76f, 0.77f, 0.76f, 0.64f);
         _billowMaterial.EmissionEnabled = false;
         for (int i = 0; i < 40; i++)
         {
             float phase = Mathf.PosMod(i * 0.618034f, 1f);
             float angle = i * 2.399963f;
-            float radius = 4.0f + (i % 12) * 2.8f;
+            float radius = 2.0f + (i % 12) * 1.75f;
             // Wide, low sheets merge into a deluge wall. Circular puffs read as
             // the white spheres on the play-camera pad.
-            float width = 10.0f + phase * 7.0f;
-            float height = 2.1f + phase * 1.6f;
+            float width = 9.0f + phase * 6.0f;
+            float height = 3.6f + phase * 2.4f;
             var puff = new MeshInstance3D
             {
                 Name = $"DelugeBillow{i}",
                 Mesh = new QuadMesh { Size = new Vector2(width, height) },
                 Position = new Vector3(Mathf.Cos(angle) * radius,
-                    0.9f + (i % 6) * 0.85f, Mathf.Sin(angle) * radius),
+                    0.6f + (i % 7) * 0.72f, Mathf.Sin(angle) * radius),
                 MaterialOverride = _billowMaterial,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             };
@@ -292,7 +292,7 @@ public partial class LaunchEffectsController : Node3D
         DriveImmediateSteam(_instantSteam, intensity, age);
         float life = Mathf.Clamp(1f - Mathf.Max(0f, age - 5f) / 7f, 0f, 1f);
         Color color = _billowMaterial.AlbedoColor;
-        color.A = Mathf.Clamp(Mathf.Lerp(0.08f, 0.18f, intensity) * life, 0f, 0.18f);
+        color.A = Mathf.Clamp(Mathf.Lerp(0.42f, 0.78f, intensity) * life, 0f, 0.78f);
         _billowMaterial.AlbedoColor = color;
     }
 
@@ -306,17 +306,19 @@ public partial class LaunchEffectsController : Node3D
             float phase = Mathf.PosMod(i * 0.618034f, 1f);
             float angle = i * 2.399963f + phase * 0.35f;
             float speed = 1.2f + phase * 2.2f;
-            float radius = 5.0f + (i % 19) * 2.7f + Mathf.Min(age, 7f) * speed;
-            float height = 2.0f + (i % 13) * 1.75f + Mathf.Min(age, 7f) * (0.55f + phase * 0.70f);
+            // Keep the compatibility layer as a low connected sheet. A very wide,
+            // tall ring reads as isolated white balls in the lateral pad camera.
+            float radius = 3.0f + (i % 15) * 1.45f + Mathf.Min(age, 7f) * speed * 0.65f;
+            float height = 1.0f + (i % 8) * 0.48f + Mathf.Min(age, 7f) * (0.30f + phase * 0.40f);
             float size = (1.9f + phase * 2.30f) * (1f + Mathf.Min(age, 6f) * 0.12f);
-            var basis = Basis.Identity.Scaled(new Vector3(size * (2.05f + phase * 0.55f), size * 0.52f, 1f));
+            var basis = Basis.Identity.Scaled(new Vector3(size * (1.20f + phase * 0.30f), size * 0.40f, 1f));
             var origin = new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
             mm.SetInstanceTransform(i, new Transform3D(basis, origin));
             mm.SetInstanceColor(i, new Color(
-                0.90f + phase * 0.05f,
-                0.74f + phase * 0.08f,
-                0.58f + phase * 0.10f,
-                Mathf.Clamp(Mathf.Lerp(0.22f, 0.48f, intensity) * life, 0f, 0.48f)));
+                0.78f + phase * 0.08f,
+                0.82f + phase * 0.06f,
+                0.84f + phase * 0.05f,
+                Mathf.Clamp(Mathf.Lerp(0.32f, 0.62f, intensity) * life, 0f, 0.68f)));
         }
     }
 
@@ -751,21 +753,22 @@ public partial class LaunchEffectsController : Node3D
     // ── Shared material / texture helpers ────────────────────────────────────
 
     /// <summary>
-    /// Soft, slightly self-illuminated steam billboard. Additive so the cloud
-    /// glows softly against the daylit pad while staying voluminous (the alpha
-    /// ramp keeps cores soft, not hot).
+    /// Soft, slightly self-illuminated steam billboard. Camera-facing alpha
+    /// cards are required here because this material is shared by both the GPU
+    /// particle layers and the immediate ignition bank.
     /// </summary>
     private static StandardMaterial3D SteamDrawMaterial(float energy)
     {
         return new StandardMaterial3D
         {
-            BillboardMode            = BaseMaterial3D.BillboardModeEnum.Particles,
+            BillboardMode            = BaseMaterial3D.BillboardModeEnum.Enabled,
             ShadingMode              = BaseMaterial3D.ShadingModeEnum.Unshaded,
             // Alpha mixing lets hundreds of overlapping billows become an
             // optically dense wall instead of isolated glowing discs.
             BlendMode                = BaseMaterial3D.BlendModeEnum.Mix,
             Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
             DepthDrawMode            = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+            CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
             AlbedoTexture            = SoftCircle,
             AlbedoColor              = Colors.White,
             EmissionEnabled          = true,

@@ -1083,6 +1083,16 @@ public partial class HUDController : Control
         _engineGrid.ApplyDensityLayout();
         // Sit above the SPEED/ALT band in Minimal/Full; drop lower when Clean hides it.
         _navball.SetClusterBottomOffset(clean ? -36f : -108f);
+
+        // Keep the launch vehicle and pad effects readable in the exterior pad camera.
+        // The centered instrument cluster otherwise covers the plume, tower, and the
+        // separation between the vehicle and the ground. Chase/cockpit compositions retain
+        // their centered layout when the pad camera hands off above the lower atmosphere.
+        bool padComposition = exterior && CameraController.Instance?.Mode == CameraMode.Pad;
+        float horizontalOffset = padComposition
+            ? -Mathf.Clamp(GetViewportRect().Size.X * 0.22f, 140f, 280f)
+            : 0f;
+        _navball.SetClusterHorizontalOffset(horizontalOffset);
     }
 
     private bool HasCriticalAlert() =>
