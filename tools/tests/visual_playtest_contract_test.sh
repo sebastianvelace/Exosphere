@@ -56,6 +56,21 @@ if ! grep -q 'verify_post_run_contracts' "$HARNESS_SCRIPT"; then
   echo "FAIL verify-only does not run post-capture telemetry gates" >&2
   exit 1
 fi
+if ! grep -q 'SUMMARY reason=SHIP_OK' "$HARNESS_SCRIPT" \
+  || ! grep -q 'VISUAL_NODES ship padVisible=False' "$HARNESS_SCRIPT" \
+  || ! grep -q 'VISUAL_PLANET body=earth slug=ship_vacuum visible=True' "$HARNESS_SCRIPT"; then
+  echo "FAIL standalone Starship mode still accepts an unrelated valid PNG" >&2
+  exit 1
+fi
+if ! grep -q 'SUMMARY reason=SMOKE_OK' "$HARNESS_SCRIPT" \
+  || ! grep -q 'VISUAL_LAUNCH slug=pad present=True visible=True' "$HARNESS_SCRIPT"; then
+  echo "FAIL smoke mode does not prove the single hero launch complex" >&2
+  exit 1
+fi
+if ! grep -q 'DismissPadHelp()' "$HARNESS_SCRIPT"; then
+  echo "FAIL visual captures can be contaminated by the production mission-controls overlay" >&2
+  exit 1
+fi
 if ! grep -q 'simultaneous delivered Super Heavy and Ship plume output' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_PLUME ' "$HARNESS_SCRIPT"; then
   echo "FAIL hot-stage gate does not verify dual delivered plume telemetry" >&2

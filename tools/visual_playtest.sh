@@ -554,6 +554,7 @@ public partial class _PlaytestShot : Node
     bool _beautyJumped;
     int _beautyWaitFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded;
+    bool _hudHelpDismissed;
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     double _nextFullTelemetry;
     double _lastApproachSpeed = double.NaN;
@@ -718,6 +719,18 @@ public partial class _PlaytestShot : Node
     public override void _Process(double delta)
     {
         if (!_authorized || _finished) return;
+        // Dismiss before the first rendered frame that can become a milestone. Calling this
+        // only inside CaptureNow is one frame too late because the viewport texture still
+        // contains the previous draw with the production help sheet visible.
+        if (!_hudHelpDismissed)
+        {
+            var hud = GetTree().Root.FindChild("HUDController", true, false) as HUDController;
+            if (hud != null)
+            {
+                hud.DismissPadHelp();
+                _hudHelpDismissed = true;
+            }
+        }
         _frame++;
 
         double nowWallSeconds = Time.GetTicksMsec() / 1000.0;
@@ -2788,6 +2801,12 @@ public partial class _PlaytestShot : Node
 
     private void CaptureNow(string slug)
     {
+        // The production HUD intentionally opens the mission-controls sheet on the pad.
+        // A visual milestone must show the launch complex, not the instructional overlay;
+        // dismiss only that sheet through the public HUD API and leave all flight HUD data
+        // intact for the capture.
+        var hud = GetTree().Root.FindChild("HUDController", true, false) as HUDController;
+        hud?.DismissPadHelp();
         LogHotStageVisualTelemetry(slug);
         LogReentryVisualTelemetry(slug);
         LogLaunchComplexVisualTelemetry(slug);
@@ -3452,6 +3471,67 @@ verify_pngs() {
       END { exit !(found == 2 && !bad) }
     ' "$LOG"; then
       echo "ERROR: launch capture has broad clipping or neon-green contamination" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "ship" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_ship_vacuum.png" ]]; then
+      echo "ERROR: missing standalone Starship visual milestone PNG" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=SHIP_OK' "$LOG"; then
+      echo "ERROR: standalone Starship visual capture did not finish cleanly" >&2
+      return 1
+    fi
+    # This mode used to pass on any decodable PNG. Require evidence that the
+    # captured frame contains the detached Starship, has no launch-pad residue,
+    # and presents an Earth body rather than an empty/stale scene.
+    if ! grep -Eq '^VISUAL_NODES ship padVisible=False .*rendererVisible=True' "$LOG"; then
+      echo "ERROR: standalone Starship capture did not prove pad suppression and renderer visibility" >&2
+      return 1
+    fi
+    if ! grep -Eq '^VISUAL_PLANET body=earth slug=ship_vacuum visible=True ' "$LOG"; then
+      echo "ERROR: standalone Starship capture did not prove an Earth-framed planetary view" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=ship_vacuum / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^darkFrac=/) { split($i, p, "="); dark = p[2] + 0 }
+          if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && mean > 0.005 && dark < 0.98 && clipped < 0.10) }
+    ' "$LOG"; then
+      echo "ERROR: standalone Starship image is empty or broadly clipped" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "smoke" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_pad.png" ]]; then
+      echo "ERROR: missing smoke pad milestone PNG" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=SMOKE_OK' "$LOG"; then
+      echo "ERROR: smoke visual capture did not finish cleanly" >&2
+      return 1
+    fi
+    if ! grep -Eq '^VISUAL_LAUNCH slug=pad present=True visible=True .*farFieldVisible=False ' "$LOG"; then
+      echo "ERROR: smoke capture did not prove a single clean hero launch complex" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=pad / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+          if ($i ~ /^neonGreenFrac=/) { split($i, p, "="); neon = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && mean > 0.005 && clipped < 0.10 && neon < 0.001) }
+    ' "$LOG"; then
+      echo "ERROR: smoke image is empty, clipped, or contaminated by neon-green artifacts" >&2
       return 1
     fi
   elif [[ "$MODE" == "ascent" ]]; then
