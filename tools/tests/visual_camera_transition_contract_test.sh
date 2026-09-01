@@ -6,7 +6,7 @@ fail() { echo "visual_camera_transition_contract_test: FAIL: $*" >&2; exit 1; }
 
 camera="$ROOT/scripts/CameraController.cs"
 
-rg -q 'CameraFrameTransitionSeconds = 0\.42f' "$camera" \
+rg -q 'CameraFrameTransitionSeconds = 0\.14f' "$camera" \
   || fail "camera transition has no bounded smoothing interval"
 rg -q 'CameraFrameBlend\(delta\)' "$camera" \
   || fail "rendered camera frame does not use the transition blend"
