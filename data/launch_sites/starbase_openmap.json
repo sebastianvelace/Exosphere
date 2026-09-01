@@ -1,0 +1,85 @@
+{
+  "version": "2026-08-31",
+  "origin": { "latitude": 25.9972, "longitude": -97.1566, "crs": "EPSG:4326" },
+  "units": "metres",
+  "source": "OpenStreetMap via Overpass API",
+  "sourceUrl": "https://overpass-api.de/api/interpreter",
+  "queryBbox": [25.988, -97.17, 26.01, -97.145],
+  "license": "ODbL 1.0",
+  "attribution": "© OpenStreetMap contributors",
+  "features": [
+    {
+      "kind": "road", "id": "697324661", "name": "Boca Chica Boulevard", "widthM": 12,
+      "points": [[-2289.2,-616.4],[-1961.2,-530.5],[-1794.7,-498.4],[-1699.2,-478.3],[-1605.8,-453.0],[-1513.3,-422.3],[-1092.4,-261.3],[-863.3,-180.7],[-772.3,-146.4],[-488.8,-33.4],[-444.7,-8.8],[-309.9,74.7],[-281.9,88.3],[-247.6,101.2],[-212.6,110.6],[-181.4,115.9],[-153.1,117.9],[-125.7,117.6],[-103.4,115.8],[-57.8,107.6],[226.3,42.1],[326.3,18.8]]
+    },
+    {
+      "kind": "road", "id": "1230331495", "name": "Boca Chica Boulevard", "widthM": 12,
+      "points": [[394.6,2.8],[439.3,-7.4],[569.5,-37.7],[593.7,-43.3]]
+    },
+    {
+      "kind": "road", "id": "1384805737", "name": "Boca Chica Boulevard", "widthM": 12,
+      "points": [[326.3,18.8],[367.7,9.0]]
+    },
+    {
+      "kind": "road", "id": "1384805738", "name": "Boca Chica Boulevard", "widthM": 12,
+      "points": [[367.7,9.0],[373.4,-5.1],[388.0,-5.8],[395.0,7.2],[384.4,19.7],[369.2,13.1],[367.7,9.0]]
+    },
+    {
+      "kind": "coastline", "id": "1230230975",
+      "points": [[678.6,-989.6],[650.9,-579.2],[621.8,-190.0],[610.1,36.7],[588.2,461.8],[537.4,1101.8],[502.4,1580.7]]
+    },
+    {
+      "kind": "water", "id": "1486752424", "name": "Pad-2 Deluge Runoff Pond", "class": "basin",
+      "points": [[-184.5,-90.8],[-149.8,-106.3],[-184.5,-90.8]]
+    },
+    {
+      "kind": "water", "id": "999745812", "name": "", "class": "pond",
+      "points": [[-235.3,65.4],[-239.2,66.4],[-240.5,68.4],[-239.1,70.9],[-236.5,72.9],[-233.3,74.4],[-230.8,75.3],[-228.1,75.3],[-226.0,72.8],[-226.0,69.5],[-227.0,67.0],[-229.5,65.5],[-232.2,65.4],[-235.3,65.4]]
+    },
+    {
+      "kind": "water", "id": "999745813", "name": "", "class": "pond",
+      "points": [[-252.4,64.5],[-260.5,60.6],[-275.9,55.3],[-282.6,55.2],[-283.9,56.9],[-283.7,61.0],[-275.1,63.4],[-267.0,64.7],[-259.6,66.1],[-252.3,67.6],[-250.6,66.9]]
+    },
+    {
+      "kind": "water", "id": "1164326749", "name": "", "class": "pond",
+      "points": [[-295.1,-39.8],[-278.4,-26.2],[-268.9,-29.3],[-279.6,-50.3],[-311.2,-71.1],[-360.1,-108.2],[-402.3,-139.2],[-458.9,-175.6],[-531.9,-215.7],[-600.0,-252.0],[-664.4,-279.4],[-677.5,-278.4],[-671.1,-266.4],[-633.1,-246.2],[-551.7,-193.8],[-474.6,-157.5],[-433.2,-132.6],[-387.4,-106.6],[-337.3,-65.9]]
+    },
+    {
+      "kind": "wetland", "id": "1514739175", "class": "tidalflat",
+      "points": [[-290.7,24.6],[-245.9,58.5],[-283.8,48.3],[-234.2,78.6],[-290.9,73.1],[-405.7,-9.7],[-613.5,-104.6],[-816.2,-181.1],[-1084.8,-279.7],[-1314.7,-366.2],[-1584.2,-464.2],[-1431.1,-448.8],[-1220.4,-372.2],[-950.6,-269.3],[-674.9,-171.2],[-492.2,-94.1],[-323.3,6.9]]
+    },
+    {
+      "kind": "yard", "id": "1002874668", "name": "SpaceX Orbital Launch Pad Tank Farm",
+      "points": [[202.8,27.8],[313.8,-42.4],[278.6,-43.5],[190.5,-49.2],[146.8,-38.5],[9.8,32.4],[166.5,36.2]]
+    },
+    { "kind": "building", "id": "839363255", "name": "Suborbital GSE Bunker", "x": -62.6, "z": 69.8, "widthM": 37.8, "depthM": 22.6, "heightM": 4.3 },
+    { "kind": "building", "id": "893790338", "name": "Control Center", "x": -86.4, "z": 80.3, "widthM": 15.0, "depthM": 12.9, "heightM": 4.1 },
+    { "kind": "building", "id": "968227813", "name": "Starbase Integration Tower 1", "x": 186.5, "z": -119.6, "widthM": 17.2, "depthM": 17.4, "heightM": 143.0 },
+    { "kind": "building", "id": "1207227015", "name": "Starbase Integration Tower 2", "x": -146.7, "z": -17.1, "widthM": 16.0, "depthM": 16.0, "heightM": 144.5 },
+    { "kind": "building", "id": "1228332588", "name": "Megabunker", "x": -11.0, "z": 76.8, "widthM": 53.7, "depthM": 30.3, "heightM": 4.1 },
+    { "kind": "building", "id": "1240890712", "name": "Security Building", "x": -102.8, "z": 102.8, "widthM": 9.1, "depthM": 6.9, "heightM": 3.0 },
+    { "kind": "building", "id": "1270592427", "name": "Power Bunker", "x": 88.9, "z": 58.1, "widthM": 31.2, "depthM": 12.7, "heightM": 4.5 },
+    { "kind": "building", "id": "1274369240", "name": "CH4 Reclaim", "x": 33.3, "z": -5.2, "widthM": 60.6, "depthM": 25.3, "heightM": 4.5 },
+    { "kind": "building", "id": "1290585481", "name": "Pad 2 Power & Comms", "x": -62.9, "z": 89.8, "widthM": 35.0, "depthM": 15.9, "heightM": 4.5 },
+    { "kind": "building", "id": "1290585483", "name": "Pad 2 LOX GSE", "x": 45.5, "z": 41.8, "widthM": 57.7, "depthM": 41.8, "heightM": 4.5 },
+    { "kind": "building", "id": "1290585484", "name": "Pad 2 CH4 GSE", "x": 37.5, "z": 15.2, "widthM": 63.9, "depthM": 35.1, "heightM": 4.5 },
+    { "kind": "tank", "id": "1002874660", "name": "liquid methane", "x": 213.8, "z": -20.8, "lengthM": 48.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1002874661", "name": "liquid methane", "x": 221.6, "z": -22.5, "lengthM": 48.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1240890702", "name": "liquid oxygen", "x": 117.1, "z": -2.8, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1240890703", "name": "liquid oxygen", "x": 123.8, "z": -4.5, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1240890704", "name": "liquid nitrogen", "x": 131.5, "z": -6.4, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1240890705", "name": "liquid nitrogen", "x": 138.1, "z": -7.5, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1240890706", "name": "liquid nitrogen", "x": 144.4, "z": -9.1, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1240890707", "name": "liquid nitrogen", "x": 151.1, "z": -10.5, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1248980685", "name": "liquid oxygen", "x": 110.3, "z": -1.0, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1248980686", "name": "liquid oxygen", "x": 103.6, "z": 0.7, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1248980687", "name": "liquid oxygen", "x": 96.9, "z": 2.2, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1295515346", "name": "liquid oxygen", "x": 88.4, "z": 4.2, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1352374668", "name": "liquid oxygen", "x": 75.0, "z": 7.2, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1352374669", "name": "liquid oxygen", "x": 81.5, "z": 5.7, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1534183741", "name": "liquid oxygen", "x": 157.2, "z": -12.1, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1534183742", "name": "liquid oxygen", "x": 163.4, "z": -13.5, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1534183743", "name": "liquid nitrogen", "x": 206.9, "z": -18.2, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 },
+    { "kind": "tank", "id": "1534183744", "name": "liquid nitrogen", "x": 200.6, "z": -16.5, "lengthM": 50.0, "diameterM": 16.0, "heightM": 7.1, "yawDeg": -14.0 }
+  ]
+}

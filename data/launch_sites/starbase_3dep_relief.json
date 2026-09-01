@@ -1,0 +1,22 @@
+{
+  "version": "2026-08-31",
+  "source": "USGS 3DEP 1 m lidar-derived DEM",
+  "sourceUrl": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
+  "download": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1m/Projects/TX_LowerRioGrande_D22/TIFF/USGS_1M_14_x68y288_TX_LowerRioGrande_D22.tif",
+  "license": "Public domain, USGS",
+  "origin": { "latitude": 25.9972, "longitude": -97.1566, "crs": "EPSG:4326" },
+  "bbox": [-97.161, 25.992, -97.151, 26.002],
+  "grid": { "columns": 9, "rows": 9, "stepM": [137.5, 138.9], "rowOrder": "north_to_south" },
+  "processing": "Relative to center sample; values clipped to +/-0.85 m to suppress edge mosaic artifacts and preserve the flat barrier-island character.",
+  "valuesM": [
+    [-0.035, 0.829, -0.481, -0.700, -0.751, -0.682, 0.199, 0.204, 0.850],
+    [0.170, -0.156, -0.448, -0.057, -0.664, -0.665, -0.287, -0.083, 0.850],
+    [0.188, -0.293, -0.412, -0.484, -0.550, -0.503, -0.428, -0.063, 0.850],
+    [-0.522, -0.265, -0.070, 0.237, 0.276, -0.099, -0.010, 0.487, 0.850],
+    [-0.232, -0.436, 0.546, 0.209, 0.000, 0.850, 0.636, 0.391, 0.850],
+    [0.522, -0.557, -0.404, 0.189, 0.238, -0.204, -0.053, 0.432, 0.850],
+    [-0.627, -0.516, -0.431, -0.625, 0.116, -0.275, -0.108, 0.161, 0.766],
+    [-0.283, -0.463, -0.437, -0.842, -0.435, -0.302, -0.129, 0.651, 0.850],
+    [-0.421, -0.421, -0.341, -0.320, 0.316, -0.071, 0.349, 0.835, 0.850]
+  ]
+}

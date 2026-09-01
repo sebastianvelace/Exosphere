@@ -91,10 +91,12 @@ public partial class LaunchPadController : Node3D
         // with the engine tips in the floating-origin scene.
         Position = new Vector3(0f, -(float)(VehicleInterfaceElevationM * U), 0f);
         BuildEnvironment();
+        BuildStarbaseFarField();
     }
 
     public override void _Process(double delta)
     {
+        UpdateStarbaseFarField();
         UpdatePadExhaustFx(delta);
 
         bool night = SunController.SolarPhase is "ASTRONOMICAL_TWILIGHT" or "NIGHT";
@@ -191,7 +193,7 @@ public partial class LaunchPadController : Node3D
         var burnt     = Mat(new Color(0.09f, 0.08f, 0.07f), 0.98f, 0.0f);
         var steel     = Mat(new Color(0.55f, 0.56f, 0.58f), 0.55f, 0.85f); // grey lattice steel
         var darkSteel = Mat(new Color(0.28f, 0.28f, 0.31f), 0.60f, 0.80f); // OLM / dark steel
-        var insul     = Mat(new Color(0.42f, 0.32f, 0.24f), 0.92f, 0.06f); // oxidized cryo tanks
+        var insul     = Mat(new Color(0.63f, 0.62f, 0.58f), 0.82f, 0.20f); // weathered cryogenic steel
         var cladding  = Mat(new Color(0.28f, 0.24f, 0.20f), 0.93f, 0.08f); // rusted campus walls
         // Weathered, slightly lighter concrete for the wide tarmac, plus a mid
         // scorch tone between clean concrete and fully-charred burnt.
@@ -219,6 +221,7 @@ public partial class LaunchPadController : Node3D
         BuildMechazillaTower(steel, darkSteel);
         BuildTankFarm(insul, steel);
         BuildGroundSupport(insul, steel, darkSteel, concrete, concDark);
+        BuildStarbaseGeospatialContext();
         ApplyLaunchSurfaceMaterials();
         BuildNightFloodlights();
         BuildPadExhaustFx();
@@ -240,8 +243,11 @@ public partial class LaunchPadController : Node3D
         var marsh = CreateLaunchSurfaceMaterial(
             // Keep the broad marsh variation, but avoid sub-pixel grain across the
             // 22 km skirt: the old settings produced moire bands in the pad camera.
-            new Color(0.20f, 0.23f, 0.18f), 0.045f, 0.12f, 0.025f, 0.18f,
-            edgeFade: 1f, edgeHalfX: 11000f * U, edgeHalfZ: 8000f * U);
+            // The broad skirt is a low-frequency coastal wetland backdrop. Keep
+            // it olive/sand rather than saturated green; the mapped OSM wetlands
+            // above it carry the stronger local marsh colour.
+            new Color(0.19f, 0.24f, 0.16f), 0.032f, 0.08f, 0.018f, 0.14f,
+            edgeFade: 1f, edgeHalfX: 480f * U, edgeHalfZ: 430f * U);
         var burnt = CreateLaunchSurfaceMaterial(
             new Color(0.09f, 0.08f, 0.07f), 0.36f, 0.16f, 0.06f, 0.28f);
 
@@ -512,37 +518,9 @@ public partial class LaunchPadController : Node3D
         StandardMaterial3D asphalt, StandardMaterial3D concrete, StandardMaterial3D joint,
         StandardMaterial3D paint)
     {
-        Spawn("StarbaseCoastalFill",
-            new CylinderMesh
-            {
-                TopRadius = 220f * U,
-                BottomRadius = 260f * U,
-                Height = 0.8f * U,
-                RadialSegments = 32,
-            },
-            sandFill, new Vector3(-40f * U, GradeY - 0.3f * U, 20f * U));
-        // Wide wetland/dune skirt so the 300 m civil island does not drop into a
-        // featureless satellite smear. Sits just above the Earth ground patch and
-        // below the OLM apron.
-        var marsh = Mat(new Color(0.17f, 0.21f, 0.16f), 0.98f, 0.0f);
-        Spawn("StarbaseWetlandSkirt",
-            new CylinderMesh
-            {
-                TopRadius = 22000f * U,
-                BottomRadius = 22000f * U,
-                Height = 0.30f * U,
-                RadialSegments = 64,
-            },
-            marsh, new Vector3(-80f * U, GradeY + 0.08f * U, 60f * U));
-        Spawn("StarbaseDuneShoulder",
-            new CylinderMesh
-            {
-                TopRadius = 420f * U,
-                BottomRadius = 480f * U,
-                Height = 0.22f * U,
-                RadialSegments = 48,
-            },
-            sandFill, new Vector3(-180f * U, GradeY + 0.12f * U, 40f * U));
+        // Do not add a solid island/skirt under the site. The EarthGround shader owns
+        // the continuous marsh/sand/water context; an opaque cylinder here becomes a
+        // visible oval at the first pull-back and z-fights the geodetic relief.
         Spawn("OrbitalPadApron",
             new BoxMesh { Size = new Vector3(126f * U, 0.35f * U, 112f * U) },
             concrete, new Vector3(0, GradeY + 0.175f * U, 0));
@@ -1706,6 +1684,12 @@ public partial class LaunchPadController : Node3D
         _wellFlameMat.SetShaderParameter("expansion", 0f);
         _wellFlameMat.SetShaderParameter("atmo_pressure", 1f);
         _wellFlameMat.SetShaderParameter("throttle_level", 1f);
+        _wellFlameMat.SetShaderParameter("shock_cell_strength", 0.28f);
+        _wellFlameMat.SetShaderParameter("shock_cell_spacing", 0.95f);
+        _wellFlameMat.SetShaderParameter("shock_cell_softness", 0.30f);
+        _wellFlameMat.SetShaderParameter("steam_occlusion", 0.64f);
+        _wellFlameMat.SetShaderParameter("afterburn_strength", 1f);
+        _wellFlameMat.SetShaderParameter("pad_interaction", 1f);
 
         float wellLen = Mathf.Max(2.4f, VehicleInterfaceY - GradeY);
         _wellFlame = new MeshInstance3D
