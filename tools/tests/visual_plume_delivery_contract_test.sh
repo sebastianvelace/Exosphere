@@ -24,6 +24,18 @@ has 'VISUAL_PLUME overlap=' "$RENDERER" \
   "renderer has no hot-stage plume telemetry"
 has 'body.Atmosphere.GetPressure(0.0)' "$RENDERER" \
   "plume pressure ratio is not normalized by the active body"
+has 'layer_opacity' "$PLUME" \
+  "plume layers do not expose bounded optical density"
+has 'CoreMat' "$PLUME" \
+  "plume has no separate axial core layer"
+has 'float coreTailRadius = sh' "$PLUME" \
+  "plume core geometry still reuses the broad outer sheath"
+has 'Mesh             = coreMesh' "$PLUME" \
+  "plume core geometry is not bound to its narrow mesh"
+has 'layer_opacity' "$ROOT/assets/shaders/raptor_plume.gdshader" \
+  "plume shader cannot distinguish core and outer sheath opacity"
+has 'vacuumCoreAlpha' "$ROOT/assets/shaders/raptor_plume.gdshader" \
+  "vacuum plume has no readable axial emission floor"
 
 if rg -q 'GD\.Randf\(\)' "$PLUME"; then
   fail "plume motion still uses frame-rate-dependent random flicker"

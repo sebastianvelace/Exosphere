@@ -39,6 +39,8 @@ public partial class PlumeSystem : Node3D
         public Node3D           Pivot    = null!;   // anchored at the nozzle; scaled to stretch the plume
         public MeshInstance3D   Cone     = null!;   // shader-driven core + diamonds + sheath
         public ShaderMaterial   ConeMat  = null!;
+        public MeshInstance3D   Core     = null!;   // narrow inner core, separate from the optically-thin sheath
+        public ShaderMaterial   CoreMat  = null!;
         public GpuParticles3D   Smoke    = null!;   // turbulent steam/deluge envelope
         public GpuParticles3D   Dust     = null!;   // low-altitude pad dust/debris
         public OmniLight3D?     Light;              // ground illumination (group leaders only)
@@ -46,6 +48,7 @@ public partial class PlumeSystem : Node3D
         public float BaseLength;                    // sea-level plume length (render units)
         public float BaseRadius;                    // plume mouth radius at the nozzle
         public float BaseEnergy;
+        public float CoreScale;                      // radial scale of the visible inner core
         public bool  IsSuperHeavy;
         public bool  IsSkirt;
         public string InstanceId = "";
@@ -204,6 +207,7 @@ public partial class PlumeSystem : Node3D
                 shipThrottle, expansion, pressRatio, altitude, 1f,
                 start: 3, count: 3, activeCount: slActive,
                 flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f);
+
     }
 
     public void UpdateGeneric(
@@ -273,15 +277,6 @@ public partial class PlumeSystem : Node3D
             u.Pivot.Visible = unitFiring;
             if (unitFiring)
             {
-                u.ConeMat.SetShaderParameter("throttle",       throttle);
-                u.ConeMat.SetShaderParameter("expansion",      expansion);
-                // N7: new uniforms — atmo_pressure and throttle_level.
-                // The shader reconciles both control paths, so writing both is safe
-                // and ensures the N7 plume_length / diamond / opacity logic fires.
-                u.ConeMat.SetShaderParameter("atmo_pressure",  atmoPressure);
-                u.ConeMat.SetShaderParameter("throttle_level", throttle);
-                u.ConeMat.SetShaderParameter("energy", u.BaseEnergy * Mathf.Max(0.28f, activeFraction));
-
                 // Shock cells are a pressure-mismatch feature, not a permanent
                 // decorative pattern. Deluge steam and pad ejecta lower their
                 // contrast in the first few hundred metres without changing thrust.
@@ -293,12 +288,25 @@ public partial class PlumeSystem : Node3D
                 float afterburnStrength = Mathf.Clamp(
                     (1f - expansion) * 0.68f + groundInteraction * 0.44f, 0f, 1f);
                 float padInteraction = groundInteraction * (u.IsSuperHeavy ? 1f : 0.45f);
-                u.ConeMat.SetShaderParameter("shock_cell_strength", shockCellStrength);
-                u.ConeMat.SetShaderParameter("shock_cell_spacing", Mathf.Lerp(0.88f, 1.12f, expansion));
-                u.ConeMat.SetShaderParameter("shock_cell_softness", Mathf.Lerp(0.08f, 0.34f, expansion));
-                u.ConeMat.SetShaderParameter("steam_occlusion", steamOcclusion);
-                u.ConeMat.SetShaderParameter("afterburn_strength", afterburnStrength);
-                u.ConeMat.SetShaderParameter("pad_interaction", padInteraction);
+                float shockSpacing = Mathf.Lerp(0.88f, 1.12f, expansion);
+                float shockSoftness = Mathf.Lerp(0.08f, 0.34f, expansion);
+                float outerOpacity = Mathf.Lerp(
+                    u.IsSuperHeavy ? 0.56f : 0.50f,
+                    u.IsSuperHeavy ? 0.18f : 0.12f,
+                    expansion);
+                float coreOpacity = Mathf.Lerp(0.92f, 0.78f, expansion);
+                SetPlumeMaterial(
+                    u.ConeMat, throttle, expansion, atmoPressure,
+                    u.BaseEnergy * 0.58f * Mathf.Max(0.28f, activeFraction),
+                    outerOpacity, shockCellStrength, shockSpacing, shockSoftness,
+                    steamOcclusion, afterburnStrength, padInteraction, coreLayer: 0f);
+                SetPlumeMaterial(
+                    u.CoreMat, throttle, expansion, atmoPressure,
+                    u.BaseEnergy * 0.86f * Mathf.Max(0.28f, activeFraction),
+                    coreOpacity, shockCellStrength * 0.72f, shockSpacing, shockSoftness,
+                    steamOcclusion * 0.35f, afterburnStrength * 0.80f, padInteraction * 0.65f,
+                    coreLayer: 1f);
+                u.Core.Visible = unitFiring;
 
                 // Length grows with throttle and (strongly) with altitude;
                 // mouth broadens in vacuum (underexpanded). Flicker jitters length.
@@ -323,6 +331,7 @@ public partial class PlumeSystem : Node3D
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction),
                     u.BaseLength * lenScale,
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction));
+                u.Core.Scale = new Vector3(u.CoreScale, 1f, u.CoreScale);
             }
 
             // ── Turbulent steam/deluge particles ─────────────────────────────
@@ -393,6 +402,36 @@ public partial class PlumeSystem : Node3D
         return 0.5f + 0.5f * Mathf.Sin(phase * 7.3f + offset * 2.1f);
     }
 
+    private static void SetPlumeMaterial(
+        ShaderMaterial material,
+        float throttle,
+        float expansion,
+        float atmoPressure,
+        float energy,
+        float layerOpacity,
+        float shockCellStrength,
+        float shockCellSpacing,
+        float shockCellSoftness,
+        float steamOcclusion,
+        float afterburnStrength,
+        float padInteraction,
+        float coreLayer)
+    {
+        material.SetShaderParameter("throttle", throttle);
+        material.SetShaderParameter("expansion", expansion);
+        material.SetShaderParameter("atmo_pressure", atmoPressure);
+        material.SetShaderParameter("throttle_level", throttle);
+        material.SetShaderParameter("energy", energy);
+        material.SetShaderParameter("layer_opacity", layerOpacity);
+        material.SetShaderParameter("core_layer", coreLayer);
+        material.SetShaderParameter("shock_cell_strength", shockCellStrength);
+        material.SetShaderParameter("shock_cell_spacing", shockCellSpacing);
+        material.SetShaderParameter("shock_cell_softness", shockCellSoftness);
+        material.SetShaderParameter("steam_occlusion", steamOcclusion);
+        material.SetShaderParameter("afterburn_strength", afterburnStrength);
+        material.SetShaderParameter("pad_interaction", padInteraction);
+    }
+
     // ── Factory helpers ────────────────────────────────────────────────────
 
     private PlumeUnit BuildUnit(string name, float yPos, float mouthR,
@@ -407,6 +446,7 @@ public partial class PlumeSystem : Node3D
             BaseLength   = length,
             BaseRadius   = mouthR,
             BaseEnergy   = sh ? (name.Contains("Skirt") ? 1.35f : 4.6f) : 5.5f,
+            CoreScale    = sh ? 0.52f : 0.82f,
             IsSuperHeavy = sh,
             IsSkirt = name.Contains("Skirt"),
         };
@@ -450,7 +490,46 @@ public partial class PlumeSystem : Node3D
         mat.SetShaderParameter("steam_occlusion", 0f);
         mat.SetShaderParameter("afterburn_strength", 0f);
         mat.SetShaderParameter("pad_interaction", 0f);
+        mat.SetShaderParameter("layer_opacity",     sh ? 0.56f : 0.50f);
+        mat.SetShaderParameter("core_layer",         0f);
         mat.RenderPriority = 2;
+
+        // A cone surface is an envelope, not a volumetric sample: without a second
+        // narrow layer, its side-facing fragments only show the skin and read as a
+        // solid white teardrop. The core layer supplies the blue-white axial column;
+        // the outer layer remains transparent enough to preserve the turbulent edge.
+        float coreTailRadius = sh
+            ? resolvedTailRadius * 0.42f
+            : resolvedTailRadius * 0.34f;
+        var coreMesh = new CylinderMesh
+        {
+            TopRadius      = 0.5f,
+            BottomRadius   = coreTailRadius,
+            Height         = 1.0f,
+            RadialSegments = 20,
+            Rings          = 24,
+            CapTop         = false,
+            CapBottom      = false,
+        };
+        var coreMat = new ShaderMaterial { Shader = PlumeShader };
+        coreMat.SetShaderParameter("core_color", core);
+        coreMat.SetShaderParameter("edge_color", new Color(1.0f, 0.45f, 0.12f));
+        coreMat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
+        coreMat.SetShaderParameter("tail_radius", coreTailRadius);
+        coreMat.SetShaderParameter("energy", unit.BaseEnergy * 0.86f);
+        coreMat.SetShaderParameter("throttle", 0f);
+        coreMat.SetShaderParameter("expansion", 0f);
+        coreMat.SetShaderParameter("atmo_pressure", 1f);
+        coreMat.SetShaderParameter("throttle_level", 0f);
+        coreMat.SetShaderParameter("shock_cell_strength", 0f);
+        coreMat.SetShaderParameter("shock_cell_spacing", 1f);
+        coreMat.SetShaderParameter("shock_cell_softness", 0.10f);
+        coreMat.SetShaderParameter("steam_occlusion", 0f);
+        coreMat.SetShaderParameter("afterburn_strength", 0f);
+        coreMat.SetShaderParameter("pad_interaction", 0f);
+        coreMat.SetShaderParameter("layer_opacity",     0.92f);
+        coreMat.SetShaderParameter("core_layer",         1f);
+        coreMat.RenderPriority = 3;
 
         var pivot = new Node3D
         {
@@ -475,9 +554,24 @@ public partial class PlumeSystem : Node3D
                                         new Vector3(8f, 8f, 8f)),
         };
         pivot.AddChild(cone);
+        var coreCone = new MeshInstance3D
+        {
+            Name             = name + "_Core",
+            Mesh             = coreMesh,
+            Position         = new Vector3(0, -0.5f, 0),
+            MaterialOverride = coreMat,
+            CastShadow       = GeometryInstance3D.ShadowCastingSetting.Off,
+            SortingOffset    = 3f,
+            Visible          = false,
+            CustomAabb       = new Aabb(new Vector3(-4.0f, -6.0f, -4.0f),
+                                        new Vector3(8f, 8f, 8f)),
+        };
+        pivot.AddChild(coreCone);
         unit.Pivot   = pivot;
         unit.Cone    = cone;
         unit.ConeMat = mat;
+        unit.Core    = coreCone;
+        unit.CoreMat = coreMat;
 
         // ── Turbulent smoke / soot particles ─────────────────────────────────
         unit.Smoke = BuildSmoke(name + "_Smoke", xPos, yPos, zPos, mouthR, count, sh);

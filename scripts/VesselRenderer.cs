@@ -25,6 +25,8 @@ public partial class VesselRenderer : Node3D
     private readonly HashSet<string> _shipEngineIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _perEngineThrottle = new(StringComparer.Ordinal);
     private readonly List<EngineReadout> _engineReadoutScratch = new();
+    private readonly List<EngineReadout> _superHeavyReadoutScratch = new();
+    private readonly List<EngineReadout> _shipReadoutScratch = new();
     private double _engineVisualTimer;
     private double _thermalVisualTimer;
     private double _landingGearStateTimer;
@@ -1389,31 +1391,24 @@ public partial class VesselRenderer : Node3D
         out float superHeavyThrottle,
         out float shipThrottle)
     {
-        double superHeavySum = 0.0;
-        double shipSum = 0.0;
-        double allSum = 0.0;
         int superHeavyCount = 0;
         int shipCount = 0;
         int knownCount = 0;
+        _superHeavyReadoutScratch.Clear();
+        _shipReadoutScratch.Clear();
         for (int i = 0; i < readouts.Count; i++)
         {
             var readout = readouts[i];
-            bool delivered = EngineHudPresentation.IsDelivered(readout);
-            double value = delivered
-                ? System.Math.Clamp(readout.Throttle, 0.0, 1.0)
-                : 0.0;
-            allSum += value;
-
             if (_superHeavyEngineIds.Contains(readout.InstanceId))
             {
                 superHeavyCount++;
-                superHeavySum += value;
+                _superHeavyReadoutScratch.Add(readout);
                 knownCount++;
             }
             else if (_shipEngineIds.Contains(readout.InstanceId))
             {
                 shipCount++;
-                shipSum += value;
+                _shipReadoutScratch.Add(readout);
                 knownCount++;
             }
         }
@@ -1423,19 +1418,17 @@ public partial class VesselRenderer : Node3D
         // fallback, but never use it when a mixed Starship stack has role-tagged rows.
         if (knownCount == 0)
         {
-            float aggregate = readouts.Count > 0
-                ? (float)System.Math.Clamp(allSum / readouts.Count, 0.0, 1.0)
-                : 0f;
+            float aggregate = (float)EngineHudPresentation.DeliveredThrottle(readouts);
             superHeavyThrottle = _hasSuperHeavy ? aggregate : 0f;
             shipThrottle = _hasSuperHeavy ? 0f : aggregate;
             return;
         }
 
         superHeavyThrottle = superHeavyCount > 0
-            ? (float)System.Math.Clamp(superHeavySum / superHeavyCount, 0.0, 1.0)
+            ? (float)EngineHudPresentation.DeliveredThrottle(_superHeavyReadoutScratch)
             : 0f;
         shipThrottle = shipCount > 0
-            ? (float)System.Math.Clamp(shipSum / shipCount, 0.0, 1.0)
+            ? (float)EngineHudPresentation.DeliveredThrottle(_shipReadoutScratch)
             : 0f;
     }
 
@@ -3330,6 +3323,8 @@ public partial class VesselRenderer : Node3D
         _shipEngineIds.Clear();
         _perEngineThrottle.Clear();
         _engineReadoutScratch.Clear();
+        _superHeavyReadoutScratch.Clear();
+        _shipReadoutScratch.Clear();
         _engineVisualTimer = 0.0;
         _thermalVisualTimer = 0.0;
         _landingGearStateTimer = 0.0;
