@@ -458,7 +458,16 @@ public partial class VesselRenderer : Node3D
         var shipSteel = SteelMat(new Color(0.74f, 0.74f, 0.76f), 0.24f, 0.26f, weldSpacing: 1.55f);
         _shipSteelMats.Add(shipSteel);
         _hullMesh = AddMesh("Body",
-            new CylinderMesh { TopRadius = BodyR, BottomRadius = BodyR, Height = ShipBodyH, RadialSegments = 64 },
+            new CylinderMesh
+            {
+                TopRadius = BodyR,
+                BottomRadius = BodyR,
+                Height = ShipBodyH,
+                RadialSegments = 64,
+                // The ogive owns the forward closure. Leaving this cap enabled exposes
+                // a full-radius disc through the open base of the continuous nose mesh.
+                CapTop = false,
+            },
             shipSteel, new Vector3(0, bodyMid, 0));
         AddWeldRings("ShipBarrelWeld", BodyR + 0.018f, bodyBot + 0.8f, bodyTop - 0.7f, 7);
         AddHullRing("ShipFrostLOX", BodyR + 0.026f, bodyTop - 1.3f, 0.08f, FrostMat);
@@ -487,9 +496,9 @@ public partial class VesselRenderer : Node3D
         AddMesh("Nose", BuildOgiveMesh(noseLen, OgiveR), noseSteel,
             new Vector3(0, o + noseBase, 0));
 
-        // Use one continuous windward TPS patch. Individual raised box tiles alias into
-        // bright concentric rings in orbital views, even when their rim is subdued.
-        AddNoseTileShell(o + ShipNoseBase, ShipNoseH, OgiveR);
+        // Keep the ogive as one authoritative surface at orbital scale. A separate TPS
+        // overlay, even when continuous, reads as a colored disk at the barrel interface;
+        // close-range tile detail belongs to the dedicated belly surface for now.
 
         AddMesh("NoseTip",
             new SphereMesh { Radius = 0.085f, Height = 0.17f,
@@ -597,6 +606,29 @@ public partial class VesselRenderer : Node3D
             surface.AddIndex(i11);
             surface.AddIndex(i01);
         }
+
+        // Close the aft-facing base with its own vertices so the cap keeps a flat
+        // inward normal without averaging with the curved ogive wall. The body no
+        // longer owns this plane; leaving it open exposes the planet through the
+        // nose when the orbital camera looks back along the vehicle axis.
+        int capCenter = (axialSegments + 1) * (radialSegments + 1);
+        surface.AddVertex(new Vector3(0f, 0f, 0f));
+        int capRing = capCenter + 1;
+        for (int radial = 0; radial <= radialSegments; radial++)
+        {
+            float angle = radial * Mathf.Tau / radialSegments;
+            float radius = radiusAt(0f);
+            surface.AddVertex(new Vector3(
+                radius * Mathf.Cos(angle), 0f, radius * Mathf.Sin(angle)));
+        }
+
+        for (int radial = 0; radial < radialSegments; radial++)
+        {
+            surface.AddIndex(capCenter);
+            surface.AddIndex(capRing + radial);
+            surface.AddIndex(capRing + radial + 1);
+        }
+
         surface.GenerateNormals();
         return surface.Commit()!;
     }
@@ -3121,55 +3153,6 @@ public partial class VesselRenderer : Node3D
                 stave.AddChild(vSeam);
             }
         }
-    }
-
-    // Continuous windward TPS that conforms to the narrowing nose ogive. Panel seams are
-    // intentionally omitted here: at orbital scale their raised-box approximation is more
-    // visually damaging than informative; close-up detail remains on the belly tile band.
-    private void AddNoseTileShell(float yBase, float noseLength, Func<float, float> radiusAt)
-    {
-        var tiles = TileMat(rimStrength: 0.018f);
-        RegisterTileMat(TileCharZone.Nose, tiles);
-        AddMesh("NoseTilePatch", BuildNoseTilePatch(noseLength, radiusAt), tiles,
-            new Vector3(0f, yBase, 0f));
-    }
-
-    private static ArrayMesh BuildNoseTilePatch(float length, Func<float, float> radiusAt,
-        int axialSegments = 18, int radialSegments = 20)
-    {
-        const float arc = 3.49f;
-        var surface = new SurfaceTool();
-        surface.Begin(Mesh.PrimitiveType.Triangles);
-        for (int axial = 0; axial <= axialSegments; axial++)
-        {
-            float u = axial / (float)axialSegments;
-            float y = u * length;
-            float radius = radiusAt(u) + 0.012f;
-            for (int radial = 0; radial <= radialSegments; radial++)
-            {
-                float angle = Mathf.Pi - arc * 0.5f + arc * radial / radialSegments;
-                surface.AddVertex(new Vector3(
-                    radius * Mathf.Cos(angle), y, radius * Mathf.Sin(angle)));
-            }
-        }
-
-        int rowStride = radialSegments + 1;
-        for (int axial = 0; axial < axialSegments; axial++)
-        for (int radial = 0; radial < radialSegments; radial++)
-        {
-            int i00 = axial * rowStride + radial;
-            int i10 = i00 + rowStride;
-            int i01 = i00 + 1;
-            int i11 = i10 + 1;
-            surface.AddIndex(i00);
-            surface.AddIndex(i10);
-            surface.AddIndex(i11);
-            surface.AddIndex(i00);
-            surface.AddIndex(i11);
-            surface.AddIndex(i01);
-        }
-        surface.GenerateNormals();
-        return surface.Commit()!;
     }
 
     // A Starship aerodynamic flap: a tile-covered slab plus a steel root, both
