@@ -76,7 +76,14 @@ if ! grep -q 'simultaneous delivered Super Heavy and Ship plume output' "$HARNES
   echo "FAIL hot-stage gate does not verify dual delivered plume telemetry" >&2
   exit 1
 fi
+if ! grep -q 'VISUAL_PLUME_LOD' "$ROOT/scripts/PlumeSystem.cs" \
+  || ! grep -q 'farField: farField' "$ROOT/scripts/PlumeSystem.cs" \
+  || ! grep -q 'far_field' "$ROOT/assets/shaders/raptor_plume.gdshader"; then
+  echo "FAIL plume far-field LOD is not wired through CPU, telemetry, and shader" >&2
+  exit 1
+fi
 echo "PASS bounded --resolution is wired to both Xvfb/Godot launches"
+echo "PASS plume far-field LOD is wired through CPU, telemetry, and shader"
 
 # Both Godot launch paths must override the default user://logs destination.
 # That default can fail to create its parent directory in the Xvfb environment

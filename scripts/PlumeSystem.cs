@@ -58,6 +58,14 @@ public partial class PlumeSystem : Node3D
     private readonly List<PlumeUnit> _shipUnits = new();
     private readonly List<PlumeUnit> _genericUnits = new();
     private float _visualTimeSeconds;
+    private bool _farFieldActive;
+
+    // The pad tracking shot is deliberately kept in the near-field so its broad
+    // steam/dust envelope remains readable. At larger camera distances the outer
+    // transparent shell contributes mostly overdraw and aliases into thin bars.
+    // Hysteresis prevents the two representations from flickering at the boundary.
+    private const float FarFieldEnterDistance = 520f;
+    private const float FarFieldExitDistance  = 420f;
 
     private static Shader? _plumeShader;
     private static Shader PlumeShader =>
@@ -189,6 +197,7 @@ public partial class PlumeSystem : Node3D
         _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + visualDelta, 10_000f);
         superHeavyThrottle = Mathf.Clamp(superHeavyThrottle, 0f, 1f);
         shipThrottle = Mathf.Clamp(shipThrottle, 0f, 1f);
+        bool farField = ResolveFarFieldState();
 
         // Measured ambient-pressure ratio → expansion factor. At p≈p0 the plume is
         // tight/over-expanded; as p→0 it becomes the long vacuum plume. The smoothstep
@@ -199,7 +208,7 @@ public partial class PlumeSystem : Node3D
 
         UpdateGroup(_shUnits, superHeavyThrottle > 0.01f, superHeavyThrottle,
             expansion, pressRatio, altitude, 1f, flickerPhase: _visualTimeSeconds,
-            flickerOffset: 0.0f);
+            flickerOffset: 0.0f, farField: farField);
 
         int slActive = System.Math.Clamp(selectedShipEngines, 0, 3);
         int vacActive = System.Math.Clamp(selectedShipEngines - 3, 0, 3);
@@ -207,12 +216,12 @@ public partial class PlumeSystem : Node3D
             UpdateGroup(_shipUnits, shipThrottle > 0.01f && vacActive > 0,
                 shipThrottle, expansion, pressRatio, altitude, 1f,
                 start: 0, count: 3, activeCount: vacActive,
-                flickerPhase: _visualTimeSeconds, flickerOffset: 1.7f);
+                flickerPhase: _visualTimeSeconds, flickerOffset: 1.7f, farField: farField);
         if (_shipUnits.Count >= 6)
             UpdateGroup(_shipUnits, shipThrottle > 0.01f && slActive > 0,
                 shipThrottle, expansion, pressRatio, altitude, 1f,
                 start: 3, count: 3, activeCount: slActive,
-                flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f);
+                flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f, farField: farField);
 
     }
 
@@ -228,6 +237,7 @@ public partial class PlumeSystem : Node3D
         expansion = expansion * expansion * (3f - 2f * expansion);
         float visualDelta = (float)System.Math.Clamp(visualDeltaSeconds, 0.0, 0.12);
         _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + visualDelta, 10_000f);
+        bool farField = ResolveFarFieldState();
         for (int i = 0; i < _genericUnits.Count; i++)
         {
             var unit = _genericUnits[i];
@@ -246,14 +256,34 @@ public partial class PlumeSystem : Node3D
                 count: 1,
                 activeCount: throttle > 0.01f ? 1 : 0,
                 flickerPhase: _visualTimeSeconds,
-                flickerOffset: i * 0.71f);
+                flickerOffset: i * 0.71f, farField: farField);
         }
+    }
+
+    private bool ResolveFarFieldState()
+    {
+        var camera = GetViewport().GetCamera3D();
+        if (camera == null || !GodotObject.IsInstanceValid(camera))
+            return _farFieldActive;
+
+        float distance = GlobalPosition.DistanceTo(camera.GlobalPosition);
+        bool next = _farFieldActive
+            ? distance > FarFieldExitDistance
+            : distance >= FarFieldEnterDistance;
+        if (next != _farFieldActive)
+        {
+            _farFieldActive = next;
+            GD.Print($"[VISUAL_PLUME_LOD] state={(_farFieldActive ? "far" : "near")} " +
+                $"cameraDistance={distance:F1} enter={FarFieldEnterDistance:F0} " +
+                $"exit={FarFieldExitDistance:F0}");
+        }
+        return _farFieldActive;
     }
 
     private static void UpdateGroup(List<PlumeUnit> units,
         bool firing, float throttle, float expansion, float pressureRatio, double altitude,
         float activeFraction, int start = 0, int count = -1, int activeCount = -1,
-        float flickerPhase = 0f, float flickerOffset = 0f)
+        float flickerPhase = 0f, float flickerOffset = 0f, bool farField = false)
     {
         float altT = (float)System.Math.Clamp((altitude - 50.0) / 450.0, 0.0, 1.0);
         var dir = Vector3.Down;
@@ -307,13 +337,19 @@ public partial class PlumeSystem : Node3D
                     u.ConeMat, throttle, expansion, atmoPressure,
                     u.BaseEnergy * 0.58f * Mathf.Max(0.28f, activeFraction),
                     outerOpacity, shockCellStrength, shockSpacing, shockSoftness,
-                    steamOcclusion, afterburnStrength, padInteraction, coreLayer: 0f);
+                    steamOcclusion, afterburnStrength, padInteraction, coreLayer: 0f,
+                    farField: farField);
+                float farFieldCoreOpacity = farField
+                    ? Mathf.Lerp(1.00f, 0.90f, expansion)
+                    : coreOpacity;
+                float farFieldCoreEnergy = farField ? u.BaseEnergy * 1.30f : u.BaseEnergy * 0.86f;
                 SetPlumeMaterial(
                     u.CoreMat, throttle, expansion, atmoPressure,
-                    u.BaseEnergy * 0.86f * Mathf.Max(0.28f, activeFraction),
-                    coreOpacity, shockCellStrength * 0.72f, shockSpacing, shockSoftness,
+                    farFieldCoreEnergy * Mathf.Max(0.28f, activeFraction),
+                    farFieldCoreOpacity, shockCellStrength * 0.72f, shockSpacing, shockSoftness,
                     steamOcclusion * 0.35f, afterburnStrength * 0.80f, padInteraction * 0.65f,
-                    coreLayer: 1f);
+                    coreLayer: 1f, farField: farField);
+                u.Cone.Visible = unitFiring && !farField;
                 u.Core.Visible = unitFiring;
 
                 // Length grows with throttle and (strongly) with altitude;
@@ -335,11 +371,14 @@ public partial class PlumeSystem : Node3D
                 float radScale = (0.85f + 0.30f * throttle)
                                * (1.0f + expansion * (u.IsSuperHeavy ? 1.3f : 0.72f))
                                * Mathf.Lerp(seaLevelBroadening, 1.0f, expansion);
+                if (farField)
+                    radScale *= 1.42f;
                 u.Pivot.Scale = new Vector3(
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction),
                     u.BaseLength * lenScale,
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction));
-                u.Core.Scale = new Vector3(u.CoreScale, 1f, u.CoreScale);
+                float coreScale = u.CoreScale * (farField ? 1.28f : 1f);
+                u.Core.Scale = new Vector3(coreScale, 1f, coreScale);
             }
 
             // ── Turbulent steam/deluge particles ─────────────────────────────
@@ -349,7 +388,7 @@ public partial class PlumeSystem : Node3D
             float smokePresence = Mathf.Clamp(1f - expansion * (u.IsSuperHeavy ? 0.92f : 1.12f), 0f, 1f);
             float smokeAmount = throttle * smokePresence * smokePresence * activeFraction
                 * groundInteraction * (u.IsSuperHeavy ? 0.88f : 0.20f);
-            u.Smoke.Emitting = unitFiring && smokeAmount > 0.02f;
+            u.Smoke.Emitting = unitFiring && !farField && smokeAmount > 0.02f;
             if (unitFiring)
             {
                 u.Smoke.AmountRatio = Mathf.Clamp(smokeAmount, 0.0f, 1f);
@@ -372,7 +411,7 @@ public partial class PlumeSystem : Node3D
             // persistent soot cone or a vacuum dust trail.
             float dustAmount = throttle * groundInteraction * groundInteraction
                 * smokePresence * activeFraction * (u.IsSuperHeavy ? 0.36f : 0.035f);
-            u.Dust.Emitting = unitFiring && dustAmount > 0.015f;
+            u.Dust.Emitting = unitFiring && !farField && dustAmount > 0.015f;
             if (unitFiring)
             {
                 u.Dust.AmountRatio = Mathf.Clamp(dustAmount, 0f, 1f);
@@ -389,7 +428,7 @@ public partial class PlumeSystem : Node3D
             // ── Nozzle glow light ────────────────────────────────────────────
             if (u.Light != null)
             {
-                u.Light.Visible = unitFiring;
+                u.Light.Visible = unitFiring && !farField;
                 if (unitFiring)
                 {
                     // Strong at the pad for ground illumination, eases off with
@@ -423,7 +462,8 @@ public partial class PlumeSystem : Node3D
         float steamOcclusion,
         float afterburnStrength,
         float padInteraction,
-        float coreLayer)
+        float coreLayer,
+        bool farField)
     {
         material.SetShaderParameter("throttle", throttle);
         material.SetShaderParameter("expansion", expansion);
@@ -438,6 +478,7 @@ public partial class PlumeSystem : Node3D
         material.SetShaderParameter("steam_occlusion", steamOcclusion);
         material.SetShaderParameter("afterburn_strength", afterburnStrength);
         material.SetShaderParameter("pad_interaction", padInteraction);
+        material.SetShaderParameter("far_field", farField ? 1f : 0f);
     }
 
     // ── Factory helpers ────────────────────────────────────────────────────

@@ -79,6 +79,10 @@ uniform float layer_opacity : hint_range(0.0, 1.0) = 1.0;
 // visible hot gas near the nozzle, not a full opaque billboard.
 uniform float core_layer : hint_range(0.0, 1.0) = 0.0;
 uniform float tail_radius : hint_range(0.02, 1.0) = 0.14;
+// Far-field keeps only the narrow core and gives it a bounded optical floor.
+// The CPU side hides the broad shell/particles in this mode to avoid transparent
+// overdraw and preserve a stable silhouette when the vehicle is a few pixels wide.
+uniform float far_field : hint_range(0.0, 1.0) = 0.0;
 
 varying float v_axial;   // 0 at nozzle exit → 1 at plume tip (along the mesh -Y)
 varying float v_radial;  // 0 on axis → 1 at mesh skin
@@ -145,7 +149,8 @@ void fragment() {
 	// whole cone to 0.48 — that reads as a solid white teardrop in daylight.
 	// CylinderMesh only shades the envelope (r≈1). A tiny floor makes daylight mix
 	// erase the column; a 0.48 floor plus 2.3× energy made a white teardrop.
-	float skin = mix(0.34, 0.14, effExpansion) * (1.0 - 0.40 * a);
+    float vacuumSkin = mix(0.14, 0.22, far_field);
+    float skin = mix(0.34, vacuumSkin, effExpansion) * (1.0 - 0.40 * a);
 	radial = max(radial, skin);
 
 	// ── Axial envelope: full near the nozzle, fades toward the tip. Vacuum
@@ -192,8 +197,13 @@ void fragment() {
 		* smoothstep(0.78, 1.0, r) * 0.07;
 	col = mix(col, edge_color, padWarm);
 	// Vacuum methalox remains a pale blue-white, not a solid purple volume.
-	vec3 vacuumTint = vec3(0.78, 0.88, 1.0);
-	col = mix(col, vacuumTint, effExpansion * (1.0 - coreR) * 0.18);
+    vec3 vacuumTint = vec3(0.78, 0.88, 1.0);
+    col = mix(col, vacuumTint, effExpansion * (1.0 - coreR) * 0.18);
+    // A far-field core is sampled only at its envelope, where the normalised
+    // radial coordinate is near the skin and the axial tint above contributes
+    // little. Keep a restrained blue-white identity there so distance does not
+    // turn the exhaust into a neutral grey streak.
+    col = mix(col, vec3(0.66, 0.84, 1.0), far_field * effExpansion * 0.42);
 
 	// N7: brightness — SL core is punchy and brilliant; vacuum core is dim and diffuse.
 	// At sea level: strong over-expanded shock boosts brightness near the throat.
@@ -208,12 +218,13 @@ void fragment() {
 	// N7: vacuum plume dims the core — thin gas, far fewer photons per unit volume.
 	// Kept dimmer than sea level (realistic optically-thin plume) but lifted enough so the
 	// orbital-insertion burn still reads clearly against the bright Earth/space backdrop.
-	float vacuumDim = mix(1.0, 0.72, effExpansion * effExpansion);
+    float vacuumDim = mix(1.0, mix(0.72, 0.90, far_field), effExpansion * effExpansion);
 
 	// Sea-level plumes are visually punchier per unit length; vacuum a touch
 	// dimmer (very thin gas), but its length makes it dominant in frame.
 	// Daylight pad needs a photosphere-white core, not a faint additive haze.
-	float eScale = mix(1.45, 0.90, effExpansion) * vacuumDim;
+    float eScale = mix(1.45, 0.90, effExpansion) * vacuumDim
+        * mix(1.0, 1.12, far_field);
 	float e   = energy * eScale * (0.45 + 0.55 * effThrottle);
 
 	vec3 emission = col * bright * e;
@@ -222,9 +233,9 @@ void fragment() {
 	EMISSION = emission;
 	// Mix blend against daylight: keep a readable SL core without a solid white capsule.
 	// Vacuum stays optically thin so ascent does not become a teardrop billboard.
-	float vacuumAlpha = mix(0.78, 0.42, effExpansion);
-	float vacuumCoreAlpha = core_layer * effExpansion
-		* smoothstep(0.92, 0.30, a) * 0.32;
+    float vacuumAlpha = mix(0.78, mix(0.42, 0.64, far_field), effExpansion);
+    float vacuumCoreAlpha = core_layer * effExpansion
+        * smoothstep(0.92, 0.30, a) * mix(0.32, 0.60, far_field);
 	float profileAlpha = bright * (0.62 + 0.28 * effThrottle)
 		* vacuumAlpha * layer_opacity;
 	ALPHA = clamp(max(profileAlpha, vacuumCoreAlpha), 0.0, 0.88);
