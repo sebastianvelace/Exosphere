@@ -85,6 +85,15 @@ fi
 echo "PASS bounded --resolution is wired to both Xvfb/Godot launches"
 echo "PASS plume far-field LOD is wired through CPU, telemetry, and shader"
 
+if ! rg -q 'BuildMappedFarFieldContext' "$ROOT/scripts/StarbaseFarField.cs" \
+  || ! rg -q 'BuildMappedFarRelief' "$ROOT/scripts/StarbaseFarField.cs" \
+  || ! rg -q 'source=\{source\}' "$ROOT/scripts/StarbaseFarField.cs" \
+  || ! rg -q 'StarbaseOpenMapPath' "$ROOT/scripts/StarbaseFarField.cs"; then
+  echo "FAIL Starbase far-field is not tied to the mapped OSM/3DEP context" >&2
+  exit 1
+fi
+echo "PASS Starbase far-field reuses mapped OSM/3DEP context with source telemetry"
+
 # Both Godot launch paths must override the default user://logs destination.
 # That default can fail to create its parent directory in the Xvfb environment
 # and caused Godot 4.6.3 to abort before the scene loaded.

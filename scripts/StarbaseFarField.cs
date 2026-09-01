@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using Exosphere.Simulation;
 using System.Collections.Generic;
+using System.Text.Json;
 
 /// <summary>
 /// Low-cost contextual LOD for Starbase. The detailed pad is intentionally local;
@@ -20,6 +21,7 @@ public partial class LaunchPadController
     private readonly List<MeshInstance3D> _starbaseFarFieldMeshes = new();
     private bool? _lastFarFieldVisible;
     private float _lastFarFieldOpacity = float.NaN;
+    private bool _farFieldUsesMappedContext;
 
     private void BuildStarbaseFarField()
     {
@@ -57,6 +59,9 @@ public partial class LaunchPadController
             new(700f, 620f), new(635f, 280f), new(670f, -180f),
         }), water, new Vector3(0f, GradeY + 0.075f * U, 0f));
 
+        _farFieldUsesMappedContext = BuildMappedFarFieldContext(road, water, land, steel, roof);
+        if (!_farFieldUsesMappedContext)
+        {
         AddFarRotated("Highway4", new BoxMesh { Size = new Vector3(18f * U, 0.08f * U, 1500f * U) },
             road, new Vector3(-470f * U, GradeY + 0.15f * U, 30f * U), new Vector3(0f, -5f, 0f));
         AddFarMesh("NorthServiceRoad", new BoxMesh { Size = new Vector3(760f * U, 0.08f * U, 14f * U) },
@@ -105,6 +110,258 @@ public partial class LaunchPadController
                 { Size = new Vector3(width * U, height * U, depth * U) },
                 roof, new Vector3(x * U, GradeY + height * 0.5f * U, z * U));
         }
+        }
+    }
+
+    /// <summary>
+    /// Builds a deliberately simplified copy of the mapped Starbase context. The hero
+    /// scene remains responsible for close inspection; this copy keeps the same OSM
+    /// footprints and 3DEP relief through the 12–40 km local-ground handoff instead of
+    /// swapping to a separately authored road/tank layout.
+    /// </summary>
+    private bool BuildMappedFarFieldContext(StandardMaterial3D road,
+        StandardMaterial3D water, StandardMaterial3D land,
+        StandardMaterial3D steel, StandardMaterial3D roof)
+    {
+        if (!FileAccess.FileExists(StarbaseOpenMapPath))
+            return false;
+
+        var file = FileAccess.Open(StarbaseOpenMapPath, FileAccess.ModeFlags.Read);
+        if (file == null)
+            return false;
+
+        string json = file.GetAsText();
+        file.Close();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("features", out var features)
+                || features.ValueKind != JsonValueKind.Array)
+                return false;
+
+            int built = 0;
+            foreach (var feature in features.EnumerateArray())
+            {
+                string kind = StringValue(feature, "kind");
+                switch (kind)
+                {
+                    case "road":
+                        built += BuildMappedFarRoad(feature, road);
+                        break;
+                    case "coastline":
+                        built += BuildMappedFarCoastline(feature, water, land);
+                        break;
+                    case "water":
+                    case "wetland":
+                    case "yard":
+                        built += BuildMappedFarPolygon(feature, kind, water, land);
+                        break;
+                    case "building":
+                        built += BuildMappedFarBuilding(feature, steel, roof);
+                        break;
+                    case "tank":
+                        built += BuildMappedFarTank(feature, steel);
+                        break;
+                }
+            }
+
+            built += BuildMappedFarRelief(land);
+            return built > 0;
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[STARBASE_FAR] Invalid mapped context: {ex.Message}");
+            return false;
+        }
+    }
+
+    private int BuildMappedFarRoad(JsonElement feature, StandardMaterial3D material)
+    {
+        var points = ReadPoints(feature);
+        float widthM = Mathf.Clamp(Number(feature, "widthM", 8f), 4f, 18f);
+        int built = 0;
+        for (int i = 0; i + 1 < points.Count; i++)
+        {
+            Vector2 a = points[i], b = points[i + 1];
+            float lengthM = a.DistanceTo(b);
+            if (lengthM < 4f || lengthM > 800f || !NearRenderContext(a, b, 2_600f))
+                continue;
+            Vector2 mid = (a + b) * 0.5f;
+            float yaw = -Mathf.RadToDeg(Mathf.Atan2(b.Y - a.Y, b.X - a.X));
+            AddFarRotated($"MappedRoad_{StringValue(feature, "id")}_{i}",
+                new BoxMesh { Size = new Vector3(lengthM * U, 0.08f * U, widthM * U) },
+                material,
+                new Vector3(mid.X * U, GradeY + 0.16f * U, mid.Y * U),
+                new Vector3(0f, yaw, 0f));
+            built++;
+        }
+        return built;
+    }
+
+    private int BuildMappedFarCoastline(JsonElement feature,
+        StandardMaterial3D water, StandardMaterial3D shore)
+    {
+        var points = ReadPoints(feature);
+        int built = 0;
+        for (int i = 0; i + 1 < points.Count; i++)
+        {
+            Vector2 a = points[i], b = points[i + 1];
+            float lengthM = a.DistanceTo(b);
+            if (lengthM < 4f || lengthM > 800f || !NearRenderContext(a, b, 2_600f))
+                continue;
+            Vector2 dir = (b - a).Normalized();
+            Vector2 mid = (a + b) * 0.5f;
+            float yaw = -Mathf.RadToDeg(Mathf.Atan2(dir.Y, dir.X));
+            string id = StringValue(feature, "id");
+            AddFarRotated($"MappedShore_{id}_{i}",
+                new BoxMesh { Size = new Vector3(lengthM * U, 0.06f * U, 6f * U) },
+                shore,
+                new Vector3(mid.X * U, GradeY + 0.18f * U, mid.Y * U),
+                new Vector3(0f, yaw, 0f));
+            Vector2 seaMid = mid + new Vector2(70f, 0f);
+            AddFarRotated($"MappedSea_{id}_{i}",
+                new BoxMesh { Size = new Vector3(lengthM * U, 0.035f * U, 140f * U) },
+                water,
+                new Vector3(seaMid.X * U, GradeY + 0.07f * U, seaMid.Y * U),
+                new Vector3(0f, yaw, 0f));
+            built++;
+        }
+        return built;
+    }
+
+    private int BuildMappedFarPolygon(JsonElement feature, string kind,
+        StandardMaterial3D water, StandardMaterial3D land)
+    {
+        var points = ReadPoints(feature);
+        var material = kind == "water" ? water : land;
+        var mesh = BuildExtrudedPolygon(points, GradeY + 0.09f * U, 0.06f * U);
+        if (mesh == null)
+            return 0;
+        AddFarMesh($"Mapped{kind}_{StringValue(feature, "id")}", mesh, material, Vector3.Zero)
+            .CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        return 1;
+    }
+
+    private int BuildMappedFarBuilding(JsonElement feature,
+        StandardMaterial3D steel, StandardMaterial3D roof)
+    {
+        string name = StringValue(feature, "name");
+        if (name.Contains("Flame Trench", StringComparison.OrdinalIgnoreCase))
+            return 0;
+        float heightM = Mathf.Clamp(Number(feature, "heightM", 4f), 2f, 160f);
+        float widthM = Mathf.Clamp(Number(feature, "widthM", 8f), 2f, 90f);
+        float depthM = Mathf.Clamp(Number(feature, "depthM", 8f), 2f, 90f);
+        float x = Number(feature, "x");
+        float z = Number(feature, "z");
+        string id = StringValue(feature, "id");
+        if (heightM >= 100f && name.Contains("Integration Tower", StringComparison.OrdinalIgnoreCase))
+        {
+            float halfX = Mathf.Min(widthM, 18f) * 0.5f * U;
+            float halfZ = Mathf.Min(depthM, 18f) * 0.5f * U;
+            float height = heightM * U;
+            foreach ((float dx, float dz) in new[]
+            {
+                (-halfX, -halfZ), (halfX, -halfZ), (halfX, halfZ), (-halfX, halfZ),
+            })
+                AddFarMesh($"MappedTower_{id}",
+                    new BoxMesh { Size = new Vector3(0.65f * U, height, 0.65f * U) },
+                    steel,
+                    new Vector3(x * U + dx, GradeY + height * 0.5f, z * U + dz));
+            for (int level = 1; level <= 4; level++)
+                AddFarMesh($"MappedTowerRail_{id}_{level}",
+                    new BoxMesh { Size = new Vector3(widthM * U, 0.26f * U, depthM * U) },
+                    steel,
+                    new Vector3(x * U, GradeY + height * level / 5f, z * U));
+            return 1;
+        }
+
+        AddFarMesh($"MappedBuilding_{id}",
+            new BoxMesh { Size = new Vector3(widthM * U, heightM * U, depthM * U) },
+            steel,
+            new Vector3(x * U, GradeY + heightM * 0.5f * U, z * U));
+        AddFarMesh($"MappedRoof_{id}",
+            new BoxMesh { Size = new Vector3((widthM + 0.6f) * U, 0.22f * U, (depthM + 0.6f) * U) },
+            roof,
+            new Vector3(x * U, GradeY + (heightM + 0.11f) * U, z * U));
+        return 1;
+    }
+
+    private int BuildMappedFarTank(JsonElement feature, StandardMaterial3D material)
+    {
+        float x = Number(feature, "x");
+        float z = Number(feature, "z");
+        float lengthM = Mathf.Clamp(Number(feature, "lengthM", 48f), 20f, 70f);
+        float diameterM = Mathf.Clamp(Number(feature, "diameterM", 8f), 5.5f, 7.5f);
+        float radius = diameterM * 0.5f * U;
+        float yaw = Number(feature, "yawDeg", -14f);
+        AddFarRotated($"MappedTank_{StringValue(feature, "id")}",
+            new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius,
+                Height = lengthM * U,
+                RadialSegments = 12,
+            },
+            material,
+            new Vector3(x * U, GradeY + radius + 0.35f * U, z * U),
+            new Vector3(0f, yaw, 90f));
+        return 1;
+    }
+
+    private int BuildMappedFarRelief(StandardMaterial3D material)
+    {
+        if (!FileAccess.FileExists(StarbaseReliefPath))
+            return 0;
+        var file = FileAccess.Open(StarbaseReliefPath, FileAccess.ModeFlags.Read);
+        if (file == null)
+            return 0;
+        string json = file.GetAsText();
+        file.Close();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var grid = doc.RootElement.GetProperty("grid");
+            int columns = grid.GetProperty("columns").GetInt32();
+            int rows = grid.GetProperty("rows").GetInt32();
+            float stepX = grid.GetProperty("stepM")[0].GetSingle();
+            float stepZ = grid.GetProperty("stepM")[1].GetSingle();
+            var values = doc.RootElement.GetProperty("valuesM");
+            const float centreX = 67f;
+            const float centreZ = 0f;
+            const float reliefScale = 0.55f;
+            float baseY = GradeY + 0.10f * U;
+            Vector3 Vertex(int row, int column)
+            {
+                float x = centreX + (column - (columns - 1) * 0.5f) * stepX;
+                float z = centreZ + ((rows - 1) * 0.5f - row) * stepZ;
+                float y = baseY + values[row][column].GetSingle() * reliefScale * U;
+                return new Vector3(x * U, y, z * U);
+            }
+            var st = new SurfaceTool();
+            st.Begin(Mesh.PrimitiveType.Triangles);
+            for (int row = 0; row < rows - 1; row++)
+            for (int column = 0; column < columns - 1; column++)
+            {
+                Vector3 a = Vertex(row, column);
+                Vector3 b = Vertex(row, column + 1);
+                Vector3 c = Vertex(row + 1, column + 1);
+                Vector3 d = Vertex(row + 1, column);
+                AddReliefTriangle(st, a, b, c);
+                AddReliefTriangle(st, a, c, d);
+            }
+            st.GenerateNormals();
+            var mesh = st.Commit();
+            if (mesh == null)
+                return 0;
+            AddFarMesh("Mapped3DepRelief", mesh, material, Vector3.Zero)
+                .CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[STARBASE_FAR] Invalid mapped relief: {ex.Message}");
+            return 0;
+        }
     }
 
     private void UpdateStarbaseFarField()
@@ -138,8 +395,9 @@ public partial class LaunchPadController
         if (_lastFarFieldVisible != visible)
         {
             _lastFarFieldVisible = visible;
-            GD.Print($"[STARBASE_FAR] visible={visible} heroVisible={heroVisible} " +
-                $"altitude={altitude:F0} opacity={opacity:F2}");
+              string source = _farFieldUsesMappedContext ? "OSM+3DEP" : "fallback";
+              GD.Print($"[STARBASE_FAR] visible={visible} heroVisible={heroVisible} " +
+                  $"source={source} altitude={altitude:F0} opacity={opacity:F2}");
         }
         if (!float.IsNaN(_lastFarFieldOpacity) && Mathf.Abs(_lastFarFieldOpacity - opacity) < 0.01f)
             return;
