@@ -8,6 +8,8 @@ using System.Collections.Generic;
 /// Low-cost contextual LOD for Starbase. The detailed pad is intentionally local;
 /// this sibling root preserves the launch site's silhouette after the hero geometry
 /// is hidden, without keeping every lattice brace alive into the orbital camera.
+/// Its opacity is coupled to the Earth globe handoff so the site remains legible while
+/// the detailed pad leaves the camera's local scale.
 /// </summary>
 public partial class LaunchPadController
 {
@@ -63,7 +65,7 @@ public partial class LaunchPadController
             road, new Vector3(290f * U, GradeY + 0.16f * U, 80f * U));
 
         // One strong tower silhouette and a compact tank farm anchor the site from
-        // 3–60 km. Their proportions are deliberately real-world, not billboard scale.
+        // 3–75 km. Their proportions are deliberately real-world, not billboard scale.
         float towerX = (float)Spec.OlitEast;
         float towerH = (float)Spec.OlitHeight;
         foreach (float dx in new[] { -7f, 7f })
@@ -74,16 +76,23 @@ public partial class LaunchPadController
             AddFarMesh("TowerCrossbar", new BoxMesh { Size = new Vector3(16f * U, 1.1f * U, 1.1f * U) },
                 steel, new Vector3(towerX * U, GradeY + towerH * heightFraction * U, 0f));
 
+        float tankRadius = 4.2f;
+        float tankHeight = (float)Spec.CommodityTankMaxHeight;
         for (int i = 0; i < 6; i++)
         {
-            float x = 205f + (i % 3) * 24f;
-            float z = 110f + (i / 3) * 28f;
+            // Keep the far-field tanks on the same local datum as LaunchPadController's
+            // hero farm (58 m east, 48 m south). A previous synthetic cluster at
+            // 205–273 m and 92 m high popped to a second, oversized tank farm on LOD swap.
+            float x = 58f + (i % 3) * 14f;
+            float z = 48f + (i / 3) * 14f;
             AddFarMesh("TankFarmTank", new CylinderMesh
-                { TopRadius = 7.5f * U, BottomRadius = 7.5f * U, Height = 92f * U, RadialSegments = 12 },
-                steel, new Vector3(x * U, GradeY + 46f * U, z * U));
+                { TopRadius = tankRadius * U, BottomRadius = tankRadius * U,
+                  Height = tankHeight * U, RadialSegments = 12 },
+                steel, new Vector3(x * U, GradeY + tankHeight * 0.5f * U, z * U));
             AddFarMesh("TankFarmRoof", new SphereMesh
-                { Radius = 7.5f * U, Height = 7.5f * U, IsHemisphere = true, RadialSegments = 12, Rings = 4 },
-                steel, new Vector3(x * U, GradeY + 92f * U, z * U));
+                { Radius = tankRadius * U, Height = tankRadius * U, IsHemisphere = true,
+                  RadialSegments = 12, Rings = 4 },
+                steel, new Vector3(x * U, GradeY + tankHeight * U, z * U));
         }
 
         foreach (var (x, z, width, depth, height) in new[]
@@ -115,7 +124,7 @@ public partial class LaunchPadController
         double altitude = System.Math.Max(vesselAlt, cameraAlt);
         float opacity = activeEarth && double.IsFinite(altitude)
             ? FarSmoothstep(1_600f, 3_500f, (float)altitude)
-                * (1f - FarSmoothstep(35_000f, 55_000f, (float)altitude))
+                * (1f - FloatingOrigin.EarthGlobeAlpha(altitude))
             : 0f;
 
         bool visible = opacity > 0.005f;

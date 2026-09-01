@@ -89,7 +89,7 @@ uniform vec3 ground_horizon : source_color = vec3(0.30, 0.55, 0.90);
 uniform vec3 ground_bottom : source_color = vec3(0.18, 0.30, 0.50);
 // 1 on the pad (sky may fill rays that hit the spherical ground). Fades out as
 // the scaled-space Earth mesh takes over the disc so a toy-blue sky ground cannot
-// show through a semi-transparent globe during the 18–42 km handoff.
+// show through a semi-transparent globe during the 40–75 km handoff.
 uniform float ground_fill_strength : hint_range(0.0, 1.0) = 1.0;
 
 // The old 16/8 integration visibly banded the blue limb into radial spokes on

@@ -267,8 +267,9 @@ public partial class EarthGroundController : Node3D
     }
 
     /// <summary>
-    /// Civil apron, wetland skirt and dune boxes read as cookies from a few
-    /// kilometres up. Fade them as soon as the planetary disc owns the nadir.
+    /// Civil apron and OLM foundation read as cookies from a few kilometres up.
+    /// Fade only those local civil meshes; StarbaseFarField owns the contextual
+    /// complex and follows the Earth globe handoff independently.
     /// </summary>
     private void FadeCivilGroundBox(double cameraAltitudeM)
     {
@@ -299,9 +300,6 @@ public partial class EarthGroundController : Node3D
         foreach (string name in new[]
                  {
                      "Ground",
-                     "StarbaseWetlandSkirt",
-                     "StarbaseDuneShoulder",
-                     "StarbaseCoastalFill",
                      "OrbitalPadApron",
                      "OlmFoundationMat",
                  })

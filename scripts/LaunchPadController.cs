@@ -241,11 +241,8 @@ public partial class LaunchPadController : Node3D
         var gravel = CreateLaunchSurfaceMaterial(
             new Color(0.20f, 0.19f, 0.17f), 0.46f, 0.38f, 0.20f, 0.0f);
         var marsh = CreateLaunchSurfaceMaterial(
-            // Keep the broad marsh variation, but avoid sub-pixel grain across the
-            // 22 km skirt: the old settings produced moire bands in the pad camera.
-            // The broad skirt is a low-frequency coastal wetland backdrop. Keep
-            // it olive/sand rather than saturated green; the mapped OSM wetlands
-            // above it carry the stronger local marsh colour.
+            // Keep the broad marsh variation low-frequency so the mapped OSM wetlands
+            // carry the stronger local colour without introducing moire in the pad view.
             new Color(0.19f, 0.24f, 0.16f), 0.032f, 0.08f, 0.018f, 0.14f,
             edgeFade: 1f, edgeHalfX: 480f * U, edgeHalfZ: 430f * U);
         var burnt = CreateLaunchSurfaceMaterial(
@@ -253,11 +250,6 @@ public partial class LaunchPadController : Node3D
 
         if (IsStarbaseSite)
         {
-            ApplySurface("StarbaseCoastalFill", sand);
-            ApplySurface("StarbaseWetlandSkirt", marsh);
-            if (GetNodeOrNull<MeshInstance3D>("StarbaseWetlandSkirt") is { } skirt)
-                skirt.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            ApplySurface("StarbaseDuneShoulder", sand);
             ApplySurface("OrbitalPadApron", concrete);
             ApplySurface("OlmFoundationMat", gravel);
             ApplySurface("StateHighway4Access", asphalt);
