@@ -54,6 +54,7 @@ public partial class PlumeSystem : Node3D
     private readonly List<PlumeUnit> _shUnits   = new();
     private readonly List<PlumeUnit> _shipUnits = new();
     private readonly List<PlumeUnit> _genericUnits = new();
+    private float _visualTimeSeconds;
 
     private static Shader? _plumeShader;
     private static Shader PlumeShader =>
@@ -151,7 +152,8 @@ public partial class PlumeSystem : Node3D
     public void Update(float throttle, bool shPresent, double altitude)
     {
         float pressureRatio = (float)System.Math.Exp(-System.Math.Max(0.0, altitude) / 7_000.0);
-        Update(throttle, shPresent, altitude, pressureRatio);
+        Update(shPresent ? throttle : 0f, shPresent ? 0f : throttle,
+            altitude, pressureRatio);
     }
 
     /// <summary>
@@ -160,12 +162,24 @@ public partial class PlumeSystem : Node3D
     /// than borrowing Earth's scale height from the altitude alone.
     /// </summary>
     public void Update(float throttle, bool shPresent, double altitude, double ambientPressureRatio)
-        => Update(throttle, shPresent, altitude, ambientPressureRatio, selectedShipEngines: 6);
+        => Update(shPresent ? throttle : 0f, shPresent ? 0f : throttle,
+            altitude, ambientPressureRatio, selectedShipEngines: 6);
 
     public void Update(float throttle, bool shPresent, double altitude,
         double ambientPressureRatio, int selectedShipEngines)
+        => Update(shPresent ? throttle : 0f, shPresent ? 0f : throttle,
+            altitude, ambientPressureRatio, selectedShipEngines);
+
+    /// <summary>
+    /// Pressure-aware dual-stage update. During hot-stage overlap both engines can be
+    /// delivered simultaneously; geometry presence is not a firing/exclusion flag.
+    /// </summary>
+    public void Update(float superHeavyThrottle, float shipThrottle, double altitude,
+        double ambientPressureRatio, int selectedShipEngines = 6)
     {
-        bool firing = throttle > 0.01f;
+        _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + 1f / 30f, 10_000f);
+        superHeavyThrottle = Mathf.Clamp(superHeavyThrottle, 0f, 1f);
+        shipThrottle = Mathf.Clamp(shipThrottle, 0f, 1f);
 
         // Measured ambient-pressure ratio → expansion factor. At p≈p0 the plume is
         // tight/over-expanded; as p→0 it becomes the long vacuum plume. The smoothstep
@@ -174,18 +188,22 @@ public partial class PlumeSystem : Node3D
         float expansion  = System.Math.Clamp(1f - pressRatio, 0f, 1f);
         expansion = expansion * expansion * (3f - 2f * expansion); // smoothstep
 
-        UpdateGroup(_shUnits, firing && shPresent, throttle, expansion, pressRatio, altitude, 1f);
+        UpdateGroup(_shUnits, superHeavyThrottle > 0.01f, superHeavyThrottle,
+            expansion, pressRatio, altitude, 1f, flickerPhase: _visualTimeSeconds,
+            flickerOffset: 0.0f);
 
         int slActive = System.Math.Clamp(selectedShipEngines, 0, 3);
         int vacActive = System.Math.Clamp(selectedShipEngines - 3, 0, 3);
         if (_shipUnits.Count >= 3)
-            UpdateGroup(_shipUnits, firing && !shPresent && vacActive > 0,
-                throttle, expansion, pressRatio, altitude, 1f,
-                start: 0, count: 3, activeCount: vacActive);
+            UpdateGroup(_shipUnits, shipThrottle > 0.01f && vacActive > 0,
+                shipThrottle, expansion, pressRatio, altitude, 1f,
+                start: 0, count: 3, activeCount: vacActive,
+                flickerPhase: _visualTimeSeconds, flickerOffset: 1.7f);
         if (_shipUnits.Count >= 6)
-            UpdateGroup(_shipUnits, firing && !shPresent && slActive > 0,
-                throttle, expansion, pressRatio, altitude, 1f,
-                start: 3, count: 3, activeCount: slActive);
+            UpdateGroup(_shipUnits, shipThrottle > 0.01f && slActive > 0,
+                shipThrottle, expansion, pressRatio, altitude, 1f,
+                start: 3, count: 3, activeCount: slActive,
+                flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f);
     }
 
     public void UpdateGeneric(
@@ -197,6 +215,7 @@ public partial class PlumeSystem : Node3D
             ambientPressureRatio, 0.0, 1.0);
         float expansion = 1f - pressureRatio;
         expansion = expansion * expansion * (3f - 2f * expansion);
+        _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + 1f / 30f, 10_000f);
         for (int i = 0; i < _genericUnits.Count; i++)
         {
             var unit = _genericUnits[i];
@@ -213,13 +232,16 @@ public partial class PlumeSystem : Node3D
                 1f,
                 start: i,
                 count: 1,
-                activeCount: throttle > 0.01f ? 1 : 0);
+                activeCount: throttle > 0.01f ? 1 : 0,
+                flickerPhase: _visualTimeSeconds,
+                flickerOffset: i * 0.71f);
         }
     }
 
     private static void UpdateGroup(List<PlumeUnit> units,
         bool firing, float throttle, float expansion, float pressureRatio, double altitude,
-        float activeFraction, int start = 0, int count = -1, int activeCount = -1)
+        float activeFraction, int start = 0, int count = -1, int activeCount = -1,
+        float flickerPhase = 0f, float flickerOffset = 0f)
     {
         float altT = (float)System.Math.Clamp((altitude - 50.0) / 450.0, 0.0, 1.0);
         var dir = Vector3.Down;
@@ -227,8 +249,10 @@ public partial class PlumeSystem : Node3D
         float groundInteraction = 1f - Mathf.SmoothStep(
             0f, 260f, (float)System.Math.Max(0.0, altitude));
 
-        // Live flicker shared per group so the whole cluster pulses together.
-        float flick = 0.92f + GD.Randf() * 0.10f;
+        // Smooth deterministic modulation shared per group. Randomizing this at 30 Hz made
+        // the plume and its light stutter independently of the physical engine cadence.
+        float flick = 0.95f + 0.05f * SmoothFlicker(flickerPhase, flickerOffset);
+        float motionFlicker = SmoothFlicker(flickerPhase * 1.23f, flickerOffset + 0.8f);
 
         // N7: atmospheric-pressure proxy for the new shader uniforms.
         // atmo_pressure = exp(-alt/7000) already computed as (1 - expansion) before
@@ -312,7 +336,8 @@ public partial class PlumeSystem : Node3D
             if (unitFiring)
             {
                 u.Smoke.AmountRatio = Mathf.Clamp(smokeAmount, 0.0f, 1f);
-                u.Smoke.SpeedScale  = 0.70f + throttle * 0.28f + smokePresence * 0.25f + GD.Randf() * 0.08f;
+                u.Smoke.SpeedScale  = 0.70f + throttle * 0.28f + smokePresence * 0.25f
+                    + motionFlicker * 0.08f;
                 if (u.Smoke.ProcessMaterial is ParticleProcessMaterial pm)
                 {
                     pm.Direction = dir;
@@ -334,7 +359,7 @@ public partial class PlumeSystem : Node3D
             if (unitFiring)
             {
                 u.Dust.AmountRatio = Mathf.Clamp(dustAmount, 0f, 1f);
-                u.Dust.SpeedScale = 0.65f + throttle * 0.18f + GD.Randf() * 0.06f;
+                u.Dust.SpeedScale = 0.65f + throttle * 0.18f + motionFlicker * 0.06f;
                 if (u.Dust.ProcessMaterial is ParticleProcessMaterial dust)
                 {
                     dust.Direction = dir;
@@ -361,6 +386,11 @@ public partial class PlumeSystem : Node3D
                 }
             }
         }
+    }
+
+    private static float SmoothFlicker(float phase, float offset)
+    {
+        return 0.5f + 0.5f * Mathf.Sin(phase * 7.3f + offset * 2.1f);
     }
 
     // ── Factory helpers ────────────────────────────────────────────────────

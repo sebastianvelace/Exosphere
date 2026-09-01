@@ -21,6 +21,8 @@ public partial class VesselRenderer : Node3D
     private bool _usesGenericPlumes;
     private bool _hasSuperHeavy;
     private int _selectedShipEngines = 6;
+    private readonly HashSet<string> _superHeavyEngineIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _shipEngineIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _perEngineThrottle = new(StringComparer.Ordinal);
     private readonly List<EngineReadout> _engineReadoutScratch = new();
     private double _engineVisualTimer;
@@ -34,6 +36,9 @@ public partial class VesselRenderer : Node3D
     private double _flapInputTimer;
     private double _landingGearMotionDelta;
     private float _lastGlow = float.NaN;
+    private bool? _lastVisualHotStage;
+    private float _lastVisualSuperHeavyThrottle = float.NaN;
+    private float _lastVisualShipThrottle = float.NaN;
     private CelestialBody? _cachedPresentationBody;
     private double _cachedPresentationAltitude;
     private double _cachedPresentationPressureRatio;
@@ -144,6 +149,7 @@ public partial class VesselRenderer : Node3D
         bool hasNewGlenn = vessel.Parts.Parts.Any(p => string.Equals(
             p.Definition.VehicleFamily, "newglenn", StringComparison.OrdinalIgnoreCase));
         _hasSuperHeavy = hasSH;
+        BuildEngineVisualGroups(vessel);
         _selectedShipEngines = vessel.Parts.Parts
             .FirstOrDefault(p => p.Definition.IsStarshipFamily
                 && p.Definition.HasVehicleRole("ship_engines"))?.SelectedEngineCount ?? 6;
@@ -1217,10 +1223,14 @@ public partial class VesselRenderer : Node3D
             TargetVessel.FillEngineReadoutsAtPressure(
                 _engineReadoutScratch,
                 _cachedPresentationPressureRatio * 101_325.0);
-            float throttle = (float)EngineHudPresentation.DeliveredThrottle(
-                _engineReadoutScratch);
-            _plumes?.Update(throttle, _hasSuperHeavy, alt,
+            ComputeDeliveredPlumeThrottles(
+                _engineReadoutScratch,
+                out float superHeavyThrottle,
+                out float shipThrottle);
+            float throttle = Mathf.Max(superHeavyThrottle, shipThrottle);
+            _plumes?.Update(superHeavyThrottle, shipThrottle, alt,
                 _cachedPresentationPressureRatio, _selectedShipEngines);
+            ReportVisualPlumeTelemetry(superHeavyThrottle, shipThrottle);
             if (_usesGenericPlumes && _plumes != null)
             {
                 _perEngineThrottle.Clear();
@@ -1346,6 +1356,108 @@ public partial class VesselRenderer : Node3D
     // are sampled once at the secondary-visual cadence and reused by plumes, flaps and
     // thermal materials. Universe.Tick and all gameplay consumers retain their own live
     // physics queries; this cache only bounds redundant renderer-side reads.
+    private void BuildEngineVisualGroups(Vessel vessel)
+    {
+        _superHeavyEngineIds.Clear();
+        _shipEngineIds.Clear();
+        foreach (var part in vessel.Parts.Parts)
+        {
+            if (part.Definition.Category != PartCategory.Engine)
+                continue;
+
+            bool isSuperHeavy = part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("booster");
+            bool isShip = part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("ship_engines");
+            if (!isSuperHeavy && !isShip)
+                continue;
+
+            var destination = isSuperHeavy ? _superHeavyEngineIds : _shipEngineIds;
+            if (!part.HasEngineRuntime)
+            {
+                destination.Add(part.InstanceId);
+                continue;
+            }
+
+            foreach (var state in part.EngineStates)
+                destination.Add(state.InstanceId);
+        }
+    }
+
+    private void ComputeDeliveredPlumeThrottles(
+        IReadOnlyList<EngineReadout> readouts,
+        out float superHeavyThrottle,
+        out float shipThrottle)
+    {
+        double superHeavySum = 0.0;
+        double shipSum = 0.0;
+        double allSum = 0.0;
+        int superHeavyCount = 0;
+        int shipCount = 0;
+        int knownCount = 0;
+        for (int i = 0; i < readouts.Count; i++)
+        {
+            var readout = readouts[i];
+            bool delivered = EngineHudPresentation.IsDelivered(readout);
+            double value = delivered
+                ? System.Math.Clamp(readout.Throttle, 0.0, 1.0)
+                : 0.0;
+            allSum += value;
+
+            if (_superHeavyEngineIds.Contains(readout.InstanceId))
+            {
+                superHeavyCount++;
+                superHeavySum += value;
+                knownCount++;
+            }
+            else if (_shipEngineIds.Contains(readout.InstanceId))
+            {
+                shipCount++;
+                shipSum += value;
+                knownCount++;
+            }
+        }
+
+        // A custom/static engine without a runtime instance can still arrive through the
+        // compatibility readout API. Preserve the old single-cluster behavior as a safe
+        // fallback, but never use it when a mixed Starship stack has role-tagged rows.
+        if (knownCount == 0)
+        {
+            float aggregate = readouts.Count > 0
+                ? (float)System.Math.Clamp(allSum / readouts.Count, 0.0, 1.0)
+                : 0f;
+            superHeavyThrottle = _hasSuperHeavy ? aggregate : 0f;
+            shipThrottle = _hasSuperHeavy ? 0f : aggregate;
+            return;
+        }
+
+        superHeavyThrottle = superHeavyCount > 0
+            ? (float)System.Math.Clamp(superHeavySum / superHeavyCount, 0.0, 1.0)
+            : 0f;
+        shipThrottle = shipCount > 0
+            ? (float)System.Math.Clamp(shipSum / shipCount, 0.0, 1.0)
+            : 0f;
+    }
+
+    private void ReportVisualPlumeTelemetry(float superHeavyThrottle, float shipThrottle)
+    {
+        if (TargetVessel == null)
+            return;
+
+        bool overlap = TargetVessel.IsHotStageOverlapping;
+        if (_lastVisualHotStage == overlap
+            && !float.IsNaN(_lastVisualSuperHeavyThrottle)
+            && Mathf.Abs(superHeavyThrottle - _lastVisualSuperHeavyThrottle) < 0.03f
+            && Mathf.Abs(shipThrottle - _lastVisualShipThrottle) < 0.03f)
+            return;
+
+        _lastVisualHotStage = overlap;
+        _lastVisualSuperHeavyThrottle = superHeavyThrottle;
+        _lastVisualShipThrottle = shipThrottle;
+        GD.Print($"VISUAL_PLUME overlap={overlap} shDelivered={superHeavyThrottle:F3} "
+            + $"shipDelivered={shipThrottle:F3} shUnits={_hasSuperHeavy}");
+    }
+
     private void RefreshPresentationSample()
     {
         if (TargetVessel == null)
@@ -1362,9 +1474,20 @@ public partial class VesselRenderer : Node3D
         _cachedPresentationAltitude = body != null
             ? TargetVessel.GetAltitude(body)
             : 0.0;
-        _cachedPresentationPressureRatio = body?.Atmosphere != null
-            ? System.Math.Clamp(
-                TargetVessel.GetAmbientPressure(body) / 101_325.0, 0.0, 1.0)
+        if (body?.Atmosphere == null)
+        {
+            _cachedPresentationPressureRatio = 0.0;
+            return;
+        }
+
+        // Plume expansion is dimensionless p/p0. Earth happened to work with the old
+        // 101325 Pa constant, but it made Mars look vacuum-like and Venus look like a
+        // lightly pressurized Earth. Resolve p0 from the same atmosphere model that owns
+        // the physical pressure query; this is presentation-only and does not alter thrust.
+        double seaLevelPressure = body.Atmosphere.GetPressure(0.0);
+        double ambientPressure = TargetVessel.GetAmbientPressure(body);
+        _cachedPresentationPressureRatio = seaLevelPressure > 1e-9
+            ? System.Math.Clamp(ambientPressure / seaLevelPressure, 0.0, 1.0)
             : 0.0;
     }
 
@@ -3203,6 +3326,8 @@ public partial class VesselRenderer : Node3D
         _usesGenericPlumes = false;
         _hasSuperHeavy = false;
         _selectedShipEngines = 6;
+        _superHeavyEngineIds.Clear();
+        _shipEngineIds.Clear();
         _perEngineThrottle.Clear();
         _engineReadoutScratch.Clear();
         _engineVisualTimer = 0.0;
@@ -3211,6 +3336,9 @@ public partial class VesselRenderer : Node3D
         _parachuteStateTimer = 0.0;
         _flapInputTimer = 0.0;
         _lastGlow = float.NaN;
+        _lastVisualHotStage = null;
+        _lastVisualSuperHeavyThrottle = float.NaN;
+        _lastVisualShipThrottle = float.NaN;
         _cachedPresentationBody = null;
         _cachedPresentationAltitude = 0.0;
         _cachedPresentationPressureRatio = 0.0;
