@@ -92,12 +92,57 @@ public partial class LaunchPadController
             }
 
             BuildStarbase3DepRelief(wetland);
-            GD.Print($"[STARBASE_GEO] roads={roads} polygons={polygons} buildings={buildings} tanks={tanks} source=OSM+3DEP");
+            Vector2 originOffsetM = ApplyActiveSiteGeoOriginOffset();
+            string originSite = SimulationBridge.Instance?.LaunchSiteOrNull?.Id ?? "unknown";
+            GD.Print($"[STARBASE_GEO] roads={roads} polygons={polygons} buildings={buildings} tanks={tanks} " +
+                $"source=OSM+3DEP originSite={originSite} offsetX={originOffsetM.X:F1} offsetZ={originOffsetM.Y:F1}");
         }
         catch (Exception ex)
         {
             GD.PushWarning($"[STARBASE_GEO] Invalid geospatial data: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// OSM/3DEP features are exported relative to the orbital-site origin. Pad-2 is a
+    /// separate WGS84 launch datum, so translate the whole presentation layer into the
+    /// active site's ENU frame after construction. The physics launch position remains
+    /// owned by LaunchSite and is never modified here.
+    /// </summary>
+    private static Vector2 ActiveSiteGeoOriginOffsetM()
+    {
+        var site = SimulationBridge.Instance?.LaunchSiteOrNull;
+        if (site == null)
+            return Vector2.Zero;
+
+        const double sourceLatitude = 25.9972;
+        const double sourceLongitude = -97.1566;
+        const double metresPerDegreeLatitude = 111_132.92;
+        double metresPerDegreeLongitude = 111_412.84
+            * System.Math.Cos(sourceLatitude * System.Math.PI / 180.0);
+
+        float eastM = (float)((site.Longitude - sourceLongitude) * metresPerDegreeLongitude);
+        // Local +Z is south, hence northward latitude deltas become negative Z.
+        float southM = (float)(-(site.Latitude - sourceLatitude) * metresPerDegreeLatitude);
+        return new Vector2(eastM, southM);
+    }
+
+    private Vector2 ApplyActiveSiteGeoOriginOffset()
+    {
+        Vector2 offsetM = ActiveSiteGeoOriginOffsetM();
+        if (offsetM == Vector2.Zero)
+            return offsetM;
+
+        Vector3 offset = new(offsetM.X * U, 0f, offsetM.Y * U);
+        foreach (Node child in GetChildren())
+        {
+            string name = child.Name.ToString();
+            if (child is Node3D node
+                && (name.StartsWith("Geo", StringComparison.Ordinal)
+                    || name == "Starbase3DepRelief"))
+                node.Position += offset;
+        }
+        return offsetM;
     }
 
     private int BuildGeospatialRoad(JsonElement feature, StandardMaterial3D material)

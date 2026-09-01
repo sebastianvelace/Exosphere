@@ -459,6 +459,14 @@ public partial class SimulationBridge : Node
                 && (activeVessel.IsAttemptingTowerCatch || activeVessel.IsTowerCatchDemonstration);
             bool catchAnchorIsStarship = HasStarshipRole(catchAnchorVessel, "command")
                 || HasStarshipRole(catchAnchorVessel, "booster");
+            // The launch complex is framed by the camera as well as by the vessel. A
+            // pulled-back pad shot can therefore leave the vehicle below the old 12 km
+            // cutoff while the camera has already entered the next visual scale. Use the
+            // larger of the two altitudes so hero geometry and its contextual LOD cannot
+            // occupy the same image as two competing Starbases.
+            double presentationAlt = activeEarth
+                ? System.Math.Max(activeAlt, FloatingOrigin.CameraAltOverEarth)
+                : double.PositiveInfinity;
             // The pad is a local presentation anchored to the vessel being viewed. A
             // returning booster may be in its catch approach while the player is still
             // looking at a Starship in orbit; using any fleet vessel here made the pad
@@ -467,13 +475,14 @@ public partial class SimulationBridge : Node
             // Starship-family catches only; a generic vessel must never summon the
             // launch complex into an unrelated orbital shot.
             bool padVisible = activeEarth
-                && (activeAlt <= LaunchPadController.PadVisibilityCeilingM
+                && (presentationAlt <= LaunchPadController.PadVisibilityCeilingM
                     || (activeCatch && catchAnchorIsStarship));
             if (!_lastLaunchPadVisibility.HasValue || _lastLaunchPadVisibility.Value != padVisible)
             {
                 _lastLaunchPadVisibility = padVisible;
                 _launchPad.Visible = padVisible;
                 GD.Print($"[PAD_VISUAL] visible={padVisible} body={padEarth.Id} alt={activeAlt:F0} " +
+                    $"cameraAlt={FloatingOrigin.CameraAltOverEarth:F0} presentationAlt={presentationAlt:F0} " +
                     $"fleetCatchApproach={catchApproachActive} activeCatch={activeCatch}");
             }
 

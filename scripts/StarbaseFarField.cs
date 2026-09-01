@@ -126,13 +126,20 @@ public partial class LaunchPadController
             ? FarSmoothstep(1_600f, 3_500f, (float)altitude)
                 * (1f - FloatingOrigin.EarthGlobeAlpha(altitude))
             : 0f;
+        // SimulationBridge owns the hero-pad visibility. Keep the contextual LOD
+        // mutually exclusive with it; otherwise a zoomed-out low-altitude shot can
+        // render two differently authored Starbases at once.
+        bool heroVisible = Visible;
+        if (heroVisible)
+            opacity = 0f;
 
         bool visible = opacity > 0.005f;
         _starbaseFarFieldRoot.Visible = visible;
         if (_lastFarFieldVisible != visible)
         {
             _lastFarFieldVisible = visible;
-            GD.Print($"[STARBASE_FAR] visible={visible} altitude={altitude:F0} opacity={opacity:F2}");
+            GD.Print($"[STARBASE_FAR] visible={visible} heroVisible={heroVisible} " +
+                $"altitude={altitude:F0} opacity={opacity:F2}");
         }
         if (!float.IsNaN(_lastFarFieldOpacity) && Mathf.Abs(_lastFarFieldOpacity - opacity) < 0.01f)
             return;
