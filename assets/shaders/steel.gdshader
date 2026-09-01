@@ -60,7 +60,15 @@ void fragment() {
     // every weld line. The old warm/cool seam tint read as random damage.
     col     *= 0.985 + (brush - 0.5) * brush_amt * 0.06;
 
-    float soot = 1.0 - clamp((v_local.y - soot_y0) / max(soot_y1 - soot_y0, 0.001), 0.0, 1.0);
+    // SteelMat supplies the clean/sooty limits in either order. Normalize them
+    // here before smoothstep; clamping a negative interval to 0.001 collapses
+    // the intended gradient into a hard, nearly full-height soot cutoff.
+    float soot = 0.0;
+    if (soot_y0 > -999.0 && soot_y1 > -999.0) {
+        float sootLow = min(soot_y0, soot_y1);
+        float sootHigh = max(soot_y0, soot_y1);
+        soot = 1.0 - smoothstep(sootLow, max(sootHigh, sootLow + 0.001), v_local.y);
+    }
     col = mix(col, soot_color, soot * 0.85);
 
     vec3 n = normalize(NORMAL);

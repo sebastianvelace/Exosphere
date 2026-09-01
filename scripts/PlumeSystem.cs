@@ -178,9 +178,15 @@ public partial class PlumeSystem : Node3D
     /// delivered simultaneously; geometry presence is not a firing/exclusion flag.
     /// </summary>
     public void Update(float superHeavyThrottle, float shipThrottle, double altitude,
-        double ambientPressureRatio, int selectedShipEngines = 6)
+        double ambientPressureRatio, int selectedShipEngines = 6,
+        double visualDeltaSeconds = 1.0 / 30.0)
     {
-        _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + 1f / 30f, 10_000f);
+        // Advance optical turbulence from wall-clock frame time, not from the number
+        // of renderer callbacks. The latter slows the plume under llvmpipe and makes
+        // a low-FPS flight feel like a sequence of frozen poses. Clamp recovery from
+        // a long hitch so one overloaded frame cannot teleport the pattern.
+        float visualDelta = (float)System.Math.Clamp(visualDeltaSeconds, 0.0, 0.12);
+        _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + visualDelta, 10_000f);
         superHeavyThrottle = Mathf.Clamp(superHeavyThrottle, 0f, 1f);
         shipThrottle = Mathf.Clamp(shipThrottle, 0f, 1f);
 
@@ -213,13 +219,15 @@ public partial class PlumeSystem : Node3D
     public void UpdateGeneric(
         IReadOnlyDictionary<string, double> engineThrottles,
         double altitude,
-        double ambientPressureRatio)
+        double ambientPressureRatio,
+        double visualDeltaSeconds = 1.0 / 30.0)
     {
         float pressureRatio = (float)System.Math.Clamp(
             ambientPressureRatio, 0.0, 1.0);
         float expansion = 1f - pressureRatio;
         expansion = expansion * expansion * (3f - 2f * expansion);
-        _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + 1f / 30f, 10_000f);
+        float visualDelta = (float)System.Math.Clamp(visualDeltaSeconds, 0.0, 0.12);
+        _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + visualDelta, 10_000f);
         for (int i = 0; i < _genericUnits.Count; i++)
         {
             var unit = _genericUnits[i];

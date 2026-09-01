@@ -11,8 +11,8 @@ using Exosphere.Simulation.Math;
 ///
 /// This is purely visual — it never touches the deterministic simulation. Continuous
 /// noise (sums of sines at incommensurate frequencies) is used for smooth shake rather
-/// than per-frame white noise. A tiny bit of GD.Randf() seeds the phase so repeat
-/// launches don't look identical.
+/// than per-frame white noise. Fixed phase seeds keep repeat launches deterministic
+/// for visual acceptance while the incommensurate oscillators still avoid a mechanical loop.
 ///
 /// Owned by CameraController; the offsets are applied AFTER LookAt so the orbit logic
 /// is untouched.
@@ -21,17 +21,17 @@ public sealed class CameraShake
 {
     // ── Tunables (kept SMALL — enhance, don't nauseate) ───────────────────────
     // Render scale is ~2.8 m/unit; chase/pad distances are ~80-140 units.
-    private const float MaxThrustTrans = 0.20f;  // render units, full-throttle dense-air rumble
-    private const float MaxThrustRot   = 0.08f;  // degrees
-    private const float MaxBuffetTrans = 0.35f;  // render units, peak Max-Q buffet
-    private const float MaxBuffetRot   = 0.12f;  // degrees
-    private const float MaxFovKick     = 1.6f;   // degrees of extra FOV under high g
+    private const float MaxThrustTrans = 0.11f;  // render units, full-throttle dense-air rumble
+    private const float MaxThrustRot   = 0.035f; // degrees
+    private const float MaxBuffetTrans = 0.17f;  // render units, peak Max-Q buffet
+    private const float MaxBuffetRot   = 0.06f;  // degrees
+    private const float MaxFovKick     = 0.8f;   // degrees of extra FOV under high g
 
     // Entry deceleration shake. A hypersonic entry is not the same event as Max-Q: the load
     // is an order of magnitude longer-lived and far lower in frequency, so it gets its own
     // envelope and its own oscillator band rather than being folded into the buffet term.
-    private const float MaxEntryTrans  = 0.45f;  // render units at the full-scale entry load
-    private const float MaxEntryRot    = 0.16f;  // degrees
+    private const float MaxEntryTrans  = 0.24f;  // render units at the full-scale entry load
+    private const float MaxEntryRot    = 0.09f;  // degrees
 
     // Reference dynamic pressure for normalising buffet (Pa). Earth ascent Max-Q
     // is roughly 30-35 kPa; we saturate a little above that.
@@ -69,9 +69,12 @@ public sealed class CameraShake
 
     // ── Noise phase accumulators ─────────────────────────────────────────────
     private float _t;
-    private readonly float _seedX = (float)GD.Randf() * 100f;
-    private readonly float _seedY = (float)GD.Randf() * 100f;
-    private readonly float _seedZ = (float)GD.Randf() * 100f;
+    private const float SeedX = 17.13f;
+    private const float SeedY = 43.71f;
+    private const float SeedZ = 79.29f;
+    private const float _seedX = SeedX;
+    private const float _seedY = SeedY;
+    private const float _seedZ = SeedZ;
     private const float PositionFilterRate = 16f;
     private const float RotationFilterRate = 18f;
 
@@ -103,6 +106,7 @@ public sealed class CameraShake
     private Vector3 _lastPositionOffset = Vector3.Zero;
     private Vector3 _lastRotationOffset = Vector3.Zero;
     private float _lastFov = 70f;
+    private bool _metricsInitialized;
 
     /// <summary>
     /// Advance the shake one frame. <paramref name="distance"/> is the camera orbit
@@ -198,12 +202,21 @@ public sealed class CameraShake
         // ── FOV kick under high g (subtle widen) ─────────────────────────────
         Fov = BaseFov + _fovEnv * MaxFovKick * zoom;
 
-        PeakPositionStepPerSecond = Mathf.Max(PeakPositionStepPerSecond,
-            _lastPositionOffset.DistanceTo(PositionOffset) / dt);
-        PeakRotationStepDegreesPerSecond = Mathf.Max(PeakRotationStepDegreesPerSecond,
-            Mathf.RadToDeg(_lastRotationOffset.DistanceTo(RotationOffset)) / dt);
-        PeakFovStepPerSecond = Mathf.Max(PeakFovStepPerSecond,
-            Mathf.Abs(_lastFov - Fov) / dt);
+        // The first frame can legitimately reconcile the camera's authored FOV with
+        // the active preset. Do not report that initialization jump as turbulence.
+        if (_metricsInitialized)
+        {
+            PeakPositionStepPerSecond = Mathf.Max(PeakPositionStepPerSecond,
+                _lastPositionOffset.DistanceTo(PositionOffset) / dt);
+            PeakRotationStepDegreesPerSecond = Mathf.Max(PeakRotationStepDegreesPerSecond,
+                Mathf.RadToDeg(_lastRotationOffset.DistanceTo(RotationOffset)) / dt);
+            PeakFovStepPerSecond = Mathf.Max(PeakFovStepPerSecond,
+                Mathf.Abs(_lastFov - Fov) / dt);
+        }
+        else
+        {
+            _metricsInitialized = true;
+        }
         _lastPositionOffset = PositionOffset;
         _lastRotationOffset = RotationOffset;
         _lastFov = Fov;

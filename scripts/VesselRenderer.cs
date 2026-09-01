@@ -472,32 +472,23 @@ public partial class VesselRenderer : Node3D
         AddTileBand(bodyBot, bodyTop, TileCharZone.Belly);
         AddHeatShieldBorder(bodyBot, bodyTop, BodyR + 0.035f);
 
-        const int   noseSeg  = 22;
         const float noseBase = ShipNoseBase;
         const float noseLen  = ShipNoseH;
         const float noseR    = BodyR;
         var noseSteel = SteelMat(new Color(0.74f, 0.74f, 0.76f), 0.24f, 0.26f,
-            weldSpacing: 1.3f);
+            weldSpacing: 8.0f, weldDepth: 0.0f);
         _shipSteelMats.Add(noseSteel);
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
-        // a fuller, more realistic Starship nose than a simple sqrt curve.
+        // a fuller, more realistic Starship nose than a simple sqrt curve. Keep
+        // the entire shell as one mesh: separate capped frusta at zero-gap
+        // interfaces produce the concentric bright discs visible in orbit.
         float OgiveR(float u)                // u in [0,1], 0=base 1=tip
             => (float)VehicleVisualPhysics.TangentOgiveRadius(u, noseR, noseLen);
-        for (int i = 0; i < noseSeg; i++)
-        {
-            float u0 = (float)i       / noseSeg;
-            float u1 = (float)(i + 1) / noseSeg;
-            float rBot = OgiveR(u0);
-            float rTop = OgiveR(u1);
-            float segH = noseLen / noseSeg;
-            float yMid = o + noseBase + (u0 + u1) * 0.5f * noseLen;
-            AddMesh($"Nose{i}",
-                new CylinderMesh { TopRadius = rTop, BottomRadius = rBot, Height = segH * 1.06f, RadialSegments = 64 },
-                noseSteel, new Vector3(0, yMid, 0));
-        }
+        AddMesh("Nose", BuildOgiveMesh(noseLen, OgiveR), noseSteel,
+            new Vector3(0, o + noseBase, 0));
 
-        // Unlike a cylindrical tile band, these short rows follow the local
-        // ogive radius all the way to the tip and preserve the tapered silhouette.
+        // Use one continuous windward TPS patch. Individual raised box tiles alias into
+        // bright concentric rings in orbital views, even when their rim is subdued.
         AddNoseTileShell(o + ShipNoseBase, ShipNoseH, OgiveR);
 
         AddMesh("NoseTip",
@@ -567,6 +558,47 @@ public partial class VesselRenderer : Node3D
             foreach (var part in vessel.Parts.Parts)
                 _partNodes[part.InstanceId] = _hullMesh!;
         }
+    }
+
+    /// <summary>
+    /// Builds the Starship tangent-ogive as a continuous open-ended shell. The
+    /// bottom is intentionally uncapped because it meets the barrel at the same
+    /// plane; the tip sphere closes the only visible end without a z-fighting seam.
+    /// </summary>
+    private static ArrayMesh BuildOgiveMesh(float length, Func<float, float> radiusAt,
+        int axialSegments = 24, int radialSegments = 64)
+    {
+        var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+        for (int axial = 0; axial <= axialSegments; axial++)
+        {
+            float u0 = axial / (float)axialSegments;
+            float y = u0 * length;
+            float radius = radiusAt(u0);
+            for (int radial = 0; radial <= radialSegments; radial++)
+            {
+                float angle = radial * Mathf.Tau / radialSegments;
+                surface.AddVertex(new Vector3(
+                    radius * Mathf.Cos(angle), y, radius * Mathf.Sin(angle)));
+            }
+        }
+        int rowStride = radialSegments + 1;
+        for (int axial = 0; axial < axialSegments; axial++)
+        for (int radial = 0; radial < radialSegments; radial++)
+        {
+            int i00 = axial * rowStride + radial;
+            int i10 = i00 + rowStride;
+            int i01 = i00 + 1;
+            int i11 = i10 + 1;
+            surface.AddIndex(i00);
+            surface.AddIndex(i10);
+            surface.AddIndex(i11);
+            surface.AddIndex(i00);
+            surface.AddIndex(i11);
+            surface.AddIndex(i01);
+        }
+        surface.GenerateNormals();
+        return surface.Commit()!;
     }
 
     // ── Falcon 9 Block 5 dedicated visual path ────────────────────────────
@@ -1231,7 +1263,7 @@ public partial class VesselRenderer : Node3D
                 out float shipThrottle);
             float throttle = Mathf.Max(superHeavyThrottle, shipThrottle);
             _plumes?.Update(superHeavyThrottle, shipThrottle, alt,
-                _cachedPresentationPressureRatio, _selectedShipEngines);
+                _cachedPresentationPressureRatio, _selectedShipEngines, delta);
             ReportVisualPlumeTelemetry(superHeavyThrottle, shipThrottle);
             if (_usesGenericPlumes && _plumes != null)
             {
@@ -1239,7 +1271,7 @@ public partial class VesselRenderer : Node3D
                 foreach (var row in _engineReadoutScratch)
                     _perEngineThrottle[row.InstanceId] = row.Throttle;
                 _plumes.UpdateGeneric(_perEngineThrottle, alt,
-                    _cachedPresentationPressureRatio);
+                    _cachedPresentationPressureRatio, delta);
             }
             UpdateVehicleLighting(throttle, alt);
         }
@@ -2813,7 +2845,8 @@ public partial class VesselRenderer : Node3D
     // SAME local space as the mesh that uses it). Pass sootTop<=sootBot to disable.
     private ShaderMaterial SteelMat(
         Color tint, float metallic = 0.58f, float roughness = 0.28f,
-        float weldSpacing = 1.6f, float sootBot = -1000f, float sootTop = -1000f)
+        float weldSpacing = 1.6f, float weldDepth = 0.08f,
+        float sootBot = -1000f, float sootTop = -1000f)
     {
         var m = new ShaderMaterial { Shader = SteelShader };
         m.SetShaderParameter("base_tint",    tint);
@@ -2821,7 +2854,7 @@ public partial class VesselRenderer : Node3D
         m.SetShaderParameter("rough_val",    roughness);
         m.SetShaderParameter("spec_val",     0.62f);
         m.SetShaderParameter("weld_spacing", weldSpacing);
-        m.SetShaderParameter("weld_depth",   0.08f);
+        m.SetShaderParameter("weld_depth",   weldDepth);
         m.SetShaderParameter("brush_amt",    0.06f);
         m.SetShaderParameter("soot_y0",      sootTop);   // clean above
         m.SetShaderParameter("soot_y1",      sootBot);   // sooty toward engine
@@ -2843,7 +2876,7 @@ public partial class VesselRenderer : Node3D
     private static Shader TileShader =>
         _tileShader ??= GD.Load<Shader>("res://assets/shaders/heat_tile.gdshader");
 
-    private static ShaderMaterial TileMat()
+    private static ShaderMaterial TileMat(float rimStrength = 0.06f)
     {
         var m = new ShaderMaterial { Shader = TileShader };
         m.SetShaderParameter("albedo_color", TileBaseColor);
@@ -2853,7 +2886,7 @@ public partial class VesselRenderer : Node3D
         m.SetShaderParameter("hex_scale", 1.0f);
         m.SetShaderParameter("gap_width", 0.0f);
         m.SetShaderParameter("char_amt", 0.0f);
-        m.SetShaderParameter("rim_strength", 0.06f);
+        m.SetShaderParameter("rim_strength", rimStrength);
         m.SetShaderParameter("sky_bounce", 1.0f);
         m.SetShaderParameter("emit_strength", 0.0f);
         return m;
@@ -3090,40 +3123,53 @@ public partial class VesselRenderer : Node3D
         }
     }
 
-    // Segmented windward TPS that conforms to the narrowing nose ogive.
+    // Continuous windward TPS that conforms to the narrowing nose ogive. Panel seams are
+    // intentionally omitted here: at orbital scale their raised-box approximation is more
+    // visually damaging than informative; close-up detail remains on the belly tile band.
     private void AddNoseTileShell(float yBase, float noseLength, Func<float, float> radiusAt)
     {
-        var tiles = TileMat();
+        var tiles = TileMat(rimStrength: 0.018f);
         RegisterTileMat(TileCharZone.Nose, tiles);
-        const int rows = 14;
-        const int staves = 12;
+        AddMesh("NoseTilePatch", BuildNoseTilePatch(noseLength, radiusAt), tiles,
+            new Vector3(0f, yBase, 0f));
+    }
+
+    private static ArrayMesh BuildNoseTilePatch(float length, Func<float, float> radiusAt,
+        int axialSegments = 18, int radialSegments = 20)
+    {
         const float arc = 3.49f;
-        float rowH = noseLength / rows;
-
-        for (int row = 0; row < rows; row++)
+        var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+        for (int axial = 0; axial <= axialSegments; axial++)
         {
-            float u0 = row / (float)rows;
-            float u1 = (row + 1f) / rows;
-            float um = (u0 + u1) * 0.5f;
-            float r = radiusAt(um) + 0.035f;
-            if (r < 0.08f) continue;
-            float width = Mathf.Max(0.045f, r * arc / staves * 0.985f);
-            float y = yBase + um * noseLength;
-
-            for (int i = 0; i < staves; i++)
+            float u = axial / (float)axialSegments;
+            float y = u * length;
+            float radius = radiusAt(u) + 0.012f;
+            for (int radial = 0; radial <= radialSegments; radial++)
             {
-                float a = Mathf.Pi - arc * 0.5f + arc * (i + 0.5f) / staves;
-                var tile = new MeshInstance3D
-                {
-                    Name = $"NoseTile_{row}_{i}",
-                    Mesh = new BoxMesh { Size = new Vector3(width, rowH * 0.985f, 0.070f) },
-                    Position = new Vector3(r * Mathf.Cos(a), y, r * Mathf.Sin(a)),
-                    RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a) + 90f, 0f),
-                };
-                tile.SetSurfaceOverrideMaterial(0, tiles);
-                AddChild(tile);
+                float angle = Mathf.Pi - arc * 0.5f + arc * radial / radialSegments;
+                surface.AddVertex(new Vector3(
+                    radius * Mathf.Cos(angle), y, radius * Mathf.Sin(angle)));
             }
         }
+
+        int rowStride = radialSegments + 1;
+        for (int axial = 0; axial < axialSegments; axial++)
+        for (int radial = 0; radial < radialSegments; radial++)
+        {
+            int i00 = axial * rowStride + radial;
+            int i10 = i00 + rowStride;
+            int i01 = i00 + 1;
+            int i11 = i10 + 1;
+            surface.AddIndex(i00);
+            surface.AddIndex(i10);
+            surface.AddIndex(i11);
+            surface.AddIndex(i00);
+            surface.AddIndex(i11);
+            surface.AddIndex(i01);
+        }
+        surface.GenerateNormals();
+        return surface.Commit()!;
     }
 
     // A Starship aerodynamic flap: a tile-covered slab plus a steel root, both
