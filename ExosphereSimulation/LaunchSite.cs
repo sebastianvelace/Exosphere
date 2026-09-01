@@ -123,6 +123,16 @@ public class LaunchSite
 
         foreach (var file in System.IO.Directory.GetFiles(dirPath, "*.json"))
         {
+            // The launch-sites directory also carries presentation datasets (for
+            // example OSM/3DEP context) that are intentionally not launch-site
+            // definitions. A physical site must declare a celestial body; skip
+            // metadata-only JSON while keeping malformed site JSON fail-fast in
+            // LoadFromJson below.
+            using (var doc = JsonDocument.Parse(System.IO.File.ReadAllText(file)))
+            {
+                if (!doc.RootElement.TryGetProperty("body", out _))
+                    continue;
+            }
             var site = LoadFromJson(file);
             result[site.Id] = site;
         }
