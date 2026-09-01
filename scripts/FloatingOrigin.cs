@@ -81,11 +81,12 @@ public partial class FloatingOrigin : Node
     public static double CameraAltOverEarth { get; private set; } = 0.0;
 
     /// <summary>
-    /// Shared pad→globe handoff. Below this camera altitude the local ground patch
-    /// owns the horizon; above the high mark the scaled-space Earth disc owns it.
+    /// Shared pad→globe handoff. The local patch owns the horizon through the whole
+    /// ascent camera regime; the scaled-space Earth arrives before the tangent
+    /// approximation becomes a coloured cookie in a pulled-back camera.
     /// </summary>
-    public const double EarthVisualHandoffLowM = 18_000.0;
-    public const double EarthVisualHandoffHighM = 42_000.0;
+    public const double EarthVisualHandoffLowM = 40_000.0;
+    public const double EarthVisualHandoffHighM = 75_000.0;
 
     /// <summary>
     /// Opacity of the scaled-space Earth globe for the current camera altitude.

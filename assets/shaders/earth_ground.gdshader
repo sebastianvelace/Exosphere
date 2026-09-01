@@ -137,8 +137,8 @@ void fragment() {
 	vec2 warped = v_patch + warp * 1800.0;
     // Keep low-altitude detail below the pixel-frequency limit of the play
     // camera. The previous 0.045 band produced moire stripes across the pad.
-    float local_scrub = noise01(gnoise(warped * 0.006 + vec2(-13.0, 29.0)));
-    float ground_grain = noise01(gnoise(warped * 0.018 + vec2(47.0, -37.0)));
+    float local_scrub = noise01(gnoise(warped * 0.0035 + vec2(-13.0, 29.0)));
+    float ground_grain = noise01(gnoise(warped * 0.0065 + vec2(47.0, -37.0)));
 	float dist = length(v_world_pos - CAMERA_POSITION_WORLD);
 	float view_up = max(dot(N, V), 0.0);
 	// Preview the later atmospheric-perspective term so high-frequency ground
@@ -175,8 +175,11 @@ void fragment() {
 			* smoothstep(0.52, 0.80, mix(inlet, coast_noise, 0.42)),
 		max(gulf, lagoon * 0.88) * coastal_belt * (1.0 - site_core * 0.55));
 	float flats_var = noise01(gnoise(warped * 0.000018 + vec2(3.0, 8.0)));
-	vec3 marsh = mix(vec3(0.20, 0.26, 0.16), vec3(0.32, 0.30, 0.18), flats_var);
-	vec3 flats = mix(vec3(0.42, 0.38, 0.26), marsh, 0.40 * flats_var);
+    // Boca Chica is a low sandy barrier island with scrub and tidal flats, not
+    // a saturated inland grass field. Keep the wetland green but shift the
+    // broad base toward muted sand/olive so the site reads geographically.
+    vec3 marsh = mix(vec3(0.20, 0.25, 0.17), vec3(0.30, 0.30, 0.20), flats_var);
+    vec3 flats = mix(vec3(0.34, 0.36, 0.25), marsh, 0.32 * flats_var);
 	vec3 near_water = vec3(0.05, 0.14, 0.20);
 	vec3 pad_ground = mix(flats, near_water, reconstructed_water);
     // A restrained concrete apron gives the launch site a readable hardstand
@@ -190,9 +193,9 @@ void fragment() {
 	// A small normal perturbation makes the multi-scale breakup respond to the
 	// sun direction. It is deliberately low amplitude: this gives texture relief
 	// without turning the tangent patch into a noisy tessellation substitute.
-    float relief = gnoise(v_patch * 0.018 + vec2(61.0, -13.0));
-    float relief_e = gnoise((v_patch + vec2(2.0, 0.0)) * 0.018 + vec2(61.0, -13.0));
-    float relief_n = gnoise((v_patch + vec2(0.0, 2.0)) * 0.018 + vec2(61.0, -13.0));
+    float relief = gnoise(v_patch * 0.006 + vec2(61.0, -13.0));
+    float relief_e = gnoise((v_patch + vec2(2.0, 0.0)) * 0.006 + vec2(61.0, -13.0));
+    float relief_n = gnoise((v_patch + vec2(0.0, 2.0)) * 0.006 + vec2(61.0, -13.0));
 	float relief_scale = terrain_relief_strength * land_mask * close_detail;
 	N = normalize(N
 		+ v_world_tangent_e * (relief - relief_e) * relief_scale

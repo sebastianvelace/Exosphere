@@ -38,7 +38,7 @@ uniform float limb_strength : hint_range(0.0, 1.5) = 0.85;
 // altitude: ~0 in the low launch view (so the local ground patch + sky own the horizon, no
 // grey seam between the two Earth representations) → 1 once the viewpoint is high enough that
 // the curved planet is what you should actually be seeing. The handoff is complementary with
-// the ground patch (18–42 km camera altitude).
+// the ground patch (40–75 km camera altitude).
 uniform float planet_alpha : hint_range(0.0, 1.0) = 1.0;
 
 // N3: high-frequency FBM micro-detail strength (0 = off, 0.18 = default).

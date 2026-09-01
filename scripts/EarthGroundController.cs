@@ -24,6 +24,10 @@ using Exosphere.Simulation.Math;
 /// </summary>
 public partial class EarthGroundController : Node3D
 {
+    /// <summary>Runtime compositor state consumed by deterministic visual captures.</summary>
+    public float LocalPatchOpacity { get; private set; }
+    public bool LocalPatchVisible => Visible && LocalPatchOpacity > 0.001f;
+
     // ── Render scale ─────────────────────────────────────────────────────────
     private const float  MetresPerUnit = 2.8f;
     // Fallback only until the live sim body is available. Curvature of the patch
@@ -41,7 +45,9 @@ public partial class EarthGroundController : Node3D
     // Vessel-altitude safety: hide the tangent patch once the rocket itself is
     // well into the scaled-space regime even if a chase camera is somehow low.
     // The visible pad→globe cross-fade is owned by FloatingOrigin.EarthGlobeAlpha.
-    private const double FadeHi = 48_000.0;
+    // Safety cutoff after the shared 40–75 km handoff. The shader fade reaches zero
+    // first; this guard only handles unusual camera/origin states.
+    private const double FadeHi = 90_000.0;
 
     // Local-ground calibration: a small blue-biased indirect floor keeps the
     // surface readable at night/twilight without changing the direct solar path.
@@ -134,31 +140,44 @@ public partial class EarthGroundController : Node3D
         var bridge   = SimulationBridge.Instance;
         var vessel   = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
-        if (vessel == null || universe == null) { Visible = false; return; }
+        if (vessel == null || universe == null)
+        {
+            Visible = false;
+            LocalPatchOpacity = 0f;
+            return;
+        }
 
         var earth = universe.GetBody("earth");
-        if (earth == null) { Visible = false; return; }
+        if (earth == null)
+        {
+            Visible = false;
+            LocalPatchOpacity = 0f;
+            return;
+        }
 
         var dominant = universe.GetDominantBody(vessel.Position);
         double alt   = vessel.GetAltitude(earth);
         if (dominant.Id != "earth" || alt > FadeHi)
         {
             Visible = false;
+            LocalPatchOpacity = 0f;
             _groundShaderStateInitialized = false;
             return;
         }
 
         // Complementary to FloatingOrigin.EarthGlobeAlpha: the patch owns the
         // horizon on the pad, the globe owns it in space, and they share one
-        // 18–42 km camera-altitude handoff so neither a double-Earth nor a gap.
+        // 40–75 km camera-altitude handoff so neither a double-Earth nor a gap.
         float fade = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
         if (fade <= 0.001f)
         {
             Visible = false;
+            LocalPatchOpacity = 0f;
             _groundShaderStateInitialized = false;
             return;
         }
         Visible = true;
+        LocalPatchOpacity = fade;
 
         // Anchor to the live ellipsoid (or sphere), never centre + R_mean · r̂.
         // A mean-radius sphere buries Kennedy/Starbase by kilometres relative to
