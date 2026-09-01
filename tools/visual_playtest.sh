@@ -102,7 +102,7 @@ Options:
   --display DISPLAY
                  Use an already-running X display (for example localhost:101) instead of
                  starting xvfb-run. The display must already match --resolution.
-  --max-runtime SEC  Wall-clock budget (default: 3600 full mission, 1200 ascent,
+  --max-runtime SEC  Wall-clock budget (default: 3600 full mission, 1800 ascent,
                       1800 orbital reentry/other modes).
   --verify-only  Re-run artifact/log gates without building or launching Godot.
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
@@ -318,7 +318,10 @@ if [[ -z "$MAX_RUNTIME_SEC" ]]; then
   elif [[ "$MODE" == "launch" ]]; then
     MAX_RUNTIME_SEC=1800
   elif [[ "$MODE" == "ascent" ]]; then
-    MAX_RUNTIME_SEC=1200
+    # llvmpipe can spend several wall-clock seconds per rendered simulation second;
+    # keep the ascent gate aligned with the documented non-full-mode budget so the
+    # physical orbit can finish instead of timing out just after Insert.
+    MAX_RUNTIME_SEC=1800
   elif [[ "$MODE" == "orbital_reentry" ]]; then
     # This is deliberately bounded: it validates one prepared orbit and one normal
     # deorbit/EDL pass, never an open-ended campaign or a demo fallback. The CPU/Xvfb
@@ -2329,7 +2332,9 @@ public partial class _PlaytestShot : Node
         {
                 Finish(_mode == "atmosphere_orbit"
                     ? "ATMOSPHERE_ORBIT_OK"
-                    : "ATMOSPHERE_LOW_OK");
+                    : (IsGroundAtmosphereCase
+                        ? "ATMOSPHERE_GROUND_OK"
+                        : "ATMOSPHERE_LOW_OK"));
             return;
         }
         if (_atmosIndex >= _atmosCases.Length)
@@ -2463,7 +2468,10 @@ public partial class _PlaytestShot : Node
         _atmosLook = projectedSun.Normalized;
 
         vessel.IsGroundHeld = false;
-        vessel.Position = earth.Position + _atmosUp * (earth.Radius + shot.AltitudeM);
+        // Earth is WGS84-like and oblate.  A spherical radius seed can put a 20 m
+        // fixture several kilometres below the ellipsoid, so use the public geodetic
+        // ray helper that preserves the requested height above the actual surface.
+        vessel.Position = earth.GetPositionAlongDirection(_atmosUp, shot.AltitudeM);
         // Co-rotate with the sampled surface so q/heat telemetry remains zero.  The matrix
         // validates optics, not an accidental 350–460 m/s wind caused by inertial rest.
         vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);
@@ -2521,7 +2529,7 @@ public partial class _PlaytestShot : Node
         _atmosLook = projectedSun.Normalized;
 
         vessel.IsGroundHeld = false;
-        vessel.Position = body.Position + _atmosUp * (body.Radius + shot.AltitudeM);
+        vessel.Position = body.GetPositionAlongDirection(_atmosUp, shot.AltitudeM);
         vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
         vessel.Throttle = 0.0;
 
@@ -2854,6 +2862,7 @@ public partial class _PlaytestShot : Node
 
         _log.WriteLine($"VISUAL_LAUNCH slug={slug} present=True "
             + $"visible={pad.Visible} children={pad.GetChildCount()} "
+            + $"farFieldVisible={pad.FarFieldVisible} farFieldOpacity={pad.FarFieldOpacity:F2} "
             + $"nightFloodlights={pad.NightFloodlightCount} "
             + $"floodlightsActive={pad.NightFloodlightsActive} "
             + $"delugeOutlets={delugeOutlets} tankBodies={tankBodies} "
@@ -3073,6 +3082,11 @@ public partial class _PlaytestShot : Node
 
         var floating = GetTree().Root.FindChild("FloatingOrigin", true, false)
             as FloatingOrigin;
+        var ground = GetTree().Root.FindChild("EarthGroundController", true, false)
+            as EarthGroundController;
+        var pad = GetTree().Root.FindChild("LaunchPadController", true, false)
+            as LaunchPadController;
+        var cameraController = CameraController.Instance;
         if (floating != null
             && string.Equals(floating.LastPresentationBodyId, body.Id,
                 StringComparison.OrdinalIgnoreCase))
@@ -3088,6 +3102,19 @@ public partial class _PlaytestShot : Node
                 $"backdrop={floating.LastPresentationBackdropPosition.X:F1}," +
                 $"{floating.LastPresentationBackdropPosition.Y:F1}," +
                 $"{floating.LastPresentationBackdropPosition.Z:F1}");
+        }
+
+        if (body.Id == "earth")
+        {
+            double cameraAlt = FloatingOrigin.CameraAltOverEarth;
+            float globeAlpha = FloatingOrigin.EarthGlobeAlpha(cameraAlt);
+            _log.WriteLine($"VISUAL_COMPOSITOR slug={slug} vesselAlt={vessel.GetAltitude(body):F1} "
+                + $"cameraAlt={cameraAlt:F1} earthGlobeAlpha={globeAlpha:F3} "
+                + $"groundVisible={ground?.LocalPatchVisible ?? false} "
+                + $"groundOpacity={ground?.LocalPatchOpacity ?? 0f:F3} "
+                + $"padVisible={pad?.Visible ?? false} "
+                + $"farFieldVisible={pad?.FarFieldVisible ?? false} "
+                + $"farFieldOpacity={pad?.FarFieldOpacity ?? 0f:F3}");
         }
 
         double alt = vessel.GetAltitude(body);
@@ -3132,6 +3159,13 @@ public partial class _PlaytestShot : Node
             $"landingParts={landingParts} approachSpeed={_lastApproachSpeed:F2} " +
             $"contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
             $"settled={vessel.IsSurfaceSettled}");
+        if (cameraController != null)
+            _log.WriteLine($"CAMERA_PRESENTATION slug={slug} mode={cameraController.Mode} "
+                + $"shakePos={cameraController.ShakePositionMagnitude:F4} "
+                + $"shakeRotDeg={cameraController.ShakeRotationDegrees:F4} "
+                + $"peakPosStep={cameraController.ShakePeakPositionStepPerSecond:F4} "
+                + $"peakRotStepDeg={cameraController.ShakePeakRotationStepDegreesPerSecond:F4} "
+                + $"peakFovStep={cameraController.ShakePeakFovStepPerSecond:F4}");
         _log.Flush();
     }
 
