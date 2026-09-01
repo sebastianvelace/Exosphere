@@ -12,9 +12,9 @@ grep -q -- '--sun-elevation DEG' "$HARNESS" \
   || { echo "FAIL daylight elevation option is not documented" >&2; exit 1; }
 grep -q -- '--camera-preset NAME' "$HARNESS" \
   || { echo "FAIL camera preset option is not documented" >&2; exit 1; }
-grep -q -- '--sun-elevation) SUN_ELEVATION_DEG="\$2"' "$HARNESS" \
+grep -q -- '--sun-elevation).*SUN_ELEVATION_DEG="\$2"' "$HARNESS" \
   || { echo "FAIL daylight elevation parser is missing" >&2; exit 1; }
-grep -q -- '--camera-preset) CAMERA_PRESET="\$2"' "$HARNESS" \
+grep -q -- '--camera-preset).*CAMERA_PRESET="\$2"' "$HARNESS" \
   || { echo "FAIL camera preset parser is missing" >&2; exit 1; }
 grep -q 'elevation >= -90.0 && elevation <= 90.0' "$HARNESS" \
   || { echo "FAIL daylight elevation bounds are missing" >&2; exit 1; }

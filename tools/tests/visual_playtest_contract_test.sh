@@ -12,11 +12,11 @@ if ! grep -q '^RESOLUTION="1920x1080"$' "$HARNESS_SCRIPT"; then
   echo "FAIL default capture resolution is not 1920x1080" >&2
   exit 1
 fi
-if ! grep -q -- '--resolution) RESOLUTION="\$2"' "$HARNESS_SCRIPT"; then
+if ! grep -q -- '--resolution).*RESOLUTION="\$2"' "$HARNESS_SCRIPT"; then
   echo "FAIL --resolution parser is missing" >&2
   exit 1
 fi
-if ! grep -q -- '--display) EXTERNAL_DISPLAY="\$2"' "$HARNESS_SCRIPT" \
+if ! grep -q -- '--display).*EXTERNAL_DISPLAY="\$2"' "$HARNESS_SCRIPT" \
   || ! grep -q 'DISPLAY="\$EXTERNAL_DISPLAY" xdpyinfo' "$HARNESS_SCRIPT"; then
   echo "FAIL external display path is missing" >&2
   exit 1
@@ -39,6 +39,26 @@ if [[ "$godot_resolution_count" -ne 4 ]]; then
 fi
 if grep -q -- '-screen 0 1920x1080x24' "$HARNESS_SCRIPT"; then
   echo "FAIL hard-coded 1920x1080 Xvfb screen remains" >&2
+  exit 1
+fi
+if ! grep -q 'validate_png()' "$HARNESS_SCRIPT" \
+  || ! grep -q 'zlib.decompress' "$HARNESS_SCRIPT" \
+  || ! grep -q 'expected_scanline_bytes' "$HARNESS_SCRIPT"; then
+  echo "FAIL visual artifacts are not fully decoded and dimension-checked" >&2
+  exit 1
+fi
+if ! grep -q 'MODE" == "hotstage"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'MAX_RUNTIME_SEC=3600' "$HARNESS_SCRIPT"; then
+  echo "FAIL hot-stage mode has no llvmpipe-safe wall-clock budget" >&2
+  exit 1
+fi
+if ! grep -q 'verify_post_run_contracts' "$HARNESS_SCRIPT"; then
+  echo "FAIL verify-only does not run post-capture telemetry gates" >&2
+  exit 1
+fi
+if ! grep -q 'simultaneous delivered Super Heavy and Ship plume output' "$HARNESS_SCRIPT" \
+  || ! grep -q 'VISUAL_PLUME ' "$HARNESS_SCRIPT"; then
+  echo "FAIL hot-stage gate does not verify dual delivered plume telemetry" >&2
   exit 1
 fi
 echo "PASS bounded --resolution is wired to both Xvfb/Godot launches"
@@ -216,11 +236,38 @@ expect_failure "duplicate run boundary" "$duplicate_run"
 
 echo "visual_playtest_contract_test: 1 valid and 11 invalid fixtures passed"
 
+write_png_fixture() {
+  local target="$1"
+  python3 - "$target" <<'PY'
+import struct
+import sys
+import zlib
+
+path = sys.argv[1]
+width, height = 800, 450
+raw = b"".join(
+    b"\x00" + bytes((24 + (y % 16), 42 + (y % 12), 68 + (y % 10), 255)) * width
+    for y in range(height)
+)
+
+def chunk(kind, payload):
+    return (struct.pack(">I", len(payload)) + kind + payload
+            + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff))
+
+png = (b"\x89PNG\r\n\x1a\n"
+       + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+       + chunk(b"IDAT", zlib.compress(raw, 1))
+       + chunk(b"IEND", b""))
+with open(path, "wb") as stream:
+    stream.write(png)
+PY
+}
+
 orbital_out="$TEST_DIR/orbital-good-out"
 mkdir -p "$orbital_out"
 for slug in orbital_reentry_orbit orbital_reentry_entry orbital_reentry_peak_heating \
   orbital_reentry_retro_burn orbital_reentry_caught; do
-  dd if=/dev/zero of="$orbital_out/exo_play_${slug}.png" bs=9000 count=1 status=none
+  write_png_fixture "$orbital_out/exo_play_${slug}.png"
 done
 orbital_good="$TEST_DIR/orbital-good.log"
 cat > "$orbital_good" <<'EOF'
@@ -233,7 +280,7 @@ CHECK orbital_reentry caught=True pins=2 relativeSpeed=0.030 angularSpeed=0.0000
 SUMMARY reason=ORBITAL_REENTRY_OK frames=120
 EOF
 if ! bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
-    --out-dir "$orbital_out" --log "$orbital_good" >/dev/null; then
+    --out-dir "$orbital_out" --log "$orbital_good" --resolution 800x450 >/dev/null; then
   echo "FAIL valid normal orbital reentry fixture rejected" >&2
   exit 1
 fi
@@ -242,7 +289,7 @@ echo "PASS valid normal orbital reentry fixture accepted"
 orbital_demo="$TEST_DIR/orbital-demo.log"
 sed 's/demo=False/demo=True/g' "$orbital_good" > "$orbital_demo"
 if bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
-    --out-dir "$orbital_out" --log "$orbital_demo" >/dev/null 2>&1; then
+    --out-dir "$orbital_out" --log "$orbital_demo" --resolution 800x450 >/dev/null 2>&1; then
   echo "FAIL demo-only orbital fixture was accepted" >&2
   exit 1
 fi
@@ -251,7 +298,7 @@ echo "PASS demo-only orbital fixture rejected"
 orbital_no_catch="$TEST_DIR/orbital-no-catch.log"
 sed '/CHECK orbital_reentry/d' "$orbital_good" > "$orbital_no_catch"
 if bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
-    --out-dir "$orbital_out" --log "$orbital_no_catch" >/dev/null 2>&1; then
+    --out-dir "$orbital_out" --log "$orbital_no_catch" --resolution 800x450 >/dev/null 2>&1; then
   echo "FAIL no-catch orbital fixture was accepted" >&2
   exit 1
 fi

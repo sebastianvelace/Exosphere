@@ -125,6 +125,15 @@ Cleanup on exit (success or failure):
 EOF
 }
 
+require_option_value() {
+  local option="$1"
+  local value="${2-}"
+  if [[ -z "$value" ]]; then
+    echo "ERROR: $option requires a value" >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --smoke) MODE="smoke"; shift ;;
@@ -200,11 +209,11 @@ while [[ $# -gt 0 ]]; do
     --atmosphere-bodies) MODE="atmosphere_bodies"; shift ;;
     --spectral) MODE="spectral"; shift ;;
     --edl) MODE="edl"; shift ;;
-    --edl-yaw) EDL_YAW_DEG="$2"; shift 2 ;;
-    --sun-elevation) SUN_ELEVATION_DEG="$2"; shift 2 ;;
+    --edl-yaw) require_option_value "$1" "${2-}"; EDL_YAW_DEG="$2"; shift 2 ;;
+    --sun-elevation) require_option_value "$1" "${2-}"; SUN_ELEVATION_DEG="$2"; shift 2 ;;
     --clear-solar-eclipse) CLEAR_SOLAR_ECLIPSE=1; shift ;;
-    --camera-preset) CAMERA_PRESET="$2"; shift 2 ;;
-    --earth-view) EARTH_VIEW="$2"; shift 2 ;;
+    --camera-preset) require_option_value "$1" "${2-}"; CAMERA_PRESET="$2"; shift 2 ;;
+    --earth-view) require_option_value "$1" "${2-}"; EARTH_VIEW="$2"; shift 2 ;;
     --orbital-reentry)
       MODE="orbital_reentry"
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -218,13 +227,13 @@ while [[ $# -gt 0 ]]; do
       VARIANT_PROFILE="starship-flight7-ascent"
       shift ;;
     --reentry-compare) MODE="reentry_compare"; shift ;;
-    --run-id) RUN_ID="$2"; shift 2 ;;
-    --resolution) RESOLUTION="$2"; shift 2 ;;
-    --display) EXTERNAL_DISPLAY="$2"; shift 2 ;;
-    --max-runtime) MAX_RUNTIME_SEC="$2"; shift 2 ;;
+    --run-id) require_option_value "$1" "${2-}"; RUN_ID="$2"; shift 2 ;;
+    --resolution) require_option_value "$1" "${2-}"; RESOLUTION="$2"; shift 2 ;;
+    --display) require_option_value "$1" "${2-}"; EXTERNAL_DISPLAY="$2"; shift 2 ;;
+    --max-runtime) require_option_value "$1" "${2-}"; MAX_RUNTIME_SEC="$2"; shift 2 ;;
     --verify-only) VERIFY_ONLY=1; shift ;;
-    --out-dir) OUT_DIR="$2"; OUT_DIR_SET=1; shift 2 ;;
-    --log) LOG="$2"; LOG_SET=1; shift 2 ;;
+    --out-dir) require_option_value "$1" "${2-}"; OUT_DIR="$2"; OUT_DIR_SET=1; shift 2 ;;
+    --log) require_option_value "$1" "${2-}"; LOG="$2"; LOG_SET=1; shift 2 ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -277,7 +286,7 @@ if [[ ! "$RESOLUTION" =~ ^([0-9]{1,4})x([0-9]{1,4})$ ]]; then
 fi
 RESOLUTION_WIDTH="${BASH_REMATCH[1]}"
 RESOLUTION_HEIGHT="${BASH_REMATCH[2]}"
-if [[ -n "$EXTERNAL_DISPLAY" && ! "$EXTERNAL_DISPLAY" =~ ^[A-Za-z0-9._-]+:[0-9]+$ ]]; then
+if [[ -n "$EXTERNAL_DISPLAY" && ! "$EXTERNAL_DISPLAY" =~ ^(:[0-9]+|[A-Za-z0-9._-]+:[0-9]+)$ ]]; then
   echo "ERROR: --display must use DISPLAY syntax such as localhost:101 or :101" >&2
   exit 2
 fi
@@ -322,6 +331,11 @@ if [[ -z "$MAX_RUNTIME_SEC" ]]; then
     # keep the ascent gate aligned with the documented non-full-mode budget so the
     # physical orbit can finish instead of timing out just after Insert.
     MAX_RUNTIME_SEC=1800
+  elif [[ "$MODE" == "hotstage" ]]; then
+    # Hot-stage acceptance includes the full Super Heavy ascent plus the real overlap
+    # window. On llvmpipe that path is materially slower than the launch-only gate, so
+    # keep it bounded but give the physical event enough wall-clock budget to occur.
+    MAX_RUNTIME_SEC=3600
   elif [[ "$MODE" == "orbital_reentry" ]]; then
     # This is deliberately bounded: it validates one prepared orbit and one normal
     # deorbit/EDL pass, never an open-ended campaign or a demo fallback. The CPU/Xvfb
@@ -466,10 +480,15 @@ fi
 
 register_autoload() {
   if grep -q 'PlaytestShot=' project.godot 2>/dev/null; then
-    return
+    echo "ERROR: project.godot already contains the temporary PlaytestShot autoload" >&2
+    echo "       remove the stale harness or wait for the owning visual run to finish" >&2
+    return 1
   fi
   PROJECT_BACKUP="$(mktemp /tmp/exo_project_godot.XXXXXX)"
   cp project.godot "$PROJECT_BACKUP"
+  # Ownership starts only after a private backup exists. If insertion or harness
+  # generation fails, cleanup can therefore restore the exact pre-run project file.
+  OWNS_HARNESS=1
   if grep -q '^\[autoload\]' project.godot; then
     sed -i '/^\[autoload\]/a PlaytestShot="*res://scripts/_PlaytestShot.cs"' project.godot
   else
@@ -3234,6 +3253,80 @@ public partial class _PlaytestShot : Node
 CS
 }
 
+validate_png() {
+  local png="$1"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: python3 is required to validate PNG captures: $png" >&2
+    return 1
+  fi
+  if ! python3 - "$png" "$RESOLUTION_WIDTH" "$RESOLUTION_HEIGHT" <<'PY'
+import struct
+import sys
+import zlib
+
+path, expected_width, expected_height = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+signature = b"\x89PNG\r\n\x1a\n"
+try:
+    with open(path, "rb") as stream:
+        data = stream.read()
+    if not data.startswith(signature):
+        raise ValueError("invalid PNG signature")
+    offset = len(signature)
+    width = height = None
+    bit_depth = color_type = interlace = None
+    compressed = bytearray()
+    saw_iend = False
+    while offset < len(data):
+        if offset + 12 > len(data):
+            raise ValueError("truncated chunk header")
+        length = struct.unpack(">I", data[offset:offset + 4])[0]
+        kind = data[offset + 4:offset + 8]
+        start = offset + 8
+        end = start + length
+        if end + 4 > len(data):
+            raise ValueError("truncated chunk payload")
+        payload = data[start:end]
+        expected_crc = struct.unpack(">I", data[end:end + 4])[0]
+        actual_crc = zlib.crc32(kind + payload) & 0xffffffff
+        if actual_crc != expected_crc:
+            raise ValueError("chunk CRC mismatch")
+        if kind == b"IHDR":
+            if length != 13 or width is not None:
+                raise ValueError("invalid IHDR")
+            width, height, bit_depth, color_type, compression, filtering, interlace = struct.unpack(
+                ">IIBBBBB", payload)
+            if compression != 0 or filtering != 0:
+                raise ValueError("unsupported PNG compression/filter")
+        elif kind == b"IDAT":
+            compressed.extend(payload)
+        elif kind == b"IEND":
+            if length != 0:
+                raise ValueError("invalid IEND")
+            saw_iend = True
+            offset = end + 4
+            break
+        offset = end + 4
+    if width is None or not saw_iend or not compressed:
+        raise ValueError("missing IHDR, IDAT, or IEND")
+    if width != expected_width or height != expected_height:
+        raise ValueError(f"dimensions {width}x{height} != {expected_width}x{expected_height}")
+    if bit_depth != 8 or interlace != 0 or color_type not in (0, 2, 3, 4, 6):
+        raise ValueError("unsupported PNG pixel format")
+    bytes_per_pixel = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
+    decoded = zlib.decompress(bytes(compressed))
+    expected_scanline_bytes = height * (1 + width * bytes_per_pixel)
+    if len(decoded) != expected_scanline_bytes:
+        raise ValueError("decoded scanline length mismatch")
+except (OSError, ValueError, struct.error, zlib.error) as error:
+    print(f"{path}: {error}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  then
+    echo "ERROR: capture is not a valid decodable PNG: $png" >&2
+    return 1
+  fi
+}
+
 verify_pngs() {
   local min_bytes="${1:-8000}"
   local found=0
@@ -3246,6 +3339,7 @@ verify_pngs() {
       echo "ERROR: PNG too small ($size bytes): $png" >&2
       return 1
     fi
+    validate_png "$png"
   done
   shopt -u nullglob
   if [[ "$found" -eq 0 ]]; then
@@ -3491,6 +3585,27 @@ verify_pngs() {
     fi
     if ! grep -Eq 'VISUAL_HOTSTAGE slug=hotstage_separation .*frameSynced=True .*overlap=False .*interfaceY=25\.36' "$LOG"; then
       echo "ERROR: hot-stage separation capture lacks synchronized interstage anchor telemetry" >&2
+      return 1
+    fi
+    # VISUAL_PLUME is emitted by VesselRenderer to Godot's console stream, while
+    # VISUAL_HOTSTAGE is written by the temporary harness log. Require one overlap
+    # sample where both stage-specific delivered throttles are live; a frame-count
+    # gate alone would allow the historical single-plume regression to pass.
+    if ! awk '
+      /^VISUAL_PLUME / {
+        overlap = sh = ship = units = ""
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^overlap=/) { split($i, pair, "="); overlap = pair[2] }
+          if ($i ~ /^shDelivered=/) { split($i, pair, "="); sh = pair[2] + 0 }
+          if ($i ~ /^shipDelivered=/) { split($i, pair, "="); ship = pair[2] + 0 }
+          if ($i ~ /^shUnits=/) { split($i, pair, "="); units = pair[2] }
+        }
+        if (overlap == "True" && sh >= 0.95 && ship >= 0.30 && units == "True")
+          found = 1
+      }
+      END { exit !found }
+    ' "$CONSOLE_LOG"; then
+      echo "ERROR: hot-stage console never proved simultaneous delivered Super Heavy and Ship plume output" >&2
       return 1
     fi
   elif [[ "$MODE" == "saturn" ]]; then
@@ -4056,9 +4171,50 @@ verify_pngs() {
   echo "visual_playtest: verified PNG(s) in $OUT_DIR (min ${min_bytes} bytes)"
 }
 
+verify_post_run_contracts() {
+  if (( SUN_ELEVATION_SET == 1 )) || [[ -n "$CAMERA_PRESET" ]]; then
+    if ! grep -q '^VISUAL_SUN .*physicalSunPositionUnchanged=True' "$LOG"; then
+      echo "ERROR: deterministic visual run is missing VISUAL_SUN telemetry" >&2
+      return 1
+    fi
+    if [[ -n "$CAMERA_PRESET" ]] \
+      && ! grep -q "^VISUAL_CAMERA preset=${CAMERA_PRESET} " "$LOG"; then
+      echo "ERROR: deterministic visual run is missing VISUAL_CAMERA preset telemetry" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$MODE" == "gemini_docking" ]]; then
+    local omega
+    omega="$(awk '
+      /CAPTURE gemini_docked_anomaly/ {
+        for (i = 1; i <= NF; i++)
+          if ($i ~ /^omega=/) {
+            split($i, pair, "=")
+            print pair[2]
+            exit
+          }
+      }' "$LOG")"
+    if [[ -z "$omega" ]] || ! awk -v value="$omega" \
+        'BEGIN { exit !(value >= 0.30 && value <= 0.36) }'; then
+      echo "ERROR: Gemini anomaly capture requires 20 deg/s (omega=${omega:-missing} rad/s)." >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$MODE" == "lunar_map" ]] \
+    && ! grep -Eq \
+      'LUNAR_MAP model=LunarLambert encounter=True tli=[0-9.]+ loi=[0-9.]+ pe=[1-9][0-9.]* tBurn=[1-9][0-9.]*' \
+      "$LOG"; then
+    echo "ERROR: lunar map capture did not validate Lambert encounter telemetry." >&2
+    return 1
+  fi
+}
+
 if [[ "$VERIFY_ONLY" -eq 1 ]]; then
   echo "visual_playtest: verify-only mode=$MODE out=$OUT_DIR log=$LOG"
   verify_pngs
+  verify_post_run_contracts
   echo "visual_playtest: verify-only OK"
   exit 0
 fi
@@ -4084,7 +4240,6 @@ if ! mkdir "$PLAYTEST_LOCK" 2>/dev/null; then
 fi
 printf '%s\n' "$$" > "$PLAYTEST_LOCK/owner"
 OWNS_LOCK=1
-OWNS_HARNESS=1
 
 register_autoload
 
@@ -4167,44 +4322,7 @@ else
 fi
 
 verify_pngs
-
-if (( SUN_ELEVATION_SET == 1 )) || [[ -n "$CAMERA_PRESET" ]]; then
-  if ! grep -q '^VISUAL_SUN .*physicalSunPositionUnchanged=True' "$LOG"; then
-    echo "ERROR: deterministic visual run is missing VISUAL_SUN telemetry" >&2
-    exit 1
-  fi
-  if [[ -n "$CAMERA_PRESET" ]] \
-    && ! grep -q "^VISUAL_CAMERA preset=${CAMERA_PRESET} " "$LOG"; then
-    echo "ERROR: deterministic visual run is missing VISUAL_CAMERA preset telemetry" >&2
-    exit 1
-  fi
-fi
-
-if [[ "$MODE" == "gemini_docking" ]]; then
-  omega="$(awk '
-    /CAPTURE gemini_docked_anomaly/ {
-      for (i = 1; i <= NF; i++)
-        if ($i ~ /^omega=/) {
-          split($i, pair, "=")
-          print pair[2]
-          exit
-        }
-    }' "$LOG")"
-  if [[ -z "$omega" ]] || ! awk -v value="$omega" '
-      BEGIN { exit !(value >= 0.30 && value <= 0.36) }'; then
-    echo "ERROR: Gemini anomaly capture requires 20 deg/s (omega=${omega:-missing} rad/s)." >&2
-    exit 1
-  fi
-fi
-
-if [[ "$MODE" == "lunar_map" ]]; then
-  if ! grep -Eq \
-      'LUNAR_MAP model=LunarLambert encounter=True tli=[0-9.]+ loi=[0-9.]+ pe=[1-9][0-9.]* tBurn=[1-9][0-9.]*' \
-      "$LOG"; then
-    echo "ERROR: lunar map capture did not validate Lambert encounter telemetry." >&2
-    exit 1
-  fi
-fi
+verify_post_run_contracts
 
 if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"
