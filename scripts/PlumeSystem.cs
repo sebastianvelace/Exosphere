@@ -10,8 +10,8 @@ using System.Collections.Generic;
 ///   • a shader-driven emissive cone (<see cref="assets/shaders/raptor_plume.gdshader"/>)
 ///     that paints the bright blue-white supersonic core, periodic Mach (shock)
 ///     diamonds, and a translucent incandescent outer sheath;
-///   • a small GPU-particle emitter for turbulent soot/smoke that breaks up the
-///     silhouette and reacts to the ground at liftoff;
+    ///   • a GPU-particle emitter for hot steam/deluge that breaks up the silhouette;
+    ///   • a separate, low-energy dust/debris emitter driven by ground interaction;
 ///   • an <see cref="OmniLight3D"/> at the nozzle so the plume illuminates the
 ///     pad / vehicle on launch.
 ///
@@ -39,7 +39,8 @@ public partial class PlumeSystem : Node3D
         public Node3D           Pivot    = null!;   // anchored at the nozzle; scaled to stretch the plume
         public MeshInstance3D   Cone     = null!;   // shader-driven core + diamonds + sheath
         public ShaderMaterial   ConeMat  = null!;
-        public GpuParticles3D   Smoke    = null!;   // turbulent soot/smoke
+        public GpuParticles3D   Smoke    = null!;   // turbulent steam/deluge envelope
+        public GpuParticles3D   Dust     = null!;   // low-altitude pad dust/debris
         public OmniLight3D?     Light;              // ground illumination (group leaders only)
 
         public float BaseLength;                    // sea-level plume length (render units)
@@ -72,29 +73,29 @@ public partial class PlumeSystem : Node3D
         // Bright central column (the merged plume core of the densely-packed cluster).
         // Real Super Heavy liftoff is a SHORT but very WIDE, blinding flame disk — the 33
         // engines merge into one incandescent column that spills past the OLM ring.
-        _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 1.55f,
-            length: 8.0f, count: 33,
+        _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 1.75f,
+            length: 15.0f, count: 33,
             core: new Color(0.95f, 0.97f, 1.00f), withLight: true, sh: true));
 
         // Inner ring — 3 engines.
-        _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.48f,
-            length: 7.2f, count: 3,
+        _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.56f,
+            length: 13.2f, count: 3,
             core: new Color(0.90f, 0.94f, 1.00f), withLight: false, sh: true));
 
         // Mid ring — 10 engines.
-        _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.54f,
-            length: 6.7f, count: 10,
+        _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.62f,
+            length: 12.4f, count: 10,
             core: new Color(0.88f, 0.93f, 1.00f), withLight: false, sh: true));
 
         // Outer ring — 20 engines, broadest cluster.
-        _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.62f,
-            length: 6.2f, count: 20,
+        _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.70f,
+            length: 11.6f, count: 20,
             core: new Color(0.86f, 0.92f, 1.00f), withLight: true, sh: true));
 
         // Expanding fountain under the stack: hits the water-cooled plate and
         // spills out between the OLM legs so a pad-side camera actually sees fire.
-        _shUnits.Add(BuildUnit("SH_Skirt", bellY, mouthR: 2.10f,
-            length: 5.6f, count: 33,
+        _shUnits.Add(BuildUnit("SH_Skirt", bellY, mouthR: 2.35f,
+            length: 9.5f, count: 33,
             core: new Color(0.98f, 0.92f, 0.78f), withLight: true, sh: true,
             tailRadius: 0.72f));
     }
@@ -223,6 +224,8 @@ public partial class PlumeSystem : Node3D
         float altT = (float)System.Math.Clamp((altitude - 50.0) / 450.0, 0.0, 1.0);
         var dir = Vector3.Down;
         float smokeSpread = Mathf.Lerp(58f, 10f + expansion * 6f, altT);
+        float groundInteraction = 1f - Mathf.SmoothStep(
+            0f, 260f, (float)System.Math.Max(0.0, altitude));
 
         // Live flicker shared per group so the whole cluster pulses together.
         float flick = 0.92f + GD.Randf() * 0.10f;
@@ -255,6 +258,24 @@ public partial class PlumeSystem : Node3D
                 u.ConeMat.SetShaderParameter("throttle_level", throttle);
                 u.ConeMat.SetShaderParameter("energy", u.BaseEnergy * Mathf.Max(0.28f, activeFraction));
 
+                // Shock cells are a pressure-mismatch feature, not a permanent
+                // decorative pattern. Deluge steam and pad ejecta lower their
+                // contrast in the first few hundred metres without changing thrust.
+                float steamOcclusion = Mathf.Clamp(
+                    groundInteraction * (u.IsSuperHeavy ? 0.72f : 0.20f), 0f, 0.85f);
+                float shockCellStrength = Mathf.Clamp(
+                    (1f - expansion) * (0.92f - steamOcclusion * 0.55f)
+                    * (0.72f + throttle * 0.28f), 0f, 1f);
+                float afterburnStrength = Mathf.Clamp(
+                    (1f - expansion) * 0.68f + groundInteraction * 0.44f, 0f, 1f);
+                float padInteraction = groundInteraction * (u.IsSuperHeavy ? 1f : 0.45f);
+                u.ConeMat.SetShaderParameter("shock_cell_strength", shockCellStrength);
+                u.ConeMat.SetShaderParameter("shock_cell_spacing", Mathf.Lerp(0.88f, 1.12f, expansion));
+                u.ConeMat.SetShaderParameter("shock_cell_softness", Mathf.Lerp(0.08f, 0.34f, expansion));
+                u.ConeMat.SetShaderParameter("steam_occlusion", steamOcclusion);
+                u.ConeMat.SetShaderParameter("afterburn_strength", afterburnStrength);
+                u.ConeMat.SetShaderParameter("pad_interaction", padInteraction);
+
                 // Length grows with throttle and (strongly) with altitude;
                 // mouth broadens in vacuum (underexpanded). Flicker jitters length.
                 // The cone mesh is unit height (1.0) and unit-ish radius (0.5),
@@ -280,14 +301,13 @@ public partial class PlumeSystem : Node3D
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction));
             }
 
-            // ── Turbulent smoke particles ────────────────────────────────────
-            // Methalox vacuum exhaust is optically thin: keep soot/smoke as a
-            // low-atmosphere breakup layer, then hand the look over to the shader
-            // core once expansion is high. This keeps orbit burns blue/clean
-            // instead of pad-smoky.
+            // ── Turbulent steam/deluge particles ─────────────────────────────
+            // Methalox vacuum exhaust is optically thin. Keep the dense white/grey
+            // envelope tied to low altitude so an orbital burn does not inherit a
+            // pad-sized cloud.
             float smokePresence = Mathf.Clamp(1f - expansion * (u.IsSuperHeavy ? 0.92f : 1.12f), 0f, 1f);
             float smokeAmount = throttle * smokePresence * smokePresence * activeFraction
-                * (u.IsSuperHeavy ? 0.78f : 0.22f);
+                * groundInteraction * (u.IsSuperHeavy ? 0.88f : 0.20f);
             u.Smoke.Emitting = unitFiring && smokeAmount > 0.02f;
             if (unitFiring)
             {
@@ -301,6 +321,26 @@ public partial class PlumeSystem : Node3D
                     // (no air to billow into) leaving just the bright core.
                     pm.ScaleMin  = (u.IsSuperHeavy ? 1.6f : 0.55f) * Mathf.Lerp(0.20f, 1.0f, smokePresence);
                     pm.ScaleMax  = (u.IsSuperHeavy ? 3.8f : 1.35f) * Mathf.Lerp(0.28f, 1.0f, smokePresence);
+                }
+            }
+
+            // ── Ground dust/debris particles ─────────────────────────────────
+            // This is deliberately weaker and browner than the steam. It exists
+            // only while the plume can still couple to the pad, preventing a
+            // persistent soot cone or a vacuum dust trail.
+            float dustAmount = throttle * groundInteraction * groundInteraction
+                * smokePresence * activeFraction * (u.IsSuperHeavy ? 0.36f : 0.035f);
+            u.Dust.Emitting = unitFiring && dustAmount > 0.015f;
+            if (unitFiring)
+            {
+                u.Dust.AmountRatio = Mathf.Clamp(dustAmount, 0f, 1f);
+                u.Dust.SpeedScale = 0.65f + throttle * 0.18f + GD.Randf() * 0.06f;
+                if (u.Dust.ProcessMaterial is ParticleProcessMaterial dust)
+                {
+                    dust.Direction = dir;
+                    dust.Spread = u.IsSuperHeavy ? 72f : 28f;
+                    dust.ScaleMin = u.IsSuperHeavy ? 0.32f : 0.18f;
+                    dust.ScaleMax = u.IsSuperHeavy ? 1.15f : 0.55f;
                 }
             }
 
@@ -374,6 +414,12 @@ public partial class PlumeSystem : Node3D
         // N7: initialize the new atmospheric-pressure uniforms.
         mat.SetShaderParameter("atmo_pressure",  1f);  // sea level at start
         mat.SetShaderParameter("throttle_level", 0f);  // engines off at start
+        mat.SetShaderParameter("shock_cell_strength", 0f);
+        mat.SetShaderParameter("shock_cell_spacing", 1f);
+        mat.SetShaderParameter("shock_cell_softness", 0.10f);
+        mat.SetShaderParameter("steam_occlusion", 0f);
+        mat.SetShaderParameter("afterburn_strength", 0f);
+        mat.SetShaderParameter("pad_interaction", 0f);
         mat.RenderPriority = 2;
 
         var pivot = new Node3D
@@ -406,6 +452,8 @@ public partial class PlumeSystem : Node3D
         // ── Turbulent smoke / soot particles ─────────────────────────────────
         unit.Smoke = BuildSmoke(name + "_Smoke", xPos, yPos, zPos, mouthR, count, sh);
         AddChild(unit.Smoke);
+        unit.Dust = BuildDust(name + "_Dust", xPos, yPos, zPos, mouthR, count, sh);
+        AddChild(unit.Dust);
 
         // ── Nozzle glow light ────────────────────────────────────────────────
         if (withLight)
@@ -488,10 +536,10 @@ public partial class PlumeSystem : Node3D
             Colors  = new[]
             {
                 sh
-                    ? new Color(0.96f, 0.92f, 0.86f, 0.62f) // hot steam at the root
+                    ? new Color(0.96f, 0.92f, 0.86f, 0.76f) // hot steam at the root
                     : new Color(1.00f, 0.55f, 0.20f, 0.55f), // incandescent near nozzle
                 sh
-                    ? new Color(0.72f, 0.72f, 0.70f, 0.72f) // dense grey-white deluge/soot
+                    ? new Color(0.72f, 0.72f, 0.70f, 0.80f) // dense grey-white deluge/steam
                     : new Color(0.48f, 0.42f, 0.36f, 0.35f),
                 new Color(0.22f, 0.22f, 0.23f, 0.0f),       // smoke fade-out
             },
@@ -509,21 +557,21 @@ public partial class PlumeSystem : Node3D
 
             Direction          = new Vector3(0, -1, 0),
             Spread             = sh ? 48f : 14f,
-            InitialVelocityMin = sh ? 12f : 10f,
-            InitialVelocityMax = sh ? 28f : 26f,
+            InitialVelocityMin = sh ? 7f : 10f,
+            InitialVelocityMax = sh ? 19f : 26f,
 
             DampingMin = 2f,
             DampingMax = 5f,
 
-            ScaleMin = sh ? 1.4f : 1.0f,
-            ScaleMax = sh ? 3.2f : 3.0f,
+            ScaleMin = sh ? 1.8f : 1.0f,
+            ScaleMax = sh ? 5.8f : 3.0f,
 
             ColorRamp = gradTex,
         };
         pm.ParticleFlagAlignY = sh;
 
         // Elongated sheets for the SH cluster; circular puffs still read as toy balls.
-        var quad = new QuadMesh { Size = sh ? new Vector2(1.8f, 5.4f) : new Vector2(2.2f, 2.2f) };
+        var quad = new QuadMesh { Size = sh ? new Vector2(2.8f, 6.8f) : new Vector2(2.2f, 2.2f) };
         var drawMat = new StandardMaterial3D
         {
             BillboardMode            = sh
@@ -535,8 +583,9 @@ public partial class PlumeSystem : Node3D
             DepthDrawMode            = BaseMaterial3D.DepthDrawModeEnum.Disabled,
             AlbedoTexture            = sh ? SoftSheet : SoftCircle,
             AlbedoColor              = Colors.White,
-            EmissionEnabled          = !sh,
-            EmissionEnergyMultiplier = sh ? 0.7f : 1.6f,
+            EmissionEnabled          = true,
+            Emission               = sh ? new Color(0.72f, 0.72f, 0.68f) : Colors.White,
+            EmissionEnergyMultiplier = sh ? 0.35f : 1.6f,
             VertexColorUseAsAlbedo   = true,
         };
         quad.SurfaceSetMaterial(0, drawMat);
@@ -546,7 +595,7 @@ public partial class PlumeSystem : Node3D
             Name            = name,
             Position        = new Vector3(xPos, yPos, zPos),
             Amount          = amount,
-            Lifetime        = sh ? 2.4f : 1.1f,
+            Lifetime        = sh ? 3.4f : 1.1f,
             ProcessMaterial = pm,
             DrawPass1       = quad,
             Emitting        = false,
@@ -556,6 +605,73 @@ public partial class PlumeSystem : Node3D
             SpeedScale      = 1.0f,
             VisibilityAabb  = new Aabb(new Vector3(-20f, -340f, -20f),
                                        new Vector3(40f, 480f, 40f)),
+        };
+    }
+
+    private GpuParticles3D BuildDust(string name, float xPos, float yPos, float zPos, float mouthR,
+        int engineCount, bool sh)
+    {
+        int amount = sh
+            ? Mathf.Clamp(44 + engineCount * 3, 64, 150)
+            : Mathf.Clamp(12 + engineCount * 2, 12, 42);
+
+        var grad = new Gradient
+        {
+            Colors = new[]
+            {
+                sh ? new Color(0.50f, 0.45f, 0.38f, 0.22f) : new Color(0.42f, 0.37f, 0.31f, 0.16f),
+                sh ? new Color(0.32f, 0.31f, 0.29f, 0.16f) : new Color(0.24f, 0.25f, 0.25f, 0.10f),
+                new Color(0.16f, 0.17f, 0.17f, 0f),
+            },
+            Offsets = new[] { 0f, 0.32f, 1f },
+        };
+
+        var pm = new ParticleProcessMaterial
+        {
+            EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Ring,
+            EmissionRingRadius = mouthR * (sh ? 1.05f : 0.8f),
+            EmissionRingInnerRadius = mouthR * (sh ? 0.35f : 0.55f),
+            EmissionRingAxis = Vector3.Up,
+            EmissionRingHeight = 0.05f,
+            Direction = Vector3.Down,
+            Spread = sh ? 72f : 28f,
+            InitialVelocityMin = sh ? 3.0f : 1.5f,
+            InitialVelocityMax = sh ? 11.0f : 6.0f,
+            DampingMin = 3f,
+            DampingMax = 8f,
+            ScaleMin = sh ? 0.32f : 0.18f,
+            ScaleMax = sh ? 1.15f : 0.55f,
+            ColorRamp = new GradientTexture1D { Gradient = grad },
+        };
+
+        var quad = new QuadMesh { Size = sh ? new Vector2(1.6f, 1.6f) : new Vector2(0.9f, 0.9f) };
+        var material = new StandardMaterial3D
+        {
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            BlendMode = BaseMaterial3D.BlendModeEnum.Mix,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+            AlbedoTexture = SoftCircle,
+            AlbedoColor = Colors.White,
+            VertexColorUseAsAlbedo = true,
+        };
+        quad.SurfaceSetMaterial(0, material);
+
+        return new GpuParticles3D
+        {
+            Name = name,
+            Position = new Vector3(xPos, yPos, zPos),
+            Amount = amount,
+            Lifetime = sh ? 1.35f : 0.8f,
+            ProcessMaterial = pm,
+            DrawPass1 = quad,
+            Emitting = false,
+            LocalCoords = true,
+            OneShot = false,
+            Preprocess = 0.1f,
+            SpeedScale = 1f,
+            VisibilityAabb = new Aabb(new Vector3(-24f, -80f, -24f), new Vector3(48f, 100f, 48f)),
         };
     }
 }

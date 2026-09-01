@@ -60,6 +60,16 @@ uniform vec3 edge_color : source_color = vec3(1.0, 0.45, 0.12);
 // Number of Mach diamonds at sea level (they get sparser as `expansion` rises).
 uniform float diamond_count : hint_range(2.0, 14.0) = 8.0;
 
+// Runtime visibility controls. Shock cells need a pressure mismatch and enough
+// contrast to survive steam/deluge in the near field; they are not a permanent
+// decorative texture. Afterburn is intentionally confined to the hot root.
+uniform float shock_cell_strength : hint_range(0.0, 1.0) = 1.0;
+uniform float shock_cell_spacing : hint_range(0.5, 1.5) = 1.0;
+uniform float shock_cell_softness : hint_range(0.0, 0.6) = 0.10;
+uniform float steam_occlusion : hint_range(0.0, 1.0) = 0.0;
+uniform float afterburn_strength : hint_range(0.0, 1.0) = 1.0;
+uniform float pad_interaction : hint_range(0.0, 1.0) = 0.0;
+
 // Master energy multiplier.
 uniform float energy : hint_range(0.0, 10.0) = 3.2;
 uniform float tail_radius : hint_range(0.02, 1.0) = 0.14;
@@ -143,14 +153,15 @@ void fragment() {
 	float count   = mix(diamond_count, diamond_count * 0.35, effExpansion);
 	// Diamonds bunch up toward the throat (sqrt warps spacing tighter near a=0).
 	float warpedA = sqrt(max(a, 0.0));
-	float phase   = warpedA * count * 3.14159;
-	float sharp   = mix(8.0, 3.0, effExpansion);             // sharper at SL
+	float phase   = warpedA * count * 3.14159 * shock_cell_spacing;
+	float sharp   = mix(8.0, 3.0, effExpansion) * mix(1.0, 0.62, shock_cell_softness);
 	float diamond = pow(max(sin(phase), 0.0), sharp);        // sharp bright nodes
 	// Diamonds only live in the supersonic near field and on-axis; their reach
 	// downstream grows a little in vacuum.
 	float dReach  = mix(0.65, 0.9, effExpansion);
 	// N7: diamond intensity fades strongly with pressure drop — nearly gone in vacuum.
-	float diamondStrength = mix(1.0, 0.08, effExpansion);    // bright at SL, faint in vacuum
+	float diamondStrength = mix(1.0, 0.08, effExpansion)
+		* shock_cell_strength * (1.0 - steam_occlusion * 0.55);
 	float diamondMask = (1.0 - smoothstep(0.0, dReach, a)) * exp(-coreR * coreR * 4.5);
 	diamond *= diamondMask * diamondStrength;
 
@@ -166,10 +177,14 @@ void fragment() {
 	// White at the throat → blue-white core downstream.
 	vec3 col = mix(whiteHot, core_color, smoothstep(0.0, 0.45, a));
 	// Hot orange root, only at the very base and mostly at sea level.
-	float hotBase = (1.0 - smoothstep(0.0, 0.18, a)) * (1.0 - effExpansion * 0.85);
-	col = mix(col, edge_color, hotBase * 0.5);
-	// Faint incandescent orange recombination at the plume skin.
-	col = mix(col, edge_color, smoothstep(0.62, 1.0, r) * 0.24);
+	float hotBase = (1.0 - smoothstep(0.0, 0.18, a))
+		* (1.0 - effExpansion * 0.85) * afterburn_strength;
+	col = mix(col, edge_color, hotBase * 0.42);
+	// Keep the outer sheath pale. Any warm pad interaction dies quickly away from
+	// the nozzle instead of turning the whole methalox envelope orange.
+	float padWarm = smoothstep(0.0, 0.16, 1.0 - a) * pad_interaction
+		* smoothstep(0.78, 1.0, r) * 0.07;
+	col = mix(col, edge_color, padWarm);
 	// Vacuum methalox remains a pale blue-white, not a solid purple volume.
 	vec3 vacuumTint = vec3(0.78, 0.88, 1.0);
 	col = mix(col, vacuumTint, effExpansion * (1.0 - coreR) * 0.18);
