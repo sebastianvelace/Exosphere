@@ -21,17 +21,17 @@ public sealed class CameraShake
 {
     // ── Tunables (kept SMALL — enhance, don't nauseate) ───────────────────────
     // Render scale is ~2.8 m/unit; chase/pad distances are ~80-140 units.
-    private const float MaxThrustTrans = 0.9f;   // render units, full-throttle dense-air rumble
-    private const float MaxThrustRot   = 0.30f;  // degrees
-    private const float MaxBuffetTrans = 1.6f;   // render units, peak Max-Q buffet
-    private const float MaxBuffetRot   = 0.55f;  // degrees
-    private const float MaxFovKick     = 4.0f;   // degrees of extra FOV under high g
+    private const float MaxThrustTrans = 0.20f;  // render units, full-throttle dense-air rumble
+    private const float MaxThrustRot   = 0.08f;  // degrees
+    private const float MaxBuffetTrans = 0.35f;  // render units, peak Max-Q buffet
+    private const float MaxBuffetRot   = 0.12f;  // degrees
+    private const float MaxFovKick     = 1.6f;   // degrees of extra FOV under high g
 
     // Entry deceleration shake. A hypersonic entry is not the same event as Max-Q: the load
     // is an order of magnitude longer-lived and far lower in frequency, so it gets its own
     // envelope and its own oscillator band rather than being folded into the buffet term.
-    private const float MaxEntryTrans  = 2.0f;   // render units at the full-scale entry load
-    private const float MaxEntryRot    = 0.70f;  // degrees
+    private const float MaxEntryTrans  = 0.45f;  // render units at the full-scale entry load
+    private const float MaxEntryRot    = 0.16f;  // degrees
 
     // Reference dynamic pressure for normalising buffet (Pa). Earth ascent Max-Q
     // is roughly 30-35 kPa; we saturate a little above that.
@@ -72,6 +72,8 @@ public sealed class CameraShake
     private readonly float _seedX = (float)GD.Randf() * 100f;
     private readonly float _seedY = (float)GD.Randf() * 100f;
     private readonly float _seedZ = (float)GD.Randf() * 100f;
+    private const float PositionFilterRate = 16f;
+    private const float RotationFilterRate = 18f;
 
     /// <summary>The base (un-kicked) field of view, captured once from the camera.</summary>
     public float BaseFov { get; set; } = 70f;
@@ -92,6 +94,15 @@ public sealed class CameraShake
 
     /// <summary>Resulting field of view for this frame (degrees).</summary>
     public float Fov { get; private set; } = 70f;
+
+    /// <summary>Largest per-frame cosmetic step observed since this instance was created.</summary>
+    public float PeakPositionStepPerSecond { get; private set; }
+    public float PeakRotationStepDegreesPerSecond { get; private set; }
+    public float PeakFovStepPerSecond { get; private set; }
+
+    private Vector3 _lastPositionOffset = Vector3.Zero;
+    private Vector3 _lastRotationOffset = Vector3.Zero;
+    private float _lastFov = 70f;
 
     /// <summary>
     /// Advance the shake one frame. <paramref name="distance"/> is the camera orbit
@@ -136,43 +147,47 @@ public sealed class CameraShake
         // envelopes are still integrated above so re-enabling mid-flight does not pop.
         if (UserInterfaceSettings.ReducedMotion) zoom = 0f;
 
-        // ── Translational rumble (engine) — layered sines ~15-30 Hz feel ─────
+        // ── Translational rumble (engine) — bounded low-frequency motion ─────
         float eAmp = _thrustEnv * MaxThrustTrans * zoom;
         var engineTrans = new Vector3(
-            Osc(18.3f, _seedX) * 0.6f + Osc(27.1f, _seedX + 3f) * 0.4f,
-            Osc(21.7f, _seedY) * 0.6f + Osc(31.5f, _seedY + 3f) * 0.4f,
-            Osc(15.9f, _seedZ) * 0.6f + Osc(24.3f, _seedZ + 3f) * 0.4f) * eAmp;
+            Osc(6.4f, _seedX) * 0.6f + Osc(9.1f, _seedX + 3f) * 0.4f,
+            Osc(7.2f, _seedY) * 0.6f + Osc(10.4f, _seedY + 3f) * 0.4f,
+            Osc(5.8f, _seedZ) * 0.6f + Osc(8.3f, _seedZ + 3f) * 0.4f) * eAmp;
 
         // ── Buffet — lower, broader frequencies, bigger throws near Max-Q ────
         float bAmp = _buffetEnv * MaxBuffetTrans * zoom;
         var buffetTrans = new Vector3(
-            Osc(9.2f,  _seedX + 7f) * 0.7f + Osc(13.7f, _seedX + 9f) * 0.3f,
-            Osc(7.6f,  _seedY + 7f) * 0.7f + Osc(12.1f, _seedY + 9f) * 0.3f,
-            Osc(10.8f, _seedZ + 7f) * 0.7f + Osc(14.9f, _seedZ + 9f) * 0.3f) * bAmp;
+            Osc(3.1f,  _seedX + 7f) * 0.7f + Osc(5.2f, _seedX + 9f) * 0.3f,
+            Osc(2.8f,  _seedY + 7f) * 0.7f + Osc(4.7f, _seedY + 9f) * 0.3f,
+            Osc(3.6f,  _seedZ + 7f) * 0.7f + Osc(5.5f, _seedZ + 9f) * 0.3f) * bAmp;
 
         // ── Entry deceleration — the slowest, heaviest band (~3-7 Hz) ────────
         // Low frequency and large throw: a hypersonic entry reads as the whole vehicle
         // being shoved and wallowing, not as the high-frequency rattle of a live engine.
         float rAmp = _entryEnv * MaxEntryTrans * zoom;
         var entryTrans = new Vector3(
-            Osc(3.4f, _seedX + 21f) * 0.75f + Osc(6.9f, _seedX + 23f) * 0.25f,
-            Osc(4.1f, _seedY + 21f) * 0.75f + Osc(7.6f, _seedY + 23f) * 0.25f,
-            Osc(2.9f, _seedZ + 21f) * 0.75f + Osc(6.2f, _seedZ + 23f) * 0.25f) * rAmp;
+            Osc(1.1f, _seedX + 21f) * 0.75f + Osc(2.2f, _seedX + 23f) * 0.25f,
+            Osc(1.3f, _seedY + 21f) * 0.75f + Osc(2.5f, _seedY + 23f) * 0.25f,
+            Osc(0.9f, _seedZ + 21f) * 0.75f + Osc(2.0f, _seedZ + 23f) * 0.25f) * rAmp;
 
-        PositionOffset = engineTrans + buffetTrans + entryTrans;
+        var targetPositionOffset = engineTrans + buffetTrans + entryTrans;
+        float positionBlend = 1f - Mathf.Exp(-PositionFilterRate * dt);
+        PositionOffset = PositionOffset.Lerp(targetPositionOffset, positionBlend);
         CockpitPositionOffset = ClampLength(PositionOffset * 0.006f, CockpitTransCap);
 
         // ── Rotational shake (radians) ───────────────────────────────────────
         float eRot = Mathf.DegToRad(_thrustEnv * MaxThrustRot * zoom);
         float bRot = Mathf.DegToRad(_buffetEnv * MaxBuffetRot * zoom);
         float rRot = Mathf.DegToRad(_entryEnv * MaxEntryRot * zoom);
-        RotationOffset = new Vector3(
-            Osc(19.4f, _seedY + 13f) * eRot + Osc(8.3f,  _seedY + 17f) * bRot
-                + Osc(3.1f, _seedY + 27f) * rRot,  // pitch
-            Osc(22.6f, _seedX + 13f) * eRot + Osc(9.7f,  _seedX + 17f) * bRot
-                + Osc(2.6f, _seedX + 27f) * rRot,  // yaw
-            Osc(16.2f, _seedZ + 13f) * eRot + Osc(11.4f, _seedZ + 17f) * bRot
-                + Osc(3.7f, _seedZ + 27f) * rRot); // roll
+        var targetRotationOffset = new Vector3(
+            Osc(6.8f, _seedY + 13f) * eRot + Osc(3.8f,  _seedY + 17f) * bRot
+                + Osc(1.1f, _seedY + 27f) * rRot,  // pitch
+            Osc(7.6f, _seedX + 13f) * eRot + Osc(4.2f,  _seedX + 17f) * bRot
+                + Osc(0.9f, _seedX + 27f) * rRot,  // yaw
+            Osc(5.9f, _seedZ + 13f) * eRot + Osc(4.8f,  _seedZ + 17f) * bRot
+                + Osc(1.3f, _seedZ + 27f) * rRot); // roll
+        float rotationBlend = 1f - Mathf.Exp(-RotationFilterRate * dt);
+        RotationOffset = RotationOffset.Lerp(targetRotationOffset, rotationBlend);
 
         // Cockpit variant: clamp each axis so interior buffeting stays readable.
         CockpitRotationOffset = new Vector3(
@@ -182,6 +197,16 @@ public sealed class CameraShake
 
         // ── FOV kick under high g (subtle widen) ─────────────────────────────
         Fov = BaseFov + _fovEnv * MaxFovKick * zoom;
+
+        PeakPositionStepPerSecond = Mathf.Max(PeakPositionStepPerSecond,
+            _lastPositionOffset.DistanceTo(PositionOffset) / dt);
+        PeakRotationStepDegreesPerSecond = Mathf.Max(PeakRotationStepDegreesPerSecond,
+            Mathf.RadToDeg(_lastRotationOffset.DistanceTo(RotationOffset)) / dt);
+        PeakFovStepPerSecond = Mathf.Max(PeakFovStepPerSecond,
+            Mathf.Abs(_lastFov - Fov) / dt);
+        _lastPositionOffset = PositionOffset;
+        _lastRotationOffset = RotationOffset;
+        _lastFov = Fov;
     }
 
     private void SampleFlightState(Vessel? vessel, Universe? universe)

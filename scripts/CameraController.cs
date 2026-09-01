@@ -21,6 +21,11 @@ public partial class CameraController : Node3D
     public float PresentationPitchDegrees => _pitch;
     public float PresentationDistance => _distance;
     public float PresentationFov => _externalFov;
+    public float ShakePositionMagnitude => _shake.PositionOffset.Length();
+    public float ShakeRotationDegrees => Mathf.RadToDeg(_shake.RotationOffset.Length());
+    public float ShakePeakPositionStepPerSecond => _shake.PeakPositionStepPerSecond;
+    public float ShakePeakRotationStepDegreesPerSecond => _shake.PeakRotationStepDegreesPerSecond;
+    public float ShakePeakFovStepPerSecond => _shake.PeakFovStepPerSecond;
 
     /// <summary>Switch to first-person cockpit (used by debug/visual harnesses).</summary>
     public void EnterCockpitView()
@@ -118,7 +123,10 @@ public partial class CameraController : Node3D
     // the requested frame below. Keep the rendered frame in local vessel coordinates and
     // ease it before applying the floating-origin surface frame; this removes camera pops
     // without taking ownership of the player's yaw/pitch/zoom controls after presentation.
-    private const float CameraFrameTransitionSeconds = 0.42f;
+    // Continuous tracking should be within roughly two frames. Event changes still
+    // ease because the target frame itself changes over several frames at the pad/chase
+    // threshold; 0.42 s made ordinary ascent feel like the camera was dragging behind.
+    private const float CameraFrameTransitionSeconds = 0.14f;
     private Vector3 _smoothedFramePosition;
     private Vector3 _smoothedFrameTarget;
     private bool _hasSmoothedFrame;
