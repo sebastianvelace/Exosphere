@@ -335,7 +335,10 @@ public class Vessel
     public RigidBodyContactInput GetContactInput(Vector3d position, Vector3d velocity) => new(
         DatumPositionWorld: position,
         CenterOfMassPositionWorld: position + Orientation.Rotate(_landingCenterOfMassFromDatumLocal),
-        CenterOfMassVelocityWorld: velocity,
+        // The integrator advances the vessel datum with velocity. Transport that
+        // velocity to the CoM before the solver transports it back to each foot.
+        CenterOfMassVelocityWorld: velocity
+            + AngularVelocity.Cross(Orientation.Rotate(_landingCenterOfMassFromDatumLocal)),
         Orientation: Orientation,
         AngularVelocityWorld: AngularVelocity);
 

@@ -7,6 +7,37 @@ using Xunit;
 
 public sealed class LandingContactIntegrationTests
 {
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.7)]
+    public void ContactPointVelocityMatchesDerivativeOfDatumAndRotatedFoot(double tilt)
+    {
+        var (_, _, vessel) = CreateLandingCase(0.0, 0.0);
+        vessel.Orientation = Quaterniond.FromAxisAngle(Vector3d.Right, tilt);
+        vessel.AngularVelocity = new Vector3d(0.02, -0.03, 0.1);
+        var position = new Vector3d(10, 20, 30);
+        var velocity = new Vector3d(3, -2, 1);
+        var input = vessel.GetContactInput(position, velocity);
+        Assert.True((input.CenterOfMassPositionWorld - position).Magnitude > 1.0);
+
+        const double h = 1e-4;
+        var forward = Quaterniond.FromAxisAngle(vessel.AngularVelocity,
+            vessel.AngularVelocity.Magnitude * h) * vessel.Orientation;
+        var backward = Quaterniond.FromAxisAngle(vessel.AngularVelocity,
+            -vessel.AngularVelocity.Magnitude * h) * vessel.Orientation;
+        foreach (var foot in vessel.LandingContactPoints)
+        {
+            var local = foot.LocalPositionFromDatum;
+            var numericalVelocity = ((position + velocity * h + forward.Rotate(local))
+                - (position - velocity * h + backward.Rotate(local))) / (2 * h);
+            var point = position + vessel.Orientation.Rotate(local);
+            var solverVelocity = input.CenterOfMassVelocityWorld
+                + input.AngularVelocityWorld.Cross(point - input.CenterOfMassPositionWorld);
+            Assert.True((solverVelocity - numericalVelocity).Magnitude < 1e-7,
+                $"Contact velocity error: {(solverVelocity - numericalVelocity).Magnitude:R} m/s");
+        }
+    }
+
     [Fact]
     public void SixLegStarshipDropSettlesOnSpringsWithoutGroundHoldSnap()
     {
