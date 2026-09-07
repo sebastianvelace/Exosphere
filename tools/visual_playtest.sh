@@ -66,6 +66,7 @@ Options:
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
+  --starbase-far Place the Starbase stack at 12 km and capture the mapped far-field handoff.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
   --saturn      Jump to Saturn and capture the imported ring texture.
@@ -199,6 +200,7 @@ while [[ $# -gt 0 ]]; do
     --ascent) MODE="ascent"; shift ;;
     --launch) MODE="launch"; shift ;;
     --ship) MODE="ship"; shift ;;
+    --starbase-far) MODE="starbase_far"; shift ;;
     --orbit) MODE="orbit"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
     --saturn) MODE="saturn"; shift ;;
@@ -297,18 +299,25 @@ if (( RESOLUTION_WIDTH < 640 || RESOLUTION_WIDTH > 7680
   exit 2
 fi
 
-if [[ "$MODE" == "ascent" && -z "$VARIANT_FILE" ]]; then
-  VARIANT_FILE="starship_flight7_block2_2025.json"
-  VARIANT_SITE="starbase"
-  VARIANT_PROFILE="starship-flight7-ascent"
-fi
+  if [[ "$MODE" == "ascent" && -z "$VARIANT_FILE" ]]; then
+    VARIANT_FILE="starship_flight7_block2_2025.json"
+    VARIANT_SITE="starbase"
+    VARIANT_PROFILE="starship-flight7-ascent"
+  fi
+
+  if [[ "$MODE" == "starbase_far" && -z "$VARIANT_FILE" ]]; then
+    VARIANT_FILE="starship_flight7_block2_2025.json"
+    VARIANT_SITE="starbase"
+    VARIANT_PROFILE="starship-flight7-ascent"
+  fi
 
 if [[ -n "$RUN_ID" ]]; then
   if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
     echo "ERROR: --run-id accepts only letters, digits, dot, underscore and dash" >&2
     exit 2
   fi
-  if [[ "$OUT_DIR_SET" -eq 0 ]]; then OUT_DIR="/tmp/exo_play-${RUN_ID}"; fi
+
+    if [[ "$OUT_DIR_SET" -eq 0 ]]; then OUT_DIR="/tmp/exo_play-${RUN_ID}"; fi
   if [[ "$LOG_SET" -eq 0 ]]; then LOG="/tmp/exo_play-${RUN_ID}.log"; fi
 fi
 CONSOLE_LOG="${LOG}.console"
@@ -321,12 +330,12 @@ if [[ $APOLLO11_HARDWARE -eq 1 && "$MODE" == "full" ]]; then
   MODE="launch"
 fi
 
-if [[ -z "$MAX_RUNTIME_SEC" ]]; then
-  if [[ "$MODE" == "full" ]]; then
-    MAX_RUNTIME_SEC=3600
-  elif [[ "$MODE" == "launch" ]]; then
-    MAX_RUNTIME_SEC=1800
-  elif [[ "$MODE" == "ascent" ]]; then
+  if [[ -z "$MAX_RUNTIME_SEC" ]]; then
+    if [[ "$MODE" == "full" ]]; then
+      MAX_RUNTIME_SEC=3600
+    elif [[ "$MODE" == "launch" ]]; then
+      MAX_RUNTIME_SEC=1800
+    elif [[ "$MODE" == "ascent" ]]; then
     # llvmpipe can spend several wall-clock seconds per rendered simulation second;
     # keep the ascent gate aligned with the documented non-full-mode budget so the
     # physical orbit can finish instead of timing out just after Insert.
@@ -551,9 +560,8 @@ public partial class _PlaytestShot : Node
     bool _pad, _liftoff, _maxq, _separation, _orbit, _orbitBeauty;
     bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
-    bool _beautyJumped;
     int _beautyWaitFrames;
-    bool _edlSeeded, _flipComplete, _shipSeeded;
+  bool _edlSeeded, _flipComplete, _shipSeeded, _starbaseFarSeeded;
     bool _hudHelpDismissed;
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     double _nextFullTelemetry;
@@ -592,7 +600,7 @@ public partial class _PlaytestShot : Node
     // BeginReentryDemonstration; the log names the setup teleport so the acceptance result
     // cannot be mistaken for a flown ascent or the deterministic demo.
     bool _orbitalReentrySeeded, _orbitalReentryEntry, _orbitalReentryPeak;
-    bool _orbitalReentryRetro, _orbitalReentryCaught;
+    bool _orbitalReentryRetro, _orbitalReentryCaught, _orbitalReentryLanded;
     double _orbitalReentryScenarioStart, _nextOrbitalReentryTelemetry;
     double _orbitalReentrySeededPe = double.NaN;
 
@@ -838,13 +846,19 @@ public partial class _PlaytestShot : Node
             return;
         }
 
-        if (_mode is "atmosphere_low" or "atmosphere_orbit")
-        {
-            ProcessAtmosphereMatrix(delta, bridge, vessel, universe, body);
-            return;
-        }
+          if (_mode is "atmosphere_low" or "atmosphere_orbit")
+          {
+              ProcessAtmosphereMatrix(delta, bridge, vessel, universe, body);
+              return;
+          }
 
-        if (_mode == "cockpit")
+          if (_mode == "starbase_far")
+          {
+              ProcessStarbaseFarField(bridge, vessel, universe, body);
+              return;
+          }
+
+          if (_mode == "cockpit")
         {
             CameraController.Instance?.EnterCockpitView();
             if (!_shipSeeded && _readyFrames >= 45)
@@ -1277,41 +1291,38 @@ public partial class _PlaytestShot : Node
             return;
         }
 
-        // Fallback: if ascent takes too long, teleport to orbit for downstream milestones.
+        // A full mission that cannot insert within the bounded ascent budget is a
+        // physical failure. Never convert that failure into a fake orbit for later
+        // screenshots.
         if (_mode == "full"
             && !_orbit && !_ascentFallbackUsed && elapsed > AscentFallbackSec &&
             mission?.Phase is MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN or MissionPhase.IGNITION
                 or MissionPhase.LIFTOFF or MissionPhase.ASCENT_SH or MissionPhase.MAX_Q or MissionPhase.MECO
                 or MissionPhase.SEPARATION or MissionPhase.ASCENT_SHIP)
         {
-            bridge.JumpToOrbit(200_000.0);
             _ascentFallbackUsed = true;
-            _orbit = true;
-            QueueCapture("orbit");
-            _log.WriteLine("FALLBACK JumpToOrbit(200km) — ascent did not reach ORBIT in time");
+            _log.WriteLine($"GAP flown ascent did not reach ORBIT within {AscentFallbackSec:F0}s "
+                + $"phase={mission?.Phase} alt={alt:F0} speed={spd:F0}");
             _log.Flush();
+            Finish("ASCENT_ORBIT_GAP");
+            return;
         }
         // ── Orbit beauty shot ─────────────────────────────────────────────────
-        if (_orbit && !_beautyJumped && _pendingSlug == null)
+        // Keep the flown insertion state intact. The old implementation jumped to a
+        // second circular orbit and reset its return flags, which made the following
+        // EDL capture a different vehicle state than the one that actually launched.
+        if (_orbit && !_orbitBeauty && _pendingSlug == null)
         {
-            bridge.JumpToOrbit(250_000.0);
-            bridge.SetTimeScale(1.0);
-            _beautyJumped = true;
-            _beautyWaitFrames = 60;
-            _deorbitStarted = false;
-            _deorbitDone = false;
+            if (_beautyWaitFrames < 60)
+                _beautyWaitFrames++;
+            else
+            {
+                QueueCapture("orbit_beauty");
+                _orbitBeauty = true;
+            }
         }
 
-        if (_beautyJumped && !_orbitBeauty && _beautyWaitFrames > 0)
-            _beautyWaitFrames--;
-
-        if (_beautyJumped && !_orbitBeauty && _beautyWaitFrames == 0 && _pendingSlug == null)
-        {
-            QueueCapture("orbit_beauty");
-            _orbitBeauty = true;
-        }
-
-        // ── Deorbit → EDL (best effort) ───────────────────────────────────────
+        // ── Deorbit → EDL (continuous production path) ───────────────────────
         if (_orbitBeauty && _pendingSlug == null && !_landed && !vessel.IsDestroyed)
         {
             ProcessDeorbit(bridge, vessel, universe, body, mission, alt);
@@ -1526,9 +1537,16 @@ public partial class _PlaytestShot : Node
         // the real deorbit burn targets the player-safe 60 km periapsis and re-enters normally.
         const double OrbitAltitudeM = 1_200_000.0;
         const double DeorbitTargetPeM = 60_000.0;
-        // A 1,200 km circular setup needs roughly half an orbital period to reach its
-        // 60 km periapsis after the impulsive burn. Keep this as simulated time; the
-        // wall-clock budget remains controlled by the shell harness.
+        // Setup-only lead used to evaluate the actual public deorbit/catch path. The bridge
+        // uses this horizon to seed the inertial plane against the rotating Starbase radial.
+        const double OrbitalReturnExpectedSeconds = 7_867.0;
+        const double OrbitalReturnLatitudeBiasDegrees = -2.377;
+        // The seeded return plane is an inertial geometry aid, not the touchdown clock.
+        // The 1,200 km circular-to-60 km transfer reaches the Starbase latitude after
+        // roughly 2,840 s in this vehicle/atmosphere model; the larger lead compensates
+        // for the transfer's westward ground-track bias while the target itself keeps
+        // advancing with Earth rotation. Keep this as simulated time; the wall-clock
+        // budget remains controlled by the shell harness.
         const double SimTimeoutSec = 6_000.0;
 
         if (!_orbitalReentrySeeded)
@@ -1581,8 +1599,25 @@ public partial class _PlaytestShot : Node
 
             // Explicit setup teleport: it establishes a reproducible safe orbit, but does
             // not enter EDL and is never reported as a normal reentry milestone.
-            bridge.JumpToOrbit(OrbitAltitudeM);
+            if (!bridge.JumpToOrbitForLaunchSiteReturn(
+                    OrbitAltitudeM, OrbitalReturnExpectedSeconds,
+                    OrbitalReturnLatitudeBiasDegrees))
+            {
+                _log.WriteLine("GAP normal orbital return could not seed a rotating-site " +
+                    "intercept orbit");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_SETUP_INVALID");
+                return;
+            }
             vessel = bridge.ActiveVessel!;
+            const double OrbitalReturnReserveFraction = 0.12;
+            if (!bridge.ConfigureOrbitalReturnReserve(OrbitalReturnReserveFraction))
+            {
+                _log.WriteLine("GAP normal orbital return reserve could not be configured");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_UNAVAILABLE");
+                return;
+            }
             earth = universe.GetBody("earth")!;
             var seededOrbit = OrbitalElements.FromStateVector(
                 vessel.Position - earth.Position,
@@ -1655,7 +1690,11 @@ public partial class _PlaytestShot : Node
 
             _log.WriteLine($"NORMAL_REENTRY_SETUP source=JumpToOrbit altitude={OrbitAltitudeM:F0} " +
                 $"pe={seededPe:F1} ap={seededAp:F1} atmoTop={atmosphereTop:F1} " +
-                "launchSite=starbase demo=False flownAscent=False");
+                $"launchSite=starbase demo=False flownAscent=False " +
+                        $"orbitalReturnExpectedSeconds={OrbitalReturnExpectedSeconds:F0} " +
+                        $"orbitalReturnLatitudeBiasDegrees={OrbitalReturnLatitudeBiasDegrees:F2} " +
+                $"orbitalReturnReserveFraction={OrbitalReturnReserveFraction:F3} " +
+                $"propellant={vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer:F0}");
             _log.WriteLine($"NORMAL_REENTRY_ARMED source=map_deorbit_autopilot targetPe={DeorbitTargetPeM:F0} " +
                 $"dv={plannedDv:F1} phase={mission?.Phase} launchSite=starbase demo=False");
             _log.Flush();
@@ -1700,6 +1739,14 @@ public partial class _PlaytestShot : Node
             var allEngineParts = vessel.Parts.Parts.Where(
                 part => part.Definition.Category == PartCategory.Engine).ToArray();
             int activeEngines = vessel.Parts.ActiveEngines.Count();
+            var shipEnginePart = allEngineParts.FirstOrDefault(part =>
+                part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("ship_engines"));
+            string engineRuntime = shipEnginePart == null
+                ? "-"
+                : string.Join(",", shipEnginePart.EngineStates.Select(state =>
+                    $"{state.State}:{state.CommandedThrottle:F2}:{state.ActualThrottle:F2}:" +
+                    $"{state.ChamberPressureFraction:F2}:starts={state.StartsCompleted}"));
             int failedEngines = allEngineParts.Sum(part => part.EngineStates
                 .Count(state => !string.IsNullOrWhiteSpace(state.FailureCode)));
             string failureCodes = allEngineParts.Length == 0
@@ -1709,18 +1756,42 @@ public partial class _PlaytestShot : Node
                         part.IsStagingActive ? "STAGE" : "INACTIVE")}:" +
                     string.Join(",", part.EngineStates.Select(state => state.FailureCode ?? "-"))));
             double propellant = vessel.Parts.Parts.Sum(part => part.LiquidFuel + part.Oxidizer);
+            Vector3d catchOffset = vessel.Position - vessel.CatchTargetPositionWorld;
+            Vector3d catchHorizontalOffset = catchOffset - up * catchOffset.Dot(up);
+            double maxThermalRatio = vessel.Parts.Parts
+                .Where(part => part.Definition.HeatTolerance > 0.0)
+                .Select(part => part.ThermalRatio)
+                .DefaultIfEmpty(0.0)
+                .Max();
+            string partThermal = string.Join("|", vessel.Parts.Parts
+                .OrderBy(part => part.Definition.Id)
+                .Select(part =>
+                    $"{part.Definition.Id}:{(part.IsBroken ? "BROKEN" : "OK")}:" +
+                    $"T={part.Temperature:F0}:r={part.ThermalRatio:F3}"));
+            string breakingJoints = string.Join("|", vessel.Parts.Joints
+                .Where(joint => joint.IsBreaking)
+                .Select(joint =>
+                    $"{joint.Parent.Definition.Id}>{joint.Child.Definition.Id}:" +
+                    $"t={joint.CurrentTensileLoad / System.Math.Max(1.0, joint.TensileStrength):F2}:" +
+                    $"s={joint.CurrentShearLoad / System.Math.Max(1.0, joint.ShearStrength):F2}"));
+            string breakingJointLabel = breakingJoints.Length > 0 ? breakingJoints : "-";
             var autopilot = GetTree().Root.FindChild("AutopilotController", true, false)
                 as AutopilotController;
             _log.WriteLine($"TRACE_ORBITAL_REENTRY t={simElapsed:F1} alt={alt:F1} " +
                 $"vUp={vUp:F1} spd={surfVel.Magnitude:F1} pe={pe:F1} ap={ap:F1} " +
                 $"phase={phase} throttle={vessel.Throttle:F3} " +
                 $"activeEngines={activeEngines} thrustN={thrustN:F0} " +
+                $"engineRuntime={engineRuntime} " +
                 $"retroAlignment={retroAlignment:F4} pyr={vessel.PitchYawRoll} " +
                 $"failedEngines={failedEngines} failureCodes={failureCodes} " +
-                $"propellant={propellant:F0} " +
+                $"propellant={propellant:F0} partCount={vessel.Parts.Parts.Count} " +
+                $"maxThermalRatio={maxThermalRatio:F3} partsThermal={partThermal} " +
+                $"breakingJoints={breakingJointLabel} " +
                 $"autopilotArmed={autopilot?.IsArmed ?? false} " +
                 $"autopilotBurning={autopilot?.IsBurning ?? false} " +
                 $"catchArmed={vessel.IsAttemptingTowerCatch} " +
+                $"catchMiss={catchHorizontalOffset.Magnitude:F1} " +
+                $"catchRange={catchOffset.Magnitude:F1} " +
                 $"catchPins={vessel.HasCatchPins} destroyed={vessel.IsDestroyed} " +
                 "normalFlow=True demo=False");
             _log.Flush();
@@ -1782,14 +1853,36 @@ public partial class _PlaytestShot : Node
 
         if (mission?.Phase == MissionPhase.LANDED)
         {
-            // A leg touchdown is not accepted for this Starbase catch scenario. Keeping it
-            // as a GAP makes an abort-to-legs visible instead of silently passing the wrong
-            // terminal behavior.
-            _log.WriteLine($"GAP normal Starbase reentry reached LANDED without tower catch " +
-                $"alt={alt:F1} spd={surfVel.Magnitude:F1} catchArmed={vessel.IsAttemptingTowerCatch}");
-            _log.Flush();
-            Finish("ORBITAL_REENTRY_NO_CATCH");
-            return;
+            // A catch is preferred, but an explicit EDL landing kit is a valid physical
+            // abort-to-legs outcome when the tower corridor is missed. Accept only a real
+            // settled contact state; a mission-phase label alone is not sufficient evidence.
+            bool landedOnGear = vessel.IsSurfaceSettled
+                && (vessel.LastSurfaceContact?.ContactCount ?? 0) >= 3
+                && vessel.Parts.Parts.Any(part =>
+                    part.Definition.Category == PartCategory.Landing && part.IsDeployed);
+            if (landedOnGear)
+            {
+                if (!_orbitalReentryLanded)
+                {
+                    QueueCapture("orbital_reentry_landed");
+                    _orbitalReentryLanded = true;
+                    _log.WriteLine($"CHECK orbital_reentry landed=True contacts=" +
+                        $"{vessel.LastSurfaceContact?.ContactCount ?? 0} " +
+                        $"surfaceSpeed={surfVel.Magnitude:F3} " +
+                        $"angularSpeed={vessel.AngularVelocity.Magnitude:F4} " +
+                        "normalFlow=True demo=False");
+                    _log.Flush();
+                }
+            }
+            else
+            {
+                _log.WriteLine($"GAP normal Starbase reentry reached LANDED without a " +
+                    $"verified catch or leg touchdown alt={alt:F1} spd={surfVel.Magnitude:F1} " +
+                    $"catchArmed={vessel.IsAttemptingTowerCatch}");
+                _log.Flush();
+                Finish("ORBITAL_REENTRY_NO_CATCH");
+                return;
+            }
         }
 
         if (!_orbitalReentryCaught && mission?.Phase == MissionPhase.CAUGHT)
@@ -1802,19 +1895,24 @@ public partial class _PlaytestShot : Node
             _log.Flush();
         }
 
-        if (_orbitalReentryCaught && _pendingSlug == null)
+        if ((_orbitalReentryCaught || _orbitalReentryLanded) && _pendingSlug == null)
         {
             Finish("ORBITAL_REENTRY_OK");
             return;
         }
 
-        // Once the real deorbit burn has completed, use the same bounded coast policy as
-        // the full-mission harness: high warp is safe above the atmosphere, then reduce it
-        // before the entry interface so EDL still receives physical RK4 steps.
-        if (!_orbitalReentryEntry && mission?.Phase == MissionPhase.COAST)
-        {
-            bridge.SetTimeScale(alt > 120_000.0 ? 200.0 : 5.0);
-        }
+        // Keep the finite deorbit burn at x1 while the production autopilot aligns,
+        // ignites and delivers its planned Δv. A high warp here advances the rigid-body
+        // attitude in coarse scheduler steps, misses the node window and can leave the
+        // harness declaring a stall before the first engine start. Once entry is armed,
+        // x3 remains the bounded RK4 path used by EDL verification.
+        var orbitalAutopilot = GetTree().Root.FindChild("AutopilotController", true, false)
+            as AutopilotController;
+        bool finiteBurnInProgress = orbitalAutopilot?.IsArmed == true
+            || orbitalAutopilot?.IsBurning == true;
+        bridge.SetTimeScale(_orbitalReentryEntry
+            ? 3.0
+            : finiteBurnInProgress ? 1.0 : 200.0);
 
         if (simElapsed > SimTimeoutSec)
         {
@@ -1944,70 +2042,63 @@ public partial class _PlaytestShot : Node
     {
         if (!_deorbitStarted)
         {
-            // A 1,200 km -> 60 km deorbit spends more propellant than a nominal
-            // 12% landing reserve.  That value was valid for the direct 70 km EDL
-            // demonstration, but it starved the real orbital-return vehicle before
-            // the flip and made the acceptance run look like an attitude failure.
-            // Keep enough for the deorbit burn plus three-engine flip/catch margin.
-            // This is an explicit scenario seed, not a claim about the player's live tank
-            // state: JumpToOrbit may be reached from a partially flown launch profile.
-            const double orbitalReturnReserve = 0.45;
-            SetPropellantReserve(vessel, orbitalReturnReserve);
-            bridge.SetTimeScale(1.0);
-            _deorbitStarted = true;
-            _log.WriteLine($"ACTION deorbit: capped propellant at {orbitalReturnReserve:P0} " +
-                "deorbit+landing reserve, starting retro burn");
-            _log.Flush();
-        }
-
-        Vector3d rel = vessel.Position - body.Position;
-        Vector3d vel = vessel.Velocity - body.Velocity;
-        var oe = OrbitalElements.FromStateVector(rel, vel, body.GM, body.Id, universe.CurrentTime);
-        double periAlt = oe.Periapsis - body.Radius;
-
-        if (!_deorbitDone)
-        {
-            Vector3d surfVel = vessel.GetSurfaceVelocity(body);
-            Vector3d retro = surfVel.Magnitude > 10.0 ? -surfVel.Normalized : -rel.Normalized;
-            vessel.Orientation = ShortestArc(Vector3d.Up, retro);
-            vessel.Throttle = 1.0;
-            vessel.SASEnabled = false;
-            // Commit the entry: a shallow periapsis (~64 km) grazes and can skip back out of
-            // the atmosphere, re-coasting a full orbit and blowing the wall budget. Target
-            // ~55 km so the belly-flop enters on a single committed pass (survivable corridor
-            // for a high-drag broadside attitude) and reaches touchdown in a few sim-minutes.
-            if (periAlt < 55_000.0)
+            // Use the same public map planner/autopilot path a player uses. The full
+            // mission must not teleport, rewrite fuel, or directly write an attitude
+            // vector here: any of those hides a real ascent/return defect.
+            var map = MapViewController.Instance;
+            if (map == null)
             {
-                vessel.Throttle = 0.0;
-                _deorbitDone = true;
-                _log.WriteLine($"ACTION deorbit burn complete periAlt={periAlt / 1000.0:F0} km");
+                _log.WriteLine("GAP continuous deorbit map planner/autopilot unavailable");
                 _log.Flush();
+                Finish("CONTINUOUS_DEORBIT_UNAVAILABLE");
+                return;
             }
+
+            if (!map.Visible) map.ToggleVisible();
+            map._UnhandledInput(new InputEventKey { Keycode = Key.B, Pressed = true });
+            if (!map.Planner.HasNode
+                || map.Planner.DvPrograde >= -50.0
+                || !double.IsFinite(map.Planner.DeltaVMagnitude))
+            {
+                _log.WriteLine($"GAP continuous deorbit planner refused "
+                    + $"dv={map.Planner.DeltaVMagnitude:F1} prograde={map.Planner.DvPrograde:F1}");
+                _log.Flush();
+                Finish("CONTINUOUS_DEORBIT_UNAVAILABLE");
+                return;
+            }
+
+            double plannedDv = map.Planner.DeltaVMagnitude;
+            map._UnhandledInput(new InputEventKey { Keycode = Key.Enter, Pressed = true });
+            if (mission?.Phase != MissionPhase.COAST)
+            {
+                _log.WriteLine($"GAP continuous deorbit autopilot refused phase={mission?.Phase} "
+                    + $"dv={plannedDv:F1}");
+                _log.Flush();
+                Finish("CONTINUOUS_DEORBIT_UNAVAILABLE");
+                return;
+            }
+            if (map.Visible) map.ToggleVisible();
+            CameraController.Instance?.EnterShipChaseView();
+
+            double propellant = vessel.Parts.Parts.Sum(
+                part => part.LiquidFuel + part.Oxidizer);
+            _deorbitStarted = true;
+            _deorbitDone = true;
+            _log.WriteLine($"ACTION continuous deorbit armed source=map_deorbit_autopilot "
+                + $"dv={plannedDv:F1} propellant={propellant:F0} "
+                + "teleport=False fuelReseed=False");
+            _log.Flush();
+            bridge.SetTimeScale(3.0);
+            return;
         }
-        else if (alt > 120_000.0 && vessel.Throttle < 0.01 && !_entry)
-        {
-            // Coast quickly until EDL declares ENTRY.  On the next frame the harness drops
-            // to x1 and queues the state-gated entry capture before accelerating again.
-            bridge.SetTimeScale(200.0);
-        }
-        else if (alt > 90_000.0 && vessel.Throttle < 0.01 && _entry)
-        {
-            // The controller is already armed, but meaningful aero/heating has not started.
-            // Warp 5 remains on the RK4 path (unlike on-rails warp >= 10) and closes the long
-            // 140→90 km coast without skipping the physical entry solution.
-            bridge.SetTimeScale(5.0);
-        }
-        else
-        {
-            // Dense entry uses the same x3 RK4 path as the independently verified --edl
-            // acceptance mode.  Return to x1 before powered descent: the orbital-entry
-            // trajectory reaches the flip faster than the deterministic demo, and landing
-            // guidance/contact resolution need full temporal fidelity there.
-            bool poweredDescent = mission?.Phase is MissionPhase.RETRO_BURN
-                or MissionPhase.FINAL_DESCENT
-                or MissionPhase.LANDED;
-            bridge.SetTimeScale(_entry && !poweredDescent ? 3.0 : 1.0);
-        }
+
+        // Keep the production autopilot in charge of attitude and throttle. Only the
+        // scheduler policy is owned by this harness; it never mutates flight state.
+        bool poweredDescent = mission?.Phase is MissionPhase.RETRO_BURN
+            or MissionPhase.FINAL_DESCENT
+            or MissionPhase.LANDED
+            or MissionPhase.CAUGHT;
+        bridge.SetTimeScale(poweredDescent ? 1.0 : 3.0);
     }
 
     private void MonitorAscent(
@@ -2302,7 +2393,64 @@ public partial class _PlaytestShot : Node
         _visualConfigurationApplied = true;
     }
 
-    private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
+      private void ProcessStarbaseFarField(SimulationBridge bridge, Vessel vessel,
+          Universe universe, CelestialBody body)
+      {
+          if (!_starbaseFarSeeded && _readyFrames >= 45)
+          {
+              if (!string.Equals(body.Id, "earth", StringComparison.OrdinalIgnoreCase)
+                  || !bridge.LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase)
+                  || bridge.LaunchSiteOrNull == null)
+              {
+                  _log.WriteLine($"FAIL starbase_far_invalid_site body={body.Id} " +
+                      $"site={bridge.LaunchSiteId}");
+                  _log.Flush();
+                  Finish("STARBASE_FAR_INVALID_SITE");
+                  return;
+              }
+
+              const double targetAltitudeM = 12_000.0;
+              Vector3d sitePosition = bridge.LaunchSiteOrNull.GetPosition(
+                  body, universe.CurrentTime);
+              Vector3d up = (sitePosition - body.Position).Normalized;
+              vessel.Position = body.GetPositionAlongDirection(up, targetAltitudeM);
+              vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
+              vessel.PrepareForTeleport();
+              vessel.ReferenceBodyId = body.Id;
+              vessel.IsGroundHeld = false;
+              vessel.Throttle = 0.0;
+              vessel.AngularVelocity = Vector3d.Zero;
+              MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+              bridge.SetTimeScale(0.0);
+
+              // At 12 km altitude, this side-on frame places the launch site below the
+              // vehicle without making the contextual LOD a sub-pixel dot. The camera
+              // distance is render-space units (metres / 2.8), matching production.
+              CameraController.Instance?.SetExternalChaseFrame(0f, 60f, 4_200f);
+              // The site projects under the central T+ counter. Keep telemetry in the
+              // log, but remove HUD occlusion from this terrain-inspection fixture.
+              if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+                  hud.Visible = false;
+              _log.WriteLine($"STARBASE_FAR_SETUP site={bridge.LaunchSiteId} " +
+                  $"targetAlt={targetAltitudeM:F0} cameraDistanceRender=4200 " +
+                  "cameraPitchDeg=60 timeScale=0 source=public_site_frame");
+              _log.Flush();
+              _starbaseFarSeeded = true;
+              _readyFrames = 0;
+              return;
+          }
+
+          if (_starbaseFarSeeded && !_orbitBeauty && _pendingSlug == null
+              && _readyFrames >= 45)
+          {
+              QueueCapture("starbase_far");
+              _orbitBeauty = true;
+          }
+          if (_orbitBeauty && _pendingSlug == null)
+              Finish("STARBASE_FAR_OK");
+      }
+
+      private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
         Vessel vessel, Universe universe, CelestialBody body)
     {
         if (_spectralOracle == null || _spectralBodyId != body.Id)
@@ -2807,10 +2955,11 @@ public partial class _PlaytestShot : Node
         // intact for the capture.
         var hud = GetTree().Root.FindChild("HUDController", true, false) as HUDController;
         hud?.DismissPadHelp();
-        LogHotStageVisualTelemetry(slug);
-        LogReentryVisualTelemetry(slug);
-        LogLaunchComplexVisualTelemetry(slug);
-        LogEngineVisualTelemetry(slug);
+          LogHotStageVisualTelemetry(slug);
+          LogReentryVisualTelemetry(slug);
+          LogLaunchComplexVisualTelemetry(slug);
+          LogStarbaseFarFieldVisualTelemetry(slug);
+          LogEngineVisualTelemetry(slug);
         // Headless runs are telemetry-only diagnostics: the dummy renderer has no
         // framebuffer texture, but scene framing/planet placement telemetry still
         // remains valid. Keep that evidence identical across real and dummy paths so
@@ -2870,8 +3019,8 @@ public partial class _PlaytestShot : Node
         _log.Flush();
     }
 
-    private void LogLaunchComplexVisualTelemetry(string slug)
-    {
+      private void LogLaunchComplexVisualTelemetry(string slug)
+      {
         if (slug is not ("pad" or "liftoff")) return;
 
         var pad = GetTree().Root.FindChild(
@@ -2905,8 +3054,55 @@ public partial class _PlaytestShot : Node
             + $"floodlightsActive={pad.NightFloodlightsActive} "
             + $"delugeOutlets={delugeOutlets} tankBodies={tankBodies} "
             + $"chopsticks={chopsticks}");
-        _log.Flush();
-    }
+          _log.Flush();
+      }
+
+      private void LogStarbaseFarFieldVisualTelemetry(string slug)
+      {
+          if (slug != "starbase_far") return;
+
+          var pad = GetTree().Root.FindChild(
+              "LaunchPadController", true, false) as LaunchPadController;
+          _log.WriteLine($"VISUAL_STARBASE_FAR slug={slug} " +
+              $"source={pad?.FarFieldSource ?? "missing"} " +
+              $"visible={pad?.FarFieldVisible ?? false} " +
+              $"heroVisible={pad?.Visible ?? false} " +
+              $"opacity={pad?.FarFieldOpacity ?? 0f:F3}");
+          // Inspect the meshes actually instantiated by production, not source strings.
+          // Godot front faces use clockwise winding: upward-facing terrain has a
+          // negative Y cross product, unlike the conventional CCW normal formula.
+          var context = GetTree().Root.FindChild("StarbaseFarField", true, false);
+          int topTriangles = 0, backFacing = 0;
+          if (context != null)
+          foreach (Node child in context.GetChildren())
+          {
+              if (child is not MeshInstance3D mesh || mesh.Mesh is not ArrayMesh)
+                  continue;
+              var vertices = mesh.Mesh.GetFaces();
+              for (int i = 0; i + 2 < vertices.Length; i += 3)
+              {
+                  Vector3 normal = (vertices[i + 1] - vertices[i])
+                      .Cross(vertices[i + 2] - vertices[i]);
+                  if (normal.LengthSquared() < 1e-12f
+                      || Mathf.Abs(normal.Normalized().Y) < 0.8f)
+                      continue;
+                  topTriangles++;
+                  if (normal.Y > 0f) backFacing++;
+              }
+          }
+          _log.WriteLine($"VISUAL_STARBASE_GEOMETRY topTriangles={topTriangles} "
+              + $"backFacing={backFacing}");
+          var camera = GetViewport().GetCamera3D();
+          if (context is Node3D root && camera != null)
+          {
+              var screen = camera.UnprojectPosition(root.GlobalPosition);
+              _log.WriteLine($"VISUAL_STARBASE_PROJECTION inFrustum={camera.IsPositionInFrustum(root.GlobalPosition)} "
+                  + $"screenX={screen.X:F2} screenY={screen.Y:F2} "
+                  + $"distanceRender={camera.GlobalPosition.DistanceTo(root.GlobalPosition):F2} "
+                  + $"rootX={root.GlobalPosition.X:F2} rootY={root.GlobalPosition.Y:F2} rootZ={root.GlobalPosition.Z:F2}");
+          }
+          _log.Flush();
+      }
 
     private void LogEngineVisualTelemetry(string slug)
     {
@@ -3205,21 +3401,6 @@ public partial class _PlaytestShot : Node
                 + $"peakRotStepDeg={cameraController.ShakePeakRotationStepDegreesPerSecond:F4} "
                 + $"peakFovStep={cameraController.ShakePeakFovStepPerSecond:F4}");
         _log.Flush();
-    }
-
-    private static void SetPropellantReserve(Vessel vessel, double reserveFrac)
-    {
-        foreach (var p in vessel.Parts.Parts)
-        {
-            double cap = p.Definition.FuelCapacityLF + p.Definition.FuelCapacityOx;
-            if (cap <= 0.0) continue;
-            double target = cap * reserveFrac;
-            double fuelFraction = cap > 1e-9
-                ? p.Definition.FuelCapacityLF / cap
-                : 0.45;
-            p.LiquidFuel = target * fuelFraction;
-            p.Oxidizer = target * (1.0 - fuelFraction);
-        }
     }
 
     private static Quaterniond ShortestArc(Vector3d from, Vector3d to)
@@ -3530,11 +3711,51 @@ verify_pngs() {
         found = 1
       }
       END { exit !(found && mean > 0.005 && clipped < 0.10 && neon < 0.001) }
-    ' "$LOG"; then
-      echo "ERROR: smoke image is empty, clipped, or contaminated by neon-green artifacts" >&2
-      return 1
-    fi
-  elif [[ "$MODE" == "ascent" ]]; then
+      ' "$LOG"; then
+        echo "ERROR: smoke image is empty, clipped, or contaminated by neon-green artifacts" >&2
+        return 1
+      fi
+    elif [[ "$MODE" == "starbase_far" ]]; then
+      if ! rg -q '^VISUAL_STARBASE_GEOMETRY topTriangles=[1-9][0-9]* backFacing=0$' "$LOG"; then
+        echo "ERROR: Starbase terrain is missing or faces away from the overhead camera" >&2
+        return 1
+      fi
+      if [[ ! -f "$OUT_DIR/exo_play_starbase_far.png" ]]; then
+        echo "ERROR: missing Starbase far-field milestone PNG" >&2
+        return 1
+      fi
+      if ! grep -q 'SUMMARY reason=STARBASE_FAR_OK' "$LOG"; then
+        echo "ERROR: Starbase far-field capture did not finish cleanly" >&2
+        return 1
+      fi
+      if ! grep -Eq '^VISUAL_STARBASE_FAR slug=starbase_far source=OSM\+3DEP visible=True heroVisible=False opacity=[01]\.[0-9]+' "$LOG"; then
+        echo "ERROR: Starbase far-field capture did not prove mapped source and exclusive visibility" >&2
+        return 1
+      fi
+      if ! grep -Eq '^VISUAL_COMPOSITOR slug=starbase_far .*padVisible=False .*farFieldVisible=True .*farFieldOpacity=[01]\.[0-9]+' "$LOG"; then
+        echo "ERROR: compositor telemetry did not prove the Starbase hero/far-field handoff" >&2
+        return 1
+      fi
+      if ! awk '
+        /^CAPTURE starbase_far / {
+          for (i = 1; i <= NF; i++) {
+            if ($i ~ /^alt=/) { split($i, p, "="); alt = p[2] + 0 }
+          }
+          capture = 1
+        }
+        /^IMAGE slug=starbase_far / {
+          for (i = 1; i <= NF; i++) {
+            if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+            if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+          }
+          image = 1
+        }
+        END { exit !(capture && image && alt >= 12000 && alt <= 40000 && mean > 0.005 && clipped < 0.10) }
+      ' "$LOG"; then
+        echo "ERROR: Starbase far-field capture is outside the 12–40 km corridor or visually invalid" >&2
+        return 1
+      fi
+    elif [[ "$MODE" == "ascent" ]]; then
     local required=(pad liftoff maxq hotstage separation orbit)
     for slug in "${required[@]}"; do
       if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
@@ -3610,7 +3831,7 @@ verify_pngs() {
     fi
   elif [[ "$MODE" == "orbital_reentry" ]]; then
     local required=(orbital_reentry_orbit orbital_reentry_entry
-      orbital_reentry_peak_heating orbital_reentry_retro_burn orbital_reentry_caught)
+      orbital_reentry_peak_heating orbital_reentry_retro_burn)
     for slug in "${required[@]}"; do
       if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
         echo "ERROR: missing normal orbital reentry milestone PNG: exo_play_${slug}.png" >&2
@@ -3629,8 +3850,18 @@ verify_pngs() {
       echo "ERROR: missing normal map deorbit/autopilot evidence" >&2
       return 1
     fi
-    if ! grep -Eq 'CHECK orbital_reentry caught=True pins=[2-9][0-9]* relativeSpeed=[0-9.]+ angularSpeed=[0-9.]+ normalFlow=True demo=False' "$LOG"; then
-      echo "ERROR: normal orbital reentry lacks a settled physical tower catch" >&2
+    if [[ -f "$OUT_DIR/exo_play_orbital_reentry_caught.png" ]]; then
+      if ! grep -Eq 'CHECK orbital_reentry caught=True pins=[2-9][0-9]* relativeSpeed=[0-9.]+ angularSpeed=[0-9.]+ normalFlow=True demo=False' "$LOG"; then
+        echo "ERROR: orbital reentry catch capture lacks a settled physical tower catch" >&2
+        return 1
+      fi
+    elif [[ -f "$OUT_DIR/exo_play_orbital_reentry_landed.png" ]]; then
+      if ! grep -Eq 'CHECK orbital_reentry landed=True contacts=[3-9][0-9]* surfaceSpeed=[0-9.]+ angularSpeed=[0-9.]+ normalFlow=True demo=False' "$LOG"; then
+        echo "ERROR: orbital reentry landing capture lacks three settled physical leg contacts" >&2
+        return 1
+      fi
+    else
+      echo "ERROR: normal orbital reentry lacks a final tower-catch or physical-landing capture" >&2
       return 1
     fi
     if grep -Eq '^(FAIL|GAP) ' "$LOG"; then
@@ -4408,6 +4639,8 @@ if [[ "$MODE" == "smoke" ]]; then
   echo "visual_playtest: smoke OK"
 elif [[ "$MODE" == "ascent" ]]; then
   echo "visual_playtest: focused ascent diagnostics OK — stable orbit verified"
+elif [[ "$MODE" == "starbase_far" ]]; then
+  echo "visual_playtest: Starbase far-field geometry/capture checks OK — visual review still required"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
 elif [[ "$MODE" == "orbital_reentry" ]]; then

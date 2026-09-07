@@ -94,6 +94,16 @@ if ! rg -q 'BuildMappedFarFieldContext' "$ROOT/scripts/StarbaseFarField.cs" \
 fi
 echo "PASS Starbase far-field reuses mapped OSM/3DEP context with source telemetry"
 
+if ! rg -q -- '--starbase-far' "$HARNESS_SCRIPT" \
+  || ! rg -q 'MODE="starbase_far"' "$HARNESS_SCRIPT" \
+  || ! rg -q 'ProcessStarbaseFarField' "$HARNESS_SCRIPT" \
+  || ! rg -q 'STARBASE_FAR_OK' "$HARNESS_SCRIPT" \
+  || ! rg -q 'VISUAL_STARBASE_FAR' "$HARNESS_SCRIPT"; then
+  echo "FAIL Starbase corridor visual fixture is not wired into the harness" >&2
+  exit 1
+fi
+echo "PASS Starbase 12–40 km corridor fixture is wired into the harness"
+
 # Both Godot launch paths must override the default user://logs destination.
 # That default can fail to create its parent directory in the Xvfb environment
 # and caused Godot 4.6.3 to abort before the scene loaded.

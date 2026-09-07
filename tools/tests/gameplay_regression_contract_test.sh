@@ -51,14 +51,21 @@ require_pattern scripts/SimulationBridge.cs 'activeCatch' 'active catch keeps la
 require_pattern scripts/SimulationBridge.cs 'activeEarth' 'Earth launch complex visibility is body-gated'
 require_pattern scripts/AutopilotController.cs 'BurnDampingGain' 'deorbit autopilot uses damped retrograde alignment'
 require_pattern scripts/AutopilotController.cs '_burnCommandCommitted' 'deorbit burn does not restart engines on alignment oscillation'
+require_pattern scripts/AutopilotController.cs 'ProcessPriority = 150' 'deorbit autopilot wins the guidance writer order'
+require_pattern scripts/AutopilotController.cs 'Eccentricity < 0.01' 'near-circular deorbit burns immediately at the current node'
+require_pattern scripts/AutopilotController.cs 'PeriapsisRadius <= _targetPeriapsisRadius' 'deorbit burn closes on live periapsis'
 require_pattern scripts/ManeuverPlanner.cs 'DefaultDeorbitTargetPeAltitudeM = 60_000.0' 'player deorbit preset has a deep atmospheric target'
+require_pattern scripts/ManeuverPlanner.cs 'TargetPeriapsisRadius' 'deorbit planner exposes its bounded target'
 require_pattern ExosphereSimulation/Physics/AerodynamicsModel.cs 'ComputeLiftDownEntryAxis' 'catch approach uses inward aerodynamic lift'
 require_pattern scripts/EDLController.cs 'aeroPhase && vDown > 5.0 && _alt <= flipAlt' 'normal EDL flip gate is explicit'
 require_pattern scripts/EDLController.cs 'RatedClusterThrust(engineCluster, vessel.GetAmbientPressure(body))' 'EDL flip timing uses nominal thrust before ignition'
 require_pattern scripts/EDLController.cs 'engineCluster.Definition.ThrustVac' 'EDL has a legacy thrust fallback for staged runtime hydration'
-require_pattern tools/visual_playtest.sh 'const double orbitalReturnReserve = 0.45;' 'orbital reentry reserves propellant for deorbit and landing'
-require_pattern tools/visual_playtest.sh 'SetPropellantReserve(vessel, orbitalReturnReserve)' 'orbital reentry seeds a deterministic reserve'
-require_pattern tools/visual_playtest.sh 'deorbit+landing reserve' 'orbital reserve is visible in acceptance telemetry'
+require_pattern tools/visual_playtest.sh 'source=map_deorbit_autopilot' 'full mission uses the production deorbit autopilot'
+require_pattern tools/visual_playtest.sh 'teleport=False fuelReseed=False' 'full mission preserves continuous position and propellant'
+if rg -q --fixed-strings 'SetPropellantReserve(vessel' "$ROOT/tools/visual_playtest.sh"; then
+  echo "FAIL full mission still rewrites propellant" >&2
+  exit 1
+fi
 
 # Every reentry-capable legacy Starship definition has catch pins, and visual
 # acceptance recognizes the simulator's CAUGHT terminal phase.
