@@ -33,10 +33,13 @@ rg -q --fixed-strings 'Mathf.Abs(scale - _lastChopstickScale) > 0.0001f' "$PAD" 
   || fail "chopstick pose threshold missing"
 rg -q --fixed-strings 'float target = CatchCaptured ? 1f : 0f;' "$PAD" \
   || fail "chopstick close pose is no longer catch-authoritative"
-rg -q --fixed-strings 'PadVisibilityCeilingM = 12_000.0' "$PAD" \
-  || fail "orbital pad visibility ceiling missing"
-rg -q --fixed-strings 'public const double PadVisibilityCeilingM = 12_000.0;' "$PAD" \
-  || fail "pad visibility ceiling is not exposed to the bridge"
+# The detailed pad must retire before the 12 km far-field acceptance frame.
+# Allow tuning inside the regional handoff instead of pinning an obsolete literal.
+awk '/public const double PadVisibilityCeilingM =/ {
+  value = $6; gsub(/[_;]/, "", value);
+  if (value + 0 >= 3500 && value + 0 < 12000) valid = 1;
+} END { exit !valid }' "$PAD" \
+  || fail "public pad visibility ceiling must retire hero geometry before 12 km"
 rg -q --fixed-strings 'PadVisibilityCeilingM' "$ROOT/scripts/SimulationBridge.cs" \
   || fail "pad visibility is not updated from bridge altitude/catch state"
 
