@@ -57,13 +57,12 @@ if rg -q 'float x = 120f|float px = 260f|DrawGLoad\(new Vector2' "$EDL"; then
   fail "legacy fixed telemetry/thermal coordinates remain"
 fi
 
-# Keep the x-separation explicit and proportional at every supported viewport scale:
-# telemetry ends at margin+350*scale and thermal starts at margin+400*scale.
+# Telemetry ends above the attitude cluster; thermal occupies the right edge.
 rg -q 'margin \+ 120f \* scale' "$EDL" \
   || fail "telemetry column anchor changed unexpectedly"
-rg -q 'new Vector2\(230f \* scale, 250f \* scale\)' "$EDL" \
+rg -q 'new Vector2\(230f \* scale, 190f \* scale\)' "$EDL" \
   || fail "telemetry reservation size changed unexpectedly"
-rg -q 'margin \+ 400f \* scale' "$EDL" \
+rg -q 'viewport.X - 266f \* scale' "$EDL" \
   || fail "thermal column is not separated from telemetry"
 rg -q 'new Vector2\(250f \* scale, 250f \* scale\)' "$EDL" \
   || fail "thermal reservation size changed unexpectedly"

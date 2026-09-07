@@ -10,6 +10,40 @@ using Xunit;
 
 public sealed class FlightHudPresenterTests
 {
+    [Theory]
+    [InlineData("ASCENT_SH", 300.0, true, FlightAlertSeverity.Advisory)]
+    [InlineData("MAX_Q", 300.0, true, FlightAlertSeverity.Advisory)]
+    [InlineData("ASCENT_SHIP", 300.0, true, FlightAlertSeverity.Advisory)]
+    [InlineData("MAX_Q", -100.0, true, FlightAlertSeverity.Critical)]
+    [InlineData("MAX_Q", 300.0, false, FlightAlertSeverity.Critical)]
+    [InlineData("COAST", 300.0, true, FlightAlertSeverity.Critical)]
+    [InlineData("ENTRY", -100.0, true, FlightAlertSeverity.Critical)]
+    public void ImpactAlert_DistinguishesPoweredLaunchFromActualDescent(
+        string phase, double verticalSpeed, bool powered, FlightAlertSeverity severity)
+    {
+        var (universe, body, vessel, _) = CreateVehicle();
+        var catalog = PartCatalog.LoadFromDirectory(
+            Path.Combine(FindRepoRoot().FullName, "data", "parts"));
+        var engine = new Part(catalog["starship_engines"], "trajectory-engine");
+        engine.ThrottleLevel = powered ? 1.0 : 0.0;
+        if (powered)
+            for (int i = 0; i < 100; i++) engine.AdvanceEngineRuntime(1.0, 0.02);
+        vessel.Parts.SetRoot(engine);
+        vessel.Position = body.GetPositionAlongDirection(Vector3d.Right, 8_000.0);
+        vessel.Velocity = body.Velocity + new Vector3d(verticalSpeed, 0.0, 300.0);
+        var presenter = new FlightHudPresenter();
+        var snapshot = presenter.Capture(universe, vessel, phase, FlightHudViewMode.Exterior);
+        Assert.True(snapshot.IsImpactTrajectory);
+        var alert = Assert.Single(snapshot.Alerts, a => a.Code == "TRAJECTORY");
+        Assert.Equal(severity, alert.Severity);
+
+        // An already-latched advisory must escalate immediately when the climb ends.
+        vessel.Velocity = body.Velocity + new Vector3d(-100.0, 0.0, 300.0);
+        var descending = presenter.Capture(universe, vessel, phase, FlightHudViewMode.Exterior);
+        Assert.Equal(FlightAlertSeverity.Critical,
+            Assert.Single(descending.Alerts, a => a.Code == "TRAJECTORY").Severity);
+    }
+
     [Fact]
     public void Capture_ProducesOrbitalSnapshotWithoutUiPhysics()
     {

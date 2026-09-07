@@ -219,6 +219,7 @@ public sealed class FlightHudPresenter
             oxidizerCapacity,
             oxidizerFraction,
             impactTrajectory,
+            verticalSpeed > 0.0 && engineTelemetry.ThrustN > 1.0,
             nominalEngines,
             failedEngines);
 
@@ -297,6 +298,7 @@ public sealed class FlightHudPresenter
         double oxidizerCapacity,
         double oxidizerFraction,
         bool impactTrajectory,
+        bool poweredClimb,
         int nominalEngines,
         int failedEngines)
     {
@@ -328,13 +330,17 @@ public sealed class FlightHudPresenter
         SetLatch("TRAJECTORY", activeFlight && impactTrajectory, !impactTrajectory);
         if (_latchedAlerts.Contains("TRAJECTORY"))
         {
+            // An osculating orbit assumes thrust stops now. Below-surface periapsis
+            // is expected during a powered launch, but must remain visible as context.
+            bool expectedAscent = poweredClimb && phase is
+                "LIFTOFF" or "ASCENT_SH" or "MAX_Q" or "MECO" or "SEPARATION" or "ASCENT_SHIP";
             _alertScratch.Add(new FlightAlertSnapshot(
                 "TRAJECTORY",
-                FlightAlertSeverity.Critical,
-                "IMPACT TRAJECTORY",
+                expectedAscent ? FlightAlertSeverity.Advisory : FlightAlertSeverity.Critical,
+                expectedAscent ? "SUBORBITAL ASCENT" : "IMPACT TRAJECTORY",
                 "PERIAPSIS BELOW SURFACE",
                 "PERIAPSIS 0 m",
-                "Raise periapsis or prepare for entry",
+                expectedAscent ? "Continue ascent; monitor insertion" : "Raise periapsis or prepare for entry",
                 _acknowledgedAlerts.Contains("TRAJECTORY")));
         }
 

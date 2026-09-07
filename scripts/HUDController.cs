@@ -143,6 +143,10 @@ public partial class HUDController : Control
         _navball = new AttitudeNavball { Name = "Navball" };
         _navball.ZIndex = 30;
         AddChild(_navball);
+        // The fixed heading tape ends at y=194. Reserve two independent text
+        // rows below it; the original 202 px height drew target pitch on the tape.
+        _navball.CustomMinimumSize = new Vector2(184f, 232f);
+        _navball.Size = _navball.CustomMinimumSize;
 
         _engineGrid = new EngineGridHUD { Name = "EngineGridHUD" };
         _attitudeStrip = new AttitudeDataStrip { Name = "AttitudeDataStrip" };
@@ -156,7 +160,8 @@ public partial class HUDController : Control
         _engineGrid.Position = new Vector2(-(EngineGridHUD.BoardWidth + gap), 8f);
         _attitudeStrip.Position = new Vector2(navW + gap, 8f);
         _engineGrid.Size = new Vector2(EngineGridHUD.BoardWidth, EngineGridHUD.BoardHeightCompact);
-        _attitudeStrip.Size = new Vector2(AttitudeDataStrip.BoardWidth, AttitudeDataStrip.BoardHeight);
+        // Long failure values (RESTART LIMIT) must not run through the FAIL caption.
+        _attitudeStrip.Size = new Vector2(160f, AttitudeDataStrip.BoardHeight);
     }
 
     private void BuildDensityToast()
@@ -269,7 +274,7 @@ public partial class HUDController : Control
         center.OffsetLeft = -320;
         center.OffsetTop = 18;
         center.OffsetRight = 320;
-        center.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.62f, 12, 18, 10));
+        center.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.42f, 8, 12, 6));
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
 
@@ -370,7 +375,7 @@ public partial class HUDController : Control
             HorizontalAlignment = HorizontalAlignment.Center,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            MaxLinesVisible = 1,
+            MaxLinesVisible = 2,
             TextOverrunBehavior = TextServer.OverrunBehavior.TrimWordEllipsis,
         };
         InterfaceTheme.ApplyBody(_alertAction, 10);
@@ -949,7 +954,11 @@ public partial class HUDController : Control
     {
         if (EDLController.Instance?.BannerStatus is { Length: > 0 } edl)
         {
-            _guidanceLabel.Text = edl;
+            // EDL replaces the large reference sidebars. Keep reserve and aero-load
+            // safety data visible alongside the dedicated thermal/load instruments.
+            _guidanceLabel.Text = _snapshot is { } data
+                ? $"{edl} · LF {data.LiquidFuelFraction:P0} · OX {data.OxidizerFraction:P0} · q {data.DynamicPressurePa / 1000.0:F1} kPa"
+                : edl;
             return;
         }
 
@@ -1020,7 +1029,8 @@ public partial class HUDController : Control
             $"{alert.Severity.ToString().ToUpperInvariant()}  {alert.Title}";
         _alertLabel.AddThemeColorOverride(
             "font_color",
-            alert.Severity == FlightAlertSeverity.Critical ? FuelLowCol : WarnCol);
+            alert.Severity == FlightAlertSeverity.Critical ? FuelLowCol
+                : alert.Severity == FlightAlertSeverity.Advisory ? InterfaceTheme.Orbital : WarnCol);
         _alertAction.Text =
             $"{alert.Value} / LIMIT {alert.Limit}  ·  ACTION: {alert.RecommendedAction}{acknowledgement}";
     }
@@ -1044,6 +1054,26 @@ public partial class HUDController : Control
         // the layout cache early-return so new alerts appear and cleared alerts disappear.
         _alertRoot.Visible = _hasRenderedAlert && (banner || criticalOnly);
 
+        // Refresh content visibility and geometry even when only camera mode, EDL
+        // state, viewport size or alert content changes (not the density setting).
+        _phaseRoot.Visible = banner || criticalOnly;
+        _launchPathLabel.Visible = banner && _launchPathLabel.Text.Length > 0;
+        _guidanceLabel.Visible = banner && _guidanceLabel.Text.Length > 0;
+        _boosterLabel.Visible = banner && _boosterLabel.Text.Length > 0;
+        _phaseRoot.Size = new Vector2(_phaseRoot.Size.X, 0f);
+        bool edlActive = EDLController.Instance?.BannerStatus != null;
+        _leftRoot.Visible = exterior && full && !edlActive;
+        _rightRoot.Visible = exterior && full && !edlActive;
+        _navball.SetClusterBottomOffset(clean ? -16f : full ? -120f : -90f);
+        bool sideCluster = exterior && (edlActive || CameraController.Instance?.Mode == CameraMode.Pad);
+        float clusterOffset = sideCluster
+            ? -Mathf.Clamp(GetViewportRect().Size.X * 0.22f, 140f, 280f) : 0f;
+        _navball.SetClusterHorizontalOffset(clusterOffset);
+        // Centered navball needs the clock above its full height; side placement
+        // leaves the clock in the open central lane.
+        _timeRoot.OffsetBottom = sideCluster ? -220f : -330f;
+        _timeRoot.OffsetLeft = sideCluster ? GetViewportRect().Size.X * 0.5f : 0f;
+
         if (_lastAppliedViewMode == viewMode && _lastAppliedHudDensity == density)
             return;
         _lastAppliedViewMode = viewMode;
@@ -1051,15 +1081,13 @@ public partial class HUDController : Control
 
         // Secondary reference panels (loads/trajectory, orbit/vehicle, event log) are the
         // first thing to go: everything they carry is diagnostic, not fly-the-vehicle data.
-        _leftRoot.Visible = exterior && full;
-        _rightRoot.Visible = exterior && full;
         _bottomRoot.Visible = exterior && !clean;
         _timeRoot.Visible = exterior && !clean;
         ApplyBandScale(full);
 
         _phaseRoot.Visible = banner || criticalOnly;
         _phaseLabel.Visible = banner;
-        _launchPathLabel.Visible = banner;
+        _launchPathLabel.Visible = banner && _launchPathLabel.Text.Length > 0;
         _guidanceLabel.Visible = banner && _guidanceLabel.Text.Length > 0;
         _boosterLabel.Visible = banner && _boosterLabel.Text.Length > 0;
         _navRow.Visible = banner && full;
@@ -1081,18 +1109,6 @@ public partial class HUDController : Control
         _engineGrid.Visible = cluster;
         _attitudeStrip.Visible = cluster;
         _engineGrid.ApplyDensityLayout();
-        // Sit above the SPEED/ALT band in Minimal/Full; drop lower when Clean hides it.
-        _navball.SetClusterBottomOffset(clean ? -36f : -108f);
-
-        // Keep the launch vehicle and pad effects readable in the exterior pad camera.
-        // The centered instrument cluster otherwise covers the plume, tower, and the
-        // separation between the vehicle and the ground. Chase/cockpit compositions retain
-        // their centered layout when the pad camera hands off above the lower atmosphere.
-        bool padComposition = exterior && CameraController.Instance?.Mode == CameraMode.Pad;
-        float horizontalOffset = padComposition
-            ? -Mathf.Clamp(GetViewportRect().Size.X * 0.22f, 140f, 280f)
-            : 0f;
-        _navball.SetClusterHorizontalOffset(horizontalOffset);
     }
 
     private bool HasCriticalAlert() =>

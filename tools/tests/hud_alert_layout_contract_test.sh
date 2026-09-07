@@ -23,9 +23,11 @@ rg -q 'Name = "AlertLane"' "$HUD" \
 rg -q 'Name = "AlertRows"' "$HUD" \
   || fail "alert rows container missing"
 
-# The lane is exactly two one-line rows: summary and detail/action.
-[[ "$(rg -c 'MaxLinesVisible = 1' "$HUD")" -eq 2 ]] \
-  || fail "alert rows must each cap visible lines at one"
+# Summary stays compact; action text may wrap instead of losing the safety instruction.
+[[ "$(rg -c 'MaxLinesVisible = 1' "$HUD")" -eq 1 ]] \
+  || fail "alert summary must cap visible lines at one"
+rg -q 'MaxLinesVisible = 2' "$HUD" \
+  || fail "alert action must reserve two readable lines"
 [[ "$(rg -c 'AutowrapMode = TextServer\.AutowrapMode\.WordSmart' "$HUD")" -ge 5 ]] \
   || fail "word wrapping must remain configured for banner and alert text"
 [[ "$(rg -c 'TextOverrunBehavior = TextServer\.OverrunBehavior\.TrimWordEllipsis' "$HUD")" -eq 2 ]] \
