@@ -66,7 +66,7 @@ Options:
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --ship        Stage immediately and capture powered standalone Starship in vacuum.
-  --starbase-far Place the Starbase stack at 12 km and capture the mapped far-field handoff.
+  --starbase-far Capture the mapped Starbase far-field terrain at 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
   --saturn      Jump to Saturn and capture the imported ring texture.
@@ -561,7 +561,15 @@ public partial class _PlaytestShot : Node
     bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     int _beautyWaitFrames;
-  bool _edlSeeded, _flipComplete, _shipSeeded, _starbaseFarSeeded;
+    bool _edlSeeded, _flipComplete, _shipSeeded;
+    readonly (string Slug, double AltitudeM)[] _starbaseFarCases =
+    {
+        ("starbase_far_12km", 12_000.0),
+        ("starbase_far_20km", 20_000.0),
+        ("starbase_far_40km", 40_000.0),
+    };
+    int _starbaseFarCaseIndex = -1;
+    bool _starbaseFarCaptureQueued;
     bool _hudHelpDismissed;
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     double _nextFullTelemetry;
@@ -2393,62 +2401,81 @@ public partial class _PlaytestShot : Node
         _visualConfigurationApplied = true;
     }
 
-      private void ProcessStarbaseFarField(SimulationBridge bridge, Vessel vessel,
-          Universe universe, CelestialBody body)
-      {
-          if (!_starbaseFarSeeded && _readyFrames >= 45)
-          {
-              if (!string.Equals(body.Id, "earth", StringComparison.OrdinalIgnoreCase)
-                  || !bridge.LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase)
-                  || bridge.LaunchSiteOrNull == null)
-              {
-                  _log.WriteLine($"FAIL starbase_far_invalid_site body={body.Id} " +
-                      $"site={bridge.LaunchSiteId}");
-                  _log.Flush();
-                  Finish("STARBASE_FAR_INVALID_SITE");
-                  return;
-              }
+    private void ProcessStarbaseFarField(SimulationBridge bridge, Vessel vessel,
+        Universe universe, CelestialBody body)
+    {
+        if (_starbaseFarCaseIndex < 0 && _readyFrames >= 45)
+        {
+            if (!string.Equals(body.Id, "earth", StringComparison.OrdinalIgnoreCase)
+                || !bridge.LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase)
+                || bridge.LaunchSiteOrNull == null)
+            {
+                _log.WriteLine($"FAIL starbase_far_invalid_site body={body.Id} " +
+                    $"site={bridge.LaunchSiteId}");
+                _log.Flush();
+                Finish("STARBASE_FAR_INVALID_SITE");
+                return;
+            }
 
-              const double targetAltitudeM = 12_000.0;
-              Vector3d sitePosition = bridge.LaunchSiteOrNull.GetPosition(
-                  body, universe.CurrentTime);
-              Vector3d up = (sitePosition - body.Position).Normalized;
-              vessel.Position = body.GetPositionAlongDirection(up, targetAltitudeM);
-              vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
-              vessel.PrepareForTeleport();
-              vessel.ReferenceBodyId = body.Id;
-              vessel.IsGroundHeld = false;
-              vessel.Throttle = 0.0;
-              vessel.AngularVelocity = Vector3d.Zero;
-              MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
-              bridge.SetTimeScale(0.0);
+            _starbaseFarCaseIndex = 0;
+            SeedStarbaseFarCase(bridge, vessel, universe, body,
+                _starbaseFarCases[_starbaseFarCaseIndex]);
+            return;
+        }
 
-              // At 12 km altitude, this side-on frame places the launch site below the
-              // vehicle without making the contextual LOD a sub-pixel dot. The camera
-              // distance is render-space units (metres / 2.8), matching production.
-              CameraController.Instance?.SetExternalChaseFrame(0f, 60f, 4_200f);
-              // The site projects under the central T+ counter. Keep telemetry in the
-              // log, but remove HUD occlusion from this terrain-inspection fixture.
-              if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
-                  hud.Visible = false;
-              _log.WriteLine($"STARBASE_FAR_SETUP site={bridge.LaunchSiteId} " +
-                  $"targetAlt={targetAltitudeM:F0} cameraDistanceRender=4200 " +
-                  "cameraPitchDeg=60 timeScale=0 source=public_site_frame");
-              _log.Flush();
-              _starbaseFarSeeded = true;
-              _readyFrames = 0;
-              return;
-          }
+        if (_starbaseFarCaseIndex < 0)
+            return;
 
-          if (_starbaseFarSeeded && !_orbitBeauty && _pendingSlug == null
-              && _readyFrames >= 45)
-          {
-              QueueCapture("starbase_far");
-              _orbitBeauty = true;
-          }
-          if (_orbitBeauty && _pendingSlug == null)
-              Finish("STARBASE_FAR_OK");
-      }
+        if (!_starbaseFarCaptureQueued && _pendingSlug == null && _readyFrames >= 45)
+        {
+            QueueCapture(_starbaseFarCases[_starbaseFarCaseIndex].Slug);
+            _starbaseFarCaptureQueued = true;
+            return;
+        }
+
+        if (_starbaseFarCaptureQueued && _pendingSlug == null)
+        {
+            _starbaseFarCaptureQueued = false;
+            _starbaseFarCaseIndex++;
+            if (_starbaseFarCaseIndex >= _starbaseFarCases.Length)
+            {
+                Finish("STARBASE_FAR_OK");
+                return;
+            }
+
+            SeedStarbaseFarCase(bridge, vessel, universe, body,
+                _starbaseFarCases[_starbaseFarCaseIndex]);
+        }
+    }
+
+    private void SeedStarbaseFarCase(SimulationBridge bridge, Vessel vessel,
+        Universe universe, CelestialBody body, (string Slug, double AltitudeM) shot)
+    {
+        Vector3d sitePosition = bridge.LaunchSiteOrNull!.GetPosition(
+            body, universe.CurrentTime);
+        Vector3d up = (sitePosition - body.Position).Normalized;
+        vessel.Position = body.GetPositionAlongDirection(up, shot.AltitudeM);
+        vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
+        vessel.PrepareForTeleport();
+        vessel.ReferenceBodyId = body.Id;
+        vessel.IsGroundHeld = false;
+        vessel.Throttle = 0.0;
+        vessel.AngularVelocity = Vector3d.Zero;
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+        bridge.SetTimeScale(0.0);
+
+        // Keep the physical case at its requested altitude, but aim the camera at the
+        // launch site so each matrix member tests the same regional-ground composition.
+        CameraController.Instance?.SetExternalChaseFrame(
+            0f, 28f, 500f, -(float)(shot.AltitudeM / 2.8));
+        if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+            hud.Visible = false;
+        _log.WriteLine($"STARBASE_FAR_SETUP slug={shot.Slug} site={bridge.LaunchSiteId} " +
+            $"targetAlt={shot.AltitudeM:F0} cameraDistanceRender=500 " +
+            "cameraPitchDeg=28 lookAt=ground timeScale=0 source=public_site_frame");
+        _log.Flush();
+        _readyFrames = 0;
+    }
 
       private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
         Vessel vessel, Universe universe, CelestialBody body)
@@ -3057,9 +3084,9 @@ public partial class _PlaytestShot : Node
           _log.Flush();
       }
 
-      private void LogStarbaseFarFieldVisualTelemetry(string slug)
-      {
-          if (slug != "starbase_far") return;
+    private void LogStarbaseFarFieldVisualTelemetry(string slug)
+    {
+          if (!slug.StartsWith("starbase_far_", StringComparison.Ordinal)) return;
 
           var pad = GetTree().Root.FindChild(
               "LaunchPadController", true, false) as LaunchPadController;
@@ -3072,10 +3099,12 @@ public partial class _PlaytestShot : Node
           // Godot front faces use clockwise winding: upward-facing terrain has a
           // negative Y cross product, unlike the conventional CCW normal formula.
           var context = GetTree().Root.FindChild("StarbaseFarField", true, false);
-          int topTriangles = 0, backFacing = 0;
+          int topTriangles = 0, backFacing = 0, terrainTiles = 0;
           if (context != null)
           foreach (Node child in context.GetChildren())
           {
+              if (child.Name.ToString() == "Mapped3DepRelief")
+                  terrainTiles++;
               if (child is not MeshInstance3D mesh || mesh.Mesh is not ArrayMesh)
                   continue;
               var vertices = mesh.Mesh.GetFaces();
@@ -3090,16 +3119,51 @@ public partial class _PlaytestShot : Node
                   if (normal.Y > 0f) backFacing++;
               }
           }
-          _log.WriteLine($"VISUAL_STARBASE_GEOMETRY topTriangles={topTriangles} "
-              + $"backFacing={backFacing}");
+          _log.WriteLine($"VISUAL_STARBASE_GEOMETRY slug={slug} topTriangles={topTriangles} "
+              + $"backFacing={backFacing} terrainTiles={terrainTiles}");
+          _log.WriteLine($"VISUAL_STARBASE_TERRAIN_TILE slug={slug} source=USGS_3DEP "
+              + $"path=data/launch_sites/starbase_3dep_relief.json "
+              + $"edgeFade=radial reliefScale=0.55 built={terrainTiles > 0}");
           var camera = GetViewport().GetCamera3D();
           if (context is Node3D root && camera != null)
           {
               var screen = camera.UnprojectPosition(root.GlobalPosition);
-              _log.WriteLine($"VISUAL_STARBASE_PROJECTION inFrustum={camera.IsPositionInFrustum(root.GlobalPosition)} "
-                  + $"screenX={screen.X:F2} screenY={screen.Y:F2} "
-                  + $"distanceRender={camera.GlobalPosition.DistanceTo(root.GlobalPosition):F2} "
-                  + $"rootX={root.GlobalPosition.X:F2} rootY={root.GlobalPosition.Y:F2} rootZ={root.GlobalPosition.Z:F2}");
+              _log.WriteLine($"VISUAL_STARBASE_PROJECTION slug={slug} inFrustum={camera.IsPositionInFrustum(root.GlobalPosition)} "
+              + $"screenX={screen.X:F2} screenY={screen.Y:F2} "
+              + $"distanceRender={camera.GlobalPosition.DistanceTo(root.GlobalPosition):F2} "
+              + $"rootX={root.GlobalPosition.X:F2} rootY={root.GlobalPosition.Y:F2} rootZ={root.GlobalPosition.Z:F2}");
+
+              float minX = float.PositiveInfinity, minY = float.PositiveInfinity;
+              float maxX = float.NegativeInfinity, maxY = float.NegativeInfinity;
+              int projectedCorners = 0;
+              foreach (Node child in context.GetChildren())
+              {
+                  string name = child.Name.ToString();
+                  if (!name.Contains("MappedTower", StringComparison.Ordinal)
+                      && !name.Contains("MappedBuilding", StringComparison.Ordinal)
+                      && !name.Contains("MappedTank", StringComparison.Ordinal))
+                      continue;
+                  if (child is not MeshInstance3D structure || structure.Mesh == null)
+                      continue;
+                  Aabb bounds = structure.GetAabb();
+                  for (int corner = 0; corner < 8; corner++)
+                  {
+                      Vector3 local = bounds.Position + new Vector3(
+                          (corner & 1) == 0 ? 0f : bounds.Size.X,
+                          (corner & 2) == 0 ? 0f : bounds.Size.Y,
+                          (corner & 4) == 0 ? 0f : bounds.Size.Z);
+                      Vector2 projected = camera.UnprojectPosition(structure.GlobalTransform * local);
+                      minX = Mathf.Min(minX, projected.X);
+                      maxX = Mathf.Max(maxX, projected.X);
+                      minY = Mathf.Min(minY, projected.Y);
+                      maxY = Mathf.Max(maxY, projected.Y);
+                      projectedCorners++;
+                  }
+              }
+              float projectedWidth = projectedCorners > 0 ? maxX - minX : 0f;
+              float projectedHeight = projectedCorners > 0 ? maxY - minY : 0f;
+              _log.WriteLine($"VISUAL_STARBASE_STRUCTURES slug={slug} projectedCorners={projectedCorners} "
+                  + $"projectedWidthPx={projectedWidth:F2} projectedHeightPx={projectedHeight:F2}");
           }
           _log.Flush();
       }
@@ -3213,7 +3277,7 @@ public partial class _PlaytestShot : Node
                 // saturated green pixels across the limb as "neon"; subtle green emission
                 // remains valid and is reported separately as mean green excess.
                 if (x >= width * 0.10 && x < width * 0.90
-                    && y >= height * 0.36 && y < height * 0.62)
+                    && y >= height * 0.36 && y < height * 0.50)
                 {
                     limbSamples++;
                     double chroma = maxChannel - minChannel;
@@ -3716,45 +3780,67 @@ verify_pngs() {
         return 1
       fi
     elif [[ "$MODE" == "starbase_far" ]]; then
-      if ! rg -q '^VISUAL_STARBASE_GEOMETRY topTriangles=[1-9][0-9]* backFacing=0$' "$LOG"; then
+      if ! rg -q '^VISUAL_STARBASE_GEOMETRY slug=starbase_far_(12km|20km|40km) topTriangles=[1-9][0-9]* backFacing=0 terrainTiles=[1-9][0-9]*$' "$LOG"; then
         echo "ERROR: Starbase terrain is missing or faces away from the overhead camera" >&2
-        return 1
-      fi
-      if [[ ! -f "$OUT_DIR/exo_play_starbase_far.png" ]]; then
-        echo "ERROR: missing Starbase far-field milestone PNG" >&2
         return 1
       fi
       if ! grep -q 'SUMMARY reason=STARBASE_FAR_OK' "$LOG"; then
         echo "ERROR: Starbase far-field capture did not finish cleanly" >&2
         return 1
       fi
-      if ! grep -Eq '^VISUAL_STARBASE_FAR slug=starbase_far source=OSM\+3DEP visible=True heroVisible=False opacity=[01]\.[0-9]+' "$LOG"; then
-        echo "ERROR: Starbase far-field capture did not prove mapped source and exclusive visibility" >&2
-        return 1
-      fi
-      if ! grep -Eq '^VISUAL_COMPOSITOR slug=starbase_far .*padVisible=False .*farFieldVisible=True .*farFieldOpacity=[01]\.[0-9]+' "$LOG"; then
-        echo "ERROR: compositor telemetry did not prove the Starbase hero/far-field handoff" >&2
-        return 1
-      fi
-      if ! awk '
-        /^CAPTURE starbase_far / {
-          for (i = 1; i <= NF; i++) {
-            if ($i ~ /^alt=/) { split($i, p, "="); alt = p[2] + 0 }
+      local far_cases=(starbase_far_12km starbase_far_20km starbase_far_40km)
+      for slug in "${far_cases[@]}"; do
+        if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+          echo "ERROR: missing Starbase far-field milestone PNG: exo_play_${slug}.png" >&2
+          return 1
+        fi
+        if ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} source=OSM\+EarthGround visible=True heroVisible=False opacity=[01]\.[0-9]+" "$LOG"; then
+          echo "ERROR: ${slug} did not prove mapped source and exclusive visibility" >&2
+          return 1
+        fi
+        if ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*padVisible=False .*farFieldVisible=True .*farFieldOpacity=[01]\.[0-9]+" "$LOG"; then
+          echo "ERROR: compositor telemetry did not prove the ${slug} hero/far-field handoff" >&2
+          return 1
+        fi
+        if ! grep -Eq "^VISUAL_STARBASE_TERRAIN_TILE slug=${slug} source=USGS_3DEP .*edgeFade=radial .*built=True$" "$LOG"; then
+          echo "ERROR: ${slug} did not prove the source-derived 3DEP terrain tile" >&2
+          return 1
+        fi
+        if ! grep -Eq "^VISUAL_STARBASE_PROJECTION slug=${slug} inFrustum=True " "$LOG" \
+          || ! awk -v slug="$slug" '
+            $1 == "VISUAL_STARBASE_STRUCTURES" && $2 == "slug=" slug {
+              for (i = 1; i <= NF; i++) {
+                if ($i ~ /^projectedCorners=/) { split($i, p, "="); corners = p[2] + 0 }
+                if ($i ~ /^projectedWidthPx=/) { split($i, p, "="); width = p[2] + 0 }
+                if ($i ~ /^projectedHeightPx=/) { split($i, p, "="); height = p[2] + 0 }
+              }
+              found = 1
+            }
+            END { exit !(found && corners >= 8 && width >= 4 && height >= 8) }
+          ' "$LOG"; then
+          echo "ERROR: ${slug} did not project readable mapped structures" >&2
+          return 1
+        fi
+        if ! awk -v slug="$slug" '
+          $1 == "CAPTURE" && $2 == slug {
+            for (i = 1; i <= NF; i++) {
+              if ($i ~ /^alt=/) { split($i, p, "="); alt = p[2] + 0 }
+            }
+            capture = 1
           }
-          capture = 1
-        }
-        /^IMAGE slug=starbase_far / {
-          for (i = 1; i <= NF; i++) {
-            if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
-            if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+          $1 == "IMAGE" && $2 == "slug=" slug {
+            for (i = 1; i <= NF; i++) {
+              if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+              if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+            }
+            image = 1
           }
-          image = 1
-        }
-        END { exit !(capture && image && alt >= 12000 && alt <= 40000 && mean > 0.005 && clipped < 0.10) }
-      ' "$LOG"; then
-        echo "ERROR: Starbase far-field capture is outside the 12–40 km corridor or visually invalid" >&2
-        return 1
-      fi
+          END { exit !(capture && image && alt >= 12000 && alt <= 40000 && mean > 0.005 && clipped < 0.10) }
+        ' "$LOG"; then
+          echo "ERROR: ${slug} is outside the 12–40 km corridor or visually invalid" >&2
+          return 1
+        fi
+      done
     elif [[ "$MODE" == "ascent" ]]; then
     local required=(pad liftoff maxq hotstage separation orbit)
     for slug in "${required[@]}"; do

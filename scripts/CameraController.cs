@@ -32,6 +32,7 @@ public partial class CameraController : Node3D
     {
         _cockpit = true;
         _padPresetIdx = PadPresets.Length;
+        _externalLookAtY = null;
     }
 
     /// <summary>Return to an exterior chase view and frame the standalone Ship.</summary>
@@ -42,6 +43,7 @@ public partial class CameraController : Node3D
         Mode = CameraMode.Chase;
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
+        _externalLookAtY = null;
         _yaw = 28f;
         _pitch = 10f;
         // Frame the active geometry instead of assuming a 50 m Starship. Keep the
@@ -57,13 +59,15 @@ public partial class CameraController : Node3D
     }
 
     /// <summary>Set a deterministic external chase frame for visual acceptance scenes.</summary>
-    public void SetExternalChaseFrame(float yaw, float pitch, float distance)
+    public void SetExternalChaseFrame(float yaw, float pitch, float distance,
+        float? lookAtY = null)
     {
         _cockpit = false;
         _padPresetIdx = 0;
         Mode = CameraMode.Chase;
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
+        _externalLookAtY = lookAtY;
         _yaw = yaw;
         _pitch = Mathf.Clamp(pitch, -89f, 89f);
         _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
@@ -108,6 +112,7 @@ public partial class CameraController : Node3D
         Mode = CameraMode.Pad;
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
+        _externalLookAtY = null;
         _yaw = yaw;
         _pitch = Mathf.Clamp(pitch, -89f, 89f);
         _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
@@ -118,6 +123,7 @@ public partial class CameraController : Node3D
     private float _pitch    = 12f;
     private float _distance = 80f;   // full stack is ~43 units tall; 80 gives a nice frame
     private float? _presentationDistanceTarget;
+    private float? _externalLookAtY;
 
     // Event changes (Pad -> Chase, staging, and the return from EDL presentation) update
     // the requested frame below. Keep the rendered frame in local vessel coordinates and
@@ -339,7 +345,7 @@ public partial class CameraController : Node3D
         {
             // Pad/chase orbit framing.
             var active = bridge?.ActiveVessel;
-            float lookAtY = Mode == CameraMode.Pad ? 22f : 0f;
+            float lookAtY = _externalLookAtY ?? (Mode == CameraMode.Pad ? 22f : 0f);
             float requestedDistance = _presentationDistanceTarget ?? _distance;
             if (EDLController.Instance?.IsPresentationActive == true
                 && Mode == CameraMode.Chase)
@@ -361,8 +367,12 @@ public partial class CameraController : Node3D
             targetLookTarget = new Vector3(0f, lookAtY, 0f);
             if (Mode == CameraMode.Chase)
             {
-                targetCamPos += surfaceFrame.Inverse() * vesselCenter;
-                targetLookTarget = surfaceFrame.Inverse() * vesselCenter;
+                Vector3 localVesselCenter = surfaceFrame.Inverse() * vesselCenter;
+                targetCamPos += localVesselCenter;
+                // Preserve an externally authored ground/site target. Previously this
+                // assignment replaced the target with the vessel center, so a far-field
+                // fixture could move the camera down but still look back at the ship.
+                targetLookTarget += localVesselCenter;
             }
         }
 
