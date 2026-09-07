@@ -311,6 +311,8 @@ public partial class PlumeSystem : Node3D
             // than a tiny white cone. It fades before the camera's ascent handoff.
             if (u.IsSkirt && altitude > 140.0)
                 unitFiring = false;
+            float interactionOpacity = u.IsSkirt
+                ? 1f - Mathf.SmoothStep(30f, 140f, (float)altitude) : 1f;
             // ── Shader-driven core cone ──────────────────────────────────────
             u.Pivot.Visible = unitFiring;
             if (unitFiring)
@@ -336,7 +338,7 @@ public partial class PlumeSystem : Node3D
                 SetPlumeMaterial(
                     u.ConeMat, throttle, expansion, atmoPressure,
                     u.BaseEnergy * 0.58f * Mathf.Max(0.28f, activeFraction),
-                    outerOpacity, shockCellStrength, shockSpacing, shockSoftness,
+                    outerOpacity * interactionOpacity, shockCellStrength, shockSpacing, shockSoftness,
                     steamOcclusion, afterburnStrength, padInteraction, coreLayer: 0f,
                     farField: farField);
                 float farFieldCoreOpacity = farField
@@ -346,7 +348,7 @@ public partial class PlumeSystem : Node3D
                 SetPlumeMaterial(
                     u.CoreMat, throttle, expansion, atmoPressure,
                     farFieldCoreEnergy * Mathf.Max(0.28f, activeFraction),
-                    farFieldCoreOpacity, shockCellStrength * 0.72f, shockSpacing, shockSoftness,
+                    farFieldCoreOpacity * interactionOpacity, shockCellStrength * 0.72f, shockSpacing, shockSoftness,
                     steamOcclusion * 0.35f, afterburnStrength * 0.80f, padInteraction * 0.65f,
                     coreLayer: 1f, farField: farField);
                 u.Cone.Visible = unitFiring && !farField;
@@ -387,7 +389,7 @@ public partial class PlumeSystem : Node3D
             // pad-sized cloud.
             float smokePresence = Mathf.Clamp(1f - expansion * (u.IsSuperHeavy ? 0.92f : 1.12f), 0f, 1f);
             float smokeAmount = throttle * smokePresence * smokePresence * activeFraction
-                * groundInteraction * (u.IsSuperHeavy ? 0.88f : 0.20f);
+                * groundInteraction * interactionOpacity * (u.IsSuperHeavy ? 0.88f : 0.20f);
             u.Smoke.Emitting = unitFiring && !farField && smokeAmount > 0.02f;
             if (unitFiring)
             {
@@ -410,7 +412,7 @@ public partial class PlumeSystem : Node3D
             // only while the plume can still couple to the pad, preventing a
             // persistent soot cone or a vacuum dust trail.
             float dustAmount = throttle * groundInteraction * groundInteraction
-                * smokePresence * activeFraction * (u.IsSuperHeavy ? 0.36f : 0.035f);
+                * smokePresence * activeFraction * interactionOpacity * (u.IsSuperHeavy ? 0.36f : 0.035f);
             u.Dust.Emitting = unitFiring && !farField && dustAmount > 0.015f;
             if (unitFiring)
             {
@@ -435,7 +437,7 @@ public partial class PlumeSystem : Node3D
                     // altitude (nothing to light up in vacuum), flickers alive.
                     float groundBoost = 1f - altT * 0.45f;
                     u.Light.LightEnergy = (u.IsSuperHeavy ? 14.0f : 7.0f)
-                                        * throttle * groundBoost * flick * activeFraction;
+                                        * throttle * groundBoost * flick * activeFraction * interactionOpacity;
                     u.Light.OmniRange   = u.BaseLength
                                         * (u.IsSuperHeavy ? 2.8f : 1.8f)
                                         * (0.9f + throttle * 0.6f);

@@ -85,7 +85,7 @@ uniform float tail_radius : hint_range(0.02, 1.0) = 0.14;
 uniform float far_field : hint_range(0.0, 1.0) = 0.0;
 
 varying float v_axial;   // 0 at nozzle exit → 1 at plume tip (along the mesh -Y)
-varying float v_radial;  // 0 on axis → 1 at mesh skin
+varying vec3 v_view_radial; // radial normal, excluding the cone's axial slope
 
 void vertex() {
 	// The cone mesh is unit height (1.0), centred on its own origin: the wide
@@ -94,8 +94,10 @@ void vertex() {
 	// stage is scale-independent (PlumeSystem pre-scales the mesh non-uniformly).
 	v_axial  = clamp(0.5 - VERTEX.y, 0.0, 1.0);          // 0 at mouth → 1 at tip
 	// SH uses a contracting merged core; individual Ship plumes expand downstream.
-	float skin = mix(0.5, tail_radius, v_axial);
-	v_radial = clamp(length(VERTEX.xz) / max(skin, 0.02), 0.0, 1.0);
+	// Every cylinder vertex lies on the skin: length(xz)/skin is always one.
+	// Interpolate a radial normal instead so the fragment can estimate the
+	// projected chord through the gas, with a bright centre and transparent limb.
+	v_view_radial = MODELVIEW_NORMAL_MATRIX * normalize(vec3(VERTEX.x, 0.0, VERTEX.z));
 
 	// Subtle breathing of the skin so the envelope shimmers (cheap, vertex-rate).
 	float wob = 1.0 + 0.04 * sin(TIME * 37.0 + VERTEX.y * 9.0);
@@ -113,7 +115,8 @@ float noise1(float x) {
 
 void fragment() {
 	float a = v_axial;            // 0 = nozzle, 1 = tip
-	float r = v_radial;           // 0 = axis, 1 = skin
+	float facing = abs(dot(normalize(v_view_radial), normalize(VIEW)));
+	float r = sqrt(max(0.0, 1.0 - facing * facing));
 
 	// ── N7: reconcile the two control paths. PlumeSystem may write either
 	// expansion+throttle (legacy) or atmo_pressure+throttle_level (N7).
@@ -142,20 +145,13 @@ void fragment() {
 	// Tighter gaussian at SL (a pencil core), softer/broader in vacuum.
 	float falloff  = mix(3.6, 2.2, effExpansion);
 	float radial   = exp(-coreR * coreR * falloff);          // gaussian falloff
-	// CylinderMesh exposes the plume envelope, not volume samples through its
-	// axis. Preserve a luminous optically-thin sheath so the whole exhaust does
-	// not disappear when every visible fragment lies close to r=1.
-	// Keep a faint envelope so CylinderMesh skin is visible, but do not fill the
-	// whole cone to 0.48 — that reads as a solid white teardrop in daylight.
-	// CylinderMesh only shades the envelope (r≈1). A tiny floor makes daylight mix
-	// erase the column; a 0.48 floor plus 2.3× energy made a white teardrop.
-    float vacuumSkin = mix(0.14, 0.22, far_field);
-    float skin = mix(0.34, vacuumSkin, effExpansion) * (1.0 - 0.40 * a);
-	radial = max(radial, skin);
+	// A short path through the limb emits less light. No constant skin floor:
+	// it paints the polygon outline and turns overlapping shells into solids.
+	radial *= smoothstep(0.0, 0.35, facing);
 
 	// ── Axial envelope: full near the nozzle, fades toward the tip. Vacuum
 	// plumes reach much farther before fading (the long faint core). ─────────
-	float axialEnv = smoothstep(1.0, 0.5 * reach, a) * smoothstep(-0.04, 0.05, a);
+	float axialEnv = (1.0 - smoothstep(0.5 * reach, 1.0, a)) * smoothstep(-0.04, 0.05, a);
 
 	// ── N7: Mach diamonds — sea-level over-expanded shock cells.
 	// At sea level (atmo_pressure≈1, effExpansion≈0): many, sharp, packed near
@@ -227,16 +223,19 @@ void fragment() {
         * mix(1.0, 1.12, far_field);
 	float e   = energy * eScale * (0.45 + 0.55 * effThrottle);
 
-	vec3 emission = col * bright * e;
+	// Density belongs in alpha. Multiplying radiance by it again darkens the
+	// transparent edge against daylight; gas does not cast a grey cone there.
+	vec3 emission = col * e * (1.0 + diamond * 0.8) * flick;
 
-	ALBEDO   = emission;
+	ALBEDO   = vec3(0.0);
 	EMISSION = emission;
 	// Mix blend against daylight: keep a readable SL core without a solid white capsule.
 	// Vacuum stays optically thin so ascent does not become a teardrop billboard.
     float vacuumAlpha = mix(0.78, mix(0.42, 0.64, far_field), effExpansion);
-    float vacuumCoreAlpha = core_layer * effExpansion
-        * smoothstep(0.92, 0.30, a) * mix(0.32, 0.60, far_field);
+    float vacuumCoreAlpha = core_layer * effExpansion * radial
+        * (1.0 - smoothstep(0.30, 0.92, a)) * mix(0.32, 0.60, far_field)
+        * layer_opacity;
 	float profileAlpha = bright * (0.62 + 0.28 * effThrottle)
 		* vacuumAlpha * layer_opacity;
-	ALPHA = clamp(max(profileAlpha, vacuumCoreAlpha), 0.0, 0.88);
+	ALPHA = clamp(max(profileAlpha, vacuumCoreAlpha) * effThrottle, 0.0, 0.88);
 }

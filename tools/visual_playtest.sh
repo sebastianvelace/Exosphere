@@ -65,7 +65,7 @@ Options:
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
-  --ship        Stage immediately and capture powered standalone Starship in vacuum.
+  --ship        Capture standalone Starship in vacuum at full/half thrust and shutdown.
   --starbase-far Capture the mapped Starbase far-field terrain at 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
@@ -596,6 +596,8 @@ public partial class _PlaytestShot : Node
 
     // ── hotstage mode ────────────────────────────────────────────────────
     bool _hotstage, _hotstageSeparation;
+    int _shipPlumeStep;
+    bool _shipPlumeQueued, _startupRamp;
 
     // ── reentry_variant mode (one attitude per process; --reentry-compare drives two
     // separate Godot launches — see tools/visual_playtest.sh orchestration below) ──────
@@ -990,8 +992,21 @@ public partial class _PlaytestShot : Node
                 _shipSeeded = true;
                 return;
             }
-            if (_shipSeeded && _pendingSlug == null && _readyFrames >= 110 && !_orbitBeauty)
+            if (_shipSeeded && _shipPlumeQueued && _pendingSlug == null)
             {
+                if (_shipPlumeStep == 2) { Finish("SHIP_OK"); return; }
+                _shipPlumeStep++;
+                bridge.SetThrottle(_shipPlumeStep == 1 ? 0.5 : 0.0);
+                _readyFrames = 0;
+                _shipPlumeQueued = false;
+                return;
+            }
+            if (_shipSeeded && !_shipPlumeQueued && _pendingSlug == null
+                && _readyFrames >= (_shipPlumeStep == 0 ? 110 : 35))
+            {
+                double expected = _shipPlumeStep == 0 ? 1.0 : _shipPlumeStep == 1 ? 0.5 : 0.0;
+                double delivered = DeliveredThrottle(vessel, body);
+                if (System.Math.Abs(delivered - expected) > 0.04) return;
                 var padNode = GetTree().Root.FindChild("LaunchPadController", true, false) as Node3D;
                 var rendererNode = GetTree().Root.FindChild("ActiveVesselRenderer", true, false) as Node3D;
                 _log.WriteLine($"VISUAL_NODES ship padVisible={padNode?.Visible.ToString() ?? "missing"} " +
@@ -999,11 +1014,10 @@ public partial class _PlaytestShot : Node
                     $"rendererPos={rendererNode?.Position.ToString() ?? "missing"} " +
                     $"rendererVisible={rendererNode?.Visible.ToString() ?? "missing"}");
                 _log.Flush();
-                QueueCapture("ship_vacuum");
-                _orbitBeauty = true;
+                QueueCapture(_shipPlumeStep == 0 ? "ship_vacuum"
+                    : _shipPlumeStep == 1 ? "ship_vacuum_half" : "ship_vacuum_off");
+                _shipPlumeQueued = true;
             }
-            if (_orbitBeauty && _pendingSlug == null)
-                Finish("SHIP_OK");
             return;
         }
 
@@ -1232,6 +1246,19 @@ public partial class _PlaytestShot : Node
         // ── Hot-staging: gate on the real dual-thrust overlap state (booster still
         // attached, Ship engines already lit), not on the SEPARATION phase — that phase
         // only fires once mechanical staging completes, i.e. *after* the overlap window.
+        if (_mode is ("launch" or "hotstage") && !_startupRamp && _pendingSlug == null
+            && _ascentEngaged && vessel.IsGroundHeld)
+        {
+            double delivered = DeliveredThrottle(vessel, body);
+            if (delivered is >= 0.25 and <= 0.80)
+            {
+                QueueCapture("startup_ramp");
+                // Capture the gated physical state without advancing through four
+                // more simulation frames of the short ignition ramp.
+                _settleLeft = 0;
+                _startupRamp = true;
+            }
+        }
         if (_mode is "full" or "ascent" or "hotstage"
             && !_hotstage
             && _pendingSlug == null
@@ -3170,7 +3197,8 @@ public partial class _PlaytestShot : Node
 
     private void LogEngineVisualTelemetry(string slug)
     {
-        if (slug is not ("pad" or "liftoff")) return;
+        if (slug is not ("pad" or "liftoff" or "startup_ramp"
+            or "ship_vacuum" or "ship_vacuum_half" or "ship_vacuum_off")) return;
 
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
@@ -3192,8 +3220,16 @@ public partial class _PlaytestShot : Node
 
         _log.WriteLine($"VISUAL_ENGINES slug={slug} commandThrottle={vessel.Throttle:F3} "
             + $"nominal={summary.NominalEngineCount} rows={summary.ReadoutEngineCount} "
-            + $"delivered={delivered} starting={starting} failed={failed}");
+            + $"delivered={delivered} starting={starting} failed={failed} "
+            + $"deliveredThrottle={EngineHudPresentation.DeliveredThrottle(rows):F3}");
         _log.Flush();
+    }
+
+    private static double DeliveredThrottle(Vessel vessel, CelestialBody body)
+    {
+        var rows = new List<EngineReadout>(39);
+        vessel.FillEngineReadouts(body, rows, out _);
+        return EngineHudPresentation.DeliveredThrottle(rows);
     }
 
     private void LogImageMetrics(string slug, Image image)
@@ -3719,6 +3755,31 @@ verify_pngs() {
       return 1
     fi
   elif [[ "$MODE" == "ship" ]]; then
+    for slug in ship_vacuum ship_vacuum_half ship_vacuum_off; do
+      if [[ ! -s "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing vacuum throttle matrix frame: $slug" >&2
+        return 1
+      fi
+    done
+    if ! awk '
+      /^VISUAL_ENGINES slug=ship_vacuum(_half|_off)? / {
+        slug = ""; delivered = -1;
+        for (i = 1; i <= NF; i++) {
+          split($i, field, "=");
+          if (field[1] == "slug") slug = field[2];
+          if (field[1] == "deliveredThrottle" && field[2] ~ /^[0-9]+[.][0-9]+$/)
+            delivered = field[2] + 0;
+        }
+        target = slug == "ship_vacuum" ? 1 : slug == "ship_vacuum_half" ? 0.5 : 0;
+        if (delivered < target - 0.04 || delivered > target + 0.04) bad = 1;
+        seen[slug]++;
+      }
+      END { exit !(seen["ship_vacuum"] == 1 && seen["ship_vacuum_half"] == 1
+        && seen["ship_vacuum_off"] == 1 && !bad) }
+    ' "$LOG"; then
+      echo "ERROR: vacuum matrix did not prove full/half/shutdown delivered thrust" >&2
+      return 1
+    fi
     if [[ ! -f "$OUT_DIR/exo_play_ship_vacuum.png" ]]; then
       echo "ERROR: missing standalone Starship visual milestone PNG" >&2
       return 1
