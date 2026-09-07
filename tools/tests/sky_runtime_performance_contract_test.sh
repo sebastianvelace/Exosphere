@@ -57,7 +57,7 @@ rg -q --fixed-strings '_env.Sky.RadianceSize = Sky.RadianceSizeEnum.Size128;' "$
   || fail "radiance map is not bounded to 128"
 rg -q --fixed-strings '_env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;' "$SKY" \
   || fail "pad sky process mode is not realtime"
-rg -q --fixed-strings 'bool realtime = altitude < 28_000.0;' "$SKY" \
+rg -q --fixed-strings 'bool realtime = altitude < 45_000.0;' "$SKY" \
   || fail "sky process mode is not altitude-gated back to incremental"
 rg -q --fixed-strings 'using var workerPriority = new WorkerThreadPriorityScope();' "$SKY" \
   || fail "atmosphere worker priority scope missing"

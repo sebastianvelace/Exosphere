@@ -683,7 +683,11 @@ void sky() {
 	// Play-camera daylight: the starmap must not punch through a thick column
 	// even if exposure still thinks the scene is dark (T=0 pad, 19 km ascent).
 	float sun_up = smoothstep(-0.06, 0.10, dot(up, to_sun));
-	float thick_column = 1.0 - smoothstep(8000.0, 38000.0, max(observer_altitude, 0.0));
+	// Keep a restrained daylight floor through the 40 km Starbase handoff. The
+	// previous 38 km cutoff made the 40 km case snap to a black upper sky even
+	// though the atmosphere is still optically present at that altitude. Extending
+	// the smooth tail to 55 km preserves a darkening stratosphere without a snap.
+	float thick_column = 1.0 - smoothstep(8000.0, 55000.0, max(observer_altitude, 0.0));
 	stars *= 1.0 - sun_up * thick_column;
 
 	// Return one linear HDR radiance domain. Godot's environment applies exposure and

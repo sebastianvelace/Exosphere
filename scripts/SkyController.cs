@@ -586,8 +586,10 @@ public partial class SkyController : Node
         // Incremental cubemap faces stay black/star-filled for seconds on the play
         // camera, which is why xvfb captures (long waits + sun override) did not
         // match what the player sees at T=0. Bake the full sky while the column is
-        // thick; return to incremental once the vehicle is in space.
-        bool realtime = altitude < 28_000.0;
+        // thick; return to incremental only after the low-atmosphere handoff. The
+        // 28 km threshold switched the cubemap during the Starbase 20→40 km matrix,
+        // leaving a black upper sky before incremental faces had converged.
+        bool realtime = altitude < 45_000.0;
         if (realtime == _lastSkyProcessRealtime
             && _env.Sky.ProcessMode == (realtime
                 ? Sky.ProcessModeEnum.Realtime
