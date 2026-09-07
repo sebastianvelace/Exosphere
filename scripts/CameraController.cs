@@ -156,12 +156,13 @@ public partial class CameraController : Node3D
 
     // ── First-person cockpit (IVA) state ──────────────────────────────────────
     private bool       _cockpit;            // [C] cycles into this after the pad presets
-    private Vector3d   _lastVel;
     private double     _lastT = -1.0;
     private Vector3    _gOffset, _gTarget;  // eye push from G-force (render units)
     private float      _lookYaw, _lookPitch;
     // Smoothed vessel orientation — prevents raw sim jitter reaching the cockpit camera.
     private Quaternion _smoothedOrientation = Quaternion.Identity;
+    private readonly CameraOrientationSmoother _cockpitOrientation = new();
+    private Exosphere.Simulation.Vessel? _cockpitVessel;
 
     // ── Force-feel shake (cosmetic; driven by vessel state) ───────────────────
     private readonly CameraShake _shake = new();
@@ -255,6 +256,8 @@ public partial class CameraController : Node3D
     {
         ResolvePresentationNodes(delta);
         if (_cockpit) { DriveCockpit(delta); return; }
+        _cockpitOrientation.Reset();
+        _cockpitVessel = null;
         SetCockpitVisible(false);
 
         // Auto-switch to Chase mode once vessel is clear of the pad
@@ -356,7 +359,7 @@ public partial class CameraController : Node3D
             {
                 effectiveDistance = Mathf.Max(effectiveDistance, (float)
                     VehicleCameraFraming.MinimumOrbitDistance(
-                        active.VehicleLength, active.MaximumDiameter, camera.Fov));
+                        active.VehicleLength, active.MaximumDiameter, _externalFov));
                 float centerU = (float)(active.VehicleLength / (2.0 * 2.8));
                 vesselCenter = ToGQuat(active.Orientation) * (Vector3.Up * centerU);
             }
@@ -407,7 +410,8 @@ public partial class CameraController : Node3D
             _baseFovCaptured = true;
         }
 
-        _shake.Update(delta, bridge?.ActiveVessel, bridge?.Universe, _distance);
+        _shake.Update(delta, bridge?.ActiveVessel, bridge?.Universe,
+            camera.Position.DistanceTo(lookTarget));
 
         // Translate in camera-local space so the jitter tracks the current view.
         camera.Translate(_shake.PositionOffset);
@@ -432,8 +436,14 @@ public partial class CameraController : Node3D
 
         // Smooth vessel orientation to absorb high-freq sim jitter. Rate 8/s: fast enough
         // to track real pitch-overs, slow enough to kill single-frame noise spikes.
-        Quaternion rawOrient = ToGQuat(v.Orientation);
-        _smoothedOrientation = _smoothedOrientation.Slerp(rawOrient, Mathf.Clamp((float)delta * 8f, 0f, 1f));
+        if (!ReferenceEquals(_cockpitVessel, v))
+        {
+            _cockpitOrientation.Reset();
+            _cockpitVessel = v;
+            _gOffset = _gTarget = Vector3.Zero;
+            _lastT = -1.0;
+        }
+        _smoothedOrientation = ToGQuat(_cockpitOrientation.Update(v.Orientation, delta));
 
         // The vessel renders at the origin. The authored cockpit sits at y=36 for the full
         // 121 m stack, but standalone Starship is rebuilt with its engines at y≈0 and nose at
@@ -480,14 +490,14 @@ public partial class CameraController : Node3D
                 if (m > 0.015f) target *= 0.015f / m;
                 _gTarget = target;
             }
-            _lastVel = v.Velocity; _lastT = t;
+            _lastT = t;
         }
-        _gOffset = _gOffset.Lerp(_gTarget, Mathf.Clamp((float)delta * 6f, 0f, 1f));
+        _gOffset = _gOffset.Lerp(_gTarget, (float)CameraSmoothing.Blend(delta, 6.0));
 
         // Free-look (recenters when not dragging).
         if (!_dragging)
         {
-            float k = Mathf.Clamp((float)delta * 3f, 0f, 1f);
+            float k = (float)CameraSmoothing.Blend(delta, 3.0);
             _lookYaw   = Mathf.Lerp(_lookYaw,   0f, k);
             _lookPitch = Mathf.Lerp(_lookPitch, 0f, k);
         }
@@ -501,11 +511,11 @@ public partial class CameraController : Node3D
         camera.LookAt(eye + _gOffset + look, up);
 
         // Interior vibration — reduced multiplier (×0.6 vs old ×1.8) so ascent stays readable.
-        // CameraShake also caps rotational throw to ±2° (see CameraShake.CockpitRotCap).
+        // CameraShake also caps rotational throw to ~0.23° (see CameraShake.CockpitRotCap).
         if (!_baseFovCaptured) { _shake.BaseFov = camera.Fov; _baseFovCaptured = true; }
         _shake.Update(delta, v, uni, 40f);
         camera.Translate(_shake.CockpitPositionOffset);
-        var rot = _shake.CockpitRotationOffset;   // already capped to ±2° per axis
+        var rot = _shake.CockpitRotationOffset;
         camera.RotateObjectLocal(Vector3.Right,   rot.X);
         camera.RotateObjectLocal(Vector3.Up,      rot.Y);
         camera.RotateObjectLocal(Vector3.Forward, rot.Z);
@@ -580,10 +590,7 @@ public partial class CameraController : Node3D
     private static Quaternion ToGQuat(Quaterniond q) => new((float)q.X, (float)q.Y, (float)q.Z, (float)q.W);
 
     private static float CameraFrameBlend(double delta)
-    {
-        if (delta <= 0.0) return 1f;
-        return 1f - Mathf.Exp(-(float)delta / CameraFrameTransitionSeconds);
-    }
+        => (float)CameraSmoothing.Blend(delta, 1.0 / CameraFrameTransitionSeconds);
 
     private static Basis BuildSurfaceFrame(Exosphere.Simulation.CelestialBody body, Vector3d position)
     {

@@ -2,7 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
-using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Visual;
 
 /// <summary>
 /// Cosmetic camera force-feel system. Produces a small translational + rotational
@@ -68,7 +68,7 @@ public sealed class CameraShake
     private float _sampledEntryNorm;
 
     // ── Noise phase accumulators ─────────────────────────────────────────────
-    private float _t;
+    private double _t;
     private const float SeedX = 17.13f;
     private const float SeedY = 43.71f;
     private const float SeedZ = 79.29f;
@@ -114,9 +114,9 @@ public sealed class CameraShake
     /// </summary>
     public void Update(double delta, Vessel? vessel, Universe? universe, float distance)
     {
+        if (!double.IsFinite(delta) || delta <= 0.0) return;
         float dt = (float)delta;
-        if (dt <= 0f) dt = 1f / 60f;
-        _t += dt;
+        _t += delta;
 
         _physicsSampleTimer -= System.Math.Max(0.0, delta);
         if (_physicsSampleTimer <= 0.0
@@ -175,7 +175,7 @@ public sealed class CameraShake
             Osc(0.9f, _seedZ + 21f) * 0.75f + Osc(2.0f, _seedZ + 23f) * 0.25f) * rAmp;
 
         var targetPositionOffset = engineTrans + buffetTrans + entryTrans;
-        float positionBlend = 1f - Mathf.Exp(-PositionFilterRate * dt);
+        float positionBlend = (float)CameraSmoothing.Blend(delta, PositionFilterRate);
         PositionOffset = PositionOffset.Lerp(targetPositionOffset, positionBlend);
         CockpitPositionOffset = ClampLength(PositionOffset * 0.006f, CockpitTransCap);
 
@@ -190,7 +190,7 @@ public sealed class CameraShake
                 + Osc(0.9f, _seedX + 27f) * rRot,  // yaw
             Osc(5.9f, _seedZ + 13f) * eRot + Osc(4.8f,  _seedZ + 17f) * bRot
                 + Osc(1.3f, _seedZ + 27f) * rRot); // roll
-        float rotationBlend = 1f - Mathf.Exp(-RotationFilterRate * dt);
+        float rotationBlend = (float)CameraSmoothing.Blend(delta, RotationFilterRate);
         RotationOffset = RotationOffset.Lerp(targetRotationOffset, rotationBlend);
 
         // Cockpit variant: clamp each axis so interior buffeting stays readable.
@@ -282,13 +282,14 @@ public sealed class CameraShake
     }
 
     // Single normalised oscillator in [-1, 1].
-    private float Osc(float freq, float phase) => Mathf.Sin(_t * freq + phase);
+    private float Osc(float freq, float phase)
+        => (float)CameraSmoothing.Oscillator(_t, freq, phase);
 
     // Asymmetric exponential smoothing: rate `up` when rising, `down` when falling.
     private static float Damp(float current, float target, float dt, float up, float down)
     {
         float rate = target > current ? up : down;
-        float k = 1f - Mathf.Exp(-rate * dt);
+        float k = (float)CameraSmoothing.Blend(dt, rate);
         return current + (target - current) * k;
     }
 }
