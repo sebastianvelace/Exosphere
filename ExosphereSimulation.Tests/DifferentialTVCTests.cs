@@ -154,6 +154,29 @@ public sealed class DifferentialTVCTests
             $"expected assembled-stack roll authority > 2.0 deg/s after 1s full stick, got {rollDegPerSec}");
     }
 
+    [Fact]
+    public void AssembledShip_OneSelectedCentreRaptorCancelsItsStaticMountTorque()
+    {
+        var vessel = BuildPilotedFlight7Vessel();
+        var shipEngines = vessel.Parts.Parts.Single(
+            part => part.Definition.Id == "starship_engines");
+        _ = vessel.Stage();
+        vessel.SASEnabled = false;
+        shipEngines.SelectEngineCount(1);
+        vessel.Throttle = 1.0;
+        vessel.PitchYawRoll = new Vector3d(1.0, 0.0, 0.0);
+
+        // The first sea-level Raptor is intentionally offset from the ship axis in the
+        // real Flight 7 cluster. Let the physical spool and TVC servo settle, then verify
+        // that a commanded positive pitch is not overwhelmed by that fixed zero-gimbal
+        // moment. This is the terminal-return configuration used by the EDL fallback leg.
+        for (int i = 0; i < 250; i++)
+            vessel.Tick(0.02, VacuumBody());
+
+        Assert.True(vessel.AngularVelocity.X > 0.0,
+            $"single-engine TVC should overcome static mount torque, got {vessel.AngularVelocity}");
+    }
+
     private static Vessel BuildPilotedFlight7Vessel()
     {
         var catalog = LoadPartCatalog();

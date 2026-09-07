@@ -319,6 +319,38 @@ public sealed class PhysicsRegressionTests
     }
 
     [Fact]
+    public void RetractedLandingGearIsThermallyStowedUntilDeployment()
+    {
+        var gear = new Part(new PartDefinition
+        {
+            Id = "retracted_landing_gear",
+            CategoryStr = "landing",
+            MassDry = 100.0,
+            HeatTolerance = 1_000.0,
+        });
+        var graph = new PartGraph();
+        graph.SetRoot(gear);
+
+        const double severeFlux = 50_000_000.0;
+        var stowedOrientationAware = StressSolver.ApplyThermalLoads(
+            graph, severeFlux, 10.0, Vector3d.Up);
+        var stowedFavorableFallback = StressSolver.ApplyThermalLoads(
+            graph, severeFlux, 10.0);
+
+        Assert.Empty(stowedOrientationAware);
+        Assert.Empty(stowedFavorableFallback);
+        Assert.Equal(290.0, gear.Temperature);
+        Assert.False(gear.IsBroken);
+
+        gear.IsDeployed = true;
+        var deployed = StressSolver.ApplyThermalLoads(
+            graph, severeFlux, 10.0, Vector3d.Up);
+
+        Assert.Single(deployed);
+        Assert.True(gear.IsBroken);
+    }
+
+    [Fact]
     public void AerodynamicDragIsBroadsideDominantAndScalesWithDynamicPressure()
     {
         double density = 0.02;

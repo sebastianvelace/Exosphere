@@ -61,6 +61,22 @@ public sealed class EngineRuntimeTests
     }
 
     [Fact]
+    public void SelectedEngineCountSkipsFailedMountsAndKeepsRequestedHealthyCount()
+    {
+        var engine = CreateMerlinCluster("healthy-selection");
+        Assert.True(engine.FailEngine(engine.EngineStates[0].InstanceId, "OUTER_ENGINE_FAILURE"));
+        engine.SelectEngineCount(3);
+
+        for (int i = 0; i < 100; i++)
+            engine.AdvanceEngineRuntime(1.0, 0.02);
+
+        Assert.Equal(0.0, engine.EngineStates[0].ActualThrottle);
+        Assert.Equal(3, engine.EngineStates.Count(state => state.ActualThrottle > 0.99));
+        Assert.Equal(3, engine.GetEngineTelemetry(101_325.0)
+            .Count(row => row.ThrustN > 0.0));
+    }
+
+    [Fact]
     public void ShutdownPassesThroughPurgeAndReturnsOff()
     {
         var engine = CreateMerlinCluster("octaweb-shutdown");

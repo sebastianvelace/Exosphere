@@ -82,6 +82,13 @@ public static class StressSolver
         var destroyed = new List<Part>();
         foreach (var part in graph.Parts)
         {
+            // Landing hardware is stowed inside the aft skirt during entry. It must not
+            // receive free-stream heating until EDL explicitly deploys it near the pad;
+            // otherwise a recoverability kit burns off tens of kilometres above the site
+            // before the contact solver ever has a chance to use it.
+            if (part.Definition.Category == PartCategory.Landing && !part.IsDeployed)
+                continue;
+
             double shieldedFraction = part.Definition.HasHeatShield
                 ? ThermalModel.WindwardFactor(
                     flowDirLocal,
@@ -108,6 +115,9 @@ public static class StressSolver
         var destroyed = new List<Part>();
         foreach (var part in graph.Parts)
         {
+            if (part.Definition.Category == PartCategory.Landing && !part.IsDeployed)
+                continue;
+
             if (ThermalModel.ApplyHeat(part, heatFlux, dt, shieldedFraction))
             {
                 part.IsBroken = true;

@@ -162,6 +162,28 @@ public static class AerodynamicsModel
         double angleOfAttackDegrees = NominalEntryAngleOfAttackDegrees)
         => ComputeEntryAxis(localUp, velocityDirection, angleOfAttackDegrees, liftSign: -1.0);
 
+    /// <summary>
+    /// Builds a high-drag entry axis whose body lift points toward an explicit world-space
+    /// direction. The requested lift is projected perpendicular to the flow, so a terminal
+    /// guidance law can bias a belly-flop toward a moving landing corridor without changing
+    /// the aerodynamic model or applying a direct force.
+    /// </summary>
+    public static Vector3d ComputeEntryAxisForLift(
+        Vector3d velocityDirection,
+        Vector3d liftDirection,
+        double angleOfAttackDegrees = NominalEntryAngleOfAttackDegrees)
+    {
+        var flow = velocityDirection.Normalized;
+        var lift = liftDirection - flow * liftDirection.Dot(flow);
+        if (lift.Magnitude < 1e-6)
+            return ComputeLiftDownEntryAxis(Vector3d.Up, flow, angleOfAttackDegrees);
+        return (flow * System.Math.Cos(
+                    System.Math.Clamp(angleOfAttackDegrees, 0.0, 90.0) * MathUtils.DEG_TO_RAD)
+                + lift.Normalized * System.Math.Sin(
+                    System.Math.Clamp(angleOfAttackDegrees, 0.0, 90.0) * MathUtils.DEG_TO_RAD))
+            .Normalized;
+    }
+
     private static Vector3d ComputeEntryAxis(
         Vector3d localUp,
         Vector3d velocityDirection,

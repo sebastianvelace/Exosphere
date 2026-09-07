@@ -118,6 +118,20 @@ public sealed class AerodynamicLiftTests
     }
 
     [Fact]
+    public void ExplicitEntryLiftAxisPointsLiftTowardGuidanceCorridor()
+    {
+        var velocity = Vector3d.Right;
+        var requestedLift = (Vector3d.Up + new Vector3d(0.0, 0.0, 1.0)).Normalized;
+        var axis = AerodynamicsModel.ComputeEntryAxisForLift(velocity, requestedLift);
+        var lift = AerodynamicsModel.ComputeLift(Density, velocity * Speed, axis, PartCount);
+
+        Assert.Equal(AerodynamicsModel.NominalEntryAngleOfAttackDegrees,
+            System.Math.Acos(axis.Dot(velocity)) * 180.0 / System.Math.PI, 8);
+        Assert.True(lift.Dot(requestedLift) > 0.0,
+            "explicit entry guidance must point body lift toward the requested corridor");
+    }
+
+    [Fact]
     public void FlapAuthorityScalesWithDynamicPressureAndOpposesNoAxisMapping()
     {
         var command = new Vector3d(1.0, 0.0, 0.0); // semantic pitch -> local X

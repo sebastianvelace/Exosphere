@@ -126,15 +126,20 @@ public class Part
 
         int selected = SelectedEngineCount;
         double floored = ApplyThrottleFloor(commandedThrottle);
+        int selectedHealthy = 0;
         for (int i = 0; i < _engineStates.Count; i++)
         {
             var state = _engineStates[i];
-            double command = i < selected ? floored : 0.0;
+            bool operational = state.State != EngineLifecycleState.Failed
+                && state.FailureCode == null;
+            bool selectedForCommand = operational && selectedHealthy < selected;
+            if (operational) selectedHealthy++;
+            double command = selectedForCommand ? floored : 0.0;
             state.CommandedThrottle = command;
             if (!ApplyScheduledFailure(state, dt))
                 AdvanceEngineState(state, command, dt);
             AdvanceChamberPressure(state, dt);
-            AdvanceGimbal(state, i, i < selected, dt);
+            AdvanceGimbal(state, i, selectedForCommand, dt);
             AdvanceEngineThermalState(state, dt);
         }
 
@@ -571,11 +576,16 @@ public class Part
             return;
         }
 
-        int count = System.Math.Min(selected, _engineStates.Count);
         double total = 0.0;
-        for (int i = 0; i < count; i++)
-            total += _engineStates[i].ActualThrottle;
-        ThrottleLevel = count > 0 ? total / selected : 0.0;
+        int selectedHealthy = 0;
+        foreach (var state in _engineStates)
+        {
+            if (state.State == EngineLifecycleState.Failed || state.FailureCode != null)
+                continue;
+            if (selectedHealthy++ >= selected) break;
+            total += state.ActualThrottle;
+        }
+        ThrottleLevel = selected > 0 ? total / selected : 0.0;
     }
 
     // ── Masa actual (seca + propelante) ───────────────────────────────────
@@ -720,11 +730,14 @@ public class Part
         if (!HasEngineRuntime)
             return GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
 
-        int count = System.Math.Min(SelectedEngineCount, _engineStates.Count);
         double thrust = 0.0;
-        for (int i = 0; i < count; i++)
+        int selectedHealthy = 0;
+        foreach (var state in _engineStates)
         {
-            var model = ResolveEngineModel(_engineStates[i]);
+            if (state.State == EngineLifecycleState.Failed || state.FailureCode != null)
+                continue;
+            if (selectedHealthy++ >= SelectedEngineCount) break;
+            var model = ResolveEngineModel(state);
             if (model != null)
                 thrust += EnginePerformanceEvaluator.Evaluate(
                     model, ambientPressure, model.MaximumThrottle).ThrustN;
@@ -833,13 +846,21 @@ public class Part
     internal IReadOnlyList<(Vector3d PositionM, Vector3d ThrustVectorN)>
         GetEngineInstanceThrustGeometrySnapshot(double ambientPressure)
     {
-        BuildEngineInstanceThrustGeometry(_thrustGeometryScratch, ambientPressure);
+        BuildEngineInstanceThrustGeometry(_thrustGeometryScratch, ambientPressure, zeroGimbal: false);
+        return _thrustGeometryScratch;
+    }
+
+    internal IReadOnlyList<(Vector3d PositionM, Vector3d ThrustVectorN)>
+        GetEngineInstanceZeroGimbalThrustGeometrySnapshot(double ambientPressure)
+    {
+        BuildEngineInstanceThrustGeometry(_thrustGeometryScratch, ambientPressure, zeroGimbal: true);
         return _thrustGeometryScratch;
     }
 
     private void BuildEngineInstanceThrustGeometry(
         List<(Vector3d PositionM, Vector3d ThrustVectorN)> destination,
-        double ambientPressure)
+        double ambientPressure,
+        bool zeroGimbal = false)
     {
         destination.Clear();
         if (!HasEngineRuntime)
@@ -867,7 +888,8 @@ public class Part
                 : Vector3d.Up;
 
             double thrust = EvaluateEnginePerformance(state, ambientPressure).ThrustN;
-            var direction = TiltDirection(baseDirection, state.GimbalDeg.X, state.GimbalDeg.Z);
+            var gimbal = zeroGimbal ? Vector3d.Zero : state.GimbalDeg;
+            var direction = TiltDirection(baseDirection, gimbal.X, gimbal.Z);
             destination.Add((position, direction * thrust));
         }
     }
@@ -917,10 +939,13 @@ public class Part
         if (!HasEngineRuntime || IsBroken || !IsStagingActive) return;
 
         int selected = SelectedEngineCount;
+        int selectedHealthy = 0;
         for (int i = 0; i < _engineStates.Count; i++)
         {
-            if (i >= selected) continue;
             var state = _engineStates[i];
+            if (state.State == EngineLifecycleState.Failed || state.FailureCode != null)
+                continue;
+            if (selectedHealthy++ >= selected) break;
             var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(i);
             bool gimballed = mount?.Gimballed ?? true;
             if (!gimballed) continue;

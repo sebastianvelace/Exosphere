@@ -689,6 +689,31 @@ public class PartGraph
     }
 
     /// <summary>
+    /// Returns the engine-cluster torque with every engine at zero gimbal. This includes
+    /// unavoidable fixed-engine and asymmetric-mount moments, which a TVC allocator must
+    /// cancel before solving for the commanded control torque. It intentionally does not
+    /// mutate servo state or command overrides.
+    /// </summary>
+    public Vector3d GetZeroGimbalEngineTorque(double ambientPressure)
+    {
+        var positions = GetCachedPartLocalPositions();
+        var com = CenterOfMass;
+        var torque = Vector3d.Zero;
+        foreach (var engine in ActiveEngineList)
+        {
+            if (!positions.TryGetValue(engine, out var partPosition)) continue;
+            var geometry = engine.GetEngineInstanceZeroGimbalThrustGeometrySnapshot(ambientPressure);
+            for (int i = 0; i < geometry.Count; i++)
+            {
+                var (mountPosition, thrustVector) = geometry[i];
+                var r = partPosition + mountPosition - com;
+                torque += r.Cross(thrustVector);
+            }
+        }
+        return torque;
+    }
+
+    /// <summary>
     /// Genuine geometric angular acceleration (rad/s²) about all three vessel axes, derived
     /// from <see cref="GetTotalTorque(double)"/> divided component-wise by the appropriate
     /// moment of inertia: X/Z (pitch/yaw) by <see cref="TransverseMomentOfInertia"/>, Y

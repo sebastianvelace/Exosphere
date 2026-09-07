@@ -808,10 +808,16 @@ public class Vessel
                 command.X * pitchYawAuthority,
                 command.Z * rollAuthority,
                 command.Y * pitchYawAuthority);
+            // The zero-gimbal cluster can have a real static moment when the selected
+            // engines are asymmetric (for example one of Starship's three centre Raptors).
+            // Allocate the control torque needed to reach the requested TOTAL torque, not
+            // just the requested correction; otherwise the residual static moment rotates
+            // the vehicle exactly when the terminal burn has the least authority margin.
+            var zeroGimbalTorque = Parts.GetZeroGimbalEngineTorque(pressure);
             var desiredTorque = new Vector3d(
-                desiredLocalAngAccel.X * Parts.TransverseMomentOfInertia,
-                desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia,
-                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia);
+                desiredLocalAngAccel.X * Parts.TransverseMomentOfInertia - zeroGimbalTorque.X,
+                desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia - zeroGimbalTorque.Y,
+                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia - zeroGimbalTorque.Z);
             Parts.SolveDifferentialGimbal(desiredTorque, pressure);
         }
 
