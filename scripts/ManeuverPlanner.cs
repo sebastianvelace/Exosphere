@@ -31,6 +31,14 @@ public sealed class ManeuverPlanner
     public double   SemiLatusRectum{ get; private set; }   // p = h²/μ
     public double   TrueAnomalyNow { get; private set; }   // ν of the vessel right now (rad)
 
+    /// <summary>Target periapsis radius for the current deorbit node, when one exists.</summary>
+    public double TargetPeriapsisRadius { get; private set; }
+
+    /// <summary>Periapsis radius of the latest live orbit snapshot.</summary>
+    public double PeriapsisRadius => SemiMajorAxis > 0.0
+        ? SemiMajorAxis * (1.0 - Eccentricity)
+        : double.PositiveInfinity;
+
     // ── Maneuver node ─────────────────────────────────────────────────────────
     public bool   HasNode        { get; private set; }
     public double NodeTrueAnomaly{ get; set; }             // ν at which the burn occurs (rad)
@@ -99,6 +107,7 @@ public sealed class ManeuverPlanner
     {
         HasNode = false;
         DvPrograde = DvNormal = DvRadial = 0.0;
+        TargetPeriapsisRadius = 0.0;
     }
 
     /// <summary>
@@ -129,6 +138,8 @@ public sealed class ManeuverPlanner
         DvPrograde = -dv;
         DvNormal   = 0.0;
         DvRadial   = 0.0;
+        TargetPeriapsisRadius = DeorbitPlanner.ClampTargetPeriapsisRadius(
+            targetPeRadius, body.Radius, atmoMax);
         return dv > 0.0;
     }
 

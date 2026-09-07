@@ -1394,6 +1394,8 @@ public partial class SimulationBridge : Node
                     && p.Definition.HasVehicleRole("ship_engines")))
             return false;
 
+        EnsureStarshipReentryLandingGear(vessel);
+
         Vector3d currentUp = (vessel.Position - earth.Position).Normalized;
         if (currentUp.MagnitudeSquared < 1e-9) currentUp = Vector3d.Right;
 
@@ -1538,7 +1540,11 @@ public partial class SimulationBridge : Node
 
     /// DEBUG: drop the active vessel straight into a circular orbit (~200 km) around Earth,
     /// to test orbital features (transfer planner, etc.) without flying the whole ascent.
-    public void JumpToOrbit(double altitude = 200_000.0)
+    /// <paramref name="phaseOffsetDegrees"/> advances the insertion point along the seeded
+    /// prograde track. It is intentionally explicit because orbital-return fixtures must
+    /// choose their intercept phase; an unphased orbit can be physically valid and still
+    /// miss the launch site by an entire ground track.
+    public void JumpToOrbit(double altitude = 200_000.0, double phaseOffsetDegrees = 0.0)
     {
         var earth = Universe.GetBody("earth");
         var v = ActiveVessel;
@@ -1549,11 +1555,15 @@ public partial class SimulationBridge : Node
         var up = (v.Position - earth.Position).Normalized;
         if (up.MagnitudeSquared < 1e-9) up = new Vector3d(0, 1, 0);
         double r = earth.Radius + altitude;
-        v.Position = earth.Position + up * r;
 
         var refDir  = System.Math.Abs(up.Dot(new Vector3d(0, 1, 0))) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
-        var tangent = refDir.Cross(up).Normalized;
+        var baseTangent = refDir.Cross(up).Normalized;
+        var orbitNormal = up.Cross(baseTangent).Normalized;
+        double phase = phaseOffsetDegrees * System.Math.PI / 180.0;
+        var radial = up * System.Math.Cos(phase) + baseTangent * System.Math.Sin(phase);
+        var tangent = orbitNormal.Cross(radial).Normalized;
         double vCirc = System.Math.Sqrt(earth.GM / r);
+        v.Position = earth.Position + radial * r;
         v.Velocity = earth.Velocity + tangent * vCirc;
         v.PrepareForTeleport();
         v.ReferenceBodyId = earth.Id;
@@ -1562,7 +1572,149 @@ public partial class SimulationBridge : Node
         v.Throttle = 0.0;
 
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
-        GD.Print($"[DEBUG] JumpToOrbit -> {altitude / 1000:F0} km circular, v={vCirc:F0} m/s");
+        GD.Print($"[DEBUG] JumpToOrbit -> {altitude / 1000:F0} km circular, " +
+            $"phase={phaseOffsetDegrees:F2} deg, v={vCirc:F0} m/s");
+    }
+
+    /// <summary>
+    /// Seeds a circular orbit whose deorbit periapsis is on the rotating launch site after
+    /// the requested flight time. This is setup-only: the public map planner still owns the
+    /// actual retro burn. The site-now/site-at-return plane preserves a valid inertial orbit
+    /// while accounting for planetary rotation instead of hiding the miss in EDL homing.
+    /// </summary>
+    public bool JumpToOrbitForLaunchSiteReturn(
+        double altitude = 1_200_000.0,
+        double expectedReturnSeconds = 3_300.0,
+        double returnLatitudeBiasDegrees = 0.0)
+    {
+        var earth = Universe.GetBody("earth");
+        var vessel = ActiveVessel;
+        if (earth == null || vessel == null || _launchSite == null
+            || !string.Equals(_launchSite.BodyId, earth.Id, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        EnsureStarshipReentryLandingGear(vessel);
+
+        CancelGuidanceForTeleport();
+        double now = Universe.CurrentTime;
+        var siteNow = _launchSite.GetPosition(earth, now) - earth.Position;
+        // The atmosphere's lift/drag model produces a repeatable cross-track offset during
+        // the shallow return. The caller supplies that measured corridor correction; the
+        // physical catch target remains the unmodified launch-site geodetic position.
+        var siteAtReturn = earth.GetSurfacePositionAtTime(
+                _launchSite.Latitude + returnLatitudeBiasDegrees,
+                _launchSite.Longitude,
+                now + System.Math.Max(0.0, expectedReturnSeconds),
+                _launchSite.Altitude)
+            - earth.Position;
+        var siteNowUp = siteNow.Normalized;
+        var returnUp = siteAtReturn.Normalized;
+        if (siteNowUp.MagnitudeSquared < 1e-9 || returnUp.MagnitudeSquared < 1e-9)
+            return false;
+
+        // The orbit plane contains the present site radial and the future site radial. The
+        // burn point is the future site's antipode; after the retrograde burn, the lowered
+        // periapsis is therefore the rotating Starbase radial, not a fixed meridian.
+        var orbitNormal = siteNowUp.Cross(returnUp).Normalized;
+        if (orbitNormal.MagnitudeSquared < 1e-9)
+        {
+            var reference = System.Math.Abs(siteNowUp.Dot(new Vector3d(0, 1, 0))) < 0.9
+                ? new Vector3d(0, 1, 0)
+                : new Vector3d(1, 0, 0);
+            orbitNormal = siteNowUp.Cross(reference).Normalized;
+        }
+
+        var burnRadial = -returnUp;
+        var tangent = orbitNormal.Cross(burnRadial).Normalized;
+        if (tangent.MagnitudeSquared < 1e-9) return false;
+
+        double r = earth.Radius + altitude;
+        double vCirc = System.Math.Sqrt(earth.GM / r);
+        vessel.Position = earth.Position + burnRadial * r;
+        vessel.Velocity = earth.Velocity + tangent * vCirc;
+        vessel.PrepareForTeleport();
+        vessel.ReferenceBodyId = earth.Id;
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, -tangent);
+        vessel.SASEnabled = true;
+        vessel.Throttle = 0.0;
+
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+        GD.Print($"[DEBUG] JumpToOrbitForLaunchSiteReturn -> {altitude / 1000:F0} km circular, " +
+            $"targetLead={expectedReturnSeconds:F0} s latitudeBias={returnLatitudeBiasDegrees:F2} deg, " +
+            $"v={vCirc:F0} m/s");
+        return true;
+    }
+
+    /// <summary>
+    /// Configures the explicit propellant reserve for a deterministic orbital-return setup.
+    /// A direct orbit jump is a debug/setup operation, not a flown ascent; keeping this
+    /// transition in the bridge makes the landing mass assumption visible and reusable by
+    /// the map/reentry validation path without allowing a harness to mutate part resources.
+    /// </summary>
+    /// <param name="fraction">Fraction of each liquid tank's declared capacity to retain.</param>
+    public bool ConfigureOrbitalReturnReserve(double fraction = 0.12)
+    {
+        var vessel = ActiveVessel;
+        if (vessel == null || vessel.IsDestroyed) return false;
+
+        double reserve = System.Math.Clamp(fraction, 0.0, 1.0);
+        bool configured = false;
+        foreach (var part in vessel.Parts.Parts)
+        {
+            double capacity = part.Definition.FuelCapacityLF
+                + part.Definition.FuelCapacityOx;
+            if (capacity <= 0.0) continue;
+
+            double mixtureCapacity = part.Definition.FuelCapacityLF / capacity;
+            double target = capacity * reserve;
+            part.LiquidFuel = target * mixtureCapacity;
+            part.Oxidizer = target * (1.0 - mixtureCapacity);
+            configured = true;
+        }
+
+        if (configured)
+            GD.Print($"[DEBUG] Orbital return reserve configured fraction={reserve:F3} "
+                + $"propellant={vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer:F0} kg");
+        return configured;
+    }
+
+    /// <summary>
+    /// Adds the simulator's explicit Starship EDL landing kit to a reentry fixture when the
+    /// selected historical vehicle has no landing hardware. The Flight 7 source variant stays
+    /// historically faithful (its data and launch mass remain gearless); only the playable
+    /// return demonstration gets the recoverability hardware needed by the leg-landing abort.
+    /// </summary>
+    private bool EnsureStarshipReentryLandingGear(Vessel vessel)
+    {
+        if (!vessel.Parts.Parts.Any(part =>
+                part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("ship_engines")))
+            return false;
+
+        if (vessel.Parts.Parts.Any(part => part.Definition.Category == PartCategory.Landing))
+        {
+            vessel.ConfigureLandingContactsFromParts();
+            return true;
+        }
+
+        string partsPath = System.IO.Path.Combine(
+            ProjectSettings.GlobalizePath(DataDirectory), "parts");
+        var definitions = PartCatalog.LoadFromDirectory(partsPath).Parts;
+        if (!definitions.TryGetValue("starship_landing_gear", out var gearDefinition))
+            return false;
+
+        var engines = vessel.Parts.Parts.FirstOrDefault(part =>
+            part.Definition.IsStarshipFamily
+            && part.Definition.HasVehicleRole("ship_engines"));
+        if (engines == null) return false;
+
+        var gear = new Part(gearDefinition, $"{vessel.Id}-reentry-gear");
+        vessel.Parts.AddPart(gear);
+        vessel.Parts.AddJoint(new Joint(engines, gear, "bottom", "top"));
+        vessel.ConfigureLandingContactsFromParts();
+        RebuildActiveVesselRenderer();
+        GD.Print("[EDL] provisioned explicit Starship reentry landing gear for fallback landing");
+        return true;
     }
 
     /// <summary>

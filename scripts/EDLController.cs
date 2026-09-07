@@ -41,6 +41,25 @@ public partial class EDLController : Control
     // into an automatic leg-impact; the pin solver itself remains limited to 5 m.
     private const double CatchAbortHorizontalMissToleranceM = 20.0;
     private const double CatchAbortHorizontalSpeedToleranceMps = 6.0;
+    private const double CatchEarlyAbortAltitudeM = 5_000.0;
+    private const double CatchEarlyAbortMissToleranceM = 2_000.0;
+    private const double MinimumLandingTwr = 1.10;
+    // With engines off, releasing 12 m above the feet would add roughly 15 m/s before contact.
+    // Keep the free-fall handoff inside the 3 m/s soft-impact budget instead. This is the
+    // total surface-relative speed, not just the vertical component: the landing feet carry
+    // the vehicle's lateral and angular velocity into the suspension as well.
+    private const double FinalSurfaceReleaseAltitudeM = 0.25;
+    private const double FinalSurfaceReleaseSpeedMps = 1.2;
+    // A rotating 60 t vehicle can turn a harmless COM descent into a several-m/s foot strike
+    // because the Starship landing datum is ~21 m below the physical CoM. Do not cut the
+    // engines while that angular energy is still present; the contact damper is not a guidance
+    // actuator and must not be used as a substitute for attitude-rate control.
+    private const double FinalSurfaceReleaseAngularRateRadS = 0.08;
+    // Start the vertical-only terminal envelope while there is still time for the real
+    // attitude controller to settle. At 50 m the lateral branch had already rotated the
+    // vehicle and amplified tangential velocity in the final approach.
+    private const double TerminalVerticalPriorityAltitudeM = 300.0;
+    private const double TerminalSingleEngineAltitudeM = 300.0;
     private bool _towerCatchAborted;
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
@@ -71,6 +90,8 @@ public partial class EDLController : Control
     private bool _legsDeployed;
     private bool _flipInProgress;
     private bool _landingCutoffCommitted;
+    private bool _landingBurnCoast;
+    private bool _landingBurnRelit;
     private int _landingEngineCount;
     private double _flipElapsed;
     private bool _flipGateDiagnosticEmitted;
@@ -161,6 +182,8 @@ public partial class EDLController : Control
                 _legsDeployed = false;
                 _flipInProgress = false;
                 _landingCutoffCommitted = false;
+                _landingBurnCoast = false;
+                _landingBurnRelit = false;
                 _landingEngineCount = 3;
                 _flipElapsed = 0.0;
                 _flipGateDiagnosticEmitted = false;
@@ -225,8 +248,10 @@ public partial class EDLController : Control
         // arrival still ignites in time) AND below a low flip ceiling so a nominal aero-braked entry
         // doesn't flip prematurely and waste propellant on a huge high-altitude burn.
         // Flip altitude: scale with the burn's stopping distance for a fast arrival, but never
-        // below ~800 m so a vessel already at belly-flop terminal velocity (~70-100 m/s) still has
-        // comfortable room to flip and null the descent (a too-low flip can't arrest it in time).
+        // below 4.5 km so a vessel already at belly-flop terminal velocity (~70-100 m/s) has
+        // enough distance for the physical attitude flip and engine spool before the final burn.
+        // The previous 3 km floor allowed the Starship return fixture to reach the ground still
+        // carrying most of its vertical speed while the three centre Raptors were spooling.
         const double FlipCeiling = 8_000.0;
         double pressure = vessel.GetAmbientPressure(body);
         double flipIgnitionThrottle = shipEngines?.Definition.MinThrottle > 0.0
@@ -239,7 +264,7 @@ public partial class EDLController : Control
         double flipAngle = AttitudeGuidance.ErrorAngleRadians(vessel.Orientation, retroTarget);
         double flipTime = EstimateFlipTime(flipAngle, fullAngularAuthority, maxRate: 0.35);
         double flipAlt = aBrake > 0.5
-            ? System.Math.Clamp(stopDist * 2.2 + vDown * (flipTime + 3.0), 3_000.0, FlipCeiling)
+            ? System.Math.Clamp(stopDist * 2.2 + vDown * (flipTime + 3.0), 4_500.0, FlipCeiling)
             : 0.0;   // can't brake yet (still hypersonic) — keep belly-flop
 
         // Tower-catch horizontal guidance: simple proportional homing on the position error
@@ -248,9 +273,14 @@ public partial class EDLController : Control
         // metres). Computed once here so both the attitude cant and the throttle's braking
         // term below read the same error instead of two independently-derived vectors.
         Vector3d catchLateralVelocityError = Vector3d.Zero;
+        Vector3d catchTargetPosition = vessel.CatchTargetPositionWorld;
         if (_phase is Edl.Retro or Edl.Catch)
         {
-            Vector3d offsetFromTarget = vessel.Position - vessel.CatchTargetPositionWorld;
+            // The bridge refreshes this sample at the simulation cadence immediately before
+            // the guidance pass. Keep the controller on that synchronized sample: predicting
+            // from a moving target here would apply the cradle velocity twice when the bridge
+            // has already advanced the target for the current frame.
+            Vector3d offsetFromTarget = vessel.Position - catchTargetPosition;
             Vector3d horizontalOffset = offsetFromTarget - up * offsetFromTarget.Dot(up);
             double missDistance = horizontalOffset.Magnitude;
             double closingSpeed = System.Math.Clamp(missDistance * 0.35, 0.0, 6.0);
@@ -276,6 +306,25 @@ public partial class EDLController : Control
             mission?.EnterPhase(MissionPhase.RETRO_BURN);
         }
 
+        // A tower catch is a narrow terminal corridor, not a long-range homing mode. Once
+        // the vehicle is below the flip ceiling, a multi-kilometre miss cannot be repaired
+        // by the remaining bounded thrust-vector authority. Divert early to the ordinary
+        // legs path so the controller does not spend the last propellant on an impossible
+        // catch and then hover or fall through the cradle.
+        Vector3d currentCatchOffset = catchTargetPosition - vessel.Position;
+        double currentCatchMiss = (currentCatchOffset
+            - up * currentCatchOffset.Dot(up)).Magnitude;
+        if (vessel.IsAttemptingTowerCatch
+            && !_towerCatchAborted
+            && _alt <= CatchEarlyAbortAltitudeM
+            && currentCatchMiss > CatchEarlyAbortMissToleranceM)
+        {
+            _towerCatchAborted = true;
+            vessel.IsAttemptingTowerCatch = false;
+            GD.Print($"[EDL] early tower catch divert at {_alt:F0} m " +
+                $"(miss={currentCatchMiss:F1} m) — continuing with leg landing");
+        }
+
         switch (_phase)
         {
             case Edl.Entry:
@@ -288,7 +337,15 @@ public partial class EDLController : Control
             case Edl.Aero:
                 break;   // retro ignition handled by the physics gate above
             case Edl.Retro:
-                if (_alt < 1500.0)
+                // Once the fallback is slow and below 2.7 km, enter the staged terminal regime
+                // before the three-engine minimum can turn a near-hover into a climb. The
+                // previous 2.0 km gate still left v30 on three engines at ~2.4 km, where the
+                // minimum throttle arrested the descent and created a second restart cycle.
+                if (_alt < 1500.0
+                    || (_towerCatchAborted
+                        && !vessel.IsAttemptingTowerCatch
+                        && _alt < 2_700.0
+                        && vDown < 20.0))
                 {
                     bool attemptCatch = vessel.IsAttemptingTowerCatch
                         && !_towerCatchAborted && vessel.HasCatchPins;
@@ -298,7 +355,7 @@ public partial class EDLController : Control
                 break;
             case Edl.Catch:
             {
-                Vector3d offset = vessel.Position - vessel.CatchTargetPositionWorld;
+                Vector3d offset = vessel.Position - catchTargetPosition;
                 double missDistance = (offset - up * offset.Dot(up)).Magnitude;
                 if (_alt < CatchAbortDecisionAltitudeM
                     && (missDistance > CatchAbortHorizontalMissToleranceM
@@ -312,8 +369,17 @@ public partial class EDLController : Control
                     _towerCatchAborted = true;
                     vessel.IsAttemptingTowerCatch = false;
                     _phase = Edl.Final;
+                    body.GetGeodeticCoordinates(catchTargetPosition,
+                        out double targetLatitude, out double targetLongitude, out _);
+                    body.GetGeodeticCoordinates(vessel.Position,
+                        out double vehicleLatitude, out double vehicleLongitude, out _);
+                    Vector3d targetDelta = catchTargetPosition - vessel.Position;
                     GD.Print($"[EDL] tower catch aborted at {_alt:F0} m " +
-                        $"(miss={missDistance:F1} m, horiz={_horiz:F1} m/s) — diverting to leg landing");
+                        $"(miss={missDistance:F1} m, horiz={_horiz:F1} m/s, " +
+                        $"targetDelta={targetDelta}, " +
+                        $"vehicleLatLon={vehicleLatitude:F5},{vehicleLongitude:F5}, " +
+                        $"targetLatLon={targetLatitude:F5},{targetLongitude:F5}) " +
+                        "— diverting to leg landing");
                     break;
                 }
                 if (vessel.IsCaught)
@@ -356,19 +422,42 @@ public partial class EDLController : Control
             // target retains nearly all projected drag while generating Starship-like L/D.
             if (vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
             {
-                // A shallow atmospheric deorbit with exact broadside (zero body lift) can skip
-                // back out of the atmosphere before reaching the low flip gate. Keep the
-                // belly-first high-drag attitude, but bias lift toward the body so the
-                // normal aerodynamic integrator commits the return trajectory. The tower
-                // target is still handled by the powered retro/catch guidance below.
-                aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
+                // A catch return needs a bounded cross-range lift bias. A fixed down-lift
+                // vector can enter the atmosphere safely yet miss the rotating tower by tens
+                // of kilometres because small entry-state changes alter the ballistic ground
+                // track. Project the target corridor into the lift plane and blend it with the
+                // inward/downward bias; the normal aerodynamic integrator remains authoritative.
+                Vector3d targetOffset = catchTargetPosition - vessel.Position;
+                Vector3d targetLift = targetOffset - velDir * targetOffset.Dot(velDir);
+                Vector3d bodyDownLift = -(up - velDir * up.Dot(velDir));
+                if (bodyDownLift.Magnitude > 1e-6 && targetLift.Magnitude > 1e-6)
+                {
+                    double crossRangeMiss = (targetOffset - up * targetOffset.Dot(up)).Magnitude;
+                    // A normal orbital return can enter hundreds of kilometres off the
+                    // instantaneous cradle track after the first lift pass.  At that scale
+                    // the previous 45% cap left too much lift committed to the fixed
+                    // body-down bias, so the trajectory stayed parallel to the wrong
+                    // ground track.  Give the corridor authority only while the error is
+                    // large; taper to the conservative body-down attitude near the site so
+                    // the final aero-to-retro transition remains stable.
+                    double targetWeight = System.Math.Clamp(crossRangeMiss / 200_000.0, 0.15, 0.85);
+                    Vector3d guidedLift = (bodyDownLift.Normalized * (1.0 - targetWeight)
+                        + targetLift.Normalized * targetWeight).Normalized;
+                    aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(velDir, guidedLift);
+                }
+                else
+                {
+                    aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
+                }
             }
             else
             {
                 aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
             }
         }
-        else if (_phase == Edl.Catch || (_phase == Edl.Final && _horiz < 12.0))
+        else if (_phase == Edl.Catch
+            || (_phase == Edl.Final && _horiz < 12.0
+                && !(_towerCatchAborted && _alt <= TerminalVerticalPriorityAltitudeM)))
         {
             // Stay primarily upright but cant into the lateral error so the same thrust
             // command can actually remove it. A perfectly vertical axis cannot satisfy a
@@ -393,15 +482,67 @@ public partial class EDLController : Control
         }
         else if (_phase == Edl.Retro && vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
         {
-            // Keep the powered flip aligned with the retrograde braking axis. Lateral thrust
-            // during the high-authority flip amplifies a small site error into a large miss;
-            // the low-altitude Catch phase has a separate one-engine position/velocity loop
-            // with enough time to close the remaining metres without sacrificing the flip.
-            aimAxis = -velDir;
+            // Keep retrograde braking as the primary command, but spend bounded thrust-vector
+            // authority on a large lateral corridor error.  A pure retrograde burn preserves
+            // the wrong ground track once aero descent has left a several-kilometre miss; by
+            // the Catch phase there is not enough altitude to recover it.  The correction uses
+            // the already synchronized target-relative velocity error and is capped at 15° so
+            // it remains a controlled divert, not an attitude snap or direct position write.
+            Vector3d retroAxis = -velDir;
+            Vector3d lateralCorrection = -catchLateralVelocityError;
+            lateralCorrection -= retroAxis * lateralCorrection.Dot(retroAxis);
+            double catchMiss = (catchTargetPosition - vessel.Position
+                - up * (catchTargetPosition - vessel.Position).Dot(up)).Magnitude;
+            double lateralAngle = System.Math.Clamp(catchMiss / 5_000.0, 0.0, 15.0)
+                * MathUtils.DEG_TO_RAD;
+            aimAxis = lateralCorrection.Magnitude > 1e-3 && lateralAngle > 1e-6
+                ? (retroAxis * System.Math.Cos(lateralAngle)
+                    + lateralCorrection.Normalized * System.Math.Sin(lateralAngle)).Normalized
+                : retroAxis;
         }
         else
         {
-            aimAxis = -velDir;                              // engines retrograde
+            // Once the catch has been diverted, the landing burn is a vertical leg landing,
+            // not a generic retrograde burn. Using -velDir here becomes singular when the
+            // vertical speed approaches zero: the target axis swings through the horizontal
+            // velocity and the vehicle starts chasing its own attitude error. That oscillation
+            // was the direct cause of the v22 propellant-starvation crash. Keep the thrust axis
+            // upright and spend only bounded tilt authority on horizontal velocity damping.
+            // Below the terminal gate, do not trade vertical landing margin for cross-range
+            // correction. The v26 run reached 24.7 m with only 0.8 m/s down but 6.4 m/s total
+            // speed because the lateral tilt kept injecting horizontal velocity. Landing gear
+            // contact has no lateral catch mechanism, so a clean vertical release is safer and
+            // more physical than chasing the remaining site offset at the last instant.
+            if (_towerCatchAborted && _alt <= TerminalVerticalPriorityAltitudeM)
+            {
+                // Preserve vertical landing margin while gently bleeding residual lateral
+                // velocity. The correction fades out before foot contact so it cannot inject a
+                // late sideways component into the suspension.
+                Vector3d terminalLateralVelocity = surfVel - up * _vUp;
+                const double terminalContactDatumAlt = 7.85;
+                double terminalHeight = System.Math.Max(0.0, _alt - terminalContactDatumAlt);
+                double terminalBlend = System.Math.Clamp((terminalHeight - 1.0) / 15.0, 0.0, 1.0);
+                const double TerminalMaxTiltDeg = 20.0;
+                double terminalTilt = System.Math.Clamp(
+                    terminalLateralVelocity.Magnitude * 0.20,
+                    0.0,
+                    System.Math.Tan(TerminalMaxTiltDeg * MathUtils.DEG_TO_RAD)) * terminalBlend;
+                aimAxis = terminalLateralVelocity.Magnitude > 1e-3 && terminalTilt > 1e-6
+                    ? (up - terminalLateralVelocity.Normalized * terminalTilt).Normalized
+                    : up;
+            }
+            else
+            {
+                Vector3d landingLateralVelocity = surfVel - up * _vUp;
+            const double MaxLandingTiltDeg = 15.0;
+            double landingTilt = System.Math.Clamp(
+                landingLateralVelocity.Magnitude * 0.04,
+                0.0,
+                System.Math.Tan(MaxLandingTiltDeg * MathUtils.DEG_TO_RAD));
+            aimAxis = landingLateralVelocity.Magnitude > 1e-3
+                ? (up - landingLateralVelocity.Normalized * landingTilt).Normalized
+                : up;
+            }
         }
         // In the aero phases pitch is not enough: roll the vehicle so the actual tiled
         // local -X belly faces the velocity vector. This keeps rendering, heating and drag
@@ -476,13 +617,54 @@ public partial class EDLController : Control
                 return;
             }
 
+            // The Raptor minimum throttle is still a substantial landing impulse. After an
+            // abort-to-legs, the closed-loop profile can cross zero vertical speed at the apex;
+            // immediately commanding the floor again then causes a shutdown/restart chatter
+            // and consumes the finite engine restart budget. Latch a single coast segment above
+            // the low restart gate, then relight once on the way down for the final burn.
+            bool fallbackLegLanding = _towerCatchAborted && !vessel.IsAttemptingTowerCatch;
+            if (fallbackLegLanding)
+            {
+                // Leave enough altitude for one full guidance frame plus the three-engine
+                // arrest. At 1,200 m the llvmpipe E2E cadence could cross the entire handoff
+                // window and relight only at ~172 m with ~135 m/s down; 2,500 m preserves a
+                // physically recoverable burn corridor without changing the orbital seed.
+                const double LowRelightAltitudeM = 2_500.0;
+                const double CoastEntryVerticalSpeedMps = 0.5;
+                // Coast is a one-shot handoff. Once the landing cluster has relit, never
+                // re-enter coast: a second shutdown would consume the finite Raptor restart
+                // budget while the vehicle is already committed to its terminal burn.
+                if (!_landingBurnCoast && !_landingBurnRelit && _phase == Edl.Retro
+                    && _vUp >= -CoastEntryVerticalSpeedMps
+                    && _alt > LowRelightAltitudeM)
+                {
+                    _landingBurnCoast = true;
+                    GD.Print($"[EDL] fallback landing coast entered alt={_alt:F0}m vUp={_vUp:F1}m/s");
+                }
+
+                if (_landingBurnCoast)
+                {
+                    if (_alt > LowRelightAltitudeM || _vUp >= 0.0)
+                    {
+                        vessel.Throttle = 0.0;
+                        vessel.PitchYawRoll = Vector3d.Zero;
+                        shipEngines?.SelectEngineCount(0);
+                        return;
+                    }
+
+                    _landingBurnCoast = false;
+                    _landingBurnRelit = true;
+                    GD.Print($"[EDL] fallback landing burn relit alt={_alt:F0}m vUp={_vUp:F1}m/s");
+                }
+            }
+
             const double contactDatumAlt = 7.85; // 7.50 m leg offset + 0.35 m foot radius
             const double touchdownRate = 1.20;
             // A catch approach's "ground" is the cradle's height up the tower, not the planet
             // surface below it — the descent profile must arrest at the arms, not fly through
             // them toward the ground the tower stands on.
             double effectiveContactDatumAlt = _phase == Edl.Catch
-                ? body.GetAltitude(vessel.CatchTargetPositionWorld)
+                ? body.GetAltitude(catchTargetPosition)
                     - vessel.CatchContactPoints
                         .Select(point => point.LocalPositionFromDatum.Y)
                         .DefaultIfEmpty(0.0)
@@ -536,6 +718,30 @@ public partial class EDLController : Control
                 shipEngines?.SelectEngineCount(0);
                 vessel.Throttle = 0.0;
                 _landingEngineCount = 0;
+                return;
+            }
+
+            // A normal leg landing has no pin solver to announce contact before the feet touch.
+            // Once the vehicle is inside the final 12 m and already below the contract's soft
+            // touchdown speed, close the engines and let the contact integrator settle it. This
+            // prevents a minimum-throttle Raptor from hovering just above the surface.
+            Vector3d landingAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+            double uprightAlignment = landingAxis.Dot(up);
+            bool finalSurfaceRelease = _phase == Edl.Final
+                && heightToContact <= FinalSurfaceReleaseAltitudeM
+                && surfVel.Magnitude <= FinalSurfaceReleaseSpeedMps
+                && vessel.AngularVelocity.Magnitude <= FinalSurfaceReleaseAngularRateRadS
+                && uprightAlignment >= System.Math.Cos(8.0 * MathUtils.DEG_TO_RAD);
+            if (finalSurfaceRelease)
+            {
+                _landingCutoffCommitted = true;
+                shipEngines?.SelectEngineCount(0);
+                vessel.Throttle = 0.0;
+                vessel.PitchYawRoll = Vector3d.Zero;
+                _landingEngineCount = 0;
+                GD.Print($"[EDL] final surface release alt={_alt:F2}m vDown={vDown:F2}m/s "
+                    + $"surfaceSpeed={surfVel.Magnitude:F2}m/s "
+                    + $"omega={vessel.AngularVelocity.Magnitude:F3}rad/s upright={uprightAlignment:F3}");
                 return;
             }
 
@@ -599,6 +805,8 @@ public partial class EDLController : Control
             _phase = Edl.Inactive;
             _flipInProgress = false;
             _landingCutoffCommitted = false;
+            _landingBurnCoast = false;
+            _landingBurnRelit = false;
             _landingEngineCount = 0;
             Visible = false;
         }
@@ -639,8 +847,8 @@ public partial class EDLController : Control
         for (int i = 0; i < bands; i++)
         {
             float t = i / (float)(bands - 1);
-            float thick = vp.Y * 0.5f * (1f - t);
-            float a = k * 0.22f * (1f - t);
+            float thick = vp.Y * 0.10f * (1f - t);
+            float a = k * 0.08f * (1f - t);
             DrawRect(new Rect2(0, vp.Y - thick, vp.X, thick), new Color(hot, a));   // bottom glow
             DrawRect(new Rect2(0, 0, vp.X, thick * 0.5f), new Color(hot, a * 0.4f)); // top
         }
@@ -690,17 +898,17 @@ public partial class EDLController : Control
                 Mathf.Min(viewport.X / 1280f, viewport.Y / 720f), 0.85f, 1.00f);
             float margin = 56f * scale;
 
-            // At the supported 1280×720 baseline: altimeter [56,86], telemetry
-            // [176,406], and thermal [456,706].  The explicit gaps also keep the
-            // 70.0 km marker text outside telemetry, while HIGH G stays inside its panel.
+            // Side rails reserve the center for the vehicle. At 720p telemetry
+            // ends at y=370, above the attitude cluster; thermal hugs the right edge.
+            float top = 180f * scale;
             Rect2 altimeter = new(
-                new Vector2(margin, viewport.Y * 0.22f),
-                new Vector2(30f * scale, viewport.Y * 0.56f));
+                new Vector2(margin, top),
+                new Vector2(30f * scale, 190f * scale));
             Rect2 telemetry = new(
-                new Vector2(margin + 120f * scale, viewport.Y * 0.18f),
-                new Vector2(230f * scale, 250f * scale));
+                new Vector2(margin + 120f * scale, top),
+                new Vector2(230f * scale, 190f * scale));
             Rect2 thermal = new(
-                new Vector2(margin + 400f * scale, viewport.Y * 0.28f),
+                new Vector2(viewport.X - 266f * scale, top),
                 new Vector2(250f * scale, 250f * scale));
 
             Vector2 telemetryOrigin = telemetry.Position + new Vector2(12f, 28f) * scale;
@@ -715,6 +923,9 @@ public partial class EDLController : Control
     private void DrawAltimeter(EdlOverlayLayout layout)
     {
         float maxAlt = AltimeterMaxAltitude(_phase);
+        // Entry may start above 70 km. Keep the marker on-scale without altering
+        // the underlying altitude or the tighter landing reference range.
+        maxAlt = Mathf.Max(maxAlt, Mathf.Ceil((float)_alt / 10_000f) * 10_000f);
         Rect2 rail = layout.AltimeterRect;
         float x = rail.Position.X;
         float top = rail.Position.Y;
@@ -844,7 +1055,7 @@ public partial class EDLController : Control
         Color vsCol = System.Math.Abs(vDown) > 50 ? new Color(1f, 0.35f, 0.3f)
                     : System.Math.Abs(vDown) > 10 ? new Color(1f, 0.82f, 0.3f)
                     : new Color(0.4f, 1f, 0.5f);
-        Text("VERTICAL",   new Vector2(x, y),      new Color(0.6f, 0.7f, 0.82f), 13);
+        Text("VERTICAL (DOWN +)", new Vector2(x, y), new Color(0.6f, 0.7f, 0.82f), 13);
         Text($"{vDown:+0;-0} m/s", new Vector2(x, y + 20f * scale), vsCol, 22);
         Text("HORIZONTAL", new Vector2(x, y + 52f * scale), new Color(0.6f, 0.7f, 0.82f), 13);
         Text($"{_horiz:F0} m/s", new Vector2(x, y + 72f * scale), new Color(0.9f, 0.95f, 1f), 20);
@@ -906,22 +1117,27 @@ public partial class EDLController : Control
     private void DrawBlackoutBanner(Vector2 vp)
     {
         const string headline = "SIGNAL LOST — PLASMA BLACKOUT";
-        string sub = $"IONISED SHEATH · T+{_blackoutSeconds:F0}s · SIGNAL RETURNS AS SPEED BLEEDS OFF";
+        string sub = $"IONISED SHEATH · {_blackoutSeconds:F0}s ELAPSED";
+        const string recovery = "Signal returns as speed decreases";
 
-        var headSize = _font.GetStringSize(headline, HorizontalAlignment.Center, -1, 24);
-        var subSize = _font.GetStringSize(sub, HorizontalAlignment.Center, -1, 13);
-        float cx = vp.X * 0.5f;
-        float top = vp.Y * 0.74f;
+        var headSize = _font.GetStringSize(headline, HorizontalAlignment.Center, -1, 18);
+        var subSize = _font.GetStringSize(sub, HorizontalAlignment.Center, -1, 12);
+        var recoverySize = _font.GetStringSize(recovery, HorizontalAlignment.Center, -1, 12);
+        // Right half of the lower lane, clear of the complete left attitude cluster.
+        float cx = vp.X * 0.75f;
+        float top = vp.Y - 182f;
 
-        DrawRect(new Rect2(cx - headSize.X * 0.5f - 22f, top - 26f,
-            headSize.X + 44f, 60f), new Color(0.04f, 0.06f, 0.09f, 0.72f));
-        DrawRect(new Rect2(cx - headSize.X * 0.5f - 22f, top - 26f,
-            headSize.X + 44f, 60f), new Color(InterfaceTheme.Alert, 0.55f), false, 1.2f);
+        var panel = new Rect2(cx - headSize.X * 0.5f - 16f, top - 22f,
+            headSize.X + 32f, 64f);
+        DrawRect(panel, new Color(0.04f, 0.06f, 0.09f, 0.72f));
+        DrawRect(panel, new Color(InterfaceTheme.Alert, 0.55f), false, 1.2f);
 
         DrawString(_font, new Vector2(cx - headSize.X * 0.5f, top), headline,
-            HorizontalAlignment.Left, -1, 24, InterfaceTheme.Alert);
-        DrawString(_font, new Vector2(cx - subSize.X * 0.5f, top + 22f), sub,
-            HorizontalAlignment.Left, -1, 13, InterfaceTheme.TextMuted);
+            HorizontalAlignment.Left, -1, 18, InterfaceTheme.Alert);
+        DrawString(_font, new Vector2(cx - subSize.X * 0.5f, top + 17f), sub,
+            HorizontalAlignment.Left, -1, 12, InterfaceTheme.TextMuted);
+        DrawString(_font, new Vector2(cx - recoverySize.X * 0.5f, top + 33f), recovery,
+            HorizontalAlignment.Left, -1, 12, InterfaceTheme.TextMuted);
     }
 
     /// <summary>
@@ -990,7 +1206,24 @@ public partial class EDLController : Control
             engineCluster, vessel.GetAmbientPressure(body));
         double perEngine = ratedCluster / represented;
         double desiredThrust = System.Math.Max(0.0, accelerationCmd * mass);
-        if (perEngine <= 1.0 || desiredThrust <= 1.0)
+        if (perEngine <= 1.0)
+        {
+            engineCluster.SelectEngineCount(0);
+            vessel.Throttle = 0.0;
+            return;
+        }
+
+        // Once a fallback leg landing has relit below the coast gate, do not issue a transient
+        // zero command merely because the profile briefly crosses the minimum-throttle deadband.
+        // Raptor shutdown/restart is not continuous thrust modulation: the interruption would
+        // consume a restart and leave the vehicle with an incomplete landing cluster. The normal
+        // surface-release gate above remains the only way to end this committed burn.
+        bool committedStarshipBurn = _landingBurnRelit
+            && _towerCatchAborted
+            && !vessel.IsAttemptingTowerCatch
+            && engineCluster.Definition.IsStarshipFamily
+            && engineCluster.Definition.HasVehicleRole("ship_engines");
+        if (desiredThrust <= 1.0 && !committedStarshipBurn)
         {
             engineCluster.SelectEngineCount(0);
             vessel.Throttle = 0.0;
@@ -1007,28 +1240,71 @@ public partial class EDLController : Control
             }
         }
 
-        // A landing burn is a monotonic engine-count sequence, not a bank that may chatter
-        // on and off with every guidance correction. Start all three centre Raptors during
-        // the flip. Once descent has genuinely reduced the demand, step down 3→2→1 with
-        // margin. The tower-catch approach participates in the same step-down: leaving all
-        // three engines at the Raptor minimum throttle creates a hover plateau above the arms.
+        // A landing burn is a hysteretic engine-count sequence, not a bank that may chatter on
+        // and off with every guidance correction. Start all three centre Raptors during the flip.
+        // A candidate count must retain a real hover margin; the previous monotonic 3→2→1 rule
+        // could select one engine while the demand was low and then never restore it when the
+        // vehicle arrived hot. That left the fallback with ~2 MN against a multi-meganewton
+        // vehicle weight and produced the observed 21 m/s ground impact.
+        double hoverThrust = System.Math.Max(0.0, mass * body.GetSurfaceGravity() * MinimumLandingTwr);
+        int minimumSafeEngines = System.Math.Clamp(
+            (int)System.Math.Ceiling(hoverThrust / perEngine), 1, maxLandingEngines);
+        // Starship's landing burn is the three-engine centre cluster. Keep those engines
+        // selected throughout a real Starship EDL sequence; using the nominal full-throttle
+        // rating above would otherwise classify one engine as a safe minimum for this fixture,
+        // even though one Raptor at its 40% floor cannot arrest the vehicle near the ground.
+        bool starshipLandingCluster = engineCluster.Definition.IsStarshipFamily
+            && engineCluster.Definition.HasVehicleRole("ship_engines");
+        if (starshipLandingCluster)
+        {
+            // Starship needs the three-engine centre cluster for the flip and initial
+            // velocity arrest. Use two engines for the intermediate final descent, then one
+            // engine only inside the terminal gate; three engines at the deep-throttle floor
+            // over-accelerate the light vehicle after the descent profile has been arrested.
+            minimumSafeEngines = _phase == Edl.Final
+                ? (_alt <= TerminalSingleEngineAltitudeM ? 1 : 2)
+                : maxLandingEngines;
+        }
         if (_landingEngineCount <= 0)
             _landingEngineCount = maxLandingEngines;
-        int selected = System.Math.Min(_landingEngineCount, maxLandingEngines);
+        int selected = System.Math.Max(
+            System.Math.Min(_landingEngineCount, maxLandingEngines), minimumSafeEngines);
         if (_phase is Edl.Catch or Edl.Final)
         {
             const double StepDownCapacityFraction = 0.75;
             while (selected > 1
+                   && selected > minimumSafeEngines
                    && requested < selected
                    && desiredThrust <= perEngine * (selected - 1)
                        * StepDownCapacityFraction)
                 selected--;
+
+            // Restore an engine before the commanded thrust saturates. This is the other half of
+            // the hysteresis: it makes an earlier economical step-down reversible and gives the
+            // burn enough authority for the last part of a hot approach.
+            if (requested > selected
+                || desiredThrust > perEngine * selected * 0.90)
+                selected = System.Math.Min(maxLandingEngines, requested);
         }
+        // Keep the three-engine cluster available for the high-energy part of Final. Once the
+        // vessel is inside the terminal gate, never re-expand after stepping down to one: a
+        // late demand spike must saturate the committed engine, not restart Raptors that were
+        // intentionally shut down during the final approach.
+        if (starshipLandingCluster && _phase == Edl.Final)
+            selected = _alt <= TerminalSingleEngineAltitudeM ? 1 : 2;
         _landingEngineCount = selected;
         engineCluster.SelectEngineCount(selected);
-        double throttle = desiredThrust / (perEngine * selected);
+        double throttle = committedStarshipBurn
+            ? System.Math.Max(DefinitionMinThrottle(engineCluster),
+                desiredThrust / (perEngine * selected))
+            : desiredThrust / (perEngine * selected);
         vessel.Throttle = engineCluster.ApplyThrottleFloor(
             System.Math.Clamp(throttle, 0.0, 1.0));
+    }
+
+    private static double DefinitionMinThrottle(Part engineCluster)
+    {
+        return System.Math.Max(0.0, engineCluster.Definition.MinThrottle);
     }
 
     private static double EstimateFlipTime(double angle, double angularAcceleration, double maxRate)

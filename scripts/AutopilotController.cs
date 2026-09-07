@@ -4,6 +4,7 @@ using Godot;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Parts;
 
 /// <summary>
 /// Executes a planned maneuver. When armed it waits until the active vessel reaches
@@ -23,6 +24,8 @@ public partial class AutopilotController : Node
     private bool   _restoreSas;
     private bool   _burnCommandCommitted;
     private Vector3d _burnDirectionWorld = Vector3d.Zero;
+    private bool   _deorbitBurn;
+    private double _targetPeriapsisRadius;
 
     private const double NodeWindow = 0.10;   // rad: how close to node before igniting
     // A deorbit burn commonly starts 180° away from the current thrust axis. The generic
@@ -31,6 +34,19 @@ public partial class AutopilotController : Node
     // for maneuver execution only; EDL/ascent retain their own tuned callers.
     private const double BurnProportionalGain = 2.0;
     private const double BurnDampingGain = 25.0;
+    // The controller runs after the current physics tick. Near a circular orbit, one more
+    // 0.1 s thrust slice can move periapsis by tens of kilometres, so stop when a forecast of
+    // the next bounded slice reaches the requested target instead of waiting for overshoot.
+    private const double DeorbitForecastSeconds = 0.1;
+
+    public override void _Ready()
+    {
+        // Maneuver execution must be the final guidance writer before EDL. HUD input and
+        // ascent assist may publish a zero/old stick command earlier in the frame; leaving
+        // this at the default priority made a correctly armed deorbit burn sit forever at
+        // pyr=(0,0,0) until its watchdog expired.
+        ProcessPriority = 150;
+    }
 
     public void Bind(ManeuverPlanner planner) => _planner = planner;
 
@@ -81,6 +97,16 @@ public partial class AutopilotController : Node
 
         if (!IsBurning)
         {
+            // The deorbit preset deliberately places a near-circular node at the current
+            // true anomaly. Waiting for a future node-crossing test here is numerically
+            // fragile: SetOrbit's tiny eccentricity noise can move the angle outside the
+            // 0.10 rad window on the next frame, leaving the armed burn permanently idle.
+            if (_planner.DvPrograde < -50.0 && _planner.Eccentricity < 0.01)
+            {
+                BeginBurn(vessel, relVel);
+            }
+            else
+            {
             // Detect arrival at (or crossing of) the node true anomaly.
             double diff = AngleDiff(nu, _planner.NodeTrueAnomaly);
             bool crossed = !double.IsNaN(_prevNu) &&
@@ -89,9 +115,10 @@ public partial class AutopilotController : Node
             _prevNu = nu;
 
             if (System.Math.Abs(diff) <= NodeWindow || crossed)
-                BeginBurn(vessel);
+                BeginBurn(vessel, relVel);
             else
                 return;
+            }
         }
 
         // ── Burning ──────────────────────────────────────────────────────────
@@ -132,16 +159,70 @@ public partial class AutopilotController : Node
             _deliveredDv += thrust / mass * simStep;
         }
 
-        if (_deliveredDv >= _targetDv)
+        bool deorbitTargetReached = _deorbitBurn
+            && (_planner.PeriapsisRadius <= _targetPeriapsisRadius
+                || PredictNextDeorbitPeriapsis(vessel, refBody) <= _targetPeriapsisRadius);
+        bool burnSafetyLimitReached = _deorbitBurn
+            && _deliveredDv >= _targetDv * 1.5;
+        if ((!_deorbitBurn && _deliveredDv >= _targetDv)
+            || deorbitTargetReached
+            || burnSafetyLimitReached)
             FinishBurn(vessel);
     }
 
-    private void BeginBurn(Vessel vessel)
+    private double PredictNextDeorbitPeriapsis(Vessel vessel, CelestialBody refBody)
+    {
+        if (vessel.TotalMass <= 0.0 || _burnDirectionWorld.MagnitudeSquared < 1e-12)
+            return double.PositiveInfinity;
+
+        double pressure = refBody.Atmosphere?.GetPressure(refBody.GetAltitude(vessel.Position)) ?? 0.0;
+        double thrust = vessel.ComputeThrust(refBody).Magnitude;
+        double forecastThrust = 0.0;
+        foreach (var engine in vessel.Parts.ActiveEngines)
+        {
+            double fullThrust = engine.GetFullThrottleThrustMagnitude(pressure);
+            double nextThrottle = System.Math.Clamp(
+                engine.ThrottleLevel + Part.SpoolRate * DeorbitForecastSeconds,
+                0.0,
+                1.0);
+            forecastThrust += fullThrust * nextThrottle;
+        }
+        thrust = System.Math.Max(thrust, forecastThrust);
+        if (!double.IsFinite(thrust) || thrust <= 0.0)
+            return double.PositiveInfinity;
+
+        Vector3d relativePosition = vessel.Position - refBody.Position;
+        Vector3d relativeVelocity = vessel.Velocity - refBody.Velocity;
+        Vector3d predictedVelocity = relativeVelocity
+            + _burnDirectionWorld.Normalized
+                * (thrust / vessel.TotalMass * DeorbitForecastSeconds);
+        try
+        {
+            var predictedOrbit = OrbitalElements.FromStateVector(
+                relativePosition,
+                predictedVelocity,
+                refBody.GM,
+                refBody.Id,
+                SimulationBridge.Instance?.Universe.CurrentTime ?? 0.0);
+            return predictedOrbit.PeriapsisRadius;
+        }
+        catch (ArgumentException)
+        {
+            return double.PositiveInfinity;
+        }
+    }
+
+    private void BeginBurn(Vessel vessel, Vector3d currentRelativeVelocity = default)
     {
         IsBurning   = true;
         _targetDv   = _planner.DeltaVMagnitude;
         _deliveredDv = 0.0;
-        _burnDirectionWorld = _planner.DeltaVInertial().Normalized;
+        _deorbitBurn = _planner.DvPrograde < -50.0;
+        _targetPeriapsisRadius = _planner.TargetPeriapsisRadius;
+        _burnDirectionWorld = _deorbitBurn
+            && currentRelativeVelocity.MagnitudeSquared > 1e-9
+            ? -currentRelativeVelocity.Normalized
+            : _planner.DeltaVInertial().Normalized;
         _restoreSas = vessel.SASEnabled;
         vessel.SASEnabled = false;
 
@@ -152,7 +233,7 @@ public partial class AutopilotController : Node
 
     private void FinishBurn(Vessel vessel)
     {
-        bool wasDeorbit = _planner.DvPrograde < -50.0;
+        bool wasDeorbit = _deorbitBurn;
         vessel.Throttle = 0.0;
         EndBurn();
         IsArmed = false;
@@ -179,6 +260,8 @@ public partial class AutopilotController : Node
         IsBurning = false;
         _burnCommandCommitted = false;
         _burnDirectionWorld = Vector3d.Zero;
+        _deorbitBurn = false;
+        _targetPeriapsisRadius = 0.0;
     }
 
     // ── Math helpers ──────────────────────────────────────────────────────────
