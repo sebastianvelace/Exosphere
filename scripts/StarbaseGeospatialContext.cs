@@ -380,7 +380,9 @@ public partial class LaunchPadController
 
     private static void AddReliefTriangle(SurfaceTool st, Vector3 a, Vector3 b, Vector3 c)
     {
-        if ((b - a).Cross(c - a).Y < 0f)
+        // Godot front faces are clockwise. A positive conventional cross product
+        // points up but makes this surface back-facing when viewed from above.
+        if ((b - a).Cross(c - a).Y > 0f)
             (b, c) = (c, b);
         st.AddVertex(a);
         st.AddVertex(b);

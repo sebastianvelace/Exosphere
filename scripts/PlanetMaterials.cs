@@ -25,8 +25,8 @@ public static class PlanetMaterials
     private const string BodyShaderPath  = "res://assets/shaders/planet_body.gdshader";
 
     /// <summary>
-    /// Photorealistic Earth: procedural oceans/continents, animated clouds, polar
-    /// ice, a day/night terminator with faint city lights, and a glowing blue limb.
+    /// Textured Earth surface with animated clouds, a day/night terminator and
+    /// city lights. Atmospheric haze and limb radiance belong to the sky integrator.
     /// </summary>
     public static Material CreateEarth()
     {
@@ -45,7 +45,6 @@ public static class PlanetMaterials
         mat.SetShaderParameter("night_lights", 2.4f);
         mat.SetShaderParameter("day_gain", 1.15f);
         mat.SetShaderParameter("night_floor", 0.12f);
-        mat.SetShaderParameter("limb_strength", 0.85f);
         return mat;
     }
 

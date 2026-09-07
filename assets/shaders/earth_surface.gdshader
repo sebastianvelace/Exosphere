@@ -2,8 +2,8 @@
 // Exosphere — Photoreal Earth from NASA Blue Marble textures.
 // Equirectangular day (natural-colour land/ocean), night (Black Marble city lights)
 // and cloud textures, sampled from the sphere's local position. Day/night blend from
-// `sun_dir` and spectrally attenuated direct sunlight. The sky owns the broad atmosphere;
-// the solid sphere only gets a bounded night-side earthshine floor and a thin edge.
+// `sun_dir` and spectrally attenuated direct sunlight. Atmospheric radiance belongs
+// to the spherical sky integrator; this surface adds no view-angle haze or limb glow.
 // Unshaded — the
 // shader does its own lighting (so Godot's DirectionalLight does not double-light it).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,10 +30,6 @@ uniform float day_gain     : hint_range(0.5, 2.0) = 1.15;
 // texture remains additive; this floor only keeps land/ocean readable when the
 // physically direct beam is absent and exposure is driven by the star field.
 uniform float night_floor : hint_range(0.0, 0.16) = 0.12;
-// The scaled-space Earth is a real mesh, so the sky integrator cannot draw its
-// atmospheric limb over it. This bounded blue edge preserves the planetary
-// silhouette on the night side without adding a broad emissive halo.
-uniform float limb_strength : hint_range(0.0, 1.5) = 0.85;
 // Fades the whole distant-Earth backdrop in/out. Driven by FloatingOrigin from the CAMERA's
 // altitude: ~0 in the low launch view (so the local ground patch + sky own the horizon, no
 // grey seam between the two Earth representations) → 1 once the viewpoint is high enough that
@@ -93,7 +89,6 @@ void fragment() {
 	vec3 p = normalize(v_local);
 	vec3 N = normalize(v_world_normal);
 	vec3 L = normalize(sun_dir);
-	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 
 	vec2 uv = equirect(p);
 
@@ -143,33 +138,6 @@ void fragment() {
 	vec3 lit = surface * (vec3(diffuse_fill)
 		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility);
 
-	// A thin, physically motivated atmospheric edge remains visible when the
-	// unlit surface and city-light texture are below the adapted exposure.
-	float ndotv = clamp(dot(N, V), 0.0, 1.0);
-	float limb = 1.0 - ndotv;
-	// View-path haze: continents stay colorful at nadir and pick up Rayleigh blue
-	// toward the limb, matching ISS/NASA limb photos instead of a toy marble glow.
-	float path_air = pow(limb, 2.15);
-	vec3 rayleigh_haze = vec3(0.34, 0.56, 0.92);
-	lit = mix(lit, mix(lit, rayleigh_haze, 0.62), path_air * 0.48 * solar_visibility);
-
-	// Thin atmospheric edge: inner cyan scattering, outer Chappuis ozone.
-	// fwidth keeps the silhouette from aliasing into a white sawtooth against
-	// the sky; keep the band thin so 50–80 km reads as a cyan line, not a
-	// blown white hemisphere.
-	float limb_aa = max(fwidth(limb), 0.004);
-	float inner = smoothstep(0.02, 0.02 + limb_aa * 4.0, limb)
-		* (1.0 - smoothstep(0.10, 0.28, limb));
-	float outer = smoothstep(0.16, 0.16 + limb_aa * 6.0, limb)
-		* (1.0 - smoothstep(0.32, 0.55, limb));
-	float limb_visibility = 0.22 + 0.78 * solar_visibility;
-	vec3 atmosphere_limb = (
-		vec3(0.28, 0.68, 1.00) * inner * 0.70
-		+ vec3(0.55, 0.82, 1.00) * pow(limb, 11.0) * 0.10
-		+ vec3(0.58, 0.22, 0.10) * outer * 0.22
-	) * limb_strength * limb_visibility;
-	lit += atmosphere_limb;
-
 	// City lights on the night side (emissive). Threshold on luminance so ONLY genuine
 	// bright lights pass — the Black Marble texture has a dark, blocky data floor in
 	// unlit regions that otherwise bleeds across the terminator as grey/blocky squares
@@ -180,11 +148,15 @@ void fragment() {
 	lit += cities;
 
 	ALBEDO = lit;
-	EMISSION = cities * 0.6 + atmosphere_limb * 0.10;
-	// Soften the geometric silhouette so a tessellated sphere does not print
-	// a white sawtooth against the sky; the cyan band stays on the disc.
-	// Without blend_mix this ALPHA is ignored and the faceted sphere edge
-	// aliases as a blown white limb at 50–80 km.
-	float silhouette = 1.0 - smoothstep(0.70, 0.92, limb);
+	EMISSION = cities * 0.6;
+	// Coverage only: the geometric silhouette is N dot V = 0, not an interior
+	// view-angle contour. Use the unclamped cosine for derivatives so the
+	// footprint remains valid across the tangent. The epsilon only guards zero
+	// derivatives; no fixed angular band should expose sky through the disc.
+	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
+	float ndotv = dot(N, V);
+	float limb = 1.0 - ndotv;
+	float limb_aa = max(fwidth(limb), 0.000001);
+	float silhouette = smoothstep(0.0, limb_aa, ndotv);
 	ALPHA = planet_alpha * silhouette;
 }

@@ -16,6 +16,7 @@ public partial class LaunchPadController
 {
     public bool FarFieldVisible => _starbaseFarFieldRoot?.Visible == true;
     public float FarFieldOpacity => float.IsNaN(_lastFarFieldOpacity) ? 0f : _lastFarFieldOpacity;
+    public string FarFieldSource => _farFieldUsesMappedContext ? "OSM+3DEP" : "fallback";
 
     private Node3D? _starbaseFarFieldRoot;
     private readonly List<MeshInstance3D> _starbaseFarFieldMeshes = new();
@@ -442,8 +443,7 @@ public partial class LaunchPadController
             Vector3 a = new(points[0].X * U, 0f, points[0].Y * U);
             Vector3 b = new(points[i].X * U, 0f, points[i].Y * U);
             Vector3 c = new(points[i + 1].X * U, 0f, points[i + 1].Y * U);
-            if ((b - a).Cross(c - a).Y < 0f) (b, c) = (c, b);
-            st.AddVertex(a); st.AddVertex(b); st.AddVertex(c);
+            AddReliefTriangle(st, a, b, c);
         }
         st.GenerateNormals();
         return st.Commit()!;
