@@ -56,10 +56,10 @@ public partial class LaunchPadController : Node3D
 
     private const double CatchPresentationPeriodSeconds = 1.0 / 20.0;
     // The launch complex is a local-scene presentation. Once the active vessel is more
-    // than 12 km above Earth, keeping the pad at the floating origin makes it appear in
+    // than 10 km above Earth, keeping the pad at the floating origin makes it appear in
     // orbital chase shots as if the vehicle never left the ground. SimulationBridge also
     // keeps it alive while a returning vessel is in the final catch approach.
-    public const double PadVisibilityCeilingM = 12_000.0;
+    public const double PadVisibilityCeilingM = 10_000.0;
 
     /// <summary>Presentation telemetry for the physical catch state.</summary>
     public bool CatchApproachArmed { get; private set; }

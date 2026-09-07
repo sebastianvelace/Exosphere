@@ -16,7 +16,7 @@ public partial class LaunchPadController
 {
     public bool FarFieldVisible => _starbaseFarFieldRoot?.Visible == true;
     public float FarFieldOpacity => float.IsNaN(_lastFarFieldOpacity) ? 0f : _lastFarFieldOpacity;
-    public string FarFieldSource => _farFieldUsesMappedContext ? "OSM+3DEP" : "fallback";
+    public string FarFieldSource => _farFieldUsesMappedContext ? "OSM+EarthGround" : "fallback";
 
     private Node3D? _starbaseFarFieldRoot;
     private readonly List<MeshInstance3D> _starbaseFarFieldMeshes = new();
@@ -32,96 +32,115 @@ public partial class LaunchPadController
         _starbaseFarFieldRoot = new Node3D { Name = "StarbaseFarField", Visible = false };
         world.AddChild(_starbaseFarFieldRoot);
 
-        var land = Mat(new Color(0.18f, 0.25f, 0.16f), 0.98f, 0.0f);
-        var hardstand = Mat(new Color(0.25f, 0.26f, 0.24f), 0.96f, 0.0f);
-        var road = Mat(new Color(0.055f, 0.065f, 0.060f), 0.96f, 0.0f);
-        var water = Mat(new Color(0.035f, 0.15f, 0.18f), 0.88f, 0.0f);
-        var steel = Mat(new Color(0.34f, 0.37f, 0.37f), 0.72f, 0.55f);
-        var roof = Mat(new Color(0.11f, 0.12f, 0.12f), 0.90f, 0.15f);
+        // The local EarthGround patch is unshaded and owns the broad terrain radiance.
+        // Far-field vector layers still use StandardMaterial3D so they can cast the
+        // tower/tank silhouettes, but a bounded emission floor keeps them readable when
+        // the real sun is near the horizon or the capture is in twilight.
+        var land = FarMat(new Color(0.24f, 0.28f, 0.20f), 0.98f, 0.0f, 0.04f);
+        var hardstand = FarMat(new Color(0.25f, 0.26f, 0.24f), 0.96f, 0.0f, 0.10f);
+        // These are contextual land-cover cues. Keep them close to the EarthGround
+        // palette so the mapped OSM lines do not become a floating map overlay when
+        // the camera crosses the 12–40 km handoff.
+        var road = FarContextMat(new Color(0.13f, 0.14f, 0.12f), 0.99f, 0.0f, 0.008f, 0.46f);
+        var shore = FarContextMat(new Color(0.20f, 0.22f, 0.18f), 0.99f, 0.0f, 0.004f, 0.30f);
+        var water = FarContextMat(new Color(0.055f, 0.14f, 0.16f), 0.98f, 0.0f, 0.025f, 0.58f);
+        var wetland = FarContextMat(new Color(0.20f, 0.24f, 0.17f), 0.99f, 0.0f, 0.012f, 0.36f);
+        var yard = FarContextMat(new Color(0.29f, 0.28f, 0.23f), 0.98f, 0.0f, 0.025f, 0.54f);
+        // Far-field steel is a silhouette cue, not a reflective hero material. A high
+        // metallic value mirrored the blue sky and turned the mapped tower cyan.
+        var steel = FarMat(new Color(0.42f, 0.43f, 0.40f), 0.88f, 0.08f, 0.24f);
+        var roof = FarMat(new Color(0.11f, 0.12f, 0.12f), 0.90f, 0.15f, 0.12f);
+        var relief = FarMat(new Color(0.58f, 0.49f, 0.34f), 0.99f, 0.0f, 0.012f);
+        relief.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        relief.AlbedoColor = Colors.White;
+        relief.VertexColorUseAsAlbedo = true;
 
-        AddFarMesh("Footprint", BuildFootprintMesh(new Vector2[]
-        {
-            new(-760f, -520f), new(-540f, -720f), new(80f, -690f),
-            new(520f, -560f), new(760f, -230f), new(690f, 330f),
-            new(360f, 610f), new(-210f, 650f), new(-690f, 430f),
-        }), land, new Vector3(-20f * U, GradeY + 0.04f * U, 20f * U));
-
-        // A hardstand-shaped polygon is more useful at altitude than a second rectangle:
-        // it reads as the pad island while leaving the surrounding wetland visible.
-        AddFarMesh("LaunchHardstand", BuildFootprintMesh(new Vector2[]
-        {
-            new(-160f, -125f), new(55f, -150f), new(180f, -82f),
-            new(170f, 105f), new(45f, 145f), new(-175f, 110f),
-        }), hardstand, new Vector3(0f, GradeY + 0.10f * U, 0f));
-
-        AddFarMesh("CoastalWater", BuildFootprintMesh(new Vector2[]
-        {
-            new(690f, -560f), new(860f, -440f), new(860f, 500f),
-            new(700f, 620f), new(635f, 280f), new(670f, -180f),
-        }), water, new Vector3(0f, GradeY + 0.075f * U, 0f));
-
-        _farFieldUsesMappedContext = BuildMappedFarFieldContext(road, water, land, steel, roof);
+        _farFieldUsesMappedContext = BuildMappedFarFieldContext(
+            road, shore, water, wetland, yard, land, steel, roof);
+        if (_farFieldUsesMappedContext)
+            BuildMappedFarRelief(relief);
         if (!_farFieldUsesMappedContext)
         {
-        AddFarRotated("Highway4", new BoxMesh { Size = new Vector3(18f * U, 0.08f * U, 1500f * U) },
-            road, new Vector3(-470f * U, GradeY + 0.15f * U, 30f * U), new Vector3(0f, -5f, 0f));
-        AddFarMesh("NorthServiceRoad", new BoxMesh { Size = new Vector3(760f * U, 0.08f * U, 14f * U) },
-            road, new Vector3(-120f * U, GradeY + 0.16f * U, 270f * U));
-        AddFarMesh("TankServiceRoad", new BoxMesh { Size = new Vector3(520f * U, 0.08f * U, 14f * U) },
-            road, new Vector3(290f * U, GradeY + 0.16f * U, 80f * U));
+            AddFarMesh("Footprint", BuildFootprintMesh(new Vector2[]
+            {
+                new(-760f, -520f), new(-540f, -720f), new(80f, -690f),
+                new(520f, -560f), new(760f, -230f), new(690f, 330f),
+                new(360f, 610f), new(-210f, 650f), new(-690f, 430f),
+            }), land, new Vector3(-20f * U, GradeY + 0.04f * U, 20f * U));
 
-        // One strong tower silhouette and a compact tank farm anchor the site from
-        // 3–75 km. Their proportions are deliberately real-world, not billboard scale.
-        float towerX = (float)Spec.OlitEast;
-        float towerH = (float)Spec.OlitHeight;
-        foreach (float dx in new[] { -7f, 7f })
-        foreach (float dz in new[] { -7f, 7f })
-            AddFarMesh("TowerColumn", new BoxMesh { Size = new Vector3(1.8f * U, towerH * U, 1.8f * U) },
-                steel, new Vector3((towerX + dx) * U, GradeY + towerH * 0.5f * U, dz * U));
-        foreach (float heightFraction in new[] { 0.30f, 0.58f, 0.84f })
-            AddFarMesh("TowerCrossbar", new BoxMesh { Size = new Vector3(16f * U, 1.1f * U, 1.1f * U) },
-                steel, new Vector3(towerX * U, GradeY + towerH * heightFraction * U, 0f));
+            // Fallback-only hardstand and water keep non-Starbase/custom builds readable.
+            AddFarMesh("LaunchHardstand", BuildFootprintMesh(new Vector2[]
+            {
+                new(-160f, -125f), new(55f, -150f), new(180f, -82f),
+                new(170f, 105f), new(45f, 145f), new(-175f, 110f),
+            }), hardstand, new Vector3(0f, GradeY + 0.10f * U, 0f));
+            AddFarMesh("CoastalWater", BuildFootprintMesh(new Vector2[]
+            {
+                new(690f, -560f), new(860f, -440f), new(860f, 500f),
+                new(700f, 620f), new(635f, 280f), new(670f, -180f),
+            }), water, new Vector3(0f, GradeY + 0.075f * U, 0f));
 
-        float tankRadius = 4.2f;
-        float tankHeight = (float)Spec.CommodityTankMaxHeight;
-        for (int i = 0; i < 6; i++)
-        {
-            // Keep the far-field tanks on the same local datum as LaunchPadController's
-            // hero farm (58 m east, 48 m south). A previous synthetic cluster at
-            // 205–273 m and 92 m high popped to a second, oversized tank farm on LOD swap.
-            float x = 58f + (i % 3) * 14f;
-            float z = 48f + (i / 3) * 14f;
-            AddFarMesh("TankFarmTank", new CylinderMesh
-                { TopRadius = tankRadius * U, BottomRadius = tankRadius * U,
-                  Height = tankHeight * U, RadialSegments = 12 },
-                steel, new Vector3(x * U, GradeY + tankHeight * 0.5f * U, z * U));
-            AddFarMesh("TankFarmRoof", new SphereMesh
-                { Radius = tankRadius * U, Height = tankRadius * U, IsHemisphere = true,
-                  RadialSegments = 12, Rings = 4 },
-                steel, new Vector3(x * U, GradeY + tankHeight * U, z * U));
-        }
+            AddFarRotated("Highway4", new BoxMesh { Size = new Vector3(18f * U, 0.08f * U, 1500f * U) },
+                road, new Vector3(-470f * U, GradeY + 0.15f * U, 30f * U), new Vector3(0f, -5f, 0f));
+            AddFarMesh("NorthServiceRoad", new BoxMesh { Size = new Vector3(760f * U, 0.08f * U, 14f * U) },
+                road, new Vector3(-120f * U, GradeY + 0.16f * U, 270f * U));
+            AddFarMesh("TankServiceRoad", new BoxMesh { Size = new Vector3(520f * U, 0.08f * U, 14f * U) },
+                road, new Vector3(290f * U, GradeY + 0.16f * U, 80f * U));
 
-        foreach (var (x, z, width, depth, height) in new[]
-        {
-            (-315f, 230f, 110f, 58f, 10f), (-140f, 250f, 92f, 52f, 9f),
-            (-260f, -250f, 140f, 70f, 12f), (360f, -190f, 135f, 76f, 12f),
-        })
-        {
-            AddFarMesh("SupportBuilding", new BoxMesh
-                { Size = new Vector3(width * U, height * U, depth * U) },
-                roof, new Vector3(x * U, GradeY + height * 0.5f * U, z * U));
-        }
+            // One strong tower silhouette and a compact tank farm anchor the site from
+            // 3–75 km. Their proportions are deliberately real-world, not billboard scale.
+            float towerX = (float)Spec.OlitEast;
+            float towerH = (float)Spec.OlitHeight;
+            foreach (float dx in new[] { -7f, 7f })
+            foreach (float dz in new[] { -7f, 7f })
+                AddFarMesh("TowerColumn", new BoxMesh { Size = new Vector3(1.8f * U, towerH * U, 1.8f * U) },
+                    steel, new Vector3((towerX + dx) * U, GradeY + towerH * 0.5f * U, dz * U));
+            foreach (float heightFraction in new[] { 0.30f, 0.58f, 0.84f })
+                AddFarMesh("TowerCrossbar", new BoxMesh { Size = new Vector3(16f * U, 1.1f * U, 1.1f * U) },
+                    steel, new Vector3(towerX * U, GradeY + towerH * heightFraction * U, 0f));
+
+            float tankRadius = 4.2f;
+            float tankHeight = (float)Spec.CommodityTankMaxHeight;
+            for (int i = 0; i < 6; i++)
+            {
+                // Keep the far-field tanks on the same local datum as LaunchPadController's
+                // hero farm (58 m east, 48 m south). A previous synthetic cluster at
+                // 205–273 m and 92 m high popped to a second, oversized tank farm on LOD swap.
+                float x = 58f + (i % 3) * 14f;
+                float z = 48f + (i / 3) * 14f;
+                AddFarMesh("TankFarmTank", new CylinderMesh
+                    { TopRadius = tankRadius * U, BottomRadius = tankRadius * U,
+                      Height = tankHeight * U, RadialSegments = 12 },
+                    steel, new Vector3(x * U, GradeY + tankHeight * 0.5f * U, z * U));
+                AddFarMesh("TankFarmRoof", new SphereMesh
+                    { Radius = tankRadius * U, Height = tankRadius * U, IsHemisphere = true,
+                      RadialSegments = 12, Rings = 4 },
+                    steel, new Vector3(x * U, GradeY + tankHeight * U, z * U));
+            }
+
+            foreach (var (x, z, width, depth, height) in new[]
+            {
+                (-315f, 230f, 110f, 58f, 10f), (-140f, 250f, 92f, 52f, 9f),
+                (-260f, -250f, 140f, 70f, 12f), (360f, -190f, 135f, 76f, 12f),
+            })
+            {
+                AddFarMesh("SupportBuilding", new BoxMesh
+                    { Size = new Vector3(width * U, height * U, depth * U) },
+                    roof, new Vector3(x * U, GradeY + height * 0.5f * U, z * U));
+            }
         }
     }
 
     /// <summary>
     /// Builds a deliberately simplified copy of the mapped Starbase context. The hero
     /// scene remains responsible for close inspection; this copy keeps the same OSM
-    /// footprints and 3DEP relief through the 12–40 km local-ground handoff instead of
+    /// footprints and continuous EarthGround context through the 12–40 km local-ground handoff instead of
     /// swapping to a separately authored road/tank layout.
     /// </summary>
     private bool BuildMappedFarFieldContext(StandardMaterial3D road,
-        StandardMaterial3D water, StandardMaterial3D land,
+        StandardMaterial3D shore, StandardMaterial3D water,
+        StandardMaterial3D wetland, StandardMaterial3D yard,
+        StandardMaterial3D land,
         StandardMaterial3D steel, StandardMaterial3D roof)
     {
         if (!FileAccess.FileExists(StarbaseOpenMapPath))
@@ -150,12 +169,12 @@ public partial class LaunchPadController
                         built += BuildMappedFarRoad(feature, road);
                         break;
                     case "coastline":
-                        built += BuildMappedFarCoastline(feature, water, land);
+                        built += BuildMappedFarCoastline(feature, shore);
                         break;
                     case "water":
                     case "wetland":
                     case "yard":
-                        built += BuildMappedFarPolygon(feature, kind, water, land);
+                        built += BuildMappedFarPolygon(feature, kind, water, wetland, yard, land);
                         break;
                     case "building":
                         built += BuildMappedFarBuilding(feature, steel, roof);
@@ -166,7 +185,6 @@ public partial class LaunchPadController
                 }
             }
 
-            built += BuildMappedFarRelief(land);
             return built > 0;
         }
         catch (Exception ex)
@@ -199,8 +217,7 @@ public partial class LaunchPadController
         return built;
     }
 
-    private int BuildMappedFarCoastline(JsonElement feature,
-        StandardMaterial3D water, StandardMaterial3D shore)
+    private int BuildMappedFarCoastline(JsonElement feature, StandardMaterial3D shore)
     {
         var points = ReadPoints(feature);
         int built = 0;
@@ -215,26 +232,124 @@ public partial class LaunchPadController
             float yaw = -Mathf.RadToDeg(Mathf.Atan2(dir.Y, dir.X));
             string id = StringValue(feature, "id");
             AddFarRotated($"MappedShore_{id}_{i}",
-                new BoxMesh { Size = new Vector3(lengthM * U, 0.06f * U, 6f * U) },
+                // Coastline is a datum cue, not a second elevated seawall. Its narrow
+                // footprint prevents the long OSM shoreline from reading as a neon rail.
+                new BoxMesh { Size = new Vector3(lengthM * U, 0.025f * U, 2.2f * U) },
                 shore,
-                new Vector3(mid.X * U, GradeY + 0.18f * U, mid.Y * U),
-                new Vector3(0f, yaw, 0f));
-            Vector2 seaMid = mid + new Vector2(70f, 0f);
-            AddFarRotated($"MappedSea_{id}_{i}",
-                new BoxMesh { Size = new Vector3(lengthM * U, 0.035f * U, 140f * U) },
-                water,
-                new Vector3(seaMid.X * U, GradeY + 0.07f * U, seaMid.Y * U),
+                new Vector3(mid.X * U, GradeY + 0.12f * U, mid.Y * U),
                 new Vector3(0f, yaw, 0f));
             built++;
         }
         return built;
     }
 
+    /// <summary>
+    /// Adds the source-derived 3DEP elevation tile underneath the mapped vector
+    /// context. It is intentionally translucent and edge-faded: EarthGround owns
+    /// the continuous planetary surface, while this tile contributes measured local
+    /// grade variation without exposing the source raster's square boundary.
+    /// </summary>
+    private int BuildMappedFarRelief(StandardMaterial3D material)
+    {
+        if (!FileAccess.FileExists(StarbaseReliefPath))
+            return 0;
+
+        var file = FileAccess.Open(StarbaseReliefPath, FileAccess.ModeFlags.Read);
+        if (file == null)
+            return 0;
+
+        string json = file.GetAsText();
+        file.Close();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var grid = root.GetProperty("grid");
+            int columns = grid.GetProperty("columns").GetInt32();
+            int rows = grid.GetProperty("rows").GetInt32();
+            if (columns < 2 || rows < 2)
+                return 0;
+
+            float stepX = grid.GetProperty("stepM")[0].GetSingle();
+            float stepZ = grid.GetProperty("stepM")[1].GetSingle();
+            var values = root.GetProperty("valuesM");
+            const float centreX = 67f;
+            const float centreZ = 0f;
+            const float reliefScale = 0.55f;
+            float baseY = GradeY + 0.10f * U;
+            float halfColumns = (columns - 1) * 0.5f;
+            float halfRows = (rows - 1) * 0.5f;
+
+            Vector3 Vertex(int row, int column)
+            {
+                float x = centreX + (column - halfColumns) * stepX;
+                float z = centreZ + (halfRows - row) * stepZ;
+                float y = baseY + values[row][column].GetSingle() * reliefScale * U;
+                return new Vector3(x * U, y, z * U);
+            }
+
+            Color VertexColor(int row, int column)
+            {
+                float edgeX = Mathf.Abs(column - halfColumns) / Mathf.Max(halfColumns, 1f);
+                float edgeZ = Mathf.Abs(row - halfRows) / Mathf.Max(halfRows, 1f);
+                float edge = 1f - FarSmoothstep(0.62f, 1.0f, Mathf.Max(edgeX, edgeZ));
+                float elevation = values[row][column].GetSingle();
+                float tone = Mathf.Clamp((elevation + 0.85f) / 1.70f, 0f, 1f);
+                return new Color(
+                    Mathf.Lerp(0.48f, 0.66f, tone),
+                    Mathf.Lerp(0.38f, 0.52f, tone),
+                    Mathf.Lerp(0.25f, 0.38f, tone),
+                    // The regional DEM is a restrained grade cue over EarthGround,
+                    // not an opaque replacement surface. A low alpha prevents the
+                    // source tile from reading as a bright square at 12–40 km.
+                    edge * 0.08f);
+            }
+
+            var st = new SurfaceTool();
+            st.Begin(Mesh.PrimitiveType.Triangles);
+            for (int row = 0; row < rows - 1; row++)
+            for (int column = 0; column < columns - 1; column++)
+            {
+                Vector3 a = Vertex(row, column);
+                Vector3 b = Vertex(row, column + 1);
+                Vector3 c = Vertex(row + 1, column + 1);
+                Vector3 d = Vertex(row + 1, column);
+                AddFadedReliefTriangle(st, a, b, c,
+                    VertexColor(row, column), VertexColor(row, column + 1),
+                    VertexColor(row + 1, column + 1));
+                AddFadedReliefTriangle(st, a, c, d,
+                    VertexColor(row, column), VertexColor(row + 1, column + 1),
+                    VertexColor(row + 1, column));
+            }
+
+            st.GenerateNormals();
+            var mesh = st.Commit();
+            if (mesh == null)
+                return 0;
+
+            var node = AddFarMesh("Mapped3DepRelief", mesh, material, Vector3.Zero);
+            node.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[STARBASE_FAR] Invalid 3DEP relief: {ex.Message}");
+            return 0;
+        }
+    }
+
     private int BuildMappedFarPolygon(JsonElement feature, string kind,
-        StandardMaterial3D water, StandardMaterial3D land)
+        StandardMaterial3D water, StandardMaterial3D wetland,
+        StandardMaterial3D yard, StandardMaterial3D land)
     {
         var points = ReadPoints(feature);
-        var material = kind == "water" ? water : land;
+        var material = kind switch
+        {
+            "water" => water,
+            "wetland" => wetland,
+            "yard" => yard,
+            _ => land,
+        };
         var mesh = BuildExtrudedPolygon(points, GradeY + 0.09f * U, 0.06f * U);
         if (mesh == null)
             return 0;
@@ -264,23 +379,23 @@ public partial class LaunchPadController
             {
                 (-halfX, -halfZ), (halfX, -halfZ), (halfX, halfZ), (-halfX, halfZ),
             })
-                AddFarMesh($"MappedTower_{id}",
+                AddFarShadowMesh($"MappedTower_{id}",
                     new BoxMesh { Size = new Vector3(0.65f * U, height, 0.65f * U) },
                     steel,
                     new Vector3(x * U + dx, GradeY + height * 0.5f, z * U + dz));
             for (int level = 1; level <= 4; level++)
-                AddFarMesh($"MappedTowerRail_{id}_{level}",
+                AddFarShadowMesh($"MappedTowerRail_{id}_{level}",
                     new BoxMesh { Size = new Vector3(widthM * U, 0.26f * U, depthM * U) },
                     steel,
                     new Vector3(x * U, GradeY + height * level / 5f, z * U));
             return 1;
         }
 
-        AddFarMesh($"MappedBuilding_{id}",
+        AddFarShadowMesh($"MappedBuilding_{id}",
             new BoxMesh { Size = new Vector3(widthM * U, heightM * U, depthM * U) },
             steel,
             new Vector3(x * U, GradeY + heightM * 0.5f * U, z * U));
-        AddFarMesh($"MappedRoof_{id}",
+        AddFarShadowMesh($"MappedRoof_{id}",
             new BoxMesh { Size = new Vector3((widthM + 0.6f) * U, 0.22f * U, (depthM + 0.6f) * U) },
             roof,
             new Vector3(x * U, GradeY + (heightM + 0.11f) * U, z * U));
@@ -295,7 +410,7 @@ public partial class LaunchPadController
         float diameterM = Mathf.Clamp(Number(feature, "diameterM", 8f), 5.5f, 7.5f);
         float radius = diameterM * 0.5f * U;
         float yaw = Number(feature, "yawDeg", -14f);
-        AddFarRotated($"MappedTank_{StringValue(feature, "id")}",
+        var tank = AddFarRotated($"MappedTank_{StringValue(feature, "id")}",
             new CylinderMesh
             {
                 TopRadius = radius,
@@ -306,63 +421,8 @@ public partial class LaunchPadController
             material,
             new Vector3(x * U, GradeY + radius + 0.35f * U, z * U),
             new Vector3(0f, yaw, 90f));
+        tank.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
         return 1;
-    }
-
-    private int BuildMappedFarRelief(StandardMaterial3D material)
-    {
-        if (!FileAccess.FileExists(StarbaseReliefPath))
-            return 0;
-        var file = FileAccess.Open(StarbaseReliefPath, FileAccess.ModeFlags.Read);
-        if (file == null)
-            return 0;
-        string json = file.GetAsText();
-        file.Close();
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var grid = doc.RootElement.GetProperty("grid");
-            int columns = grid.GetProperty("columns").GetInt32();
-            int rows = grid.GetProperty("rows").GetInt32();
-            float stepX = grid.GetProperty("stepM")[0].GetSingle();
-            float stepZ = grid.GetProperty("stepM")[1].GetSingle();
-            var values = doc.RootElement.GetProperty("valuesM");
-            const float centreX = 67f;
-            const float centreZ = 0f;
-            const float reliefScale = 0.55f;
-            float baseY = GradeY + 0.10f * U;
-            Vector3 Vertex(int row, int column)
-            {
-                float x = centreX + (column - (columns - 1) * 0.5f) * stepX;
-                float z = centreZ + ((rows - 1) * 0.5f - row) * stepZ;
-                float y = baseY + values[row][column].GetSingle() * reliefScale * U;
-                return new Vector3(x * U, y, z * U);
-            }
-            var st = new SurfaceTool();
-            st.Begin(Mesh.PrimitiveType.Triangles);
-            for (int row = 0; row < rows - 1; row++)
-            for (int column = 0; column < columns - 1; column++)
-            {
-                Vector3 a = Vertex(row, column);
-                Vector3 b = Vertex(row, column + 1);
-                Vector3 c = Vertex(row + 1, column + 1);
-                Vector3 d = Vertex(row + 1, column);
-                AddReliefTriangle(st, a, b, c);
-                AddReliefTriangle(st, a, c, d);
-            }
-            st.GenerateNormals();
-            var mesh = st.Commit();
-            if (mesh == null)
-                return 0;
-            AddFarMesh("Mapped3DepRelief", mesh, material, Vector3.Zero)
-                .CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            return 1;
-        }
-        catch (Exception ex)
-        {
-            GD.PushWarning($"[STARBASE_FAR] Invalid mapped relief: {ex.Message}");
-            return 0;
-        }
     }
 
     private void UpdateStarbaseFarField()
@@ -396,7 +456,7 @@ public partial class LaunchPadController
         if (_lastFarFieldVisible != visible)
         {
             _lastFarFieldVisible = visible;
-              string source = _farFieldUsesMappedContext ? "OSM+3DEP" : "fallback";
+              string source = _farFieldUsesMappedContext ? "OSM+EarthGround" : "fallback";
               GD.Print($"[STARBASE_FAR] visible={visible} heroVisible={heroVisible} " +
                   $"source={source} altitude={altitude:F0} opacity={opacity:F2}");
         }
@@ -434,6 +494,35 @@ public partial class LaunchPadController
         return node;
     }
 
+    private MeshInstance3D AddFarShadowMesh(string name, Mesh mesh,
+        StandardMaterial3D material, Vector3 position)
+    {
+        var node = AddFarMesh(name, mesh, material, position);
+        node.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+        return node;
+    }
+
+    private static StandardMaterial3D FarMat(Color albedo, float roughness,
+        float metallic, float emissionEnergy)
+    {
+        var material = Mat(albedo, roughness, metallic);
+        material.EmissionEnabled = emissionEnergy > 0.0f;
+        material.Emission = albedo;
+        material.EmissionEnergyMultiplier = emissionEnergy;
+        return material;
+    }
+
+    private static StandardMaterial3D FarContextMat(Color albedo, float roughness,
+        float metallic, float emissionEnergy, float alpha)
+    {
+        var material = FarMat(albedo, roughness, metallic, emissionEnergy);
+        material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        var color = material.AlbedoColor;
+        color.A = alpha;
+        material.AlbedoColor = color;
+        return material;
+    }
+
     private static ArrayMesh BuildFootprintMesh(IReadOnlyList<Vector2> points)
     {
         var st = new SurfaceTool();
@@ -447,6 +536,25 @@ public partial class LaunchPadController
         }
         st.GenerateNormals();
         return st.Commit()!;
+    }
+
+    private static void AddFadedReliefTriangle(SurfaceTool st,
+        Vector3 a, Vector3 b, Vector3 c,
+        Color colorA, Color colorB, Color colorC)
+    {
+        // Godot front faces are clockwise. Keep vertex colors paired with their
+        // vertices when correcting the winding for an upward-facing surface.
+        if ((b - a).Cross(c - a).Y > 0f)
+        {
+            (b, c) = (c, b);
+            (colorB, colorC) = (colorC, colorB);
+        }
+        st.SetColor(colorA);
+        st.AddVertex(a);
+        st.SetColor(colorB);
+        st.AddVertex(b);
+        st.SetColor(colorC);
+        st.AddVertex(c);
     }
 
     private static float FarSmoothstep(float edge0, float edge1, float value)

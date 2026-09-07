@@ -86,23 +86,44 @@ echo "PASS bounded --resolution is wired to both Xvfb/Godot launches"
 echo "PASS plume far-field LOD is wired through CPU, telemetry, and shader"
 
 if ! rg -q 'BuildMappedFarFieldContext' "$ROOT/scripts/StarbaseFarField.cs" \
-  || ! rg -q 'BuildMappedFarRelief' "$ROOT/scripts/StarbaseFarField.cs" \
+  || ! rg -q 'OSM\+EarthGround' "$ROOT/scripts/StarbaseFarField.cs" \
   || ! rg -q 'source=\{source\}' "$ROOT/scripts/StarbaseFarField.cs" \
   || ! rg -q 'StarbaseOpenMapPath' "$ROOT/scripts/StarbaseFarField.cs"; then
-  echo "FAIL Starbase far-field is not tied to the mapped OSM/3DEP context" >&2
+  echo "FAIL Starbase far-field is not tied to the mapped OSM/EarthGround context" >&2
   exit 1
 fi
-echo "PASS Starbase far-field reuses mapped OSM/3DEP context with source telemetry"
+echo "PASS Starbase far-field reuses mapped OSM/EarthGround context with source telemetry"
 
 if ! rg -q -- '--starbase-far' "$HARNESS_SCRIPT" \
   || ! rg -q 'MODE="starbase_far"' "$HARNESS_SCRIPT" \
   || ! rg -q 'ProcessStarbaseFarField' "$HARNESS_SCRIPT" \
   || ! rg -q 'STARBASE_FAR_OK' "$HARNESS_SCRIPT" \
-  || ! rg -q 'VISUAL_STARBASE_FAR' "$HARNESS_SCRIPT"; then
+  || ! rg -q 'VISUAL_STARBASE_FAR' "$HARNESS_SCRIPT" \
+  || ! rg -q 'starbase_far_12km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'starbase_far_20km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'starbase_far_40km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'BuildMappedFarRelief' "$ROOT/scripts/StarbaseFarField.cs" \
+  || ! rg -q 'edgeFade=radial' "$HARNESS_SCRIPT"; then
   echo "FAIL Starbase corridor visual fixture is not wired into the harness" >&2
   exit 1
 fi
 echo "PASS Starbase 12–40 km corridor fixture is wired into the harness"
+
+if ! rg -q 'FarContextMat' "$ROOT/scripts/StarbaseFarField.cs" \
+  || ! rg -q 'kind switch' "$ROOT/scripts/StarbaseFarField.cs" \
+  || ! rg -q 'new BoxMesh \{ Size = new Vector3\(lengthM \* U, 0\.025f \* U, 2\.2f \* U\) \}' "$ROOT/scripts/StarbaseFarField.cs"; then
+  echo "FAIL mapped far-field context does not preserve semantic alpha compositing" >&2
+  exit 1
+fi
+echo "PASS mapped roads, shore, water, wetland, and yard keep semantic alpha compositing"
+
+if rg -q 'GeoSea' "$ROOT/scripts/StarbaseGeospatialContext.cs" \
+  || ! rg -q 'BuildGeospatialCoastline\(feature, wetSand\)' "$ROOT/scripts/StarbaseGeospatialContext.cs" \
+  || ! rg -q 'new BoxMesh \{ Size = new Vector3\(lengthM \* U, 0\.025f \* U, 2\.2f \* U\) \}' "$ROOT/scripts/StarbaseGeospatialContext.cs"; then
+  echo "FAIL close Starbase context still contains a synthetic sea ribbon or elevated shoreline" >&2
+  exit 1
+fi
+echo "PASS close Starbase context uses OSM water footprints without a synthetic sea ribbon"
 
 # Both Godot launch paths must override the default user://logs destination.
 # That default can fail to create its parent directory in the Xvfb environment

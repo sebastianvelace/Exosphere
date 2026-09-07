@@ -115,7 +115,7 @@ void fragment() {
 	float luma = dot(surface, vec3(0.299, 0.587, 0.114));
 	float water_hint = smoothstep(0.18, 0.34, surface.b - max(surface.r, surface.g) * 0.62);
 	vec3 muted = mix(vec3(luma), surface, 0.52);
-	vec3 coastal_land = mix(vec3(0.34, 0.31, 0.24), vec3(0.24, 0.28, 0.20), smoothstep(0.34, 0.62, luma));
+	vec3 coastal_land = mix(vec3(0.36, 0.32, 0.24), vec3(0.25, 0.27, 0.21), smoothstep(0.34, 0.62, luma));
 	vec3 coastal_water = vec3(0.05, 0.15, 0.19);
 	vec3 coastal = mix(coastal_land, coastal_water, water_hint);
 	surface = mix(muted, coastal, coastal_grade);
@@ -178,8 +178,8 @@ void fragment() {
     // Boca Chica is a low sandy barrier island with scrub and tidal flats, not
     // a saturated inland grass field. Keep the wetland green but shift the
     // broad base toward muted sand/olive so the site reads geographically.
-    vec3 marsh = mix(vec3(0.20, 0.25, 0.17), vec3(0.30, 0.30, 0.20), flats_var);
-    vec3 flats = mix(vec3(0.34, 0.36, 0.25), marsh, 0.32 * flats_var);
+    vec3 marsh = mix(vec3(0.23, 0.24, 0.18), vec3(0.31, 0.29, 0.21), flats_var);
+    vec3 flats = mix(vec3(0.36, 0.34, 0.25), marsh, 0.32 * flats_var);
 	vec3 near_water = vec3(0.05, 0.14, 0.20);
 	vec3 pad_ground = mix(flats, near_water, reconstructed_water);
     // A restrained concrete apron gives the launch site a readable hardstand

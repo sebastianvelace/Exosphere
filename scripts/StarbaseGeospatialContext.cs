@@ -61,7 +61,7 @@ public partial class LaunchPadController
                         roads += BuildGeospatialRoad(feature, road);
                         break;
                     case "coastline":
-                        roads += BuildGeospatialCoastline(feature, wetSand, water);
+                        roads += BuildGeospatialCoastline(feature, wetSand);
                         break;
                     case "water":
                         polygons += BuildGeospatialPolygon(feature, "GeoWater_", water,
@@ -170,7 +170,7 @@ public partial class LaunchPadController
     }
 
     private int BuildGeospatialCoastline(JsonElement feature,
-        StandardMaterial3D shoreMaterial, StandardMaterial3D waterMaterial)
+        StandardMaterial3D shoreMaterial)
     {
         var points = ReadPoints(feature);
         int built = 0;
@@ -185,19 +185,12 @@ public partial class LaunchPadController
             Vector2 mid = (a + b) * 0.5f;
             float yaw = -Mathf.RadToDeg(Mathf.Atan2(dir.Y, dir.X));
             SpawnRot($"GeoShore_{StringValue(feature, "id")}_{i}",
-                new BoxMesh { Size = new Vector3(lengthM * U, 0.06f * U, 6f * U) },
+                // The mapped coastline is a reference line, not an elevated seawall.
+                // EarthGround already owns the broad ocean/coast radiance and the OSM
+                // water polygons provide the measured local water footprints.
+                new BoxMesh { Size = new Vector3(lengthM * U, 0.025f * U, 2.2f * U) },
                 shoreMaterial,
-                new Vector3(mid.X * U, GradeY + 0.18f * U, mid.Y * U),
-                new Vector3(0f, yaw, 0f));
-
-            // The Gulf side is east (+X) in this local frame. A shallow water ribbon
-            // gives the actual coastline a readable horizon cue without pretending to
-            // be a high-resolution bathymetry product.
-            Vector2 seaMid = mid + new Vector2(70f, 0f);
-            SpawnRot($"GeoSea_{StringValue(feature, "id")}_{i}",
-                new BoxMesh { Size = new Vector3(lengthM * U, 0.035f * U, 140f * U) },
-                waterMaterial,
-                new Vector3(seaMid.X * U, GradeY + 0.07f * U, seaMid.Y * U),
+                new Vector3(mid.X * U, GradeY + 0.12f * U, mid.Y * U),
                 new Vector3(0f, yaw, 0f));
             built++;
         }
