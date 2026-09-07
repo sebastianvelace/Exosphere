@@ -5,6 +5,16 @@ using Xunit;
 
 public sealed class VehicleCameraFramingTests
 {
+    [Theory]
+    [InlineData(5.0, 0.1)]
+    [InlineData(4200.0, 42.0)]
+    [InlineData(400000.0, 1000.0)]
+    [InlineData(double.NaN, 0.1)]
+    public void ExternalNearPlanePreservesCloseViewsAndDistantDepthPrecision(double distance, double expected)
+    {
+        Assert.Equal(expected, VehicleCameraFraming.ExternalNearPlane(distance, 0.1), 8);
+    }
+
     [Fact]
     public void SeparatedShipCannotBeZoomedInsideItsVisualEnvelope()
     {

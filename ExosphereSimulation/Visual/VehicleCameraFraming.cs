@@ -4,6 +4,19 @@ namespace Exosphere.Simulation.Visual;
 public static class VehicleCameraFraming
 {
     /// <summary>
+    /// Keep depth precision as an external camera pulls away. Distances are render
+    /// units. Only the nearest one percent of the target distance is clipped;
+    /// cockpit cameras retain their separate close-focus projection.
+    /// </summary>
+    public static double ExternalNearPlane(double targetDistanceRenderUnits, double minimumNear)
+    {
+        double floor = double.IsFinite(minimumNear) && minimumNear > 0 ? minimumNear : 0.1;
+        if (!double.IsFinite(targetDistanceRenderUnits) || targetDistanceRenderUnits <= 0)
+            return floor;
+        return System.Math.Max(floor, System.Math.Min(1000.0, targetDistanceRenderUnits * 0.01));
+    }
+
+    /// <summary>
     /// Ground-anchored pad tracking distance. Wider than the vehicle span so the
     /// tower and stack share the frame through the first kilometre of climb.
     /// </summary>

@@ -383,6 +383,8 @@ public partial class CameraController : Node3D
         // vessel's geodetic frame so screen-up follows radial up instead of inertial +Y.
         camera.Position = surfaceFrame * _smoothedFramePosition;
         Vector3 lookTarget = surfaceFrame * _smoothedFrameTarget;
+        camera.Near = (float)VehicleCameraFraming.ExternalNearPlane(
+            camera.Position.DistanceTo(lookTarget), _externalNear);
         camera.LookAt(lookTarget, renderUp);
 
         // ── Force-feel shake — applied AFTER LookAt so the orbit framing is intact.
