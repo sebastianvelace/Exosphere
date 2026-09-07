@@ -118,10 +118,6 @@ public partial class ReentryPlasmaController : Node3D
     {
         if (_shock == null || _wake == null || _shockMat == null || _wakeMat == null) return;
 
-        _visualSampleTimer -= System.Math.Max(0.0, delta);
-        if (_visualSampleTimer > 0.0) return;
-        _visualSampleTimer = VisualSamplePeriodSeconds;
-
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         if (bridge == null || vessel == null || vessel.IsDestroyed)
@@ -139,6 +135,13 @@ public partial class ReentryPlasmaController : Node3D
         // second world transform reconstructed here can drift visually during the EDL flip,
         // leaving the shock ring detached from the ship even while the physics is correct.
         SyncToVesselFrame();
+
+        // Pose and destruction visibility must follow every rendered frame. Only the
+        // thermal/material sample is throttled; retain overshoot to avoid 15 Hz at 30 FPS.
+        _visualSampleTimer -= System.Math.Max(0.0, delta);
+        if (_visualSampleTimer > 0.0) return;
+        _visualSampleTimer = VisualSamplePeriodSeconds
+            + _visualSampleTimer % VisualSamplePeriodSeconds;
 
         var body = bridge.Universe.GetDominantBody(vessel.Position);
 
@@ -187,8 +190,7 @@ public partial class ReentryPlasmaController : Node3D
             new Vector3d(surfVel.X, surfVel.Y, surfVel.Z));
         double windward = ThermalModel.WindwardFactor(flowLocal);   // 1 = belly squarely into flow
 
-        // Vessel body centre in render space. The plasma controller is a sibling of
-        // the renderer, so it must apply the vessel orientation itself.
+        // Vessel body centre in the local frame synchronized above.
         bool hasSH = HasSuperHeavy(vessel);
         Vector3 bodyCentre = new(0f, hasSH ? 30f : 8f, 0f);
 
@@ -412,7 +414,12 @@ public partial class ReentryPlasmaController : Node3D
         if (dir.LengthSquared() < 1e-6f) return;
         Vector3 up   = dir.Normalized();
         Vector3 axis = Vector3.Up.Cross(up);
-        if (axis.LengthSquared() < 1e-6f) { node.Basis = Basis.Identity; return; }
+        if (axis.LengthSquared() < 1e-6f)
+        {
+            // Parallel and antiparallel vectors both have a zero cross product.
+            node.Basis = up.Y >= 0f ? Basis.Identity : new Basis(Vector3.Right, Mathf.Pi);
+            return;
+        }
         float angle = Vector3.Up.AngleTo(up);
         node.Basis = new Basis(axis.Normalized(), angle);
     }
