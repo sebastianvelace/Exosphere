@@ -100,7 +100,7 @@ Important implemented systems:
 ## Game Layer Rules
 
 - Godot code lives under `scripts/` and namespace `Exosphere.Game`.
-- Main scene: `scenes/flight/Flight.tscn`.
+- Project main scene: `scenes/ui/MainMenu.tscn`. Playable flight: `scenes/flight/Flight.tscn`.
 - VAB scene: `scenes/construction/Construction.tscn`.
 - Flight opens VAB with `V`; VAB launches the current craft through `CraftLaunchRequest`.
 - VAB direct picking lives in `scripts/VabPickingLayer.cs`; it creates collision bodies for parts and compatible attachment nodes and is driven by `ConstructionController`.
@@ -140,7 +140,7 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 ## Known Limits
 
 - Per-engine lifecycle/gimbal/thermal/feed/failure state is modeled per instance. Per-mount torque (`PartGraph.GetTotalTorque`), differential TVC (R5b: `SolveDifferentialGimbal`), and per-mount thrust vector sum (R5d: `GetThrustVector`) are landed; `Vessel.Tick` applies real per-mount torque with and without pilot input.
-- VAB 2.0 has filtered catalog, double-click/drag auto-attach, snap, rotation, symmetry, Starter/Starship templates, undo/redo, launch validation, 3D picking, craft persistence, and VAB-to-launch flow. It still lacks drag/rotate gizmos and a dedicated menu flow.
+- VAB 2.0 has filtered catalog, double-click auto-attach, Starter/Starship templates, undo/redo, launch validation, 3D picking, craft persistence, MainMenu entry, and VAB-to-launch flow. It still lacks drag/rotate gizmos. Catalog drag-ghost, symmetry, and part-rotation UX are not in the construction UI.
 - Reentry has physics basis and tests plus windward plasma, tile charring, survivable belly-flop EDL, thermal break-up VFX, per-piece structural breakup, and control-loss authority. Richer shock/plasma rendering vs IFT references is still pending.
 - Mission UX: usable save/load (C1), orbit→deorbit→ENTRY without teleport (C2), and EDL phase-track/cues (C3) are landed. LEO warp decay (B3), hot-stage thrust overlap (B2), structural breakup (B1) and `ControlAuthority` are landed. Visual oleada A is landed. Mechazilla Ship catch + booster return (R12 boostback → entry burn → catch via `BoosterReturnController`, HUD status line) are landed. R11 systems phase loads + ground command delay (`GroundCommandRelay`) are landed; crewed pad/LEO stick is onboard (`PilotCommandRouting`) so LOS does not dead-stick the player, `[G]` yields to WASD, and Minimal HUD is an attitude cluster (engines — navball — data strip). Apollo 11 TD&E + docked LOI (circular LLO) are landed; powered descent still pending. `tools/visual_playtest.sh` has `--hotstage` and `--reentry-compare`. R5/R5b/R5c/R5d are landed.
 - Patched-conic SOI transitions are implemented for on-rails vessels (warp-resolution-independent); inside on-rails propagation use `BodyStateAt(body, t)` for body state at the epoch/crossing time, not the end-of-tick global position.

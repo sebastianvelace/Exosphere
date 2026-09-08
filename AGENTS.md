@@ -37,7 +37,7 @@ Standard commands are in `README.md` and `CLAUDE.md` (build both csproj, run xUn
 - First Godot invocation after a clean checkout must import assets once:
   `"$GODOT_BIN" --headless --path . --import` (a few seconds). The `.godot/` import cache
   is gitignored, so this recurs after `git clean`.
-- Visual / gameplay validation: `bash tools/visual_playtest.sh [--smoke|--ascent|--launch|--ship|--cockpit|--edl]`
+- Visual / gameplay validation: `bash tools/visual_playtest.sh [--smoke|--ascent|--launch|--ship|--cockpit|--edl|--hotstage|--reentry-compare]`
   (default = full pad→orbit→EDL). It builds, spins a temporary autoload harness under
   `xvfb-run`, writes PNG milestones to `/tmp/exo_play/` + telemetry to `/tmp/exo_play.log`,
   and always cleans up the harness + restores `project.godot` on exit. Never commit the

@@ -12,37 +12,22 @@ Current engine/runtime:
 ## Current State
 
 Implemented and working:
-- Launchpad flight scene: `scenes/flight/Flight.tscn`
+- Project main scene: `scenes/ui/MainMenu.tscn`. Playable flight: `scenes/flight/Flight.tscn`. VAB: `scenes/construction/Construction.tscn`
 - Data-driven solar system with 8 body JSON files in `data/bodies/`
-- Data-driven parts catalog with 20 JSON files in `data/parts/`
+- Data-driven parts catalog with 104 JSON files in `data/parts/`
 - Double-precision simulation types: `Vector3d`, `Quaterniond`, `Universe`, `Vessel`, `CelestialBody`, `OrbitalElements`
 - RK4 integration, Kepler/on-rails propagation, SOI selection, patched-conic SOI transitions (warp-resolution-independent), radial/suborbital guards, hard-impact destruction
-- Pressure-corrected engines, mass flow, Isp, staging and stage delta-v
-- Orientation-dependent drag, reentry heating, progressive part thermal damage, heat-shield orientation handling and destruction causes
+- Pressure-corrected engines, mass flow, Isp, staging and stage delta-v. VAB still exposes one engine part per stage; the sim expands `engine_count` into per-instance lifecycle, gimbal, feed, failure and torque
+- Orientation-dependent drag, reentry heating, progressive part thermal damage, heat-shield orientation handling, per-piece structural breakup (`Universe.TryStructuralBreakup`) and control-loss authority
 - Time warp levels: `1,2,3,5,10,50,100,1000,10000,100000`
 - HUD, navball, map view, transfer planning helpers, cockpit, systems HUD, launch/crash/reentry visual effects
+- Quicksave/load `F5`/`F9`, Mechazilla Ship catch plus booster return, and a 16-mission historical campaign (Flight 7/12 scenarios included)
 - Pure Hohmann planetary transfers plus an ephemeris-targeted Earth–Moon Lambert/B-plane planner with maximum-warp SOI regressions
 - Patched-conic SOI transitions and encounter prediction for on-rails interplanetary coast
 - Starship/Super Heavy procedural mesh with hot-stage ring, grid-fin lattice, windward tiles, flaps, Raptor clusters and stainless steel shader
 - Survivable Starship EDL profile: belly-flop reentry, low-altitude flip-and-burn and soft touchdown
-- VAB V1.5:
-  - `ExosphereSimulation/Construction`
-  - `scripts/ConstructionController.cs`
-  - `scripts/VabPickingLayer.cs`
-  - `scenes/construction/Construction.tscn`
-  - catalog loading, compatible-node validation, mass/propellant/TWR/delta-v metrics, subtree delete, export to `Vessel`/`PartGraph`
-  - 3D preview, direct click-to-attach node picking, craft JSON save/load, saved-craft browser panel, `V` from flight to VAB, `Launch` from VAB to pad
-- Automated tests:
-  - gravity
-  - RK4 energy/radius conservation
-  - Kepler round-trip
-  - radial/suborbital detection
-  - rails impact destruction
-  - engine thrust/mass-flow/Isp equation
-  - heat-shield orientation
-  - aero drag scaling
-  - SOI selection
-  - VAB catalog/assembly/export behavior
+- VAB 2.0: filtered catalog, double-click auto-attach, 3D picking, Starter/Starship templates, undo/redo, launch validation, craft save/load, MainMenu and `V` from flight, `Launch` to pad. Still missing drag/rotate gizmos
+- Automated tests for gravity, RK4, Kepler, radial/suborbital, rails impact, engines, heat-shield, aero, SOI, and VAB catalog/assembly/export
 
 See `ROADMAP.md` for the current plan. `PLAN_REALISM.md` records the physics/telemetry audit, and `PLAN_VISUAL_REALISM.md` is the next visual-fidelity track.
 
@@ -96,17 +81,13 @@ in `project.godot`.
 
 ## Run In Godot
 
-Open the project folder in Godot 4.6.3 mono and run the project. The main scene is:
+Open the project folder in Godot 4.6.3 mono and run the project. The project main scene is:
 
 ```text
-scenes/flight/Flight.tscn
+scenes/ui/MainMenu.tscn
 ```
 
-The construction scene is:
-
-```text
-scenes/construction/Construction.tscn
-```
+Playable flight is `scenes/flight/Flight.tscn`. Construction is `scenes/construction/Construction.tscn`.
 
 ## Controls
 
@@ -123,7 +104,7 @@ Flight:
 - `L`: countdown / launch flow
 - `O`: jump to orbit debug helper
 - `.` / `,`: warp up / down
-- `Backspace`: warp x1
+- `F5` / `F9`: quicksave / quickload
 - The local Sun/terrain lighting follows simulation time continuously. At x1, one
   sidereal surface rotation is 86,164 seconds; the solar day also includes the Sun's
   ephemeris motion. Use time warp to observe dawn, twilight and night, and enable the
@@ -207,9 +188,9 @@ The Starship default stack currently uses:
 
 ## Current Limitations
 
-- One physical engine part per stage; 33/6 engines are visual, not individual physical engines.
-- VAB V1.5 has 3D preview, click-to-attach node picking, craft-file persistence, VAB-to-launch flow, and a saved-craft browser panel. It still lacks drag/rotate gizmos and a dedicated main-menu flow.
-- Reentry has windward plasma glow, progressive heat-shield tile charring, survivable belly-flop EDL, and a thermal break-up VFX when a vessel burns up. Still limited: per-piece structural break-up, control-loss consequences, and richer plasma/shock visuals.
+- VAB still exposes one engine part per stage. Runtime expands `engine_count` into per-instance `EngineInstanceState` (lifecycle, gimbal, feed, failure, torque); mesh clusters remain procedural visuals of those instances.
+- VAB 2.0 still lacks drag/rotate gizmos. Catalog drag-ghost attach, symmetry, and part-rotation tools are not in the construction UI.
+- Reentry has windward plasma, tile charring, survivable belly-flop EDL, thermal break-up VFX, per-piece structural breakup and control-loss authority. Richer shock/plasma rendering vs IFT references is still pending.
 - Starship hull is modelled at the real 9 m diameter with procedural steel, weld seams, windward tiles, heat-shield borders, flaps, raceways, payload-door cues, access panels, vent/drain ports, flap leading-edge/tile-seam cues, Raptor clusters, denser liftoff plume/smoke, and refined Super Heavy grid fins with hinge/lattice detail. The Starbase tower has added carriage rails, catch-arm rub rails/rollers/cables and Ship QD cues. Engine startup now has pre-release glow/vapor/flicker, hot-staging has flash/plume VFX, vacuum burns suppress pad-like smoke, and reentry plasma uses heat-flux-driven cap/wake plus first-pass localized nose/belly/flap glow. Remaining visual work is fine reference matching, EDL/reference captures, lighting/camera polish, and verified screenshots.
 - CI provisions Godot in the workflow and runs the headless smoke checks strictly, with an anti-harness guard; full PNG capture in CI is still a follow-up.
 - Interplanetary planning has tested Hohmann planetary transfers, a geocentric
