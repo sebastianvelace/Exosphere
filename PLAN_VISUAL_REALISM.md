@@ -193,10 +193,14 @@ Hecho:
 - [x] Glow localizado primera pasada: nariz, belly center y leading edges de flaps
   usan el mismo heat flux/windward y siguen `vessel.Orientation` aunque el plasma
   sea sibling del renderer. Validado con captura sintética Xvfb
-  `/tmp/exosphere_reentry_edges.png`; pendiente captura de EDL nominal/fallo real.
+  `/tmp/exosphere_reentry_edges.png` y con `--reentry-compare`. Comparación IFT
+  lado-a-lado sigue siendo juicio humano.
 - [x] Charring progresivo de tiles por `Part.ThermalDamage`/temperatura.
 - [x] Breakup VFX cuando ocurre destruccion termica.
-- [x] Entrada mal orientada se ve mas roja/extendida que belly-first nominal.
+- [x] Harness `--reentry-compare` captura belly-flop nominal vs mala orientación.
+  En Flight 7 towerCatchCapable (P0 2026-09, `/tmp/exo_play-p0-reentry-close/`)
+  ambas semillas convergieron a `upright≈-0.39` en AERO_DESCENT; no es un still
+  nose-first en PEAK_HEATING. Comparación IFT lado-a-lado sigue abierta.
 
 Pendiente / cerrado esta tanda:
 - [x] Afinar shock/plasma localizado con capturas reales de EDL: wake α, edge
@@ -309,8 +313,9 @@ Aceptacion:
    ✅ hot-staging capturado en ascenso real `[G]` (jul 2026, ver `.atl/agent-hotstaging-log.md`),
    ✅ smoke/soot de pluma vacio atenuado. Falta: comparacion fina hot-staging vs frame IFT,
    comparacion fina de startup/ramp y captura/reference de pluma de vacio limpia.
-5. V3 reentry plasma/charring localizado. ✅ primera pasada de glows localizados
-   en nose/belly/flaps; falta comparativa nominal/fallo y charring por zonas.
+5. V3 reentry plasma/charring localizado. ✅ primera pasada de glows, ✅ charring
+   por zonas, ✅ harness `--reentry-compare` (nominal vs mala actitud). Falta:
+   comparación IFT lado-a-lado (juicio humano de referencia, no tooling).
 6. V4 camara/luz/atmosfera.
 7. V5 capturas automatizadas en CI (cablear el xvfb capture de V0).
 
@@ -338,14 +343,16 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
 - **Hot-staging VFX**: `SimulationBridge.TriggerStaging` separa Ship/Booster y emite
   `VesselStaged`; `HotStageFlashController` agrega flash/luz/anillo/plume/hollin, y
   `VesselRenderer` muestra Super Heavy separado con hot-stage ring expuesto, vents y
-  scorch/labio quemado. Validado con trigger local multiframe (`/tmp/exosphere_hotstage_after_*.png`).
-  Falta capturar el evento dentro del ascenso real y comparar contra frames IFT T+2:39/T+2:40.
+  scorch/labio quemado. Validado con trigger local multiframe (`/tmp/exosphere_hotstage_after_*.png`)
+  y con `--hotstage` en ascenso real `[G]` (P0 2026-09, `HOTSTAGE_OK`). Falta
+  comparar contra frames IFT T+2:39/T+2:40.
 - **Startup/ramp VFX**: `EngineStartupController` agrega pre-release engine glow, vapor y
   flicker en el mount mientras `IsGroundHeld` y throttle sube. Validado con trigger local
   multiframe (`/tmp/exosphere_startup_*.png`); falta comparar contra startup real y ajustar timing.
 - **Reentry localized glow V1**: `ReentryPlasmaController` ya no asume nave vertical para
   cap/wake; aplica `vessel.Orientation` al centro de plasma y a glows de nariz, belly y flaps.
-  Validado con captura sintética `/tmp/exosphere_reentry_edges.png`; falta barrido real de EDL.
+  Validado con captura sintética `/tmp/exosphere_reentry_edges.png` y
+  `--reentry-compare`. Falta comparación IFT lado-a-lado.
 - **Grid fins close-up V1**: `VesselRenderer.AddSHGridFins` usa placa trapezoidal,
   hinge drum, marco/ribs/diagonales y cant leve. Validado con
   `/tmp/exosphere_gridfin_closeup.png`; falta comparacion fina contra referencias Starbase/IFT.
@@ -364,7 +371,8 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
   vacio = largo/tenue/sin diamantes (a proposito).
 - Ground cloud (deluge): `LaunchEffectsController.cs`.
 
-**Proximo paso mas valioso:** screenshot sweep de hot-staging en ascenso real con framebuffer
-real y captura multiframe; despues comparar hot-staging/startup contra referencia IFT y ajustar
-solo lo observable. Luego V3 (reentry plasma localizado ligado al heat flux real, que YA esta
-en el sim como `WorstHeatRatio`/`Part.ThermalDamage`).
+**Proximo paso mas valioso:** comparación humana lado-a-lado contra stills IFT
+(hot-staging T+2:39/T+2:40, startup/ramp, pluma de vacío, reentry). El harness
+`--hotstage` / `--ship` / `--reentry-compare` ya produce frames de juego; no
+marcar esa comparación de referencia como hecha hasta juzgar las fotos reales.
+Starbase fotogrametría / OSM extra queda **después** de ese juicio.

@@ -96,7 +96,21 @@ bash tools/visual_playtest.sh --ascent --flight7 --run-id agent-ascent
 # Re-run gates against preserved artifacts without launching Godot
 bash tools/visual_playtest.sh --flight7 --run-id agent-vp1 --verify-only
 
+# Pad ignition / ramp / liftoff
+bash tools/visual_playtest.sh --launch --flight7 --run-id agent-launch
+
+# Vacuum Ship plume at full / half / off throttle
+bash tools/visual_playtest.sh --ship --run-id agent-ship
+
+# Hot-stage overlap during real [G] ascent
+bash tools/visual_playtest.sh --hotstage --flight7 --run-id agent-hotstage
+
+# Nominal vs bad-attitude reentry (two Godot processes)
+bash tools/visual_playtest.sh --reentry-compare --run-id agent-reentry
+
 # Useful options: --run-id ID  --max-runtime SEC  --out-dir DIR  --log FILE  --skip-build
+#                 --resolution WIDTHxHEIGHT (default 1920x1080). Some llvmpipe/Xvfb
+#                 paths emit 1280x720; pass that size or the PNG dimension gate fails.
 ```
 
 **Outputs**
