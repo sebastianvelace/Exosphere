@@ -38,15 +38,16 @@ Capa que renderiza el estado del sim y captura input. Aquí SÍ se usa `Godot`. 
 ## Cámaras y HUD
 
 - Vistas: FPV (cabina Crew-Dragon), mapa del sistema ([Tab]), órbita/seguimiento. `[C]` cicla FPV.
-- HUD estilo SpaceX: `HUDController`, `NavBallController`/`AttitudeNavball`, `EngineGridHUD`,
+- HUD estilo SpaceX: `HUDController`, `AttitudeNavball`, `EngineGridHUD`,
   `SystemsHUD`. Layout: SYSTEMS a la izquierda, PROPULSION abajo-izquierda (evitar solapes).
 
 ## GOTCHAS
 
 - Nodos hermanos creados en `_Ready()` van con `CallDeferred("add_child", ...)` (el padre `Flight`
   aún está ocupado en su propio `_Ready`).
-- El "33 Raptors / 6 motores" es **solo visual** — no asumas 1 nodo de motor = 1 motor físico
-  (el sim tiene 1 parte-motor por etapa).
+- VAB expone **una parte-motor por etapa**. El sim expande `engine_count` a
+  `EngineInstanceState` (ciclo de vida, gimbal, feed, fallo, torque); las mallas
+  33/6 son el cluster visual de esas instancias, no motores físicos extra en el VAB.
 - No edites `.godot/`, `*.cs.uid`, `bin/`, `obj/` (generados).
 
 ## Verificación
