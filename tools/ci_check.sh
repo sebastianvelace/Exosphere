@@ -39,6 +39,7 @@ bash tools/tests/cockpit_visual_material_contract_test.sh
 bash tools/tests/atmosphere_low_altitude_prefilter_contract_test.sh
 bash tools/tests/space_sky_banding_contract_test.sh
 bash tools/tests/earth_ground_lighting_contract_test.sh
+bash tools/tests/starbase_3dep_relief_contract_test.sh
 bash tools/tests/solar_cycle_contract_test.sh
 bash tools/tests/mars_terrain_lighting_contract_test.sh
 bash tools/tests/edl_catch_guidance_contract_test.sh

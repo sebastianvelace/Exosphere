@@ -268,7 +268,10 @@ Mejoras:
   direccionales en concreto (`PadShadowMaxDistance` ~2.5 km, ambient pad 0.22),
   `ground_fill_strength=0` en Tierra, globo 256/128 segmentos, far de camara al horizonte
   geometrico, limbo cian con `fwidth` (sin sierra blanca), cúpula diurna azul y stars
-  apagadas de dia. Pluma/deluge: agente hermano.
+  apagadas de dia. Pluma/deluge: agente hermano. Hero USGS 3DEP comparte el rim
+  vertex-color del far-field (smoothstep 0.62→1.0, peak alpha 0.08) y se funde
+  con OSM land-cover entre 1–8 km, para leerse como terreno y no como un
+  cuadrado de humedal opaco. El globo scaled-space sigue en 40–75 km.
 
 Aceptacion:
 - Pad, orbita y reentry se distinguen por luz/color sin filtros exagerados.

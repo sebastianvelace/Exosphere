@@ -50,10 +50,7 @@ public partial class LaunchPadController
         // metallic value mirrored the blue sky and turned the mapped tower cyan.
         var steel = FarMat(new Color(0.42f, 0.43f, 0.40f), 0.88f, 0.08f, 0.24f);
         var roof = FarMat(new Color(0.11f, 0.12f, 0.12f), 0.90f, 0.15f, 0.12f);
-        var relief = FarMat(new Color(0.58f, 0.49f, 0.34f), 0.99f, 0.0f, 0.012f);
-        relief.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-        relief.AlbedoColor = Colors.White;
-        relief.VertexColorUseAsAlbedo = true;
+        var relief = CreateDepReliefMaterial();
 
         _farFieldUsesMappedContext = BuildMappedFarFieldContext(
             road, shore, water, wetland, yard, land, steel, roof);
@@ -245,97 +242,18 @@ public partial class LaunchPadController
 
     /// <summary>
     /// Adds the source-derived 3DEP elevation tile underneath the mapped vector
-    /// context. It is intentionally translucent and edge-faded: EarthGround owns
-    /// the continuous planetary surface, while this tile contributes measured local
-    /// grade variation without exposing the source raster's square boundary.
+    /// context. Hero and far-field share <see cref="BuildFaded3DepReliefMesh"/> so
+    /// the source raster never exposes a square boundary at either LOD.
     /// </summary>
     private int BuildMappedFarRelief(StandardMaterial3D material)
     {
-        if (!FileAccess.FileExists(StarbaseReliefPath))
+        var mesh = BuildFaded3DepReliefMesh(DepReliefPeakAlpha);
+        if (mesh == null)
             return 0;
 
-        var file = FileAccess.Open(StarbaseReliefPath, FileAccess.ModeFlags.Read);
-        if (file == null)
-            return 0;
-
-        string json = file.GetAsText();
-        file.Close();
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var grid = root.GetProperty("grid");
-            int columns = grid.GetProperty("columns").GetInt32();
-            int rows = grid.GetProperty("rows").GetInt32();
-            if (columns < 2 || rows < 2)
-                return 0;
-
-            float stepX = grid.GetProperty("stepM")[0].GetSingle();
-            float stepZ = grid.GetProperty("stepM")[1].GetSingle();
-            var values = root.GetProperty("valuesM");
-            const float centreX = 67f;
-            const float centreZ = 0f;
-            const float reliefScale = 0.55f;
-            float baseY = GradeY + 0.10f * U;
-            float halfColumns = (columns - 1) * 0.5f;
-            float halfRows = (rows - 1) * 0.5f;
-
-            Vector3 Vertex(int row, int column)
-            {
-                float x = centreX + (column - halfColumns) * stepX;
-                float z = centreZ + (halfRows - row) * stepZ;
-                float y = baseY + values[row][column].GetSingle() * reliefScale * U;
-                return new Vector3(x * U, y, z * U);
-            }
-
-            Color VertexColor(int row, int column)
-            {
-                float edgeX = Mathf.Abs(column - halfColumns) / Mathf.Max(halfColumns, 1f);
-                float edgeZ = Mathf.Abs(row - halfRows) / Mathf.Max(halfRows, 1f);
-                float edge = 1f - FarSmoothstep(0.62f, 1.0f, Mathf.Max(edgeX, edgeZ));
-                float elevation = values[row][column].GetSingle();
-                float tone = Mathf.Clamp((elevation + 0.85f) / 1.70f, 0f, 1f);
-                return new Color(
-                    Mathf.Lerp(0.48f, 0.66f, tone),
-                    Mathf.Lerp(0.38f, 0.52f, tone),
-                    Mathf.Lerp(0.25f, 0.38f, tone),
-                    // The regional DEM is a restrained grade cue over EarthGround,
-                    // not an opaque replacement surface. A low alpha prevents the
-                    // source tile from reading as a bright square at 12–40 km.
-                    edge * 0.08f);
-            }
-
-            var st = new SurfaceTool();
-            st.Begin(Mesh.PrimitiveType.Triangles);
-            for (int row = 0; row < rows - 1; row++)
-            for (int column = 0; column < columns - 1; column++)
-            {
-                Vector3 a = Vertex(row, column);
-                Vector3 b = Vertex(row, column + 1);
-                Vector3 c = Vertex(row + 1, column + 1);
-                Vector3 d = Vertex(row + 1, column);
-                AddFadedReliefTriangle(st, a, b, c,
-                    VertexColor(row, column), VertexColor(row, column + 1),
-                    VertexColor(row + 1, column + 1));
-                AddFadedReliefTriangle(st, a, c, d,
-                    VertexColor(row, column), VertexColor(row + 1, column + 1),
-                    VertexColor(row + 1, column));
-            }
-
-            st.GenerateNormals();
-            var mesh = st.Commit();
-            if (mesh == null)
-                return 0;
-
-            var node = AddFarMesh("Mapped3DepRelief", mesh, material, Vector3.Zero);
-            node.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            return 1;
-        }
-        catch (Exception ex)
-        {
-            GD.PushWarning($"[STARBASE_FAR] Invalid 3DEP relief: {ex.Message}");
-            return 0;
-        }
+        var node = AddFarMesh("Mapped3DepRelief", mesh, material, Vector3.Zero);
+        node.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        return 1;
     }
 
     private int BuildMappedFarPolygon(JsonElement feature, string kind,
@@ -500,6 +418,15 @@ public partial class LaunchPadController
         var node = AddFarMesh(name, mesh, material, position);
         node.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
         return node;
+    }
+
+    private static StandardMaterial3D CreateDepReliefMaterial()
+    {
+        var material = FarMat(new Color(0.58f, 0.49f, 0.34f), 0.99f, 0.0f, 0.012f);
+        material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        material.AlbedoColor = Colors.White;
+        material.VertexColorUseAsAlbedo = true;
+        return material;
     }
 
     private static StandardMaterial3D FarMat(Color albedo, float roughness,

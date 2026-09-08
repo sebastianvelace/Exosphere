@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
@@ -15,6 +16,28 @@ public partial class LaunchPadController
 {
     private const string StarbaseOpenMapPath = "res://data/launch_sites/starbase_openmap.json";
     private const string StarbaseReliefPath = "res://data/launch_sites/starbase_3dep_relief.json";
+
+    private const float DepReliefCentreX = 67f;
+    private const float DepReliefCentreZ = 0f;
+    private const float DepReliefScale = 0.55f;
+    // Far-field rim/alpha: do not drop the rim. Raise HeroDepReliefPeakAlpha only
+    // if T-0 loses too much centre relief; keep DepReliefPeakAlpha at 0.08.
+    private const float DepReliefRimStart = 0.62f;
+    private const float DepReliefPeakAlpha = 0.08f;
+    private const float HeroDepReliefPeakAlpha = DepReliefPeakAlpha;
+
+    /// <summary>
+    /// Hero 3DEP / OSM land-cover overlays read as a cookie once the chase
+    /// camera leaves the pad. Civil apron already fades 150–700 m; this wider
+    /// band retires the mapped campus before the 10 km pad ceiling. Far-field
+    /// keeps its own exclusive LOD after that.
+    /// </summary>
+    public const float HeroGeospatialFadeLowM = 1_000f;
+    public const float HeroGeospatialFadeHighM = 8_000f;
+
+    private readonly List<MeshInstance3D> _heroGeospatialFadeMeshes = new();
+    private bool _heroGeospatialFadeCollected;
+    private float _lastHeroGeospatialHide = float.NaN;
 
     private void BuildStarbaseGeospatialContext()
     {
@@ -41,10 +64,10 @@ public partial class LaunchPadController
                 || features.ValueKind != JsonValueKind.Array)
                 return;
 
-            var road = Mat(new Color(0.075f, 0.080f, 0.075f), 0.92f, 0.0f);
-            var wetSand = Mat(new Color(0.29f, 0.27f, 0.20f), 0.96f, 0.0f);
-            var wetland = Mat(new Color(0.13f, 0.19f, 0.14f), 0.98f, 0.0f);
-            var water = Mat(new Color(0.035f, 0.16f, 0.20f), 0.22f, 0.10f);
+            var road = FarContextMat(new Color(0.075f, 0.080f, 0.075f), 0.92f, 0.0f, 0.008f, 0.46f);
+            var wetSand = FarContextMat(new Color(0.29f, 0.27f, 0.20f), 0.96f, 0.0f, 0.004f, 0.30f);
+            var wetland = FarContextMat(new Color(0.20f, 0.24f, 0.17f), 0.99f, 0.0f, 0.012f, 0.36f);
+            var water = FarContextMat(new Color(0.035f, 0.16f, 0.20f), 0.98f, 0.0f, 0.025f, 0.58f);
             var building = Mat(new Color(0.22f, 0.21f, 0.19f), 0.92f, 0.08f);
             var roof = Mat(new Color(0.10f, 0.11f, 0.11f), 0.88f, 0.22f);
             var tank = Mat(new Color(0.47f, 0.48f, 0.47f), 0.52f, 0.78f);
@@ -91,7 +114,7 @@ public partial class LaunchPadController
                 }
             }
 
-            BuildStarbase3DepRelief(wetland);
+            BuildStarbase3DepRelief();
             Vector2 originOffsetM = ApplyActiveSiteGeoOriginOffset();
             string originSite = SimulationBridge.Instance?.LaunchSiteOrNull?.Id ?? "unknown";
             GD.Print($"[STARBASE_GEO] roads={roads} polygons={polygons} buildings={buildings} tanks={tanks} " +
@@ -309,17 +332,31 @@ public partial class LaunchPadController
         return true;
     }
 
-    private void BuildStarbase3DepRelief(StandardMaterial3D material)
+    private void BuildStarbase3DepRelief()
+    {
+        var mesh = BuildFaded3DepReliefMesh(HeroDepReliefPeakAlpha);
+        if (mesh == null)
+            return;
+        var node = Spawn("Starbase3DepRelief", mesh, CreateDepReliefMaterial(), Vector3.Zero);
+        node.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+    }
+
+    /// <summary>
+    /// Shared USGS 3DEP tile for hero and far-field. Vertex colours carry the
+    /// radial rim and the restrained sand/olive alpha so the source raster
+    /// never reads as an opaque wetland square.
+    /// </summary>
+    private ArrayMesh? BuildFaded3DepReliefMesh(float peakAlpha)
     {
         if (!FileAccess.FileExists(StarbaseReliefPath))
-            return;
+            return null;
 
         var file = FileAccess.Open(StarbaseReliefPath, FileAccess.ModeFlags.Read);
         if (file == null)
-            return;
+            return null;
+
         string json = file.GetAsText();
         file.Close();
-
         try
         {
             using var doc = JsonDocument.Parse(json);
@@ -327,25 +364,42 @@ public partial class LaunchPadController
             var grid = root.GetProperty("grid");
             int columns = grid.GetProperty("columns").GetInt32();
             int rows = grid.GetProperty("rows").GetInt32();
+            if (columns < 2 || rows < 2)
+                return null;
+
             float stepX = grid.GetProperty("stepM")[0].GetSingle();
             float stepZ = grid.GetProperty("stepM")[1].GetSingle();
             var values = root.GetProperty("valuesM");
-
-            var st = new SurfaceTool();
-            st.Begin(Mesh.PrimitiveType.Triangles);
-            const float centreX = 67f;
-            const float centreZ = 0f;
-            const float reliefScale = 0.55f;
             float baseY = GradeY + 0.10f * U;
+            float halfColumns = (columns - 1) * 0.5f;
+            float halfRows = (rows - 1) * 0.5f;
 
             Vector3 Vertex(int row, int column)
             {
-                float x = centreX + (column - (columns - 1) * 0.5f) * stepX;
-                float z = centreZ + ((rows - 1) * 0.5f - row) * stepZ;
-                float y = baseY + values[row][column].GetSingle() * reliefScale * U;
+                float x = DepReliefCentreX + (column - halfColumns) * stepX;
+                float z = DepReliefCentreZ + (halfRows - row) * stepZ;
+                float y = baseY + values[row][column].GetSingle() * DepReliefScale * U;
                 return new Vector3(x * U, y, z * U);
             }
 
+            Color VertexColor(int row, int column)
+            {
+                float edgeX = Mathf.Abs(column - halfColumns) / Mathf.Max(halfColumns, 1f);
+                float edgeZ = Mathf.Abs(row - halfRows) / Mathf.Max(halfRows, 1f);
+                float edge = 1f - FarSmoothstep(DepReliefRimStart, 1.0f, Mathf.Max(edgeX, edgeZ));
+                float elevation = values[row][column].GetSingle();
+                float tone = Mathf.Clamp((elevation + 0.85f) / 1.70f, 0f, 1f);
+                return new Color(
+                    Mathf.Lerp(0.48f, 0.66f, tone),
+                    Mathf.Lerp(0.38f, 0.52f, tone),
+                    Mathf.Lerp(0.25f, 0.38f, tone),
+                    // The regional DEM is a restrained grade cue over EarthGround,
+                    // not an opaque replacement surface.
+                    edge * peakAlpha);
+            }
+
+            var st = new SurfaceTool();
+            st.Begin(Mesh.PrimitiveType.Triangles);
             for (int row = 0; row < rows - 1; row++)
             for (int column = 0; column < columns - 1; column++)
             {
@@ -353,21 +407,77 @@ public partial class LaunchPadController
                 Vector3 b = Vertex(row, column + 1);
                 Vector3 c = Vertex(row + 1, column + 1);
                 Vector3 d = Vertex(row + 1, column);
-                AddReliefTriangle(st, a, b, c);
-                AddReliefTriangle(st, a, c, d);
+                AddFadedReliefTriangle(st, a, b, c,
+                    VertexColor(row, column), VertexColor(row, column + 1),
+                    VertexColor(row + 1, column + 1));
+                AddFadedReliefTriangle(st, a, c, d,
+                    VertexColor(row, column), VertexColor(row + 1, column + 1),
+                    VertexColor(row + 1, column));
             }
 
             st.GenerateNormals();
-            var mesh = st.Commit();
-            if (mesh != null)
-            {
-                var node = Spawn("Starbase3DepRelief", mesh, material, Vector3.Zero);
-                node.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            }
+            return st.Commit();
         }
         catch (Exception ex)
         {
             GD.PushWarning($"[STARBASE_GEO] Invalid 3DEP relief: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void UpdateHeroGeospatialFade()
+    {
+        if (!IsStarbaseSite)
+            return;
+        if (!_heroGeospatialFadeCollected)
+        {
+            CollectHeroGeospatialFadeMeshes();
+            _heroGeospatialFadeCollected = true;
+        }
+        if (_heroGeospatialFadeMeshes.Count == 0)
+            return;
+
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var earth = bridge?.Universe?.GetBody("earth");
+        bool activeEarth = vessel != null && earth != null && vessel.ReferenceBodyId == earth.Id;
+        double vesselAlt = activeEarth ? vessel!.GetAltitude(earth!) : double.PositiveInfinity;
+        double altitude = activeEarth
+            ? System.Math.Max(vesselAlt, FloatingOrigin.CameraAltOverEarth)
+            : FloatingOrigin.CameraAltOverEarth;
+        float hide = FarSmoothstep(HeroGeospatialFadeLowM, HeroGeospatialFadeHighM, (float)altitude);
+        if (!float.IsNaN(_lastHeroGeospatialHide) && Mathf.Abs(_lastHeroGeospatialHide - hide) < 0.01f)
+            return;
+
+        _lastHeroGeospatialHide = hide;
+        for (int i = _heroGeospatialFadeMeshes.Count - 1; i >= 0; i--)
+        {
+            var mesh = _heroGeospatialFadeMeshes[i];
+            if (mesh == null || !IsInstanceValid(mesh))
+            {
+                _heroGeospatialFadeMeshes.RemoveAt(i);
+                continue;
+            }
+            mesh.Transparency = hide;
+            mesh.Visible = hide < 0.97f;
+        }
+    }
+
+    private void CollectHeroGeospatialFadeMeshes()
+    {
+        _heroGeospatialFadeMeshes.Clear();
+        foreach (Node child in GetChildren())
+        {
+            if (child is not MeshInstance3D mesh)
+                continue;
+            string name = mesh.Name.ToString();
+            if (name == "Starbase3DepRelief"
+                || name.StartsWith("GeoRoad_", StringComparison.Ordinal)
+                || name.StartsWith("GeoShore_", StringComparison.Ordinal)
+                || name.StartsWith("GeoWetland_", StringComparison.Ordinal)
+                || name.StartsWith("GeoWater_", StringComparison.Ordinal)
+                || name.StartsWith("GeoYard_", StringComparison.Ordinal))
+                _heroGeospatialFadeMeshes.Add(mesh);
         }
     }
 

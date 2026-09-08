@@ -97,6 +97,7 @@ public partial class LaunchPadController : Node3D
     public override void _Process(double delta)
     {
         UpdateStarbaseFarField();
+        UpdateHeroGeospatialFade();
         UpdatePadExhaustFx(delta);
 
         bool night = SunController.SolarPhase is "ASTRONOMICAL_TWILIGHT" or "NIGHT";
