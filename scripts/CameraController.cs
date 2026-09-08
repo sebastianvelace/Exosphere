@@ -27,11 +27,15 @@ public partial class CameraController : Node3D
     public float ShakePeakRotationStepDegreesPerSecond => _shake.PeakRotationStepDegreesPerSecond;
     public float ShakePeakFovStepPerSecond => _shake.PeakFovStepPerSecond;
 
+    /// <summary>The production chase/pad/cockpit camera, not an incidental viewport camera.</summary>
+    public Camera3D? PresentationCamera => _camera;
+
     /// <summary>Switch to first-person cockpit (used by debug/visual harnesses).</summary>
     public void EnterCockpitView()
     {
         _cockpit = true;
         _padPresetIdx = PadPresets.Length;
+        Mode = CameraMode.Cockpit;
         _externalLookAtY = null;
     }
 
@@ -255,7 +259,12 @@ public partial class CameraController : Node3D
     public override void _Process(double delta)
     {
         ResolvePresentationNodes(delta);
-        if (_cockpit) { DriveCockpit(delta); return; }
+        if (_cockpit)
+        {
+            Mode = CameraMode.Cockpit;
+            DriveCockpit(delta);
+            return;
+        }
         _cockpitOrientation.Reset();
         _cockpitVessel = null;
         SetCockpitVisible(false);

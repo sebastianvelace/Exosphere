@@ -3774,8 +3774,11 @@ verify_pngs() {
         if (delivered < target - 0.04 || delivered > target + 0.04) bad = 1;
         seen[slug]++;
       }
-      END { exit !(seen["ship_vacuum"] == 1 && seen["ship_vacuum_half"] == 1
-        && seen["ship_vacuum_off"] == 1 && !bad) }
+      END {
+        ok = seen["ship_vacuum"] == 1 && seen["ship_vacuum_half"] == 1 && seen["ship_vacuum_off"] == 1 && bad != 1
+        if (ok) exit 0
+        exit 1
+      }
     ' "$LOG"; then
       echo "ERROR: vacuum matrix did not prove full/half/shutdown delivered thrust" >&2
       return 1

@@ -36,6 +36,10 @@ has 'layer_opacity' "$ROOT/assets/shaders/raptor_plume.gdshader" \
   "plume shader cannot distinguish core and outer sheath opacity"
 has 'vacuumCoreAlpha' "$ROOT/assets/shaders/raptor_plume.gdshader" \
   "vacuum plume has no readable axial emission floor"
+has 'camera.GlobalPosition.Length()' "$PLUME" \
+  "plume far-field LOD is not measured from the viewing camera to the vessel origin"
+has 'PresentationCamera' "$PLUME" \
+  "plume far-field LOD does not prefer the production chase/pad camera"
 
 if rg -q 'GD\.Randf\(\)' "$PLUME"; then
   fail "plume motion still uses frame-rate-dependent random flicker"

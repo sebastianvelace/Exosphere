@@ -262,11 +262,17 @@ public partial class PlumeSystem : Node3D
 
     private bool ResolveFarFieldState()
     {
-        var camera = GetViewport().GetCamera3D();
+        var camera = CameraController.Instance?.PresentationCamera
+            ?? GetViewport()?.GetCamera3D();
         if (camera == null || !GodotObject.IsInstanceValid(camera))
             return _farFieldActive;
 
-        float distance = GlobalPosition.DistanceTo(camera.GlobalPosition);
+        // The active vessel is rendered at the origin. LOD must follow the viewing
+        // camera's distance to that origin. Measuring this node's GlobalPosition
+        // against GetViewport().GetCamera3D() latched far-field after JumpToOrbit
+        // (~115 km, the sim altitude in metres) and never recovered, so orbital
+        // Raptors kept the distant core-only sprite instead of the near vacuum plume.
+        float distance = camera.GlobalPosition.Length();
         bool next = _farFieldActive
             ? distance > FarFieldExitDistance
             : distance >= FarFieldEnterDistance;

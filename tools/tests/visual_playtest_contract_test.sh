@@ -62,6 +62,14 @@ if ! grep -q 'SUMMARY reason=SHIP_OK' "$HARNESS_SCRIPT" \
   echo "FAIL standalone Starship mode still accepts an unrelated valid PNG" >&2
   exit 1
 fi
+if grep -q 'END { exit !(seen\["ship_vacuum"\]' "$HARNESS_SCRIPT"; then
+  echo "FAIL ship throttle-matrix awk uses mawk-incompatible exit !(...) wrapping" >&2
+  exit 1
+fi
+if ! grep -q 'seen\["ship_vacuum_off"\] == 1 && bad != 1' "$HARNESS_SCRIPT"; then
+  echo "FAIL ship throttle-matrix awk no longer proves full/half/shutdown delivered thrust" >&2
+  exit 1
+fi
 if ! grep -q 'SUMMARY reason=SMOKE_OK' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_LAUNCH slug=pad present=True visible=True' "$HARNESS_SCRIPT"; then
   echo "FAIL smoke mode does not prove the single hero launch complex" >&2
