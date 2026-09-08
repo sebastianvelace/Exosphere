@@ -40,8 +40,16 @@ Librería de física **pura C#, sin Godot**. Namespace `Exosphere.Simulation` (+
 
 ## GOTCHAS
 
-- **Cada etapa = UNA parte-motor.** Super Heavy = 1 parte (~74 MN), Starship = 1 parte. Los "33" y
-  "6" son visuales. `Parts.ActiveEngines.Count == 1` por etapa — no iteres motores físicos por bell.
+- **Cada etapa = UNA parte-motor.** Super Heavy = 1 parte, Starship = 1 parte.
+  `Parts.ActiveEngines.Count == 1` por etapa cuenta **partes**, no bells. Los 33/6
+  Raptors viven como `EngineInstanceState` dentro de esa parte (lifecycle, gimbal,
+  feed, fallos, torque `τ=Σ r×F`, TVC diferencial R5b, suma vectorial R5d). Itera
+  `part.EngineStates` / geometría por mount para física y telemetría; no asumas que
+  son solo visuales.
+- **Selección de subconjunto:** `SelectEngineCount(n, gimballedOnly:)` arma hasta N
+  mounts operativos priorizando gimballed → inboard → índice. EDL/boostback pasan
+  `gimballedOnly: true` para no promover un Raptor Vac o un outer fijo tras un
+  engine-out. Asenso full-cluster deja `gimballedOnly: false`.
 - **Impacto soft-rest**: hoy `Universe.cs` reubica a `Radius + 1` y aplica velocidad de superficie
   cuando `altitude < 0`, en lugar de destruir. Por eso un aterrizaje "se posa" sin estrellarse.
   Si cambias crash/EDL, esto es lo primero que toca revisar.

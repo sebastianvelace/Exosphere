@@ -51,7 +51,10 @@ Base tecnica cerrada en `main`:
   el TVC diferencial por motor (R5b: `PartGraph.SolveDifferentialGimbal`) comanda cada
   mount gimballed hacia el torque pedido; el torque real por mount se aplica tanto con
   input como sin él (R5c); `GetThrustVector` suma vectores por mount (R5d) sin diluir
-  mounts fijos al promediar gimbal del cluster.
+  mounts fijos al promediar gimbal del cluster. La selección de subconjunto
+  (`SelectEngineCount(n, gimballedOnly:)`) prioriza mounts gimballed/inboard y
+  EDL/boostback no promocionan Raptor Vac ni outers fijos tras un engine-out; las
+  plumas Ship/SH siguen telemetría por instancia (anillo SH / bell Ship).
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.

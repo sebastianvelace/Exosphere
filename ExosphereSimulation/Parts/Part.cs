@@ -68,6 +68,16 @@ public class Part
         _scheduledFailures;
     public bool HasEngineRuntime => _engineStates.Count > 0;
     private double _activeEngineFraction = 1.0;
+    /// <summary>
+    /// When true, <see cref="SelectEngineCount"/> / runtime selection only arm gimballed
+    /// mounts. Landing and boostback use this so a sea-level Raptor failure cannot pull a
+    /// vacuum Raptor (or a fixed outer SH mount) into the commanded subset.
+    /// </summary>
+    private bool _gimballedOnlySelection;
+    private readonly List<int> _selectedIndexScratch = new();
+    private bool[] _selectedForCommand = System.Array.Empty<bool>();
+    private bool _selectionMaskDirty = true;
+    private int _selectionMaskSelectedCount = int.MinValue;
 
     /// <summary>
     /// Fraction of the engines represented by this aggregate part that are selected.
@@ -77,15 +87,34 @@ public class Part
     public double ActiveEngineFraction
     {
         get => _activeEngineFraction;
-        set => _activeEngineFraction = System.Math.Clamp(value, 0.0, 1.0);
+        set
+        {
+            double next = System.Math.Clamp(value, 0.0, 1.0);
+            if (System.Math.Abs(next - _activeEngineFraction) > 0.0)
+                _selectionMaskDirty = true;
+            _activeEngineFraction = next;
+        }
     }
 
     public int SelectedEngineCount => Definition.Category == PartCategory.Engine
         ? (int)System.Math.Round(System.Math.Max(1, Definition.EngineCount) * ActiveEngineFraction)
         : 0;
 
-    public void SelectEngineCount(int count)
+    /// <summary>
+    /// Arms up to <paramref name="count"/> operational engines. Selection prefers
+    /// gimballed mounts, then inboard radial distance, then stable cluster index — not
+    /// raw array order alone — so mixed SL/Vac and centre/outer clusters keep physically
+    /// sensible subsets after an engine-out.
+    /// </summary>
+    /// <param name="gimballedOnly">
+    /// Restrict the candidate set to gimballed mounts. EDL/boostback pass true; ascent
+    /// and full-cluster burns leave false so fixed outers remain available.
+    /// </param>
+    public void SelectEngineCount(int count, bool gimballedOnly = false)
     {
+        if (_gimballedOnlySelection != gimballedOnly)
+            _selectionMaskDirty = true;
+        _gimballedOnlySelection = gimballedOnly;
         int total = System.Math.Max(1, Definition.EngineCount);
         ActiveEngineFraction = System.Math.Clamp(count, 0, total) / (double)total;
     }
@@ -109,6 +138,7 @@ public class Part
                 // Preserve the save/test-stand identity contract. Mount ids describe
                 // physical topology; runtime ids remain scoped to the part instance.
                 InstanceId = $"{InstanceId}:engine:{i + 1:00}",
+                MountId = mount?.InstanceId ?? "",
                 EngineModelId = modelId,
             });
         }
@@ -124,16 +154,12 @@ public class Part
         if (!double.IsFinite(commandedThrottle) || !double.IsFinite(dt) || dt < 0.0)
             throw new ArgumentOutOfRangeException(nameof(commandedThrottle));
 
-        int selected = SelectedEngineCount;
+        RebuildSelectedCommandMask();
         double floored = ApplyThrottleFloor(commandedThrottle);
-        int selectedHealthy = 0;
         for (int i = 0; i < _engineStates.Count; i++)
         {
             var state = _engineStates[i];
-            bool operational = state.State != EngineLifecycleState.Failed
-                && state.FailureCode == null;
-            bool selectedForCommand = operational && selectedHealthy < selected;
-            if (operational) selectedHealthy++;
+            bool selectedForCommand = IsSelectedForCommand(i);
             double command = selectedForCommand ? floored : 0.0;
             state.CommandedThrottle = command;
             if (!ApplyScheduledFailure(state, dt))
@@ -144,6 +170,88 @@ public class Part
         }
 
         RefreshAggregateThrottle();
+    }
+
+    private static bool IsOperationalEngine(EngineInstanceState state) =>
+        state.State != EngineLifecycleState.Failed && state.FailureCode == null;
+
+    private bool IsMountGimballed(int index)
+    {
+        var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(index);
+        return mount?.Gimballed ?? true;
+    }
+
+    private double MountRadialDistance(int index)
+    {
+        var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(index);
+        if (mount == null) return index;
+        double x = mount.Position.X;
+        double z = mount.Position.Z;
+        return System.Math.Sqrt(x * x + z * z);
+    }
+
+    /// <summary>
+    /// Rebuilds which operational mounts receive the vessel throttle command. Ranking is
+    /// gimballed → inboard → index so mixed clusters do not promote vacuum/fixed mounts
+    /// merely because an earlier sea-level/centre mount failed.
+    /// </summary>
+    private void RebuildSelectedCommandMask()
+    {
+        int selected = SelectedEngineCount;
+        if (!_selectionMaskDirty
+            && _selectedForCommand.Length == _engineStates.Count
+            && _selectionMaskSelectedCount == selected)
+            return;
+
+        if (_selectedForCommand.Length != _engineStates.Count)
+            _selectedForCommand = new bool[_engineStates.Count];
+        else
+            System.Array.Clear(_selectedForCommand, 0, _selectedForCommand.Length);
+
+        _selectedIndexScratch.Clear();
+        for (int i = 0; i < _engineStates.Count; i++)
+        {
+            if (!IsOperationalEngine(_engineStates[i]))
+                continue;
+            if (_gimballedOnlySelection && !IsMountGimballed(i))
+                continue;
+            _selectedIndexScratch.Add(i);
+        }
+
+        // Insertion sort — N ≤ 33, no Comparison delegate / Array.Sort allocations.
+        for (int i = 1; i < _selectedIndexScratch.Count; i++)
+        {
+            int key = _selectedIndexScratch[i];
+            int j = i - 1;
+            while (j >= 0 && CompareMountSelectionPriority(_selectedIndexScratch[j], key) > 0)
+            {
+                _selectedIndexScratch[j + 1] = _selectedIndexScratch[j];
+                j--;
+            }
+            _selectedIndexScratch[j + 1] = key;
+        }
+
+        int take = System.Math.Min(selected, _selectedIndexScratch.Count);
+        for (int n = 0; n < take; n++)
+            _selectedForCommand[_selectedIndexScratch[n]] = true;
+
+        _selectionMaskDirty = false;
+        _selectionMaskSelectedCount = selected;
+    }
+
+    private int CompareMountSelectionPriority(int a, int b)
+    {
+        int gimbalCmp = IsMountGimballed(b).CompareTo(IsMountGimballed(a));
+        if (gimbalCmp != 0) return gimbalCmp;
+        int radialCmp = MountRadialDistance(a).CompareTo(MountRadialDistance(b));
+        if (radialCmp != 0) return radialCmp;
+        return a.CompareTo(b);
+    }
+
+    private bool IsSelectedForCommand(int index)
+    {
+        RebuildSelectedCommandMask();
+        return index >= 0 && index < _selectedForCommand.Length && _selectedForCommand[index];
     }
 
     public bool FailEngine(string instanceId, string failureCode)
@@ -163,6 +271,7 @@ public class Part
                 injection.EngineInstanceId,
                 instanceId,
                 StringComparison.Ordinal));
+        _selectionMaskDirty = true;
         RefreshAggregateThrottle();
         return true;
     }
@@ -569,23 +678,24 @@ public class Part
 
     private void RefreshAggregateThrottle()
     {
-        int selected = SelectedEngineCount;
-        if (selected <= 0)
+        if (SelectedEngineCount <= 0)
         {
             ThrottleLevel = 0.0;
             return;
         }
 
+        RebuildSelectedCommandMask();
         double total = 0.0;
-        int selectedHealthy = 0;
-        foreach (var state in _engineStates)
+        int commanded = 0;
+        for (int i = 0; i < _engineStates.Count; i++)
         {
-            if (state.State == EngineLifecycleState.Failed || state.FailureCode != null)
-                continue;
-            if (selectedHealthy++ >= selected) break;
-            total += state.ActualThrottle;
+            if (!IsSelectedForCommand(i)) continue;
+            total += _engineStates[i].ActualThrottle;
+            commanded++;
         }
-        ThrottleLevel = selected > 0 ? total / selected : 0.0;
+        // Average over the mounts that were actually armed. If gimballed-only
+        // selection could not fill the requested count, do not dilute by empty slots.
+        ThrottleLevel = commanded > 0 ? total / commanded : 0.0;
     }
 
     // ── Masa actual (seca + propelante) ───────────────────────────────────
@@ -730,14 +840,12 @@ public class Part
         if (!HasEngineRuntime)
             return GetRatedFullThrottleThrustMagnitude(ambientPressure) * ActiveEngineFraction;
 
+        RebuildSelectedCommandMask();
         double thrust = 0.0;
-        int selectedHealthy = 0;
-        foreach (var state in _engineStates)
+        for (int i = 0; i < _engineStates.Count; i++)
         {
-            if (state.State == EngineLifecycleState.Failed || state.FailureCode != null)
-                continue;
-            if (selectedHealthy++ >= SelectedEngineCount) break;
-            var model = ResolveEngineModel(state);
+            if (!IsSelectedForCommand(i)) continue;
+            var model = ResolveEngineModel(_engineStates[i]);
             if (model != null)
                 thrust += EnginePerformanceEvaluator.Evaluate(
                     model, ambientPressure, model.MaximumThrottle).ThrustN;
@@ -938,14 +1046,11 @@ public class Part
         destination.Clear();
         if (!HasEngineRuntime || IsBroken || !IsStagingActive) return;
 
-        int selected = SelectedEngineCount;
-        int selectedHealthy = 0;
+        RebuildSelectedCommandMask();
         for (int i = 0; i < _engineStates.Count; i++)
         {
+            if (!IsSelectedForCommand(i)) continue;
             var state = _engineStates[i];
-            if (state.State == EngineLifecycleState.Failed || state.FailureCode != null)
-                continue;
-            if (selectedHealthy++ >= selected) break;
             var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(i);
             bool gimballed = mount?.Gimballed ?? true;
             if (!gimballed) continue;

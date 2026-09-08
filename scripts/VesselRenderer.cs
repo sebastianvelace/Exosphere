@@ -161,6 +161,53 @@ public partial class VesselRenderer : Node3D
         else if (hasFalcon9)           BuildFalcon9Section(vessel);
         else if (hasNewGlenn)          BuildNewGlennSection(vessel);
         else                           BuildGenericVessel(vessel);
+        BindProceduralPlumeEngineIds(vessel);
+    }
+
+    /// <summary>
+    /// Maps Starship/Super Heavy plume units onto runtime engine instance ids so an
+    /// engine-out extinguishes the matching plume (Ship) or dims the matching ring (SH).
+    /// Falcon/New Glenn already use <see cref="PlumeSystem.SetupGenericCluster"/>.
+    /// </summary>
+    private void BindProceduralPlumeEngineIds(Vessel vessel)
+    {
+        if (_plumes == null) return;
+
+        var shipEngines = vessel.Parts.Parts.FirstOrDefault(p =>
+            p.Definition.IsStarshipFamily
+            && p.Definition.HasVehicleRole("ship_engines")
+            && p.HasEngineRuntime);
+        if (shipEngines != null && shipEngines.EngineStates.Count >= 6)
+        {
+            // Plume visual order is Vac0..2 then SL0..2; runtime cluster order is SL then Vac.
+            _plumes.BindStarshipEngineInstanceIds(new[]
+            {
+                shipEngines.EngineStates[3].InstanceId,
+                shipEngines.EngineStates[4].InstanceId,
+                shipEngines.EngineStates[5].InstanceId,
+                shipEngines.EngineStates[0].InstanceId,
+                shipEngines.EngineStates[1].InstanceId,
+                shipEngines.EngineStates[2].InstanceId,
+            });
+        }
+
+        var boosterEngines = vessel.Parts.Parts.FirstOrDefault(p =>
+            p.Definition.IsStarshipFamily
+            && p.Definition.HasVehicleRole("booster")
+            && p.HasEngineRuntime);
+        if (boosterEngines != null && boosterEngines.EngineStates.Count >= 33)
+        {
+            var center = new string[3];
+            var middle = new string[10];
+            var outer = new string[20];
+            for (int i = 0; i < 3; i++)
+                center[i] = boosterEngines.EngineStates[i].InstanceId;
+            for (int i = 0; i < 10; i++)
+                middle[i] = boosterEngines.EngineStates[3 + i].InstanceId;
+            for (int i = 0; i < 20; i++)
+                outer[i] = boosterEngines.EngineStates[13 + i].InstanceId;
+            _plumes.BindSuperHeavyRingInstanceIds(center, middle, outer);
+        }
     }
 
     // ── Full Starship + Super Heavy stack ─────────────────────────────────
@@ -1294,14 +1341,15 @@ public partial class VesselRenderer : Node3D
                 out float superHeavyThrottle,
                 out float shipThrottle);
             float throttle = Mathf.Max(superHeavyThrottle, shipThrottle);
+            _perEngineThrottle.Clear();
+            foreach (var row in _engineReadoutScratch)
+                _perEngineThrottle[row.InstanceId] = row.Throttle;
             _plumes?.Update(superHeavyThrottle, shipThrottle, alt,
-                _cachedPresentationPressureRatio, _selectedShipEngines, delta);
+                _cachedPresentationPressureRatio, _selectedShipEngines, delta,
+                _perEngineThrottle);
             ReportVisualPlumeTelemetry(superHeavyThrottle, shipThrottle);
             if (_usesGenericPlumes && _plumes != null)
             {
-                _perEngineThrottle.Clear();
-                foreach (var row in _engineReadoutScratch)
-                    _perEngineThrottle[row.InstanceId] = row.Throttle;
                 _plumes.UpdateGeneric(_perEngineThrottle, alt,
                     _cachedPresentationPressureRatio, delta);
             }

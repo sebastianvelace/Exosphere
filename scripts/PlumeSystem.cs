@@ -52,6 +52,13 @@ public partial class PlumeSystem : Node3D
         public bool  IsSuperHeavy;
         public bool  IsSkirt;
         public string InstanceId = "";
+        public string UnitName = "";
+        /// <summary>
+        /// Optional runtime engine ids that drive this merged Super Heavy ring. Empty for
+        /// the decorative skirt / core column. When set, Update uses the mean delivered
+        /// throttle of these instances instead of the stage-wide aggregate.
+        /// </summary>
+        public string[] RingInstanceIds = System.Array.Empty<string>();
     }
 
     private readonly List<PlumeUnit> _shUnits   = new();
@@ -134,6 +141,47 @@ public partial class PlumeSystem : Node3D
         }
     }
 
+    /// <summary>
+    /// Binds Starship plume units to runtime <see cref="EngineInstanceState.InstanceId"/>
+    /// values. Visual order is Vac0..Vac2 then SL0..SL2; callers must pass ids in that
+    /// order so a single failed sea-level Raptor extinguishes only its own plume.
+    /// </summary>
+    public void BindStarshipEngineInstanceIds(IReadOnlyList<string> vacThenSlInstanceIds)
+    {
+        int n = System.Math.Min(_shipUnits.Count, vacThenSlInstanceIds.Count);
+        for (int i = 0; i < n; i++)
+            _shipUnits[i].InstanceId = vacThenSlInstanceIds[i] ?? "";
+    }
+
+    /// <summary>
+    /// Binds Super Heavy ring plumes to the centre / middle / outer runtime instance ids.
+    /// The merged core and skirt keep stage-wide throttle; the three rings follow the mean
+    /// delivered throttle of their mounts so an outer-ring engine-out is visible.
+    /// </summary>
+    public void BindSuperHeavyRingInstanceIds(
+        IReadOnlyList<string> centerIds,
+        IReadOnlyList<string> middleIds,
+        IReadOnlyList<string> outerIds)
+    {
+        foreach (var unit in _shUnits)
+        {
+            if (unit.UnitName.Contains("Inner", System.StringComparison.Ordinal))
+                unit.RingInstanceIds = CopyIds(centerIds);
+            else if (unit.UnitName.Contains("Mid", System.StringComparison.Ordinal))
+                unit.RingInstanceIds = CopyIds(middleIds);
+            else if (unit.UnitName.Contains("Outer", System.StringComparison.Ordinal))
+                unit.RingInstanceIds = CopyIds(outerIds);
+        }
+    }
+
+    private static string[] CopyIds(IReadOnlyList<string> ids)
+    {
+        var copy = new string[ids.Count];
+        for (int i = 0; i < ids.Count; i++)
+            copy[i] = ids[i] ?? "";
+        return copy;
+    }
+
     public void SetupGenericCluster(IEnumerable<EnginePlumeMount> mounts)
     {
         foreach (var mount in mounts)
@@ -184,10 +232,13 @@ public partial class PlumeSystem : Node3D
     /// <summary>
     /// Pressure-aware dual-stage update. During hot-stage overlap both engines can be
     /// delivered simultaneously; geometry presence is not a firing/exclusion flag.
+    /// When <paramref name="engineThrottles"/> is provided and units carry InstanceId /
+    /// RingInstanceIds bindings, each plume follows its own delivered throttle.
     /// </summary>
     public void Update(float superHeavyThrottle, float shipThrottle, double altitude,
         double ambientPressureRatio, int selectedShipEngines = 6,
-        double visualDeltaSeconds = 1.0 / 30.0)
+        double visualDeltaSeconds = 1.0 / 30.0,
+        IReadOnlyDictionary<string, double>? engineThrottles = null)
     {
         // Advance optical turbulence from wall-clock frame time, not from the number
         // of renderer callbacks. The latter slows the plume under llvmpipe and makes
@@ -206,9 +257,81 @@ public partial class PlumeSystem : Node3D
         float expansion  = System.Math.Clamp(1f - pressRatio, 0f, 1f);
         expansion = expansion * expansion * (3f - 2f * expansion); // smoothstep
 
-        UpdateGroup(_shUnits, superHeavyThrottle > 0.01f, superHeavyThrottle,
-            expansion, pressRatio, altitude, 1f, flickerPhase: _visualTimeSeconds,
-            flickerOffset: 0.0f, farField: farField);
+        UpdateSuperHeavyGroup(
+            superHeavyThrottle, expansion, pressRatio, altitude, farField, engineThrottles);
+        UpdateStarshipGroup(
+            shipThrottle, expansion, pressRatio, altitude, selectedShipEngines,
+            farField, engineThrottles);
+    }
+
+    private void UpdateSuperHeavyGroup(
+        float superHeavyThrottle,
+        float expansion,
+        float pressRatio,
+        double altitude,
+        bool farField,
+        IReadOnlyDictionary<string, double>? engineThrottles)
+    {
+        for (int i = 0; i < _shUnits.Count; i++)
+        {
+            var unit = _shUnits[i];
+            float throttle = superHeavyThrottle;
+            float activeFraction = 1f;
+            if (engineThrottles != null && unit.RingInstanceIds.Length > 0)
+            {
+                double sum = 0.0;
+                int hits = 0;
+                foreach (var id in unit.RingInstanceIds)
+                {
+                    if (engineThrottles.TryGetValue(id, out double value))
+                    {
+                        sum += System.Math.Clamp(value, 0.0, 1.0);
+                        hits++;
+                    }
+                }
+                if (hits > 0)
+                {
+                    throttle = (float)(sum / hits);
+                    activeFraction = (float)hits / unit.RingInstanceIds.Length;
+                }
+            }
+
+            UpdateGroup(_shUnits, throttle > 0.01f, throttle, expansion, pressRatio,
+                altitude, activeFraction, start: i, count: 1,
+                activeCount: throttle > 0.01f ? 1 : 0,
+                flickerPhase: _visualTimeSeconds, flickerOffset: i * 0.37f,
+                farField: farField);
+        }
+    }
+
+    private void UpdateStarshipGroup(
+        float shipThrottle,
+        float expansion,
+        float pressRatio,
+        double altitude,
+        int selectedShipEngines,
+        bool farField,
+        IReadOnlyDictionary<string, double>? engineThrottles)
+    {
+        bool bound = _shipUnits.Count > 0
+            && !string.IsNullOrEmpty(_shipUnits[0].InstanceId)
+            && engineThrottles != null;
+        if (bound)
+        {
+            for (int i = 0; i < _shipUnits.Count; i++)
+            {
+                var unit = _shipUnits[i];
+                float throttle = engineThrottles!.TryGetValue(unit.InstanceId, out double value)
+                    ? (float)System.Math.Clamp(value, 0.0, 1.0)
+                    : 0f;
+                UpdateGroup(_shipUnits, throttle > 0.01f, throttle, expansion, pressRatio,
+                    altitude, 1f, start: i, count: 1,
+                    activeCount: throttle > 0.01f ? 1 : 0,
+                    flickerPhase: _visualTimeSeconds, flickerOffset: 1.7f + i * 0.41f,
+                    farField: farField);
+            }
+            return;
+        }
 
         int slActive = System.Math.Clamp(selectedShipEngines, 0, 3);
         int vacActive = System.Math.Clamp(selectedShipEngines - 3, 0, 3);
@@ -222,7 +345,6 @@ public partial class PlumeSystem : Node3D
                 shipThrottle, expansion, pressRatio, altitude, 1f,
                 start: 3, count: 3, activeCount: slActive,
                 flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f, farField: farField);
-
     }
 
     public void UpdateGeneric(
@@ -506,6 +628,7 @@ public partial class PlumeSystem : Node3D
             CoreScale    = sh ? 0.52f : 0.82f,
             IsSuperHeavy = sh,
             IsSkirt = name.Contains("Skirt"),
+            UnitName = name,
         };
 
         // ── Shader cone ──────────────────────────────────────────────────────

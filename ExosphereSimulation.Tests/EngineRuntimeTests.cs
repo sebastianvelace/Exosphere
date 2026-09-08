@@ -77,6 +77,43 @@ public sealed class EngineRuntimeTests
     }
 
     [Fact]
+    public void ShipLandingSelectionDoesNotPromoteVacuumRaptorAfterSeaLevelEngineOut()
+    {
+        var ship = new Part(LoadCatalog()["starship_engines"], "ship-landing-selection");
+        Assert.Equal("ship-sl-01", ship.EngineStates[0].MountId);
+        Assert.Equal("ship-vac-01", ship.EngineStates[3].MountId);
+
+        Assert.True(ship.FailEngine(ship.EngineStates[0].InstanceId, "SL_ENGINE_OUT"));
+        ship.SelectEngineCount(3, gimballedOnly: true);
+        for (int i = 0; i < 120; i++)
+            ship.AdvanceEngineRuntime(1.0, 0.02);
+
+        Assert.Equal(0.0, ship.EngineStates[0].ActualThrottle);
+        Assert.True(ship.EngineStates[1].ActualThrottle > 0.99);
+        Assert.True(ship.EngineStates[2].ActualThrottle > 0.99);
+        Assert.All(ship.EngineStates.Skip(3), state =>
+            Assert.Equal(0.0, state.CommandedThrottle));
+        Assert.Equal(2, ship.EngineStates.Count(state => state.ActualThrottle > 0.99));
+    }
+
+    [Fact]
+    public void MixedClusterSelectionPrefersGimballedInboardMountsOverIndexOrderAlone()
+    {
+        var booster = new Part(LoadCatalog()["super_heavy_booster"], "sh-selection");
+        // Fail the first centre mount. Index-order selection would still fill with the
+        // next twelve mounts; gimballed-inboard ranking must keep the subset inside the
+        // 13 gimballed engines and never promote a fixed outer merely to fill the count.
+        Assert.True(booster.FailEngine(booster.EngineStates[0].InstanceId, "CENTER_OUT"));
+        booster.SelectEngineCount(13, gimballedOnly: true);
+        for (int i = 0; i < 120; i++)
+            booster.AdvanceEngineRuntime(1.0, 0.02);
+
+        Assert.Equal(12, booster.EngineStates.Count(state => state.ActualThrottle > 0.99));
+        Assert.All(booster.EngineStates.Skip(13), state =>
+            Assert.Equal(0.0, state.CommandedThrottle));
+    }
+
+    [Fact]
     public void ShutdownPassesThroughPurgeAndReturnsOff()
     {
         var engine = CreateMerlinCluster("octaweb-shutdown");

@@ -152,7 +152,8 @@ public partial class BoosterReturnController : Node
         debris.ConfigureLandingContactsFromParts();
 
         var engines = BoosterReturnGuidance.FindBoosterEnginePart(debris);
-        engines?.SelectEngineCount(BoosterReturnGuidance.BoostbackEngineCount);
+        engines?.SelectEngineCount(
+            BoosterReturnGuidance.BoostbackEngineCount, gimballedOnly: true);
 
         _boostbackStartVelocity = debris.Velocity;
         LastBoostbackDeltaVMps = 0.0;
@@ -195,7 +196,8 @@ public partial class BoosterReturnController : Node
 
         // Engines push along local +Y: point +Y along the desired thrust direction.
         AimThrustAxis(booster, thrustDir);
-        engines?.SelectEngineCount(BoosterReturnGuidance.BoostbackEngineCount);
+        engines?.SelectEngineCount(
+            BoosterReturnGuidance.BoostbackEngineCount, gimballedOnly: true);
         booster.Throttle = 1.0;
         StatusLine =
             $"BOOSTER BOOSTBACK  out={outbound:F0} m/s  fuel={fuelFrac:P0}";
@@ -242,7 +244,7 @@ public partial class BoosterReturnController : Node
         if (!catchPhase) throttle = System.Math.Max(throttle, 0.7);
         if (vHoriz > 40.0) throttle = System.Math.Max(throttle, 0.6);
 
-        engines?.SelectEngineCount(enginesLit);
+        engines?.SelectEngineCount(enginesLit, gimballedOnly: true);
         booster.Throttle = throttle;
         StatusLine = catchPhase
             ? $"BOOSTER CATCH  miss={miss:F0} m  alt={alt:F0} m"

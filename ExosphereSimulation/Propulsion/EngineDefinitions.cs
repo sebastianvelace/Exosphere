@@ -310,6 +310,12 @@ public sealed class EngineInstanceState
 {
     public required string InstanceId { get; init; }
     public required string EngineModelId { get; init; }
+    /// <summary>
+    /// Stable cluster-mount id from <c>data/engine_clusters</c> (e.g. <c>ship-sl-01</c>).
+    /// Distinct from <see cref="InstanceId"/>, which remains scoped to the part instance for
+    /// save/telemetry contracts (<c>{part}:engine:01</c>).
+    /// </summary>
+    public string MountId { get; init; } = "";
     public EngineLifecycleState State { get; set; } = EngineLifecycleState.Off;
     public double StateElapsedSeconds { get; set; }
     public double CommandedThrottle { get; set; }

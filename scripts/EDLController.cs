@@ -229,7 +229,8 @@ public partial class EDLController : Control
         bool aeroPhase = _phase is Edl.Entry or Edl.Peak or Edl.Aero;
         if (aeroPhase)
             shipEngines?.SelectEngineCount(System.Math.Min(3,
-                System.Math.Max(1, shipEngines.Definition.EngineCount)));
+                System.Math.Max(1, shipEngines.Definition.EngineCount)),
+                gimballedOnly: true);
         double aThrustFull = MaxLandingThrustAccel(vessel, body, shipEngines, mass);
 
         // Distance the FULL retrograde burn needs to null the WHOLE velocity vector (not just the
@@ -751,7 +752,7 @@ public partial class EDLController : Control
             {
                 // Flight-proven Starship sequence: ignite three centre Raptors as
                 // the flip begins, then let gimbal authority rotate the vehicle.
-                shipEngines?.SelectEngineCount(3);
+                shipEngines?.SelectEngineCount(3, gimballedOnly: true);
                 vessel.Throttle = shipEngines?.ApplyThrottleFloor(flipIgnitionThrottle)
                     ?? flipIgnitionThrottle;
             }
@@ -1293,7 +1294,7 @@ public partial class EDLController : Control
         if (starshipLandingCluster && _phase == Edl.Final)
             selected = _alt <= TerminalSingleEngineAltitudeM ? 1 : 2;
         _landingEngineCount = selected;
-        engineCluster.SelectEngineCount(selected);
+        engineCluster.SelectEngineCount(selected, gimballedOnly: true);
         double throttle = committedStarshipBurn
             ? System.Math.Max(DefinitionMinThrottle(engineCluster),
                 desiredThrust / (perEngine * selected))
