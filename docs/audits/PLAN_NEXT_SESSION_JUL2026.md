@@ -1,5 +1,7 @@
 # Exosphere — Next Session Improvement Plan (Jul 2026)
 
+> Historical Jul 2026 session plan; remaining live items live in `ROADMAP.md` and `PLAN_VISUAL_REALISM.md`. Unchecked boxes here are not the current backlog (`NavBallController` / `TimeWarpController` are already gone).
+
 > **Mission:** Make the player *feel* they are flying a real Starship/Super Heavy mission — not a toy rocket with SpaceX paint. Every item below must pass the realism filter: *"How does this make the player FEEL a real space mission?"*
 >
 > **Evidence base:** `PLAN_REALISM.md`, `PLAN_VISUAL_REALISM.md`, `PLAN_PLAYTEST.md`, `ROADMAP.md`, `.atl/DELEGATION_JUL2026.md`, `.atl/OVERENGINEERING_AUDIT_JUL2026.md`, git history through `4906dfd` (Jul 2026 session).

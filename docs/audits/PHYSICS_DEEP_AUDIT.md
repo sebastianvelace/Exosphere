@@ -69,7 +69,7 @@
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `StarshipRealismTests.cs` covers static mass/thrust/O/F only; no integrated ascent. `PLAN_NEXT_SESSION.md:59-60` describes harness but no committed test. |
+| **Evidence** | `StarshipRealismTests.cs` covers static mass/thrust/O/F only; no integrated ascent. `docs/audits/PLAN_NEXT_SESSION_JUL2026.md:59-60` describes harness but no committed test. |
 | **Real-world** | Full-stack ascent is primary mission validation |
 | **Root cause** | Ascent is game-layer + RK4; no sim-level acceptance test |
 | **Fix** | **Sim test:** RK4 ascent slice (gravity turn as open-loop pitch schedule) OR **game harness** logged to CI artifact |
@@ -189,7 +189,7 @@
 
 | Field | Detail |
 |-------|--------|
-| **Evidence** | `Universe.cs:209-211`: `_ = FindBreakingJoints(...)` — result ignored. `PLAN_NEXT_SESSION.md:172-174` |
+| **Evidence** | `Universe.cs:209-211`: `_ = FindBreakingJoints(...)` — result ignored. `docs/audits/PLAN_NEXT_SESSION_JUL2026.md:172-174` |
 | **Real-world** | Max-Q and bad reentry can fail joints |
 | **Root cause** | Scaffold never wired |
 | **Fix** | **Sim:** Split vessel on breaking joints; **Game:** VFX via `ReentryBreakupController` |
@@ -365,7 +365,7 @@
 | **P-X02** | RK4 fixed body positions per 20 ms substep | **ACCEPT** | `Universe.cs:193-194`; error negligible |
 | **P-X03** | Cylinder CL = 0.7·sin(2α) | **ACCEPT** | Validated L/D≈0.3 at α=70° (`AerodynamicLiftTests.cs`) |
 | **P-X04** | Simplified D-K-R heating, 1 m² part area | **ACCEPT short-term** | Tune k or area if P-R01 q calibration needed |
-| **P-X05** | `SoftLandingThreshold` 5 m/s vs EDL 3 m/s | **FIX optional** | `Universe.cs:64` vs `EDLController.cs:24`; `PLAN_NEXT_SESSION.md:P-P1` |
+| **P-X05** | `SoftLandingThreshold` 5 m/s vs EDL 3 m/s | **FIX optional** | `Universe.cs:64` vs `EDLController.cs:24`; `docs/audits/PLAN_NEXT_SESSION_JUL2026.md:P-P1` |
 | **P-X06** | Patched-conic SOI (not full n-body) | **ACCEPT** | SOI continuity tested (`NavigationRegressionTests.cs:53-100`) |
 | **P-X07** | Min throttle 40% on ascent only | **ACCEPT** | `Part.ApplyThrottleFloor`; EDL bypasses — matches Raptor deep-throttle off/on |
 

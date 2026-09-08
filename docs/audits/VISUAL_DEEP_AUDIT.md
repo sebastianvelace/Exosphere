@@ -1,7 +1,7 @@
 # Exosphere Visual Deep Audit — Jul 2026
 
 **Scope:** Starship/Super Heavy exterior, plumes, pad, reentry, orbit/space, camera, lighting, planets/atmosphere, HUD vs render.  
-**Evidence base:** `PLAN_VISUAL_REALISM.md`, `PLAN_NEXT_SESSION.md`, `ROADMAP.md`, `PLAN_PLAYTEST.md`, source scan of render scripts + `assets/shaders/`.  
+**Evidence base:** `PLAN_VISUAL_REALISM.md`, `docs/audits/PLAN_NEXT_SESSION_JUL2026.md`, `ROADMAP.md`, `PLAN_PLAYTEST.md`, source scan of render scripts + `assets/shaders/`.  
 **Verification standard:** xvfb PNG at 1920×1080, state-gated captures (altitude/phase, not frame count).
 
 ---
@@ -411,7 +411,7 @@
 ## Infrastructure / process
 
 ### V-050 — End-to-end play harness (blocker)
-- **Evidence:** `PLAN_NEXT_SESSION.md:54-61`; `PLAN_PLAYTEST.md:16-34`.
+- **Evidence:** `docs/audits/PLAN_NEXT_SESSION_JUL2026.md:54-61`; `PLAN_PLAYTEST.md:16-34`.
 - **Realism gap:** Cannot *see* full mission arc — inference from logs ≠ webcast mission feel.
 - **Proposed solution:** Temp `_PlaytestShot.cs` state-gated PNGs + `/tmp/exo_play.log`; mandatory cleanup.
 - **Acceptance test:** PNG set: pad, liftoff, Max-Q, SEPARATION, ORBIT, EDL belly, touchdown; clean `git status`.

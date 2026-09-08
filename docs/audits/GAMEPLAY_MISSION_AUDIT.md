@@ -6,7 +6,7 @@
 **Scope:** ROADMAP pending gameplay, `SaveSystem.cs`, `MissionManager.cs`, `CrewMember`, `ExosphereSimulation/Systems/*`, `lua_scripts/`, `ExosphereSimulation/Construction/*`, pad→orbit→EDL→recovery arc.  
 **Mode:** Read-only code/doc scan. No C# changes.
 
-**Sources:** `ROADMAP.md` (Gameplay pendientes), `PLAN_NEXT_SESSION.md` (G-P1–G-P5), `PLAN_REALISM.md` (R11/R12), `.atl/DELEGATION_JUL2026.md`.
+**Sources:** `ROADMAP.md` (Gameplay pendientes), `docs/audits/PLAN_NEXT_SESSION_JUL2026.md` (G-P1–G-P5), `PLAN_REALISM.md` (R11/R12), `.atl/DELEGATION_JUL2026.md`.
 
 ---
 
@@ -43,7 +43,7 @@
 
 | | |
 |---|---|
-| **Evidence** | `SaveSystem.SaveGame`/`LoadGame` exist (`scripts/SaveSystem.cs:24-51`) but **zero UI/HUD callers** (grep: only `SaveSystem.cs`). ROADMAP: "Save/load de mision" pending. `PLAN_NEXT_SESSION.md` G-P1. |
+| **Evidence** | `SaveSystem.SaveGame`/`LoadGame` exist (`scripts/SaveSystem.cs:24-51`) but **zero UI/HUD callers** (grep: only `SaveSystem.cs`). ROADMAP: "Save/load de mision" pending. `docs/audits/PLAN_NEXT_SESSION_JUL2026.md` G-P1. |
 | **Gap** | Saves only position, velocity, orientation, `IsOnRails`, `ReferenceBodyId`. **Missing:** propellant, part graph, throttle/SAS, `OrbitalState`, crew, systems reservoirs, `MissionManager.Phase`, warp index, maneuvers, ground-hold. `CurrentTime` serialized but **not restored** (`SaveSystem.cs:104-105`, `Universe.CurrentTime` private set). New vessels get **new GUIDs** on load (`Vessel.cs:16`) so `ActiveVesselId` matching is fragile (`SaveSystem.cs:120-121`). |
 | **Impact** | Multi-hour orbital missions cannot be paused/resumed — core real-mission fantasy. |
 | **Recommendation** | Extend DTO; expose `Universe.CurrentTime` setter for restore; wire MainMenu Continue + in-flight F5/F9; roundtrip test mid-orbit apoapsis ±1 m/s. |
@@ -53,7 +53,7 @@
 
 | | |
 |---|---|
-| **Evidence** | `MissionManager` is a phase FSM (`MissionManager.cs:6-27`) with signals for HUD/audio. No objective types, success/fail flags, or progression store. `MainMenu` shows static "LOW EARTH ORBIT" (`MainMenu.cs:178-179`) — not data-driven. ROADMAP: "Misiones/objetivos de progresion" pending. `PLAN_NEXT_SESSION.md` G-P3. |
+| **Evidence** | `MissionManager` is a phase FSM (`MissionManager.cs:6-27`) with signals for HUD/audio. No objective types, success/fail flags, or progression store. `MainMenu` shows static "LOW EARTH ORBIT" (`MainMenu.cs:178-179`) — not data-driven. ROADMAP: "Misiones/objetivos de progresion" pending. `docs/audits/PLAN_NEXT_SESSION_JUL2026.md` G-P3. |
 | **Gap** | Phases like `ORBIT`, `LANDED`, `CRASHED` have no mission outcome. Player can fly forever with no arc end. |
 | **Impact** | Sandbox flight sim, not a SpaceX-style mission with briefing → execution → debrief. |
 | **Recommendation** | `MissionDefinition` JSON + `MissionManager` objective evaluator; first mission: "150 km orbit + soft landing"; success/fail banner + telemetry export on completion. |
@@ -111,7 +111,7 @@
 
 | | |
 |---|---|
-| **Evidence** | `OnLaunch` sets craft and changes scene with try/catch only (`ConstructionController.cs:440-451`). ROADMAP: "Validacion visual de crafts guardados antes de launch." `PLAN_NEXT_SESSION.md` G-P2. Browser shows mass if rebuildable (`ConstructionController.cs:401-414`) but no TWR/engine/decoupler checks. |
+| **Evidence** | `OnLaunch` sets craft and changes scene with try/catch only (`ConstructionController.cs:440-451`). ROADMAP: "Validacion visual de crafts guardados antes de launch." `docs/audits/PLAN_NEXT_SESSION_JUL2026.md` G-P2. Browser shows mass if rebuildable (`ConstructionController.cs:401-414`) but no TWR/engine/decoupler checks. |
 | **Gap** | Under-TWR or engine-less stacks can reach pad; preview mesh may diverge from flight `VesselRenderer` path. |
 | **Impact** | Range-safety fantasy broken — impossible vehicles launch. |
 | **Recommendation** | `VesselAssembly.ComputeMetrics` gate: TWR ≥ 1.0, ≥1 engine, decoupler if multi-stage; block launch with readable errors. |
@@ -165,7 +165,7 @@
 
 | | |
 |---|---|
-| **Evidence** | `TickEVA`, `ComputeEVARisk`, `CrewStatus` (`CrewMember.cs:51-77`) — no game-layer caller. `PLAN_NEXT_SESSION.md` lists crew EVA as non-goal. |
+| **Evidence** | `TickEVA`, `ComputeEVARisk`, `CrewStatus` (`CrewMember.cs:51-77`) — no game-layer caller. `docs/audits/PLAN_NEXT_SESSION_JUL2026.md` lists crew EVA as non-goal. |
 | **Recommendation** | Defer until crew roster (G-003) ships; then EVA as optional objective type. |
 | **Owner** | Future gameplay layer |
 
@@ -243,7 +243,7 @@
 
 ## Self-check
 
-- Scanned: ROADMAP, SaveSystem, MissionManager, CrewMember, Systems/*, lua_scripts, Construction/*, SimulationBridge staging, SystemsController consequences, MainMenu, PLAN_NEXT_SESSION G-P track.  
+- Scanned: ROADMAP, SaveSystem, MissionManager, CrewMember, Systems/*, lua_scripts, Construction/*, SimulationBridge staging, SystemsController consequences, MainMenu, archived Jul 2026 G-P track.  
 - Template aligned with `docs/physics_audit.md` (evidence table + priority fixes) and `.atl/OVERENGINEERING_AUDIT_JUL2026.md` (severity counts + ID blocks).
 
 ---
