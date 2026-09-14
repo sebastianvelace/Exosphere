@@ -269,7 +269,8 @@ public partial class CameraController : Node3D
         _cockpitVessel = null;
         SetCockpitVisible(false);
 
-        // Auto-switch to Chase mode once vessel is clear of the pad
+        // Auto-switch to Chase mode once the opening tower shot has converged
+        // exactly on the vehicle-focused frame.
         var bridge = SimulationBridge.Instance;
         if (bridge?.ActiveVessel != null)
         {
@@ -301,15 +302,6 @@ public partial class CameraController : Node3D
             }
             _trackedHadBooster = hasBooster;
             _trackedVehicleInitialized = true;
-            if (body != null)
-            {
-                double alt = bridge.ActiveVessel.GetAltitude(body);
-                // Keep pad framing through ~1.1 km so the tower does not vanish in 2 s.
-                if (Mode == CameraMode.Pad && alt > 1100)
-                    Mode = CameraMode.Chase;
-                if (Mode == CameraMode.Chase && alt < 800)
-                    Mode = CameraMode.Pad;
-            }
         }
 
         var camera = _camera;
@@ -321,37 +313,54 @@ public partial class CameraController : Node3D
         float pitchRad = Mathf.DegToRad(_pitch);
 
         // The active vessel is at the render origin (FloatingOrigin); the ground sits at
-        // -alt/2.8 render units below it. Below ~1.5 km, anchor the camera to the GROUND
-        // and watch the rocket climb away — over featureless ocean/terrain this is the only
-        // clear cue that the rocket is actually rising.
+        // -alt/2.8 render units below it. Begin with a tower-context shot, then crane and
+        // zoom onto the vehicle after tower clear. The pure framing curve reaches the
+        // exact chase frame before Mode changes, so there is no threshold pop.
         double trackAlt = 0.0;
         Basis surfaceFrame = Basis.Identity;
         Vector3 renderUp = Vector3.Up;
+        float vehicleHeight = 43f;
+        Vector3 localVesselCenter = Vector3.Up * (vehicleHeight * 0.5f);
+        VehicleCameraFraming.EarlyFlightCameraFrame earlyFlightFrame = default;
         if (bridge?.ActiveVessel is { } tv)
         {
             var trackingBody = bridge.Universe.GetDominantBody(tv.Position);
             trackAlt = tv.GetAltitude(trackingBody);
             surfaceFrame = BuildSurfaceFrame(trackingBody, tv.Position);
             renderUp = surfaceFrame.Y;
+            vehicleHeight = (float)(tv.VehicleLength / 2.8);
+            Vector3 vesselCenter = ToGQuat(tv.Orientation)
+                * (Vector3.Up * (vehicleHeight * 0.5f));
+            localVesselCenter = surfaceFrame.Inverse() * vesselCenter;
+            earlyFlightFrame = VehicleCameraFraming.EarlyFlightFrame(
+                vehicleHeight, -(trackAlt / 2.8));
+
+            if (Mode == CameraMode.Pad && earlyFlightFrame.VehicleFocus >= 1.0)
+            {
+                _presentationDistanceTarget = (float)earlyFlightFrame.CameraDistance;
+                Mode = CameraMode.Chase;
+            }
         }
 
         Vector3 targetCamPos;
         Vector3 targetLookTarget;
-        if (Mode == CameraMode.Pad && trackAlt < 1100.0)
+        if (Mode == CameraMode.Pad && bridge?.ActiveVessel != null)
         {
-            // Ground-anchored tracking shot: the pad sits at groundY, the rocket at the
-            // origin (0..43 units tall). Look at the MIDPOINT and pull the camera back as the
-            // rocket climbs so BOTH the stationary pad and the rocket stay in frame — the
-            // growing gap between them is the clear, readable cue that the rocket is rising.
-            float groundY = -(float)(trackAlt / 2.8f);            // render-space ground level
-            float vehicleHeight = bridge?.ActiveVessel is { } padVessel
-                ? (float)(padVessel.VehicleLength / 2.8)
-                : 43f;
-            float dist = (float)VehicleCameraFraming.PadTrackingDistance(
-                vehicleHeight, groundY);
-            float midY = (groundY + vehicleHeight) * 0.5f;
-            targetCamPos = new Vector3(dist * Mathf.Sin(yawRad), midY, dist * Mathf.Cos(yawRad));
-            targetLookTarget = new Vector3(0f, midY, 0f);
+            float groundY = -(float)(trackAlt / 2.8);
+            float focus = (float)earlyFlightFrame.VehicleFocus;
+            float dist = (float)earlyFlightFrame.CameraDistance;
+            Vector3 contextTarget = new(0f, (groundY + vehicleHeight) * 0.5f, 0f);
+            targetLookTarget = contextTarget.Lerp(localVesselCenter, focus);
+
+            Vector3 contextOffset = new(
+                dist * Mathf.Sin(yawRad),
+                0f,
+                dist * Mathf.Cos(yawRad));
+            Vector3 vehicleOffset = new(
+                dist * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
+                dist * Mathf.Sin(pitchRad),
+                dist * Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
+            targetCamPos = targetLookTarget + contextOffset.Lerp(vehicleOffset, focus);
         }
         else
         {
@@ -369,8 +378,8 @@ public partial class CameraController : Node3D
                 effectiveDistance = Mathf.Max(effectiveDistance, (float)
                     VehicleCameraFraming.MinimumOrbitDistance(
                         active.VehicleLength, active.MaximumDiameter, _externalFov));
-                float centerU = (float)(active.VehicleLength / (2.0 * 2.8));
-                vesselCenter = ToGQuat(active.Orientation) * (Vector3.Up * centerU);
+                vesselCenter = ToGQuat(active.Orientation)
+                    * (Vector3.Up * (float)(active.VehicleLength / (2.0 * 2.8)));
             }
             targetCamPos = new Vector3(
                 effectiveDistance * Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
@@ -379,12 +388,12 @@ public partial class CameraController : Node3D
             targetLookTarget = new Vector3(0f, lookAtY, 0f);
             if (Mode == CameraMode.Chase)
             {
-                Vector3 localVesselCenter = surfaceFrame.Inverse() * vesselCenter;
-                targetCamPos += localVesselCenter;
+                Vector3 localChaseCenter = surfaceFrame.Inverse() * vesselCenter;
+                targetCamPos += localChaseCenter;
                 // Preserve an externally authored ground/site target. Previously this
                 // assignment replaced the target with the vessel center, so a far-field
                 // fixture could move the camera down but still look back at the ship.
-                targetLookTarget += localVesselCenter;
+                targetLookTarget += localChaseCenter;
             }
         }
 

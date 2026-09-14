@@ -51,4 +51,40 @@ public sealed class VehicleCameraFramingTests
         Assert.True(starship > mercury * 3.5);
         Assert.True(starship >= (121.0 / 2.8) * 3.0 - 0.1);
     }
+
+    [Fact]
+    public void EarlyFlightFrameMovesSmoothlyFromTowerContextToVehicle()
+    {
+        const double height = 121.0 / 2.8;
+
+        var opening = VehicleCameraFraming.EarlyFlightFrame(height, 0.0);
+        var towerClear = VehicleCameraFraming.EarlyFlightFrame(height, -height * 1.2);
+        var handoff = VehicleCameraFraming.EarlyFlightFrame(height, -height * 1.5);
+        var afterHandoff = VehicleCameraFraming.EarlyFlightFrame(height, -height * 3.0);
+
+        Assert.Equal(0.0, opening.VehicleFocus, 8);
+        Assert.Equal(height * 3.0, opening.CameraDistance, 8);
+        Assert.InRange(towerClear.VehicleFocus, 0.85, 0.90);
+        Assert.InRange(towerClear.CameraDistance, height * 1.8, height * 2.0);
+        Assert.Equal(1.0, handoff.VehicleFocus, 8);
+        Assert.Equal(height * 1.65, handoff.CameraDistance, 8);
+        Assert.Equal(handoff, afterHandoff);
+        Assert.Equal(height * 4.5,
+            VehicleCameraFraming.PadTrackingDistance(height, -height * 100.0), 8);
+        Assert.True(VehicleCameraFraming.PadTrackingDistance(
+            height, -height * 100.0) < 850.0);
+
+        double previousFocus = opening.VehicleFocus;
+        double previousDistance = opening.CameraDistance;
+        for (int step = 1; step <= 150; step++)
+        {
+            double altitude = height * step / 100.0;
+            var frame = VehicleCameraFraming.EarlyFlightFrame(height, -altitude);
+            Assert.True(frame.VehicleFocus >= previousFocus);
+            Assert.True(frame.CameraDistance <= previousDistance + 1e-10);
+            Assert.InRange(previousDistance - frame.CameraDistance, 0.0, height * 0.02);
+            previousFocus = frame.VehicleFocus;
+            previousDistance = frame.CameraDistance;
+        }
+    }
 }

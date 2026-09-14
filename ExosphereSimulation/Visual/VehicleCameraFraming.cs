@@ -4,6 +4,15 @@ namespace Exosphere.Simulation.Visual;
 public static class VehicleCameraFraming
 {
     /// <summary>
+    /// Deterministic early-ascent composition. VehicleFocus is zero for the opening
+    /// tower shot and one once the camera has completed its move to the vehicle.
+    /// CameraDistance is expressed in render units.
+    /// </summary>
+    public readonly record struct EarlyFlightCameraFrame(
+        double VehicleFocus,
+        double CameraDistance);
+
+    /// <summary>
     /// Keep depth precision as an external camera pulls away. Distances are render
     /// units. Only the nearest one percent of the target distance is clipped;
     /// cockpit cameras retain their separate close-focus projection.
@@ -17,8 +26,9 @@ public static class VehicleCameraFraming
     }
 
     /// <summary>
-    /// Ground-anchored pad tracking distance. Wider than the vehicle span so the
-    /// tower and stack share the frame through the first kilometre of climb.
+    /// Ground-anchored pad tracking distance. The opening shot stays at three
+    /// vehicle heights through the early transition, then has a relative upper
+    /// bound so no vehicle can collapse into a tiny subject at high altitude.
     /// </summary>
     public static double PadTrackingDistance(
         double vehicleHeightRenderUnits,
@@ -32,7 +42,40 @@ public static class VehicleCameraFraming
             vehicleHeightRenderUnits - groundYRenderUnits,
             vehicleHeightRenderUnits);
         double minimum = vehicleHeightRenderUnits * 3.0;
-        return System.Math.Clamp(span * 2.4, minimum, 850.0);
+        double maximum = vehicleHeightRenderUnits * 4.5;
+        return System.Math.Clamp(span * 1.2, minimum, maximum);
+    }
+
+    /// <summary>
+    /// Moves from a tower-context shot to a vehicle-focused tracking shot as a
+    /// function of altitude alone. Smoothstep gives zero velocity at both ends,
+    /// making the result deterministic and safe to hand over to the chase camera.
+    /// </summary>
+    public static EarlyFlightCameraFrame EarlyFlightFrame(
+        double vehicleHeightRenderUnits,
+        double groundYRenderUnits)
+    {
+        if (!double.IsFinite(vehicleHeightRenderUnits)
+            || !double.IsFinite(groundYRenderUnits)
+            || vehicleHeightRenderUnits <= 0.0)
+            return new EarlyFlightCameraFrame(1.0, 40.0);
+
+        double altitude = System.Math.Max(0.0, -groundYRenderUnits);
+        double transitionStart = vehicleHeightRenderUnits * 0.25;
+        double transitionEnd = vehicleHeightRenderUnits * 1.5;
+        double linear = System.Math.Clamp(
+            (altitude - transitionStart) / (transitionEnd - transitionStart),
+            0.0,
+            1.0);
+        double vehicleFocus = linear * linear * (3.0 - 2.0 * linear);
+
+        double contextDistance = PadTrackingDistance(
+            vehicleHeightRenderUnits, groundYRenderUnits);
+        double vehicleDistance = vehicleHeightRenderUnits * 1.65;
+        double cameraDistance = contextDistance
+            + (vehicleDistance - contextDistance) * vehicleFocus;
+
+        return new EarlyFlightCameraFrame(vehicleFocus, cameraDistance);
     }
 
     public static double MinimumOrbitDistance(
