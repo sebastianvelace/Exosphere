@@ -53,8 +53,8 @@ rg -q --fixed-strings '_lastAtmosphereQuality' "$SKY" \
 
 # Pad uses Realtime so the play camera is not stuck on a black Incremental
 # cubemap at T=0. Incremental remains the high-altitude path.
-rg -q --fixed-strings '_env.Sky.RadianceSize = Sky.RadianceSizeEnum.Size128;' "$SKY" \
-  || fail "radiance map is not bounded to 128"
+rg -q --fixed-strings '? Sky.RadianceSizeEnum.Size128 : Sky.RadianceSizeEnum.Size256;' "$SKY" \
+  || fail "radiance map does not respect Compatibility and RenderingDevice realtime sizes"
 rg -q --fixed-strings '_env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;' "$SKY" \
   || fail "pad sky process mode is not realtime"
 rg -q --fixed-strings 'bool realtime = altitude < 45_000.0;' "$SKY" \

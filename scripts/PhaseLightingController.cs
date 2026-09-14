@@ -33,7 +33,11 @@ public partial class PhaseLightingController : Node
     private const float AmbientEnergySpace = 0.18f;
     private const float SunEnergyPad   = 1.85f;
     private const float SunEnergySpace = 1.95f;
-    private const float PadShadowMaxDistance = 900f;
+    private const float PadShadowMaxDistance = 1_100f;
+    private const float AmbientSkyContribution = 0.72f;
+    private const float SurfaceFogDensity = 0.34f;
+    private const float SurfaceFogDepthBegin = 55f;
+    private const float SurfaceFogDepthEnd = 3_200f;
     private const float GlowIntensitySpace = 0.6f;
 
     private const double FluxThresh = VehicleVisualPhysics.VisibleReentryFluxWm2;
@@ -51,6 +55,7 @@ public partial class PhaseLightingController : Node
 
     private Godot.Environment? _env;
     private DirectionalLight3D? _light;
+    private bool _environmentConfigured;
     private double _directTransmittanceAccumulator = double.MaxValue;
     private Vector3d _cachedDirectTransmittance = new(1.0, 1.0, 1.0);
     private string? _cachedDirectBodyId;
@@ -107,6 +112,7 @@ public partial class PhaseLightingController : Node
         float ambient = Mathf.Lerp(AmbientEnergyPad, AmbientEnergySpace, s);
         float sun     = Mathf.Lerp(SunEnergyPad, SunEnergySpace, s);
         float glow    = Mathf.Lerp(0.0f, GlowIntensitySpace, s);
+        UpdateAerialPerspective(1.0f - s);
 
         float reentry = _sampledReentry;
 
@@ -273,10 +279,75 @@ public partial class PhaseLightingController : Node
         {
             var wenv = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
             _env = wenv?.Environment;
+            _environmentConfigured = false;
         }
         if (_light == null || !IsInstanceValid(_light))
             _light = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
+        ConfigureEnvironment();
         ConfigurePadShadows();
+    }
+
+    /// <summary>
+    /// Makes the procedural sky an actual lighting and reflection source. Expensive
+    /// screen-space effects stay renderer-gated so Compatibility remains a valid
+    /// baseline while Forward+ receives the extra near-field depth cues.
+    /// </summary>
+    private void ConfigureEnvironment()
+    {
+        if (_env == null || _environmentConfigured) return;
+
+        _env.AmbientLightSource = Godot.Environment.AmbientSource.Sky;
+        _env.AmbientLightSkyContribution = AmbientSkyContribution;
+        _env.ReflectedLightSource = Godot.Environment.ReflectionSource.Sky;
+
+        _env.FogMode = Godot.Environment.FogModeEnum.Depth;
+        _env.FogDepthBegin = SurfaceFogDepthBegin;
+        _env.FogDepthEnd = SurfaceFogDepthEnd;
+        _env.FogDepthCurve = 1.35f;
+        _env.FogAerialPerspective = 0.78f;
+        _env.FogSkyAffect = 0.08f;
+        _env.FogSunScatter = 0.10f;
+
+        // SSAO is available in Compatibility and Forward+. SSIL and SSR require
+        // Forward+, so never leave unsupported effects enabled in OpenGL captures.
+        string renderer = RenderingServer.GetCurrentRenderingMethod().ToString();
+        bool forwardPlus = renderer == "forward_plus";
+        _env.SsaoEnabled = forwardPlus || renderer == "gl_compatibility";
+        _env.SsaoRadius = 1.45f;
+        _env.SsaoIntensity = 1.15f;
+        _env.SsaoPower = 1.25f;
+        _env.SsaoDetail = 0.55f;
+        _env.SsaoLightAffect = 0.08f;
+
+        _env.SsilEnabled = forwardPlus;
+        _env.SsilRadius = 2.2f;
+        _env.SsilIntensity = 0.65f;
+        _env.SsrEnabled = forwardPlus;
+        _env.SsrMaxSteps = 32;
+        _env.SsrFadeIn = 0.18f;
+        _env.SsrFadeOut = 2.4f;
+        _env.SsrDepthTolerance = 0.15f;
+
+        _environmentConfigured = true;
+        GD.Print($"[VISUAL_ENV] renderer={RenderingServer.GetCurrentRenderingMethod()} " +
+                 $"ssao={_env.SsaoEnabled} ssil={_env.SsilEnabled} ssr={_env.SsrEnabled}");
+    }
+
+    private void UpdateAerialPerspective(float atmosphericPresence)
+    {
+        if (_env == null) return;
+
+        float presence = Mathf.Clamp(atmosphericPresence, 0f, 1f);
+        float density = SurfaceFogDensity * presence;
+        bool enabled = density > 0.002f;
+        if (_env.FogEnabled != enabled) _env.FogEnabled = enabled;
+        if (FloatDiffers(_env.FogDensity, density)) _env.FogDensity = density;
+
+        Color horizon = SkyController.CurrentHorizonColor;
+        // Follow the sky to black at night; a constant gray mix self-illuminates fog.
+        Color fogColor = horizon;
+        if (ColorDiffers(_env.FogLightColor, fogColor)) _env.FogLightColor = fogColor;
+        if (FloatDiffers(_env.FogLightEnergy, 0.82f)) _env.FogLightEnergy = 0.82f;
     }
 
     /// <summary>
@@ -288,16 +359,28 @@ public partial class PhaseLightingController : Node
     {
         if (_light == null) return;
         if (!_light.ShadowEnabled) _light.ShadowEnabled = true;
-        if (_light.DirectionalShadowMode != DirectionalLight3D.ShadowMode.Parallel2Splits)
-            _light.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits;
+        if (_light.DirectionalShadowMode != DirectionalLight3D.ShadowMode.Parallel4Splits)
+            _light.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
         if (FloatDiffers(_light.DirectionalShadowMaxDistance, PadShadowMaxDistance))
             _light.DirectionalShadowMaxDistance = PadShadowMaxDistance;
-        if (FloatDiffers(_light.ShadowBias, 0.04f))
-            _light.ShadowBias = 0.04f;
+        if (FloatDiffers(_light.DirectionalShadowSplit1, 0.08f))
+            _light.DirectionalShadowSplit1 = 0.08f;
+        if (FloatDiffers(_light.DirectionalShadowSplit2, 0.24f))
+            _light.DirectionalShadowSplit2 = 0.24f;
+        if (FloatDiffers(_light.DirectionalShadowSplit3, 0.52f))
+            _light.DirectionalShadowSplit3 = 0.52f;
+        if (FloatDiffers(_light.DirectionalShadowFadeStart, 0.86f))
+            _light.DirectionalShadowFadeStart = 0.86f;
+        if (FloatDiffers(_light.ShadowBias, 0.025f))
+            _light.ShadowBias = 0.025f;
         if (!_light.DirectionalShadowBlendSplits)
             _light.DirectionalShadowBlendSplits = true;
-        if (FloatDiffers(_light.ShadowNormalBias, 1.0f))
-            _light.ShadowNormalBias = 1.0f;
+        if (FloatDiffers(_light.ShadowNormalBias, 0.45f))
+            _light.ShadowNormalBias = 0.45f;
+        if (FloatDiffers(_light.LightAngularDistance, 0.53f))
+            _light.LightAngularDistance = 0.53f;
+        if (FloatDiffers(_light.ShadowBlur, 1.0f))
+            _light.ShadowBlur = 1.0f;
     }
 
     private static float Smoothstep(float edge0, float edge1, float x)

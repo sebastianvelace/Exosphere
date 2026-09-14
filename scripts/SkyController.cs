@@ -198,13 +198,14 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("transmittance_lut_enabled", false);
         _skyMat.SetShaderParameter("multiple_scattering_lut_enabled", false);
         _env.Sky.SkyMaterial = _skyMat;
-        // Atmospheric radiance is low frequency and is refreshed incrementally.
-        // 128² keeps the six-face cubemap cheap on integrated/llvmpipe renderers;
-        // the full-screen background still uses the filtered cubemap.
-        _env.Sky.RadianceSize = Sky.RadianceSizeEnum.Size128;
+        // Compatibility supports a small cubemap; the RenderingDevice realtime
+        // path requires 256 and would silently override a requested 128.
+        bool compatibility = RenderingServer.GetCurrentRenderingMethod() == "gl_compatibility";
+        _env.Sky.RadianceSize = compatibility
+            ? Sky.RadianceSizeEnum.Size128 : Sky.RadianceSizeEnum.Size256;
         _env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;
         _lastSkyProcessRealtime = true;
-        GD.Print($"PERF_RENDER stage=sky_config radiance=128 process=realtime "
+        GD.Print($"PERF_RENDER stage=sky_config radiance={(compatibility ? 128 : 256)} process=realtime "
             + $"atmosphereQuality={InteractiveAtmosphereQuality:F2}");
     }
 
