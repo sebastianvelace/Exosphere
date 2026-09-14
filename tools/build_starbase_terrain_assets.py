@@ -45,14 +45,38 @@ def main() -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
 
     ortho = Image.open(args.naip).convert("RGB")
+    rgb = np.asarray(ortho, dtype=np.uint8).copy()
+    source_valid = np.any(rgb > 2, axis=2)
+    missing = ~source_valid
+    if missing.any():
+        # The USDA tile stops in open Gulf water. Continue the nearest observed
+        # water column through that provider void so the runtime never exposes
+        # a black rectangle or switches to a mismatched procedural ocean.
+        anchor_x = min(rgb.shape[1] - 1, int(rgb.shape[1] * 0.80))
+        transition_px = 256
+        for row in range(rgb.shape[0]):
+            missing_columns = np.flatnonzero(missing[row])
+            if missing_columns.size == 0:
+                continue
+            start = int(missing_columns[0])
+            ramp_start = max(0, start - transition_px // 2)
+            edge_color = rgb[row, ramp_start].astype(np.float32)
+            anchor_color = rgb[row, anchor_x].astype(np.float32)
+            columns = np.arange(ramp_start, rgb.shape[1], dtype=np.float32)
+            t = np.clip((columns - ramp_start + 1.0) / transition_px, 0.0, 1.0)
+            t = t * t * (3.0 - 2.0 * t)
+            rgb[row, ramp_start:] = np.rint(
+                edge_color[None, :] * (1.0 - t[:, None])
+                + anchor_color[None, :] * t[:, None]
+            ).astype(np.uint8)
+        ortho = Image.fromarray(rgb, mode="RGB")
     ortho.save(texture_dir / "starbase_naip_10km.jpg", quality=92, optimize=True)
 
-    rgb = np.asarray(ortho, dtype=np.uint8)
     valid = np.any(rgb > 2, axis=2)
     mask = Image.fromarray(np.where(valid, 255, 0).astype(np.uint8), mode="L")
-    # Feather only the provider's no-data boundary. This avoids a hard black
-    # rectangle while the shader applies its physical regional edge fade.
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=6))
+    # Feather the outer regional boundary. The provider's open-ocean void was
+    # filled from observed water above, so the mask remains opaque internally.
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=192))
     mask.save(texture_dir / "starbase_naip_10km_mask.png", optimize=True)
 
     dem_image = Image.open(args.dem)
