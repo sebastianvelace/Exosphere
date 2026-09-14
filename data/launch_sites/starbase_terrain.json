@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "site": "Starbase / Boca Chica",
+  "center": {
+    "latitude": 25.9972,
+    "longitude": -97.1566
+  },
+  "bbox_wgs84": {
+    "west": -97.2066,
+    "south": 25.9522,
+    "east": -97.1066,
+    "north": 26.0422
+  },
+  "projection": "EPSG:4326 source export; sampled in local east/north tangent metres",
+  "ortho": {
+    "file": "assets/textures/starbase_naip_10km.jpg",
+    "mask_file": "assets/textures/starbase_naip_10km_mask.png",
+    "width": 4096,
+    "height": 4096,
+    "source": "USDA NAIP CONUS ImageServer",
+    "source_url": "https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer",
+    "license": "USDA public service; attribution retained for provenance"
+  },
+  "elevation": {
+    "file": "assets/textures/starbase_3dep_10km_height.png",
+    "width": 2048,
+    "height": 2048,
+    "source": "USGS 3DEP Elevation ImageServer",
+    "source_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
+    "license": "USGS public domain",
+    "encoding": "uint16 normalized absolute NAVD88 metres",
+    "height_min_m": -2.0,
+    "height_max_m": 12.0,
+    "reference_m": 0.96,
+    "valid_input_fraction": 0.946766
+  },
+  "prepared_on": "2026-09-14",
+  "runtime_extent_m": 10000.0,
+  "notes": [
+    "NAIP provides observed surface reflectance for the low-altitude regional ground.",
+    "3DEP is bare-earth elevation and is used only for broad displacement.",
+    "Invalid provider pixels are masked and filled at the launch-site reference height."
+  ]
+}
