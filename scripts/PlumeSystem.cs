@@ -340,7 +340,10 @@ public partial class PlumeSystem : Node3D
                     u.IsSuperHeavy ? 0.56f : 0.50f,
                     u.IsSuperHeavy ? 0.18f : 0.12f,
                     expansion);
-                float coreOpacity = Mathf.Lerp(0.92f, 0.78f, expansion);
+                // The shader owns the final optical caps. These multipliers keep
+                // the broad shell subordinate to the narrow daylight-readable core,
+                // then thin the near-field core aggressively as pressure falls.
+                float coreOpacity = Mathf.Lerp(0.90f, 0.48f, expansion);
                 SetPlumeMaterial(
                     u.ConeMat, throttle, expansion, atmoPressure,
                     u.BaseEnergy * 0.58f * Mathf.Max(0.28f, activeFraction),
@@ -503,7 +506,7 @@ public partial class PlumeSystem : Node3D
             BaseLength   = length,
             BaseRadius   = mouthR,
             BaseEnergy   = sh ? (name.Contains("Skirt") ? 1.35f : 4.6f) : 5.5f,
-            CoreScale    = sh ? 0.52f : 0.82f,
+            CoreScale    = sh ? 0.38f : 0.68f,
             IsSuperHeavy = sh,
             IsSkirt = name.Contains("Skirt"),
         };

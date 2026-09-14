@@ -36,13 +36,28 @@ has 'layer_opacity' "$ROOT/assets/shaders/raptor_plume.gdshader" \
   "plume shader cannot distinguish core and outer sheath opacity"
 has 'vacuumCoreAlpha' "$ROOT/assets/shaders/raptor_plume.gdshader" \
   "vacuum plume has no readable axial emission floor"
+has 'vec3 albedoColor' "$ROOT/assets/shaders/raptor_plume.gdshader" \
+  "mix-blended plume has no non-black Compatibility source colour"
+has 'float sheathAlpha' "$ROOT/assets/shaders/raptor_plume.gdshader" \
+  "plume shader does not bound sheath density separately from the core"
+has 'float coreAlpha' "$ROOT/assets/shaders/raptor_plume.gdshader" \
+  "plume shader does not bound core density separately from the sheath"
+has '0.0, 0.62' "$ROOT/assets/shaders/raptor_plume.gdshader" \
+  "plume alpha is not capped below the former solid-cone limit"
+has 'Mathf.Lerp(0.90f, 0.48f, expansion)' "$PLUME" \
+  "near-field core opacity does not thin toward vacuum"
 has 'camera.GlobalPosition.Length()' "$PLUME" \
   "plume far-field LOD is not measured from the viewing camera to the vessel origin"
 has 'PresentationCamera' "$PLUME" \
   "plume far-field LOD does not prefer the production chase/pad camera"
 
+if rg -q 'ALBEDO[[:space:]]*=[[:space:]]*vec3\(0\.0\)' \
+    "$ROOT/assets/shaders/raptor_plume.gdshader"; then
+  fail "mix-blended plume still composites a black source colour"
+fi
+
 if rg -q 'GD\.Randf\(\)' "$PLUME"; then
   fail "plume motion still uses frame-rate-dependent random flicker"
 fi
 
-echo "visual_plume_delivery_contract_test: PASS (dual-stage delivery, per-body pressure, smooth modulation)"
+echo "visual_plume_delivery_contract_test: PASS (layered Compatibility colour, bounded alpha, orbital thinning)"

@@ -223,19 +223,41 @@ void fragment() {
         * mix(1.0, 1.12, far_field);
 	float e   = energy * eScale * (0.45 + 0.55 * effThrottle);
 
-	// Density belongs in alpha. Multiplying radiance by it again darkens the
-	// transparent edge against daylight; gas does not cast a grey cone there.
-	vec3 emission = col * e * (1.0 + diamond * 0.8) * flick;
+	// Compatibility's mix path must receive a real source colour. A black ALBEDO
+	// with high alpha turns the transparent envelope into a black polygon even
+	// when its HDR emission is bright. Keep the source pale and put intensity in
+	// emission; alpha below controls optical density independently.
+	float layerRadiance = mix(radial * axialEnv * 0.42, bright, core_layer);
+	vec3 emission = col * e * layerRadiance * (1.0 + diamond * 0.8) * flick;
+	vec3 albedoColor = mix(col * 0.86, mix(col, whiteHot, 0.18), core_layer);
+	albedoColor = mix(albedoColor, whiteHot, diamond * 0.34);
 
-	ALBEDO   = vec3(0.0);
+	ALBEDO   = albedoColor;
 	EMISSION = emission;
-	// Mix blend against daylight: keep a readable SL core without a solid white capsule.
-	// Vacuum stays optically thin so ascent does not become a teardrop billboard.
-    float vacuumAlpha = mix(0.78, mix(0.42, 0.64, far_field), effExpansion);
-    float vacuumCoreAlpha = core_layer * effExpansion * radial
-        * (1.0 - smoothstep(0.30, 0.92, a)) * mix(0.32, 0.60, far_field)
-        * layer_opacity;
-	float profileAlpha = bright * (0.62 + 0.28 * effThrottle)
-		* vacuumAlpha * layer_opacity;
-	ALPHA = clamp(max(profileAlpha, vacuumCoreAlpha) * effThrottle, 0.0, 0.88);
+
+	// Treat the two meshes as different optical layers. The broad sheath stays
+	// faint and broken up; the narrow core carries daylight readability. Neither
+	// layer inherits radiance/shock multipliers in alpha, which previously made
+	// five nested Super Heavy units clamp into one solid triangular cone.
+	float sheathBreakup = 0.68 + 0.32
+		* noise1(a * 37.0 - TIME * 24.0 + facing * 11.0);
+	float opticalProfile = radial * axialEnv;
+	float sheathAlpha = opticalProfile * sheathBreakup
+		* mix(0.22, 0.065, effExpansion) * layer_opacity;
+	float coreAlpha = opticalProfile
+		* mix(0.56, 0.16, effExpansion) * layer_opacity;
+	float farCoreAlpha = opticalProfile
+		* mix(0.40, 0.24, effExpansion) * layer_opacity;
+	coreAlpha = mix(coreAlpha, farCoreAlpha, far_field);
+	float shockAlpha = diamond * mix(0.08, 0.02, effExpansion)
+		* mix(0.35, 1.0, core_layer) * layer_opacity;
+
+	// Preserve a restrained near-nozzle core in vacuum. It follows throttle and
+	// remains much thinner than the sea-level core; far-field may lift it only
+	// because the CPU hides the sheath there.
+	float vacuumCoreAlpha = core_layer * effExpansion * radial
+		* (1.0 - smoothstep(0.22, 0.74, a))
+		* mix(0.055, 0.12, far_field) * layer_opacity;
+	float profileAlpha = mix(sheathAlpha, coreAlpha, core_layer) + shockAlpha;
+	ALPHA = clamp(max(profileAlpha, vacuumCoreAlpha) * effThrottle, 0.0, 0.62);
 }
