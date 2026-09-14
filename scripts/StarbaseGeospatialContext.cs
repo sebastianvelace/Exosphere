@@ -425,6 +425,8 @@ public partial class LaunchPadController
         }
     }
 
+    private readonly LaunchSurfaceFade _heroSurfaceFade = new();
+
     private void UpdateHeroGeospatialFade()
     {
         if (!IsStarbaseSite)
@@ -446,7 +448,7 @@ public partial class LaunchPadController
             ? System.Math.Max(vesselAlt, FloatingOrigin.CameraAltOverEarth)
             : FloatingOrigin.CameraAltOverEarth;
         float hide = FarSmoothstep(HeroGeospatialFadeLowM, HeroGeospatialFadeHighM, (float)altitude);
-        if (!float.IsNaN(_lastHeroGeospatialHide) && Mathf.Abs(_lastHeroGeospatialHide - hide) < 0.01f)
+        if (_lastHeroGeospatialHide == hide)
             return;
 
         _lastHeroGeospatialHide = hide;
@@ -458,8 +460,7 @@ public partial class LaunchPadController
                 _heroGeospatialFadeMeshes.RemoveAt(i);
                 continue;
             }
-            mesh.Transparency = hide;
-            mesh.Visible = hide < 0.97f;
+            _heroSurfaceFade.Apply(mesh, 1f - hide);
         }
     }
 

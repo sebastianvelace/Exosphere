@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 
@@ -9,19 +10,26 @@ using System.Text.Json;
 /// Low-cost contextual LOD for Starbase. The detailed pad is intentionally local;
 /// this sibling root preserves the launch site's silhouette after the hero geometry
 /// is hidden, without keeping every lattice brace alive into the orbital camera.
-/// Its opacity is coupled to the Earth globe handoff so the site remains legible while
-/// the detailed pad leaves the camera's local scale.
+/// Campus OSM/3DEP fades in as the hero geospatial overlay fades out (1–8 km).
+/// Civil silhouettes stay exclusive with the hero pad until 10 km so two authored
+/// Starbases never stack. Opacity also follows the Earth globe handoff.
 /// </summary>
 public partial class LaunchPadController
 {
     public bool FarFieldVisible => _starbaseFarFieldRoot?.Visible == true;
     public float FarFieldOpacity => float.IsNaN(_lastFarFieldOpacity) ? 0f : _lastFarFieldOpacity;
+    public float FarFieldContextOpacity => float.IsNaN(_lastFarFieldContextOpacity) ? 0f : _lastFarFieldContextOpacity;
+    public float FarFieldSilhouetteOpacity => float.IsNaN(_lastFarFieldSilhouetteOpacity) ? 0f : _lastFarFieldSilhouetteOpacity;
     public string FarFieldSource => _farFieldUsesMappedContext ? "OSM+EarthGround" : "fallback";
 
     private Node3D? _starbaseFarFieldRoot;
     private readonly List<MeshInstance3D> _starbaseFarFieldMeshes = new();
+    private readonly HashSet<MeshInstance3D> _starbaseFarFieldContextMeshes = new();
+    private readonly LaunchSurfaceFade _farSurfaceFade = new();
     private bool? _lastFarFieldVisible;
     private float _lastFarFieldOpacity = float.NaN;
+    private float _lastFarFieldContextOpacity = float.NaN;
+    private float _lastFarFieldSilhouetteOpacity = float.NaN;
     private bool _farFieldUsesMappedContext;
 
     private void BuildStarbaseFarField()
@@ -58,7 +66,7 @@ public partial class LaunchPadController
             BuildMappedFarRelief(relief);
         if (!_farFieldUsesMappedContext)
         {
-            AddFarMesh("Footprint", BuildFootprintMesh(new Vector2[]
+            AddFarContextMesh("Footprint", BuildFootprintMesh(new Vector2[]
             {
                 new(-760f, -520f), new(-540f, -720f), new(80f, -690f),
                 new(520f, -560f), new(760f, -230f), new(690f, 330f),
@@ -66,22 +74,22 @@ public partial class LaunchPadController
             }), land, new Vector3(-20f * U, GradeY + 0.04f * U, 20f * U));
 
             // Fallback-only hardstand and water keep non-Starbase/custom builds readable.
-            AddFarMesh("LaunchHardstand", BuildFootprintMesh(new Vector2[]
+            AddFarContextMesh("LaunchHardstand", BuildFootprintMesh(new Vector2[]
             {
                 new(-160f, -125f), new(55f, -150f), new(180f, -82f),
                 new(170f, 105f), new(45f, 145f), new(-175f, 110f),
             }), hardstand, new Vector3(0f, GradeY + 0.10f * U, 0f));
-            AddFarMesh("CoastalWater", BuildFootprintMesh(new Vector2[]
+            AddFarContextMesh("CoastalWater", BuildFootprintMesh(new Vector2[]
             {
                 new(690f, -560f), new(860f, -440f), new(860f, 500f),
                 new(700f, 620f), new(635f, 280f), new(670f, -180f),
             }), water, new Vector3(0f, GradeY + 0.075f * U, 0f));
 
-            AddFarRotated("Highway4", new BoxMesh { Size = new Vector3(18f * U, 0.08f * U, 1500f * U) },
+            AddFarContextRotated("Highway4", new BoxMesh { Size = new Vector3(18f * U, 0.08f * U, 1500f * U) },
                 road, new Vector3(-470f * U, GradeY + 0.15f * U, 30f * U), new Vector3(0f, -5f, 0f));
-            AddFarMesh("NorthServiceRoad", new BoxMesh { Size = new Vector3(760f * U, 0.08f * U, 14f * U) },
+            AddFarContextMesh("NorthServiceRoad", new BoxMesh { Size = new Vector3(760f * U, 0.08f * U, 14f * U) },
                 road, new Vector3(-120f * U, GradeY + 0.16f * U, 270f * U));
-            AddFarMesh("TankServiceRoad", new BoxMesh { Size = new Vector3(520f * U, 0.08f * U, 14f * U) },
+            AddFarContextMesh("TankServiceRoad", new BoxMesh { Size = new Vector3(520f * U, 0.08f * U, 14f * U) },
                 road, new Vector3(290f * U, GradeY + 0.16f * U, 80f * U));
 
             // One strong tower silhouette and a compact tank farm anchor the site from
@@ -204,7 +212,7 @@ public partial class LaunchPadController
                 continue;
             Vector2 mid = (a + b) * 0.5f;
             float yaw = -Mathf.RadToDeg(Mathf.Atan2(b.Y - a.Y, b.X - a.X));
-            AddFarRotated($"MappedRoad_{StringValue(feature, "id")}_{i}",
+            AddFarContextRotated($"MappedRoad_{StringValue(feature, "id")}_{i}",
                 new BoxMesh { Size = new Vector3(lengthM * U, 0.08f * U, widthM * U) },
                 material,
                 new Vector3(mid.X * U, GradeY + 0.16f * U, mid.Y * U),
@@ -228,7 +236,7 @@ public partial class LaunchPadController
             Vector2 mid = (a + b) * 0.5f;
             float yaw = -Mathf.RadToDeg(Mathf.Atan2(dir.Y, dir.X));
             string id = StringValue(feature, "id");
-            AddFarRotated($"MappedShore_{id}_{i}",
+            AddFarContextRotated($"MappedShore_{id}_{i}",
                 // Coastline is a datum cue, not a second elevated seawall. Its narrow
                 // footprint prevents the long OSM shoreline from reading as a neon rail.
                 new BoxMesh { Size = new Vector3(lengthM * U, 0.025f * U, 2.2f * U) },
@@ -251,7 +259,7 @@ public partial class LaunchPadController
         if (mesh == null)
             return 0;
 
-        var node = AddFarMesh("Mapped3DepRelief", mesh, material, Vector3.Zero);
+        var node = AddFarContextMesh("Mapped3DepRelief", mesh, material, Vector3.Zero);
         node.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
         return 1;
     }
@@ -271,7 +279,7 @@ public partial class LaunchPadController
         var mesh = BuildExtrudedPolygon(points, GradeY + 0.09f * U, 0.06f * U);
         if (mesh == null)
             return 0;
-        AddFarMesh($"Mapped{kind}_{StringValue(feature, "id")}", mesh, material, Vector3.Zero)
+        AddFarContextMesh($"Mapped{kind}_{StringValue(feature, "id")}", mesh, material, Vector3.Zero)
             .CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
         return 1;
     }
@@ -358,16 +366,22 @@ public partial class LaunchPadController
         double vesselAlt = activeEarth ? vessel!.GetAltitude(earth!) : double.PositiveInfinity;
         double cameraAlt = FloatingOrigin.CameraAltOverEarth;
         double altitude = System.Math.Max(vesselAlt, cameraAlt);
-        float opacity = activeEarth && double.IsFinite(altitude)
-            ? FarSmoothstep(1_600f, 3_500f, (float)altitude)
-                * (1f - FloatingOrigin.EarthGlobeAlpha(altitude))
+        float globeWeight = activeEarth && double.IsFinite(altitude)
+            ? 1f - FloatingOrigin.EarthGlobeAlpha(altitude)
             : 0f;
-        // SimulationBridge owns the hero-pad visibility. Keep the contextual LOD
-        // mutually exclusive with it; otherwise a zoomed-out low-altitude shot can
-        // render two differently authored Starbases at once.
+        // Regional relief, land cover and roads bridge the detailed pad to
+        // EarthGround. They may overlap the hero because they carry context, not a
+        // second copy of the launch site's civil structures.
+        float contextOpacity = activeEarth && double.IsFinite(altitude)
+            ? FarSmoothstep(1_000f, 8_000f, (float)altitude) * globeWeight
+            : 0f;
         bool heroVisible = Visible;
-        if (heroVisible)
-            opacity = 0f;
+        // Civil silhouettes remain exclusive with the hero and fade up only after
+        // its 10 km retirement, avoiding a duplicate tower or tank farm.
+        float silhouetteOpacity = !heroVisible && activeEarth && double.IsFinite(altitude)
+            ? FarSmoothstep(10_000f, 14_000f, (float)altitude) * globeWeight
+            : 0f;
+        float opacity = Mathf.Max(contextOpacity, silhouetteOpacity);
 
         bool visible = opacity > 0.005f;
         _starbaseFarFieldRoot.Visible = visible;
@@ -376,16 +390,23 @@ public partial class LaunchPadController
             _lastFarFieldVisible = visible;
               string source = _farFieldUsesMappedContext ? "OSM+EarthGround" : "fallback";
               GD.Print($"[STARBASE_FAR] visible={visible} heroVisible={heroVisible} " +
-                  $"source={source} altitude={altitude:F0} opacity={opacity:F2}");
+                  $"source={source} altitude={altitude:F0} opacity={opacity:F2} " +
+                  $"context={contextOpacity:F2} silhouettes={silhouetteOpacity:F2}");
         }
-        if (!float.IsNaN(_lastFarFieldOpacity) && Mathf.Abs(_lastFarFieldOpacity - opacity) < 0.01f)
+        if (_lastFarFieldContextOpacity == contextOpacity
+            && _lastFarFieldSilhouetteOpacity == silhouetteOpacity)
             return;
 
         _lastFarFieldOpacity = opacity;
+        _lastFarFieldContextOpacity = contextOpacity;
+        _lastFarFieldSilhouetteOpacity = silhouetteOpacity;
         foreach (var mesh in _starbaseFarFieldMeshes)
         {
             if (mesh == null || !IsInstanceValid(mesh)) continue;
-            mesh.Transparency = 1f - opacity;
+            float meshOpacity = _starbaseFarFieldContextMeshes.Contains(mesh)
+                ? contextOpacity
+                : silhouetteOpacity;
+            _farSurfaceFade.Apply(mesh, meshOpacity);
         }
     }
 
@@ -408,6 +429,22 @@ public partial class LaunchPadController
         Vector3 position, Vector3 rotationDegrees)
     {
         var node = AddFarMesh(name, mesh, material, position);
+        node.RotationDegrees = rotationDegrees;
+        return node;
+    }
+
+    private MeshInstance3D AddFarContextMesh(string name, Mesh mesh,
+        StandardMaterial3D material, Vector3 position)
+    {
+        var node = AddFarMesh(name, mesh, material, position);
+        _starbaseFarFieldContextMeshes.Add(node);
+        return node;
+    }
+
+    private MeshInstance3D AddFarContextRotated(string name, Mesh mesh,
+        StandardMaterial3D material, Vector3 position, Vector3 rotationDegrees)
+    {
+        var node = AddFarContextMesh(name, mesh, material, position);
         node.RotationDegrees = rotationDegrees;
         return node;
     }

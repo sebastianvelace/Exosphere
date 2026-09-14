@@ -8,6 +8,7 @@ uniform float detail_scale : hint_range(0.01, 2.0) = 0.22;
 uniform float detail_strength : hint_range(0.0, 0.8) = 0.28;
 uniform float grain_strength : hint_range(0.0, 0.5) = 0.10;
 uniform float wetness : hint_range(0.0, 1.0) = 0.0;
+uniform float surface_opacity : hint_range(0.0, 1.0) = 1.0;
 uniform float edge_fade : hint_range(0.0, 1.0) = 0.0;
 uniform vec2 edge_half = vec2(1.0, 1.0);
 
@@ -59,5 +60,5 @@ void fragment() {
 	float radial = max(abs(v_local_position.x) / half_ext.x,
 		abs(v_local_position.z) / half_ext.y);
 	float fade = 1.0 - smoothstep(0.58, 0.98, radial) * clamp(edge_fade, 0.0, 1.0);
-	ALPHA = fade;
+	ALPHA = fade * surface_opacity;
 }

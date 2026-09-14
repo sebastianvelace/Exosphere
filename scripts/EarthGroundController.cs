@@ -77,6 +77,7 @@ public partial class EarthGroundController : Node3D
     private Vector3 _lastSunDirection;
     private MeshInstance3D? _civilGround;
     private readonly List<MeshInstance3D> _civilMeshes = new();
+    private readonly LaunchSurfaceFade _civilSurfaceFade = new();
 
     public override void _Ready()
     {
@@ -286,8 +287,7 @@ public partial class EarthGroundController : Node3D
                 _civilMeshes.RemoveAt(i);
                 continue;
             }
-            mesh.Transparency = hide;
-            mesh.Visible = hide < 0.97f;
+            _civilSurfaceFade.Apply(mesh, 1f - hide);
         }
     }
 

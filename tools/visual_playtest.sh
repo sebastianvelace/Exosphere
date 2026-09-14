@@ -23,6 +23,8 @@ RUN_ID=""
 RUN_TOKEN=""
 MAX_RUNTIME_SEC="${PLAYTEST_MAX_RUNTIME_SEC:-}"
 RESOLUTION="1920x1080"
+RENDERER="compatibility"
+GODOT_RENDERER_ARGS=()
 EXTERNAL_DISPLAY="${EXO_VISUAL_DISPLAY:-}"
 VERIFY_ONLY=0
 MODE="full"
@@ -65,6 +67,7 @@ Options:
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
+  --launch-track Capture launch, tower-clear and 1 km using the production camera.
   --ship        Capture standalone Starship in vacuum at full/half thrust and shutdown.
   --starbase-far Capture the mapped Starbase far-field terrain at 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
@@ -100,6 +103,7 @@ Options:
   --run-id ID    Isolate default artifacts as /tmp/exo_play-ID{,.log}; recommended for agents.
   --resolution WIDTHxHEIGHT
                  Capture framebuffer size (default: 1920x1080; limits: 640x360..7680x4320).
+  --renderer NAME Renderer for capture: compatibility (default) or forward_plus.
   --display DISPLAY
                  Use an already-running X display (for example localhost:101) instead of
                  starting xvfb-run. The display must already match --resolution.
@@ -199,6 +203,7 @@ while [[ $# -gt 0 ]]; do
       shift ;;
     --ascent) MODE="ascent"; shift ;;
     --launch) MODE="launch"; shift ;;
+    --launch-track) MODE="launch_track"; shift ;;
     --ship) MODE="ship"; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
     --orbit) MODE="orbit"; shift ;;
@@ -231,6 +236,7 @@ while [[ $# -gt 0 ]]; do
     --reentry-compare) MODE="reentry_compare"; shift ;;
     --run-id) require_option_value "$1" "${2-}"; RUN_ID="$2"; shift 2 ;;
     --resolution) require_option_value "$1" "${2-}"; RESOLUTION="$2"; shift 2 ;;
+    --renderer) require_option_value "$1" "${2-}"; RENDERER="$2"; shift 2 ;;
     --display) require_option_value "$1" "${2-}"; EXTERNAL_DISPLAY="$2"; shift 2 ;;
     --max-runtime) require_option_value "$1" "${2-}"; MAX_RUNTIME_SEC="$2"; shift 2 ;;
     --verify-only) VERIFY_ONLY=1; shift ;;
@@ -241,6 +247,21 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+case "$RENDERER" in
+  compatibility)
+    # Preserve the historical harness default exactly: selecting the OpenGL 3
+    # driver makes Godot use the Compatibility renderer.
+    GODOT_RENDERER_ARGS=(--rendering-driver opengl3)
+    ;;
+  forward_plus)
+    GODOT_RENDERER_ARGS=(--rendering-driver vulkan --rendering-method forward_plus)
+    ;;
+  *)
+    echo "ERROR: --renderer must be compatibility or forward_plus" >&2
+    exit 2
+    ;;
+esac
 
 if [[ ! "${EDL_YAW_DEG:-0}" =~ ^-?[0-9]+([.][0-9]+)?$ ]] \
   || ! awk -v yaw="${EDL_YAW_DEG:-0}" 'BEGIN { exit !(yaw >= -180.0 && yaw <= 180.0) }'; then
@@ -378,6 +399,9 @@ write_run_summary() {
   {
     echo "status=$status"
     echo "mode=$MODE"
+    echo "renderer=$RENDERER"
+    echo "renderer_args=${GODOT_RENDERER_ARGS[*]}"
+    echo "renderer_actual=$(awk '/^RENDERER_ACTUAL / { actual=$2 } END { print actual ? actual : "unavailable" }' "$LOG" 2>/dev/null)"
     echo "run_id=${RUN_ID:-default}"
     echo "log=$LOG"
     echo "console_log=$CONSOLE_LOG"
@@ -422,6 +446,31 @@ prepare_godot_log_file() {
   GODOT_LOG_FILE="${CONSOLE_LOG}.godot"
   mkdir -p "$(dirname "$GODOT_LOG_FILE")"
   : > "$GODOT_LOG_FILE"
+}
+
+run_godot() {
+  local godot_status=0
+  local godot_args=(
+    "$GODOT"
+    --path .
+    "${GODOT_RENDERER_ARGS[@]}"
+    --resolution "$RESOLUTION"
+    --log-file "$GODOT_LOG_FILE"
+    res://scenes/flight/Flight.tscn
+  )
+
+  echo "visual_playtest: launch renderer=$RENDERER renderer_args=${GODOT_RENDERER_ARGS[*]}" \
+    | tee -a "$CONSOLE_LOG"
+  if [[ -n "$EXTERNAL_DISPLAY" ]]; then
+    DISPLAY="$EXTERNAL_DISPLAY" EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
+      "${godot_args[@]}" 2>&1 | tee -a "$CONSOLE_LOG" || godot_status=$?
+  else
+    xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" env \
+      EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "${godot_args[@]}" \
+      2>&1 | tee -a "$CONSOLE_LOG" || godot_status=$?
+  fi
+  printf 'RENDERER name=%s args=%s\n' "$RENDERER" "${GODOT_RENDERER_ARGS[*]}" >> "$LOG"
+  return "$godot_status"
 }
 
 cleanup() {
@@ -558,12 +607,16 @@ public partial class _PlaytestShot : Node
     string? _pendingSlug;
 
     bool _pad, _liftoff, _maxq, _separation, _orbit, _orbitBeauty;
+    bool _towerClear, _earlyAscent;
     bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     int _beautyWaitFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded;
     readonly (string Slug, double AltitudeM)[] _starbaseFarCases =
     {
+        ("starbase_far_2km", 2_000.0),
+        ("starbase_far_5km", 5_000.0),
+        ("starbase_far_8km", 8_000.0),
         ("starbase_far_12km", 12_000.0),
         ("starbase_far_20km", 20_000.0),
         ("starbase_far_40km", 40_000.0),
@@ -1246,7 +1299,7 @@ public partial class _PlaytestShot : Node
         // ── Hot-staging: gate on the real dual-thrust overlap state (booster still
         // attached, Ship engines already lit), not on the SEPARATION phase — that phase
         // only fires once mechanical staging completes, i.e. *after* the overlap window.
-        if (_mode is ("launch" or "hotstage") && !_startupRamp && _pendingSlug == null
+        if (_mode is ("launch" or "launch_track" or "hotstage") && !_startupRamp && _pendingSlug == null
             && _ascentEngaged && vessel.IsGroundHeld)
         {
             double delivered = DeliveredThrottle(vessel, body);
@@ -1298,6 +1351,24 @@ public partial class _PlaytestShot : Node
         {
             Finish("LAUNCH_OK");
             return;
+        }
+        if (_mode == "launch_track" && _liftoff && _pendingSlug == null)
+        {
+            if (!_towerClear && alt >= 250.0)
+            {
+                _towerClear = true;
+                QueueCapture("tower_clear");
+            }
+            else if (!_earlyAscent && alt >= 1_000.0)
+            {
+                _earlyAscent = true;
+                QueueCapture("early_ascent");
+            }
+            else if (_earlyAscent)
+            {
+                Finish("LAUNCH_TRACK_OK");
+                return;
+            }
         }
 
         if (!_maxq && mission?.Phase == MissionPhase.MAX_Q)
@@ -3014,6 +3085,23 @@ public partial class _PlaytestShot : Node
           LogLaunchComplexVisualTelemetry(slug);
           LogStarbaseFarFieldVisualTelemetry(slug);
           LogEngineVisualTelemetry(slug);
+          _log.WriteLine($"RENDERER_ACTUAL {RenderingServer.GetCurrentRenderingMethod()}");
+          if (slug is "tower_clear" or "early_ascent")
+          {
+              var vessel = SimulationBridge.Instance?.ActiveVessel;
+              var camera = CameraController.Instance?.PresentationCamera;
+              if (vessel != null && camera != null)
+              {
+                  Vector3 top = ToGodot(vessel.Orientation.Rotate(Vector3d.Up))
+                      * (float)(vessel.VehicleLength / 2.8);
+                  Vector2 screenTop = camera.UnprojectPosition(top);
+                  Vector2 screenBottom = camera.UnprojectPosition(Vector3.Zero);
+                  float fraction = screenTop.DistanceTo(screenBottom) / GetViewport().GetVisibleRect().Size.Y;
+                  _log.WriteLine($"VISUAL_EARLY_CAMERA slug={slug} mode={CameraController.Instance!.Mode} "
+                      + $"heightFraction={fraction:F3} topVisible={camera.IsPositionInFrustum(top)} "
+                      + $"bottomVisible={camera.IsPositionInFrustum(Vector3.Zero)}");
+              }
+          }
         // Headless runs are telemetry-only diagnostics: the dummy renderer has no
         // framebuffer texture, but scene framing/planet placement telemetry still
         // remains valid. Keep that evidence identical across real and dummy paths so
@@ -3121,17 +3209,31 @@ public partial class _PlaytestShot : Node
               $"source={pad?.FarFieldSource ?? "missing"} " +
               $"visible={pad?.FarFieldVisible ?? false} " +
               $"heroVisible={pad?.Visible ?? false} " +
-              $"opacity={pad?.FarFieldOpacity ?? 0f:F3}");
+              $"opacity={pad?.FarFieldOpacity ?? 0f:F3} " +
+              $"contextOpacity={pad?.FarFieldContextOpacity ?? 0f:F3} " +
+              $"silhouetteOpacity={pad?.FarFieldSilhouetteOpacity ?? 0f:F3}");
           // Inspect the meshes actually instantiated by production, not source strings.
           // Godot front faces use clockwise winding: upward-facing terrain has a
           // negative Y cross product, unlike the conventional CCW normal formula.
           var context = GetTree().Root.FindChild("StarbaseFarField", true, false);
           int topTriangles = 0, backFacing = 0, terrainTiles = 0;
+          int visibleStructures = 0;
+          float reliefAlpha = -1f;
           if (context != null)
           foreach (Node child in context.GetChildren())
           {
               if (child.Name.ToString() == "Mapped3DepRelief")
+              {
                   terrainTiles++;
+                  if (child is MeshInstance3D relief
+                      && relief.GetActiveMaterial(0) is StandardMaterial3D reliefMaterial)
+                      reliefAlpha = reliefMaterial.AlbedoColor.A;
+              }
+              if (child is MeshInstance3D civil && civil.IsVisibleInTree()
+                  && (child.Name.ToString().StartsWith("MappedTower", StringComparison.Ordinal)
+                      || child.Name.ToString().StartsWith("MappedBuilding", StringComparison.Ordinal)
+                      || child.Name.ToString().StartsWith("MappedTank", StringComparison.Ordinal)))
+                  visibleStructures++;
               if (child is not MeshInstance3D mesh || mesh.Mesh is not ArrayMesh)
                   continue;
               var vertices = mesh.Mesh.GetFaces();
@@ -3148,6 +3250,8 @@ public partial class _PlaytestShot : Node
           }
           _log.WriteLine($"VISUAL_STARBASE_GEOMETRY slug={slug} topTriangles={topTriangles} "
               + $"backFacing={backFacing} terrainTiles={terrainTiles}");
+          _log.WriteLine($"VISUAL_STARBASE_MATERIALS slug={slug} reliefAlpha={reliefAlpha:F3} "
+              + $"expectedAlpha={pad?.FarFieldContextOpacity ?? 0f:F3} visibleStructures={visibleStructures}");
           _log.WriteLine($"VISUAL_STARBASE_TERRAIN_TILE slug={slug} source=USGS_3DEP "
               + $"path=data/launch_sites/starbase_3dep_relief.json "
               + $"edgeFade=radial reliefScale=0.55 built={terrainTiles > 0}");
@@ -3712,14 +3816,31 @@ verify_pngs() {
       echo "ERROR: full-mission touchdown is neither a 3-contact gear landing nor a <=3 m/s settled historical gearless landing" >&2
       return 1
     fi
-  elif [[ "$MODE" == "launch" ]]; then
+  elif [[ "$MODE" == "launch" || "$MODE" == "launch_track" ]]; then
     for slug in pad liftoff; do
       if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
         echo "ERROR: missing required launch visual milestone PNG: exo_play_${slug}.png" >&2
         return 1
       fi
     done
-    if ! grep -q 'SUMMARY reason=LAUNCH_OK' "$LOG"; then
+    local launch_reason="LAUNCH_OK"
+    if [[ "$MODE" == "launch_track" ]]; then
+      launch_reason="LAUNCH_TRACK_OK"
+      for slug in tower_clear early_ascent; do
+        if [[ ! -s "$OUT_DIR/exo_play_${slug}.png" ]] || ! awk -v slug="$slug" '
+          $1 == "VISUAL_EARLY_CAMERA" && $2 == "slug=" slug {
+            for (i=3; i<=NF; i++) { split($i,kv,"="); v[kv[1]]=kv[2] }
+            found=1; valid=(v["mode"]=="Chase" && v["heightFraction"]+0>=0.18 &&
+              v["heightFraction"]+0<=0.85 && v["topVisible"]=="True" && v["bottomVisible"]=="True");
+          }
+          END { exit !(found && valid) }
+        ' "$LOG"; then
+          echo "ERROR: ${slug} did not preserve the whole vehicle at a readable size" >&2
+          return 1
+        fi
+      done
+    fi
+    if ! grep -q "SUMMARY reason=$launch_reason" "$LOG"; then
       echo "ERROR: launch visual capture did not finish cleanly" >&2
       return 1
     fi
@@ -3844,7 +3965,7 @@ verify_pngs() {
         return 1
       fi
     elif [[ "$MODE" == "starbase_far" ]]; then
-      if ! rg -q '^VISUAL_STARBASE_GEOMETRY slug=starbase_far_(12km|20km|40km) topTriangles=[1-9][0-9]* backFacing=0 terrainTiles=[1-9][0-9]*$' "$LOG"; then
+      if ! rg -q '^VISUAL_STARBASE_GEOMETRY slug=starbase_far_(2km|5km|8km|12km|20km|40km) topTriangles=[1-9][0-9]* backFacing=0 terrainTiles=[1-9][0-9]*$' "$LOG"; then
         echo "ERROR: Starbase terrain is missing or faces away from the overhead camera" >&2
         return 1
       fi
@@ -3852,17 +3973,47 @@ verify_pngs() {
         echo "ERROR: Starbase far-field capture did not finish cleanly" >&2
         return 1
       fi
-      local far_cases=(starbase_far_12km starbase_far_20km starbase_far_40km)
+      local far_cases=(starbase_far_2km starbase_far_5km starbase_far_8km starbase_far_12km starbase_far_20km starbase_far_40km)
       for slug in "${far_cases[@]}"; do
         if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
           echo "ERROR: missing Starbase far-field milestone PNG: exo_play_${slug}.png" >&2
           return 1
         fi
-        if ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} source=OSM\+EarthGround visible=True heroVisible=False opacity=[01]\.[0-9]+" "$LOG"; then
-          echo "ERROR: ${slug} did not prove mapped source and exclusive visibility" >&2
+        if ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} source=OSM\+EarthGround visible=True .*contextOpacity=[01]\.[0-9]+" "$LOG"; then
+          echo "ERROR: ${slug} did not prove mapped regional-context visibility" >&2
           return 1
         fi
-        if ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*padVisible=False .*farFieldVisible=True .*farFieldOpacity=[01]\.[0-9]+" "$LOG"; then
+        if [[ "$slug" =~ ^starbase_far_(2km|5km|8km)$ ]]; then
+          if ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} .*heroVisible=True .*silhouetteOpacity=0\.000$" "$LOG"; then
+            echo "ERROR: ${slug} did not keep civil silhouettes exclusive with the hero" >&2
+            return 1
+          fi
+          local expected_pad="True"
+        else
+          if ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} .*heroVisible=False" "$LOG"; then
+            echo "ERROR: ${slug} did not retire the hero pad" >&2
+            return 1
+          fi
+          local expected_pad="False"
+        fi
+        if ! awk -v slug="$slug" -v hero="$expected_pad" '
+          $1 == "VISUAL_STARBASE_MATERIALS" && $2 == "slug=" slug {
+            for (i=3; i<=NF; i++) {
+              split($i, kv, "="); values[kv[1]]=kv[2]+0
+            }
+            difference=values["reliefAlpha"]-values["expectedAlpha"];
+            if (difference<0) difference=-difference;
+            valid=(values["expectedAlpha"]>0 && difference<=0.011 &&
+              ((hero=="True" && values["visibleStructures"]==0) ||
+               (hero=="False" && values["visibleStructures"]>0)));
+            found=1;
+          }
+          END { exit !(found && valid) }
+        ' "$LOG"; then
+          echo "ERROR: ${slug} material alpha or visible structures disagree with the LOD contract" >&2
+          return 1
+        fi
+        if ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*padVisible=${expected_pad} .*farFieldVisible=True .*farFieldOpacity=[01]\.[0-9]+" "$LOG"; then
           echo "ERROR: compositor telemetry did not prove the ${slug} hero/far-field handoff" >&2
           return 1
         fi
@@ -3899,9 +4050,9 @@ verify_pngs() {
             }
             image = 1
           }
-          END { exit !(capture && image && alt >= 12000 && alt <= 40000 && mean > 0.005 && clipped < 0.10) }
+          END { exit !(capture && image && alt >= 2000 && alt <= 40000 && mean > 0.005 && clipped < 0.10) }
         ' "$LOG"; then
-          echo "ERROR: ${slug} is outside the 12–40 km corridor or visually invalid" >&2
+          echo "ERROR: ${slug} is outside the 2–40 km corridor or visually invalid" >&2
           return 1
         fi
       done
@@ -4633,6 +4784,14 @@ verify_pngs() {
 }
 
 verify_post_run_contracts() {
+  local actual_renderer expected_renderer
+  actual_renderer="$(awk '/^RENDERER_ACTUAL / { actual=$2 } END { print actual }' "$LOG")"
+  expected_renderer="gl_compatibility"
+  if [[ "$RENDERER" == "forward_plus" ]]; then expected_renderer="forward_plus"; fi
+  if [[ -n "$actual_renderer" && "$actual_renderer" != "$expected_renderer" ]]; then
+    echo "ERROR: recorded renderer $actual_renderer does not match requested $expected_renderer" >&2
+    return 1
+  fi
   if (( SUN_ELEVATION_SET == 1 )) || [[ -n "$CAMERA_PRESET" ]]; then
     if ! grep -q '^VISUAL_SUN .*physicalSunPositionUnchanged=True' "$LOG"; then
       echo "ERROR: deterministic visual run is missing VISUAL_SUN telemetry" >&2
@@ -4713,7 +4872,7 @@ rm -f "$OUT_DIR"/exo_play_*.png 2>/dev/null || true
 : > "$LOG"
 : > "$CONSOLE_LOG"
 
-echo "visual_playtest: mode=$MODE max_runtime=${MAX_RUNTIME_SEC}s out=$OUT_DIR log=$LOG"
+echo "visual_playtest: mode=$MODE renderer=$RENDERER max_runtime=${MAX_RUNTIME_SEC}s out=$OUT_DIR log=$LOG"
 
 if [[ "$MODE" == "reentry_compare" ]]; then
   # Two independent Godot launches — one per attitude — appending into the same combined
@@ -4739,21 +4898,7 @@ if [[ "$MODE" == "reentry_compare" ]]; then
     prepare_godot_log_file
     write_harness
     dotnet build Exosphere.csproj --no-restore --nologo -v quiet
-    if [[ -n "$EXTERNAL_DISPLAY" ]]; then
-      DISPLAY="$EXTERNAL_DISPLAY" env \
-        EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
-        --path . --rendering-driver opengl3 \
-        --resolution "$RESOLUTION" \
-        --log-file "$GODOT_LOG_FILE" \
-        res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
-    else
-      xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" env \
-        EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
-        --path . --rendering-driver opengl3 \
-        --resolution "$RESOLUTION" \
-        --log-file "$GODOT_LOG_FILE" \
-        res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
-    fi
+    run_godot
     cat "$LOG" >> "$COMBINED_LOG"
     cat "$CONSOLE_LOG" >> "$COMBINED_CONSOLE_LOG"
     rm -f "$LOG" "$CONSOLE_LOG"
@@ -4765,21 +4910,7 @@ else
   write_harness
   dotnet build Exosphere.csproj --no-restore --nologo -v quiet
   prepare_godot_log_file
-  if [[ -n "$EXTERNAL_DISPLAY" ]]; then
-    DISPLAY="$EXTERNAL_DISPLAY" env \
-      EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
-      --path . --rendering-driver opengl3 \
-      --resolution "$RESOLUTION" \
-      --log-file "$GODOT_LOG_FILE" \
-      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
-  else
-    xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" env \
-      EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "$GODOT" \
-      --path . --rendering-driver opengl3 \
-      --resolution "$RESOLUTION" \
-      --log-file "$GODOT_LOG_FILE" \
-      res://scenes/flight/Flight.tscn 2>&1 | tee -a "$CONSOLE_LOG"
-  fi
+  run_godot
 fi
 
 verify_pngs

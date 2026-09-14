@@ -7,7 +7,26 @@ source "$ROOT/tools/lib/playtest_contracts.sh"
 HARNESS_SCRIPT="$ROOT/tools/visual_playtest.sh"
 bash -n "$HARNESS_SCRIPT"
 
-# Resolution must be explicit, bounded, and shared by both Xvfb/Godot launch paths.
+# Renderer and resolution must be explicit, bounded, and shared by every launch path.
+if ! rg -q '^RENDERER="compatibility"$' "$HARNESS_SCRIPT" \
+  || ! rg -q -- '--renderer\).*RENDERER="\$2"' "$HARNESS_SCRIPT"; then
+  echo "FAIL renderer default or --renderer parser is missing" >&2
+  exit 1
+fi
+if ! rg -q 'GODOT_RENDERER_ARGS=\(--rendering-driver opengl3\)' "$HARNESS_SCRIPT" \
+  || ! rg -q 'GODOT_RENDERER_ARGS=\(--rendering-driver vulkan --rendering-method forward_plus\)' "$HARNESS_SCRIPT"; then
+  echo "FAIL renderer names do not map to the expected Godot driver/method arguments" >&2
+  exit 1
+fi
+if ! rg -q 'echo "renderer=\$RENDERER"' "$HARNESS_SCRIPT" \
+  || ! rg -q 'RENDERER name=%s args=%s' "$HARNESS_SCRIPT"; then
+  echo "FAIL renderer identity is missing from the run summary or logs" >&2
+  exit 1
+fi
+if bash "$HARNESS_SCRIPT" --renderer invalid --verify-only >/dev/null 2>&1; then
+  echo "FAIL invalid renderer was accepted" >&2
+  exit 1
+fi
 if ! grep -q '^RESOLUTION="1920x1080"$' "$HARNESS_SCRIPT"; then
   echo "FAIL default capture resolution is not 1920x1080" >&2
   exit 1
@@ -28,13 +47,13 @@ if ! grep -q 'RESOLUTION_WIDTH < 640' "$HARNESS_SCRIPT" \
   exit 1
 fi
 screen_count="$(grep -c -- '-screen 0 \${RESOLUTION}x24' "$HARNESS_SCRIPT")"
-if [[ "$screen_count" -ne 2 ]]; then
-  echo "FAIL expected both xvfb-run paths to use the validated resolution, got $screen_count" >&2
+if [[ "$screen_count" -ne 1 ]]; then
+  echo "FAIL expected the centralized xvfb-run path to use the validated resolution, got $screen_count" >&2
   exit 1
 fi
 godot_resolution_count="$(grep -c -- '--resolution "\$RESOLUTION"' "$HARNESS_SCRIPT")"
-if [[ "$godot_resolution_count" -ne 4 ]]; then
-  echo "FAIL expected both display paths in both Godot launches to receive --resolution, got $godot_resolution_count" >&2
+if [[ "$godot_resolution_count" -ne 1 ]]; then
+  echo "FAIL expected the centralized Godot launch to receive --resolution, got $godot_resolution_count" >&2
   exit 1
 fi
 if grep -q -- '-screen 0 1920x1080x24' "$HARNESS_SCRIPT"; then
@@ -90,7 +109,7 @@ if ! grep -q 'VISUAL_PLUME_LOD' "$ROOT/scripts/PlumeSystem.cs" \
   echo "FAIL plume far-field LOD is not wired through CPU, telemetry, and shader" >&2
   exit 1
 fi
-echo "PASS bounded --resolution is wired to both Xvfb/Godot launches"
+echo "PASS renderer selection and bounded --resolution share one Godot launch path"
 echo "PASS plume far-field LOD is wired through CPU, telemetry, and shader"
 
 if ! rg -q 'BuildMappedFarFieldContext' "$ROOT/scripts/StarbaseFarField.cs" \
@@ -107,6 +126,9 @@ if ! rg -q -- '--starbase-far' "$HARNESS_SCRIPT" \
   || ! rg -q 'ProcessStarbaseFarField' "$HARNESS_SCRIPT" \
   || ! rg -q 'STARBASE_FAR_OK' "$HARNESS_SCRIPT" \
   || ! rg -q 'VISUAL_STARBASE_FAR' "$HARNESS_SCRIPT" \
+  || ! rg -q 'starbase_far_2km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'starbase_far_5km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'starbase_far_8km' "$HARNESS_SCRIPT" \
   || ! rg -q 'starbase_far_12km' "$HARNESS_SCRIPT" \
   || ! rg -q 'starbase_far_20km' "$HARNESS_SCRIPT" \
   || ! rg -q 'starbase_far_40km' "$HARNESS_SCRIPT" \
@@ -115,7 +137,7 @@ if ! rg -q -- '--starbase-far' "$HARNESS_SCRIPT" \
   echo "FAIL Starbase corridor visual fixture is not wired into the harness" >&2
   exit 1
 fi
-echo "PASS Starbase 12–40 km corridor fixture is wired into the harness"
+echo "PASS Starbase 2–40 km transition fixture is wired into the harness"
 
 if ! rg -q 'FarContextMat' "$ROOT/scripts/StarbaseFarField.cs" \
   || ! rg -q 'kind switch' "$ROOT/scripts/StarbaseFarField.cs" \
@@ -137,8 +159,8 @@ echo "PASS close Starbase context uses OSM water footprints without a synthetic 
 # That default can fail to create its parent directory in the Xvfb environment
 # and caused Godot 4.6.3 to abort before the scene loaded.
 launch_count="$(grep -c -- '--log-file "\$GODOT_LOG_FILE"' "$HARNESS_SCRIPT")"
-if [[ "$launch_count" -ne 4 ]]; then
-  echo "FAIL expected 4 explicit Godot --log-file arguments across display paths, got $launch_count" >&2
+if [[ "$launch_count" -ne 1 ]]; then
+  echo "FAIL expected one explicit --log-file argument in the centralized Godot launch, got $launch_count" >&2
   exit 1
 fi
 if ! grep -q 'GODOT_LOG_FILE="\${CONSOLE_LOG}.godot"' "$HARNESS_SCRIPT"; then
@@ -354,7 +376,42 @@ if ! bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
   echo "FAIL valid normal orbital reentry fixture rejected" >&2
   exit 1
 fi
+if ! rg -q '^renderer=compatibility$' "$orbital_out/run-summary.txt" \
+  || ! rg -q '^renderer_args=--rendering-driver opengl3$' "$orbital_out/run-summary.txt"; then
+  echo "FAIL default Compatibility renderer is missing from run-summary.txt" >&2
+  exit 1
+fi
+if ! bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only --renderer forward_plus \
+    --out-dir "$orbital_out" --log "$orbital_good" --resolution 800x450 >/dev/null; then
+  echo "FAIL valid Forward Plus verify-only fixture rejected" >&2
+  exit 1
+fi
+if ! rg -q '^renderer=forward_plus$' "$orbital_out/run-summary.txt" \
+  || ! rg -q '^renderer_args=--rendering-driver vulkan --rendering-method forward_plus$' \
+    "$orbital_out/run-summary.txt"; then
+  echo "FAIL Forward Plus renderer is missing from run-summary.txt" >&2
+  exit 1
+fi
 echo "PASS valid normal orbital reentry fixture accepted"
+
+orbital_renderer="$TEST_DIR/orbital-renderer.log"
+cp "$orbital_good" "$orbital_renderer"
+echo 'RENDERER_ACTUAL gl_compatibility' >> "$orbital_renderer"
+if ! bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only \
+    --out-dir "$orbital_out" --log "$orbital_renderer" --resolution 800x450 >/dev/null; then
+  echo "FAIL matching actual renderer was rejected" >&2
+  exit 1
+fi
+if ! rg -q '^renderer_actual=gl_compatibility$' "$orbital_out/run-summary.txt"; then
+  echo "FAIL actual renderer was not preserved in the summary" >&2
+  exit 1
+fi
+if bash "$HARNESS_SCRIPT" --orbital-reentry --verify-only --renderer forward_plus \
+    --out-dir "$orbital_out" --log "$orbital_renderer" --resolution 800x450 >/dev/null 2>&1; then
+  echo "FAIL requested Forward Plus accepted Compatibility evidence" >&2
+  exit 1
+fi
+echo "PASS renderer mismatch rejected using actual runtime evidence"
 
 orbital_demo="$TEST_DIR/orbital-demo.log"
 sed 's/demo=False/demo=True/g' "$orbital_good" > "$orbital_demo"
