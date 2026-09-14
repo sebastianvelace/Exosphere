@@ -2,7 +2,7 @@
 
 This doc gives any loop iteration two things:
 
-1. A **repeatable way to "play" a full mission headless and SEE it** (a temporary,
+1. A **repeatable way to play a full mission and capture a real framebuffer** (a temporary,
    untracked autoload harness driven through the real `SimulationBridge` API).
 2. A **prioritized, evidence-backed backlog** so a loop picks high-impact work
    without re-deriving context.
@@ -13,7 +13,7 @@ and observe the whole game" layer plus a living TODO seeded with real findings.
 
 ---
 
-## 1. End-to-end play harness (headless, untracked)
+## 1. End-to-end play harness (Xvfb, untracked)
 
 ### Environment gotchas (verified this session)
 
@@ -99,6 +99,15 @@ bash tools/visual_playtest.sh --flight7 --run-id agent-vp1 --verify-only
 # Pad ignition / ramp / liftoff
 bash tools/visual_playtest.sh --launch --flight7 --run-id agent-launch
 
+# Continue through 250 m and 1 km; require the full stack to remain readable in Chase
+bash tools/visual_playtest.sh --launch-track --flight7 --run-id launch-track --resolution 1280x720
+
+# Deterministic regional LOD fixtures at 2/5/8/12/20/40 km (not a flown ascent)
+bash tools/visual_playtest.sh --starbase-far --flight7 --run-id regional --resolution 1280x720
+
+# Compare the same launch with Forward+ (Vulkan); Compatibility remains the default
+bash tools/visual_playtest.sh --launch --flight7 --run-id launch-forward --renderer forward_plus --resolution 1280x720
+
 # Vacuum Ship plume at full / half / off throttle
 bash tools/visual_playtest.sh --ship --run-id agent-ship
 
@@ -132,6 +141,16 @@ corruption and duplicate run boundaries). `tools/ci_check.sh` runs this contract
 Harness ownership is exclusive: `flock` prevents two scripts from mutating the temporary
 autoload simultaneously, a per-process environment token makes unrelated Godot instances
 ignore it, and only the lock owner may restore/delete generated resources.
+Do not edit the runner while it is executing: Bash may read the changed file later in
+the same process. Recover preserved captures with `--verify-only` after interruptions.
+
+Summaries record both the requested `renderer` and runtime `renderer_actual`; a mismatch
+fails verification. Legacy artifacts without `RENDERER_ACTUAL` remain readable but report
+`unavailable`, so they cannot establish which renderer produced an image. `VISUAL_EARLY_CAMERA`
+records frustum visibility and projected vehicle height at the two added launch milestones.
+The regional gate reads actual material alpha and visible structures, not just requested
+instance transparency, which Godot Compatibility ignores. Review every PNG in addition to
+these gates: a passing contract proves rendering invariants, not visual fidelity.
 
 **Milestone status (verified Jul 2026 on `integrate/jul2026-realism-loop`)**
 
