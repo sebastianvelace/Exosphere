@@ -57,20 +57,20 @@ Every capture logs the actual rendering method; requested/actual mismatch is an 
 
 ## Remaining fidelity limits and next work
 
-The local Earth surface is still a broad procedural, unshaded reconstruction. OSM
-footprints and 3DEP geometry provide layout and relief, but not detailed ground imagery.
-Increasing fog or enabling SSR cannot supply missing coastal detail, varied materials
-or real terrain shading. The pad also retains visibly procedural tanks/buildings and
-discrete deluge billboards. Forward+ produced a paler image in this software-rendered
+Status update 2026-09-14: the first 10 km now uses a geographically aligned USDA NAIP
+orthophoto plus a normalized USGS 3DEP broad-relief raster. OSM civil geometry remains
+anchored to the same Starbase datum, and the regional material feathers into the existing
+planetary ground before the large-scale Starbase handoff. See
+`docs/audits/LOCAL_TERRAIN_REALISM_2026-09-14.md` for the implementation and evidence.
+
+The regional ground is a baked presentation asset, not a collision mesh or a complete
+high-resolution reconstruction. The pad still retains visibly procedural tanks/buildings
+and discrete deluge billboards. Forward+ produced a paler image in the software-rendered
 comparison; additional rendering features alone do not establish improved realism.
 
-Next priority: build a geographically aligned regional terrain material for the first
-0–10 km, starting with a small licensed imagery/land-cover sample and consistent coastal
-color, roughness and normals. Preserve the existing datum, relief and orbital blend.
-Compare the same pad, 300 m, 1 km and 5 km camera views against dated launch references,
-and measure frame time and memory on an actual target GPU before expanding coverage.
-Keep camera and physical flight identical between comparisons. Only then expand civil
-detail and deluge volume; avoid hiding the remaining flat surface with stronger haze.
+Next priority: fine reference matching, broader high-resolution terrain coverage and
+target-GPU frame-time/memory measurements. Keep camera and physical flight identical
+between comparisons; avoid hiding remaining detail limits with stronger haze.
 
 Offscreen scene reflections are not supplied by SSR, and transparent ground overlays
 do not share all opaque screen-space effects. Software Vulkan/OpenGL captures establish
