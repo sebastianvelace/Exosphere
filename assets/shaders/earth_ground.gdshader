@@ -21,6 +21,15 @@ render_mode cull_back, unshaded, depth_draw_opaque;
 
 uniform sampler2D day_tex : source_color, filter_linear_mipmap;
 uniform sampler2D night_tex : source_color, filter_linear_mipmap;
+// USDA NAIP reflectance and USGS 3DEP broad relief for the real Starbase
+// regional ground. A separate mask excludes provider no-data pixels.
+uniform sampler2D regional_ortho_tex : source_color, filter_linear_mipmap;
+uniform sampler2D regional_mask_tex : hint_default_white, filter_linear;
+uniform sampler2D regional_height_tex : hint_default_black, filter_linear;
+uniform float regional_extent_m = 10000.0;
+uniform float regional_height_min_m = -2.0;
+uniform float regional_height_max_m = 12.0;
+uniform float regional_height_reference_m = 0.96;
 uniform vec3  sub_p       = vec3(0.0, 1.0, 0.0);  // sub-vessel point on the unit sphere (texture space)
 uniform vec3  east_local  = vec3(1.0, 0.0, 0.0);  // patch +X (east)  in texture space
 uniform vec3  north_local = vec3(0.0, 0.0, 1.0);  // patch +Z (north) in texture space
@@ -85,7 +94,36 @@ vec2 equirect(vec3 p) {
 	return vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI);
 }
 
+// Mesh +X is geodetic east and +Z is geodetic north. Imported rasters use
+// the conventional top-to-bottom image origin, so north maps toward V=0.
+vec2 regional_uv(vec2 patch_m) {
+	return vec2(0.5 + patch_m.x / regional_extent_m,
+		0.5 - patch_m.y / regional_extent_m);
+}
+
+float regional_edge_weight(vec2 uv) {
+	vec2 distance_from_center = abs(uv - vec2(0.5)) * 2.0;
+	float edge = max(distance_from_center.x, distance_from_center.y);
+	return 1.0 - smoothstep(0.84, 1.0, edge);
+}
+
+float regional_validity(vec2 uv) {
+	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+		return 0.0;
+	return regional_edge_weight(uv)
+		* smoothstep(0.08, 0.42, texture(regional_mask_tex, uv).r);
+}
+
 void vertex() {
+	vec2 patch_m = VERTEX.xz * metres_per_unit;
+	vec2 regional = regional_uv(patch_m);
+	float regional_weight = regional_validity(regional);
+	if (regional_weight > 0.0) {
+		float encoded_height = textureLod(regional_height_tex, regional, 0.0).r;
+		float terrain_height = mix(regional_height_min_m, regional_height_max_m, encoded_height);
+		VERTEX.y += (terrain_height - regional_height_reference_m)
+			/ metres_per_unit * regional_weight;
+	}
 	v_world_pos    = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	v_world_tangent_e = normalize((MODEL_MATRIX * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
@@ -93,7 +131,7 @@ void vertex() {
 	// Derive the physical patch coordinate from the authoritative mesh position.
 	// UV2 is retained by the mesh for tooling, but using VERTEX here avoids driver
 	// differences in secondary-UV interpolation on the duplicated SurfaceTool grid.
-	v_patch        = VERTEX.xz * metres_per_unit;
+	v_patch        = patch_m;
 }
 
 void fragment() {
@@ -108,6 +146,14 @@ void fragment() {
 	vec2  uv  = equirect(dir);
 	vec3  surface = texture(day_tex, uv).rgb;
 	vec3  night_map = texture(night_tex, uv).rgb;
+	vec2 regional_uv_value = regional_uv(v_patch);
+	float regional_weight = regional_validity(regional_uv_value);
+	vec3 regional_surface = texture(regional_ortho_tex, regional_uv_value).rgb;
+	// NAIP is observed daylight reflectance. Desaturate it slightly before the
+	// same solar/earthshine model used by the fallback, retaining roads, lagoons,
+	// dunes and pad geometry without baking a second artificial geography layer.
+	float regional_luma = dot(regional_surface, vec3(0.299, 0.587, 0.114));
+	regional_surface = mix(vec3(regional_luma), regional_surface, 0.88) * 0.92;
 
 	// Low-altitude launch views should read as coastal fill, marsh and sand,
 	// not as saturated satellite green. Keep the Blue Marble macro-shapes, but
@@ -187,8 +233,13 @@ void fragment() {
     float apron = 1.0 - smoothstep(38.0, 260.0, pad_range);
     vec3 apron_color = vec3(0.23, 0.24, 0.23);
     pad_ground = mix(pad_ground, apron_color, apron * 0.86);
-    surface = mix(pad_ground, surface, map_blend);
-    surface = mix(surface, pad_ground, site_core * 0.92);
+	surface = mix(pad_ground, surface, map_blend);
+	surface = mix(surface, pad_ground, site_core * 0.92);
+	// The measured regional material owns the first ~8.4 km and feathers into
+	// the existing procedural/geographic fallback. This prevents the 10 km
+	// raster from reading as a rectangular cookie while keeping coverage gaps
+	// transparent through the provider mask.
+	surface = mix(surface, regional_surface, regional_weight);
 
 	// A small normal perturbation makes the multi-scale breakup respond to the
 	// sun direction. It is deliberately low amplitude: this gives texture relief

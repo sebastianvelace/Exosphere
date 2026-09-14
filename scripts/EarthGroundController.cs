@@ -14,10 +14,11 @@ using Exosphere.Simulation.Math;
 /// curvature <c>y = -(x²+z²)/(2R)</c>. At 4–10 km altitude the horizon is then far
 /// and essentially flat — exactly as in reality — while coordinates stay float-safe.
 ///
-/// The surface look (ocean / land / coastlines / clouds) is procedural and sampled
-/// from a WORLD-SPACE ground coordinate: as the vessel translates over the planet,
-/// that coordinate scrolls, so features glide across the patch and you can clearly
-/// SEE the rocket moving. The whole patch cross-fades into the backdrop on ascent.
+/// The broad local surface uses the measured Starbase NAIP orthoimage and 3DEP
+/// elevation raster, with a procedural fallback outside the regional coverage.
+/// Sampling is anchored to a WORLD-SPACE ground coordinate so features glide across
+/// the patch as the vessel translates. The whole patch cross-fades into the backdrop
+/// on ascent.
 ///
 /// Anchored each frame like <see cref="MarsTerrainController"/>; add as a child of
 /// the "World" Node3D. Render scale: 1 unit = <see cref="MetresPerUnit"/> metres.
@@ -27,6 +28,7 @@ public partial class EarthGroundController : Node3D
     /// <summary>Runtime compositor state consumed by deterministic visual captures.</summary>
     public float LocalPatchOpacity { get; private set; }
     public bool LocalPatchVisible => Visible && LocalPatchOpacity > 0.001f;
+    public bool RegionalTerrainReady { get; private set; }
 
     // ── Render scale ─────────────────────────────────────────────────────────
     private const float  MetresPerUnit = 2.8f;
@@ -66,6 +68,10 @@ public partial class EarthGroundController : Node3D
     private const float NightCityGain = 0.34f;
     private const float TerminatorWidth = 0.16f;
     private const float HorizonHazeStrength = 0.92f;
+    private const float RegionalTerrainExtentM = 10_000f;
+    private const float RegionalHeightMinM = -2.0f;
+    private const float RegionalHeightMaxM = 12.0f;
+    private const float RegionalHeightReferenceM = 0.96f;
 
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;
@@ -108,6 +114,22 @@ public partial class EarthGroundController : Node3D
             if (dayTexture != null) _mat.SetShaderParameter("day_tex", dayTexture);
             var nightTexture = GD.Load<Texture2D>("res://assets/textures/earth_night.jpg");
             if (nightTexture != null) _mat.SetShaderParameter("night_tex", nightTexture);
+            var regionalOrtho = GD.Load<Texture2D>("res://assets/textures/starbase_naip_10km.jpg");
+            var regionalMask = GD.Load<Texture2D>("res://assets/textures/starbase_naip_10km_mask.png");
+            var regionalHeight = GD.Load<Texture2D>("res://assets/textures/starbase_3dep_10km_height.png");
+            RegionalTerrainReady = regionalOrtho != null && regionalMask != null && regionalHeight != null;
+            if (regionalOrtho != null && regionalMask != null && regionalHeight != null)
+            {
+                _mat.SetShaderParameter("regional_ortho_tex", regionalOrtho);
+                _mat.SetShaderParameter("regional_mask_tex", regionalMask);
+                _mat.SetShaderParameter("regional_height_tex", regionalHeight);
+                _mat.SetShaderParameter("regional_extent_m", RegionalTerrainExtentM);
+                _mat.SetShaderParameter("regional_height_min_m", RegionalHeightMinM);
+                _mat.SetShaderParameter("regional_height_max_m", RegionalHeightMaxM);
+                _mat.SetShaderParameter("regional_height_reference_m", RegionalHeightReferenceM);
+            }
+            GD.Print($"[EARTH_GROUND_TERRAIN] source=NAIP+3DEP ready={RegionalTerrainReady} "
+                + $"extentM={RegionalTerrainExtentM:F0} heightRangeM={RegionalHeightMinM:F1}..{RegionalHeightMaxM:F1}");
             _mesh.SetSurfaceOverrideMaterial(0, _mat);
         }
         else
