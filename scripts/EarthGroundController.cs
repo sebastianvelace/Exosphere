@@ -42,13 +42,16 @@ public partial class EarthGroundController : Node3D
     // 800,000 m / 2.8 ≈ 286,000 units. A square of any size reads as a cookie
     // from the play camera; the silhouette is a disc with a shader rim fade.
     private const float PatchRadiusUnits = 280_000f;
-    private const int   DiscRings        = 48;
-    private const int   DiscSegments     = 72;
+    // The outer silhouette crosses the geometric horizon at 20–40 km. Keep enough
+    // angular and radial samples there that the tangent disc reads as a continuous
+    // limb instead of a polygonal band.
+    private const int   DiscRings        = 96;
+    private const int   DiscSegments     = 256;
 
     // Vessel-altitude safety: hide the tangent patch once the rocket itself is
     // well into the scaled-space regime even if a chase camera is somehow low.
     // The visible pad→globe cross-fade is owned by FloatingOrigin.EarthGlobeAlpha.
-    // Safety cutoff after the shared 40–75 km handoff. The shader fade reaches zero
+    // Safety cutoff after the shared 12–18 km handoff. The shader fade reaches zero
     // first; this guard only handles unusual camera/origin states.
     private const double FadeHi = 90_000.0;
 
@@ -211,7 +214,7 @@ public partial class EarthGroundController : Node3D
 
         // Complementary to FloatingOrigin.EarthGlobeAlpha: the patch owns the
         // horizon on the pad, the globe owns it in space, and they share one
-        // 40–75 km camera-altitude handoff so neither a double-Earth nor a gap.
+        // 12–18 km camera-altitude handoff so neither a double-Earth nor a gap.
         float fade = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
         if (fade <= 0.001f)
         {

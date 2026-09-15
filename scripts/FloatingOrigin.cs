@@ -85,8 +85,11 @@ public partial class FloatingOrigin : Node
     /// ascent camera regime; the scaled-space Earth arrives before the tangent
     /// approximation becomes a coloured cookie in a pulled-back camera.
     /// </summary>
-    public const double EarthVisualHandoffLowM = 40_000.0;
-    public const double EarthVisualHandoffHighM = 75_000.0;
+    // The tangent patch carries measured Starbase detail through the low ascent;
+    // complete the globe handoff before the pulled-back 20 km view. Both render
+    // surfaces are opaque, so a long overlap reads as a central depth band.
+    public const double EarthVisualHandoffLowM = 12_000.0;
+    public const double EarthVisualHandoffHighM = 18_000.0;
 
     /// <summary>
     /// Opacity of the scaled-space Earth globe for the current camera altitude.

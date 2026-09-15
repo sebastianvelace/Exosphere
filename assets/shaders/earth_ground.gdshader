@@ -111,16 +111,21 @@ vec2 regional_uv(vec2 patch_m) {
 }
 
 float regional_edge_weight(vec2 uv) {
-	vec2 distance_from_center = abs(uv - vec2(0.5)) * 2.0;
-	float edge = max(distance_from_center.x, distance_from_center.y);
-	return 1.0 - smoothstep(0.84, 1.0, edge);
+	// The raster is square, but its handoff must follow the circular tangent
+	// patch. A max-component distance leaves a visible rectangular cookie over
+	// the coast when the regional layer retires in the mid-altitude view.
+	float radial_distance = length(uv - vec2(0.5)) * 2.0;
+	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
 }
 
 float regional_validity(vec2 uv) {
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
 		return 0.0;
 	return regional_edge_weight(uv)
-		* smoothstep(0.08, 0.42, texture(regional_mask_tex, uv).r);
+		// The exported mask is Gaussian-feathered around the provider footprint.
+		// Keep its low-valued tail invalid so the neutral JPEG fill cannot leak
+		// back into the scene as a rectangular patch.
+		* smoothstep(0.30, 0.52, texture(regional_mask_tex, uv).r);
 }
 
 vec2 macro_uv(vec2 patch_m) {
@@ -129,16 +134,19 @@ vec2 macro_uv(vec2 patch_m) {
 }
 
 float macro_edge_weight(vec2 uv) {
-	vec2 distance_from_center = abs(uv - vec2(0.5)) * 2.0;
-	float edge = max(distance_from_center.x, distance_from_center.y);
-	return 1.0 - smoothstep(0.84, 1.0, edge);
+	// Keep the broad measured layer circular as well. Otherwise the 50 km
+	// bridge reintroduces the same square silhouette after the 10 km layer fades.
+	float radial_distance = length(uv - vec2(0.5)) * 2.0;
+	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
 }
 
 float macro_validity(vec2 uv) {
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
 		return 0.0;
 	return macro_edge_weight(uv)
-		* smoothstep(0.08, 0.42, texture(macro_mask_tex, uv).r);
+		// The macro provider footprint is irregular; reject its feather tail
+		// before sampling the neutral fill colour stored in the JPEG void.
+		* smoothstep(0.30, 0.52, texture(macro_mask_tex, uv).r);
 }
 
 void vertex() {
@@ -331,8 +339,11 @@ void fragment() {
 	// apply grazing wash when the look is actually toward the horizon.
 	float look_down = smoothstep(0.55, 0.88, view_up);
 	float distance_haze = smoothstep(horizon_dist * 0.42, horizon_dist * 1.05, dist);
-	float grazing_haze = (1.0 - smoothstep(0.04, 0.52, view_up)) * (1.0 - look_down);
-	float haze = clamp(max(distance_haze * 0.48, grazing_haze * horizon_haze_strength * 0.50), 0.0, 0.70)
+	// Keep grazing haze close to the actual limb. The former 0.04..0.52
+	// angular ramp washed the fallback Blue Marble across most of the oblique
+	// view, making the 50 km measured layer read as a rectangular island.
+	float grazing_haze = (1.0 - smoothstep(0.02, 0.22, view_up)) * (1.0 - look_down);
+	float haze = clamp(max(distance_haze * 0.48, grazing_haze * horizon_haze_strength * 0.28), 0.0, 0.55)
 		* (1.0 - look_down * 0.85);
 	ground_radiance = mix(ground_radiance, haze_color, haze);
 	// Circular rim at the geometric horizon (not a camera-distance kill, and
