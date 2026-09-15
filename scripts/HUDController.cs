@@ -592,7 +592,6 @@ public partial class HUDController : Control
         {
             ("O", "JUMP TO ORBIT"),
             ("J", "JUMP TO BODY (MAP)"),
-            ("F8", "INJECT ENGINE FAILURE"),
         }, debug: true);
 
         _reentryDemoButton = new Button
@@ -1452,17 +1451,6 @@ public partial class HUDController : Control
                 case Key.F2:
                     if (_snapshot?.Alerts.FirstOrDefault(a => !a.Acknowledged) is { } alert)
                         _presenter.AcknowledgeAlert(alert.Code);
-                    viewport.SetInputAsHandled();
-                    break;
-                case Key.F8:
-                    if (bridge.InjectActiveEngineFailure())
-                    {
-                        _events.Insert(
-                            0,
-                            $"{FormatClock(bridge.Universe.CurrentTime)}  ENGINE OUT TEST");
-                        if (_events.Count > 5)
-                            _events.RemoveAt(_events.Count - 1);
-                    }
                     viewport.SetInputAsHandled();
                     break;
                 case Key.F5:

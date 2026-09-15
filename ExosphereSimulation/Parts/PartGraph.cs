@@ -665,7 +665,7 @@ public class PartGraph
     /// current centre of mass, and F_i is its actual gimballed, pressure-corrected thrust
     /// vector. Unlike <see cref="GetPitchYawAngularAcceleration(double)"/> and
     /// <see cref="GetRollAngularAcceleration(double)"/> (which use a single scalar lever
-    /// per part), this sums real per-engine moment arms, so an asymmetric engine failure or
+    /// per part), this sums real per-engine moment arms, so asymmetric engine availability or
     /// gimbal deflection produces genuine, correctly-signed torque instead of only reducing
     /// total thrust proportionally.
     /// </summary>
@@ -1215,15 +1215,6 @@ public class PartGraph
                         {
                             continue;
                         }
-                        if (performance.MassFlowKgS
-                            > engine.GetEngineFeedLimitKgS(engineIndex) + 1e-9)
-                        {
-                            engine.FailEngine(
-                                state.InstanceId,
-                                "FEED_BRANCH_FLOW_LIMIT");
-                            _tickActiveEngineCacheValid = false;
-                            continue;
-                        }
                         _liquidDemands.Add(new LiquidEngineDemand(
                             engine,
                             state.InstanceId,
@@ -1285,17 +1276,18 @@ public class PartGraph
                     continue;
                 }
 
-                if (demand.EnginePart.HasEngineRuntime)
+                // Fuel exhaustion is an ordinary resource boundary. Consume whatever
+                // remains below, then stop requesting thrust on the next physics tick;
+                // it must not create a persistent engine failure state.
+                if (remainingLF > 0.0 || remainingOx > 0.0)
                 {
-                    demand.EnginePart.FailEngine(
-                        demand.EngineInstanceId, "PROPELLANT_STARVATION");
-                    _tickActiveEngineCacheValid = false;
+                    fundedLF += remainingLF;
+                    fundedOx += remainingOx;
+                    remainingLF = 0.0;
+                    remainingOx = 0.0;
                 }
-                else
-                {
-                    demand.EnginePart.IsStagingActive = false;
-                    _tickActiveEngineCacheValid = false;
-                }
+                demand.EnginePart.MarkFuelDepleted();
+                _tickActiveEngineCacheValid = false;
             }
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
@@ -1352,7 +1344,7 @@ public class PartGraph
             foreach (var engine in engines)
             {
                 if (engine.HasEngineRuntime)
-                    engine.FailAllEngines("PROPELLANT_STARVATION");
+                    engine.MarkFuelDepleted();
                 else
                     engine.IsStagingActive = false;
                 _tickActiveEngineCacheValid = false;

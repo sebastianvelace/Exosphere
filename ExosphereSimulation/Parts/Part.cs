@@ -55,7 +55,6 @@ public class Part
     public double   ThrottleLevel { get; set; }          // [0, 1]
     public Vector3d GimbalOffset  { get; set; } = Vector3d.Zero;  // deflexión normalizada
     private readonly List<EngineInstanceState> _engineStates = new();
-    private readonly List<EngineFailureInjection> _scheduledFailures = new();
     private readonly List<(Vector3d PositionM, Vector3d ThrustVectorN)>
         _thrustGeometryScratch = new();
     private readonly List<(
@@ -65,8 +64,10 @@ public class Part
         double GimbalRangeDeg)> _gimbalAuthorityScratch = new();
     public IReadOnlyList<EngineInstanceState> EngineStates => _engineStates;
     public IReadOnlyList<EngineFailureInjection> ScheduledEngineFailures =>
-        _scheduledFailures;
+        Array.Empty<EngineFailureInjection>();
     public bool HasEngineRuntime => _engineStates.Count > 0;
+    /// <summary>Fuel depletion cuts the engine command without creating an engine failure.</summary>
+    public bool FuelDepleted { get; private set; }
     private double _activeEngineFraction = 1.0;
 
     /// <summary>
@@ -116,16 +117,17 @@ public class Part
 
     public void AdvanceEngineRuntime(double commandedThrottle, double dt)
     {
+        double effectiveCommandedThrottle = FuelDepleted ? 0.0 : commandedThrottle;
         if (!HasEngineRuntime)
         {
-            SpoolToward(commandedThrottle, dt);
+            SpoolToward(effectiveCommandedThrottle, dt);
             return;
         }
         if (!double.IsFinite(commandedThrottle) || !double.IsFinite(dt) || dt < 0.0)
             throw new ArgumentOutOfRangeException(nameof(commandedThrottle));
 
         int selected = SelectedEngineCount;
-        double floored = ApplyThrottleFloor(commandedThrottle);
+        double floored = ApplyThrottleFloor(effectiveCommandedThrottle);
         int selectedHealthy = 0;
         for (int i = 0; i < _engineStates.Count; i++)
         {
@@ -136,8 +138,7 @@ public class Part
             if (operational) selectedHealthy++;
             double command = selectedForCommand ? floored : 0.0;
             state.CommandedThrottle = command;
-            if (!ApplyScheduledFailure(state, dt))
-                AdvanceEngineState(state, command, dt);
+            AdvanceEngineState(state, command, dt);
             AdvanceChamberPressure(state, dt);
             AdvanceGimbal(state, i, selectedForCommand, dt);
             AdvanceEngineThermalState(state, dt);
@@ -146,6 +147,8 @@ public class Part
         RefreshAggregateThrottle();
     }
 
+    // Legacy test-only hook retained so historical asymmetric-thrust fixtures can
+    // still be replayed; no gameplay or automatic runtime path calls this method.
     public bool FailEngine(string instanceId, string failureCode)
     {
         var engine = _engineStates.FirstOrDefault(
@@ -158,20 +161,19 @@ public class Part
         engine.FailureCode = string.IsNullOrWhiteSpace(failureCode)
             ? "INJECTED_FAILURE"
             : failureCode;
-        _scheduledFailures.RemoveAll(injection =>
-            string.Equals(
-                injection.EngineInstanceId,
-                instanceId,
-                StringComparison.Ordinal));
         RefreshAggregateThrottle();
         return true;
     }
 
-    public void FailAllEngines(string failureCode)
+    public void MarkFuelDepleted()
     {
+        FuelDepleted = true;
         foreach (var engine in _engineStates)
-            FailEngine(engine.InstanceId, failureCode);
-        RefreshAggregateThrottle();
+        {
+            engine.CommandedThrottle = 0.0;
+            engine.ActualThrottle = 0.0;
+            engine.ChamberPressureFraction = 0.0;
+        }
     }
 
     /// <summary>
@@ -210,15 +212,15 @@ public class Part
             throw new ArgumentException(
                 $"Unknown engine instance '{injection.EngineInstanceId}'.",
                 nameof(injection));
-        _scheduledFailures.Add(injection);
+        // Failure injection was removed from gameplay. Keep the method as a
+        // save/test compatibility shim, but never enqueue a state transition.
     }
 
     public void RestoreScheduledEngineFailures(
         IEnumerable<EngineFailureInjection> injections)
     {
-        _scheduledFailures.Clear();
-        foreach (var injection in injections)
-            ScheduleEngineFailure(injection);
+        // Ignore schedules from older saves; they are no longer part of the
+        // propulsion model.
     }
 
     public void RestoreEngineStates(IEnumerable<EngineInstanceState> states)
@@ -228,7 +230,9 @@ public class Part
         foreach (var target in _engineStates)
         {
             if (!restored.TryGetValue(target.InstanceId, out var source)) continue;
-            target.State = source.State;
+            target.State = source.State == EngineLifecycleState.Failed
+                ? EngineLifecycleState.Off
+                : source.State;
             target.StateElapsedSeconds = source.StateElapsedSeconds;
             target.CommandedThrottle = source.CommandedThrottle;
             target.ActualThrottle = source.ActualThrottle;
@@ -238,7 +242,7 @@ public class Part
             target.TemperatureK = source.TemperatureK;
             target.StartAttempts = source.StartAttempts;
             target.StartsCompleted = source.StartsCompleted;
-            target.FailureCode = source.FailureCode;
+            target.FailureCode = null;
         }
     }
 
@@ -267,46 +271,11 @@ public class Part
         }
     }
 
-    private bool ApplyScheduledFailure(EngineInstanceState state, double dt)
-    {
-        int activeAttempt = state.State is
-            EngineLifecycleState.Chill or EngineLifecycleState.SpinPrime
-            ? state.StartAttempts + 1
-            : state.StartAttempts;
-        for (int index = 0; index < _scheduledFailures.Count; index++)
-        {
-            var injection = _scheduledFailures[index];
-            if (!string.Equals(
-                    injection.EngineInstanceId,
-                    state.InstanceId,
-                    StringComparison.Ordinal)
-                || injection.TriggerState != state.State
-                || injection.TriggerStartAttempt != 0
-                    && injection.TriggerStartAttempt != activeAttempt
-                || state.StateElapsedSeconds + dt
-                    < injection.TriggerAfterStateSeconds)
-                continue;
-
-            string failureCode = injection.FailureCode;
-            _scheduledFailures.RemoveAt(index);
-            return FailEngine(state.InstanceId, failureCode);
-        }
-
-        return false;
-    }
-
     private void AdvanceEngineThermalState(
         EngineInstanceState state,
         double dt)
     {
         var model = ResolveEngineModel(state);
-        if (model != null
-            && state.State != EngineLifecycleState.Failed
-            && state.TemperatureK > model.MaximumSafeTemperatureK)
-        {
-            FailEngine(state.InstanceId, "ENGINE_OVERTEMPERATURE");
-            return;
-        }
         double chamber = state.ChamberPressureFraction;
         double target = model != null
             ? 290.0 + (model.NominalOperatingTemperatureK - 290.0) * chamber
@@ -318,10 +287,6 @@ public class Part
             : chamber > 1e-3 ? 1.0 / 1.5 : 4.0;
         double alpha = 1.0 - System.Math.Exp(-dt / timeConstant);
         state.TemperatureK += (target - state.TemperatureK) * alpha;
-        if (model != null
-            && state.State != EngineLifecycleState.Failed
-            && state.TemperatureK > model.MaximumSafeTemperatureK)
-            FailEngine(state.InstanceId, "ENGINE_OVERTEMPERATURE");
     }
 
     public double GetEngineFeedLimitKgS(int engineIndex)
@@ -351,7 +316,7 @@ public class Part
         EngineInstanceState state,
         double ambientPressure)
     {
-        double effectiveThrottle = state.State == EngineLifecycleState.Failed
+        double effectiveThrottle = FuelDepleted || state.State == EngineLifecycleState.Failed
             ? 0.0
             : state.ChamberPressureFraction;
         if (ResolveEngineModel(state) is { } model)
@@ -370,7 +335,7 @@ public class Part
 
     private void AdvanceChamberPressure(EngineInstanceState state, double dt)
     {
-        double target = state.State == EngineLifecycleState.Failed
+        double target = FuelDepleted || state.State == EngineLifecycleState.Failed
             ? 0.0
             : state.ActualThrottle;
         double seconds = target >= state.ChamberPressureFraction
@@ -461,12 +426,6 @@ public class Part
         double command,
         double dt)
     {
-        if (state.State == EngineLifecycleState.Failed)
-        {
-            state.ActualThrottle = 0.0;
-            return;
-        }
-
         state.StateElapsedSeconds += dt;
         if (command <= 1e-3
             && state.State is not (
@@ -480,16 +439,7 @@ public class Part
             case EngineLifecycleState.Off:
                 state.ActualThrottle = 0.0;
                 if (command > 1e-3)
-                {
-                    int permittedStarts = ResolveEngineModel(state) is { } model
-                        ? model.RestartLimit + 1
-                        : int.MaxValue;
-                    if (state.StartsCompleted >= permittedStarts)
-                        FailEngine(
-                            state.InstanceId, "RESTART_LIMIT_EXCEEDED");
-                    else
-                        Transition(state, EngineLifecycleState.Chill);
-                }
+                    Transition(state, EngineLifecycleState.Chill);
                 break;
             case EngineLifecycleState.Chill:
                 if (state.StateElapsedSeconds >= Definition.EngineChillSeconds)
@@ -620,6 +570,7 @@ public class Part
     // ── Inicializar recursos al máximo de capacidad ───────────────────────
     public void ResetResources()
     {
+        FuelDepleted   = false;
         LiquidFuel     = Definition.FuelCapacityLF;
         Oxidizer       = Definition.FuelCapacityOx;
         SolidFuel      = Definition.FuelCapacitySolid;
@@ -690,7 +641,7 @@ public class Part
     public double GetMassFlow(double ambientPressure = 0.0)
     {
         if (Definition.Category != PartCategory.Engine
-            || IsBroken || !IsStagingActive)
+            || IsBroken || !IsStagingActive || FuelDepleted)
             return 0.0;
         if (HasEngineRuntime)
         {
@@ -715,6 +666,7 @@ public class Part
     /// </summary>
     public double GetThrustMagnitude(double ambientPressure = 0.0)
     {
+        if (FuelDepleted) return 0.0;
         if (!HasEngineRuntime)
             return GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
 

@@ -121,7 +121,7 @@ public sealed class EngineRuntimeTests
     }
 
     [Fact]
-    public void SaveV2_RoundTripPreservesEngineFailureAndTransientState()
+    public void SaveV2_NormalizesLegacyEngineFailureAndPreservesTransientState()
     {
         var catalog = LoadCatalog();
         var vessel = new Vessel("engine-save-vessel");
@@ -146,8 +146,8 @@ public sealed class EngineRuntimeTests
         var restored = Assert.Single(restoredUniverse.Vessels).Parts.Root!;
         Assert.Equal(9, restored.EngineStates.Count);
         var failed = Assert.Single(restored.EngineStates, e => e.InstanceId == failedId);
-        Assert.Equal(EngineLifecycleState.Failed, failed.State);
-        Assert.Equal("PUMP_FAILURE", failed.FailureCode);
+        Assert.Equal(EngineLifecycleState.Off, failed.State);
+        Assert.Null(failed.FailureCode);
         Assert.Contains(restored.EngineStates,
             e => e.State is EngineLifecycleState.Ramp or EngineLifecycleState.Running);
         Assert.Contains(restored.EngineStates,

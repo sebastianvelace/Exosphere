@@ -83,7 +83,7 @@ public sealed class AdvancedEnginePhysicsTests
     }
 
     [Fact]
-    public void FeedBranchLimit_FailsOnlyTheRestrictedEngine()
+    public void FeedBranchLimit_DoesNotCreateAnEngineFailure()
     {
         var definition = LoadCatalog()["merlin1d_cluster9_block5"];
         var source = definition.ResolvedEngineCluster!;
@@ -115,10 +115,8 @@ public sealed class AdvancedEnginePhysicsTests
 
         graph.ConsumePropellant(0.02, SeaLevelPressure);
 
-        var failed = Assert.Single(engine.EngineStates,
-            state => state.FailureCode == "FEED_BRANCH_FLOW_LIMIT");
-        Assert.Equal(engine.EngineStates[4].InstanceId, failed.InstanceId);
-        Assert.Equal(8, engine.EngineStates.Count(
+        Assert.All(engine.EngineStates, state => Assert.Null(state.FailureCode));
+        Assert.Equal(9, engine.EngineStates.Count(
             state => state.State == EngineLifecycleState.Running));
     }
 
@@ -142,12 +140,12 @@ public sealed class AdvancedEnginePhysicsTests
 
         graph.ConsumePropellant(dt, SeaLevelPressure);
 
-        Assert.Equal(1, engine.EngineStates.Count(
+        Assert.Equal(9, engine.EngineStates.Count(
             state => state.State == EngineLifecycleState.Running));
-        Assert.Equal(8, engine.EngineStates.Count(
-            state => state.FailureCode == "PROPELLANT_STARVATION"));
+        Assert.True(engine.FuelDepleted);
+        Assert.All(engine.EngineStates, state => Assert.Null(state.FailureCode));
         double consumed = before - graph.TotalLiquidFuel - graph.TotalOxidizer;
-        Assert.Equal(oneEngineFlow * dt, consumed, 8);
+        Assert.Equal(fuel + oxidizer, consumed, 8);
         Assert.All(graph.Parts, part =>
         {
             Assert.True(part.LiquidFuel >= -1e-9);

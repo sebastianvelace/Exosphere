@@ -12,7 +12,7 @@ public sealed class EngineReliabilityTests
     private static readonly DirectoryInfo Root = FindRepoRoot();
 
     [Fact]
-    public void MerlinFirstStage_RejectsASecondCompletedStart()
+    public void MerlinFirstStage_AllowsASecondCommandWithoutFailure()
     {
         var engine = CreateEngine("merlin1d_cluster9_block5", "restart-merlin");
         RunToState(engine, EngineLifecycleState.Running, 1.0);
@@ -24,13 +24,13 @@ public sealed class EngineReliabilityTests
         {
             Assert.Equal(1, state.StartAttempts);
             Assert.Equal(1, state.StartsCompleted);
-            Assert.Equal(EngineLifecycleState.Failed, state.State);
-            Assert.Equal("RESTART_LIMIT_EXCEEDED", state.FailureCode);
+            Assert.NotEqual(EngineLifecycleState.Failed, state.State);
+            Assert.Null(state.FailureCode);
         });
     }
 
     [Fact]
-    public void MerlinVacuum_AllowsFourRestartsThenRejectsTheFifth()
+    public void MerlinVacuum_AllowsRepeatedRestartsWithoutFailure()
     {
         var engine = CreateEngine("merlin1d_vac_block5", "restart-mvac");
 
@@ -46,12 +46,12 @@ public sealed class EngineReliabilityTests
         var state = Assert.Single(engine.EngineStates);
         Assert.Equal(5, state.StartAttempts);
         Assert.Equal(5, state.StartsCompleted);
-        Assert.Equal(EngineLifecycleState.Failed, state.State);
-        Assert.Equal("RESTART_LIMIT_EXCEEDED", state.FailureCode);
+        Assert.NotEqual(EngineLifecycleState.Failed, state.State);
+        Assert.Null(state.FailureCode);
     }
 
     [Fact]
-    public void ScheduledIgnitionFault_FailsOnlyItsStableEngineInstance()
+    public void ScheduledIgnitionFault_IsIgnoredByTheRuntime()
     {
         var engine = CreateEngine("merlin1d_cluster9_block5", "fault-octaweb");
         string targetId = engine.EngineStates[3].InstanceId;
@@ -67,20 +67,19 @@ public sealed class EngineReliabilityTests
         for (int i = 0; i < 150; i++)
             engine.AdvanceEngineRuntime(1.0, 0.02);
 
-        var failed = Assert.Single(
-            engine.EngineStates,
-            state => state.State == EngineLifecycleState.Failed);
-        Assert.Equal(targetId, failed.InstanceId);
-        Assert.Equal(1, failed.StartAttempts);
-        Assert.Equal(0, failed.StartsCompleted);
-        Assert.Equal("IGNITER_NO_LIGHT", failed.FailureCode);
-        Assert.Equal(8, engine.EngineStates.Count(
+        Assert.Contains(engine.EngineStates, state => state.InstanceId == targetId);
+        Assert.All(engine.EngineStates, state =>
+        {
+            Assert.NotEqual(EngineLifecycleState.Failed, state.State);
+            Assert.Null(state.FailureCode);
+        });
+        Assert.Equal(9, engine.EngineStates.Count(
             state => state.State == EngineLifecycleState.Running));
         Assert.Empty(engine.ScheduledEngineFailures);
     }
 
     [Fact]
-    public void OvertemperatureTripsBeforeTheEngineCanContinueRunning()
+    public void OvertemperatureDoesNotCreateAnEngineFailure()
     {
         var engine = CreateEngine("merlin1d_vac_block5", "hot-mvac");
         var state = Assert.Single(engine.EngineStates);
@@ -89,8 +88,8 @@ public sealed class EngineReliabilityTests
 
         engine.AdvanceEngineRuntime(1.0, 0.02);
 
-        Assert.Equal(EngineLifecycleState.Failed, state.State);
-        Assert.Equal("ENGINE_OVERTEMPERATURE", state.FailureCode);
+        Assert.NotEqual(EngineLifecycleState.Failed, state.State);
+        Assert.Null(state.FailureCode);
         Assert.Equal(0.0, state.ChamberPressureFraction);
     }
 
@@ -124,18 +123,18 @@ public sealed class EngineReliabilityTests
             catalog);
         var restored = Assert.Single(restoredUniverse.Vessels).Parts.Root!;
 
-        Assert.Single(restored.ScheduledEngineFailures);
+        Assert.Empty(restored.ScheduledEngineFailures);
         for (int i = 0; i < 10; i++)
             restored.AdvanceEngineRuntime(0.0, 0.02);
 
         var restoredState = Assert.Single(restored.EngineStates);
-        Assert.Equal(EngineLifecycleState.Failed, restoredState.State);
-        Assert.Equal("SHUTDOWN_VALVE_STUCK", restoredState.FailureCode);
+        Assert.NotEqual(EngineLifecycleState.Failed, restoredState.State);
+        Assert.Null(restoredState.FailureCode);
         Assert.Empty(restored.ScheduledEngineFailures);
     }
 
     [Fact]
-    public void TestStandReportsInjectedFailureAndFailsAcceptance()
+    public void TestStandIgnoresLegacyFailureInjection()
     {
         var definition = LoadCatalog()["merlin1d_cluster9_block5"];
         var profile = EngineTestProfile.Merlin1DAcceptance();
@@ -151,11 +150,10 @@ public sealed class EngineReliabilityTests
 
         var report = EngineTestStand.Run(definition, profile, 0.02);
 
-        Assert.False(report.Passed);
-        Assert.Contains("TEST_IGNITION_FAILURE", report.FailureCodes);
-        Assert.Contains(report.Telemetry,
-            row => row.Phase == EngineTestPhase.Failed
-                   && row.FailureCode == "TEST_IGNITION_FAILURE");
+        Assert.True(report.Passed);
+        Assert.Empty(report.FailureCodes);
+        Assert.DoesNotContain(report.Telemetry,
+            row => row.Phase == EngineTestPhase.Failed);
     }
 
     private static Part CreateEngine(string definitionId, string instanceId) =>

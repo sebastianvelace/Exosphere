@@ -463,14 +463,6 @@ public class Vessel
         out EngineTelemetrySummary summary) =>
         Parts.FillEngineReadouts(GetAmbientPressure(body), destination, out summary);
 
-    public bool InjectEngineFailure(string engineInstanceId, string failureCode)
-    {
-        foreach (var part in Parts.Parts.Where(p => p.HasEngineRuntime))
-            if (part.FailEngine(engineInstanceId, failureCode))
-                return true;
-        return false;
-    }
-
     /// <summary>Δv (m/s) of the current stage as loaded, at the current effective Isp.</summary>
     public double GetCurrentStageDeltaV(CelestialBody? body) =>
         Parts.GetCurrentStageDeltaV(GetAmbientPressure(body));
