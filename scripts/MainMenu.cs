@@ -7,7 +7,7 @@ using Godot;
 
 public partial class MainMenu : Control
 {
-    private VBoxContainer _navigation = null!;
+    private GridContainer _navigation = null!;
     private PanelContainer _dossier = null!;
     private MarginContainer _bodyMargin = null!;
     private VBoxContainer _primaryColumn = null!;
@@ -130,6 +130,15 @@ public partial class MainMenu : Control
         brand.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         row.AddChild(brand);
 
+        var systemStatus = new Label
+        {
+            Text = "FLIGHT SYSTEM  /  NOMINAL",
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        InterfaceTheme.ApplyMono(systemStatus, 10);
+        systemStatus.AddThemeColorOverride("font_color", InterfaceTheme.Success);
+        row.AddChild(systemStatus);
+
         var language = new Button
         {
             Text = UserInterfaceSettings.Language == InterfaceLanguage.English ? "ES" : "EN",
@@ -198,8 +207,13 @@ public partial class MainMenu : Control
         _bodySubtitle.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         _primaryColumn.AddChild(_bodySubtitle);
 
-        _navigation = new VBoxContainer();
-        _navigation.AddThemeConstantOverride("separation", 7);
+        _navigation = new GridContainer
+        {
+            Name = "MissionNavigation",
+            Columns = 2,
+        };
+        _navigation.AddThemeConstantOverride("h_separation", 10);
+        _navigation.AddThemeConstantOverride("v_separation", 10);
         _primaryColumn.AddChild(_navigation);
 
         string[] saves = SaveSystem.ListSaveSlots();
@@ -231,14 +245,15 @@ public partial class MainMenu : Control
     {
         var button = new Button
         {
-            Text = text,
+            Text = $"{_navigation.GetChildCount() + 1:00}  //  {text}",
             Alignment = HorizontalAlignment.Left,
             Disabled = disabled,
             TooltipText = tooltip,
             FocusMode = FocusModeEnum.All,
         };
         InterfaceTheme.StyleDossierButton(button, primary);
-        button.CustomMinimumSize = new Vector2(360, 43);
+        button.AddThemeFontSizeOverride("font_size", 12);
+        button.CustomMinimumSize = new Vector2(198, 52);
         button.AddThemeConstantOverride("outline_size", 0);
         button.Pressed += action;
         _navigation.AddChild(button);
@@ -256,16 +271,30 @@ public partial class MainMenu : Control
         };
         var style = InterfaceTheme.GlassPanel(0.88f, 0, 28, 25);
         style.BorderColor = new Color(InterfaceTheme.Orbital, 0.34f);
+        style.BorderWidthTop = 2;
         panel.AddThemeStyleboxOverride("panel", style);
 
         var content = new VBoxContainer();
         content.AddThemeConstantOverride("separation", 15);
         panel.AddChild(content);
 
-        var label = new Label { Text = UiText.Get("mission") };
+        var statusRow = new HBoxContainer();
+        statusRow.AddThemeConstantOverride("separation", 8);
+
+        var label = new Label
+        {
+            Text = UiText.Get("mission"),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
         InterfaceTheme.ApplyMono(label, 10);
         label.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
-        content.AddChild(label);
+        statusRow.AddChild(label);
+
+        var nominal = new Label { Text = "● NOMINAL" };
+        InterfaceTheme.ApplyMono(nominal, 10);
+        nominal.AddThemeColorOverride("font_color", InterfaceTheme.Success);
+        statusRow.AddChild(nominal);
+        content.AddChild(statusRow);
 
         var mission = new Label { Text = UiText.Get("dossier_vehicle_title") };
         InterfaceTheme.ApplyDisplay(mission, 30);
@@ -696,13 +725,14 @@ public partial class MainMenu : Control
         _bodyMargin.OffsetRight = narrow ? -54 : -70;
         _bodyMargin.OffsetBottom = compact ? -50 : -74;
         _primaryColumn.AddThemeConstantOverride("separation", compact ? 8 : 16);
-        _navigation.AddThemeConstantOverride("separation", compact ? 4 : 7);
+        _navigation.AddThemeConstantOverride("h_separation", compact ? 7 : 10);
+        _navigation.AddThemeConstantOverride("v_separation", compact ? 7 : 10);
         _bodyTitle.AddThemeFontSizeOverride("font_size", compact ? 46 : 55);
         _bodySubtitle.CustomMinimumSize = new Vector2(390, compact ? 40 : 54);
         foreach (Node child in _navigation.GetChildren())
         {
             if (child is Button button)
-                button.CustomMinimumSize = new Vector2(360, compact ? 36 : 43);
+                button.CustomMinimumSize = new Vector2(198, compact ? 42 : 52);
         }
     }
 

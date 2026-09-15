@@ -9,7 +9,11 @@ text="$ROOT/scripts/UI/UserInterfaceSettings.cs"
 
 rg -q 'float effectiveHeight = Size\.Y' "$menu" \
   || fail "menu has no height-aware responsive branch"
-rg -q 'button\.CustomMinimumSize = new Vector2\(360, compact \? 36 : 43\)' "$menu" \
+rg -q 'private GridContainer _navigation' "$menu" \
+  || fail "menu navigation is not using the mission module grid"
+rg -q 'Columns = 2' "$menu" \
+  || fail "mission module grid does not declare two columns"
+rg -q 'button\.CustomMinimumSize = new Vector2\(198, compact \? 42 : 52\)' "$menu" \
   || fail "compact navigation does not preserve a bounded hit target"
 rg -q '_dossier\.Visible = !narrow' "$menu" \
   || fail "narrow layout does not remove the secondary dossier"
