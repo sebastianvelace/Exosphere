@@ -69,7 +69,7 @@ Options:
   --launch      Capture ignition and early vertical liftoff, then exit.
   --launch-track Capture launch, tower-clear and 1 km using the production camera.
   --ship        Capture standalone Starship in vacuum at full/half thrust and shutdown.
-  --starbase-far Capture the mapped Starbase far-field terrain at 12, 20 and 40 km.
+  --starbase-far Capture the mapped Starbase terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
   --saturn      Jump to Saturn and capture the imported ring texture.

@@ -144,7 +144,7 @@ public partial class AutopilotController : Node
         // Once the first ignition command is accepted, do not cut throttle and let the
         // engine lifecycle re-enter Chill/SpinPrime on every small attitude oscillation.
         // A burn is a single committed event; guidance continues correcting attitude while
-        // the planned ΔV is delivered, and the engine failure policy remains authoritative.
+        // the planned ΔV is delivered, and the propulsion runtime policy remains authoritative.
         _burnCommandCommitted = true;
         vessel.Throttle = 1.0;
 

@@ -58,9 +58,11 @@ Every capture logs the actual rendering method; requested/actual mismatch is an 
 ## Remaining fidelity limits and next work
 
 Status update 2026-09-14: the first 10 km now uses a geographically aligned USDA NAIP
-orthophoto plus a normalized USGS 3DEP broad-relief raster. OSM civil geometry remains
-anchored to the same Starbase datum, and the regional material feathers into the existing
-planetary ground before the large-scale Starbase handoff. See
+orthophoto plus a normalized USGS 3DEP broad-relief raster, and a filtered 50 km NAIP /
+3DEP macro layer now bridges the mid-altitude pullback. OSM civil geometry remains
+anchored to the same Starbase datum, and the two observed terrain layers feather into the
+existing planetary ground before the large-scale Starbase handoff. The 2–40 km runtime
+matrix no longer shows the isolated realistic square; see
 `docs/audits/LOCAL_TERRAIN_REALISM_2026-09-14.md` for the implementation and evidence.
 
 The regional ground is a baked presentation asset, not a collision mesh or a complete
@@ -68,9 +70,10 @@ high-resolution reconstruction. The pad still retains visibly procedural tanks/b
 and discrete deluge billboards. Forward+ produced a paler image in the software-rendered
 comparison; additional rendering features alone do not establish improved realism.
 
-Next priority: fine reference matching, broader high-resolution terrain coverage and
-target-GPU frame-time/memory measurements. Keep camera and physical flight identical
-between comparisons; avoid hiding remaining detail limits with stronger haze.
+Next priority: fine reference matching, target-GPU frame-time/memory measurements and
+separate correction of the pre-existing tangent-patch horizon band. Keep camera and
+physical flight identical between comparisons; avoid hiding remaining detail limits with
+stronger haze.
 
 Offscreen scene reflections are not supplied by SSR, and transparent ground overlays
 do not share all opaque screen-space effects. Software Vulkan/OpenGL captures establish
