@@ -2562,15 +2562,20 @@ public partial class _PlaytestShot : Node
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
         bridge.SetTimeScale(0.0);
 
-        // Keep the physical case at its requested altitude, but aim the camera at the
-        // launch site so each matrix member tests the same regional-ground composition.
-        CameraController.Instance?.SetExternalChaseFrame(
-            0f, 28f, 500f, -(float)(shot.AltitudeM / 2.8));
+        // Keep the physical case at its requested altitude. Below the handoff,
+        // aim at the launch site for the mapped context; at 20–40 km, track the
+        // vessel from its real altitude so CameraAltOverEarth exercises the
+        // production globe handoff instead of staying near the ground.
+        float lookAtY = shot.AltitudeM >= 20_000.0
+            ? 0f
+            : -(float)(shot.AltitudeM / 2.8);
+        CameraController.Instance?.SetExternalChaseFrame(0f, 28f, 500f, lookAtY);
         if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
             hud.Visible = false;
         _log.WriteLine($"STARBASE_FAR_SETUP slug={shot.Slug} site={bridge.LaunchSiteId} " +
             $"targetAlt={shot.AltitudeM:F0} cameraDistanceRender=500 " +
-            "cameraPitchDeg=28 lookAt=ground timeScale=0 source=public_site_frame");
+            $"cameraPitchDeg=28 lookAt={(shot.AltitudeM >= 20_000.0 ? "vessel" : "ground")} " +
+            "timeScale=0 source=public_site_frame");
         _log.Flush();
         _readyFrames = 0;
     }
@@ -3979,7 +3984,12 @@ verify_pngs() {
           echo "ERROR: missing Starbase far-field milestone PNG: exo_play_${slug}.png" >&2
           return 1
         fi
-        if ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} source=OSM\+EarthGround visible=True .*contextOpacity=[01]\.[0-9]+" "$LOG"; then
+        if [[ "$slug" == "starbase_far_20km" || "$slug" == "starbase_far_40km" ]]; then
+          if ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*earthGlobeAlpha=1\.000 .*groundVisible=False" "$LOG"; then
+            echo "ERROR: ${slug} did not prove the scaled Earth handoff" >&2
+            return 1
+          fi
+        elif ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} source=OSM\+EarthGround visible=True .*contextOpacity=[01]\.[0-9]+" "$LOG"; then
           echo "ERROR: ${slug} did not prove mapped regional-context visibility" >&2
           return 1
         fi
@@ -3989,6 +3999,8 @@ verify_pngs() {
             return 1
           fi
           local expected_pad="True"
+        elif [[ "$slug" == "starbase_far_20km" || "$slug" == "starbase_far_40km" ]]; then
+          local expected_pad="False"
         else
           if ! grep -Eq "^VISUAL_STARBASE_FAR slug=${slug} .*heroVisible=False" "$LOG"; then
             echo "ERROR: ${slug} did not retire the hero pad" >&2
@@ -3996,7 +4008,7 @@ verify_pngs() {
           fi
           local expected_pad="False"
         fi
-        if ! awk -v slug="$slug" -v hero="$expected_pad" '
+        if [[ "$slug" != "starbase_far_20km" && "$slug" != "starbase_far_40km" ]] && ! awk -v slug="$slug" -v hero="$expected_pad" '
           $1 == "VISUAL_STARBASE_MATERIALS" && $2 == "slug=" slug {
             for (i=3; i<=NF; i++) {
               split($i, kv, "="); values[kv[1]]=kv[2]+0
@@ -4013,7 +4025,12 @@ verify_pngs() {
           echo "ERROR: ${slug} material alpha or visible structures disagree with the LOD contract" >&2
           return 1
         fi
-        if ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*padVisible=${expected_pad} .*farFieldVisible=True .*farFieldOpacity=[01]\.[0-9]+" "$LOG"; then
+        if [[ "$slug" == "starbase_far_20km" || "$slug" == "starbase_far_40km" ]]; then
+          if ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*earthGlobeAlpha=1\.000 .*groundVisible=False .*padVisible=False .*farFieldVisible=False" "$LOG"; then
+            echo "ERROR: compositor telemetry did not prove the ${slug} scaled-Earth handoff" >&2
+            return 1
+          fi
+        elif ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*padVisible=${expected_pad} .*farFieldVisible=True .*farFieldOpacity=[01]\.[0-9]+" "$LOG"; then
           echo "ERROR: compositor telemetry did not prove the ${slug} hero/far-field handoff" >&2
           return 1
         fi
@@ -4021,8 +4038,9 @@ verify_pngs() {
           echo "ERROR: ${slug} did not prove the source-derived 3DEP terrain tile" >&2
           return 1
         fi
-        if ! grep -Eq "^VISUAL_STARBASE_PROJECTION slug=${slug} inFrustum=True " "$LOG" \
-          || ! awk -v slug="$slug" '
+        if [[ "$slug" != "starbase_far_40km" && "$slug" != "starbase_far_20km" ]]; then
+          if ! grep -Eq "^VISUAL_STARBASE_PROJECTION slug=${slug} inFrustum=True " "$LOG" \
+            || ! awk -v slug="$slug" '
             $1 == "VISUAL_STARBASE_STRUCTURES" && $2 == "slug=" slug {
               for (i = 1; i <= NF; i++) {
                 if ($i ~ /^projectedCorners=/) { split($i, p, "="); corners = p[2] + 0 }
@@ -4032,9 +4050,10 @@ verify_pngs() {
               found = 1
             }
             END { exit !(found && corners >= 8 && width >= 4 && height >= 8) }
-          ' "$LOG"; then
-          echo "ERROR: ${slug} did not project readable mapped structures" >&2
-          return 1
+            ' "$LOG"; then
+            echo "ERROR: ${slug} did not project readable mapped structures" >&2
+            return 1
+          fi
         fi
         if ! awk -v slug="$slug" '
           $1 == "CAPTURE" && $2 == slug {

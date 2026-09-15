@@ -139,6 +139,13 @@ if ! rg -q -- '--starbase-far' "$HARNESS_SCRIPT" \
 fi
 echo "PASS Starbase 2–40 km transition fixture is wired into the harness"
 
+if ! rg -q 'float lookAtY = shot\.AltitudeM >= 20_000\.0' "$HARNESS_SCRIPT" \
+  || ! rg -q 'earthGlobeAlpha=1\\.000 .*groundVisible=False .*padVisible=False .*farFieldVisible=False' "$HARNESS_SCRIPT"; then
+  echo "FAIL high-altitude Starbase fixture does not prove the single-globe handoff" >&2
+  exit 1
+fi
+echo "PASS high-altitude Starbase fixture tracks camera altitude and proves globe ownership"
+
 if ! rg -q 'FarContextMat' "$ROOT/scripts/StarbaseFarField.cs" \
   || ! rg -q 'kind switch' "$ROOT/scripts/StarbaseFarField.cs" \
   || ! rg -q 'new BoxMesh \{ Size = new Vector3\(lengthM \* U, 0\.025f \* U, 2\.2f \* U\) \}' "$ROOT/scripts/StarbaseFarField.cs"; then

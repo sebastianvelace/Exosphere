@@ -42,7 +42,7 @@ if rg -A 20 'private void CollectCivilGroundMeshes' "$earth" | rg -q 'Starbase3D
   fail "hero 3DEP was added to FadeCivilGroundBox; that fade is apron/OLM only"
 fi
 
-has 'EarthVisualHandoffLowM = 40_000.0' "$origin" "Earth visual handoff low altitude changed"
-has 'EarthVisualHandoffHighM = 75_000.0' "$origin" "Earth visual handoff high altitude changed"
+has 'EarthVisualHandoffLowM = 12_000.0' "$origin" "Earth visual handoff low altitude changed"
+has 'EarthVisualHandoffHighM = 18_000.0' "$origin" "Earth visual handoff high altitude changed"
 
 echo "starbase_3dep_relief_contract_test: PASS (hero 3DEP shares far-field vertex-color rim, not wetland Mat)"
