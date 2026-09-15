@@ -386,7 +386,12 @@ public partial class LaunchPadController
             {
                 float edgeX = Mathf.Abs(column - halfColumns) / Mathf.Max(halfColumns, 1f);
                 float edgeZ = Mathf.Abs(row - halfRows) / Mathf.Max(halfRows, 1f);
-                float edge = 1f - FarSmoothstep(DepReliefRimStart, 1.0f, Mathf.Max(edgeX, edgeZ));
+                // The source grid is rectangular, but its presentation footprint must be
+                // circular. A max-component distance preserves a square silhouette in
+                // pulled-back chase views; radial distance gives the relief a continuous edge
+                // before it hands back to EarthGround.
+                float radialEdge = Mathf.Sqrt(edgeX * edgeX + edgeZ * edgeZ);
+                float edge = 1f - FarSmoothstep(DepReliefRimStart, 1.0f, radialEdge);
                 float elevation = values[row][column].GetSingle();
                 float tone = Mathf.Clamp((elevation + 0.85f) / 1.70f, 0f, 1f);
                 return new Color(
