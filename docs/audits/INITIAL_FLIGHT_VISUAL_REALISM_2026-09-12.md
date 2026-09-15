@@ -70,10 +70,12 @@ high-resolution reconstruction. The pad still retains visibly procedural tanks/b
 and discrete deluge billboards. Forward+ produced a paler image in the software-rendered
 comparison; additional rendering features alone do not establish improved realism.
 
-Next priority: fine reference matching, target-GPU frame-time/memory measurements and
-separate correction of the pre-existing tangent-patch horizon band. Keep camera and
-physical flight identical between comparisons; avoid hiding remaining detail limits with
-stronger haze.
+The 2026-09-14 follow-up closes the previously documented tangent-patch handoff issue:
+the globe handoff now completes at 18 km, before the pulled-back 20 km view, and the
+corrected camera fixture proves a single planetary surface at 20 and 40 km. Remaining
+priority is fine reference matching and target-GPU frame-time/memory measurement. Keep
+camera and physical flight identical between comparisons; avoid hiding remaining detail
+limits with stronger haze.
 
 Offscreen scene reflections are not supplied by SSR, and transparent ground overlays
 do not share all opaque screen-space effects. Software Vulkan/OpenGL captures establish

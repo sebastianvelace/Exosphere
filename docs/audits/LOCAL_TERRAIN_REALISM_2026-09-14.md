@@ -66,12 +66,19 @@ Real framebuffer evidence used the production camera with the Compatibility rend
 | `starbase-far` | 2, 5, 8, 12, 20 and 40 km | `STARBASE_FAR_OK`; no isolated regional square or internal diagonal ocean seam |
 
 The 2–8 km frames retain visible roads, marsh, beach and Gulf water while the launch
-complex remains anchored in the scene. At 12–40 km the macro material preserves the
-same mapped coast and lagoon context across the frame while the detailed regional layer
-retires. The isolated realistic square is gone. A dark horizontal horizon band remains
-in those far frames; the tangent-ground compositor now keeps that limb in a bounded deep
-blue instead of exposing a black slot as the air column thins. It is still part of the
-large-scale atmosphere/ground fade, not the removed NAIP provider seam.
+complex remains anchored in the scene. The 12 km frame is the last local Starbase context
+view. The scaled Earth handoff then completes at 18 km, before the 20 km pulled-back
+camera can expose the tangent patch as a foreground band; both 20 and 40 km use one
+continuous planetary surface. The isolated realistic square and the 20–40 km horizon
+band are therefore absent from the final handoff frames. A bounded deep-blue limb remains
+in the low local 2–12 km horizon, where it belongs to the atmosphere/ground transition,
+not to a provider mask or raster boundary.
+
+The follow-up handoff run used the corrected high-altitude camera fixture so the camera
+altitude matched each 20/40 km target instead of remaining near 716 m. Its compositor
+telemetry recorded `earthGlobeAlpha=1.000`, `groundVisible=False`, `padVisible=False`
+and `farFieldVisible=False` at both scaled-Earth cases. The six PNGs are retained in
+`/tmp/exo_handoff_narrow_valid/`; the 1280×720 `--verify-only` gate passed.
 
 ## Data provenance and limits
 

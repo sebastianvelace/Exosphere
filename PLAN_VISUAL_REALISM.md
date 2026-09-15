@@ -256,7 +256,7 @@ Mejoras:
 - Evitar bloom/exposicion que lave el acero o la UI.
 - [x] Tierra visual V4.1 (rama `visual/earth-pad-ascent`): parche local y globo scaled-space
   anclados al elipsoide vivo (`CelestialBody.GetSurfacePoint` / radio geocentrico local),
-  no a `centre + R_mean`. Handoff pad→globo complementario (`EarthVisualHandoff` 18–42 km)
+  no a `centre + R_mean`. Handoff pad→globo complementario (`EarthVisualHandoff` 12–18 km)
   para que no haya doble Tierra ni hueco. Cielo geometria con `GetGeodeticUp` y
   `ground_fill_strength` que apaga el suelo toy-blue del sky cuando el mesh toma el disco.
   Limbo orbital: haze Rayleigh + borde cian/ozono Chappuis, oceanos un poco mas oscuros;
@@ -271,7 +271,8 @@ Mejoras:
   apagadas de dia. Pluma/deluge: agente hermano. Hero USGS 3DEP comparte el rim
   vertex-color del far-field (smoothstep 0.62→1.0, peak alpha 0.08) y se funde
   con OSM land-cover entre 1–8 km, para leerse como terreno y no como un
-  cuadrado de humedal opaco. El globo scaled-space sigue en 40–75 km.
+  cuadrado de humedal opaco. El globo scaled-space completa el handoff a 18 km, antes de
+  que la vista pulled-back de 20 km pueda exponer el parche tangencial como una banda.
 
 Aceptacion:
 - Pad, orbita y reentry se distinguen por luz/color sin filtros exagerados.

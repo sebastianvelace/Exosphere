@@ -101,7 +101,12 @@ NASA balloon photography from ~30 km over Chesapeake `[verified]` NTRS 197100204
 
 **What the frame shows:** Same **square land** in a grey-blue void. Huge **overexposed sun glow**. Thick white haze. Sky not darkening.
 
-**Cause in repo `[synthesis]`:** 19 km sits **inside** `FloatingOrigin.EarthVisualHandoffLowM … HighM` = **18–42 km**. Local patch `fade = 1 - EarthGlobeAlpha` is already dropping while the scaled globe is not yet a full disc in this look-down. Result: a fading square of procedural land, blown solar bloom, no continuous Earth. This is the documented handoff, failing the play camera.
+**Historical cause in repo `[synthesis]`:** 19 km sat **inside** the former
+`FloatingOrigin.EarthVisualHandoffLowM … HighM` = **18–42 km**. The local patch was
+already dropping while the scaled globe was not yet a full disc in this look-down. Result:
+a fading square of procedural land, blown solar bloom, no continuous Earth. Resolved on
+2026-09-14 by completing the current handoff at 18 km; the corrected 20 km framebuffer
+uses the scaled Earth alone.
 
 At ~20 km a real nadir (balloon nested series, same NTRS report, frames from 30.5 km down to 9 km) still shows **geography and haze**, not a tile. Sky at 19 km is still **blue**, not white; you are only above ~90% of the mass of the atmosphere, not out of Rayleigh.
 
@@ -163,7 +168,7 @@ Do **environment and exposure first**. A correct plume on a white sky still look
 | --- | --- | --- | --- |
 | E1 | **Stop the 700 m square from being the only ground.** Either hide/shrink the civil `Ground` box after ~1 km AGL, or make it **receive** the same fade as the tangent patch. | `LaunchPadController.BuildConcretePad` (`Ground` `BoxMesh` 700 m) | Frames C–D **are** that box. |
 | E2 | **Do not alpha-kill the tangent patch into the sky.** `ALPHA = fade * (1.0 - edge)` plus aggressive `haze_color` mix is how a 450 km mesh becomes invisible. Keep the patch **opaque** to the geometric horizon; haze in **RGB**, not alpha. | `assets/shaders/earth_ground.gdshader` driven by `EarthGroundController` (`horizon_dist = sqrt(2 R h)`) | Frames A, C. V4.1 skirt never reaches the play camera. |
-| E3 | **Handoff 18–42 km must not reveal a cookie.** At 19 km nadir, local fade and globe alpha currently leave a square. Need overlap that still looks like **continuous Earth** (globe already covering the patch footprint, or patch that does not have a square silhouette). | `FloatingOrigin.EarthGlobeAlpha` (18–42 km) + `PlanetMaterials` / `earth_surface.gdshader` + `EarthGroundController` fade | Frame D. |
+| E3 | **Closed 2026-09-14:** the handoff completes at 18 km, before the pulled-back 20 km view, so the opaque tangent patch cannot overlap the scaled globe as a cookie. | `FloatingOrigin.EarthGlobeAlpha` (12–18 km) + `EarthGroundController` fade | 20 km real framebuffer in `/tmp/exo_handoff_narrow_valid/`. |
 | E4 | **Starbase geography, not a 1 km island.** Reconstruct **east=Gulf, west=flats/SH 4, south=Mexico barrier, north=laguna** at tens of km. Procedural marsh in `earth_ground.gdshader` (`site_core` 80–1400 m, `coastal_belt` to 48 km) is the right *idea* and the wrong *read* in the captures. | `earth_ground.gdshader` (`reconstructed_water`, `gulf`, `lagoon`) + launch-site lat/lon already in the Boca Chica profile (`docs/audits/STARBASE_RECONSTRUCTION_V1.md`: 25.9972°N, 97.1566°W) | Frames A–D. **Not** an 8K Texas photogrammetry project. |
 | E5 | **Limb at 50–80 km: cyan line, no sawtooth, no white clip.** Lower sky energy at altitude; MSAA / disc coverage / premultiplied limb; keep Chappuis/cyan as a **thin** band. | `SkyController` (observer altitude → `space_sky.gdshader`) + `earth_surface.gdshader` (`limb_strength`, `atmosphere_limb`) + tonemap (`PhaseLightingController` keeps Filmic) | Frame E. |
 
@@ -225,7 +230,8 @@ Capture with real framebuffer (`xvfb-run`, not `--headless`). Same play camera f
 
 - Show **continuous** coast/water at tens of km (R5, R7).
 - Keep a **blue** sky; stars still **invisible** (R10).
-- Survive the 18–42 km handoff without a hole or a cookie (`FloatingOrigin`).
+- Survive the 12–18 km handoff without a hole or a cookie (`FloatingOrigin`); use the
+  scaled Earth alone from 20 km upward.
 
 ### ~58 km limb (`Ap` tens to >100 km, looking to horizon)
 
