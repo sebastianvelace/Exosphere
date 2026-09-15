@@ -30,6 +30,15 @@ uniform float regional_extent_m = 10000.0;
 uniform float regional_height_min_m = -2.0;
 uniform float regional_height_max_m = 12.0;
 uniform float regional_height_reference_m = 0.96;
+// Lower-frequency NAIP/3DEP context prevents the 10 km measured layer from
+// reading as a lone square during the 10–40 km ascent transition.
+uniform sampler2D macro_ortho_tex : source_color, filter_linear_mipmap;
+uniform sampler2D macro_mask_tex : hint_default_black, filter_linear;
+uniform sampler2D macro_height_tex : hint_default_black, filter_linear;
+uniform float macro_extent_m = 50000.0;
+uniform float macro_height_min_m = -2.0;
+uniform float macro_height_max_m = 12.0;
+uniform float macro_height_reference_m = 0.96;
 uniform vec3  sub_p       = vec3(0.0, 1.0, 0.0);  // sub-vessel point on the unit sphere (texture space)
 uniform vec3  east_local  = vec3(1.0, 0.0, 0.0);  // patch +X (east)  in texture space
 uniform vec3  north_local = vec3(0.0, 0.0, 1.0);  // patch +Z (north) in texture space
@@ -114,16 +123,45 @@ float regional_validity(vec2 uv) {
 		* smoothstep(0.08, 0.42, texture(regional_mask_tex, uv).r);
 }
 
+vec2 macro_uv(vec2 patch_m) {
+	return vec2(0.5 + patch_m.x / macro_extent_m,
+		0.5 - patch_m.y / macro_extent_m);
+}
+
+float macro_edge_weight(vec2 uv) {
+	vec2 distance_from_center = abs(uv - vec2(0.5)) * 2.0;
+	float edge = max(distance_from_center.x, distance_from_center.y);
+	return 1.0 - smoothstep(0.84, 1.0, edge);
+}
+
+float macro_validity(vec2 uv) {
+	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+		return 0.0;
+	return macro_edge_weight(uv)
+		* smoothstep(0.08, 0.42, texture(macro_mask_tex, uv).r);
+}
+
 void vertex() {
 	vec2 patch_m = VERTEX.xz * metres_per_unit;
 	vec2 regional = regional_uv(patch_m);
 	float regional_weight = regional_validity(regional);
+	vec2 macro = macro_uv(patch_m);
+	float macro_weight = macro_validity(macro);
+	float terrain_offset = 0.0;
+	if (macro_weight > 0.0) {
+		float encoded_height = textureLod(macro_height_tex, macro, 0.0).r;
+		float terrain_height = mix(macro_height_min_m, macro_height_max_m, encoded_height);
+		terrain_offset = (terrain_height - macro_height_reference_m)
+			/ metres_per_unit * macro_weight;
+	}
 	if (regional_weight > 0.0) {
 		float encoded_height = textureLod(regional_height_tex, regional, 0.0).r;
 		float terrain_height = mix(regional_height_min_m, regional_height_max_m, encoded_height);
-		VERTEX.y += (terrain_height - regional_height_reference_m)
-			/ metres_per_unit * regional_weight;
+		float regional_offset = (terrain_height - regional_height_reference_m)
+			/ metres_per_unit;
+		terrain_offset = mix(terrain_offset, regional_offset, regional_weight);
 	}
+	VERTEX.y += terrain_offset;
 	v_world_pos    = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	v_world_tangent_e = normalize((MODEL_MATRIX * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
@@ -149,6 +187,11 @@ void fragment() {
 	vec2 regional_uv_value = regional_uv(v_patch);
 	float regional_weight = regional_validity(regional_uv_value);
 	vec3 regional_surface = texture(regional_ortho_tex, regional_uv_value).rgb;
+	vec2 macro_uv_value = macro_uv(v_patch);
+	float macro_weight = macro_validity(macro_uv_value);
+	vec3 macro_surface = texture(macro_ortho_tex, macro_uv_value).rgb;
+	float macro_luma = dot(macro_surface, vec3(0.299, 0.587, 0.114));
+	macro_surface = mix(vec3(macro_luma), macro_surface, 0.82) * 0.90;
 	// NAIP is observed daylight reflectance. Desaturate it slightly before the
 	// same solar/earthshine model used by the fallback, retaining roads, lagoons,
 	// dunes and pad geometry without baking a second artificial geography layer.
@@ -239,6 +282,7 @@ void fragment() {
 	// the existing procedural/geographic fallback. This prevents the 10 km
 	// raster from reading as a rectangular cookie while keeping coverage gaps
 	// transparent through the provider mask.
+	surface = mix(surface, macro_surface, macro_weight);
 	surface = mix(surface, regional_surface, regional_weight);
 
 	// A small normal perturbation makes the multi-scale breakup respond to the

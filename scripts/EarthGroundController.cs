@@ -29,6 +29,7 @@ public partial class EarthGroundController : Node3D
     public float LocalPatchOpacity { get; private set; }
     public bool LocalPatchVisible => Visible && LocalPatchOpacity > 0.001f;
     public bool RegionalTerrainReady { get; private set; }
+    public bool MacroTerrainReady { get; private set; }
 
     // ── Render scale ─────────────────────────────────────────────────────────
     private const float  MetresPerUnit = 2.8f;
@@ -68,10 +69,15 @@ public partial class EarthGroundController : Node3D
     private const float NightCityGain = 0.34f;
     private const float TerminatorWidth = 0.16f;
     private const float HorizonHazeStrength = 0.92f;
+    // The sky controller deliberately darkens its horizon colour as the air column
+    // thins. The tangent ground still needs a faint blue atmospheric limb there;
+    // otherwise its geometric rim becomes a black horizontal slot at 20–40 km.
+    private static readonly Color EarthHorizonFloor = new(0.18f, 0.28f, 0.46f);
     private const float RegionalTerrainExtentM = 10_000f;
     private const float RegionalHeightMinM = -2.0f;
     private const float RegionalHeightMaxM = 12.0f;
     private const float RegionalHeightReferenceM = 0.96f;
+    private const float MacroTerrainExtentM = 50_000f;
 
     private MeshInstance3D  _mesh = null!;
     private ShaderMaterial  _mat  = null!;
@@ -128,8 +134,23 @@ public partial class EarthGroundController : Node3D
                 _mat.SetShaderParameter("regional_height_max_m", RegionalHeightMaxM);
                 _mat.SetShaderParameter("regional_height_reference_m", RegionalHeightReferenceM);
             }
-            GD.Print($"[EARTH_GROUND_TERRAIN] source=NAIP+3DEP ready={RegionalTerrainReady} "
-                + $"extentM={RegionalTerrainExtentM:F0} heightRangeM={RegionalHeightMinM:F1}..{RegionalHeightMaxM:F1}");
+            var macroOrtho = GD.Load<Texture2D>("res://assets/textures/starbase_naip_50km.jpg");
+            var macroMask = GD.Load<Texture2D>("res://assets/textures/starbase_naip_50km_mask.png");
+            var macroHeight = GD.Load<Texture2D>("res://assets/textures/starbase_3dep_50km_height.png");
+            MacroTerrainReady = macroOrtho != null && macroMask != null && macroHeight != null;
+            if (macroOrtho != null && macroMask != null && macroHeight != null)
+            {
+                _mat.SetShaderParameter("macro_ortho_tex", macroOrtho);
+                _mat.SetShaderParameter("macro_mask_tex", macroMask);
+                _mat.SetShaderParameter("macro_height_tex", macroHeight);
+                _mat.SetShaderParameter("macro_extent_m", MacroTerrainExtentM);
+                _mat.SetShaderParameter("macro_height_min_m", RegionalHeightMinM);
+                _mat.SetShaderParameter("macro_height_max_m", RegionalHeightMaxM);
+                _mat.SetShaderParameter("macro_height_reference_m", RegionalHeightReferenceM);
+            }
+            GD.Print($"[EARTH_GROUND_TERRAIN] source=NAIP+3DEP+macro ready={RegionalTerrainReady && MacroTerrainReady} "
+                + $"regional={RegionalTerrainExtentM:F0}m macro={MacroTerrainExtentM:F0}m "
+                + $"heightRangeM={RegionalHeightMinM:F1}..{RegionalHeightMaxM:F1}");
             _mesh.SetSurfaceOverrideMaterial(0, _mat);
         }
         else
@@ -228,6 +249,14 @@ public partial class EarthGroundController : Node3D
         if (_mat != null)
         {
             var hazeColor = SkyController.CurrentHorizonColor;
+            if (earth.Id == "earth")
+            {
+                hazeColor = new Color(
+                    Mathf.Max(hazeColor.R, EarthHorizonFloor.R),
+                    Mathf.Max(hazeColor.G, EarthHorizonFloor.G),
+                    Mathf.Max(hazeColor.B, EarthHorizonFloor.B),
+                    hazeColor.A);
+            }
             if (!_groundShaderStateInitialized || FloatDiffers(_lastFade, fade))
             {
                 _mat.SetShaderParameter("fade", fade);
