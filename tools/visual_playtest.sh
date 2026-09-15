@@ -2053,7 +2053,7 @@ public partial class _PlaytestShot : Node
                 Finish("REENTRY_COMPARE_START_FAILED");
                 return;
             }
-            bridge.SetTimeScale(3.0); // verification speed only; the HUD button starts at x1
+            bridge.SetWarpIndex(2); // verification speed only; production EDL clamps this to x1
             _reentrySeeded = true;
             _reentryScenarioStart = universe.CurrentTime;
             _log.WriteLine($"ACTION seeded {(bellyFirst ? "nominal belly-flop" : "forced broadside bad-attitude")} " +
@@ -2069,6 +2069,12 @@ public partial class _PlaytestShot : Node
             Finish("REENTRY_COMPARE_NO_VESSEL");
             return;
         }
+        bool edlGuidanceActive = mission?.Phase is MissionPhase.ENTRY
+            or MissionPhase.PEAK_HEATING
+            or MissionPhase.AERO_DESCENT
+            or MissionPhase.RETRO_BURN
+            or MissionPhase.FINAL_DESCENT;
+        bridge.SetWarpIndex(edlGuidanceActive ? 0 : 2);
         double simElapsed = universe.CurrentTime - _reentryScenarioStart;
 
         // Never gates on a frame count. The primary gate is MissionPhase.PEAK_HEATING (the
@@ -2134,11 +2140,21 @@ public partial class _PlaytestShot : Node
         MissionManager? mission, double simElapsed, string trigger)
     {
         Vector3d up = (vessel.Position - body.Position).Normalized;
+        Vector3d flow = vessel.GetSurfaceVelocity(body);
+        Vector3d flowLocal = flow.Magnitude > 1e-6
+            ? vessel.Orientation.Inverse().Rotate(flow.Normalized)
+            : Vector3d.Zero;
+        double shield = ThermalModel.WindwardFactor(flowLocal);
+        Vector3d longAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+        double alpha = flow.Magnitude > 1e-6
+            ? System.Math.Acos(System.Math.Clamp(longAxis.Dot(flow.Normalized), -1.0, 1.0))
+            : 0.0;
         double upright = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up);
         double maxT = vessel.Parts.Parts.Count > 0 ? vessel.Parts.Parts.Max(p => p.Temperature) : 0.0;
         double heatRatio = vessel.Parts.Parts.Count > 0 ? vessel.Parts.Parts.Max(p => p.ThermalRatio) : 0.0;
         _log.WriteLine($"REENTRY_COMPARE slug={slug} trigger={trigger} t={simElapsed:F1} " +
             $"phase={mission?.Phase} upright={upright:F4} maxT={maxT:F0} heatRatio={heatRatio:F3} " +
+            $"shield={shield:F4} alphaDeg={alpha * 180.0 / Math.PI:F1} " +
             $"omega={vessel.AngularVelocity.Magnitude:F4}");
         _log.Flush();
     }
@@ -4276,6 +4292,19 @@ verify_pngs() {
         return 1
       fi
     done
+    if ! awk '
+      /^REENTRY_COMPARE slug=reentry_nominal / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^shield=/) { split($i, p, "="); shield = p[2] + 0 }
+          if ($i ~ /^alphaDeg=/) { split($i, p, "="); alpha = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && shield >= 0.85 && shield <= 1.0 && alpha >= 60.0 && alpha <= 80.0) }
+    ' "$LOG"; then
+      echo "ERROR: nominal reentry lost the controlled broadside target (shield/alpha evidence invalid)" >&2
+      return 1
+    fi
     # Two independent Godot launches (nominal, bad-attitude) share this one $LOG file, so a
     # successful compare shows exactly one REENTRY_VARIANT_OK finish per launch.
     local ok_count

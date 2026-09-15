@@ -57,6 +57,7 @@ require_pattern scripts/AutopilotController.cs 'PeriapsisRadius <= _targetPeriap
 require_pattern scripts/ManeuverPlanner.cs 'DefaultDeorbitTargetPeAltitudeM = 60_000.0' 'player deorbit preset has a deep atmospheric target'
 require_pattern scripts/ManeuverPlanner.cs 'TargetPeriapsisRadius' 'deorbit planner exposes its bounded target'
 require_pattern ExosphereSimulation/Physics/AerodynamicsModel.cs 'ComputeLiftDownEntryAxis' 'catch approach uses inward aerodynamic lift'
+require_pattern scripts/SimulationBridge.cs 'or MissionPhase.ENTRY' 'EDL clamps time warp for attitude cadence'
 require_pattern scripts/EDLController.cs 'aeroPhase && vDown > 5.0 && _alt <= flipAlt' 'normal EDL flip gate is explicit'
 require_pattern scripts/EDLController.cs 'RatedClusterThrust(engineCluster, vessel.GetAmbientPressure(body))' 'EDL flip timing uses nominal thrust before ignition'
 require_pattern scripts/EDLController.cs 'engineCluster.Definition.ThrustVac' 'EDL has a legacy thrust fallback for staged runtime hydration'
