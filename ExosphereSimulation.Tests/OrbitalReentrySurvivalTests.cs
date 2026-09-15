@@ -2,9 +2,11 @@ namespace ExosphereSimulation.Tests;
 
 using System.IO;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Physics;
 
 /// <summary>
 /// RF-07 acceptance, at full orbital energy — the case the Godot playtest harness cannot
@@ -134,6 +136,66 @@ public sealed class OrbitalReentrySurvivalTests
         Assert.True(tail.PeakStructure > belly.PeakStructure + 800.0,
             $"attitude must dominate the outcome (belly {belly.PeakStructure:F0} K vs tail {tail.PeakStructure:F0} K)");
         Assert.True(tail.Damage > belly.Damage);
+    }
+
+    [Fact]
+    public void PhysicalFlapLoopMaintainsWindwardBellyThroughEntry()
+    {
+        var universe = Universe.LoadFromDataDirectory(Path.Combine(RepoRoot(), "data"));
+        var earth = universe.GetBody("earth")!;
+        var vessel = BuildStarship();
+        var up = Vector3d.Right;
+        var flightPath = (Vector3d.Forward * 0.995 - up * 0.10).Normalized;
+        vessel.Position = earth.Position + up * (earth.Radius + EntryAltitude);
+        vessel.Velocity = earth.Velocity + flightPath * EntrySpeed;
+        vessel.SASEnabled = false;
+        universe.AddVessel(vessel);
+        universe.ActiveVessel = vessel;
+
+        double minimumWindward = 1.0;
+        double maximumAngleOfAttack = 0.0;
+        var initialFlow = vessel.GetSurfaceVelocity(earth).Normalized;
+        var initialAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, initialFlow);
+        vessel.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
+            initialAxis, initialFlow);
+        Vector3d filteredAxis = initialAxis;
+        Vector3d filteredFlow = initialFlow;
+        const double controlDt = 0.02;
+        for (int i = 0; i < 4_000; i++)
+        {
+            var currentUp = (vessel.Position - earth.Position).Normalized;
+            var surfaceVelocity = vessel.GetSurfaceVelocity(earth);
+            var flow = surfaceVelocity.Normalized;
+            var targetAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(currentUp, flow);
+            filteredAxis = filteredAxis.MagnitudeSquared < 1e-12
+                ? targetAxis
+                : AttitudeGuidance.SmoothDirection(filteredAxis, targetAxis, Dt, 0.35);
+            filteredFlow = filteredFlow.MagnitudeSquared < 1e-12
+                ? flow
+                : AttitudeGuidance.SmoothDirection(filteredFlow, flow, Dt, 0.35);
+            var targetAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
+                filteredAxis, filteredFlow);
+            vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
+                vessel.Orientation, targetAttitude, vessel.AngularVelocity,
+                proportionalGain: 2.6, dampingGain: 1.2, allowRoll: true);
+
+            universe.Tick(controlDt);
+
+            var flowLocal = vessel.Orientation.Inverse().Rotate(
+                vessel.GetSurfaceVelocity(earth).Normalized);
+            minimumWindward = System.Math.Min(
+                minimumWindward, ThermalModel.WindwardFactor(flowLocal));
+            var axis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+            double alignment = System.Math.Clamp(axis.Dot(flow), -1.0, 1.0);
+            maximumAngleOfAttack = System.Math.Max(
+                maximumAngleOfAttack, System.Math.Acos(System.Math.Abs(alignment)));
+        }
+
+        Assert.True(minimumWindward > 0.70,
+            $"physical flap loop lost the windward belly: minimum={minimumWindward:F3} "
+            + $"maxAoA={maximumAngleOfAttack * MathUtils.RAD_TO_DEG:F1}°");
+        Assert.True(maximumAngleOfAttack > 45.0 * MathUtils.DEG_TO_RAD,
+            "entry controller must maintain a real broadside angle of attack");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

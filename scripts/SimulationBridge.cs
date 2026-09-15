@@ -337,11 +337,18 @@ public partial class SimulationBridge : Node
             bool atmosphericZone = refB.Atmosphere != null
                 && av.GetAltitude(refB) <= refB.Atmosphere.MaxAltitude * 1.05;
             var missionPhase = MissionManager.Instance?.Phase;
-            // Real-time only through tower clear — atmospheric ×3 warp made pad liftoff
-            // feel like a snap even with correct TWR.
+            // Real-time only through tower clear and the complete EDL track. EDL guidance is
+            // refreshed once per rendered frame while the solver may execute many fixed
+            // substeps; allowing warp here makes the physical vehicle follow a stale attitude
+            // command for too long and can turn a controlled belly-flop into a dive.
             if (missionPhase is MissionPhase.COUNTDOWN
                 or MissionPhase.IGNITION
-                or MissionPhase.LIFTOFF)
+                or MissionPhase.LIFTOFF
+                or MissionPhase.ENTRY
+                or MissionPhase.PEAK_HEATING
+                or MissionPhase.AERO_DESCENT
+                or MissionPhase.RETRO_BURN
+                or MissionPhase.FINAL_DESCENT)
             {
                 MaxAllowedWarpIndex = 0;
             }
@@ -1389,14 +1396,11 @@ public partial class SimulationBridge : Node
         Vector3d longAxis;
         if (towerCatchCapable)
         {
-            // Exact broadside removes the artificial body-lift vector from this deterministic
-            // tower test while retaining the large drag area and tile-forward presentation.
-            // The normal gameplay entry path continues to use the calibrated 70° lift-up axis.
-            longAxis = up.Cross(velocityDirection);
-            if (longAxis.MagnitudeSquared < 1e-9)
-                longAxis = _launchSite?.GetLocalFrame(earth, Universe.CurrentTime).East
-                    ?? Vector3d.Right;
-            longAxis = longAxis.Normalized;
+            // Keep the deterministic catch demonstration in the same nonzero-alpha regime as
+            // real Starship entry. Exact 90° broadside has zero body lift in the symmetric hull
+            // model, so it offers no aerodynamic trajectory control and invites the static
+            // margin to rotate the nose into the flow before the flap loop can settle.
+            longAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velocityDirection);
         }
         else
         {

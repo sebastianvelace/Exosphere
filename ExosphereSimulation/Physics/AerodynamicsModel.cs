@@ -184,6 +184,28 @@ public static class AerodynamicsModel
             .Normalized;
     }
 
+    /// <summary>
+    /// Restores a filtered entry reference to the requested angle of attack. Filtering the
+    /// flow and longitudinal axis independently can otherwise change their mutual angle and
+    /// silently turn a belly-flop into an axial dive. The reference axis supplies only the
+    /// desired lift side; the returned axis always preserves the aerodynamic alpha.
+    /// </summary>
+    public static Vector3d ConstrainEntryAxisToAngle(
+        Vector3d velocityDirection,
+        Vector3d referenceAxis,
+        double angleOfAttackDegrees = NominalEntryAngleOfAttackDegrees)
+    {
+        var flow = velocityDirection.Normalized;
+        if (flow.MagnitudeSquared < 1e-12)
+            return referenceAxis.Normalized;
+
+        var liftDirection = referenceAxis - flow * referenceAxis.Dot(flow);
+        if (liftDirection.Magnitude < 1e-6)
+            return ComputeLiftUpEntryAxis(Vector3d.Up, flow, angleOfAttackDegrees);
+
+        return ComputeEntryAxisForLift(flow, liftDirection, angleOfAttackDegrees);
+    }
+
     private static Vector3d ComputeEntryAxis(
         Vector3d localUp,
         Vector3d velocityDirection,

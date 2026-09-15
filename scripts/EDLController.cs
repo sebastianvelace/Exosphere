@@ -96,6 +96,14 @@ public partial class EDLController : Control
     private double _flipElapsed;
     private bool _flipGateDiagnosticEmitted;
     private double _attitudeErrorDeg;
+    private Vector3d _filteredAeroAxis;
+    private Vector3d _filteredAeroFlow;
+    private bool _aeroReferenceInitialized;
+
+    // The real vehicle's aerodynamic reference cannot jump with one noisy guidance sample.
+    // This is a reference filter only: the vessel still follows it through physical flap/torque
+    // authority in Vessel.Tick.
+    private const double AeroReferenceTimeConstantSeconds = 0.35;
 
     public override void _Ready()
     {
@@ -548,9 +556,38 @@ public partial class EDLController : Control
         // local -X belly faces the velocity vector. This keeps rendering, heating and drag
         // on the same physical side of the Ship. During the landing burn only the thrust
         // axis matters, so use the shortest rotation.
-        Quaterniond desiredAttitude = _phase is Edl.Entry or Edl.Peak or Edl.Aero
-            ? AerodynamicsModel.ComputeBellyFirstOrientation(aimAxis, velDir)
-            : ShortestArc(Vector3d.Up, aimAxis);
+        bool aeroAttitude = _phase is Edl.Entry or Edl.Peak or Edl.Aero;
+        Quaterniond desiredAttitude;
+        if (aeroAttitude)
+        {
+            double filterDelta = System.Math.Clamp(delta, 0.0, 0.20);
+            if (!_aeroReferenceInitialized)
+            {
+                _filteredAeroAxis = aimAxis.Normalized;
+                _filteredAeroFlow = velDir.Normalized;
+                _aeroReferenceInitialized = true;
+            }
+            else
+            {
+                _filteredAeroAxis = AttitudeGuidance.SmoothDirection(
+                    _filteredAeroAxis, aimAxis, filterDelta, AeroReferenceTimeConstantSeconds);
+                _filteredAeroFlow = AttitudeGuidance.SmoothDirection(
+                    _filteredAeroFlow, velDir, filterDelta, AeroReferenceTimeConstantSeconds);
+            }
+
+            // Independent reference filters can change the mutual angle between the axis and
+            // flow. Rebuild the axis from its filtered lift side so alpha remains the physical
+            // 70° entry target instead of collapsing into a nose-first dive.
+            var constrainedAeroAxis = AerodynamicsModel.ConstrainEntryAxisToAngle(
+                _filteredAeroFlow, _filteredAeroAxis);
+            desiredAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
+                constrainedAeroAxis, _filteredAeroFlow);
+        }
+        else
+        {
+            _aeroReferenceInitialized = false;
+            desiredAttitude = ShortestArc(Vector3d.Up, aimAxis);
+        }
         bool catchAero = vessel.IsAttemptingTowerCatch && vessel.HasCatchPins
             && _phase is Edl.Entry or Edl.Peak or Edl.Aero;
         bool catchDemoAttitude = vessel.IsTowerCatchDemonstration
@@ -808,9 +845,11 @@ public partial class EDLController : Control
             _landingBurnCoast = false;
             _landingBurnRelit = false;
             _landingEngineCount = 0;
+            _aeroReferenceInitialized = false;
             Visible = false;
         }
     }
+
 
     // ── HUD overlay ─────────────────────────────────────────────────────────────
 

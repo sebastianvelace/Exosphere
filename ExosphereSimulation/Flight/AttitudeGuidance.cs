@@ -70,6 +70,33 @@ public static class AttitudeGuidance
             + up * System.Math.Sin(elevationRad)).Normalized;
     }
 
+    /// <summary>
+    /// Smooths a changing unit-direction command with a time-constant response. This is used
+    /// for atmospheric entry references, where the measured velocity/corridor direction may
+    /// move between physics samples but the vehicle cannot rotate instantaneously. It changes
+    /// only the commanded reference; it never changes the physical angular state.
+    /// </summary>
+    public static Vector3d SmoothDirection(
+        Vector3d current,
+        Vector3d target,
+        double deltaSeconds,
+        double timeConstantSeconds)
+    {
+        var desired = target.Normalized;
+        if (desired.MagnitudeSquared < 1e-12)
+            return current.Normalized;
+
+        var previous = current.Normalized;
+        if (previous.MagnitudeSquared < 1e-12 || deltaSeconds <= 0.0
+            || timeConstantSeconds <= 1e-6)
+            return desired;
+
+        double blend = 1.0 - System.Math.Exp(-deltaSeconds / timeConstantSeconds);
+        blend = System.Math.Clamp(blend, 0.0, 1.0);
+        var blended = previous.Lerp(desired, blend);
+        return blended.MagnitudeSquared < 1e-12 ? desired : blended.Normalized;
+    }
+
     public static Vector3d ComputeCommand(
         Quaterniond current,
         Quaterniond desired,

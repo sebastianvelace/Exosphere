@@ -63,6 +63,30 @@ public sealed class AttitudeGuidanceTests
     }
 
     [Fact]
+    public void SmoothDirectionLimitsOnePhysicsSampleReferenceChange()
+    {
+        var smoothed = AttitudeGuidance.SmoothDirection(
+            Vector3d.Right, Vector3d.Up, deltaSeconds: 0.02, timeConstantSeconds: 0.35);
+
+        Assert.True(smoothed.Dot(Vector3d.Right) > 0.99,
+            $"one entry sample must not rotate the reference abruptly: {smoothed}");
+        Assert.True(smoothed.Dot(Vector3d.Up) > 0.0,
+            "the filtered reference must still move toward the new direction");
+    }
+
+    [Fact]
+    public void SmoothDirectionConvergesToAStableEntryReference()
+    {
+        var smoothed = Vector3d.Right;
+        for (int i = 0; i < 200; i++)
+            smoothed = AttitudeGuidance.SmoothDirection(
+                smoothed, Vector3d.Up, deltaSeconds: 0.02, timeConstantSeconds: 0.35);
+
+        Assert.True(smoothed.Dot(Vector3d.Up) > 0.999,
+            $"filtered entry reference failed to converge: {smoothed}");
+    }
+
+    [Fact]
     public void AxisPointingIgnoresRollAndMapsTheShortestYaw()
     {
         var rolled = Quaterniond.FromAxisAngle(Vector3d.Up, 75.0 * MathUtils.DEG_TO_RAD);

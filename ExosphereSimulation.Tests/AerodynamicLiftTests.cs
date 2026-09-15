@@ -118,6 +118,43 @@ public sealed class AerodynamicLiftTests
     }
 
     [Fact]
+    public void VerticalLiftDownEntryStillHasNonzeroAngleOfAttack()
+    {
+        var velocity = -Vector3d.Up;
+        var axis = AerodynamicsModel.ComputeLiftDownEntryAxis(Vector3d.Up, velocity);
+        var attitude = AerodynamicsModel.ComputeBellyFirstOrientation(axis, velocity);
+        var lift = AerodynamicsModel.ComputeLift(
+            Density, velocity * Speed, axis, PartCount);
+
+        Assert.Equal(AerodynamicsModel.NominalEntryAngleOfAttackDegrees,
+            System.Math.Acos(axis.Dot(velocity)) * 180.0 / System.Math.PI, 8);
+        Assert.True(lift.Magnitude > 0.0,
+            "vertical catch-entry fallback must retain a controllable nonzero-alpha lift vector");
+        Assert.Equal(System.Math.Sin(AerodynamicsModel.NominalEntryAngleOfAttackDegrees
+            * MathUtils.DEG_TO_RAD), ThermalModel.WindwardFactor(
+            attitude.Inverse().Rotate(velocity)), 10);
+    }
+
+    [Fact]
+    public void FilteredEntryReferenceRestoresNominalAngleOfAttack()
+    {
+        var flow = -Vector3d.Up;
+        var referenceAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(Vector3d.Up, flow);
+        var filteredFlow = (flow + new Vector3d(0.08, 0.0, 0.03)).Normalized;
+        var filteredAxis = (referenceAxis + new Vector3d(-0.12, 0.0, 0.06)).Normalized;
+
+        var constrained = AerodynamicsModel.ConstrainEntryAxisToAngle(
+            filteredFlow, filteredAxis);
+        var attitude = AerodynamicsModel.ComputeBellyFirstOrientation(constrained, filteredFlow);
+        double alpha = System.Math.Acos(constrained.Dot(filteredFlow)) * MathUtils.RAD_TO_DEG;
+
+        Assert.Equal(AerodynamicsModel.NominalEntryAngleOfAttackDegrees, alpha, 8);
+        Assert.Equal(System.Math.Sin(AerodynamicsModel.NominalEntryAngleOfAttackDegrees
+            * MathUtils.DEG_TO_RAD), ThermalModel.WindwardFactor(
+            attitude.Inverse().Rotate(filteredFlow)), 10);
+    }
+
+    [Fact]
     public void ExplicitEntryLiftAxisPointsLiftTowardGuidanceCorridor()
     {
         var velocity = Vector3d.Right;
