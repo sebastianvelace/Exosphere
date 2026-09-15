@@ -8,6 +8,13 @@ shader="$ROOT/assets/shaders/steel.gdshader"
 tile_shader="$ROOT/assets/shaders/heat_tile.gdshader"
 renderer="$ROOT/scripts/VesselRenderer.cs"
 
+rg -q 'var noseBlack = Mat\(new Color\(0\.001f, 0\.001f, 0\.001f\), 0\.0f, 0\.96f\)' "$renderer" \
+  || fail "Starship nose is not assigned the dedicated opaque black material"
+rg -q 'noseBlack\.Transparency = BaseMaterial3D\.TransparencyEnum\.Disabled' "$renderer" \
+  || fail "Starship nose black material is not explicitly opaque"
+rg -q 'BuildOgiveMesh\(noseLen, OgiveR\), noseBlack' "$renderer" \
+  || fail "Starship ogive does not use the black nose material"
+
 rg -q 'uniform float fill_strength' "$shader" \
   || fail "steel shader has no bounded presentation fill uniform"
 rg -q 'uniform float fill_strength : hint_range\(0\.0, 0\.12\)' "$shader" \

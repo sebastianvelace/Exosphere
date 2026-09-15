@@ -484,16 +484,19 @@ public partial class VesselRenderer : Node3D
         const float noseBase = ShipNoseBase;
         const float noseLen  = ShipNoseH;
         const float noseR    = BodyR;
-        var noseSteel = SteelMat(new Color(0.74f, 0.74f, 0.76f), 0.24f, 0.26f,
-            weldSpacing: 8.0f, weldDepth: 0.0f);
-        _shipSteelMats.Add(noseSteel);
+        // The nose cone is a dark thermal-protection surface in this vehicle
+        // configuration. Keep it in the opaque dielectric path: the previous
+        // steel shader made the cone read white and its highlights suggested
+        // transparency in the high-altitude captures.
+        var noseBlack = Mat(new Color(0.001f, 0.001f, 0.001f), 0.0f, 0.96f);
+        noseBlack.Transparency = BaseMaterial3D.TransparencyEnum.Disabled;
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
         // a fuller, more realistic Starship nose than a simple sqrt curve. Keep
         // the entire shell as one mesh: separate capped frusta at zero-gap
         // interfaces produce the concentric bright discs visible in orbit.
         float OgiveR(float u)                // u in [0,1], 0=base 1=tip
             => (float)VehicleVisualPhysics.TangentOgiveRadius(u, noseR, noseLen);
-        AddMesh("Nose", BuildOgiveMesh(noseLen, OgiveR), noseSteel,
+        AddMesh("Nose", BuildOgiveMesh(noseLen, OgiveR), noseBlack,
             new Vector3(0, o + noseBase, 0));
 
         // Keep the ogive as one authoritative surface at orbital scale. A separate TPS
@@ -502,7 +505,7 @@ public partial class VesselRenderer : Node3D
 
         AddMesh("NoseTip",
             new SphereMesh { Radius = 0.085f, Height = 0.17f,
-                RadialSegments = 24, Rings = 8 }, noseSteel,
+                RadialSegments = 24, Rings = 8 }, noseBlack,
             new Vector3(0, o + noseBase + noseLen - 0.055f, 0));
 
         AddMesh("Skirt",
