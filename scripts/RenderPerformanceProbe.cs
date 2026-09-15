@@ -78,7 +78,10 @@ public partial class RenderPerformanceProbe : Node
 
     private void ApplyAbOverrideIfRequested()
     {
-        if (_abOverrideApplied || string.IsNullOrEmpty(_abOverride))
+        bool visibilityOverride = _abOverride is
+            "hide_pad" or "hide_launch_effects" or "hide_vessel" or "hide_hud"
+            or "hide_starfield" or "hide_earth_ground" or "hide_sky";
+        if ((_abOverrideApplied && !visibilityOverride) || string.IsNullOrEmpty(_abOverride))
         {
             _abOverrideApplied = true;
             return;
@@ -115,8 +118,12 @@ public partial class RenderPerformanceProbe : Node
 
         if (applied)
         {
+            if (!_abOverrideApplied)
+                GD.Print($"PERF_GPU_AB mode={_abOverride} applied=true");
+            // Visibility is owned by dynamic game controllers. Reassert the
+            // diagnostic state each frame so their normal lifecycle cannot
+            // undo an isolation profile after the probe has applied it.
             _abOverrideApplied = true;
-            GD.Print($"PERF_GPU_AB mode={_abOverride} applied=true");
         }
     }
 

@@ -26,6 +26,10 @@ require_text "$PROBE" 'hide_pad' \
   "probe must expose a launch-pad A/B variant"
 require_text "$PROBE" 'hide_sky' \
   "probe must expose an atmosphere-sky A/B variant"
+require_text "$PROBE" 'bool visibilityOverride = _abOverride is' \
+  "probe must identify visibility A/B profiles separately"
+require_text "$PROBE" 'Reassert the' \
+  "visibility A/B profiles must be reasserted after dynamic controllers run"
 require_text "$PROBE" 'sky_quality_low' \
   "probe must expose a low-atmosphere-quality A/B variant"
 require_text "$PROBE" 'earth_day_gain_090' \
