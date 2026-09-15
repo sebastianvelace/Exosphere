@@ -21,7 +21,7 @@ uniform sampler2D night_tex : source_color, filter_linear_mipmap;
 uniform sampler2D cloud_tex : hint_default_white, filter_linear_mipmap;
 
 uniform vec3 vertical_optical_depth = vec3(0.0615, 0.1420, 0.2714);
-uniform float cloud_amount : hint_range(0.0, 1.0) = 0.85;
+uniform float cloud_amount : hint_range(0.0, 1.0) = 0.72;
 // ≈15 m/s zonal wind at Earth's equator: v/(2πR) in texture revolutions/s.
 uniform float cloud_speed  = 0.000000375;
 uniform float night_lights : hint_range(0.0, 4.0) = 2.4;
@@ -112,20 +112,24 @@ void fragment() {
 
 	// FBM detail on cloud mask: breaks up hard edges and adds wispy variation.
 	float cloud_detail = es_fbm(uv * 60.0 + vec2(time_offset * 0.0001, 0.0));
-	float cloud = clamp(cloud_raw + (cloud_detail - 0.5) * 0.3, 0.0, 1.0);
+	// The source map is intentionally broad and smooth. Shape its coverage
+	// before adding detail so low-orbit views read as a continuous cloud deck
+	// instead of isolated opaque blobs with image-like edges.
+	float cloud_signal = cloud_raw + (cloud_detail - 0.5) * 0.22;
+	float cloud = smoothstep(0.18, 0.78, clamp(cloud_signal, 0.0, 1.0));
 
 	// Day / night from the real sun direction.
 	float ndl = dot(N, L);
 	float day = smoothstep(-0.12, 0.20, ndl);
 
 	// Cloud shadow: darken ground beneath thick clouds slightly.
-	float shadow = 1.0 - cloud * 0.25;
+	float shadow = 1.0 - cloud * 0.16;
 	vec3 lit_day = dayCol * shadow;
 
 	// Cloud colour: slight blue-white tint; translucency via smoothstep so thin
 	// clouds (low coverage) remain semi-transparent.
 	vec3 cloud_col = vec3(0.97, 0.97, 1.0);
-	float cloud_alpha = smoothstep(0.1, 0.6, cloud) * cloud_amount * day;
+	float cloud_alpha = smoothstep(0.24, 0.82, cloud) * cloud_amount * day;
 	vec3 surface = mix(lit_day, cloud_col, cloud_alpha);
 
 	// Direct solar beam attenuated through the same RGB vertical optical depth as the sky.

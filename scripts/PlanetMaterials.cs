@@ -41,7 +41,7 @@ public static class PlanetMaterials
         var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
         mat.SetShaderParameter("vertical_optical_depth", new Vector3(
             (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
-        mat.SetShaderParameter("cloud_amount", 0.85f);
+        mat.SetShaderParameter("cloud_amount", 0.72f);
         mat.SetShaderParameter("night_lights", 2.4f);
         mat.SetShaderParameter("day_gain", 1.15f);
         mat.SetShaderParameter("night_floor", 0.12f);
