@@ -118,6 +118,12 @@ public static class InterfaceTheme
         return style;
     }
 
+    public static void AddStateRail(StyleBoxFlat style, Color color, int width = 2)
+    {
+        style.BorderColor = color;
+        style.BorderWidthLeft = width;
+    }
+
     /// <param name="minSize">Defaults to the large main-menu CTA size (238x50). Pass a
     /// smaller size for dense toolbars (e.g. the VAB's action grid) — the touch-friendly
     /// menu size does not fit a dozen-plus actions in a sidebar.</param>
@@ -227,6 +233,13 @@ public static class InterfaceTheme
                 hover: state is "hover" or "focus" or "pressed",
                 pressed: state == "pressed");
             source.SetCornerRadiusAll(0);
+            if (primary || state is "hover" or "focus")
+            {
+                var rail = primary && state == "normal"
+                    ? new Color(Orbital, 0.72f)
+                    : new Color(Orbital, state == "pressed" ? 0.95f : 0.52f);
+                AddStateRail(source, rail, primary ? 3 : 2);
+            }
             button.AddThemeStyleboxOverride(state, source);
         }
     }

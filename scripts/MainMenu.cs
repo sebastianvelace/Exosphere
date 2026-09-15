@@ -170,6 +170,14 @@ public partial class MainMenu : Control
         classification.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
         _primaryColumn.AddChild(classification);
 
+        var rule = new ColorRect
+        {
+            Color = new Color(InterfaceTheme.Orbital, 0.42f),
+            CustomMinimumSize = new Vector2(52, 2),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        _primaryColumn.AddChild(rule);
+
         _bodyTitle = new Label
         {
             Text = UiText.Get("dossier"),
@@ -231,6 +239,7 @@ public partial class MainMenu : Control
         };
         InterfaceTheme.StyleDossierButton(button, primary);
         button.CustomMinimumSize = new Vector2(360, 43);
+        button.AddThemeConstantOverride("outline_size", 0);
         button.Pressed += action;
         _navigation.AddChild(button);
         _firstButton ??= button.Disabled ? null : button;

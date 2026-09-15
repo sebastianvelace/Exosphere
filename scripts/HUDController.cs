@@ -679,7 +679,8 @@ public partial class HUDController : Control
 
     private static PanelContainer MakePanel()
     {
-        var sb = InterfaceTheme.GlassPanel(0.76f, 12, 16, 13);
+        var sb = InterfaceTheme.GlassPanel(0.66f, 8, 15, 12);
+        sb.BorderColor = new Color(InterfaceTheme.EdgeStrong, 0.28f);
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", sb);
         panel.CustomMinimumSize = new Vector2(278, 0);
@@ -691,7 +692,7 @@ public partial class HUDController : Control
     {
         var lbl = new Label { Text = text };
         InterfaceTheme.ApplyMono(lbl, 10);
-        lbl.AddThemeColorOverride("font_color", LabelDim);
+        lbl.AddThemeColorOverride("font_color", new Color(InterfaceTheme.Orbital, 0.82f));
         return lbl;
     }
 
