@@ -116,6 +116,17 @@ public partial class EDLController : Control
     public double AeroAngleOfAttackDegrees => _aeroAngleOfAttackDeg;
     public double AeroWindwardFactor => _aeroWindwardFactor;
     public double AeroAttitudeErrorDegrees => _attitudeErrorDeg;
+    public double AeroReferenceAngleOfAttackDegrees
+    {
+        get
+        {
+            if (!_aeroReferenceInitialized || _filteredAeroFlow.MagnitudeSquared < 1e-12)
+                return 0.0;
+            var axis = _filteredAeroAttitude.Rotate(Vector3d.Up).Normalized;
+            return System.Math.Acos(System.Math.Clamp(
+                axis.Dot(_filteredAeroFlow.Normalized), -1.0, 1.0)) * MathUtils.RAD_TO_DEG;
+        }
+    }
     public Vector3d AeroAttitudeCommand => _aeroAttitudeCommand;
     public Vector3d AeroLiftReference => _aeroLiftReference;
 
@@ -634,11 +645,17 @@ public partial class EDLController : Control
                 _filteredAeroFlow, _filteredAeroAxis);
             var targetAeroAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
                 constrainedAeroAxis, _filteredAeroFlow);
-            _filteredAeroAttitude = AttitudeGuidance.SlewQuaternion(
+            var slewedAeroAttitude = AttitudeGuidance.SlewQuaternion(
                 _filteredAeroAttitude,
                 targetAeroAttitude,
                 filterDelta,
                 AeroReferenceSlewRateRadPerSecond);
+            // Slerp smooths roll and lift-side changes, but its intermediate axis can
+            // temporarily leave the 70-degree entry cone. Re-project that axis before the
+            // command is published; otherwise a corridor correction silently turns the
+            // filtered reference into a nose-first dive even while attitude error is small.
+            _filteredAeroAttitude = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(
+                slewedAeroAttitude, _filteredAeroFlow);
             desiredAttitude = _filteredAeroAttitude;
         }
         else

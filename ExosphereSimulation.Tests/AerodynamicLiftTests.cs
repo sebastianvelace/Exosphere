@@ -155,6 +155,25 @@ public sealed class AerodynamicLiftTests
     }
 
     [Fact]
+    public void SlewedBellyFirstReferenceRestoresNominalAngleOfAttack()
+    {
+        var flow = (Vector3d.Forward - Vector3d.Right * 0.12).Normalized;
+        var entryAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(Vector3d.Up, flow);
+        var target = AerodynamicsModel.ComputeBellyFirstOrientation(entryAxis, flow);
+        var interpolated = Quaterniond.Identity.Slerp(target, 0.45);
+
+        var constrained = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(
+            interpolated, flow);
+        var axis = constrained.Rotate(Vector3d.Up).Normalized;
+
+        Assert.Equal(AerodynamicsModel.NominalEntryAngleOfAttackDegrees,
+            System.Math.Acos(axis.Dot(flow)) * MathUtils.RAD_TO_DEG, 8);
+        Assert.Equal(System.Math.Sin(AerodynamicsModel.NominalEntryAngleOfAttackDegrees
+            * MathUtils.DEG_TO_RAD), ThermalModel.WindwardFactor(
+            constrained.Inverse().Rotate(flow)), 10);
+    }
+
+    [Fact]
     public void ExplicitEntryLiftAxisPointsLiftTowardGuidanceCorridor()
     {
         var velocity = Vector3d.Right;

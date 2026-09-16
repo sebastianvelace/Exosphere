@@ -436,6 +436,29 @@ public static class AerodynamicsModel
         return (qRoll * qAxis).Normalize();
     }
 
+    /// <summary>
+    /// Rebuilds a filtered belly-first attitude while restoring the declared aerodynamic
+    /// angle of attack. Quaternion interpolation is useful for smoothing lift-side changes,
+    /// but an intermediate quaternion is not guaranteed to preserve the angle between the
+    /// longitudinal axis and the flow. Re-project the interpolated axis before rebuilding
+    /// the roll so the thermal shield and body-lift model continue to see the same entry
+    /// condition throughout the filter response.
+    /// </summary>
+    public static Quaterniond ConstrainBellyFirstOrientationToAngle(
+        Quaterniond referenceAttitude,
+        Vector3d velocityDirection,
+        double angleOfAttackDegrees = NominalEntryAngleOfAttackDegrees)
+    {
+        var flow = velocityDirection.Normalized;
+        if (flow.MagnitudeSquared < 1e-12)
+            return referenceAttitude.Normalize();
+
+        var referenceAxis = referenceAttitude.Rotate(Vector3d.Up).Normalized;
+        var constrainedAxis = ConstrainEntryAxisToAngle(
+            flow, referenceAxis, angleOfAttackDegrees);
+        return ComputeBellyFirstOrientation(constrainedAxis, flow);
+    }
+
     private static Quaterniond ShortestArc(Vector3d from, Vector3d to)
     {
         var f = from.Normalized;
