@@ -194,14 +194,16 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
    - Pad costero ya tiene primera pasada visual.
    - Torre Starbase V1.1 agrega rieles de carriage, sheaves, rub rails/rollers
      de chopsticks, cables y cues del Ship QD upper arm.
-   - Siguiente: iluminacion solar, exposicion, sky/atmosfera y camaras para que
-     launch/orbit/reentry/cockpit se lean como escalas reales.
+   - Primera pasada de iluminacion solar, exposicion, sky/atmosfera y camaras ya esta
+     implementada para que launch/orbit/reentry/cockpit se lean como escalas reales.
+     Pendiente: comparacion lado-a-lado contra referencias y ajuste en hardware GPU.
 
 4. **Capturas de aceptacion**
    - Automatizar capturas con framebuffer real para pad, liftoff, Max-Q, staging,
      orbit/map, belly-flop reentry, flip-and-burn, touchdown/crash y cockpit.
-   - `--hotstage` y `--reentry-compare` ya cubren hot-stage overlap y comparacion
-     nominal/mala-actitud de EDL; falta el resto de la matriz de capturas listada arriba.
+   - `--smoke`, `--cockpit`, `--hotstage` y `--reentry-compare` ya tienen gates de
+     framebuffer; la matriz completa aun requiere capturas reproducibles de liftoff,
+     Max-Q, staging, orbita, touchdown/catch y crash.
 
 ## Sistemas Cerrados Que No Se Deben Rehacer Sin Motivo
 
