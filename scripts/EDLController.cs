@@ -436,22 +436,50 @@ public partial class EDLController : Control
                 // track. Project the target corridor into the lift plane and blend it with the
                 // inward/downward bias; the normal aerodynamic integrator remains authoritative.
                 Vector3d targetOffset = catchTargetPosition - vessel.Position;
-                Vector3d targetLift = targetOffset - velDir * targetOffset.Dot(velDir);
+                // Match the vehicle's surface-velocity frame. The cradle velocity is
+                // inertial, while surfVel is relative to the body's local rotation at
+                // the vehicle position. Subtract the cradle's local rotational velocity
+                // before comparing the two; mixing these frames creates a false
+                // cross-range command of several hundred metres per second.
+                Vector3d targetSurfaceVelocity = vessel.CatchTargetVelocityWorld
+                    - body.Velocity
+                    - body.GetSurfaceVelocity(catchTargetPosition);
                 Vector3d bodyDownLift = -(up - velDir * up.Dot(velDir));
-                if (bodyDownLift.Magnitude > 1e-6 && targetLift.Magnitude > 1e-6)
+                if (bodyDownLift.Magnitude > 1e-6)
                 {
-                    double crossRangeMiss = (targetOffset - up * targetOffset.Dot(up)).Magnitude;
-                    // A normal orbital return can enter hundreds of kilometres off the
-                    // instantaneous cradle track after the first lift pass.  At that scale
-                    // the previous 45% cap left too much lift committed to the fixed
-                    // body-down bias, so the trajectory stayed parallel to the wrong
-                    // ground track.  Give the corridor authority only while the error is
-                    // large; taper to the conservative body-down attitude near the site so
-                    // the final aero-to-retro transition remains stable.
-                    double targetWeight = System.Math.Clamp(crossRangeMiss / 200_000.0, 0.15, 0.85);
-                    Vector3d guidedLift = (bodyDownLift.Normalized * (1.0 - targetWeight)
-                        + targetLift.Normalized * targetWeight).Normalized;
-                    aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(velDir, guidedLift);
+                    var prediction = EntryCorridorGuidance.Predict(
+                        targetOffset,
+                        surfVel,
+                        targetSurfaceVelocity,
+                        up,
+                        _alt,
+                        vDown,
+                        g);
+                    if (prediction.LiftDirection.MagnitudeSquared > 1e-12)
+                    {
+                        // Use the projected touchdown error, not the instantaneous error,
+                        // to decide how much authority to spend. This keeps the guidance
+                        // from changing sign exactly as the vehicle crosses the site at
+                        // hypersonic speed.
+                        // Preserve the down-lift bias only inside the local
+                        // corridor. Once the projected miss is beyond that
+                        // margin, all available lift must work laterally; keeping
+                        // a fixed 15% down-lift share makes a large miss
+                        // unrecoverable before the flip.
+                        double targetWeight = System.Math.Clamp(
+                            (prediction.PredictedCrossRangeM - 20_000.0) / 180_000.0,
+                            0.0,
+                            1.0);
+                        Vector3d guidedLift = (
+                            bodyDownLift.Normalized * (1.0 - targetWeight)
+                            + prediction.LiftDirection * targetWeight).Normalized;
+                        aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(
+                            velDir, guidedLift);
+                    }
+                    else
+                    {
+                        aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
+                    }
                 }
                 else
                 {
