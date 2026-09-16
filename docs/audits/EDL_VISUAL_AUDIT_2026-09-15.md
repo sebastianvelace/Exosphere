@@ -12,13 +12,13 @@ checks or interrupted runs as visual acceptance.
 |---|---|---|
 | `--smoke --resolution 1280x720` | `SMOKE_OK` | `/tmp/exo_audit_smoke/exo_play_pad.png` |
 | `--cockpit --resolution 1280x720` | `COCKPIT_OK` | `/tmp/exo_audit_cockpit/exo_play_cockpit.png` |
-| `--edl --resolution 1280x720` | Partial visual milestones | `entry`, `peak_heating`, `retro_burn`, `flip_complete` PNGs in `/tmp/exo_audit_edl_v3/` |
+| `--edl --resolution 1280x720` | Visual milestones through flip | `entry`, `peak_heating`, `retro_burn`, `flip_complete` PNGs in `/tmp/exo_audit_edl_v9/` |
+| `--edl --resolution 640x360` | `CAUGHT` | `/tmp/exo_audit_edl_v10/exo_play_caught.png` and `CHECK tower_catch caught=True pins=2` |
 
-The EDL captures show a stable belly-flop attitude, a controlled low-altitude flip and
-an opaque black nose cone. The final catch contact was not accepted from the interrupted
-llvmpipe runs: the earlier harness warp produced a repeatable hover near 0.8 km, while
-the x1 rerun reached the final approach too slowly for this audit window to provide a
-completed catch gate.
+The EDL captures show a stable belly-flop attitude, a controlled low-altitude flip, an
+opaque black nose cone and a completed two-pin tower catch. The final run keeps the
+production x1 cadence after the flip; the reduced 640x360 framebuffer is a test-runtime
+constraint for llvmpipe, while the physics and gate are unchanged.
 
 ## Implementation delivered
 
@@ -29,10 +29,12 @@ completed catch gate.
   cradle noise into a hover.
 - The EDL harness remains at x1 after flip, matching the production EDL cadence.
 - The full .NET suite passes 782/782 tests and the Godot build passes with zero warnings.
+- The completed run reports `CAUGHT`, two pin contacts, zero relative speed and a settled
+  angular rate, so the contact gate is now accepted.
 
 ## Remaining visual work
 
 The remaining visual track is reference matching: richer entry shock/plasma timing,
 liftoff and Max-Q capture coverage, orbital cloud/terrain comparison at higher altitude,
-and a completed x1 catch/touchdown framebuffer gate on a sustained run. These remain
-separate from the completed menu/HUD redesign and the current pad/cockpit gates.
+and crash/abort capture coverage. These remain separate from the completed menu/HUD
+redesign, pad/cockpit gates and physical EDL catch gate.

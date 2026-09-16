@@ -201,9 +201,10 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
 4. **Capturas de aceptacion**
    - Automatizar capturas con framebuffer real para pad, liftoff, Max-Q, staging,
      orbit/map, belly-flop reentry, flip-and-burn, touchdown/crash y cockpit.
-   - `--smoke`, `--cockpit`, `--hotstage` y `--reentry-compare` ya tienen gates de
-     framebuffer; la matriz completa aun requiere capturas reproducibles de liftoff,
-     Max-Q, staging, orbita, touchdown/catch y crash.
+   - `--smoke`, `--cockpit`, `--hotstage`, `--reentry-compare` y `--edl` ya tienen
+     gates de framebuffer; `--edl` alcanza el catch físico de dos pines a cadencia x1.
+     La matriz completa aun requiere capturas reproducibles de liftoff, Max-Q, staging,
+     orbita y crash/abort.
 
 ## Sistemas Cerrados Que No Se Deben Rehacer Sin Motivo
 
