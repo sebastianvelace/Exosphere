@@ -97,6 +97,30 @@ public static class AttitudeGuidance
         return blended.MagnitudeSquared < 1e-12 ? desired : blended.Normalized;
     }
 
+    /// <summary>
+    /// Moves an attitude reference toward a new target at a bounded angular rate. The
+    /// returned quaternion is only a command reference; the vessel still has to reach it
+    /// through its physical actuators. This prevents a lift-side change from demanding an
+    /// instantaneous roll reversal at atmospheric interface.
+    /// </summary>
+    public static Quaterniond SlewQuaternion(
+        Quaterniond current,
+        Quaterniond target,
+        double deltaSeconds,
+        double maximumRateRadPerSecond)
+    {
+        if (deltaSeconds <= 0.0 || maximumRateRadPerSecond <= 0.0)
+            return current;
+
+        double angle = ErrorAngleRadians(current, target);
+        if (angle < 1e-9)
+            return target.Normalize();
+
+        double fraction = System.Math.Clamp(
+            maximumRateRadPerSecond * deltaSeconds / angle, 0.0, 1.0);
+        return current.Slerp(target, fraction);
+    }
+
     public static Vector3d ComputeCommand(
         Quaterniond current,
         Quaterniond desired,

@@ -2,6 +2,7 @@ namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Physics;
 using Xunit;
 
 public sealed class AttitudeGuidanceTests
@@ -84,6 +85,63 @@ public sealed class AttitudeGuidanceTests
 
         Assert.True(smoothed.Dot(Vector3d.Up) > 0.999,
             $"filtered entry reference failed to converge: {smoothed}");
+    }
+
+    [Fact]
+    public void PreEntryTargetPreservesNominalAlphaAndWindwardBelly()
+    {
+        var flow = (Vector3d.Forward - Vector3d.Right * 0.12).Normalized;
+        var target = EntryAttitudeGuidance.ComputeTarget(
+            Vector3d.Up, flow, liftTowardBody: true);
+        var axis = target.Rotate(Vector3d.Up).Normalized;
+        var flowLocal = target.Inverse().Rotate(flow);
+
+        Assert.Equal(
+            System.Math.Cos(AerodynamicsModel.NominalEntryAngleOfAttackDegrees
+                * MathUtils.DEG_TO_RAD),
+            axis.Dot(flow),
+            10);
+        Assert.Equal(
+            System.Math.Sin(AerodynamicsModel.NominalEntryAngleOfAttackDegrees
+                * MathUtils.DEG_TO_RAD),
+            ThermalModel.WindwardFactor(flowLocal),
+            10);
+    }
+
+    [Fact]
+    public void BellyFirstOrientationCorrectsRollWithoutChangingEntryAlpha()
+    {
+        var flow = (Vector3d.Forward - Vector3d.Right * 0.12).Normalized;
+        var axis = AerodynamicsModel.ComputeLiftDownEntryAxis(Vector3d.Up, flow);
+        var nominal = AerodynamicsModel.ComputeBellyFirstOrientation(axis, flow);
+        var rollError = Quaterniond.FromAxisAngle(axis, 90.0 * MathUtils.DEG_TO_RAD);
+        var current = (rollError * nominal).Normalize();
+        var target = AerodynamicsModel.ComputeBellyFirstOrientation(
+            current.Rotate(Vector3d.Up), flow);
+
+        Assert.Equal(
+            System.Math.Cos(AerodynamicsModel.NominalEntryAngleOfAttackDegrees
+                * MathUtils.DEG_TO_RAD),
+            target.Rotate(Vector3d.Up).Dot(flow),
+            10);
+        Assert.True(ThermalModel.WindwardFactor(
+            target.Inverse().Rotate(flow)) > 0.90);
+    }
+
+    [Fact]
+    public void SlewQuaternionLimitsReferenceRotationPerFrame()
+    {
+        var current = Quaterniond.Identity;
+        var target = Quaterniond.FromAxisAngle(
+            Vector3d.Up, 90.0 * MathUtils.DEG_TO_RAD);
+        var slewed = AttitudeGuidance.SlewQuaternion(
+            current, target, deltaSeconds: 0.02,
+            maximumRateRadPerSecond: 10.0 * MathUtils.DEG_TO_RAD);
+
+        Assert.Equal(0.02, AttitudeGuidance.ErrorAngleRadians(current, slewed)
+            / (10.0 * MathUtils.DEG_TO_RAD), 8);
+        Assert.True(AttitudeGuidance.ErrorAngleRadians(slewed, target)
+            < AttitudeGuidance.ErrorAngleRadians(current, target));
     }
 
     [Fact]

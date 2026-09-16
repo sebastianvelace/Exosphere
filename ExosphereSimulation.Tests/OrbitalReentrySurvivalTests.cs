@@ -198,6 +198,43 @@ public sealed class OrbitalReentrySurvivalTests
             "entry controller must maintain a real broadside angle of attack");
     }
 
+    [Fact]
+    public void RcsCoastCanRotateFromDeorbitRetrogradeToEntryAttitude()
+    {
+        var universe = Universe.LoadFromDataDirectory(Path.Combine(RepoRoot(), "data"));
+        var earth = universe.GetBody("earth")!;
+        var vessel = BuildStarship();
+        var up = Vector3d.Right;
+        var tangent = Vector3d.Forward;
+        vessel.Position = earth.Position + up * (earth.Radius + 1_200_000.0);
+        vessel.Velocity = earth.Velocity + tangent * System.Math.Sqrt(
+            earth.GM / (earth.Radius + 1_200_000.0));
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, -tangent);
+        vessel.SASEnabled = false;
+        universe.AddVessel(vessel);
+        universe.ActiveVessel = vessel;
+
+        for (int i = 0; i < 5_000; i++)
+        {
+            var flow = vessel.GetSurfaceVelocity(earth).Normalized;
+            var target = EntryAttitudeGuidance.ComputeTarget(up, flow, liftTowardBody: true);
+            vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
+                vessel.Orientation, target, vessel.AngularVelocity,
+                proportionalGain: 1.8, dampingGain: 4.0, allowRoll: true);
+            universe.Tick(0.02);
+        }
+
+        var finalFlow = vessel.GetSurfaceVelocity(earth).Normalized;
+        var finalAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+        var flowLocal = vessel.Orientation.Inverse().Rotate(finalFlow);
+        double alpha = System.Math.Acos(System.Math.Clamp(
+            finalAxis.Dot(finalFlow), -1.0, 1.0));
+        Assert.InRange(alpha * MathUtils.RAD_TO_DEG, 60.0, 80.0);
+        Assert.True(ThermalModel.WindwardFactor(flowLocal) > 0.85,
+            $"RCS coast preparation must keep the heat shield windward, got " +
+            $"{ThermalModel.WindwardFactor(flowLocal):F3}");
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private static Vessel BuildStarship()

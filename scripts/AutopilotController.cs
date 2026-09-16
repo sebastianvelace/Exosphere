@@ -5,6 +5,7 @@ using Exosphere.Simulation;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
 
 /// <summary>
 /// Executes a planned maneuver. When armed it waits until the active vessel reaches
@@ -17,6 +18,8 @@ public partial class AutopilotController : Node
 
     public bool IsArmed  { get; private set; }
     public bool IsBurning{ get; private set; }
+    /// <summary>True while the vehicle is being physically prepared for atmospheric entry.</summary>
+    public bool IsPreparingEntryAttitude => _entryAttitudePreparation;
 
     private double _deliveredDv;          // m/s accumulated during the burn
     private double _targetDv;             // m/s snapshot at ignition
@@ -26,6 +29,7 @@ public partial class AutopilotController : Node
     private Vector3d _burnDirectionWorld = Vector3d.Zero;
     private bool   _deorbitBurn;
     private double _targetPeriapsisRadius;
+    private bool   _entryAttitudePreparation;
 
     private const double NodeWindow = 0.10;   // rad: how close to node before igniting
     // A deorbit burn commonly starts 180° away from the current thrust axis. The generic
@@ -52,6 +56,7 @@ public partial class AutopilotController : Node
 
     public void Arm()
     {
+        _entryAttitudePreparation = false;
         if (_planner is { HasNode: true } && _planner.DeltaVMagnitude > 0.01)
         {
             IsArmed = true;
@@ -71,6 +76,7 @@ public partial class AutopilotController : Node
 
     public void Disarm()
     {
+        _entryAttitudePreparation = false;
         if (IsBurning) EndBurn();
         IsArmed = false;
         IsBurning = false;
@@ -78,6 +84,14 @@ public partial class AutopilotController : Node
 
     public override void _Process(double delta)
     {
+        if (_entryAttitudePreparation)
+        {
+            if (!GuidePreEntryAttitude())
+                _entryAttitudePreparation = false;
+            else
+                return;
+        }
+
         if (!IsArmed) return;
 
         var bridge = SimulationBridge.Instance;
@@ -246,6 +260,91 @@ public partial class AutopilotController : Node
         {
             MissionManager.Instance.EnterPhase(MissionPhase.COAST);
         }
+
+        if (wasDeorbit && ShouldPrepareEntry(vessel))
+        {
+            _entryAttitudePreparation = true;
+            vessel.SASEnabled = false;
+            GD.Print("[AUTOPILOT] post-deorbit entry attitude preparation armed");
+        }
+    }
+
+    /// <summary>
+    /// Rotates a Starship into its aerodynamic entry attitude during the coast after a
+    /// deorbit burn. This uses the vessel's normal attitude actuators and never snaps the
+    /// quaternion or changes translational state. EDL takes ownership at atmospheric entry.
+    /// </summary>
+    private bool GuidePreEntryAttitude()
+    {
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        var mission = MissionManager.Instance;
+        if (bridge == null || vessel == null || universe == null || vessel.IsDestroyed)
+            return false;
+
+        var body = universe.GetDominantBody(vessel.Position);
+        if (body?.Atmosphere == null)
+            return false;
+
+        double altitude = vessel.GetAltitude(body);
+        var surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        bool handoff = mission?.Phase is MissionPhase.ENTRY
+            or MissionPhase.PEAK_HEATING
+            or MissionPhase.AERO_DESCENT
+            or MissionPhase.RETRO_BURN
+            or MissionPhase.FINAL_DESCENT
+            or MissionPhase.LANDED
+            or MissionPhase.CAUGHT
+            or MissionPhase.CRASHED
+            || vessel.IsAttemptingTowerCatch
+            || altitude <= body.Atmosphere.MaxAltitude * 1.05;
+        if (handoff)
+        {
+            vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.SASEnabled = false;
+            GD.Print($"[AUTOPILOT] entry attitude handoff alt={altitude:F0} m " +
+                     $"phase={mission?.Phase}");
+            return false;
+        }
+
+        if (surfaceVelocity.Magnitude < 1.0)
+        {
+            vessel.PitchYawRoll = Vector3d.Zero;
+            return true;
+        }
+
+        var up = (vessel.Position - body.Position).Normalized;
+        var flow = surfaceVelocity.Normalized;
+        bool catchReturn = vessel.HasCatchPins
+            && bridge.LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase);
+        var target = EntryAttitudeGuidance.ComputeTarget(up, flow, catchReturn);
+        vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
+            vessel.Orientation,
+            target,
+            vessel.AngularVelocity,
+            proportionalGain: 1.8,
+            dampingGain: 4.0,
+            allowRoll: true);
+        vessel.Throttle = 0.0;
+        vessel.SASEnabled = false;
+        return true;
+    }
+
+    private static bool ShouldPrepareEntry(Vessel vessel)
+    {
+        var bridge = SimulationBridge.Instance;
+        var body = bridge?.Universe?.GetDominantBody(vessel.Position);
+        if (body?.Atmosphere == null || vessel.IsDestroyed)
+            return false;
+
+        bool starship = vessel.Parts.Parts.Any(part =>
+            part.Definition.IsStarshipFamily
+            && part.Definition.HasVehicleRole("command"));
+        bool shipEngines = vessel.Parts.Parts.Any(part =>
+            part.Definition.IsStarshipFamily
+            && part.Definition.HasVehicleRole("ship_engines"));
+        return starship && shipEngines;
     }
 
     private void EndBurn(Vessel? vessel = null)
