@@ -96,6 +96,7 @@ public partial class EDLController : Control
     private bool _flipGateDiagnosticEmitted;
     private double _attitudeErrorDeg;
     private double _aeroAngleOfAttackDeg;
+    private double _aeroCommandedAngleOfAttackDeg;
     private double _aeroWindwardFactor;
     private Vector3d _aeroAttitudeCommand;
     private Vector3d _aeroLiftReference;
@@ -113,6 +114,7 @@ public partial class EDLController : Control
 
     /// <summary>Measured aerodynamic entry diagnostics for the visual harness and HUD QA.</summary>
     public double AeroAngleOfAttackDegrees => _aeroAngleOfAttackDeg;
+    public double AeroCommandedAngleOfAttackDegrees => _aeroCommandedAngleOfAttackDeg;
     public double AeroWindwardFactor => _aeroWindwardFactor;
     public double AeroAttitudeErrorDegrees => _attitudeErrorDeg;
     public double AeroReferenceAngleOfAttackDegrees
@@ -448,11 +450,13 @@ public partial class EDLController : Control
         // Retro/Final: flip so the engines (local +Y thrust) point retrograde.
         Vector3d aimAxis;
         _aeroLiftReference = Vector3d.Zero;
+        _aeroCommandedAngleOfAttackDeg = AerodynamicsModel.NominalEntryAngleOfAttackDegrees;
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero)
         {
-            // Fly a lift-up ~70° AoA instead of exact 90° broadside. Exact broadside has
-            // CL=0 for a symmetric body and degenerates into a steep ballistic entry; this
-            // target retains nearly all projected drag while generating Starship-like L/D.
+            // Fly a lift-up high-drag AoA instead of exact 90° broadside. Exact broadside has
+            // CL=0 for a symmetric body and degenerates into a steep ballistic entry; the
+            // nominal 70° target retains nearly all projected drag while generating
+            // Starship-like L/D. Catch guidance may adjust it inside a bounded corridor.
             if (vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
             {
                 // A catch return needs a bounded cross-range lift bias. A fixed down-lift
@@ -480,44 +484,40 @@ public partial class EDLController : Control
                         _alt,
                         vDown,
                         g);
-                    if (prediction.LiftDirection.MagnitudeSquared > 1e-12)
+                    if (prediction.LiftDirection.MagnitudeSquared > 1e-12
+                        || System.Math.Abs(prediction.PredictedDownrangeM) > 1e-6)
                     {
-                        // Use the projected touchdown error, not the instantaneous error,
-                        // to decide how much authority to spend. This keeps the guidance
-                        // from changing sign exactly as the vehicle crosses the site at
-                        // hypersonic speed.
-                        // Preserve the down-lift bias only inside the local
-                        // corridor. Once the projected miss is beyond that
-                        // margin, all available lift must work laterally; keeping
-                        // a fixed 15% down-lift share makes a large miss
-                        // unrecoverable before the flip.
-                        double targetWeight = System.Math.Clamp(
-                            (prediction.PredictedCrossRangeM - 20_000.0) / 180_000.0,
-                            0.0,
-                            1.0);
-                        Vector3d guidedLift = (
-                            bodyDownLift.Normalized * (1.0 - targetWeight)
-                            + prediction.LiftDirection * targetWeight).Normalized;
+                        // Crossrange chooses the bank side while the predicted downrange
+                        // miss controls flight-path energy. This brakes an already
+                        // overshooting footprint before the vehicle crosses the moving
+                        // cradle at hypersonic speed.
+                        Vector3d guidedLift = EntryCorridorGuidance.SelectLiftDirection(
+                            prediction, bodyDownLift);
+                        _aeroCommandedAngleOfAttackDeg =
+                            EntryCorridorGuidance.SelectEntryAngleOfAttack(prediction);
                         _aeroLiftReference = guidedLift;
                         aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(
-                            velDir, guidedLift);
+                            velDir, guidedLift, _aeroCommandedAngleOfAttackDeg);
                     }
                     else
                     {
                         _aeroLiftReference = bodyDownLift.Normalized;
-                        aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
+                        aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(
+                            up, velDir, _aeroCommandedAngleOfAttackDeg);
                     }
                 }
                 else
                 {
                     _aeroLiftReference = bodyDownLift.Normalized;
-                    aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
+                    aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(
+                        up, velDir, _aeroCommandedAngleOfAttackDeg);
                 }
             }
             else
             {
                 _aeroLiftReference = (up - velDir * up.Dot(velDir)).Normalized;
-                aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
+                aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(
+                    up, velDir, _aeroCommandedAngleOfAttackDeg);
             }
         }
         else if (_phase == Edl.Catch
@@ -638,10 +638,10 @@ public partial class EDLController : Control
             }
 
             // Independent reference filters can change the mutual angle between the axis and
-            // flow. Rebuild the axis from its filtered lift side so alpha remains the physical
-            // 70° entry target instead of collapsing into a nose-first dive.
+            // flow. Rebuild the axis from its filtered lift side so alpha remains the selected
+            // physical entry target instead of collapsing into a nose-first dive.
             var constrainedAeroAxis = AerodynamicsModel.ConstrainEntryAxisToAngle(
-                _filteredAeroFlow, _filteredAeroAxis);
+                _filteredAeroFlow, _filteredAeroAxis, _aeroCommandedAngleOfAttackDeg);
             var targetAeroAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
                 constrainedAeroAxis, _filteredAeroFlow);
             var slewedAeroAttitude = AttitudeGuidance.SlewQuaternion(
@@ -650,11 +650,11 @@ public partial class EDLController : Control
                 filterDelta,
                 AeroReferenceSlewRateRadPerSecond);
             // Slerp smooths roll and lift-side changes, but its intermediate axis can
-            // temporarily leave the 70-degree entry cone. Re-project that axis before the
+            // temporarily leave the selected entry cone. Re-project that axis before the
             // command is published; otherwise a corridor correction silently turns the
             // filtered reference into a nose-first dive even while attitude error is small.
             _filteredAeroAttitude = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(
-                slewedAeroAttitude, _filteredAeroFlow);
+                slewedAeroAttitude, _filteredAeroFlow, _aeroCommandedAngleOfAttackDeg);
             desiredAttitude = _filteredAeroAttitude;
         }
         else
@@ -696,6 +696,7 @@ public partial class EDLController : Control
         else
         {
             _aeroAngleOfAttackDeg = 0.0;
+            _aeroCommandedAngleOfAttackDeg = 0.0;
             _aeroWindwardFactor = 0.0;
         }
 

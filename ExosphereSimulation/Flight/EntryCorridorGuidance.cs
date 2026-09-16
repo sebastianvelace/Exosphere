@@ -15,6 +15,74 @@ public static class EntryCorridorGuidance
         double TimeToGroundS);
 
     /// <summary>
+    /// Converts a footprint prediction into a bounded lift command. Cross-range error
+    /// chooses the bank side; predicted downrange error chooses whether to extend or
+    /// shorten the flight path. The latter is essential during a high-energy return:
+    /// the vehicle can be pointed at the site while its future footprint is already
+    /// beyond it.
+    /// </summary>
+    public static Vector3d SelectLiftDirection(
+        Prediction prediction,
+        Vector3d bodyDownLift,
+        double corridorMeters = 20_000.0,
+        double authorityMeters = 180_000.0)
+    {
+        var downLift = bodyDownLift.Normalized;
+        if (downLift.MagnitudeSquared < 1e-12)
+            return prediction.LiftDirection.Normalized;
+
+        double crossWeight = System.Math.Clamp(
+            (prediction.PredictedCrossRangeM - corridorMeters) / authorityMeters,
+            0.0,
+            1.0);
+        double downrangeWeight = System.Math.Clamp(
+            (System.Math.Abs(prediction.PredictedDownrangeM) - corridorMeters)
+                / authorityMeters,
+            0.0,
+            1.0);
+
+        // A positive projected downrange means the target remains ahead of the future
+        // footprint, so lift toward the sky to extend the trajectory. A negative value
+        // means the footprint is beyond the target, so retain down-lift and shorten it.
+        var flightPathLift = prediction.PredictedDownrangeM >= 0.0
+            ? -downLift
+            : downLift;
+        double baseWeight = System.Math.Max(crossWeight, downrangeWeight);
+        var selected = downLift * (1.0 - baseWeight)
+            + prediction.LiftDirection.Normalized * crossWeight
+            + flightPathLift * downrangeWeight;
+        return selected.MagnitudeSquared > 1e-12
+            ? selected.Normalized
+            : downLift;
+    }
+
+    /// <summary>
+    /// Selects a bounded entry angle that trades aerodynamic range against braking. A
+    /// short projected footprint gets a lower angle, which increases body lift and reduces
+    /// projected broadside drag so the selected up-lift can extend the trajectory. An
+    /// overlong footprint gets a higher angle, which reduces lift and presents more of the
+    /// broadside body to the flow so the selected down-lift can shorten it. The limits keep
+    /// the Starship belly-first presentation and thermal model inside a credible corridor.
+    /// </summary>
+    public static double SelectEntryAngleOfAttack(
+        Prediction prediction,
+        double nominalDegrees = 70.0,
+        double minimumDegrees = 55.0,
+        double maximumDegrees = 78.0,
+        double corridorMeters = 20_000.0,
+        double authorityMeters = 180_000.0)
+    {
+        double error = prediction.PredictedDownrangeM;
+        double weight = System.Math.Clamp(
+            (System.Math.Abs(error) - corridorMeters) / authorityMeters,
+            0.0,
+            1.0);
+        if (error >= 0.0)
+            return nominalDegrees + (minimumDegrees - nominalDegrees) * weight;
+        return nominalDegrees + (maximumDegrees - nominalDegrees) * weight;
+    }
+
+    /// <summary>
     /// Projects the current site error into the landing horizon. Position-only guidance
     /// can command the vehicle toward a corridor it is already crossing at hypersonic
     /// speed; the velocity term makes that same state command lift away from the target

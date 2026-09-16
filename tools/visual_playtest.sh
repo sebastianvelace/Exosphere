@@ -1528,6 +1528,7 @@ public partial class _PlaytestShot : Node
             var edl = EDLController.Instance;
             double edlAlpha = edl?.AeroAngleOfAttackDegrees ?? double.NaN;
             double edlReferenceAlpha = edl?.AeroReferenceAngleOfAttackDegrees ?? double.NaN;
+            double edlCommandedAlpha = edl?.AeroCommandedAngleOfAttackDegrees ?? double.NaN;
             double edlWindward = edl?.AeroWindwardFactor ?? double.NaN;
             double edlAttitudeError = edl?.AeroAttitudeErrorDegrees ?? double.NaN;
             Vector3d edlCommand = edl?.AeroAttitudeCommand ?? Vector3d.Zero;
@@ -1557,7 +1558,7 @@ public partial class _PlaytestShot : Node
                 $"catchGap={minCatchGap:F3} catchRange={catchRange:F1} " +
                 $"evalRange={vessel.LastCatchEvaluationRangeM:F1} evalGate={vessel.LastCatchEvaluationPassedGate} pinY={maxCatchPinY:F1} " +
                 $"rails={vessel.IsOnRails} contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
-                $"settled={vessel.IsSurfaceSettled} alpha={edlAlpha:F1} referenceAlpha={edlReferenceAlpha:F1} windward={edlWindward:F4} " +
+                $"settled={vessel.IsSurfaceSettled} alpha={edlAlpha:F1} referenceAlpha={edlReferenceAlpha:F1} commandedAlpha={edlCommandedAlpha:F1} windward={edlWindward:F4} " +
                 $"attitudeError={edlAttitudeError:F1} command={edlCommand} liftRef={edlLiftReference} " +
                 $"q={dynamicPressure:F0} aeroStaticLocal={aeroStaticLocal} aeroFlapLocal={aeroFlapLocal}");
             _log.Flush();
@@ -1922,6 +1923,7 @@ public partial class _PlaytestShot : Node
                 as AutopilotController;
             var edl = EDLController.Instance;
             double edlAlpha = edl?.AeroAngleOfAttackDegrees ?? double.NaN;
+            double edlCommandedAlpha = edl?.AeroCommandedAngleOfAttackDegrees ?? double.NaN;
             double edlWindward = edl?.AeroWindwardFactor ?? double.NaN;
             double edlAttitudeError = edl?.AeroAttitudeErrorDegrees ?? double.NaN;
             Vector3d edlCommand = edl?.AeroAttitudeCommand ?? Vector3d.Zero;
@@ -1932,7 +1934,7 @@ public partial class _PlaytestShot : Node
                 $"activeEngines={activeEngines} thrustN={thrustN:F0} " +
                 $"engineRuntime={engineRuntime} " +
                 $"retroAlignment={retroAlignment:F4} pyr={vessel.PitchYawRoll} " +
-                $"edlAlpha={edlAlpha:F1} edlWindward={edlWindward:F4} " +
+                $"edlAlpha={edlAlpha:F1} edlCommandedAlpha={edlCommandedAlpha:F1} edlWindward={edlWindward:F4} " +
                 $"edlError={edlAttitudeError:F1} edlCmd={edlCommand} " +
                 $"edlLift={edlLiftReference} " +
                 $"failedEngines={failedEngines} failureCodes={failureCodes} " +

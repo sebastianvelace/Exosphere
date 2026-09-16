@@ -59,4 +59,78 @@ public sealed class EntryCorridorGuidanceTests
         Assert.Equal(120.0, high.TimeToGroundS);
         Assert.Equal(15.0, low.TimeToGroundS);
     }
+
+    [Fact]
+    public void SelectsDownLiftWhenFutureFootprintHasPassedTarget()
+    {
+        var prediction = new EntryCorridorGuidance.Prediction(
+            LiftDirection: Vector3d.Zero,
+            PredictedCrossRangeM: 0.0,
+            PredictedDownrangeM: -400_000.0,
+            TimeToGroundS: 60.0);
+
+        var selected = EntryCorridorGuidance.SelectLiftDirection(
+            prediction, -Vector3d.Up);
+
+        Assert.True(selected.Dot(-Vector3d.Up) > 0.99,
+            $"expected down-lift braking, got {selected}");
+    }
+
+    [Fact]
+    public void SelectsUpLiftWhenFutureFootprintRemainsShortOfTarget()
+    {
+        var prediction = new EntryCorridorGuidance.Prediction(
+            LiftDirection: Vector3d.Zero,
+            PredictedCrossRangeM: 0.0,
+            PredictedDownrangeM: 400_000.0,
+            TimeToGroundS: 60.0);
+
+        var selected = EntryCorridorGuidance.SelectLiftDirection(
+            prediction, -Vector3d.Up);
+
+        Assert.True(selected.Dot(Vector3d.Up) > 0.99,
+            $"expected up-lift extension, got {selected}");
+    }
+
+    [Fact]
+    public void ReducesAngleToExtendShortProjectedFootprint()
+    {
+        var prediction = new EntryCorridorGuidance.Prediction(
+            LiftDirection: Vector3d.Zero,
+            PredictedCrossRangeM: 0.0,
+            PredictedDownrangeM: 400_000.0,
+            TimeToGroundS: 60.0);
+
+        var angle = EntryCorridorGuidance.SelectEntryAngleOfAttack(prediction);
+
+        Assert.Equal(55.0, angle, 8);
+    }
+
+    [Fact]
+    public void IncreasesAngleToBrakeOverlongProjectedFootprint()
+    {
+        var prediction = new EntryCorridorGuidance.Prediction(
+            LiftDirection: Vector3d.Zero,
+            PredictedCrossRangeM: 0.0,
+            PredictedDownrangeM: -400_000.0,
+            TimeToGroundS: 60.0);
+
+        var angle = EntryCorridorGuidance.SelectEntryAngleOfAttack(prediction);
+
+        Assert.Equal(78.0, angle, 8);
+    }
+
+    [Fact]
+    public void KeepsNominalAngleInsideProjectedCorridor()
+    {
+        var prediction = new EntryCorridorGuidance.Prediction(
+            LiftDirection: Vector3d.Zero,
+            PredictedCrossRangeM: 0.0,
+            PredictedDownrangeM: 10_000.0,
+            TimeToGroundS: 60.0);
+
+        var angle = EntryCorridorGuidance.SelectEntryAngleOfAttack(prediction);
+
+        Assert.Equal(70.0, angle, 8);
+    }
 }
