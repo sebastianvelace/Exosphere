@@ -243,6 +243,7 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
 - Perdida de control si falla una pieza critica.
 - Lift/AoA en sim ✅ (R6); guiado EDL lift-up ~70° ✅ (`EDLController` + `ComputeLiftUpEntryAxis`).
 - Decaimiento orbital LEO ✅ (R7 termosfera residual + B3: warp/on-rails ya no congela LEO).
+- Retorno orbital normal a Starbase 🟡 — el seed ya considera la rotación del sitio y el guiado proyecta la huella contra la velocidad superficial de la cuna; la corrida real reduce el desfase, pero todavía no demuestra captura física completa. Ver `docs/audits/ORBITAL_REENTRY_CORRIDOR_2026-09-16.md`.
 
 ### Interplanetario
 
