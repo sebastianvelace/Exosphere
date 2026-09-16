@@ -1574,10 +1574,10 @@ public partial class _PlaytestShot : Node
             {
                 QueueCapture("flip_complete");
                 _flipComplete = true;
-                // The flip is captured at real-time scale for readable evidence. Once the
-                // attitude gate has passed, accelerate only the validation run's final
-                // descent; the same EDL/engine/contact physics continues to execute.
-                bridge.SetTimeScale(6.0);
+                // Keep the final descent at real-time scale. The production bridge clamps
+                // active EDL to x1, and this harness must exercise the same cadence so the
+                // minimum-throttle/catch handoff is validated rather than hidden by a warp.
+                bridge.SetTimeScale(1.0);
                 int engines = vessel.Parts.ActiveEngines.FirstOrDefault()?.SelectedEngineCount ?? 0;
                 _log.WriteLine($"CHECK finite_flip duration={universe.CurrentTime - _retroStart:F2}s " +
                     $"alignment={alignment:F5} omega={vessel.AngularVelocity.Magnitude:F4} engines={engines}");

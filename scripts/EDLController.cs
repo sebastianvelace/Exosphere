@@ -723,22 +723,17 @@ public partial class EDLController : Control
                 ? catchLateralVelocityError.Magnitude
                 : _horiz - horizontalTarget;
             double coupledHorizontalError = _phase is Edl.Retro or Edl.Catch ? horizontalError : 0.0;
-            double brakingError = System.Math.Max(0.0,
-                System.Math.Max(verticalError, coupledHorizontalError));
             // Divide by the commanded thrust axis, not by -velocity. In final vertical flight
             // the velocity can pass through zero while the engine remains upright; using
             // -velocity there creates a singular 5 g command and launches the vehicle upward.
             double thrustUpComponent = System.Math.Max(0.20, aimAxis.Dot(up));
-            // Keep tracking the commanded descent instead of asymptotically hovering above
-            // the pad.  The previous 0.35 gain settled near zero vertical speed at ~45 m
-            // because one Raptor's minimum useful thrust nearly balanced gravity.  A stronger
-            // bounded bias gives the controller enough downward acceleration to rejoin the
-            // profile, while retaining at least ~0.69 g of support (no free-fall/relight).
-            double descentBias = System.Math.Clamp(0.90 * verticalError, -3.0, 0.0);
-            double aCmd = 1.6 * brakingError
-                + g / thrustUpComponent
-                + descentBias
-                - 1.2 * System.Math.Max(0.0, _vUp);
+            // Engines with a substantial minimum throttle cannot hover gently while the
+            // vehicle is below its target descent rate. Coast through that part of the
+            // profile, then light only once braking is actually required. This prevents the
+            // catch path from hovering hundreds of metres above the cradle and falling through
+            // the 500 m contact-evaluation gate too fast for the pins to capture it.
+            double aCmd = PoweredLandingGuidance.ComputeAccelerationCommand(
+                g, thrustUpComponent, verticalError, coupledHorizontalError, _vUp);
 
             // A single Raptor cannot command below its physical minimum throttle. Near the
             // cradle that minimum is enough to hover a catch-only Ship a few decimetres above
