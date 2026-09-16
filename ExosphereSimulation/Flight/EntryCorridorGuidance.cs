@@ -67,8 +67,8 @@ public static class EntryCorridorGuidance
     public static double SelectEntryAngleOfAttack(
         Prediction prediction,
         double nominalDegrees = 70.0,
-        double minimumDegrees = 55.0,
-        double maximumDegrees = 78.0,
+        double minimumDegrees = 64.0,
+        double maximumDegrees = 74.0,
         double corridorMeters = 20_000.0,
         double authorityMeters = 180_000.0)
     {

@@ -103,7 +103,7 @@ public sealed class EntryCorridorGuidanceTests
 
         var angle = EntryCorridorGuidance.SelectEntryAngleOfAttack(prediction);
 
-        Assert.Equal(55.0, angle, 8);
+        Assert.Equal(64.0, angle, 8);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class EntryCorridorGuidanceTests
 
         var angle = EntryCorridorGuidance.SelectEntryAngleOfAttack(prediction);
 
-        Assert.Equal(78.0, angle, 8);
+        Assert.Equal(74.0, angle, 8);
     }
 
     [Fact]
