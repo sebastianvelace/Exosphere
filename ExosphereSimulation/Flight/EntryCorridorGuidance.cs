@@ -57,32 +57,6 @@ public static class EntryCorridorGuidance
     }
 
     /// <summary>
-    /// Selects a bounded entry angle that trades aerodynamic range against braking. A
-    /// short projected footprint gets a lower angle, which increases body lift and reduces
-    /// projected broadside drag so the selected up-lift can extend the trajectory. An
-    /// overlong footprint gets a higher angle, which reduces lift and presents more of the
-    /// broadside body to the flow so the selected down-lift can shorten it. The limits keep
-    /// the Starship belly-first presentation and thermal model inside a credible corridor.
-    /// </summary>
-    public static double SelectEntryAngleOfAttack(
-        Prediction prediction,
-        double nominalDegrees = 70.0,
-        double minimumDegrees = 64.0,
-        double maximumDegrees = 74.0,
-        double corridorMeters = 20_000.0,
-        double authorityMeters = 180_000.0)
-    {
-        double error = prediction.PredictedDownrangeM;
-        double weight = System.Math.Clamp(
-            (System.Math.Abs(error) - corridorMeters) / authorityMeters,
-            0.0,
-            1.0);
-        if (error >= 0.0)
-            return nominalDegrees + (minimumDegrees - nominalDegrees) * weight;
-        return nominalDegrees + (maximumDegrees - nominalDegrees) * weight;
-    }
-
-    /// <summary>
     /// Projects the current site error into the landing horizon. Position-only guidance
     /// can command the vehicle toward a corridor it is already crossing at hypersonic
     /// speed; the velocity term makes that same state command lift away from the target
