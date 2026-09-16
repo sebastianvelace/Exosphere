@@ -1645,11 +1645,23 @@ public partial class _PlaytestShot : Node
         const double DeorbitTargetPeM = 60_000.0;
         // Setup-only lead used to evaluate the actual public deorbit/catch path. The bridge
         // uses this horizon to seed the inertial plane against the rotating Starbase radial.
-        const double OrbitalReturnExpectedSeconds = 7_867.0;
-        const double OrbitalReturnLatitudeBiasDegrees = -2.377;
+        // The return plane is seeded against the rotating site at the
+        // inertial transfer intercept. This deterministic horizon is calibrated
+        // against the actual deorbit-to-entry geometry, not the later touchdown
+        // clock used by the EDL controller.
+        const double OrbitalReturnExpectedSeconds = 3_300.0;
+        // The same seeded plane needs a small southward bias after the longitudinal
+        // correction; otherwise the atmospheric footprint remains about 1.3° north of
+        // the moving Starbase corridor before lift guidance can settle it.
+        const double OrbitalReturnLatitudeBiasDegrees = -1.0;
+        // Longitudinal entry-footprint lead compensates the modeled downrange loss from
+        // hypersonic drag. In this world-coordinate convention, a positive lead aims the
+        // inertial transfer point ahead of the moving Starbase;
+        // the physical catch target remains the unmodified launch-site cradle.
+        const double OrbitalReturnLongitudeLeadDegrees = 30.0;
         // The seeded return plane is an inertial geometry aid, not the touchdown clock.
         // The 1,200 km circular-to-60 km transfer reaches the Starbase latitude after
-        // roughly 2,840 s in this vehicle/atmosphere model; the larger lead compensates
+        // roughly 2,840 s in this vehicle/atmosphere model; the positive lead compensates
         // for the transfer's westward ground-track bias while the target itself keeps
         // advancing with Earth rotation. Keep this as simulated time; the wall-clock
         // budget remains controlled by the shell harness.
@@ -1707,7 +1719,8 @@ public partial class _PlaytestShot : Node
             // not enter EDL and is never reported as a normal reentry milestone.
             if (!bridge.JumpToOrbitForLaunchSiteReturn(
                     OrbitAltitudeM, OrbitalReturnExpectedSeconds,
-                    OrbitalReturnLatitudeBiasDegrees))
+                    OrbitalReturnLatitudeBiasDegrees,
+                    OrbitalReturnLongitudeLeadDegrees))
             {
                 _log.WriteLine("GAP normal orbital return could not seed a rotating-site " +
                     "intercept orbit");
@@ -1799,6 +1812,7 @@ public partial class _PlaytestShot : Node
                 $"launchSite=starbase demo=False flownAscent=False " +
                         $"orbitalReturnExpectedSeconds={OrbitalReturnExpectedSeconds:F0} " +
                         $"orbitalReturnLatitudeBiasDegrees={OrbitalReturnLatitudeBiasDegrees:F2} " +
+                        $"orbitalReturnLongitudeLeadDegrees={OrbitalReturnLongitudeLeadDegrees:F2} " +
                 $"orbitalReturnReserveFraction={OrbitalReturnReserveFraction:F3} " +
                 $"propellant={vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer:F0}");
             _log.WriteLine($"NORMAL_REENTRY_ARMED source=map_deorbit_autopilot targetPe={DeorbitTargetPeM:F0} " +
@@ -1864,6 +1878,10 @@ public partial class _PlaytestShot : Node
             double propellant = vessel.Parts.Parts.Sum(part => part.LiquidFuel + part.Oxidizer);
             Vector3d catchOffset = vessel.Position - vessel.CatchTargetPositionWorld;
             Vector3d catchHorizontalOffset = catchOffset - up * catchOffset.Dot(up);
+            earthBody.GetGeodeticCoordinates(vessel.Position,
+                out double vehicleLatitude, out double vehicleLongitude, out _);
+            earthBody.GetGeodeticCoordinates(vessel.CatchTargetPositionWorld,
+                out double targetLatitude, out double targetLongitude, out _);
             double maxThermalRatio = vessel.Parts.Parts
                 .Where(part => part.Definition.HeatTolerance > 0.0)
                 .Select(part => part.ThermalRatio)
@@ -1898,6 +1916,8 @@ public partial class _PlaytestShot : Node
                 $"catchArmed={vessel.IsAttemptingTowerCatch} " +
                 $"catchMiss={catchHorizontalOffset.Magnitude:F1} " +
                 $"catchRange={catchOffset.Magnitude:F1} " +
+                $"vehicleLatLon={vehicleLatitude:F5},{vehicleLongitude:F5} " +
+                $"targetLatLon={targetLatitude:F5},{targetLongitude:F5} " +
                 $"catchPins={vessel.HasCatchPins} destroyed={vessel.IsDestroyed} " +
                 "normalFlow=True demo=False");
             _log.Flush();

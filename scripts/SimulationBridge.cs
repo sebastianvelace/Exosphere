@@ -1534,7 +1534,8 @@ public partial class SimulationBridge : Node
     public bool JumpToOrbitForLaunchSiteReturn(
         double altitude = 1_200_000.0,
         double expectedReturnSeconds = 3_300.0,
-        double returnLatitudeBiasDegrees = 0.0)
+        double returnLatitudeBiasDegrees = 0.0,
+        double returnLongitudeLeadDegrees = 0.0)
     {
         var earth = Universe.GetBody("earth");
         var vessel = ActiveVessel;
@@ -1547,12 +1548,13 @@ public partial class SimulationBridge : Node
         CancelGuidanceForTeleport();
         double now = Universe.CurrentTime;
         var siteNow = _launchSite.GetPosition(earth, now) - earth.Position;
-        // The atmosphere's lift/drag model produces a repeatable cross-track offset during
-        // the shallow return. The caller supplies that measured corridor correction; the
-        // physical catch target remains the unmodified launch-site geodetic position.
+        // The atmosphere's lift/drag model produces a repeatable downrange delay during the
+        // shallow return. The caller may aim the inertial transfer point ahead of the future
+        // site to compensate for that modeled footprint loss; the physical catch target
+        // remains the unmodified launch-site geodetic position.
         var siteAtReturn = earth.GetSurfacePositionAtTime(
                 _launchSite.Latitude + returnLatitudeBiasDegrees,
-                _launchSite.Longitude,
+                _launchSite.Longitude + returnLongitudeLeadDegrees,
                 now + System.Math.Max(0.0, expectedReturnSeconds),
                 _launchSite.Altitude)
             - earth.Position;
@@ -1589,7 +1591,8 @@ public partial class SimulationBridge : Node
 
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
         GD.Print($"[DEBUG] JumpToOrbitForLaunchSiteReturn -> {altitude / 1000:F0} km circular, " +
-            $"targetLead={expectedReturnSeconds:F0} s latitudeBias={returnLatitudeBiasDegrees:F2} deg, " +
+            $"targetLead={expectedReturnSeconds:F0} s latitudeBias={returnLatitudeBiasDegrees:F2} deg " +
+            $"longitudeLead={returnLongitudeLeadDegrees:F2} deg, " +
             $"v={vCirc:F0} m/s");
         return true;
     }
