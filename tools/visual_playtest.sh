@@ -1525,6 +1525,26 @@ public partial class _PlaytestShot : Node
             double peakLegLoad = vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0;
             double minCatchGap = vessel.LastCatchContact?.Points.Min(p => p.SignedGapM) ?? double.NaN;
             double catchRange = (vessel.Position - vessel.CatchTargetPositionWorld).Magnitude;
+            var edl = EDLController.Instance;
+            double edlAlpha = edl?.AeroAngleOfAttackDegrees ?? double.NaN;
+            double edlReferenceAlpha = edl?.AeroReferenceAngleOfAttackDegrees ?? double.NaN;
+            double edlWindward = edl?.AeroWindwardFactor ?? double.NaN;
+            double edlAttitudeError = edl?.AeroAttitudeErrorDegrees ?? double.NaN;
+            Vector3d edlCommand = edl?.AeroAttitudeCommand ?? Vector3d.Zero;
+            Vector3d edlLiftReference = edl?.AeroLiftReference ?? Vector3d.Zero;
+            double density = body.Atmosphere?.GetDensity(alt) ?? 0.0;
+            double dynamicPressure = AerodynamicsModel.ComputeDynamicPressure(
+                density, surfVel.Magnitude);
+            Vector3d aeroAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+            Vector3d aeroStaticAcceleration = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
+                density, surfVel, aeroAxis, vessel.AngularVelocity, vessel.VehicleLength,
+                vessel.MaximumDiameter, vessel.Parts.TransverseMomentOfInertia,
+                body.Atmosphere?.GetTemperature(alt) ?? 1.0);
+            Vector3d aeroFlapAcceleration = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+                density, surfVel, vessel.Orientation, edlCommand, vessel.VehicleLength,
+                vessel.MaximumDiameter, vessel.Parts.TransverseMomentOfInertia);
+            Vector3d aeroStaticLocal = vessel.Orientation.Inverse().Rotate(aeroStaticAcceleration);
+            Vector3d aeroFlapLocal = vessel.Orientation.Inverse().Rotate(aeroFlapAcceleration);
             double maxCatchPinY = vessel.CatchContactPoints
                 .Select(point => point.LocalPositionFromDatum.Y)
                 .DefaultIfEmpty(double.NaN)
@@ -1537,7 +1557,9 @@ public partial class _PlaytestShot : Node
                 $"catchGap={minCatchGap:F3} catchRange={catchRange:F1} " +
                 $"evalRange={vessel.LastCatchEvaluationRangeM:F1} evalGate={vessel.LastCatchEvaluationPassedGate} pinY={maxCatchPinY:F1} " +
                 $"rails={vessel.IsOnRails} contacts={contacts} maxStroke={maxStroke:F3} peakLegLoad={peakLegLoad:F0} " +
-                $"settled={vessel.IsSurfaceSettled}");
+                $"settled={vessel.IsSurfaceSettled} alpha={edlAlpha:F1} referenceAlpha={edlReferenceAlpha:F1} windward={edlWindward:F4} " +
+                $"attitudeError={edlAttitudeError:F1} command={edlCommand} liftRef={edlLiftReference} " +
+                $"q={dynamicPressure:F0} aeroStaticLocal={aeroStaticLocal} aeroFlapLocal={aeroFlapLocal}");
             _log.Flush();
             _nextEdlTelemetry = simElapsed + 5.0;
         }
