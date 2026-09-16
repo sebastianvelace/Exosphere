@@ -186,6 +186,11 @@ if ! grep -q -- '--orbital-reentry' "$HARNESS_SCRIPT" \
   echo "FAIL normal orbital reentry mode is not wired into the harness" >&2
   exit 1
 fi
+if ! rg -q 'double activeEntryWarp = _orbitalReentryEntry' "$HARNESS_SCRIPT" \
+  || ! rg -q 'activeEntryWarp' "$HARNESS_SCRIPT"; then
+  echo "FAIL orbital reentry harness can pause after ENTRY when preparation has handed off" >&2
+  exit 1
+fi
 if ! grep -q -- '--orbit' "$HARNESS_SCRIPT" \
   || ! grep -q 'MODE="orbit"' "$HARNESS_SCRIPT" \
   || ! grep -q 'ORBIT_DIRECT_OK' "$HARNESS_SCRIPT"; then

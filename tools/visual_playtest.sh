@@ -1676,17 +1676,14 @@ public partial class _PlaytestShot : Node
         // correction; otherwise the atmospheric footprint remains about 1.3° north of
         // the moving Starbase corridor before lift guidance can settle it.
         const double OrbitalReturnLatitudeBiasDegrees = -1.0;
-        // Longitudinal entry-footprint lead compensates the modeled downrange loss from
-        // hypersonic drag. In this world-coordinate convention, a positive lead aims the
-        // inertial transfer point ahead of the moving Starbase;
-        // the physical catch target remains the unmodified launch-site cradle.
-        const double OrbitalReturnLongitudeLeadDegrees = 30.0;
+        // The return plane is aligned with the rotating launch site. The deorbit burn
+        // lowers periapsis on the opposite side of the circular orbit; adding a positive
+        // longitude lead therefore moved periapsis east of Starbase by thousands of km
+        // before atmospheric guidance had meaningful authority.
+        const double OrbitalReturnLongitudeLeadDegrees = 0.0;
         // The seeded return plane is an inertial geometry aid, not the touchdown clock.
-        // The 1,200 km circular-to-60 km transfer reaches the Starbase latitude after
-        // roughly 2,840 s in this vehicle/atmosphere model; the positive lead compensates
-        // for the transfer's westward ground-track bias while the target itself keeps
-        // advancing with Earth rotation. Keep this as simulated time; the wall-clock
-        // budget remains controlled by the shell harness.
+        // Keep this as simulated time; the wall-clock budget remains controlled by the
+        // shell harness.
         const double SimTimeoutSec = 6_000.0;
 
         if (!_orbitalReentrySeeded)
@@ -2073,8 +2070,15 @@ public partial class _PlaytestShot : Node
                 ? 1.0
                 : 10.0
             : 0.0;
+        // Once the atmospheric milestone has been observed, the preparation loop may have
+        // already handed control to EDL. Do not reuse its inactive zero sentinel here:
+        // that would pause the universe immediately after the ENTRY capture and prevent
+        // PEAK_HEATING/EDL from ever being reached.
+        double activeEntryWarp = _orbitalReentryEntry
+            ? 1.0
+            : preparingEntryAttitude ? entryPreparationWarp : 0.0;
         bridge.SetTimeScale(_orbitalReentryEntry || preparingEntryAttitude
-            ? entryPreparationWarp
+            ? activeEntryWarp
             : finiteBurnInProgress ? 1.0 : 200.0);
 
         if (simElapsed > SimTimeoutSec)
