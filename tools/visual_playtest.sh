@@ -1823,7 +1823,7 @@ public partial class _PlaytestShot : Node
             _orbitalReentryScenarioStart = universe.CurrentTime;
             _nextOrbitalReentryTelemetry = universe.CurrentTime;
             _orbitalReentrySeededPe = seededPe;
-            bridge.SetTimeScale(3.0);
+            bridge.SetTimeScale(1.0);
             return;
         }
 
@@ -1901,12 +1901,21 @@ public partial class _PlaytestShot : Node
             string breakingJointLabel = breakingJoints.Length > 0 ? breakingJoints : "-";
             var autopilot = GetTree().Root.FindChild("AutopilotController", true, false)
                 as AutopilotController;
+            var edl = EDLController.Instance;
+            double edlAlpha = edl?.AeroAngleOfAttackDegrees ?? double.NaN;
+            double edlWindward = edl?.AeroWindwardFactor ?? double.NaN;
+            double edlAttitudeError = edl?.AeroAttitudeErrorDegrees ?? double.NaN;
+            Vector3d edlCommand = edl?.AeroAttitudeCommand ?? Vector3d.Zero;
+            Vector3d edlLiftReference = edl?.AeroLiftReference ?? Vector3d.Zero;
             _log.WriteLine($"TRACE_ORBITAL_REENTRY t={simElapsed:F1} alt={alt:F1} " +
                 $"vUp={vUp:F1} spd={surfVel.Magnitude:F1} pe={pe:F1} ap={ap:F1} " +
                 $"phase={phase} throttle={vessel.Throttle:F3} " +
                 $"activeEngines={activeEngines} thrustN={thrustN:F0} " +
                 $"engineRuntime={engineRuntime} " +
                 $"retroAlignment={retroAlignment:F4} pyr={vessel.PitchYawRoll} " +
+                $"edlAlpha={edlAlpha:F1} edlWindward={edlWindward:F4} " +
+                $"edlError={edlAttitudeError:F1} edlCmd={edlCommand} " +
+                $"edlLift={edlLiftReference} " +
                 $"failedEngines={failedEngines} failureCodes={failureCodes} " +
                 $"propellant={propellant:F0} partCount={vessel.Parts.Parts.Count} " +
                 $"maxThermalRatio={maxThermalRatio:F3} partsThermal={partThermal} " +
@@ -2030,14 +2039,20 @@ public partial class _PlaytestShot : Node
         // Keep the finite deorbit burn at x1 while the production autopilot aligns,
         // ignites and delivers its planned Δv. A high warp here advances the rigid-body
         // attitude in coarse scheduler steps, misses the node window and can leave the
-        // harness declaring a stall before the first engine start. Once entry is armed,
-        // x3 remains the bounded RK4 path used by EDL verification.
+        // harness declaring a stall before the first engine start. Once entry is armed, keep
+        // x1 so the harness matches production's real-time EDL command-refresh cadence.
         var orbitalAutopilot = GetTree().Root.FindChild("AutopilotController", true, false)
             as AutopilotController;
         bool finiteBurnInProgress = orbitalAutopilot?.IsArmed == true
             || orbitalAutopilot?.IsBurning == true;
-        bridge.SetTimeScale(_orbitalReentryEntry
-            ? 3.0
+        bool preparingEntryAttitude = orbitalAutopilot?.IsPreparingEntryAttitude == true;
+        double entryPreparationWarp = preparingEntryAttitude
+            ? vessel.GetAltitude(universe.GetDominantBody(vessel.Position)) <= 160_000.0
+                ? 1.0
+                : 10.0
+            : 0.0;
+        bridge.SetTimeScale(_orbitalReentryEntry || preparingEntryAttitude
+            ? entryPreparationWarp
             : finiteBurnInProgress ? 1.0 : 200.0);
 
         if (simElapsed > SimTimeoutSec)

@@ -96,14 +96,28 @@ public partial class EDLController : Control
     private double _flipElapsed;
     private bool _flipGateDiagnosticEmitted;
     private double _attitudeErrorDeg;
+    private double _aeroAngleOfAttackDeg;
+    private double _aeroWindwardFactor;
+    private Vector3d _aeroAttitudeCommand;
+    private Vector3d _aeroLiftReference;
     private Vector3d _filteredAeroAxis;
     private Vector3d _filteredAeroFlow;
+    private Quaterniond _filteredAeroAttitude;
     private bool _aeroReferenceInitialized;
 
     // The real vehicle's aerodynamic reference cannot jump with one noisy guidance sample.
     // This is a reference filter only: the vessel still follows it through physical flap/torque
     // authority in Vessel.Tick.
     private const double AeroReferenceTimeConstantSeconds = 0.35;
+    private const double AeroReferenceSlewRateRadPerSecond =
+        10.0 * MathUtils.DEG_TO_RAD;
+
+    /// <summary>Measured aerodynamic entry diagnostics for the visual harness and HUD QA.</summary>
+    public double AeroAngleOfAttackDegrees => _aeroAngleOfAttackDeg;
+    public double AeroWindwardFactor => _aeroWindwardFactor;
+    public double AeroAttitudeErrorDegrees => _attitudeErrorDeg;
+    public Vector3d AeroAttitudeCommand => _aeroAttitudeCommand;
+    public Vector3d AeroLiftReference => _aeroLiftReference;
 
     public override void _Ready()
     {
@@ -423,6 +437,7 @@ public partial class EDLController : Control
         // heat-shield windward) to bleed velocity aerodynamically like real Starship.
         // Retro/Final: flip so the engines (local +Y thrust) point retrograde.
         Vector3d aimAxis;
+        _aeroLiftReference = Vector3d.Zero;
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero)
         {
             // Fly a lift-up ~70° AoA instead of exact 90° broadside. Exact broadside has
@@ -473,21 +488,25 @@ public partial class EDLController : Control
                         Vector3d guidedLift = (
                             bodyDownLift.Normalized * (1.0 - targetWeight)
                             + prediction.LiftDirection * targetWeight).Normalized;
+                        _aeroLiftReference = guidedLift;
                         aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(
                             velDir, guidedLift);
                     }
                     else
                     {
+                        _aeroLiftReference = bodyDownLift.Normalized;
                         aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
                     }
                 }
                 else
                 {
+                    _aeroLiftReference = bodyDownLift.Normalized;
                     aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir);
                 }
             }
             else
             {
+                _aeroLiftReference = (up - velDir * up.Dot(velDir)).Normalized;
                 aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(up, velDir);
             }
         }
@@ -591,8 +610,13 @@ public partial class EDLController : Control
             double filterDelta = System.Math.Clamp(delta, 0.0, 0.20);
             if (!_aeroReferenceInitialized)
             {
-                _filteredAeroAxis = aimAxis.Normalized;
+                // Seed from the physical vehicle state. The orbital return has already
+                // prepared a belly-first attitude during coast; seeding from aimAxis here
+                // would introduce an artificial 90–180° roll step when corridor guidance
+                // selects a different lift side on the first atmospheric frame.
+                _filteredAeroAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
                 _filteredAeroFlow = velDir.Normalized;
+                _filteredAeroAttitude = vessel.Orientation;
                 _aeroReferenceInitialized = true;
             }
             else
@@ -608,8 +632,14 @@ public partial class EDLController : Control
             // 70° entry target instead of collapsing into a nose-first dive.
             var constrainedAeroAxis = AerodynamicsModel.ConstrainEntryAxisToAngle(
                 _filteredAeroFlow, _filteredAeroAxis);
-            desiredAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
+            var targetAeroAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
                 constrainedAeroAxis, _filteredAeroFlow);
+            _filteredAeroAttitude = AttitudeGuidance.SlewQuaternion(
+                _filteredAeroAttitude,
+                targetAeroAttitude,
+                filterDelta,
+                AeroReferenceSlewRateRadPerSecond);
+            desiredAttitude = _filteredAeroAttitude;
         }
         else
         {
@@ -620,7 +650,7 @@ public partial class EDLController : Control
             && _phase is Edl.Entry or Edl.Peak or Edl.Aero;
         bool catchDemoAttitude = vessel.IsTowerCatchDemonstration
             && (_phase is Edl.Entry or Edl.Peak or Edl.Aero or Edl.Retro or Edl.Catch);
-        vessel.PitchYawRoll = _phase is Edl.Entry or Edl.Peak or Edl.Aero
+        _aeroAttitudeCommand = _phase is Edl.Entry or Edl.Peak or Edl.Aero
             ? AttitudeGuidance.ComputeCommand(
                 vessel.Orientation,
                 desiredAttitude,
@@ -635,8 +665,23 @@ public partial class EDLController : Control
                 vessel.AngularVelocity,
                 proportionalGain: 2.2,
                 dampingGain: 6.0);
+        vessel.PitchYawRoll = _aeroAttitudeCommand;
         _attitudeErrorDeg = AttitudeGuidance.ErrorAngleRadians(
             vessel.Orientation, desiredAttitude) * MathUtils.RAD_TO_DEG;
+
+        if (aeroAttitude && velDir.MagnitudeSquared > 1e-12)
+        {
+            var actualAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+            _aeroAngleOfAttackDeg = System.Math.Acos(System.Math.Clamp(
+                actualAxis.Dot(velDir), -1.0, 1.0)) * MathUtils.RAD_TO_DEG;
+            _aeroWindwardFactor = ThermalModel.WindwardFactor(
+                vessel.Orientation.Inverse().Rotate(velDir));
+        }
+        else
+        {
+            _aeroAngleOfAttackDeg = 0.0;
+            _aeroWindwardFactor = 0.0;
+        }
 
         if (vessel.IsTowerCatchDemonstration && catchDemoAttitude)
         {

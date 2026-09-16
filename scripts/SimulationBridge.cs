@@ -337,11 +337,18 @@ public partial class SimulationBridge : Node
             bool atmosphericZone = refB.Atmosphere != null
                 && av.GetAltitude(refB) <= refB.Atmosphere.MaxAltitude * 1.05;
             var missionPhase = MissionManager.Instance?.Phase;
+            bool preparingEntryAttitude = GetTree().Root.FindChild(
+                "AutopilotController", true, false) is AutopilotController autopilot
+                && autopilot.IsPreparingEntryAttitude
+                && av.GetAltitude(refB) <= 300_000.0;
+            bool finalEntryApproach = preparingEntryAttitude
+                && av.GetAltitude(refB) <= 160_000.0;
             // Real-time only through tower clear and the complete EDL track. EDL guidance is
             // refreshed once per rendered frame while the solver may execute many fixed
             // substeps; allowing warp here makes the physical vehicle follow a stale attitude
             // command for too long and can turn a controlled belly-flop into a dive.
-            if (missionPhase is MissionPhase.COUNTDOWN
+            if (finalEntryApproach
+                || missionPhase is MissionPhase.COUNTDOWN
                 or MissionPhase.IGNITION
                 or MissionPhase.LIFTOFF
                 or MissionPhase.ENTRY
@@ -351,6 +358,12 @@ public partial class SimulationBridge : Node
                 or MissionPhase.FINAL_DESCENT)
             {
                 MaxAllowedWarpIndex = 0;
+            }
+            else if (preparingEntryAttitude)
+            {
+                // The pre-entry attitude loop still needs render-frame command refresh,
+                // but it can safely use x10 while the ship remains above the atmosphere.
+                MaxAllowedWarpIndex = 4;
             }
             else if (av.Throttle > 0.01)
             {
