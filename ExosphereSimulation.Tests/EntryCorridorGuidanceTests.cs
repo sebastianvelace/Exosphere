@@ -7,12 +7,12 @@ using Xunit;
 public sealed class EntryCorridorGuidanceTests
 {
     [Fact]
-    public void PredictsOverflightBeforeTheVehicleCrossesTheSite()
+    public void PredictsFutureCrossTrackMissWithoutChasingDownrange()
     {
         var prediction = EntryCorridorGuidance.Predict(
-            targetOffsetWorld: Vector3d.Right * 30_000.0,
+            targetOffsetWorld: Vector3d.Forward * 30_000.0,
             vehicleSurfaceVelocity: Vector3d.Right * 7_600.0,
-            targetSurfaceVelocity: Vector3d.Zero,
+            targetSurfaceVelocity: Vector3d.Forward * 7_600.0 + Vector3d.Right * 8_000.0,
             bodyUp: Vector3d.Up,
             altitudeM: 70_000.0,
             downwardSpeedMps: 260.0,
@@ -21,8 +21,10 @@ public sealed class EntryCorridorGuidanceTests
         Assert.True(prediction.TimeToGroundS > 20.0);
         Assert.True(prediction.PredictedCrossRangeM > 500_000.0,
             $"expected a large future miss, got {prediction.PredictedCrossRangeM:F0} m");
-        Assert.True(prediction.LiftDirection.Dot(-Vector3d.Right) > 0.9,
-            "the lift command must oppose the projected eastbound overflight");
+        Assert.True(prediction.LiftDirection.Dot(Vector3d.Forward) > 0.9,
+            "the lift command must oppose the projected cross-track miss");
+        Assert.True(prediction.PredictedDownrangeM > 20_000.0,
+            "downrange error must remain observable without becoming a bank command");
     }
 
     [Fact]
@@ -39,6 +41,7 @@ public sealed class EntryCorridorGuidanceTests
 
         Assert.Equal(Vector3d.Forward, prediction.LiftDirection);
         Assert.InRange(prediction.PredictedCrossRangeM, 4_999.9, 5_000.1);
+        Assert.Equal(0.0, prediction.PredictedDownrangeM, 10);
     }
 
     [Fact]

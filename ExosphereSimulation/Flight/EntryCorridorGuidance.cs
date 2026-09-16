@@ -11,6 +11,7 @@ public static class EntryCorridorGuidance
     public readonly record struct Prediction(
         Vector3d LiftDirection,
         double PredictedCrossRangeM,
+        double PredictedDownrangeM,
         double TimeToGroundS);
 
     /// <summary>
@@ -49,13 +50,42 @@ public static class EntryCorridorGuidance
         horizon = System.Math.Clamp(horizon, minHorizonS, maxHorizonS);
 
         var predictedOffset = horizontalOffset + horizontalRelativeVelocity * horizon;
-        double predictedRange = predictedOffset.Magnitude;
-        var liftDirection = predictedRange > 1e-6
-            ? predictedOffset / predictedRange
-            : horizontalOffset.Magnitude > 1e-6
-                ? horizontalOffset.Normalized
-                : Vector3d.Zero;
 
-        return new Prediction(liftDirection, predictedRange, horizon);
+        // Body lift can change flight-path energy and cross-range, but it must not chase the
+        // entire ground-track error as though downrange were a lateral miss. Project the
+        // predicted footprint onto the vehicle's current horizontal track and its normal. The
+        // old total-range vector made a shallow entry bank toward a target that was simply
+        // ahead of the vehicle, which is the source of an artificial side-to-side weave.
+        var track = vehicleSurfaceVelocity - up * vehicleSurfaceVelocity.Dot(up);
+        double trackMagnitude = track.Magnitude;
+        if (trackMagnitude < 1e-6)
+        {
+            track = horizontalRelativeVelocity;
+            trackMagnitude = track.Magnitude;
+        }
+
+        if (trackMagnitude < 1e-6)
+        {
+            double range = predictedOffset.Magnitude;
+            var fallback = range > 1e-6
+                ? predictedOffset / range
+                : Vector3d.Zero;
+            return new Prediction(fallback, range, 0.0, horizon);
+        }
+
+        track /= trackMagnitude;
+        var crossTrack = up.Cross(track).Normalized;
+        double signedCrossRange = predictedOffset.Dot(crossTrack);
+        double predictedCrossRange = System.Math.Abs(signedCrossRange);
+        double predictedDownrange = predictedOffset.Dot(track);
+        var liftDirection = predictedCrossRange > 1e-6
+            ? crossTrack * System.Math.Sign(signedCrossRange)
+            : Vector3d.Zero;
+
+        return new Prediction(
+            liftDirection,
+            predictedCrossRange,
+            predictedDownrange,
+            horizon);
     }
 }

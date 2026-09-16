@@ -1396,15 +1396,42 @@ public partial class SimulationBridge : Node
         // A repeatable suborbital entry state chosen to expose heating, aerodynamic descent,
         // belly-flop, powered flip and touchdown in one watchable session. It intentionally
         // starts at the 70 km entry interface instead of pretending to perform a deorbit burn.
-        // The catch demonstration is intentionally a deterministic tower-approach test:
-        // a 1.8 km/s eastward entry would carry the ship thousands of kilometres past the
-        // fixed launch site before the final 300 m catch guidance becomes active. Keep the
-        // ordinary visual entry lateral for non-catch vehicles, but make a catch-capable
-        // Starship descend over the cradle so the chopstick/contact path is exercised rather
-        // than an unrelated cross-range miss.
-        Vector3d airVelocity = towerCatchCapable
-            ? -up * 1_800.0
-            : east * 1_800.0 - up * 120.0;
+        //
+        // The catch-capable fixture still uses the physical tower path, but it now arrives on
+        // a shallow, downrange entry plane. The previous vertical 1.8 km/s drop had no real
+        // ground track: body lift created the entire horizontal velocity, so the corridor
+        // controller appeared to “turbulate” while chasing a target that was initially below
+        // the vehicle. This seed gives EDL the same geometry as a real Starship return and
+        // lets drag, body lift and the moving target determine the final miss naturally.
+        Vector3d airVelocity;
+        if (towerCatchCapable && _launchSite != null)
+        {
+            // The visual EDL fixture is a 70 km atmospheric handoff rather than a full orbital
+            // return. The measured vehicle footprint covers roughly 150 km before the ship
+            // reaches the low-altitude flip corridor; seed it at that footprint so the target
+            // is reached by the physical trajectory instead of asking crossrange guidance to
+            // solve a longitudinal error it cannot control.
+            const double EntryDownrangeLeadM = 143_000.0;
+            var targetCradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
+                _launchSite, earth, Universe.CurrentTime);
+            var targetUp = (targetCradle - earth.Position).Normalized;
+            var targetEast = earth.RotationAxis.Cross(targetUp).Normalized;
+            if (targetEast.MagnitudeSquared < 1e-9)
+                targetEast = Vector3d.Forward;
+
+            // Move the entry point upstream along the local ground track, then recompute the
+            // geodetic up vector so the 70 km shell remains normal to the ellipsoid.
+            var entryGround = targetCradle - targetEast * EntryDownrangeLeadM;
+            up = (entryGround - earth.Position).Normalized;
+            east = earth.RotationAxis.Cross(up).Normalized;
+            if (east.MagnitudeSquared < 1e-9)
+                east = targetEast;
+            airVelocity = east * 1_800.0 - up * 120.0;
+        }
+        else
+        {
+            airVelocity = east * 1_800.0 - up * 120.0;
+        }
         Vector3d velocityDirection = airVelocity.Normalized;
         Vector3d longAxis;
         if (towerCatchCapable)
@@ -1424,14 +1451,14 @@ public partial class SimulationBridge : Node
         Vector3d rotationReferencePosition = entryPosition;
         if (towerCatchCapable && _launchSite != null)
         {
-            // Align the high-altitude seed with the actual cradle radial line. The arms are
-            // offset from the pad datum, so using only the pad's Up vector leaves a fixed
-            // cross-range error before guidance is allowed to act.
+            // Keep the entry position on the same upstream radial line used to build the
+            // shallow-entry velocity. Replacing it with the cradle radial line here would
+            // make the position and velocity belong to different surface points: the ship
+            // would be visually seeded above the pad while its velocity was aimed from an
+            // upstream point. That inconsistency was the source of the large, seed-insensitive
+            // downrange miss in the EDL traces.
             var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
                 _launchSite, earth, Universe.CurrentTime);
-            Vector3d cradleUp = (cradle - earth.Position).Normalized;
-            if (cradleUp.MagnitudeSquared > 1e-9)
-                entryPosition = earth.Position + cradleUp * (earth.Radius + 70_000.0);
             // The atmosphere target is the rotating cradle at the surface, not a free
             // inertial point at entry altitude. Its tangential velocity is the seed that
             // produced the stable low-cross-range approach in the flight trace.

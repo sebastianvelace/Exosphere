@@ -59,7 +59,6 @@ public partial class EDLController : Control
     // attitude controller to settle. At 50 m the lateral branch had already rotated the
     // vehicle and amplified tangential velocity in the final approach.
     private const double TerminalVerticalPriorityAltitudeM = 300.0;
-    private const double TerminalSingleEngineAltitudeM = 300.0;
     private bool _towerCatchAborted;
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
@@ -108,9 +107,9 @@ public partial class EDLController : Control
     // The real vehicle's aerodynamic reference cannot jump with one noisy guidance sample.
     // This is a reference filter only: the vessel still follows it through physical flap/torque
     // authority in Vessel.Tick.
-    private const double AeroReferenceTimeConstantSeconds = 0.35;
+    private const double AeroReferenceTimeConstantSeconds = 0.75;
     private const double AeroReferenceSlewRateRadPerSecond =
-        10.0 * MathUtils.DEG_TO_RAD;
+        6.0 * MathUtils.DEG_TO_RAD;
 
     /// <summary>Measured aerodynamic entry diagnostics for the visual harness and HUD QA.</summary>
     public double AeroAngleOfAttackDegrees => _aeroAngleOfAttackDeg;
@@ -1337,13 +1336,13 @@ public partial class EDLController : Control
             return;
         }
 
-        // Once a fallback leg landing has relit below the coast gate, do not issue a transient
-        // zero command merely because the profile briefly crosses the minimum-throttle deadband.
-        // Raptor shutdown/restart is not continuous thrust modulation: the interruption would
-        // consume a restart and leave the vehicle with an incomplete landing cluster. The normal
-        // surface-release gate above remains the only way to end this committed burn.
-        bool committedStarshipBurn = _landingBurnRelit
-            && _towerCatchAborted
+        // Once a Starship fallback leg has been committed, do not issue a transient zero command
+        // merely because the profile briefly crosses the minimum-throttle deadband. The abort can
+        // happen after the normal coast/relight handoff, so tying this latch to the relight flag
+        // would still allow an unintended shutdown in the terminal corridor. Raptor shutdown /
+        // restart is not continuous thrust modulation; the surface-release gate remains the only
+        // way to end this committed burn.
+        bool committedStarshipBurn = _towerCatchAborted
             && !vessel.IsAttemptingTowerCatch
             && engineCluster.Definition.IsStarshipFamily
             && engineCluster.Definition.HasVehicleRole("ship_engines");
@@ -1382,12 +1381,10 @@ public partial class EDLController : Control
         if (starshipLandingCluster)
         {
             // Starship needs the three-engine centre cluster for the flip and initial
-            // velocity arrest. Use two engines for the intermediate final descent, then one
-            // engine only inside the terminal gate; three engines at the deep-throttle floor
-            // over-accelerate the light vehicle after the descent profile has been arrested.
-            minimumSafeEngines = _phase == Edl.Final
-                ? (_alt <= TerminalSingleEngineAltitudeM ? 1 : 2)
-                : maxLandingEngines;
+            // velocity arrest. Enter the two-engine terminal cluster at FINAL_DESCENT, where
+            // there is still altitude to reject the actuator step. A fallback leg keeps that
+            // cluster committed through contact instead of allowing a later shutdown/restart.
+            minimumSafeEngines = _phase == Edl.Final ? 2 : maxLandingEngines;
         }
         if (_landingEngineCount <= 0)
             _landingEngineCount = maxLandingEngines;
@@ -1410,12 +1407,12 @@ public partial class EDLController : Control
                 || desiredThrust > perEngine * selected * 0.90)
                 selected = System.Math.Min(maxLandingEngines, requested);
         }
-        // Keep the three-engine cluster available for the high-energy part of Final. Once the
-        // vessel is inside the terminal gate, never re-expand after stepping down to one: a
-        // late demand spike must saturate the committed engine, not restart Raptors that were
-        // intentionally shut down during the final approach.
+        // Keep the two-engine terminal cluster selected through a fallback landing. This avoids
+        // a late engine-count step exactly where the attitude controller has the least time to
+        // reject the resulting torque/thrust transient, while avoiding the three-engine floor
+        // that would over-accelerate the light vehicle after the descent profile is arrested.
         if (starshipLandingCluster && _phase == Edl.Final)
-            selected = _alt <= TerminalSingleEngineAltitudeM ? 1 : 2;
+            selected = 2;
         _landingEngineCount = selected;
         engineCluster.SelectEngineCount(selected);
         double throttle = committedStarshipBurn
