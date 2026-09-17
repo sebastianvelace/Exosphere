@@ -1376,10 +1376,12 @@ public partial class EDLController : Control
         if (starshipLandingCluster)
         {
             // Starship needs the three-engine centre cluster for the flip and initial
-            // velocity arrest. Enter the two-engine terminal cluster at FINAL_DESCENT, where
-            // there is still altitude to reject the actuator step. A fallback leg keeps that
-            // cluster committed through contact instead of allowing a later shutdown/restart.
-            minimumSafeEngines = _phase == Edl.Final ? 2 : maxLandingEngines;
+            // velocity arrest. Let the hysteresis step down to one centre Raptor in
+            // FINAL_DESCENT: at the vehicle's landing mass, one engine spans the required
+            // throttle range around hover while two engines are above hover at their physical
+            // minimum and force a bounce. The restore branch below brings the second engine
+            // back before the commanded thrust saturates on a hot approach.
+            minimumSafeEngines = _phase == Edl.Final ? 1 : maxLandingEngines;
         }
         if (_landingEngineCount <= 0)
             _landingEngineCount = maxLandingEngines;
@@ -1402,12 +1404,6 @@ public partial class EDLController : Control
                 || desiredThrust > perEngine * selected * 0.90)
                 selected = System.Math.Min(maxLandingEngines, requested);
         }
-        // Keep the two-engine terminal cluster selected through a fallback landing. This avoids
-        // a late engine-count step exactly where the attitude controller has the least time to
-        // reject the resulting torque/thrust transient, while avoiding the three-engine floor
-        // that would over-accelerate the light vehicle after the descent profile is arrested.
-        if (starshipLandingCluster && _phase == Edl.Final)
-            selected = 2;
         _landingEngineCount = selected;
         engineCluster.SelectEngineCount(selected);
         double throttle = committedStarshipBurn
