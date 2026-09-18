@@ -81,6 +81,7 @@ varying vec3 v_world_normal;
 varying vec3 v_world_tangent_e;
 varying vec3 v_world_tangent_n;
 varying vec2 v_patch;   // patch-local (east, north) offset in metres
+varying vec2 v_terrain_slope; // measured dH/dEast, dH/dNorth from 3DEP
 
 vec2 hash2(vec2 p) {
 	p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
@@ -149,6 +150,33 @@ float macro_validity(vec2 uv) {
 		* smoothstep(0.30, 0.52, texture(macro_mask_tex, uv).r);
 }
 
+float sample_height_m(sampler2D height_tex, vec2 uv, float min_m,
+		float max_m, float reference_m) {
+	float encoded = textureLod(height_tex, uv, 0.0).r;
+	return mix(min_m, max_m, encoded) - reference_m;
+}
+
+vec2 sample_height_slope(sampler2D height_tex, vec2 uv, float extent_m,
+		float min_m, float max_m, float reference_m) {
+	// Both checked-in DEMs are 2048². Sample one source texel on either side,
+	// then convert the finite difference back to a dimensionless grade. The
+	// renderer's relief displacement is in metres, so this remains scale-safe
+	// when the Godot patch uses 1 u = 2.8 m.
+	const float source_inv_size = 1.0 / 2048.0;
+	float source_step_m = extent_m * source_inv_size;
+	float east = sample_height_m(height_tex, uv + vec2(source_inv_size, 0.0),
+		min_m, max_m, reference_m);
+	float west = sample_height_m(height_tex, uv - vec2(source_inv_size, 0.0),
+		min_m, max_m, reference_m);
+	float north = sample_height_m(height_tex, uv - vec2(0.0, source_inv_size),
+		min_m, max_m, reference_m);
+	float south = sample_height_m(height_tex, uv + vec2(0.0, source_inv_size),
+		min_m, max_m, reference_m);
+	return vec2(
+		(east - west) / max(2.0 * source_step_m, 0.001),
+		(north - south) / max(2.0 * source_step_m, 0.001));
+}
+
 void vertex() {
 	vec2 patch_m = VERTEX.xz * metres_per_unit;
 	vec2 regional = regional_uv(patch_m);
@@ -156,18 +184,24 @@ void vertex() {
 	vec2 macro = macro_uv(patch_m);
 	float macro_weight = macro_validity(macro);
 	float terrain_offset = 0.0;
+	vec2 terrain_slope = vec2(0.0);
 	if (macro_weight > 0.0) {
-		float encoded_height = textureLod(macro_height_tex, macro, 0.0).r;
-		float terrain_height = mix(macro_height_min_m, macro_height_max_m, encoded_height);
-		terrain_offset = (terrain_height - macro_height_reference_m)
-			/ metres_per_unit * macro_weight;
+		float terrain_height = sample_height_m(macro_height_tex, macro,
+			macro_height_min_m, macro_height_max_m, macro_height_reference_m);
+		terrain_offset = terrain_height / metres_per_unit * macro_weight;
+		terrain_slope = sample_height_slope(macro_height_tex, macro,
+			macro_extent_m, macro_height_min_m, macro_height_max_m,
+			macro_height_reference_m) * macro_weight;
 	}
 	if (regional_weight > 0.0) {
-		float encoded_height = textureLod(regional_height_tex, regional, 0.0).r;
-		float terrain_height = mix(regional_height_min_m, regional_height_max_m, encoded_height);
-		float regional_offset = (terrain_height - regional_height_reference_m)
-			/ metres_per_unit;
+		float regional_height = sample_height_m(regional_height_tex, regional,
+			regional_height_min_m, regional_height_max_m, regional_height_reference_m);
+		float regional_offset = regional_height / metres_per_unit;
+		vec2 regional_slope = sample_height_slope(regional_height_tex, regional,
+			regional_extent_m, regional_height_min_m, regional_height_max_m,
+			regional_height_reference_m);
 		terrain_offset = mix(terrain_offset, regional_offset, regional_weight);
+		terrain_slope = mix(terrain_slope, regional_slope, regional_weight);
 	}
 	VERTEX.y += terrain_offset;
 	v_world_pos    = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -178,6 +212,10 @@ void vertex() {
 	// UV2 is retained by the mesh for tooling, but using VERTEX here avoids driver
 	// differences in secondary-UV interpolation on the duplicated SurfaceTool grid.
 	v_patch        = patch_m;
+	// A 3DEP height displacement without a matching normal is visually flat and
+	// cannot receive a coherent manually-computed sun response. Keep the slope
+	// bounded because the provider raster includes low-confidence edge samples.
+	v_terrain_slope = clamp(terrain_slope, vec2(-0.45), vec2(0.45));
 }
 
 void fragment() {
@@ -303,6 +341,12 @@ void fragment() {
 	N = normalize(N
 		+ v_world_tangent_e * (relief - relief_e) * relief_scale
 		+ v_world_tangent_n * (relief - relief_n) * relief_scale);
+	// Apply measured 3DEP grade after the procedural micro-normal. This makes
+	// beaches, marsh berms and road embankments turn with the actual relief
+	// instead of remaining a flat-shaded height-textured decal.
+	N = normalize(N
+		- v_world_tangent_e * v_terrain_slope.x
+		- v_world_tangent_n * v_terrain_slope.y);
 
 	// Spectrally attenuated direct sunlight. The small diffuse floor represents skylight;
 	// unlike the former 0.55 term it does not leave the coast brightly lit at midnight.
