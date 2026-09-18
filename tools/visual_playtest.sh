@@ -3249,7 +3249,6 @@ public partial class _PlaytestShot : Node
 
         var effect = GetTree().Root.FindChild(
             "HotStageFlashController", true, false) as HotStageFlashController;
-        var plume = effect?.GetNodeOrNull<Node3D>("HotStagePlume");
         var renderer = GetTree().Root.FindChild(
             "ActiveVesselRenderer", true, false) as Node3D;
         bool overlap = SimulationBridge.Instance?.ActiveVessel?.IsHotStageOverlapping == true;
@@ -3258,7 +3257,9 @@ public partial class _PlaytestShot : Node
             $"frameSynced={effect?.IsVesselFrameSynchronized ?? false} " +
             $"overlap={overlap} " +
             $"interfaceY={HotStageFlashController.HotStageInterfaceRenderY:F2} " +
-            $"plumeLocalY={(plume != null ? plume.Position.Y : float.NaN):F2} " +
+            $"plumeVisible={effect?.IsInterstagePlumeVisible ?? false} " +
+            $"plumeLocalY={effect?.InterstagePlumeLocalY ?? double.NaN:F2} " +
+            $"plumeOpacity={effect?.InterstagePlumeOpacity ?? 0f:F3} " +
             $"rendererY={(renderer != null ? renderer.Position.Y : float.NaN):F2} " +
             $"rootY={(effect != null ? effect.Position.Y : float.NaN):F2}");
         _log.Flush();
@@ -4345,8 +4346,8 @@ verify_pngs() {
       echo "ERROR: hot-stage overlap capture lacks synchronized interstage anchor telemetry" >&2
       return 1
     fi
-    if ! grep -Eq 'VISUAL_HOTSTAGE slug=hotstage .*frameSynced=True .*overlap=True .*interfaceY=25\.36' "$LOG"; then
-      echo "ERROR: hot-stage overlap capture did not prove live overlap or synchronized interstage anchor" >&2
+    if ! grep -Eq 'VISUAL_HOTSTAGE slug=hotstage .*frameSynced=True .*overlap=True .*interfaceY=25\.36 .*plumeVisible=True .*plumeLocalY=-?[0-9.]+ .*plumeOpacity=0\.[0-9]+' "$LOG"; then
+      echo "ERROR: hot-stage overlap capture did not prove live overlap, synchronized anchor, and visible interstage plume" >&2
       return 1
     fi
     if ! grep -Eq 'VISUAL_HOTSTAGE slug=hotstage_separation .*frameSynced=True .*overlap=False .*interfaceY=25\.36' "$LOG"; then

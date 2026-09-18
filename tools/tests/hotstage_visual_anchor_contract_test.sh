@@ -30,6 +30,12 @@ rg -Fq 'IsHotStageOverlapping == true' "$HOTSTAGE" \
   || { echo "FAIL hot-stage VFX does not observe the live overlap transition" >&2; exit 1; }
 rg -Fq '_overlapBurstStarted = true' "$HOTSTAGE" \
   || { echo "FAIL hot-stage overlap transition does not start the burst" >&2; exit 1; }
+rg -Fq 'Name = "HotStagePlume"' "$HOTSTAGE" \
+  || { echo "FAIL hot-stage effect has no dedicated interstage plume volume" >&2; exit 1; }
+rg -Fq 'public bool IsInterstagePlumeVisible' "$HOTSTAGE" \
+  || { echo "FAIL hot-stage plume visibility is not exposed to capture telemetry" >&2; exit 1; }
+rg -Fq 'InterstagePlumeOpacity' "$HOTSTAGE" \
+  || { echo "FAIL hot-stage plume opacity is not exposed to capture telemetry" >&2; exit 1; }
 
 bash -n "$HARNESS"
 rg -Fq 'QueueCapture("hotstage_separation")' "$HARNESS" \
@@ -40,5 +46,7 @@ rg -Fq 'VISUAL_HOTSTAGE slug=' "$HARNESS" \
   || { echo "FAIL harness has no hot-stage spatial telemetry" >&2; exit 1; }
 rg -q 'interfaceY=25\\.36' "$HARNESS" \
   || { echo "FAIL verification does not gate the interstage anchor telemetry" >&2; exit 1; }
+rg -q 'plumeVisible=True .*plumeLocalY=.*plumeOpacity=' "$HARNESS" \
+  || { echo "FAIL verification does not gate the dedicated interstage plume" >&2; exit 1; }
 
 echo "hotstage_visual_anchor_contract_test: PASS (interstage anchor, frame sync and separation evidence)"

@@ -180,6 +180,8 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      `Vessel.IsHotStageOverlapping`; verificado con xvfb → `exo_play_hotstage.png`). Siguiente:
      la comparacion contra referencia y la validacion orbital de pluma vacio limpia, que ya no
      dependen de tooling.
+   - El gate ahora exige también el volumen procedural `HotStagePlume` visible y anclado
+     durante el overlap; validado en framebuffer real a 640x360 como evidencia reproducible.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.

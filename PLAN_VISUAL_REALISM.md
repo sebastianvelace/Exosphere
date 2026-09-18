@@ -162,6 +162,9 @@ Mejoras:
   HUD legible. Ver `.atl/agent-hotstaging-log.md`. Flash/anillo/hollín reforzados esta
   tanda (`HotStageFlashController`) para legibilidad en captura estática; juicio IFT
   T+2:39 lado-a-lado sigue abierto como comparación humana de referencia.
+- [x] La captura reproducible exige además un volumen procedural `HotStagePlume`
+  visible durante el overlap, con telemetría de anclaje/opacity y gate fail-closed en
+  `tools/visual_playtest.sh`; validado en `/tmp/exo_play-visual-close-20260918-low/`.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
 - [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.

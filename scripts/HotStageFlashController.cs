@@ -12,6 +12,9 @@ public partial class HotStageFlashController : Node3D
     private const int PuffCount = 12;
     private readonly MeshInstance3D[] _puffs = new MeshInstance3D[PuffCount];
     private readonly ShaderMaterial[] _materials = new ShaderMaterial[PuffCount];
+    private MeshInstance3D? _interstagePlume;
+    private ShaderMaterial? _interstagePlumeMaterial;
+    private float _interstagePlumeOpacity;
     private float _age = Duration + 1f;
     private bool _wired;
     private bool _lastHotStageOverlap;
@@ -21,6 +24,11 @@ public partial class HotStageFlashController : Node3D
 
     public bool IsVesselFrameSynchronized =>
         _vesselFrame != null && GodotObject.IsInstanceValid(_vesselFrame);
+    public bool IsInterstagePlumeVisible =>
+        _interstagePlume != null && _interstagePlume.Visible;
+    public float InterstagePlumeLocalY =>
+        _interstagePlume?.Position.Y ?? float.NaN;
+    public float InterstagePlumeOpacity => _interstagePlumeOpacity;
 
     public override void _Ready()
     {
@@ -41,6 +49,24 @@ public partial class HotStageFlashController : Node3D
             };
             AddChild(_puffs[i]);
         }
+        _interstagePlumeMaterial = new ShaderMaterial { Shader = shader };
+        _interstagePlumeMaterial.SetShaderParameter("seed", 37.0f);
+        _interstagePlumeMaterial.SetShaderParameter("opacity", 0f);
+        _interstagePlume = new MeshInstance3D
+        {
+            Name = "HotStagePlume",
+            Mesh = new SphereMesh
+            {
+                Radius = 1f,
+                Height = 2f,
+                RadialSegments = 24,
+                Rings = 12,
+            },
+            MaterialOverride = _interstagePlumeMaterial,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+        };
+        AddChild(_interstagePlume);
         TryWireSignal();
         Visible = false;
     }
@@ -63,6 +89,25 @@ public partial class HotStageFlashController : Node3D
         _age += (float)delta;
         float t = Mathf.Clamp(_age / Duration, 0f, 1f);
         Visible = IsVesselFrameSynchronized && t < 1f;
+        bool plumeVisible = IsVesselFrameSynchronized && t < 1f;
+        if (_interstagePlume != null && _interstagePlumeMaterial != null)
+        {
+            // A broad, tapering gas core makes the ignition-before-separation state
+            // readable in a still without introducing a solid emissive ring. The
+            // mesh is presentation-only and shares the same soft gas shader as the
+            // surrounding puffs.
+            float height = 3.8f + 1.4f * t;
+            float radius = 1.15f + 0.65f * t;
+            _interstagePlume.Position = new Vector3(
+                0f,
+                HotStageInterfaceRenderY - height * 0.5f,
+                0f);
+            _interstagePlume.Scale = new Vector3(radius, height * 0.5f, radius);
+            _interstagePlumeMaterial.SetShaderParameter("age", t);
+            _interstagePlumeOpacity = 0.16f * (1f - t) * (1f - t);
+            _interstagePlumeMaterial.SetShaderParameter("opacity", _interstagePlumeOpacity);
+            _interstagePlume.Visible = plumeVisible && _interstagePlumeOpacity > 0.005f;
+        }
         // Bounded presentation envelope, not gas dynamics: including puff extent,
         // radius stays below 4.1 units (~11.5 m). Density falls during expansion.
         for (int i = 0; i < PuffCount; i++)
