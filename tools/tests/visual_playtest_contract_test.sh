@@ -89,6 +89,16 @@ if ! grep -q 'seen\["ship_vacuum_off"\] == 1 && bad != 1' "$HARNESS_SCRIPT"; the
   echo "FAIL ship throttle-matrix awk no longer proves full/half/shutdown delivered thrust" >&2
   exit 1
 fi
+if ! grep -q 'ship_detail_steel' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ship_detail_tps' "$HARNESS_SCRIPT" \
+  || ! grep -q 'GetEastDirection(vessel.Position)' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ToGodot(-inspectionEast)' "$HARNESS_SCRIPT" \
+  || ! grep -q 'hud.Visible = false' "$HARNESS_SCRIPT" \
+  || ! grep -q 'SetExternalChaseFrame(90f, 4f, 23f)' "$HARNESS_SCRIPT" \
+  || ! grep -q 'SetExternalChaseFrame(270f, 4f, 23f)' "$HARNESS_SCRIPT"; then
+  echo "FAIL standalone Starship mode lacks deterministic steel/TPS detail views" >&2
+  exit 1
+fi
 if ! grep -q 'SUMMARY reason=SMOKE_OK' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_LAUNCH slug=pad present=True visible=True' "$HARNESS_SCRIPT"; then
   echo "FAIL smoke mode does not prove the single hero launch complex" >&2

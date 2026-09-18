@@ -8,10 +8,10 @@ shader="$ROOT/assets/shaders/steel.gdshader"
 tile_shader="$ROOT/assets/shaders/heat_tile.gdshader"
 renderer="$ROOT/scripts/VesselRenderer.cs"
 
-rg -q 'var noseBlack = Mat\(new Color\(0\.001f, 0\.001f, 0\.001f\), 0\.0f, 0\.96f\)' "$renderer" \
-  || fail "Starship nose is not assigned the dedicated opaque black material"
-rg -q 'noseBlack\.Transparency = BaseMaterial3D\.TransparencyEnum\.Disabled' "$renderer" \
-  || fail "Starship nose black material is not explicitly opaque"
+rg -q 'var noseBlack = TileMat\(rimStrength: 0\.035f, tileScale: 13\.0f\)' "$renderer" \
+  || fail "Starship nose is not assigned the dedicated black TPS material"
+rg -q 'RegisterTileMat\(TileCharZone\.Nose, noseBlack\)' "$renderer" \
+  || fail "Starship nose TPS does not participate in thermal presentation"
 rg -q 'BuildOgiveMesh\(noseLen, OgiveR\), noseBlack' "$renderer" \
   || fail "Starship ogive does not use the black nose material"
 
@@ -44,13 +44,43 @@ rg -q 'SetShaderParameter\("fill_strength", 0\.038f\)' "$renderer" \
 [[ -f "$tile_shader" ]] || fail "heat-tile shader is missing"
 rg -q 'uniform vec3  albedo_color' "$tile_shader" \
   || fail "TPS shader has no explicit baseline albedo"
-rg -q 'vec3 lit = tile \*' "$tile_shader" \
-  || fail "TPS shader does not seed the baseline fill"
-rg -q 'ALBEDO = lit;' "$tile_shader" \
-  || fail "TPS shader does not write its display-referred fill"
+rg -q 'render_mode cull_back, diffuse_burley, specular_schlick_ggx;' "$tile_shader" \
+  || fail "TPS shader is not using the opaque PBR lighting path"
+rg -q 'float filter_width = max\(fwidth\(edge_distance\)' "$tile_shader" \
+  || fail "TPS tile joints are not derivative-filtered"
+rg -q 'ALBEDO = tile;' "$tile_shader" \
+  || fail "TPS shader does not preserve tile color as PBR albedo"
+rg -q 'ROUGHNESS = roughness_val;' "$tile_shader" \
+  || fail "TPS shader does not expose its matte roughness"
+rg -q 'EMISSION = emission;' "$tile_shader" \
+  || fail "TPS shader does not layer bounded thermal emission"
+if rg -q 'render_mode.*unshaded|^\s*ALPHA\s*=' "$tile_shader"; then
+  fail "TPS shader bypasses lighting or enters the transparent pipeline"
+fi
 rg -q 'm\.SetShaderParameter\("albedo_color", TileBaseColor\)' "$renderer" \
   || fail "renderer does not configure the TPS baseline color"
 rg -q 'm\.SetShaderParameter\("emit_strength", 0\.0f\)' "$renderer" \
   || fail "TPS material does not initialize thermal emission"
 
-echo "visual_material_fill_contract_test: PASS (PBR steel reflections, bounded fill, thermal emission additive)"
+rg -q 'BuildCylindricalSectorMesh' "$renderer" \
+  || fail "Starship TPS still lacks a continuous curved body surface"
+rg -Fq 'surface.SetNormal(new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)))' "$renderer" \
+  || fail "Starship TPS sector does not carry explicit outward normals"
+rg -Fq 'surface.AddIndex(i11);' "$renderer" \
+  || fail "Starship TPS sector lacks exterior-facing triangle winding"
+rg -q 'BuildStarshipFlapMesh' "$renderer" \
+  || fail "Starship flaps still lack a tapered aerodynamic mesh"
+rg -q 'AddFlap\("FwdFlapL".*2\.05f, 1\.15f' "$renderer" \
+  && rg -q 'fwdFlapTiles, tipSpanFraction: 0\.56f' "$renderer" \
+  || fail "Starship forward flaps are not using bounded image-derived proportions"
+rg -q 'AddFlap\("AftFlapL".*3\.95f, 1\.95f' "$renderer" \
+  && rg -q 'aftFlapTiles, tipSpanFraction: 0\.60f' "$renderer" \
+  || fail "Starship aft flaps are not using bounded image-derived proportions"
+if rg -q 'TileSeam' "$renderer"; then
+  fail "Starship flap still carries box seam overlays over the filtered TPS pattern"
+fi
+if rg -q 'ShipBarrelWeld' "$renderer"; then
+  fail "Starship still draws metal weld rings over the windward TPS surface"
+fi
+
+echo "visual_material_fill_contract_test: PASS (opaque PBR steel/TPS, filtered joints, curved shield and tapered flaps)"

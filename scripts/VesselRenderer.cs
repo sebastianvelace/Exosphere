@@ -440,11 +440,12 @@ public partial class VesselRenderer : Node3D
 
     private void BuildStarshipSection(Vessel vessel, float yOffset)
     {
-        var fwdFlapTiles = TileMat();
+        var fwdFlapTiles = TileMat(tileScale: 7.0f);
         RegisterTileMat(TileCharZone.FwdFlap, fwdFlapTiles);
-        var aftFlapTiles = TileMat();
+        var aftFlapTiles = TileMat(tileScale: 8.5f);
         RegisterTileMat(TileCharZone.AftFlap, aftFlapTiles);
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
+        var detailSteel = Mat(new Color(0.18f, 0.19f, 0.21f), 0.42f, 0.58f);
 
         float o = yOffset;
         float bodyMid = o + ShipBodyBase + ShipBodyH * 0.5f;
@@ -455,7 +456,8 @@ public partial class VesselRenderer : Node3D
         float skirtMid = o + ShipSkirtBase + ShipSkirtH * 0.5f;
         float skirtTop = o + ShipBodyBase;
 
-        var shipSteel = SteelMat(new Color(0.74f, 0.74f, 0.76f), 0.24f, 0.26f, weldSpacing: 1.55f);
+        var shipSteel = SteelMat(new Color(0.66f, 0.67f, 0.70f), 0.68f, 0.34f,
+            weldSpacing: 1.55f, weldDepth: 0.055f);
         _shipSteelMats.Add(shipSteel);
         _hullMesh = AddMesh("Body",
             new CylinderMesh
@@ -469,13 +471,15 @@ public partial class VesselRenderer : Node3D
                 CapTop = false,
             },
             shipSteel, new Vector3(0, bodyMid, 0));
-        AddWeldRings("ShipBarrelWeld", BodyR + 0.018f, bodyBot + 0.8f, bodyTop - 0.7f, 7);
+        // The steel shader already carries ring-weld variation. Separate torus-like
+        // weld geometry sat above the TPS radius and drew bright metal stripes across
+        // the windward heat shield, which cannot happen on the tiled flight article.
         AddHullRing("ShipFrostLOX", BodyR + 0.026f, bodyTop - 1.3f, 0.08f, FrostMat);
         AddHullRing("ShipFrostCH4", BodyR + 0.026f, bodyMid - 1.75f, 0.07f, FrostMat);
 
         AddSurfaceBox("ShipRaceway", angle: 0f, y: bodyMid, height: ShipBodyH * 0.81f,
-            width: 0.18f, depth: 0.18f, mat: darkSteel, radius: BodyR + 0.045f);
-        AddPayloadDoorOutline(o, darkSteel);
+            width: 0.15f, depth: 0.12f, mat: detailSteel, radius: BodyR + 0.045f);
+        AddPayloadDoorOutline(o, detailSteel);
         AddShipCloseupCues(o);
 
         AddTileBand(bodyBot, bodyTop, TileCharZone.Belly);
@@ -484,12 +488,12 @@ public partial class VesselRenderer : Node3D
         const float noseBase = ShipNoseBase;
         const float noseLen  = ShipNoseH;
         const float noseR    = BodyR;
-        // The nose cone is a dark thermal-protection surface in this vehicle
-        // configuration. Keep it in the opaque dielectric path: the previous
-        // steel shader made the cone read white and its highlights suggested
-        // transparency in the high-altitude captures.
-        var noseBlack = Mat(new Color(0.001f, 0.001f, 0.001f), 0.0f, 0.96f);
-        noseBlack.Transparency = BaseMaterial3D.TransparencyEnum.Disabled;
+        // The nose remains an opaque black TPS surface, but it now shares the
+        // physically lit tile material instead of a featureless black plastic.
+        // This preserves the requested black silhouette while giving sunlight,
+        // Earth bounce and reentry heating a surface to describe.
+        var noseBlack = TileMat(rimStrength: 0.035f, tileScale: 13.0f);
+        RegisterTileMat(TileCharZone.Nose, noseBlack);
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
         // a fuller, more realistic Starship nose than a simple sqrt curve. Keep
         // the entire shell as one mesh: separate capped frusta at zero-gap
@@ -499,9 +503,8 @@ public partial class VesselRenderer : Node3D
         AddMesh("Nose", BuildOgiveMesh(noseLen, OgiveR), noseBlack,
             new Vector3(0, o + noseBase, 0));
 
-        // Keep the ogive as one authoritative surface at orbital scale. A separate TPS
-        // overlay, even when continuous, reads as a colored disk at the barrel interface;
-        // close-range tile detail belongs to the dedicated belly surface for now.
+        // Keep the ogive as one authoritative opaque surface at orbital scale. UVs generated
+        // by BuildOgiveMesh provide tile detail without a second coplanar overlay.
 
         AddMesh("NoseTip",
             new SphereMesh { Radius = 0.085f, Height = 0.17f,
@@ -513,12 +516,18 @@ public partial class VesselRenderer : Node3D
             darkSteel, new Vector3(0, skirtMid, 0));
         AddWeldRing("SkirtLip", 1.155f * RScale, skirtTop);
 
-        // Flight 7-ish proportions: forward canards shorter/narrower; aft elevons longer
-        // with deeper chord, seated closer to the belly so the silhouette reads Starship.
-        AddFlap("FwdFlapL", fwdFlapY + 0.15f, 2.55f, 1.72f, -0.58f, fwdFlapTiles);
-        AddFlap("FwdFlapR", fwdFlapY + 0.15f, 2.55f, 1.72f,  0.58f, fwdFlapTiles);
-        AddFlap("AftFlapL", aftFlapY - 0.20f, 6.35f, 3.95f, -0.48f, aftFlapTiles);
-        AddFlap("AftFlapR", aftFlapY - 0.20f, 6.35f, 3.95f,  0.48f, aftFlapTiles);
+        // Flight 7-ish image proportions: the forward flaps occupy roughly one sixth
+        // of the barrel length and the aft flaps roughly one third. The former values
+        // made each aft surface almost 18 m long and 11 m wide, producing the giant
+        // rectangular boards visible in orbital broadside captures.
+        AddFlap("FwdFlapL", fwdFlapY + 0.15f, 2.05f, 1.15f, -0.58f,
+            fwdFlapTiles, tipSpanFraction: 0.56f);
+        AddFlap("FwdFlapR", fwdFlapY + 0.15f, 2.05f, 1.15f,  0.58f,
+            fwdFlapTiles, tipSpanFraction: 0.56f);
+        AddFlap("AftFlapL", aftFlapY - 0.20f, 3.95f, 1.95f, -0.48f,
+            aftFlapTiles, tipSpanFraction: 0.60f);
+        AddFlap("AftFlapR", aftFlapY - 0.20f, 3.95f, 1.95f,  0.48f,
+            aftFlapTiles, tipSpanFraction: 0.60f);
         var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
         AddMesh("ShipBaySoot", new CylinderMesh
             { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
@@ -590,6 +599,7 @@ public partial class VesselRenderer : Node3D
             for (int radial = 0; radial <= radialSegments; radial++)
             {
                 float angle = radial * Mathf.Tau / radialSegments;
+                surface.SetUV(new Vector2(radial / (float)radialSegments, u0));
                 surface.AddVertex(new Vector3(
                     radius * Mathf.Cos(angle), y, radius * Mathf.Sin(angle)));
             }
@@ -615,12 +625,16 @@ public partial class VesselRenderer : Node3D
         // longer owns this plane; leaving it open exposes the planet through the
         // nose when the orbital camera looks back along the vehicle axis.
         int capCenter = (axialSegments + 1) * (radialSegments + 1);
+        surface.SetUV(new Vector2(0.5f, 0.5f));
         surface.AddVertex(new Vector3(0f, 0f, 0f));
         int capRing = capCenter + 1;
         for (int radial = 0; radial <= radialSegments; radial++)
         {
             float angle = radial * Mathf.Tau / radialSegments;
             float radius = radiusAt(0f);
+            surface.SetUV(new Vector2(
+                0.5f + 0.5f * Mathf.Cos(angle),
+                0.5f + 0.5f * Mathf.Sin(angle)));
             surface.AddVertex(new Vector3(
                 radius * Mathf.Cos(angle), 0f, radius * Mathf.Sin(angle)));
         }
@@ -2911,15 +2925,13 @@ public partial class VesselRenderer : Node3D
     private static Shader TileShader =>
         _tileShader ??= GD.Load<Shader>("res://assets/shaders/heat_tile.gdshader");
 
-    private static ShaderMaterial TileMat(float rimStrength = 0.06f)
+    private static ShaderMaterial TileMat(float rimStrength = 0.06f, float tileScale = 11.0f)
     {
         var m = new ShaderMaterial { Shader = TileShader };
         m.SetShaderParameter("albedo_color", TileBaseColor);
         m.SetShaderParameter("roughness_val", 0.93f);
-        // Kept for material compatibility; panel gaps are geometry, not a
-        // fragment-level procedural pattern.
-        m.SetShaderParameter("hex_scale", 1.0f);
-        m.SetShaderParameter("gap_width", 0.0f);
+        m.SetShaderParameter("hex_scale", tileScale);
+        m.SetShaderParameter("gap_width", 0.055f);
         m.SetShaderParameter("char_amt", 0.0f);
         m.SetShaderParameter("rim_strength", rimStrength);
         m.SetShaderParameter("sky_bounce", 1.0f);
@@ -3098,70 +3110,29 @@ public partial class VesselRenderer : Node3D
     }
 
     // Black heat-shield tile coverage over the windward (-X) half of a body
-    // section. Built from short tile staves spanning ~200° of the circumference
-    // so the dark side reads clearly while the leeward side stays bare steel.
+    // section. One curved sector replaces the old set of flat overlapping staves;
+    // the shader owns anti-aliased tile joints, while geometry owns the silhouette.
     private void AddTileBand(float yBottom, float yTop, TileCharZone zone,
         float topRadius = BodyR + 0.015f, float botRadius = BodyR + 0.015f)
     {
-        var tiles = TileMat();
+        var tiles = TileMat(tileScale: 15.0f);
         RegisterTileMat(zone, tiles);
-        var seams  = Mat(new Color(0.010f, 0.010f, 0.012f), 0.0f, 0.96f);
         float yMid = (yBottom + yTop) * 0.5f;
         float h    = yTop - yBottom;
 
         // Windward arc centred on -X (angle = π), spanning ~200°.
-        const int   staves = 14;
         const float arc    = 3.49f;            // ~200°
-        for (int i = 0; i < staves; i++)
-        {
-            float a = Mathf.Pi - arc * 0.5f + arc * (i + 0.5f) / staves;
-            float r = (topRadius + botRadius) * 0.5f;
-            // Thin curved-ish stave (a flat slat) sitting just proud of the hull.
-            var stave = new MeshInstance3D
-            {
-                Name            = $"Tile_{(int)(yMid * 10)}_{i}",
-                Mesh            = new BoxMesh { Size = new Vector3(0.52f, h, 0.10f) },
-                Position        = new Vector3(r * Mathf.Cos(a), yMid, r * Mathf.Sin(a)),
-                RotationDegrees = new Vector3(0, -Mathf.RadToDeg(a) + 90f, 0),
-            };
-            stave.SetSurfaceOverrideMaterial(0, tiles);
-            AddChild(stave);
-
-            int rows = System.Math.Clamp((int)(h / 0.85f), 3, 18);
-            for (int row = 1; row < rows; row++)
-            {
-                float y = -h * 0.5f + h * row / rows;
-                var seam = new MeshInstance3D
-                {
-                    Name = $"TileSeamH_{(int)(yMid * 10)}_{i}_{row}",
-                    Mesh = new BoxMesh { Size = new Vector3(0.50f, 0.018f, 0.108f) },
-                    Position = new Vector3(0f, y, -0.006f),
-                };
-                seam.SetSurfaceOverrideMaterial(0, seams);
-                stave.AddChild(seam);
-            }
-
-            float rowH = h / rows;
-            for (int row = 0; row < rows; row++)
-            {
-                float y = -h * 0.5f + rowH * (row + 0.5f);
-                float x = (row + i) % 2 == 0 ? -0.13f : 0.13f;
-                var vSeam = new MeshInstance3D
-                {
-                    Name = $"TileSeamV_{(int)(yMid * 10)}_{i}_{row}",
-                    Mesh = new BoxMesh { Size = new Vector3(0.018f, rowH * 0.58f, 0.110f) },
-                    Position = new Vector3(x, y, -0.007f),
-                };
-                vSeam.SetSurfaceOverrideMaterial(0, seams);
-                stave.AddChild(vSeam);
-            }
-        }
+        float radius = (topRadius + botRadius) * 0.5f;
+        AddMesh("ShipHeatShield",
+            BuildCylindricalSectorMesh(radius, h, Mathf.Pi - arc * 0.5f, arc),
+            tiles, new Vector3(0f, yMid, 0f));
     }
 
     // A Starship aerodynamic flap: a tile-covered slab plus a steel root, both
     // mounted on the windward (-X) side and offset around the body by `angOff`
     // radians from the -X axis.
-    private void AddFlap(string name, float y, float length, float chord, float angOff, Material mat)
+    private void AddFlap(string name, float y, float length, float chord, float angOff,
+        Material mat, float tipSpanFraction)
     {
         float a   = Mathf.Pi + angOff;
         float cos = Mathf.Cos(a);
@@ -3172,7 +3143,7 @@ public partial class VesselRenderer : Node3D
         var blade = new MeshInstance3D
         {
             Name            = name,
-            Mesh            = new BoxMesh { Size = new Vector3(chord, length, 0.16f) },
+            Mesh            = BuildStarshipFlapMesh(length, chord, 0.16f, tipSpanFraction),
             Position        = new Vector3((BodyR + 0.40f) * cos, y, (BodyR + 0.40f) * sin),
             RotationDegrees = new Vector3(0, deg, 0),
         };
@@ -3185,29 +3156,6 @@ public partial class VesselRenderer : Node3D
             Side = name.EndsWith("L", StringComparison.Ordinal) ? -1f : 1f,
             Forward = name.StartsWith("Fwd", StringComparison.Ordinal),
         });
-
-        var edgeMat = Mat(new Color(0.020f, 0.020f, 0.024f), 0.0f, 0.94f);
-        var leading = new MeshInstance3D
-        {
-            Name = name + "LeadingEdge",
-            Mesh = new BoxMesh { Size = new Vector3(0.12f, length * 0.96f, 0.070f) },
-            Position = new Vector3(chord * 0.45f, 0f, -0.10f),
-        };
-        leading.SetSurfaceOverrideMaterial(0, edgeMat);
-        blade.AddChild(leading);
-
-        // Denser tile seams (∼6 rows) so flaps read as tiled TPS at mid distance.
-        for (int s = -3; s <= 3; s++)
-        {
-            var seam = new MeshInstance3D
-            {
-                Name = $"{name}TileSeam{s}",
-                Mesh = new BoxMesh { Size = new Vector3(chord * 0.72f, 0.028f, 0.055f) },
-                Position = new Vector3(0f, s * length * 0.125f, -0.105f),
-            };
-            seam.SetSurfaceOverrideMaterial(0, edgeMat);
-            blade.AddChild(seam);
-        }
 
         // Root fairing where the flap meets the hull.
         var root = new MeshInstance3D
@@ -3230,6 +3178,95 @@ public partial class VesselRenderer : Node3D
         };
         hinge.SetSurfaceOverrideMaterial(0, hingeMat);
         root.AddChild(hinge);
+    }
+
+    private static ArrayMesh BuildCylindricalSectorMesh(float radius, float height,
+        float startAngle, float arc, int radialSegments = 40, int axialSegments = 12)
+    {
+        var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+        for (int axial = 0; axial <= axialSegments; axial++)
+        {
+            float v = axial / (float)axialSegments;
+            float y = Mathf.Lerp(-height * 0.5f, height * 0.5f, v);
+            for (int radial = 0; radial <= radialSegments; radial++)
+            {
+                float u = radial / (float)radialSegments;
+                float angle = startAngle + arc * u;
+                surface.SetUV(new Vector2(u, v));
+                surface.SetNormal(new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)));
+                surface.AddVertex(new Vector3(
+                    radius * Mathf.Cos(angle), y, radius * Mathf.Sin(angle)));
+            }
+        }
+
+        int stride = radialSegments + 1;
+        for (int axial = 0; axial < axialSegments; axial++)
+        for (int radial = 0; radial < radialSegments; radial++)
+        {
+            int i00 = axial * stride + radial;
+            int i10 = i00 + stride;
+            int i01 = i00 + 1;
+            int i11 = i10 + 1;
+            // Godot treats clockwise winding as front-facing. Keep the generated
+            // outward normal above and wind each quad for an exterior observer;
+            // the previous order culled the complete body TPS in broadside views.
+            surface.AddIndex(i00);
+            surface.AddIndex(i11);
+            surface.AddIndex(i10);
+            surface.AddIndex(i00);
+            surface.AddIndex(i01);
+            surface.AddIndex(i11);
+        }
+        return surface.Commit()!;
+    }
+
+    private static ArrayMesh BuildStarshipFlapMesh(float length, float chord,
+        float thickness, float tipSpanFraction)
+    {
+        float rootHalf = length * 0.5f;
+        float tipHalf = rootHalf * Mathf.Clamp(tipSpanFraction, 0.5f, 0.9f);
+        float x0 = -chord * 0.5f;
+        float x1 = chord * 0.5f;
+        float z0 = -thickness * 0.5f;
+        float z1 = thickness * 0.5f;
+        Vector3 a0 = new(x0, -rootHalf, z0);
+        Vector3 a1 = new(x1, -tipHalf, z0);
+        Vector3 a2 = new(x1, tipHalf, z0);
+        Vector3 a3 = new(x0, rootHalf, z0);
+        Vector3 b0 = new(x0, -rootHalf, z1);
+        Vector3 b1 = new(x1, -tipHalf, z1);
+        Vector3 b2 = new(x1, tipHalf, z1);
+        Vector3 b3 = new(x0, rootHalf, z1);
+        Vector2 uv0 = new(0f, 1f);
+        Vector2 uv1 = new(1f, 0.5f + tipSpanFraction * 0.5f);
+        Vector2 uv2 = new(1f, 0.5f - tipSpanFraction * 0.5f);
+        Vector2 uv3 = new(0f, 0f);
+
+        var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+        void Triangle(Vector3 p0, Vector2 t0, Vector3 p1, Vector2 t1,
+            Vector3 p2, Vector2 t2)
+        {
+            surface.SetUV(t0); surface.AddVertex(p0);
+            surface.SetUV(t1); surface.AddVertex(p1);
+            surface.SetUV(t2); surface.AddVertex(p2);
+        }
+
+        Triangle(a0, uv0, a1, uv1, a2, uv2);
+        Triangle(a0, uv0, a2, uv2, a3, uv3);
+        Triangle(b1, uv1, b0, uv0, b3, uv3);
+        Triangle(b1, uv1, b3, uv3, b2, uv2);
+        Triangle(b0, uv0, a0, uv0, a3, uv3);
+        Triangle(b0, uv0, a3, uv3, b3, uv3);
+        Triangle(a1, uv1, b1, uv1, b2, uv2);
+        Triangle(a1, uv1, b2, uv2, a2, uv2);
+        Triangle(a3, uv3, a2, uv2, b2, uv2);
+        Triangle(a3, uv3, b2, uv2, b3, uv3);
+        Triangle(b0, uv0, b1, uv1, a1, uv1);
+        Triangle(b0, uv0, a1, uv1, a0, uv0);
+        surface.GenerateNormals();
+        return surface.Commit()!;
     }
 
     // ── Raptor engine ─────────────────────────────────────────────────────

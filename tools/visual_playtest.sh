@@ -68,7 +68,8 @@ Options:
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --launch-track Capture launch, tower-clear and 1 km using the production camera.
-  --ship        Capture standalone Starship in vacuum at full/half thrust and shutdown.
+  --ship        Capture standalone Starship in vacuum at full/half thrust, shutdown,
+                plus close steel-side and TPS-side inspection frames.
   --starbase-far Capture the mapped Starbase terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
@@ -1047,9 +1048,38 @@ public partial class _PlaytestShot : Node
             }
             if (_shipSeeded && _shipPlumeQueued && _pendingSlug == null)
             {
-                if (_shipPlumeStep == 2) { Finish("SHIP_OK"); return; }
+                if (_shipPlumeStep == 4) { Finish("SHIP_OK"); return; }
                 _shipPlumeStep++;
-                bridge.SetThrottle(_shipPlumeStep == 1 ? 0.5 : 0.0);
+                if (_shipPlumeStep <= 2)
+                    bridge.SetThrottle(_shipPlumeStep == 1 ? 0.5 : 0.0);
+                else if (_shipPlumeStep == 3)
+                {
+                    // The throttle matrix above preserves the production orbital attitude.
+                    // Detail acceptance needs a stable broadside: freeze the fixture, align
+                    // the vehicle axis to geodetic up and remove HUD occlusion before judging
+                    // silhouette, weld bands, flap taper and the steel/TPS boundary.
+                    bridge.SetTimeScale(0.0);
+                    vessel.AngularVelocity = Vector3d.Zero;
+                    Vector3d inspectionUp = body.GetGeodeticUp(vessel.Position);
+                    Vector3d inspectionEast = body.GetEastDirection(vessel.Position);
+                    Vector3d inspectionSouth = inspectionEast.Cross(inspectionUp).Normalized;
+                    // Local -X is the TPS normal. Map it to geodetic east so yaw 90
+                    // is a true windward broadside and yaw 270 is true leeward steel.
+                    var inspectionBasis = new Basis(
+                        ToGodot(-inspectionEast), ToGodot(inspectionUp),
+                        ToGodot(-inspectionSouth));
+                    var inspectionRotation = inspectionBasis.GetRotationQuaternion();
+                    vessel.Orientation = new Quaterniond(
+                        inspectionRotation.W, inspectionRotation.X,
+                        inspectionRotation.Y, inspectionRotation.Z);
+                    if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+                        hud.Visible = false;
+                    // +X looks directly at the tiled windward side in this fixture.
+                    CameraController.Instance?.SetExternalChaseFrame(90f, 4f, 23f);
+                }
+                else
+                    // -X looks directly at the bare stainless leeward side.
+                    CameraController.Instance?.SetExternalChaseFrame(270f, 4f, 23f);
                 _readyFrames = 0;
                 _shipPlumeQueued = false;
                 return;
@@ -1067,8 +1097,15 @@ public partial class _PlaytestShot : Node
                     $"rendererPos={rendererNode?.Position.ToString() ?? "missing"} " +
                     $"rendererVisible={rendererNode?.Visible.ToString() ?? "missing"}");
                 _log.Flush();
-                QueueCapture(_shipPlumeStep == 0 ? "ship_vacuum"
-                    : _shipPlumeStep == 1 ? "ship_vacuum_half" : "ship_vacuum_off");
+                string slug = _shipPlumeStep switch
+                {
+                    0 => "ship_vacuum",
+                    1 => "ship_vacuum_half",
+                    2 => "ship_vacuum_off",
+                    3 => "ship_detail_tps",
+                    _ => "ship_detail_steel",
+                };
+                QueueCapture(slug);
                 _shipPlumeQueued = true;
             }
             return;
@@ -3961,7 +3998,7 @@ verify_pngs() {
       return 1
     fi
   elif [[ "$MODE" == "ship" ]]; then
-    for slug in ship_vacuum ship_vacuum_half ship_vacuum_off; do
+    for slug in ship_vacuum ship_vacuum_half ship_vacuum_off ship_detail_steel ship_detail_tps; do
       if [[ ! -s "$OUT_DIR/exo_play_${slug}.png" ]]; then
         echo "ERROR: missing vacuum throttle matrix frame: $slug" >&2
         return 1
@@ -3991,6 +4028,24 @@ verify_pngs() {
     fi
     if [[ ! -f "$OUT_DIR/exo_play_ship_vacuum.png" ]]; then
       echo "ERROR: missing standalone Starship visual milestone PNG" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=ship_detail_(steel|tps) / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^darkFrac=/) { split($i, p, "="); dark = p[2] + 0 }
+          if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+        }
+        if (mean <= 0.005 || dark >= 0.98 || clipped >= 0.10) bad = 1
+        found++
+      }
+      END {
+        if (found == 2 && bad != 1) exit 0
+        exit 1
+      }
+    ' "$LOG"; then
+      echo "ERROR: Starship detail frames are empty or broadly clipped" >&2
       return 1
     fi
     if ! grep -q 'SUMMARY reason=SHIP_OK' "$LOG"; then
