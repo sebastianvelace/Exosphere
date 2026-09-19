@@ -145,6 +145,20 @@ Mejoras:
   `vacuumDim`/`vacuumAlpha` para mantener un core azul/blanco legible contra Tierra
   sin volver a una nube de pad. Validado con captura sintética
   `/tmp/exosphere_orbit_plume_clean.png`.
+- [x] Fixture orbital dedicado: `tools/visual_playtest.sh --orbital-plume` captura a 200 km
+  con la cámara Chase de producción, HUD y silueta activos. El gate fail-closed exige cuerpo
+  Earth, presión casi nula, expansión de vacío, throttle entregado, campana core/sheath
+  anclada al nozzle, partículas de interacción apagadas, punta y raíz dentro del framebuffer,
+  capas ópticas no opacas y PNG 1920x1080 decodificable. La comparación visual queda
+  calibrada contra la página oficial de Starship
+  (`https://new.spacex.com/vehicles/starship`) y el video oficial
+  (`https://youtu.be/EthkNLasUa8`): campana larga y anclada, núcleo azul-blanco legible,
+  envolvente translúcida con caída axial, silueta/HUD sin clipping. El contrato enfocado es
+  `tools/tests/orbital_plume_visual_contract_test.sh`.
+- [ ] Captura Xvfb real de este fixture a 1920x1080: el gate está listo; las corridas
+  de cierre se interrumpieron (SIGTERM / lock) antes de producir PNG. El comando es:
+  `GODOT_BIN=/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64 bash tools/visual_playtest.sh
+  --orbital-plume --run-id orbital-plume --resolution 1920x1080`.
 - [x] Startup/ramp: transicion visible desde ignicion a liftoff. `EngineStartupController`
   agrega glow/flicker, vapor de chill y flecks de ignicion mientras la nave sigue
   ground-held; verificado con trigger local Xvfb en `/tmp/exosphere_startup_00..33.png`.
@@ -276,6 +290,12 @@ Mejoras:
   con OSM land-cover entre 1–8 km, para leerse como terreno y no como un
   cuadrado de humedal opaco. El globo scaled-space completa el handoff a 18 km, antes de
   que la vista pulled-back de 20 km pueda exponer el parche tangencial como una banda.
+- [ ] Globo 20–40 km dayside (v5, no cerrado): el azul de v1 es cielo por ALPHA
+  cruzada. Fixture `elevationDeg=28.123 phase=DAY`, pero el casquete rasterizado
+  queda en night (city lights, lowerMean ≈ 0.068) o disco negro (0.0007) si se
+  remapea/invierte `sun_dir`. P1-1 (RotationAxis desde +Y vs +Z orbital) es un
+  defecto de física real; NO es la causa directa — el override de 28° ya
+  reconstruye el sol contra `GetGeodeticUp`. No commitear sin dayside opaco.
 
 Aceptacion:
 - Pad, orbita y reentry se distinguen por luz/color sin filtros exagerados.

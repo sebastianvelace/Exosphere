@@ -48,6 +48,7 @@ bash tools/tests/visual_camera_planet_framing_contract_test.sh
 bash tools/tests/visual_camera_transition_contract_test.sh
 bash tools/tests/visual_daylight_capture_contract_test.sh
 bash tools/tests/hotstage_visual_anchor_contract_test.sh
+bash tools/tests/orbital_plume_visual_contract_test.sh
 bash tools/tests/engine_hud_semantics_contract_test.sh
 bash tools/tests/engine_hud_visual_semantics_contract_test.sh
 bash tools/tests/engine_failure_disabled_contract_test.sh

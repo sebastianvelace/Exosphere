@@ -60,6 +60,22 @@ public partial class PlumeSystem : Node3D
     private float _visualTimeSeconds;
     private bool _farFieldActive;
 
+    // Read-only presentation diagnostics consumed by the orbital visual fixture.
+    // They describe the rendered layer state only; no simulation state crosses this
+    // surface and no gameplay consumer depends on these values.
+    public bool IsFarFieldActive => _farFieldActive;
+    public float LastExpansion { get; private set; }
+    public float LastPressureRatio { get; private set; }
+    public float LastMaximumThrottle { get; private set; }
+    public float LastCoreOpacity { get; private set; }
+    public float LastSheathOpacity { get; private set; }
+    public int VisibleUnitCount { get; private set; }
+    public int AnchoredUnitCount { get; private set; }
+    public float LongestVisibleLength { get; private set; }
+    public bool CoreLayerVisible { get; private set; }
+    public bool SheathLayerVisible { get; private set; }
+    public bool InteractionParticlesVisible { get; private set; }
+
     // The pad tracking shot is deliberately kept in the near-field so its broad
     // steam/dust envelope remains readable. At larger camera distances the outer
     // transparent shell contributes mostly overdraw and aliases into thin bars.
@@ -205,6 +221,11 @@ public partial class PlumeSystem : Node3D
         float pressRatio = (float)System.Math.Clamp(ambientPressureRatio, 0.0, 1.0);
         float expansion  = System.Math.Clamp(1f - pressRatio, 0f, 1f);
         expansion = expansion * expansion * (3f - 2f * expansion); // smoothstep
+        LastExpansion = expansion;
+        LastPressureRatio = pressRatio;
+        LastMaximumThrottle = Mathf.Max(superHeavyThrottle, shipThrottle);
+        LastCoreOpacity = Mathf.Lerp(0.90f, 0.48f, expansion);
+        LastSheathOpacity = Mathf.Lerp(0.50f, 0.12f, expansion);
 
         UpdateGroup(_shUnits, superHeavyThrottle > 0.01f, superHeavyThrottle,
             expansion, pressRatio, altitude, 1f, flickerPhase: _visualTimeSeconds,
@@ -223,6 +244,7 @@ public partial class PlumeSystem : Node3D
                 start: 3, count: 3, activeCount: slActive,
                 flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f, farField: farField);
 
+        RefreshDiagnostics();
     }
 
     public void UpdateGeneric(
@@ -238,6 +260,11 @@ public partial class PlumeSystem : Node3D
         float visualDelta = (float)System.Math.Clamp(visualDeltaSeconds, 0.0, 0.12);
         _visualTimeSeconds = Mathf.PosMod(_visualTimeSeconds + visualDelta, 10_000f);
         bool farField = ResolveFarFieldState();
+        LastExpansion = expansion;
+        LastPressureRatio = pressureRatio;
+        LastMaximumThrottle = 0f;
+        LastCoreOpacity = Mathf.Lerp(0.90f, 0.48f, expansion);
+        LastSheathOpacity = Mathf.Lerp(0.50f, 0.12f, expansion);
         for (int i = 0; i < _genericUnits.Count; i++)
         {
             var unit = _genericUnits[i];
@@ -257,7 +284,48 @@ public partial class PlumeSystem : Node3D
                 activeCount: throttle > 0.01f ? 1 : 0,
                 flickerPhase: _visualTimeSeconds,
                 flickerOffset: i * 0.71f, farField: farField);
+            LastMaximumThrottle = Mathf.Max(LastMaximumThrottle, throttle);
         }
+        RefreshDiagnostics();
+    }
+
+    private void RefreshDiagnostics()
+    {
+        int visible = 0;
+        int anchored = 0;
+        float longest = 0f;
+        bool coreVisible = false;
+        bool sheathVisible = false;
+        bool particlesVisible = false;
+
+        foreach (var unit in EnumerateUnits())
+        {
+            if (!unit.Pivot.Visible)
+                continue;
+
+            visible++;
+            longest = Mathf.Max(longest, unit.Pivot.Scale.Y);
+            if (Mathf.Abs(unit.Cone.Position.Y + 0.5f) <= 0.02f
+                && unit.Pivot.Scale.Y > 1.0f)
+                anchored++;
+            coreVisible |= unit.Core.Visible;
+            sheathVisible |= unit.Cone.Visible;
+            particlesVisible |= unit.Smoke.Emitting || unit.Dust.Emitting;
+        }
+
+        VisibleUnitCount = visible;
+        AnchoredUnitCount = anchored;
+        LongestVisibleLength = longest;
+        CoreLayerVisible = coreVisible;
+        SheathLayerVisible = sheathVisible;
+        InteractionParticlesVisible = particlesVisible;
+    }
+
+    private IEnumerable<PlumeUnit> EnumerateUnits()
+    {
+        foreach (var unit in _shUnits) yield return unit;
+        foreach (var unit in _shipUnits) yield return unit;
+        foreach (var unit in _genericUnits) yield return unit;
     }
 
     private bool ResolveFarFieldState()

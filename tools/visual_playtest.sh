@@ -70,6 +70,9 @@ Options:
   --launch-track Capture launch, tower-clear and 1 km using the production camera.
   --ship        Capture standalone Starship in vacuum at full/half thrust, shutdown,
                 plus close steel-side and TPS-side inspection frames.
+  --orbital-plume
+                Capture a deterministic 200 km Starship vacuum plume with the production
+                chase camera, HUD, vehicle silhouette, and fail-closed plume telemetry.
   --starbase-far Capture the mapped Starbase terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
@@ -206,6 +209,7 @@ while [[ $# -gt 0 ]]; do
     --launch) MODE="launch"; shift ;;
     --launch-track) MODE="launch_track"; shift ;;
     --ship) MODE="ship"; shift ;;
+    --orbital-plume) MODE="orbital_plume"; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
     --orbit) MODE="orbit"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
@@ -1108,6 +1112,31 @@ public partial class _PlaytestShot : Node
                 QueueCapture(slug);
                 _shipPlumeQueued = true;
             }
+            return;
+        }
+
+        if (_mode == "orbital_plume")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                bridge.TriggerStaging();
+                bridge.JumpToOrbit(200_000.0);
+                bridge.SetThrottle(1.0);
+                // Keep the production chase camera and HUD active, but bias the
+                // target down so the vehicle and the long vacuum bell share the
+                // 1920x1080 frame instead of cropping the plume tip.
+                CameraController.Instance?.SetExternalChaseFrame(28f, 16f, 36f, -4f);
+                _shipSeeded = true;
+                return;
+            }
+            if (_shipSeeded && _pendingSlug == null && _readyFrames >= 110
+                && !_orbitBeauty)
+            {
+                QueueCapture("orbital_plume");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("ORBITAL_PLUME_OK");
             return;
         }
 
@@ -3240,6 +3269,7 @@ public partial class _PlaytestShot : Node
         img.SavePng(path);
         LogTelemetry(slug, path);
         LogImageMetrics(slug, img);
+        LogOrbitalPlumeVisualTelemetry(slug, img);
         GD.Print($"[Playtest] captured {slug} -> {path}");
     }
 
@@ -3449,6 +3479,77 @@ public partial class _PlaytestShot : Node
             + $"nominal={summary.NominalEngineCount} rows={summary.ReadoutEngineCount} "
             + $"delivered={delivered} starting={starting} failed={failed} "
             + $"deliveredThrottle={EngineHudPresentation.DeliveredThrottle(rows):F3}");
+        _log.Flush();
+    }
+
+    private void LogOrbitalPlumeVisualTelemetry(string slug, Image image)
+    {
+        if (slug != "orbital_plume") return;
+
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        var universe = bridge?.Universe;
+        var body = vessel == null || universe == null
+            ? null
+            : universe.GetDominantBody(vessel.Position);
+        var plumes = GetTree().Root.FindChild("Plumes", true, false) as PlumeSystem;
+        var renderer = GetTree().Root.FindChild("ActiveVesselRenderer", true, false) as Node3D;
+        var camera = CameraController.Instance?.PresentationCamera
+            ?? GetViewport().GetCamera3D();
+        var hud = GetTree().Root.FindChild("HUDController", true, false) as CanvasItem;
+        double altitude = vessel != null && body != null
+            ? vessel.GetAltitude(body)
+            : double.NaN;
+
+        int projectedPoints = 0;
+        int pointsInFrame = 0;
+        if (plumes != null && camera != null)
+        {
+            foreach (Node child in plumes.GetChildren())
+            {
+                if (child is not Node3D pivot
+                    || !pivot.Name.ToString().EndsWith("_Pivot", StringComparison.Ordinal)
+                    || !pivot.Visible)
+                    continue;
+
+                foreach (Node point in pivot.GetChildren())
+                {
+                    if (point is not MeshInstance3D mesh
+                        || !mesh.Visible
+                        || !mesh.Name.ToString().EndsWith("_Core", StringComparison.Ordinal))
+                        continue;
+
+                    Vector3 root = pivot.GlobalTransform * new Vector3(0f, 0f, 0f);
+                    Vector3 tip = pivot.GlobalTransform * new Vector3(0f, -1f, 0f);
+                    projectedPoints += 2;
+                    if (camera.IsPositionInFrustum(root)) pointsInFrame++;
+                    if (camera.IsPositionInFrustum(tip)) pointsInFrame++;
+                    break;
+                }
+            }
+        }
+
+        _log.WriteLine(
+            $"VISUAL_ORBITAL_PLUME slug={slug} " +
+            $"body={body?.Id ?? "missing"} " +
+            $"altitudeM={altitude:F1} " +
+            $"pressureRatio={plumes?.LastPressureRatio ?? float.NaN:F4} " +
+            $"expansion={plumes?.LastExpansion ?? float.NaN:F3} " +
+            $"deliveredThrottle={plumes?.LastMaximumThrottle ?? float.NaN:F3} " +
+            $"farField={plumes?.IsFarFieldActive ?? false} " +
+            $"visibleUnits={plumes?.VisibleUnitCount ?? 0} " +
+            $"anchoredUnits={plumes?.AnchoredUnitCount ?? 0} " +
+            $"longestLengthRender={plumes?.LongestVisibleLength ?? float.NaN:F2} " +
+            $"coreVisible={plumes?.CoreLayerVisible ?? false} " +
+            $"sheathVisible={plumes?.SheathLayerVisible ?? false} " +
+            $"interactionParticles={plumes?.InteractionParticlesVisible ?? false} " +
+            $"coreOpacity={plumes?.LastCoreOpacity ?? float.NaN:F3} " +
+            $"sheathOpacity={plumes?.LastSheathOpacity ?? float.NaN:F3} " +
+            $"projectedPoints={projectedPoints} pointsInFrame={pointsInFrame} " +
+            $"cameraMode={CameraController.Instance?.Mode.ToString() ?? "missing"} " +
+            $"cameraDistanceRender={camera?.GlobalPosition.Length() ?? float.NaN:F2} " +
+            $"rendererVisible={renderer?.Visible ?? false} hudVisible={hud?.Visible ?? false} " +
+            $"imageWidth={image.GetWidth()} imageHeight={image.GetHeight()}");
         _log.Flush();
     }
 
@@ -4076,6 +4177,77 @@ verify_pngs() {
       END { exit !(found && mean > 0.005 && dark < 0.98 && clipped < 0.10) }
     ' "$LOG"; then
       echo "ERROR: standalone Starship image is empty or broadly clipped" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "orbital_plume" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_orbital_plume.png" ]]; then
+      echo "ERROR: missing orbital vacuum-plume milestone PNG" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=ORBITAL_PLUME_OK' "$LOG"; then
+      echo "ERROR: orbital vacuum-plume capture did not finish cleanly" >&2
+      return 1
+    fi
+    # This gate intentionally combines physical fixture identity, rendered-layer
+    # diagnostics, camera composition and decoded image metrics. A valid PNG or a
+    # shader source string alone must not satisfy the orbital-plume acceptance.
+    if ! awk '
+      function value(prefix,    i, pair) {
+        for (i = 1; i <= NF; i++)
+          if ($i ~ ("^" prefix "=")) {
+            split($i, pair, "=")
+            return pair[2]
+          }
+        return ""
+      }
+      function finite(value) {
+        return value != "" && value == value &&
+          value !~ /^(nan|NaN|inf|Inf|-inf|-Inf)$/
+      }
+      /^VISUAL_ORBITAL_PLUME / {
+        valid = value("body") == "earth"
+        valid = valid && finite(value("altitudeM")) && value("altitudeM") + 0 >= 199000
+        valid = valid && value("altitudeM") + 0 <= 201000
+        valid = valid && finite(value("pressureRatio")) && value("pressureRatio") + 0 <= 0.02
+        valid = valid && finite(value("expansion")) && value("expansion") + 0 >= 0.95
+        valid = valid && finite(value("deliveredThrottle")) && value("deliveredThrottle") + 0 >= 0.95
+        valid = valid && value("farField") == "False"
+        valid = valid && value("visibleUnits") + 0 >= 1
+        valid = valid && value("anchoredUnits") + 0 == value("visibleUnits") + 0
+        valid = valid && value("longestLengthRender") + 0 >= 12.0
+        valid = valid && value("coreVisible") == "True"
+        valid = valid && value("sheathVisible") == "True"
+        valid = valid && value("interactionParticles") == "False"
+        valid = valid && value("coreOpacity") + 0 >= 0.44
+        valid = valid && value("coreOpacity") + 0 <= 0.52
+        valid = valid && value("sheathOpacity") + 0 >= 0.10
+        valid = valid && value("sheathOpacity") + 0 <= 0.14
+        valid = valid && value("projectedPoints") + 0 >= 2
+        valid = valid && value("pointsInFrame") + 0 == value("projectedPoints") + 0
+        valid = valid && value("cameraMode") == "Chase"
+        valid = valid && value("rendererVisible") == "True"
+        valid = valid && value("hudVisible") == "True"
+        valid = valid && value("imageWidth") + 0 == 1920
+        valid = valid && value("imageHeight") + 0 == 1080
+        seen++
+      }
+      END { exit !(seen == 1 && valid) }
+    ' "$LOG"; then
+      echo "ERROR: orbital vacuum-plume telemetry did not prove vacuum layers, anchoring, framing, HUD, and silhouette" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=orbital_plume / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^darkFrac=/) { split($i, p, "="); dark = p[2] + 0 }
+          if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && mean > 0.005 && dark < 0.98 && clipped < 0.10) }
+    ' "$LOG"; then
+      echo "ERROR: orbital vacuum-plume image is empty, black, or broadly clipped" >&2
       return 1
     fi
   elif [[ "$MODE" == "smoke" ]]; then
@@ -5096,6 +5268,8 @@ elif [[ "$MODE" == "orbital_reentry" ]]; then
   echo "visual_playtest: normal orbital Starbase reentry verification OK — physical catch confirmed"
 elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
+elif [[ "$MODE" == "orbital_plume" ]]; then
+  echo "visual_playtest: orbital vacuum-plume capture OK"
 elif [[ "$MODE" == "reentry_compare" ]]; then
   echo "visual_playtest: reentry attitude compare OK — see REENTRY_COMPARE rows in $LOG"
 elif [[ "$MODE" == "atmosphere_bodies" ]]; then
