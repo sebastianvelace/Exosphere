@@ -118,6 +118,7 @@
         "lapse_rate": 0.0103931
       }
     ],
+    "molar_mass": 0.0289644,
     "surface_gravity": 9.80665,
     "geopotential_radius": 6356766.0,
     "thermosphere_scale_height_growth": 0.16

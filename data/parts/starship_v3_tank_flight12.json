@@ -1,7 +1,7 @@
 {
   "id": "starship_v3_tank_flight12",
   "name": "Starship V3 Propellant Tank",
-  "description": "Flight 12 V3 common-bulkhead tank model. The 1,400 t loading and component dry mass are simulator estimates, not SpaceX acceptance data.",
+  "description": "Flight 12 V3 common-bulkhead tank model. The 1,400 t loading and component dry mass are simulator estimates, not SpaceX acceptance data. axial_drag_coefficient 0.30 is a calibrated estimate for a bare 9 m cylindrical barrel (skin friction plus a modest base contribution); it is only consulted when this section is the vessel root or through the length-weighted fallback in PartGraph.AxialDragCoefficient.",
   "category": "fuel_tank",
   "vehicle_family": "starship",
   "vehicle_role": "tank",
@@ -10,6 +10,7 @@
   "diameter_m": 9.0,
   "cost": 24000,
   "drag_coefficient": 0.2,
+  "axial_drag_coefficient": 0.3,
   "heat_tolerance": 1800,
   "has_heat_shield": true,
   "fuel_capacity_lf": 308000,

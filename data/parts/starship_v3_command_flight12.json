@@ -1,7 +1,7 @@
 {
   "id": "starship_v3_command_flight12",
   "name": "Starship V3 Command Section",
-  "description": "Flight 12 V3 nose, payload section, avionics and forward flaps. Geometry and mass allocation are restricted public-data engineering estimates.",
+  "description": "Flight 12 V3 nose, payload section, avionics and forward flaps. Geometry and mass allocation are restricted public-data engineering estimates. nose_radius_m and axial_drag_coefficient are calibrated engineering estimates: the 3.0 m stagnation radius matches the same 9 m ogive modelled by starship_command, and 0.45 is a slender-body axial Cd on the frontal area for a fineness ratio near 14 (Hoerner, Fluid-Dynamic Drag, ch. 3); the transonic rise is applied separately by AerodynamicsModel.GetMachDragMultiplier.",
   "category": "command",
   "vehicle_family": "starship",
   "vehicle_role": "command",
@@ -10,6 +10,8 @@
   "diameter_m": 9.0,
   "cost": 54000,
   "drag_coefficient": 0.25,
+  "axial_drag_coefficient": 0.45,
+  "nose_radius_m": 3.0,
   "heat_tolerance": 2800,
   "has_heat_shield": true,
   "max_crew": 100,

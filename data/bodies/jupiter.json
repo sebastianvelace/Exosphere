@@ -8,14 +8,18 @@
   "axial_tilt": 3.13,
   "has_atmosphere": true,
   "atmosphere": {
-    "scale_height": 27000,
+    "scale_height": 24900,
     "sea_level_density": 0.16,
     "sea_level_pressure": 100000,
     "sea_level_temperature": 165.0,
     "max_altitude": 1000000,
+    "molar_mass": 0.00222,
+    "surface_gravity": 24.79,
+    "geopotential_radius": 71492000.0,
     "layers": [
-      {"alt_min": 0,      "alt_max": 50000,  "temp_base": 165.0, "lapse_rate": -0.002},
-      {"alt_min": 50000,  "alt_max": 1000000, "temp_base": 265.0, "lapse_rate": 0.0}
+      {"alt_min": 0,       "alt_max": 50000,   "temp_base": 165.0, "lapse_rate": -0.0011},
+      {"alt_min": 50000,   "alt_max": 150000,  "temp_base": 110.0, "lapse_rate": 0.0005},
+      {"alt_min": 150000,  "alt_max": 1010000, "temp_base": 160.0, "lapse_rate": 0.0007907}
     ]
   },
   "surface_gravity": 24.79,

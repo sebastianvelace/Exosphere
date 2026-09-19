@@ -1,7 +1,7 @@
 {
   "id": "super_heavy_v3_booster_flight12",
   "name": "Super Heavy V3",
-  "description": "Flight 12 Super Heavy V3 with 33 individually simulated Raptor 3 engineering models. SpaceX publishes the flown engine count; mass, loading and performance remain estimates.",
+  "description": "Flight 12 Super Heavy V3 with 33 individually simulated Raptor 3 engineering models. SpaceX publishes the flown engine count; mass, loading and performance remain estimates. axial_drag_coefficient 1.00 is a calibrated estimate for the configuration this part actually flies alone: after staging the booster becomes its own vessel root and descends engine-first, presenting the blunt 9 m aft end, grid fins and 33 bells rather than a nose.",
   "category": "engine",
   "vehicle_family": "starship",
   "vehicle_role": "booster",
@@ -10,6 +10,7 @@
   "diameter_m": 9.0,
   "cost": 110000,
   "drag_coefficient": 0.2,
+  "axial_drag_coefficient": 1.0,
   "heat_tolerance": 2050,
   "fuel_capacity_lf": 792000,
   "fuel_capacity_ox": 2808000,

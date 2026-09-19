@@ -14,14 +14,18 @@
     "opacity": 0.7
   },
   "atmosphere": {
-    "scale_height": 59500,
+    "scale_height": 51600,
     "sea_level_density": 0.19,
     "sea_level_pressure": 100000,
     "sea_level_temperature": 134.0,
     "max_altitude": 1000000,
+    "molar_mass": 0.00207,
+    "surface_gravity": 10.44,
+    "geopotential_radius": 60268000.0,
     "layers": [
-      {"alt_min": 0,      "alt_max": 50000,  "temp_base": 134.0, "lapse_rate": -0.0009},
-      {"alt_min": 50000,  "alt_max": 1000000, "temp_base": 180.0, "lapse_rate": 0.0}
+      {"alt_min": 0,       "alt_max": 60000,   "temp_base": 134.0, "lapse_rate": -0.00081667},
+      {"alt_min": 60000,   "alt_max": 200000,  "temp_base": 85.0,  "lapse_rate": 0.00042857},
+      {"alt_min": 200000,  "alt_max": 1010000, "temp_base": 145.0, "lapse_rate": 0.00040741}
     ]
   },
   "surface_gravity": 10.44,

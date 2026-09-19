@@ -8,7 +8,7 @@
   "mixtureRatioOxidizerToFuel": 3.55,
   "ratedThrustSeaLevelN": 1666666.666667,
   "ratedThrustVacuumN": 2250000,
-  "specificImpulseSeaLevelS": 300,
+  "specificImpulseSeaLevelS": 274.07,
   "specificImpulseVacuumS": 370,
   "minimumThrottle": 0.40,
   "maximumThrottle": 1.0,
@@ -23,9 +23,9 @@
   "thermalTimeConstantSeconds": 3.0,
   "cooldownTimeConstantSeconds": 18.0,
   "performanceMap": [
-    {"ambientPressurePa": 101325, "throttle": 0.4, "thrustN": 666666.666667, "specificImpulseS": 300},
+    {"ambientPressurePa": 101325, "throttle": 0.4, "thrustN": 666666.666667, "specificImpulseS": 274.07},
     {"ambientPressurePa": 0, "throttle": 0.4, "thrustN": 900000, "specificImpulseS": 370},
-    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 1666666.666667, "specificImpulseS": 300},
+    {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 1666666.666667, "specificImpulseS": 274.07},
     {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 2250000, "specificImpulseS": 370}
   ]
 }

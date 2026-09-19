@@ -15,9 +15,10 @@
     },
     {
       "dataId": "raptor2-superheavy-flight7", "field": "specificImpulseSeaLevelS",
-      "status": "estimated", "source": "Public Raptor 2 performance reporting and simulator calibration",
-      "accessedDate": "2026-07-28", "variant": "Flight 7 booster Raptor 2",
-      "conditions": "Earth sea level", "uncertainty": "±4%; not published by SpaceX for Flight 7"
+      "status": "derived", "source": "Exosphere mass-flow closure on ratedThrustSeaLevelN, ratedThrustVacuumN and specificImpulseVacuumS",
+      "accessedDate": "2026-09-18", "variant": "Flight 7 booster Raptor 2",
+      "conditions": "Earth sea level; Isp_sl = F_sl/(mdot*g0) with mdot fixed by the vacuum pair",
+      "uncertainty": "inherits the rated-point uncertainties; not an independent measurement"
     },
     {
       "dataId": "raptor2-superheavy-flight7", "field": "specificImpulseVacuumS",
@@ -82,9 +83,10 @@
     },
     {
       "dataId": "raptor2-starship-sl-flight7", "field": "specificImpulseSeaLevelS",
-      "status": "estimated", "source": "Public Raptor 2 performance reporting and simulator calibration",
-      "accessedDate": "2026-07-28", "variant": "Ship 33 center Raptor 2",
-      "conditions": "Earth sea level", "uncertainty": "±4%"
+      "status": "derived", "source": "Exosphere mass-flow closure on ratedThrustSeaLevelN, ratedThrustVacuumN and specificImpulseVacuumS",
+      "accessedDate": "2026-09-18", "variant": "Ship 33 center Raptor 2",
+      "conditions": "Earth sea level; Isp_sl = F_sl/(mdot*g0) with mdot fixed by the vacuum pair",
+      "uncertainty": "inherits the rated-point uncertainties; not an independent measurement"
     },
     {
       "dataId": "raptor2-starship-sl-flight7", "field": "specificImpulseVacuumS",
@@ -149,9 +151,10 @@
     },
     {
       "dataId": "raptor2-starship-vac-flight7", "field": "specificImpulseSeaLevelS",
-      "status": "estimated", "source": "Exosphere back-pressure model",
-      "accessedDate": "2026-07-28", "variant": "Ship 33 Raptor Vacuum",
-      "conditions": "hypothetical Earth sea-level operation", "uncertainty": "±10%; non-operational condition"
+      "status": "derived", "source": "Exosphere mass-flow closure on ratedThrustSeaLevelN, ratedThrustVacuumN and specificImpulseVacuumS",
+      "accessedDate": "2026-09-18", "variant": "Ship 33 Raptor Vacuum",
+      "conditions": "hypothetical Earth sea-level operation; Isp_sl = F_sl/(mdot*g0) with mdot fixed by the vacuum pair",
+      "uncertainty": "non-operational condition; the implied nozzle exit area (5.76 m2) is an unverified back-pressure anchor"
     },
     {
       "dataId": "raptor2-starship-vac-flight7", "field": "specificImpulseVacuumS",

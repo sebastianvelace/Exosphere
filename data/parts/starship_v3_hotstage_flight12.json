@@ -1,7 +1,7 @@
 {
   "id": "starship_v3_hotstage_flight12",
   "name": "Super Heavy V3 Hot-Stage",
-  "description": "Flight 12 V3 hot-stage ring and mechanical interface. Geometry and mass are simulator estimates.",
+  "description": "Flight 12 V3 hot-stage ring and mechanical interface. Geometry and mass are simulator estimates. axial_drag_coefficient 0.35 is a calibrated estimate for the vented interstage ring.",
   "category": "decoupler",
   "vehicle_family": "starship",
   "vehicle_role": "hotstage",
@@ -10,6 +10,7 @@
   "diameter_m": 9.0,
   "cost": 1000,
   "drag_coefficient": 0.2,
+  "axial_drag_coefficient": 0.35,
   "heat_tolerance": 1800,
   "has_heat_shield": true,
   "ejection_force": 1000,

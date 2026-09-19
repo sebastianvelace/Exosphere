@@ -376,7 +376,18 @@ public partial class AtmosphereModel
         },
     };
 
-    /// <summary>Thick Venusian CO₂ atmosphere. Mirrors <c>data/bodies/venus.json</c>.</summary>
+    /// <summary>
+    /// Thick Venusian CO₂ atmosphere. Mirrors <c>data/bodies/venus.json</c>.
+    ///
+    /// The layer stack is a coarse piecewise-linear reconstruction of the Venus
+    /// International Reference Atmosphere temperature profile, anchored in GEOPOTENTIAL
+    /// metres on 737 K surface / 263 K at 60 km / 186 K at 90 km / 175 K mesopause and a
+    /// slow thermospheric rise. It reproduces VIRA pressure within ~5 % to 80 km and within
+    /// a factor 1.6 at 100 km — a reconstruction, not a standard. A single 0 → 250 km layer
+    /// at −0.0075 K/m previously drove the temperature through 0 K at ~99.7 km geometric,
+    /// which made density and pressure identically zero for the top 150 km of a boundary the
+    /// same file declares as atmosphere.
+    /// </summary>
     public static AtmosphereModel Venus() => new()
     {
         Optics = new AtmosphereOptics
@@ -411,7 +422,11 @@ public partial class AtmosphereModel
         GeopotentialRadius  = 6_051_800.0,
         Layers              = new List<AtmosphereLayer>
         {
-            new(0.0, 250_000.0, 737.0, -0.0075),
+            new(       0.0,  60_000.0, 737.0, -0.0079),      // lower atmosphere
+            new(  60_000.0,  90_000.0, 263.0, -0.00256667),  // cloud top → mesosphere
+            new(  90_000.0, 100_000.0, 186.0, -0.0011),      // mesopause approach
+            new( 100_000.0, 150_000.0, 175.0,  0.0),         // mesopause
+            new( 150_000.0, 241_000.0, 175.0,  0.0006044),   // lower thermosphere
         },
     };
 }
