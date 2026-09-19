@@ -202,7 +202,7 @@ public partial class SunController : Node
             OrientLight(renderDir);
             _lastSunDir = renderDir;
         }
-        if (sunDirectionChanged || materialsNeedRefresh)
+        if (sunDirectionChanged || materialsNeedRefresh || _earthMat == null)
             FeedSunDir(renderDir);
 
         string atmosphereBodyId = atmosphereBody?.Id ?? string.Empty;
@@ -345,10 +345,14 @@ public partial class SunController : Node
     /// Pushes <c>sun_dir</c> into the Earth material (priority) and any other body
     /// material that exposes the same uniform, so every shader-driven terminator and
     /// night-side city-light field lines up with the real Sun.
+    /// Lighting and coverage stay in world space: the shader uses
+    /// <c>v_world_normal</c> against this vector. Retry when the Earth mesh is
+    /// created after the first visual tick, otherwise the globe keeps the shader
+    /// default and can rasterize night under a risen visual sun.
     /// </summary>
     private void FeedSunDir(Vector3 sunDir)
     {
-        if (_earthMat == null)
+        if (_earthMat == null || !IsInstanceValid(_earthMat))
             _earthMat = FindBodyMaterial("Earth_mesh");
         _earthMat?.SetShaderParameter("sun_dir", sunDir);
 

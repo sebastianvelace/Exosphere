@@ -38,6 +38,7 @@ public sealed class EarthSurfaceShaderContractTests
         string shader = Source("assets/shaders/earth_surface.gdshader");
         Assert.Contains("render_mode cull_back, unshaded, blend_mix;", shader);
         Assert.Contains("float ndotv = dot(N, V);", shader);
+        Assert.Contains("vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);", shader);
         Assert.Contains("float limb = 1.0 - ndotv;", shader);
         // The floor is a numerical guard, not a visible angular width.
         Assert.Contains("float limb_aa = max(fwidth(limb), 0.000001);", shader);
@@ -71,5 +72,15 @@ public sealed class EarthSurfaceShaderContractTests
         Assert.DoesNotContain("limb_strength", shader);
         Assert.DoesNotContain("limb_strength", earth);
         Assert.Contains("AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0)", earth);
+    }
+
+    [Fact]
+    public void EarthSunDirRetriesWhenTheMeshMaterialIsCreatedLate()
+    {
+        string sun = Source("scripts/SunController.cs");
+        Assert.Contains("sunDirectionChanged || materialsNeedRefresh || _earthMat == null", sun);
+        Assert.Contains("!IsInstanceValid(_earthMat)", sun);
+        Assert.Contains("_earthMat?.SetShaderParameter(\"sun_dir\", sunDir);", sun);
+        Assert.DoesNotContain("ToEarthSurfaceSunDirection", sun);
     }
 }
