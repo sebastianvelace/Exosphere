@@ -74,7 +74,7 @@ require_pattern data/parts/starship_command.json 'catch_pin_lateral_offset_m' 'l
 require_pattern scripts/SimulationBridge.cs 'ArmTowerCatchApproach(vessel);' 'reentry catch arming'
 require_pattern scripts/EDLController.cs 'if (_phase is Edl.Catch or Edl.Final)' 'catch-specific engine selection'
 require_pattern scripts/EDLController.cs 'vessel.IsAttemptingTowerCatch && vessel.HasCatchPins' 'catch trajectory guidance gate'
-require_pattern scripts/EDLController.cs 'aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(up, velDir)' 'catch inward-lift trajectory'
+require_pattern scripts/EDLController.cs 'aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis' 'catch inward-lift trajectory'
 require_pattern scripts/EDLController.cs 'desiredHorizontalVelocity = towardTarget * closingSpeed' 'catch position/velocity guidance'
 require_pattern scripts/SimulationBridge.cs 'Vector3d rotationalVelocity = earth.GetSurfaceVelocity(rotationReferencePosition);' 'catch-target rotation seed'
 require_pattern scripts/EDLController.cs 'CatchAbortHorizontalMissToleranceM = 20.0' 'recoverable catch abort corridor'
