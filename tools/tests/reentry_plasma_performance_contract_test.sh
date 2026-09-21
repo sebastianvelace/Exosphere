@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PLASMA="$ROOT_DIR/scripts/ReentryPlasmaController.cs"
+SHADER="$ROOT_DIR/assets/shaders/reentry_glow.gdshader"
 
 fail() {
   echo "reentry_plasma_performance_contract_test: FAIL: $*" >&2
@@ -10,6 +11,7 @@ fail() {
 }
 
 [[ -f "$PLASMA" ]] || fail "missing ReentryPlasmaController.cs"
+[[ -f "$SHADER" ]] || fail "missing reentry_glow.gdshader"
 
 # Plasma is a presentation consumer of the physical heat flux. Keep the solver-facing
 # equations intact while bounding the render-side sampling rate.
@@ -52,7 +54,18 @@ rg -q --fixed-strings 'VisualFluxResponseExponent = 0.65' "$PLASMA" \
   || fail "bounded perceptual flux response is missing"
 rg -q --fixed-strings 'System.Math.Pow(' "$PLASMA" \
   || fail "re-entry visual flux response is not bounded by a power curve"
+rg -q --fixed-strings 'VisualWakeTailGain = 0.34' "$PLASMA" \
+  || fail "aero-descent wake tail gain is missing"
+rg -q --fixed-strings 'VisualEdgeOnset = 0.04f' "$PLASMA" \
+  || fail "aero-descent edge onset is missing"
 rg -q --fixed-strings 'VISUAL_REENTRY slug=' "$ROOT_DIR/tools/visual_playtest.sh" \
   || fail "visual harness does not record plasma presentation state"
+
+# The aero-descent tail must remain legible at the real capture exposure. A hard
+# 0.2 discard threshold hides the entire measured 0.12-0.15 shock range.
+rg -q --fixed-strings 'const float PLASMA_ONSET  = 0.08;' "$SHADER" \
+  || fail "re-entry shader onset is not bounded for aero-descent continuity"
+rg -q --fixed-strings 'ALPHA = t <= PLASMA_ONSET ? 0.0' "$SHADER" \
+  || fail "re-entry shader still uses a disconnected hard-coded alpha cutoff"
 
 echo "reentry_plasma_performance_contract_test: PASS (sample=20Hz, visibility dirty-gated, heat physics preserved)"

@@ -31,8 +31,8 @@ void fragment() {
 	float t = clamp(heat_level * turbulence, 0.0, 1.0);
 
 	// ── Temperature → colour ramp ────────────────────────────────────────────
-	// 0.0–0.2 : no emission
-	// 0.2–0.5 : dark orange
+	// 0.0–0.08: no emission
+	// 0.08–0.5: dark orange
 	// 0.5–0.8 : bright orange / yellow
 	// 0.8–1.0 : white-hot with blue plasma edges
 	const vec3 DARK_ORANGE   = vec3(0.55, 0.13, 0.01);
@@ -40,16 +40,18 @@ void fragment() {
 	const vec3 YELLOW        = vec3(1.0, 0.85, 0.30);
 	const vec3 WHITE_HOT     = vec3(1.0, 0.97, 0.90);
 	const vec3 PLASMA_BLUE   = vec3(0.45, 0.65, 1.0);
+	const float PLASMA_ONSET  = 0.08;
 
 	vec3 col = vec3(0.0);
 	float strength = 0.0;
 
-	if (t > 0.2) {
+	if (t > PLASMA_ONSET) {
 		if (t < 0.5) {
-			// Faint → dark orange glow.
-			float k = smoothstep(0.2, 0.5, t);
-			col = mix(DARK_ORANGE * 0.4, BRIGHT_ORANGE, k);
-			strength = k * 0.6 + 0.1;
+			// Residual aero-descent plasma remains visible without becoming a flat
+			// orange card at the phase boundary.
+			float k = smoothstep(PLASMA_ONSET, 0.5, t);
+			col = mix(DARK_ORANGE * 0.32, BRIGHT_ORANGE, k);
+			strength = k * 0.75 + 0.06;
 		} else if (t < 0.8) {
 			// Bright orange → yellow.
 			float k = smoothstep(0.5, 0.8, t);
@@ -72,6 +74,7 @@ void fragment() {
 
 	ALBEDO = emission;
 	EMISSION = emission;
-	// t <= 0.2 → fully transparent (no emission at all).
-	ALPHA = t <= 0.2 ? 0.0 : clamp(strength * 0.6, 0.0, 1.0);
+	// Keep the physical onset soft, while allowing the low-intensity tail to read
+	// at the actual game exposure used during aero descent.
+	ALPHA = t <= PLASMA_ONSET ? 0.0 : clamp(strength * 0.55, 0.0, 1.0);
 }

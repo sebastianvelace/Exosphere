@@ -34,6 +34,11 @@ public partial class ReentryPlasmaController : Node3D
     // This bounded exponent changes only presentation contrast; the heat flux and damage
     // equations remain untouched.
     private const double VisualFluxResponseExponent = 0.65;
+    // Low-density aero descent still leaves a readable ionised wake. This gain is
+    // presentation-only and remains multiplied by the physical visual intensity.
+    private const double VisualWakeTailGain = 0.34;
+    private const float VisualEdgeOnset = 0.04f;
+    private const float VisualEdgeRange = 0.72f;
 
     // Last presentation sample, exposed only for deterministic visual evidence. These
     // values never feed the simulation, damage model or guidance.
@@ -220,7 +225,7 @@ public partial class ReentryPlasmaController : Node3D
         LastShockHeatLevel = heatLevel;
         _shockMat.SetShaderParameter("heat_level", heatLevel);
 
-        float wakeAlpha = (float)(intensity * 0.20f) * Mathf.Lerp(0.55f, 1.0f, misalign);
+        float wakeAlpha = (float)(intensity * VisualWakeTailGain) * Mathf.Lerp(0.55f, 1.0f, misalign);
         _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f, wakeAlpha);
         _wakeMat.EmissionEnergyMultiplier = (float)(0.85 + intensity * 1.7);
 
@@ -310,7 +315,7 @@ public partial class ReentryPlasmaController : Node3D
             return;
         }
 
-        float edgeBase = Mathf.Clamp((intensity - 0.08f) / 0.92f, 0f, 1f);
+        float edgeBase = Mathf.Clamp((intensity - VisualEdgeOnset) / VisualEdgeRange, 0f, 1f);
         float focus = Mathf.Lerp(0.58f, 1.0f, align);
         float misalign = 1f - align;
         float noseBoost  = Mathf.Lerp(0.55f, 1.20f, misalign);
