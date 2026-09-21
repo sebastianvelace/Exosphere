@@ -25,7 +25,9 @@ public static class EntryCorridorGuidance
         Prediction prediction,
         Vector3d bodyDownLift,
         double corridorMeters = 20_000.0,
-        double authorityMeters = 180_000.0)
+        double authorityMeters = 180_000.0,
+        double? downrangeCorridorMeters = null,
+        double? downrangeAuthorityMeters = null)
     {
         var downLift = bodyDownLift.Normalized;
         if (downLift.MagnitudeSquared < 1e-12)
@@ -35,9 +37,11 @@ public static class EntryCorridorGuidance
             (prediction.PredictedCrossRangeM - corridorMeters) / authorityMeters,
             0.0,
             1.0);
+        double downrangeCorridor = downrangeCorridorMeters ?? corridorMeters;
+        double downrangeAuthority = downrangeAuthorityMeters ?? authorityMeters;
         double downrangeWeight = System.Math.Clamp(
-            (System.Math.Abs(prediction.PredictedDownrangeM) - corridorMeters)
-                / authorityMeters,
+            (System.Math.Abs(prediction.PredictedDownrangeM) - downrangeCorridor)
+                / downrangeAuthority,
             0.0,
             1.0);
 

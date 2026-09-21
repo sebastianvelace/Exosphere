@@ -92,4 +92,25 @@ public sealed class EntryCorridorGuidanceTests
             $"expected up-lift extension, got {selected}");
     }
 
+    [Fact]
+    public void TerminalCorridorRespondsToKilometreScaleDownrangeError()
+    {
+        var prediction = new EntryCorridorGuidance.Prediction(
+            LiftDirection: Vector3d.Zero,
+            PredictedCrossRangeM: 0.0,
+            PredictedDownrangeM: 2_000.0,
+            TimeToGroundS: 30.0);
+
+        var selected = EntryCorridorGuidance.SelectLiftDirection(
+            prediction,
+            -Vector3d.Up,
+            corridorMeters: 20_000.0,
+            authorityMeters: 180_000.0,
+            downrangeCorridorMeters: 500.0,
+            downrangeAuthorityMeters: 2_500.0);
+
+        Assert.True(selected.Dot(Vector3d.Up) > 0.2,
+            $"terminal lift must extend a short footprint, got {selected}");
+    }
+
 }

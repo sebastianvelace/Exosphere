@@ -1411,7 +1411,12 @@ public partial class SimulationBridge : Node
             // reaches the low-altitude flip corridor; seed it at that footprint so the target
             // is reached by the physical trajectory instead of asking crossrange guidance to
             // solve a longitudinal error it cannot control.
-            const double EntryDownrangeLeadM = 143_000.0;
+            // The deterministic demonstration must enter the powered corridor before it
+            // crosses the cradle ground track. The previous 143 km seed reached the low
+            // corridor with a residual downrange error that the physical retro burn could
+            // not remove before the catch gate. Keep the seed upstream by a measured
+            // trajectory correction rather than widening the catch gates.
+            const double EntryDownrangeLeadM = 143_900.0;
             var targetCradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
                 _launchSite, earth, Universe.CurrentTime);
             var targetUp = (targetCradle - earth.Position).Normalized;

@@ -369,11 +369,11 @@ public partial class EDLController : Control
             case Edl.Aero:
                 break;   // retro ignition handled by the physics gate above
             case Edl.Retro:
-                // Once the fallback is slow and below 2.7 km, enter the staged terminal regime
-                // before the three-engine minimum can turn a near-hover into a climb. The
-                // previous 2.0 km gate still left v30 on three engines at ~2.4 km, where the
-                // minimum throttle arrested the descent and created a second restart cycle.
-                if (_alt < 1500.0
+                // Once the return is below 2.5 km, enter the staged terminal catch regime
+                // while there is still enough time to close the measured position error before
+                // the 300 m abort decision. The previous 1.5 km handoff left a 65 m residual
+                // miss at the abort floor even though the synchronized velocity was stable.
+                if (_alt < 2500.0
                     || (_towerCatchAborted
                         && !vessel.IsAttemptingTowerCatch
                         && _alt < 2_700.0
@@ -485,11 +485,27 @@ public partial class EDLController : Control
                         || System.Math.Abs(prediction.PredictedDownrangeM) > 1e-6)
                     {
                         // Crossrange chooses the bank side while the predicted downrange
-                        // miss controls flight-path energy. This brakes an already
-                        // overshooting footprint before the vehicle crosses the moving
-                        // cradle at hypersonic speed.
+                        // miss controls flight-path energy. Long-range entry guidance uses
+                        // a deliberately wide deadband to avoid banking at hypersonic speed;
+                        // once the Starbase return is inside the terminal corridor, that same
+                        // deadband would ignore a 1-2 km error and hand it to the powered burn.
+                        // Tighten the corridor progressively below 25 km, while keeping both
+                        // limits bounded so this remains a physical lift command rather than
+                        // a direct position correction.
+                        bool terminalCatchCorridor = _alt < 25_000.0;
+                        double downrangeCorridorMeters = terminalCatchCorridor
+                            ? System.Math.Clamp(_alt * 0.01, 5.0, 250.0)
+                            : 20_000.0;
+                        double downrangeAuthorityMeters = terminalCatchCorridor
+                            ? System.Math.Clamp(_alt * 0.12, 1_500.0, 4_000.0)
+                            : 180_000.0;
                         Vector3d guidedLift = EntryCorridorGuidance.SelectLiftDirection(
-                            prediction, bodyDownLift);
+                            prediction,
+                            bodyDownLift,
+                            corridorMeters: 20_000.0,
+                            authorityMeters: 180_000.0,
+                            downrangeCorridorMeters: downrangeCorridorMeters,
+                            downrangeAuthorityMeters: downrangeAuthorityMeters);
                         _aeroLiftReference = guidedLift;
                         aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(
                             velDir, guidedLift);
