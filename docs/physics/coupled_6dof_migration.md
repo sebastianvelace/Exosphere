@@ -1,0 +1,44 @@
+# Coupled 6-DoF migration
+
+This document records the reviewable work units used to introduce a coupled rigid-body
+integrator without changing the production scheduler by default.
+
+## Completed sequence
+
+1. `feat(math): add double-precision 3x3 matrix primitives` — matrix multiplication,
+   transpose, determinant, and inverse for inertia tensors.
+2. `feat(physics): define rigid-body 6dof state` — inertial position/velocity, normalized
+   orientation, and body-frame angular velocity.
+3. `feat(parts): derive center-of-mass inertia properties` — mass, center of mass, and
+   parallel-axis inertia assembled from the active PartGraph.
+4. `feat(integrator): add coupled rigid-body rk4` — translational and rotational RK4 with
+   Euler rigid-body angular dynamics.
+5. `feat(vessel): prepare stateful inputs for coupled physics` — one-per-tick propulsion,
+   propellant, hot-stage, crew, and gimbal preparation plus candidate-attitude drag.
+6. `feat(physics): evaluate candidate-state forces and torques` — pure gravity, thrust,
+   aerodynamic force, engine torque, aerodynamic attitude torque, and external wrench.
+7. `feat(universe): wire opt-in coupled 6dof integration` — COM-based off-rails adapter and
+   candidate-state landing/catch contacts; legacy and rails paths remain unchanged.
+8. `test(universe): cover coupled 6dof dispatch` — verifies the opt-in path completes a
+   scheduler tick without destroying the vessel or producing non-finite state.
+9. `feat(telemetry): expose coupled 6dof state evidence` — records COM state, orientation,
+   angular velocity, mass, and step timing for old/new parity work.
+
+## Runtime contract
+
+`Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
+until deterministic telemetry comparisons and real framebuffer flight gates establish parity
+for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
+
+## Validation
+
+- Full simulation suite: 853/853 tests passing.
+- Coupled adapter test: 1/1 passing.
+- Godot project build: 0 warnings, 0 errors.
+- `git diff --check`: clean before each commit.
+
+## Remaining work
+
+- Compare legacy and coupled trajectories from identical initial states.
+- Port or reconcile flap control, SAS/rate limiting, and RCS authority.
+- Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
