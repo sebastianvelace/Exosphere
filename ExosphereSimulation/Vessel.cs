@@ -342,6 +342,26 @@ public class Vessel
         Orientation: Orientation,
         AngularVelocityWorld: AngularVelocity);
 
+    /// <summary>
+    /// Builds contact input from the coupled integrator's centre-of-mass state. The returned
+    /// datum is reconstructed from the PartGraph centre of mass, so contact witnesses remain
+    /// attached to the vessel while RK4 evaluates intermediate orientations.
+    /// </summary>
+    public RigidBodyContactInput GetContactInput(in RigidBody6DofState state)
+    {
+        var comFromDatumWorld = state.Orientation.Rotate(Parts.CenterOfMass);
+        var datumPosition = state.Position - comFromDatumWorld;
+        var angularVelocityWorld = state.AngularVelocityWorld;
+        var datumVelocity = state.Velocity
+            - angularVelocityWorld.Cross(comFromDatumWorld);
+        return new RigidBodyContactInput(
+            DatumPositionWorld: datumPosition,
+            CenterOfMassPositionWorld: state.Position,
+            CenterOfMassVelocityWorld: state.Velocity,
+            Orientation: state.Orientation,
+            AngularVelocityWorld: angularVelocityWorld);
+    }
+
     // ── Tripulación ───────────────────────────────────────────────────────
     public List<CrewMember> Crew { get; } = new();
 
@@ -498,12 +518,23 @@ public class Vessel
 
     // Fuerza aerodinámica total (drag + lift de cuerpo) en world space (N) — estado actual.
     public Vector3d ComputeDrag(CelestialBody body) =>
-        ComputeDragAt(Position, Velocity, body);
+        ComputeDragAt(Position, Velocity, Orientation, body);
 
     // Fuerza aerodinámica evaluada en un estado (pos, vel) arbitrario (para subpasos RK4).
     // Delega en AerodynamicsModel: drag orientación-dependiente (cilindro de 9 m, Cd y área
     // blend axial↔broadside, pico transónico) más la sustentación de cuerpo CL=CLmax·sin(2α).
-    public Vector3d ComputeDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
+    public Vector3d ComputeDragAt(Vector3d pos, Vector3d vel, CelestialBody body) =>
+        ComputeDragAt(pos, vel, Orientation, body);
+
+    /// <summary>
+    /// Evaluates aerodynamic force at an arbitrary translational and attitude state without
+    /// mutating the vessel. This is the force-side contract used by the coupled RK4 stages.
+    /// </summary>
+    public Vector3d ComputeDragAt(
+        Vector3d pos,
+        Vector3d vel,
+        Quaterniond orientation,
+        CelestialBody body)
     {
         if (body.Atmosphere == null) return Vector3d.Zero;
         double alt     = body.GetAltitude(pos);
@@ -516,7 +547,7 @@ public class Vessel
         double speed   = surfVel.Magnitude;
         if (speed < 0.001 || double.IsNaN(speed)) return Vector3d.Zero;
 
-        Vector3d axis = Orientation.Rotate(Vector3d.Up);   // eje longitudinal en mundo
+        Vector3d axis = orientation.Rotate(Vector3d.Up);   // eje longitudinal en mundo
         double   temp = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
 
         var drag = AerodynamicsModel.ComputeReentryDrag(
@@ -702,6 +733,72 @@ public class Vessel
     // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor
     // gimbal authority is computed from thrust, lever arm, CoM and moment of inertia.
     private const double ReactionControlAuthority = 0.01;
+
+    /// <summary>
+    /// Advances stateful propulsion/control preparation exactly once while leaving attitude
+    /// integration to the coupled 6-DoF path. The PartGraph physics cache remains open until
+    /// <see cref="EndCoupledPhysicsStep"/> so every RK4 stage reads the same prepared engine
+    /// state and mass snapshot.
+    /// </summary>
+    internal void BeginCoupledPhysicsStep(double dt, CelestialBody refBody)
+    {
+        Parts.BeginPhysicsTick();
+        try
+        {
+            ApplyThrottle(dt);
+            Parts.InvalidateTickActiveEngineCache();
+
+            double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+            Parts.ConsumePropellant(dt, pressure);
+            AdvanceHotStageOverlap(dt);
+
+            foreach (var crew in Crew)
+                crew.TickEVA(dt);
+
+            double auth = Flight.ControlAuthority.Evaluate(this);
+            if (Flight.ControlAuthority.IsLost(auth))
+            {
+                PitchYawRoll = Vector3d.Zero;
+                SASEnabled = false;
+            }
+
+            var command = PitchYawRoll * auth;
+            bool hasInput = command.Magnitude > 0.01;
+            foreach (var engine in Parts.ActiveEngineList)
+            {
+                engine.GimbalOffset = hasInput
+                    ? new Vector3d(command.Y, 0.0, -command.X)
+                    : Vector3d.Zero;
+                engine.ClearGimbalCommandOverrides();
+            }
+
+            if (!hasInput) return;
+
+            double pitchYawAuthority =
+                System.Math.Max(ReactionControlAuthority,
+                    Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).X) * auth;
+            double rollAuthority =
+                System.Math.Max(ReactionControlAuthority,
+                    Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).Y) * auth;
+            var desiredLocalAngAccel = new Vector3d(
+                command.X * pitchYawAuthority,
+                command.Z * rollAuthority,
+                command.Y * pitchYawAuthority);
+            var zeroGimbalTorque = Parts.GetZeroGimbalEngineTorque(pressure);
+            var desiredTorque = new Vector3d(
+                desiredLocalAngAccel.X * Parts.TransverseMomentOfInertia - zeroGimbalTorque.X,
+                desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia - zeroGimbalTorque.Y,
+                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia - zeroGimbalTorque.Z);
+            Parts.SolveDifferentialGimbal(desiredTorque, pressure);
+        }
+        catch
+        {
+            Parts.EndPhysicsTick();
+            throw;
+        }
+    }
+
+    internal void EndCoupledPhysicsStep() => Parts.EndPhysicsTick();
 
     /// <summary>
     /// Returns whichever of <paramref name="value"/>/<paramref name="floor"/> has the larger
