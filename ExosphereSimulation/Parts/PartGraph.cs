@@ -1,6 +1,7 @@
 namespace Exosphere.Simulation.Parts;
 
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Physics;
 using Exosphere.Simulation.Propulsion;
 
 /// <summary>
@@ -75,6 +76,7 @@ public class PartGraph
     private Vector3d _tickCenterOfMass;
     private double _tickTransverseMomentOfInertia;
     private double _tickAxialMomentOfInertia;
+    private RigidBodyMassProperties _tickMassProperties;
 
     public PartGraph()
     {
@@ -318,11 +320,131 @@ public class PartGraph
                 _tickCenterOfMass /= _tickTotalMass;
         }
 
+        if (_tickTotalMass > 0.0)
+            _tickMassProperties = BuildMassProperties(GetCachedPartLocalPositions());
+
         double radius = MaximumDiameter * 0.5;
         _tickTransverseMomentOfInertia = _tickTotalMass
             * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
         _tickAxialMomentOfInertia = 0.5 * _tickTotalMass * radius * radius;
         _tickMassPropertiesValid = true;
+    }
+
+    /// <summary>
+    /// Returns the current physical mass distribution in vessel-local coordinates.
+    /// Each part is approximated as a cylinder aligned with the vessel axes, then shifted
+    /// to the aggregate centre of mass with the parallel-axis theorem. This is deliberately
+    /// separate from the legacy envelope inertia used by existing guidance authority code.
+    /// </summary>
+    public RigidBodyMassProperties GetMassProperties()
+    {
+        if (_physicsTickActive)
+        {
+            EnsureTickMassProperties();
+            if (_tickTotalMass <= 0.0)
+                throw new InvalidOperationException("Cannot build mass properties for an empty graph.");
+            return _tickMassProperties;
+        }
+
+        var positions = ComputePartLocalPositions();
+        return BuildMassProperties(positions);
+    }
+
+    /// <summary>Non-throwing variant for construction and empty-graph callers.</summary>
+    public bool TryGetMassProperties(out RigidBodyMassProperties properties)
+    {
+        if (_physicsTickActive)
+        {
+            EnsureTickMassProperties();
+            if (_tickTotalMass <= 0.0)
+            {
+                properties = default;
+                return false;
+            }
+
+            properties = _tickMassProperties;
+            return true;
+        }
+
+        var positions = ComputePartLocalPositions();
+        double totalMass = _parts.Sum(part => part.CurrentMass);
+        if (totalMass <= 0.0)
+        {
+            properties = default;
+            return false;
+        }
+
+        properties = BuildMassProperties(positions);
+        return true;
+    }
+
+    private RigidBodyMassProperties BuildMassProperties(
+        IReadOnlyDictionary<Part, Vector3d> positions)
+    {
+        double totalMass = 0.0;
+        Vector3d weightedPosition = Vector3d.Zero;
+        foreach (var part in _parts)
+        {
+            double mass = part.CurrentMass;
+            if (!double.IsFinite(mass) || mass < 0.0)
+                throw new InvalidOperationException(
+                    $"Part '{part.InstanceId}' has invalid mass {mass:G17}.");
+            if (!positions.TryGetValue(part, out var position)) continue;
+
+            totalMass += mass;
+            weightedPosition += position * mass;
+        }
+
+        if (!double.IsFinite(totalMass) || totalMass <= 0.0)
+            throw new InvalidOperationException("Cannot build mass properties for an empty graph.");
+
+        Vector3d centerOfMass = weightedPosition / totalMass;
+        double fallbackLength = System.Math.Max(
+            1.0,
+            VehicleLength / System.Math.Max(1, _parts.Count));
+        double fallbackDiameter = System.Math.Max(1.0, MaximumDiameter);
+
+        double i11 = 0.0;
+        double i12 = 0.0;
+        double i13 = 0.0;
+        double i22 = 0.0;
+        double i23 = 0.0;
+        double i33 = 0.0;
+        foreach (var part in _parts)
+        {
+            if (!positions.TryGetValue(part, out var position)) continue;
+            double mass = part.CurrentMass;
+            double length = part.Definition.LengthM > 0.0
+                ? part.Definition.LengthM
+                : fallbackLength;
+            double diameter = part.Definition.DiameterM > 0.0
+                ? part.Definition.DiameterM
+                : fallbackDiameter;
+            double radius = diameter * 0.5;
+
+            // Local cylinder axis is vessel +Y. The local COM inertia is diagonal.
+            double transverse = mass
+                * (3.0 * radius * radius + length * length) / 12.0;
+            double axial = 0.5 * mass * radius * radius;
+            Vector3d offset = position - centerOfMass;
+            double xx = offset.X;
+            double yy = offset.Y;
+            double zz = offset.Z;
+
+            // Parallel-axis theorem: I_shift = I_local + m((d·d)E - d⊗d).
+            i11 += transverse + mass * (yy * yy + zz * zz);
+            i22 += axial + mass * (xx * xx + zz * zz);
+            i33 += transverse + mass * (xx * xx + yy * yy);
+            i12 -= mass * xx * yy;
+            i13 -= mass * xx * zz;
+            i23 -= mass * yy * zz;
+        }
+
+        var inertia = new Matrix3x3d(
+            i11, i12, i13,
+            i12, i22, i23,
+            i13, i23, i33);
+        return new RigidBodyMassProperties(totalMass, centerOfMass, inertia);
     }
 
     private Dictionary<Part, Vector3d> GetCachedPartLocalPositions()
