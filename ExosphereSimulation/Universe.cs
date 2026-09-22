@@ -126,6 +126,13 @@ public class Universe
     public bool DeferredPhysicsCandidateEnabled { get; set; }
 
     /// <summary>
+    /// Experimental opt-in for the coupled 6-DoF off-rails adapter. It is disabled by
+    /// default until old/new telemetry parity and real-framebuffer flight gates are closed.
+    /// On-rails propagation is never changed by this switch.
+    /// </summary>
+    public bool Coupled6DofIntegrationEnabled { get; set; }
+
+    /// <summary>
     /// Authoritative external guard for the experimental candidate. The callback must return
     /// true only when the vessel's non-physics state is materialized at the supplied epoch;
     /// null or an exception fails closed to the existing scheduler path.
@@ -1510,7 +1517,10 @@ public class Universe
 
             var refBody = GetDominantBody(vessel.Position);
             RecordWorkload(VesselPhysicsWorkload.FullPhysics);
-            IntegrateVesselOffRails(vessel, refBody, dt);
+            if (Coupled6DofIntegrationEnabled)
+                IntegrateVesselOffRailsCoupled6Dof(vessel, refBody, dt);
+            else
+                IntegrateVesselOffRails(vessel, refBody, dt);
         }
         ApplyDockingConstraints();
     }
@@ -2061,6 +2071,96 @@ public class Universe
         ApplyPostIntegrationPhysics(vessel, refBody, dt);
     }
 
+    private void IntegrateVesselOffRailsCoupled6Dof(
+        Vessel vessel,
+        CelestialBody refBody,
+        double dt)
+    {
+        var (referenceStartPosition, referenceStartVelocity) =
+            BodyStateAt(refBody, CurrentTime);
+        double evaluationTime = CurrentTime + dt;
+        Vector3d frameAcceleration = GetReferenceBodyRailAcceleration(refBody);
+
+        vessel.BeginCoupledPhysicsStep(dt, refBody);
+        try
+        {
+            var massProperties = vessel.Parts.GetMassProperties();
+            var orientation = vessel.Orientation;
+            var angularVelocityWorld = vessel.AngularVelocity;
+            var centerOfMassOffsetWorld = orientation.Rotate(
+                massProperties.CenterOfMassBody);
+            var centerOfMassPosition = vessel.Position + centerOfMassOffsetWorld;
+            var centerOfMassVelocity = vessel.Velocity
+                + angularVelocityWorld.Cross(centerOfMassOffsetWorld);
+            var initialState = new Physics.RigidBody6DofState(
+                centerOfMassPosition - referenceStartPosition,
+                centerOfMassVelocity - referenceStartVelocity,
+                orientation,
+                orientation.Inverse().Rotate(angularVelocityWorld));
+
+            Physics.RigidBody6DofState finalState =
+                Integrators.RigidBody6DofIntegrator.Step(
+                    initialState,
+                    CurrentTime,
+                    dt,
+                    massProperties,
+                    (candidate, _) =>
+                    {
+                        var absolute = ToAbsoluteState(refBody, candidate);
+                        var landingContact = EvaluateLandingContact(
+                            vessel, refBody, absolute);
+                        var catchContact = EvaluateCatchContact(
+                            vessel, absolute, evaluationTime);
+                        var contactForce = (landingContact?.ForceWorld ?? Vector3d.Zero)
+                            + (catchContact?.ForceWorld ?? Vector3d.Zero);
+                        var contactTorque = (landingContact?.TorqueWorld ?? Vector3d.Zero)
+                            + (catchContact?.TorqueWorld ?? Vector3d.Zero);
+                        var context = new Physics.RigidBodyForceContext(
+                            _bodies,
+                            refBody,
+                            externalForceWorld: contactForce
+                                - frameAcceleration * massProperties.Mass,
+                            externalTorqueWorld: contactTorque);
+                        return Physics.RigidBodyForceEvaluator.Evaluate(
+                            vessel, absolute, context);
+                    });
+
+            var absoluteFinal = ToAbsoluteState(refBody, finalState);
+            var finalComOffsetWorld = absoluteFinal.Orientation.Rotate(
+                massProperties.CenterOfMassBody);
+            vessel.Position = absoluteFinal.Position - finalComOffsetWorld;
+            vessel.Velocity = absoluteFinal.Velocity
+                - absoluteFinal.AngularVelocityWorld.Cross(finalComOffsetWorld);
+            vessel.Orientation = absoluteFinal.Orientation;
+            vessel.AngularVelocity = absoluteFinal.AngularVelocityWorld;
+
+            var contactAfter = EvaluateLandingContact(vessel, refBody, absoluteFinal);
+            vessel.LastSurfaceContact = contactAfter;
+            vessel.LastContactForceWorld = contactAfter?.ForceWorld ?? Vector3d.Zero;
+            vessel.LastContactTorqueWorld = contactAfter?.TorqueWorld ?? Vector3d.Zero;
+            var catchContactAfter = EvaluateCatchContact(
+                vessel, absoluteFinal, evaluationTime);
+            vessel.LastCatchContact = catchContactAfter;
+            UpdateLandingContactState(vessel, refBody, contactAfter, dt);
+            UpdateCatchContactState(vessel, catchContactAfter, dt);
+        }
+        finally
+        {
+            vessel.EndCoupledPhysicsStep();
+        }
+
+        ApplyPostIntegrationPhysics(vessel, refBody, dt);
+    }
+
+    private static Physics.RigidBody6DofState ToAbsoluteState(
+        CelestialBody refBody,
+        in Physics.RigidBody6DofState relativeState) =>
+        new(
+            refBody.Position + relativeState.Position,
+            refBody.Velocity + relativeState.Velocity,
+            relativeState.Orientation,
+            relativeState.AngularVelocityBody);
+
     // Cheap range gate evaluated before the full penalty-contact solve: the tower is a
     // single fixed point, and a catch-flagged flight spends almost all of its time nowhere
     // near it (deorbit, entry, aero descent). Generous enough to cover final-approach
@@ -2090,6 +2190,32 @@ public class Universe
             vessel.CatchContactPoints,
             point => Physics.SurfaceSample.FromCatchCradle(
                 cradlePosition, up, cradleVelocity, CatchCaptureRadiusM, point));
+    }
+
+    private static Physics.ContactWrench? EvaluateCatchContact(
+        Vessel vessel,
+        in Physics.RigidBody6DofState state,
+        double evaluationTime)
+    {
+        Vector3d datumPosition = state.Position
+            - state.Orientation.Rotate(vessel.Parts.CenterOfMass);
+        Vector3d cradlePosition = vessel.GetCatchTargetPositionAt(evaluationTime);
+        if (!vessel.IsAttemptingTowerCatch || !vessel.HasCatchPins)
+            return null;
+        if ((datumPosition - cradlePosition).MagnitudeSquared
+            > CatchRangeGateM * CatchRangeGateM)
+            return null;
+
+        var input = vessel.GetContactInput(state);
+        return Physics.SurfaceContactSolver.Evaluate(
+            input,
+            vessel.CatchContactPoints,
+            point => Physics.SurfaceSample.FromCatchCradle(
+                cradlePosition,
+                vessel.CatchTargetUpWorld,
+                vessel.CatchTargetVelocityWorld,
+                CatchCaptureRadiusM,
+                point));
     }
 
     /// <summary>
@@ -2142,6 +2268,18 @@ public class Universe
         if (!vessel.HasDeployedLandingGear || vessel.LandingContactPoints.Count == 0)
             return null;
         var input = vessel.GetContactInput(position, velocity);
+        return Physics.SurfaceContactSolver.EvaluateSphere(
+            input, vessel.LandingContactPoints, body);
+    }
+
+    private static Physics.ContactWrench? EvaluateLandingContact(
+        Vessel vessel,
+        CelestialBody body,
+        in Physics.RigidBody6DofState state)
+    {
+        if (!vessel.HasDeployedLandingGear || vessel.LandingContactPoints.Count == 0)
+            return null;
+        var input = vessel.GetContactInput(state);
         return Physics.SurfaceContactSolver.EvaluateSphere(
             input, vessel.LandingContactPoints, body);
     }
