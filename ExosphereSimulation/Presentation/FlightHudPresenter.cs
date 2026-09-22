@@ -327,7 +327,14 @@ public sealed class FlightHudPresenter
         bool activeFlight = !isGroundHeld
             && surfaceSpeed > 100.0
             && !IsTerminalPhase(phase);
-        SetLatch("TRAJECTORY", activeFlight && impactTrajectory, !impactTrajectory);
+        // During controlled atmospheric descent the osculating orbit is no longer
+        // the vehicle's flight plan: drag and EDL guidance are intentionally taking
+        // it below the vacuum periapsis. Keep the raw impact flag in the snapshot for
+        // telemetry, but do not present it as a critical orbital warning in EDL.
+        bool trajectoryWarningActive = activeFlight
+            && impactTrajectory
+            && !IsControlledDescentPhase(phase);
+        SetLatch("TRAJECTORY", trajectoryWarningActive, !impactTrajectory);
         if (_latchedAlerts.Contains("TRAJECTORY"))
         {
             // An osculating orbit assumes thrust stops now. Below-surface periapsis
@@ -538,6 +545,10 @@ public sealed class FlightHudPresenter
     private static bool IsLaunchPhase(string phase) =>
         phase is "LIFTOFF" or "ASCENT_SH" or "MAX_Q" or "MECO"
             or "SEPARATION" or "ASCENT_SHIP";
+
+    private static bool IsControlledDescentPhase(string phase) =>
+        phase is "ENTRY" or "PEAK_HEATING" or "AERO_DESCENT"
+            or "RETRO_BURN" or "FINAL_DESCENT";
 
     private static bool IsTerminalPhase(string phase) =>
         phase is "PRE_LAUNCH" or "COUNTDOWN" or "IGNITION" or "LANDED" or "CRASHED";

@@ -17,7 +17,6 @@ public sealed class FlightHudPresenterTests
     [InlineData("MAX_Q", -100.0, true, FlightAlertSeverity.Critical)]
     [InlineData("MAX_Q", 300.0, false, FlightAlertSeverity.Critical)]
     [InlineData("COAST", 300.0, true, FlightAlertSeverity.Critical)]
-    [InlineData("ENTRY", -100.0, true, FlightAlertSeverity.Critical)]
     public void ImpactAlert_DistinguishesPoweredLaunchFromActualDescent(
         string phase, double verticalSpeed, bool powered, FlightAlertSeverity severity)
     {
@@ -42,6 +41,30 @@ public sealed class FlightHudPresenterTests
         var descending = presenter.Capture(universe, vessel, phase, FlightHudViewMode.Exterior);
         Assert.Equal(FlightAlertSeverity.Critical,
             Assert.Single(descending.Alerts, a => a.Code == "TRAJECTORY").Severity);
+    }
+
+    [Theory]
+    [InlineData("ENTRY")]
+    [InlineData("PEAK_HEATING")]
+    [InlineData("AERO_DESCENT")]
+    [InlineData("RETRO_BURN")]
+    [InlineData("FINAL_DESCENT")]
+    public void ImpactAlert_IsSuppressedDuringControlledDescent(string phase)
+    {
+        var (universe, body, vessel, _) = CreateVehicle();
+        vessel.Position = body.GetPositionAlongDirection(Vector3d.Right, 8_000.0);
+        vessel.Velocity = body.Velocity + new Vector3d(-100.0, 0.0, 300.0);
+
+        var snapshot = new FlightHudPresenter().Capture(
+            universe, vessel, phase, FlightHudViewMode.Exterior);
+
+        Assert.True(snapshot.IsImpactTrajectory);
+        Assert.DoesNotContain(snapshot.Alerts, alert => alert.Code == "TRAJECTORY");
+        Assert.Equal(
+            phase is "ENTRY" or "PEAK_HEATING" or "AERO_DESCENT"
+                ? FlightNavigationMode.Entry
+                : FlightNavigationMode.Land,
+            snapshot.NavigationMode);
     }
 
     [Fact]
