@@ -23,6 +23,8 @@ integrator without changing the production scheduler by default.
    scheduler tick without destroying the vessel or producing non-finite state.
 9. `feat(telemetry): expose coupled 6dof state evidence` — records COM state, orientation,
    angular velocity, mass, and step timing for old/new parity work.
+10. `test(physics): compare legacy and coupled coast states` — adds a COM-normalized parity
+    comparator and a deterministic 50-step coast gate.
 
 ## Runtime contract
 
@@ -37,8 +39,12 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
+The first parity probe compares identical no-atmosphere initial states for 50 × 20 ms steps.
+It remains within 0.1 m position error and 0.1 m/s velocity error, with finite attitude and
+angular-rate errors. This is a coast sanity gate, not evidence of ascent or EDL parity.
+
 ## Remaining work
 
-- Compare legacy and coupled trajectories from identical initial states.
+- Extend the legacy/coupled comparison to powered ascent and controlled EDL.
 - Port or reconcile flap control, SAS/rate limiting, and RCS authority.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
