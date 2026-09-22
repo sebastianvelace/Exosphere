@@ -56,5 +56,16 @@ public sealed class Coupled6DofUniverseTests
         Assert.True(double.IsFinite(vessel.Velocity.Y));
         Assert.True(double.IsFinite(vessel.Velocity.Z));
         Assert.Equal(1.0, vessel.Orientation.Norm, precision: 12);
+
+        var telemetry = universe.LastCoupled6DofTelemetry;
+        Assert.True(telemetry.Integrated);
+        Assert.True(telemetry.IsFinite);
+        Assert.Equal(0.02, telemetry.SimulationTime, precision: 12);
+        Assert.Equal(0.02, telemetry.StepSeconds, precision: 12);
+        Assert.Equal(1_000.0, telemetry.MassKg, precision: 8);
+        Assert.Equal(vessel.Orientation.Norm, telemetry.OrientationNorm, precision: 12);
+        Assert.Equal(
+            vessel.Position + vessel.Orientation.Rotate(vessel.Parts.CenterOfMass),
+            telemetry.FinalCenterOfMassPositionWorld);
     }
 }

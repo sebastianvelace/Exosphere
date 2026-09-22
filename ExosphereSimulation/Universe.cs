@@ -132,6 +132,9 @@ public class Universe
     /// </summary>
     public bool Coupled6DofIntegrationEnabled { get; set; }
 
+    /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
+    public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }
+
     /// <summary>
     /// Authoritative external guard for the experimental candidate. The callback must return
     /// true only when the vessel's non-physics state is materialized at the supplied epoch;
@@ -2133,6 +2136,18 @@ public class Universe
                 - absoluteFinal.AngularVelocityWorld.Cross(finalComOffsetWorld);
             vessel.Orientation = absoluteFinal.Orientation;
             vessel.AngularVelocity = absoluteFinal.AngularVelocityWorld;
+
+            LastCoupled6DofTelemetry = new Physics.Coupled6DofTelemetry(
+                Integrated: true,
+                SimulationTime: evaluationTime,
+                StepSeconds: dt,
+                MassKg: massProperties.Mass,
+                InitialCenterOfMassPositionWorld: centerOfMassPosition,
+                FinalCenterOfMassPositionWorld: absoluteFinal.Position,
+                InitialCenterOfMassVelocityWorld: centerOfMassVelocity,
+                FinalCenterOfMassVelocityWorld: absoluteFinal.Velocity,
+                FinalOrientation: absoluteFinal.Orientation,
+                FinalAngularVelocityWorld: absoluteFinal.AngularVelocityWorld);
 
             var contactAfter = EvaluateLandingContact(vessel, refBody, absoluteFinal);
             vessel.LastSurfaceContact = contactAfter;
