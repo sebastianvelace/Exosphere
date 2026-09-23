@@ -174,8 +174,10 @@ The state advances once per physics tick before coupled RK4 candidate evaluation
 all four RK4 stages read the same physical actuator position, while the legacy path applies the
 same position to its angular-acceleration term. Releasing the command does not teleport the
 flaps to neutral: residual deflection slews back and can continue producing authority during
-that interval. The renderer has not yet been switched to this state; visual pose parity remains
-an open gate.
+that interval. The renderer now consumes the shared pitch/roll actuator state for control
+deflection; aerodynamic base deployment remains a presentation approximation driven by the
+same dynamic-pressure and belly-alignment signals. Visual pose parity still requires a real
+framebuffer gate.
 
 ## Propulsion and mass flow
 

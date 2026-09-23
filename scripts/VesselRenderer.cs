@@ -34,8 +34,7 @@ public partial class VesselRenderer : Node3D
     private double _parachuteStateTimer;
     private bool _landingGearDeployed;
     private float _cachedFlapDeployment;
-    private float _cachedFlapPitch;
-    private float _cachedFlapRoll;
+    private FlapActuatorState _cachedFlapActuators = FlapActuatorState.Zero;
     private double _flapInputTimer;
     private double _landingGearMotionDelta;
     private float _lastGlow = float.NaN;
@@ -1339,10 +1338,9 @@ public partial class VesselRenderer : Node3D
         {
             _flapInputTimer = SecondaryVisualPeriodSeconds;
             _cachedFlapDeployment = ComputeFlapDeployment(body);
-            _cachedFlapPitch = (float)TargetVessel.PitchYawRoll.X;
-            _cachedFlapRoll = (float)TargetVessel.PitchYawRoll.Z;
+            _cachedFlapActuators = TargetVessel.FlapActuators;
         }
-        UpdateFlaps(delta, _cachedFlapDeployment, _cachedFlapPitch, _cachedFlapRoll);
+        UpdateFlaps(delta, _cachedFlapDeployment, _cachedFlapActuators);
 
         _landingGearMotionDelta += System.Math.Max(0.0, delta);
         _landingGearStateTimer -= System.Math.Max(0.0, delta);
@@ -1596,11 +1594,16 @@ public partial class VesselRenderer : Node3D
         return Mathf.Max(aeroDeployment, 0.28f);
     }
 
-    private void UpdateFlaps(double delta, float aeroDeployment, float pitch, float roll)
+    private void UpdateFlaps(
+        double delta,
+        float aeroDeployment,
+        FlapActuatorState actuators)
     {
         if (_flapRigs.Count == 0 || TargetVessel == null) return;
 
         float response = 1f - Mathf.Exp(-(float)delta * 3.8f);
+        float pitch = (float)actuators.Pitch;
+        float roll = (float)actuators.Roll;
 
         foreach (var flap in _flapRigs)
         {

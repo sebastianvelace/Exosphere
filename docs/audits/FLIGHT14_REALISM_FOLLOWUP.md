@@ -30,7 +30,7 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 | Upper ship | Continuous barrel, tangent-ogive nose, raceway, payload-door cue and four animated flaps exist | Shadow-side steel/TPS loses surface information at distance; seams and thermal zones need a controlled readability pass | P0 |
 | V3 booster | Flight 12 data is selected by the harness; renderer now uses three larger, lower, re-clocked fins only for V3 part IDs | Integrated hot-stage geometry is not yet distinct from the legacy vented interstage in the full-stack renderer | P1 |
 | Fault isolation | Live peer-thrust telemetry, 100 ms persistence and mount-geometry torque corroboration now gate the onboard recovery sensor | The classifier still needs a longer controlled-ascent campaign and fault injection beyond the deterministic Flight 7 fixture | P0 |
-| Flaps | Pure simulation now shares a persistent semantic actuator state, rate limit and saturation between legacy/coupled torque evaluation | Renderer still derives a separate pose from q, belly alignment and input; four individual hinge states remain an aggregate approximation | P1 |
+| Flaps | Pure simulation and renderer now share the semantic actuator state for control deflection, with rate limit and saturation in legacy/coupled torque evaluation | Base deployment still comes from q/belly presentation logic, and four individual hinge states remain an aggregate approximation; real-framebuffer acceptance is pending | P1 |
 
 ## Implemented in this stage
 
@@ -58,8 +58,8 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 1. **Controlled ascent:** run the V3 stack through a longer ascent gate with thrust,
    mass, dynamic pressure, attitude error, gimbal and flap-command telemetry. Keep
    Flight 7 legacy as the comparison baseline.
-2. **Flap renderer parity:** make the renderer consume `FlapActuatorState` rather than
-   deriving a separate pose from pitch/roll, then validate the result with a real framebuffer.
+2. **Flap renderer parity:** validate the renderer's shared `FlapActuatorState` pose with a
+   real framebuffer, then compare controlled ascent and entry angles against the reference.
 3. **P0 plume comparison:** add a deterministic close camera preset and compare pad,
    100 m and 1 km captures against the same framing. Tune the layered cone, ground
    interaction and deluge separately; do not use a global exposure or arbitrary bloom
