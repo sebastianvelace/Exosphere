@@ -11,8 +11,8 @@ public sealed class PhysicsParityIntegrationTests
     [Fact]
     public void LegacyAndCoupledPathsRemainWithinCoastTolerance()
     {
-        var legacy = CreateUniverse("legacy", coupled: false);
-        var coupled = CreateUniverse("coupled", coupled: true);
+        var legacy = CreateUniverse("legacy", coupled: false, powered: false);
+        var coupled = CreateUniverse("coupled", coupled: true, powered: false);
 
         for (int i = 0; i < 50; i++)
         {
@@ -36,7 +36,37 @@ public sealed class PhysicsParityIntegrationTests
         Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
     }
 
-    private static Universe CreateUniverse(string vesselId, bool coupled)
+    [Fact]
+    public void LegacyAndCoupledPathsRemainWithinPoweredAscentTolerance()
+    {
+        var legacy = CreateUniverse("legacy-powered", coupled: false, powered: true);
+        var coupled = CreateUniverse("coupled-powered", coupled: true, powered: true);
+
+        for (int i = 0; i < 25; i++)
+        {
+            legacy.Tick(0.02);
+            coupled.Tick(0.02);
+        }
+
+        var result = RigidBodyParityComparer.Compare(
+            RigidBodyStateSnapshot.FromVessel(legacy.ActiveVessel!),
+            RigidBodyStateSnapshot.FromVessel(coupled.ActiveVessel!),
+            new RigidBodyParityTolerance(
+                PositionMeters: 0.5,
+                VelocityMetersPerSecond: 0.5,
+                AttitudeRadians: 1e-6,
+                AngularVelocityRadiansPerSecond: 1e-6));
+
+        Assert.True(result.IsFinite);
+        Assert.True(
+            result.IsWithinTolerance,
+            $"Legacy/coupled powered divergence exceeded tolerance: {result}");
+        Assert.True(coupled.ActiveVessel!.Parts.TotalLiquidFuel
+            < legacy.ActiveVessel!.Parts.TotalLiquidFuel + 1e-9);
+        Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
+    }
+
+    private static Universe CreateUniverse(string vesselId, bool coupled, bool powered)
     {
         var body = new CelestialBody
         {
@@ -51,18 +81,28 @@ public sealed class PhysicsParityIntegrationTests
         };
         var vessel = new Vessel(vesselId)
         {
-            Position = Vector3d.Right * (body.Radius + 250_000.0),
-            Velocity = Vector3d.Up * 7_600.0,
+            Position = Vector3d.Up * (body.Radius + (powered ? 1_000.0 : 250_000.0)),
+            Velocity = powered ? Vector3d.Zero : Vector3d.Up * 7_600.0,
             ReferenceBodyId = body.Id,
             SASEnabled = false,
+            Throttle = powered ? 1.0 : 0.0,
         };
         vessel.Parts.SetRoot(new Part(new PartDefinition
         {
-            Id = "parity-payload",
-            CategoryStr = "structure",
-            MassDry = 1_000.0,
+            Id = powered ? "parity-engine" : "parity-payload",
+            CategoryStr = powered ? "engine" : "structure",
+            MassDry = powered ? 1_000.0 : 1_000.0,
             LengthM = 10.0,
             DiameterM = 2.0,
+            ThrustVac = powered ? 50_000.0 : 0.0,
+            ThrustSL = powered ? 50_000.0 : 0.0,
+            IspVac = powered ? 300.0 : 0.0,
+            IspSL = powered ? 300.0 : 0.0,
+            FuelTypeStr = powered ? "LiquidFuel+Oxidizer" : "",
+            MixtureRatio = powered ? 2.0 : 0.0,
+            FuelCapacityLF = powered ? 1_000.0 : 0.0,
+            FuelCapacityOx = powered ? 2_000.0 : 0.0,
+            ThrustPositionYM = powered ? -5.0 : 0.0,
         }));
 
         var universe = new Universe
