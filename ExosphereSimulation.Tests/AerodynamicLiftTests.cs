@@ -244,6 +244,51 @@ public sealed class AerodynamicLiftTests
     }
 
     [Fact]
+    public void FlapActuatorsSlewTowardDemandAndSaturateAtFullDeflection()
+    {
+        var state = FlapActuatorState.Zero;
+        var command = new Vector3d(1.0, -0.5, 0.25);
+
+        state = FlapActuatorState.Advance(state, command, 0.1);
+        Assert.Equal(FlapActuatorState.DefaultRatePerSecond * 0.1, state.Pitch, 12);
+        Assert.Equal(-FlapActuatorState.DefaultRatePerSecond * 0.1, state.Yaw, 12);
+        Assert.Equal(FlapActuatorState.DefaultRatePerSecond * 0.1, state.Roll, 12);
+
+        for (int i = 0; i < 20; i++)
+            state = FlapActuatorState.Advance(state, command, 0.1);
+
+        Assert.Equal(command.X, state.Pitch, 12);
+        Assert.Equal(command.Y, state.Yaw, 12);
+        Assert.Equal(command.Z, state.Roll, 12);
+        Assert.InRange(state.Pitch, -1.0, 1.0);
+        Assert.InRange(state.Yaw, -1.0, 1.0);
+        Assert.InRange(state.Roll, -1.0, 1.0);
+
+        var released = FlapActuatorState.Advance(state, Vector3d.Zero, 0.1);
+        Assert.True(released.Pitch < state.Pitch && released.Pitch > 0.0);
+    }
+
+    [Fact]
+    public void FlapAuthorityUsesActualActuatorStateRatherThanInstantaneousCommand()
+    {
+        var partial = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+            density: 0.02,
+            surfaceVelocity: Vector3d.Right * 600.0,
+            orientation: Quaterniond.Identity,
+            actuatorState: new FlapActuatorState(0.25, 0.0, 0.0),
+            vehicleLength: 52.0,
+            vehicleDiameter: 9.0,
+            transverseMomentOfInertia: 5.0e7);
+        var full = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+            0.02, Vector3d.Right * 600.0, Quaterniond.Identity,
+            new Vector3d(1.0, 0.0, 0.0), 52.0, 9.0, 5.0e7);
+
+        Assert.Equal(full.X * 0.25, partial.X, 12);
+        Assert.Equal(0.0, partial.Y, 12);
+        Assert.Equal(0.0, partial.Z, 12);
+    }
+
+    [Fact]
     public void AerodynamicMomentRotatesNoseTowardTheVelocity()
     {
         // Nose points +Y while the vehicle travels mostly +Y with a small +X error.

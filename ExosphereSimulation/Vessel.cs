@@ -55,6 +55,9 @@ public class Vessel
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
+    /// <summary>Actual normalized body-flap deflection consumed by both integrators.</summary>
+    public FlapActuatorState FlapActuators { get; private set; } = FlapActuatorState.Zero;
+
     /// <summary>0..1 attitude authority after structural damage (see <see cref="Flight.ControlAuthority"/>).</summary>
     public double ControlAuthorityFactor => Flight.ControlAuthority.Evaluate(this);
 
@@ -763,6 +766,7 @@ public class Vessel
             }
 
             var command = PitchYawRoll * auth;
+            AdvanceFlapActuators(dt, command);
             bool hasInput = command.Magnitude > 1e-6;
             foreach (var engine in Parts.ActiveEngineList)
             {
@@ -799,6 +803,19 @@ public class Vessel
     }
 
     internal void EndCoupledPhysicsStep() => Parts.EndPhysicsTick();
+
+    internal bool HasFunctionalBodyFlaps()
+    {
+        foreach (var part in Parts.PartList)
+        {
+            if (part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("command")
+                && !part.IsBroken)
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Returns whichever of <paramref name="value"/>/<paramref name="floor"/> has the larger
@@ -857,6 +874,7 @@ public class Vessel
         }
 
         var command = PitchYawRoll * auth;
+        AdvanceFlapActuators(dt, command);
         // Aplicar input de rotación (en espacio local del vessel). El eje longitudinal
         // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
         // pitch → giro local X, yaw → giro local Z, roll → giro local Y.
@@ -1003,13 +1021,13 @@ public class Vessel
                 // unpowered entry. Their hinge force scales with q and their physical lever
                 // arm; this replaces the impossible assumption that only lit engines can
                 // hold a lift-producing angle of attack.
-                if (hasBodyFlaps && hasInput)
+                if (hasBodyFlaps && !FlapActuators.IsZero)
                 {
                     AngularVelocity += AerodynamicsModel.ComputeFlapControlAngularAcceleration(
                         density,
                         surfVel,
                         Orientation,
-                        command,
+                        FlapActuators,
                         VehicleLength,
                         MaximumDiameter,
                         Parts.TransverseMomentOfInertia) * dt;
@@ -1050,6 +1068,13 @@ public class Vessel
             var    deltaRot = Quaterniond.FromAxisAngle(AngularVelocity.Normalized, angle);
             Orientation = (deltaRot * Orientation).Normalize();
         }
+    }
+
+    private void AdvanceFlapActuators(double dt, Vector3d command)
+    {
+        FlapActuators = HasFunctionalBodyFlaps()
+            ? FlapActuatorState.Advance(FlapActuators, command, dt)
+            : FlapActuatorState.Zero;
     }
 
     // ── Staging ───────────────────────────────────────────────────────────

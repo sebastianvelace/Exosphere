@@ -106,6 +106,17 @@ public static class RigidBodyForceEvaluator
             vessel.Parts.TransverseMomentOfInertia,
             temperature,
             aerodynamicCenterOffset);
+        if (vessel.FlapActuators.IsZero is false && vessel.HasFunctionalBodyFlaps())
+        {
+            angularAccelerationWorld += AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+                density,
+                surfaceVelocity,
+                state.Orientation,
+                vessel.FlapActuators,
+                vessel.VehicleLength,
+                vessel.MaximumDiameter,
+                vessel.Parts.TransverseMomentOfInertia);
+        }
         var angularAccelerationBody = state.Orientation.Inverse().Rotate(angularAccelerationWorld);
         return massProperties.InertiaBody.Multiply(angularAccelerationBody);
     }

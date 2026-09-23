@@ -384,9 +384,31 @@ public static class AerodynamicsModel
         double vehicleLength,
         double vehicleDiameter,
         double transverseMomentOfInertia)
+        => ComputeFlapControlAngularAcceleration(
+            density,
+            surfaceVelocity,
+            orientation,
+            FlapActuatorState.FromCommand(pitchYawRollCommand),
+            vehicleLength,
+            vehicleDiameter,
+            transverseMomentOfInertia);
+
+    /// <summary>
+    /// Computes flap authority from the actual actuator state. The command overload above is
+    /// retained for analytical callers; runtime integration must use this stateful overload so
+    /// servo slew and saturation are represented before hinge forces are applied.
+    /// </summary>
+    public static Vector3d ComputeFlapControlAngularAcceleration(
+        double density,
+        Vector3d surfaceVelocity,
+        Quaterniond orientation,
+        FlapActuatorState actuatorState,
+        double vehicleLength,
+        double vehicleDiameter,
+        double transverseMomentOfInertia)
     {
         if (density <= 0.0 || surfaceVelocity.Magnitude < 1.0
-            || transverseMomentOfInertia <= 0.0 || pitchYawRollCommand.Magnitude < 1e-6)
+            || transverseMomentOfInertia <= 0.0 || actuatorState.IsZero)
             return Vector3d.Zero;
 
         double q = ComputeDynamicPressure(density, surfaceVelocity.Magnitude);
@@ -410,9 +432,9 @@ public static class AerodynamicsModel
         double rollAuthority = pitchYawAuthority * 0.55;
 
         var localAcceleration = new Vector3d(
-            System.Math.Clamp(pitchYawRollCommand.X, -1.0, 1.0) * pitchYawAuthority,
-            System.Math.Clamp(pitchYawRollCommand.Z, -1.0, 1.0) * rollAuthority,
-            System.Math.Clamp(pitchYawRollCommand.Y, -1.0, 1.0) * pitchYawAuthority);
+            actuatorState.Pitch * pitchYawAuthority,
+            actuatorState.Roll * rollAuthority,
+            actuatorState.Yaw * pitchYawAuthority);
         return orientation.Rotate(localAcceleration);
     }
 

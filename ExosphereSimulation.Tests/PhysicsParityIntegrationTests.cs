@@ -134,6 +134,11 @@ public sealed class PhysicsParityIntegrationTests
             result.IsWithinTolerance,
             $"Legacy/coupled controlled Flight 7 divergence exceeded tolerance: {result}");
         Assert.True(coupled.ActiveVessel.AngularVelocity.Magnitude > 1e-4);
+        Assert.True(legacy.ActiveVessel.FlapActuators.Pitch > 0.0);
+        Assert.Equal(
+            legacy.ActiveVessel.FlapActuators.Pitch,
+            coupled.ActiveVessel.FlapActuators.Pitch,
+            precision: 12);
         Assert.Contains(
             coupled.ActiveVessel.Parts.ActiveEngines,
             part => part.EngineStates.Any(state => state.GimbalDeg.Magnitude > 1e-3));

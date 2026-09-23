@@ -116,7 +116,9 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      pasen y se conserve evidencia numérica y de framebuffer.
 
 2. **Controles aún no equivalentes en el camino acoplado**
-   - SAS/rate limiting, flaps y RCS requieren contratos explícitos con el evaluador de torques.
+   - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el
+     renderer consuma ese estado y cerrar la campaña V3 de mayor duración.
+   - SAS/rate limiting y RCS todavía requieren contratos explícitos con el evaluador de torques.
    - Cada diferencia debe tener una prueba de paridad, no un ajuste visual de tolerancia.
 
 3. **Validación visual posterior**

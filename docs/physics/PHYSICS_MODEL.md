@@ -152,10 +152,30 @@ The current model includes:
 - transonic/hypersonic continuity handling;
 - body lift driven by angle of attack, with `CL` proportional to `sin(2α)`;
 - aerodynamic-centre attitude torque in the coupled evaluator;
+- aggregate four-body-flap authority driven by dynamic pressure and the shared
+  `FlapActuatorState` in both legacy and coupled paths;
 - pressure-corrected engine thrust and Isp.
 
 This is a mission-scale aerodynamic model. It is not a Navier–Stokes solution and does not
 resolve boundary-layer transition, local shock interactions or plume impingement.
+
+### Body-flap actuator contract
+
+The four flaps are represented by three semantic channels (`pitch`, `yaw`, `roll`) because the
+current mission-scale force model computes their combined hinge authority rather than resolving
+each hinge and local panel flow independently. `FlapActuatorState` stores normalized deflection
+in `[-1, 1]`; `FlapActuatorState.Advance` moves each channel toward the command with a rate
+limit and saturates it before the aerodynamic torque is evaluated. The aggregate model uses a
+52° maximum geometric envelope and a 25°/s actuator-rate estimate. The envelope matches the
+current renderer geometry; the rate is explicitly a simulator estimate, not a published SpaceX
+specification.
+
+The state advances once per physics tick before coupled RK4 candidate evaluation. Consequently,
+all four RK4 stages read the same physical actuator position, while the legacy path applies the
+same position to its angular-acceleration term. Releasing the command does not teleport the
+flaps to neutral: residual deflection slews back and can continue producing authority during
+that interval. The renderer has not yet been switched to this state; visual pose parity remains
+an open gate.
 
 ## Propulsion and mass flow
 
@@ -211,7 +231,9 @@ all motors are one physical point.
 | Flight 7 engine-out recovery | Same warm-up/response window; active-stage detection, axis feedback and command slew | First deterministic recovery gate only |
 | Flight 7 delayed engine-out recovery | Same window; 100 ms onboard detection latency before feedback | First sensor-latency recovery gate only |
 | Controlled Starship ascent/EDL parity | Not yet closed | Open |
-| SAS, flaps and RCS in coupled path | Not yet fully equivalent | Open |
+| Flap actuator state and torque in legacy/coupled paths | Shared state, rate limit and saturation; aggregate four-surface model | Unit + controlled-pitch gate |
+| Renderer flap pose parity | Renderer still derives a separate pose from q/belly/input | Open |
+| SAS and RCS in coupled path | Not yet fully equivalent | Open |
 | CFD, plume-flow interaction and slosh | Out of current solver scope | Deliberate approximation |
 
 ## Evidence gates

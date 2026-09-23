@@ -30,7 +30,7 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 | Upper ship | Continuous barrel, tangent-ogive nose, raceway, payload-door cue and four animated flaps exist | Shadow-side steel/TPS loses surface information at distance; seams and thermal zones need a controlled readability pass | P0 |
 | V3 booster | Flight 12 data is selected by the harness; renderer now uses three larger, lower, re-clocked fins only for V3 part IDs | Integrated hot-stage geometry is not yet distinct from the legacy vented interstage in the full-stack renderer | P1 |
 | Fault isolation | Live peer-thrust telemetry, 100 ms persistence and mount-geometry torque corroboration now gate the onboard recovery sensor | The classifier still needs a longer controlled-ascent campaign and fault injection beyond the deterministic Flight 7 fixture | P0 |
-| Flaps | Aerodynamic authority is applied in the pure simulation; visual flaps respond to q, belly alignment, pitch and roll | No persistent actuator state/rate limit is shared by physics and renderer | P1 |
+| Flaps | Pure simulation now shares a persistent semantic actuator state, rate limit and saturation between legacy/coupled torque evaluation | Renderer still derives a separate pose from q, belly alignment and input; four individual hinge states remain an aggregate approximation | P1 |
 
 ## Implemented in this stage
 
@@ -48,15 +48,18 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
   their telemetry so the observer can distinguish commanded demand from delivered thrust.
 - Added a geometric residual test and strengthened the Flight 7 legacy/coupled delayed
   recovery gate to prove the diagnosis and torque corroboration are both present.
+- Added `FlapActuatorState`: the physical command now slews toward demand at a declared
+  simulator-estimate rate, saturates at the geometric envelope, and is consumed by both
+  legacy and coupled aerodynamic torque paths. Releasing input leaves a physically decaying
+  residual deflection instead of an instantaneous neutral pose.
 
 ## Next work units
 
 1. **Controlled ascent:** run the V3 stack through a longer ascent gate with thrust,
    mass, dynamic pressure, attitude error, gimbal and flap-command telemetry. Keep
    Flight 7 legacy as the comparison baseline.
-2. **Flap actuator parity:** introduce a physical deflection state, rate limit and
-   saturation in the pure simulation; make the renderer consume that state rather than
-   deriving a separate pose from pitch/roll.
+2. **Flap renderer parity:** make the renderer consume `FlapActuatorState` rather than
+   deriving a separate pose from pitch/roll, then validate the result with a real framebuffer.
 3. **P0 plume comparison:** add a deterministic close camera preset and compare pad,
    100 m and 1 km captures against the same framing. Tune the layered cone, ground
    interaction and deluge separately; do not use a global exposure or arbitrary bloom
