@@ -1,5 +1,10 @@
 # Exosphere Roadmap
 
+> **Reconciled:** 2026-09-22 · **Current physics front:** legacy-versus-coupled 6-DoF parity.
+> The historical phase waves below remain useful evidence, but the active source of truth is
+> [`docs/README.md`](docs/README.md), [`docs/physics/PHYSICS_MODEL.md`](docs/physics/PHYSICS_MODEL.md)
+> and this roadmap.
+
 Este es el roadmap vivo del proyecto. Los planes viejos `PLAN_MEJORAS.md`,
 `PLAN_MEJORAS_R15.md` y `PLAN_MEJORAS_R16.md` fueron cerrados/retirados. La
 auditoria tecnica de fisica vive en `PLAN_REALISM.md`; el proximo frente
@@ -86,8 +91,31 @@ Base tecnica cerrada en `main`:
 
 ## Prioridad Inmediata
 
-La siguiente etapa no debe abrir un sistema grande nuevo. Primero hay que subir la
-fidelidad visual y asegurar que lo existente se pueda validar con capturas.
+La prioridad inmediata es cerrar la paridad física antes de activar el integrador acoplado en
+vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactivado por defecto.
+
+1. **Paridad legacy vs. coupled 6-DoF**
+   - Coast determinista: cerrado con 50 pasos de 20 ms.
+   - Ascenso propulsado simplificado: cerrado con 25 pasos de 20 ms, consumo de propelente y
+     gravedad.
+   - Siguiente gate: fixture de Starship con datos reales, spool, gimbal, atmósfera y control.
+   - Gate posterior: EDL controlado con contactos y telemetría de captura.
+   - No activar el switch ni declarar fidelidad completa hasta que ambos escenarios pasen y se
+     conserve evidencia numérica y de framebuffer.
+
+2. **Controles aún no equivalentes en el camino acoplado**
+   - SAS/rate limiting, flaps y RCS requieren contratos explícitos con el evaluador de torques.
+   - Cada diferencia debe tener una prueba de paridad, no un ajuste visual de tolerancia.
+
+3. **Validación visual posterior**
+   - Solo después de la paridad numérica: ascenso, hot-stage, órbita, reentrada y touchdown con
+     `tools/visual_playtest.sh` y framebuffer real.
+
+### Backlog histórico y frentes paralelos
+
+Los bloques de optimización y fidelidad visual que siguen son planes de trabajo históricos o
+paralelos. Sus informes conservan resultados fechados; al cerrar un gate deben actualizarse los
+documentos activos anteriores, no solo añadir otra nota de fase.
 
 Frente paralelo de física (no pisa visual; plan en
 `docs/audits/REALISM_UNRESOLVED_FRONTS_AUG2026.md`): Tierra WGS84 + J2 armado

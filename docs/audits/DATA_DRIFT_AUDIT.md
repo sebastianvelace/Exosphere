@@ -1,7 +1,12 @@
 # Data & Documentation Drift Audit — Exosphere
 
+> **Historical audit — reviewed 2026-09-22.** This Wave 1 report is retained as
+> provenance for the July 2026 drift findings. The current documentation inventory
+> and disposition are maintained in [`docs/DOCUMENTATION_AUDIT.md`](../DOCUMENTATION_AUDIT.md);
+> the current physics contract is [`docs/physics/PHYSICS_MODEL.md`](../physics/PHYSICS_MODEL.md).
+
 **Wave:** 1 (overnight Jul 2026)  
-**Scope:** `docs/physics_audit.md`, `PLAN_REALISM.md`, `ROADMAP.md`, `data/parts/*.json`, schema honesty
+**Original scope:** `docs/physics_audit.md`, `PLAN_REALISM.md`, `ROADMAP.md`, `data/parts/*.json`, schema honesty
 
 ---
 

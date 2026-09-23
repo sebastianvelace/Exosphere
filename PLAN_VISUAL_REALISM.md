@@ -1,5 +1,10 @@
 # Exosphere — Plan de Fidelidad Visual Realista
 
+> **Reconciliado el 2026-09-22.** Este documento sigue siendo el plan vivo de validación visual.
+> Los informes fechados de `docs/audits/` son evidencia histórica; no reemplazan este plan ni
+> `ROADMAP.md`. Toda afirmación de cierre debe distinguir implementación, telemetría y captura
+> de framebuffer real.
+
 Objetivo: hacer que el juego se lea visualmente como un simulador Starship/Super
 Heavy real-scale, sin romper la fisica, el VAB ni el flujo de vuelo ya validados.
 Este plan prioriza mejoras visibles y verificables sobre sistemas nuevos.

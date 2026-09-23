@@ -1,5 +1,9 @@
 # Master Improvement Index — Exosphere
 
+> **Historical index — reconciled 2026-09-22.** This wave inventory is retained for provenance.
+> It is not the active roadmap; use [`../../ROADMAP.md`](../../ROADMAP.md) and
+> [`../README.md`](../README.md) for current priorities and document ownership.
+
 > **Documento rector actual:**
 > [`REALISM_ASTRONAUT_MASTER_PLAN.md`](REALISM_ASTRONAUT_MASTER_PLAN.md). Este índice
 > conserva inventario histórico; algunos estados de física/visual están superados.

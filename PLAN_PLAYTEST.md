@@ -1,5 +1,10 @@
 # Exosphere — End-to-End Playtest Harness & Future-Work Backlog
 
+> **Reconciliado el 2026-09-22.** El harness y sus reglas siguen vigentes, pero los estados de
+> hitos fechados en julio deben verificarse contra `tools/visual_playtest.sh`, la telemetría y
+> los artefactos actuales antes de reutilizarse como evidencia. La paridad numérica 6-DoF no se
+> considera validación visual: requiere además framebuffer real.
+
 This doc gives any loop iteration two things:
 
 1. A **repeatable way to play a full mission and capture a real framebuffer** (a temporary,

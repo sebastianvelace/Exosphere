@@ -1,5 +1,10 @@
 # Unresolved realism fronts — execution plan (2026-08-21)
 
+> **Historical execution plan — reconciled 2026-09-22.** The branch hashes and agent statuses
+> below are frozen evidence from August. J2/data claims must be checked against current code;
+> current physics priorities are in [`../../ROADMAP.md`](../../ROADMAP.md) and the maintained
+> model in [`../physics/PHYSICS_MODEL.md`](../physics/PHYSICS_MODEL.md).
+
 **Base:** `main` at `4420ae5` plus a live visual agent on `tools/visual_playtest.sh`.
 **Goal:** advance physics fronts that are still open without colliding with visual work.
 **Do not enable** `SimulationInterestPolicy` / deferred physics in this pass.

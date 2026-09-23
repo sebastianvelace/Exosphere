@@ -31,6 +31,24 @@ Implemented and working:
 
 See `ROADMAP.md` for the current plan. `PLAN_REALISM.md` records the physics/telemetry audit, and `PLAN_VISUAL_REALISM.md` is the next visual-fidelity track.
 
+The maintained technical index is [`docs/README.md`](docs/README.md). The equations, coordinate
+frames, force model, approximations and activation gates are documented in
+[`docs/physics/PHYSICS_MODEL.md`](docs/physics/PHYSICS_MODEL.md). Historical audits remain under
+`docs/audits/` as evidence; they are not the active roadmap.
+
+## Physics at a glance
+
+The simulation is a double-precision, SI-unit model with seconds from J2000 as its clock. It
+combines data-driven body/part definitions, point-mass plus optional `J2` gravity, rotating-body
+atmospheres, pressure-corrected propulsion, orientation-dependent aero, thermal protection,
+multi-point contact and patched-conic/Kepler rail propagation.
+
+The current realism front is a coupled rigid-body 6-DoF solver. It integrates centre of mass,
+attitude, body-frame angular velocity and the full inertia tensor through four pure RK4 force
+stages. It is still opt-in: coast and simplified powered-ascent parity gates pass, while
+Starship ascent/EDL parity and full SAS/flap/RCS equivalence remain open. See the
+[physics model](docs/physics/PHYSICS_MODEL.md) and [6-DoF migration record](docs/physics/coupled_6dof_migration.md).
+
 ## Build And Test
 
 Run these after C# changes:
@@ -199,6 +217,8 @@ The Starship default stack currently uses:
   TLI/LOI readouts and future-window burn arming. Remaining work includes executable
   LOI sequencing, dated lunar ephemerides and timeline maneuver nodes.
 - Automated visual screenshots need a real framebuffer; current headless smoke tests only validate load/runtime.
+- The coupled 6-DoF path is intentionally disabled by default until powered Starship ascent,
+  controlled EDL and real-framebuffer parity gates are closed.
 
 ## Working Rules
 

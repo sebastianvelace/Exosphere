@@ -1,5 +1,12 @@
 # Exosphere — Plan de mejoras de REALISMO (auditoría end-to-end)
 
+> **Reconciliado el 2026-09-22.** Este archivo conserva el backlog histórico de realismo y sus
+> evidencias de telemetría. Para la descripción vigente de ecuaciones, marcos y límites leer
+> [`docs/physics/PHYSICS_MODEL.md`](docs/physics/PHYSICS_MODEL.md); para el frente activo de
+> integración rígida leer [`docs/physics/coupled_6dof_migration.md`](docs/physics/coupled_6dof_migration.md).
+> Los estados fechados de julio/agosto que no tengan una prueba o referencia actual deben
+> tratarse como históricos, no como una afirmación del runtime presente.
+
 > Basado en (a) un **playthrough headless por telemetría** del ascenso real (autopiloto [G],
 > ignición→Max-Q→staging→circularización, muestreado cada 5 s) y (b) una **auditoría de los datos
 > y modelos** contra valores del mundo real. Criterio rector: **lo más realista posible**.

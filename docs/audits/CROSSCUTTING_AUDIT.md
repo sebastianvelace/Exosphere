@@ -1,5 +1,10 @@
 # Crosscutting Audit — Exosphere
 
+> **Historical audit — reviewed 2026-09-22.** This Wave 2 report preserves the
+> cross-domain findings from July 2026. Use [`docs/README.md`](../README.md) for
+> the active documentation map and [`docs/DOCUMENTATION_AUDIT.md`](../DOCUMENTATION_AUDIT.md)
+> for the disposition of dated reports.
+
 **Wave:** 2 (overnight Jul 2026)  
 **Scope:** CI/visual testing, performance vs visual quality, audio, docs drift, over-engineering, duplicate backlog items  
 **Method:** Cross-reference Wave 1 domain audits + targeted repo grep/read

@@ -30,7 +30,8 @@ The update script only runs `dotnet restore`; the SDK/Godot/Xvfb are pre-install
 ### Build / test / run
 
 Standard commands are in `README.md` and `CLAUDE.md` (build both csproj, run xUnit, or
-`bash tools/ci_check.sh`). All 324 xUnit tests pass. Expected standard: 0 warnings, 0 errors.
+`bash tools/ci_check.sh`). The latest verified baseline is 858 xUnit tests passing, including
+the coast and simplified powered-ascent physics parity gates. Expected standard: 0 warnings, 0 errors.
 
 - Headless smoke (boot a scene + quit): see `README.md` "Godot smoke test". Use
   `"$GODOT_BIN"` in place of the hardcoded path.
@@ -68,3 +69,9 @@ Standard commands are in `README.md` and `CLAUDE.md` (build both csproj, run xUn
   paths); the missing-`0` ALSA errors are just the audio dummy driver under Xvfb.
 - The main scene is `scenes/ui/MainMenu.tscn` (per `project.godot`); the playable flight and
   VAB scenes are `scenes/flight/Flight.tscn` and `scenes/construction/Construction.tscn`.
+
+### Physics documentation
+
+- Current equations, frames, approximations and activation gates: `docs/physics/PHYSICS_MODEL.md`.
+- Coupled 6-DoF migration and parity evidence: `docs/physics/coupled_6dof_migration.md`.
+- Historical audits are evidence only; use `ROADMAP.md` for active priorities.

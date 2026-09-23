@@ -1,6 +1,6 @@
 # Exosphere Agent Notes
 
-This file is the short operational guide for agents working in this repo. `ROADMAP.md` is the live product plan. `PLAN_REALISM.md` is the physics/telemetry audit log. `PLAN_VISUAL_REALISM.md` is the next visual-fidelity track. Do not look for `PLAN_MEJORAS.md`; it has been retired.
+This file is the short operational guide for agents working in this repo. `ROADMAP.md` is the live product plan. `PLAN_REALISM.md` is the physics/telemetry audit log. `PLAN_VISUAL_REALISM.md` is the next visual-fidelity track. Do not look for `PLAN_MEJORAS.md`; it has been retired. The maintained physics source of truth is `docs/physics/PHYSICS_MODEL.md`; the coupled migration and parity gates are tracked in `docs/physics/coupled_6dof_migration.md`.
 
 ## Required Checks
 
@@ -92,6 +92,7 @@ Important implemented systems:
 - radial/suborbital impact guards
 - pressure-corrected thrust/Isp/mass flow
 - orientation-dependent aero and heating
+- opt-in coupled rigid-body 6-DoF RK4 with COM/inertia, candidate-state forces and contact
 - heat-shield flag from part JSON
 - hard impact destruction
 - VAB catalog/assembly/export in `ExosphereSimulation/Construction`
@@ -151,6 +152,8 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - CI builds/tests the sim, builds the Godot C# layer, downloads Godot 4.6.3 mono in GitHub Actions, and runs strict headless smoke checks. Local `tools/ci_check.sh` runs Godot smoke only when `GODOT_BIN` or the default local Godot path exists.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 - Current product priority after documentation cleanup: visual fidelity against real Starship/Super Heavy references. Prefer scoped improvements to `VesselRenderer`, `ReentryPlasmaController`, `PlumeSystem`, camera/lighting, and visual capture before broad new gameplay systems.
+- The coupled 6-DoF path remains disabled by default. Coast and simplified powered parity pass;
+  Starship ascent/EDL parity and full SAS/flap/RCS equivalence are still required before activation.
 
 ## Workflow
 

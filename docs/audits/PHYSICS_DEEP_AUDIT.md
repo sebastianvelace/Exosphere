@@ -1,5 +1,9 @@
 # Exosphere Physics Deep Audit (Jul 2026)
 
+> **Historical evidence — reconciled 2026-09-22.** Several fixes described here have since
+> landed, while the remaining gaps were re-scoped by the coupled 6-DoF work. Current equations,
+> limits and gates live in [`../physics/PHYSICS_MODEL.md`](../physics/PHYSICS_MODEL.md).
+
 > **Estado histórico.** La auditoría vigente y sus cierres están en
 > [`REALISM_ASTRONAUT_MASTER_PLAN.md`](REALISM_ASTRONAUT_MASTER_PLAN.md). P-A03,
 > P-A05 y P-R04 ya no describen el código actual.

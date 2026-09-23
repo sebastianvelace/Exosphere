@@ -1,5 +1,9 @@
 # Physics Realism Audit — Exosphere
 
+> **Historical audit — reconciled 2026-09-22.** Use [`docs/physics/PHYSICS_MODEL.md`](../physics/PHYSICS_MODEL.md)
+> and [`ROADMAP.md`](../../ROADMAP.md) for current implementation and priorities. This report
+> remains valuable as dated evidence and must not be read as a live status table.
+
 **Wave:** 1 (synthesized overnight Jul 2026)  
 **Scope:** `ExosphereSimulation/`, `data/parts/`, `data/bodies/`  
 **Mode:** Read-only; no C# changes in this audit pass  
