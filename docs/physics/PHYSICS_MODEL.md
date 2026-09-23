@@ -176,8 +176,10 @@ same position to its angular-acceleration term. Releasing the command does not t
 flaps to neutral: residual deflection slews back and can continue producing authority during
 that interval. The renderer now consumes the shared pitch/roll actuator state for control
 deflection; aerodynamic base deployment remains a presentation approximation driven by the
-same dynamic-pressure and belly-alignment signals. Visual pose parity still requires a real
-framebuffer gate.
+same dynamic-pressure and belly-alignment signals. EDL's scripted catch corridor may provide a
+temporary `FlapCommandOverride` while TVC/RCS is neutralized for its attitude snap, so the
+surface state remains physically observable instead of being silently forced to zero. Visual
+pose parity still requires a real framebuffer gate.
 
 ## Propulsion and mass flow
 

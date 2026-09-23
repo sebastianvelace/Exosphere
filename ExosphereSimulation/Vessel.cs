@@ -55,6 +55,13 @@ public class Vessel
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
+    /// <summary>
+    /// Optional body-flap command used by guidance modes that deliberately suppress the
+    /// coupled TVC/RCS command while still driving the aerodynamic control surfaces. A null
+    /// value keeps the normal pilot/autopilot command path shared with the engines.
+    /// </summary>
+    public Vector3d? FlapCommandOverride { get; set; }
+
     /// <summary>Actual normalized body-flap deflection consumed by both integrators.</summary>
     public FlapActuatorState FlapActuators { get; private set; } = FlapActuatorState.Zero;
 
@@ -766,7 +773,8 @@ public class Vessel
             }
 
             var command = PitchYawRoll * auth;
-            AdvanceFlapActuators(dt, command);
+            var flapCommand = (FlapCommandOverride ?? PitchYawRoll) * auth;
+            AdvanceFlapActuators(dt, flapCommand);
             bool hasInput = command.Magnitude > 1e-6;
             foreach (var engine in Parts.ActiveEngineList)
             {
@@ -874,7 +882,8 @@ public class Vessel
         }
 
         var command = PitchYawRoll * auth;
-        AdvanceFlapActuators(dt, command);
+        var flapCommand = (FlapCommandOverride ?? PitchYawRoll) * auth;
+        AdvanceFlapActuators(dt, flapCommand);
         // Aplicar input de rotación (en espacio local del vessel). El eje longitudinal
         // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
         // pitch → giro local X, yaw → giro local Z, roll → giro local Y.

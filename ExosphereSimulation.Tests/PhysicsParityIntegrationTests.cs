@@ -146,6 +146,34 @@ public sealed class PhysicsParityIntegrationTests
     }
 
     [Fact]
+    public void FlapOverrideAdvancesWithoutReintroducingTvcCommand()
+    {
+        var legacy = CreateFlight7Universe("legacy-flap-override", coupled: false, useEarthData: true);
+        var coupled = CreateFlight7Universe("coupled-flap-override", coupled: true, useEarthData: true);
+        var demand = new Vector3d(0.4, -0.2, 0.3);
+
+        legacy.ActiveVessel!.PitchYawRoll = Vector3d.Zero;
+        coupled.ActiveVessel!.PitchYawRoll = Vector3d.Zero;
+        legacy.ActiveVessel.FlapCommandOverride = demand;
+        coupled.ActiveVessel.FlapCommandOverride = demand;
+
+        for (int i = 0; i < 10; i++)
+        {
+            legacy.Tick(0.02);
+            coupled.Tick(0.02);
+        }
+
+        Assert.Equal(Vector3d.Zero, legacy.ActiveVessel.PitchYawRoll);
+        Assert.Equal(Vector3d.Zero, coupled.ActiveVessel.PitchYawRoll);
+        Assert.True(legacy.ActiveVessel.FlapActuators.Pitch > 0.0);
+        Assert.True(legacy.ActiveVessel.FlapActuators.Yaw < 0.0);
+        Assert.True(legacy.ActiveVessel.FlapActuators.Roll > 0.0);
+        Assert.Equal(
+            legacy.ActiveVessel.FlapActuators,
+            coupled.ActiveVessel.FlapActuators);
+    }
+
+    [Fact]
     public void Flight7ClosedLoopElevationProgramRemainsWithinParityTolerance()
     {
         var legacy = CreateFlight7Universe("legacy-flight7-guidance", coupled: false, useEarthData: true);

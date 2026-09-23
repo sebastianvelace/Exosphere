@@ -237,6 +237,7 @@ public partial class EDLController : Control
         {
             vessel.Throttle = 0.0;
             vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.FlapCommandOverride = null;
             vessel.SASEnabled = false;
             QueueRedraw();
             return;
@@ -249,6 +250,12 @@ public partial class EDLController : Control
     private void AdvancePhase(Vessel vessel, CelestialBody body, MissionManager? mission,
         double mass, double speed, Vector3d up, Vector3d surfVel, double delta, Universe universe)
     {
+        // The scripted catch demonstration snaps the attitude for a stable visual/physical
+        // capture corridor. Keep that presentation shortcut from also hiding the actual body
+        // flap command; TVC/RCS remains neutral, but the aerodynamic actuator still follows
+        // the same guidance demand with its rate limit.
+        vessel.FlapCommandOverride = null;
+
         double g = body.GetSurfaceGravity();
 
         double vDown   = System.Math.Max(0.0, -_vUp);
@@ -720,6 +727,7 @@ public partial class EDLController : Control
             vessel.Orientation = desiredAttitude;
             vessel.AngularVelocity = Vector3d.Zero;
             vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.FlapCommandOverride = _aeroAttitudeCommand;
         }
 
         if (_flipInProgress)

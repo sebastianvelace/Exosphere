@@ -1632,7 +1632,8 @@ public partial class VesselRenderer : Node3D
 
         _lastVisualFlapDeployment = deployment;
         _lastVisualFlapActuators = actuators;
-        GD.Print($"VISUAL_FLAPS deployment={deployment:F3} pitch={actuators.Pitch:F3} "
+        GD.Print($"VISUAL_FLAPS vessel={TargetVessel?.Id ?? "none"} "
+            + $"deployment={deployment:F3} pitch={actuators.Pitch:F3} "
             + $"yaw={actuators.Yaw:F3} roll={actuators.Roll:F3}");
     }
 
