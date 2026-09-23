@@ -52,7 +52,14 @@ void fragment() {
     // A tiny bounded floor keeps the black TPS legible against space. It is
     // intentionally far below direct lighting and never replaces scene light.
     float sky_floor = clamp(sky_bounce / 1.15, 0.0, 1.0);
+    // Compatibility/llvmpipe can lose the PBR environment contribution on the
+    // shadow side of the ship. Keep a bounded cool-sky fill tied to view-facing
+    // surface area so TPS remains a textured black surface instead of a flat
+    // silhouette; direct sunlight still owns the dominant response.
+    vec3 sky_tint = vec3(0.72, 0.82, 1.0);
+    float view_fill = mix(0.28, 1.0, nDotV) * sky_floor;
     vec3 emission = tile * mix(0.012, 0.026, sky_floor);
+    emission += sky_tint * tile * view_fill * 0.30;
     emission += rim_color * rim * 0.035;
     emission += emit_color * emit_strength;
 

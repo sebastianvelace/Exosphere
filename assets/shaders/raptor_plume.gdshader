@@ -133,10 +133,10 @@ void fragment() {
 	// effective pressure. At vacuum the envelope opens far downstream.
 	// mix(0.4, 2.5, 1-atmo) * throttle is the CPU-side length; here we modulate
 	// the axial fade-out reach to match the desired atmosphere-dependent length.
-	float plumeLength = mix(0.4, 2.5, effExpansion) * effThrottle;
+	float plumeLength = mix(0.64, 2.5, effExpansion) * effThrottle;
 	// Remap to a [0.62..1.0] reach that the axial envelope already understands.
 	// plumeLength=0.4 → reach≈0.62 (short SL); plumeLength=2.5 → reach≈1.0 (vacuum).
-	float reach = clamp(mix(0.62, 1.0, (plumeLength - 0.4) / 2.1), 0.62, 1.0);
+	float reach = clamp(mix(0.72, 1.0, (plumeLength - 0.64) / 1.86), 0.72, 1.0);
 
 	// ── Radial profile: bright on axis, fades to skin. The plume narrows
 	// downstream at sea level but stays fat (underexpanded) in vacuum. ───────

@@ -20,6 +20,7 @@ public partial class VesselRenderer : Node3D
     private PlumeSystem?    _plumes;
     private bool _usesGenericPlumes;
     private bool _hasSuperHeavy;
+    private bool _isV3Variant;
     private int _selectedShipEngines = 6;
     private readonly HashSet<string> _superHeavyEngineIds = new(StringComparer.Ordinal);
     private readonly HashSet<string> _shipEngineIds = new(StringComparer.Ordinal);
@@ -151,6 +152,9 @@ public partial class VesselRenderer : Node3D
         bool hasNewGlenn = vessel.Parts.Parts.Any(p => string.Equals(
             p.Definition.VehicleFamily, "newglenn", StringComparison.OrdinalIgnoreCase));
         _hasSuperHeavy = hasSH;
+        _isV3Variant = vessel.Parts.Parts.Any(p =>
+            p.Definition.Id.StartsWith("starship_v3_", StringComparison.Ordinal)
+            || p.Definition.Id.StartsWith("super_heavy_v3_", StringComparison.Ordinal));
         BuildEngineVisualGroups(vessel);
         _selectedShipEngines = vessel.Parts.Parts
             .FirstOrDefault(p => p.Definition.IsStarshipFamily
@@ -331,62 +335,67 @@ public partial class VesselRenderer : Node3D
         }
     }
 
-    // ── 4 grid fins near top of Super Heavy ──────────────────────────────
+    // ── Super Heavy grid fins near the top ────────────────────────────────
 
     private void AddSHGridFins()
     {
-        // Real SH grid fins: 4 near the top, offset ~90° apart. They read as
-        // thick cast lattice panels with a tapered outer silhouette, hinge drum
-        // and diagonal webbing, not flat rectangular paddles.
+        // Flight 7 keeps the four-fin Block 1/2 silhouette. The V3 public design
+        // moves to three fins, each substantially larger and clocked differently;
+        // keeping this variant conditional prevents a V3 detail from rewriting the
+        // historical vehicle used by the legacy ascent scenarios.
+        bool v3 = _isV3Variant;
+        int finCount = v3 ? 3 : 4;
+        float finScale = v3 ? 1.50f : 1.0f;
+        float finY = v3 ? ShGridFinY - 1.1f : ShGridFinY;
         var finMat   = SteelMat(new Color(0.48f, 0.47f, 0.46f), 0.58f, 0.34f, weldSpacing: 0.55f);
         var mountMat = SteelMat(new Color(0.30f, 0.30f, 0.32f), 0.55f, 0.40f, weldSpacing: 0.8f);
         var gridMat  = SteelMat(new Color(0.12f, 0.12f, 0.13f), 0.42f, 0.55f, weldSpacing: 0.4f);
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < finCount; i++)
         {
-            float a   = i * Mathf.Pi * 0.5f;
+            float a   = i * Mathf.Tau / finCount + (v3 ? Mathf.Pi / 6f : 0f);
             float cos = Mathf.Cos(a);
             float sin = Mathf.Sin(a);
-            float deg = -i * 90f;
+            float deg = -Mathf.RadToDeg(a);
 
             // Mount hinge/arm against the hull.
-            AddMesh($"GridFinMount{i}", new BoxMesh { Size = new Vector3(0.55f, 1.3f, 0.70f) },
-                mountMat, new Vector3((BodyR + 0.03f) * cos, ShGridFinY, (BodyR + 0.03f) * sin));
+            AddMesh($"GridFinMount{i}", new BoxMesh { Size = new Vector3(0.55f, 1.3f * finScale, 0.70f) },
+                mountMat, new Vector3((BodyR + 0.03f) * cos, finY, (BodyR + 0.03f) * sin));
 
             var hinge = AddMesh($"GridFinHinge{i}",
-                new CylinderMesh { TopRadius = 0.18f, BottomRadius = 0.18f, Height = 1.45f, RadialSegments = 18 },
-                mountMat, new Vector3((BodyR + 0.34f) * cos, ShGridFinY + 0.15f, (BodyR + 0.34f) * sin));
+                new CylinderMesh { TopRadius = 0.18f * finScale, BottomRadius = 0.18f * finScale, Height = 1.45f * finScale, RadialSegments = 18 },
+                mountMat, new Vector3((BodyR + 0.34f * finScale) * cos, finY + 0.15f * finScale, (BodyR + 0.34f * finScale) * sin));
             hinge.RotationDegrees = new Vector3(0f, deg, 90f);
 
             // Tapered lattice slab, canted slightly so it does not read as a flat square.
             var fin = new MeshInstance3D
             {
                 Name            = $"GridFin{i}",
-                Mesh            = BuildGridFinPlateMesh(rootChord: 1.62f, tipChord: 1.18f, height: 1.85f, thickness: 0.18f),
-                Position        = new Vector3((BodyR + 0.78f) * cos, ShGridFinY + 0.25f, (BodyR + 0.78f) * sin),
+                Mesh            = BuildGridFinPlateMesh(rootChord: 1.62f * finScale, tipChord: 1.18f * finScale, height: 1.85f * finScale, thickness: 0.18f * finScale),
+                Position        = new Vector3((BodyR + 0.78f * finScale) * cos, finY + 0.25f * finScale, (BodyR + 0.78f * finScale) * sin),
                 RotationDegrees = new Vector3(0f, deg + 6f, 4f),
             };
             fin.SetSurfaceOverrideMaterial(0, finMat);
             AddChild(fin);
 
             // Perimeter frame.
-            foreach (float y in new[] { -0.78f, 0.78f })
+            foreach (float y in new[] { -0.78f * finScale, 0.78f * finScale })
             {
                 var rib = new MeshInstance3D
                 {
                     Name = $"GridFin{i}_FrameH{y}",
-                    Mesh = new BoxMesh { Size = new Vector3(1.34f, 0.070f, 0.24f) },
+                    Mesh = new BoxMesh { Size = new Vector3(1.34f * finScale, 0.070f * finScale, 0.24f * finScale) },
                     Position = new Vector3(0f, y, -0.025f),
                 };
                 rib.SetSurfaceOverrideMaterial(0, gridMat);
                 fin.AddChild(rib);
             }
-            foreach (float x in new[] { -0.60f, 0.60f })
+            foreach (float x in new[] { -0.60f * finScale, 0.60f * finScale })
             {
                 var rib = new MeshInstance3D
                 {
                     Name = $"GridFin{i}_FrameV{x}",
-                    Mesh = new BoxMesh { Size = new Vector3(0.075f, 1.62f, 0.24f) },
+                    Mesh = new BoxMesh { Size = new Vector3(0.075f * finScale, 1.62f * finScale, 0.24f * finScale) },
                     Position = new Vector3(x, 0f, -0.025f),
                 };
                 rib.SetSurfaceOverrideMaterial(0, gridMat);
@@ -401,8 +410,8 @@ public partial class VesselRenderer : Node3D
                 var rib = new MeshInstance3D
                 {
                     Name = $"GridFin{i}_RibH{r}",
-                    Mesh = new BoxMesh { Size = new Vector3(1.12f, 0.040f, 0.25f) },
-                    Position = new Vector3(0f, r * 0.27f, -0.04f),
+                    Mesh = new BoxMesh { Size = new Vector3(1.12f * finScale, 0.040f * finScale, 0.25f * finScale) },
+                    Position = new Vector3(0f, r * 0.27f * finScale, -0.04f * finScale),
                 };
                 rib.SetSurfaceOverrideMaterial(0, gridMat);
                 fin.AddChild(rib);
@@ -412,8 +421,8 @@ public partial class VesselRenderer : Node3D
                 var rib = new MeshInstance3D
                 {
                     Name = $"GridFin{i}_RibV{c}",
-                    Mesh = new BoxMesh { Size = new Vector3(0.040f, 1.42f, 0.25f) },
-                    Position = new Vector3(c * 0.25f, 0f, -0.02f),
+                    Mesh = new BoxMesh { Size = new Vector3(0.040f * finScale, 1.42f * finScale, 0.25f * finScale) },
+                    Position = new Vector3(c * 0.25f * finScale, 0f, -0.02f * finScale),
                 };
                 rib.SetSurfaceOverrideMaterial(0, gridMat);
                 fin.AddChild(rib);
@@ -423,7 +432,7 @@ public partial class VesselRenderer : Node3D
                 var rib = new MeshInstance3D
                 {
                     Name = $"GridFin{i}_Diag{d}",
-                    Mesh = new BoxMesh { Size = new Vector3(0.045f, 1.75f, 0.23f) },
+                    Mesh = new BoxMesh { Size = new Vector3(0.045f * finScale, 1.75f * finScale, 0.23f * finScale) },
                     Position = new Vector3(0f, 0f, -0.055f),
                     RotationDegrees = new Vector3(0f, 0f, d * 38f),
                 };

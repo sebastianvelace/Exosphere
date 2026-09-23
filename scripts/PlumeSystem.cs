@@ -415,7 +415,10 @@ public partial class PlumeSystem : Node3D
                 SetPlumeMaterial(
                     u.ConeMat, throttle, expansion, atmoPressure,
                     u.BaseEnergy * 0.58f * Mathf.Max(0.28f, activeFraction),
-                    outerOpacity * interactionOpacity, shockCellStrength, shockSpacing, shockSoftness,
+                    Mathf.Lerp(u.IsSuperHeavy ? 0.72f : 0.50f,
+                        u.IsSuperHeavy ? 0.20f : 0.12f, expansion)
+                        * interactionOpacity,
+                    shockCellStrength, shockSpacing, shockSoftness,
                     steamOcclusion, afterburnStrength, padInteraction, coreLayer: 0f,
                     farField: farField);
                 float farFieldCoreOpacity = farField
@@ -441,7 +444,8 @@ public partial class PlumeSystem : Node3D
                 // lengthens dramatically (up to ~4x) and widens (up to ~2.3x) into
                 // the long faint underexpanded plume.
                 float vacuumLengthGain = u.IsSuperHeavy ? 3.0f : 1.8f;
-                float lenScale = (0.55f + 0.45f * throttle)
+                float minimumLength = u.IsSuperHeavy ? 0.78f : 0.55f;
+                float lenScale = (minimumLength + (1.0f - minimumLength) * throttle)
                                * (1.0f + expansion * vacuumLengthGain) * flick;
                 // The Super Heavy's sea-level exhaust is a broad merged disk, not a
                 // needle. Widen only the radial envelope so the pad-side silhouette
@@ -574,7 +578,9 @@ public partial class PlumeSystem : Node3D
             BaseLength   = length,
             BaseRadius   = mouthR,
             BaseEnergy   = sh ? (name.Contains("Skirt") ? 1.35f : 4.6f) : 5.5f,
-            CoreScale    = sh ? 0.38f : 0.68f,
+            CoreScale    = sh
+                ? (name.Contains("Skirt") ? 0.92f : 0.72f)
+                : 0.68f,
             IsSuperHeavy = sh,
             IsSkirt = name.Contains("Skirt"),
         };
