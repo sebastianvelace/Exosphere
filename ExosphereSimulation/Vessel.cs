@@ -763,7 +763,7 @@ public class Vessel
             }
 
             var command = PitchYawRoll * auth;
-            bool hasInput = command.Magnitude > 0.01;
+            bool hasInput = command.Magnitude > 1e-6;
             foreach (var engine in Parts.ActiveEngineList)
             {
                 engine.GimbalOffset = hasInput
@@ -860,7 +860,7 @@ public class Vessel
         // Aplicar input de rotación (en espacio local del vessel). El eje longitudinal
         // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
         // pitch → giro local X, yaw → giro local Z, roll → giro local Y.
-        bool hasInput = command.Magnitude > 0.01;
+        bool hasInput = command.Magnitude > 1e-6;
         // Couple the commanded attitude torque to the actual thrust vector. Engines sit
         // below the CoM: +pitch needs -Z deflection; +yaw needs +X deflection. Roll remains
         // differential-cluster torque and has no net lateral force in this aggregate model.

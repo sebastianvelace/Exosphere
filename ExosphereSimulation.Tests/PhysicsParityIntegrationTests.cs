@@ -228,6 +228,60 @@ public sealed class PhysicsParityIntegrationTests
         Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
     }
 
+    [Fact]
+    public void Flight7EngineOutRecoveryReducesAngularRateAndPreservesParity()
+    {
+        var legacy = CreateFlight7Universe("legacy-flight7-recovery", coupled: false, useEarthData: true);
+        var coupled = CreateFlight7Universe("coupled-flight7-recovery", coupled: true, useEarthData: true);
+        var baseline = CreateFlight7Universe("baseline-flight7-recovery", coupled: true, useEarthData: true);
+        const double dt = 0.02;
+
+        for (int i = 0; i < 150; i++)
+        {
+            legacy.Tick(dt);
+            coupled.Tick(dt);
+            baseline.Tick(dt);
+        }
+
+        FailFlight7BoosterEngine(legacy, 13);
+        FailFlight7BoosterEngine(coupled, 13);
+        FailFlight7BoosterEngine(baseline, 13);
+        Assert.True(EngineOutRecoveryGuidance.Inspect(coupled.ActiveVessel!).IsEngineOut);
+
+        var legacyCommand = Vector3d.Zero;
+        var coupledCommand = Vector3d.Zero;
+        for (int i = 0; i < 100; i++)
+        {
+            legacyCommand = ApplyEngineOutRecovery(legacy, legacyCommand, dt);
+            coupledCommand = ApplyEngineOutRecovery(coupled, coupledCommand, dt);
+            baseline.Tick(dt);
+            legacy.Tick(dt);
+            coupled.Tick(dt);
+        }
+
+        var result = RigidBodyParityComparer.Compare(
+            RigidBodyStateSnapshot.FromVessel(legacy.ActiveVessel!),
+            RigidBodyStateSnapshot.FromVessel(coupled.ActiveVessel!),
+            new RigidBodyParityTolerance(
+                PositionMeters: 100.0,
+                VelocityMetersPerSecond: 100.0,
+                AttitudeRadians: 0.15,
+                AngularVelocityRadiansPerSecond: 0.15));
+
+        Assert.True(result.IsFinite);
+        Assert.True(
+            result.IsWithinTolerance,
+            $"Legacy/coupled engine-out recovery divergence exceeded tolerance: {result}");
+        var recoveredVessel = coupled.ActiveVessel!;
+        var baselineVessel = baseline.ActiveVessel!;
+        Assert.True(
+            recoveredVessel.AngularVelocity.Magnitude < baselineVessel.AngularVelocity.Magnitude,
+            $"Engine-out recovery did not reduce angular rate: recovered={recoveredVessel.AngularVelocity.Magnitude:F6}, baseline={baselineVessel.AngularVelocity.Magnitude:F6}, command={coupledCommand.Magnitude:F6}");
+        Assert.True(legacyCommand.Magnitude > 1e-3);
+        Assert.True(coupledCommand.Magnitude > 1e-3);
+        Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
+    }
+
     private static Universe CreateUniverse(string vesselId, bool coupled, bool powered)
     {
         var body = new CelestialBody
@@ -354,6 +408,23 @@ public sealed class PhysicsParityIntegrationTests
             part => part.Definition.Id == "super_heavy_booster");
         string instanceId = booster.EngineStates[engineIndex].InstanceId;
         Assert.True(booster.FailEngine(instanceId, "PARITY_ENGINE_OUT"));
+    }
+
+    private static Vector3d ApplyEngineOutRecovery(
+        Universe universe,
+        Vector3d previousCommand,
+        double deltaSeconds)
+    {
+        var vessel = universe.ActiveVessel!;
+        var body = universe.GetBody(vessel.ReferenceBodyId!)!;
+        var command = EngineOutRecoveryGuidance.ComputeCommand(
+            vessel,
+            body.GetGeodeticUp(vessel.Position),
+            previousCommand,
+            deltaSeconds);
+        vessel.PitchYawRoll = command;
+        vessel.SASEnabled = false;
+        return command;
     }
 
     private static DirectoryInfo FindRepoRoot()

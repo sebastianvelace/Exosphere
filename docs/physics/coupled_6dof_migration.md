@@ -37,6 +37,9 @@ integrator without changing the production scheduler by default.
     elevation ramp with attitude error and angular-rate feedback for five simulated seconds.
 16. `test(physics): exercise Flight 7 engine-out parity` — fails one off-axis booster Raptor after
     spool-up and checks real asymmetric torque, angular response and legacy/coupled agreement.
+17. `feat(physics): add deterministic engine-out recovery guidance` — detects an active-stage
+    engine-out, computes an axis-pointing feedback command with rate limiting, and proves that
+    recovery reduces angular rate without breaking legacy/coupled parity.
 
 ## Runtime contract
 
@@ -46,9 +49,9 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 862/862 tests passing after the engine-out gate.
-- Physics parity tests: 6/6 passing (coast, powered ascent, Flight 7 ascent, controlled pitch,
-  closed-loop elevation and engine-out).
+- Full simulation suite: 863/863 tests passing after the recovery gate.
+- Physics parity tests: 7/7 passing (coast, powered ascent, Flight 7 ascent, controlled pitch,
+  closed-loop elevation, engine-out and engine-out recovery).
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
@@ -71,11 +74,17 @@ it is a deterministic attitude-reference exercise, not a complete ascent guidanc
 or dispersion model.
 The engine-out gate removes one off-axis booster Raptor after 3 seconds of spool-up and checks
 the resulting real per-mount torque rather than treating the failure as proportional thrust
-loss. It still does not prove automated failure detection, engine-out guidance or recovery.
+loss. The recovery gate then detects the failed/live engine mix, writes a bounded axis-pointing
+command and verifies lower angular rate against an identical no-recovery baseline. The command
+deadband is numerical (`1e-6`), so a physically small correction still reaches TVC allocation.
+This remains a deterministic injected-failure test: it does not yet prove automatic onboard
+failure diagnosis, sensor latency, fault isolation, full SAS/flap/RCS recovery or dispersed
+production ascent.
 
 ## Remaining work
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
-- Port or reconcile flap control, SAS/rate limiting, and RCS authority.
+- Port or reconcile flap control, SAS/rate limiting, and RCS authority around the recovery
+  controller, including sensor/failure-detection latency and longer-duration ascent cases.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
