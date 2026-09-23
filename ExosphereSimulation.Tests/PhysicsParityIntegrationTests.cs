@@ -2,6 +2,7 @@ namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
@@ -139,6 +140,44 @@ public sealed class PhysicsParityIntegrationTests
         Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
     }
 
+    [Fact]
+    public void Flight7ClosedLoopElevationProgramRemainsWithinParityTolerance()
+    {
+        var legacy = CreateFlight7Universe("legacy-flight7-guidance", coupled: false, useEarthData: true);
+        var coupled = CreateFlight7Universe("coupled-flight7-guidance", coupled: true, useEarthData: true);
+        bool commandSeen = false;
+        const double dt = 0.02;
+
+        for (int i = 0; i < 250; i++)
+        {
+            double elapsed = i * dt;
+            commandSeen |= ApplyElevationGuidance(legacy, elapsed);
+            commandSeen |= ApplyElevationGuidance(coupled, elapsed);
+            legacy.Tick(dt);
+            coupled.Tick(dt);
+        }
+
+        var result = RigidBodyParityComparer.Compare(
+            RigidBodyStateSnapshot.FromVessel(legacy.ActiveVessel!),
+            RigidBodyStateSnapshot.FromVessel(coupled.ActiveVessel!),
+            new RigidBodyParityTolerance(
+                PositionMeters: 100.0,
+                VelocityMetersPerSecond: 100.0,
+                AttitudeRadians: 0.10,
+                AngularVelocityRadiansPerSecond: 0.10));
+
+        Assert.True(commandSeen);
+        Assert.True(result.IsFinite);
+        Assert.True(
+            result.IsWithinTolerance,
+            $"Legacy/coupled closed-loop Flight 7 divergence exceeded tolerance: {result}");
+        Assert.True(coupled.ActiveVessel!.AngularVelocity.Magnitude > 1e-4);
+        Assert.Contains(
+            coupled.ActiveVessel.Parts.ActiveEngines,
+            part => part.EngineStates.Any(state => state.GimbalDeg.Magnitude > 1e-3));
+        Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
+    }
+
     private static Universe CreateUniverse(string vesselId, bool coupled, bool powered)
     {
         var body = new CelestialBody
@@ -237,6 +276,26 @@ public sealed class PhysicsParityIntegrationTests
             "vehicles",
             "starship_flight7_block2_2025.json"));
         return variant.Build(catalog);
+    }
+
+    private static bool ApplyElevationGuidance(Universe universe, double elapsedSeconds)
+    {
+        var vessel = universe.ActiveVessel!;
+        var body = universe.GetBody(vessel.ReferenceBodyId!)!;
+        double elevation = (90.0 - 55.0 * System.Math.Clamp(
+            elapsedSeconds / 5.0, 0.0, 1.0)) * MathUtils.DEG_TO_RAD;
+        var target = AttitudeGuidance.AimFromElevation(
+            body.GetGeodeticUp(vessel.Position),
+            body.GetEastDirection(vessel.Position),
+            elevation);
+        vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
+            vessel.Orientation,
+            Vector3d.Up,
+            target,
+            vessel.AngularVelocity,
+            proportionalGain: 2.6,
+            dampingGain: 1.2);
+        return vessel.PitchYawRoll.Magnitude > 1e-3;
     }
 
     private static DirectoryInfo FindRepoRoot()

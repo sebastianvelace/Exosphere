@@ -102,7 +102,9 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      con masas, 33+6 motores, spool y consumo de propelente.
    - Gate controlado inicial: cerrado para 50 pasos de 20 ms con pitch fijo, atmósfera Earth,
      rotación superficial y gimbal observable.
-   - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con guiado, SAS y
+   - Programa cerrado inicial: cerrado para 250 pasos de 20 ms con rampa de elevación y
+     feedback de actitud/velocidad angular.
+   - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con navegación, SAS y
      autoridad de control equivalentes.
    - Gate posterior: EDL controlado con contactos y telemetría de captura.
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados

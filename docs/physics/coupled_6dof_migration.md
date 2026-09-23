@@ -33,6 +33,8 @@ integrator without changing the production scheduler by default.
     variant, including 33+6 engine configuration, production data masses, spool and fuel flow.
 14. `test(physics): exercise controlled Flight 7 ascent parity` — adds a constant pitch command
     under the real Earth atmosphere, surface rotation and live gimbal servo state.
+15. `test(physics): exercise closed-loop Flight 7 elevation parity` — follows a deterministic
+    elevation ramp with attitude error and angular-rate feedback for five simulated seconds.
 
 ## Runtime contract
 
@@ -42,8 +44,9 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 860/860 tests passing after the controlled Flight 7 gate.
-- Physics parity tests: 4/4 passing (coast, powered ascent, Flight 7 ascent and controlled pitch).
+- Full simulation suite: 861/861 tests passing after the closed-loop elevation gate.
+- Physics parity tests: 5/5 passing (coast, powered ascent, Flight 7 ascent, controlled pitch
+  and closed-loop elevation).
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
@@ -61,6 +64,9 @@ tolerance; neither proves guidance, actuator, long-duration atmospheric or landi
 The controlled gate is deliberately narrower: it holds a fixed pitch command for 1 second
 near the surface, confirms live gimbal deflection and checks legacy/coupled attitude parity;
 it does not yet prove a closed-loop guidance law.
+The new closed-loop gate follows a five-second elevation ramp with attitude and rate feedback;
+it is a deterministic attitude-reference exercise, not a complete ascent guidance, navigation
+or dispersion model.
 
 ## Remaining work
 

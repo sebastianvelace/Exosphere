@@ -47,7 +47,8 @@ The current realism front is a coupled rigid-body 6-DoF solver. It integrates ce
 attitude, body-frame angular velocity and the full inertia tensor through four pure RK4 force
 stages. It is still opt-in: coast, simplified powered ascent, a short open-loop Flight 7
 hardware fixture and a first controlled pitch/atmosphere gate pass, while closed-loop
-Starship ascent/EDL parity and full SAS/flap/RCS equivalence remain open. See the
+elevation is only covered by a short deterministic reference program; Starship ascent/EDL
+parity and full SAS/flap/RCS equivalence remain open. See the
 [physics model](docs/physics/PHYSICS_MODEL.md) and [6-DoF migration record](docs/physics/coupled_6dof_migration.md).
 
 ## Build And Test
