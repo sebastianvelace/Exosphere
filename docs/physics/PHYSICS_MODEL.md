@@ -205,6 +205,7 @@ all motors are one physical point.
 | Legacy vs coupled coast | 50 × 20 ms parity gate passes | Narrow gate only |
 | Legacy vs coupled powered ascent | 25 × 20 ms powered gate passes | Simplified fixture only |
 | Legacy vs coupled Flight 7 ascent | 100 × 20 ms gate passes with real parts and propellant | Open-loop short ascent only |
+| Flight 7 controlled pitch in Earth atmosphere | 50 × 20 ms gate passes with surface rotation and gimbal | First controlled gate only |
 | Controlled Starship ascent/EDL parity | Not yet closed | Open |
 | SAS, flaps and RCS in coupled path | Not yet fully equivalent | Open |
 | CFD, plume-flow interaction and slosh | Out of current solver scope | Deliberate approximation |

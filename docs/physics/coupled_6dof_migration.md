@@ -31,6 +31,8 @@ integrator without changing the production scheduler by default.
     a deterministic thrust-and-propellant fixture, including mass depletion and telemetry.
 13. `test(physics): add Flight 7 ascent parity gate` — reuses the real Flight 7 Block 2 part
     variant, including 33+6 engine configuration, production data masses, spool and fuel flow.
+14. `test(physics): exercise controlled Flight 7 ascent parity` — adds a constant pitch command
+    under the real Earth atmosphere, surface rotation and live gimbal servo state.
 
 ## Runtime contract
 
@@ -40,8 +42,8 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 859/859 tests passing after the Flight 7 parity gate.
-- Physics parity tests: 3/3 passing (coast, simplified powered ascent and Flight 7 ascent).
+- Full simulation suite: 860/860 tests passing after the controlled Flight 7 gate.
+- Physics parity tests: 4/4 passing (coast, powered ascent, Flight 7 ascent and controlled pitch).
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
@@ -56,6 +58,9 @@ The Flight 7 fixture adds the real repository configuration, part masses, 33+6 e
 spool and propellant flow for a short open-loop ascent. Both gates prove that the paths
 consume equivalent propellant and integrate a thrusting rigid body within their declared
 tolerance; neither proves guidance, actuator, long-duration atmospheric or landing parity.
+The controlled gate is deliberately narrower: it holds a fixed pitch command for 1 second
+near the surface, confirms live gimbal deflection and checks legacy/coupled attitude parity;
+it does not yet prove a closed-loop guidance law.
 
 ## Remaining work
 
