@@ -201,10 +201,11 @@ all motors are one physical point.
 | Orbital gravity, SOI and Kepler rails | Implemented and regression-tested | High within patched-conic scope |
 | WGS-style surface and Earth `J2` | Implemented for active RK4 bodies | High; rails boundary documented |
 | Mass, CoM and inertia | Derived from `PartGraph` | High for current part primitives |
-| Coupled 6-DoF RK4 | Opt-in, with force/contact stages | Proven in isolated and simple powered fixtures |
+| Coupled 6-DoF RK4 | Opt-in, with force/contact stages | Proven in isolated and powered Flight 7 fixture |
 | Legacy vs coupled coast | 50 × 20 ms parity gate passes | Narrow gate only |
 | Legacy vs coupled powered ascent | 25 × 20 ms powered gate passes | Simplified fixture only |
-| Starship ascent/EDL parity | Not yet closed | Open |
+| Legacy vs coupled Flight 7 ascent | 100 × 20 ms gate passes with real parts and propellant | Open-loop short ascent only |
+| Controlled Starship ascent/EDL parity | Not yet closed | Open |
 | SAS, flaps and RCS in coupled path | Not yet fully equivalent | Open |
 | CFD, plume-flow interaction and slosh | Out of current solver scope | Deliberate approximation |
 

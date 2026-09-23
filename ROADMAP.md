@@ -98,10 +98,13 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - Coast determinista: cerrado con 50 pasos de 20 ms.
    - Ascenso propulsado simplificado: cerrado con 25 pasos de 20 ms, consumo de propelente y
      gravedad.
-   - Siguiente gate: fixture de Starship con datos reales, spool, gimbal, atmósfera y control.
+   - Fixture Flight 7 de datos reales: cerrado para 100 pasos de 20 ms en ascenso abierto,
+     con masas, 33+6 motores, spool y consumo de propelente.
+   - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con gimbal, atmósfera,
+     SAS y autoridad de control equivalentes.
    - Gate posterior: EDL controlado con contactos y telemetría de captura.
-   - No activar el switch ni declarar fidelidad completa hasta que ambos escenarios pasen y se
-     conserve evidencia numérica y de framebuffer.
+   - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
+     pasen y se conserve evidencia numérica y de framebuffer.
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - SAS/rate limiting, flaps y RCS requieren contratos explícitos con el evaluador de torques.

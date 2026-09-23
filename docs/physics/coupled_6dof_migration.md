@@ -29,6 +29,8 @@ integrator without changing the production scheduler by default.
     boundary between a numerical sanity check and a production flight gate.
 12. `test(physics): add powered ascent parity gate` — compares legacy and coupled paths for
     a deterministic thrust-and-propellant fixture, including mass depletion and telemetry.
+13. `test(physics): add Flight 7 ascent parity gate` — reuses the real Flight 7 Block 2 part
+    variant, including 33+6 engine configuration, production data masses, spool and fuel flow.
 
 ## Runtime contract
 
@@ -38,8 +40,8 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 858/858 tests passing after the powered parity gate.
-- Physics parity tests: 2/2 passing (coast and simplified powered ascent).
+- Full simulation suite: 859/859 tests passing after the Flight 7 parity gate.
+- Physics parity tests: 3/3 passing (coast, simplified powered ascent and Flight 7 ascent).
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
@@ -49,13 +51,15 @@ angular-rate errors. This is a coast sanity gate, not evidence of ascent or EDL 
 
 ## Current boundary
 
-The powered fixture is intentionally smaller than the production Starship vehicle. It
-proves that both paths consume the same propellant and integrate a thrusting rigid body
-without a state divergence beyond the declared tolerance; it does not prove guidance,
-actuator, atmospheric, or landing parity.
+The simplified powered fixture is intentionally smaller than the production Starship vehicle.
+The Flight 7 fixture adds the real repository configuration, part masses, 33+6 engine data,
+spool and propellant flow for a short open-loop ascent. Both gates prove that the paths
+consume equivalent propellant and integrate a thrusting rigid body within their declared
+tolerance; neither proves guidance, actuator, long-duration atmospheric or landing parity.
 
 ## Remaining work
 
-- Extend the comparison to the production Starship ascent fixture and controlled EDL.
+- Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
+  fixture and then controlled EDL.
 - Port or reconcile flap control, SAS/rate limiting, and RCS authority.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.

@@ -45,8 +45,9 @@ multi-point contact and patched-conic/Kepler rail propagation.
 
 The current realism front is a coupled rigid-body 6-DoF solver. It integrates centre of mass,
 attitude, body-frame angular velocity and the full inertia tensor through four pure RK4 force
-stages. It is still opt-in: coast and simplified powered-ascent parity gates pass, while
-Starship ascent/EDL parity and full SAS/flap/RCS equivalence remain open. See the
+stages. It is still opt-in: coast, simplified powered ascent and a short open-loop Flight 7
+hardware fixture pass, while controlled Starship ascent/EDL parity and full SAS/flap/RCS
+equivalence remain open. See the
 [physics model](docs/physics/PHYSICS_MODEL.md) and [6-DoF migration record](docs/physics/coupled_6dof_migration.md).
 
 ## Build And Test
