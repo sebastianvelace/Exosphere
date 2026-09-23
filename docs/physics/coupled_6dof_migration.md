@@ -25,6 +25,10 @@ integrator without changing the production scheduler by default.
    angular velocity, mass, and step timing for old/new parity work.
 10. `test(physics): compare legacy and coupled coast states` — adds a COM-normalized parity
     comparator and a deterministic 50-step coast gate.
+11. `docs(physics): record first parity probe` — records the coast evidence and the explicit
+    boundary between a numerical sanity check and a production flight gate.
+12. `test(physics): add powered ascent parity gate` — compares legacy and coupled paths for
+    a deterministic thrust-and-propellant fixture, including mass depletion and telemetry.
 
 ## Runtime contract
 
@@ -34,8 +38,8 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 853/853 tests passing.
-- Coupled adapter test: 1/1 passing.
+- Full simulation suite: 858/858 tests passing after the powered parity gate.
+- Physics parity tests: 2/2 passing (coast and simplified powered ascent).
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
@@ -43,8 +47,15 @@ The first parity probe compares identical no-atmosphere initial states for 50 ×
 It remains within 0.1 m position error and 0.1 m/s velocity error, with finite attitude and
 angular-rate errors. This is a coast sanity gate, not evidence of ascent or EDL parity.
 
+## Current boundary
+
+The powered fixture is intentionally smaller than the production Starship vehicle. It
+proves that both paths consume the same propellant and integrate a thrusting rigid body
+without a state divergence beyond the declared tolerance; it does not prove guidance,
+actuator, atmospheric, or landing parity.
+
 ## Remaining work
 
-- Extend the legacy/coupled comparison to powered ascent and controlled EDL.
+- Extend the comparison to the production Starship ascent fixture and controlled EDL.
 - Port or reconcile flap control, SAS/rate limiting, and RCS authority.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
