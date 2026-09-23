@@ -57,6 +57,8 @@ public class Part
     private readonly List<EngineInstanceState> _engineStates = new();
     private readonly List<(Vector3d PositionM, Vector3d ThrustVectorN)>
         _thrustGeometryScratch = new();
+    private readonly List<(string InstanceId, Vector3d PositionM, Vector3d ThrustDirection)>
+        _faultIsolationGeometryScratch = new();
     private readonly List<(
         EngineInstanceState State,
         Vector3d PositionM,
@@ -136,7 +138,13 @@ public class Part
                 && state.FailureCode == null;
             bool selectedForCommand = operational && selectedHealthy < selected;
             if (operational) selectedHealthy++;
-            double command = selectedForCommand ? floored : 0.0;
+            // Keep the stage-level demand visible in telemetry after a hard failure. The
+            // engine computer has been asked to produce thrust, but its actual response is
+            // zero; clearing CommandedThrottle here would erase the very residual an onboard
+            // peer-engine isolator needs to diagnose the fault.
+            double command = state.State == EngineLifecycleState.Failed
+                ? floored
+                : selectedForCommand ? floored : 0.0;
             state.CommandedThrottle = command;
             AdvanceEngineState(state, command, dt);
             AdvanceChamberPressure(state, dt);
@@ -807,6 +815,43 @@ public class Part
     {
         BuildEngineInstanceThrustGeometry(_thrustGeometryScratch, ambientPressure, zeroGimbal: true);
         return _thrustGeometryScratch;
+    }
+
+    /// <summary>
+    /// Returns the stable mount geometry needed by onboard fault isolation. Unlike the
+    /// thrust geometry snapshot, this keeps a direction for an engine whose delivered
+    /// thrust has fallen to zero, so a flight computer can still predict the missing
+    /// torque from its physical mount.
+    /// </summary>
+    internal IReadOnlyList<(string InstanceId, Vector3d PositionM, Vector3d ThrustDirection)>
+        GetEngineInstanceFaultIsolationGeometrySnapshot()
+    {
+        _faultIsolationGeometryScratch.Clear();
+        if (!HasEngineRuntime)
+        {
+            _faultIsolationGeometryScratch.Add((
+                InstanceId,
+                new Vector3d(0.0, Definition.ThrustPositionYM, 0.0),
+                Vector3d.Up));
+            return _faultIsolationGeometryScratch;
+        }
+
+        for (int i = 0; i < _engineStates.Count; i++)
+        {
+            var state = _engineStates[i];
+            var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(i);
+            var position = mount != null
+                ? mount.Position + new Vector3d(0.0, Definition.ThrustPositionYM, 0.0)
+                : new Vector3d(0.0, Definition.ThrustPositionYM, 0.0);
+            var baseDirection = mount?.Direction ?? Vector3d.Up;
+            var direction = TiltDirection(baseDirection, state.GimbalDeg.X, state.GimbalDeg.Z);
+            if (direction.MagnitudeSquared < 1e-12)
+                direction = Vector3d.Up;
+
+            _faultIsolationGeometryScratch.Add((state.InstanceId, position, direction.Normalized));
+        }
+
+        return _faultIsolationGeometryScratch;
     }
 
     private void BuildEngineInstanceThrustGeometry(

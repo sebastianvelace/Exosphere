@@ -50,6 +50,37 @@ public sealed class EngineFaultIsolationTests
         Assert.Equal(0.0, result.Confidence);
     }
 
+    [Fact]
+    public void MissingEngineProducesGeometricTorqueResidual()
+    {
+        var rows = new[]
+        {
+            Row("engine-0", 1.0, 1.0, 1_000_000.0),
+            Row("engine-1", 1.0, 1.0, 1_000_000.0),
+            Row("engine-2", 1.0, 0.0, 0.0),
+        };
+        var geometry = new[]
+        {
+            new EngineFaultIsolationGeometry(
+                "engine-0", new(1.0, 0.0, 0.0), Exosphere.Simulation.Math.Vector3d.Up),
+            new EngineFaultIsolationGeometry(
+                "engine-1", new(-1.0, 0.0, 0.0), Exosphere.Simulation.Math.Vector3d.Up),
+            new EngineFaultIsolationGeometry(
+                "engine-2", new(0.0, 0.0, 1.0), Exosphere.Simulation.Math.Vector3d.Up),
+        };
+
+        var result = EngineFaultIsolation.Infer(
+            rows,
+            geometry,
+            Exosphere.Simulation.Math.Vector3d.Zero);
+
+        Assert.True(result.FaultDetected);
+        Assert.Contains("engine-2", result.SuspectEngineIds);
+        Assert.True(result.TorqueResidualNm.Magnitude > 0.0);
+        Assert.True(
+            result.TorqueResidualRatio >= EngineFaultIsolation.DefaultMinimumTorqueResidualRatio);
+    }
+
     private static EngineTelemetry Row(
         string id, double commanded, double actual, double thrust) => new(
             id,

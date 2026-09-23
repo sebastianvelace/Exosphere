@@ -1,6 +1,7 @@
 namespace Exosphere.Simulation.Flight;
 
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Propulsion;
 
 /// <summary>
 /// Delayed onboard observation of an active-stage engine-out condition.
@@ -10,52 +11,106 @@ using Exosphere.Simulation.Math;
 public sealed class EngineOutSensor
 {
     public const double DefaultDetectionLatencySeconds = 0.10;
+    public const double DefaultMinimumIsolationConfidence = 0.70;
+    public const double DefaultMinimumTorqueResidualRatio =
+        EngineFaultIsolation.DefaultMinimumTorqueResidualRatio;
 
     private double _rawConditionSeconds;
+    private double _corroboratedConditionSeconds;
 
-    public EngineOutSensor(double detectionLatencySeconds = DefaultDetectionLatencySeconds)
+    public EngineOutSensor(
+        double detectionLatencySeconds = DefaultDetectionLatencySeconds,
+        double minimumIsolationConfidence = DefaultMinimumIsolationConfidence,
+        double minimumTorqueResidualRatio = DefaultMinimumTorqueResidualRatio)
     {
         if (!double.IsFinite(detectionLatencySeconds) || detectionLatencySeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(detectionLatencySeconds));
 
         DetectionLatencySeconds = detectionLatencySeconds;
+        if (!double.IsFinite(minimumIsolationConfidence)
+            || minimumIsolationConfidence <= 0.0
+            || minimumIsolationConfidence > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(minimumIsolationConfidence));
+        if (!double.IsFinite(minimumTorqueResidualRatio)
+            || minimumTorqueResidualRatio < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(minimumTorqueResidualRatio));
+
+        MinimumIsolationConfidence = minimumIsolationConfidence;
+        MinimumTorqueResidualRatio = minimumTorqueResidualRatio;
     }
 
     public double DetectionLatencySeconds { get; }
+    public double MinimumIsolationConfidence { get; }
+    public double MinimumTorqueResidualRatio { get; }
     public EngineOutSensorState LastState { get; private set; }
 
     public EngineOutSensorState Sample(Vessel vessel, double deltaSeconds)
+        => Sample(vessel, body: null, deltaSeconds);
+
+    public EngineOutSensorState Sample(
+        Vessel vessel,
+        CelestialBody? body,
+        double deltaSeconds)
     {
         ArgumentNullException.ThrowIfNull(vessel);
         if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
 
         var population = EngineOutRecoveryGuidance.Inspect(vessel);
-        bool rawCondition = population.IsEngineOut;
+        double ambientPressure = vessel.GetAmbientPressure(body);
+        var telemetry = new List<EngineTelemetry>();
+        var geometry = new List<EngineFaultIsolationGeometry>();
+        foreach (var part in vessel.Parts.ActiveEngines)
+        {
+            if (!part.HasEngineRuntime) continue;
+            telemetry.AddRange(part.GetEngineTelemetry(ambientPressure));
+            foreach (var row in part.GetEngineInstanceFaultIsolationGeometrySnapshot())
+                geometry.Add(new EngineFaultIsolationGeometry(
+                    row.InstanceId,
+                    row.PositionM,
+                    row.ThrustDirection));
+        }
+
+        var isolation = EngineFaultIsolation.Infer(
+            telemetry,
+            geometry,
+            vessel.Parts.CenterOfMass);
+        bool isolatedCondition = isolation.FaultDetected
+            && isolation.Confidence >= MinimumIsolationConfidence;
+        bool torqueCorroborated = isolatedCondition
+            && isolation.TorqueResidualRatio >= MinimumTorqueResidualRatio;
+        bool rawCondition = population.IsEngineOut || isolatedCondition;
         if (rawCondition)
         {
             _rawConditionSeconds += deltaSeconds;
-            if (_rawConditionSeconds + 1e-12 >= DetectionLatencySeconds)
-                LastState = new EngineOutSensorState(
-                    population,
-                    RawEngineOut: true,
-                    DetectedEngineOut: true,
-                    RawConditionSeconds: _rawConditionSeconds);
+            if (torqueCorroborated)
+                _corroboratedConditionSeconds += deltaSeconds;
             else
-                LastState = new EngineOutSensorState(
-                    population,
-                    RawEngineOut: true,
-                    DetectedEngineOut: false,
-                    RawConditionSeconds: _rawConditionSeconds);
+                _corroboratedConditionSeconds = 0.0;
+
+            bool detected = _rawConditionSeconds + 1e-12 >= DetectionLatencySeconds
+                && _corroboratedConditionSeconds + 1e-12 >= DetectionLatencySeconds;
+            LastState = new EngineOutSensorState(
+                population,
+                isolation,
+                RawEngineOut: true,
+                TorqueCorroborated: torqueCorroborated,
+                DetectedEngineOut: detected,
+                RawConditionSeconds: _rawConditionSeconds,
+                CorroboratedConditionSeconds: _corroboratedConditionSeconds);
         }
         else
         {
             _rawConditionSeconds = 0.0;
+            _corroboratedConditionSeconds = 0.0;
             LastState = new EngineOutSensorState(
                 population,
+                isolation,
                 RawEngineOut: false,
+                TorqueCorroborated: false,
                 DetectedEngineOut: false,
-                RawConditionSeconds: 0.0);
+                RawConditionSeconds: 0.0,
+                CorroboratedConditionSeconds: 0.0);
         }
 
         return LastState;
@@ -64,6 +119,7 @@ public sealed class EngineOutSensor
     public void Reset()
     {
         _rawConditionSeconds = 0.0;
+        _corroboratedConditionSeconds = 0.0;
         LastState = default;
     }
 }
@@ -94,11 +150,17 @@ public sealed class EngineOutRecoveryController
             return _previousCommand;
         }
 
-        _previousCommand = EngineOutRecoveryGuidance.ComputeCommand(
-            vessel,
-            targetWorldAxis,
-            _previousCommand,
-            deltaSeconds);
+        _previousCommand = observation.Population.IsEngineOut
+            ? EngineOutRecoveryGuidance.ComputeCommand(
+                vessel,
+                targetWorldAxis,
+                _previousCommand,
+                deltaSeconds)
+            : EngineOutRecoveryGuidance.ComputeCommandFromConfirmedFault(
+                vessel,
+                targetWorldAxis,
+                _previousCommand,
+                deltaSeconds);
         return _previousCommand;
     }
 
@@ -111,6 +173,9 @@ public sealed class EngineOutRecoveryController
 
 public readonly record struct EngineOutSensorState(
     EngineOutRecoveryState Population,
+    EngineFaultIsolationResult Isolation,
     bool RawEngineOut,
+    bool TorqueCorroborated,
     bool DetectedEngineOut,
-    double RawConditionSeconds);
+    double RawConditionSeconds,
+    double CorroboratedConditionSeconds);

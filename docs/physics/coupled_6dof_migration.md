@@ -42,6 +42,9 @@ integrator without changing the production scheduler by default.
     recovery reduces angular rate without breaking legacy/coupled parity.
 18. `feat(physics): add delayed engine-out sensor` — debounces the active-stage observation for
     100 ms before enabling recovery, then verifies the latency and long-window parity on Flight 7.
+19. `feat(physics): integrate telemetry fault isolation` — samples live peer-engine telemetry,
+    preserves the stage demand after a failed engine, and requires a persistent mount-geometry
+    torque residual before the delayed recovery sensor can enable automatic response.
 
 ## Runtime contract
 
@@ -51,7 +54,7 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 864/864 tests passing after the delayed-sensor gate.
+- Full simulation suite: 868/868 tests passing after telemetry fault-isolation integration.
 - Physics parity tests: 8/8 passing (coast, powered ascent, Flight 7 ascent, controlled pitch,
   closed-loop elevation, engine-out, immediate recovery and delayed-sensor recovery).
 - Godot project build: 0 warnings, 0 errors.
@@ -80,9 +83,10 @@ loss. The recovery gate then detects the failed/live engine mix, writes a bounde
 command and verifies lower angular rate against an identical no-recovery baseline. The delayed
 sensor gate holds that command for four 20 ms samples and enables it on the fifth, representing
 100 ms of onboard detection latency. The command deadband is numerical (`1e-6`), so a physically
-small correction still reaches TVC allocation. This remains a deterministic injected-failure
-test: it does not yet prove automatic onboard failure diagnosis, fault isolation, full
-SAS/flap/RCS recovery or dispersed production ascent.
+small correction still reaches TVC allocation. The sensor now also needs live peer-thrust
+diagnosis and a persistent mount-geometry torque residual; the gate still uses a deterministic
+injected failure and does not prove dispersed production ascent, full SAS/flap/RCS recovery or
+long-duration fault management.
 
 ## Remaining work
 

@@ -77,6 +77,40 @@ public static class EngineOutRecoveryGuidance
         if (!Inspect(vessel).IsEngineOut)
             return Vector3d.Zero;
 
+        return ComputeCommandFromConfirmedFault(
+            vessel,
+            targetWorldAxis,
+            previousCommand,
+            deltaSeconds,
+            maximumCommandRatePerSecond,
+            proportionalGain,
+            dampingGain);
+    }
+
+    /// <summary>
+    /// Computes the same bounded recovery command after an independent onboard fault
+    /// isolator has confirmed the anomaly. This path deliberately does not inspect the
+    /// simulator's failure flag: a degraded but not-yet-declared engine can still be
+    /// recovered once peer thrust and torque residuals agree.
+    /// </summary>
+    public static Vector3d ComputeCommandFromConfirmedFault(
+        Vessel vessel,
+        Vector3d targetWorldAxis,
+        Vector3d previousCommand,
+        double deltaSeconds,
+        double maximumCommandRatePerSecond = DefaultCommandRatePerSecond,
+        double proportionalGain = DefaultProportionalGain,
+        double dampingGain = DefaultDampingGain)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        if (!double.IsFinite(maximumCommandRatePerSecond)
+            || maximumCommandRatePerSecond < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(maximumCommandRatePerSecond));
+        if (targetWorldAxis.MagnitudeSquared < 1e-12)
+            return Vector3d.Zero;
+
         var targetCommand = AttitudeGuidance.ComputeAxisPointingCommand(
             vessel.Orientation,
             Vector3d.Up,

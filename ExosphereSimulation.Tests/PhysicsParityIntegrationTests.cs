@@ -342,6 +342,8 @@ public sealed class PhysicsParityIntegrationTests
 
         Assert.Equal(4, detectionStep);
         Assert.True(coupledController.LastCommand.Magnitude > 1e-3);
+        Assert.True(coupledController.Sensor.LastState.Isolation.FaultDetected);
+        Assert.True(coupledController.Sensor.LastState.TorqueCorroborated);
         Assert.True(
             coupled.ActiveVessel!.AngularVelocity.Magnitude
                 < baseline.ActiveVessel!.AngularVelocity.Magnitude);

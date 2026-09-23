@@ -29,7 +29,7 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 | Launch plume | 33/33 telemetry and delivered thrust reach 1.0; the real framebuffer shows a visible core and pad steam | At liftoff the exhaust still reads as a narrow white column instead of a broad, layered methalox/steam volume | P0 |
 | Upper ship | Continuous barrel, tangent-ogive nose, raceway, payload-door cue and four animated flaps exist | Shadow-side steel/TPS loses surface information at distance; seams and thermal zones need a controlled readability pass | P0 |
 | V3 booster | Flight 12 data is selected by the harness; renderer now uses three larger, lower, re-clocked fins only for V3 part IDs | Integrated hot-stage geometry is not yet distinct from the legacy vented interstage in the full-stack renderer | P1 |
-| Fault isolation | Engine state and delayed engine-out recovery exist; a pure peer-thrust classifier is now covered by tests | Classifier is not yet wired into onboard guidance and needs persistence/debounce plus residual/torque corroboration | P0 |
+| Fault isolation | Live peer-thrust telemetry, 100 ms persistence and mount-geometry torque corroboration now gate the onboard recovery sensor | The classifier still needs a longer controlled-ascent campaign and fault injection beyond the deterministic Flight 7 fixture | P0 |
 | Flaps | Aerodynamic authority is applied in the pure simulation; visual flaps respond to q, belly alignment, pitch and roll | No persistent actuator state/rate limit is shared by physics and renderer | P1 |
 
 ## Implemented in this stage
@@ -42,24 +42,26 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
   core cross-section; vacuum behavior remains pressure-driven.
 - Added a bounded cool-sky fill to the black TPS shader so shadow-side surfaces retain
   physical material cues without changing the direct-light response.
+- Wired `EngineFaultIsolation` into `EngineOutSensor`: the sensor samples live engine
+  telemetry, retains the peer baseline, and requires a persistent torque residual before
+  automatic recovery becomes eligible. Failed engines keep the stage throttle demand in
+  their telemetry so the observer can distinguish commanded demand from delivered thrust.
+- Added a geometric residual test and strengthened the Flight 7 legacy/coupled delayed
+  recovery gate to prove the diagnosis and torque corroboration are both present.
 
 ## Next work units
 
-1. **Fault isolation runtime:** feed `EngineFaultIsolation` from the same live engine
-   telemetry used by the HUD, add a 100–150 ms persistence window and expose a diagnosis
-   confidence/engine list to recovery guidance. Add thrust-vector residuals before
-   allowing automatic recovery to act.
-2. **Controlled ascent:** run the V3 stack through a longer ascent gate with thrust,
+1. **Controlled ascent:** run the V3 stack through a longer ascent gate with thrust,
    mass, dynamic pressure, attitude error, gimbal and flap-command telemetry. Keep
    Flight 7 legacy as the comparison baseline.
-3. **Flap actuator parity:** introduce a physical deflection state, rate limit and
+2. **Flap actuator parity:** introduce a physical deflection state, rate limit and
    saturation in the pure simulation; make the renderer consume that state rather than
    deriving a separate pose from pitch/roll.
-4. **P0 plume comparison:** add a deterministic close camera preset and compare pad,
+3. **P0 plume comparison:** add a deterministic close camera preset and compare pad,
    100 m and 1 km captures against the same framing. Tune the layered cone, ground
    interaction and deluge separately; do not use a global exposure or arbitrary bloom
    increase as a substitute for geometry.
-5. **V3 hot stage and upper ship:** model the integrated interface as a V3-specific
+4. **V3 hot stage and upper ship:** model the integrated interface as a V3-specific
    continuous shell, then validate nose/TPS/raceway/flap readability in a close-up
    framebuffer before touching global lighting.
 
