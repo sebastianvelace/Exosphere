@@ -36,6 +36,8 @@ public partial class VesselRenderer : Node3D
     private float _cachedFlapDeployment;
     private FlapActuatorState _cachedFlapActuators = FlapActuatorState.Zero;
     private double _flapInputTimer;
+    private float _lastVisualFlapDeployment = float.NaN;
+    private FlapActuatorState _lastVisualFlapActuators = FlapActuatorState.Zero;
     private double _landingGearMotionDelta;
     private float _lastGlow = float.NaN;
     private bool? _lastVisualHotStage;
@@ -1339,6 +1341,7 @@ public partial class VesselRenderer : Node3D
             _flapInputTimer = SecondaryVisualPeriodSeconds;
             _cachedFlapDeployment = ComputeFlapDeployment(body);
             _cachedFlapActuators = TargetVessel.FlapActuators;
+            ReportVisualFlapTelemetry(_cachedFlapDeployment, _cachedFlapActuators);
         }
         UpdateFlaps(delta, _cachedFlapDeployment, _cachedFlapActuators);
 
@@ -1614,6 +1617,23 @@ public partial class VesselRenderer : Node3D
             var target = flap.Neutral * new Quaternion(Vector3.Up, Mathf.DegToRad(signedDeg));
             flap.Blade.Quaternion = flap.Blade.Quaternion.Slerp(target, response);
         }
+    }
+
+    private void ReportVisualFlapTelemetry(
+        float deployment,
+        FlapActuatorState actuators)
+    {
+        if (!float.IsNaN(_lastVisualFlapDeployment)
+            && Mathf.Abs(deployment - _lastVisualFlapDeployment) < 0.01f
+            && System.Math.Abs(actuators.Pitch - _lastVisualFlapActuators.Pitch) < 0.01
+            && System.Math.Abs(actuators.Yaw - _lastVisualFlapActuators.Yaw) < 0.01
+            && System.Math.Abs(actuators.Roll - _lastVisualFlapActuators.Roll) < 0.01)
+            return;
+
+        _lastVisualFlapDeployment = deployment;
+        _lastVisualFlapActuators = actuators;
+        GD.Print($"VISUAL_FLAPS deployment={deployment:F3} pitch={actuators.Pitch:F3} "
+            + $"yaw={actuators.Yaw:F3} roll={actuators.Roll:F3}");
     }
 
     // ── Heat-shield tile charring ─────────────────────────────────────────
