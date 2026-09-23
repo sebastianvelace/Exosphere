@@ -178,6 +178,56 @@ public sealed class PhysicsParityIntegrationTests
         Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
     }
 
+    [Fact]
+    public void Flight7BoosterEngineOutRemainsWithinAsymmetricTorqueParityTolerance()
+    {
+        var legacy = CreateFlight7Universe("legacy-flight7-engine-out", coupled: false, useEarthData: true);
+        var coupled = CreateFlight7Universe("coupled-flight7-engine-out", coupled: true, useEarthData: true);
+        const double dt = 0.02;
+
+        for (int i = 0; i < 150; i++)
+        {
+            legacy.Tick(dt);
+            coupled.Tick(dt);
+        }
+
+        FailFlight7BoosterEngine(legacy, 13);
+        FailFlight7BoosterEngine(coupled, 13);
+
+        var legacyBody = legacy.GetBody(legacy.ActiveVessel!.ReferenceBodyId!)!;
+        double pressure = legacyBody.GetAtmosphericPressure(legacy.ActiveVessel.Position);
+        var legacyTorque = legacy.ActiveVessel.Parts.GetTotalTorque(pressure);
+        var coupledTorque = coupled.ActiveVessel!.Parts.GetTotalTorque(pressure);
+        Assert.True(legacyTorque.Magnitude > 1.0);
+        Assert.True(coupledTorque.Magnitude > 1.0);
+        Assert.True(
+            legacyTorque.Z * coupledTorque.Z > 0.0,
+            $"Expected matching asymmetric yaw torque signs: legacy={legacyTorque}, coupled={coupledTorque}");
+
+        for (int i = 0; i < 100; i++)
+        {
+            legacy.Tick(dt);
+            coupled.Tick(dt);
+        }
+
+        var result = RigidBodyParityComparer.Compare(
+            RigidBodyStateSnapshot.FromVessel(legacy.ActiveVessel),
+            RigidBodyStateSnapshot.FromVessel(coupled.ActiveVessel),
+            new RigidBodyParityTolerance(
+                PositionMeters: 100.0,
+                VelocityMetersPerSecond: 100.0,
+                AttitudeRadians: 0.10,
+                AngularVelocityRadiansPerSecond: 0.10));
+
+        Assert.True(result.IsFinite);
+        Assert.True(
+            result.IsWithinTolerance,
+            $"Legacy/coupled engine-out divergence exceeded tolerance: {result}");
+        Assert.True(legacy.ActiveVessel.AngularVelocity.Magnitude > 1e-4);
+        Assert.True(coupled.ActiveVessel.AngularVelocity.Magnitude > 1e-4);
+        Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
+    }
+
     private static Universe CreateUniverse(string vesselId, bool coupled, bool powered)
     {
         var body = new CelestialBody
@@ -296,6 +346,14 @@ public sealed class PhysicsParityIntegrationTests
             proportionalGain: 2.6,
             dampingGain: 1.2);
         return vessel.PitchYawRoll.Magnitude > 1e-3;
+    }
+
+    private static void FailFlight7BoosterEngine(Universe universe, int engineIndex)
+    {
+        var booster = universe.ActiveVessel!.Parts.Parts.Single(
+            part => part.Definition.Id == "super_heavy_booster");
+        string instanceId = booster.EngineStates[engineIndex].InstanceId;
+        Assert.True(booster.FailEngine(instanceId, "PARITY_ENGINE_OUT"));
     }
 
     private static DirectoryInfo FindRepoRoot()

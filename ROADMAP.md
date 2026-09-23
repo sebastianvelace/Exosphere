@@ -104,8 +104,10 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      rotación superficial y gimbal observable.
    - Programa cerrado inicial: cerrado para 250 pasos de 20 ms con rampa de elevación y
      feedback de actitud/velocidad angular.
+   - Engine-out asimétrico inicial: cerrado con fallo de un Raptor booster fuera de eje,
+     torque geométrico y respuesta angular legacy/6-DoF equivalentes.
    - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con navegación, SAS y
-     autoridad de control equivalentes.
+     autoridad de recuperación equivalentes.
    - Gate posterior: EDL controlado con contactos y telemetría de captura.
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
      pasen y se conserve evidencia numérica y de framebuffer.

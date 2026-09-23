@@ -207,6 +207,7 @@ all motors are one physical point.
 | Legacy vs coupled Flight 7 ascent | 100 × 20 ms gate passes with real parts and propellant | Open-loop short ascent only |
 | Flight 7 controlled pitch in Earth atmosphere | 50 × 20 ms gate passes with surface rotation and gimbal | First controlled gate only |
 | Flight 7 closed-loop elevation program | 250 × 20 ms gate passes with attitude/rate feedback | First deterministic guidance gate only |
+| Flight 7 booster engine-out | 150 × 20 ms warm-up + 100 × 20 ms asymmetric response | First engine-out parity gate |
 | Controlled Starship ascent/EDL parity | Not yet closed | Open |
 | SAS, flaps and RCS in coupled path | Not yet fully equivalent | Open |
 | CFD, plume-flow interaction and slosh | Out of current solver scope | Deliberate approximation |

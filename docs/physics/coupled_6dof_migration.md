@@ -35,6 +35,8 @@ integrator without changing the production scheduler by default.
     under the real Earth atmosphere, surface rotation and live gimbal servo state.
 15. `test(physics): exercise closed-loop Flight 7 elevation parity` — follows a deterministic
     elevation ramp with attitude error and angular-rate feedback for five simulated seconds.
+16. `test(physics): exercise Flight 7 engine-out parity` — fails one off-axis booster Raptor after
+    spool-up and checks real asymmetric torque, angular response and legacy/coupled agreement.
 
 ## Runtime contract
 
@@ -44,9 +46,9 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 861/861 tests passing after the closed-loop elevation gate.
-- Physics parity tests: 5/5 passing (coast, powered ascent, Flight 7 ascent, controlled pitch
-  and closed-loop elevation).
+- Full simulation suite: 862/862 tests passing after the engine-out gate.
+- Physics parity tests: 6/6 passing (coast, powered ascent, Flight 7 ascent, controlled pitch,
+  closed-loop elevation and engine-out).
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
@@ -67,6 +69,9 @@ it does not yet prove a closed-loop guidance law.
 The new closed-loop gate follows a five-second elevation ramp with attitude and rate feedback;
 it is a deterministic attitude-reference exercise, not a complete ascent guidance, navigation
 or dispersion model.
+The engine-out gate removes one off-axis booster Raptor after 3 seconds of spool-up and checks
+the resulting real per-mount torque rather than treating the failure as proportional thrust
+loss. It still does not prove automated failure detection, engine-out guidance or recovery.
 
 ## Remaining work
 
