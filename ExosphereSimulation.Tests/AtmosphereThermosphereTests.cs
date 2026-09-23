@@ -75,14 +75,30 @@ public sealed class AtmosphereThermosphereTests
     }
 
     [Fact]
-    public void PressureStaysVacuumAboveMaxAltitude()
+    public void PressureMatchesIdealGasLawAcrossTheResidualThermosphere()
     {
-        // MaxAltitude remains the aerodynamically significant boundary that the
-        // flight controllers reason about; only density gets a residual tail.
+        var atmo = AtmosphereModel.Earth();
+        const double universalGasConstant = 8.31446;
+
+        foreach (double altitude in new[] { 140_000.0, 150_000.0, 200_000.0, 400_000.0 })
+        {
+            double expected = atmo.GetDensity(altitude)
+                * universalGasConstant * atmo.GetTemperature(altitude)
+                / atmo.MolarMass;
+            double actual = atmo.GetPressure(altitude);
+
+            Assert.True(actual > 0.0, $"pressure vanished at {altitude / 1000.0:F0} km");
+            Assert.Equal(expected, actual, 10);
+        }
+    }
+
+    [Fact]
+    public void PressureReturnsVacuumAtTheConfiguredThermosphereTop()
+    {
         var atmo = AtmosphereModel.Earth();
 
-        Assert.Equal(0.0, atmo.GetPressure(150_000.0));
-        Assert.Equal(0.0, atmo.GetPressure(200_000.0));
+        Assert.Equal(0.0, atmo.GetPressure(atmo.ThermosphereTopAltitude));
+        Assert.Equal(0.0, atmo.GetPressure(atmo.ThermosphereTopAltitude + 100_000.0));
     }
 
     [Fact]

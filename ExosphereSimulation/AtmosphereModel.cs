@@ -139,7 +139,24 @@ public partial class AtmosphereModel
     /// </summary>
     public double GetPressure(double altitude)
     {
-        if (altitude >= MaxAltitude || altitude < 0.0) return 0.0;
+        if (altitude < 0.0) return 0.0;
+
+        // Keep the thermosphere thermodynamically coherent with GetDensity().
+        // The residual density tail is intentionally retained above MaxAltitude
+        // for orbital drag; returning exactly zero pressure there made engine
+        // performance and the ideal-gas state disagree in the same atmosphere.
+        if (altitude >= MaxAltitude)
+        {
+            if (ThermosphereScaleHeight <= 0.0
+                || ThermosphereTopAltitude <= MaxAltitude
+                || altitude >= ThermosphereTopAltitude
+                || MolarMass <= 0.0)
+                return 0.0;
+
+            double density = GetDensity(altitude);
+            double temperature = GetTemperature(altitude);
+            return density * (R / MolarMass) * temperature;
+        }
 
         if (Layers.Count == 0)
             return SeaLevelPressure * System.Math.Exp(-altitude / ScaleHeight);

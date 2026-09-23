@@ -156,8 +156,42 @@ The current model includes:
   `FlapActuatorState` in both legacy and coupled paths;
 - pressure-corrected engine thrust and Isp.
 
+The residual thermosphere keeps pressure and density coupled through the ideal-gas law
+(p=\rho R T/M). This matters even when the aerodynamic force is small: the same ambient
+state must drive drag, engine pressure thrust and plume expansion without an artificial
+pressure discontinuity at the nominal 140 km flight boundary. The tail remains a
+mission-scale approximation; it is not an NRLMSISE atmosphere.
+
 This is a mission-scale aerodynamic model. It is not a Navier–Stokes solution and does not
 resolve boundary-layer transition, local shock interactions or plume impingement.
+
+The renderer's exposed stainless-steel shader uses Godot's opaque metallic PBR path, with
+Fresnel handled by the engine and a bounded roughness variation for rolled/brushed stock.
+Anisotropic highlights are intentionally not enabled until the procedural meshes provide
+tangents; enabling that output without tangents makes the renderer fall back with warnings.
+This is an optical material approximation, not a measured Starship BRDF. Heat-shield tiles
+remain dielectric and high-roughness; their emissive floor is only a bounded readability
+fallback for the compatibility renderer.
+
+### Evidence basis and deliberate boundaries
+
+The implementation is constrained by the following primary references:
+
+- [NASA Dynamic Pressure](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/dynamic-pressure-2/)
+  for (q=\frac{1}{2}\rho V^2) and the Max-Q interpretation;
+- [NASA Rocket Aerodynamics](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/rocket-aerodynamics/)
+  for drag/lift integration over the vehicle and the centre-of-pressure/centre-of-mass
+  moment;
+- [NASA GSFC Planetary Spectrum Generator](https://psg.gsfc.nasa.gov/helpatm.php) for
+  bidirectional reflectance/BRDF as a function of incidence, emission and phase angle;
+- [NASA Plume Surface Interaction](https://www.nasa.gov/plume-surface-interaction/) and
+  [NASA landing-gear impulse/momentum analysis](https://ntrs.nasa.gov/citations/19930083424)
+  for the unresolved plume–surface and touchdown-load work.
+
+Those references justify the current force and material contracts; they do not justify
+inventing an uncalibrated plume back-pressure force, a measured Starship BRDF, or hardware
+landing-leg coefficients. The simulator therefore keeps plume impingement as an explicit
+open boundary and labels landing gear values as simulator estimates in the part data.
 
 ### Body-flap actuator contract
 
