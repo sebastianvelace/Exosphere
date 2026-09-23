@@ -40,6 +40,8 @@ integrator without changing the production scheduler by default.
 17. `feat(physics): add deterministic engine-out recovery guidance` — detects an active-stage
     engine-out, computes an axis-pointing feedback command with rate limiting, and proves that
     recovery reduces angular rate without breaking legacy/coupled parity.
+18. `feat(physics): add delayed engine-out sensor` — debounces the active-stage observation for
+    100 ms before enabling recovery, then verifies the latency and long-window parity on Flight 7.
 
 ## Runtime contract
 
@@ -49,9 +51,9 @@ for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
 
 ## Validation
 
-- Full simulation suite: 863/863 tests passing after the recovery gate.
-- Physics parity tests: 7/7 passing (coast, powered ascent, Flight 7 ascent, controlled pitch,
-  closed-loop elevation, engine-out and engine-out recovery).
+- Full simulation suite: 864/864 tests passing after the delayed-sensor gate.
+- Physics parity tests: 8/8 passing (coast, powered ascent, Flight 7 ascent, controlled pitch,
+  closed-loop elevation, engine-out, immediate recovery and delayed-sensor recovery).
 - Godot project build: 0 warnings, 0 errors.
 - `git diff --check`: clean before each commit.
 
@@ -75,16 +77,17 @@ or dispersion model.
 The engine-out gate removes one off-axis booster Raptor after 3 seconds of spool-up and checks
 the resulting real per-mount torque rather than treating the failure as proportional thrust
 loss. The recovery gate then detects the failed/live engine mix, writes a bounded axis-pointing
-command and verifies lower angular rate against an identical no-recovery baseline. The command
-deadband is numerical (`1e-6`), so a physically small correction still reaches TVC allocation.
-This remains a deterministic injected-failure test: it does not yet prove automatic onboard
-failure diagnosis, sensor latency, fault isolation, full SAS/flap/RCS recovery or dispersed
-production ascent.
+command and verifies lower angular rate against an identical no-recovery baseline. The delayed
+sensor gate holds that command for four 20 ms samples and enables it on the fifth, representing
+100 ms of onboard detection latency. The command deadband is numerical (`1e-6`), so a physically
+small correction still reaches TVC allocation. This remains a deterministic injected-failure
+test: it does not yet prove automatic onboard failure diagnosis, fault isolation, full
+SAS/flap/RCS recovery or dispersed production ascent.
 
 ## Remaining work
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
 - Port or reconcile flap control, SAS/rate limiting, and RCS authority around the recovery
-  controller, including sensor/failure-detection latency and longer-duration ascent cases.
+  controller, including automatic fault isolation and longer-duration ascent cases.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.

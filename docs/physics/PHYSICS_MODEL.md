@@ -209,6 +209,7 @@ all motors are one physical point.
 | Flight 7 closed-loop elevation program | 250 × 20 ms gate passes with attitude/rate feedback | First deterministic guidance gate only |
 | Flight 7 booster engine-out | 150 × 20 ms warm-up + 100 × 20 ms asymmetric response | First engine-out parity gate |
 | Flight 7 engine-out recovery | Same warm-up/response window; active-stage detection, axis feedback and command slew | First deterministic recovery gate only |
+| Flight 7 delayed engine-out recovery | Same window; 100 ms onboard detection latency before feedback | First sensor-latency recovery gate only |
 | Controlled Starship ascent/EDL parity | Not yet closed | Open |
 | SAS, flaps and RCS in coupled path | Not yet fully equivalent | Open |
 | CFD, plume-flow interaction and slosh | Out of current solver scope | Deliberate approximation |

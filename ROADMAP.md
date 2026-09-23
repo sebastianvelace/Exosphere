@@ -106,11 +106,11 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      feedback de actitud/velocidad angular.
    - Engine-out asimétrico inicial: cerrado con fallo de un Raptor booster fuera de eje,
      torque geométrico y respuesta angular legacy/6-DoF equivalentes.
-   - Recuperación engine-out determinista: cerrado con detección del estado activo, comando de
-     actitud con feedback, rate limit y reducción de velocidad angular conservando la paridad
-     legacy/6-DoF.
-   - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con navegación, SAS,
-     flaps, RCS y autoridad de recuperación equivalentes.
+   - Recuperación engine-out determinista: cerrado con detección del estado activo, 100 ms de
+     latencia onboard, comando de actitud con feedback, rate limit y reducción de velocidad
+     angular conservando la paridad legacy/6-DoF.
+   - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con diagnóstico de
+     fallos, navegación, SAS, flaps, RCS y autoridad de recuperación equivalentes.
    - Gate posterior: EDL controlado con contactos y telemetría de captura.
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
      pasen y se conserve evidencia numérica y de framebuffer.

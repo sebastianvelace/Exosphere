@@ -282,6 +282,86 @@ public sealed class PhysicsParityIntegrationTests
         Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
     }
 
+    [Fact]
+    public void Flight7EngineOutRecoveryWaitsForSensorLatencyThenPreservesParity()
+    {
+        var legacy = CreateFlight7Universe("legacy-flight7-recovery-latency", coupled: false, useEarthData: true);
+        var coupled = CreateFlight7Universe("coupled-flight7-recovery-latency", coupled: true, useEarthData: true);
+        var baseline = CreateFlight7Universe("baseline-flight7-recovery-latency", coupled: true, useEarthData: true);
+        var legacyController = new EngineOutRecoveryController(0.10);
+        var coupledController = new EngineOutRecoveryController(0.10);
+        const double dt = 0.02;
+
+        for (int i = 0; i < 150; i++)
+        {
+            legacy.Tick(dt);
+            coupled.Tick(dt);
+            baseline.Tick(dt);
+        }
+
+        FailFlight7BoosterEngine(legacy, 13);
+        FailFlight7BoosterEngine(coupled, 13);
+        FailFlight7BoosterEngine(baseline, 13);
+
+        int detectionStep = -1;
+        for (int i = 0; i < 100; i++)
+        {
+            var legacyVessel = legacy.ActiveVessel!;
+            var legacyBody = legacy.GetBody(legacyVessel.ReferenceBodyId!)!;
+            var coupledVessel = coupled.ActiveVessel!;
+            var coupledBody = coupled.GetBody(coupledVessel.ReferenceBodyId!)!;
+            var legacyCommand = legacyController.ComputeCommand(
+                legacyVessel,
+                legacyBody.GetGeodeticUp(legacyVessel.Position),
+                dt);
+            var coupledCommand = coupledController.ComputeCommand(
+                coupledVessel,
+                coupledBody.GetGeodeticUp(coupledVessel.Position),
+                dt);
+
+            if (i < 4)
+            {
+                Assert.False(legacyController.Sensor.LastState.DetectedEngineOut);
+                Assert.False(coupledController.Sensor.LastState.DetectedEngineOut);
+                Assert.Equal(0.0, legacyCommand.Magnitude, precision: 12);
+                Assert.Equal(0.0, coupledCommand.Magnitude, precision: 12);
+            }
+            else if (detectionStep < 0 && coupledController.Sensor.LastState.DetectedEngineOut)
+            {
+                detectionStep = i;
+            }
+
+            legacyVessel.PitchYawRoll = legacyCommand;
+            legacyVessel.SASEnabled = false;
+            coupledVessel.PitchYawRoll = coupledCommand;
+            coupledVessel.SASEnabled = false;
+            baseline.Tick(dt);
+            legacy.Tick(dt);
+            coupled.Tick(dt);
+        }
+
+        Assert.Equal(4, detectionStep);
+        Assert.True(coupledController.LastCommand.Magnitude > 1e-3);
+        Assert.True(
+            coupled.ActiveVessel!.AngularVelocity.Magnitude
+                < baseline.ActiveVessel!.AngularVelocity.Magnitude);
+
+        var result = RigidBodyParityComparer.Compare(
+            RigidBodyStateSnapshot.FromVessel(legacy.ActiveVessel!),
+            RigidBodyStateSnapshot.FromVessel(coupled.ActiveVessel!),
+            new RigidBodyParityTolerance(
+                PositionMeters: 100.0,
+                VelocityMetersPerSecond: 100.0,
+                AttitudeRadians: 0.15,
+                AngularVelocityRadiansPerSecond: 0.15));
+
+        Assert.True(result.IsFinite);
+        Assert.True(
+            result.IsWithinTolerance,
+            $"Legacy/coupled delayed engine-out recovery divergence exceeded tolerance: {result}");
+        Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
+    }
+
     private static Universe CreateUniverse(string vesselId, bool coupled, bool powered)
     {
         var body = new CelestialBody
