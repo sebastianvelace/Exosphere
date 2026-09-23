@@ -4,7 +4,7 @@
 // A large tangent-plane mesh anchored under the vessel by EarthGroundController.
 // Each fragment reconstructs its real lat/lon (from the sub-vessel point + its patch
 // offset over the sphere) and samples the same NASA day texture as the orbital
-// backdrop, so the launch zone shows the REAL Cape Canaveral coast/terrain — and as
+// backdrop, so the launch zone shows the real Starbase / Boca Chica coast and terrain — and as
 // the rocket climbs those features recede, giving a clear sense of rising. A subtle
 // procedural micro-detail keeps it from looking flat up close. `horizon_dist` hazes
 // terrain beyond the true horizon into the sky (flat horizon, no dome); `fade`
@@ -119,6 +119,25 @@ float regional_edge_weight(vec2 uv) {
 	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
 }
 
+float regional_no_data_factor(vec2 uv) {
+	// The downloaded NAIP tile is JPEG, so its provider no-data area is an
+	// opaque neutral olive instead of alpha. The separate mask is only a broad
+	// feather and cannot describe the irregular tile footprint on its own.
+	// Reject a locally flat neutral plateau while preserving real water/land
+	// pixels and the narrow transition at the data boundary.
+	const vec2 texel = vec2(1.0 / 4096.0);
+	vec3 centre = textureLod(regional_ortho_tex, uv, 0.0).rgb;
+	vec3 east = textureLod(regional_ortho_tex,
+		clamp(uv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)), 0.0).rgb;
+	vec3 north = textureLod(regional_ortho_tex,
+		clamp(uv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)), 0.0).rgb;
+	float neutral = 1.0 - smoothstep(0.06, 0.18,
+		length(centre - vec3(0.54, 0.54, 0.45)));
+	float local_variation = max(length(east - centre), length(north - centre));
+	float flat_fill = 1.0 - smoothstep(0.004, 0.025, local_variation);
+	return 1.0 - neutral * flat_fill;
+}
+
 float regional_validity(vec2 uv) {
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
 		return 0.0;
@@ -126,7 +145,8 @@ float regional_validity(vec2 uv) {
 		// The exported mask is Gaussian-feathered around the provider footprint.
 		// Keep its low-valued tail invalid so the neutral JPEG fill cannot leak
 		// back into the scene as a rectangular patch.
-		* smoothstep(0.30, 0.52, texture(regional_mask_tex, uv).r);
+		* smoothstep(0.62, 0.80, texture(regional_mask_tex, uv).r)
+		* regional_no_data_factor(uv);
 }
 
 vec2 macro_uv(vec2 patch_m) {
@@ -141,13 +161,31 @@ float macro_edge_weight(vec2 uv) {
 	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
 }
 
+float macro_no_data_factor(vec2 uv) {
+	// The 50 km composite contains large opaque JPEG voids outside the
+	// available NAIP swaths. Detect their neutral, locally flat fill before it
+	// can be mistaken for real Gulf water or wetland in the LOD bridge.
+	const vec2 texel = vec2(1.0 / 4096.0);
+	vec3 centre = textureLod(macro_ortho_tex, uv, 0.0).rgb;
+	vec3 east = textureLod(macro_ortho_tex,
+		clamp(uv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)), 0.0).rgb;
+	vec3 north = textureLod(macro_ortho_tex,
+		clamp(uv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)), 0.0).rgb;
+	float neutral = 1.0 - smoothstep(0.06, 0.18,
+		length(centre - vec3(0.54, 0.54, 0.45)));
+	float local_variation = max(length(east - centre), length(north - centre));
+	float flat_fill = 1.0 - smoothstep(0.004, 0.025, local_variation);
+	return 1.0 - neutral * flat_fill;
+}
+
 float macro_validity(vec2 uv) {
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
 		return 0.0;
 	return macro_edge_weight(uv)
 		// The macro provider footprint is irregular; reject its feather tail
 		// before sampling the neutral fill colour stored in the JPEG void.
-		* smoothstep(0.30, 0.52, texture(macro_mask_tex, uv).r);
+		* smoothstep(0.62, 0.80, texture(macro_mask_tex, uv).r)
+		* macro_no_data_factor(uv);
 }
 
 float sample_height_m(sampler2D height_tex, vec2 uv, float min_m,
