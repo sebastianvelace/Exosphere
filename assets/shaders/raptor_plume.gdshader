@@ -151,7 +151,11 @@ void fragment() {
 
 	// ── Axial envelope: full near the nozzle, fades toward the tip. Vacuum
 	// plumes reach much farther before fading (the long faint core). ─────────
-	float axialEnv = (1.0 - smoothstep(0.5 * reach, 1.0, a)) * smoothstep(-0.04, 0.05, a);
+	// A vacuum plume remains optically thin, but its emissive core must not collapse
+	// into a nozzle-sized disc. Hold the plateau farther downstream as density falls,
+	// then keep the same smooth fade to a transparent tip.
+	float axialPlateau = mix(0.50, 0.74, effExpansion) * reach;
+	float axialEnv = (1.0 - smoothstep(axialPlateau, 1.0, a)) * smoothstep(-0.04, 0.05, a);
 
 	// ── N7: Mach diamonds — sea-level over-expanded shock cells.
 	// At sea level (atmo_pressure≈1, effExpansion≈0): many, sharp, packed near
@@ -214,12 +218,12 @@ void fragment() {
 	// N7: vacuum plume dims the core — thin gas, far fewer photons per unit volume.
 	// Kept dimmer than sea level (realistic optically-thin plume) but lifted enough so the
 	// orbital-insertion burn still reads clearly against the bright Earth/space backdrop.
-    float vacuumDim = mix(1.0, mix(0.72, 0.90, far_field), effExpansion * effExpansion);
+    float vacuumDim = mix(1.0, mix(0.92, 0.96, far_field), effExpansion * effExpansion);
 
 	// Sea-level plumes are visually punchier per unit length; vacuum a touch
 	// dimmer (very thin gas), but its length makes it dominant in frame.
 	// Daylight pad needs a photosphere-white core, not a faint additive haze.
-    float eScale = mix(1.45, 0.90, effExpansion) * vacuumDim
+    float eScale = mix(1.45, 1.10, effExpansion) * vacuumDim
         * mix(1.0, 1.12, far_field);
 	float e   = energy * eScale * (0.45 + 0.55 * effThrottle);
 
@@ -227,7 +231,7 @@ void fragment() {
 	// with high alpha turns the transparent envelope into a black polygon even
 	// when its HDR emission is bright. Keep the source pale and put intensity in
 	// emission; alpha below controls optical density independently.
-	float layerRadiance = mix(radial * axialEnv * 0.42, bright, core_layer);
+	float layerRadiance = mix(radial * axialEnv * 0.50, bright, core_layer);
 	vec3 emission = col * e * layerRadiance * (1.0 + diamond * 0.8) * flick;
 	vec3 albedoColor = mix(col * 0.86, mix(col, whiteHot, 0.18), core_layer);
 	albedoColor = mix(albedoColor, whiteHot, diamond * 0.34);
@@ -243,9 +247,9 @@ void fragment() {
 		* noise1(a * 37.0 - TIME * 24.0 + facing * 11.0);
 	float opticalProfile = radial * axialEnv;
 	float sheathAlpha = opticalProfile * sheathBreakup
-		* mix(0.22, 0.065, effExpansion) * layer_opacity;
+		* mix(0.22, 0.090, effExpansion) * layer_opacity;
 	float coreAlpha = opticalProfile
-		* mix(0.56, 0.16, effExpansion) * layer_opacity;
+		* mix(0.56, 0.36, effExpansion) * layer_opacity;
 	float farCoreAlpha = opticalProfile
 		* mix(0.40, 0.24, effExpansion) * layer_opacity;
 	coreAlpha = mix(coreAlpha, farCoreAlpha, far_field);
@@ -257,7 +261,7 @@ void fragment() {
 	// because the CPU hides the sheath there.
 	float vacuumCoreAlpha = core_layer * effExpansion * radial
 		* (1.0 - smoothstep(0.22, 0.74, a))
-		* mix(0.055, 0.12, far_field) * layer_opacity;
+		* mix(0.15, 0.18, far_field) * layer_opacity;
 	float profileAlpha = mix(sheathAlpha, coreAlpha, core_layer) + shockAlpha;
 	ALPHA = clamp(max(profileAlpha, vacuumCoreAlpha) * effThrottle, 0.0, 0.62);
 }

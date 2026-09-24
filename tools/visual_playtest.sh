@@ -3677,6 +3677,10 @@ public partial class _PlaytestShot : Node
 
         int projectedPoints = 0;
         int pointsInFrame = 0;
+        double plumeTailLumaSum = 0.0;
+        double plumeBackdropLumaSum = 0.0;
+        int plumeTailSamples = 0;
+        int plumeBackdropSamples = 0;
         if (plumes != null && camera != null)
         {
             foreach (Node child in plumes.GetChildren())
@@ -3698,10 +3702,51 @@ public partial class _PlaytestShot : Node
                     projectedPoints += 2;
                     if (camera.IsPositionInFrustum(root)) pointsInFrame++;
                     if (camera.IsPositionInFrustum(tip)) pointsInFrame++;
+                    Vector2 rootScreen = camera.UnprojectPosition(root);
+                    Vector2 tipScreen = camera.UnprojectPosition(tip);
+                    Vector2 axis = tipScreen - rootScreen;
+                    if (axis.Length() >= 8f)
+                    {
+                        Vector2 perpendicular = new Vector2(-axis.Y, axis.X).Normalized();
+                        float backdropOffset = Mathf.Clamp(axis.Length() * 0.16f, 10f, 24f);
+                        for (int sampleIndex = 0; sampleIndex < 5; sampleIndex++)
+                        {
+                            float t = 0.30f + sampleIndex * 0.10f;
+                            Vector2 center = rootScreen.Lerp(tipScreen, t);
+                            for (int cross = -1; cross <= 1; cross++)
+                            {
+                                double tail = SampleImageLuma(
+                                    image, center + perpendicular * (cross * 1.5f));
+                                if (double.IsFinite(tail))
+                                {
+                                    plumeTailLumaSum += tail;
+                                    plumeTailSamples++;
+                                }
+                            }
+                            foreach (float side in new[] { -1f, 1f })
+                            {
+                                double backdrop = SampleImageLuma(
+                                    image, center + perpendicular * (backdropOffset * side));
+                                if (double.IsFinite(backdrop))
+                                {
+                                    plumeBackdropLumaSum += backdrop;
+                                    plumeBackdropSamples++;
+                                }
+                            }
+                        }
+                    }
                     break;
                 }
             }
         }
+
+        double plumeTailLuma = plumeTailSamples > 0
+            ? plumeTailLumaSum / plumeTailSamples
+            : double.NaN;
+        double plumeBackdropLuma = plumeBackdropSamples > 0
+            ? plumeBackdropLumaSum / plumeBackdropSamples
+            : double.NaN;
+        double plumeTailContrast = plumeTailLuma - plumeBackdropLuma;
 
         _log.WriteLine(
             $"VISUAL_ORBITAL_PLUME slug={slug} " +
@@ -3721,6 +3766,9 @@ public partial class _PlaytestShot : Node
             $"coreOpacity={plumes?.LastCoreOpacity ?? float.NaN:F3} " +
             $"sheathOpacity={plumes?.LastSheathOpacity ?? float.NaN:F3} " +
             $"projectedPoints={projectedPoints} pointsInFrame={pointsInFrame} " +
+            $"plumeTailLuma={plumeTailLuma:F5} " +
+            $"plumeBackdropLuma={plumeBackdropLuma:F5} " +
+            $"plumeTailContrast={plumeTailContrast:F5} " +
             $"cameraMode={CameraController.Instance?.Mode.ToString() ?? "missing"} " +
             $"cameraDistanceRender={camera?.GlobalPosition.Length() ?? float.NaN:F2} " +
             $"rendererVisible={renderer?.Visible ?? false} hudVisible={hud?.Visible ?? false} " +
@@ -3740,6 +3788,16 @@ public partial class _PlaytestShot : Node
                 && !plumes.IsQueuedForDeletion())
                 return plumes;
         return null;
+    }
+
+    private static double SampleImageLuma(Image image, Vector2 point)
+    {
+        int x = Mathf.RoundToInt(point.X);
+        int y = Mathf.RoundToInt(point.Y);
+        if (x < 0 || y < 0 || x >= image.GetWidth() || y >= image.GetHeight())
+            return double.NaN;
+        Color color = image.GetPixel(x, y);
+        return 0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B;
     }
 
     private static double DeliveredThrottle(Vessel vessel, CelestialBody body)
@@ -4427,6 +4485,8 @@ verify_pngs() {
         valid = valid && value("sheathOpacity") + 0 <= 0.14
         valid = valid && value("projectedPoints") + 0 >= 2
         valid = valid && value("pointsInFrame") + 0 == value("projectedPoints") + 0
+        valid = valid && finite(value("plumeTailLuma")) && value("plumeTailLuma") + 0 >= 0.040
+        valid = valid && finite(value("plumeTailContrast")) && value("plumeTailContrast") + 0 >= 0.025
         valid = valid && value("cameraMode") == "Chase"
         valid = valid && value("rendererVisible") == "True"
         valid = valid && value("hudVisible") == "True"
@@ -4436,7 +4496,7 @@ verify_pngs() {
       }
       END { exit !(seen == 1 && valid) }
     ' "$LOG"; then
-      echo "ERROR: orbital vacuum-plume telemetry did not prove vacuum layers, anchoring, framing, HUD, and silhouette" >&2
+      echo "ERROR: orbital vacuum-plume telemetry did not prove vacuum layers, anchoring, framebuffer contrast, framing, HUD, and silhouette" >&2
       return 1
     fi
     if ! awk '

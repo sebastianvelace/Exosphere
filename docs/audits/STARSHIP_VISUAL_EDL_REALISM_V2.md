@@ -1,6 +1,7 @@
 # Starship visual, propulsion and EDL realism — V2
 
 Date: 2026-07-13
+Last verified: 2026-09-24
 
 ## Outcome
 
@@ -66,6 +67,15 @@ Throttle immediately wakes it, so this is not a hidden ground clamp.
 - Landing guidance commands the visible 3 → 2 → 1-capable centre-engine sequence instead
   of leaving engines at zero through the flip.
 
+The dedicated orbital-burn gate now waits for three consecutive samples of real delivered
+thrust instead of capturing after an arbitrary frame count. It resolves the plume system
+under `ActiveVesselRenderer`, so a staged Super Heavy renderer cannot satisfy or corrupt the
+measurement. The 1920×1080 acceptance frame must prove all six units are visible and anchored,
+fully expanded at a pressure ratio below 0.02, free of atmospheric smoke/dust, and brighter
+than adjacent framebuffer background through the middle 30–70% of the exhaust tail. The
+latest run measured tail luminance `0.05181` against `0.02064` background (`0.03116` contrast)
+with a 200.001 km geocentric seed and 196.894 km WGS84 geodetic altitude.
+
 The sequence is patterned after SpaceX's published flight descriptions: Flight 4 used
 three centre Raptors for flip/landing burn, and Flight 12 reports landing-burn start,
 flip, and reductions from three to two to one engines.
@@ -118,6 +128,7 @@ dotnet build Exosphere.csproj --no-restore
 dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --no-restore
 bash tools/visual_playtest.sh --edl
 bash tools/visual_playtest.sh --ship
+bash tools/visual_playtest.sh --orbital-plume --resolution 1920x1080
 bash tools/visual_playtest.sh --cockpit
 ```
 
