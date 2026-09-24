@@ -146,7 +146,6 @@ void fragment() {
 	float diffuse_fill = mix(night_floor, 0.045, smoothstep(-0.18, 0.30, ndl));
 	vec3 lit = surface * (vec3(diffuse_fill)
 		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility);
-
 	// The distant ocean is not a black Lambertian tile: it reflects a bounded
 	// blue atmospheric dome. Use optical depth for the sky colour and keep this
 	// term view-independent so it cannot paint a camera-centred contour.
@@ -166,12 +165,25 @@ void fragment() {
 	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 	float ndotv = dot(N, V);
 
+	// Air-to-water Fresnel reflectance: n_air≈1.000 and n_water≈1.333 give
+	// F0=(1.000-1.333)^2/(1.000+1.333)^2≈0.0204. At scaled-Earth range the
+	// ocean is a broad statistical surface, so keep the solar response bounded
+	// to a low-frequency lobe instead of pretending to resolve individual waves.
+	float view_cosine = clamp(ndotv, 0.0, 1.0);
+	float water_fresnel = 0.0204 + 0.9796 * pow(1.0 - view_cosine, 5.0);
+	float half_length = length(L + V);
+	vec3 reflection_half = half_length > 0.0001
+		? (L + V) / half_length : N;
+	float sun_glint = pow(max(dot(N, reflection_half), 0.0), 64.0);
+	vec3 ocean_sun_reflection = vec3(water_fresnel * sun_glint)
+		* direct_transmittance * water * day * solar_visibility;
+	lit += ocean_sun_reflection;
+
 	// The scaled globe is opaque in front of the sky cubemap, so the atmosphere
 	// cannot paint its own limb over the surface. Apply the same bounded optical
 	// depth as a camera-to-surface path: surface radiance is attenuated and the
 	// missing energy is replaced by blue Rayleigh in-scatter. The blend is only
 	// active near the geometric limb; the disc centre keeps its measured albedo.
-	float view_cosine = clamp(ndotv, 0.0, 1.0);
 	float view_air_mass = 1.0 / max(
 		view_cosine + 0.025 * exp(-11.0 * view_cosine), 0.025);
 	vec3 view_transmittance = exp(-vertical_optical_depth

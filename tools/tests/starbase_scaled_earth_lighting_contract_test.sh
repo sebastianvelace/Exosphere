@@ -51,6 +51,10 @@ has 'vec3 aerial_radiance = lit * view_transmittance' "$shader" \
   "scaled Earth limb has no Rayleigh in-scatter replacement"
 has 'float limb_scatter = smoothstep(0.0, 0.42' "$shader" \
   "scaled Earth atmospheric path is not restricted to the geometric limb"
+has 'float water_fresnel = 0.0204 + 0.9796 * pow(1.0 - view_cosine, 5.0);' "$shader" \
+  "scaled Earth ocean is missing air-water Fresnel reflection"
+has 'vec3 ocean_sun_reflection = vec3(water_fresnel * sun_glint)' "$shader" \
+  "scaled Earth ocean sun reflection is not bounded"
 
 if [[ $# -eq 0 ]]; then
   echo "starbase_scaled_earth_lighting_contract_test: PASS (world-space solar lighting is bounded)"

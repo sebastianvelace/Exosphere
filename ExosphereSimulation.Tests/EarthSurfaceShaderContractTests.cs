@@ -56,6 +56,8 @@ public sealed class EarthSurfaceShaderContractTests
         string shader = Source("assets/shaders/earth_surface.gdshader");
         Assert.Contains("exp(-vertical_optical_depth * min(air_mass, 40.0))", shader);
         Assert.Contains("direct_transmittance * solar_visibility", shader);
+        Assert.Contains("float water_fresnel = 0.0204 + 0.9796 * pow(1.0 - view_cosine, 5.0);", shader);
+        Assert.Contains("vec3 ocean_sun_reflection = vec3(water_fresnel * sun_glint)", shader);
         Assert.Contains("nightCol * smoothstep(0.07, 0.18, lum) * night * night_lights", shader);
         Assert.Contains("lit += cities;", shader);
     }
