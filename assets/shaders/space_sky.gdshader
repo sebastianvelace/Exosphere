@@ -529,6 +529,8 @@ void sky() {
 		ray_end = ground_hit.x;
 		hits_ground = true;
 	}
+	float view_tangent_altitude = length(origin + view_dir
+		* max(-dot(origin, view_dir), 0.0)) - planet_radius;
 
 	vec3 optical_depth = vec3(0.0);
 	vec3 in_scatter = vec3(0.0);
@@ -744,12 +746,21 @@ void sky() {
 	// VisualExposure still closes down for daylight. A 1/mu air-mass term blows
 	// the whole pad frame to white (the chase camera looks at the horizon, not
 	// the zenith), so this is a bounded elevation mix in the same HDR domain.
-	// Closed-form daylight dome used as a luminance floor. Apply it across the
-	// mathematical horizon so pad play-camera pixels that miss the ground mesh
-	// stay pale sky instead of snapping to a dark planet fill.
+	// Closed-form daylight dome used as a luminance floor. Apply it across both the
+	// mathematical horizon and the sub-horizon tangent shell: at 20–40 km a ray
+	// can miss the opaque globe while still pointing below local horizontal. Those
+	// rays are the visible atmosphere limb, not ground, and must not fall through
+	// the above-horizon floor into a dark interpolation band.
 	{
 		float elev = dot(view_dir, up);
-		float above = smoothstep(-0.045, 0.050, elev);
+		// The tangent ray remains inside the active shell even when its closest
+		// approach is already tens of kilometres above the surface. Use the full
+		// configured shell here; a narrow fraction leaves the 40 km ray under-filled.
+		float tangent_shell_width = max(20000.0, atmosphere_height);
+		float tangent_sky = hits_ground ? 0.0
+			: 1.0 - smoothstep(0.0, tangent_shell_width,
+				max(view_tangent_altitude, 0.0));
+		float above = max(smoothstep(-0.045, 0.050, elev), tangent_sky);
 		float h = clamp(elev, 0.0, 1.0);
 		vec3 dome = mix(vec3(0.70, 0.82, 0.94), vec3(0.18, 0.42, 0.84), pow(h, 0.55));
 		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);

@@ -32,5 +32,11 @@ rg -q 'float thick_column = 1.0 - smoothstep\(8000.0, daylight_tail_top' "$SHADE
   || fail "daylight pad/ascent does not occlude the starmap by optical column"
 rg -q 'vec3 daylight_floor = max\(atmosphere, dome\);' "$SHADER" \
   || fail "daylight pad sky has no bounded radiance floor"
+rg -q 'float tangent_shell_width = max\(20000\.0, atmosphere_height\);' "$SHADER" \
+  || fail "tangent sky floor is not coupled to the full active atmosphere shell"
+rg -q 'float view_tangent_altitude = length\(origin \+ view_dir' "$SHADER" \
+  || fail "tangent sky floor does not classify the ray closest approach"
+rg -q 'float tangent_sky = hits_ground \? 0\.0' "$SHADER" \
+  || fail "tangent sky floor is not gated away from opaque ground hits"
 
 echo "space_sky_banding_contract_test: PASS (24-sample stable cloud-shell quadrature)"

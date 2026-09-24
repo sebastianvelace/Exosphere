@@ -68,24 +68,31 @@ The correction is split across the two render layers:
   atmosphere height, keeping the 40 km handoff continuous and forcing the floor
   to zero before vacuum.
 
-The final real 1920×1080 `starbase-far` run in `/tmp/exo_env_ocean_final3/`
-finished with `STARBASE_FAR_OK`. The scaled-Earth contract passed for both
-handoff frames; `lowerMean` improved from the previous baseline of roughly
-`0.069` to `0.19773` at 20 km and `0.20213` at 40 km, with
-`surfaceClippedFrac=0.00000` in both frames. The images still show a broad dark
-gradient immediately above the bright blue limb at 40 km. Terrain/globe
-ownership is continuous, but the atmospheric composition itself is not closed:
-the residual is in grazing-ray sky transport or sky/limb overlap, not ocean
-albedo. Do not hide it with another global brightness multiplier; the next
-visual front should isolate `hits_ground`, tangent sky, and opaque globe
-coverage against a calibrated camera/exposure reference.
+The final real 1920×1080 `starbase-far` run in
+`/tmp/exo_env_tangent_shell_final/` finished with `STARBASE_FAR_OK`. The
+scaled-Earth contract passed for both handoff frames; `lowerMean` is `0.19773`
+at 20 km and `0.20213` at 40 km, with `surfaceClippedFrac=0.00000` and
+`darkFrac=0.00000` in both frames.
+
+The remaining dark band was isolated with a diagnostic framebuffer as a
+grazing-ray sky-classification error. At 20–40 km, a ray can point below local
+horizontal, miss the opaque globe, and still intersect the visible atmospheric
+shell. The previous `above-horizon` floor classified that ray as neither ground
+nor sky, so the interpolation fell through to a dark planet fill. The fix in
+`space_sky.gdshader` computes the ray's closest-approach altitude, gates it with
+`hits_ground`, and applies the bounded daylight floor across the full active
+atmosphere shell. It does not change terrain ownership, solar geometry, or
+flight physics. The new real captures show a continuous pale-blue transition;
+the residual soft gradient is atmospheric composition, not an opaque black
+artifact.
 
 ## Remaining environment work
 
-The Starbase/Boca Chica transition is now continuous in the validated matrix.
-Cape Canaveral/Kennedy remains a separate environment-data pass: its launch
-complex geometry, coastal rasters, datum, and site-specific horizon need their
-own source inventory and visual gate rather than reusing the Starbase assets.
+The Starbase/Boca Chica transition is now continuous in the validated matrix,
+including the tangent atmosphere limb above the scaled Earth. The next
+environment front is still Cape Canaveral/Kennedy: its launch-complex geometry,
+coastal rasters, datum, and site-specific horizon need their own source
+inventory and visual gate rather than reusing the Starbase assets.
 
 ## Data references
 
