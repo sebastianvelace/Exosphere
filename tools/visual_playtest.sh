@@ -628,6 +628,7 @@ public partial class _PlaytestShot : Node
     bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     int _beautyWaitFrames;
+    int _orbitalPlumeStableFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded;
     readonly (string Slug, double AltitudeM)[] _starbaseFarCases =
     {
@@ -1156,13 +1157,55 @@ public partial class _PlaytestShot : Node
                 // 1920x1080 frame instead of cropping the plume tip.
                 CameraController.Instance?.SetExternalChaseFrame(28f, 16f, 36f, -4f);
                 _shipSeeded = true;
+                _readyFrames = 0;
                 return;
             }
-            if (_shipSeeded && _pendingSlug == null && _readyFrames >= 110
-                && !_orbitBeauty)
+            if (_shipSeeded && _pendingSlug == null && !_orbitBeauty)
             {
-                QueueCapture("orbital_plume");
-                _orbitBeauty = true;
+                var plumes = GetActivePlumeSystem();
+                double delivered = DeliveredThrottle(vessel, body);
+                bool plumeReady = _readyFrames >= 30
+                    && delivered >= 0.95
+                    && plumes != null
+                    && plumes.LastPressureRatio <= 0.02f
+                    && plumes.LastExpansion >= 0.95f
+                    && plumes.LastMaximumThrottle >= 0.95f
+                    && plumes.VisibleUnitCount == 6
+                    && plumes.AnchoredUnitCount == plumes.VisibleUnitCount
+                    && plumes.LongestVisibleLength >= 12.0f
+                    && plumes.CoreLayerVisible
+                    && plumes.SheathLayerVisible
+                    && !plumes.InteractionParticlesVisible;
+                _orbitalPlumeStableFrames = plumeReady
+                    ? _orbitalPlumeStableFrames + 1
+                    : 0;
+
+                if (_readyFrames % 30 == 0)
+                {
+                    _log.WriteLine(
+                        $"TRACE_ORBITAL_PLUME frame={_readyFrames} " +
+                        $"delivered={delivered:F3} pressureRatio={plumes?.LastPressureRatio ?? float.NaN:F4} " +
+                        $"expansion={plumes?.LastExpansion ?? float.NaN:F3} " +
+                        $"visibleUnits={plumes?.VisibleUnitCount ?? 0} " +
+                        $"anchoredUnits={plumes?.AnchoredUnitCount ?? 0} " +
+                        $"stableFrames={_orbitalPlumeStableFrames}");
+                    _log.Flush();
+                }
+
+                if (_orbitalPlumeStableFrames >= 3)
+                {
+                    QueueCapture("orbital_plume");
+                    _orbitBeauty = true;
+                }
+                else if (_readyFrames >= 360)
+                {
+                    _log.WriteLine(
+                        $"FAIL orbital plume never reached a stable delivered burn " +
+                        $"delivered={delivered:F3} pressureRatio={plumes?.LastPressureRatio ?? float.NaN:F4} " +
+                        $"visibleUnits={plumes?.VisibleUnitCount ?? 0}");
+                    _log.Flush();
+                    Finish("ORBITAL_PLUME_NOT_READY");
+                }
             }
             if (_orbitBeauty && _pendingSlug == null)
                 Finish("ORBITAL_PLUME_OK");
@@ -3620,13 +3663,16 @@ public partial class _PlaytestShot : Node
         var body = vessel == null || universe == null
             ? null
             : universe.GetDominantBody(vessel.Position);
-        var plumes = GetTree().Root.FindChild("Plumes", true, false) as PlumeSystem;
         var renderer = GetTree().Root.FindChild("ActiveVesselRenderer", true, false) as Node3D;
+        var plumes = GetActivePlumeSystem();
         var camera = CameraController.Instance?.PresentationCamera
             ?? GetViewport().GetCamera3D();
         var hud = GetTree().Root.FindChild("HUDController", true, false) as CanvasItem;
         double altitude = vessel != null && body != null
             ? vessel.GetAltitude(body)
+            : double.NaN;
+        double geocentricAltitude = vessel != null && body != null
+            ? (vessel.Position - body.Position).Magnitude - body.Radius
             : double.NaN;
 
         int projectedPoints = 0;
@@ -3661,6 +3707,7 @@ public partial class _PlaytestShot : Node
             $"VISUAL_ORBITAL_PLUME slug={slug} " +
             $"body={body?.Id ?? "missing"} " +
             $"altitudeM={altitude:F1} " +
+            $"geocentricAltitudeM={geocentricAltitude:F1} " +
             $"pressureRatio={plumes?.LastPressureRatio ?? float.NaN:F4} " +
             $"expansion={plumes?.LastExpansion ?? float.NaN:F3} " +
             $"deliveredThrottle={plumes?.LastMaximumThrottle ?? float.NaN:F3} " +
@@ -3679,6 +3726,20 @@ public partial class _PlaytestShot : Node
             $"rendererVisible={renderer?.Visible ?? false} hudVisible={hud?.Visible ?? false} " +
             $"imageWidth={image.GetWidth()} imageHeight={image.GetHeight()}");
         _log.Flush();
+    }
+
+    private PlumeSystem? GetActivePlumeSystem()
+    {
+        var renderer = GetTree().Root.FindChild(
+            "ActiveVesselRenderer", true, false) as Node3D;
+        if (renderer == null || !GodotObject.IsInstanceValid(renderer)) return null;
+
+        foreach (Node child in renderer.GetChildren())
+            if (child is PlumeSystem plumes
+                && GodotObject.IsInstanceValid(plumes)
+                && !plumes.IsQueuedForDeletion())
+                return plumes;
+        return null;
     }
 
     private static double DeliveredThrottle(Vessel vessel, CelestialBody body)
@@ -4342,8 +4403,14 @@ verify_pngs() {
       }
       /^VISUAL_ORBITAL_PLUME / {
         valid = value("body") == "earth"
-        valid = valid && finite(value("altitudeM")) && value("altitudeM") + 0 >= 199000
-        valid = valid && value("altitudeM") + 0 <= 201000
+        # JumpToOrbit seeds a geocentric radius while the HUD reports WGS84
+        # geodetic altitude. At the fixture latitude those differ by about 3 km,
+        # so prove both the exact 200 km seed and the expected geodetic band.
+        valid = valid && finite(value("geocentricAltitudeM"))
+        valid = valid && value("geocentricAltitudeM") + 0 >= 199000
+        valid = valid && value("geocentricAltitudeM") + 0 <= 201000
+        valid = valid && finite(value("altitudeM")) && value("altitudeM") + 0 >= 190000
+        valid = valid && value("altitudeM") + 0 <= 210000
         valid = valid && finite(value("pressureRatio")) && value("pressureRatio") + 0 <= 0.02
         valid = valid && finite(value("expansion")) && value("expansion") + 0 >= 0.95
         valid = valid && finite(value("deliveredThrottle")) && value("deliveredThrottle") + 0 >= 0.95

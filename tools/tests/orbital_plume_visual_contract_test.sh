@@ -24,6 +24,12 @@ rg -q 'coreOpacity' "$HARNESS" \
   || fail "orbital-plume optical-layer evidence is missing"
 rg -q 'pointsInFrame' "$HARNESS" \
   || fail "orbital-plume framing evidence is missing"
+rg -q 'GetActivePlumeSystem' "$HARNESS" \
+  || fail "orbital-plume telemetry is not scoped to the active vessel renderer"
+rg -q '_orbitalPlumeStableFrames >= 3' "$HARNESS" \
+  || fail "orbital-plume capture does not require a stable delivered burn"
+rg -Fq 'Finish("ORBITAL_PLUME_NOT_READY")' "$HARNESS" \
+  || fail "orbital-plume readiness wait has no fail-closed timeout"
 rg -q 'float axialEnv' "$ROOT/assets/shaders/raptor_plume.gdshader" \
   || fail "shader has no axial intensity falloff"
 rg -q 'float sheathAlpha' "$ROOT/assets/shaders/raptor_plume.gdshader" \
@@ -69,7 +75,7 @@ PY
 good="$TEST_DIR/good.log"
 printf '%s\n' \
   '=== Exosphere visual playtest fixture mode=orbital_plume ===' \
-  'VISUAL_ORBITAL_PLUME slug=orbital_plume body=earth altitudeM=200000.0 pressureRatio=0.0000 expansion=1.000 deliveredThrottle=1.000 farField=False visibleUnits=6 anchoredUnits=6 longestLengthRender=21.00 coreVisible=True sheathVisible=True interactionParticles=False coreOpacity=0.480 sheathOpacity=0.120 projectedPoints=12 pointsInFrame=12 cameraMode=Chase cameraDistanceRender=34.00 rendererVisible=True hudVisible=True imageWidth=1920 imageHeight=1080' \
+  'VISUAL_ORBITAL_PLUME slug=orbital_plume body=earth altitudeM=196900.0 geocentricAltitudeM=200000.0 pressureRatio=0.0000 expansion=1.000 deliveredThrottle=1.000 farField=False visibleUnits=6 anchoredUnits=6 longestLengthRender=21.00 coreVisible=True sheathVisible=True interactionParticles=False coreOpacity=0.480 sheathOpacity=0.120 projectedPoints=12 pointsInFrame=12 cameraMode=Chase cameraDistanceRender=34.00 rendererVisible=True hudVisible=True imageWidth=1920 imageHeight=1080' \
   'IMAGE slug=orbital_plume width=1920 height=1080 mean=0.18000 darkFrac=0.24000 clippedFrac=0.00100' \
   'SUMMARY reason=ORBITAL_PLUME_OK frames=120' > "$good"
 
@@ -92,4 +98,19 @@ if bash "$HARNESS" --orbital-plume --verify-only \
   fail "anchor regression fixture was accepted"
 fi
 
-echo "orbital_plume_visual_contract_test: PASS (vacuum state, layer anchor, framing, image gate)"
+zero_throttle="$TEST_DIR/zero-throttle.log"
+python3 - "$good" "$zero_throttle" <<'PY'
+import sys
+
+source, target = sys.argv[1], sys.argv[2]
+text = open(source, encoding="utf-8").read()
+text = text.replace("deliveredThrottle=1.000", "deliveredThrottle=0.000")
+open(target, "w", encoding="utf-8").write(text)
+PY
+
+if bash "$HARNESS" --orbital-plume --verify-only \
+    --out-dir "$OUT_DIR" --log "$zero_throttle" >/dev/null 2>&1; then
+  fail "zero-throttle orbital-plume fixture was accepted"
+fi
+
+echo "orbital_plume_visual_contract_test: PASS (stable burn, vacuum state, layer anchor, framing, image gate)"
