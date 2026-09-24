@@ -41,6 +41,10 @@ uniform float ocean_sky_fill_strength : hint_range(0.0, 0.40) = 0.16;
 // the curved planet is what you should actually be seeing. The handoff is complementary with
 // the ground patch (40–75 km camera altitude).
 uniform float planet_alpha : hint_range(0.0, 1.0) = 1.0;
+// Presentation-only Earth shell. The shell is a separate, slightly larger mesh;
+// keeping this branch in the same shader reuses the measured RGB optical depth and
+// the live solar visibility without changing the opaque surface radiance.
+uniform float atmosphere_shell : hint_range(0.0, 1.0) = 0.0;
 
 // N3: high-frequency FBM micro-detail strength (0 = off, 0.18 = default).
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.18;
@@ -162,6 +166,29 @@ void fragment() {
 	float lum    = dot(nightCol, vec3(0.299, 0.587, 0.114));
 	vec3  cities = nightCol * smoothstep(0.07, 0.18, lum) * night * night_lights;
 	lit += cities;
+
+	bool shell_render = atmosphere_shell > 0.5;
+	vec3 shell_radiance = vec3(0.0);
+	float shell_alpha = 0.0;
+	if (shell_render) {
+		vec3 shell_view = normalize(CAMERA_POSITION_WORLD - v_world_pos);
+		float shell_view_cosine = clamp(dot(N, shell_view), 0.0, 1.0);
+		float shell_air_mass = 1.0 / max(
+			shell_view_cosine + 0.025 * exp(-11.0 * shell_view_cosine), 0.025);
+		vec3 shell_transmittance = exp(-vertical_optical_depth
+			* min(shell_air_mass, 40.0));
+		float shell_limb = smoothstep(0.02, 0.82,
+			clamp(1.0 - shell_view_cosine, 0.0, 1.0));
+		float shell_day = mix(0.12, 1.0,
+			smoothstep(-0.18, 0.30, dot(N, L)) * solar_visibility);
+		shell_radiance = rayleigh_sky * shell_day
+			* (vec3(1.0) - shell_transmittance);
+		float shell_luminance = dot(shell_radiance,
+			vec3(0.2126, 0.7152, 0.0722));
+		shell_alpha = planet_alpha * shell_limb
+			* clamp(shell_luminance * 2.8, 0.0, 0.72);
+	}
+
 	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 	float ndotv = dot(N, V);
 
@@ -195,14 +222,20 @@ void fragment() {
 		clamp(1.0 - ndotv, 0.0, 1.0));
 	lit = mix(lit, aerial_radiance, limb_scatter);
 
-	ALBEDO = lit;
-	EMISSION = cities * 0.6;
-	// Coverage only: the geometric silhouette is N dot V = 0, not an interior
-	// view-angle contour. Use the unclamped cosine for derivatives so the
-	// footprint remains valid across the tangent. The epsilon only guards zero
-	// derivatives; no fixed angular band should expose sky through the disc.
-	float limb = 1.0 - ndotv;
-	float limb_aa = max(fwidth(limb), 0.000001);
-	float silhouette = smoothstep(0.0, limb_aa, ndotv);
-	ALPHA = planet_alpha * silhouette;
+	if (shell_render) {
+		ALBEDO = shell_radiance;
+		EMISSION = vec3(0.0);
+		ALPHA = clamp(shell_alpha, 0.0, 0.72);
+	} else {
+		ALBEDO = lit;
+		EMISSION = cities * 0.6;
+		// Coverage only: the geometric silhouette is N dot V = 0, not an interior
+		// view-angle contour. Use the unclamped cosine for derivatives so the
+		// footprint remains valid across the tangent. The epsilon only guards zero
+		// derivatives; no fixed angular band should expose sky through the disc.
+		float limb = 1.0 - ndotv;
+		float limb_aa = max(fwidth(limb), 0.000001);
+		float silhouette = smoothstep(0.0, limb_aa, ndotv);
+		ALPHA = planet_alpha * silhouette;
+	}
 }

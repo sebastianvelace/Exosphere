@@ -13,6 +13,7 @@ launch_pad="$ROOT/scripts/LaunchPadController.cs"
 far_field="$ROOT/scripts/StarbaseFarField.cs"
 surface="$ROOT/assets/shaders/earth_surface.gdshader"
 origin="$ROOT/scripts/FloatingOrigin.cs"
+simulation="$ROOT/scripts/SimulationBridge.cs"
 lighting="$ROOT/scripts/PhaseLightingController.cs"
 
 [[ -f "$launch_shader" ]] || fail "launch surface shader is missing"
@@ -132,5 +133,8 @@ has '_env.SsrEnabled = forwardPlus' "$lighting" "Forward+ reflections are not re
 has 'RadialSegments = 384' "$origin" "scaled-space Earth globe is still the low-tessellation sawtooth sphere"
 has 'float limb_aa = max(fwidth(limb)' "$surface" "Earth limb has no fwidth antialias against the sky"
 has 'render_mode cull_back, unshaded, blend_mix' "$surface" "Earth limb ALPHA is ignored without blend_mix"
+has 'uniform float atmosphere_shell' "$surface" "Earth has no separate atmospheric shell path"
+has 'vec3 shell_transmittance = exp(-vertical_optical_depth' "$surface" "Earth atmosphere shell is not tied to optical depth"
+has 'Name = "Earth_atmosphere"' "$simulation" "scaled Earth atmosphere shell is not spawned"
 
 echo "earth_ground_lighting_contract_test: PASS (bounded night floor, ellipsoid disc, nadir haze gate, limb blend_mix)"

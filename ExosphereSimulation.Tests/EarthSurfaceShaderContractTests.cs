@@ -23,8 +23,10 @@ public sealed class EarthSurfaceShaderContractTests
     {
         string shader = Source("assets/shaders/earth_surface.gdshader");
         int cameraPathStart = shader.IndexOf("vec3 V =", StringComparison.Ordinal);
-        Assert.True(cameraPathStart > shader.IndexOf("lit += cities;", StringComparison.Ordinal));
-        string surfaceRadiance = shader[..cameraPathStart];
+        int shellStart = shader.IndexOf("bool shell_render = atmosphere_shell > 0.5;", StringComparison.Ordinal);
+        Assert.True(shellStart > shader.IndexOf("lit += cities;", StringComparison.Ordinal));
+        Assert.True(cameraPathStart > shellStart);
+        string surfaceRadiance = shader[..shellStart];
         // Direct surface lighting remains independent of the camera. The scaled
         // globe gets a separate, bounded camera-to-surface path at the limb.
         Assert.DoesNotMatch(@"\b(CAMERA_POSITION_WORLD|VIEW|ndotv|limb|FRAGCOORD|SCREEN_UV)\b", surfaceRadiance);
@@ -33,6 +35,18 @@ public sealed class EarthSurfaceShaderContractTests
         Assert.Contains("vec3 view_transmittance = exp(-vertical_optical_depth", shader);
         Assert.Contains("float limb_scatter = smoothstep(0.0, 0.42", shader);
         Assert.Contains("lit = mix(lit, aerial_radiance, limb_scatter);", shader);
+    }
+
+    [Fact]
+    public void EarthAtmosphereShellUsesBoundedOpticalDepthAndSeparateCoverage()
+    {
+        string shader = Source("assets/shaders/earth_surface.gdshader");
+        Assert.Contains("uniform float atmosphere_shell", shader);
+        Assert.Contains("vec3 shell_transmittance = exp(-vertical_optical_depth", shader);
+        Assert.Contains("float shell_limb = smoothstep(0.02, 0.82", shader);
+        Assert.Contains("ALPHA = clamp(shell_alpha, 0.0, 0.72);", shader);
+        Assert.Contains("Name = \"Earth_atmosphere\"", Source("scripts/SimulationBridge.cs"));
+        Assert.Contains("CreateEarthAtmosphere()", Source("scripts/PlanetMaterials.cs"));
     }
 
     [Fact]
@@ -47,7 +61,7 @@ public sealed class EarthSurfaceShaderContractTests
         Assert.Contains("float limb_aa = max(fwidth(limb), 0.000001);", shader);
         Assert.Contains("float silhouette = smoothstep(0.0, limb_aa, ndotv);", shader);
         Assert.Contains("ALPHA = planet_alpha * silhouette;", shader);
-        Assert.Single(Regex.Matches(shader, @"\bALPHA\s*="));
+        Assert.Equal(2, Regex.Matches(shader, @"\bALPHA\s*=").Count);
     }
 
     [Fact]

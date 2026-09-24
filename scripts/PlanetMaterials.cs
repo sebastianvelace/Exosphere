@@ -51,6 +51,28 @@ public static class PlanetMaterials
     }
 
     /// <summary>
+    /// Presentation-only Earth atmosphere shell. It uses the same Earth shader and
+    /// optical-depth calibration as the opaque disc, but is rendered on a 1.6% larger
+    /// mesh so the atmosphere extends beyond the geometric surface limb.
+    /// </summary>
+    public static ShaderMaterial CreateEarthAtmosphere()
+    {
+        var shader = GD.Load<Shader>(EarthShaderPath);
+        var mat = new ShaderMaterial { Shader = shader, RenderPriority = -1 };
+        mat.SetShaderParameter("sun_dir", DefaultSunDir);
+        mat.SetShaderParameter("day_tex", LoadTexture("res://assets/textures/earth_day.jpg"));
+        mat.SetShaderParameter("night_tex", LoadTexture("res://assets/textures/earth_night.jpg"));
+        mat.SetShaderParameter("cloud_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
+        var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
+        mat.SetShaderParameter("vertical_optical_depth", new Vector3(
+            (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
+        mat.SetShaderParameter("solar_visibility", 1.0f);
+        mat.SetShaderParameter("planet_alpha", 1.0f);
+        mat.SetShaderParameter("atmosphere_shell", 1.0f);
+        return mat;
+    }
+
+    /// <summary>
     /// Loads Godot's imported/cached texture. Returns a 1×1 white fallback on error.
     /// </summary>
     private static Texture2D LoadTexture(string resPath)

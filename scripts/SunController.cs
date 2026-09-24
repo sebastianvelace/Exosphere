@@ -113,6 +113,7 @@ public partial class SunController : Node
     // Cached node lookups — re-found lazily if they go null (e.g. scene rebuild).
     private DirectionalLight3D? _light;
     private ShaderMaterial?     _earthMat;
+    private ShaderMaterial?     _earthAtmosphereMat;
     private int _planetNodeCount = -1;
     private bool _solarGeometryReady;
     private bool _solarGeometryTelemetryPublished;
@@ -356,7 +357,10 @@ public partial class SunController : Node
     {
         if (_earthMat == null || !IsInstanceValid(_earthMat))
             _earthMat = FindBodyMaterial("Earth_mesh");
+        if (_earthAtmosphereMat == null || !IsInstanceValid(_earthAtmosphereMat))
+            _earthAtmosphereMat = FindBodyMaterial("Earth_atmosphere");
         _earthMat?.SetShaderParameter("sun_dir", sunDir);
+        _earthAtmosphereMat?.SetShaderParameter("sun_dir", sunDir);
         if (!_earthMaterialTelemetryPublished)
         {
             GD.Print($"PERF_SOLAR_BIND earthMaterial={(_earthMat != null ? "bound" : "missing")} "
@@ -395,6 +399,9 @@ public partial class SunController : Node
                     as ShaderMaterial;
         }
         _groundMaterial?.SetShaderParameter("solar_visibility", visibility);
+        if (_earthAtmosphereMat == null || !IsInstanceValid(_earthAtmosphereMat))
+            _earthAtmosphereMat = FindBodyMaterial("Earth_atmosphere");
+        _earthAtmosphereMat?.SetShaderParameter("solar_visibility", visibility);
     }
 
     private void RefreshPlanetMaterials()

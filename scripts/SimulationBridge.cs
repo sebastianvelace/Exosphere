@@ -797,6 +797,22 @@ public partial class SimulationBridge : Node
         var mesh = new MeshInstance3D { Name = body.Name + "_mesh", Mesh = sphere };
         mesh.SetSurfaceOverrideMaterial(0, mat);
         planetsNode.AddChild(mesh);
+
+        if (body.Id == "earth")
+        {
+            // Earth atmosphere reaches roughly 100 km over a 6,371 km radius.
+            // The 1.6% shell is presentation-only and follows the same scaled-space
+            // transform as the opaque globe, so it cannot affect simulation state.
+            var atmosphere = new MeshInstance3D
+            {
+                Name = "Earth_atmosphere",
+                Mesh = sphere,
+                Scale = Godot.Vector3.One * 1.016f,
+            };
+            atmosphere.SetSurfaceOverrideMaterial(0, PlanetMaterials.CreateEarthAtmosphere());
+            mesh.AddChild(atmosphere);
+        }
+
         fo.RegisterPlanetNode(body.Id, mesh);
 
         if (body.Id == "saturn") AddSaturnRing(mesh);
