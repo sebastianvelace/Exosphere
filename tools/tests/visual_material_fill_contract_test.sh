@@ -76,12 +76,18 @@ rg -Fq 'surface.AddIndex(i11);' "$renderer" \
   || fail "Starship TPS sector lacks exterior-facing triangle winding"
 rg -q 'BuildStarshipFlapMesh' "$renderer" \
   || fail "Starship flaps still lack a tapered aerodynamic mesh"
-rg -q 'AddFlap\("FwdFlapL".*2\.05f, 1\.15f' "$renderer" \
-  && rg -q 'fwdFlapTiles, tipSpanFraction: 0\.56f' "$renderer" \
+rg -q 'AddFlap\("FwdFlapL".*2\.05f, 0\.91f' "$renderer" \
+  && rg -q 'fwdFlapTiles, shipSteel, tipSpanFraction: 0\.56f' "$renderer" \
   || fail "Starship forward flaps are not using bounded image-derived proportions"
-rg -q 'AddFlap\("AftFlapL".*3\.95f, 1\.95f' "$renderer" \
-  && rg -q 'aftFlapTiles, tipSpanFraction: 0\.60f' "$renderer" \
+rg -q 'AddFlap\("AftFlapL".*3\.95f, 1\.32f' "$renderer" \
+  && rg -q 'aftFlapTiles, shipSteel, tipSpanFraction: 0\.60f' "$renderer" \
   || fail "Starship aft flaps are not using bounded image-derived proportions"
+rg -q 'BuildStarshipFlapRootFairingMesh' "$renderer" \
+  && rg -q 'BuildExtrudedPlanformMesh' "$renderer" \
+  || fail "Starship flap roots and blades are not using bounded extruded planforms"
+if rg -q 'name \+ "Root".*BoxMesh' "$renderer"; then
+  fail "Starship flap root regressed to a rectangular box"
+fi
 if rg -q 'TileSeam' "$renderer"; then
   fail "Starship flap still carries box seam overlays over the filtered TPS pattern"
 fi

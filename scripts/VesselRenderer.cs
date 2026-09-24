@@ -540,17 +540,17 @@ public partial class VesselRenderer : Node3D
         AddWeldRing("SkirtLip", 1.155f * RScale, skirtTop);
 
         // Flight 7-ish image proportions: the forward flaps occupy roughly one sixth
-        // of the barrel length and the aft flaps roughly one third. The former values
-        // made each aft surface almost 18 m long and 11 m wide, producing the giant
-        // rectangular boards visible in orbital broadside captures.
-        AddFlap("FwdFlapL", fwdFlapY + 0.15f, 2.05f, 1.15f, -0.58f,
-            fwdFlapTiles, tipSpanFraction: 0.56f);
-        AddFlap("FwdFlapR", fwdFlapY + 0.15f, 2.05f, 1.15f,  0.58f,
-            fwdFlapTiles, tipSpanFraction: 0.56f);
-        AddFlap("AftFlapL", aftFlapY - 0.20f, 3.95f, 1.95f, -0.48f,
-            aftFlapTiles, tipSpanFraction: 0.60f);
-        AddFlap("AftFlapR", aftFlapY - 0.20f, 3.95f, 1.95f,  0.48f,
-            aftFlapTiles, tipSpanFraction: 0.60f);
+        // of the barrel length and the aft flaps roughly one third. Chord is measured
+        // from the hull transition outward; the mount offset below keeps that complete
+        // planform outside the barrel while preserving the prior observed outer reach.
+        AddFlap("FwdFlapL", fwdFlapY + 0.15f, 2.05f, 0.91f, -0.58f,
+            fwdFlapTiles, shipSteel, tipSpanFraction: 0.56f);
+        AddFlap("FwdFlapR", fwdFlapY + 0.15f, 2.05f, 0.91f,  0.58f,
+            fwdFlapTiles, shipSteel, tipSpanFraction: 0.56f);
+        AddFlap("AftFlapL", aftFlapY - 0.20f, 3.95f, 1.32f, -0.48f,
+            aftFlapTiles, shipSteel, tipSpanFraction: 0.60f);
+        AddFlap("AftFlapR", aftFlapY - 0.20f, 3.95f, 1.32f,  0.48f,
+            aftFlapTiles, shipSteel, tipSpanFraction: 0.60f);
         var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
         AddMesh("ShipBaySoot", new CylinderMesh
             { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
@@ -3185,7 +3185,7 @@ public partial class VesselRenderer : Node3D
     // mounted on the windward (-X) side and offset around the body by `angOff`
     // radians from the -X axis.
     private void AddFlap(string name, float y, float length, float chord, float angOff,
-        Material mat, float tipSpanFraction)
+        Material bladeMat, Material rootMat, float tipSpanFraction)
     {
         float a   = Mathf.Pi + angOff;
         float cos = Mathf.Cos(a);
@@ -3197,10 +3197,16 @@ public partial class VesselRenderer : Node3D
         {
             Name            = name,
             Mesh            = BuildStarshipFlapMesh(length, chord, 0.16f, tipSpanFraction),
-            Position        = new Vector3((BodyR + 0.40f) * cos, y, (BodyR + 0.40f) * sin),
+            // Keep the complete planform outside the barrel. The previous fixed offset
+            // buried up to half of the mesh inside the hull, so its apparent chord and
+            // root shape changed unpredictably with camera angle.
+            Position        = new Vector3(
+                (BodyR + chord * 0.5f + 0.06f) * cos,
+                y,
+                (BodyR + chord * 0.5f + 0.06f) * sin),
             RotationDegrees = new Vector3(0, deg, 0),
         };
-        blade.SetSurfaceOverrideMaterial(0, mat);
+        blade.SetSurfaceOverrideMaterial(0, bladeMat);
         AddChild(blade);
         blade.SetMeta("flap_id", name);
         blade.AddToGroup(StarshipFlapBladeGroup);
@@ -3212,15 +3218,19 @@ public partial class VesselRenderer : Node3D
             Forward = name.StartsWith("Fwd", StringComparison.Ordinal),
         });
 
-        // Root fairing where the flap meets the hull.
+        // The fixed root blends the longitudinal hinge into the cylindrical hull.
+        // A tapered extruded fairing replaces the box that read as a structural brick
+        // in broadside captures. It deliberately protrudes beyond the 0.16-unit blade
+        // thickness so overlapping faces cannot become coplanar and flicker.
         var root = new MeshInstance3D
         {
             Name            = name + "Root",
-            Mesh            = new BoxMesh { Size = new Vector3(0.55f, length, 0.20f) },
-            Position        = new Vector3((BodyR + 0.02f) * cos, y, (BodyR + 0.02f) * sin),
+            Mesh            = BuildStarshipFlapRootFairingMesh(
+                length * 0.82f, radialWidth: 0.68f, thickness: 0.24f),
+            Position        = new Vector3((BodyR + 0.03f) * cos, y, (BodyR + 0.03f) * sin),
             RotationDegrees = new Vector3(0, deg, 0),
         };
-        root.SetSurfaceOverrideMaterial(0, mat);
+        root.SetSurfaceOverrideMaterial(0, rootMat);
         AddChild(root);
         root.SetMeta("flap_id", name);
         root.AddToGroup(StarshipFlapRootGroup);
@@ -3229,8 +3239,14 @@ public partial class VesselRenderer : Node3D
         var hinge = new MeshInstance3D
         {
             Name = name + "Hinge",
-            Mesh = new CylinderMesh { TopRadius = 0.055f, BottomRadius = 0.055f, Height = length * 0.92f, RadialSegments = 14 },
-            Position = new Vector3(-0.28f, 0f, -0.11f),
+            Mesh = new CylinderMesh
+            {
+                TopRadius = 0.072f,
+                BottomRadius = 0.072f,
+                Height = length * 0.76f,
+                RadialSegments = 18,
+            },
+            Position = new Vector3(-0.22f, 0f, -0.14f),
             RotationDegrees = new Vector3(0f, 0f, 0f),
         };
         hinge.SetSurfaceOverrideMaterial(0, hingeMat);
@@ -3283,47 +3299,77 @@ public partial class VesselRenderer : Node3D
     private static ArrayMesh BuildStarshipFlapMesh(float length, float chord,
         float thickness, float tipSpanFraction)
     {
-        float rootHalf = length * 0.5f;
-        float tipHalf = rootHalf * Mathf.Clamp(tipSpanFraction, 0.5f, 0.9f);
-        float x0 = -chord * 0.5f;
-        float x1 = chord * 0.5f;
+        float tip = Mathf.Clamp(tipSpanFraction, 0.5f, 0.9f);
+        float[] chordStations = { 0f, 0.10f, 0.28f, 0.55f, 0.78f, 0.94f, 1f };
+        float[] spanFractions = { 0.82f, 0.96f, 1f, 0.90f, 0.76f, tip + 0.025f, tip * 0.94f };
+        var outline = new List<Vector2>(chordStations.Length * 2);
+        for (int i = 0; i < chordStations.Length; i++)
+        {
+            float x = Mathf.Lerp(-chord * 0.5f, chord * 0.5f, chordStations[i]);
+            outline.Add(new Vector2(x, -length * 0.5f * spanFractions[i]));
+        }
+        for (int i = chordStations.Length - 1; i >= 0; i--)
+        {
+            float x = Mathf.Lerp(-chord * 0.5f, chord * 0.5f, chordStations[i]);
+            outline.Add(new Vector2(x, length * 0.5f * spanFractions[i]));
+        }
+        return BuildExtrudedPlanformMesh(outline, thickness);
+    }
+
+    private static ArrayMesh BuildStarshipFlapRootFairingMesh(
+        float length, float radialWidth, float thickness)
+    {
+        float x0 = -radialWidth * 0.5f;
+        float x1 = radialWidth * 0.5f;
+        float half = length * 0.5f;
+        var outline = new List<Vector2>
+        {
+            new(x0, -half * 0.68f),
+            new(Mathf.Lerp(x0, x1, 0.26f), -half),
+            new(Mathf.Lerp(x0, x1, 0.70f), -half * 0.84f),
+            new(x1, -half * 0.56f),
+            new(x1, half * 0.56f),
+            new(Mathf.Lerp(x0, x1, 0.70f), half * 0.84f),
+            new(Mathf.Lerp(x0, x1, 0.26f), half),
+            new(x0, half * 0.68f),
+        };
+        return BuildExtrudedPlanformMesh(outline, thickness);
+    }
+
+    private static ArrayMesh BuildExtrudedPlanformMesh(
+        IReadOnlyList<Vector2> outline, float thickness)
+    {
         float z0 = -thickness * 0.5f;
         float z1 = thickness * 0.5f;
-        Vector3 a0 = new(x0, -rootHalf, z0);
-        Vector3 a1 = new(x1, -tipHalf, z0);
-        Vector3 a2 = new(x1, tipHalf, z0);
-        Vector3 a3 = new(x0, rootHalf, z0);
-        Vector3 b0 = new(x0, -rootHalf, z1);
-        Vector3 b1 = new(x1, -tipHalf, z1);
-        Vector3 b2 = new(x1, tipHalf, z1);
-        Vector3 b3 = new(x0, rootHalf, z1);
-        Vector2 uv0 = new(0f, 1f);
-        Vector2 uv1 = new(1f, 0.5f + tipSpanFraction * 0.5f);
-        Vector2 uv2 = new(1f, 0.5f - tipSpanFraction * 0.5f);
-        Vector2 uv3 = new(0f, 0f);
-
+        float minX = outline.Min(point => point.X);
+        float maxX = outline.Max(point => point.X);
+        float minY = outline.Min(point => point.Y);
+        float maxY = outline.Max(point => point.Y);
+        float invX = 1f / Mathf.Max(maxX - minX, 0.001f);
+        float invY = 1f / Mathf.Max(maxY - minY, 0.001f);
         var surface = new SurfaceTool();
         surface.Begin(Mesh.PrimitiveType.Triangles);
-        void Triangle(Vector3 p0, Vector2 t0, Vector3 p1, Vector2 t1,
-            Vector3 p2, Vector2 t2)
+
+        Vector2 Uv(Vector2 point) => new(
+            (point.X - minX) * invX,
+            1f - (point.Y - minY) * invY);
+        void Vertex(Vector2 point, float z)
         {
-            surface.SetUV(t0); surface.AddVertex(p0);
-            surface.SetUV(t1); surface.AddVertex(p1);
-            surface.SetUV(t2); surface.AddVertex(p2);
+            surface.SetUV(Uv(point));
+            surface.AddVertex(new Vector3(point.X, point.Y, z));
         }
 
-        Triangle(a0, uv0, a1, uv1, a2, uv2);
-        Triangle(a0, uv0, a2, uv2, a3, uv3);
-        Triangle(b1, uv1, b0, uv0, b3, uv3);
-        Triangle(b1, uv1, b3, uv3, b2, uv2);
-        Triangle(b0, uv0, a0, uv0, a3, uv3);
-        Triangle(b0, uv0, a3, uv3, b3, uv3);
-        Triangle(a1, uv1, b1, uv1, b2, uv2);
-        Triangle(a1, uv1, b2, uv2, a2, uv2);
-        Triangle(a3, uv3, a2, uv2, b2, uv2);
-        Triangle(a3, uv3, b2, uv2, b3, uv3);
-        Triangle(b0, uv0, b1, uv1, a1, uv1);
-        Triangle(b0, uv0, a1, uv1, a0, uv0);
+        for (int i = 1; i < outline.Count - 1; i++)
+        {
+            Vertex(outline[0], z0); Vertex(outline[i], z0); Vertex(outline[i + 1], z0);
+            Vertex(outline[i + 1], z1); Vertex(outline[i], z1); Vertex(outline[0], z1);
+        }
+        for (int i = 0; i < outline.Count; i++)
+        {
+            int next = (i + 1) % outline.Count;
+            Vertex(outline[i], z0); Vertex(outline[next], z0); Vertex(outline[next], z1);
+            Vertex(outline[i], z0); Vertex(outline[next], z1); Vertex(outline[i], z1);
+        }
         surface.GenerateNormals();
         return surface.Commit()!;
     }

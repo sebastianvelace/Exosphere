@@ -171,4 +171,37 @@ Vehicle-owned only. `[G]` ascent / EDL untouched. No `PlumeSystem` particle owne
 - `/tmp/exo_vehicle_brdf_pad2.png` — shaded emission: still a cutout (before unshaded).
 - `/tmp/exo_vehicle_brdf_pad5.png` / `pad6.png` — mill grey on the sun wrap, charcoal TPS, not a full-stack black pancake. Shadow side still too dark vs IFT stainless.
 
+---
+
+## 9. Flap silhouette and root pass (2026-09-24)
+
+The public fidelity boundary remains explicit:
+
+- SpaceX documents **two forward and two aft flaps** that move independently to control
+  pitch, yaw and roll during belly-first descent, but does not publish production flap CAD
+  or exact dimensions in the [Starbase overview](https://www.spacex.com/vehicles/starship/assets/media/Starbase%20Overview.pdf).
+- SpaceX's [vehicle updates](https://new.spacex.com/updates) describe a V3 aft-flap
+  actuation change (one actuator with three motors), but the default Flight 7 vehicle in
+  this fixture is not relabelled as V3 and does not invent visible internal motor hardware.
+- Length, chord, hinge radius and planform stations below remain `[estimate]`, constrained
+  by public imagery and the known 9 m ship diameter rather than claimed as engineering CAD.
+
+| Change | Authority | Why |
+| --- | --- | --- |
+| Seven-station curved/tapered flap planform | `VesselRenderer` | Replaces the constant-sided trapezoidal slab; keeps forward and aft silhouettes distinct. `[estimate]` |
+| Full chord mounted outside the barrel | `VesselRenderer` | Removes hidden/intersecting geometry while preserving the previous outer reach. |
+| Extruded steel root fairing + larger longitudinal hinge | `VesselRenderer` | Replaces the rectangular root block and leaves a readable, non-coplanar hull transition. `[estimate]` |
+| Semantic blade/root/hinge groups and `flap_id` metadata | `VesselRenderer`, visual harness | Lets framebuffer evidence bind to the active renderer despite Godot sibling-name uniquing. |
+| Deterministic `--flaps` windward/leeward pair | `tools/visual_playtest.sh` | Requires all four blades, roots and hinges plus non-empty 1920×1080 framebuffer evidence. |
+
+No aerodynamic coefficients, actuator commands, flight-control mixing or EDL laws changed.
+The fixture freezes only presentation time after entering a physical Flight 7 orbit.
+
+**Comparable real-framebuffer evidence (1920×1080, Compatibility/llvmpipe):**
+
+- Before: `/tmp/exo_flaps_baseline_v3/exo_play_ship_flaps_{windward,leeward}.png`
+- After: `/tmp/exo_flaps_final/exo_play_ship_flaps_{windward,leeward}.png`
+- After telemetry: 4 blades, 4 roots, 4 hinges and 4/4 projected-readable flaps in
+  both views; projected widths remain 17–43 px and heights 59–135 px.
+
 Engram `visual/starship-vehicle` could not be written (MCP cwd ambiguous: intgrascale vs kicad).
