@@ -99,6 +99,11 @@ if ! grep -q 'ship_detail_steel' "$HARNESS_SCRIPT" \
   echo "FAIL standalone Starship mode lacks deterministic steel/TPS detail views" >&2
   exit 1
 fi
+if ! grep -q 'noseContrast = upperBySlug\["ship_detail_steel"\] - upperBySlug\["ship_detail_tps"\]' "$HARNESS_SCRIPT" \
+  || ! grep -q 'noseContrast >= 0.003' "$HARNESS_SCRIPT"; then
+  echo "FAIL standalone Starship mode does not prove the steel/TPS nose split in framebuffer evidence" >&2
+  exit 1
+fi
 if ! grep -q 'SUMMARY reason=SMOKE_OK' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_LAUNCH slug=pad present=True visible=True' "$HARNESS_SCRIPT"; then
   echo "FAIL smoke mode does not prove the single hero launch complex" >&2

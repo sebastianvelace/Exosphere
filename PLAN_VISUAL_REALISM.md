@@ -122,6 +122,11 @@ Mejoras:
 - [x] Proporciones finas flaps/nariz V1.1: forward flaps mas cortos, aft elevons
   mas largos/profundos, tip de nariz mas redondo, seams de tiles densos; plasma
   edge glows realineados al layout.
+- [x] Materiales de nariz V1.2: la ogiva ya no es TPS negro a 360 grados; usa un
+  sector windward de tiles y un sector leeward de acero continuo con el fuselaje.
+  La correccion tambien alinea el winding exterior de la ogiva con el sector TPS.
+  Validado en framebuffer real 1920x1080 con vistas deterministas
+  `ship_detail_tps`/`ship_detail_steel` y contraste fail-closed en el harness.
 
 Aceptacion:
 - En pad lateral se identifica inmediatamente una Starship/Super Heavy.

@@ -4262,20 +4262,28 @@ verify_pngs() {
     fi
     if ! awk '
       /^IMAGE slug=ship_detail_(steel|tps) / {
+        slug = ""; upper = -1;
         for (i = 1; i <= NF; i++) {
+          if ($i ~ /^slug=/) { split($i, p, "="); slug = p[2] }
           if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
           if ($i ~ /^darkFrac=/) { split($i, p, "="); dark = p[2] + 0 }
           if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+          if ($i ~ /^upperMean=/) { split($i, p, "="); upper = p[2] + 0 }
         }
         if (mean <= 0.005 || dark >= 0.98 || clipped >= 0.10) bad = 1
+        upperBySlug[slug] = upper
         found++
       }
       END {
-        if (found == 2 && bad != 1) exit 0
+        noseContrast = upperBySlug["ship_detail_steel"] - upperBySlug["ship_detail_tps"]
+        if (found == 2 && bad != 1 &&
+            upperBySlug["ship_detail_tps"] >= 0 &&
+            upperBySlug["ship_detail_steel"] >= 0.004 &&
+            noseContrast >= 0.003) exit 0
         exit 1
       }
     ' "$LOG"; then
-      echo "ERROR: Starship detail frames are empty or broadly clipped" >&2
+      echo "ERROR: Starship detail frames are empty, clipped, or lack leeward nose material contrast" >&2
       return 1
     fi
     if ! grep -q 'SUMMARY reason=SHIP_OK' "$LOG"; then

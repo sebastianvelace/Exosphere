@@ -498,23 +498,33 @@ public partial class VesselRenderer : Node3D
         const float noseBase = ShipNoseBase;
         const float noseLen  = ShipNoseH;
         const float noseR    = BodyR;
-        // The nose remains an opaque black TPS surface, but it now shares the
-        // physically lit tile material instead of a featureless black plastic.
-        // This preserves the requested black silhouette while giving sunlight,
-        // Earth bounce and reentry heating a surface to describe.
+        // Starship's nose continues the same windward TPS / leeward stainless-steel
+        // split as the barrel. Covering the complete ogive in tiles erased its volume
+        // in orbital views and was physically wrong: the thermal protection system is
+        // a bounded windward surface, not a 360-degree black fairing.
         var noseBlack = TileMat(rimStrength: 0.035f, tileScale: 13.0f);
         RegisterTileMat(TileCharZone.Nose, noseBlack);
         // Ogive profile: a circular-arc shape. Using a near-tangent-ogive gives
         // a fuller, more realistic Starship nose than a simple sqrt curve. Keep
-        // the entire shell as one mesh: separate capped frusta at zero-gap
+        // each material region continuous: stacked capped frusta at zero-gap
         // interfaces produce the concentric bright discs visible in orbit.
         float OgiveR(float u)                // u in [0,1], 0=base 1=tip
             => (float)VehicleVisualPhysics.TangentOgiveRadius(u, noseR, noseLen);
-        AddMesh("Nose", BuildOgiveMesh(noseLen, OgiveR), noseBlack,
+        const float noseTpsArc = 3.49f; // Match the ~200-degree body heat-shield sector.
+        AddMesh("NoseTPS",
+            BuildOgiveSectorMesh(noseLen, OgiveR,
+                Mathf.Pi - noseTpsArc * 0.5f, noseTpsArc, radialSegments: 40),
+            noseBlack,
+            new Vector3(0, o + noseBase, 0));
+        AddMesh("NoseSteel",
+            BuildOgiveSectorMesh(noseLen, OgiveR,
+                Mathf.Pi + noseTpsArc * 0.5f, Mathf.Tau - noseTpsArc,
+                radialSegments: 24),
+            shipSteel,
             new Vector3(0, o + noseBase, 0));
 
-        // Keep the ogive as one authoritative opaque surface at orbital scale. UVs generated
-        // by BuildOgiveMesh provide tile detail without a second coplanar overlay.
+        // The two sectors share only boundary vertices. There is no coplanar overlay,
+        // so the material seam remains stable instead of flickering at orbital scale.
 
         AddMesh("NoseTip",
             new SphereMesh { Radius = 0.085f, Height = 0.17f,
@@ -592,12 +602,14 @@ public partial class VesselRenderer : Node3D
     }
 
     /// <summary>
-    /// Builds the Starship tangent-ogive as a continuous open-ended shell. The
-    /// bottom is intentionally uncapped because it meets the barrel at the same
-    /// plane; the tip sphere closes the only visible end without a z-fighting seam.
+    /// Builds one non-overlapping angular sector of the Starship tangent ogive.
+    /// Adjacent sectors can use different materials while retaining one continuous
+    /// silhouette. Each sector owns its wedge of the aft cap, preventing the planet
+    /// from showing through when the orbital camera looks along the vehicle axis.
     /// </summary>
-    private static ArrayMesh BuildOgiveMesh(float length, Func<float, float> radiusAt,
-        int axialSegments = 24, int radialSegments = 64)
+    private static ArrayMesh BuildOgiveSectorMesh(float length,
+        Func<float, float> radiusAt, float startAngle, float arc,
+        int axialSegments = 24, int radialSegments = 40)
     {
         var surface = new SurfaceTool();
         surface.Begin(Mesh.PrimitiveType.Triangles);
@@ -608,7 +620,8 @@ public partial class VesselRenderer : Node3D
             float radius = radiusAt(u0);
             for (int radial = 0; radial <= radialSegments; radial++)
             {
-                float angle = radial * Mathf.Tau / radialSegments;
+                float sectorU = radial / (float)radialSegments;
+                float angle = startAngle + arc * sectorU;
                 surface.SetUV(new Vector2(radial / (float)radialSegments, u0));
                 surface.AddVertex(new Vector3(
                     radius * Mathf.Cos(angle), y, radius * Mathf.Sin(angle)));
@@ -622,12 +635,16 @@ public partial class VesselRenderer : Node3D
             int i10 = i00 + rowStride;
             int i01 = i00 + 1;
             int i11 = i10 + 1;
+            // Match the exterior clockwise winding used by the cylindrical TPS
+            // sector. The legacy full ogive hid the reversed winding because its
+            // closed 360-degree shell exposed the opposite side; once split by
+            // material, that error swapped the visible steel and TPS regions.
             surface.AddIndex(i00);
+            surface.AddIndex(i11);
             surface.AddIndex(i10);
-            surface.AddIndex(i11);
             surface.AddIndex(i00);
-            surface.AddIndex(i11);
             surface.AddIndex(i01);
+            surface.AddIndex(i11);
         }
 
         // Close the aft-facing base with its own vertices so the cap keeps a flat
@@ -640,11 +657,11 @@ public partial class VesselRenderer : Node3D
         int capRing = capCenter + 1;
         for (int radial = 0; radial <= radialSegments; radial++)
         {
-            float angle = radial * Mathf.Tau / radialSegments;
+            float sectorU = radial / (float)radialSegments;
+            float angle = startAngle + arc * sectorU;
             float radius = radiusAt(0f);
             surface.SetUV(new Vector2(
-                0.5f + 0.5f * Mathf.Cos(angle),
-                0.5f + 0.5f * Mathf.Sin(angle)));
+                0.5f + 0.5f * Mathf.Cos(angle), 0.5f + 0.5f * Mathf.Sin(angle)));
             surface.AddVertex(new Vector3(
                 radius * Mathf.Cos(angle), 0f, radius * Mathf.Sin(angle)));
         }

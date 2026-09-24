@@ -12,8 +12,14 @@ rg -q 'var noseBlack = TileMat\(rimStrength: 0\.035f, tileScale: 13\.0f\)' "$ren
   || fail "Starship nose is not assigned the dedicated black TPS material"
 rg -q 'RegisterTileMat\(TileCharZone\.Nose, noseBlack\)' "$renderer" \
   || fail "Starship nose TPS does not participate in thermal presentation"
-rg -q 'BuildOgiveMesh\(noseLen, OgiveR\), noseBlack' "$renderer" \
-  || fail "Starship ogive does not use the black nose material"
+rg -q 'BuildOgiveSectorMesh\(noseLen, OgiveR,' "$renderer" \
+  || fail "Starship ogive is not split into bounded material sectors"
+rg -q 'AddMesh\("NoseTPS",' "$renderer" \
+  || fail "Starship nose has no dedicated windward TPS sector"
+rg -q 'AddMesh\("NoseSteel",' "$renderer" \
+  || fail "Starship nose has no leeward stainless-steel sector"
+rg -q 'Mathf\.Tau - noseTpsArc' "$renderer" \
+  || fail "Starship nose steel sector does not complement the TPS coverage"
 
 rg -q 'uniform float fill_strength' "$shader" \
   || fail "steel shader has no bounded presentation fill uniform"
