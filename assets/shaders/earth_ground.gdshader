@@ -434,7 +434,12 @@ void fragment() {
 	// Keep grazing haze close to the actual limb. The angular term represents the
 	// increasing tangent column; it fades before nadir so local pad detail remains.
 	float grazing_haze = (1.0 - smoothstep(0.0, 0.32, view_up)) * (1.0 - look_down);
-	float haze = clamp(max(distance_haze * 0.92, grazing_haze * horizon_haze_strength), 0.0, 0.94)
+	// Combine independent distance and grazing columns in transmittance space.
+	// Taking max() creates a visible slope break where the dominant term changes;
+	// multiplying the remaining transmittances keeps the aerial perspective smooth.
+	float distance_transmittance = 1.0 - distance_haze * 0.92;
+	float grazing_transmittance = 1.0 - grazing_haze * horizon_haze_strength;
+	float haze = clamp(1.0 - distance_transmittance * grazing_transmittance, 0.0, 0.995)
 		* (1.0 - look_down * 0.85);
 	ground_radiance = mix(ground_radiance, haze_color, haze);
 	// Circular rim at the geometric horizon (not a camera-distance kill, and

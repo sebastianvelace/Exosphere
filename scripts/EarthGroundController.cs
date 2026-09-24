@@ -72,7 +72,10 @@ public partial class EarthGroundController : Node3D
     private const float TerrainReliefStrength = 0.18f;
     private const float NightCityGain = 0.34f;
     private const float TerminatorWidth = 0.16f;
-    private const float HorizonHazeStrength = 0.92f;
+    // At a 2 km camera altitude the tangent ray crosses many vertical
+    // atmospheric columns; keep the geometric limb nearly opaque instead of
+    // exposing a darker ground sample at the first visible patch row.
+    private const float HorizonHazeStrength = 0.98f;
     // Keep the opaque tangent ground on the same bounded daylight-dome floor used
     // by space_sky.gdshader at the Earth horizon. The controller's live horizon
     // colour can darken with altitude; using that darker value alone leaves a grey
