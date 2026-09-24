@@ -240,7 +240,13 @@ public partial class SkyController : Node
         Vector3d sunD = sun != null && SunController.Instance != null
             ? SunController.Instance.GetVisualSunDirection(body, vessel.Position, physicalSunD)
             : physicalSunD;
-        double altitude = vessel.GetAltitude(body);
+        // The sky is observed by the render camera, not by the vessel's physical
+        // reference point. Chase cameras can be hundreds of metres below a seeded
+        // vehicle during terrain-transition captures; using vessel altitude here
+        // darkens the horizon before the camera has actually left the atmosphere.
+        double altitude = body.Id == "earth"
+            ? FloatingOrigin.CameraAltOverEarth
+            : vessel.GetAltitude(body);
 
         // Incremental skies rebuild one cubemap face at a time. Reassigning every
         // uniform at 12 Hz invalidates that work before the six faces can complete;

@@ -14,11 +14,11 @@ using Exosphere.Simulation.Math;
 /// curvature <c>y = -(x²+z²)/(2R)</c>. At 4–10 km altitude the horizon is then far
 /// and essentially flat — exactly as in reality — while coordinates stay float-safe.
 ///
-/// The broad local surface uses the measured Starbase NAIP orthoimage and 3DEP
-/// elevation raster, with a procedural fallback outside the regional coverage.
-/// Sampling is anchored to a WORLD-SPACE ground coordinate so features glide across
-/// the patch as the vessel translates. The whole patch cross-fades into the backdrop
-/// on ascent.
+/// The broad local surface uses the measured site-specific NAIP orthoimage and 3DEP
+/// elevation raster when one is available, with a coastal procedural fallback outside
+/// regional coverage. Sampling is anchored to a WORLD-SPACE ground coordinate so
+/// features glide across the patch as the vessel translates. The whole patch
+/// cross-fades into the backdrop on ascent.
 ///
 /// Anchored each frame like <see cref="MarsTerrainController"/>; add as a child of
 /// the "World" Node3D. Render scale: 1 unit = <see cref="MetresPerUnit"/> metres.
@@ -30,6 +30,7 @@ public partial class EarthGroundController : Node3D
     public bool LocalPatchVisible => Visible && LocalPatchOpacity > 0.001f;
     public bool RegionalTerrainReady { get; private set; }
     public bool MacroTerrainReady { get; private set; }
+    public string TerrainSource { get; private set; } = "procedural-only";
 
     // ── Render scale ─────────────────────────────────────────────────────────
     private const float  MetresPerUnit = 2.8f;
@@ -80,6 +81,9 @@ public partial class EarthGroundController : Node3D
     private const float RegionalHeightMinM = -2.0f;
     private const float RegionalHeightMaxM = 12.0f;
     private const float RegionalHeightReferenceM = 0.96f;
+    private const float KennedyHeightMinM = -2.0f;
+    private const float KennedyHeightMaxM = 15.0f;
+    private const float KennedyHeightReferenceM = 3.0f;
     private const float MacroTerrainExtentM = 50_000f;
 
     private MeshInstance3D  _mesh = null!;
@@ -96,6 +100,16 @@ public partial class EarthGroundController : Node3D
 
     public override void _Ready()
     {
+        string launchSiteId = SimulationBridge.Instance?.LaunchSiteId ?? "starbase";
+        bool isStarbaseSite = launchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase);
+        bool isKennedySite = string.Equals(launchSiteId, "kennedy", StringComparison.OrdinalIgnoreCase);
+        string terrainPrefix = isStarbaseSite ? "starbase" : isKennedySite ? "kennedy" : string.Empty;
+        string macroPrefix = isKennedySite ? "cape_canaveral" : terrainPrefix;
+        float siteProfile = isKennedySite ? 1f : 0f;
+        float heightMinM = isKennedySite ? KennedyHeightMinM : RegionalHeightMinM;
+        float heightMaxM = isKennedySite ? KennedyHeightMaxM : RegionalHeightMaxM;
+        float heightReferenceM = isKennedySite ? KennedyHeightReferenceM : RegionalHeightReferenceM;
+
         _mesh = new MeshInstance3D { Name = "EarthGround", Mesh = BuildMesh() };
 
         var shader = GD.Load<Shader>("res://assets/shaders/earth_ground.gdshader");
@@ -119,41 +133,57 @@ public partial class EarthGroundController : Node3D
             _mat.SetShaderParameter("night_city_gain", NightCityGain);
             _mat.SetShaderParameter("terminator_width", TerminatorWidth);
             _mat.SetShaderParameter("horizon_haze_strength", HorizonHazeStrength);
+            _mat.SetShaderParameter("site_profile", siteProfile);
             var dayTexture = GD.Load<Texture2D>("res://assets/textures/earth_day.jpg");
             if (dayTexture != null) _mat.SetShaderParameter("day_tex", dayTexture);
             var nightTexture = GD.Load<Texture2D>("res://assets/textures/earth_night.jpg");
             if (nightTexture != null) _mat.SetShaderParameter("night_tex", nightTexture);
-            var regionalOrtho = GD.Load<Texture2D>("res://assets/textures/starbase_naip_10km.jpg");
-            var regionalMask = GD.Load<Texture2D>("res://assets/textures/starbase_naip_10km_mask.png");
-            var regionalHeight = GD.Load<Texture2D>("res://assets/textures/starbase_3dep_10km_height.png");
+            Texture2D? regionalOrtho = null;
+            Texture2D? regionalMask = null;
+            Texture2D? regionalHeight = null;
+            Texture2D? macroOrtho = null;
+            Texture2D? macroMask = null;
+            Texture2D? macroHeight = null;
+            if (!string.IsNullOrEmpty(terrainPrefix))
+            {
+                regionalOrtho = GD.Load<Texture2D>($"res://assets/textures/{terrainPrefix}_naip_10km.jpg");
+                regionalMask = GD.Load<Texture2D>($"res://assets/textures/{terrainPrefix}_naip_10km_mask.png");
+                regionalHeight = GD.Load<Texture2D>($"res://assets/textures/{terrainPrefix}_3dep_10km_height.png");
+                macroOrtho = GD.Load<Texture2D>($"res://assets/textures/{macroPrefix}_naip_50km.jpg");
+                macroMask = GD.Load<Texture2D>($"res://assets/textures/{macroPrefix}_naip_50km_mask.png");
+                macroHeight = GD.Load<Texture2D>($"res://assets/textures/{macroPrefix}_3dep_50km_height.png");
+            }
             RegionalTerrainReady = regionalOrtho != null && regionalMask != null && regionalHeight != null;
-            if (regionalOrtho != null && regionalMask != null && regionalHeight != null)
+            if (RegionalTerrainReady)
             {
-                _mat.SetShaderParameter("regional_ortho_tex", regionalOrtho);
-                _mat.SetShaderParameter("regional_mask_tex", regionalMask);
-                _mat.SetShaderParameter("regional_height_tex", regionalHeight);
+                _mat.SetShaderParameter("regional_ortho_tex", regionalOrtho!);
+                _mat.SetShaderParameter("regional_mask_tex", regionalMask!);
+                _mat.SetShaderParameter("regional_height_tex", regionalHeight!);
                 _mat.SetShaderParameter("regional_extent_m", RegionalTerrainExtentM);
-                _mat.SetShaderParameter("regional_height_min_m", RegionalHeightMinM);
-                _mat.SetShaderParameter("regional_height_max_m", RegionalHeightMaxM);
-                _mat.SetShaderParameter("regional_height_reference_m", RegionalHeightReferenceM);
+                _mat.SetShaderParameter("regional_height_min_m", heightMinM);
+                _mat.SetShaderParameter("regional_height_max_m", heightMaxM);
+                _mat.SetShaderParameter("regional_height_reference_m", heightReferenceM);
             }
-            var macroOrtho = GD.Load<Texture2D>("res://assets/textures/starbase_naip_50km.jpg");
-            var macroMask = GD.Load<Texture2D>("res://assets/textures/starbase_naip_50km_mask.png");
-            var macroHeight = GD.Load<Texture2D>("res://assets/textures/starbase_3dep_50km_height.png");
             MacroTerrainReady = macroOrtho != null && macroMask != null && macroHeight != null;
-            if (macroOrtho != null && macroMask != null && macroHeight != null)
+            if (MacroTerrainReady)
             {
-                _mat.SetShaderParameter("macro_ortho_tex", macroOrtho);
-                _mat.SetShaderParameter("macro_mask_tex", macroMask);
-                _mat.SetShaderParameter("macro_height_tex", macroHeight);
+                _mat.SetShaderParameter("macro_ortho_tex", macroOrtho!);
+                _mat.SetShaderParameter("macro_mask_tex", macroMask!);
+                _mat.SetShaderParameter("macro_height_tex", macroHeight!);
                 _mat.SetShaderParameter("macro_extent_m", MacroTerrainExtentM);
-                _mat.SetShaderParameter("macro_height_min_m", RegionalHeightMinM);
-                _mat.SetShaderParameter("macro_height_max_m", RegionalHeightMaxM);
-                _mat.SetShaderParameter("macro_height_reference_m", RegionalHeightReferenceM);
+                _mat.SetShaderParameter("macro_height_min_m", heightMinM);
+                _mat.SetShaderParameter("macro_height_max_m", heightMaxM);
+                _mat.SetShaderParameter("macro_height_reference_m", heightReferenceM);
             }
-            GD.Print($"[EARTH_GROUND_TERRAIN] source=NAIP+3DEP+macro ready={RegionalTerrainReady && MacroTerrainReady} "
+            TerrainSource = RegionalTerrainReady && MacroTerrainReady
+                ? $"NAIP+3DEP:{launchSiteId}"
+                : RegionalTerrainReady ? $"NAIP+3DEP-regional:{launchSiteId}"
+                : MacroTerrainReady ? $"NAIP+3DEP-macro:{launchSiteId}"
+                : "procedural-only";
+            GD.Print($"[EARTH_GROUND_TERRAIN] site={launchSiteId} source={TerrainSource} "
+                + $"ready={RegionalTerrainReady && MacroTerrainReady} "
                 + $"regional={RegionalTerrainExtentM:F0}m macro={MacroTerrainExtentM:F0}m "
-                + $"heightRangeM={RegionalHeightMinM:F1}..{RegionalHeightMaxM:F1}");
+                + $"heightRangeM={heightMinM:F1}..{heightMaxM:F1} referenceM={heightReferenceM:F2}");
             _mesh.SetSurfaceOverrideMaterial(0, _mat);
         }
         else

@@ -53,6 +53,9 @@ uniform vec3  haze_color : source_color = vec3(0.40, 0.65, 1.0);
 uniform vec3  sun_dir = vec3(0.42, 0.78, 0.46);
 uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform vec3  vertical_optical_depth = vec3(0.0615, 0.1420, 0.2714);
+// 0 = Starbase/Boca Chica, 1 = Kennedy/Cape Canaveral. This only changes the
+// presentation fallback outside measured rasters; site imagery remains authoritative.
+uniform float site_profile = 0.0;
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.18;
 uniform float coastal_grade : hint_range(0.0, 1.0) = 0.46;
 // The orbital map is intentionally macro-scale. These controls add bounded
@@ -348,12 +351,16 @@ void fragment() {
 			* smoothstep(0.52, 0.80, mix(inlet, coast_noise, 0.42)),
 		max(gulf, lagoon * 0.88) * coastal_belt * (1.0 - site_core * 0.55));
 	float flats_var = noise01(gnoise(warped * 0.000018 + vec2(3.0, 8.0)));
-    // Boca Chica is a low sandy barrier island with scrub and tidal flats, not
-    // a saturated inland grass field. Keep the wetland green but shift the
-    // broad base toward muted sand/olive so the site reads geographically.
-    vec3 marsh = mix(vec3(0.23, 0.24, 0.18), vec3(0.31, 0.29, 0.21), flats_var);
-    vec3 flats = mix(vec3(0.36, 0.34, 0.25), marsh, 0.32 * flats_var);
-	vec3 near_water = vec3(0.05, 0.14, 0.20);
+	// Boca Chica is a low sandy barrier island with scrub and tidal flats;
+	// Kennedy/Cape Canaveral is a wetter barrier-island complex with marsh and
+	// lagoon vegetation. Keep the fallback distinct until measured coverage owns it.
+    vec3 boca_marsh = mix(vec3(0.23, 0.24, 0.18), vec3(0.31, 0.29, 0.21), flats_var);
+    vec3 florida_marsh = mix(vec3(0.16, 0.25, 0.18), vec3(0.25, 0.34, 0.22), flats_var);
+    vec3 marsh = mix(boca_marsh, florida_marsh, site_profile);
+    vec3 boca_flats = mix(vec3(0.36, 0.34, 0.25), boca_marsh, 0.32 * flats_var);
+    vec3 florida_flats = mix(vec3(0.28, 0.34, 0.24), florida_marsh, 0.40 * flats_var);
+    vec3 flats = mix(boca_flats, florida_flats, site_profile);
+	vec3 near_water = mix(vec3(0.05, 0.14, 0.20), vec3(0.04, 0.17, 0.22), site_profile);
 	vec3 pad_ground = mix(flats, near_water, reconstructed_water);
     // A restrained concrete apron gives the launch site a readable hardstand
     // at 20–100 m without turning the entire local patch into a grey disc.

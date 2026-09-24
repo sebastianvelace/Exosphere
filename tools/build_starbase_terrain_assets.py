@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build the checked-in Starbase regional terrain textures from official rasters.
+"""Build checked-in launch-site terrain textures from official rasters.
 
 The game consumes a compact orthoimage, a validity mask, and a 16-bit relative
-height map. This tool keeps the lossy conversion explicit and reproducible while
-leaving the original downloaded rasters outside the repository.
+height map. It defaults to the historical Starbase paths for backwards
+compatibility, but accepts a site prefix and separate macro prefix so additional
+launch environments can share the same reproducible conversion.
 """
 
 from __future__ import annotations
@@ -41,6 +42,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dem", type=Path, required=True)
     parser.add_argument("--naip-macro", type=Path)
     parser.add_argument("--dem-macro", type=Path)
+    parser.add_argument("--site", default="Starbase / Boca Chica")
+    parser.add_argument("--prefix", default="starbase")
+    parser.add_argument("--macro-prefix")
+    parser.add_argument("--center-lat", type=float, default=25.9972)
+    parser.add_argument("--center-lon", type=float, default=-97.1566)
+    parser.add_argument("--bbox", type=float, nargs=4,
+                        metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+                        default=[BBOX["west"], BBOX["south"], BBOX["east"], BBOX["north"]])
+    parser.add_argument("--macro-bbox", type=float, nargs=4,
+                        metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+                        default=[MACRO_BBOX["west"], MACRO_BBOX["south"],
+                                 MACRO_BBOX["east"], MACRO_BBOX["north"]])
+    parser.add_argument("--height-min", type=float, default=HEIGHT_MIN_M)
+    parser.add_argument("--height-max", type=float, default=HEIGHT_MAX_M)
+    parser.add_argument("--reference-m", type=float, default=REFERENCE_M)
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     return parser.parse_args()
 
@@ -86,7 +103,8 @@ def prepare_ortho(source: Path, output: Path, mask_output: Path, feather_radius:
     return ortho
 
 
-def prepare_dem(source: Path, output: Path) -> tuple[Image.Image, float]:
+def prepare_dem(source: Path, output: Path, height_min_m: float,
+                height_max_m: float, reference_m: float) -> tuple[Image.Image, float]:
     dem_image = Image.open(source)
     if dem_image.mode != "F":
         raise RuntimeError(f"expected a float32 DEM, got {dem_image.mode}")
@@ -99,9 +117,9 @@ def prepare_dem(source: Path, output: Path) -> tuple[Image.Image, float]:
     valid_dem = finite & (dem > -5.0) & (dem < 30.0)
     if valid_dem.mean() < 0.60:
         raise RuntimeError(f"3DEP valid coverage unexpectedly low: {valid_dem.mean():.3f}")
-    clipped = np.clip(np.where(valid_dem, dem, REFERENCE_M), HEIGHT_MIN_M, HEIGHT_MAX_M)
+    clipped = np.clip(np.where(valid_dem, dem, reference_m), height_min_m, height_max_m)
     encoded = np.round(
-        (clipped - HEIGHT_MIN_M) / (HEIGHT_MAX_M - HEIGHT_MIN_M) * 65535.0
+        (clipped - height_min_m) / (height_max_m - height_min_m) * 65535.0
     ).astype(np.uint16)
     # The dynamic mosaic can contain isolated sub-pixel tile seams and void
     # speckles. The runtime uses this only for broad landform displacement.
@@ -113,19 +131,30 @@ def prepare_dem(source: Path, output: Path) -> tuple[Image.Image, float]:
 
 def main() -> None:
     args = parse_args()
+    macro_prefix = args.macro_prefix or args.prefix
+    bbox = dict(zip(("west", "south", "east", "north"), args.bbox))
+    macro_bbox = dict(zip(("west", "south", "east", "north"), args.macro_bbox))
+    manifest_path = args.manifest or (args.root / "data" / "launch_sites" / f"{args.prefix}_terrain.json")
     texture_dir = args.root / "assets" / "textures"
     data_dir = args.root / "data" / "launch_sites"
     texture_dir.mkdir(parents=True, exist_ok=True)
     data_dir.mkdir(parents=True, exist_ok=True)
 
+    regional_ortho_path = texture_dir / f"{args.prefix}_naip_10km.jpg"
+    regional_mask_path = texture_dir / f"{args.prefix}_naip_10km_mask.png"
+    regional_height_path = texture_dir / f"{args.prefix}_3dep_10km_height.png"
+    macro_ortho_path = texture_dir / f"{macro_prefix}_naip_50km.jpg"
+    macro_mask_path = texture_dir / f"{macro_prefix}_naip_50km_mask.png"
+    macro_height_path = texture_dir / f"{macro_prefix}_3dep_50km_height.png"
+
     ortho = prepare_ortho(
         args.naip,
-        texture_dir / "starbase_naip_10km.jpg",
-        texture_dir / "starbase_naip_10km_mask.png",
+        regional_ortho_path,
+        regional_mask_path,
         feather_radius=192,
     )
     dem_10km_image, valid_dem_fraction = prepare_dem(
-        args.dem, texture_dir / "starbase_3dep_10km_height.png"
+        args.dem, regional_height_path, args.height_min, args.height_max, args.reference_m
     )
 
     macro_ortho = None
@@ -135,44 +164,48 @@ def main() -> None:
     if args.naip_macro is not None and args.dem_macro is not None:
         macro_ortho = prepare_ortho(
             args.naip_macro,
-            texture_dir / "starbase_naip_50km.jpg",
-            texture_dir / "starbase_naip_50km_mask.png",
+            macro_ortho_path,
+            macro_mask_path,
             # The macro source has a provider footprint smaller than its requested
             # bbox. A broad raster feather keeps that footprint from becoming a
             # visible diagonal at the 2–40 km camera distances.
             feather_radius=768,
         )
         _, macro_dem_fraction = prepare_dem(
-            args.dem_macro, texture_dir / "starbase_3dep_50km_height.png"
+            args.dem_macro, macro_height_path, args.height_min, args.height_max, args.reference_m
         )
 
     metadata = {
         "schema": 1,
-        "site": "Starbase / Boca Chica",
-        "center": {"latitude": 25.9972, "longitude": -97.1566},
-        "bbox_wgs84": BBOX,
+        "site": args.site,
+        "center": {"latitude": args.center_lat, "longitude": args.center_lon},
+        "bbox_wgs84": bbox,
         "projection": "EPSG:4326 source export; sampled in local east/north tangent metres",
         "ortho": {
-            "file": "assets/textures/starbase_naip_10km.jpg",
-            "mask_file": "assets/textures/starbase_naip_10km_mask.png",
+            "file": f"assets/textures/{args.prefix}_naip_10km.jpg",
+            "mask_file": f"assets/textures/{args.prefix}_naip_10km_mask.png",
             "width": ortho.width,
             "height": ortho.height,
             "source": "USDA NAIP CONUS ImageServer",
             "source_url": "https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer",
             "license": "USDA public service; attribution retained for provenance",
+            "request": {"bbox_wgs84": bbox, "size_px": [ortho.width, ortho.height],
+                         "format": "JPEG", "resampling": "bilinear"},
         },
         "elevation": {
-            "file": "assets/textures/starbase_3dep_10km_height.png",
+            "file": f"assets/textures/{args.prefix}_3dep_10km_height.png",
             "width": dem_10km_image.width,
             "height": dem_10km_image.height,
             "source": "USGS 3DEP Elevation ImageServer",
             "source_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
             "license": "USGS public domain",
             "encoding": "uint16 normalized absolute NAVD88 metres",
-            "height_min_m": HEIGHT_MIN_M,
-            "height_max_m": HEIGHT_MAX_M,
-            "reference_m": REFERENCE_M,
+            "height_min_m": args.height_min,
+            "height_max_m": args.height_max,
+            "reference_m": args.reference_m,
             "valid_input_fraction": round(valid_dem_fraction, 6),
+            "request": {"bbox_wgs84": bbox, "size_px": [dem_10km_image.width, dem_10km_image.height],
+                         "format": "float32 TIFF", "resampling": "bilinear"},
         },
         "prepared_on": str(date.today()),
         "runtime_extent_m": 10000.0,
@@ -183,39 +216,43 @@ def main() -> None:
         ],
     }
     if macro_ortho is not None:
-        metadata["macro_bbox_wgs84"] = MACRO_BBOX
+        metadata["macro_bbox_wgs84"] = macro_bbox
         metadata["macro_ortho"] = {
-            "file": "assets/textures/starbase_naip_50km.jpg",
-            "mask_file": "assets/textures/starbase_naip_50km_mask.png",
+            "file": f"assets/textures/{macro_prefix}_naip_50km.jpg",
+            "mask_file": f"assets/textures/{macro_prefix}_naip_50km_mask.png",
             "width": macro_ortho.width,
             "height": macro_ortho.height,
             "source": "USDA NAIP CONUS ImageServer",
             "source_url": "https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer",
             "license": "USDA public service; attribution retained for provenance",
+            "request": {"bbox_wgs84": macro_bbox, "size_px": [macro_ortho.width, macro_ortho.height],
+                         "format": "JPEG", "resampling": "bilinear"},
         }
         metadata["macro_elevation"] = {
-            "file": "assets/textures/starbase_3dep_50km_height.png",
+            "file": f"assets/textures/{macro_prefix}_3dep_50km_height.png",
             "width": 2048,
             "height": 2048,
             "source": "USGS 3DEP Elevation ImageServer",
             "source_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
             "license": "USGS public domain",
             "encoding": "uint16 normalized absolute NAVD88 metres",
-            "height_min_m": HEIGHT_MIN_M,
-            "height_max_m": HEIGHT_MAX_M,
-            "reference_m": REFERENCE_M,
+            "height_min_m": args.height_min,
+            "height_max_m": args.height_max,
+            "reference_m": args.reference_m,
             "valid_input_fraction": round(macro_dem_fraction, 6),
+            "request": {"bbox_wgs84": macro_bbox, "size_px": [2048, 2048],
+                         "format": "float32 TIFF", "resampling": "bilinear"},
         }
         metadata["macro_runtime_extent_m"] = 50000.0
-    (data_dir / "starbase_terrain.json").write_text(
+    manifest_path.write_text(
         json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
     )
     print(json.dumps({
         "ortho": [ortho.width, ortho.height],
         "dem": [dem_10km_image.width, dem_10km_image.height],
         "valid_dem_fraction": round(valid_dem_fraction, 6),
-        "height_range_m": [HEIGHT_MIN_M, HEIGHT_MAX_M],
-        "reference_m": REFERENCE_M,
+        "height_range_m": [args.height_min, args.height_max],
+        "reference_m": args.reference_m,
     }))
 
 

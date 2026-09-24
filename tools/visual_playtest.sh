@@ -74,6 +74,7 @@ Options:
                 Capture a deterministic 200 km Starship vacuum plume with the production
                 chase camera, HUD, vehicle silhouette, and fail-closed plume telemetry.
   --starbase-far Capture the mapped Starbase terrain transition at 2, 5, 8, 12, 20 and 40 km.
+  --kennedy-far  Capture the measured Kennedy LC-39A terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
   --cockpit     Capture the first-person cockpit optics and interior.
   --saturn      Jump to Saturn and capture the imported ring texture.
@@ -211,6 +212,12 @@ while [[ $# -gt 0 ]]; do
     --ship) MODE="ship"; shift ;;
     --orbital-plume) MODE="orbital_plume"; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
+    --kennedy-far)
+      MODE="kennedy_far"
+      VARIANT_FILE="falcon9_block5_standard_2025.json"
+      VARIANT_SITE="kennedy"
+      VARIANT_PROFILE="falcon9-block5-ascent"
+      shift ;;
     --orbit) MODE="orbit"; shift ;;
     --cockpit) MODE="cockpit"; shift ;;
     --saturn) MODE="saturn"; shift ;;
@@ -335,6 +342,11 @@ fi
     VARIANT_FILE="starship_flight7_block2_2025.json"
     VARIANT_SITE="starbase"
     VARIANT_PROFILE="starship-flight7-ascent"
+  fi
+  if [[ "$MODE" == "kennedy_far" && -z "$VARIANT_FILE" ]]; then
+    VARIANT_FILE="falcon9_block5_standard_2025.json"
+    VARIANT_SITE="kennedy"
+    VARIANT_PROFILE="falcon9-block5-ascent"
   fi
 
 if [[ -n "$RUN_ID" ]]; then
@@ -628,6 +640,17 @@ public partial class _PlaytestShot : Node
     };
     int _starbaseFarCaseIndex = -1;
     bool _starbaseFarCaptureQueued;
+    readonly (string Slug, double AltitudeM)[] _kennedyFarCases =
+    {
+        ("kennedy_far_2km", 2_000.0),
+        ("kennedy_far_5km", 5_000.0),
+        ("kennedy_far_8km", 8_000.0),
+        ("kennedy_far_12km", 12_000.0),
+        ("kennedy_far_20km", 20_000.0),
+        ("kennedy_far_40km", 40_000.0),
+    };
+    int _kennedyFarCaseIndex = -1;
+    bool _kennedyFarCaptureQueued;
     bool _hudHelpDismissed;
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     double _nextFullTelemetry;
@@ -923,6 +946,12 @@ public partial class _PlaytestShot : Node
           if (_mode == "starbase_far")
           {
               ProcessStarbaseFarField(bridge, vessel, universe, body);
+              return;
+          }
+
+          if (_mode == "kennedy_far")
+          {
+              ProcessKennedyFarField(bridge, vessel, universe, body);
               return;
           }
 
@@ -2732,6 +2761,83 @@ public partial class _PlaytestShot : Node
         _readyFrames = 0;
     }
 
+    private void ProcessKennedyFarField(SimulationBridge bridge, Vessel vessel,
+        Universe universe, CelestialBody body)
+    {
+        if (_kennedyFarCaseIndex < 0 && _readyFrames >= 45)
+        {
+            if (!string.Equals(body.Id, "earth", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(bridge.LaunchSiteId, "kennedy", StringComparison.OrdinalIgnoreCase)
+                || bridge.LaunchSiteOrNull == null)
+            {
+                _log.WriteLine($"FAIL kennedy_far_invalid_site body={body.Id} " +
+                    $"site={bridge.LaunchSiteId}");
+                _log.Flush();
+                Finish("KENNEDY_FAR_INVALID_SITE");
+                return;
+            }
+
+            _kennedyFarCaseIndex = 0;
+            SeedKennedyFarCase(bridge, vessel, universe, body,
+                _kennedyFarCases[_kennedyFarCaseIndex]);
+            return;
+        }
+
+        if (_kennedyFarCaseIndex < 0)
+            return;
+
+        if (!_kennedyFarCaptureQueued && _pendingSlug == null && _readyFrames >= 45)
+        {
+            QueueCapture(_kennedyFarCases[_kennedyFarCaseIndex].Slug);
+            _kennedyFarCaptureQueued = true;
+            return;
+        }
+
+        if (_kennedyFarCaptureQueued && _pendingSlug == null)
+        {
+            _kennedyFarCaptureQueued = false;
+            _kennedyFarCaseIndex++;
+            if (_kennedyFarCaseIndex >= _kennedyFarCases.Length)
+            {
+                Finish("KENNEDY_FAR_OK");
+                return;
+            }
+
+            SeedKennedyFarCase(bridge, vessel, universe, body,
+                _kennedyFarCases[_kennedyFarCaseIndex]);
+        }
+    }
+
+    private void SeedKennedyFarCase(SimulationBridge bridge, Vessel vessel,
+        Universe universe, CelestialBody body, (string Slug, double AltitudeM) shot)
+    {
+        Vector3d sitePosition = bridge.LaunchSiteOrNull!.GetPosition(
+            body, universe.CurrentTime);
+        Vector3d up = (sitePosition - body.Position).Normalized;
+        vessel.Position = body.GetPositionAlongDirection(up, shot.AltitudeM);
+        vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
+        vessel.PrepareForTeleport();
+        vessel.ReferenceBodyId = body.Id;
+        vessel.IsGroundHeld = false;
+        vessel.Throttle = 0.0;
+        vessel.AngularVelocity = Vector3d.Zero;
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+        bridge.SetTimeScale(0.0);
+
+        float lookAtY = shot.AltitudeM >= 20_000.0
+            ? 0f
+            : -(float)(shot.AltitudeM / 2.8);
+        CameraController.Instance?.SetExternalChaseFrame(0f, 28f, 500f, lookAtY);
+        if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+            hud.Visible = false;
+        _log.WriteLine($"KENNEDY_FAR_SETUP slug={shot.Slug} site={bridge.LaunchSiteId} " +
+            $"targetAlt={shot.AltitudeM:F0} cameraDistanceRender=500 " +
+            $"cameraPitchDeg=28 lookAt={(shot.AltitudeM >= 20_000.0 ? "vessel" : "ground")} " +
+            "timeScale=0 source=public_site_frame");
+        _log.Flush();
+        _readyFrames = 0;
+    }
+
       private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
         Vessel vessel, Universe universe, CelestialBody body)
     {
@@ -3241,6 +3347,7 @@ public partial class _PlaytestShot : Node
           LogReentryVisualTelemetry(slug);
           LogLaunchComplexVisualTelemetry(slug);
           LogStarbaseFarFieldVisualTelemetry(slug);
+          LogKennedyTerrainVisualTelemetry(slug);
           LogEngineVisualTelemetry(slug);
           _log.WriteLine($"RENDERER_ACTUAL {RenderingServer.GetCurrentRenderingMethod()}");
           if (slug is "tower_clear" or "early_ascent")
@@ -3457,6 +3564,21 @@ public partial class _PlaytestShot : Node
           }
           _log.Flush();
       }
+
+    private void LogKennedyTerrainVisualTelemetry(string slug)
+    {
+        if (!slug.StartsWith("kennedy_far_", StringComparison.Ordinal)) return;
+        var ground = GetTree().Root.FindChild(
+            "EarthGroundController", true, false) as EarthGroundController;
+        _log.WriteLine($"VISUAL_KENNEDY_TERRAIN slug={slug} " +
+            $"site={SimulationBridge.Instance?.LaunchSiteId ?? "missing"} " +
+            $"source={ground?.TerrainSource ?? "missing"} " +
+            $"regionalReady={ground?.RegionalTerrainReady ?? false} " +
+            $"macroReady={ground?.MacroTerrainReady ?? false} " +
+            $"groundVisible={ground?.LocalPatchVisible ?? false} " +
+            $"groundOpacity={ground?.LocalPatchOpacity ?? 0f:F3}");
+        _log.Flush();
+    }
 
     private void LogEngineVisualTelemetry(string slug)
     {
@@ -4389,6 +4511,45 @@ verify_pngs() {
           return 1
         fi
       done
+    elif [[ "$MODE" == "kennedy_far" ]]; then
+      if ! grep -q 'SUMMARY reason=KENNEDY_FAR_OK' "$LOG"; then
+        echo "ERROR: Kennedy far-field capture did not finish cleanly" >&2
+        return 1
+      fi
+      local kennedy_cases=(kennedy_far_2km kennedy_far_5km kennedy_far_8km kennedy_far_12km kennedy_far_20km kennedy_far_40km)
+      for slug in "${kennedy_cases[@]}"; do
+        if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+          echo "ERROR: missing Kennedy far-field milestone PNG: exo_play_${slug}.png" >&2
+          return 1
+        fi
+        if ! grep -Eq "^VISUAL_KENNEDY_TERRAIN slug=${slug} site=kennedy source=NAIP\+3DEP:kennedy regionalReady=True macroReady=True" "$LOG"; then
+          echo "ERROR: ${slug} did not prove the measured Kennedy NAIP+3DEP stack" >&2
+          return 1
+        fi
+        if [[ "$slug" == "kennedy_far_20km" || "$slug" == "kennedy_far_40km" ]]; then
+          if ! grep -Eq "^VISUAL_COMPOSITOR slug=${slug} .*earthGlobeAlpha=1\.000 .*groundVisible=False .*padVisible=False" "$LOG"; then
+            echo "ERROR: ${slug} did not prove the Kennedy scaled-Earth handoff" >&2
+            return 1
+          fi
+        fi
+        if ! awk -v slug="$slug" '
+          $1 == "CAPTURE" && $2 == slug {
+            for (i = 1; i <= NF; i++) if ($i ~ /^alt=/) { split($i, p, "="); alt = p[2] + 0 }
+            capture = 1
+          }
+          $1 == "IMAGE" && $2 == "slug=" slug {
+            for (i = 1; i <= NF; i++) {
+              if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+              if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+            }
+            image = 1
+          }
+          END { exit !(capture && image && alt >= 2000 && alt <= 40000 && mean > 0.005 && clipped < 0.10) }
+        ' "$LOG"; then
+          echo "ERROR: ${slug} is outside the 2–40 km corridor or visually invalid" >&2
+          return 1
+        fi
+      done
     elif [[ "$MODE" == "ascent" ]]; then
     local required=(pad liftoff maxq hotstage separation orbit)
     for slug in "${required[@]}"; do
@@ -5268,6 +5429,8 @@ elif [[ "$MODE" == "ascent" ]]; then
   echo "visual_playtest: focused ascent diagnostics OK — stable orbit verified"
 elif [[ "$MODE" == "starbase_far" ]]; then
   echo "visual_playtest: Starbase far-field geometry/capture checks OK — visual review still required"
+elif [[ "$MODE" == "kennedy_far" ]]; then
+  echo "visual_playtest: Kennedy LC-39A terrain/capture checks OK — visual review still required"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
 elif [[ "$MODE" == "orbital_reentry" ]]; then

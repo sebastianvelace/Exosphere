@@ -149,6 +149,24 @@ if ! rg -q -- '--starbase-far' "$HARNESS_SCRIPT" \
 fi
 echo "PASS Starbase 2–40 km transition fixture is wired into the harness"
 
+if ! rg -q -- '--kennedy-far' "$HARNESS_SCRIPT" \
+  || ! rg -q 'MODE="kennedy_far"' "$HARNESS_SCRIPT" \
+  || ! rg -q 'ProcessKennedyFarField' "$HARNESS_SCRIPT" \
+  || ! rg -q 'KENNEDY_FAR_OK' "$HARNESS_SCRIPT" \
+  || ! rg -q 'VISUAL_KENNEDY_TERRAIN' "$HARNESS_SCRIPT" \
+  || ! rg -q 'kennedy_far_2km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'kennedy_far_5km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'kennedy_far_8km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'kennedy_far_12km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'kennedy_far_20km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'kennedy_far_40km' "$HARNESS_SCRIPT" \
+  || ! rg -q 'LaunchSiteId, "kennedy"' "$HARNESS_SCRIPT" \
+  || ! rg -q 'source=\{ground\?\.TerrainSource' "$HARNESS_SCRIPT"; then
+  echo "FAIL Kennedy LC-39A terrain fixture is not wired into the harness" >&2
+  exit 1
+fi
+echo "PASS Kennedy LC-39A 2–40 km terrain fixture is wired into the harness"
+
 if ! rg -q 'float lookAtY = shot\.AltitudeM >= 20_000\.0' "$HARNESS_SCRIPT" \
   || ! rg -q 'earthGlobeAlpha=1\\.000 .*groundVisible=False .*padVisible=False .*farFieldVisible=False' "$HARNESS_SCRIPT"; then
   echo "FAIL high-altitude Starbase fixture does not prove the single-globe handoff" >&2

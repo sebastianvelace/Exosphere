@@ -24,6 +24,7 @@ require_fixed() {
 # loop or by the LUT worker.
 require_fixed "public const int RuntimeMultipleScatteringOrder = SpectralAtmosphereOracle.OfficialRendererOrder;" "$SKY"
 require_fixed "private const int MultipleScatteringMaxOrder = 4;" "$SKY"
+require_fixed "? FloatingOrigin.CameraAltOverEarth" "$SKY"
 if rg -n 'SpectralAtmosphereOracle\.Build|\.Evaluate\(' "$SKY" >/dev/null; then
   fail "runtime SkyController invokes the offline spectral oracle"
 fi

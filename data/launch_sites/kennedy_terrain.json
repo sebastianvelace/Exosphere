@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "site": "Kennedy Space Center / LC-39A",
+  "center": {
+    "latitude": 28.608389,
+    "longitude": -80.604333
+  },
+  "bbox_wgs84": {
+    "west": -80.654333,
+    "south": 28.558389,
+    "east": -80.554333,
+    "north": 28.658389
+  },
+  "projection": "EPSG:4326 source export; sampled in local east/north tangent metres",
+  "ortho": {
+    "file": "assets/textures/kennedy_naip_10km.jpg",
+    "mask_file": "assets/textures/kennedy_naip_10km_mask.png",
+    "width": 4096,
+    "height": 4096,
+    "source": "USDA NAIP CONUS ImageServer",
+    "source_url": "https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer",
+    "license": "USDA public service; attribution retained for provenance",
+    "request": {
+      "bbox_wgs84": {
+        "west": -80.654333,
+        "south": 28.558389,
+        "east": -80.554333,
+        "north": 28.658389
+      },
+      "size_px": [
+        4096,
+        4096
+      ],
+      "format": "JPEG",
+      "resampling": "bilinear"
+    }
+  },
+  "elevation": {
+    "file": "assets/textures/kennedy_3dep_10km_height.png",
+    "width": 2048,
+    "height": 2048,
+    "source": "USGS 3DEP Elevation ImageServer",
+    "source_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
+    "license": "USGS public domain",
+    "encoding": "uint16 normalized absolute NAVD88 metres",
+    "height_min_m": -2.0,
+    "height_max_m": 15.0,
+    "reference_m": 3.0,
+    "valid_input_fraction": 0.926235,
+    "request": {
+      "bbox_wgs84": {
+        "west": -80.654333,
+        "south": 28.558389,
+        "east": -80.554333,
+        "north": 28.658389
+      },
+      "size_px": [
+        2048,
+        2048
+      ],
+      "format": "float32 TIFF",
+      "resampling": "bilinear"
+    }
+  },
+  "prepared_on": "2026-09-23",
+  "runtime_extent_m": 10000.0,
+  "notes": [
+    "NAIP provides observed surface reflectance for the low-altitude regional ground.",
+    "3DEP is bare-earth elevation and is used only for broad displacement.",
+    "Invalid provider pixels are masked and filled at the launch-site reference height."
+  ],
+  "macro_bbox_wgs84": {
+    "west": -80.904333,
+    "south": 28.358389,
+    "east": -80.404333,
+    "north": 28.858389
+  },
+  "macro_ortho": {
+    "file": "assets/textures/cape_canaveral_naip_50km.jpg",
+    "mask_file": "assets/textures/cape_canaveral_naip_50km_mask.png",
+    "width": 4096,
+    "height": 4096,
+    "source": "USDA NAIP CONUS ImageServer",
+    "source_url": "https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer",
+    "license": "USDA public service; attribution retained for provenance",
+    "request": {
+      "bbox_wgs84": {
+        "west": -80.904333,
+        "south": 28.358389,
+        "east": -80.404333,
+        "north": 28.858389
+      },
+      "size_px": [
+        4096,
+        4096
+      ],
+      "format": "JPEG",
+      "resampling": "bilinear"
+    }
+  },
+  "macro_elevation": {
+    "file": "assets/textures/cape_canaveral_3dep_50km_height.png",
+    "width": 2048,
+    "height": 2048,
+    "source": "USGS 3DEP Elevation ImageServer",
+    "source_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
+    "license": "USGS public domain",
+    "encoding": "uint16 normalized absolute NAVD88 metres",
+    "height_min_m": -2.0,
+    "height_max_m": 15.0,
+    "reference_m": 3.0,
+    "valid_input_fraction": 0.825794,
+    "request": {
+      "bbox_wgs84": {
+        "west": -80.904333,
+        "south": 28.358389,
+        "east": -80.404333,
+        "north": 28.858389
+      },
+      "size_px": [
+        2048,
+        2048
+      ],
+      "format": "float32 TIFF",
+      "resampling": "bilinear"
+    }
+  },
+  "macro_runtime_extent_m": 50000.0
+}
