@@ -34,33 +34,48 @@ done
   exit 1
 }
 
-for tool in gdalinfo gdal_translate; do
-  command -v "$tool" >/dev/null 2>&1 || {
-    echo "ERROR: $tool is required; install GDAL before converting ETOPO data" >&2
-    exit 1
-  }
-done
-
 echo "SOURCE=$SOURCE"
 echo "SOURCE_SHA256=$(sha256sum "$SOURCE" | awk '{print $1}')"
-echo "SOURCE_METADATA_BEGIN"
-gdalinfo "$SOURCE"
-echo "SOURCE_METADATA_END"
 
-if [[ "$CHECK_ONLY" == true ]]; then
-  echo "EARTH_RELIEF_CHECK=PASS"
+if command -v gdalinfo >/dev/null 2>&1 && command -v gdal_translate >/dev/null 2>&1; then
+  echo "CONVERTER=GDAL"
+  echo "SOURCE_METADATA_BEGIN"
+  gdalinfo "$SOURCE"
+  echo "SOURCE_METADATA_END"
+
+  if [[ "$CHECK_ONLY" == true ]]; then
+    echo "EARTH_RELIEF_CHECK=PASS"
+    exit 0
+  fi
+
+  mkdir -p "$(dirname "$OUTPUT")"
+  gdal_translate \
+    -of PNG \
+    -ot UInt16 \
+    -outsize 4096 2048 \
+    -scale -11000 9000 0 65535 \
+    -a_nodata none \
+    "$SOURCE" "$OUTPUT"
+
+  echo "OUTPUT=$OUTPUT"
+  echo "OUTPUT_SHA256=$(sha256sum "$OUTPUT" | awk '{print $1}')"
+  echo "EARTH_RELIEF_CONVERSION=PASS"
   exit 0
 fi
 
-mkdir -p "$(dirname "$OUTPUT")"
-gdal_translate \
-  -of PNG \
-  -ot UInt16 \
-  -outsize 4096 2048 \
-  -scale -11000 9000 0 65535 \
-  -a_nodata none \
-  "$SOURCE" "$OUTPUT"
+command -v python3 >/dev/null 2>&1 || {
+  echo "ERROR: GDAL or Python 3 is required for ETOPO conversion" >&2
+  exit 1
+}
 
-echo "OUTPUT=$OUTPUT"
-echo "OUTPUT_SHA256=$(sha256sum "$OUTPUT" | awk '{print $1}')"
-echo "EARTH_RELIEF_CONVERSION=PASS"
+echo "CONVERTER=Python-Pillow-NumPy"
+python3 -c 'import numpy; from PIL import Image' >/dev/null 2>&1 || {
+  echo "ERROR: fallback conversion requires Python packages Pillow and NumPy" >&2
+  exit 1
+}
+
+if [[ "$CHECK_ONLY" == true ]]; then
+  python3 "$ROOT/tools/prepare_earth_relief.py" "$SOURCE" "$OUTPUT" --check-only
+else
+  python3 "$ROOT/tools/prepare_earth_relief.py" "$SOURCE" "$OUTPUT"
+fi

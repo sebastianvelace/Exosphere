@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "asset_id": "earth_etopo2022_scaled_relief",
-  "status": "source_validated_not_runtime_bound",
+  "status": "derived_asset_generated_not_runtime_bound",
   "purpose": "Scaled-space Earth relief for visual continuity above the local Starbase/Kennedy terrain handoff.",
   "source": {
     "name": "ETOPO 2022 Global Relief Model",
@@ -14,7 +14,8 @@
     "doi": "10.25921/fd45-gt74",
     "license": "CC0-1.0",
     "vertical_reference": "EGM2008 (EPSG:3855 metadata); elevations in metres",
-    "coverage": "global land topography and ocean bathymetry"
+    "coverage": "global land topography and ocean bathymetry",
+    "source_sha256": "a2cc72f8a4292dee928f439069457cdefc1fba319876807c626edce40258ba7a"
   },
   "derived_asset": {
     "file": "assets/textures/earth_etopo2022_4k_height.png",
@@ -26,7 +27,7 @@
     "elevation_max_m": 9000.0,
     "source_nodata_policy": "must be inspected during conversion; do not silently invent terrain",
     "generated_by": "tools/prepare_earth_relief.sh",
-    "sha256": null
+    "sha256": "d35764f899575def469ec93b5d5fa255ad9eab80cad4dfb7183c212e65a4b37c"
   },
   "runtime_contract": {
     "use": "visual_only",
