@@ -8,6 +8,10 @@ bin/
 obj/
 *.user
 .vs/
+
+# Python tooling caches
+__pycache__/
+*.pyc
 .vscode/settings.json
 
 # Exports
