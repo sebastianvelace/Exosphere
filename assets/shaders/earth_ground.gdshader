@@ -422,17 +422,19 @@ void fragment() {
 	vec3 ground_radiance = lit + indirect_emission + city_lights;
 
 	// Atmospheric perspective in RGB only. Nadir views (6–20 km) must keep
-	// coast/Gulf contrast — washing to haze_color made a 450 km mesh look like
-	// sky, leaving the civil apron as a floating square.
+	// coast/Gulf contrast, while a grazing ray must accumulate the long air path
+	// between the camera and the tangent surface. The exponential term is a bounded
+	// Beer–Lambert-style extinction proxy; it removes the former constant grey band
+	// without changing the measured raster or the flight model.
 	// view_up ≈ 1 when the camera looks at the ground face-on (nadir). Only
 	// apply grazing wash when the look is actually toward the horizon.
 	float look_down = smoothstep(0.55, 0.88, view_up);
-	float distance_haze = smoothstep(horizon_dist * 0.42, horizon_dist * 1.05, dist);
-	// Keep grazing haze close to the actual limb. The former 0.04..0.52
-	// angular ramp washed the fallback Blue Marble across most of the oblique
-	// view, making the 50 km measured layer read as a rectangular island.
-	float grazing_haze = (1.0 - smoothstep(0.02, 0.22, view_up)) * (1.0 - look_down);
-	float haze = clamp(max(distance_haze * 0.48, grazing_haze * horizon_haze_strength * 0.28), 0.0, 0.55)
+	float horizon_path = max(horizon_dist * 0.32, 1000.0);
+	float distance_haze = 1.0 - exp(-dist / horizon_path);
+	// Keep grazing haze close to the actual limb. The angular term represents the
+	// increasing tangent column; it fades before nadir so local pad detail remains.
+	float grazing_haze = (1.0 - smoothstep(0.0, 0.32, view_up)) * (1.0 - look_down);
+	float haze = clamp(max(distance_haze * 0.92, grazing_haze * horizon_haze_strength), 0.0, 0.94)
 		* (1.0 - look_down * 0.85);
 	ground_radiance = mix(ground_radiance, haze_color, haze);
 	// Circular rim at the geometric horizon (not a camera-distance kill, and

@@ -762,14 +762,17 @@ void sky() {
 				max(view_tangent_altitude, 0.0));
 		float above = max(smoothstep(-0.045, 0.050, elev), tangent_sky);
 		float h = clamp(elev, 0.0, 1.0);
-		vec3 dome = mix(vec3(0.70, 0.82, 0.94), vec3(0.18, 0.42, 0.84), pow(h, 0.55));
+		vec3 dome = mix(vec3(0.82, 0.88, 0.95), vec3(0.18, 0.42, 0.84), pow(h, 0.55));
 		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);
 		dome += vec3(sun_glare, sun_glare * 0.85, sun_glare * 0.55);
 		float pad_sky = sun_up * thick_column * above * atmospheric_solar_visibility;
-		// Treat the dome as a bounded daylight floor, not as a darkening blend:
-		// under-resolved grazing rays must not pull a continuous sky shell into a
-		// black band. Preserve any physically integrated radiance above the floor.
-		vec3 daylight_floor = max(atmosphere, dome);
+		// Treat the dome as a bounded daylight floor, not as a darkening blend.
+		// Force the mathematical limb to start at the same radiance as the opaque
+		// EarthGround horizon, then restore integrated multiple scattering over a
+		// finite elevation interval. This keeps sky/ground radiance continuous
+		// without erasing the physical atmosphere away from the limb.
+		float preserve_integrated = smoothstep(0.035, 0.18, h);
+		vec3 daylight_floor = mix(dome, max(atmosphere, dome), preserve_integrated);
 		atmosphere = mix(atmosphere, daylight_floor, pad_sky);
 	}
 	vec3 airglow = airglow_radiance * sun_illuminance;

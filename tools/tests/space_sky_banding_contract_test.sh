@@ -30,8 +30,10 @@ rg -q 'float daylight_tail_top = max\(55000.0, atmosphere_height \* 0\.86\);' "$
   || fail "daylight pad/ascent tail is not coupled to the configured atmosphere shell"
 rg -q 'float thick_column = 1.0 - smoothstep\(8000.0, daylight_tail_top' "$SHADER" \
   || fail "daylight pad/ascent does not occlude the starmap by optical column"
-rg -q 'vec3 daylight_floor = max\(atmosphere, dome\);' "$SHADER" \
-  || fail "daylight pad sky has no bounded radiance floor"
+rg -q 'float preserve_integrated = smoothstep\(0\.035, 0\.18, h\);' "$SHADER" \
+  || fail "daylight floor does not restore integrated radiance over a finite limb interval"
+rg -q 'vec3 daylight_floor = mix\(dome, max\(atmosphere, dome\), preserve_integrated\);' "$SHADER" \
+  || fail "daylight floor does not start at the shared dome radiance on the limb"
 rg -q 'float tangent_shell_width = max\(20000\.0, atmosphere_height\);' "$SHADER" \
   || fail "tangent sky floor is not coupled to the full active atmosphere shell"
 rg -q 'float view_tangent_altitude = length\(origin \+ view_dir' "$SHADER" \

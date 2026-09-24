@@ -73,10 +73,11 @@ public partial class EarthGroundController : Node3D
     private const float NightCityGain = 0.34f;
     private const float TerminatorWidth = 0.16f;
     private const float HorizonHazeStrength = 0.92f;
-    // The sky controller deliberately darkens its horizon colour as the air column
-    // thins. The tangent ground still needs a faint blue atmospheric limb there;
-    // otherwise its geometric rim becomes a black horizontal slot at 20–40 km.
-    private static readonly Color EarthHorizonFloor = new(0.18f, 0.28f, 0.46f);
+    // Keep the opaque tangent ground on the same bounded daylight-dome floor used
+    // by space_sky.gdshader at the Earth horizon. The controller's live horizon
+    // colour can darken with altitude; using that darker value alone leaves a grey
+    // strip between the sky dome and the measured ground raster.
+    private static readonly Color EarthHorizonFloor = new(0.82f, 0.88f, 0.95f);
     private const float RegionalTerrainExtentM = 10_000f;
     private const float RegionalHeightMinM = -2.0f;
     private const float RegionalHeightMaxM = 12.0f;
@@ -282,13 +283,25 @@ public partial class EarthGroundController : Node3D
         if (_mat != null)
         {
             var hazeColor = SkyController.CurrentHorizonColor;
-            if (earth.Id == "earth")
+            var sun = universe.GetBody("sun");
+            var sunDirection = Vector3.Zero;
+            var hasSunDirection = false;
+            if (sun != null)
             {
-                hazeColor = new Color(
-                    Mathf.Max(hazeColor.R, EarthHorizonFloor.R),
-                    Mathf.Max(hazeColor.G, EarthHorizonFloor.G),
-                    Mathf.Max(hazeColor.B, EarthHorizonFloor.B),
-                    hazeColor.A);
+                var physicalDirection = (sun.Position - vessel.Position).Normalized;
+                sunDirection = ToGodot(SunController.Instance != null
+                    ? SunController.Instance.GetVisualSunDirection(
+                        earth, vessel.Position, physicalDirection)
+                    : physicalDirection);
+                hasSunDirection = true;
+            }
+            if (earth.Id == "earth" && hasSunDirection)
+            {
+                // Match space_sky.gdshader's bounded daylight dome at the actual
+                // horizon. At night retain the live atmospheric colour; the opaque
+                // ground must not keep a daylight floor through an eclipse/night side.
+                var daylight = Mathf.SmoothStep(-0.12f, 0.03f, renderUp.Dot(sunDirection));
+                hazeColor = hazeColor.Lerp(EarthHorizonFloor, daylight);
             }
             if (!_groundShaderStateInitialized || FloatDiffers(_lastFade, fade))
             {
@@ -300,14 +313,8 @@ public partial class EarthGroundController : Node3D
                 _mat.SetShaderParameter("haze_color", hazeColor);
                 _lastHazeColor = hazeColor;
             }
-            var sun = universe.GetBody("sun");
             if (sun != null)
             {
-                var physicalDirection = (sun.Position - vessel.Position).Normalized;
-                var sunDirection = ToGodot(SunController.Instance != null
-                    ? SunController.Instance.GetVisualSunDirection(
-                        earth, vessel.Position, physicalDirection)
-                    : physicalDirection);
                 if (!_groundShaderStateInitialized
                     || _lastSunDirection.DistanceSquaredTo(sunDirection) > 1e-10f)
                 {
