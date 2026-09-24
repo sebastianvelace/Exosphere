@@ -104,6 +104,17 @@ if ! grep -q 'noseContrast = upperBySlug\["ship_detail_steel"\] - upperBySlug\["
   echo "FAIL standalone Starship mode does not prove the steel/TPS nose split in framebuffer evidence" >&2
   exit 1
 fi
+if ! grep -q 'ship_flaps_windward' "$HARNESS_SCRIPT" \
+  || ! grep -q 'ship_flaps_leeward' "$HARNESS_SCRIPT" \
+  || ! grep -q -- '--flaps) MODE="flaps"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'SUMMARY reason=FLAPS_OK' "$HARNESS_SCRIPT" \
+  || ! grep -q 'VISUAL_FLAPS slug=' "$HARNESS_SCRIPT" \
+  || ! grep -q 'GetNodesInGroup(group)' "$HARNESS_SCRIPT" \
+  || ! grep -q 'root.IsAncestorOf(mesh)' "$HARNESS_SCRIPT" \
+  || ! grep -q 'readable < 4' "$HARNESS_SCRIPT"; then
+  echo "FAIL standalone Starship mode lacks fail-closed flap inspection evidence" >&2
+  exit 1
+fi
 if ! grep -q 'SUMMARY reason=SMOKE_OK' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_LAUNCH slug=pad present=True visible=True' "$HARNESS_SCRIPT"; then
   echo "FAIL smoke mode does not prove the single hero launch complex" >&2

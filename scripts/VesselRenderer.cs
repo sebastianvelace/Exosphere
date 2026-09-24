@@ -54,6 +54,9 @@ public partial class VesselRenderer : Node3D
     private const double ThermalVisualPeriodSeconds = 1.0 / 15.0;
     private const double SecondaryVisualPeriodSeconds = 1.0 / 20.0;
     private const double PresentationSamplePeriodSeconds = 1.0 / 20.0;
+    public const string StarshipFlapBladeGroup = "starship_flap_blade";
+    public const string StarshipFlapRootGroup = "starship_flap_root";
+    public const string StarshipFlapHingeGroup = "starship_flap_hinge";
 
     private sealed class FlapRig
     {
@@ -3199,6 +3202,8 @@ public partial class VesselRenderer : Node3D
         };
         blade.SetSurfaceOverrideMaterial(0, mat);
         AddChild(blade);
+        blade.SetMeta("flap_id", name);
+        blade.AddToGroup(StarshipFlapBladeGroup);
         _flapRigs.Add(new FlapRig
         {
             Blade = blade,
@@ -3217,6 +3222,8 @@ public partial class VesselRenderer : Node3D
         };
         root.SetSurfaceOverrideMaterial(0, mat);
         AddChild(root);
+        root.SetMeta("flap_id", name);
+        root.AddToGroup(StarshipFlapRootGroup);
 
         var hingeMat = Mat(new Color(0.18f, 0.18f, 0.20f), 0.80f, 0.40f);
         var hinge = new MeshInstance3D
@@ -3228,6 +3235,8 @@ public partial class VesselRenderer : Node3D
         };
         hinge.SetSurfaceOverrideMaterial(0, hingeMat);
         root.AddChild(hinge);
+        hinge.SetMeta("flap_id", name);
+        hinge.AddToGroup(StarshipFlapHingeGroup);
     }
 
     private static ArrayMesh BuildCylindricalSectorMesh(float radius, float height,

@@ -69,7 +69,8 @@ Options:
   --launch      Capture ignition and early vertical liftoff, then exit.
   --launch-track Capture launch, tower-clear and 1 km using the production camera.
   --ship        Capture standalone Starship in vacuum at full/half thrust, shutdown,
-                plus close steel-side and TPS-side inspection frames.
+                plus close steel/TPS and three-quarter flap inspection frames.
+  --flaps       Capture only the deterministic windward/leeward flap inspection pair.
   --orbital-plume
                 Capture a deterministic 200 km Starship vacuum plume with the production
                 chase camera, HUD, vehicle silhouette, and fail-closed plume telemetry.
@@ -210,6 +211,7 @@ while [[ $# -gt 0 ]]; do
     --launch) MODE="launch"; shift ;;
     --launch-track) MODE="launch_track"; shift ;;
     --ship) MODE="ship"; shift ;;
+    --flaps) MODE="flaps"; shift ;;
     --orbital-plume) MODE="orbital_plume"; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
     --kennedy-far)
@@ -1066,6 +1068,51 @@ public partial class _PlaytestShot : Node
             return;
         }
 
+        if (_mode == "flaps")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                bridge.TriggerStaging();
+                bridge.JumpToOrbit(118_000.0);
+                bridge.SetThrottle(0.0);
+                bridge.SetTimeScale(0.0);
+                vessel.AngularVelocity = Vector3d.Zero;
+                Vector3d inspectionUp = body.GetGeodeticUp(vessel.Position);
+                Vector3d inspectionEast = body.GetEastDirection(vessel.Position);
+                Vector3d inspectionSouth = inspectionEast.Cross(inspectionUp).Normalized;
+                var inspectionBasis = new Basis(
+                    ToGodot(-inspectionEast), ToGodot(inspectionUp),
+                    ToGodot(-inspectionSouth));
+                var inspectionRotation = inspectionBasis.GetRotationQuaternion();
+                vessel.Orientation = new Quaterniond(
+                    inspectionRotation.W, inspectionRotation.X,
+                    inspectionRotation.Y, inspectionRotation.Z);
+                if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+                    hud.Visible = false;
+                CameraController.Instance?.EnterShipChaseView();
+                CameraController.Instance?.SetExternalChaseFrame(55f, 5f, 23f);
+                _shipSeeded = true;
+                _readyFrames = 0;
+                return;
+            }
+            if (_shipSeeded && _shipPlumeQueued && _pendingSlug == null)
+            {
+                if (_shipPlumeStep == 1) { Finish("FLAPS_OK"); return; }
+                _shipPlumeStep = 1;
+                CameraController.Instance?.SetExternalChaseFrame(305f, 5f, 23f);
+                _readyFrames = 0;
+                _shipPlumeQueued = false;
+                return;
+            }
+            if (_shipSeeded && !_shipPlumeQueued && _pendingSlug == null && _readyFrames >= 35)
+            {
+                QueueCapture(_shipPlumeStep == 0
+                    ? "ship_flaps_windward" : "ship_flaps_leeward");
+                _shipPlumeQueued = true;
+            }
+            return;
+        }
+
         if (_mode == "ship")
         {
             if (!_shipSeeded && _readyFrames >= 45)
@@ -1082,7 +1129,7 @@ public partial class _PlaytestShot : Node
             }
             if (_shipSeeded && _shipPlumeQueued && _pendingSlug == null)
             {
-                if (_shipPlumeStep == 4) { Finish("SHIP_OK"); return; }
+                if (_shipPlumeStep == 6) { Finish("SHIP_OK"); return; }
                 _shipPlumeStep++;
                 if (_shipPlumeStep <= 2)
                     bridge.SetThrottle(_shipPlumeStep == 1 ? 0.5 : 0.0);
@@ -1111,9 +1158,17 @@ public partial class _PlaytestShot : Node
                     // +X looks directly at the tiled windward side in this fixture.
                     CameraController.Instance?.SetExternalChaseFrame(90f, 4f, 23f);
                 }
-                else
+                else if (_shipPlumeStep == 4)
                     // -X looks directly at the bare stainless leeward side.
                     CameraController.Instance?.SetExternalChaseFrame(270f, 4f, 23f);
+                else if (_shipPlumeStep == 5)
+                    // Three-quarter windward view keeps both near-side flap planforms,
+                    // their hull transitions and the far-side tips readable together.
+                    CameraController.Instance?.SetExternalChaseFrame(55f, 5f, 23f);
+                else
+                    // Mirrored three-quarter view proves thickness/root readability on
+                    // the leeward side instead of accepting one favorable camera angle.
+                    CameraController.Instance?.SetExternalChaseFrame(305f, 5f, 23f);
                 _readyFrames = 0;
                 _shipPlumeQueued = false;
                 return;
@@ -1137,7 +1192,9 @@ public partial class _PlaytestShot : Node
                     1 => "ship_vacuum_half",
                     2 => "ship_vacuum_off",
                     3 => "ship_detail_tps",
-                    _ => "ship_detail_steel",
+                    4 => "ship_detail_steel",
+                    5 => "ship_flaps_windward",
+                    _ => "ship_flaps_leeward",
                 };
                 QueueCapture(slug);
                 _shipPlumeQueued = true;
@@ -3392,6 +3449,7 @@ public partial class _PlaytestShot : Node
           LogStarbaseFarFieldVisualTelemetry(slug);
           LogKennedyTerrainVisualTelemetry(slug);
           LogEngineVisualTelemetry(slug);
+          LogFlapVisualTelemetry(slug);
           _log.WriteLine($"RENDERER_ACTUAL {RenderingServer.GetCurrentRenderingMethod()}");
           if (slug is "tower_clear" or "early_ascent")
           {
@@ -3468,6 +3526,78 @@ public partial class _PlaytestShot : Node
             $"visualIntensity={plasma?.LastVisualIntensity01 ?? float.NaN:F3} " +
             $"shockHeat={plasma?.LastShockHeatLevel ?? float.NaN:F3}");
         _log.Flush();
+    }
+
+    private void LogFlapVisualTelemetry(string slug)
+    {
+        if (slug is not ("ship_flaps_windward" or "ship_flaps_leeward")) return;
+
+        var renderer = GetTree().Root.FindChild(
+            "ActiveVesselRenderer", true, false) as Node3D;
+        var camera = CameraController.Instance?.PresentationCamera;
+        string[] flapNames = { "FwdFlapL", "FwdFlapR", "AftFlapL", "AftFlapR" };
+        int blades = 0, roots = 0, hinges = 0, projectedReadable = 0;
+
+        foreach (string flapName in flapNames)
+        {
+            var blade = FindGroupedFlap(renderer, VesselRenderer.StarshipFlapBladeGroup, flapName);
+            var root = FindGroupedFlap(renderer, VesselRenderer.StarshipFlapRootGroup, flapName);
+            var hinge = FindGroupedFlap(renderer, VesselRenderer.StarshipFlapHingeGroup, flapName);
+            if (blade?.Mesh != null) blades++;
+            if (root?.Mesh != null) roots++;
+            if (hinge?.Mesh != null) hinges++;
+
+            float screenWidth = 0f, screenHeight = 0f;
+            bool inFront = false;
+            if (blade?.Mesh != null && camera != null)
+            {
+                Aabb bounds = blade.Mesh.GetAabb();
+                float minX = float.PositiveInfinity, minY = float.PositiveInfinity;
+                float maxX = float.NegativeInfinity, maxY = float.NegativeInfinity;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 world = blade.GlobalTransform * bounds.GetEndpoint(corner);
+                    if (camera.IsPositionBehind(world)) continue;
+                    Vector2 screen = camera.UnprojectPosition(world);
+                    minX = Mathf.Min(minX, screen.X);
+                    minY = Mathf.Min(minY, screen.Y);
+                    maxX = Mathf.Max(maxX, screen.X);
+                    maxY = Mathf.Max(maxY, screen.Y);
+                    inFront = true;
+                }
+                if (inFront)
+                {
+                    screenWidth = maxX - minX;
+                    screenHeight = maxY - minY;
+                    if (screenWidth >= 5f && screenHeight >= 18f)
+                        projectedReadable++;
+                }
+            }
+
+            Vector3 size = blade?.Mesh?.GetAabb().Size ?? Vector3.Zero;
+            _log.WriteLine($"FLAP_NODE slug={slug} name={flapName} "
+                + $"mesh={blade?.Mesh != null} root={root?.Mesh != null} hinge={hinge?.Mesh != null} "
+                + $"size={size.X:F3},{size.Y:F3},{size.Z:F3} "
+                + $"screenWidth={screenWidth:F2} screenHeight={screenHeight:F2} inFront={inFront}");
+        }
+
+        _log.WriteLine($"VISUAL_FLAPS slug={slug} renderer={renderer != null} camera={camera != null} "
+            + $"blades={blades} roots={roots} hinges={hinges} projectedReadable={projectedReadable}");
+        _log.Flush();
+    }
+
+    private MeshInstance3D? FindGroupedFlap(Node3D? root, string group, string flapId)
+    {
+        if (root == null) return null;
+        foreach (Node candidate in GetTree().GetNodesInGroup(group))
+        {
+            if (candidate is MeshInstance3D mesh
+                && root.IsAncestorOf(mesh)
+                && mesh.HasMeta("flap_id")
+                && mesh.GetMeta("flap_id").ToString() == flapId)
+                return mesh;
+        }
+        return null;
     }
 
       private void LogLaunchComplexVisualTelemetry(string slug)
@@ -4346,8 +4476,55 @@ verify_pngs() {
       echo "ERROR: launch capture has broad clipping or neon-green contamination" >&2
       return 1
     fi
+  elif [[ "$MODE" == "flaps" ]]; then
+    for slug in ship_flaps_windward ship_flaps_leeward; do
+      if [[ ! -s "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing Starship flap inspection frame: $slug" >&2
+        return 1
+      fi
+    done
+    if ! rg -q 'SUMMARY reason=FLAPS_OK' "$LOG"; then
+      echo "ERROR: Starship flap inspection did not finish cleanly" >&2
+      return 1
+    fi
+    if ! awk '
+      /^VISUAL_FLAPS slug=ship_flaps_(windward|leeward) / {
+        blades = roots = hinges = readable = -1
+        for (i = 1; i <= NF; i++) {
+          split($i, field, "=")
+          if (field[1] == "blades") blades = field[2] + 0
+          if (field[1] == "roots") roots = field[2] + 0
+          if (field[1] == "hinges") hinges = field[2] + 0
+          if (field[1] == "projectedReadable") readable = field[2] + 0
+        }
+        if (blades != 4 || roots != 4 || hinges != 4 || readable < 4) bad = 1
+        found++
+      }
+      END { exit !(found == 2 && bad != 1) }
+    ' "$LOG"; then
+      echo "ERROR: flap inspection did not prove four readable blades, roots and hinges in both views" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=ship_flaps_(windward|leeward) / {
+        mean = dark = clipped = -1
+        for (i = 1; i <= NF; i++) {
+          split($i, field, "=")
+          if (field[1] == "mean") mean = field[2] + 0
+          if (field[1] == "darkFrac") dark = field[2] + 0
+          if (field[1] == "clippedFrac") clipped = field[2] + 0
+        }
+        if (mean <= 0.005 || dark >= 0.98 || clipped >= 0.10) bad = 1
+        found++
+      }
+      END { exit !(found == 2 && bad != 1) }
+    ' "$LOG"; then
+      echo "ERROR: flap inspection frames are empty or broadly clipped" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "ship" ]]; then
-    for slug in ship_vacuum ship_vacuum_half ship_vacuum_off ship_detail_steel ship_detail_tps; do
+    for slug in ship_vacuum ship_vacuum_half ship_vacuum_off ship_detail_steel ship_detail_tps \
+      ship_flaps_windward ship_flaps_leeward; do
       if [[ ! -s "$OUT_DIR/exo_play_${slug}.png" ]]; then
         echo "ERROR: missing vacuum throttle matrix frame: $slug" >&2
         return 1
@@ -4403,6 +4580,41 @@ verify_pngs() {
       }
     ' "$LOG"; then
       echo "ERROR: Starship detail frames are empty, clipped, or lack leeward nose material contrast" >&2
+      return 1
+    fi
+    if ! awk '
+      /^VISUAL_FLAPS slug=ship_flaps_(windward|leeward) / {
+        blades = roots = hinges = readable = -1
+        for (i = 1; i <= NF; i++) {
+          split($i, field, "=")
+          if (field[1] == "blades") blades = field[2] + 0
+          if (field[1] == "roots") roots = field[2] + 0
+          if (field[1] == "hinges") hinges = field[2] + 0
+          if (field[1] == "projectedReadable") readable = field[2] + 0
+        }
+        if (blades != 4 || roots != 4 || hinges != 4 || readable < 4) bad = 1
+        found++
+      }
+      END { exit !(found == 2 && bad != 1) }
+    ' "$LOG"; then
+      echo "ERROR: flap inspection did not prove four readable blades, roots and hinges in both views" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=ship_flaps_(windward|leeward) / {
+        mean = dark = clipped = -1
+        for (i = 1; i <= NF; i++) {
+          split($i, field, "=")
+          if (field[1] == "mean") mean = field[2] + 0
+          if (field[1] == "darkFrac") dark = field[2] + 0
+          if (field[1] == "clippedFrac") clipped = field[2] + 0
+        }
+        if (mean <= 0.005 || dark >= 0.98 || clipped >= 0.10) bad = 1
+        found++
+      }
+      END { exit !(found == 2 && bad != 1) }
+    ' "$LOG"; then
+      echo "ERROR: flap inspection frames are empty or broadly clipped" >&2
       return 1
     fi
     if ! grep -q 'SUMMARY reason=SHIP_OK' "$LOG"; then
