@@ -116,6 +116,7 @@ public partial class SunController : Node
     private int _planetNodeCount = -1;
     private bool _solarGeometryReady;
     private bool _solarGeometryTelemetryPublished;
+    private bool _earthMaterialTelemetryPublished;
     private SolarGeometrySnapshot _solarGeometrySnapshot;
 
     public override void _Ready()
@@ -170,6 +171,7 @@ public partial class SunController : Node
             _solarTelemetryTimer = 0.0;
             _solarGeometryReady = false;
             _solarGeometryTelemetryPublished = false;
+            _earthMaterialTelemetryPublished = false;
             SolarVisibility = 1f;
             SolarElevationDegrees = double.NaN;
             SolarPhase = "UNKNOWN";
@@ -355,6 +357,12 @@ public partial class SunController : Node
         if (_earthMat == null || !IsInstanceValid(_earthMat))
             _earthMat = FindBodyMaterial("Earth_mesh");
         _earthMat?.SetShaderParameter("sun_dir", sunDir);
+        if (!_earthMaterialTelemetryPublished)
+        {
+            GD.Print($"PERF_SOLAR_BIND earthMaterial={(_earthMat != null ? "bound" : "missing")} "
+                + $"sunDir={sunDir.X:F4},{sunDir.Y:F4},{sunDir.Z:F4}");
+            _earthMaterialTelemetryPublished = true;
+        }
 
         RefreshPlanetMaterials();
         foreach (var material in _planetMaterials)

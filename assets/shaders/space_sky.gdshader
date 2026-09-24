@@ -684,10 +684,13 @@ void sky() {
 	// even if exposure still thinks the scene is dark (T=0 pad, 19 km ascent).
 	float sun_up = smoothstep(-0.06, 0.10, dot(up, to_sun));
 	// Keep a restrained daylight floor through the 40 km Starbase handoff. The
-	// previous 38 km cutoff made the 40 km case snap to a black upper sky even
-	// though the atmosphere is still optically present at that altitude. Extending
-	// the smooth tail to 55 km preserves a darkening stratosphere without a snap.
-	float thick_column = 1.0 - smoothstep(8000.0, 55000.0, max(observer_altitude, 0.0));
+	// previous 55 km tail still left a dark interpolation band below the geometric
+	// atmosphere edge. Fade the bounded floor against the configured atmosphere
+	// height so it follows the active body's optical shell and cannot persist in
+	// vacuum.
+	float daylight_tail_top = max(55000.0, atmosphere_height * 0.86);
+	float thick_column = 1.0 - smoothstep(8000.0, daylight_tail_top,
+		max(observer_altitude, 0.0));
 	stars *= 1.0 - sun_up * thick_column;
 
 	// Return one linear HDR radiance domain. Godot's environment applies exposure and
@@ -752,7 +755,11 @@ void sky() {
 		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);
 		dome += vec3(sun_glare, sun_glare * 0.85, sun_glare * 0.55);
 		float pad_sky = sun_up * thick_column * above * atmospheric_solar_visibility;
-		atmosphere = mix(atmosphere, dome, pad_sky);
+		// Treat the dome as a bounded daylight floor, not as a darkening blend:
+		// under-resolved grazing rays must not pull a continuous sky shell into a
+		// black band. Preserve any physically integrated radiance above the floor.
+		vec3 daylight_floor = max(atmosphere, dome);
+		atmosphere = mix(atmosphere, daylight_floor, pad_sky);
 	}
 	vec3 airglow = airglow_radiance * sun_illuminance;
 	float sky_luminance = dot(atmosphere, vec3(0.2126, 0.7152, 0.0722));

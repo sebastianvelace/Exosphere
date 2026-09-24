@@ -43,13 +43,49 @@ the production gate after the fix. The deterministic matrix covers 2, 5, 8,
 `tools/tests/earth_ground_lighting_contract_test.sh` now guards both no-data
 rejection functions and the stricter macro mask threshold.
 
-## Remaining visual gap
+## Scaled-Earth radiance follow-up
 
-The grey tile-shaped cut is closed, but the low-camera 2–12 km fixtures still
-show a broad dark atmospheric limb. That is a separate horizon-compositing
-issue, not provider coverage: the next pass should calibrate the atmosphere/
-ground radiance and camera altitude relationship using the same measured sky
-state. It should not be hidden with an arbitrary brightness multiplier.
+The grey tile-shaped cut is closed. The remaining far-field defect was a dark
+ocean and a dark interpolation band at the 20–40 km scaled-Earth handoff. The
+solar material binding and the world-space normal frame were both correct:
+
+```text
+PERF_SOLAR_BIND earthMaterial=bound sunDir=0.3744,-0.6431,-0.6680
+PERF_SOLAR_CYCLE ... elevationDeg=28.123 ... solarVisibility=1.000
+```
+
+The cause was presentation radiance: the linear Blue Marble ocean had direct
+Lambertian response but no bounded atmospheric sky fill, while the sky's
+daylight floor faded too early for the configured 140 km shell. This was not a
+flight-physics or solar-geometry defect.
+
+The correction is split across the two render layers:
+
+- `earth_surface.gdshader` adds a view-independent ocean term derived from the
+  same Rayleigh optical-depth state, gated by water, daylight, and solar
+  visibility. It cannot create a camera-centred contour.
+- `space_sky.gdshader` fades its bounded daylight floor against the active
+  atmosphere height, keeping the 40 km handoff continuous and forcing the floor
+  to zero before vacuum.
+
+The final real 1920×1080 `starbase-far` run in `/tmp/exo_env_ocean_final3/`
+finished with `STARBASE_FAR_OK`. The scaled-Earth contract passed for both
+handoff frames; `lowerMean` improved from the previous baseline of roughly
+`0.069` to `0.19773` at 20 km and `0.20213` at 40 km, with
+`surfaceClippedFrac=0.00000` in both frames. The images still show a broad dark
+gradient immediately above the bright blue limb at 40 km. Terrain/globe
+ownership is continuous, but the atmospheric composition itself is not closed:
+the residual is in grazing-ray sky transport or sky/limb overlap, not ocean
+albedo. Do not hide it with another global brightness multiplier; the next
+visual front should isolate `hits_ground`, tangent sky, and opaque globe
+coverage against a calibrated camera/exposure reference.
+
+## Remaining environment work
+
+The Starbase/Boca Chica transition is now continuous in the validated matrix.
+Cape Canaveral/Kennedy remains a separate environment-data pass: its launch
+complex geometry, coastal rasters, datum, and site-specific horizon need their
+own source inventory and visual gate rather than reusing the Starbase assets.
 
 ## Data references
 

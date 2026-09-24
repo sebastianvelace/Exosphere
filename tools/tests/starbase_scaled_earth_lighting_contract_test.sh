@@ -37,6 +37,12 @@ has 'night_floor : hint_range(0.0, 0.16)' "$shader" \
   "scaled Earth night floor is not bounded"
 has 'night_floor", 0.12f' "$materials" \
   "scaled Earth night floor calibration is not explicit"
+has 'uniform float ocean_sky_fill_strength' "$shader" \
+  "scaled Earth ocean sky fill is not explicitly bounded"
+has 'vec3 rayleigh_sky = vec3(1.0) - exp(-vertical_optical_depth * 5.0);' "$shader" \
+  "scaled Earth ocean sky fill is not derived from optical depth"
+has '* water * day * solar_visibility' "$shader" \
+  "scaled Earth ocean sky fill is not gated by surface and solar state"
 
 if [[ $# -eq 0 ]]; then
   echo "starbase_scaled_earth_lighting_contract_test: PASS (world-space solar lighting is bounded)"

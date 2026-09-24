@@ -30,6 +30,10 @@ uniform float day_gain     : hint_range(0.5, 2.0) = 1.15;
 // texture remains additive; this floor only keeps land/ocean readable when the
 // physically direct beam is absent and exposure is driven by the star field.
 uniform float night_floor : hint_range(0.0, 0.16) = 0.12;
+// Bounded ocean response to the blue atmospheric sky. The term is derived from
+// the same vertical Rayleigh optical depth used by the atmosphere integrator,
+// rather than from an arbitrary global brightness multiplier.
+uniform float ocean_sky_fill_strength : hint_range(0.0, 0.40) = 0.16;
 // Fades the whole distant-Earth backdrop in/out. Driven by FloatingOrigin from the CAMERA's
 // altitude: ~0 in the low launch view (so the local ground patch + sky own the horizon, no
 // grey seam between the two Earth representations) → 1 once the viewpoint is high enough that
@@ -141,6 +145,14 @@ void fragment() {
 	float diffuse_fill = mix(night_floor, 0.045, smoothstep(-0.18, 0.30, ndl));
 	vec3 lit = surface * (vec3(diffuse_fill)
 		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility);
+
+	// The distant ocean is not a black Lambertian tile: it reflects a bounded
+	// blue atmospheric dome. Use optical depth for the sky colour and keep this
+	// term view-independent so it cannot paint a camera-centred contour.
+	vec3 rayleigh_sky = vec3(1.0) - exp(-vertical_optical_depth * 5.0);
+	vec3 ocean_sky = rayleigh_sky * ocean_sky_fill_strength
+		* water * day * solar_visibility;
+	lit += ocean_sky;
 
 	// City lights on the night side (emissive). Threshold on luminance so ONLY genuine
 	// bright lights pass — the Black Marble texture has a dark, blocky data floor in

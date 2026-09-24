@@ -26,9 +26,11 @@ rg -q 'uniform float ground_fill_strength' "$SHADER" \
   || fail "sky ground fill is not altitude-gated during the globe handoff"
 rg -q 'clamp\(ground_fill_strength, 0.0, 1.0\)' "$SHADER" \
   || fail "sky ground fill strength is not applied to the geometric ground"
-rg -q 'float thick_column = 1.0 - smoothstep\(8000.0, 55000.0' "$SHADER" \
+rg -q 'float daylight_tail_top = max\(55000.0, atmosphere_height \* 0\.86\);' "$SHADER" \
+  || fail "daylight pad/ascent tail is not coupled to the configured atmosphere shell"
+rg -q 'float thick_column = 1.0 - smoothstep\(8000.0, daylight_tail_top' "$SHADER" \
   || fail "daylight pad/ascent does not occlude the starmap by optical column"
-rg -q 'atmosphere = mix\(atmosphere, dome, pad_sky\);' "$SHADER" \
-  || fail "daylight pad sky has no closed-form luminance floor"
+rg -q 'vec3 daylight_floor = max\(atmosphere, dome\);' "$SHADER" \
+  || fail "daylight pad sky has no bounded radiance floor"
 
 echo "space_sky_banding_contract_test: PASS (24-sample stable cloud-shell quadrature)"

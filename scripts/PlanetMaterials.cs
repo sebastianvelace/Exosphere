@@ -45,6 +45,7 @@ public static class PlanetMaterials
         mat.SetShaderParameter("night_lights", 2.4f);
         mat.SetShaderParameter("day_gain", 1.15f);
         mat.SetShaderParameter("night_floor", 0.12f);
+        mat.SetShaderParameter("ocean_sky_fill_strength", 0.18f);
         return mat;
     }
 
