@@ -33,6 +33,14 @@
       "source": "OpenAI image generation tool; generated for Exosphere on 2026-07-27",
       "commercialUse": "project_policy",
       "notes": "Original prompt requested a scientific low-Earth-orbit view with no logos, text, spacecraft or third-party characters."
+    },
+    {
+      "path": "assets/textures/earth_etopo2022_4k_height.png",
+      "category": "derived_terrain",
+      "license": "CC0-1.0",
+      "source": "NOAA NCEI ETOPO 2022; see data/provenance/earth_etopo2022_relief.json",
+      "commercialUse": "permitted_under_license",
+      "notes": "Generated offline from the documented source; visual scaled-space backdrop only, not physics or collision authority."
     }
   ],
   "fonts": [

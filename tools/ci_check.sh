@@ -41,6 +41,7 @@ bash tools/tests/space_sky_banding_contract_test.sh
 bash tools/tests/earth_ground_lighting_contract_test.sh
 bash tools/tests/starbase_scaled_earth_lighting_contract_test.sh
 bash tools/tests/starbase_3dep_relief_contract_test.sh
+bash tools/tests/earth_relief_pipeline_contract_test.sh
 bash tools/tests/solar_cycle_contract_test.sh
 bash tools/tests/mars_terrain_lighting_contract_test.sh
 bash tools/tests/edl_catch_guidance_contract_test.sh

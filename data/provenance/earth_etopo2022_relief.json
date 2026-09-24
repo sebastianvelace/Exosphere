@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "asset_id": "earth_etopo2022_scaled_relief",
+  "status": "source_validated_not_runtime_bound",
+  "purpose": "Scaled-space Earth relief for visual continuity above the local Starbase/Kennedy terrain handoff.",
+  "source": {
+    "name": "ETOPO 2022 Global Relief Model",
+    "provider": "NOAA National Centers for Environmental Information",
+    "variant": "bedrock",
+    "source_resolution_arc_seconds": 60,
+    "source_format": "GeoTIFF",
+    "source_url": "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/60s/60s_bed_elev_gtif/ETOPO_2022_v1_60s_N90W180_bed.tif",
+    "metadata_url": "https://www.ncei.noaa.gov/metadata/geoportal/rest/metadata/item/gov.noaa.ngdc.mgg.dem%3Aetopo_2022/html",
+    "doi": "10.25921/fd45-gt74",
+    "license": "CC0-1.0",
+    "vertical_reference": "EGM2008 (EPSG:3855 metadata); elevations in metres",
+    "coverage": "global land topography and ocean bathymetry"
+  },
+  "derived_asset": {
+    "file": "assets/textures/earth_etopo2022_4k_height.png",
+    "width": 4096,
+    "height": 2048,
+    "projection": "equirectangular EPSG:4326, longitude -180..180, latitude -90..90",
+    "encoding": "uint16 normalized elevation",
+    "elevation_min_m": -11000.0,
+    "elevation_max_m": 9000.0,
+    "source_nodata_policy": "must be inspected during conversion; do not silently invent terrain",
+    "generated_by": "tools/prepare_earth_relief.sh",
+    "sha256": null
+  },
+  "runtime_contract": {
+    "use": "visual_only",
+    "physics_authority": false,
+    "collision_authority": false,
+    "coordinate_convention": "earth shader uses longitude=atan2(z,x), latitude=asin(y)",
+    "activation_band_m": [20000.0, 500000.0],
+    "near_field_authority": "site-specific NAIP/3DEP terrain remains authoritative below the scaled-Earth handoff",
+    "acceptance": [
+      "source checksum is recorded after download",
+      "derived texture dimensions and uint16 encoding are verified",
+      "no seam at longitude wrap or latitude poles",
+      "real 1920x1080 framebuffer captures show relief continuity at 20, 50, 100 and 500 km",
+      "terrain asset does not alter simulation gravity, mass, collision or flight telemetry"
+    ]
+  },
+  "notes": [
+    "The raw global dataset is intentionally not committed to the repository.",
+    "ETOPO is a global backdrop source, not a substitute for launch-site photogrammetry or a collision mesh.",
+    "The derived range preserves Earth land and ocean relief while keeping the runtime texture bounded and streamable."
+  ]
+}
