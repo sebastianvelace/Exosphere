@@ -55,6 +55,24 @@ has 'float water_fresnel = 0.0204 + 0.9796 * pow(1.0 - view_cosine, 5.0);' "$sha
   "scaled Earth ocean is missing air-water Fresnel reflection"
 has 'vec3 ocean_sun_reflection = vec3(water_fresnel * sun_glint)' "$shader" \
   "scaled Earth ocean sun reflection is not bounded"
+has 'uniform sampler2D relief_tex' "$shader" \
+  "scaled Earth has no global relief texture"
+has 'textureLod(relief_tex' "$shader" \
+  "scaled Earth relief is not sampled at a stable mip level"
+has 'VERTEX = p * (1.0 + radial_displacement)' "$shader" \
+  "scaled Earth relief does not affect the surface silhouette"
+has 'float east_slope' "$shader" \
+  "scaled Earth relief does not derive an east terrain slope"
+has 'float north_slope' "$shader" \
+  "scaled Earth relief does not derive a north terrain slope"
+has 'SetShaderParameter("relief_enabled"' "$materials" \
+  "Earth material does not configure the global relief texture"
+has 'earth_etopo2022_4k_height.png' "$materials" \
+  "Earth material does not bind the derived ETOPO texture"
+has 'reliefTexture != null ? 1.0f : 0.0f' "$materials" \
+  "Earth relief does not fail closed when its asset is unavailable"
+has 'PERF_EARTH_RELIEF source=ETOPO2022' "$materials" \
+  "Earth relief runtime telemetry is missing"
 
 if [[ $# -eq 0 ]]; then
   echo "starbase_scaled_earth_lighting_contract_test: PASS (world-space solar lighting is bounded)"

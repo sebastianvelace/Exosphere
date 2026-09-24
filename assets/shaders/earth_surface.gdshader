@@ -46,6 +46,15 @@ uniform float planet_alpha : hint_range(0.0, 1.0) = 1.0;
 // the live solar visibility without changing the opaque surface radiance.
 uniform float atmosphere_shell : hint_range(0.0, 1.0) = 0.0;
 
+// Global ETOPO relief is a low-frequency visual layer for the scaled Earth. Local
+// NAIP/3DEP terrain remains authoritative near launch sites; this texture never
+// participates in gravity, collision or flight dynamics.
+uniform sampler2D relief_tex : hint_default_black, filter_linear_mipmap;
+uniform float relief_enabled : hint_range(0.0, 1.0) = 0.0;
+uniform float relief_min_m = -11000.0;
+uniform float relief_max_m = 9000.0;
+uniform float earth_radius_m = 6371008.8;
+
 // N3: high-frequency FBM micro-detail strength (0 = off, 0.18 = default).
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.18;
 // N4: cloud drift animation — set from script each frame (TIME * scale).
@@ -55,7 +64,25 @@ varying vec3 v_local;
 varying vec3 v_world_normal;
 varying vec3 v_world_pos;
 
+// Point on the unit sphere → equirectangular UV (lon = atan2(z,x), lat = asin(y)).
+vec2 equirect(vec3 p) {
+	float lon = atan(p.z, p.x);                 // −π … π
+	float lat = asin(clamp(p.y, -1.0, 1.0));    // −π/2 … π/2
+	return vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI);
+}
+
+float relief_elevation_m(vec2 uv) {
+	vec2 wrapped_uv = vec2(fract(uv.x), clamp(uv.y, 0.0, 1.0));
+	float encoded = textureLod(relief_tex, wrapped_uv, 0.0).r;
+	return mix(relief_min_m, relief_max_m, encoded);
+}
+
 void vertex() {
+	vec3 p = normalize(VERTEX);
+	float land_elevation_m = max(relief_elevation_m(equirect(p)), 0.0);
+	float radial_displacement = relief_enabled * land_elevation_m
+		/ max(earth_radius_m, 1.0);
+	VERTEX = p * (1.0 + radial_displacement);
 	v_local        = normalize(VERTEX);
 	v_world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	v_world_pos    = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -87,19 +114,33 @@ float es_fbm(vec2 p) {
 	return v;
 }
 
-// Point on the unit sphere → equirectangular UV (lon = atan2(z,x), lat = asin(y)).
-vec2 equirect(vec3 p) {
-	float lon = atan(p.z, p.x);                 // −π … π
-	float lat = asin(clamp(p.y, -1.0, 1.0));    // −π/2 … π/2
-	return vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI);
-}
-
 void fragment() {
 	vec3 p = normalize(v_local);
 	vec3 N = normalize(v_world_normal);
 	vec3 L = normalize(sun_dir);
 
 	vec2 uv = equirect(p);
+	if (relief_enabled > 0.5) {
+		float relief_height_m = relief_elevation_m(uv);
+		float land_mask = smoothstep(0.0, 250.0, relief_height_m);
+		float lat = asin(clamp(p.y, -1.0, 1.0));
+		float east_len = length(vec2(p.x, p.z));
+		vec3 local_east = east_len > 0.00001
+			? vec3(-p.z, 0.0, p.x) / east_len : vec3(1.0, 0.0, 0.0);
+		vec3 local_north = normalize(cross(local_east, p));
+		vec3 east = normalize((MODEL_MATRIX * vec4(local_east, 0.0)).xyz);
+		vec3 north = normalize((MODEL_MATRIX * vec4(local_north, 0.0)).xyz);
+		float du = 1.0 / 4096.0;
+		float dv = 1.0 / 2048.0;
+		float east_m = max(earth_radius_m * 2.0 * PI * max(cos(lat), 0.08) * du, 1.0);
+		float north_m = max(earth_radius_m * PI * dv, 1.0);
+		float east_slope = (relief_elevation_m(uv + vec2(du, 0.0))
+			- relief_elevation_m(uv - vec2(du, 0.0))) / (2.0 * east_m);
+		float north_slope = (relief_elevation_m(uv - vec2(0.0, dv))
+			- relief_elevation_m(uv + vec2(0.0, dv))) / (2.0 * north_m);
+		N = normalize(N - east * east_slope * land_mask
+			- north * north_slope * land_mask);
+	}
 
 	// ── N3: Day texture with FBM micro-detail ────────────────────────────────
 	// High-frequency FBM at UV * 180 gives ~5 km sub-texel variation at orbital

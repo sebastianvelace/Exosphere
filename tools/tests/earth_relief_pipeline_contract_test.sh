@@ -16,6 +16,10 @@ asset="$ROOT/assets/textures/earth_etopo2022_4k_height.png"
 
 rg -q '"name": "ETOPO 2022 Global Relief Model"' "$manifest" \
   || fail "ETOPO source identity is missing"
+rg -q '"manifestId": "earth_etopo2022_relief"' "$manifest" \
+  || fail "runtime provenance manifest id is missing"
+rg -q '"field": "global_height"' "$manifest" \
+  || fail "runtime provenance record is missing"
 rg -q '"license": "CC0-1.0"' "$manifest" \
   || fail "ETOPO license is not recorded"
 rg -q '"source_resolution_arc_seconds": 60' "$manifest" \

@@ -1,6 +1,6 @@
 # Global Earth relief pipeline
 
-Status: source validated, derived texture not yet runtime-bound (2026-09-24).
+Status: runtime-bound; Starbase far-field gate passed at 1920×1080 (2026-09-24).
 
 ## Why this source
 
@@ -50,6 +50,13 @@ The first runtime gate is 20, 50, 100 and 500 km camera altitude. The expected
 result is continuity, not close-up geological detail. Local NAIP/3DEP terrain
 must fade out before this backdrop becomes visible, and the handoff must not
 change physics telemetry.
+
+The first implemented acceptance run is the existing Starbase far-field matrix at
+2, 5, 8, 12, 20 and 40 km. It completed with `STARBASE_FAR_OK` at 1920×1080 and
+reported `enabled=True visualOnly=True physicsAuthority=False`. The 20–40 km
+framing looks toward the Gulf, so it validates the asset binding and handoff more
+than exposed continental relief. A land-facing globe capture remains the next
+visual comparison gate.
 
 ## Known limits
 

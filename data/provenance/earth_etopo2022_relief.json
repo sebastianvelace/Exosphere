@@ -1,7 +1,8 @@
 {
   "schema": 1,
+  "manifestId": "earth_etopo2022_relief",
   "asset_id": "earth_etopo2022_scaled_relief",
-  "status": "derived_asset_generated_not_runtime_bound",
+  "status": "runtime_bound_visual_gate_passed",
   "purpose": "Scaled-space Earth relief for visual continuity above the local Starbase/Kennedy terrain handoff.",
   "source": {
     "name": "ETOPO 2022 Global Relief Model",
@@ -48,5 +49,17 @@
     "The raw global dataset is intentionally not committed to the repository.",
     "ETOPO is a global backdrop source, not a substitute for launch-site photogrammetry or a collision mesh.",
     "The derived range preserves Earth land and ocean relief while keeping the runtime texture bounded and streamable."
+  ],
+  "records": [
+    {
+      "dataId": "earth_relief",
+      "field": "global_height",
+      "status": "derived",
+      "source": "NOAA NCEI ETOPO 2022, DOI 10.25921/fd45-gt74",
+      "accessedDate": "2026-09-24",
+      "variant": "60 arc-second bedrock GeoTIFF converted to 4096x2048 uint16 PNG",
+      "conditions": "Visual scaled-space backdrop only; local NAIP/3DEP owns the launch-site handoff.",
+      "uncertainty": "Global relief is not suitable for navigation or close-up site geometry; conversion clips to -11000..9000 m."
+    }
   ]
 }

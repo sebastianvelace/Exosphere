@@ -241,9 +241,10 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
    - Primera pasada de iluminacion solar, exposicion, sky/atmosfera y camaras ya esta
      implementada para que launch/orbit/reentry/cockpit se lean como escalas reales.
      Pendiente: comparacion lado-a-lado contra referencias y ajuste en hardware GPU.
-   - Relieve global Earth iniciado con ETOPO 2022: procedencia CC0, manifiesto y
-     conversión reproducible preparados. Pendiente: generar el PNG derivado, enlazarlo
-     al globo escalado y cerrar la matriz visual 20–500 km sin convertirlo en física.
+   - Relieve global Earth con ETOPO 2022 ya generado y enlazado al shader: procedencia
+     CC0, conversión reproducible, fail-closed y matriz Starbase 1920×1080 a 2–40 km
+     pasan. Pendiente: captura land-facing y comparación 20–500 km; sigue siendo una
+     capa visual, nunca autoridad de física o colisión.
 
 4. **Capturas de aceptacion**
    - Automatizar capturas con framebuffer real para pad, liftoff, Max-Q, staging,

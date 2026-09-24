@@ -23,6 +23,7 @@ public static class PlanetMaterials
     public static readonly Vector3 DefaultSunDir = new Vector3(0.4f, 0.5f, 0.8f).Normalized();
 
     private const string EarthShaderPath = "res://assets/shaders/earth_surface.gdshader";
+    private const string EarthReliefPath = "res://assets/textures/earth_etopo2022_4k_height.png";
     private const string BodyShaderPath  = "res://assets/shaders/planet_body.gdshader";
 
     /// <summary>
@@ -39,6 +40,15 @@ public static class PlanetMaterials
         mat.SetShaderParameter("day_tex",   LoadTexture("res://assets/textures/earth_day.jpg"));
         mat.SetShaderParameter("night_tex", LoadTexture("res://assets/textures/earth_night.jpg"));
         mat.SetShaderParameter("cloud_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
+        var reliefTexture = GD.Load<Texture2D>(EarthReliefPath);
+        if (reliefTexture != null)
+            mat.SetShaderParameter("relief_tex", reliefTexture);
+        mat.SetShaderParameter("relief_enabled", reliefTexture != null ? 1.0f : 0.0f);
+        mat.SetShaderParameter("relief_min_m", -11000.0f);
+        mat.SetShaderParameter("relief_max_m", 9000.0f);
+        mat.SetShaderParameter("earth_radius_m", 6371008.8f);
+        GD.Print($"PERF_EARTH_RELIEF source=ETOPO2022 asset={EarthReliefPath} " +
+            $"enabled={reliefTexture != null} visualOnly=True physicsAuthority=False");
         var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
         mat.SetShaderParameter("vertical_optical_depth", new Vector3(
             (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
@@ -63,6 +73,7 @@ public static class PlanetMaterials
         mat.SetShaderParameter("day_tex", LoadTexture("res://assets/textures/earth_day.jpg"));
         mat.SetShaderParameter("night_tex", LoadTexture("res://assets/textures/earth_night.jpg"));
         mat.SetShaderParameter("cloud_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
+        mat.SetShaderParameter("relief_enabled", 0.0f);
         var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
         mat.SetShaderParameter("vertical_optical_depth", new Vector3(
             (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
