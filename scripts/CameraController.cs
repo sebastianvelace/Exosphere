@@ -48,6 +48,7 @@ public partial class CameraController : Node3D
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
         _externalLookAtY = null;
+        _allowCloseExternalFrame = false;
         _yaw = 28f;
         _pitch = 10f;
         // Frame the active geometry instead of assuming a 50 m Starship. Keep the
@@ -64,7 +65,7 @@ public partial class CameraController : Node3D
 
     /// <summary>Set a deterministic external chase frame for visual acceptance scenes.</summary>
     public void SetExternalChaseFrame(float yaw, float pitch, float distance,
-        float? lookAtY = null)
+        float? lookAtY = null, bool allowCloseup = false)
     {
         _cockpit = false;
         _padPresetIdx = 0;
@@ -72,6 +73,7 @@ public partial class CameraController : Node3D
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
         _externalLookAtY = lookAtY;
+        _allowCloseExternalFrame = allowCloseup;
         _yaw = yaw;
         _pitch = Mathf.Clamp(pitch, -89f, 89f);
         _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
@@ -128,6 +130,7 @@ public partial class CameraController : Node3D
     private float _distance = 80f;   // full stack is ~43 units tall; 80 gives a nice frame
     private float? _presentationDistanceTarget;
     private float? _externalLookAtY;
+    private bool _allowCloseExternalFrame;
 
     // Event changes (Pad -> Chase, staging, and the return from EDL presentation) update
     // the requested frame below. Keep the rendered frame in local vessel coordinates and
@@ -375,9 +378,10 @@ public partial class CameraController : Node3D
             Vector3 vesselCenter = Vector3.Zero;
             if (Mode == CameraMode.Chase && active != null)
             {
-                effectiveDistance = Mathf.Max(effectiveDistance, (float)
-                    VehicleCameraFraming.MinimumOrbitDistance(
-                        active.VehicleLength, active.MaximumDiameter, _externalFov));
+                if (!_allowCloseExternalFrame)
+                    effectiveDistance = Mathf.Max(effectiveDistance, (float)
+                        VehicleCameraFraming.MinimumOrbitDistance(
+                            active.VehicleLength, active.MaximumDiameter, _externalFov));
                 vesselCenter = ToGQuat(active.Orientation)
                     * (Vector3.Up * (float)(active.VehicleLength / (2.0 * 2.8)));
             }

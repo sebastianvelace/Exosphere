@@ -71,6 +71,7 @@ Options:
   --ship        Capture standalone Starship in vacuum at full/half thrust, shutdown,
                 plus close steel/TPS and three-quarter flap inspection frames.
   --flaps       Capture only the deterministic windward/leeward flap inspection pair.
+  --enginebay   Capture a deterministic underside inspection of the six Starship Raptors.
   --orbital-plume
                 Capture a deterministic 200 km Starship vacuum plume with the production
                 chase camera, HUD, vehicle silhouette, and fail-closed plume telemetry.
@@ -212,6 +213,7 @@ while [[ $# -gt 0 ]]; do
     --launch-track) MODE="launch_track"; shift ;;
     --ship) MODE="ship"; shift ;;
     --flaps) MODE="flaps"; shift ;;
+    --enginebay) MODE="enginebay"; shift ;;
     --orbital-plume) MODE="orbital_plume"; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
     --kennedy-far)
@@ -631,7 +633,7 @@ public partial class _PlaytestShot : Node
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     int _beautyWaitFrames;
     int _orbitalPlumeStableFrames;
-    bool _edlSeeded, _flipComplete, _shipSeeded;
+    bool _edlSeeded, _flipComplete, _shipSeeded, _engineBayCaptured;
     readonly (string Slug, double AltitudeM)[] _starbaseFarCases =
     {
         ("starbase_far_2km", 2_000.0),
@@ -1110,6 +1112,45 @@ public partial class _PlaytestShot : Node
                     ? "ship_flaps_windward" : "ship_flaps_leeward");
                 _shipPlumeQueued = true;
             }
+            return;
+        }
+
+        if (_mode == "enginebay")
+        {
+            if (!_shipSeeded && _readyFrames >= 45)
+            {
+                bridge.TriggerStaging();
+                bridge.JumpToOrbit(118_000.0);
+                bridge.SetThrottle(1.0);
+                vessel.AngularVelocity = Vector3d.Zero;
+                Vector3d inspectionUp = body.GetGeodeticUp(vessel.Position);
+                Vector3d inspectionEast = body.GetEastDirection(vessel.Position);
+                Vector3d inspectionSouth = inspectionEast.Cross(inspectionUp).Normalized;
+                var inspectionBasis = new Basis(
+                    ToGodot(-inspectionEast), ToGodot(inspectionUp), ToGodot(-inspectionSouth));
+                var inspectionRotation = inspectionBasis.GetRotationQuaternion();
+                vessel.Orientation = new Quaterniond(
+                    inspectionRotation.W, inspectionRotation.X, inspectionRotation.Y, inspectionRotation.Z);
+                if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
+                    hud.Visible = false;
+                CameraController.Instance?.EnterShipChaseView();
+                // Look from below at the thrust puck, with enough distance to include all six exits.
+                CameraController.Instance?.SetExternalChaseFrame(
+                    180f, -55f, 7.0f, -7.3f, allowCloseup: true);
+                _shipSeeded = true;
+                _readyFrames = 0;
+                return;
+            }
+            if (_shipSeeded && !_engineBayCaptured && _pendingSlug == null && _readyFrames >= 45)
+            {
+                if (DeliveredThrottle(vessel, body) < 0.95) return;
+                bridge.SetTimeScale(0.0);
+                QueueCapture("ship_enginebay");
+                _engineBayCaptured = true;
+                return;
+            }
+            if (_engineBayCaptured && _pendingSlug == null)
+                Finish("ENGINEBAY_OK");
             return;
         }
 
@@ -3449,6 +3490,7 @@ public partial class _PlaytestShot : Node
           LogStarbaseFarFieldVisualTelemetry(slug);
           LogKennedyTerrainVisualTelemetry(slug);
           LogEngineVisualTelemetry(slug);
+          LogEngineBayVisualTelemetry(slug);
           LogFlapVisualTelemetry(slug);
           _log.WriteLine($"RENDERER_ACTUAL {RenderingServer.GetCurrentRenderingMethod()}");
           if (slug is "tower_clear" or "early_ascent")
@@ -3781,7 +3823,7 @@ public partial class _PlaytestShot : Node
     private void LogEngineVisualTelemetry(string slug)
     {
         if (slug is not ("pad" or "liftoff" or "startup_ramp"
-            or "ship_vacuum" or "ship_vacuum_half" or "ship_vacuum_off")) return;
+            or "ship_vacuum" or "ship_vacuum_half" or "ship_vacuum_off" or "ship_enginebay")) return;
 
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
@@ -3805,6 +3847,29 @@ public partial class _PlaytestShot : Node
             + $"nominal={summary.NominalEngineCount} rows={summary.ReadoutEngineCount} "
             + $"delivered={delivered} starting={starting} failed={failed} "
             + $"deliveredThrottle={EngineHudPresentation.DeliveredThrottle(rows):F3}");
+        _log.Flush();
+    }
+
+    private void LogEngineBayVisualTelemetry(string slug)
+    {
+        if (slug != "ship_enginebay") return;
+        var renderer = GetTree().Root.FindChild("ActiveVesselRenderer", true, false) as Node3D;
+        var camera = CameraController.Instance?.PresentationCamera ?? GetViewport().GetCamera3D();
+        int vacuumExits = 0;
+        int seaLevelExits = 0;
+        foreach (Node node in GetTree().GetNodesInGroup(VesselRenderer.StarshipEngineExitGroup))
+        {
+            if (renderer == null || !renderer.IsAncestorOf(node)) continue;
+            string variant = node.GetMeta("engine_variant", "").AsString();
+            if (variant == "vacuum") vacuumExits++;
+            if (variant == "sea_level") seaLevelExits++;
+        }
+        _log.WriteLine($"VISUAL_ENGINEBAY slug={slug} renderer={renderer != null} "
+            + $"camera={camera != null} mode={CameraController.Instance?.Mode} "
+            + $"yaw={CameraController.Instance?.PresentationYawDegrees ?? float.NaN:F1} "
+            + $"pitch={CameraController.Instance?.PresentationPitchDegrees ?? float.NaN:F1} "
+            + $"distance={CameraController.Instance?.PresentationDistance ?? float.NaN:F1} "
+            + $"vacuumExits={vacuumExits} seaLevelExits={seaLevelExits}");
         _log.Flush();
     }
 
@@ -4675,6 +4740,48 @@ verify_pngs() {
       END { exit !(found && mean > 0.005 && dark < 0.98 && clipped < 0.10) }
     ' "$LOG"; then
       echo "ERROR: standalone Starship image is empty or broadly clipped" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "enginebay" ]]; then
+    if [[ ! -s "$OUT_DIR/exo_play_ship_enginebay.png" ]]; then
+      echo "ERROR: missing Starship engine-bay inspection frame" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=ENGINEBAY_OK' "$LOG"; then
+      echo "ERROR: Starship engine-bay inspection did not finish cleanly" >&2
+      return 1
+    fi
+    if ! awk '
+      /^VISUAL_ENGINEBAY / {
+        renderer = camera = mode = ""; vacuum = sea = -1
+        for (i = 1; i <= NF; i++) {
+          split($i, field, "=")
+          if (field[1] == "renderer") renderer = field[2]
+          if (field[1] == "camera") camera = field[2]
+          if (field[1] == "mode") mode = field[2]
+          if (field[1] == "vacuumExits") vacuum = field[2] + 0
+          if (field[1] == "seaLevelExits") sea = field[2] + 0
+        }
+        valid = renderer == "True" && camera == "True" && mode == "Chase" && vacuum == 3 && sea == 3
+        found++
+      }
+      END { exit !(found == 1 && valid) }
+    ' "$LOG"; then
+      echo "ERROR: engine-bay telemetry did not prove the six Starship exits and underside camera" >&2
+      return 1
+    fi
+    if ! awk '
+      /^IMAGE slug=ship_enginebay / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^mean=/) { split($i, p, "="); mean = p[2] + 0 }
+          if ($i ~ /^darkFrac=/) { split($i, p, "="); dark = p[2] + 0 }
+          if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
+        }
+        found = 1
+      }
+      END { exit !(found && mean > 0.005 && dark < 0.98 && clipped < 0.10) }
+    ' "$LOG"; then
+      echo "ERROR: engine-bay framebuffer is empty or broadly clipped" >&2
       return 1
     fi
   elif [[ "$MODE" == "orbital_plume" ]]; then

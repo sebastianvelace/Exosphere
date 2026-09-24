@@ -57,6 +57,7 @@ public partial class VesselRenderer : Node3D
     public const string StarshipFlapBladeGroup = "starship_flap_blade";
     public const string StarshipFlapRootGroup = "starship_flap_root";
     public const string StarshipFlapHingeGroup = "starship_flap_hinge";
+    public const string StarshipEngineExitGroup = "starship_engine_exit";
 
     private sealed class FlapRig
     {
@@ -95,6 +96,7 @@ public partial class VesselRenderer : Node3D
     private OmniLight3D? _engineBayLight;
     private OmniLight3D? _engineRimLight;
     private OmniLight3D? _skyFillLight;
+    private bool _vehicleLightsSuperHeavy;
 
     // ── Real-scale hull radius ────────────────────────────────────────────
     // Starship/Super Heavy are 9 m in diameter → 4.5 m radius. At the render
@@ -535,7 +537,15 @@ public partial class VesselRenderer : Node3D
             new Vector3(0, o + noseBase + noseLen - 0.055f, 0));
 
         AddMesh("Skirt",
-            new CylinderMesh { TopRadius = BodyR, BottomRadius = 1.08f * RScale, Height = ShipSkirtH, RadialSegments = 48 },
+            new CylinderMesh
+            {
+                TopRadius = BodyR,
+                BottomRadius = 1.08f * RScale,
+                Height = ShipSkirtH,
+                RadialSegments = 48,
+                // The aft skirt is an open engine bay, not a solid end cap.
+                CapBottom = false,
+            },
             darkSteel, new Vector3(0, skirtMid, 0));
         AddWeldRing("SkirtLip", 1.155f * RScale, skirtTop);
 
@@ -553,7 +563,13 @@ public partial class VesselRenderer : Node3D
             aftFlapTiles, shipSteel, tipSpanFraction: 0.60f);
         var sootSteel = Mat(new Color(0.20f, 0.19f, 0.19f), 0.70f, 0.62f);
         AddMesh("ShipBaySoot", new CylinderMesh
-            { TopRadius = 1.08f * RScale, BottomRadius = 1.10f * RScale, Height = 0.9f, RadialSegments = 48 },
+            {
+                TopRadius = 1.08f * RScale,
+                BottomRadius = 1.10f * RScale,
+                Height = 0.9f,
+                RadialSegments = 48,
+                CapBottom = false,
+            },
             sootSteel, new Vector3(0, o + ShipSkirtBase + 0.4f, 0));
         AddAftShieldSkirt(o, sootSteel);
         if (vessel.Parts.Parts.Any(p => p.Definition.Id == "starship_landing_gear"))
@@ -570,8 +586,14 @@ public partial class VesselRenderer : Node3D
         float slExitY = bellY + 0.35f;
 
         AddMesh("ShipThrustPuck", new CylinderMesh
-            { TopRadius = 1.18f, BottomRadius = 1.28f, Height = 0.24f,
-                RadialSegments = 48 }, sootSteel,
+            {
+                TopRadius = 1.18f,
+                BottomRadius = 1.28f,
+                Height = 0.24f,
+                RadialSegments = 48,
+                // Keep the upper thrust frame, but expose the six nozzle throats below it.
+                CapBottom = false,
+            }, sootSteel,
             new Vector3(0, o + ShipSkirtBase - 0.02f, 0));
 
         for (int i = 0; i < 3; i++)
@@ -1825,6 +1847,7 @@ public partial class VesselRenderer : Node3D
 
     private void AttachVehicleLights(float engineY, bool superHeavy)
     {
+        _vehicleLightsSuperHeavy = superHeavy;
         _engineBayLight?.QueueFree();
         _engineRimLight?.QueueFree();
         _skyFillLight?.QueueFree();
@@ -1906,15 +1929,17 @@ public partial class VesselRenderer : Node3D
         if (_engineBayLight != null)
         {
             _engineBayLight.Visible = firing;
-            _engineBayLight.LightEnergy = firing
-                ? (18f + 42f * t) * (1f - space * 0.35f)
+        _engineBayLight.LightEnergy = firing
+                ? (_vehicleLightsSuperHeavy ? 18f + 42f * t : 7f + 16f * t)
+                    * (1f - space * 0.35f)
                 : 0f;
         }
         if (_engineRimLight != null)
         {
             _engineRimLight.Visible = firing;
             _engineRimLight.LightEnergy = firing
-                ? (10f + 22f * t) * (1f - space * 0.25f)
+                ? (_vehicleLightsSuperHeavy ? 10f + 22f * t : 4f + 9f * t)
+                    * (1f - space * 0.25f)
                 : 0f;
         }
         if (_skyFillLight != null)
@@ -1924,19 +1949,19 @@ public partial class VesselRenderer : Node3D
         {
             _bellMat.EmissionEnabled = firing;
             _bellMat.Emission = new Color(1.0f, 0.42f, 0.12f);
-            _bellMat.EmissionEnergyMultiplier = t * 3.8f;
+            _bellMat.EmissionEnergyMultiplier = t * 0.65f;
         }
         if (_throatMat != null)
         {
             _throatMat.EmissionEnabled = firing;
             _throatMat.Emission = new Color(1.0f, 0.72f, 0.35f);
-            _throatMat.EmissionEnergyMultiplier = t * 6.5f;
+            _throatMat.EmissionEnergyMultiplier = t * 2.4f;
         }
         if (_bellLipMat != null)
         {
             _bellLipMat.EmissionEnabled = firing;
             _bellLipMat.Emission = new Color(1.0f, 0.85f, 0.55f);
-            _bellLipMat.EmissionEnergyMultiplier = t * 2.2f;
+            _bellLipMat.EmissionEnergyMultiplier = t * 0.85f;
         }
     }
 
@@ -3449,10 +3474,12 @@ public partial class VesselRenderer : Node3D
                 _bellMat, new Vector3(pos.X, yc, pos.Z));
         }
 
-        AddMesh($"{name}ExitLip",
+        var exitLip = AddMesh($"{name}ExitLip",
             new CylinderMesh { TopRadius = exitR * 1.015f, BottomRadius = exitR * 1.015f,
                 Height = 0.055f, RadialSegments = 48, CapTop = false, CapBottom = false },
             _bellLipMat, new Vector3(pos.X, pos.Y + 0.028f, pos.Z));
+        exitLip.AddToGroup(StarshipEngineExitGroup);
+        exitLip.SetMeta("engine_variant", bellRings >= 8 ? "vacuum" : "sea_level");
 
         // Thin-wall RVac extensions have conspicuous longitudinal stiffeners.
         if (bellRings >= 8)
@@ -3514,6 +3541,7 @@ public partial class VesselRenderer : Node3D
         _engineBayLight = null;
         _engineRimLight = null;
         _skyFillLight = null;
+        _vehicleLightsSuperHeavy = false;
         _flapRigs.Clear();
         _landingLegRigs.Clear();
         _landingGearDeployment = 0f;

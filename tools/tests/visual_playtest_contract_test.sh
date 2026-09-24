@@ -118,6 +118,15 @@ if ! grep -q 'ship_flaps_windward' "$HARNESS_SCRIPT" \
   echo "FAIL standalone Starship mode lacks fail-closed flap inspection evidence" >&2
   exit 1
 fi
+if ! grep -q -- '--enginebay) MODE="enginebay"' "$HARNESS_SCRIPT" \
+  || ! grep -q 'SUMMARY reason=ENGINEBAY_OK' "$HARNESS_SCRIPT" \
+  || ! grep -q 'VISUAL_ENGINEBAY slug=' "$HARNESS_SCRIPT" \
+  || ! grep -q 'vacuum == 3 && sea == 3' "$HARNESS_SCRIPT" \
+  || ! grep -q 'DeliveredThrottle(vessel, body) < 0.95' "$HARNESS_SCRIPT" \
+  || ! grep -q 'allowCloseup: true' "$HARNESS_SCRIPT"; then
+  echo "FAIL engine-bay mode lacks spooled six-engine and underside framebuffer evidence" >&2
+  exit 1
+fi
 if ! grep -q 'SUMMARY reason=SMOKE_OK' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_LAUNCH slug=pad present=True visible=True' "$HARNESS_SCRIPT"; then
   echo "FAIL smoke mode does not prove the single hero launch complex" >&2

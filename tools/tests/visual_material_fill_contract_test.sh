@@ -89,6 +89,9 @@ rg -q 'splitTopSurface: true' "$renderer" \
   && rg -q 'blade\.SetSurfaceOverrideMaterial\(0, rootMat\)' "$renderer" \
   && rg -q 'blade\.SetSurfaceOverrideMaterial\(1, bladeMat\)' "$renderer" \
   || fail "Starship flaps do not separate leeward steel from windward TPS"
+rg -q 'StarshipEngineExitGroup' "$renderer" \
+  && rg -q 'CapBottom = false' "$renderer" \
+  || fail "Starship aft engine bay is not open and instrumentable"
 if rg -q 'name \+ "Root".*BoxMesh' "$renderer"; then
   fail "Starship flap root regressed to a rectangular box"
 fi

@@ -218,3 +218,34 @@ The fixture freezes only presentation time after entering a physical Flight 7 or
   steel/TPS surface splits and 4/4 correctly oriented TPS faces in both views. The measured
   TPS-normal/windward dot products are 0.903–0.962; projected widths remain 17–43 px and
   heights 59–135 px.
+
+## 10. Aft skirt and engine-bay pass (2026-09-24)
+
+The underside inspection exposed a concrete presentation defect: the Starship skirt, soot bay
+and thrust frame each had a lower cylinder cap. Together they formed a solid disk that hid the
+six nozzle exits, so the vehicle read as a white circular plug with only two campanas visible
+from below. The fix keeps the lateral structural volumes but opens their lower surfaces.
+
+The six exits are now grouped and tagged as three vacuum Raptors plus three sea-level Raptors.
+The visual fixture lets the engines spool to delivered throttle before freezing presentation
+time; it does not alter thrust, propellant, guidance or engine failure state. The underside
+camera is explicitly a close-up presentation frame and does not change normal player framing.
+
+| Change | Evidence / boundary |
+| --- | --- |
+| Open lower `Skirt`, `ShipBaySoot` and `ShipThrustPuck` surfaces | Removes the false solid cap and exposes the engine bay; structural side walls remain. `[synthesis]` |
+| Group/tag six nozzle exits | Runtime telemetry proves `vacuumExits=3` and `seaLevelExits=3`, independent of Godot sibling-name uniquing. |
+| Warm engine-bay bounce reduced for Ship; throat/lip emission retained | Keeps dark exterior bell material readable while preserving a warm active-engine cue. `[synthesis]` |
+| `--enginebay` 1920×1080 fixture | Requires active renderer, underside chase camera, six exits, delivered throttle `1.000`, and decoded PNG evidence. |
+
+**Current real-framebuffer evidence (Compatibility/llvmpipe, 1920×1080):**
+
+- Baseline closed-bay capture: `/tmp/exo_enginebay_under_baseline/exo_play_ship_enginebay.png`
+  (`darkFrac=0.98725`; telemetry failed closed because exits were not discoverable).
+- Open-bay intermediate: `/tmp/exo_enginebay_under_open/exo_play_ship_enginebay.png`
+  (six exits proven; camera still too dark at `darkFrac=0.98951`).
+- Spooled/tuned final: `/tmp/exo_enginebay_under_tuned/exo_play_ship_enginebay.png`
+  (`vacuumExits=3`, `seaLevelExits=3`, `deliveredThrottle=1.000`, `darkFrac=0.87090`,
+  `clippedFrac=0.03158`, `surfaceClippedFrac=0.03255`).
+
+No aerodynamic, propulsion, mass, guidance or control-law code changed in this pass.
