@@ -111,6 +111,9 @@ if ! grep -q 'ship_flaps_windward' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_FLAPS slug=' "$HARNESS_SCRIPT" \
   || ! grep -q 'GetNodesInGroup(group)' "$HARNESS_SCRIPT" \
   || ! grep -q 'root.IsAncestorOf(mesh)' "$HARNESS_SCRIPT" \
+  || ! grep -q 'materialSplits={materialSplits}' "$HARNESS_SCRIPT" \
+  || ! grep -q 'orientedFaces={orientedFaces}' "$HARNESS_SCRIPT" \
+  || ! grep -q 'splits != 4 || oriented != 4' "$HARNESS_SCRIPT" \
   || ! grep -q 'readable < 4' "$HARNESS_SCRIPT"; then
   echo "FAIL standalone Starship mode lacks fail-closed flap inspection evidence" >&2
   exit 1

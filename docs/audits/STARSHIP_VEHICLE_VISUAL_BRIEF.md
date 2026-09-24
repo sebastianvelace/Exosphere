@@ -1,8 +1,8 @@
 # Starship + Super Heavy — vehicle visual brief
 
-**Status:** research + implementation brief for the *vehicle-owned* workstream.
-**Date:** 2026-08-23
-**Branch:** `visual/starship-vehicle-realism`
+**Status:** living research + implementation brief for the *vehicle-owned* workstream.
+**Updated:** 2026-09-24
+**Branch:** `main`
 **Scope:** hull, TPS, flaps, grid fins, raceway, chines, engine bells, and **vehicle-side lighting** (sun response, self-shadow, exhaust bounce, ascent rim).
 **Out of scope:** pad tile / ocean skirt / sky / Earth limb / deluge sheets (`EarthGround`, `Sky`, `space_sky`, planet shaders). Particle/mesh ownership of `PlumeSystem` is another agent; this brief may still specify *lights parented to the vehicle* driven by engine state.
 
@@ -191,17 +191,30 @@ The public fidelity boundary remains explicit:
 | Seven-station curved/tapered flap planform | `VesselRenderer` | Replaces the constant-sided trapezoidal slab; keeps forward and aft silhouettes distinct. `[estimate]` |
 | Full chord mounted outside the barrel | `VesselRenderer` | Removes hidden/intersecting geometry while preserving the previous outer reach. |
 | Extruded steel root fairing + larger longitudinal hinge | `VesselRenderer` | Replaces the rectangular root block and leaves a readable, non-coplanar hull transition. `[estimate]` |
+| Separate windward TPS and leeward steel blade faces | `VesselRenderer` | Removes the one-material black slab: the +local-Z face maps toward vehicle windward and uses the tile shader; the opposite face and exposed edge use stainless steel. `[synthesis]` |
 | Semantic blade/root/hinge groups and `flap_id` metadata | `VesselRenderer`, visual harness | Lets framebuffer evidence bind to the active renderer despite Godot sibling-name uniquing. |
-| Deterministic `--flaps` windward/leeward pair | `tools/visual_playtest.sh` | Requires all four blades, roots and hinges plus non-empty 1920×1080 framebuffer evidence. |
+| Deterministic `--flaps` windward/leeward pair | `tools/visual_playtest.sh` | Requires all four blades, roots and hinges, two correctly assigned material surfaces, windward-normal agreement and non-empty 1920×1080 framebuffer evidence. |
+
+The face split is constrained by public visual evidence, not claimed as production CAD:
+
+- SpaceX's overview establishes the four-flap architecture and control role.
+- Public inspection photographs show the black tiled windward side adjacent to exposed
+  stainless structure: [SN20 tile inspection](https://commons.wikimedia.org/wiki/File:Starship_SN20_getting_a_tile_inspection.jpg)
+  and [SN15 flap/nose detail](https://commons.wikimedia.org/wiki/File:Starship_SN15_flap_and_nosecone_(51437260707).jpg).
+- The exact tile termination, edge treatment and internal hinge construction of the Flight 7
+  article remain unpublished; those details stay `[estimate]` rather than invented hardware.
 
 No aerodynamic coefficients, actuator commands, flight-control mixing or EDL laws changed.
 The fixture freezes only presentation time after entering a physical Flight 7 orbit.
 
-**Comparable real-framebuffer evidence (1920×1080, Compatibility/llvmpipe):**
+**Reproducible comparison and current real-framebuffer evidence
+(1920×1080, Compatibility/llvmpipe):**
 
-- Before: `/tmp/exo_flaps_baseline_v3/exo_play_ship_flaps_{windward,leeward}.png`
-- After: `/tmp/exo_flaps_final/exo_play_ship_flaps_{windward,leeward}.png`
-- After telemetry: 4 blades, 4 roots, 4 hinges and 4/4 projected-readable flaps in
-  both views; projected widths remain 17–43 px and heights 59–135 px.
-
-Engram `visual/starship-vehicle` could not be written (MCP cwd ambiguous: intgrascale vs kicad).
+- Baseline fixture state: commit `b47092f`.
+- Geometry pass state: commit `33a779f`.
+- Current material-face run: `/tmp/exo_flap_faces_final/exo_play_ship_flaps_{windward,leeward}.png`
+  (ephemeral local artifacts; regenerate with `tools/visual_playtest.sh --flaps`).
+- Final telemetry: 4 blades, 4 roots, 4 hinges, 4/4 projected-readable flaps, 4/4
+  steel/TPS surface splits and 4/4 correctly oriented TPS faces in both views. The measured
+  TPS-normal/windward dot products are 0.903–0.962; projected widths remain 17–43 px and
+  heights 59–135 px.

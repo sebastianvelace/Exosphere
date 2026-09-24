@@ -85,6 +85,10 @@ rg -q 'AddFlap\("AftFlapL".*3\.95f, 1\.32f' "$renderer" \
 rg -q 'BuildStarshipFlapRootFairingMesh' "$renderer" \
   && rg -q 'BuildExtrudedPlanformMesh' "$renderer" \
   || fail "Starship flap roots and blades are not using bounded extruded planforms"
+rg -q 'splitTopSurface: true' "$renderer" \
+  && rg -q 'blade\.SetSurfaceOverrideMaterial\(0, rootMat\)' "$renderer" \
+  && rg -q 'blade\.SetSurfaceOverrideMaterial\(1, bladeMat\)' "$renderer" \
+  || fail "Starship flaps do not separate leeward steel from windward TPS"
 if rg -q 'name \+ "Root".*BoxMesh' "$renderer"; then
   fail "Starship flap root regressed to a rectangular box"
 fi

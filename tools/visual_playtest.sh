@@ -3537,6 +3537,7 @@ public partial class _PlaytestShot : Node
         var camera = CameraController.Instance?.PresentationCamera;
         string[] flapNames = { "FwdFlapL", "FwdFlapR", "AftFlapL", "AftFlapR" };
         int blades = 0, roots = 0, hinges = 0, projectedReadable = 0;
+        int materialSplits = 0, orientedFaces = 0;
 
         foreach (string flapName in flapNames)
         {
@@ -3546,6 +3547,19 @@ public partial class _PlaytestShot : Node
             if (blade?.Mesh != null) blades++;
             if (root?.Mesh != null) roots++;
             if (hinge?.Mesh != null) hinges++;
+
+            int surfaces = blade?.Mesh?.GetSurfaceCount() ?? 0;
+            bool steelFace = UsesShader(blade, 0, "steel.gdshader");
+            bool tpsFace = UsesShader(blade, 1, "heat_tile.gdshader");
+            if (surfaces == 2 && steelFace && tpsFace) materialSplits++;
+            float tpsWindwardDot = float.NaN;
+            if (blade != null && renderer != null)
+            {
+                Vector3 tpsNormal = (blade.GlobalBasis * Vector3.Back).Normalized();
+                Vector3 windward = (renderer.GlobalBasis * Vector3.Left).Normalized();
+                tpsWindwardDot = tpsNormal.Dot(windward);
+                if (tpsWindwardDot >= 0.45f) orientedFaces++;
+            }
 
             float screenWidth = 0f, screenHeight = 0f;
             bool inFront = false;
@@ -3577,13 +3591,24 @@ public partial class _PlaytestShot : Node
             Vector3 size = blade?.Mesh?.GetAabb().Size ?? Vector3.Zero;
             _log.WriteLine($"FLAP_NODE slug={slug} name={flapName} "
                 + $"mesh={blade?.Mesh != null} root={root?.Mesh != null} hinge={hinge?.Mesh != null} "
+                + $"surfaces={surfaces} steelFace={steelFace} tpsFace={tpsFace} "
+                + $"tpsWindwardDot={tpsWindwardDot:F3} "
                 + $"size={size.X:F3},{size.Y:F3},{size.Z:F3} "
                 + $"screenWidth={screenWidth:F2} screenHeight={screenHeight:F2} inFront={inFront}");
         }
 
         _log.WriteLine($"VISUAL_FLAPS slug={slug} renderer={renderer != null} camera={camera != null} "
-            + $"blades={blades} roots={roots} hinges={hinges} projectedReadable={projectedReadable}");
+            + $"blades={blades} roots={roots} hinges={hinges} projectedReadable={projectedReadable} "
+            + $"materialSplits={materialSplits} orientedFaces={orientedFaces}");
         _log.Flush();
+    }
+
+    private static bool UsesShader(MeshInstance3D? mesh, int surface, string suffix)
+    {
+        if (mesh?.Mesh == null || surface < 0 || surface >= mesh.Mesh.GetSurfaceCount())
+            return false;
+        return mesh.GetSurfaceOverrideMaterial(surface) is ShaderMaterial material
+            && material.Shader?.ResourcePath.EndsWith(suffix, StringComparison.Ordinal) == true;
     }
 
     private MeshInstance3D? FindGroupedFlap(Node3D? root, string group, string flapId)
@@ -4489,15 +4514,18 @@ verify_pngs() {
     fi
     if ! awk '
       /^VISUAL_FLAPS slug=ship_flaps_(windward|leeward) / {
-        blades = roots = hinges = readable = -1
+        blades = roots = hinges = readable = splits = oriented = -1
         for (i = 1; i <= NF; i++) {
           split($i, field, "=")
           if (field[1] == "blades") blades = field[2] + 0
           if (field[1] == "roots") roots = field[2] + 0
           if (field[1] == "hinges") hinges = field[2] + 0
           if (field[1] == "projectedReadable") readable = field[2] + 0
+          if (field[1] == "materialSplits") splits = field[2] + 0
+          if (field[1] == "orientedFaces") oriented = field[2] + 0
         }
-        if (blades != 4 || roots != 4 || hinges != 4 || readable < 4) bad = 1
+        if (blades != 4 || roots != 4 || hinges != 4 || readable < 4 \
+            || splits != 4 || oriented != 4) bad = 1
         found++
       }
       END { exit !(found == 2 && bad != 1) }
@@ -4584,15 +4612,18 @@ verify_pngs() {
     fi
     if ! awk '
       /^VISUAL_FLAPS slug=ship_flaps_(windward|leeward) / {
-        blades = roots = hinges = readable = -1
+        blades = roots = hinges = readable = splits = oriented = -1
         for (i = 1; i <= NF; i++) {
           split($i, field, "=")
           if (field[1] == "blades") blades = field[2] + 0
           if (field[1] == "roots") roots = field[2] + 0
           if (field[1] == "hinges") hinges = field[2] + 0
           if (field[1] == "projectedReadable") readable = field[2] + 0
+          if (field[1] == "materialSplits") splits = field[2] + 0
+          if (field[1] == "orientedFaces") oriented = field[2] + 0
         }
-        if (blades != 4 || roots != 4 || hinges != 4 || readable < 4) bad = 1
+        if (blades != 4 || roots != 4 || hinges != 4 || readable < 4 \
+            || splits != 4 || oriented != 4) bad = 1
         found++
       }
       END { exit !(found == 2 && bad != 1) }

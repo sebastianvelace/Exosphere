@@ -3206,7 +3206,11 @@ public partial class VesselRenderer : Node3D
                 (BodyR + chord * 0.5f + 0.06f) * sin),
             RotationDegrees = new Vector3(0, deg, 0),
         };
-        blade.SetSurfaceOverrideMaterial(0, bladeMat);
+        // Surface 0 is the leeward face plus exposed edge; surface 1 is the +Z
+        // windward face. The base orientation maps +Z toward vehicle -X for both
+        // left and right flaps, so one material ordering stays physically coherent.
+        blade.SetSurfaceOverrideMaterial(0, rootMat);
+        blade.SetSurfaceOverrideMaterial(1, bladeMat);
         AddChild(blade);
         blade.SetMeta("flap_id", name);
         blade.AddToGroup(StarshipFlapBladeGroup);
@@ -3313,7 +3317,7 @@ public partial class VesselRenderer : Node3D
             float x = Mathf.Lerp(-chord * 0.5f, chord * 0.5f, chordStations[i]);
             outline.Add(new Vector2(x, length * 0.5f * spanFractions[i]));
         }
-        return BuildExtrudedPlanformMesh(outline, thickness);
+        return BuildExtrudedPlanformMesh(outline, thickness, splitTopSurface: true);
     }
 
     private static ArrayMesh BuildStarshipFlapRootFairingMesh(
@@ -3337,7 +3341,7 @@ public partial class VesselRenderer : Node3D
     }
 
     private static ArrayMesh BuildExtrudedPlanformMesh(
-        IReadOnlyList<Vector2> outline, float thickness)
+        IReadOnlyList<Vector2> outline, float thickness, bool splitTopSurface = false)
     {
         float z0 = -thickness * 0.5f;
         float z1 = thickness * 0.5f;
@@ -3347,13 +3351,13 @@ public partial class VesselRenderer : Node3D
         float maxY = outline.Max(point => point.Y);
         float invX = 1f / Mathf.Max(maxX - minX, 0.001f);
         float invY = 1f / Mathf.Max(maxY - minY, 0.001f);
-        var surface = new SurfaceTool();
-        surface.Begin(Mesh.PrimitiveType.Triangles);
+        var baseSurface = new SurfaceTool();
+        baseSurface.Begin(Mesh.PrimitiveType.Triangles);
 
         Vector2 Uv(Vector2 point) => new(
             (point.X - minX) * invX,
             1f - (point.Y - minY) * invY);
-        void Vertex(Vector2 point, float z)
+        void Vertex(SurfaceTool surface, Vector2 point, float z)
         {
             surface.SetUV(Uv(point));
             surface.AddVertex(new Vector3(point.X, point.Y, z));
@@ -3361,17 +3365,41 @@ public partial class VesselRenderer : Node3D
 
         for (int i = 1; i < outline.Count - 1; i++)
         {
-            Vertex(outline[0], z0); Vertex(outline[i], z0); Vertex(outline[i + 1], z0);
-            Vertex(outline[i + 1], z1); Vertex(outline[i], z1); Vertex(outline[0], z1);
+            Vertex(baseSurface, outline[0], z0);
+            Vertex(baseSurface, outline[i], z0);
+            Vertex(baseSurface, outline[i + 1], z0);
+            if (!splitTopSurface)
+            {
+                Vertex(baseSurface, outline[i + 1], z1);
+                Vertex(baseSurface, outline[i], z1);
+                Vertex(baseSurface, outline[0], z1);
+            }
         }
         for (int i = 0; i < outline.Count; i++)
         {
             int next = (i + 1) % outline.Count;
-            Vertex(outline[i], z0); Vertex(outline[next], z0); Vertex(outline[next], z1);
-            Vertex(outline[i], z0); Vertex(outline[next], z1); Vertex(outline[i], z1);
+            Vertex(baseSurface, outline[i], z0);
+            Vertex(baseSurface, outline[next], z0);
+            Vertex(baseSurface, outline[next], z1);
+            Vertex(baseSurface, outline[i], z0);
+            Vertex(baseSurface, outline[next], z1);
+            Vertex(baseSurface, outline[i], z1);
         }
-        surface.GenerateNormals();
-        return surface.Commit()!;
+        baseSurface.GenerateNormals();
+        var mesh = baseSurface.Commit()!;
+        if (!splitTopSurface) return mesh;
+
+        var topSurface = new SurfaceTool();
+        topSurface.Begin(Mesh.PrimitiveType.Triangles);
+        for (int i = 1; i < outline.Count - 1; i++)
+        {
+            Vertex(topSurface, outline[i + 1], z1);
+            Vertex(topSurface, outline[i], z1);
+            Vertex(topSurface, outline[0], z1);
+        }
+        topSurface.GenerateNormals();
+        topSurface.Commit(mesh);
+        return mesh;
     }
 
     // ── Raptor engine ─────────────────────────────────────────────────────
