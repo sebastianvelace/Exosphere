@@ -2,8 +2,9 @@
 // Exosphere — Photoreal Earth from NASA Blue Marble textures.
 // Equirectangular day (natural-colour land/ocean), night (Black Marble city lights)
 // and cloud textures, sampled from the sphere's local position. Day/night blend from
-// `sun_dir` and spectrally attenuated direct sunlight. Atmospheric radiance belongs
-// to the spherical sky integrator; this surface adds no view-angle haze or limb glow.
+// `sun_dir` and spectrally attenuated direct sunlight. The spherical sky integrator
+// owns free-sky radiance; the surface applies the bounded camera-to-ground optical
+// path needed when the scaled Earth disc itself occludes that atmosphere.
 // Unshaded — the
 // shader does its own lighting (so Godot's DirectionalLight does not double-light it).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,6 +163,25 @@ void fragment() {
 	float lum    = dot(nightCol, vec3(0.299, 0.587, 0.114));
 	vec3  cities = nightCol * smoothstep(0.07, 0.18, lum) * night * night_lights;
 	lit += cities;
+	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
+	float ndotv = dot(N, V);
+
+	// The scaled globe is opaque in front of the sky cubemap, so the atmosphere
+	// cannot paint its own limb over the surface. Apply the same bounded optical
+	// depth as a camera-to-surface path: surface radiance is attenuated and the
+	// missing energy is replaced by blue Rayleigh in-scatter. The blend is only
+	// active near the geometric limb; the disc centre keeps its measured albedo.
+	float view_cosine = clamp(ndotv, 0.0, 1.0);
+	float view_air_mass = 1.0 / max(
+		view_cosine + 0.025 * exp(-11.0 * view_cosine), 0.025);
+	vec3 view_transmittance = exp(-vertical_optical_depth
+		* min(view_air_mass, 40.0));
+	float limb_illumination = mix(0.20, 1.0, day * solar_visibility);
+	vec3 aerial_radiance = lit * view_transmittance
+		+ rayleigh_sky * limb_illumination * (vec3(1.0) - view_transmittance);
+	float limb_scatter = smoothstep(0.0, 0.42,
+		clamp(1.0 - ndotv, 0.0, 1.0));
+	lit = mix(lit, aerial_radiance, limb_scatter);
 
 	ALBEDO = lit;
 	EMISSION = cities * 0.6;
@@ -169,8 +189,6 @@ void fragment() {
 	// view-angle contour. Use the unclamped cosine for derivatives so the
 	// footprint remains valid across the tangent. The epsilon only guards zero
 	// derivatives; no fixed angular band should expose sky through the disc.
-	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
-	float ndotv = dot(N, V);
 	float limb = 1.0 - ndotv;
 	float limb_aa = max(fwidth(limb), 0.000001);
 	float silhouette = smoothstep(0.0, limb_aa, ndotv);

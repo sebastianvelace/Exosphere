@@ -7,8 +7,9 @@ using Exosphere.Simulation;
 /// Factory for photorealistic, scale-independent planet materials.
 ///
 /// Earth uses a dedicated procedural shader (<c>earth_surface.gdshader</c>) with
-/// continents, clouds, ice caps and a day/night terminator. Atmospheric radiance
-/// is owned exclusively by the spherical sky integrator. Other bodies use a shared generic body shader
+/// continents, clouds, ice caps and a day/night terminator. Free-sky atmospheric radiance
+/// is owned by the spherical sky integrator; the Earth surface also models the bounded
+/// camera-to-surface limb path because the opaque scaled disc occludes the sky behind it. Other bodies use a shared generic body shader
 /// (<c>planet_body.gdshader</c>) or a tuned <see cref="StandardMaterial3D"/>.
 ///
 /// All shaders sample detail from the *normalized* local vertex position, so the

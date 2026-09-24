@@ -43,6 +43,14 @@ has 'vec3 rayleigh_sky = vec3(1.0) - exp(-vertical_optical_depth * 5.0);' "$shad
   "scaled Earth ocean sky fill is not derived from optical depth"
 has '* water * day * solar_visibility' "$shader" \
   "scaled Earth ocean sky fill is not gated by surface and solar state"
+has 'float view_air_mass = 1.0 / max(' "$shader" \
+  "scaled Earth has no camera-to-surface atmospheric path"
+has 'vec3 view_transmittance = exp(-vertical_optical_depth' "$shader" \
+  "scaled Earth limb does not attenuate surface radiance by optical depth"
+has 'vec3 aerial_radiance = lit * view_transmittance' "$shader" \
+  "scaled Earth limb has no Rayleigh in-scatter replacement"
+has 'float limb_scatter = smoothstep(0.0, 0.42' "$shader" \
+  "scaled Earth atmospheric path is not restricted to the geometric limb"
 
 if [[ $# -eq 0 ]]; then
   echo "starbase_scaled_earth_lighting_contract_test: PASS (world-space solar lighting is bounded)"

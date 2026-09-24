@@ -19,17 +19,20 @@ public sealed class EarthSurfaceShaderContractTests
     }
 
     [Fact]
-    public void SurfaceRadianceCannotPaintCameraCenteredAtmosphericContours()
+    public void SurfaceRadianceKeepsCameraDependentScatteringBoundedToTheGlobeLimb()
     {
         string shader = Source("assets/shaders/earth_surface.gdshader");
-        int coverageStart = shader.IndexOf("vec3 V =", StringComparison.Ordinal);
-        Assert.True(coverageStart > shader.IndexOf("ALBEDO = lit;", StringComparison.Ordinal));
-        string radiance = shader[..coverageStart];
-        // Camera-dependent color is not a surface-lighting input. This rejects the
-        // old rings AND replacing them with another Fresnel/view-angle haze term.
-        Assert.DoesNotMatch(@"\b(CAMERA_POSITION_WORLD|VIEW|ndotv|limb|FRAGCOORD|SCREEN_UV)\b", radiance);
-        Assert.Matches(@"EMISSION\s*=\s*cities\s*\*\s*0\.6\s*;", radiance);
-        Assert.DoesNotMatch(@"\b(ALBEDO|EMISSION|lit)\s*[+*/-]?=", shader[coverageStart..]);
+        int cameraPathStart = shader.IndexOf("vec3 V =", StringComparison.Ordinal);
+        Assert.True(cameraPathStart > shader.IndexOf("lit += cities;", StringComparison.Ordinal));
+        string surfaceRadiance = shader[..cameraPathStart];
+        // Direct surface lighting remains independent of the camera. The scaled
+        // globe gets a separate, bounded camera-to-surface path at the limb.
+        Assert.DoesNotMatch(@"\b(CAMERA_POSITION_WORLD|VIEW|ndotv|limb|FRAGCOORD|SCREEN_UV)\b", surfaceRadiance);
+        Assert.Matches(@"EMISSION\s*=\s*cities\s*\*\s*0\.6\s*;", shader);
+        Assert.Contains("float view_air_mass = 1.0 / max(", shader);
+        Assert.Contains("vec3 view_transmittance = exp(-vertical_optical_depth", shader);
+        Assert.Contains("float limb_scatter = smoothstep(0.0, 0.42", shader);
+        Assert.Contains("lit = mix(lit, aerial_radiance, limb_scatter);", shader);
     }
 
     [Fact]
