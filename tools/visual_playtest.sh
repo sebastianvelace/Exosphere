@@ -2171,8 +2171,18 @@ public partial class _PlaytestShot : Node
             double edlAttitudeError = edl?.AeroAttitudeErrorDegrees ?? double.NaN;
             Vector3d edlCommand = edl?.AeroAttitudeCommand ?? Vector3d.Zero;
             Vector3d edlLiftReference = edl?.AeroLiftReference ?? Vector3d.Zero;
+            EntryFlightState entryState = EntryFlightDiagnostics.Evaluate(vessel, earthBody);
             _log.WriteLine($"TRACE_ORBITAL_REENTRY t={simElapsed:F1} alt={alt:F1} " +
                 $"vUp={vUp:F1} spd={surfVel.Magnitude:F1} pe={pe:F1} ap={ap:F1} " +
+                $"mach={entryState.Mach:F3} qPa={entryState.DynamicPressurePa:F1} " +
+                $"gammaDeg={entryState.FlightPathAngleDegrees:F3} " +
+                $"alphaDeg={entryState.AngleOfAttackDegrees:F3} " +
+                $"bankDeg={entryState.BankAngleDegrees:F3} " +
+                $"energyJkg={entryState.PointMassSpecificOrbitalEnergyJPerKg:F3} " +
+                $"hM2s={entryState.SpecificAngularMomentumM2PerS:F3} " +
+                $"dragN={entryState.DragForceN:F1} liftN={entryState.LiftForceN:F1} " +
+                $"ld={entryState.LiftToDragRatio:F4} aeroG={entryState.AerodynamicLoadG:F4} " +
+                $"heatWm2={entryState.StagnationHeatFluxWPerM2:F1} " +
                 $"phase={phase} throttle={vessel.Throttle:F3} " +
                 $"activeEngines={activeEngines} thrustN={thrustN:F0} " +
                 $"engineRuntime={engineRuntime} " +
