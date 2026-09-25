@@ -70,7 +70,7 @@ public sealed class EntryCorridorGuidanceTests
             TimeToGroundS: 60.0);
 
         var selected = EntryCorridorGuidance.SelectLiftDirection(
-            prediction, -Vector3d.Up);
+            prediction, Vector3d.Up);
 
         Assert.True(selected.Dot(-Vector3d.Up) > 0.99,
             $"expected down-lift braking, got {selected}");
@@ -86,7 +86,7 @@ public sealed class EntryCorridorGuidanceTests
             TimeToGroundS: 60.0);
 
         var selected = EntryCorridorGuidance.SelectLiftDirection(
-            prediction, -Vector3d.Up);
+            prediction, Vector3d.Up);
 
         Assert.True(selected.Dot(Vector3d.Up) > 0.99,
             $"expected up-lift extension, got {selected}");
@@ -103,7 +103,7 @@ public sealed class EntryCorridorGuidanceTests
 
         var selected = EntryCorridorGuidance.SelectLiftDirection(
             prediction,
-            -Vector3d.Up,
+            Vector3d.Up,
             corridorMeters: 20_000.0,
             authorityMeters: 180_000.0,
             downrangeCorridorMeters: 500.0,
@@ -111,6 +111,22 @@ public sealed class EntryCorridorGuidanceTests
 
         Assert.True(selected.Dot(Vector3d.Up) > 0.2,
             $"terminal lift must extend a short footprint, got {selected}");
+    }
+
+    [Fact]
+    public void KeepsLiftUpInsideTheDeadband()
+    {
+        var prediction = new EntryCorridorGuidance.Prediction(
+            LiftDirection: Vector3d.Forward,
+            PredictedCrossRangeM: 5_000.0,
+            PredictedDownrangeM: 5_000.0,
+            TimeToGroundS: 60.0);
+
+        var selected = EntryCorridorGuidance.SelectLiftDirection(
+            prediction, Vector3d.Up);
+
+        Assert.True(selected.Dot(Vector3d.Up) > 0.999,
+            $"nominal entry must remain lift-up inside the corridor, got {selected}");
     }
 
 }

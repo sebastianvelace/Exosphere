@@ -2172,6 +2172,8 @@ public partial class _PlaytestShot : Node
             Vector3d edlCommand = edl?.AeroAttitudeCommand ?? Vector3d.Zero;
             Vector3d edlLiftReference = edl?.AeroLiftReference ?? Vector3d.Zero;
             EntryFlightState entryState = EntryFlightDiagnostics.Evaluate(vessel, earthBody);
+            double guidancePeriod = edl?.GuidanceUpdatePeriodSeconds ?? double.NaN;
+            ulong guidanceUpdates = edl?.GuidanceUpdateCount ?? 0;
             _log.WriteLine($"TRACE_ORBITAL_REENTRY t={simElapsed:F1} alt={alt:F1} " +
                 $"vUp={vUp:F1} spd={surfVel.Magnitude:F1} pe={pe:F1} ap={ap:F1} " +
                 $"mach={entryState.Mach:F3} qPa={entryState.DynamicPressurePa:F1} " +
@@ -2190,6 +2192,7 @@ public partial class _PlaytestShot : Node
                 $"edlAlpha={edlAlpha:F1} edlWindward={edlWindward:F4} " +
                 $"edlError={edlAttitudeError:F1} edlCmd={edlCommand} " +
                 $"edlLift={edlLiftReference} " +
+                $"guidanceDt={guidancePeriod:F6} guidanceUpdates={guidanceUpdates} " +
                 $"failedEngines={failedEngines} failureCodes={failureCodes} " +
                 $"propellant={propellant:F0} partCount={vessel.Parts.Parts.Count} " +
                 $"maxThermalRatio={maxThermalRatio:F3} partsThermal={partThermal} " +

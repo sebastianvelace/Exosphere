@@ -23,14 +23,14 @@ public static class EntryCorridorGuidance
     /// </summary>
     public static Vector3d SelectLiftDirection(
         Prediction prediction,
-        Vector3d bodyDownLift,
+        Vector3d bodyLiftUp,
         double corridorMeters = 20_000.0,
         double authorityMeters = 180_000.0,
         double? downrangeCorridorMeters = null,
         double? downrangeAuthorityMeters = null)
     {
-        var downLift = bodyDownLift.Normalized;
-        if (downLift.MagnitudeSquared < 1e-12)
+        var liftUp = bodyLiftUp.Normalized;
+        if (liftUp.MagnitudeSquared < 1e-12)
             return prediction.LiftDirection.Normalized;
 
         double crossWeight = System.Math.Clamp(
@@ -45,19 +45,20 @@ public static class EntryCorridorGuidance
             0.0,
             1.0);
 
-        // A positive projected downrange means the target remains ahead of the future
-        // footprint, so lift toward the sky to extend the trajectory. A negative value
-        // means the footprint is beyond the target, so retain down-lift and shorten it.
+        // Lift-up is the nominal entry state: it shapes the deceleration pulse and avoids
+        // driving a shallow orbital entry into the dense atmosphere. A positive projected
+        // downrange means the target remains ahead of the future footprint, so keep lift-up
+        // to extend the trajectory. Only a predicted overflight reverses lift downward.
         var flightPathLift = prediction.PredictedDownrangeM >= 0.0
-            ? -downLift
-            : downLift;
+            ? liftUp
+            : -liftUp;
         double baseWeight = System.Math.Max(crossWeight, downrangeWeight);
-        var selected = downLift * (1.0 - baseWeight)
+        var selected = liftUp * (1.0 - baseWeight)
             + prediction.LiftDirection.Normalized * crossWeight
             + flightPathLift * downrangeWeight;
         return selected.MagnitudeSquared > 1e-12
             ? selected.Normalized
-            : downLift;
+            : liftUp;
     }
 
     /// <summary>

@@ -128,6 +128,9 @@ public partial class EDLController : Control
     }
     public Vector3d AeroAttitudeCommand => _aeroAttitudeCommand;
     public Vector3d AeroLiftReference => _aeroLiftReference;
+    public ulong GuidanceUpdateCount { get; private set; }
+    public double GuidanceUpdatePeriodSeconds { get; private set; } = double.NaN;
+    public double LastGuidanceSimulationTimeSeconds { get; private set; } = double.NaN;
 
     public override void _Ready()
     {
@@ -243,6 +246,11 @@ public partial class EDLController : Control
             return;
         }
 
+        GuidanceUpdatePeriodSeconds = double.IsFinite(LastGuidanceSimulationTimeSeconds)
+            ? System.Math.Max(0.0, universe.CurrentTime - LastGuidanceSimulationTimeSeconds)
+            : double.NaN;
+        LastGuidanceSimulationTimeSeconds = universe.CurrentTime;
+        GuidanceUpdateCount++;
         AdvancePhase(vessel, body, mission, mass, speed, up, surfVel, processedSimDelta, universe);
         QueueRedraw();   // live telemetry overlay
     }
@@ -463,11 +471,10 @@ public partial class EDLController : Control
             // Starship-like L/D. Catch guidance may adjust it inside a bounded corridor.
             if (vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
             {
-                // A catch return needs a bounded cross-range lift bias. A fixed down-lift
-                // vector can enter the atmosphere safely yet miss the rotating tower by tens
-                // of kilometres because small entry-state changes alter the ballistic ground
-                // track. Project the target corridor into the lift plane and blend it with the
-                // inward/downward bias; the normal aerodynamic integrator remains authoritative.
+                // A catch return needs a bounded cross-range lift bias. Keep lift-up as the
+                // neutral state that shapes the deceleration pulse, bank it toward crossrange,
+                // and reverse it only for a predicted downrange overflight. The normal
+                // aerodynamic integrator remains authoritative.
                 Vector3d targetOffset = catchTargetPosition - vessel.Position;
                 // Match the vehicle's surface-velocity frame. The cradle velocity is
                 // inertial, while surfVel is relative to the body's local rotation at
@@ -477,8 +484,8 @@ public partial class EDLController : Control
                 Vector3d targetSurfaceVelocity = vessel.CatchTargetVelocityWorld
                     - body.Velocity
                     - body.GetSurfaceVelocity(catchTargetPosition);
-                Vector3d bodyDownLift = -(up - velDir * up.Dot(velDir));
-                if (bodyDownLift.Magnitude > 1e-6)
+                Vector3d bodyLiftUp = up - velDir * up.Dot(velDir);
+                if (bodyLiftUp.Magnitude > 1e-6)
                 {
                     var prediction = EntryCorridorGuidance.Predict(
                         targetOffset,
@@ -508,7 +515,7 @@ public partial class EDLController : Control
                             : 180_000.0;
                         Vector3d guidedLift = EntryCorridorGuidance.SelectLiftDirection(
                             prediction,
-                            bodyDownLift,
+                            bodyLiftUp,
                             corridorMeters: 20_000.0,
                             authorityMeters: 180_000.0,
                             downrangeCorridorMeters: downrangeCorridorMeters,
@@ -519,15 +526,15 @@ public partial class EDLController : Control
                     }
                     else
                     {
-                        _aeroLiftReference = bodyDownLift.Normalized;
-                        aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(
+                        _aeroLiftReference = bodyLiftUp.Normalized;
+                        aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(
                             up, velDir);
                     }
                 }
                 else
                 {
-                    _aeroLiftReference = bodyDownLift.Normalized;
-                    aimAxis = AerodynamicsModel.ComputeLiftDownEntryAxis(
+                    _aeroLiftReference = bodyLiftUp.Normalized;
+                    aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(
                         up, velDir);
                 }
             }

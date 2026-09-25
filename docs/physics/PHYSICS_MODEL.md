@@ -1,6 +1,6 @@
 # Exosphere physics model
 
-> **Current technical source of truth — 2026-09-22**
+> **Current technical source of truth — 2026-09-25**
 >
 > This document describes the physics that is implemented today, the deliberately simplified
 > parts, and the gates required before the experimental coupled 6-DoF path can become default.
@@ -130,6 +130,18 @@ contact geometry respond to the candidate state.
   vessels feel `CelestialBody.GetGravityAt`. This is an explicit model boundary, not an
   unreported contradiction.
 
+### Orbit and entry diagnostics
+
+`EntryFlightDiagnostics` keeps body-centred inertial quantities separate from rotating-
+atmosphere quantities. It exposes point-mass specific energy and angular momentum alongside
+Mach, dynamic pressure, flight-path angle, angle of attack, aerodynamic bank, modeled L/D,
+load and stagnation heat flux. These values are diagnostics, not extra forces. The normal
+orbital-reentry harness logs them together with EDL command cadence so timing-dependent
+guidance cannot pass as a stable physical trajectory.
+
+Undefined aerodynamic directions are reported as `NaN`, not zero. A presentation fixture
+that assigns attitude directly cannot satisfy a physics acceptance gate.
+
 ## Atmosphere and aerodynamics
 
 Atmospheric force uses relative air velocity, including the rotating body's surface velocity:
@@ -214,6 +226,19 @@ same dynamic-pressure and belly-alignment signals. EDL's scripted catch corridor
 temporary `FlapCommandOverride` while TVC/RCS is neutralized for its attitude snap, so the
 surface state remains physically observable instead of being silently forced to zero. Visual
 pose parity still requires a real framebuffer gate.
+
+### Entry lift policy
+
+Atmospheric interface starts from the nominal 70° **lift-up** attitude. The corridor law keeps
+that state inside its crossrange/downrange dead bands, banks the lift vector toward a measured
+crossrange miss and reverses lift toward the body only when the predicted footprint has passed
+the target. Continuous lift-down is not a neutral catch posture: the 120 km physical-entry gate
+measured a 29.65 g plunge and excessive residual speed at 30 km. The lift-up policy passes the
+bounded entry envelope without changing aerodynamic coefficients.
+
+This policy does not make the current corridor predictor flight-qualified. Its time horizon is
+still a bounded reduced-order approximation; energy-aware propagation and frame-rate-independent
+control remain required by `docs/audits/ORBITAL_REENTRY_PHYSICS_AUDIT_2026-09-25.md`.
 
 ## Propulsion and mass flow
 

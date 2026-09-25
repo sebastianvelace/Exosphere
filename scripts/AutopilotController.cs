@@ -316,9 +316,11 @@ public partial class AutopilotController : Node
 
         var up = (vessel.Position - body.Position).Normalized;
         var flow = surfaceVelocity.Normalized;
-        bool catchReturn = vessel.HasCatchPins
-            && bridge.LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase);
-        var target = EntryAttitudeGuidance.ComputeTarget(up, flow, catchReturn);
+        // Start atmospheric interface lift-up. A continuous down-lift pre-entry target
+        // steepens the trajectory before the corridor predictor has measured an overflight;
+        // the entry guidance may still reverse lift later when downrange energy requires it.
+        var target = EntryAttitudeGuidance.ComputeTarget(
+            up, flow, liftTowardBody: false);
         vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
             vessel.Orientation,
             target,

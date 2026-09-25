@@ -199,6 +199,87 @@ public sealed class OrbitalReentrySurvivalTests
     }
 
     [Fact]
+    public void PhysicalControllerFliesFromEntryInterfaceThroughPeakHeating()
+    {
+        var universe = Universe.LoadFromDataDirectory(Path.Combine(RepoRoot(), "data"));
+        var earth = universe.GetBody("earth")!;
+        var vessel = BuildStarship();
+        var up = Vector3d.Right;
+        var east = Vector3d.Forward;
+        double flightPath = FlightPathDeg * MathUtils.DEG_TO_RAD;
+        var velocityDirection = (east * System.Math.Cos(flightPath)
+            + up * System.Math.Sin(flightPath)).Normalized;
+        vessel.Position = earth.Position + up * (earth.Radius + EntryAltitude);
+        vessel.Velocity = earth.Velocity + velocityDirection * EntrySpeed;
+        vessel.SASEnabled = false;
+        universe.AddVessel(vessel);
+        universe.ActiveVessel = vessel;
+
+        var initialFlow = vessel.GetSurfaceVelocity(earth).Normalized;
+        var initialTarget = EntryAttitudeGuidance.ComputeTarget(
+            up, initialFlow, liftTowardBody: false);
+        vessel.Orientation = initialTarget;
+
+        double peakDynamicPressure = 0.0;
+        double peakHeatFlux = 0.0;
+        double peakLoadG = 0.0;
+        double minimumWindward = 1.0;
+        double minimumAltitude = EntryAltitude;
+        double finalSpeed = EntrySpeed;
+        const double controlDt = 0.02;
+        int steps = (int)System.Math.Ceiling(MaxDuration / controlDt);
+        for (int i = 0; i < steps; i++)
+        {
+            var currentUp = earth.GetGeodeticUp(vessel.Position);
+            var surfaceVelocity = vessel.GetSurfaceVelocity(earth);
+            var flow = surfaceVelocity.Normalized;
+            var target = EntryAttitudeGuidance.ComputeTarget(
+                currentUp, flow, liftTowardBody: false);
+            vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
+                vessel.Orientation,
+                target,
+                vessel.AngularVelocity,
+                proportionalGain: 2.6,
+                dampingGain: 1.2,
+                allowRoll: true);
+
+            universe.Tick(controlDt);
+
+            EntryFlightState state = EntryFlightDiagnostics.Evaluate(vessel, earth);
+            peakDynamicPressure = System.Math.Max(peakDynamicPressure, state.DynamicPressurePa);
+            peakHeatFlux = System.Math.Max(peakHeatFlux, state.StagnationHeatFluxWPerM2);
+            peakLoadG = System.Math.Max(peakLoadG, state.AerodynamicLoadG);
+            minimumAltitude = System.Math.Min(minimumAltitude, state.AltitudeM);
+            finalSpeed = state.AtmosphereRelativeSpeedMps;
+            if (state.AtmosphereRelativeSpeedMps > 1.0)
+            {
+                var flowLocal = vessel.Orientation.Inverse().Rotate(
+                    vessel.GetSurfaceVelocity(earth).Normalized);
+                minimumWindward = System.Math.Min(
+                    minimumWindward, ThermalModel.WindwardFactor(flowLocal));
+            }
+
+            if (vessel.IsDestroyed || state.AltitudeM <= 30_000.0)
+                break;
+        }
+
+        Assert.False(vessel.IsDestroyed);
+        Assert.True(minimumAltitude <= 30_000.0,
+            $"entry must reach the lower-atmosphere gate, minimum altitude={minimumAltitude:F0} m");
+        Assert.InRange(peakDynamicPressure, 1_000.0, 200_000.0);
+        Assert.True(peakHeatFlux > 100_000.0,
+            $"orbital entry must produce a measurable heating pulse, peak={peakHeatFlux:F0} W/m²");
+        Assert.True(peakLoadG is >= 0.05 and <= 8.0,
+            $"entry load exceeded the bounded crew/structure envelope: peak={peakLoadG:F2} g, "
+            + $"q={peakDynamicPressure:F0} Pa, heat={peakHeatFlux:F0} W/m², "
+            + $"finalSpeed={finalSpeed:F0} m/s, minWindward={minimumWindward:F3}");
+        Assert.True(finalSpeed < 2_000.0,
+            $"entry must dissipate orbital energy before 30 km, final speed={finalSpeed:F0} m/s");
+        Assert.True(minimumWindward > 0.65,
+            $"physical controller lost the TPS side during full entry, minimum={minimumWindward:F3}");
+    }
+
+    [Fact]
     public void RcsCoastCanRotateFromDeorbitRetrogradeToEntryAttitude()
     {
         var universe = Universe.LoadFromDataDirectory(Path.Combine(RepoRoot(), "data"));

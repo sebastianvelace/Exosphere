@@ -12,8 +12,8 @@ public static class EntryAttitudeGuidance
     /// <summary>
     /// Builds the Starship belly-first target used before atmospheric interface.  The
     /// longitudinal axis keeps the nominal 70° angle of attack, while the local -X thermal
-    /// protection faces the velocity vector.  Catch returns bias lift toward the body so the
-    /// later corridor guidance starts from the same physical attitude family.
+    /// protection faces the velocity vector. <paramref name="liftTowardBody"/> is an explicit
+    /// reversal for a measured overflight; normal entry interface uses lift-up.
     /// </summary>
     public static Quaterniond ComputeTarget(
         Vector3d bodyUp,
