@@ -11,7 +11,7 @@ using Exosphere.Simulation.Physics;
 using Exosphere.Simulation.Propulsion;
 
 [GlobalClass]
-public partial class SimulationBridge : Node
+public partial class SimulationBridge : Node, IPhysicsStepController
 {
     public static SimulationBridge Instance { get; private set; } = null!;
 
@@ -172,6 +172,7 @@ public partial class SimulationBridge : Node
         var dataPath = ProjectSettings.GlobalizePath(DataDirectory);
         Universe = Universe.LoadFromDataDirectory(dataPath);
         Universe.TimeScale = 1.0;
+        Universe.PhysicsStepController = this;
         Universe.DeferredPhysicsCandidateEnabled = ProjectSettings
             .GetSetting("simulation/deferred_physics_candidate_enabled", false)
             .AsBool();
@@ -321,6 +322,22 @@ public partial class SimulationBridge : Node
             light.RotationDegrees = new Godot.Vector3(-45f, -30f, 0f);
     }
 
+    bool IPhysicsStepController.RequiresFixedCadence(Universe universe) =>
+        EDLController.Instance?.RequiresFixedPhysicsCadence(universe) == true;
+
+    void IPhysicsStepController.BeforePhysicsStep(
+        Universe universe,
+        double controlIntervalSeconds) =>
+        EDLController.Instance?.AdvancePhysicsStep(universe, controlIntervalSeconds);
+
+    public override void _ExitTree()
+    {
+        if (Universe != null && ReferenceEquals(Universe.PhysicsStepController, this))
+            Universe.PhysicsStepController = null;
+        if (ReferenceEquals(Instance, this))
+            Instance = null!;
+    }
+
     public override void _Process(double delta)
     {
         if (!_running || Universe == null) return;
@@ -343,10 +360,10 @@ public partial class SimulationBridge : Node
                 && av.GetAltitude(refB) <= 300_000.0;
             bool finalEntryApproach = preparingEntryAttitude
                 && av.GetAltitude(refB) <= 160_000.0;
-            // Real-time only through tower clear and the complete EDL track. EDL guidance is
-            // refreshed once per rendered frame while the solver may execute many fixed
-            // substeps; allowing warp here makes the physical vehicle follow a stale attitude
-            // command for too long and can turn a controlled belly-flop into a dive.
+            // Real-time remains the player-facing limit through tower clear and EDL. The EDL
+            // controller itself now refreshes at deterministic 20 ms simulation boundaries;
+            // this limit preserves camera readability and terminal-contact resolution rather
+            // than compensating for render-cadence guidance.
             if (finalEntryApproach
                 || missionPhase is MissionPhase.COUNTDOWN
                 or MissionPhase.IGNITION

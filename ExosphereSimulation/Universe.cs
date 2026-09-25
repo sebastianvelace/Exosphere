@@ -53,6 +53,12 @@ public enum VesselSimulationTier
 /// </summary>
 public class Universe
 {
+    /// <summary>
+    /// Control-law cadence used while an external physics controller is active. This matches
+    /// the full-physics integration ceiling and keeps guidance epochs independent of render FPS.
+    /// </summary>
+    public const double DeterministicControlPeriodSeconds = 0.02;
+
     private readonly List<CelestialBody> _bodies  = new();
     private readonly List<Vessel>        _vessels = new();
     private readonly List<Vessel>        _pendingStructuralDebris = new();
@@ -64,6 +70,8 @@ public class Universe
     private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
     private readonly KeplerPropagator.BodyPropagationWorkspace _bodyPropagationWorkspace = new();
     private double _pendingSimulationSeconds;
+    private IPhysicsStepController? _physicsStepController;
+    private double _physicsControlSecondsUntilUpdate;
 
     public Universe()
     {
@@ -108,6 +116,21 @@ public class Universe
     /// above 1000 = everything on Keplerian rails.
     /// </summary>
     public double TimeScale { get; set; } = 1.0;
+
+    /// <summary>
+    /// Optional game-layer adapter that refreshes force-producing commands on fixed simulation
+    /// epochs. Assigning a new controller starts its cadence immediately at the current epoch.
+    /// </summary>
+    public IPhysicsStepController? PhysicsStepController
+    {
+        get => _physicsStepController;
+        set
+        {
+            if (ReferenceEquals(_physicsStepController, value)) return;
+            _physicsStepController = value;
+            _physicsControlSecondsUntilUpdate = 0.0;
+        }
+    }
 
     /// <summary>
     /// Enables the development catch-up budget. When enabled, a frame may commit only
@@ -737,11 +760,13 @@ public class Universe
             {
                 double step  = System.Math.Min(remaining,
                     anyContactSensitive ? MaxContactStep : MaxPhysicsStep);
+                step = PrepareControlledPhysicsStep(step, out bool controlCadenceActive);
                 _tickOuterSubsteps++;
                 TickPhysics(step);
                 CurrentTime += step;
                 remaining   -= step;
                 _tickProcessedSimulationSeconds += step;
+                CompleteControlledPhysicsStep(step, controlCadenceActive);
             }
         }
         else if (TimeScale <= 1000.0 || anyForceSensitive)
@@ -760,11 +785,13 @@ public class Universe
             while (remaining > 1e-12 && _tickOuterSubsteps < substepBudget)
             {
                 double step = System.Math.Min(remaining, cap);
+                step = PrepareControlledPhysicsStep(step, out bool controlCadenceActive);
                 _tickOuterSubsteps++;
                 TickPhysicsMixed(step);
                 CurrentTime += step;
                 remaining   -= step;
                 _tickProcessedSimulationSeconds += step;
+                CompleteControlledPhysicsStep(step, controlCadenceActive);
             }
         }
         else
@@ -809,6 +836,33 @@ public class Universe
         _tickBudgetLimited = _pendingSimulationSeconds > 1e-12;
 
         PublishSchedulerTelemetry();
+    }
+
+    private double PrepareControlledPhysicsStep(double proposedStep, out bool cadenceActive)
+    {
+        IPhysicsStepController? controller = _physicsStepController;
+        cadenceActive = controller?.RequiresFixedCadence(this) == true;
+        if (!cadenceActive)
+        {
+            _physicsControlSecondsUntilUpdate = 0.0;
+            return proposedStep;
+        }
+
+        if (_physicsControlSecondsUntilUpdate <= 1e-12)
+        {
+            controller!.BeforePhysicsStep(this, DeterministicControlPeriodSeconds);
+            _physicsControlSecondsUntilUpdate = DeterministicControlPeriodSeconds;
+        }
+
+        return System.Math.Min(proposedStep, _physicsControlSecondsUntilUpdate);
+    }
+
+    private void CompleteControlledPhysicsStep(double completedStep, bool cadenceActive)
+    {
+        if (!cadenceActive) return;
+        _physicsControlSecondsUntilUpdate = System.Math.Max(
+            0.0,
+            _physicsControlSecondsUntilUpdate - completedStep);
     }
 
     private void BeginSchedulerTelemetry(double realDeltaTime, double simDelta)

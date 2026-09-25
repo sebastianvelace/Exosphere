@@ -129,8 +129,10 @@ require_text "$AUTOPILOT_CONTROLLER" "LastProcessedSimulationSeconds" \
     "autopilot delta-v accounting consumes committed simulation time"
 require_text "$MANEUVER_EXECUTOR" "LastProcessedSimulationSeconds" \
     "maneuver delta-v accounting consumes committed simulation time"
-require_text "$EDL_CONTROLLER" "LastProcessedSimulationSeconds" \
-    "EDL physical timers consume committed simulation time"
+require_text "$EDL_CONTROLLER" "AdvancePhysicsStep" \
+    "EDL guidance advances on the deterministic physics-control clock"
+require_text "$SIMULATION_BRIDGE" "IPhysicsStepController" \
+    "Godot bridge adapts EDL guidance into the pure simulation scheduler"
 require_text "$VISUAL_PLAYTEST" "scheduler_ms=" \
     "visual playtest records scheduler wall-clock telemetry"
 require_text "$VISUAL_PLAYTEST" "scheduler_branch=" \

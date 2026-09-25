@@ -3,12 +3,14 @@
 ## Executive diagnosis
 
 The orbit propagator is not the largest realism gap. Its double-precision RK4 and Kepler
-paths already have useful invariant tests. The visibly artificial behavior is concentrated
-at the boundary between the Godot frame loop, EDL guidance and attitude-dependent forces:
+paths already have useful invariant tests. The original audit found the visibly artificial
+behavior concentrated at the boundary between the Godot frame loop, EDL guidance and
+attitude-dependent forces:
 
-1. EDL commands are refreshed once per rendered frame, after the physics update. One command
-   is then held across all fixed physics substeps. Control behavior therefore varies with
-   frame rate and always enters physics one rendered frame late.
+1. **Closed in the first remediation pass:** EDL commands had been refreshed once per rendered
+   frame, after physics. `Universe` now owns an exact 20 ms control clock, splits propagation at
+   its boundaries and invokes the bridge adapter before force integration. Tests prove identical
+   control epochs with 30, 60 and 120 FPS outer ticks.
 2. The deterministic EDL presentation fixture directly assigns attitude and zeroes angular
    velocity every frame. It proves presentation/capture states, not physical controllability.
 3. The entry-corridor predictor estimates time to ground from a bounded vacuum/free-fall
@@ -26,7 +28,7 @@ fit coefficients to a moving numerical target and hide the root cause.
 
 | Priority | Finding | Evidence | Consequence |
 |---|---|---|---|
-| P0 | Guidance depends on render cadence | `SimulationBridge._Process` advances `Universe.Tick`; `EDLController` runs later at priority 200 and consumes `LastProcessedSimulationSeconds` | Different FPS can produce different attitude commands, entry footprints and thermal histories |
+| Closed P0 | Guidance depended on render cadence | `IPhysicsStepController` now runs EDL at exact 20 ms simulation boundaries before `TickPhysics`; 30/60/120 FPS tests produce identical epochs | Render FPS no longer chooses EDL command times or adds a one-frame control delay |
 | P0 | Demo attitude is kinematic | `EDLController.AdvancePhase` assigns `vessel.Orientation` and clears `AngularVelocity` when `IsTowerCatchDemonstration` is true | The most repeatable visual entry can look smooth while bypassing rotational physics |
 | P0 | Corridor prediction omits entry dynamics | `EntryCorridorGuidance.Predict` uses projected target motion and free-fall time-to-ground | Bank demand can oscillate or arrive late because predicted range ignores energy dissipation |
 | P1 | Force and attitude stages are split by default | `Universe.Coupled6DofIntegrationEnabled` defaults off; legacy RK4 samples one orientation through its translational stages | Fast attitude changes do not alter force direction continuously within the same RK4 step |
@@ -78,7 +80,9 @@ atmosphere arrival, heating pulse, dynamic-pressure, load, energy-dissipation an
 requirements. This is a trajectory-guidance correction; no `Cd`, `CL`, heat or mass
 coefficient was tuned to make the test pass.
 
-The render-cadence coupling and reduced-order footprint predictor remain open P0 items.
+The reduced-order footprint predictor remains an open P0 item. Render-cadence coupling is closed
+at the scheduler/control boundary; the non-demo rendered entry fixture remains required to prove
+the complete game path.
 
 ## Verification ladder
 
@@ -110,9 +114,9 @@ The render-cadence coupling and reduced-order footprint predictor remain open P0
    orbit framebuffer, but its 3300 s coast cannot reach atmospheric interface within the
    practical wall-time budget. Add a non-demo entry-interface fixture bound to the same state
    and provenance contract.
-2. **Remove render-rate coupling:** move EDL guidance into a deterministic pure-simulation
-   control cadence evaluated before force integration; hold commands only for a declared
-   control period.
+2. **Closed — remove render-rate coupling:** EDL guidance now runs through a pure-simulation
+   scheduler contract at exact 20 ms epochs before force integration. Commands are held for one
+   declared control interval, independent of outer 30/60/120 FPS cadence.
 3. **Replace vacuum corridor prediction:** propagate a reduced-order entry state containing
    energy, flight-path angle, lift/drag and bank; use bank reversals with dead bands for
    crossrange instead of continuously steering at the point target.

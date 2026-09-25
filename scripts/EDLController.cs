@@ -64,7 +64,7 @@ public partial class EDLController : Control
     // ── Trigger thresholds ────────────────────────────────────────────────────
     private const double EntrySpeed   = StarbaseCatchPolicy.MinimumEntrySpeedMps;
 
-    // ── Live telemetry (refreshed each frame) ─────────────────────────────────
+    // ── Live telemetry (refreshed on physics-control epochs) ──────────────────
     private double _alt, _vUp, _horiz, _gForce, _heat;
     private string _bodyName = "";
 
@@ -150,38 +150,62 @@ public partial class EDLController : Control
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
-        var mission = MissionManager.Instance;
         if (bridge == null || vessel == null || universe == null) { Visible = false; return; }
-
-        double processedSimDelta = bridge.LastProcessedSimulationSeconds;
 
         var body = universe.GetDominantBody(vessel.Position);
         if (body.Atmosphere == null) { Deactivate(); return; }
 
-        // ── Refresh telemetry ──────────────────────────────────────────────────
+        RefreshFlightTelemetry(vessel, body, updateLoad: false, simulationDelta: 0.0);
+        RefreshPresentationTelemetry(vessel, body);
+        if (_phase != Edl.Inactive)
+            QueueRedraw();
+    }
+
+    /// <summary>
+    /// True when atmospheric EDL needs the fixed simulation-time control clock. The entry
+    /// trigger is evaluated here as well as after activation so the first command is applied
+    /// before the first controlled force-integration interval.
+    /// </summary>
+    public bool RequiresFixedPhysicsCadence(Universe universe)
+    {
+        if (_phase != Edl.Inactive) return true;
+
+        Vessel? vessel = universe.ActiveVessel;
+        if (vessel == null) return false;
+        CelestialBody body = universe.GetDominantBody(vessel.Position);
+        if (body.Atmosphere == null) return false;
+
+        Vector3d up = (vessel.Position - body.Position).Normalized;
+        Vector3d surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        double altitude = body.GetAltitude(vessel.Position);
+        return altitude < body.Atmosphere.MaxAltitude * 1.05
+            && surfaceVelocity.Dot(up) < -20.0
+            && surfaceVelocity.Magnitude > EntrySpeed;
+    }
+
+    /// <summary>
+    /// Advances EDL guidance on the simulation's fixed control clock. This method is invoked
+    /// by <see cref="SimulationBridge"/> immediately before force integration, never by the
+    /// render loop.
+    /// </summary>
+    public void AdvancePhysicsStep(Universe universe, double controlIntervalSeconds)
+    {
+        if (!double.IsFinite(controlIntervalSeconds) || controlIntervalSeconds <= 0.0)
+            return;
+
+        var bridge = SimulationBridge.Instance;
+        var vessel = universe.ActiveVessel;
+        var mission = MissionManager.Instance;
+        if (bridge == null || vessel == null) return;
+
+        var body = universe.GetDominantBody(vessel.Position);
+        if (body.Atmosphere == null) { Deactivate(); return; }
+
         Vector3d up      = (vessel.Position - body.Position).Normalized;
         Vector3d surfVel = vessel.GetSurfaceVelocity(body);
-        _alt    = body.GetAltitude(vessel.Position);
-        _vUp    = surfVel.Dot(up);                         // + up, − down
-        _horiz  = (surfVel - up * _vUp).Magnitude;
-        _bodyName = body.Name;
-
+        RefreshFlightTelemetry(vessel, body, updateLoad: true, controlIntervalSeconds);
         double mass = vessel.TotalMass;
-        _gForce = vessel.GetProperAcceleration(body).Magnitude / EntryLoadTracker.StandardGravity;
-        // Track the peak only once the EDL track is armed, so an ascent's 3 g does not
-        // pre-poison the entry readout.
-        if (_phase != Edl.Inactive)
-            _load.Update(processedSimDelta, _gForce);
-
-        var comms = SystemsController.Instance?.Comms;
-        _blackout = comms?.PlasmaBlackout ?? false;
-        _blackoutSeconds = comms?.PlasmaBlackoutSeconds ?? 0.0;
-
-        double density = body.Atmosphere.GetDensity(_alt);
         double speed   = surfVel.Magnitude;
-        _heat = density * speed * speed * speed;            // ∝ convective heat flux
-
-        RefreshThermalState(vessel, body, density, speed, surfVel);
 
         // Do not disarm after entry has begun.  A lifting skip can briefly climb
         // back above the nominal atmosphere and a landing burn can cross zero
@@ -199,7 +223,7 @@ public partial class EDLController : Control
             {
                 // Defensive recovery for an externally-started/full-stack entry.
                 // Starship cannot perform a belly-flop while still attached.
-                bridge!.TriggerStaging();
+                bridge.TriggerStaging();
                 return;
             }
             if (descending && inAtmo && speed > EntrySpeed)
@@ -227,7 +251,7 @@ public partial class EDLController : Control
                 // path as the deterministic reentry demo. The policy is deliberately
                 // narrow; Mars/Venus, other launch sites and non-Starship vehicles keep
                 // their ordinary leg-landing fallback.
-                bridge?.TryArmStarbaseCatchForReentry(vessel, body);
+                bridge.TryArmStarbaseCatchForReentry(vessel, body);
                 _load.Reset();
                 Visible = true;
                 mission?.EnterPhase(MissionPhase.ENTRY);
@@ -247,12 +271,45 @@ public partial class EDLController : Control
         }
 
         GuidanceUpdatePeriodSeconds = double.IsFinite(LastGuidanceSimulationTimeSeconds)
-            ? System.Math.Max(0.0, universe.CurrentTime - LastGuidanceSimulationTimeSeconds)
+            ? controlIntervalSeconds
             : double.NaN;
         LastGuidanceSimulationTimeSeconds = universe.CurrentTime;
         GuidanceUpdateCount++;
-        AdvancePhase(vessel, body, mission, mass, speed, up, surfVel, processedSimDelta, universe);
-        QueueRedraw();   // live telemetry overlay
+        AdvancePhase(vessel, body, mission, mass, speed, up, surfVel,
+            controlIntervalSeconds, universe);
+    }
+
+    private void RefreshFlightTelemetry(
+        Vessel vessel,
+        CelestialBody body,
+        bool updateLoad,
+        double simulationDelta)
+    {
+        Vector3d up = (vessel.Position - body.Position).Normalized;
+        Vector3d surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        _alt = body.GetAltitude(vessel.Position);
+        _vUp = surfaceVelocity.Dot(up);
+        _horiz = (surfaceVelocity - up * _vUp).Magnitude;
+        _bodyName = body.Name;
+        _gForce = vessel.GetProperAcceleration(body).Magnitude
+            / EntryLoadTracker.StandardGravity;
+        if (updateLoad && _phase != Edl.Inactive)
+            _load.Update(simulationDelta, _gForce);
+
+        double density = body.Atmosphere!.GetDensity(_alt);
+        double speed = surfaceVelocity.Magnitude;
+        _heat = density * speed * speed * speed;
+    }
+
+    private void RefreshPresentationTelemetry(Vessel vessel, CelestialBody body)
+    {
+        var comms = SystemsController.Instance?.Comms;
+        _blackout = comms?.PlasmaBlackout ?? false;
+        _blackoutSeconds = comms?.PlasmaBlackoutSeconds ?? 0.0;
+
+        Vector3d surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        double density = body.Atmosphere!.GetDensity(_alt);
+        RefreshThermalState(vessel, body, density, surfaceVelocity.Magnitude, surfaceVelocity);
     }
 
     private void AdvancePhase(Vessel vessel, CelestialBody body, MissionManager? mission,

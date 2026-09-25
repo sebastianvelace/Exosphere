@@ -118,6 +118,14 @@ Both paths use fourth-order Runge–Kutta at the normal 20 ms physics step. The 
 is called at all four RK4 stages so attitude-dependent aerodynamics, thrust direction and
 contact geometry respond to the candidate state.
 
+Atmospheric EDL control is evaluated on a separate, explicit 20 ms simulation-time clock. When
+that controller is active, `Universe` splits a shorter or longer outer-frame request at every
+control boundary and calls `IPhysicsStepController.BeforePhysicsStep` before force integration.
+The Godot `SimulationBridge` is only the adapter; the render loop no longer advances EDL timers
+or writes its flight commands. Consequently, 30, 60 and 120 FPS outer ticks produce the same
+guidance epochs and hold each command for one declared control interval. When EDL is inactive,
+the adapter does not reduce the scheduler's normal coast/warp step.
+
 ## Gravity and orbital mechanics
 
 - Point-mass gravity uses \(\mathbf a=-\mu\mathbf r/r^3\).
@@ -237,8 +245,10 @@ measured a 29.65 g plunge and excessive residual speed at 30 km. The lift-up pol
 bounded entry envelope without changing aerodynamic coefficients.
 
 This policy does not make the current corridor predictor flight-qualified. Its time horizon is
-still a bounded reduced-order approximation; energy-aware propagation and frame-rate-independent
-control remain required by `docs/audits/ORBITAL_REENTRY_PHYSICS_AUDIT_2026-09-25.md`.
+still a bounded reduced-order approximation; energy-aware propagation remains required by
+`docs/audits/ORBITAL_REENTRY_PHYSICS_AUDIT_2026-09-25.md`. The EDL command clock itself is now
+frame-rate independent, but full trajectory parity still requires the rendered physical-entry
+gate and the eventual coupled 6-DoF migration.
 
 ## Propulsion and mass flow
 
@@ -293,6 +303,7 @@ all motors are one physical point.
 | Flight 7 booster engine-out | 150 × 20 ms warm-up + 100 × 20 ms asymmetric response | First engine-out parity gate |
 | Flight 7 engine-out recovery | Same warm-up/response window; active-stage detection, axis feedback and command slew | First deterministic recovery gate only |
 | Flight 7 delayed engine-out recovery | Same window; 100 ms onboard detection latency before feedback | First sensor-latency recovery gate only |
+| EDL guidance cadence | Fixed 20 ms simulation clock before force integration; 30/60/120 FPS epoch parity | Pure scheduler gate; rendered physical entry pending |
 | Controlled Starship ascent/EDL parity | Not yet closed | Open |
 | Flap actuator state and torque in legacy/coupled paths | Shared state, rate limit and saturation; aggregate four-surface model | Unit + controlled-pitch gate |
 | Renderer flap pose parity | Renderer still derives a separate pose from q/belly/input | Open |
