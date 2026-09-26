@@ -8,7 +8,8 @@ as provenance, but they are not the current product plan.
 
 | Need | Read |
 |---|---|
-| Product overview, build, controls, architecture | [`../README.md`](../README.md) |
+| Play from source, controls, what the sim includes | [`../README.md`](../README.md) |
+| Build, architecture, data, and current limits | [`DEVELOPMENT.md`](DEVELOPMENT.md) |
 | Current priorities and delivery order | [`../ROADMAP.md`](../ROADMAP.md) |
 | Physics equations, frames, assumptions and limits | [`physics/PHYSICS_MODEL.md`](physics/PHYSICS_MODEL.md) |
 | Coupled 6-DoF migration and parity gates | [`physics/coupled_6dof_migration.md`](physics/coupled_6dof_migration.md) |
@@ -19,7 +20,7 @@ as provenance, but they are not the current product plan.
 ## Information hierarchy
 
 1. Code, tests and data are authoritative for what the simulator currently does.
-2. `README.md`, `ROADMAP.md` and `physics/PHYSICS_MODEL.md` explain the current system.
+2. `README.md` introduces the project. `docs/DEVELOPMENT.md`, `ROADMAP.md` and `physics/PHYSICS_MODEL.md` explain the current system.
 3. `PLAN_*` files are living execution plans and must be updated when a gate closes.
 4. `docs/audits/`, `docs/HITO*` and `.atl/` preserve dated evidence and decisions. Their
    statuses are historical unless a current document links to them as active evidence.
