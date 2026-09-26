@@ -4,6 +4,24 @@ Exosphere is a space-mission simulator. You fly a launch vehicle from the pad, t
 
 There is no installer yet. You play by opening the source in the Godot .NET editor.
 
+## Screenshots
+
+![Starship on the Starbase pad before launch](docs/screenshots/pad.png)
+
+*Starship on the Starbase pad before launch.*
+
+![Earth limb from low orbit](docs/screenshots/orbit.png)
+
+*Earth limb from low orbit, with the flight HUD.*
+
+![Cockpit view over the day side](docs/screenshots/cockpit.png)
+
+*Cockpit view over the day side as entry interface approaches.*
+
+![Starship at entry interface](docs/screenshots/entry.png)
+
+*Starship at entry interface, about 67 km, nose toward Earth.*
+
 ## Play
 
 | Need | Version |
