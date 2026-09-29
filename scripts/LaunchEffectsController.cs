@@ -429,7 +429,7 @@ public partial class LaunchEffectsController : Node3D
 
         const float quad = 40f;
         int count = mesh.InstanceCount;
-        int skirts = Mathf.Min(6, count);
+        int skirts = Mathf.Min(8, count);
         for (int i = 0; i < count; i++)
         {
             bool skirt = i >= count - skirts;
@@ -445,12 +445,15 @@ public partial class LaunchEffectsController : Node3D
             float spine;
             if (skirt)
             {
-                along = (i - (count - skirts) - (skirts - 1) * 0.5f) * 34f;
-                fore = -78f - h * 18f;
-                width = 120f;
-                height = 28f;
-                rise = 0.15f;
-                spine = height * 0.5f;
+                // Far-side row. Depth test keeps it behind the stack, and it
+                // covers the horizon marsh the launch gate scores as neon.
+                int k = i - (count - skirts);
+                along = (k - (skirts - 1) * 0.5f) * 26f;
+                fore = -50f;
+                width = 78f;
+                height = 70f;
+                rise = 0.4f;
+                spine = 34f;
             }
             else
             {
