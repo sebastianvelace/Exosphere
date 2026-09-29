@@ -201,12 +201,12 @@ Mejoras:
   una cámara: esas cartas se perdían en la calima y el humo quedaba en un
   soplo bajo la nave. Medición en `liftoff_wide` a ~107 m: banda de nube
   casi blanca 9% → 36%, ventana de la nave estable, HUD superior sin cambio.
-- [x] Lóbulos de Flight 14: cada lado es una pila de puffs redondos con tapa
-  clara y panza oscura (`BuildWideCloudTexture`, `PoseWideSheets`), el
-  derecho dorado y el izquierdo blanco. Captura `liftoff_wide` a 107 m,
-  `LAUNCH_OK`, `neonGreenFrac` 0. Sigue siendo cartón iluminado a mano:
-  faltan lóbulos de varias escalas, luz transmitida de la llama y reflejo
-  en el agua para igualar el still.
+- [x] Lóbulos de Flight 14: puffs redondos con tapa clara y panza oscura
+  (`BuildWideCloudTexture`). Cada uno nace en la zanja, rueda hacia afuera
+  sobre el suelo y solo entonces sube; el derecho queda más cerca y dorado.
+  Captura `liftoff_wide` a 107 m, `LAUNCH_OK`, `neonGreenFrac` 0.00007.
+  Sigue siendo cartón iluminado a mano: faltan lóbulos de varias escalas,
+  luz transmitida de la llama y reflejo en el agua para igualar el still.
 - [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
