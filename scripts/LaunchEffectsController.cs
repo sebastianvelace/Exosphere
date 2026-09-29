@@ -97,7 +97,7 @@ public partial class LaunchEffectsController : Node3D
         // camera-facing trench glow.
         // Low emission so the gold/white vertex colours survive. A bright
         // emission multiplier clipped both lobes back to the same white.
-        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.18f, new Vector2(72f, 34f), billboard: false);
+        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.10f, new Vector2(40f, 40f), billboard: false);
         _wideCore = BuildWideBank("WideDelugeCore", WideCoreCount, 0.85f, new Vector2(22f, 14f), billboard: true);
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
@@ -350,7 +350,7 @@ public partial class LaunchEffectsController : Node3D
     // without ever covering the pad camera.
     private const float WideCameraStartDistance = 200f;
     private const float WideCameraFullDistance = 360f;
-    private const int WideSheetCount = 36;
+    private const int WideSheetCount = 78;
     private const int WideCoreCount = 6;
 
     private void DriveWideCloud(float intensity, float age)
@@ -402,10 +402,11 @@ public partial class LaunchEffectsController : Node3D
     }
 
     /// <summary>
-    /// Two cumulus lobes beside the stack, matching the Flight 14 aerial still:
-    /// a clear corridor for the vehicle and the flame, white outer cauliflower,
-    /// and a gold inner face on the screen-right mass. Short golden roots sit
-    /// next to the trench without climbing the booster.
+    /// Flight 14's still is not two flat sheets. Each side is a stack of
+    /// round sunlit puffs: bright caps, darker bellies, and a gold body on
+    /// the screen-right mass. The stack corridor stays empty above the pad.
+    /// A short far-side skirt covers the horizon wetland the launch gate
+    /// otherwise scores as neon.
     /// </summary>
     private static void PoseWideSheets(
         MultiMeshInstance3D bank, float spread, float weight, float age,
@@ -426,56 +427,83 @@ public partial class LaunchEffectsController : Node3D
         else
             towardCamera = towardCamera.Normalized();
 
-        const float quadWidth = 72f;
-        const float quadHeight = 34f;
+        const float quad = 40f;
         int count = mesh.InstanceCount;
         int skirts = Mathf.Min(6, count);
-        int roots = Mathf.Min(8, Mathf.Max(0, count - skirts));
         for (int i = 0; i < count; i++)
         {
-            float phase = Mathf.PosMod(i * 0.618034f, 1f);
-            int side = (i % 2 == 0) ? 1 : -1;
             bool skirt = i >= count - skirts;
-            bool root = i < roots;
-            // Inner edge of the tall cards stays outside the stack. The quad
-            // is wide, so the centre has to sit well out or it paints the ship.
-            // The skirt is a low far-side sheet: it fills the horizon gap the
-            // corridor leaves, which otherwise shows wetland the launch gate
-            // scores as neon, without climbing the vehicle.
-            float along = skirt
-                ? (i - (count - skirts) - (skirts - 1) * 0.5f) * 36f
-                : side * (root ? 40f + phase * 14f : 112f + phase * 64f) * spread;
-            float fore = skirt
-                ? -70f - phase * 24f
-                : ((i % 7) - 3) * (root ? 7f : 14f);
-            float width = skirt ? 150f : root ? 46f + phase * 14f : 96f + phase * 28f;
-            float height = skirt ? 34f + phase * 8f : root ? 18f + phase * 8f : 64f + phase * 42f;
-            float y = 2f + height * 0.5f + Mathf.Sin(age * 0.22f + i) * (root ? 0.3f : 1.4f);
+            int side = (i % 2 == 0) ? -1 : 1;
+            float h = PuffHash(i * 3 + 1);
+            float v = PuffHash(i * 5 + 2);
+            float w = PuffHash(i * 7 + 3);
+            float along;
+            float fore;
+            float width;
+            float height;
+            float rise;
+            float spine;
+            if (skirt)
+            {
+                along = (i - (count - skirts) - (skirts - 1) * 0.5f) * 34f;
+                fore = -78f - h * 18f;
+                width = 120f;
+                height = 28f;
+                rise = 0.15f;
+                spine = height * 0.5f;
+            }
+            else
+            {
+                bool deck = v < 0.28f;
+                rise = deck ? v / 0.28f * 0.22f : Mathf.Pow(v, 0.72f);
+                spine = deck ? 6f + rise * 18f : Mathf.Lerp(14f, 102f, rise);
+                float lateralSpread = deck ? 70f : Mathf.Lerp(36f, 18f, rise);
+                along = side * (deck ? 36f + h * lateralSpread : 46f + h * lateralSpread) * spread;
+                fore = (w - 0.5f) * (deck ? 22f : Mathf.Lerp(30f, 14f, rise));
+                float puff = deck
+                    ? 22f + h * 14f
+                    : Mathf.Lerp(16f, 32f, rise) * Mathf.Lerp(0.82f, 1.2f, h);
+                width = Mathf.Max(puff, 12f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.86f, 1.08f, w), 12f);
+                spine += Mathf.Sin(age * 0.2f + i) * 0.6f;
+                rise = Mathf.Clamp(spine / 110f, 0f, 1f);
+            }
+
+            float y = 2f + spine;
             Vector3 outward = lateral * side;
             Vector3 cardZ = towardCamera;
-            Vector3 cardUp = (Vector3.Up * (root ? 0.62f : 0.88f) + outward * (root ? 0.42f : 0.18f)).Normalized();
+            Vector3 cardUp = (Vector3.Up * 0.94f + outward * 0.08f).Normalized();
             Vector3 cardX = cardUp.Cross(cardZ).Normalized();
             if (cardX.LengthSquared() < 1e-4f)
                 cardX = outward;
             cardUp = cardZ.Cross(cardX).Normalized();
             var basis = new Basis(cardX, cardUp, cardZ).Scaled(
-                new Vector3(width / quadWidth, height / quadHeight, 1f));
+                new Vector3(width / quad, height / quad, 1f));
             var origin = lateral * along + towardCamera * fore + Vector3.Up * y;
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
 
-            // Screen-right lobe is the flame-lit gold mass. Outer faces stay white.
+            // Screen-right body is flame-lit gold. Caps stay bright; bellies
+            // and crevices drop so neighbouring puffs stay separate.
             float warm = skirt
-                ? 0.22f
-                : root
-                    ? (side > 0 ? 0.92f : 0.55f)
-                    : (side > 0 ? 0.62f : 0.16f) * (1f - phase * 0.55f);
-            float alpha = (skirt ? 0.94f : root ? 0.90f : Mathf.Lerp(0.92f, 0.76f, phase)) * weight;
+                ? 0.18f
+                : side > 0
+                    ? Mathf.Lerp(0.88f, 0.28f, rise)
+                    : Mathf.Lerp(0.22f, 0.04f, rise);
+            float crevice = skirt ? 0f : (1f - rise) * (1f - Mathf.Abs(h - 0.45f) * 1.6f);
+            float lit = Mathf.Lerp(0.58f, 1f, rise) * Mathf.Lerp(1f, 0.70f, Mathf.Clamp(crevice, 0f, 1f));
             mesh.SetInstanceColor(i, new Color(
-                1f,
-                Mathf.Lerp(0.98f, 0.56f, warm),
-                Mathf.Lerp(0.95f, 0.24f, warm),
-                alpha));
+                lit,
+                lit * Mathf.Lerp(0.98f, 0.55f, warm),
+                lit * Mathf.Lerp(0.96f, 0.26f, warm),
+                (skirt ? 0.94f : 0.90f) * weight));
         }
+    }
+
+    private static float PuffHash(int n)
+    {
+        uint x = (uint)n * 747796405u + 2891336453u;
+        x = ((x >> 16) ^ x) * 73244475u;
+        return (x & 65535) / 65535f;
     }
 
     private static void PoseWideCore(MultiMeshInstance3D bank, float spread, float weight, float age)
@@ -1041,12 +1069,13 @@ public partial class LaunchEffectsController : Node3D
     }
 
     /// <summary>
-    /// Low-frequency cumulus card. The center saturates so overlapping lobes
-    /// become one mass; only the rim stays soft.
+    /// One round puff. The top is sunlit and the belly is darker, so a stack
+    /// of cards reads as cauliflower instead of one flat sheet. Image row 0
+    /// is the top of a Godot texture.
     /// </summary>
     private static ImageTexture BuildWideCloudTexture()
     {
-        const int Size = 192;
+        const int Size = 128;
         var img = Image.CreateEmpty(Size, Size, false, Image.Format.Rgba8);
         float half = Size * 0.5f;
         for (int y = 0; y < Size; y++)
@@ -1054,18 +1083,13 @@ public partial class LaunchEffectsController : Node3D
         {
             float dx = (x - half) / half;
             float dy = (y - half) / half;
-            // Elliptical falloff that is zero before the quad border. A square
-            // edge left the card corners visible.
-            float r2 = dx * dx * 0.85f + dy * dy * 1.55f;
-            float falloff = r2 >= 1f ? 0f : Mathf.SmoothStep(1f, 0.20f, r2);
-            float lump0 = Mathf.Exp(-((dx + 0.22f) * (dx + 0.22f) * 3.1f
-                + (dy + 0.05f) * (dy + 0.05f) * 4.2f));
-            float lump1 = Mathf.Exp(-((dx - 0.18f) * (dx - 0.18f) * 2.6f
-                + (dy - 0.12f) * (dy - 0.12f) * 5.0f));
-            float lump2 = Mathf.Exp(-(dx * dx * 4.4f + (dy + 0.18f) * (dy + 0.18f) * 3.6f));
-            float density = Mathf.Clamp(lump0 * 0.85f + lump1 * 0.75f + lump2 * 0.65f, 0f, 1f);
-            float alpha = density * falloff;
-            img.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            float radius = Mathf.Sqrt(dx * dx + dy * dy);
+            float alpha = radius >= 1f ? 0f : Mathf.SmoothStep(0.98f, 0.46f, radius);
+            // Bright cap, shaded underside. y=0 is the top of the image.
+            float shade = Mathf.Lerp(1f, 0.42f, y / (float)(Size - 1));
+            float crevice = Mathf.Clamp(1f - radius * 0.35f, 0.7f, 1f);
+            float lit = shade * crevice;
+            img.SetPixel(x, y, new Color(lit, lit * 0.985f, lit * 0.96f, alpha));
         }
         return ImageTexture.CreateFromImage(img);
     }
