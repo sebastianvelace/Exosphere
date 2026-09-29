@@ -446,6 +446,7 @@ public partial class LaunchEffectsController : Node3D
             // Birth is hidden. Dissipation at the crown is hidden. Between
             // those, the card is a body of steam sliding along the roll.
             float fade = 1f;
+            float flame = 0f;
             if (skirt)
             {
                 // Short bank behind the stack. It covers the far wetland in
@@ -468,26 +469,29 @@ public partial class LaunchEffectsController : Node3D
                 float speed = 0.045f + h * 0.028f;
                 float t = Mathf.PosMod(v + age * speed, 1f);
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
-                float out01 = Mathf.Pow(t, 0.80f);
-                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.34f) / 0.66f, 0f, 1f), 1.25f);
+                // Most of the path stays on the ground. The rise is only the
+                // outer crown, so the tall heads sit outboard of the stack.
+                float out01 = Mathf.Pow(t, 0.65f);
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.50f) / 0.50f, 0f, 1f), 1.15f);
                 float boil = up01 * up01;
-                float radius = Mathf.Lerp(8f, 200f, out01) * spread;
-                spine = Mathf.Lerp(2f, 100f, up01);
+                float radius = Mathf.Lerp(18f, 165f, out01) * spread;
+                spine = Mathf.Lerp(4f, 72f, up01);
                 // Churn grows once the puff leaves the ground, so the crown
                 // boils instead of sliding as a rigid disc.
                 float churn = Mathf.Sin(age * (0.85f + h * 0.7f) + w * 6.2f);
-                spine += Mathf.Max(-1.5f, churn) * (1.2f + 8f * boil);
-                radius += Mathf.Sin(age * 0.55f + h * 4.1f) * (1.5f + 5f * boil);
+                spine += churn * (1.5f + 6f * boil);
+                radius += Mathf.Sin(age * 0.55f + h * 4.1f) * (2f + 4f * boil);
                 along = side * radius;
                 // Screen-right mass is closer to the camera and larger.
-                float depth = side > 0 ? 36f : -22f;
-                fore = depth + (w - 0.5f) * Mathf.Lerp(6f, 22f, t);
-                float scale = side > 0 ? 1.22f : 0.92f;
-                float puff = Mathf.Lerp(18f, 56f, Mathf.Pow(t, 0.9f)) * scale;
-                width = Mathf.Max(puff * Mathf.Lerp(1.12f, 0.96f, up01), 12f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.72f, 1.08f, up01), 12f);
-                rise = t;
-                lean = Mathf.Lerp(0.12f, 0.62f, up01);
+                float depth = side > 0 ? 42f : -18f;
+                fore = depth + (w - 0.5f) * Mathf.Lerp(8f, 18f, t);
+                float scale = side > 0 ? 1.25f : 0.95f;
+                float puff = Mathf.Lerp(42f, 64f, Mathf.Sqrt(t)) * scale;
+                width = Mathf.Max(puff * Mathf.Lerp(1.15f, 0.98f, up01), 16f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.78f, 1.05f, up01), 16f);
+                rise = up01;
+                flame = 1f - out01;
+                lean = Mathf.Lerp(0.08f, 0.48f, up01);
             }
 
             float y = 2f + Mathf.Max(spine, 1f);
@@ -510,10 +514,10 @@ public partial class LaunchEffectsController : Node3D
             float warm = skirt
                 ? 0.18f
                 : side > 0
-                    ? Mathf.Lerp(0.88f, 0.28f, rise)
-                    : Mathf.Lerp(0.22f, 0.04f, rise);
+                    ? Mathf.Lerp(0.20f, 0.86f, flame)
+                    : Mathf.Lerp(0.04f, 0.18f, flame);
             float crevice = skirt ? 0f : (1f - rise) * (1f - Mathf.Abs(h - 0.45f) * 1.6f);
-            float lit = Mathf.Lerp(0.58f, 1f, rise) * Mathf.Lerp(1f, 0.70f, Mathf.Clamp(crevice, 0f, 1f));
+            float lit = Mathf.Lerp(0.84f, 1f, rise) * Mathf.Lerp(1f, 0.72f, Mathf.Clamp(crevice, 0f, 1f));
             mesh.SetInstanceColor(i, new Color(
                 lit,
                 lit * Mathf.Lerp(0.98f, 0.55f, warm),
