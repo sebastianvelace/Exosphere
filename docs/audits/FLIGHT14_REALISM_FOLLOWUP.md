@@ -29,7 +29,7 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 
 | Area | Verified state | Gap | Priority |
 | --- | --- | --- | --- |
-| Launch plume | 33/33 delivered. Aerial frame is two side cumulus lobes, gold on screen-right and white on screen-left, with the stack in a clear corridor. `liftoff_wide` at 107 m passes the launch image gate (`neonGreenFrac` 0.00014) | The lobes are sheet cards, so the cauliflower is softer than the Flight 14 still. Close chase steam is unchanged | P1 |
+| Launch plume | 33/33 delivered. Aerial lobes are stacks of round puffs with a lit cap and a dark belly. `liftoff_wide` at 107 m passes the launch image gate (`neonGreenFrac` 0) | The still's beauty is transmitted flame light, multi-scale cauliflower and water reflection. The puffs are still camera-facing cards | P1 |
 | Upper ship | Continuous barrel, tangent-ogive nose, raceway, payload-door cue and four animated flaps exist | Shadow-side steel/TPS loses surface information at distance; seams and thermal zones need a controlled readability pass | P0 |
 | V3 booster | Flight 12 data is selected by the harness; renderer now uses three larger, lower, re-clocked fins only for V3 part IDs | Integrated hot-stage geometry is not yet distinct from the legacy vented interstage in the full-stack renderer | P1 |
 | Fault isolation | Live peer-thrust telemetry, 100 ms persistence and mount-geometry torque corroboration now gate the onboard recovery sensor | The classifier still needs a longer controlled-ascent campaign and fault injection beyond the deterministic Flight 7 fixture | P0 |
