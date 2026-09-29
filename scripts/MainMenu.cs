@@ -21,14 +21,10 @@ public partial class MainMenu : Control
         UserInterfaceSettings.Load();
         GetWindow().ContentScaleFactor = UserInterfaceSettings.UiScale;
         SetAnchorsPreset(LayoutPreset.FullRect);
-        BuildBackground();
-        BuildHeader();
-        BuildBody();
-        BuildFooter();
-        ApplyEntrance();
-        Resized += UpdateResponsiveLayout;
-        UpdateResponsiveLayout();
-        _firstButton?.CallDeferred(Control.MethodName.GrabFocus);
+        var title = new TitleScreen();
+        title.SetAnchorsPreset(LayoutPreset.FullRect);
+        title.StartRequested += OpenSandbox;
+        AddChild(title);
         MaybeAutoSmokeFlight();
     }
 

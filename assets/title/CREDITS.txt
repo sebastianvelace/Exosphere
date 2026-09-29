@@ -1,0 +1,12 @@
+Title images
+
+black_hole.jpg
+  Still from "Black Hole with Accretion Disk Visualization", NASA Scientific
+  Visualization Studio, SVS 14619 (2024).
+  https://svs.gsfc.nasa.gov/14619/
+  Public domain. Credit: NASA's Scientific Visualization Studio.
+
+Jost Light
+  Copyright 2020 The Jost Project Authors.
+  https://github.com/indestructible-type/Jost
+  Licensed under the SIL Open Font License 1.1.
