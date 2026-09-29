@@ -487,11 +487,12 @@ public partial class LaunchEffectsController : Node3D
                 // Screen-right mass is closer to the camera and larger.
                 float depth = side > 0 ? 42f : -18f;
                 fore = depth + (w - 0.5f) * Mathf.Lerp(8f, 18f, t);
-                float scale = side > 0 ? 1.25f : 0.95f;
-                float puff = Mathf.Lerp(32f, 72f, Mathf.Max(t * 0.35f, up01)) * scale;
-                // Low and wide while it rolls on the ground, round once it boils.
-                width = Mathf.Max(puff * Mathf.Lerp(1.35f, 1.0f, up01), 16f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.58f, 1.12f, up01), 14f);
+                float scale = side > 0 ? 1.18f : 0.94f;
+                // Keep each puff a lobe. A 70-unit card reaches back to the
+                // airframe and reads as a column glued to the stack.
+                float puff = Mathf.Lerp(26f, 44f, Mathf.Max(t * 0.25f, up01)) * scale;
+                width = Mathf.Max(puff * Mathf.Lerp(1.20f, 1.0f, up01), 16f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.62f, 1.05f, up01), 14f);
                 rise = up01;
                 flame = 1f - out01;
                 lean = Mathf.Lerp(0.08f, 0.48f, up01);
