@@ -466,16 +466,18 @@ public partial class LaunchEffectsController : Node3D
                 // Each puff is born in the trench and travels the same path
                 // the deluge takes: out along the ground, then up. Offsets
                 // keep the mass full while the cards themselves are moving.
-                float speed = 0.045f + h * 0.028f;
+                // Fast enough that a liftoff shows the roll, slow enough
+                // that the mass stays full. Each card is at a different phase.
+                float speed = 0.07f + h * 0.04f;
                 float t = Mathf.PosMod(v + age * speed, 1f);
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
-                // Most of the path stays on the ground. The rise is only the
-                // outer crown, so the tall heads sit outboard of the stack.
-                float out01 = Mathf.Pow(t, 0.65f);
-                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.50f) / 0.50f, 0f, 1f), 1.15f);
+                // Run outward first. The boil starts only after the puff is
+                // already clear of the stack, so the tall heads are outboard.
+                float out01 = Mathf.Pow(t, 0.55f);
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.70f) / 0.30f, 0f, 1f), 1.05f);
                 float boil = up01 * up01;
-                float radius = Mathf.Lerp(18f, 165f, out01) * spread;
-                spine = Mathf.Lerp(4f, 72f, up01);
+                float radius = Mathf.Lerp(12f, 210f, out01) * spread;
+                spine = Mathf.Lerp(3f, 78f, up01);
                 // Churn grows once the puff leaves the ground, so the crown
                 // boils instead of sliding as a rigid disc.
                 float churn = Mathf.Sin(age * (0.85f + h * 0.7f) + w * 6.2f);
@@ -486,9 +488,10 @@ public partial class LaunchEffectsController : Node3D
                 float depth = side > 0 ? 42f : -18f;
                 fore = depth + (w - 0.5f) * Mathf.Lerp(8f, 18f, t);
                 float scale = side > 0 ? 1.25f : 0.95f;
-                float puff = Mathf.Lerp(42f, 64f, Mathf.Sqrt(t)) * scale;
-                width = Mathf.Max(puff * Mathf.Lerp(1.15f, 0.98f, up01), 16f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.78f, 1.05f, up01), 16f);
+                float puff = Mathf.Lerp(32f, 72f, Mathf.Max(t * 0.35f, up01)) * scale;
+                // Low and wide while it rolls on the ground, round once it boils.
+                width = Mathf.Max(puff * Mathf.Lerp(1.35f, 1.0f, up01), 16f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.58f, 1.12f, up01), 14f);
                 rise = up01;
                 flame = 1f - out01;
                 lean = Mathf.Lerp(0.08f, 0.48f, up01);
