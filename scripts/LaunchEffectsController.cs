@@ -459,6 +459,11 @@ public partial class LaunchEffectsController : Node3D
                 spine = deck ? 6f + rise * 18f : Mathf.Lerp(14f, 102f, rise);
                 float lateralSpread = deck ? 70f : Mathf.Lerp(36f, 18f, rise);
                 along = side * (deck ? 36f + h * lateralSpread : 46f + h * lateralSpread) * spread;
+                // Mid-height puffs close the horizon slot. That slot was a
+                // band of wetland beside the booster, which the launch gate
+                // scores as neon. The crown stays wide of the nose.
+                if (!deck && rise < 0.48f && h < 0.42f)
+                    along = side * (22f + h * 18f) * spread;
                 fore = (w - 0.5f) * (deck ? 22f : Mathf.Lerp(30f, 14f, rise));
                 float puff = deck
                     ? 22f + h * 14f
