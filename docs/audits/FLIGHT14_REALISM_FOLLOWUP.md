@@ -1,15 +1,19 @@
 # Flight 14 realism follow-up
 
 **Status:** active audit, not a claim of Flight 14 mission parity
-**Updated:** 2026-09-22
+**Updated:** 2026-09-29
 **Scope:** Starship V3 visual fidelity, propulsion fault isolation, controlled ascent and flap actuation.
 
 ## Evidence boundary
 
 The two user-provided screenshots are treated as visual evidence only. They are not
-implementation instructions and do not establish a physical parameter. The current
-Godot framebuffer captures were produced by `tools/visual_playtest.sh` at 1280×1024
-with the compatibility renderer.
+implementation instructions and do not establish a physical parameter. The attachment
+from the pre-environment chat is not in the cloud snapshot. Until it is available
+again, the liftoff reference is the SpaceX Flight 14 Pad 2 still published by
+Spaceflight Now on 28 Sep 2026 (`20260928_Starship_Flight-14.jpeg`): an orange-yellow
+column, a thick white base cloud, and the vehicle left as a needle above that cloud.
+The current Godot framebuffer captures were produced by `tools/visual_playtest.sh`
+at 1280×1024 with the compatibility renderer.
 
 The official [Flight 14 mission page](https://www.spacex.com/launches/starship-flight-14)
 was reachable during this audit, but its mission content was not text-extractable in
@@ -26,7 +30,7 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 
 | Area | Verified state | Gap | Priority |
 | --- | --- | --- | --- |
-| Launch plume | 33/33 telemetry and delivered thrust reach 1.0; the real framebuffer shows a visible core and pad steam | At liftoff the exhaust still reads as a narrow white column instead of a broad, layered methalox/steam volume | P0 |
+| Launch plume | 33/33 telemetry and delivered thrust reach 1.0; the aerial deluge ring raised near-white coverage in the cloud band from 9% to 36% at ~107 m without covering the ship | The column is still a pale streak. Flight 14 reads as a wide orange sea-level column over a brilliant white deluge mound | P0 |
 | Upper ship | Continuous barrel, tangent-ogive nose, raceway, payload-door cue and four animated flaps exist | Shadow-side steel/TPS loses surface information at distance; seams and thermal zones need a controlled readability pass | P0 |
 | V3 booster | Flight 12 data is selected by the harness; renderer now uses three larger, lower, re-clocked fins only for V3 part IDs | Integrated hot-stage geometry is not yet distinct from the legacy vented interstage in the full-stack renderer | P1 |
 | Fault isolation | Live peer-thrust telemetry, 100 ms persistence and mount-geometry torque corroboration now gate the onboard recovery sensor | The classifier still needs a longer controlled-ascent campaign and fault injection beyond the deterministic Flight 7 fixture | P0 |
@@ -60,9 +64,10 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
    Flight 7 legacy as the comparison baseline.
 2. **Flap renderer parity:** validate the renderer's shared `FlapActuatorState` pose with a
    real framebuffer, then compare controlled ascent and entry angles against the reference.
-3. **P0 plume comparison:** add a deterministic close camera preset and compare pad,
-   100 m and 1 km captures against the same framing. Tune the layered cone, ground
-   interaction and deluge separately; do not use a global exposure or arbitrary bloom
+3. **P0 plume comparison:** compare the aerial liftoff frame with the Flight 14
+   Pad 2 still. The sea-level skin is orange and the Super Heavy radial envelope
+   is wider; vacuum stays blue-white. Tune the layered cone, ground interaction
+   and deluge separately; do not use a global exposure or arbitrary bloom
    increase as a substitute for geometry.
 4. **V3 hot stage and upper ship:** model the integrated interface as a V3-specific
    continuous shell, then validate nose/TPS/raceway/flap readability in a close-up

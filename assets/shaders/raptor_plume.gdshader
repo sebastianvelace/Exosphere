@@ -6,8 +6,8 @@
 // per ring at unit-ish scale; PlumeSystem stretches/recolours it via uniforms.
 //
 // The shader paints, from nozzle outward:
-//   • a bright, near-white incandescent base right at the throat (over-expanded
-//     sea-level flame — hot, slightly orange at the very root),
+//   • a bright, near-white incandescent axis, with an orange sea-level skin
+//     (daylight afterburn) that collapses in vacuum,
 //   • a bright blue-white supersonic core down the axis,
 //   • periodic Mach (shock) diamonds — sharp bright nodes along the axis whose
 //     spacing widens (fewer diamonds) as ambient pressure drops with altitude,
@@ -21,8 +21,9 @@
 //   • vacuum     → very long, broad, faint plume dominated by the smooth bright
 //                  core; diamonds few, soft and pushed downstream.
 //
-// Methalox burns nearly translucent blue — NOT orange/yellow. Orange only
-// appears as hot recombination at the very base and along the plume skin.
+// Vacuum methalox stays a pale blue-white. At sea level the axis stays
+// white-hot and the skin carries the orange afterburn of a daylight liftoff
+// (Flight 14 Pad 2 stills). That tint dies as expansion rises.
 //
 // Atmospheric pressure inputs (N7):
 //   atmo_pressure  1.0 = sea level, 0.0 = vacuum. Drives plume length, diamond
@@ -62,7 +63,7 @@ uniform float diamond_count : hint_range(2.0, 14.0) = 8.0;
 
 // Runtime visibility controls. Shock cells need a pressure mismatch and enough
 // contrast to survive steam/deluge in the near field; they are not a permanent
-// decorative texture. Afterburn is intentionally confined to the hot root.
+// decorative texture. Sea-level afterburn tints the skin; vacuum stays pale.
 uniform float shock_cell_strength : hint_range(0.0, 1.0) = 1.0;
 uniform float shock_cell_spacing : hint_range(0.5, 1.5) = 1.0;
 uniform float shock_cell_softness : hint_range(0.0, 0.6) = 0.10;
@@ -187,10 +188,13 @@ void fragment() {
 	vec3 whiteHot = vec3(1.0);
 	// White at the throat → blue-white core downstream.
 	vec3 col = mix(whiteHot, core_color, smoothstep(0.0, 0.45, a));
-	// Hot orange root, only at the very base and mostly at sea level.
-	float hotBase = (1.0 - smoothstep(0.0, 0.18, a))
+	// Daylight liftoff column: white-hot axis, orange skin through the short
+	// sea-level plume. Vacuum collapses both the reach and the mix.
+	float hotReach = mix(0.62, 0.16, effExpansion);
+	float hotBase = (1.0 - smoothstep(0.0, hotReach, a))
 		* (1.0 - effExpansion * 0.85) * afterburn_strength;
-	col = mix(col, edge_color, hotBase * 0.42);
+	float skin = smoothstep(0.08, 0.55, coreR);
+	col = mix(col, edge_color, hotBase * mix(0.22, 0.78, skin));
 	// Keep the outer sheath pale. Any warm pad interaction dies quickly away from
 	// the nozzle instead of turning the whole methalox envelope orange.
 	float padWarm = smoothstep(0.0, 0.16, 1.0 - a) * pad_interaction

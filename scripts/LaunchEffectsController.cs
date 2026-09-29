@@ -94,8 +94,8 @@ public partial class LaunchEffectsController : Node3D
         // Sheets are oriented in the pad frame. A billboard here stood the
         // cloud up into the hazy sky and it disappeared. The core stays a
         // camera-facing trench glow.
-        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.28f, new Vector2(72f, 34f), billboard: false);
-        _wideCore = BuildWideBank("WideDelugeCore", WideCoreCount, 0.42f, new Vector2(16f, 11f), billboard: true);
+        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.55f, new Vector2(72f, 34f), billboard: false);
+        _wideCore = BuildWideBank("WideDelugeCore", WideCoreCount, 0.85f, new Vector2(22f, 14f), billboard: true);
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
         _pivot.AddChild(_dustRadial);  // N5: radial blast wave at pad deck level
@@ -437,8 +437,8 @@ public partial class LaunchEffectsController : Node3D
                 new Vector3(width / quadWidth, height / quadHeight, 1f));
             var origin = radial * radius + Vector3.Up * y;
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
-            float tone = Mathf.Lerp(1f, 0.86f, radial01);
-            float alpha = Mathf.Lerp(0.90f, 0.62f, radial01) * weight;
+            float tone = Mathf.Lerp(1f, 0.90f, radial01);
+            float alpha = Mathf.Lerp(0.96f, 0.70f, radial01) * weight;
             // Outer ring picks up pad dust so the edge is not a white cutout.
             mesh.SetInstanceColor(i, new Color(
                 tone,
@@ -460,7 +460,7 @@ public partial class LaunchEffectsController : Node3D
             float angle = i * 2.399963f;
             float radius = (6f + phase * 10f) * Mathf.Lerp(0.9f, 1f, spread);
             float y = 3.5f + phase * 4.5f + Mathf.Sin(age * 0.8f + angle) * 0.6f;
-            float size = 0.85f + phase * 0.55f;
+            float size = 1.55f + phase * 0.85f;
             var basis = Basis.Identity.Scaled(new Vector3(size * 1.35f, size, 1f));
             var origin = new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
@@ -468,7 +468,7 @@ public partial class LaunchEffectsController : Node3D
                 1f,
                 0.42f + phase * 0.16f,
                 0.08f + phase * 0.06f,
-                Mathf.Clamp(0.72f * weight, 0f, 0.72f)));
+                Mathf.Clamp(0.88f * weight, 0f, 0.88f)));
         }
     }
 
