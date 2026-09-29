@@ -382,10 +382,9 @@ public partial class LaunchEffectsController : Node3D
             return;
 
         float spread = Mathf.Lerp(0.72f, 1.22f, Mathf.Clamp(age / 8f, 0f, 1f));
-        // Leave the upper stack in clear air. On the pad that caps the cloud
-        // around the booster; once the vehicle has climbed, the same cards
-        // sit on the ground beneath it.
-        float topCap = (float)(_sampledAltitude / MetresPerUnit) + 14f;
+        // Fixed mound on the pad, about 40–70 m. Letting the cap chase
+        // altitude painted the white sheets over the orange column.
+        float topCap = Mathf.Lerp(14f, 24f, Mathf.Clamp(age / 6f, 0f, 1f));
         PoseWideSheets(_wideLobes, spread, weight, age, topCap);
         PoseWideCore(_wideCore, spread, weight, age);
     }

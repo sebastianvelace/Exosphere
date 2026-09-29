@@ -239,6 +239,11 @@ void fragment() {
 	vec3 emission = col * e * layerRadiance * (1.0 + diamond * 0.8) * flick;
 	vec3 albedoColor = mix(col * 0.86, mix(col, whiteHot, 0.18), core_layer);
 	albedoColor = mix(albedoColor, whiteHot, diamond * 0.34);
+	// Full sea-level energy clips every channel to white, so a flame tint
+	// never survives the framebuffer. Hold the saturated colour in albedo
+	// and keep emission from pushing green and blue through the clip.
+	emission *= mix(1.0, 0.34, hotBase);
+	albedoColor = mix(albedoColor, flame, hotBase);
 
 	ALBEDO   = albedoColor;
 	EMISSION = emission;
