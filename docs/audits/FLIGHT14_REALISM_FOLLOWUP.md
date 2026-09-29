@@ -30,7 +30,7 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 
 | Area | Verified state | Gap | Priority |
 | --- | --- | --- | --- |
-| Launch plume | 33/33 telemetry and delivered thrust reach 1.0; the aerial deluge ring raised near-white coverage in the cloud band from 9% to 36% at ~107 m without covering the ship | The column is still a pale streak. Flight 14 reads as a wide orange sea-level column over a brilliant white deluge mound | P0 |
+| Launch plume | 33/33 delivered. Aerial deluge ring plus a saturated sea-level flame. At 107 m the nozzle band warmed (2% → 37% warm pixels) and the launch image gate still passes | The column body is still near-white. A lower steam cap reveals the orange body and also wetland that the limb gate scores as neon | P0 |
 | Upper ship | Continuous barrel, tangent-ogive nose, raceway, payload-door cue and four animated flaps exist | Shadow-side steel/TPS loses surface information at distance; seams and thermal zones need a controlled readability pass | P0 |
 | V3 booster | Flight 12 data is selected by the harness; renderer now uses three larger, lower, re-clocked fins only for V3 part IDs | Integrated hot-stage geometry is not yet distinct from the legacy vented interstage in the full-stack renderer | P1 |
 | Fault isolation | Live peer-thrust telemetry, 100 ms persistence and mount-geometry torque corroboration now gate the onboard recovery sensor | The classifier still needs a longer controlled-ascent campaign and fault injection beyond the deterministic Flight 7 fixture | P0 |

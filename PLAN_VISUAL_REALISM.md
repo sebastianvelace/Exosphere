@@ -203,11 +203,15 @@ Mejoras:
   una cámara: esas cartas se perdían en la calima y el humo quedaba en un
   soplo bajo la nave. Medición en `liftoff_wide` a ~107 m: banda de nube
   casi blanca 9% → 36%, ventana de la nave estable, HUD superior sin cambio.
-- [ ] Columna de Flight 14: el mismo frame sigue leyéndose como una columna
-  blanca estrecha. El objetivo es la piel naranja de nivel del mar
-  (`raptor_plume.gdshader`, alcance axial que muere con `expansion`) y un
-  ensanche radial solo de Super Heavy (`PlumeSystem` `seaLevelBroadening`),
-  más el vapor aéreo más opaco. El vacío sigue azul-blanco.
+- [ ] Columna de Flight 14: la piel de nivel del mar ya es un naranja saturado
+  que no se clipea a blanco, y el montículo de vapor queda en el pad
+  (`topCap` 20–36 u). En `liftoff_wide` a 107 m la banda del nozzle pasó de
+  casi blanca (warm 2%) a melocotón (warm 37%, media 225,190,171). El cuerpo
+  de la columna sigue cerca de blanco (media ~235,232,228) porque bajar más
+  el montículo destapa humedal en la banda del limbo y el gate de launch
+  lo cuenta como neón (`neonGreenFrac` 0.0014 con tope 30 u, 0.0005 con 36 u).
+  La nave y el HUD no se movieron. El vacío sigue azul-blanco. Falta una
+  columna naranja en todo el cuerpo sin tapar el vehículo ni fallar ese gate.
 - [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
