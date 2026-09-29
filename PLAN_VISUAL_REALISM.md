@@ -190,6 +190,10 @@ Mejoras:
   visible durante el overlap, con telemetría de anclaje/opacity y gate fail-closed en
   `tools/visual_playtest.sh`; validado en `/tmp/exo_play-visual-close-20260918-low/`.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
+  La vista aérea de despegue usa un anillo de láminas alrededor del pad
+  (`LaunchEffectsController` wide sheets), no dos lóbulos fijos al yaw de
+  una cámara: esas cartas se perdían en la calima y el humo quedaba en un
+  soplo bajo la nave.
 - [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana

@@ -27,6 +27,8 @@ rg -q --fixed-strings 'DriveAmounts(_intensity);' "$EFFECTS" \
   || fail "per-frame particle drive missing"
 rg -q --fixed-strings 'DriveImmediateSteam(_intensity, _ignitionAge);' "$EFFECTS" \
   || fail "per-frame MultiMesh animation missing"
+rg -q --fixed-strings 'CameraController.Instance?.PresentationCamera' "$EFFECTS" \
+  || fail "aerial deluge must measure the presentation camera"
 
 # Preserve launch gates and the existing emission dirty gate.
 rg -q --fixed-strings 'vessel.HasActiveEngineParts' "$EFFECTS" \
