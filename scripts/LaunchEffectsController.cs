@@ -94,7 +94,7 @@ public partial class LaunchEffectsController : Node3D
         // Sheets are oriented in the pad frame. A billboard here stood the
         // cloud up into the hazy sky and it disappeared. The core stays a
         // camera-facing trench glow.
-        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.14f, new Vector2(72f, 34f), billboard: false);
+        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.28f, new Vector2(72f, 34f), billboard: false);
         _wideCore = BuildWideBank("WideDelugeCore", WideCoreCount, 0.42f, new Vector2(16f, 11f), billboard: true);
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
@@ -382,7 +382,11 @@ public partial class LaunchEffectsController : Node3D
             return;
 
         float spread = Mathf.Lerp(0.72f, 1.22f, Mathf.Clamp(age / 8f, 0f, 1f));
-        PoseWideSheets(_wideLobes, spread, weight, age);
+        // Leave the upper stack in clear air. On the pad that caps the cloud
+        // around the booster; once the vehicle has climbed, the same cards
+        // sit on the ground beneath it.
+        float topCap = (float)(_sampledAltitude / MetresPerUnit) + 14f;
+        PoseWideSheets(_wideLobes, spread, weight, age, topCap);
         PoseWideCore(_wideCore, spread, weight, age);
     }
 
@@ -391,7 +395,8 @@ public partial class LaunchEffectsController : Node3D
     /// tracked one camera yaw and vanished into the sky haze from the aerial
     /// liftoff frame. Tops stay under the climbing stack.
     /// </summary>
-    private static void PoseWideSheets(MultiMeshInstance3D bank, float spread, float weight, float age)
+    private static void PoseWideSheets(
+        MultiMeshInstance3D bank, float spread, float weight, float age, float topCap)
     {
         MultiMesh? mesh = bank.Multimesh;
         if (mesh == null)
@@ -404,22 +409,36 @@ public partial class LaunchEffectsController : Node3D
             float phase = Mathf.PosMod(i * 0.618034f, 1f);
             float angle = i * 2.399963f;
             float radial01 = (i % 6) / 5f;
-            float radius = (18f + radial01 * 78f) * spread;
-            float width = (78f + phase * 46f) * Mathf.Lerp(0.92f, 1.08f, radial01);
-            float height = 24f + phase * 12f;
-            float y = 3.2f + height * 0.34f + Mathf.Sin(age * 0.35f + angle) * 1.4f;
+            // Hundreds of metres across. The previous 80 m sheets were a
+            // light veil on the wetland and did not read as deluge.
+            float radius = (26f + radial01 * 92f) * spread;
+            float width = (130f + phase * 70f) * Mathf.Lerp(0.95f, 1.12f, radial01);
+            float height = 42f + phase * 16f;
+            // Keep the whole card above the pad deck so the ground mesh
+            // does not depth-clip it into a thin puff.
+            float y = 4f + height * 0.46f + Mathf.Sin(age * 0.35f + angle) * 1.6f;
+            float top = y + height * 0.5f;
+            if (top > topCap)
+            {
+                y -= top - topCap;
+                if (y - height * 0.5f < 2f)
+                {
+                    height = Mathf.Max(18f, topCap - 2f);
+                    y = 2f + height * 0.5f;
+                }
+            }
             Vector3 radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-            // Lean the top outward so the sheet has both a ground footprint
-            // and a face the 15° aerial camera can actually see.
-            Vector3 cardUp = (Vector3.Up * 0.78f + radial * 0.62f).Normalized();
+            // Mostly upright, leaned just enough that the near face is
+            // visible from the 15° aerial liftoff camera.
+            Vector3 cardUp = (Vector3.Up * 0.90f + radial * 0.28f).Normalized();
             Vector3 cardX = cardUp.Cross(radial).Normalized();
             Vector3 cardZ = cardX.Cross(cardUp).Normalized();
             var basis = new Basis(cardX, cardUp, cardZ).Scaled(
                 new Vector3(width / quadWidth, height / quadHeight, 1f));
             var origin = radial * radius + Vector3.Up * y;
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
-            float tone = Mathf.Lerp(0.98f, 0.74f, radial01);
-            float alpha = Mathf.Lerp(0.78f, 0.42f, radial01) * weight;
+            float tone = Mathf.Lerp(1f, 0.86f, radial01);
+            float alpha = Mathf.Lerp(0.90f, 0.62f, radial01) * weight;
             // Outer ring picks up pad dust so the edge is not a white cutout.
             mesh.SetInstanceColor(i, new Color(
                 tone,
