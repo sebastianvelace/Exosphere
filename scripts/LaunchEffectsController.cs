@@ -402,11 +402,10 @@ public partial class LaunchEffectsController : Node3D
     }
 
     /// <summary>
-    /// Flight 14's still is not two flat sheets. Each side is a stack of
-    /// round sunlit puffs: bright caps, darker bellies, and a gold body on
-    /// the screen-right mass. The stack corridor stays empty above the pad.
-    /// A short far-side skirt covers the horizon wetland the launch gate
-    /// otherwise scores as neon.
+    /// Flight 14's steam leaves the trench, rolls outward along the ground,
+    /// and only then boils up. Puffs sit on that path: low near the flame,
+    /// tall and wide at the outer crown. The screen-right mass is closer to
+    /// the camera and gold. The stack corridor stays empty.
     /// </summary>
     private static void PoseWideSheets(
         MultiMeshInstance3D bank, float spread, float weight, float age,
@@ -443,44 +442,60 @@ public partial class LaunchEffectsController : Node3D
             float height;
             float rise;
             float spine;
+            float lean;
+            // Birth is hidden. Dissipation at the crown is hidden. Between
+            // those, the card is a body of steam sliding along the roll.
+            float fade = 1f;
             if (skirt)
             {
-                // Far-side row. Depth test keeps it behind the stack, and it
-                // covers the horizon marsh the launch gate scores as neon.
+                // Short bank behind the stack. It covers the far wetland in
+                // the horizon slot without climbing the clear corridor.
                 int k = i - (count - skirts);
-                along = (k - (skirts - 1) * 0.5f) * 26f;
-                fore = -50f;
-                width = 78f;
-                height = 70f;
-                rise = 0.4f;
-                spine = 34f;
+                along = (k - (skirts - 1) * 0.5f) * 18f;
+                fore = -70f - h * 16f;
+                width = 56f;
+                height = 34f;
+                rise = 0.15f;
+                spine = 20f + (k % 3) * 5f;
+                lean = 0.15f;
+                side = along >= 0f ? 1 : -1;
             }
             else
             {
-                bool deck = v < 0.28f;
-                rise = deck ? v / 0.28f * 0.22f : Mathf.Pow(v, 0.72f);
-                spine = deck ? 6f + rise * 18f : Mathf.Lerp(14f, 102f, rise);
-                float lateralSpread = deck ? 70f : Mathf.Lerp(36f, 18f, rise);
-                along = side * (deck ? 36f + h * lateralSpread : 46f + h * lateralSpread) * spread;
-                // Mid-height puffs close the horizon slot. That slot was a
-                // band of wetland beside the booster, which the launch gate
-                // scores as neon. The crown stays wide of the nose.
-                if (!deck && rise < 0.48f && h < 0.42f)
-                    along = side * (22f + h * 18f) * spread;
-                fore = (w - 0.5f) * (deck ? 22f : Mathf.Lerp(30f, 14f, rise));
-                float puff = deck
-                    ? 22f + h * 14f
-                    : Mathf.Lerp(16f, 32f, rise) * Mathf.Lerp(0.82f, 1.2f, h);
-                width = Mathf.Max(puff, 12f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.86f, 1.08f, w), 12f);
-                spine += Mathf.Sin(age * 0.2f + i) * 0.6f;
-                rise = Mathf.Clamp(spine / 110f, 0f, 1f);
+                // Each puff is born in the trench and travels the same path
+                // the deluge takes: out along the ground, then up. Offsets
+                // keep the mass full while the cards themselves are moving.
+                float speed = 0.045f + h * 0.028f;
+                float t = Mathf.PosMod(v + age * speed, 1f);
+                fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
+                float out01 = Mathf.Pow(t, 0.80f);
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.34f) / 0.66f, 0f, 1f), 1.25f);
+                float boil = up01 * up01;
+                float radius = Mathf.Lerp(8f, 200f, out01) * spread;
+                spine = Mathf.Lerp(2f, 100f, up01);
+                // Churn grows once the puff leaves the ground, so the crown
+                // boils instead of sliding as a rigid disc.
+                float churn = Mathf.Sin(age * (0.85f + h * 0.7f) + w * 6.2f);
+                spine += Mathf.Max(-1.5f, churn) * (1.2f + 8f * boil);
+                radius += Mathf.Sin(age * 0.55f + h * 4.1f) * (1.5f + 5f * boil);
+                along = side * radius;
+                // Screen-right mass is closer to the camera and larger.
+                float depth = side > 0 ? 36f : -22f;
+                fore = depth + (w - 0.5f) * Mathf.Lerp(6f, 22f, t);
+                float scale = side > 0 ? 1.22f : 0.92f;
+                float puff = Mathf.Lerp(18f, 56f, Mathf.Pow(t, 0.9f)) * scale;
+                width = Mathf.Max(puff * Mathf.Lerp(1.12f, 0.96f, up01), 12f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.72f, 1.08f, up01), 12f);
+                rise = t;
+                lean = Mathf.Lerp(0.12f, 0.62f, up01);
             }
 
-            float y = 2f + spine;
+            float y = 2f + Mathf.Max(spine, 1f);
             Vector3 outward = lateral * side;
             Vector3 cardZ = towardCamera;
-            Vector3 cardUp = (Vector3.Up * 0.94f + outward * 0.08f).Normalized();
+            // On the ground the cap stays low. As the puff boils, it leans
+            // out along the roll instead of standing up against the airframe.
+            Vector3 cardUp = (Vector3.Up * Mathf.Lerp(0.55f, 0.88f, lean) + outward * lean).Normalized();
             Vector3 cardX = cardUp.Cross(cardZ).Normalized();
             if (cardX.LengthSquared() < 1e-4f)
                 cardX = outward;
@@ -503,7 +518,7 @@ public partial class LaunchEffectsController : Node3D
                 lit,
                 lit * Mathf.Lerp(0.98f, 0.55f, warm),
                 lit * Mathf.Lerp(0.96f, 0.26f, warm),
-                (skirt ? 0.94f : 0.90f) * weight));
+                (skirt ? 0.94f : 0.90f * fade) * weight));
         }
     }
 
