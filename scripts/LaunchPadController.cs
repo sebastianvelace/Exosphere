@@ -1203,7 +1203,7 @@ public partial class LaunchPadController : Node3D
         for (int c = 0; c < 4; c++)
         {
             Spawn($"TowerCol{c}", new BoxMesh { Size = new Vector3(1.2f * U, towerH, 1.2f * U) },
-                steel, new Vector3(towerX + cx[c], center.Y, towerZ + cz[c]));
+                _latticeMat, new Vector3(towerX + cx[c], center.Y, towerZ + cz[c]));
         }
 
         // Horizontal + diagonal lattice bracing every few metres up each face.
@@ -1238,20 +1238,21 @@ public partial class LaunchPadController : Node3D
             darkSteel, new Vector3(towerX - halfW - 0.6f * U, baseY + towerH * 0.5f, towerZ));
 
         // Broad dark service cladding is a defining feature of the operational
-        // integration tower. Three separated vertical zones retain readable
-        // lattice bays while giving the tower its real, asymmetric silhouette.
+        // integration tower. It is painted panel, not the same metal as the
+        // lattice, so the bays stay readable against the booster.
+        var clad = Mat(new Color(0.16f, 0.16f, 0.17f), 0.84f, 0.05f);
         for (int zone = 0; zone < 3; zone++)
         {
             float panelH = towerH * 0.275f;
             float panelY = baseY + towerH * (0.17f + zone * 0.315f);
             Spawn($"OlitCladdingBack{zone}", new BoxMesh
-                { Size = new Vector3(0.32f * U, panelH, towerW * 0.88f) }, darkSteel,
+                { Size = new Vector3(0.32f * U, panelH, towerW * 0.88f) }, clad,
                 new Vector3(towerX - halfW - 0.20f * U, panelY, towerZ));
             Spawn($"OlitCladdingNorth{zone}", new BoxMesh
-                { Size = new Vector3(towerW * 0.78f, panelH, 0.30f * U) }, darkSteel,
+                { Size = new Vector3(towerW * 0.78f, panelH, 0.30f * U) }, clad,
                 new Vector3(towerX - 0.6f * U, panelY, towerZ - halfW - 0.18f * U));
             Spawn($"OlitCladdingSouth{zone}", new BoxMesh
-                { Size = new Vector3(towerW * 0.78f, panelH, 0.30f * U) }, darkSteel,
+                { Size = new Vector3(towerW * 0.78f, panelH, 0.30f * U) }, clad,
                 new Vector3(towerX - 0.6f * U, panelY, towerZ + halfW + 0.18f * U));
         }
 
@@ -1262,7 +1263,7 @@ public partial class LaunchPadController : Node3D
             float py = baseY + towerH * (0.18f + p * 0.22f);
             Spawn($"TowerPanel{p}", new BoxMesh
                 { Size = new Vector3(0.4f * U, towerH * 0.16f, towerW * 0.8f) },
-                darkSteel, new Vector3(towerX + halfW + 0.3f * U, py, towerZ));
+                clad, new Vector3(towerX + halfW + 0.3f * U, py, towerZ));
         }
 
         // ── Perimeter walkways / railings at several work levels ──────────────
@@ -1533,6 +1534,12 @@ public partial class LaunchPadController : Node3D
                 { TopRadius = 0.04f * U, BottomRadius = 0.25f * U, Height = 6f * U, RadialSegments = 6 },
                 steel, new Vector3(x, baseY + mastH + 3f * U, z));
 
+            // A short crossarm keeps the mast from reading as a bare pole
+            // at the pad chase distance.
+            Spawn($"MastArm{idx}", new BoxMesh
+                { Size = new Vector3(8f * U, 0.35f * U, 0.35f * U) },
+                steel, new Vector3(x, baseY + mastH * 0.86f, z));
+
             // Concrete footing block under each mast.
             Spawn($"MastFoot{idx}", new BoxMesh { Size = new Vector3(5f * U, 1.5f * U, 5f * U) },
                 Mat(new Color(0.40f, 0.39f, 0.37f), 0.95f, 0.0f), new Vector3(x, baseY + 0.75f * U, z));
@@ -1624,17 +1631,37 @@ public partial class LaunchPadController : Node3D
         AddChild(node);
     }
 
-    // Cached lattice material so all the small beams share one material.
-    private StandardMaterial3D? _latticeMatCache;
-    private StandardMaterial3D _latticeMat =>
-        _latticeMatCache ??= Mat(new Color(0.50f, 0.51f, 0.54f), 0.55f, 0.82f);
+    // Cached lattice material so the columns and small beams share one material.
+    // The same stainless shader as the booster, duller, so the tower catches
+    // the sky without turning into a second white stack.
+    private Material? _latticeMatCache;
+    private Material _latticeMat =>
+        _latticeMatCache ??= CreateTowerLatticeSteel();
+
+    private static ShaderMaterial CreateTowerLatticeSteel()
+    {
+        var material = new ShaderMaterial
+        {
+            Shader = GD.Load<Shader>("res://assets/shaders/steel.gdshader"),
+        };
+        material.SetShaderParameter("base_tint", new Color(0.46f, 0.47f, 0.49f));
+        material.SetShaderParameter("metallic_val", 0.82f);
+        material.SetShaderParameter("rough_val", 0.50f);
+        material.SetShaderParameter("spec_val", 0.55f);
+        material.SetShaderParameter("weld_spacing", 6.0f);
+        material.SetShaderParameter("weld_depth", 0.05f);
+        material.SetShaderParameter("brush_amt", 0.04f);
+        material.SetShaderParameter("soot_y0", -1000f);
+        material.SetShaderParameter("soot_y1", -1000f);
+        return material;
+    }
 
     private static StandardMaterial3D Mat(Color albedo, float roughness, float metallic)
     {
         return new StandardMaterial3D { AlbedoColor = albedo, Roughness = roughness, Metallic = metallic };
     }
 
-    private MeshInstance3D Spawn(string name, Mesh mesh, StandardMaterial3D mat, Vector3 pos)
+    private MeshInstance3D Spawn(string name, Mesh mesh, Material mat, Vector3 pos)
     {
         var node = new MeshInstance3D
         {

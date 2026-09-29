@@ -232,9 +232,11 @@ public partial class VesselRenderer : Node3D
         var sootSteel = SteelMat(new Color(0.22f, 0.21f, 0.20f), 0.48f, 0.55f,
             weldSpacing: 1.6f, sootBot: -1.2f, sootTop: 1.1f);
 
-        // Main body (y=2 → y=20), a single tall barrel. Body-local y runs
-        // [-9, +9]; soot fades in over the bottom ~3 units (toward the engines).
-        var shSteel = SteelMat(new Color(0.68f, 0.67f, 0.65f), 0.22f, 0.32f,
+        // Main body, one continuous barrel. 304L is a metal, not a white paint:
+        // metallic matches the weld rings, roughness stays high enough that
+        // Forward+ reflections do not turn the booster into a mirror. Soot
+        // still fades in over the bottom ~3 units, toward the engines.
+        var shSteel = SteelMat(new Color(0.56f, 0.55f, 0.53f), 0.86f, 0.44f,
             weldSpacing: 1.6f, sootBot: -ShBodyH * 0.5f, sootTop: -ShBodyH * 0.5f + 3.5f);
         _hullMesh = AddMesh("SHBody", new CylinderMesh
             { TopRadius = BodyR, BottomRadius = BodyR, Height = ShBodyH, RadialSegments = 64 },

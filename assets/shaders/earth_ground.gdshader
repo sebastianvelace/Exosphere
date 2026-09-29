@@ -283,7 +283,7 @@ void fragment() {
 	// same solar/earthshine model used by the fallback, retaining roads, lagoons,
 	// dunes and pad geometry without baking a second artificial geography layer.
 	float regional_luma = dot(regional_surface, vec3(0.299, 0.587, 0.114));
-	regional_surface = mix(vec3(regional_luma), regional_surface, 0.88) * 0.92;
+	regional_surface = mix(vec3(regional_luma), regional_surface, 0.88);
 
 	// Low-altitude launch views should read as coastal fill, marsh and sand,
 	// not as saturated satellite green. Keep the Blue Marble macro-shapes, but
@@ -364,9 +364,11 @@ void fragment() {
 	vec3 pad_ground = mix(flats, near_water, reconstructed_water);
     // A restrained concrete apron gives the launch site a readable hardstand
     // at 20–100 m without turning the entire local patch into a grey disc.
-    float apron = 1.0 - smoothstep(38.0, 260.0, pad_range);
+    // The concrete apron is the pad itself, not a kilometre-wide disc that
+    // hides the NAIP roads and berms around the tower.
+    float apron = 1.0 - smoothstep(40.0, 110.0, pad_range);
     vec3 apron_color = vec3(0.23, 0.24, 0.23);
-    pad_ground = mix(pad_ground, apron_color, apron * 0.86);
+    pad_ground = mix(pad_ground, apron_color, apron * 0.55);
 	surface = mix(pad_ground, surface, map_blend);
 	surface = mix(surface, pad_ground, site_core * 0.92);
 	// The measured regional material owns the first ~8.4 km and feathers into
@@ -375,6 +377,14 @@ void fragment() {
 	// transparent through the provider mask.
 	surface = mix(surface, macro_surface, macro_weight);
 	surface = mix(surface, regional_surface, regional_weight);
+	// Chase views look across the pad, so the first kilometre keeps the NAIP
+	// contrast instead of the desaturated fallback, and the haze term below
+	// does not wash that ortho into the sky.
+	float near_pad = 1.0 - smoothstep(250.0, 1600.0, pad_range);
+	vec3 near_ortho = clamp(
+		regional_surface * 1.08 + (regional_surface - vec3(regional_luma)) * 0.35,
+		0.0, 1.0);
+	surface = mix(surface, near_ortho, near_pad * regional_weight);
 
 	// A small normal perturbation makes the multi-scale breakup respond to the
 	// sun direction. It is deliberately low amplitude: this gives texture relief
@@ -389,9 +399,10 @@ void fragment() {
 	// Apply measured 3DEP grade after the procedural micro-normal. This makes
 	// beaches, marsh berms and road embankments turn with the actual relief
 	// instead of remaining a flat-shaded height-textured decal.
+	float slope_gain = mix(1.0, 2.4, near_pad);
 	N = normalize(N
-		- v_world_tangent_e * v_terrain_slope.x
-		- v_world_tangent_n * v_terrain_slope.y);
+		- v_world_tangent_e * v_terrain_slope.x * slope_gain
+		- v_world_tangent_n * v_terrain_slope.y * slope_gain);
 
 	// Spectrally attenuated direct sunlight. The small diffuse floor represents skylight;
 	// unlike the former 0.55 term it does not leave the coast brightly lit at midnight.
@@ -441,6 +452,7 @@ void fragment() {
 	float grazing_transmittance = 1.0 - grazing_haze * horizon_haze_strength;
 	float haze = clamp(1.0 - distance_transmittance * grazing_transmittance, 0.0, 0.995)
 		* (1.0 - look_down * 0.85);
+	haze *= 1.0 - near_pad;
 	ground_radiance = mix(ground_radiance, haze_color, haze);
 	// Circular rim at the geometric horizon (not a camera-distance kill, and
 	// not the square mesh border).

@@ -7,7 +7,7 @@ shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
 uniform vec3  base_tint    : source_color = vec3(0.66, 0.66, 0.68);
-uniform float metallic_val : hint_range(0.0, 1.0) = 0.22;
+uniform float metallic_val : hint_range(0.0, 1.0) = 0.86;
 uniform float rough_val    : hint_range(0.0, 1.0) = 0.28;
 uniform float spec_val     : hint_range(0.0, 1.0) = 0.62;
 

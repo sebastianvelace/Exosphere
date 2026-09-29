@@ -103,12 +103,61 @@ public partial class CameraController : Node3D
             case "edl_side":
                 SetExternalChaseFrame(0f, 12f, EdlPresentationDistance);
                 break;
+            case "liftoff_wide":
+                // Aerial liftoff, about 1.3 km out. The gaze sits below the
+                // vehicle so the pad cloud shares the frame with the stack.
+                // The tighter vertical FOV keeps the vehicle a needle instead
+                // of a fisheye subject. Gameplay chase distances are unchanged.
+                SetExternalChaseFrame(38f, 15f, 460f, lookAtY: -26f);
+                _externalFov = 32f;
+                break;
             default:
                 return false;
         }
 
         VisualPreset = normalized;
         return true;
+    }
+
+    /// <summary>
+    /// Pulls out to the aerial liftoff frame once the stack is off the pad,
+    /// then hands the camera back to chase above 450 m. A capture preset,
+    /// or any orbit/zoom/cycle from the player, keeps ownership.
+    /// </summary>
+    private void HoldLiftoffWide(SimulationBridge? bridge)
+    {
+        // Input before the beat starts is the pad camera. Only an orbit or
+        // zoom during the aerial shot itself cancels it.
+        if (_cameraUserAdjusted && _liftoffWideHold)
+        {
+            _liftoffWideHold = false;
+            _liftoffWideArmed = false;
+            return;
+        }
+        _cameraUserAdjusted = false;
+        if (VisualPreset != null || bridge?.ActiveVessel is not { } vessel)
+            return;
+
+        var body = bridge.Universe.GetDominantBody(vessel.Position);
+        if (body == null)
+            return;
+
+        double altitude = vessel.GetAltitude(body);
+        bool lit = vessel.Throttle > 0.02 && vessel.HasActiveEngineParts;
+        if (!_liftoffWideHold && _liftoffWideArmed && lit && altitude is > 40.0 and < 250.0)
+        {
+            SetExternalChaseFrame(38f, 15f, 460f, lookAtY: -26f);
+            _externalFov = 32f;
+            _liftoffWideHold = true;
+            return;
+        }
+        if (_liftoffWideHold && altitude > 450.0)
+        {
+            _liftoffWideHold = false;
+            _liftoffWideArmed = false;
+            SetExternalChaseFrame(28f, 10f, 95f);
+            _externalFov = _gameplayFov;
+        }
     }
 
     private void SetExternalPadFrame(float yaw, float pitch, float distance)
@@ -177,7 +226,13 @@ public partial class CameraController : Node3D
     private bool _trackedVehicleInitialized;
     private bool _trackedHadBooster;
     private float _externalFov = 75f;
+    private float _gameplayFov = 75f;
     private float _externalNear = 0.5f;
+    // One aerial beat during liftoff, then back to chase. A drag or zoom
+    // cancels it. Capture presets own the camera themselves.
+    private bool _liftoffWideArmed = true;
+    private bool _liftoffWideHold;
+    private bool _cameraUserAdjusted;
     private Camera3D? _camera;
     private Node3D? _cockpitRenderer;
     private Node3D? _exteriorRenderer;
@@ -203,6 +258,7 @@ public partial class CameraController : Node3D
         if (_camera is { } camera)
         {
             _externalFov = camera.Fov;
+            _gameplayFov = camera.Fov;
             _externalNear = camera.Near;
         }
     }
@@ -216,11 +272,13 @@ public partial class CameraController : Node3D
 
             if (mb.ButtonIndex == MouseButton.WheelUp)
             {
+                _cameraUserAdjusted = true;
                 _presentationDistanceTarget = null;
                 _distance = Mathf.Clamp(_distance / ZoomSensitivity, MinDistance, MaxDistance);
             }
             if (mb.ButtonIndex == MouseButton.WheelDown)
             {
+                _cameraUserAdjusted = true;
                 _presentationDistanceTarget = null;
                 _distance = Mathf.Clamp(_distance * ZoomSensitivity, MinDistance, MaxDistance);
             }
@@ -236,6 +294,7 @@ public partial class CameraController : Node3D
             }
             else
             {
+                _cameraUserAdjusted = true;
                 _presentationDistanceTarget = null;
                 _yaw   -= mm.Relative.X * OrbitSensitivity;
                 _pitch -= mm.Relative.Y * OrbitSensitivity;
@@ -246,6 +305,7 @@ public partial class CameraController : Node3D
         // C key: cycle pad/chase presets → first-person cockpit → back to preset 0.
         if (@event is InputEventKey key && key.Pressed && !key.Echo && key.Keycode == Key.C)
         {
+            _cameraUserAdjusted = true;
             _padPresetIdx = (_padPresetIdx + 1) % (PadPresets.Length + 1);
             _cockpit = _padPresetIdx == PadPresets.Length;
             if (!_cockpit)
@@ -306,6 +366,8 @@ public partial class CameraController : Node3D
             _trackedHadBooster = hasBooster;
             _trackedVehicleInitialized = true;
         }
+
+        HoldLiftoffWide(bridge);
 
         var camera = _camera;
         if (camera == null) return;

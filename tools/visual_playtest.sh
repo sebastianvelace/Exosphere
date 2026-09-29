@@ -97,7 +97,7 @@ Options:
                 Presentation-only EDL fixture: disable unrelated solar occlusion while
                 retaining physical Sun/Moon positions and physics.
   --camera-preset NAME
-                Deterministic composition: pad_side|tower_side|tracking|orbit_beauty|edl_side.
+                Deterministic composition: pad_side|tower_side|tracking|orbit_beauty|edl_side|liftoff_wide.
   --earth-view NAME
                 Scaled-space Earth composition: default|rotated (atmosphere-orbit only).
   --orbital-reentry  Seed a Starbase Starship in circular orbit, arm the real map deorbit
@@ -313,9 +313,9 @@ else
 fi
 
 case "$CAMERA_PRESET" in
-  ""|pad_side|tower_side|tracking|orbit_beauty|edl_side) ;;
+  ""|pad_side|tower_side|tracking|orbit_beauty|edl_side|liftoff_wide) ;;
   *)
-    echo "ERROR: --camera-preset must be pad_side, tower_side, tracking, orbit_beauty or edl_side" >&2
+    echo "ERROR: --camera-preset must be pad_side, tower_side, tracking, orbit_beauty, edl_side or liftoff_wide" >&2
     exit 2
     ;;
 esac

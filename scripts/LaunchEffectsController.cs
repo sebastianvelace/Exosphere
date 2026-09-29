@@ -12,8 +12,11 @@ using Exosphere.Simulation.Math;
 /// up low and outward.
 ///
 /// This is purely the ground cloud; the engine flame itself is owned by
-/// <c>PlumeSystem</c>. We anchor the cloud to the ground point directly under
-/// the vessel. Because the active vessel sits at the render origin and the
+/// <c>PlumeSystem</c>. The close layers stay sized for the gameplay chase
+/// camera. A second bank of large cards supplies the kilometre-scale deluge
+/// seen from the aerial liftoff frame, and fades out inside chase range so
+/// that view does not collapse into white balls. We anchor the cloud to the
+/// ground point directly under the vessel. Because the active vessel sits at the render origin and the
 /// floating-origin scheme keeps it there, the ground recedes downward as the
 /// rocket climbs: we place the emitters at <c>-up * (altitude / MetresPerUnit)</c>
 /// so the cloud is "left behind" on the pad while the booster ascends away.
@@ -49,10 +52,18 @@ public partial class LaunchEffectsController : Node3D
     private MultiMeshInstance3D _instantSteam = null!; // guaranteed ignition cloud bank
     private Node3D _billowBank = null!;
     private StandardMaterial3D _billowMaterial = null!;
+    // Kilometre-scale lobes for the aerial liftoff frame. Hidden inside the
+    // gameplay chase distance; see WideCameraFullDistance.
+    private MultiMeshInstance3D _wideLobes = null!;
+    private MultiMeshInstance3D _wideCore = null!;
 
-    // Shared soft-round billboard texture for all layers.
+    // Shared soft-round billboard texture for the close layers.
     private static ImageTexture? _softCircle;
     private static ImageTexture SoftCircle => _softCircle ??= BuildSoftCircleTexture();
+    // Smooth cumulus for the aerial bank. Kept separate so the close-range
+    // circle's high-frequency breakup is not stretched across hundreds of metres.
+    private static ImageTexture? _wideCloud;
+    private static ImageTexture WideCloudTexture => _wideCloud ??= BuildWideCloudTexture();
 
     // Smoothed intensity so ignition/cutoff ramps instead of popping.
     private float _intensity;
@@ -79,6 +90,8 @@ public partial class LaunchEffectsController : Node3D
         _dustRadial = BuildDustRadial();  // N5: ground-level radial blast ring
         _instantSteam = BuildImmediateSteamBank();
         _billowBank = BuildBillowBank();
+        _wideLobes = BuildWideBank("WideDelugeLobes", WideLobeCards.Length, 0.08f, new Vector2(78f, 40f));
+        _wideCore = BuildWideBank("WideDelugeCore", WideCoreCards.Length, 1.15f, new Vector2(34f, 26f));
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
         _pivot.AddChild(_dustRadial);  // N5: radial blast wave at pad deck level
@@ -87,6 +100,8 @@ public partial class LaunchEffectsController : Node3D
         _pivot.AddChild(_steamCore);
         _pivot.AddChild(_instantSteam);
         _pivot.AddChild(_billowBank);
+        _pivot.AddChild(_wideLobes);
+        _pivot.AddChild(_wideCore);
 
         SetEmitting(false);
         Visible = false;
@@ -152,6 +167,7 @@ public partial class LaunchEffectsController : Node3D
         DriveAmounts(_intensity);
         _ignitionAge += (float)delta;
         DriveImmediateSteam(_intensity, _ignitionAge);
+        DriveWideCloud(_intensity, _ignitionAge);
     }
 
     private void SampleLaunchState(Vessel? vessel, Universe? universe)
@@ -320,6 +336,134 @@ public partial class LaunchEffectsController : Node3D
                 0.84f + phase * 0.05f,
                 Mathf.Clamp(Mathf.Lerp(0.32f, 0.62f, intensity) * life, 0f, 0.68f)));
         }
+    }
+
+    // Gameplay chase tops out near 200 render units. The aerial preset sits
+    // at 460. Fade across that gap so zooming out reveals the large cloud
+    // without ever covering the pad camera.
+    private const float WideCameraStartDistance = 240f;
+    private const float WideCameraFullDistance = 420f;
+
+    private readonly record struct WideCard(
+        float Angle, float Radius, float Height, float WidthScale, float HeightScale, float Shade);
+
+    // Authored for liftoff_wide yaw 38°: two overlapping masses sit left and
+    // right of the stack, clear of the vehicle, with a little depth behind
+    // the pad. Distances are render units (1 unit = 2.8 m).
+    private static readonly WideCard[] WideLobeCards =
+    {
+        // Left bank, tight overlap so the cards read as one mass.
+        new(2.08f, 124f, 22f, 2.15f, 1.70f, 0.15f),
+        new(2.20f, 132f, 28f, 2.40f, 1.90f, 0.45f),
+        new(2.34f, 128f, 18f, 2.05f, 1.55f, 0.70f),
+        new(2.16f, 140f, 34f, 1.85f, 1.65f, 0.90f),
+        // Right bank.
+        new(-0.78f, 126f, 24f, 2.25f, 1.75f, 0.20f),
+        new(-0.92f, 136f, 30f, 2.50f, 2.00f, 0.50f),
+        new(-1.06f, 130f, 18f, 2.10f, 1.60f, 0.75f),
+        new(-0.88f, 146f, 36f, 1.90f, 1.70f, 0.95f),
+    };
+
+    private static readonly WideCard[] WideCoreCards =
+    {
+        new(0.20f, 14f, 12f, 0.85f, 0.90f, 0.10f),
+        new(1.35f, 24f, 16f, 1.00f, 1.05f, 0.35f),
+        new(-0.55f, 20f, 14f, 0.90f, 0.95f, 0.55f),
+        new(2.40f, 28f, 10f, 0.95f, 0.70f, 0.75f),
+        new(0.66f, 16f, 22f, 0.70f, 1.20f, 0.20f),
+        new(-1.10f, 22f, 11f, 0.80f, 0.75f, 0.90f),
+    };
+
+    private void DriveWideCloud(float intensity, float age)
+    {
+        Camera3D? camera = GetViewport()?.GetCamera3D();
+        float distance = camera == null
+            ? 0f
+            : _pivot.GlobalPosition.DistanceTo(camera.GlobalPosition);
+        // The close deluge eases off above 140 m. This bank is the subject of
+        // the wide shot and stays on the pad through the first several hundred metres.
+        float altitudeFade = 1f;
+        if (_sampledAltitude > 250.0)
+        {
+            float t = ((float)_sampledAltitude - 250f) / (900f - 250f);
+            altitudeFade = 1f - Mathf.Clamp(t, 0f, 1f);
+        }
+        float weight = Mathf.SmoothStep(WideCameraStartDistance, WideCameraFullDistance, distance)
+            * altitudeFade;
+        bool show = intensity > 0.02f && weight > 0.05f;
+        _wideLobes.Visible = show;
+        _wideCore.Visible = show;
+        if (!show)
+            return;
+
+        float grow = Mathf.Lerp(0.74f, 1f, Mathf.Clamp(age / 5f, 0f, 1f));
+        PoseWideBank(_wideLobes, WideLobeCards, grow, weight, age, core: false);
+        PoseWideBank(_wideCore, WideCoreCards, grow, weight, age, core: true);
+    }
+
+    private static void PoseWideBank(
+        MultiMeshInstance3D bank, WideCard[] cards, float grow, float weight, float age, bool core)
+    {
+        MultiMesh? mesh = bank.Multimesh;
+        if (mesh == null)
+            return;
+
+        float spread = core ? Mathf.Lerp(0.88f, 1f, grow) : grow;
+        for (int i = 0; i < cards.Length; i++)
+        {
+            WideCard card = cards[i];
+            float radius = card.Radius * spread;
+            float y = card.Height * grow
+                + Mathf.Sin(age * 0.4f + card.Angle) * (core ? 0.8f : 2.5f);
+            var basis = Basis.Identity.Scaled(new Vector3(card.WidthScale, card.HeightScale, 1f));
+            var origin = new Vector3(Mathf.Cos(card.Angle) * radius, y, Mathf.Sin(card.Angle) * radius);
+            mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
+            // Optically thick centers. The previous 0.4 alpha left each card
+            // readable as its own disc.
+            float alpha = (core ? 0.78f : 0.94f) * weight;
+            float tone = 0.72f + card.Shade * 0.26f;
+            Color color = core
+                ? new Color(1f, 0.46f + card.Shade * 0.14f, 0.10f + card.Shade * 0.08f, alpha)
+                : new Color(tone, tone, tone * 0.97f, alpha);
+            mesh.SetInstanceColor(i, color);
+        }
+    }
+
+    private MultiMeshInstance3D BuildWideBank(string name, int count, float emission, Vector2 quadSize)
+    {
+        // Own texture: the close-range soft circle has a pixel sine that turns
+        // into a visible grid once a card is hundreds of metres across.
+        var material = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            BlendMode = BaseMaterial3D.BlendModeEnum.Mix,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            AlbedoTexture = WideCloudTexture,
+            AlbedoColor = Colors.White,
+            EmissionEnabled = true,
+            EmissionEnergyMultiplier = emission,
+            VertexColorUseAsAlbedo = true,
+        };
+        material.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
+        var quad = new QuadMesh { Size = quadSize };
+        quad.SurfaceSetMaterial(0, material);
+        var mesh = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseColors = true,
+            Mesh = quad,
+            InstanceCount = count,
+        };
+        return new MultiMeshInstance3D
+        {
+            Name = name,
+            Multimesh = mesh,
+            Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CustomAabb = new Aabb(new Vector3(-460f, -8f, -460f), new Vector3(920f, 240f, 920f)),
+        };
     }
 
     private void FadeOut(double delta)
@@ -816,6 +960,36 @@ public partial class LaunchEffectsController : Node3D
                 0f, 1f);
             float a = Mathf.SmoothStep(0f, 1f, density * edge * breakup);
             img.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+        }
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    /// <summary>
+    /// Low-frequency cumulus card. The center saturates so overlapping lobes
+    /// become one mass; only the rim stays soft.
+    /// </summary>
+    private static ImageTexture BuildWideCloudTexture()
+    {
+        const int Size = 192;
+        var img = Image.CreateEmpty(Size, Size, false, Image.Format.Rgba8);
+        float half = Size * 0.5f;
+        for (int y = 0; y < Size; y++)
+        for (int x = 0; x < Size; x++)
+        {
+            float dx = (x - half) / half;
+            float dy = (y - half) / half;
+            // Elliptical falloff that is zero before the quad border. A square
+            // edge left the card corners visible.
+            float r2 = dx * dx * 0.85f + dy * dy * 1.55f;
+            float falloff = r2 >= 1f ? 0f : Mathf.SmoothStep(1f, 0.20f, r2);
+            float lump0 = Mathf.Exp(-((dx + 0.22f) * (dx + 0.22f) * 3.1f
+                + (dy + 0.05f) * (dy + 0.05f) * 4.2f));
+            float lump1 = Mathf.Exp(-((dx - 0.18f) * (dx - 0.18f) * 2.6f
+                + (dy - 0.12f) * (dy - 0.12f) * 5.0f));
+            float lump2 = Mathf.Exp(-(dx * dx * 4.4f + (dy + 0.18f) * (dy + 0.18f) * 3.6f));
+            float density = Mathf.Clamp(lump0 * 0.85f + lump1 * 0.75f + lump2 * 0.65f, 0f, 1f);
+            float alpha = density * falloff;
+            img.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
         }
         return ImageTexture.CreateFromImage(img);
     }
