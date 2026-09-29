@@ -15,7 +15,7 @@ public partial class WarpController : Control
     public override void _Ready()
     {
         _font = InterfaceTheme.MonoFont;
-        _panelStyle = InterfaceTheme.GlassPanel(0.68f, 12, 0, 0);
+        _panelStyle = InterfaceTheme.PanelStyle(0.88f, 0, 0);
         SetAnchorsPreset(LayoutPreset.TopLeft);
         CustomMinimumSize = new Vector2(178, 68);
         OffsetLeft   = 320;

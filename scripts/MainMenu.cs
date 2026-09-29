@@ -29,6 +29,39 @@ public partial class MainMenu : Control
         Resized += UpdateResponsiveLayout;
         UpdateResponsiveLayout();
         _firstButton?.CallDeferred(Control.MethodName.GrabFocus);
+        MaybeAutoSmokeFlight();
+    }
+
+    /// <summary>
+    /// Private-test export smoke: <c>--exo-smoke-flight</c> opens sandbox Flight so
+    /// logs show whether the loose <c>data/</c> tree beside the executable loads.
+    /// </summary>
+    private void MaybeAutoSmokeFlight()
+    {
+        bool requested = false;
+        foreach (string arg in OS.GetCmdlineUserArgs())
+        {
+            if (arg == "--exo-smoke-flight")
+            {
+                requested = true;
+                break;
+            }
+        }
+        if (!requested)
+        {
+            foreach (string arg in OS.GetCmdlineArgs())
+            {
+                if (arg == "--exo-smoke-flight")
+                {
+                    requested = true;
+                    break;
+                }
+            }
+        }
+        if (!requested)
+            return;
+        GD.Print("[ExportSmoke] --exo-smoke-flight: opening sandbox");
+        CallDeferred(nameof(OpenSandbox));
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -116,8 +149,8 @@ public partial class MainMenu : Control
             CustomMinimumSize = new Vector2(48, 34),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        InterfaceTheme.ApplyDisplay(mark, 18);
-        mark.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
+        InterfaceTheme.ApplyLabel(mark, 19);
+        mark.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         row.AddChild(mark);
 
         var brand = new Label
@@ -126,8 +159,8 @@ public partial class MainMenu : Control
             VerticalAlignment = VerticalAlignment.Center,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        InterfaceTheme.ApplyBody(brand, 13, medium: true);
-        brand.AddThemeColorOverride("font_color", InterfaceTheme.Text);
+        InterfaceTheme.ApplyLabel(brand, 14);
+        brand.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         row.AddChild(brand);
 
         var systemStatus = new Label
@@ -175,14 +208,14 @@ public partial class MainMenu : Control
         split.AddChild(_primaryColumn);
 
         var classification = new Label { Text = UiText.Get("flight_operations") };
-        InterfaceTheme.ApplyMono(classification, 11);
-        classification.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
+        InterfaceTheme.ApplyLabel(classification, 13);
+        classification.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         _primaryColumn.AddChild(classification);
 
         var rule = new ColorRect
         {
-            Color = new Color(InterfaceTheme.Orbital, 0.42f),
-            CustomMinimumSize = new Vector2(52, 2),
+            Color = InterfaceTheme.EdgeStrong,
+            CustomMinimumSize = new Vector2(52, 1),
             MouseFilter = MouseFilterEnum.Ignore,
         };
         _primaryColumn.AddChild(rule);
@@ -269,9 +302,8 @@ public partial class MainMenu : Control
             SizeFlagsVertical = SizeFlags.ShrinkCenter,
             MouseFilter = MouseFilterEnum.Ignore,
         };
-        var style = InterfaceTheme.GlassPanel(0.88f, 0, 28, 25);
-        style.BorderColor = new Color(InterfaceTheme.Orbital, 0.34f);
-        style.BorderWidthTop = 2;
+        var style = InterfaceTheme.PanelStyle(0.94f, 28, 25, deep: true);
+        style.BorderColor = InterfaceTheme.EdgeStrong;
         panel.AddThemeStyleboxOverride("panel", style);
 
         var content = new VBoxContainer();
@@ -286,18 +318,18 @@ public partial class MainMenu : Control
             Text = UiText.Get("mission"),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        InterfaceTheme.ApplyMono(label, 10);
-        label.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
+        InterfaceTheme.ApplyLabel(label, 12);
+        label.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         statusRow.AddChild(label);
 
-        var nominal = new Label { Text = "● NOMINAL" };
+        var nominal = new Label { Text = "NOMINAL" };
         InterfaceTheme.ApplyMono(nominal, 10);
         nominal.AddThemeColorOverride("font_color", InterfaceTheme.Success);
         statusRow.AddChild(nominal);
         content.AddChild(statusRow);
 
         var mission = new Label { Text = UiText.Get("dossier_vehicle_title") };
-        InterfaceTheme.ApplyDisplay(mission, 30);
+        InterfaceTheme.ApplyLabel(mission, 30);
         mission.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         content.AddChild(mission);
         content.AddChild(Divider());
@@ -412,7 +444,7 @@ public partial class MainMenu : Control
         string flightProfileId,
         string mode = "scenario")
     {
-        string data = ProjectSettings.GlobalizePath("res://data");
+        string data = GameDataPath.Resolve();
         var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(data, "parts"));
         var variant = VehicleVariantDefinition.LoadFromJson(
             System.IO.Path.Combine(data, "vehicles", variantFile));
@@ -447,7 +479,7 @@ public partial class MainMenu : Control
 
     private void ShowCampaign() => ShowModal(UiText.Get("campaign_preview"), body =>
     {
-        string data = ProjectSettings.GlobalizePath("res://data");
+        string data = GameDataPath.Resolve();
         var campaignDefinition = CampaignDefinition.LoadFromJson(
             System.IO.Path.Combine(
                 data, "campaigns", "historical_nasa_spacex.json"));
@@ -556,7 +588,7 @@ public partial class MainMenu : Control
         string variantPath,
         CampaignSaveV2 campaignState)
     {
-        string data = ProjectSettings.GlobalizePath("res://data");
+        string data = GameDataPath.Resolve();
         var catalog = PartCatalog.LoadFromDirectory(
             System.IO.Path.Combine(data, "parts"));
         var variant = VehicleVariantDefinition.LoadFromJson(variantPath);
@@ -651,7 +683,8 @@ public partial class MainMenu : Control
         shade.AddChild(center);
 
         var panel = new PanelContainer { CustomMinimumSize = new Vector2(540, 0) };
-        panel.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.97f, 0, 28, 25));
+        panel.AddThemeStyleboxOverride(
+            "panel", InterfaceTheme.PanelStyle(0.97f, 28, 25, deep: true));
         center.AddChild(panel);
 
         var body = new VBoxContainer();
@@ -659,7 +692,7 @@ public partial class MainMenu : Control
         panel.AddChild(body);
 
         var title = new Label { Text = titleText.ToUpperInvariant() };
-        InterfaceTheme.ApplyDisplay(title, 30);
+        InterfaceTheme.ApplyLabel(title, 30);
         title.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         body.AddChild(title);
         body.AddChild(Divider());
@@ -783,10 +816,10 @@ public partial class OrbitalDossierTrace : Control
             var local = new Vector2(Mathf.Cos(angle) * rx, Mathf.Sin(angle) * ry);
             points[i] = center + local.Rotated(tilt);
         }
-        DrawPolyline(points, new Color(InterfaceTheme.Orbital, 0.46f), 1.15f, true);
+        // A plotted ground track, not decoration: one hairline and one marker, no glow.
+        DrawPolyline(points, InterfaceTheme.EdgeStrong, 1f, true);
 
         int marker = Mathf.Clamp((int)(_phase * (points.Length - 1)), 0, points.Length - 1);
-        DrawCircle(points[marker], 3.2f, InterfaceTheme.Orbital);
-        DrawCircle(points[marker], 7.5f, new Color(InterfaceTheme.Orbital, 0.14f));
+        DrawCircle(points[marker], 2.6f, new Color(InterfaceTheme.Text, 0.85f));
     }
 }

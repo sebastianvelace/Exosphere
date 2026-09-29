@@ -244,11 +244,20 @@ the target. Continuous lift-down is not a neutral catch posture: the 120 km phys
 measured a 29.65 g plunge and excessive residual speed at 30 km. The lift-up policy passes the
 bounded entry envelope without changing aerodynamic coefficients.
 
-This policy does not make the current corridor predictor flight-qualified. Its time horizon is
-still a bounded reduced-order approximation; energy-aware propagation remains required by
-`docs/audits/ORBITAL_REENTRY_PHYSICS_AUDIT_2026-09-25.md`. The EDL command clock itself is now
-frame-rate independent, but full trajectory parity still requires the rendered physical-entry
-gate and the eventual coupled 6-DoF migration.
+The physical-entry fixture declares a body-centred inertial speed. Earth rotation is
+already contained in that vector. Adding it again on an eastward track lifts the vehicle
+above circular speed and the entry skips near 80 km. The footprint is then propagated
+with the resulting atmosphere-relative speed.
+
+Catch guidance predicts that footprint with `EntryCorridorPropagation`: a spherical-planet
+point mass at the nominal 70° angle of attack, using the same `AerodynamicsModel` drag and
+lift as the vessel. The footprint is a central angle, compared with the target chord
+through arcsin, so a vehicle still short of the site is not treated as an overflight.
+Curvature uses inertial speed, airspeed plus local eastward rotation. Bank zero is the
+lift-up reference. Latitude is held for the duration of one prediction. The vacuum
+`EstimateTimeToGround` remains only the no-drag bound. A vertical-lift floor still limits
+how far an overflight command may bank toward the body. The rendered non-demo catch and
+the coupled 6-DoF migration remain open.
 
 ## Propulsion and mass flow
 
@@ -304,6 +313,7 @@ all motors are one physical point.
 | Flight 7 engine-out recovery | Same warm-up/response window; active-stage detection, axis feedback and command slew | First deterministic recovery gate only |
 | Flight 7 delayed engine-out recovery | Same window; 100 ms onboard detection latency before feedback | First sensor-latency recovery gate only |
 | EDL guidance cadence | Fixed 20 ms simulation clock before force integration; 30/60/120 FPS epoch parity | Pure scheduler gate; rendered physical entry pending |
+| Entry footprint prediction | Spherical point-mass propagation with the production drag/lift model | Reduced-order; no winds, no 6-DoF, rendered catch still open |
 | Controlled Starship ascent/EDL parity | Not yet closed | Open |
 | Flap actuator state and torque in legacy/coupled paths | Shared state, rate limit and saturation; aggregate four-surface model | Unit + controlled-pitch gate |
 | Renderer flap pose parity | Renderer still derives a separate pose from q/belly/input | Open |

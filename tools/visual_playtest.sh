@@ -102,6 +102,8 @@ Options:
                 Scaled-space Earth composition: default|rotated (atmosphere-orbit only).
   --orbital-reentry  Seed a Starbase Starship in circular orbit, arm the real map deorbit
                 autopilot, and verify normal atmospheric entry through tower catch.
+  --entry-physics  Seed a non-demo Starship at the 120 km entry interface and verify the
+                production EDL path through peak heating and transonic flight.
   --hotstage    Fly [G] full ascent (default Flight 7 Starship/Super Heavy) and capture the
                 real hot-staging dual-thrust overlap window, gated on vessel state
                 (IsHotStageOverlapping), not a frame count.
@@ -243,6 +245,12 @@ while [[ $# -gt 0 ]]; do
       VARIANT_SITE="starbase"
       VARIANT_PROFILE="starship-flight7-ascent"
       shift ;;
+    --entry-physics)
+      MODE="entry_physics"
+      VARIANT_FILE="starship_flight7_block2_2025.json"
+      VARIANT_SITE="starbase"
+      VARIANT_PROFILE="starship-flight7-ascent"
+      shift ;;
     --hotstage)
       MODE="hotstage"
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -263,6 +271,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ "$MODE" == "entry_physics" ]]; then
+  [[ -n "$SUN_ELEVATION_DEG" ]] || SUN_ELEVATION_DEG="25"
+  [[ -n "$CAMERA_PRESET" ]] || CAMERA_PRESET="edl_side"
+fi
 
 case "$RENDERER" in
   compatibility)
@@ -387,6 +400,10 @@ fi
     # window. On llvmpipe that path is materially slower than the launch-only gate, so
     # keep it bounded but give the physical event enough wall-clock budget to occur.
     MAX_RUNTIME_SEC=3600
+  elif [[ "$MODE" == "entry_physics" ]]; then
+    # State-seeded at atmospheric interface: no orbital coast, but still a complete
+    # production EDL integration through transonic flight under llvmpipe.
+    MAX_RUNTIME_SEC=1800
   elif [[ "$MODE" == "orbital_reentry" ]]; then
     # This is deliberately bounded: it validates one prepared orbit and one normal
     # deorbit/EDL pass, never an open-ended campaign or a demo fallback. The CPU/Xvfb
@@ -699,6 +716,15 @@ public partial class _PlaytestShot : Node
     bool _orbitalReentryRetro, _orbitalReentryCaught, _orbitalReentryLanded;
     double _orbitalReentryScenarioStart, _nextOrbitalReentryTelemetry;
     double _orbitalReentrySeededPe = double.NaN;
+
+    // ── entry_physics mode ─────────────────────────────────────────────────
+    // One setup assignment at the 120 km interface, then production EDL owns every
+    // command and the regular integrator owns every state update. No demo attitude snap.
+    bool _entryPhysicsSeeded, _entryPhysicsInterface, _entryPhysicsPeak;
+    bool _entryPhysicsTransonic;
+    double _entryPhysicsStart, _nextEntryPhysicsTelemetry;
+    double _entryPhysicsPeakQ, _entryPhysicsPeakHeat, _entryPhysicsPeakLoad;
+    double _entryPhysicsMinimumWindward = 1.0;
 
     // Atmosphere acceptance is deliberately state-seeded instead of flown.  This makes
     // every altitude/solar-elevation pair reproducible and keeps the matrix fast enough
@@ -1357,6 +1383,12 @@ public partial class _PlaytestShot : Node
         if (_mode == "orbital_reentry")
         {
             ProcessOrbitalReentry(bridge, vessel, universe, body, mission, alt, surfVel, phase);
+            return;
+        }
+
+        if (_mode == "entry_physics")
+        {
+            ProcessPhysicalEntry(bridge, vessel, universe, mission);
             return;
         }
 
@@ -2347,6 +2379,164 @@ public partial class _PlaytestShot : Node
                 $"retro={_orbitalReentryRetro}");
             _log.Flush();
             Finish("ORBITAL_REENTRY_TIMEOUT");
+        }
+    }
+
+    private void ProcessPhysicalEntry(
+        SimulationBridge bridge,
+        Vessel vessel,
+        Universe universe,
+        MissionManager? mission)
+    {
+        const double InterfaceAltitudeM = 120_000.0;
+        const double InterfaceSpeedMps = 7_600.0;
+        const double FlightPathAngleDegrees = -1.6;
+        const double ReserveFraction = 0.06;
+        const double SimTimeoutSeconds = 900.0;
+
+        if (!_entryPhysicsSeeded)
+        {
+            if (_readyFrames < 45 || EDLController.Instance == null) return;
+            if (!bridge.SeedPhysicalEntryInterfaceForValidation(
+                    InterfaceAltitudeM,
+                    InterfaceSpeedMps,
+                    FlightPathAngleDegrees,
+                    ReserveFraction))
+            {
+                _log.WriteLine("GAP physical entry interface setup was rejected");
+                _log.Flush();
+                Finish("ENTRY_PHYSICS_UNAVAILABLE");
+                return;
+            }
+
+            vessel = bridge.ActiveVessel!;
+            CameraController.Instance?.EnterShipChaseView();
+            _entryPhysicsSeeded = true;
+            _entryPhysicsStart = universe.CurrentTime;
+            _nextEntryPhysicsTelemetry = universe.CurrentTime;
+            _log.WriteLine($"PHYSICAL_ENTRY_SETUP source=entry_interface " +
+                $"altitude={InterfaceAltitudeM:F0} airspeed={InterfaceSpeedMps:F0} " +
+                $"flightPathDeg={FlightPathAngleDegrees:F2} reserve={ReserveFraction:F3} " +
+                $"normalFlow=True demo={vessel.IsTowerCatchDemonstration} " +
+                "orientationWritesAfterSeed=0 angularVelocityResetsAfterSeed=0");
+            _log.Flush();
+            QueueCapture("entry_physics_interface");
+            _entryPhysicsInterface = true;
+            bridge.SetTimeScale(3.0);
+            return;
+        }
+
+        vessel = bridge.ActiveVessel!;
+        var earth = universe.GetBody("earth");
+        if (earth == null)
+        {
+            _log.WriteLine("FAIL physical entry lost Earth reference");
+            _log.Flush();
+            Finish("ENTRY_PHYSICS_INVALID");
+            return;
+        }
+
+        EntryFlightState state = EntryFlightDiagnostics.Evaluate(vessel, earth);
+        _entryPhysicsPeakQ = System.Math.Max(_entryPhysicsPeakQ, state.DynamicPressurePa);
+        _entryPhysicsPeakHeat = System.Math.Max(
+            _entryPhysicsPeakHeat, state.StagnationHeatFluxWPerM2);
+        _entryPhysicsPeakLoad = System.Math.Max(_entryPhysicsPeakLoad, state.AerodynamicLoadG);
+        if (state.AtmosphereRelativeSpeedMps > 1.0)
+        {
+            Vector3d localFlow = vessel.Orientation.Inverse().Rotate(
+                vessel.GetSurfaceVelocity(earth).Normalized);
+            _entryPhysicsMinimumWindward = System.Math.Min(
+                _entryPhysicsMinimumWindward,
+                ThermalModel.WindwardFactor(localFlow));
+        }
+
+        double simElapsed = universe.CurrentTime - _entryPhysicsStart;
+        var edl = EDLController.Instance;
+        double guidancePeriod = edl?.GuidanceUpdatePeriodSeconds ?? double.NaN;
+        ulong guidanceUpdates = edl?.GuidanceUpdateCount ?? 0;
+        string phase = mission?.Phase.ToString() ?? "?";
+        if (universe.CurrentTime >= _nextEntryPhysicsTelemetry)
+        {
+            _log.WriteLine($"TRACE_ENTRY_PHYSICS t={simElapsed:F2} " +
+                $"alt={state.AltitudeM:F1} spd={state.AtmosphereRelativeSpeedMps:F1} " +
+                $"mach={state.Mach:F3} qPa={state.DynamicPressurePa:F1} " +
+                $"gammaDeg={state.FlightPathAngleDegrees:F3} " +
+                $"alphaDeg={state.AngleOfAttackDegrees:F3} " +
+                $"bankDeg={state.BankAngleDegrees:F3} " +
+                $"energyJkg={state.PointMassSpecificOrbitalEnergyJPerKg:F3} " +
+                $"hM2s={state.SpecificAngularMomentumM2PerS:F3} " +
+                $"ld={state.LiftToDragRatio:F4} aeroG={state.AerodynamicLoadG:F4} " +
+                $"heatWm2={state.StagnationHeatFluxWPerM2:F1} " +
+                $"guidanceDt={guidancePeriod:F6} guidanceUpdates={guidanceUpdates} " +
+                $"phase={phase} destroyed={vessel.IsDestroyed} " +
+                $"normalFlow=True demo={vessel.IsTowerCatchDemonstration}");
+            _log.Flush();
+            _nextEntryPhysicsTelemetry = universe.CurrentTime + 2.0;
+        }
+
+        if (vessel.IsTowerCatchDemonstration)
+        {
+            _log.WriteLine("FAIL physical entry entered deterministic demo mode");
+            _log.Flush();
+            Finish("ENTRY_PHYSICS_DEMO_CONTAMINATION");
+            return;
+        }
+        if (vessel.IsDestroyed)
+        {
+            _log.WriteLine($"FAIL physical entry destroyed phase={phase} " +
+                $"cause={vessel.DestructionCause} alt={state.AltitudeM:F1} " +
+                $"mach={state.Mach:F2} peakG={_entryPhysicsPeakLoad:F2}");
+            _log.Flush();
+            Finish("ENTRY_PHYSICS_DESTROYED");
+            return;
+        }
+
+        if (!_entryPhysicsPeak && _pendingSlug == null
+            && mission?.Phase == MissionPhase.PEAK_HEATING)
+        {
+            QueueCapture("entry_physics_peak_heating");
+            _entryPhysicsPeak = true;
+        }
+        if (!_entryPhysicsTransonic && _pendingSlug == null
+            && double.IsFinite(state.Mach) && state.Mach <= 1.2)
+        {
+            QueueCapture("entry_physics_transonic");
+            _entryPhysicsTransonic = true;
+        }
+
+        if (_entryPhysicsInterface && _entryPhysicsPeak && _entryPhysicsTransonic
+            && _pendingSlug == null)
+        {
+            bool cadenceValid = double.IsFinite(guidancePeriod)
+                && System.Math.Abs(
+                    guidancePeriod - Universe.DeterministicControlPeriodSeconds) <= 1e-9;
+            bool envelopeValid = _entryPhysicsPeakQ is >= 1_000.0 and <= 200_000.0
+                && _entryPhysicsPeakHeat >= 100_000.0
+                && _entryPhysicsPeakLoad is >= 0.05 and <= 8.0
+                && _entryPhysicsMinimumWindward > 0.65;
+            _log.WriteLine($"CHECK entry_physics interface=True peakHeating=True " +
+                $"transonic=True finalMach={state.Mach:F3} " +
+                $"peakQPa={_entryPhysicsPeakQ:F1} peakHeatWm2={_entryPhysicsPeakHeat:F1} " +
+                $"peakG={_entryPhysicsPeakLoad:F3} " +
+                $"minimumWindward={_entryPhysicsMinimumWindward:F4} " +
+                $"guidanceDt={guidancePeriod:F6} guidanceUpdates={guidanceUpdates} " +
+                $"cadenceValid={cadenceValid} envelopeValid={envelopeValid} " +
+                "normalFlow=True demo=False orientationWritesAfterSeed=0");
+            _log.Flush();
+            Finish(cadenceValid && envelopeValid
+                ? "ENTRY_PHYSICS_OK"
+                : "ENTRY_PHYSICS_ENVELOPE_FAILED");
+            return;
+        }
+
+        bridge.SetTimeScale(3.0);
+        if (simElapsed > SimTimeoutSeconds)
+        {
+            _log.WriteLine($"GAP physical entry did not reach transonic flight within " +
+                $"{SimTimeoutSeconds:F0}s phase={phase} alt={state.AltitudeM:F1} " +
+                $"mach={state.Mach:F2} peak={_entryPhysicsPeak}");
+            _log.Flush();
+            Finish("ENTRY_PHYSICS_TIMEOUT");
         }
     }
 
@@ -5122,6 +5312,36 @@ verify_pngs() {
       echo "ERROR: requested clear-solar-eclipse EDL fixture was not recorded" >&2
       return 1
     fi
+  elif [[ "$MODE" == "entry_physics" ]]; then
+    local required=(entry_physics_interface entry_physics_peak_heating
+      entry_physics_transonic)
+    for slug in "${required[@]}"; do
+      if [[ ! -f "$OUT_DIR/exo_play_${slug}.png" ]]; then
+        echo "ERROR: missing physical-entry milestone PNG: exo_play_${slug}.png" >&2
+        return 1
+      fi
+    done
+    if ! grep -q 'SUMMARY reason=ENTRY_PHYSICS_OK' "$LOG"; then
+      echo "ERROR: physical entry did not finish with ENTRY_PHYSICS_OK" >&2
+      return 1
+    fi
+    if ! grep -q 'PHYSICAL_ENTRY_SETUP .*source=entry_interface .*normalFlow=True demo=False .*orientationWritesAfterSeed=0' "$LOG"; then
+      echo "ERROR: missing explicit non-demo 120 km entry-interface evidence" >&2
+      return 1
+    fi
+    if ! grep -Eq 'TRACE_ENTRY_PHYSICS .*guidanceDt=0\.020000 .*normalFlow=True demo=False' "$LOG"; then
+      echo "ERROR: physical entry lacks deterministic 20 ms guidance telemetry" >&2
+      return 1
+    fi
+    if ! grep -Eq 'CHECK entry_physics .*transonic=True .*cadenceValid=True envelopeValid=True .*normalFlow=True demo=False orientationWritesAfterSeed=0' "$LOG"; then
+      echo "ERROR: physical entry lacks a valid transonic/envelope closure record" >&2
+      return 1
+    fi
+    if grep -Eq '^(FAIL|GAP) ' "$LOG"; then
+      echo "ERROR: physical-entry log contains FAIL/GAP evidence" >&2
+      grep -E '^(FAIL|GAP) ' "$LOG" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "orbital_reentry" ]]; then
     local required=(orbital_reentry_orbit orbital_reentry_entry
       orbital_reentry_peak_heating orbital_reentry_retro_burn)
@@ -5931,6 +6151,8 @@ elif [[ "$MODE" == "kennedy_far" ]]; then
   echo "visual_playtest: Kennedy LC-39A terrain/capture checks OK — visual review still required"
 elif [[ "$MODE" == "edl" ]]; then
   echo "visual_playtest: deterministic EDL verification OK"
+elif [[ "$MODE" == "entry_physics" ]]; then
+  echo "visual_playtest: non-demo physical entry verification OK — interface, peak heating, and transonic milestones confirmed"
 elif [[ "$MODE" == "orbital_reentry" ]]; then
   echo "visual_playtest: normal orbital Starbase reentry verification OK — physical catch confirmed"
 elif [[ "$MODE" == "hotstage" ]]; then

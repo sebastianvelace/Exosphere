@@ -5,13 +5,14 @@ using Godot;
 public partial class SystemsHUD : Control
 {
     private const double RefreshPeriodSeconds = 0.10;
-    private static readonly Color NominalBar  = new(0.88f, 0.90f, 0.94f, 1f);
+    private static readonly Color NominalBar  = new(0.86f, 0.87f, 0.88f, 1f);
     private static readonly Color YellowBar   = InterfaceTheme.Warning;
     private static readonly Color RedBar      = InterfaceTheme.Alert;
     private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
-    private static readonly Color Accent      = InterfaceTheme.Text;
+    private static readonly Color Accent      = InterfaceTheme.TextMuted;
 
     private Font _font = null!;
+    private Font _labelFont = null!;
     private StyleBoxFlat _panelStyle = null!;
     private double _refreshAccumulator = double.MaxValue;
     private bool _wasVisible;
@@ -19,7 +20,8 @@ public partial class SystemsHUD : Control
     public override void _Ready()
     {
         _font = InterfaceTheme.MonoFont;
-        _panelStyle = InterfaceTheme.GlassPanel(0.76f, 12, 0, 0);
+        _labelFont = InterfaceTheme.LabelFont;
+        _panelStyle = InterfaceTheme.PanelStyle(0.90f, 0, 0);
         // Secondary health information sits below the orbit block on the right.
         SetAnchorsPreset(LayoutPreset.TopRight);
         GrowHorizontal = GrowDirection.Begin;
@@ -69,9 +71,11 @@ public partial class SystemsHUD : Control
         var size = Size;
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
 
-        DrawString(_font, new Vector2(14, 20), "SYSTEMS", HorizontalAlignment.Left, -1, 11, Accent);
+        DrawString(_labelFont, new Vector2(14, 20), "SYSTEMS",
+            HorizontalAlignment.Left, -1, 12, Accent);
+        DrawRect(new Rect2(14f, 26f, size.X - 28f, 1f), InterfaceTheme.Edge);
 
-        float y = 34f;
+        float y = 38f;
         y = DrawBar(14, y, "O2",   (float)sys.LifeSupport.OxygenFraction,    sys.LifeSupport.OxygenAlert);
         y = DrawBar(14, y, "CO2",  1.0f - (float)sys.LifeSupport.CO2Fraction, sys.LifeSupport.CO2Alert);
         y = DrawBar(14, y, "H2O",  (float)sys.LifeSupport.WaterFraction,      false);
@@ -137,14 +141,15 @@ public partial class SystemsHUD : Control
     private float DrawBar(float x, float y, string label, float fraction, bool alert)
     {
         fraction = System.Math.Clamp(fraction, 0f, 1f);
-        DrawString(_font, new Vector2(x, y + 9), label, HorizontalAlignment.Left, -1, 10, LabelDim);
+        DrawString(_labelFont, new Vector2(x, y + 8), label,
+            HorizontalAlignment.Left, -1, 11, LabelDim);
 
-        float barX = x + 36;
+        float barX = x + 40;
         float barW = Size.X - barX - 10;
-        DrawRect(new Rect2(barX, y, barW, 7), InterfaceTheme.Track, true);
+        DrawRect(new Rect2(barX, y, barW, 6), InterfaceTheme.Track, true);
 
         Color barCol = alert ? RedBar : (fraction > 0.4f ? NominalBar : YellowBar);
-        DrawRect(new Rect2(barX, y, barW * fraction, 7), barCol, true);
+        DrawRect(new Rect2(barX, y, barW * fraction, 6), barCol, true);
 
         return y + 14f;
     }

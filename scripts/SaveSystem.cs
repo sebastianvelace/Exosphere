@@ -9,10 +9,21 @@ using Godot;
 /// <summary>
 /// Disk adapter for the authoritative, simulation-layer SaveGameV2 codec.
 /// Writes are atomic and legacy partial saves are migrated on read.
+/// Mission saves live under Godot <c>user://saves</c> (cross-platform).
+/// Existing Linux saves under <c>~/.local/share/Exosphere/saves</c> remain readable.
 /// </summary>
 public static class SaveSystem
 {
-    private static string DefaultSaveDirectory =>
+    /// <summary>
+    /// Canonical save folder for new writes (Linux + Windows via OS.GetUserDataDir).
+    /// </summary>
+    private static string PrimarySaveDirectory =>
+        ProjectSettings.GlobalizePath("user://saves");
+
+    /// <summary>
+    /// Pre-export Linux path kept only so old slots still load.
+    /// </summary>
+    private static string LegacyLinuxSaveDirectory =>
         System.IO.Path.Combine(
             System.Environment.GetFolderPath(
                 System.Environment.SpecialFolder.UserProfile),
@@ -35,7 +46,7 @@ public static class SaveSystem
         if (bridge?.Universe == null) return;
 
         string safeSlot = NormalizeSlotName(slotName);
-        System.IO.Directory.CreateDirectory(DefaultSaveDirectory);
+        System.IO.Directory.CreateDirectory(PrimarySaveDirectory);
         var save = SaveGameV2Codec.Capture(
             bridge.Universe, LastLoadedMetadata);
         save.VesselSystems.Clear();
@@ -62,7 +73,7 @@ public static class SaveSystem
             save.Mission.CallbackEvents = callbackState.Events;
         }
         string path = System.IO.Path.Combine(
-            DefaultSaveDirectory, $"{safeSlot}.json");
+            PrimarySaveDirectory, $"{safeSlot}.json");
         string temporary = path + ".tmp";
         System.IO.File.WriteAllText(
             temporary, SaveGameV2Json.Serialize(save));
@@ -77,9 +88,8 @@ public static class SaveSystem
         PendingMaterializedSystemsStates = null;
         PendingCallbackState = null;
         string safeSlot = NormalizeSlotName(slotName);
-        string path = System.IO.Path.Combine(
-            DefaultSaveDirectory, $"{safeSlot}.json");
-        if (!System.IO.File.Exists(path)) return false;
+        string? path = ResolveExistingSaveFile(safeSlot);
+        if (path == null || !System.IO.File.Exists(path)) return false;
 
         var bridge = SimulationBridge.Instance;
         if (bridge == null) return false;
@@ -88,8 +98,7 @@ public static class SaveSystem
         {
             string text = System.IO.File.ReadAllText(path);
             var save = SaveGameV2Json.DeserializeOrMigrate(text);
-            string partsPath =
-                ProjectSettings.GlobalizePath("res://data/parts");
+            string partsPath = GameDataPath.Combine("parts");
             var catalog = PartCatalog.LoadFromDirectory(partsPath);
             SaveGameV2Codec.Restore(bridge.Universe, save, catalog);
             LastLoadedMetadata = save;
@@ -156,15 +165,18 @@ public static class SaveSystem
     public static string[] ListSaveSlots(
         string? saveDirectory = null)
     {
-        string directory = saveDirectory ?? DefaultSaveDirectory;
-        if (!System.IO.Directory.Exists(directory)) return [];
-        return System.IO.Directory.GetFiles(directory, "*.json")
-            .Select(System.IO.Path.GetFileNameWithoutExtension)
-            .Where(name => name != null)
-            .Cast<string>()
-            .OrderBy(
-                name => name,
-                System.StringComparer.OrdinalIgnoreCase)
+        if (saveDirectory != null)
+            return ListSlotsInDirectory(saveDirectory)
+                .OrderBy(name => name, System.StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+        var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (string name in ListSlotsInDirectory(PrimarySaveDirectory))
+            names.Add(name);
+        foreach (string name in ListSlotsInDirectory(LegacyLinuxSaveDirectory))
+            names.Add(name);
+        return names
+            .OrderBy(name => name, System.StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -174,12 +186,13 @@ public static class SaveSystem
     public static CampaignSaveV2 ReadMostRecentCampaignState(
         string? saveDirectory = null)
     {
-        string directory = saveDirectory ?? DefaultSaveDirectory;
-        if (!System.IO.Directory.Exists(directory))
-            return new CampaignSaveV2();
-        foreach (string path in System.IO.Directory.GetFiles(
-                     directory, "*.json")
-                 .OrderByDescending(System.IO.File.GetLastWriteTimeUtc))
+        IEnumerable<string> candidates = saveDirectory != null
+            ? EnumerateSaveFiles(saveDirectory)
+            : EnumerateSaveFiles(PrimarySaveDirectory)
+                .Concat(EnumerateSaveFiles(LegacyLinuxSaveDirectory));
+
+        foreach (string path in candidates
+                     .OrderByDescending(System.IO.File.GetLastWriteTimeUtc))
         {
             try
             {
@@ -193,6 +206,36 @@ public static class SaveSystem
             }
         }
         return new CampaignSaveV2();
+    }
+
+    private static string? ResolveExistingSaveFile(string safeSlot)
+    {
+        string primary = System.IO.Path.Combine(
+            PrimarySaveDirectory, $"{safeSlot}.json");
+        if (System.IO.File.Exists(primary))
+            return primary;
+        string legacy = System.IO.Path.Combine(
+            LegacyLinuxSaveDirectory, $"{safeSlot}.json");
+        if (System.IO.File.Exists(legacy))
+            return legacy;
+        return null;
+    }
+
+    private static string[] ListSlotsInDirectory(string directory)
+    {
+        if (!System.IO.Directory.Exists(directory)) return [];
+        return System.IO.Directory.GetFiles(directory, "*.json")
+            .Select(System.IO.Path.GetFileNameWithoutExtension)
+            .Where(name => name != null)
+            .Cast<string>()
+            .ToArray();
+    }
+
+    private static IEnumerable<string> EnumerateSaveFiles(string directory)
+    {
+        if (!System.IO.Directory.Exists(directory))
+            return [];
+        return System.IO.Directory.GetFiles(directory, "*.json");
     }
 
     private static string NormalizeSlotName(string slotName)

@@ -17,11 +17,11 @@ public partial class EngineGridHUD : Control
     public const float BoardHeightFull = 210f;
 
     private static readonly Color DotOff      = InterfaceTheme.Track;
-    private static readonly Color DotOn       = new(0.78f, 0.81f, 0.86f, 1f);
+    private static readonly Color DotOn       = new(0.72f, 0.74f, 0.76f, 1f);
     private static readonly Color DotOnHot    = InterfaceTheme.Text;
     private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
     private static readonly Color ValueBright = InterfaceTheme.Text;
-    private static readonly Color Accent      = InterfaceTheme.Text;
+    private static readonly Color Accent      = InterfaceTheme.TextMuted;
 
     private Font _labelFont = null!;
     private Font _valueFont = null!;
@@ -44,9 +44,9 @@ public partial class EngineGridHUD : Control
 
     public override void _Ready()
     {
-        _labelFont = InterfaceTheme.BodyFont;
+        _labelFont = InterfaceTheme.LabelFont;
         _valueFont = InterfaceTheme.MonoFont;
-        _panelStyle = InterfaceTheme.GlassPanel(0.82f, 10, 0, 0);
+        _panelStyle = InterfaceTheme.PanelStyle(0.92f, 0, 0);
         MouseFilter = MouseFilterEnum.Ignore;
         ClipContents = false;
         ApplyDensityLayout(force: true);
@@ -113,7 +113,8 @@ public partial class EngineGridHUD : Control
 
         DrawStyleBox(_panelStyle, new Rect2(Vector2.Zero, size));
         DrawString(_labelFont, new Vector2(10, 16), "ENGINES",
-            HorizontalAlignment.Left, -1, 10, Accent);
+            HorizontalAlignment.Left, -1, 11, Accent);
+        DrawRect(new Rect2(10f, 22f, size.X - 20f, 1f), InterfaceTheme.Edge);
         if (_failedEngines > 0)
             DrawString(_valueFont, new Vector2(size.X - 43f, 16), $"FAIL {_failedEngines}",
                 HorizontalAlignment.Left, -1, 8, InterfaceTheme.Alert);
@@ -140,12 +141,12 @@ public partial class EngineGridHUD : Control
         float ry = 122f;
         ry = DrawReadout(10, ry, "THRUST", $"{_thrustKN:N0} kN", ValueBright);
         ry = DrawReadout(10, ry, "TWR",
-            _twrValid ? $"{_twr:F2}" : "---",
+            _twrValid ? $"{_twr:F2}" : "—",
             _twrValid ? (_twr >= 1.0 ? ValueBright : InterfaceTheme.Alert) : LabelDim);
-        ry = DrawReadout(10, ry, "Isp",
-            _ispEff > 0 ? $"{_ispEff:F0} s" : "---", ValueBright);
-        DrawReadout(10, ry, "ṁ",
-            _massFlow > 0.001 ? $"{_massFlow:F2} t/s" : "---", ValueBright);
+        ry = DrawReadout(10, ry, "ISP",
+            _ispEff > 0 ? $"{_ispEff:F0} s" : "—", ValueBright);
+        DrawReadout(10, ry, "FLOW",
+            _massFlow > 0.001 ? $"{_massFlow:F2} t/s" : "—", ValueBright);
     }
 
     private static float RingRadius(int ringIndex, int ringCount, int nominalEngines)
@@ -198,7 +199,7 @@ public partial class EngineGridHUD : Control
     {
         float width = Size.X >= 8f ? Size.X : CustomMinimumSize.X;
         DrawString(_labelFont, new Vector2(x, y), label,
-            HorizontalAlignment.Left, -1, 10, LabelDim);
+            HorizontalAlignment.Left, -1, 11, LabelDim);
         var vw = _valueFont.GetStringSize(value, HorizontalAlignment.Right, -1, 12);
         DrawString(_valueFont, new Vector2(width - 10 - vw.X, y), value,
             HorizontalAlignment.Left, -1, 12, valCol);

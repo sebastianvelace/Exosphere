@@ -18,19 +18,19 @@ using Exosphere.Simulation.Math;
 public partial class AttitudeNavball : Control
 {
     private const double RefreshPeriodSeconds = 1.0 / 30.0;
-    private static readonly Color PanelBg     = InterfaceTheme.GlassStrong;
+    // Flat instrument ball: two tones and a white horizon, no gloss and no gradient.
+    private static readonly Color PanelBg     = InterfaceTheme.PanelDeep;
     private static readonly Color PanelBorder = InterfaceTheme.EdgeStrong;
-    private static readonly Color SkyColHigh  = new(0.36f, 0.40f, 0.48f, 1f);
-    private static readonly Color SkyColLow   = new(0.22f, 0.24f, 0.30f, 1f);
-    private static readonly Color GroundCol   = new(0.070f, 0.078f, 0.090f, 1f);
+    private static readonly Color SkyCol      = new(0.145f, 0.155f, 0.170f, 1f);
+    private static readonly Color GroundCol   = new(0.048f, 0.051f, 0.055f, 1f);
     private static readonly Color HorizonCol  = InterfaceTheme.Text;
     private static readonly Color HorizonOutline = new(0f, 0f, 0f, 0.72f);
-    private static readonly Color LadderCol   = new(0.82f, 0.84f, 0.88f, 0.64f);
-    private static readonly Color LadderNear  = new(0.90f, 0.92f, 0.96f, 0.82f);
+    private static readonly Color LadderCol   = new(0.80f, 0.81f, 0.83f, 0.52f);
+    private static readonly Color LadderNear  = new(0.92f, 0.93f, 0.94f, 0.78f);
     private static readonly Color Reticle     = InterfaceTheme.Text;
     private static readonly Color ProgradeCol = InterfaceTheme.Text;
-    private static readonly Color RetroCol    = new(0.62f, 0.65f, 0.70f, 1f);
-    private static readonly Color RadialCol   = new(0.76f, 0.78f, 0.82f, 1f);
+    private static readonly Color RetroCol    = new(0.60f, 0.62f, 0.64f, 1f);
+    private static readonly Color RadialCol   = new(0.74f, 0.76f, 0.78f, 1f);
     private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
     private static readonly Color ValueBright = InterfaceTheme.Text;
 
@@ -274,15 +274,9 @@ public partial class AttitudeNavball : Control
         var i1 = horizonMid - rightv * half;   // chord endpoints on the circle
         var i2 = horizonMid + rightv * half;
 
-        // Base disc = sky (subtle high→low gradient along ball "up").
-        DrawCircle(c, Radius, SkyColLow);
-        for (int band = 3; band >= 1; band--)
-        {
-            float t = band / 4f;
-            var col = SkyColLow.Lerp(SkyColHigh, t);
-            col.A = 0.55f * t;
-            DrawCircle(c - dir * (Radius * (1f - t) * 0.35f), Radius * (0.55f + 0.35f * t), col);
-        }
+        // Base disc = sky. One flat tone: a shaded sphere reads as decoration, and the
+        // information here is the horizon line and the ladder, not the material.
+        DrawCircle(c, Radius, SkyCol);
 
         // Ground = circular segment below the horizon, walked around the rim with the chord
         // intersections inserted at the two crossings (perfect clip, handles any roll/pitch).
@@ -378,10 +372,10 @@ public partial class AttitudeNavball : Control
         DrawCircle(p, 1.2f, RadialCol);
     }
 
-    // Director de pitch: una barra magenta con dos cuñas en la posición del pitch objetivo
+    // Director de pitch: una barra ámbar con dos cuñas en la posición del pitch objetivo
     // sobre la escalera (se mueve con horizonte y roll igual que los ticks). Llevar la
     // retícula (morro) hasta la barra ejecuta el gravity turn sugerido.
-    // Pitch director: a magenta bar with two chevrons at the target pitch on the ladder
+    // Pitch director: an amber bar with two chevrons at the target pitch on the ladder
     // (moves with horizon and roll like the ticks). Flying the nose reticle onto the bar
     // executes the suggested gravity turn.
     private void DrawPitchDirector(Vector2 c, float pitchPx, float roll)
@@ -407,7 +401,7 @@ public partial class AttitudeNavball : Control
     {
         float w = Radius * 2f;
         var rect = new Rect2(top.X - w / 2f, top.Y, w, 16f);
-        DrawRect(rect, InterfaceTheme.GlassStrong, true);
+        DrawRect(rect, InterfaceTheme.PanelDeep, true);
         DrawRect(rect, PanelBorder, false, 1f);
 
         // Tick every 30°, centred on current heading.

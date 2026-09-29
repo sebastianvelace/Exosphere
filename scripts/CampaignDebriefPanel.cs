@@ -33,7 +33,7 @@ public static class CampaignDebriefPanel
             CustomMinimumSize = new Vector2(720, 0),
         };
         panel.AddThemeStyleboxOverride(
-            "panel", InterfaceTheme.GlassPanel(0.97f, 0, 32, 28));
+            "panel", InterfaceTheme.PanelStyle(0.97f, 32, 28, deep: true));
         center.AddChild(panel);
         var content = new VBoxContainer();
         content.AddThemeConstantOverride("separation", 10);
@@ -43,9 +43,9 @@ public static class CampaignDebriefPanel
         {
             Text = spanish ? "INFORME DE MISIÓN" : "MISSION DEBRIEF",
         };
-        InterfaceTheme.ApplyMono(classification, 11);
+        InterfaceTheme.ApplyLabel(classification, 13);
         classification.AddThemeColorOverride(
-            "font_color", InterfaceTheme.Orbital);
+            "font_color", InterfaceTheme.TextMuted);
         content.AddChild(classification);
 
         var title = new Label
@@ -102,7 +102,7 @@ public static class CampaignDebriefPanel
             };
             InterfaceTheme.ApplyMono(reward, 11);
             reward.AddThemeColorOverride(
-                "font_color", InterfaceTheme.Orbital);
+                "font_color", InterfaceTheme.Success);
             content.AddChild(reward);
         }
 

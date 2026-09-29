@@ -1,7 +1,6 @@
 # Godot
 .godot/
 *.uid
-export_presets.cfg
 
 # .NET
 bin/
@@ -14,8 +13,9 @@ __pycache__/
 *.pyc
 .vscode/settings.json
 
-# Exports
+# Exports / private test builds (binaries, pcks, zips — never commit)
 exports/
+dist/
 
 # OS
 .DS_Store
@@ -41,3 +41,6 @@ scripts/*VerifyShot.cs
 scripts/*VerifyShot.cs.uid
 scenes/*VerifyShot.tscn
 scenes/*VerifyShot.tscn.uid
+
+# Local agent memory (Engram)
+.engram/

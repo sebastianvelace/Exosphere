@@ -61,6 +61,26 @@ public sealed class EntryCorridorGuidanceTests
     }
 
     [Fact]
+    public void VacuumFallHorizonIsTheNoDragBound()
+    {
+        const double altitudeM = 120_000.0;
+        const double speedMps = 7_600.0;
+        const double flightPathAngleDegrees = -1.6;
+        const double gravityMps2 = 9.45;
+        double flightPathRadians = flightPathAngleDegrees * System.Math.PI / 180.0;
+        double downwardSpeed = -speedMps * System.Math.Sin(flightPathRadians);
+
+        double horizon = EntryCorridorGuidance.EstimateTimeToGround(
+            altitudeM,
+            downwardSpeed,
+            gravityMps2);
+        double horizontalLead = speedMps * System.Math.Cos(flightPathRadians) * horizon;
+
+        Assert.InRange(horizon, 135.0, 142.0);
+        Assert.InRange(horizontalLead, 1_020_000.0, 1_080_000.0);
+    }
+
+    [Fact]
     public void SelectsDownLiftWhenFutureFootprintHasPassedTarget()
     {
         var prediction = new EntryCorridorGuidance.Prediction(
@@ -127,6 +147,83 @@ public sealed class EntryCorridorGuidanceTests
 
         Assert.True(selected.Dot(Vector3d.Up) > 0.999,
             $"nominal entry must remain lift-up inside the corridor, got {selected}");
+    }
+
+    [Fact]
+    public void ReducedOrderGuidanceCannotCommandNegativeVerticalLift()
+    {
+        var constrained = EntryCorridorGuidance.ConstrainVerticalLift(
+            requestedLift: (-Vector3d.Up + Vector3d.Forward).Normalized,
+            bodyLiftUp: Vector3d.Up);
+
+        Assert.InRange(constrained.Dot(Vector3d.Up), -1e-12, 1e-12);
+        Assert.True(constrained.Dot(Vector3d.Forward) > 0.999,
+            $"lateral bank authority must be preserved, got {constrained}");
+    }
+
+    [Fact]
+    public void PureDownLiftFallsBackToLiftUpWithoutAnArbitraryBankSide()
+    {
+        var constrained = EntryCorridorGuidance.ConstrainVerticalLift(
+            requestedLift: -Vector3d.Up,
+            bodyLiftUp: Vector3d.Up);
+
+        Assert.True(constrained.Dot(Vector3d.Up) > 0.999);
+    }
+
+    [Fact]
+    public void PureDownLiftUsesExplicitBankSideForNeutralVerticalLift()
+    {
+        var constrained = EntryCorridorGuidance.ConstrainVerticalLift(
+            requestedLift: -Vector3d.Up,
+            bodyLiftUp: Vector3d.Up,
+            minimumVerticalFraction: 0.0,
+            lateralFallback: Vector3d.Forward);
+
+        Assert.InRange(constrained.Dot(Vector3d.Up), -1e-12, 1e-12);
+        Assert.True(constrained.Dot(Vector3d.Forward) > 0.999,
+            $"explicit bank side must avoid a full lift-up skip command, got {constrained}");
+    }
+
+    [Fact]
+    public void BoundedDownLiftPreservesBankSideWithoutFullReversal()
+    {
+        var constrained = EntryCorridorGuidance.ConstrainVerticalLift(
+            requestedLift: -Vector3d.Up,
+            bodyLiftUp: Vector3d.Up,
+            minimumVerticalFraction: -0.15,
+            lateralFallback: Vector3d.Forward);
+
+        Assert.InRange(constrained.Dot(Vector3d.Up), -0.1500001, -0.1499999);
+        Assert.True(constrained.Dot(Vector3d.Forward) > 0.98);
+    }
+
+    [Fact]
+    public void BankCommandWaitsForAerodynamicControlAuthority()
+    {
+        var vacuum = EntryCorridorGuidance.BlendForAerodynamicAuthority(
+            Vector3d.Forward, Vector3d.Up, dynamicPressurePa: 10.0);
+        var transition = EntryCorridorGuidance.BlendForAerodynamicAuthority(
+            Vector3d.Forward, Vector3d.Up, dynamicPressurePa: 137.5);
+        var controlled = EntryCorridorGuidance.BlendForAerodynamicAuthority(
+            Vector3d.Forward, Vector3d.Up, dynamicPressurePa: 300.0);
+
+        Assert.True(vacuum.Dot(Vector3d.Up) > 0.999);
+        Assert.InRange(transition.Dot(Vector3d.Up), 0.70, 0.71);
+        Assert.True(transition.Dot(Vector3d.Forward) > 0.70);
+        Assert.True(controlled.Dot(Vector3d.Forward) > 0.999);
+    }
+
+    [Fact]
+    public void LoadReliefTransitionsFromShallowDownLiftToLiftUp()
+    {
+        double nominal = EntryCorridorGuidance.ComputeLoadReliefVerticalFloor(3.0);
+        double midpoint = EntryCorridorGuidance.ComputeLoadReliefVerticalFloor(5.5);
+        double relieved = EntryCorridorGuidance.ComputeLoadReliefVerticalFloor(7.5);
+
+        Assert.Equal(-0.15, nominal, 10);
+        Assert.InRange(midpoint, 0.424999, 0.425001);
+        Assert.Equal(1.0, relieved, 10);
     }
 
 }

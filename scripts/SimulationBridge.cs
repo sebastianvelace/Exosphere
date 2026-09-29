@@ -169,7 +169,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         var startup = Stopwatch.StartNew();
         GD.Print("PERF_STARTUP phase=begin");
 
-        var dataPath = ProjectSettings.GlobalizePath(DataDirectory);
+        var dataPath = GameDataPath.Resolve(DataDirectory);
         Universe = Universe.LoadFromDataDirectory(dataPath);
         Universe.TimeScale = 1.0;
         Universe.PhysicsStepController = this;
@@ -1200,7 +1200,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         var earth = Universe.GetBody("earth");
         var carrier = ActiveVessel;
         if (earth == null || carrier == null) return null;
-        string dataPath = ProjectSettings.GlobalizePath(DataDirectory);
+        string dataPath = GameDataPath.Resolve(DataDirectory);
         var catalog = PartCatalog.LoadFromDirectory(
             System.IO.Path.Combine(dataPath, "parts"));
         var variant = VehicleVariantDefinition.LoadFromJson(
@@ -1257,7 +1257,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             Exosphere.Simulation.Flight.Apollo11FlightProfile.EmptySlaDryMassKg
             - sla.Definition.MassDry;
 
-        string dataPath = ProjectSettings.GlobalizePath(DataDirectory);
+        string dataPath = GameDataPath.Resolve(DataDirectory);
         var catalog = PartCatalog.LoadFromDirectory(
             System.IO.Path.Combine(dataPath, "parts"));
         var variant = VehicleVariantDefinition.LoadFromJson(
@@ -1709,6 +1709,119 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     }
 
     /// <summary>
+    /// Seeds a standalone Starship at a declared physical entry interface. This is an
+    /// initial-condition fixture, not the deterministic EDL demonstration: after the one-time
+    /// position, velocity and attitude assignment, the regular EDL controller, actuators,
+    /// aerodynamics, thermal model and force integrator own the complete trajectory.
+    /// </summary>
+    public bool SeedPhysicalEntryInterfaceForValidation(
+        double altitudeM = 120_000.0,
+        double inertialSpeedMps = 7_600.0,
+        double flightPathAngleDegrees = -1.6,
+        double propellantReserveFraction = 0.06)
+    {
+        if (!double.IsFinite(altitudeM) || altitudeM <= 0.0
+            || !double.IsFinite(inertialSpeedMps)
+            || inertialSpeedMps <= 0.0
+            || !double.IsFinite(flightPathAngleDegrees)
+            || flightPathAngleDegrees is <= -90.0 or >= 90.0
+            || !double.IsFinite(propellantReserveFraction))
+            return false;
+
+        var earth = Universe.GetBody("earth");
+        var vessel = ActiveVessel;
+        if (earth == null || vessel == null || vessel.IsDestroyed || _launchSite == null)
+            return false;
+
+        if (vessel.Parts.Parts.Any(part =>
+                part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("booster")))
+        {
+            TriggerStaging();
+            vessel = ActiveVessel;
+        }
+        if (vessel == null || !vessel.Parts.Parts.Any(part =>
+                part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("ship_engines")))
+            return false;
+
+        CancelGuidanceForTeleport();
+        EnsureStarshipReentryLandingGear(vessel);
+        if (!ConfigureOrbitalReturnReserve(propellantReserveFraction))
+            return false;
+
+        LaunchSiteFrame frame = _launchSite.GetLocalFrame(earth, Universe.CurrentTime);
+        double flightPathRadians = flightPathAngleDegrees * MathUtils.DEG_TO_RAD;
+        Vector3d referencePosition = earth.GetSurfacePositionFromGeodeticUp(
+            frame.Up,
+            altitudeM);
+        const double InitialDownrangeMarginM = 80_000.0;
+        // Preview the air-relative state at the pad latitude. The declared speed is
+        // body-centred inertial; Earth rotation is already inside that vector, so the
+        // footprint must be propagated with the slower eastward airspeed.
+        EntryInterfaceState.Velocity preview = EntryInterfaceState.Compose(
+            earth,
+            referencePosition,
+            frame.East,
+            inertialSpeedMps,
+            flightPathRadians);
+        var entryDynamics = EntryCorridorPropagation.ForVessel(vessel, earth) with
+        {
+            LatitudeRad = earth.GetLatitude(referencePosition) * MathUtils.DEG_TO_RAD,
+            TrackEast = 1.0,
+            CrossEast = 0.0
+        };
+        EntryCorridorPropagation.Result propagated = EntryCorridorPropagation.Propagate(
+            altitudeM,
+            preview.AtmosphereRelativeSpeedMps,
+            preview.AtmosphereRelativeFlightPathRad,
+            entryDynamics);
+        double interfaceRadius = (referencePosition - earth.Position).Magnitude;
+        double leadAngle = propagated.CentralAngleRad
+            + InitialDownrangeMarginM / System.Math.Max(1.0, interfaceRadius);
+        double downrangeLead = leadAngle * interfaceRadius;
+        Vector3d entryUp = (
+            frame.Up * System.Math.Cos(leadAngle)
+            - frame.East * System.Math.Sin(leadAngle)).Normalized;
+        Vector3d position = earth.GetSurfacePositionFromGeodeticUp(entryUp, altitudeM);
+        Vector3d up = earth.GetGeodeticUp(position);
+        Vector3d targetPosition = _launchSite.GetPosition(earth, Universe.CurrentTime);
+        Vector3d targetTangent = targetPosition - position;
+        targetTangent -= up * targetTangent.Dot(up);
+        if (targetTangent.MagnitudeSquared < 1e-12)
+            targetTangent = earth.GetEastDirection(position);
+        EntryInterfaceState.Velocity flown = EntryInterfaceState.Compose(
+            earth,
+            position,
+            targetTangent,
+            inertialSpeedMps,
+            flightPathRadians);
+        vessel.Position = position;
+        vessel.Velocity = earth.Velocity + flown.InertialRelativeToBody;
+        vessel.PrepareForTeleport();
+        vessel.ReferenceBodyId = earth.Id;
+        Vector3d airflow = flown.AtmosphereRelative.MagnitudeSquared > 1.0
+            ? flown.AtmosphereRelative
+            : targetTangent;
+        vessel.Orientation = EntryAttitudeGuidance.ComputeTarget(
+            up,
+            airflow,
+            liftTowardBody: false);
+        vessel.SASEnabled = false;
+        vessel.Throttle = 0.0;
+
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+        GD.Print($"[DEBUG] Physical entry interface seeded altitude={altitudeM:F0} m "
+            + $"inertial={flown.InertialSpeedMps:F0} m/s "
+            + $"airspeed={flown.AtmosphereRelativeSpeedMps:F0} m/s "
+            + $"flightPath={flightPathAngleDegrees:F2} deg "
+            + $"upRange={downrangeLead:F0} m horizon={propagated.DurationS:F1} s "
+            + $"energyChange={propagated.FinalSpecificEnergyJPerKg - propagated.InitialSpecificEnergyJPerKg:F0} J/kg "
+            + $"reserve={System.Math.Clamp(propellantReserveFraction, 0.0, 1.0):F3}");
+        return true;
+    }
+
+    /// <summary>
     /// Adds the simulator's explicit Starship EDL landing kit to a reentry fixture when the
     /// selected historical vehicle has no landing hardware. The Flight 7 source variant stays
     /// historically faithful (its data and launch mass remain gearless); only the playable
@@ -1728,7 +1841,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         }
 
         string partsPath = System.IO.Path.Combine(
-            ProjectSettings.GlobalizePath(DataDirectory), "parts");
+            GameDataPath.Resolve(DataDirectory), "parts");
         var definitions = PartCatalog.LoadFromDirectory(partsPath).Parts;
         if (!definitions.TryGetValue("starship_landing_gear", out var gearDefinition))
             return false;

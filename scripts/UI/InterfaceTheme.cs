@@ -2,27 +2,30 @@ namespace Exosphere.Game;
 
 using Godot;
 
-/// Shared visual tokens for Exosphere's monochrome interface.
-/// Godot does not blur the 3D framebuffer behind Controls, so the "glass" material
-/// is an intentionally restrained approximation: translucent charcoal, a bright
-/// inner edge and a soft black shadow.
+/// Shared visual tokens for Exosphere's flight-test interface.
+/// Surfaces are flat near-black with hairline rules and square corners — an instrument
+/// panel, not a glass dashboard. Type is split by role: condensed caps for labels,
+/// monospace for every number, proportional sans only where a sentence is needed.
+/// Colour is a status channel and never decoration: <see cref="Text"/> is nominal,
+/// <see cref="Warning"/> is caution, <see cref="Alert"/> is a warning, and
+/// <see cref="Success"/> is reserved for a check that has passed.
 public static class InterfaceTheme
 {
-    public static readonly Color Void = new(0.015f, 0.018f, 0.024f, 1f);
-    public static readonly Color Glass = new(0.025f, 0.030f, 0.040f, 0.78f);
-    public static readonly Color GlassStrong = new(0.025f, 0.030f, 0.040f, 0.92f);
-    public static readonly Color GlassSoft = new(0.035f, 0.040f, 0.052f, 0.56f);
-    public static readonly Color Edge = new(0.88f, 0.92f, 1.00f, 0.20f);
-    public static readonly Color EdgeStrong = new(0.96f, 0.98f, 1.00f, 0.48f);
-    public static readonly Color Text = new(0.95f, 0.97f, 1.00f, 1f);
-    public static readonly Color TextMuted = new(0.63f, 0.67f, 0.74f, 1f);
-    public static readonly Color TextFaint = new(0.42f, 0.46f, 0.53f, 1f);
-    public static readonly Color Track = new(0.13f, 0.15f, 0.19f, 0.94f);
-    public static readonly Color Alert = new(1.00f, 0.40f, 0.34f, 1f);
-    public static readonly Color Warning = new(1.00f, 0.73f, 0.28f, 1f);
-    public static readonly Color Orbital = new(0.24f, 0.76f, 0.88f, 1f);
+    public static readonly Color Void = new(0.012f, 0.013f, 0.015f, 1f);
+    /// Standard instrument surface: opaque enough to read numbers over a bright horizon.
+    public static readonly Color Panel = new(0.026f, 0.028f, 0.031f, 0.90f);
+    /// Denser surface for a panel that must stay readable over the plume or the ground.
+    public static readonly Color PanelDeep = new(0.019f, 0.021f, 0.023f, 0.96f);
+    public static readonly Color Edge = new(1f, 1f, 1f, 0.11f);
+    public static readonly Color EdgeStrong = new(1f, 1f, 1f, 0.24f);
+    public static readonly Color Text = new(0.94f, 0.95f, 0.96f, 1f);
+    public static readonly Color TextMuted = new(0.62f, 0.64f, 0.66f, 1f);
+    public static readonly Color TextFaint = new(0.40f, 0.41f, 0.43f, 1f);
+    public static readonly Color Track = new(0.098f, 0.103f, 0.110f, 0.92f);
+    public static readonly Color Alert = new(0.95f, 0.29f, 0.24f, 1f);
+    public static readonly Color Warning = new(1.00f, 0.71f, 0.20f, 1f);
     /// Pale green reserved for a passed check / nominal terminal state.
-    public static readonly Color Success = new(0.55f, 0.95f, 0.65f, 1f);
+    public static readonly Color Success = new(0.56f, 0.88f, 0.60f, 1f);
 
     public static Font DisplayFont =>
         GD.Load<Font>("res://assets/fonts/barlow/BarlowCondensed-SemiBold.ttf");
@@ -33,9 +36,26 @@ public static class InterfaceTheme
     public static Font MonoFont =>
         GD.Load<Font>("res://assets/fonts/ibm-plex/IBMPlexMono-Regular.ttf");
 
+    private static FontVariation? _labelFont;
+
+    /// <summary>Condensed caps with a little tracking — the callout label of a flight
+    /// display. Built once: a FontVariation is a resource, not a per-label value.</summary>
+    public static Font LabelFont => _labelFont ??= new FontVariation
+    {
+        BaseFont = DisplayFont,
+        SpacingGlyph = 1,
+    };
+
     public static void ApplyDisplay(Label label, int size)
     {
         label.AddThemeFontOverride("font", DisplayFont);
+        label.AddThemeFontSizeOverride("font_size", size);
+    }
+
+    /// <summary>Caption/label type: condensed, tracked, meant to be read in caps.</summary>
+    public static void ApplyLabel(Label label, int size)
+    {
+        label.AddThemeFontOverride("font", LabelFont);
         label.AddThemeFontSizeOverride("font_size", size);
     }
 
@@ -51,13 +71,14 @@ public static class InterfaceTheme
         label.AddThemeFontSizeOverride("font_size", size);
     }
 
-    public static StyleBoxFlat GlassPanel(
-        float opacity = 0.78f,
-        int radius = 12,
-        int marginX = 16,
-        int marginY = 14)
+    /// <summary>Flat instrument surface: square corners, one hairline border, no shadow.</summary>
+    public static StyleBoxFlat PanelStyle(
+        float opacity = 0.90f,
+        int marginX = 14,
+        int marginY = 11,
+        bool deep = false)
     {
-        var background = Glass;
+        var background = deep ? PanelDeep : Panel;
         background.A = opacity;
 
         var style = new StyleBoxFlat
@@ -68,35 +89,32 @@ public static class InterfaceTheme
             ContentMarginRight = marginX,
             ContentMarginTop = marginY,
             ContentMarginBottom = marginY,
-            ShadowColor = new Color(0f, 0f, 0f, 0.32f),
-            ShadowSize = 10,
-            ShadowOffset = new Vector2(0, 5),
-            AntiAliasing = true,
+            AntiAliasing = false,
         };
         style.SetBorderWidthAll(1);
-        style.SetCornerRadiusAll(radius);
+        style.SetCornerRadiusAll(0);
         return style;
     }
 
     public static StyleBoxFlat Button(
-        bool primary, bool hover = false, bool pressed = false, int paddingX = 22, int paddingY = 13, int radius = 10)
+        bool primary, bool hover = false, bool pressed = false, int paddingX = 20, int paddingY = 12)
     {
         Color background;
         Color border;
         if (primary)
         {
             background = pressed
-                ? new Color(0.72f, 0.75f, 0.80f, 1f)
+                ? new Color(0.70f, 0.71f, 0.72f, 1f)
                 : hover
                     ? new Color(1f, 1f, 1f, 1f)
-                    : new Color(0.92f, 0.94f, 0.98f, 1f);
+                    : new Color(0.90f, 0.91f, 0.92f, 1f);
             border = background;
         }
         else
         {
             background = hover
-                ? new Color(0.12f, 0.13f, 0.16f, 0.94f)
-                : new Color(0.04f, 0.045f, 0.055f, 0.78f);
+                ? new Color(0.085f, 0.090f, 0.095f, 0.94f)
+                : new Color(0.026f, 0.028f, 0.031f, 0.86f);
             border = hover ? EdgeStrong : Edge;
         }
 
@@ -108,13 +126,10 @@ public static class InterfaceTheme
             ContentMarginRight = paddingX,
             ContentMarginTop = paddingY,
             ContentMarginBottom = paddingY,
-            ShadowColor = new Color(0f, 0f, 0f, primary ? 0.36f : 0.18f),
-            ShadowSize = primary ? 8 : 4,
-            ShadowOffset = new Vector2(0, primary ? 4 : 2),
-            AntiAliasing = true,
+            AntiAliasing = false,
         };
         style.SetBorderWidthAll(1);
-        style.SetCornerRadiusAll(radius);
+        style.SetCornerRadiusAll(0);
         return style;
     }
 
@@ -129,10 +144,10 @@ public static class InterfaceTheme
     /// menu size does not fit a dozen-plus actions in a sidebar.</param>
     public static void StyleButton(
         Button button, bool primary = false, Vector2? minSize = null,
-        int fontSize = 14, int paddingX = 22, int paddingY = 13)
+        int fontSize = 13, int paddingX = 20, int paddingY = 12)
     {
         button.CustomMinimumSize = minSize ?? new Vector2(238, 50);
-        button.AddThemeFontOverride("font", BodyMediumFont);
+        button.AddThemeFontOverride("font", LabelFont);
         button.AddThemeFontSizeOverride("font_size", fontSize);
         button.AddThemeColorOverride("font_color", primary ? Void : Text);
         button.AddThemeColorOverride("font_hover_color", primary ? Void : Text);
@@ -147,28 +162,28 @@ public static class InterfaceTheme
         button.AddThemeStyleboxOverride("pressed", pressedStyle);
         button.AddThemeStyleboxOverride("focus", hoverStyle);
         var disabled = Button(primary, paddingX: paddingX, paddingY: paddingY);
-        disabled.BgColor = new Color(0.04f, 0.045f, 0.055f, 0.4f);
-        disabled.BorderColor = new Color(Edge, 0.4f);
+        disabled.BgColor = new Color(0.026f, 0.028f, 0.031f, 0.45f);
+        disabled.BorderColor = new Color(Edge, 0.5f);
         button.AddThemeStyleboxOverride("disabled", disabled);
     }
 
     /// <summary>Dark inset background for text/list input controls (LineEdit, ItemList,
-    /// OptionButton) so they read as part of the glass surface instead of the engine's
+    /// OptionButton) so they read as part of the instrument surface instead of the engine's
     /// default grey control theme.</summary>
-    public static StyleBoxFlat FieldPanel(int radius = 8, int paddingX = 10, int paddingY = 8)
+    public static StyleBoxFlat FieldPanel(int paddingX = 10, int paddingY = 8)
     {
         var style = new StyleBoxFlat
         {
-            BgColor = new Color(0.03f, 0.035f, 0.045f, 0.7f),
+            BgColor = new Color(0.018f, 0.020f, 0.022f, 0.86f),
             BorderColor = Edge,
             ContentMarginLeft = paddingX,
             ContentMarginRight = paddingX,
             ContentMarginTop = paddingY,
             ContentMarginBottom = paddingY,
-            AntiAliasing = true,
+            AntiAliasing = false,
         };
         style.SetBorderWidthAll(1);
-        style.SetCornerRadiusAll(radius);
+        style.SetCornerRadiusAll(0);
         return style;
     }
 
@@ -182,19 +197,19 @@ public static class InterfaceTheme
                 leFocus.BorderColor = EdgeStrong;
                 le.AddThemeStyleboxOverride("normal", panel);
                 le.AddThemeStyleboxOverride("focus", leFocus);
-                le.AddThemeFontOverride("font", BodyFont);
-                le.AddThemeFontSizeOverride("font_size", 13);
+                le.AddThemeFontOverride("font", MonoFont);
+                le.AddThemeFontSizeOverride("font_size", 12);
                 le.AddThemeColorOverride("font_color", Text);
                 le.AddThemeColorOverride("font_placeholder_color", TextFaint);
                 break;
             case ItemList il:
                 il.AddThemeStyleboxOverride("panel", panel);
-                il.AddThemeFontOverride("font", BodyFont);
-                il.AddThemeFontSizeOverride("font_size", 13);
+                il.AddThemeFontOverride("font", MonoFont);
+                il.AddThemeFontSizeOverride("font_size", 12);
                 il.AddThemeColorOverride("font_color", TextMuted);
                 il.AddThemeColorOverride("font_selected_color", Text);
-                var sel = new StyleBoxFlat { BgColor = new Color(Orbital, 0.16f) };
-                sel.SetCornerRadiusAll(6);
+                var sel = new StyleBoxFlat { BgColor = new Color(1f, 1f, 1f, 0.10f) };
+                sel.SetCornerRadiusAll(0);
                 il.AddThemeStyleboxOverride("selected", sel);
                 il.AddThemeStyleboxOverride("selected_focus", sel);
                 break;
@@ -204,21 +219,21 @@ public static class InterfaceTheme
                 ob.AddThemeStyleboxOverride("normal", panel);
                 ob.AddThemeStyleboxOverride("hover", obHover);
                 ob.AddThemeStyleboxOverride("focus", panel);
-                ob.AddThemeFontOverride("font", BodyFont);
-                ob.AddThemeFontSizeOverride("font_size", 13);
+                ob.AddThemeFontOverride("font", MonoFont);
+                ob.AddThemeFontSizeOverride("font_size", 12);
                 ob.AddThemeColorOverride("font_color", Text);
                 break;
         }
     }
 
-    /// <summary>Small muted caps-style heading for grouping related controls within a
-    /// panel (e.g. "QUICK BUILD" over the template buttons) — lighter than a full panel
-    /// title, so a dense sidebar doesn't read as one undifferentiated button grid.</summary>
+    /// <summary>Small muted caps heading for grouping related controls within a panel
+    /// (e.g. "QUICK BUILD" over the template buttons) — lighter than a full panel title,
+    /// so a dense sidebar doesn't read as one undifferentiated button grid.</summary>
     public static Label SectionLabel(string text)
     {
         var label = new Label { Text = text, Modulate = TextFaint };
-        label.AddThemeFontOverride("font", BodyMediumFont);
-        label.AddThemeFontSizeOverride("font_size", 11);
+        label.AddThemeFontOverride("font", LabelFont);
+        label.AddThemeFontSizeOverride("font_size", 12);
         label.AddThemeConstantOverride("outline_size", 0);
         return label;
     }
@@ -232,13 +247,11 @@ public static class InterfaceTheme
                 primary,
                 hover: state is "hover" or "focus" or "pressed",
                 pressed: state == "pressed");
-            source.SetCornerRadiusAll(0);
-            if (primary || state is "hover" or "focus")
+            if (primary || state is "hover" or "focus" or "pressed")
             {
-                var rail = primary && state == "normal"
-                    ? new Color(Orbital, 0.72f)
-                    : new Color(Orbital, state == "pressed" ? 0.95f : 0.52f);
-                AddStateRail(source, rail, primary ? 3 : 2);
+                // A selection rail, not an accent: the same white the numbers use.
+                float alpha = state == "normal" ? 0.45f : 0.75f;
+                AddStateRail(source, new Color(Text, alpha), primary ? 3 : 2);
             }
             button.AddThemeStyleboxOverride(state, source);
         }

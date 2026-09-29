@@ -68,7 +68,7 @@ public partial class ConstructionController : Control
 
     private void LoadCatalog()
     {
-        string path = ProjectSettings.GlobalizePath("res://data/parts");
+        string path = GameDataPath.Combine("parts");
         _catalog = PartCatalog.LoadFromDirectory(path);
         _assembly = new VesselAssembly(_catalog);
         _picking?.Configure(_catalog);
@@ -570,7 +570,7 @@ public partial class ConstructionController : Control
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         if (minWidth > 0) wrap.CustomMinimumSize = new Vector2(minWidth, 0);
-        wrap.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel());
+        wrap.AddThemeStyleboxOverride("panel", InterfaceTheme.PanelStyle());
         parent.AddChild(wrap);
 
         var content = new VBoxContainer();
@@ -581,7 +581,7 @@ public partial class ConstructionController : Control
         {
             var heading = new Label { Text = title };
             InterfaceTheme.ApplyDisplay(heading, 15);
-            heading.Modulate = InterfaceTheme.Orbital;
+            heading.Modulate = InterfaceTheme.TextMuted;
             content.AddChild(heading);
         }
         return content;
@@ -1105,7 +1105,7 @@ public partial class ConstructionController : Control
         try
         {
             if (_assembly != null) RecordUndo();
-            string path = ProjectSettings.GlobalizePath($"res://data/vehicles/{fileName}");
+            string path = GameDataPath.Combine("vehicles", fileName);
             var variant = VehicleVariantDefinition.LoadFromJson(path);
             _assembly = variant.Build(_catalog);
             _vehicleVariantId = variant.Id;

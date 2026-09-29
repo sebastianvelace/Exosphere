@@ -41,7 +41,7 @@ public partial class MissionObjectivesPanel : PanelContainer
 
     public override void _Ready()
     {
-        AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.72f, 12, 14, 11));
+        AddThemeStyleboxOverride("panel", InterfaceTheme.PanelStyle(0.88f, 14, 11));
         SetAnchorsPreset(LayoutPreset.TopLeft);
         CustomMinimumSize = new Vector2(278, 0);
         OffsetLeft = 18;
@@ -54,8 +54,8 @@ public partial class MissionObjectivesPanel : PanelContainer
         AddChild(content);
 
         _header = new Label { Text = "MISSION OBJECTIVES" };
-        InterfaceTheme.ApplyMono(_header, 10);
-        _header.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
+        InterfaceTheme.ApplyLabel(_header, 12);
+        _header.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         content.AddChild(_header);
 
         _rowBox = new VBoxContainer();

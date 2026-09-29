@@ -110,6 +110,11 @@ public partial class EDLController : Control
     private const double AeroReferenceTimeConstantSeconds = 0.75;
     private const double AeroReferenceSlewRateRadPerSecond =
         6.0 * MathUtils.DEG_TO_RAD;
+    // The reduced-order footprint predictor may lower periapsis with only a shallow
+    // down-lift component. Full lift reversal produced a measured 26-28 g plunge;
+    // zero vertical lift preserved the ~77 km periapsis and produced a skip-entry.
+    // cos(bank) = -0.15 corresponds to a bounded bank of about 98.6 degrees.
+    private const double ReducedOrderMinimumVerticalLiftFraction = -0.15;
 
     /// <summary>Measured aerodynamic entry diagnostics for the visual harness and HUD QA.</summary>
     public double AeroAngleOfAttackDegrees => _aeroAngleOfAttackDeg;
@@ -550,8 +555,9 @@ public partial class EDLController : Control
                         targetSurfaceVelocity,
                         up,
                         _alt,
-                        vDown,
-                        g);
+                        -_vUp,
+                        g,
+                        dynamics: EntryCorridorPropagation.ForVessel(vessel, body));
                     if (prediction.LiftDirection.MagnitudeSquared > 1e-12
                         || System.Math.Abs(prediction.PredictedDownrangeM) > 1e-6)
                     {
@@ -577,6 +583,31 @@ public partial class EDLController : Control
                             authorityMeters: 180_000.0,
                             downrangeCorridorMeters: downrangeCorridorMeters,
                             downrangeAuthorityMeters: downrangeAuthorityMeters);
+                        // The footprint now carries drag, lift and energy at the nominal entry
+                        // angle of attack. The vertical floor remains a load guard: a true
+                        // overflight may bank toward the body, but a saturated down-lift
+                        // command becomes a 90-degree bank on the established side instead
+                        // of a full lift-up skip or a plunge. Sign noise inside the cross-range
+                        // deadband must not reverse that bank.
+                        Vector3d priorLateral = _aeroLiftReference
+                            - bodyLiftUp.Normalized
+                                * _aeroLiftReference.Dot(bodyLiftUp.Normalized);
+                        Vector3d neutralBankSide = priorLateral.MagnitudeSquared > 1e-12
+                            ? priorLateral
+                            : up.Cross(velDir);
+                        double verticalLiftFloor = EntryCorridorGuidance
+                            .ComputeLoadReliefVerticalFloor(
+                                _gForce,
+                                ReducedOrderMinimumVerticalLiftFraction);
+                        guidedLift = EntryCorridorGuidance.ConstrainVerticalLift(
+                            guidedLift,
+                            bodyLiftUp,
+                            minimumVerticalFraction: verticalLiftFloor,
+                            lateralFallback: neutralBankSide);
+                        guidedLift = EntryCorridorGuidance.BlendForAerodynamicAuthority(
+                            guidedLift,
+                            bodyLiftUp,
+                            vessel.GetDynamicPressure(body));
                         _aeroLiftReference = guidedLift;
                         aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(
                             velDir, guidedLift);

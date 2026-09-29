@@ -7,11 +7,12 @@ using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Presentation;
 using Exosphere.Simulation.Systems;
 
-// ── Flight HUD (SpaceX-webcast aesthetic) ────────────────────────────────────
-// Dark translucent panels, thin lines, condensed type, cyan/white accents. A big
-// centred bottom telemetry band (SPEED / ALTITUDE / T+), a milestone countdown, a
-// left "loads & trajectory" panel and a right "stages & Δv + event log" panel.
+// ── Flight HUD (flight-test display) ─────────────────────────────────────────
+// Flat near-black blocks, hairline rules, condensed labels and monospaced numbers.
+// A big centred bottom telemetry band (SPEED / ALTITUDE / T+), a milestone countdown,
+// a left "loads & trajectory" panel and a right "stages & Δv + event log" panel.
 // Attitude cluster (engines — navball — data strip) is spawned as children here.
+// Colour is status only: white nominal, amber caution, red warning.
 // All physics-derived values arrive through FlightHudSnapshot.
 public partial class HUDController : Control
 {
@@ -28,14 +29,13 @@ public partial class HUDController : Control
     }
 
     // ── Palette ─────────────────────────────────────────────────────────────
-    private static readonly Color PanelBg     = InterfaceTheme.Glass;
-    private static readonly Color PanelBorder = InterfaceTheme.Edge;
     private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
     private static readonly Color ValueBright = InterfaceTheme.Text;
     private static readonly Color Accent      = InterfaceTheme.Text;
     private static readonly Color GaugeTrack  = InterfaceTheme.Track;
-    private static readonly Color FuelCol     = new(0.76f, 0.79f, 0.84f, 1f);
-    private static readonly Color OxCol       = new(0.96f, 0.97f, 1.00f, 1f);
+    // Propellant bars differ by brightness, not by hue: the gauge is a quantity, not a state.
+    private static readonly Color FuelCol     = new(0.70f, 0.72f, 0.74f, 1f);
+    private static readonly Color OxCol       = new(0.94f, 0.95f, 0.96f, 1f);
     private static readonly Color FuelLowCol  = InterfaceTheme.Alert;
     private static readonly Color WarnCol     = InterfaceTheme.Warning;
 
@@ -160,8 +160,10 @@ public partial class HUDController : Control
         _engineGrid.Position = new Vector2(-(EngineGridHUD.BoardWidth + gap), 8f);
         _attitudeStrip.Position = new Vector2(navW + gap, 8f);
         _engineGrid.Size = new Vector2(EngineGridHUD.BoardWidth, EngineGridHUD.BoardHeightCompact);
-        // Long failure values (RESTART LIMIT) must not run through the FAIL caption.
-        _attitudeStrip.Size = new Vector2(160f, AttitudeDataStrip.BoardHeight);
+        // Long failure values (RESTART LIMIT) must not run through the FAIL caption. The
+        // strip owns its own height: the entry block only fits outside Clean density.
+        _attitudeStrip.Size = new Vector2(176f, AttitudeDataStrip.BoardHeight);
+        _attitudeStrip.ApplyDensityLayout(force: true);
     }
 
     private void BuildDensityToast()
@@ -206,15 +208,15 @@ public partial class HUDController : Control
         panel.AddChild(vbox);
 
         vbox.AddChild(MakeHeader("FLIGHT"));
-        _vspeedValue    = AddRow(vbox, "VERT SPEED", "---");
-        _gValue         = AddRow(vbox, "G-FORCE", "---");
-        _qValue         = AddRow(vbox, "DYN PRESS q", "---");
-        _pitchValue     = AddRow(vbox, "FLIGHT PITCH", "---");
-        _hdgValue       = AddRow(vbox, "HEADING", "---");
-        _downrangeValue = AddRow(vbox, "DOWNRANGE", "---");
+        _vspeedValue    = AddRow(vbox, "VERT SPEED", "—");
+        _gValue         = AddRow(vbox, "G-FORCE", "—");
+        _qValue         = AddRow(vbox, "DYN PRESS q", "—");
+        _pitchValue     = AddRow(vbox, "FLIGHT PITCH", "—");
+        _hdgValue       = AddRow(vbox, "HEADING", "—");
+        _downrangeValue = AddRow(vbox, "DOWNRANGE", "—");
 
         _maxqFlag = new Label { Text = "" };
-        InterfaceTheme.ApplyMono(_maxqFlag, 12);
+        InterfaceTheme.ApplyLabel(_maxqFlag, 13);
         _maxqFlag.AddThemeColorOverride("font_color", WarnCol);
         _maxqFlag.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(_maxqFlag);
@@ -234,17 +236,17 @@ public partial class HUDController : Control
         panel.AddChild(vbox);
 
         vbox.AddChild(MakeHeader("ORBIT / VEHICLE"));
-        _massValue = AddRow(vbox, "MASS", "---");
-        _dvValue   = AddRow(vbox, "STAGE Δv", "---");
-        _apValue   = AddRow(vbox, "APOAPSIS", "---");
-        _peValue   = AddRow(vbox, "PERIAPSIS", "---");
+        _massValue = AddRow(vbox, "MASS", "—");
+        _dvValue   = AddRow(vbox, "STAGE Δv", "—");
+        _apValue   = AddRow(vbox, "APOAPSIS", "—");
+        _peValue   = AddRow(vbox, "PERIAPSIS", "—");
 
         // Aviso de trayectoria suborbital: parte del bloque de órbita (en el VBox), por lo
         // que nunca solapa otros paneles. Vacío salvo cuando la periapsis cae bajo superficie.
         // Suborbital-trajectory warning: part of the orbit block (inside the VBox), so it never
         // overlaps other panels. Empty unless periapsis falls below the surface.
         _suborbitalWarn = new Label { Text = "" };
-        InterfaceTheme.ApplyMono(_suborbitalWarn, 11);
+        InterfaceTheme.ApplyLabel(_suborbitalWarn, 12);
         _suborbitalWarn.AddThemeColorOverride("font_color", FuelLowCol);
         _suborbitalWarn.HorizontalAlignment = HorizontalAlignment.Center;
         _suborbitalWarn.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -274,7 +276,7 @@ public partial class HUDController : Control
         center.OffsetLeft = -320;
         center.OffsetTop = 18;
         center.OffsetRight = 320;
-        center.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.42f, 8, 12, 6));
+        center.AddThemeStyleboxOverride("panel", InterfaceTheme.PanelStyle(0.62f, 12, 6));
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
 
@@ -291,7 +293,7 @@ public partial class HUDController : Control
 
         _phaseLabel = new Label { Text = "PRE-LAUNCH", Name = "PhaseTitleLabel" };
         _phaseLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyDisplay(_phaseLabel, 20);
+        InterfaceTheme.ApplyLabel(_phaseLabel, 22);
         _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(MissionPhase.PRE_LAUNCH));
         _phaseLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
         _phaseLabel.AddThemeConstantOverride("outline_size", 3);
@@ -299,7 +301,7 @@ public partial class HUDController : Control
 
         _launchPathLabel = new Label { Text = "" };
         _launchPathLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyBody(_launchPathLabel, 11);
+        InterfaceTheme.ApplyLabel(_launchPathLabel, 13);
         _launchPathLabel.AddThemeColorOverride("font_color", LabelDim);
         _launchPathLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _launchPathLabel.CustomMinimumSize = new Vector2(580, 0);
@@ -310,7 +312,7 @@ public partial class HUDController : Control
         _guidanceLabel = new Label { Text = "" };
         _guidanceLabel.HorizontalAlignment = HorizontalAlignment.Center;
         InterfaceTheme.ApplyMono(_guidanceLabel, 10);
-        _guidanceLabel.AddThemeColorOverride("font_color", InterfaceTheme.Orbital);
+        _guidanceLabel.AddThemeColorOverride("font_color", LabelDim);
         _guidanceLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _guidanceLabel.CustomMinimumSize = new Vector2(580, 0);
         vbox.AddChild(_guidanceLabel);
@@ -332,9 +334,8 @@ public partial class HUDController : Control
         foreach (FlightNavigationMode mode in System.Enum.GetValues<FlightNavigationMode>())
         {
             var label = new Label { Text = mode.ToString().ToUpperInvariant() };
-            label.AddThemeFontSizeOverride("font_size", 10);
-            label.AddThemeColorOverride("font_color", LabelDim);
-            InterfaceTheme.ApplyMono(label, 10);
+            label.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
+            InterfaceTheme.ApplyLabel(label, 10);
             nav.AddChild(label);
             _navLabels[mode] = label;
         }
@@ -350,7 +351,8 @@ public partial class HUDController : Control
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             Visible = false,
         };
-        _alertRoot.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.80f, 8, 12, 7));
+        _alertRoot.AddThemeStyleboxOverride(
+            "panel", InterfaceTheme.PanelStyle(0.94f, 12, 7, deep: true));
         var alertBox = new VBoxContainer { Name = "AlertRows" };
         alertBox.AddThemeConstantOverride("separation", 2);
         _alertRoot.AddChild(alertBox);
@@ -365,7 +367,7 @@ public partial class HUDController : Control
             MaxLinesVisible = 1,
             TextOverrunBehavior = TextServer.OverrunBehavior.TrimWordEllipsis,
         };
-        InterfaceTheme.ApplyBody(_alertLabel, 12, medium: true);
+        InterfaceTheme.ApplyLabel(_alertLabel, 14);
         alertBox.AddChild(_alertLabel);
 
         _alertAction = new Label
@@ -445,15 +447,18 @@ public partial class HUDController : Control
 
         var cap = new Label { Text = caption };
         cap.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyMono(cap, 13);
+        InterfaceTheme.ApplyLabel(cap, 13);
         cap.AddThemeColorOverride("font_color", LabelDim);
         cap.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.8f));
         cap.AddThemeConstantOverride("outline_size", 4);
         vbox.AddChild(cap);
 
+        // The band carries no panel, so the outline is what keeps a quiet white number
+        // readable over a bright horizon. Digits are monospaced so the value cannot
+        // wobble as it counts.
         var val = new Label { Text = value };
         val.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyDisplay(val, 34);
+        InterfaceTheme.ApplyMono(val, 34);
         val.AddThemeColorOverride("font_color", ValueBright);
         val.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
         val.AddThemeConstantOverride("outline_size", 6);
@@ -463,7 +468,7 @@ public partial class HUDController : Control
         {
             var u = new Label { Text = unit };
             u.HorizontalAlignment = HorizontalAlignment.Center;
-            InterfaceTheme.ApplyMono(u, 12);
+            InterfaceTheme.ApplyLabel(u, 12);
             u.AddThemeColorOverride("font_color", LabelDim);
             u.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.8f));
             u.AddThemeConstantOverride("outline_size", 3);
@@ -488,7 +493,7 @@ public partial class HUDController : Control
 
         _countdownLabel = new Label { Text = "" };
         _countdownLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyDisplay(_countdownLabel, 48);
+        InterfaceTheme.ApplyMono(_countdownLabel, 44);
         _countdownLabel.AddThemeColorOverride("font_color", WarnCol);
         _countdownLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.9f));
         _countdownLabel.AddThemeConstantOverride("outline_size", 7);
@@ -496,7 +501,7 @@ public partial class HUDController : Control
 
         _countdownMilestone = new Label { Text = "" };
         _countdownMilestone.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyBody(_countdownMilestone, 14, medium: true);
+        InterfaceTheme.ApplyLabel(_countdownMilestone, 15);
         _countdownMilestone.AddThemeColorOverride("font_color", LabelDim);
         _countdownMilestone.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
         _countdownMilestone.AddThemeConstantOverride("outline_size", 6);
@@ -521,7 +526,8 @@ public partial class HUDController : Control
         _padHelpRoot.OffsetTop = -280;
         _padHelpRoot.OffsetRight = 400;
         _padHelpRoot.OffsetBottom = 120;
-        _padHelpRoot.AddThemeStyleboxOverride("panel", InterfaceTheme.GlassPanel(0.86f, 14, 22, 18));
+        _padHelpRoot.AddThemeStyleboxOverride(
+            "panel", InterfaceTheme.PanelStyle(0.96f, 22, 18, deep: true));
         _padHelpRoot.MouseFilter = MouseFilterEnum.Stop;
         _padHelpRoot.ZIndex = 5;
         AddChild(_padHelpRoot);
@@ -532,7 +538,7 @@ public partial class HUDController : Control
 
         var title = new Label { Text = "MISSION CONTROLS" };
         title.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyDisplay(title, 22);
+        InterfaceTheme.ApplyLabel(title, 24);
         title.AddThemeColorOverride("font_color", ValueBright);
         vbox.AddChild(title);
 
@@ -629,9 +635,9 @@ public partial class HUDController : Control
         bool debug = false)
     {
         var head = new Label { Text = debug ? $"{heading} — NOT PART OF FLIGHT" : heading };
-        InterfaceTheme.ApplyMono(head, 9);
+        InterfaceTheme.ApplyLabel(head, 11);
         head.AddThemeColorOverride(
-            "font_color", debug ? InterfaceTheme.Warning : InterfaceTheme.Orbital);
+            "font_color", debug ? InterfaceTheme.Warning : InterfaceTheme.TextMuted);
         column.AddChild(head);
 
         foreach (var (key, action) in bindings)
@@ -655,7 +661,7 @@ public partial class HUDController : Control
                 Text = action,
                 SizeFlagsHorizontal = SizeFlags.ExpandFill,
             };
-            InterfaceTheme.ApplyBody(actionLabel, 11);
+            InterfaceTheme.ApplyLabel(actionLabel, 12);
             actionLabel.AddThemeColorOverride(
                 "font_color", debug ? InterfaceTheme.TextFaint : LabelDim);
             row.AddChild(actionLabel);
@@ -679,8 +685,7 @@ public partial class HUDController : Control
 
     private static PanelContainer MakePanel()
     {
-        var sb = InterfaceTheme.GlassPanel(0.66f, 8, 15, 12);
-        sb.BorderColor = new Color(InterfaceTheme.EdgeStrong, 0.28f);
+        var sb = InterfaceTheme.PanelStyle(0.88f, 14, 11);
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", sb);
         panel.CustomMinimumSize = new Vector2(278, 0);
@@ -688,18 +693,29 @@ public partial class HUDController : Control
         return panel;
     }
 
-    private static Label MakeHeader(string text)
+    /// <summary>Block heading: condensed caps over a hairline rule, no accent colour.</summary>
+    private static Control MakeHeader(string text)
     {
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 3);
+
         var lbl = new Label { Text = text };
-        InterfaceTheme.ApplyMono(lbl, 10);
-        lbl.AddThemeColorOverride("font_color", new Color(InterfaceTheme.Orbital, 0.82f));
-        return lbl;
+        InterfaceTheme.ApplyLabel(lbl, 12);
+        lbl.AddThemeColorOverride("font_color", LabelDim);
+        box.AddChild(lbl);
+        box.AddChild(new ColorRect
+        {
+            Color = InterfaceTheme.Edge,
+            CustomMinimumSize = new Vector2(0, 1),
+            MouseFilter = MouseFilterEnum.Ignore,
+        });
+        return box;
     }
 
     private static Label MakeGaugeLabel(string text)
     {
         var lbl = new Label { Text = text };
-        InterfaceTheme.ApplyBody(lbl, 11);
+        InterfaceTheme.ApplyLabel(lbl, 11);
         lbl.AddThemeColorOverride("font_color", LabelDim);
         return lbl;
     }
@@ -710,7 +726,7 @@ public partial class HUDController : Control
         row.AddThemeConstantOverride("separation", 8);
 
         var cap = new Label { Text = caption };
-        InterfaceTheme.ApplyBody(cap, 11);
+        InterfaceTheme.ApplyLabel(cap, 12);
         cap.AddThemeColorOverride("font_color", LabelDim);
         cap.CustomMinimumSize = new Vector2(118, 0);
         row.AddChild(cap);
@@ -856,29 +872,35 @@ public partial class HUDController : Control
         _qValue.Text = $"{snapshot.DynamicPressurePa / 1000.0:F1} kPa";
         _pitchValue.Text = snapshot.SurfaceSpeedMps > 0.5
             ? $"{snapshot.FlightPathAngleDeg:F0}°"
-            : "---";
+            : "—";
         _hdgValue.Text = snapshot.SurfaceSpeedMps > 0.5
             ? $"{snapshot.HeadingDeg:F0}°"
-            : "---";
+            : "—";
         _downrangeValue.Text = snapshot.HasDownrangeReference
             ? FormatDistance(snapshot.DownrangeM)
-            : "---";
+            : "—";
 
         if (mission?.Phase == MissionPhase.MAX_Q)
         {
-            _maxqFlag.Text = "◆ MAX-Q ◆";
+            _maxqFlag.Text = "MAX-Q";
+            _maxqFlag.AddThemeColorOverride("font_color", WarnCol);
             _maxqSeen = true;
         }
-        else if (_maxqSeen) _maxqFlag.Text = "max-q passed";
+        else if (_maxqSeen)
+        {
+            // A milestone the vehicle has cleared: the one place a pale green belongs.
+            _maxqFlag.Text = "MAX-Q PASSED";
+            _maxqFlag.AddThemeColorOverride("font_color", InterfaceTheme.Success);
+        }
         else _maxqFlag.Text = "";
 
         _massValue.Text = $"{snapshot.TotalMassKg / 1000.0:F1} t";
         _dvValue.Text = snapshot.StageDeltaVMps > 0.0
             ? $"{snapshot.StageDeltaVMps:N0} m/s"
-            : "---";
+            : "—";
         _apValue.Text = snapshot.ApoapsisAltitudeM is { } apoapsis
             ? FormatDistance(apoapsis)
-            : "---";
+            : "—";
         if (snapshot.IsImpactTrajectory)
         {
             _peValue.Text = "IMPACT";
@@ -888,7 +910,7 @@ public partial class HUDController : Control
         {
             _peValue.Text = snapshot.PeriapsisAltitudeM is { } periapsis
                 ? FormatDistance(periapsis)
-                : "---";
+                : "—";
             _peValue.AddThemeColorOverride("font_color", ValueBright);
         }
         _suborbitalWarn.Text = snapshot.Alerts.Any(a => a.Code == "TRAJECTORY")
@@ -1008,7 +1030,7 @@ public partial class HUDController : Control
             foreach (var (mode, label) in _navLabels)
             {
                 bool active = mode == snapshot.NavigationMode;
-                label.AddThemeColorOverride("font_color", active ? InterfaceTheme.Orbital : LabelDim);
+                label.AddThemeColorOverride("font_color", active ? ValueBright : InterfaceTheme.TextFaint);
                 label.AddThemeFontSizeOverride("font_size", active ? 11 : 10);
             }
             _lastRenderedNavigationMode = snapshot.NavigationMode;
@@ -1030,7 +1052,7 @@ public partial class HUDController : Control
         _alertLabel.AddThemeColorOverride(
             "font_color",
             alert.Severity == FlightAlertSeverity.Critical ? FuelLowCol
-                : alert.Severity == FlightAlertSeverity.Advisory ? InterfaceTheme.Orbital : WarnCol);
+                : alert.Severity == FlightAlertSeverity.Advisory ? ValueBright : WarnCol);
         _alertAction.Text =
             $"{alert.Value} / LIMIT {alert.Limit}  ·  ACTION: {alert.RecommendedAction}{acknowledgement}";
     }
@@ -1109,6 +1131,7 @@ public partial class HUDController : Control
         _engineGrid.Visible = cluster;
         _attitudeStrip.Visible = cluster;
         _engineGrid.ApplyDensityLayout();
+        _attitudeStrip.ApplyDensityLayout();
     }
 
     private bool HasCriticalAlert() =>

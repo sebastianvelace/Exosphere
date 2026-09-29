@@ -2106,7 +2106,7 @@ public partial class VesselRenderer : Node3D
         _engineCatalogLoadAttempted = true;
         try
         {
-            string data = ProjectSettings.GlobalizePath("res://data");
+            string data = GameDataPath.Resolve();
             var provenance = DataProvenanceRegistry.LoadFromDirectory(
                 System.IO.Path.Combine(data, "provenance"));
             _engineCatalog = EngineDefinitionCatalog.Load(

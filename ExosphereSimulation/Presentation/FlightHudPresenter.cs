@@ -51,6 +51,13 @@ public sealed record FlightHudSnapshot
     public required double VerticalSpeedMps { get; init; }
     public required double ProperAccelerationG { get; init; }
     public required double DynamicPressurePa { get; init; }
+    /// <summary>Entry quantities sampled from <see cref="EntryFlightDiagnostics"/>. Any of
+    /// these is NaN where the quantity is undefined (vacuum, zero lift, near-radial flight);
+    /// the HUD must render that as a dash and never as a zero.</summary>
+    public required double MachNumber { get; init; }
+    public required double AngleOfAttackDeg { get; init; }
+    public required double AerodynamicBankDeg { get; init; }
+    public required double StagnationHeatFluxWPerM2 { get; init; }
     public required double FlightPathAngleDeg { get; init; }
     public required double HeadingDeg { get; init; }
     public required double VehiclePitchDeg { get; init; }
@@ -123,6 +130,10 @@ public sealed class FlightHudPresenter
         double gNow = vessel.GetProperAcceleration(body).Magnitude / StandardGravity;
         _smoothedG += (gNow - _smoothedG) * 0.2;
         double dynamicPressure = vessel.GetDynamicPressure(body);
+        // One non-mutating entry sample per capture. Mach, angle of attack, aerodynamic bank
+        // and stagnation heat flux come from the same diagnostics the entry tests audit, so
+        // the HUD never carries a second aerodynamic formula of its own.
+        var entry = EntryFlightDiagnostics.Evaluate(vessel, body);
 
         (double flightPathAngle, double heading) =
             ResolveVelocityAngles(surfaceVelocity, up, body.RotationAxis);
@@ -244,6 +255,10 @@ public sealed class FlightHudPresenter
             VerticalSpeedMps = verticalSpeed,
             ProperAccelerationG = _smoothedG,
             DynamicPressurePa = dynamicPressure,
+            MachNumber = entry.Mach,
+            AngleOfAttackDeg = entry.AngleOfAttackDegrees,
+            AerodynamicBankDeg = entry.BankAngleDegrees,
+            StagnationHeatFluxWPerM2 = entry.StagnationHeatFluxWPerM2,
             FlightPathAngleDeg = flightPathAngle,
             HeadingDeg = heading,
             VehiclePitchDeg = vehiclePitch,

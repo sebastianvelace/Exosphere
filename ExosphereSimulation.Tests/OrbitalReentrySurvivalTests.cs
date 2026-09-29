@@ -169,10 +169,10 @@ public sealed class OrbitalReentrySurvivalTests
             var targetAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(currentUp, flow);
             filteredAxis = filteredAxis.MagnitudeSquared < 1e-12
                 ? targetAxis
-                : AttitudeGuidance.SmoothDirection(filteredAxis, targetAxis, Dt, 0.35);
+                : AttitudeGuidance.SmoothDirection(filteredAxis, targetAxis, controlDt, 0.35);
             filteredFlow = filteredFlow.MagnitudeSquared < 1e-12
                 ? flow
-                : AttitudeGuidance.SmoothDirection(filteredFlow, flow, Dt, 0.35);
+                : AttitudeGuidance.SmoothDirection(filteredFlow, flow, controlDt, 0.35);
             var targetAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
                 filteredAxis, filteredFlow);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
@@ -226,6 +226,9 @@ public sealed class OrbitalReentrySurvivalTests
         double minimumWindward = 1.0;
         double minimumAltitude = EntryAltitude;
         double finalSpeed = EntrySpeed;
+        double initialSpecificEnergy = EntryFlightDiagnostics.Evaluate(vessel, earth)
+            .PointMassSpecificOrbitalEnergyJPerKg;
+        double finalSpecificEnergy = initialSpecificEnergy;
         const double controlDt = 0.02;
         int steps = (int)System.Math.Ceiling(MaxDuration / controlDt);
         for (int i = 0; i < steps; i++)
@@ -251,6 +254,7 @@ public sealed class OrbitalReentrySurvivalTests
             peakLoadG = System.Math.Max(peakLoadG, state.AerodynamicLoadG);
             minimumAltitude = System.Math.Min(minimumAltitude, state.AltitudeM);
             finalSpeed = state.AtmosphereRelativeSpeedMps;
+            finalSpecificEnergy = state.PointMassSpecificOrbitalEnergyJPerKg;
             if (state.AtmosphereRelativeSpeedMps > 1.0)
             {
                 var flowLocal = vessel.Orientation.Inverse().Rotate(
@@ -275,6 +279,9 @@ public sealed class OrbitalReentrySurvivalTests
             + $"finalSpeed={finalSpeed:F0} m/s, minWindward={minimumWindward:F3}");
         Assert.True(finalSpeed < 2_000.0,
             $"entry must dissipate orbital energy before 30 km, final speed={finalSpeed:F0} m/s");
+        Assert.True(finalSpecificEnergy < initialSpecificEnergy - 5.0e6,
+            "point-mass specific energy must fall by drag work, not by an airspeed proxy alone: "
+            + $"initial={initialSpecificEnergy:F0} J/kg final={finalSpecificEnergy:F0} J/kg");
         Assert.True(minimumWindward > 0.65,
             $"physical controller lost the TPS side during full entry, minimum={minimumWindward:F3}");
     }
