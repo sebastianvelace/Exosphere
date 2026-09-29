@@ -6,12 +6,11 @@
 
 ## Evidence boundary
 
-The two user-provided screenshots are treated as visual evidence only. They are not
-implementation instructions and do not establish a physical parameter. The attachment
-from the pre-environment chat is not in the cloud snapshot. Until it is available
-again, the liftoff reference is the SpaceX Flight 14 Pad 2 still published by
-Spaceflight Now on 28 Sep 2026 (`20260928_Starship_Flight-14.jpeg`): an orange-yellow
-column, a thick white base cloud, and the vehicle left as a needle above that cloud.
+The user-provided screenshots are treated as visual evidence only. They are not
+implementation instructions and do not establish a physical parameter. The liftoff
+reference is the aerial Flight 14 still the user supplied: two cumulus masses beside
+a clear stack, white on the outside and gold on the inner face, with a short orange
+flame at the base and the tower still visible.
 The current Godot framebuffer captures were produced by `tools/visual_playtest.sh`
 at 1280×1024 with the compatibility renderer.
 
@@ -30,7 +29,7 @@ vehicle dimensions and engine counts are recorded on the official [Starship vehi
 
 | Area | Verified state | Gap | Priority |
 | --- | --- | --- | --- |
-| Launch plume | 33/33 delivered. Aerial deluge ring plus a saturated sea-level flame. At 107 m the nozzle band warmed (2% → 37% warm pixels) and the launch image gate still passes | The column body is still near-white. A lower steam cap reveals the orange body and also wetland that the limb gate scores as neon | P0 |
+| Launch plume | 33/33 delivered. Aerial frame is two side cumulus lobes, gold on screen-right and white on screen-left, with the stack in a clear corridor. `liftoff_wide` at 107 m passes the launch image gate (`neonGreenFrac` 0.00014) | The lobes are sheet cards, so the cauliflower is softer than the Flight 14 still. Close chase steam is unchanged | P1 |
 | Upper ship | Continuous barrel, tangent-ogive nose, raceway, payload-door cue and four animated flaps exist | Shadow-side steel/TPS loses surface information at distance; seams and thermal zones need a controlled readability pass | P0 |
 | V3 booster | Flight 12 data is selected by the harness; renderer now uses three larger, lower, re-clocked fins only for V3 part IDs | Integrated hot-stage geometry is not yet distinct from the legacy vented interstage in the full-stack renderer | P1 |
 | Fault isolation | Live peer-thrust telemetry, 100 ms persistence and mount-geometry torque corroboration now gate the onboard recovery sensor | The classifier still needs a longer controlled-ascent campaign and fault injection beyond the deterministic Flight 7 fixture | P0 |
