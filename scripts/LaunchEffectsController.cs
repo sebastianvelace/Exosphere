@@ -429,18 +429,27 @@ public partial class LaunchEffectsController : Node3D
         const float quadWidth = 72f;
         const float quadHeight = 34f;
         int count = mesh.InstanceCount;
-        int roots = Mathf.Min(8, count);
+        int skirts = Mathf.Min(6, count);
+        int roots = Mathf.Min(8, Mathf.Max(0, count - skirts));
         for (int i = 0; i < count; i++)
         {
             float phase = Mathf.PosMod(i * 0.618034f, 1f);
             int side = (i % 2 == 0) ? 1 : -1;
+            bool skirt = i >= count - skirts;
             bool root = i < roots;
             // Inner edge of the tall cards stays outside the stack. The quad
             // is wide, so the centre has to sit well out or it paints the ship.
-            float along = side * (root ? 40f + phase * 14f : 112f + phase * 64f) * spread;
-            float fore = ((i % 7) - 3) * (root ? 7f : 14f);
-            float width = root ? 46f + phase * 14f : 96f + phase * 28f;
-            float height = root ? 18f + phase * 8f : 64f + phase * 42f;
+            // The skirt is a low far-side sheet: it fills the horizon gap the
+            // corridor leaves, which otherwise shows wetland the launch gate
+            // scores as neon, without climbing the vehicle.
+            float along = skirt
+                ? (i - (count - skirts) - (skirts - 1) * 0.5f) * 36f
+                : side * (root ? 40f + phase * 14f : 112f + phase * 64f) * spread;
+            float fore = skirt
+                ? -70f - phase * 24f
+                : ((i % 7) - 3) * (root ? 7f : 14f);
+            float width = skirt ? 150f : root ? 46f + phase * 14f : 96f + phase * 28f;
+            float height = skirt ? 34f + phase * 8f : root ? 18f + phase * 8f : 64f + phase * 42f;
             float y = 2f + height * 0.5f + Mathf.Sin(age * 0.22f + i) * (root ? 0.3f : 1.4f);
             Vector3 outward = lateral * side;
             Vector3 cardZ = towardCamera;
@@ -455,10 +464,12 @@ public partial class LaunchEffectsController : Node3D
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
 
             // Screen-right lobe is the flame-lit gold mass. Outer faces stay white.
-            float warm = root
-                ? (side > 0 ? 0.92f : 0.55f)
-                : (side > 0 ? 0.62f : 0.16f) * (1f - phase * 0.55f);
-            float alpha = (root ? 0.90f : Mathf.Lerp(0.92f, 0.76f, phase)) * weight;
+            float warm = skirt
+                ? 0.22f
+                : root
+                    ? (side > 0 ? 0.92f : 0.55f)
+                    : (side > 0 ? 0.62f : 0.16f) * (1f - phase * 0.55f);
+            float alpha = (skirt ? 0.94f : root ? 0.90f : Mathf.Lerp(0.92f, 0.76f, phase)) * weight;
             mesh.SetInstanceColor(i, new Color(
                 1f,
                 Mathf.Lerp(0.98f, 0.56f, warm),
