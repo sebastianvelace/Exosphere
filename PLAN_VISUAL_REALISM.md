@@ -64,13 +64,11 @@ aceptacion explicito.
 
 Referencias iniciales a consultar antes de implementar:
 - SpaceX Starship official: https://www.spacex.com/vehicles/starship/
-- Liftoff: Starship Flight 14, Pad 2, Starbase, 28 sep 2026, 7:48 a.m. CT.
-  Still de SpaceX publicado por Spaceflight Now
-  (`20260928_Starship_Flight-14.jpeg`): columna naranja-amarilla, nube blanca
-  densa en la base, el vehículo queda como una aguja por encima. Es evidencia
-  visual, no un parámetro físico. La foto que el usuario adjuntó antes de
-  crear el entorno no está en la snapshot; este still público es la referencia
-  hasta que esa foto vuelva a estar disponible.
+- Liftoff: la foto del usuario del vuelo 14 (Pad 2, vista aérea). Dos masas
+  de cúmulo a izquierda y derecha, más altas que el booster, blancas por
+  fuera y doradas/naranjas en la cara interna; la nave queda en un corredor
+  despejado con una llama naranja corta en la base y la torre visible.
+  Es evidencia visual, no un parámetro físico.
 - SpaceX flight webcasts / update pages de Starship Flight 4-6 siguen siendo
   la referencia de Max-Q, hot-staging, boostback, reentry y splashdown.
 - NASA / Artemis / HLS para variantes futuras y diferencias visuales: HLS no es
@@ -84,7 +82,7 @@ Matriz de busqueda y aceptacion:
 | Fase | Referencia real | Captura actual | Diferencia observable | Archivo dueño | Criterio de aceptacion |
 | --- | --- | --- | --- | --- | --- |
 | Pad lateral | Starship/Super Heavy en Starbase, vista lateral diurna | `/tmp/exosphere_pad_*.png` | Silueta, proporcion nariz/flaps/grid fins, brillo acero, escala del OLM | `VesselRenderer.cs`, `LaunchPadController.cs`, `CameraController.cs` | Stack 9 m / ~121 m reconocible; detalles legibles sin ruido ni plastico blanco |
-| Liftoff | Flight 14 Pad 2, columna naranja y deluge blanco | `/tmp/exosphere_liftoff_*.png` | Columna pálida y estrecha frente a la columna naranja ancha; vapor beige frente al muro blanco | `PlumeSystem.cs`, `raptor_plume.gdshader`, `LaunchEffectsController.cs` | Columna naranja más ancha que la falda, vapor blanco horizontal, nave no oculta, HUD legible, sin subir exposición global |
+| Liftoff | Flight 14, dos cúmulos laterales y llama en el hueco | `/tmp/exosphere_liftoff_*.png` | Montículo bajo y columna pálida frente a masas laterales blanca/dorada | `PlumeSystem.cs`, `raptor_plume.gdshader`, `LaunchEffectsController.cs` | Corredor despejado, llama naranja en la base, cúmulos laterales, nave y HUD legibles |
 | Startup/ramp | Engine chill/startup T-3s a liftoff | `/tmp/exosphere_startup_*.png` | Preburn, flare progresivo, anillos encendiendo, vapor antes de release | `PlumeSystem.cs`, `LaunchEffectsController.cs`, `SimulationBridge.cs` solo si hace falta exponer estado | Secuencia no salta de apagado a full plume; hay progreso visual durante hold-down |
 | Hot-staging | IFT hot-stage frames T+2:39/T+2:40 | `/tmp/exosphere_hotstage_*.png` | Flash/plume entre etapas, soot ring, separacion Ship/Booster | `HotStageFlashController.cs`, `VesselRenderer.cs`, `PlumeSystem.cs` | Un frame estatico permite entender que Starship encendio antes de separarse |
 | Orbit burn | Upper-stage / Raptor vacuum plume references | `/tmp/exosphere_orbit_*.png` | Pluma larga, azul/blanca, opticamente delgada, sin humo denso | `PlumeSystem.cs`, `raptor_plume.gdshader` | Vac plume visible contra Tierra sin parecer pluma SL |

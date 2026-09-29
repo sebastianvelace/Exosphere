@@ -13,9 +13,10 @@ using Exosphere.Simulation.Math;
 ///
 /// This is purely the ground cloud; the engine flame itself is owned by
 /// <c>PlumeSystem</c>. The close layers stay sized for the gameplay chase
-/// camera. A second bank of large cards supplies the kilometre-scale deluge
-/// seen from the aerial liftoff frame, and fades out inside chase range so
-/// that view does not collapse into white balls. We anchor the cloud to the
+/// camera. The aerial bank is two cumulus lobes left and right of a clear
+/// stack corridor, white on the outside and gold toward the flame, matching
+/// the Flight 14 Pad 2 still. It fades out inside chase range so that view
+/// does not collapse into white balls. We anchor the cloud to the
 /// ground point directly under the vessel. Because the active vessel sits at the render origin and the
 /// floating-origin scheme keeps it there, the ground recedes downward as the
 /// rocket climbs: we place the emitters at <c>-up * (altitude / MetresPerUnit)</c>
@@ -94,7 +95,9 @@ public partial class LaunchEffectsController : Node3D
         // Sheets are oriented in the pad frame. A billboard here stood the
         // cloud up into the hazy sky and it disappeared. The core stays a
         // camera-facing trench glow.
-        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.55f, new Vector2(72f, 34f), billboard: false);
+        // Low emission so the gold/white vertex colours survive. A bright
+        // emission multiplier clipped both lobes back to the same white.
+        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.18f, new Vector2(72f, 34f), billboard: false);
         _wideCore = BuildWideBank("WideDelugeCore", WideCoreCount, 0.85f, new Vector2(22f, 14f), billboard: true);
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
@@ -347,7 +350,7 @@ public partial class LaunchEffectsController : Node3D
     // without ever covering the pad camera.
     private const float WideCameraStartDistance = 200f;
     private const float WideCameraFullDistance = 360f;
-    private const int WideSheetCount = 24;
+    private const int WideSheetCount = 36;
     private const int WideCoreCount = 6;
 
     private void DriveWideCloud(float intensity, float age)
@@ -381,69 +384,85 @@ public partial class LaunchEffectsController : Node3D
         if (!show)
             return;
 
-        float spread = Mathf.Lerp(0.72f, 1.22f, Mathf.Clamp(age / 8f, 0f, 1f));
-        // Mound stays on the pad. Chasing altitude covered the orange column;
-        // a shorter cap uncovered green wetland in the liftoff limb band and
-        // the launch image gate reads that as neon airglow.
-        float topCap = Mathf.Lerp(20f, 36f, Mathf.Clamp(age / 6f, 0f, 1f));
-        PoseWideSheets(_wideLobes, spread, weight, age, topCap);
+        float spread = Mathf.Lerp(0.85f, 1.15f, Mathf.Clamp(age / 8f, 0f, 1f));
+        // Flight 14's still is two cumulus masses left and right of a clear
+        // stack. Orient them to this camera so the corridor stays open.
+        Vector3 lateral = Vector3.Right;
+        Vector3 towardCamera = Vector3.Back;
+        if (camera != null && GodotObject.IsInstanceValid(camera))
+        {
+            Basis pivot = _pivot.GlobalTransform.Basis;
+            lateral = pivot.Inverse() * camera.GlobalTransform.Basis.X;
+            lateral.Y = 0f;
+            towardCamera = pivot.Inverse() * (camera.GlobalPosition - _pivot.GlobalPosition);
+            towardCamera.Y = 0f;
+        }
+        PoseWideSheets(_wideLobes, spread, weight, age, lateral, towardCamera);
         PoseWideCore(_wideCore, spread, weight, age);
     }
 
     /// <summary>
-    /// Full ring of overlapping sheets around the pad. A pair of side lobes
-    /// tracked one camera yaw and vanished into the sky haze from the aerial
-    /// liftoff frame. Tops stay under the climbing stack.
+    /// Two cumulus lobes beside the stack, matching the Flight 14 aerial still:
+    /// a clear corridor for the vehicle and the flame, white outer cauliflower,
+    /// and a gold inner face on the screen-right mass. Short golden roots sit
+    /// next to the trench without climbing the booster.
     /// </summary>
     private static void PoseWideSheets(
-        MultiMeshInstance3D bank, float spread, float weight, float age, float topCap)
+        MultiMeshInstance3D bank, float spread, float weight, float age,
+        Vector3 lateral, Vector3 towardCamera)
     {
         MultiMesh? mesh = bank.Multimesh;
         if (mesh == null)
             return;
 
+        lateral.Y = 0f;
+        if (lateral.LengthSquared() < 1e-4f)
+            lateral = Vector3.Right;
+        else
+            lateral = lateral.Normalized();
+        towardCamera.Y = 0f;
+        if (towardCamera.LengthSquared() < 1e-4f)
+            towardCamera = new Vector3(-lateral.Z, 0f, lateral.X);
+        else
+            towardCamera = towardCamera.Normalized();
+
         const float quadWidth = 72f;
         const float quadHeight = 34f;
-        for (int i = 0; i < mesh.InstanceCount; i++)
+        int count = mesh.InstanceCount;
+        int roots = Mathf.Min(8, count);
+        for (int i = 0; i < count; i++)
         {
             float phase = Mathf.PosMod(i * 0.618034f, 1f);
-            float angle = i * 2.399963f;
-            float radial01 = (i % 6) / 5f;
-            // Hundreds of metres across. The previous 80 m sheets were a
-            // light veil on the wetland and did not read as deluge.
-            float radius = (26f + radial01 * 92f) * spread;
-            float width = (130f + phase * 70f) * Mathf.Lerp(0.95f, 1.12f, radial01);
-            float height = 42f + phase * 16f;
-            // Keep the whole card above the pad deck so the ground mesh
-            // does not depth-clip it into a thin puff.
-            float y = 4f + height * 0.46f + Mathf.Sin(age * 0.35f + angle) * 1.6f;
-            float top = y + height * 0.5f;
-            if (top > topCap)
-            {
-                y -= top - topCap;
-                if (y - height * 0.5f < 2f)
-                {
-                    height = Mathf.Max(18f, topCap - 2f);
-                    y = 2f + height * 0.5f;
-                }
-            }
-            Vector3 radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-            // Mostly upright, leaned just enough that the near face is
-            // visible from the 15° aerial liftoff camera.
-            Vector3 cardUp = (Vector3.Up * 0.90f + radial * 0.28f).Normalized();
-            Vector3 cardX = cardUp.Cross(radial).Normalized();
-            Vector3 cardZ = cardX.Cross(cardUp).Normalized();
+            int side = (i % 2 == 0) ? 1 : -1;
+            bool root = i < roots;
+            // Inner edge of the tall cards stays outside the stack. The quad
+            // is wide, so the centre has to sit well out or it paints the ship.
+            float along = side * (root ? 40f + phase * 14f : 112f + phase * 64f) * spread;
+            float fore = ((i % 7) - 3) * (root ? 7f : 14f);
+            float width = root ? 46f + phase * 14f : 96f + phase * 28f;
+            float height = root ? 18f + phase * 8f : 64f + phase * 42f;
+            float y = 2f + height * 0.5f + Mathf.Sin(age * 0.22f + i) * (root ? 0.3f : 1.4f);
+            Vector3 outward = lateral * side;
+            Vector3 cardZ = towardCamera;
+            Vector3 cardUp = (Vector3.Up * (root ? 0.62f : 0.88f) + outward * (root ? 0.42f : 0.18f)).Normalized();
+            Vector3 cardX = cardUp.Cross(cardZ).Normalized();
+            if (cardX.LengthSquared() < 1e-4f)
+                cardX = outward;
+            cardUp = cardZ.Cross(cardX).Normalized();
             var basis = new Basis(cardX, cardUp, cardZ).Scaled(
                 new Vector3(width / quadWidth, height / quadHeight, 1f));
-            var origin = radial * radius + Vector3.Up * y;
+            var origin = lateral * along + towardCamera * fore + Vector3.Up * y;
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
-            float tone = Mathf.Lerp(1f, 0.90f, radial01);
-            float alpha = Mathf.Lerp(0.96f, 0.70f, radial01) * weight;
-            // Outer ring picks up pad dust so the edge is not a white cutout.
+
+            // Screen-right lobe is the flame-lit gold mass. Outer faces stay white.
+            float warm = root
+                ? (side > 0 ? 0.92f : 0.55f)
+                : (side > 0 ? 0.62f : 0.16f) * (1f - phase * 0.55f);
+            float alpha = (root ? 0.90f : Mathf.Lerp(0.92f, 0.76f, phase)) * weight;
             mesh.SetInstanceColor(i, new Color(
-                tone,
-                tone * Mathf.Lerp(0.99f, 0.94f, radial01),
-                tone * Mathf.Lerp(0.96f, 0.86f, radial01),
+                1f,
+                Mathf.Lerp(0.98f, 0.56f, warm),
+                Mathf.Lerp(0.95f, 0.24f, warm),
                 alpha));
         }
     }
@@ -508,7 +527,7 @@ public partial class LaunchEffectsController : Node3D
             Multimesh = mesh,
             Visible = false,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            CustomAabb = new Aabb(new Vector3(-460f, -8f, -460f), new Vector3(920f, 180f, 920f)),
+            CustomAabb = new Aabb(new Vector3(-520f, -8f, -520f), new Vector3(1040f, 260f, 1040f)),
         };
     }
 
