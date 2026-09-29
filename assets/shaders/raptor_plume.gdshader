@@ -182,19 +182,19 @@ void fragment() {
 		+ 0.15 * noise1(TIME * 40.0 + a * 30.0)
 		+ 0.08 * sin(TIME * 90.0 + r * 20.0);
 
-	// ── Compose colour. Hot near-white incandescent base at the throat (with a
-	// faint orange root), cooling to the blue-white core down the axis. The hot
-	// base is strongest at sea level (over-expanded), nearly gone in vacuum. ──
+	// ── Compose colour. Sea level is a saturated orange flame whose axis clips
+	// yellow-white. Vacuum cools back to the pale blue-white core. ──
 	vec3 whiteHot = vec3(1.0);
 	// White at the throat → blue-white core downstream.
 	vec3 col = mix(whiteHot, core_color, smoothstep(0.0, 0.45, a));
-	// Daylight liftoff column: white-hot axis, orange skin through the short
-	// sea-level plume. Vacuum collapses both the reach and the mix.
-	float hotReach = mix(0.62, 0.16, effExpansion);
+	// Daylight liftoff column. A pastel tint clips to white under the sea-level
+	// energy, so the flame is saturated: the axis still blows out yellow-white
+	// and the shoulders stay orange. Vacuum kills the mix.
+	float hotReach = mix(0.70, 0.14, effExpansion);
 	float hotBase = (1.0 - smoothstep(0.0, hotReach, a))
-		* (1.0 - effExpansion * 0.85) * afterburn_strength;
-	float skin = smoothstep(0.08, 0.55, coreR);
-	col = mix(col, edge_color, hotBase * mix(0.22, 0.78, skin));
+		* (1.0 - effExpansion) * afterburn_strength;
+	vec3 flame = vec3(1.0, 0.28, 0.05);
+	col = mix(col, flame, hotBase);
 	// Keep the outer sheath pale. Any warm pad interaction dies quickly away from
 	// the nozzle instead of turning the whole methalox envelope orange.
 	float padWarm = smoothstep(0.0, 0.16, 1.0 - a) * pad_interaction
