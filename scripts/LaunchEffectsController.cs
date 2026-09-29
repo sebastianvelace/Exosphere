@@ -382,9 +382,10 @@ public partial class LaunchEffectsController : Node3D
             return;
 
         float spread = Mathf.Lerp(0.72f, 1.22f, Mathf.Clamp(age / 8f, 0f, 1f));
-        // Fixed mound on the pad, about 40–70 m. Letting the cap chase
-        // altitude painted the white sheets over the orange column.
-        float topCap = Mathf.Lerp(14f, 24f, Mathf.Clamp(age / 6f, 0f, 1f));
+        // Mound stays on the pad. Chasing altitude covered the orange column;
+        // a shorter cap uncovered green wetland in the liftoff limb band and
+        // the launch image gate reads that as neon airglow.
+        float topCap = Mathf.Lerp(20f, 36f, Mathf.Clamp(age / 6f, 0f, 1f));
         PoseWideSheets(_wideLobes, spread, weight, age, topCap);
         PoseWideCore(_wideCore, spread, weight, age);
     }
