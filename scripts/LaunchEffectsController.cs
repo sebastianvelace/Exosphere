@@ -471,13 +471,25 @@ public partial class LaunchEffectsController : Node3D
             }
             else
             {
-                // Clumps share a travel phase. A growing circumferential wave
-                // keeps successive radii from lining up into a ray — the
-                // Flight 14 stills are rolling heads, not spokes.
+                // Outer heads push out at full speed. Body cards linger in
+                // the mid-band so T+10..T+18 reads as one continuous wall,
+                // not seven sparse spokes.
                 int lobe = (i / 2) % lobesPerSide;
                 float lobeSeed = PuffHash(lobe * 19 + (side > 0 ? 7 : 3));
+                bool isHead = (i % 5) == 0;
                 float lobeSpeed = 0.065f + lobeSeed * 0.035f;
-                float t = Mathf.PosMod(lobeSeed * 0.85f + age * lobeSpeed, 1f);
+                float t;
+                if (isHead)
+                {
+                    t = Mathf.PosMod(lobeSeed * 0.85f + age * lobeSpeed, 1f);
+                }
+                else
+                {
+                    // Compress travel into the mid-field and stagger within
+                    // the lobe so the bank stays full while heads roll out.
+                    float body = Mathf.PosMod(lobeSeed * 0.55f + v * 0.35f + age * lobeSpeed * 0.55f, 1f);
+                    t = Mathf.Lerp(0.12f, 0.72f, body);
+                }
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
                 float out01 = Mathf.Pow(t, 0.55f);
                 float up01 = Mathf.Pow(Mathf.Clamp((t - 0.68f) / 0.32f, 0f, 1f), 1.05f);
@@ -485,13 +497,15 @@ public partial class LaunchEffectsController : Node3D
 
                 float lobeCenter = (lobe + 0.5f) / lobesPerSide;
                 float fan = side > 0
-                    ? Mathf.Lerp(-0.25f, 0.95f, lobeCenter)
-                    : Mathf.Lerp(-0.95f, 0.30f, lobeCenter);
+                    ? Mathf.Lerp(-0.30f, 1.00f, lobeCenter)
+                    : Mathf.Lerp(-1.00f, 0.35f, lobeCenter);
+                // Body cards widen the fan so gaps between heads fill in.
+                if (!isHead)
+                    fan += (w - 0.5f) * 0.28f;
                 float curl = side * (0.40f + 0.45f * lobeSeed) * t * t;
-                // Two-frequency wander so the path is not a circular arc either.
                 float meander = Mathf.Sin(age * (0.38f + lobeSeed * 0.45f) + lobe * 1.7f)
                         * (0.12f + 0.30f * t)
-                    + Mathf.Sin(age * (1.1f + h) + w * 4f) * 0.10f * t;
+                    + Mathf.Sin(age * (1.1f + h) + w * 4f) * 0.12f * t;
                 float ang = fan + curl + meander;
 
                 Vector3 heading = (lateral * side * Mathf.Cos(ang)
@@ -502,30 +516,27 @@ public partial class LaunchEffectsController : Node3D
                 else
                     sideway = sideway.Normalized();
 
-                float radius = Mathf.Lerp(16f, 200f, out01) * spread;
-                spine = Mathf.Lerp(3f, 70f, up01);
-                // Circumferential wave grows with radius — breaks colinearity
-                // with the pad without changing how fast the bank expands.
+                float radius = Mathf.Lerp(16f, isHead ? 205f : 150f, out01) * spread;
+                spine = Mathf.Lerp(3f, isHead ? 74f : 48f, up01);
                 float wave = Mathf.Sin(t * Mathf.Tau * (1.2f + lobeSeed) + age * 0.7f + lobe)
-                    * radius * (0.18f + 0.16f * boil);
+                    * radius * (0.20f + 0.18f * boil);
                 float swirl = Mathf.Sin(age * (0.9f + lobeSeed * 0.7f) + lobe * 2.3f)
                     * (8f + 24f * boil);
                 float churn = Mathf.Sin(age * (0.75f + lobeSeed * 0.6f) + lobe);
                 spine += churn * (2f + 10f * boil);
                 radius += Mathf.Sin(age * 0.5f + lobeSeed * 5f) * (2f + 8f * boil);
 
-                float localR = (h - 0.5f) * Mathf.Lerp(8f, 28f, out01);
-                float localS = (w - 0.5f) * Mathf.Lerp(10f, 34f, out01);
-                float localY = (u - 0.5f) * Mathf.Lerp(4f, 20f, Mathf.Max(out01, up01));
+                float localR = (h - 0.5f) * Mathf.Lerp(10f, 32f, out01);
+                float localS = (w - 0.5f) * Mathf.Lerp(12f, 40f, out01);
+                float localY = (u - 0.5f) * Mathf.Lerp(4f, 22f, Mathf.Max(out01, up01));
                 float depthBias = side > 0 ? 24f : -10f;
 
                 origin = heading * (radius + localR)
                     + sideway * (swirl + wave + localS)
                     + towardCamera * depthBias
                     + Vector3.Up * (2f + Mathf.Max(spine + localY, 1f));
-                // Keep a clear stack corridor — the Flight 14 needle slot.
                 float latAmt = origin.Dot(lateral);
-                const float corridor = 38f;
+                const float corridor = 40f;
                 if (Mathf.Abs(latAmt) < corridor)
                 {
                     float push = (latAmt >= 0f ? 1f : -1f) * (corridor - Mathf.Abs(latAmt));
@@ -537,10 +548,10 @@ public partial class LaunchEffectsController : Node3D
 
                 float scale = side > 0 ? 1.14f : 0.94f;
                 float edge = Mathf.Clamp(Mathf.Abs(h - 0.5f) + Mathf.Abs(w - 0.5f), 0f, 1f);
-                float puff = Mathf.Lerp(22f, 42f, Mathf.Max(t * 0.2f, up01))
-                    * scale * Mathf.Lerp(1.15f, 0.74f, edge);
-                width = Mathf.Max(puff * Mathf.Lerp(1.28f, 1.0f, up01), 14f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.58f, 1.06f, up01), 12f);
+                float puff = Mathf.Lerp(isHead ? 24f : 28f, isHead ? 44f : 40f, Mathf.Max(t * 0.2f, up01))
+                    * scale * Mathf.Lerp(1.12f, 0.78f, edge);
+                width = Mathf.Max(puff * Mathf.Lerp(1.35f, 1.0f, up01), 14f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.55f, 1.06f, up01), 12f);
                 rise = up01;
                 flame = 1f - out01;
                 lean = Mathf.Lerp(0.08f, 0.50f, up01);
@@ -569,8 +580,8 @@ public partial class LaunchEffectsController : Node3D
                 lit,
                 lit * Mathf.Lerp(0.98f, 0.55f, warm),
                 lit * Mathf.Lerp(0.96f, 0.26f, warm),
-                // Softer so overlapping heads fuse into one bank.
-                (skirt ? 0.92f : 0.72f * fade) * weight));
+                // Body cards keep enough opacity to fuse; heads stay readable.
+                (skirt ? 0.92f : 0.84f * fade) * weight));
         }
     }
 
