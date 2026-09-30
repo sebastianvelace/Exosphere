@@ -70,6 +70,11 @@ Base tecnica cerrada en `main`:
   Valid ~28 m/s deorbits now retain planner intent; high-entry footprint forecasting
   runs at bounded 5 Hz while control stays at 50 Hz. Full rendered mission acceptance
   remains open. See `docs/audits/atmosphere_reentry_visual_physics_2026-09-30.md`.
+- Ascent atmosphere compositing remains open (2026-09-30): the scaled Earth can
+  occlude nearby vessels, the 12–18 km terrain handoff replaces ground with haze,
+  and the fixed atmosphere shell creates a hard cyan edge. Prioritize backdrop
+  depth isolation, continuous surface LOD and a shared physical optical path.
+  See `docs/audits/ascent_surface_atmosphere_compositing_2026-09-30.md`.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
   prediction, marcador/readout de encuentro y readout de maniobra. La base lunar
   ya resuelve Lambert geocéntrico contra la efeméride móvil, busca una ventana

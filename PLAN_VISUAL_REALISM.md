@@ -34,6 +34,12 @@ The final event used simplified surface support without legs or a confirmed catc
 Photographic entry closure, cloud silhouettes and persistent final contact remain open.
 See `docs/audits/atmosphere_reentry_visual_physics_2026-09-30.md`.
 
+The subsequent ascent screenshot audit reproduces foreground hull occlusion by the
+scaled Earth and identifies an opaque RGB terrain-to-haze handoff plus a fixed cyan
+atmosphere shell. These remain open despite the earlier cloud/plasma improvements.
+See `docs/audits/ascent_surface_atmosphere_compositing_2026-09-30.md` for primary NASA
+references, measured camera-height limits and the ordered correction/acceptance plan.
+
 ## Criterio Rector
 
 - Mantener jugabilidad y telemetria existentes: no romper ascenso [G], hot-staging,
