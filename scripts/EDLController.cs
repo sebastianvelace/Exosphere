@@ -133,6 +133,8 @@ public partial class EDLController : Control
     }
     public Vector3d AeroAttitudeCommand => _aeroAttitudeCommand;
     public Vector3d AeroLiftReference => _aeroLiftReference;
+    private readonly EntryPredictionRefresh _entryPredictionRefresh = new();
+    public ulong CorridorPredictionCount => _entryPredictionRefresh.SampleCount;
     public ulong GuidanceUpdateCount { get; private set; }
     public double GuidanceUpdatePeriodSeconds { get; private set; } = double.NaN;
     public double LastGuidanceSimulationTimeSeconds { get; private set; } = double.NaN;
@@ -549,15 +551,24 @@ public partial class EDLController : Control
                 Vector3d bodyLiftUp = up - velDir * up.Dot(velDir);
                 if (bodyLiftUp.Magnitude > 1e-6)
                 {
-                    var prediction = EntryCorridorGuidance.Predict(
-                        targetOffset,
-                        surfVel,
-                        targetSurfaceVelocity,
-                        up,
-                        _alt,
-                        -_vUp,
-                        g,
-                        dynamics: EntryCorridorPropagation.ForVessel(vessel, body));
+                    double predictionTime = SimulationBridge.Instance!.Universe.CurrentTime;
+                    Vector3d relativePosition = vessel.Position - body.Position;
+                    if (_entryPredictionRefresh.NeedsRefresh(predictionTime, _alt,
+                            vessel.Id, body.Id, relativePosition))
+                    {
+                        var refreshed = EntryCorridorGuidance.Predict(
+                            targetOffset,
+                            surfVel,
+                            targetSurfaceVelocity,
+                            up,
+                            _alt,
+                            -_vUp,
+                            g,
+                            dynamics: EntryCorridorPropagation.ForVessel(vessel, body));
+                        _entryPredictionRefresh.Store(predictionTime, vessel.Id, body.Id,
+                            relativePosition, refreshed);
+                    }
+                    var prediction = _entryPredictionRefresh.Prediction;
                     if (prediction.LiftDirection.MagnitudeSquared > 1e-12
                         || System.Math.Abs(prediction.PredictedDownrangeM) > 1e-6)
                     {
