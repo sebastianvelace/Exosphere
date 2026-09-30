@@ -501,7 +501,7 @@ public partial class SkyController : Node
         {
             "mars" => new Color(0.72f, 0.38f, 0.20f),
             "venus" => new Color(0.92f, 0.72f, 0.38f),
-            _ => new Color(0.82f, 0.88f, 0.95f),
+            _ => new Color(0.58f, 0.74f, 0.94f),
         };
         _skyMat.SetShaderParameter("ground_horizon", groundHorizon);
         _skyMat.SetShaderParameter("ground_bottom", groundHorizon.Darkened(0.45f));
@@ -562,7 +562,7 @@ public partial class SkyController : Node
         {
             "mars" => new Color(0.82f, 0.46f, 0.24f),
             "venus" => new Color(0.95f, 0.78f, 0.45f),
-            _ => new Color(0.82f, 0.88f, 0.95f),
+            _ => new Color(0.58f, 0.74f, 0.94f),
         };
         CurrentHorizonColor = horizon.Lerp(Colors.Black, 1.0f - air * daylight);
 

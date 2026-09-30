@@ -762,7 +762,7 @@ void sky() {
 				max(view_tangent_altitude, 0.0));
 		float above = max(smoothstep(-0.045, 0.050, elev), tangent_sky);
 		float h = clamp(elev, 0.0, 1.0);
-		vec3 dome = mix(vec3(0.82, 0.88, 0.95), vec3(0.18, 0.42, 0.84), pow(h, 0.55));
+		vec3 dome = mix(vec3(0.58, 0.74, 0.94), vec3(0.08, 0.28, 0.72), pow(h, 0.38));
 		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);
 		dome += vec3(sun_glare, sun_glare * 0.85, sun_glare * 0.55);
 		float pad_sky = sun_up * thick_column * above * atmospheric_solar_visibility;

@@ -80,7 +80,7 @@ public partial class EarthGroundController : Node3D
     // by space_sky.gdshader at the Earth horizon. The controller's live horizon
     // colour can darken with altitude; using that darker value alone leaves a grey
     // strip between the sky dome and the measured ground raster.
-    private static readonly Color EarthHorizonFloor = new(0.82f, 0.88f, 0.95f);
+    private static readonly Color EarthHorizonFloor = new(0.58f, 0.74f, 0.94f);
     private const float RegionalTerrainExtentM = 10_000f;
     private const float RegionalHeightMinM = -2.0f;
     private const float RegionalHeightMaxM = 12.0f;

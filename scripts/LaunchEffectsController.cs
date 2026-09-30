@@ -56,6 +56,14 @@ public partial class LaunchEffectsController : Node3D
     // gameplay chase distance; see WideCameraFullDistance.
     private MultiMeshInstance3D _wideLobes = null!;
     private MultiMeshInstance3D _wideCore = null!;
+    private FogVolume[] _exhaustPuffs = null!;
+    private FogMaterial[] _exhaustMats = null!;
+    private Vector3[] _exhaustBaseSize = null!;
+    private float[] _exhaustPeakDensity = null!;
+    private OmniLight3D _flameLight = null!;
+    private Godot.Environment? _flightEnvironment;
+    private bool _volumetricExhaust;
+    private bool _volumetricFogEnabled;
 
     // Shared soft-round billboard texture for the close layers.
     private static ImageTexture? _softCircle;
@@ -92,6 +100,7 @@ public partial class LaunchEffectsController : Node3D
         _billowBank = BuildBillowBank();
         _wideLobes = BuildWideBank("WideDelugeLobes", WideLobeCards.Length, 0.08f, new Vector2(78f, 40f));
         _wideCore = BuildWideBank("WideDelugeCore", WideCoreCards.Length, 1.15f, new Vector2(34f, 26f));
+        BuildExhaustVolume();
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
         _pivot.AddChild(_dustRadial);  // N5: radial blast wave at pad deck level
@@ -102,6 +111,9 @@ public partial class LaunchEffectsController : Node3D
         _pivot.AddChild(_billowBank);
         _pivot.AddChild(_wideLobes);
         _pivot.AddChild(_wideCore);
+        foreach (FogVolume puff in _exhaustPuffs)
+            _pivot.AddChild(puff);
+        _pivot.AddChild(_flameLight);
 
         SetEmitting(false);
         Visible = false;
@@ -146,6 +158,7 @@ public partial class LaunchEffectsController : Node3D
         {
             if (Visible) SetEmitting(false);
             Visible = false;
+            SetExhaustVolume(0f, 1f);
             return;
         }
 
@@ -341,8 +354,8 @@ public partial class LaunchEffectsController : Node3D
     // Gameplay chase tops out near 200 render units. The aerial preset sits
     // at 460. Fade across that gap so zooming out reveals the large cloud
     // without ever covering the pad camera.
-    private const float WideCameraStartDistance = 240f;
-    private const float WideCameraFullDistance = 420f;
+    private const float WideCameraStartDistance = 190f;
+    private const float WideCameraFullDistance = 250f;
 
     private readonly record struct WideCard(
         float Angle, float Radius, float Height, float WidthScale, float HeightScale, float Shade);
@@ -391,14 +404,193 @@ public partial class LaunchEffectsController : Node3D
         float weight = Mathf.SmoothStep(WideCameraStartDistance, WideCameraFullDistance, distance)
             * altitudeFade;
         bool show = intensity > 0.02f && weight > 0.05f;
+        float grow = Mathf.Lerp(0.62f, 1f, Mathf.Clamp(age / 4f, 0f, 1f));
+        if (_volumetricExhaust)
+        {
+            // The flat cards are the Compatibility fallback. On Forward+ they
+            // read as the discs in the liftoff screenshots, so the volume owns
+            // the wide shot.
+            _wideLobes.Visible = false;
+            _wideCore.Visible = false;
+            SetExhaustVolume(show ? weight : 0f, grow);
+            return;
+        }
+
+        SetExhaustVolume(0f, grow);
         _wideLobes.Visible = show;
         _wideCore.Visible = show;
         if (!show)
             return;
 
-        float grow = Mathf.Lerp(0.74f, 1f, Mathf.Clamp(age / 5f, 0f, 1f));
         PoseWideBank(_wideLobes, WideLobeCards, grow, weight, age, core: false);
         PoseWideBank(_wideCore, WideCoreCards, grow, weight, age, core: true);
+    }
+
+    private readonly record struct ExhaustPuff(
+        float Angle, float Radius, float Height, Vector3 Size, float Density, bool Fire);
+
+    // Two cumulus banks beside the stack, plus a small fire core. One ellipsoid
+    // large enough to read at a kilometre becomes a dome over the vehicle.
+    private static readonly ExhaustPuff[] ExhaustLayout =
+    {
+        new(2.05f, 78f, 34f, new Vector3(72f, 96f, 64f), 0.042f, false),
+        new(2.28f, 102f, 52f, new Vector3(84f, 110f, 70f), 0.046f, false),
+        new(2.48f, 70f, 64f, new Vector3(58f, 100f, 52f), 0.038f, false),
+        new(1.82f, 90f, 24f, new Vector3(80f, 70f, 66f), 0.040f, false),
+        new(-0.70f, 82f, 32f, new Vector3(76f, 100f, 66f), 0.044f, false),
+        new(-0.95f, 108f, 56f, new Vector3(90f, 118f, 74f), 0.048f, false),
+        new(-1.18f, 72f, 68f, new Vector3(60f, 104f, 54f), 0.038f, false),
+        new(-0.48f, 94f, 22f, new Vector3(84f, 72f, 68f), 0.040f, false),
+        new(0.40f, 14f, 12f, new Vector3(40f, 28f, 36f), 0.140f, true),
+        new(2.4f, 12f, 10f, new Vector3(36f, 24f, 32f), 0.120f, true),
+        new(-0.15f, 16f, 9f, new Vector3(38f, 22f, 34f), 0.110f, true),
+    };
+
+    private static readonly Color ExhaustWhite = new(0.98f, 0.98f, 0.99f);
+    private static readonly Color ExhaustWhiteEmit = new(0.16f, 0.17f, 0.18f);
+    private static readonly Color ExhaustFire = new(1f, 0.48f, 0.10f);
+    private static readonly Color ExhaustFireEmit = new(1.1f, 0.32f, 0.05f);
+
+    private void BuildExhaustVolume()
+    {
+        Texture3D noise = BuildExhaustNoise();
+        int count = ExhaustLayout.Length;
+        _exhaustPuffs = new FogVolume[count];
+        _exhaustMats = new FogMaterial[count];
+        _exhaustBaseSize = new Vector3[count];
+        _exhaustPeakDensity = new float[count];
+        for (int i = 0; i < count; i++)
+        {
+            ExhaustPuff puff = ExhaustLayout[i];
+            Color albedo = puff.Fire ? ExhaustFire : ExhaustWhite;
+            Color emission = puff.Fire ? ExhaustFireEmit : ExhaustWhiteEmit;
+            _exhaustMats[i] = ExhaustMaterial(albedo, emission, noise);
+            _exhaustBaseSize[i] = puff.Size;
+            _exhaustPeakDensity[i] = puff.Density;
+            _exhaustPuffs[i] = ExhaustVolume(
+                puff.Fire ? $"ExhaustFire{i}" : $"ExhaustPuff{i}",
+                _exhaustMats[i],
+                puff.Size,
+                Place(puff.Angle, puff.Radius, puff.Height));
+        }
+        _flameLight = new OmniLight3D
+        {
+            Name = "ExhaustFlameLight",
+            LightColor = new Color(1f, 0.52f, 0.14f),
+            LightEnergy = 0f,
+            OmniRange = 78f,
+            OmniAttenuation = 1.1f,
+            ShadowEnabled = false,
+            LightVolumetricFogEnergy = 2.4f,
+            Position = new Vector3(0f, 8f, 0f),
+            Visible = false,
+        };
+    }
+
+    private static Vector3 Place(float angle, float radius, float height) =>
+        new(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
+
+    private static FogMaterial ExhaustMaterial(Color albedo, Color emission, Texture3D noise) =>
+        new()
+        {
+            Albedo = albedo,
+            Emission = emission,
+            Density = 0f,
+            EdgeFade = 0.22f,
+            HeightFalloff = 0f,
+            DensityTexture = noise,
+        };
+
+    private static FogVolume ExhaustVolume(string name, FogMaterial material, Vector3 size, Vector3 position) =>
+        new()
+        {
+            Name = name,
+            Shape = RenderingServer.FogVolumeShape.Ellipsoid,
+            Material = material,
+            Size = size,
+            Position = position,
+            Visible = false,
+        };
+
+    private static Texture3D BuildExhaustNoise()
+    {
+        var noise = new FastNoiseLite
+        {
+            NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth,
+            FractalType = FastNoiseLite.FractalTypeEnum.Fbm,
+            FractalOctaves = 5,
+            Frequency = 0.045f,
+        };
+        var ramp = new Gradient
+        {
+            // Keep only the dense peaks, so the volume reads as lumps
+            // instead of a smooth glowing ellipsoid.
+            // A hard threshold emptied the ellipsoids, so the liftoff frame
+            // showed only a faint orange core. Keep a soft body and brighter peaks.
+            Offsets = new[] { 0f, 0.18f, 0.55f, 1f },
+            Colors = new[]
+            {
+                new Color(0.15f, 0.15f, 0.15f),
+                new Color(0.45f, 0.45f, 0.45f),
+                Colors.White,
+                Colors.White,
+            },
+        };
+        return new NoiseTexture3D
+        {
+            Width = 64,
+            Height = 64,
+            Depth = 64,
+            Noise = noise,
+            Seamless = true,
+            ColorRamp = ramp,
+        };
+    }
+
+    private void SetExhaustVolume(float weight, float grow)
+    {
+        EnsureVolumetricExhaust();
+        bool show = _volumetricExhaust && weight > 0.05f;
+        for (int i = 0; i < _exhaustPuffs.Length; i++)
+            _exhaustPuffs[i].Visible = show;
+        _flameLight.Visible = show;
+        _flameLight.LightEnergy = show ? 8f * weight : 0f;
+        if (_flightEnvironment != null && _volumetricFogEnabled != show)
+        {
+            _flightEnvironment.VolumetricFogEnabled = show;
+            _volumetricFogEnabled = show;
+        }
+        if (!show)
+            return;
+
+        for (int i = 0; i < _exhaustPuffs.Length; i++)
+        {
+            _exhaustMats[i].Density = _exhaustPeakDensity[i] * weight;
+            float scale = ExhaustLayout[i].Fire ? Mathf.Lerp(0.8f, 1f, grow) : grow;
+            _exhaustPuffs[i].Size = _exhaustBaseSize[i] * scale;
+        }
+    }
+
+    private void EnsureVolumetricExhaust()
+    {
+        if (_flightEnvironment != null || _volumetricExhaust)
+            return;
+        if (RenderingServer.GetCurrentRenderingMethod().ToString() != "forward_plus")
+            return;
+        if (GetTree()?.Root.FindChild("WorldEnvironment", true, false) is not WorldEnvironment world
+            || world.Environment == null)
+            return;
+
+        _flightEnvironment = world.Environment;
+        _flightEnvironment.VolumetricFogDensity = 0f;
+        _flightEnvironment.VolumetricFogAlbedo = new Color(0.94f, 0.95f, 0.97f);
+        _flightEnvironment.VolumetricFogEmission = new Color(0f, 0f, 0f);
+        _flightEnvironment.VolumetricFogLength = 1100f;
+        _flightEnvironment.VolumetricFogDetailSpread = 2.2f;
+        _flightEnvironment.VolumetricFogAmbientInject = 0.32f;
+        _flightEnvironment.VolumetricFogAnisotropy = 0.35f;
+        _flightEnvironment.VolumetricFogSkyAffect = 0.7f;
+        _volumetricExhaust = true;
     }
 
     private static void PoseWideBank(

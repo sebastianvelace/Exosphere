@@ -339,9 +339,24 @@ public partial class PhaseLightingController : Node
 
         float presence = Mathf.Clamp(atmosphericPresence, 0f, 1f);
         float density = SurfaceFogDensity * presence;
+        float aerial = 0.78f;
+        float depthBegin = SurfaceFogDepthBegin;
+        // The aerial liftoff frame sits hundreds of metres out. The pad fog
+        // curve was authored for the close chase camera and turns that shot
+        // into a grey veil, so the exhaust volume and the sky cannot read.
+        Camera3D? view = GetViewport()?.GetCamera3D();
+        if (view != null && _sampledAltitude < 1_200.0)
+        {
+            float open = Mathf.SmoothStep(240f, 420f, view.GlobalPosition.Length());
+            density = Mathf.Lerp(density, 0.012f, open);
+            aerial = Mathf.Lerp(aerial, 0.10f, open);
+            depthBegin = Mathf.Lerp(depthBegin, 900f, open);
+        }
         bool enabled = density > 0.002f;
         if (_env.FogEnabled != enabled) _env.FogEnabled = enabled;
         if (FloatDiffers(_env.FogDensity, density)) _env.FogDensity = density;
+        if (FloatDiffers(_env.FogAerialPerspective, aerial)) _env.FogAerialPerspective = aerial;
+        if (FloatDiffers(_env.FogDepthBegin, depthBegin)) _env.FogDepthBegin = depthBegin;
 
         Color horizon = SkyController.CurrentHorizonColor;
         // Follow the sky to black at night; a constant gray mix self-illuminates fog.

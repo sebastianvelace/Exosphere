@@ -50,7 +50,7 @@ has 'private const float CoastalGrade = 0.28f;' "$controller" "Earth ground coas
 has 'private const float HorizonHazeStrength = 0.98f;' "$controller" "Earth ground horizon haze is too broad or unconfigured"
 has 'HorizonHazeStrength' "$controller" "Earth ground horizon seam mitigation is not bounded/configured"
 has 'private static readonly Color EarthHorizonFloor' "$controller" "Earth ground lacks a bounded upper-atmosphere limb floor"
-has 'new(0.82f, 0.88f, 0.95f)' "$controller" "Earth ground limb floor is not shared with the sky daylight dome"
+has 'new(0.58f, 0.74f, 0.94f)' "$controller" "Earth ground limb floor is not shared with the sky daylight dome"
 has 'Mathf.SmoothStep(-0.12f, 0.03f, renderUp.Dot(sunDirection))' "$controller" "Earth ground daylight floor is not gated by solar elevation"
 has 'hazeColor = hazeColor.Lerp(EarthHorizonFloor, daylight)' "$controller" "Earth ground horizon floor does not converge with the sky daylight dome"
 
