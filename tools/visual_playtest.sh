@@ -955,7 +955,7 @@ public partial class _PlaytestShot : Node
         double maxT = vessel.Parts.Parts.Count > 0 ? vessel.Parts.Parts.Max(p => p.Temperature) : 0.0;
         double heatRatio = vessel.Parts.Parts.Count > 0 ? vessel.Parts.Parts.Max(p => p.ThermalRatio) : 0.0;
         double density = body.GetAtmosphericDensity(vessel.Position);
-        double flux = ThermalModel.ComputeHeatFlux(density, spd);
+        double flux = vessel.ComputeStagnationHeatFlux(density, surfVel);
         double fluxRatio = flux / FluxPeak;
 
         TryCapturePending();
@@ -2396,7 +2396,7 @@ public partial class _PlaytestShot : Node
         MissionManager? mission)
     {
         const double InterfaceAltitudeM = 120_000.0;
-        const double InterfaceSpeedMps = 7_600.0;
+        const double InterfaceInertialSpeedMps = 7_600.0;
         const double FlightPathAngleDegrees = -1.6;
         const double ReserveFraction = 0.06;
         const double SimTimeoutSeconds = 900.0;
@@ -2406,7 +2406,7 @@ public partial class _PlaytestShot : Node
             if (_readyFrames < 45 || EDLController.Instance == null) return;
             if (!bridge.SeedPhysicalEntryInterfaceForValidation(
                     InterfaceAltitudeM,
-                    InterfaceSpeedMps,
+                    InterfaceInertialSpeedMps,
                     FlightPathAngleDegrees,
                     ReserveFraction))
             {
@@ -2422,8 +2422,9 @@ public partial class _PlaytestShot : Node
             _entryPhysicsStart = universe.CurrentTime;
             _nextEntryPhysicsTelemetry = universe.CurrentTime;
             _log.WriteLine($"PHYSICAL_ENTRY_SETUP source=entry_interface " +
-                $"altitude={InterfaceAltitudeM:F0} airspeed={InterfaceSpeedMps:F0} " +
-                $"flightPathDeg={FlightPathAngleDegrees:F2} reserve={ReserveFraction:F3} " +
+                $"altitude={InterfaceAltitudeM:F0} inertialSpeed={InterfaceInertialSpeedMps:F0} "
+                + $"airspeed={vessel.GetSurfaceVelocity(universe.GetBody("earth")!).Magnitude:F1} " +
+                $"inertialFlightPathDeg={FlightPathAngleDegrees:F2} reserve={ReserveFraction:F3} " +
                 $"normalFlow=True demo={vessel.IsTowerCatchDemonstration} " +
                 "orientationWritesAfterSeed=0 angularVelocityResetsAfterSeed=0");
             _log.Flush();
@@ -4510,7 +4511,7 @@ public partial class _PlaytestShot : Node
         double maxT = vessel.Parts.Parts.Max(p => p.Temperature);
         double heatRatio = vessel.Parts.Parts.Max(p => p.ThermalRatio);
         double density = body.GetAtmosphericDensity(vessel.Position);
-        double flux = ThermalModel.ComputeHeatFlux(density, spd);
+        double flux = vessel.ComputeStagnationHeatFlux(density, surfVel);
         var trajectory = OrbitalElements.FromStateVector(
             vessel.Position - body.Position,
             vessel.Velocity - body.Velocity,

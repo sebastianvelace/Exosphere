@@ -518,7 +518,7 @@ cat > "$entry_good" <<'EOF'
 === Exosphere visual playtest fixture mode=entry_physics ===
 VISUAL_SUN override=True elevationDeg=25.00 phase=DAY clearSolarEclipse=False physicalSunPositionUnchanged=True
 VISUAL_CAMERA preset=edl_side yawDeg=0.00 pitchDeg=-2.00 distance=42.00 fov=54.00 mode=ShipChase
-PHYSICAL_ENTRY_SETUP source=entry_interface altitude=120000 airspeed=7600 flightPathDeg=-1.60 reserve=0.060 normalFlow=True demo=False orientationWritesAfterSeed=0 angularVelocityResetsAfterSeed=0
+PHYSICAL_ENTRY_SETUP source=entry_interface altitude=120000 inertialSpeed=7600 airspeed=7176.0 inertialFlightPathDeg=-1.60 reserve=0.060 normalFlow=True demo=False orientationWritesAfterSeed=0 angularVelocityResetsAfterSeed=0
 TRACE_ENTRY_PHYSICS t=2.00 alt=118900.0 spd=7590.0 mach=25.100 qPa=12.0 gammaDeg=-1.600 alphaDeg=70.000 bankDeg=0.000 energyJkg=-1000.0 hM2s=1.0 ld=0.3000 aeroG=0.0100 heatWm2=1000.0 guidanceDt=0.020000 guidanceUpdates=100 phase=ENTRY destroyed=False normalFlow=True demo=False
 TRACE_ENTRY_PHYSICS t=310.00 alt=18000.0 spd=390.0 mach=1.150 qPa=18000.0 gammaDeg=-12.000 alphaDeg=70.000 bankDeg=5.000 energyJkg=-2000.0 hM2s=0.5 ld=0.3000 aeroG=0.8000 heatWm2=20000.0 guidanceDt=0.020000 guidanceUpdates=15500 phase=AERO_DESCENT destroyed=False normalFlow=True demo=False
 CHECK entry_physics interface=True peakHeating=True transonic=True finalMach=1.150 peakQPa=48000.0 peakHeatWm2=420000.0 peakG=3.200 minimumWindward=0.9100 guidanceDt=0.020000 guidanceUpdates=15500 cadenceValid=True envelopeValid=True normalFlow=True demo=False orientationWritesAfterSeed=0

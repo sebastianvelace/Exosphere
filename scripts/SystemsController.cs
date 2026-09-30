@@ -489,10 +489,10 @@ public partial class SystemsController : Node
 
         bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
         double atmoTemp = inAtmo ? refBody.Atmosphere!.GetTemperature(alt) : 3.0;
-        double airspeed = vessel.GetSurfaceVelocity(refBody).Magnitude;
+        var surfaceVelocity = vessel.GetSurfaceVelocity(refBody);
+        double airspeed = surfaceVelocity.Magnitude;
         double airDensity = refBody.GetAtmosphericDensity(vessel.Position);
-        double heatFlux = Exosphere.Simulation.Physics.ThermalModel.ComputeHeatFlux(
-            airDensity, airspeed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
+        double heatFlux = vessel.ComputeStagnationHeatFlux(airDensity, surfaceVelocity);
 
         Vector3d earthPos = earthBody?.Position ?? Vector3d.Zero;
 
