@@ -13,10 +13,11 @@ using Exosphere.Simulation.Math;
 ///
 /// This is purely the ground cloud; the engine flame itself is owned by
 /// <c>PlumeSystem</c>. The close layers stay sized for the gameplay chase
-/// camera. The aerial bank is two cumulus lobes left and right of a clear
-/// stack corridor, white on the outside and gold toward the flame, matching
-/// the Flight 14 Pad 2 still. It fades out inside chase range so that view
-/// does not collapse into white balls. We anchor the cloud to the
+/// camera. The aerial bank is a fan of cauliflower lobes that leave the trench,
+/// curve as they roll, and boil up outboard of a clear stack — white outside,
+/// gold toward the flame, matching Flight 14 Pad 2 stills from T+0 to T+30.
+/// It fades out inside chase range so that view does not collapse into white
+/// balls. We anchor the cloud to the
 /// ground point directly under the vessel. Because the active vessel sits at the render origin and the
 /// floating-origin scheme keeps it there, the ground recedes downward as the
 /// rocket climbs: we place the emitters at <c>-up * (altitude / MetresPerUnit)</c>
@@ -402,10 +403,10 @@ public partial class LaunchEffectsController : Node3D
     }
 
     /// <summary>
-    /// Flight 14's steam leaves the trench, rolls outward along the ground,
-    /// and only then boils up. Puffs sit on that path: low near the flame,
-    /// tall and wide at the outer crown. The screen-right mass is closer to
-    /// the camera and gold. The stack corridor stays empty.
+    /// Flight 14's steam leaves the trench as a fan, curves as it rolls, and
+    /// only then boils up. Real frames (T+0..T+30) are cauliflower banks with
+    /// jagged tops, not two rays glued to the camera lateral. Screen-right
+    /// stays closer and gold; the stack corridor stays empty.
     /// </summary>
     private static void PoseWideSheets(
         MultiMeshInstance3D bank, float spread, float weight, float age,
@@ -429,6 +430,9 @@ public partial class LaunchEffectsController : Node3D
         const float quad = 40f;
         int count = mesh.InstanceCount;
         int skirts = Mathf.Min(8, count);
+        // Cluster cards into a few cauliflower lobes per side so the silhouette
+        // is a clump of heads, not evenly spaced beads on a string.
+        const int lobesPerSide = 5;
         for (int i = 0; i < count; i++)
         {
             bool skirt = i >= count - skirts;
@@ -436,73 +440,101 @@ public partial class LaunchEffectsController : Node3D
             float h = PuffHash(i * 3 + 1);
             float v = PuffHash(i * 5 + 2);
             float w = PuffHash(i * 7 + 3);
-            float along;
-            float fore;
+            float u = PuffHash(i * 11 + 4);
             float width;
             float height;
             float rise;
             float spine;
             float lean;
-            // Birth is hidden. Dissipation at the crown is hidden. Between
-            // those, the card is a body of steam sliding along the roll.
             float fade = 1f;
             float flame = 0f;
+            Vector3 origin;
+            Vector3 outward;
             if (skirt)
             {
-                // Short bank behind the stack. It covers the far wetland in
-                // the horizon slot without climbing the clear corridor.
+                // Short bank behind the stack. Covers the far wetland in the
+                // horizon slot without climbing the clear corridor.
                 int k = i - (count - skirts);
-                along = (k - (skirts - 1) * 0.5f) * 18f;
-                fore = -70f - h * 16f;
+                float along = (k - (skirts - 1) * 0.5f) * 18f;
+                float fore = -70f - h * 16f;
                 width = 56f;
                 height = 34f;
                 rise = 0.15f;
                 spine = 20f + (k % 3) * 5f;
                 lean = 0.15f;
                 side = along >= 0f ? 1 : -1;
+                outward = lateral * side;
+                origin = lateral * along + towardCamera * fore + Vector3.Up * (2f + spine);
             }
             else
             {
-                // Each puff is born in the trench and travels the same path
-                // the deluge takes: out along the ground, then up. Offsets
-                // keep the mass full while the cards themselves are moving.
-                // Fast enough that a liftoff shows the roll, slow enough
-                // that the mass stays full. Each card is at a different phase.
+                // Same propagation speed the last pass settled on. The path
+                // itself is what has to stop looking like a straight ray.
                 float speed = 0.07f + h * 0.04f;
                 float t = Mathf.PosMod(v + age * speed, 1f);
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
-                // Run outward first. The boil starts only after the puff is
-                // already clear of the stack, so the tall heads are outboard.
                 float out01 = Mathf.Pow(t, 0.55f);
                 float up01 = Mathf.Pow(Mathf.Clamp((t - 0.70f) / 0.30f, 0f, 1f), 1.05f);
                 float boil = up01 * up01;
-                float radius = Mathf.Lerp(12f, 210f, out01) * spread;
+
+                // Lobes share a heading so neighbouring puffs form a head.
+                // Within a lobe, scatter is small; between lobes it is wide.
+                int lobe = (i / 2) % lobesPerSide;
+                float lobeCenter = (lobe + 0.5f) / lobesPerSide;
+                float lobeScatter = (h - 0.5f) * 0.22f;
+                // Fan ~±55° around screen-left / screen-right, biased so the
+                // screen-right mass leans toward the camera (Flight 14 still).
+                float fan = side > 0
+                    ? Mathf.Lerp(-0.20f, 0.95f, lobeCenter + lobeScatter)
+                    : Mathf.Lerp(-0.95f, 0.35f, lobeCenter + lobeScatter);
+                // Path curls as it travels — real steam rolls, it does not
+                // keep the birth bearing. Meander breaks the remaining line.
+                float curl = side * (0.28f + 0.45f * w) * t * t;
+                float meander = Mathf.Sin(age * (0.48f + h * 0.55f) + w * 5.1f)
+                    * (0.12f + 0.28f * t);
+                float ang = fan + curl + meander;
+
+                Vector3 heading = (lateral * side * Mathf.Cos(ang)
+                    + towardCamera * Mathf.Sin(ang)).Normalized();
+                // Perpendicular in the ground plane for vorticity.
+                Vector3 sideway = new Vector3(-heading.Z, 0f, heading.X);
+                if (sideway.LengthSquared() < 1e-4f)
+                    sideway = towardCamera;
+                else
+                    sideway = sideway.Normalized();
+
+                float radius = Mathf.Lerp(12f, 205f, out01) * spread;
                 spine = Mathf.Lerp(3f, 78f, up01);
-                // Churn grows once the puff leaves the ground, so the crown
-                // boils instead of sliding as a rigid disc.
-                float churn = Mathf.Sin(age * (0.85f + h * 0.7f) + w * 6.2f);
-                spine += churn * (1.5f + 6f * boil);
-                radius += Mathf.Sin(age * 0.55f + h * 4.1f) * (2f + 4f * boil);
-                along = side * radius;
-                // Screen-right mass is closer to the camera and larger.
-                float depth = side > 0 ? 42f : -18f;
-                fore = depth + (w - 0.5f) * Mathf.Lerp(8f, 18f, t);
+                // Vorticity grows with the boil: the crown rolls over itself.
+                float swirl = Mathf.Sin(age * (1.05f + h * 0.9f) + w * 6.8f)
+                    * (4f + 26f * boil);
+                float churn = Mathf.Sin(age * (0.85f + h * 0.7f) + u * 7.3f);
+                spine += churn * (2f + 10f * boil);
+                radius += Mathf.Sin(age * 0.55f + h * 4.1f) * (3f + 8f * boil);
+
+                // Screen-right mass sits closer; a little fore bias keeps the
+                // corridor open without pinning cards to a single depth.
+                float depthBias = side > 0 ? 28f : -14f;
+                float foreJitter = (w - 0.5f) * Mathf.Lerp(10f, 28f, t);
+                origin = heading * radius
+                    + sideway * swirl
+                    + towardCamera * (depthBias + foreJitter)
+                    + Vector3.Up * (2f + Mathf.Max(spine, 1f));
+                outward = heading;
+
                 float scale = side > 0 ? 1.18f : 0.94f;
-                // Keep each puff a lobe. A 70-unit card reaches back to the
-                // airframe and reads as a column glued to the stack.
-                float puff = Mathf.Lerp(26f, 44f, Mathf.Max(t * 0.25f, up01)) * scale;
-                width = Mathf.Max(puff * Mathf.Lerp(1.20f, 1.0f, up01), 16f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.62f, 1.05f, up01), 14f);
+                // Multi-scale: lobe centres are larger heads, edge cards smaller.
+                float lobeRole = 1f - Mathf.Abs(lobeScatter) * 1.6f;
+                float puff = Mathf.Lerp(22f, 48f, Mathf.Max(t * 0.22f, up01))
+                    * scale * Mathf.Lerp(0.72f, 1.15f, Mathf.Clamp(lobeRole, 0f, 1f));
+                width = Mathf.Max(puff * Mathf.Lerp(1.25f, 1.0f, up01), 14f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.58f, 1.08f, up01), 12f);
                 rise = up01;
                 flame = 1f - out01;
-                lean = Mathf.Lerp(0.08f, 0.48f, up01);
+                lean = Mathf.Lerp(0.08f, 0.52f, up01);
             }
 
-            float y = 2f + Mathf.Max(spine, 1f);
-            Vector3 outward = lateral * side;
             Vector3 cardZ = towardCamera;
-            // On the ground the cap stays low. As the puff boils, it leans
-            // out along the roll instead of standing up against the airframe.
             Vector3 cardUp = (Vector3.Up * Mathf.Lerp(0.55f, 0.88f, lean) + outward * lean).Normalized();
             Vector3 cardX = cardUp.Cross(cardZ).Normalized();
             if (cardX.LengthSquared() < 1e-4f)
@@ -510,7 +542,6 @@ public partial class LaunchEffectsController : Node3D
             cardUp = cardZ.Cross(cardX).Normalized();
             var basis = new Basis(cardX, cardUp, cardZ).Scaled(
                 new Vector3(width / quad, height / quad, 1f));
-            var origin = lateral * along + towardCamera * fore + Vector3.Up * y;
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
 
             // Screen-right body is flame-lit gold. Caps stay bright; bellies
