@@ -471,87 +471,64 @@ public partial class LaunchEffectsController : Node3D
             }
             else
             {
-                // Two populations, both at the same expansion speed the
-                // player liked. Carpet cards fill a continuous fan so the
-                // freeze-frame is a wall (T+7..T+18). Head cards boil at
-                // the outer crown with a wavy path so motion is not a ray.
+                // Flight 14 T+7..T+18 is rounded side masses, not rays from
+                // the pad. Cards sit on expanding elliptical arcs so a freeze
+                // frame is a cauliflower bank. Same expansion speed as before.
                 bool isHead = (i % 4) == 0;
+                // Bias mass to screen-left the way the T+7/T+10 aerials do;
+                // screen-right stays the closer gold lobe.
+                if (!isHead && (i % 10) < 6)
+                    side = -1;
                 float seed = isHead ? PuffHash((i / 2) % lobesPerSide * 19 + (side > 0 ? 7 : 3)) : h;
                 float speed = 0.065f + seed * 0.035f;
-                float t;
-                if (isHead)
-                {
-                    t = Mathf.PosMod(seed * 0.85f + age * speed, 1f);
-                }
-                else
-                {
-                    // Stay across the mid-field. Age still advances, but the
-                    // card is remapped into the dense band of the bank.
-                    float body = Mathf.PosMod(v * 0.7f + age * speed * 0.6f, 1f);
-                    t = Mathf.Lerp(0.10f, 0.68f, body);
-                }
+                float t = isHead
+                    ? Mathf.PosMod(seed * 0.85f + age * speed, 1f)
+                    : Mathf.Lerp(0.10f, 0.70f, Mathf.PosMod(v * 0.7f + age * speed * 0.6f, 1f));
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
                 float out01 = Mathf.Pow(t, 0.55f);
-                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.68f) / 0.32f, 0f, 1f), 1.05f);
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.66f) / 0.34f, 0f, 1f), 1.05f);
                 float boil = up01 * up01;
 
-                // Continuous fan by hash — discrete lobe centres made spokes.
-                float fan = side > 0
-                    ? Mathf.Lerp(-0.35f, 1.05f, isHead ? seed : h)
-                    : Mathf.Lerp(-1.05f, 0.40f, isHead ? seed : h);
-                float curl = side * (0.45f + 0.40f * seed) * t * t;
-                float meander = Mathf.Sin(age * (0.4f + seed * 0.5f) + w * 5f)
-                        * (0.14f + 0.34f * t)
-                    + Mathf.Sin(age * (1.15f + h) + u * 3.5f) * 0.14f * t;
-                float ang = fan + curl + meander;
+                // Elliptical arc around ±lateral. θ spans a wide lobe so the
+                // silhouette is round, not a spoke.
+                float theta = side > 0
+                    ? Mathf.Lerp(-0.95f, 0.95f, isHead ? seed : h)
+                    : Mathf.Lerp(Mathf.Pi - 0.95f, Mathf.Pi + 0.95f, isHead ? seed : h);
+                theta += Mathf.Sin(age * (0.45f + seed * 0.4f) + w * 4f) * (0.12f + 0.28f * t);
+                float rx = Mathf.Lerp(36f, isHead ? 205f : 165f, out01) * spread;
+                float rz = Mathf.Lerp(28f, isHead ? 150f : 125f, out01) * spread;
+                // Stretch the screen-right mass toward the camera.
+                if (side > 0)
+                    rz *= 1.18f;
+                float along = Mathf.Cos(theta) * rx;
+                float fore = Mathf.Sin(theta) * rz;
+                // Keep the stack corridor open.
+                if (Mathf.Abs(along) < 42f)
+                    along = side * 42f + (along >= 0f ? 1f : -1f) * Mathf.Abs(along) * 0.15f;
 
-                Vector3 heading = (lateral * side * Mathf.Cos(ang)
-                    + towardCamera * Mathf.Sin(ang)).Normalized();
-                Vector3 sideway = new Vector3(-heading.Z, 0f, heading.X);
-                if (sideway.LengthSquared() < 1e-4f)
-                    sideway = towardCamera;
-                else
-                    sideway = sideway.Normalized();
-
-                float radius = Mathf.Lerp(14f, isHead ? 210f : 155f, out01) * spread;
-                spine = Mathf.Lerp(2f, isHead ? 78f : 36f, up01);
-                float wave = Mathf.Sin(t * Mathf.Tau * (1.15f + seed) + age * 0.75f)
-                    * radius * (0.22f + 0.20f * boil);
-                float swirl = Mathf.Sin(age * (0.95f + seed * 0.7f) + w * 6f)
-                    * (10f + 26f * boil);
-                float churn = Mathf.Sin(age * (0.8f + seed * 0.55f) + u * 5f);
-                spine += churn * (2f + 11f * boil);
-                radius += Mathf.Sin(age * 0.52f + seed * 5f) * (2f + 9f * boil);
-
-                float localR = (h - 0.5f) * Mathf.Lerp(isHead ? 8f : 14f, isHead ? 28f : 36f, out01);
-                float localS = (w - 0.5f) * Mathf.Lerp(isHead ? 10f : 18f, isHead ? 36f : 48f, out01);
+                spine = Mathf.Lerp(2f, isHead ? 80f : 34f, up01);
+                float churn = Mathf.Sin(age * (0.85f + seed * 0.55f) + u * 5f);
+                spine += churn * (2f + 12f * boil);
+                float localA = (h - 0.5f) * Mathf.Lerp(10f, 30f, out01);
+                float localF = (w - 0.5f) * Mathf.Lerp(12f, 34f, out01);
                 float localY = (u - 0.5f) * Mathf.Lerp(3f, isHead ? 22f : 12f, Mathf.Max(out01, up01));
-                float depthBias = side > 0 ? 22f : -8f;
 
-                origin = heading * (radius + localR)
-                    + sideway * (swirl + wave + localS)
-                    + towardCamera * depthBias
+                origin = lateral * (along + localA)
+                    + towardCamera * (fore + localF)
                     + Vector3.Up * (2f + Mathf.Max(spine + localY, 1f));
-                float latAmt = origin.Dot(lateral);
-                const float corridor = 42f;
-                if (Mathf.Abs(latAmt) < corridor)
-                {
-                    float push = (latAmt >= 0f ? 1f : -1f) * (corridor - Mathf.Abs(latAmt));
-                    if (Mathf.Abs(latAmt) < 1e-3f)
-                        push = side * corridor;
-                    origin += lateral * push;
-                }
-                outward = heading;
+                outward = (lateral * along + towardCamera * fore);
+                if (outward.LengthSquared() > 1e-4f)
+                    outward = outward.Normalized();
+                else
+                    outward = lateral * side;
 
-                float scale = side > 0 ? 1.14f : 0.94f;
-                // Carpet cards are wide and low so neighbours fuse. Heads
-                // stay rounder at the outer crown.
-                float puff = Mathf.Lerp(isHead ? 24f : 34f, isHead ? 46f : 52f, out01) * scale;
-                width = Mathf.Max(puff * (isHead ? Mathf.Lerp(1.2f, 1.0f, up01) : 1.45f), 16f);
-                height = Mathf.Max(puff * (isHead ? Mathf.Lerp(0.6f, 1.08f, up01) : 0.52f), 12f);
-                rise = isHead ? up01 : out01 * 0.35f;
+                float scale = side > 0 ? 1.16f : 1.0f;
+                float puff = Mathf.Lerp(isHead ? 24f : 36f, isHead ? 48f : 56f, out01) * scale;
+                width = Mathf.Max(puff * (isHead ? Mathf.Lerp(1.15f, 1.0f, up01) : 1.50f), 16f);
+                height = Mathf.Max(puff * (isHead ? Mathf.Lerp(0.62f, 1.1f, up01) : 0.50f), 12f);
+                rise = isHead ? up01 : out01 * 0.4f;
                 flame = 1f - out01;
-                lean = isHead ? Mathf.Lerp(0.08f, 0.52f, up01) : 0.12f;
+                lean = isHead ? Mathf.Lerp(0.1f, 0.55f, up01) : 0.14f;
             }
 
             Vector3 cardZ = towardCamera;
