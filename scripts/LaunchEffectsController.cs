@@ -2,6 +2,8 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Presentation;
+using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Math;
 
 /// <summary>
@@ -11,15 +13,11 @@ using Exosphere.Simulation.Math;
 /// OUTWARD horizontally, then boils upward — accompanied by darker dust kicked
 /// up low and outward.
 ///
-/// This is purely the ground cloud; the engine flame itself is owned by
-/// <c>PlumeSystem</c>. The close layers stay sized for the gameplay chase
-/// camera. A second bank of large cards supplies the kilometre-scale deluge
-/// seen from the aerial liftoff frame, and fades out inside chase range so
-/// that view does not collapse into white balls. We anchor the cloud to the
-/// ground point directly under the vessel. Because the active vessel sits at the render origin and the
-/// floating-origin scheme keeps it there, the ground recedes downward as the
-/// rocket climbs: we place the emitters at <c>-up * (altitude / MetresPerUnit)</c>
-/// so the cloud is "left behind" on the pad while the booster ascends away.
+/// This controller owns the ground cloud; PlumeSystem owns engine exhaust.
+/// Condensed water uses ray-integrated noisy ellipsoids in both renderers, with
+/// local exhaust lighting and self-extinction. Growth uses simulation seconds;
+/// the cloud stays at the fixed geodetic pad after the vehicle moves away.
+/// The optical proxy is intentionally separate from authoritative flight physics.
 ///
 /// Self-wiring: drop in as a child of the World Node3D. It finds the vessel and
 /// the dominant body each frame through <see cref="SimulationBridge"/>,
@@ -32,50 +30,32 @@ public partial class LaunchEffectsController : Node3D
     // Render scale: 1 unit ≈ 2.8 m. The whole cloud is sized in render units.
     private const float MetresPerUnit = 2.8f;
 
-    // N5: cloud dominates 0–3 s; ceiling lowered so it dissipates by ~300 m.
-    // Altitude band (metres) over which the cloud is active and fades out.
+    // Altitude band (metres) for active exhaust impingement; steam then disperses.
     private const float TriggerCeilingM = 550f;   // above this: fully off (smoke column lingers longer)
     private const float FullIntensityM  = 140f;   // at/under this: full force (huge cloud through the first seconds)
     private const float MinThrottle     = 0.02f;  // throttle floor to count as "lit"
 
-    // Pivot we rotate to align local +Y with the planet's "up" at the vessel,
-    // and translate down to the receding ground point.
+    // Local pad frame shared with the fixed geodetic launch complex.
     private Node3D _pivot = null!;
 
-    // The five layers of the deluge cloud.
-    private GpuParticles3D _steamCore   = null!;  // dense, fast outward billow
-    private GpuParticles3D _steamBoil   = null!;  // taller lingering boil-up
+    // Independent dust beneath the optical deluge volumes.
     private GpuParticles3D _dust        = null!;  // low dark debris/dust
     private GpuParticles3D _haze        = null!;  // faint lingering ground dust haze
     // N5: second dust emitter — radial blast wave at ground level.
     private GpuParticles3D _dustRadial  = null!;  // fast flat dust ring expanding radially
-    private MultiMeshInstance3D _instantSteam = null!; // guaranteed ignition cloud bank
-    private Node3D _billowBank = null!;
-    private StandardMaterial3D _billowMaterial = null!;
-    // Kilometre-scale lobes for the aerial liftoff frame. Hidden inside the
-    // gameplay chase distance; see WideCameraFullDistance.
-    private MultiMeshInstance3D _wideLobes = null!;
-    private MultiMeshInstance3D _wideCore = null!;
-    private FogVolume[] _exhaustPuffs = null!;
-    private FogMaterial[] _exhaustMats = null!;
-    private Vector3[] _exhaustBaseSize = null!;
-    private float[] _exhaustPeakDensity = null!;
-    private OmniLight3D _flameLight = null!;
-    private Godot.Environment? _flightEnvironment;
-    private bool _volumetricExhaust;
-    private bool _volumetricFogEnabled;
-
-    // Shared soft-round billboard texture for the close layers.
+    private PadSteamCloud _steamCloud = null!;
+    private readonly List<EngineReadout> _engineReadouts = new(39);
+    private double _lastCloudSimulationTime = double.NaN;
+    private Vector3 _sunDirection = Vector3.Up;
+    public float DeliveredSourcePower => _sampledTarget;
+    public float CloudAgeSeconds => _ignitionAge;
+    public float CloudOpticalWeight => _steamCloud.OpticalWeight;
     private static ImageTexture? _softCircle;
     private static ImageTexture SoftCircle => _softCircle ??= BuildSoftCircleTexture();
-    // Smooth cumulus for the aerial bank. Kept separate so the close-range
-    // circle's high-frequency breakup is not stretched across hundreds of metres.
-    private static ImageTexture? _wideCloud;
-    private static ImageTexture WideCloudTexture => _wideCloud ??= BuildWideCloudTexture();
-
     // Smoothed intensity so ignition/cutoff ramps instead of popping.
     private float _intensity;
     private bool _emitting;
+    private bool _launchCloudArmed;
     private float _ignitionAge;
     private const double PhysicsSamplePeriodSeconds = 1.0 / 20.0;
     private double _physicsSampleTimer;
@@ -91,29 +71,15 @@ public partial class LaunchEffectsController : Node3D
         _pivot = new Node3D { Name = "DelugePivot" };
         AddChild(_pivot);
 
-        _steamCore  = BuildSteamCore();
-        _steamBoil  = BuildSteamBoil();
         _dust       = BuildDust();
         _haze       = BuildHaze();
         _dustRadial = BuildDustRadial();  // N5: ground-level radial blast ring
-        _instantSteam = BuildImmediateSteamBank();
-        _billowBank = BuildBillowBank();
-        _wideLobes = BuildWideBank("WideDelugeLobes", WideLobeCards.Length, 0.08f, new Vector2(78f, 40f));
-        _wideCore = BuildWideBank("WideDelugeCore", WideCoreCards.Length, 1.15f, new Vector2(34f, 26f));
-        BuildExhaustVolume();
+        _steamCloud = new PadSteamCloud { Name = "PadSteamCloud", Visible = false };
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
         _pivot.AddChild(_dustRadial);  // N5: radial blast wave at pad deck level
         _pivot.AddChild(_dust);        // dust sits under the steam
-        _pivot.AddChild(_steamBoil);
-        _pivot.AddChild(_steamCore);
-        _pivot.AddChild(_instantSteam);
-        _pivot.AddChild(_billowBank);
-        _pivot.AddChild(_wideLobes);
-        _pivot.AddChild(_wideCore);
-        foreach (FogVolume puff in _exhaustPuffs)
-            _pivot.AddChild(puff);
-        _pivot.AddChild(_flameLight);
+        _pivot.AddChild(_steamCloud);
 
         SetEmitting(false);
         Visible = false;
@@ -130,6 +96,13 @@ public partial class LaunchEffectsController : Node3D
             || !ReferenceEquals(universe, _sampledUniverse))
         {
             _physicsSampleTimer = PhysicsSamplePeriodSeconds;
+            if (!ReferenceEquals(vessel, _sampledVessel) || !ReferenceEquals(universe, _sampledUniverse))
+            {
+                _launchCloudArmed = false;
+                _intensity = 0f;
+                SetEmitting(false);
+                _lastCloudSimulationTime = double.NaN;
+            }
             _sampledVessel = vessel;
             _sampledUniverse = universe;
             SampleLaunchState(vessel, universe);
@@ -142,45 +115,45 @@ public partial class LaunchEffectsController : Node3D
         }
 
         float target = _sampledTarget;
+        double simTime = universe!.CurrentTime;
+        float elapsed = double.IsNaN(_lastCloudSimulationTime) ? 0f
+            : (float)System.Math.Max(0.0, simTime - _lastCloudSimulationTime);
+        _lastCloudSimulationTime = simTime;
 
-        // Starbase's deluge is already flowing when the Raptors light. Seed a
-        // substantial cloud on the ignition edge instead of visually ramping
-        // from an empty particle buffer.
         if (target > 0f && _intensity < 0.01f)
-            _intensity = 0.38f;
+            _ignitionAge = 0f;
 
         // Asymmetric smoothing: erupt fast at ignition, linger/fade slower so the
         // cloud reads as a self-sustaining body of vapour, not a switch.
-        float rate = target > _intensity ? 8f : 1.6f;
-        _intensity = Mathf.Lerp(_intensity, target, Mathf.Clamp((float)delta * rate, 0f, 1f));
+        float rate = target > _intensity ? 8f : 0.12f;
+        _intensity = Mathf.Lerp(_intensity, target, 1f - Mathf.Exp(-elapsed * rate));
 
         if (_intensity < 0.01f)
         {
             if (Visible) SetEmitting(false);
             Visible = false;
-            SetExhaustVolume(0f, 1f);
+            _steamCloud.Visible = false;
             return;
         }
 
         Visible = true;
 
-        // ── Anchor to the receding ground point under the vessel ──────────────
-        // Up direction = radial from planet centre to vessel, in render space the
-        // floating origin keeps the vessel at (0,0,0), so the ground sits at
-        // -up * altitudeUnits below us.
-        float altUnits = (float)(_sampledAltitude / MetresPerUnit);
-        _pivot.Position = -_sampledUp * altUnits;
-
-        // Orient pivot so its local +Y aligns with planet up (cloud rolls "out"
-        // in the local XZ plane and boils up along +Y).
-        AlignUp(_pivot, _sampledUp);
+        // Use the same fixed geodetic launch-site transform as the actual pad.
+        // A cloud under the moving rocket incorrectly slides across the wetlands.
+        var pad = LaunchPadController.Instance;
+        if (pad != null)
+            _pivot.GlobalTransform = pad.GlobalTransform;
+        else
+        {
+            _pivot.Position = -_sampledUp * (float)(_sampledAltitude / MetresPerUnit);
+            AlignUp(_pivot, _sampledUp);
+        }
 
         // ── Drive the layers ──────────────────────────────────────────────────
-        SetEmitting(true);
+        SetEmitting(target > MinThrottle);
         DriveAmounts(_intensity);
-        _ignitionAge += (float)delta;
-        DriveImmediateSteam(_intensity, _ignitionAge);
-        DriveWideCloud(_intensity, _ignitionAge);
+        _ignitionAge += elapsed;
+        DriveSteamCloud(_intensity, _ignitionAge);
     }
 
     private void SampleLaunchState(Vessel? vessel, Universe? universe)
@@ -197,18 +170,30 @@ public partial class LaunchEffectsController : Node3D
         if (body == null || body.Id != "earth") return;
 
         double altitude = vessel.GetAltitude(body); // metres
-        bool lit = vessel.Throttle > MinThrottle && vessel.HasActiveEngineParts;
+        vessel.FillEngineReadoutsAtPressure(_engineReadouts, vessel.GetAmbientPressure(body));
+        float delivered = (float)EngineHudPresentation.DeliveredThrottle(_engineReadouts);
+        bool lit = delivered > MinThrottle && vessel.HasActiveEngineParts;
+        if (vessel.IsGroundHeld) _launchCloudArmed = true;
         bool onPad = altitude < TriggerCeilingM;
+        if (!onPad) _launchCloudArmed = false;
 
         // Target intensity: full near the deck, easing to zero by the ceiling.
         float target = 0f;
-        if (lit && onPad)
+        if (lit && onPad && _launchCloudArmed)
         {
             float t = ((float)altitude - FullIntensityM) /
                       (TriggerCeilingM - FullIntensityM);
-            target = 1f - Mathf.Clamp(t, 0f, 1f); // 1 at/under FullIntensityM → 0 at ceiling
+            target = delivered * (1f - Mathf.Clamp(t, 0f, 1f)); // 1 at/under FullIntensityM → 0 at ceiling
         }
 
+        var sun = universe.GetBody("sun");
+        if (sun != null)
+        {
+            Vector3d direction = (sun.Position - vessel.Position).Normalized;
+            direction = SunController.Instance?.GetVisualSunDirection(body, vessel.Position, direction)
+                ?? direction;
+            _sunDirection = ToGodot(direction);
+        }
         Vector3 up = ToGodot((vessel.Position - body.Position).Normalized);
         if (up.LengthSquared() < 1e-6f) up = Vector3.Up;
 
@@ -223,11 +208,8 @@ public partial class LaunchEffectsController : Node3D
     {
         // Keep Amount fixed after construction. Mutating it rebuilt GPU buffers
         // during spool-up and repeatedly discarded the initial steam cloud.
-        // Cap peak ratios below 1 so the deluge bank does not erase the stack silhouette
-        // in a lateral pad capture (PLAN_VISUAL V2 deluge silhouette gap).
+        // Dust remains subordinate to the condensed-water volumes.
         float ratio = Mathf.Clamp(k, 0.02f, 1f);
-        _steamCore.AmountRatio  = Mathf.Lerp(0.40f, 0.82f, ratio);
-        _steamBoil.AmountRatio  = Mathf.Lerp(0.28f, 0.72f, ratio);
         _dust.AmountRatio       = Mathf.Lerp(0.20f, 0.70f, ratio);
         _haze.AmountRatio       = Mathf.Lerp(0.18f, 0.55f, ratio);
         _dustRadial.AmountRatio = Mathf.Lerp(0.30f, 0.65f, ratio);
@@ -237,427 +219,23 @@ public partial class LaunchEffectsController : Node3D
     {
         if (_emitting == on) return;
         _emitting = on;
-        _steamCore.Emitting  = on;
-        _steamBoil.Emitting  = on;
         _dust.Emitting       = on;
         _haze.Emitting       = on;
         _dustRadial.Emitting = on;  // N5
-        _instantSteam.Visible = on;
-        _billowBank.Visible = on;
         if (on)
         {
-            _ignitionAge = 0f;
-            _steamCore.Restart(true);
-            _steamBoil.Restart(true);
             _dust.Restart(true);
             _haze.Restart(true);
             _dustRadial.Restart(true);
         }
     }
 
-    private MultiMeshInstance3D BuildImmediateSteamBank()
+    private void DriveSteamCloud(float intensity, float age)
     {
-        var mat = SteamDrawMaterial(energy: 0.52f);
-        mat.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-        var quad = new QuadMesh { Size = new Vector2(12.5f, 4.2f) };
-        quad.SurfaceSetMaterial(0, mat);
-        var mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true,
-            Mesh = quad,
-            InstanceCount = 120,
-        };
-        var bank = new MultiMeshInstance3D
-        {
-            Name = "ImmediateDelugeBank",
-            Multimesh = mm,
-            Visible = false,
-            CustomAabb = new Aabb(new Vector3(-90f, -4f, -90f), new Vector3(180f, 70f, 180f)),
-        };
-        DriveImmediateSteam(bank, 0.45f, 0.0f);
-        return bank;
-    }
-
-    private Node3D BuildBillowBank()
-    {
-        var bank = new Node3D { Name = "ImmediateDelugeBillows", Visible = false };
-        // Soft irregular billboards, not SphereMesh lobes. Play-camera ignition
-        // was reading as a pile of white balls on the OLM; the GPU steam and the
-        // MultiMesh bank already supply volume, this layer only guarantees a
-        // horizontal sheet on the first frames of the compatibility renderer.
-        _billowMaterial = SteamDrawMaterial(energy: 0.22f);
-        _billowMaterial.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-        _billowMaterial.AlbedoColor = new Color(0.76f, 0.77f, 0.76f, 0.64f);
-        _billowMaterial.EmissionEnabled = false;
-        for (int i = 0; i < 40; i++)
-        {
-            float phase = Mathf.PosMod(i * 0.618034f, 1f);
-            float angle = i * 2.399963f;
-            float radius = 2.0f + (i % 12) * 1.75f;
-            // Wide, low sheets merge into a deluge wall. Circular puffs read as
-            // the white spheres on the play-camera pad.
-            float width = 9.0f + phase * 6.0f;
-            float height = 3.6f + phase * 2.4f;
-            var puff = new MeshInstance3D
-            {
-                Name = $"DelugeBillow{i}",
-                Mesh = new QuadMesh { Size = new Vector2(width, height) },
-                Position = new Vector3(Mathf.Cos(angle) * radius,
-                    0.6f + (i % 7) * 0.72f, Mathf.Sin(angle) * radius),
-                MaterialOverride = _billowMaterial,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            };
-            bank.AddChild(puff);
-        }
-        return bank;
-    }
-
-    private void DriveImmediateSteam(float intensity, float age) =>
-        DriveImmediateSteamLayers(intensity, age);
-
-    private void DriveImmediateSteamLayers(float intensity, float age)
-    {
-        DriveImmediateSteam(_instantSteam, intensity, age);
-        float life = Mathf.Clamp(1f - Mathf.Max(0f, age - 5f) / 7f, 0f, 1f);
-        Color color = _billowMaterial.AlbedoColor;
-        color.A = Mathf.Clamp(Mathf.Lerp(0.42f, 0.78f, intensity) * life, 0f, 0.78f);
-        _billowMaterial.AlbedoColor = color;
-    }
-
-    private static void DriveImmediateSteam(MultiMeshInstance3D bank, float intensity, float age)
-    {
-        var mm = bank.Multimesh;
-        if (mm == null) return;
-        float life = Mathf.Clamp(1f - Mathf.Max(0f, age - 5f) / 7f, 0f, 1f);
-        for (int i = 0; i < mm.InstanceCount; i++)
-        {
-            float phase = Mathf.PosMod(i * 0.618034f, 1f);
-            float angle = i * 2.399963f + phase * 0.35f;
-            float speed = 1.2f + phase * 2.2f;
-            // Keep the compatibility layer as a low connected sheet. A very wide,
-            // tall ring reads as isolated white balls in the lateral pad camera.
-            float radius = 3.0f + (i % 15) * 1.45f + Mathf.Min(age, 7f) * speed * 0.65f;
-            float height = 1.0f + (i % 8) * 0.48f + Mathf.Min(age, 7f) * (0.30f + phase * 0.40f);
-            float size = (1.9f + phase * 2.30f) * (1f + Mathf.Min(age, 6f) * 0.12f);
-            var basis = Basis.Identity.Scaled(new Vector3(size * (1.20f + phase * 0.30f), size * 0.40f, 1f));
-            var origin = new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
-            mm.SetInstanceTransform(i, new Transform3D(basis, origin));
-            mm.SetInstanceColor(i, new Color(
-                0.78f + phase * 0.08f,
-                0.82f + phase * 0.06f,
-                0.84f + phase * 0.05f,
-                Mathf.Clamp(Mathf.Lerp(0.32f, 0.62f, intensity) * life, 0f, 0.68f)));
-        }
-    }
-
-    // Gameplay chase tops out near 200 render units. The aerial preset sits
-    // at 460. Fade across that gap so zooming out reveals the large cloud
-    // without ever covering the pad camera.
-    private const float WideCameraStartDistance = 190f;
-    private const float WideCameraFullDistance = 250f;
-
-    private readonly record struct WideCard(
-        float Angle, float Radius, float Height, float WidthScale, float HeightScale, float Shade);
-
-    // Authored for liftoff_wide yaw 38°: two overlapping masses sit left and
-    // right of the stack, clear of the vehicle, with a little depth behind
-    // the pad. Distances are render units (1 unit = 2.8 m).
-    private static readonly WideCard[] WideLobeCards =
-    {
-        // Left bank, tight overlap so the cards read as one mass.
-        new(2.08f, 124f, 22f, 2.15f, 1.70f, 0.15f),
-        new(2.20f, 132f, 28f, 2.40f, 1.90f, 0.45f),
-        new(2.34f, 128f, 18f, 2.05f, 1.55f, 0.70f),
-        new(2.16f, 140f, 34f, 1.85f, 1.65f, 0.90f),
-        // Right bank.
-        new(-0.78f, 126f, 24f, 2.25f, 1.75f, 0.20f),
-        new(-0.92f, 136f, 30f, 2.50f, 2.00f, 0.50f),
-        new(-1.06f, 130f, 18f, 2.10f, 1.60f, 0.75f),
-        new(-0.88f, 146f, 36f, 1.90f, 1.70f, 0.95f),
-    };
-
-    private static readonly WideCard[] WideCoreCards =
-    {
-        new(0.20f, 14f, 12f, 0.85f, 0.90f, 0.10f),
-        new(1.35f, 24f, 16f, 1.00f, 1.05f, 0.35f),
-        new(-0.55f, 20f, 14f, 0.90f, 0.95f, 0.55f),
-        new(2.40f, 28f, 10f, 0.95f, 0.70f, 0.75f),
-        new(0.66f, 16f, 22f, 0.70f, 1.20f, 0.20f),
-        new(-1.10f, 22f, 11f, 0.80f, 0.75f, 0.90f),
-    };
-
-    private void DriveWideCloud(float intensity, float age)
-    {
-        Camera3D? camera = GetViewport()?.GetCamera3D();
-        float distance = camera == null
-            ? 0f
-            : _pivot.GlobalPosition.DistanceTo(camera.GlobalPosition);
-        // The close deluge eases off above 140 m. This bank is the subject of
-        // the wide shot and stays on the pad through the first several hundred metres.
-        float altitudeFade = 1f;
-        if (_sampledAltitude > 250.0)
-        {
-            float t = ((float)_sampledAltitude - 250f) / (900f - 250f);
-            altitudeFade = 1f - Mathf.Clamp(t, 0f, 1f);
-        }
-        float weight = Mathf.SmoothStep(WideCameraStartDistance, WideCameraFullDistance, distance)
-            * altitudeFade;
-        bool show = intensity > 0.02f && weight > 0.05f;
-        float grow = Mathf.Lerp(0.62f, 1f, Mathf.Clamp(age / 4f, 0f, 1f));
-        if (_volumetricExhaust)
-        {
-            // The flat cards are the Compatibility fallback. On Forward+ they
-            // read as the discs in the liftoff screenshots, so the volume owns
-            // the wide shot.
-            _wideLobes.Visible = false;
-            _wideCore.Visible = false;
-            SetExhaustVolume(show ? weight : 0f, grow);
-            return;
-        }
-
-        SetExhaustVolume(0f, grow);
-        _wideLobes.Visible = show;
-        _wideCore.Visible = show;
-        if (!show)
-            return;
-
-        PoseWideBank(_wideLobes, WideLobeCards, grow, weight, age, core: false);
-        PoseWideBank(_wideCore, WideCoreCards, grow, weight, age, core: true);
-    }
-
-    private readonly record struct ExhaustPuff(
-        float Angle, float Radius, float Height, Vector3 Size, float Density, bool Fire);
-
-    // Two cumulus banks beside the stack, plus a small fire core. One ellipsoid
-    // large enough to read at a kilometre becomes a dome over the vehicle.
-    private static readonly ExhaustPuff[] ExhaustLayout =
-    {
-        new(2.05f, 78f, 34f, new Vector3(72f, 96f, 64f), 0.090f, false),
-        new(2.28f, 102f, 52f, new Vector3(84f, 110f, 70f), 0.100f, false),
-        new(2.48f, 70f, 64f, new Vector3(58f, 100f, 52f), 0.080f, false),
-        new(1.82f, 90f, 24f, new Vector3(80f, 70f, 66f), 0.085f, false),
-        new(-0.70f, 82f, 32f, new Vector3(76f, 100f, 66f), 0.095f, false),
-        new(-0.95f, 108f, 56f, new Vector3(90f, 118f, 74f), 0.105f, false),
-        new(-1.18f, 72f, 68f, new Vector3(60f, 104f, 54f), 0.080f, false),
-        new(-0.48f, 94f, 22f, new Vector3(84f, 72f, 68f), 0.085f, false),
-        new(0.40f, 14f, 12f, new Vector3(40f, 28f, 36f), 0.140f, true),
-        new(2.4f, 12f, 10f, new Vector3(36f, 24f, 32f), 0.120f, true),
-        new(-0.15f, 16f, 9f, new Vector3(38f, 22f, 34f), 0.110f, true),
-    };
-
-    private static readonly Color ExhaustWhite = new(0.98f, 0.98f, 0.99f);
-    private static readonly Color ExhaustWhiteEmit = new(0.04f, 0.04f, 0.045f);
-    private static readonly Color ExhaustFire = new(1f, 0.48f, 0.10f);
-    private static readonly Color ExhaustFireEmit = new(1.1f, 0.32f, 0.05f);
-
-    private void BuildExhaustVolume()
-    {
-        Texture3D noise = BuildExhaustNoise();
-        int count = ExhaustLayout.Length;
-        _exhaustPuffs = new FogVolume[count];
-        _exhaustMats = new FogMaterial[count];
-        _exhaustBaseSize = new Vector3[count];
-        _exhaustPeakDensity = new float[count];
-        for (int i = 0; i < count; i++)
-        {
-            ExhaustPuff puff = ExhaustLayout[i];
-            Color albedo = puff.Fire ? ExhaustFire : ExhaustWhite;
-            Color emission = puff.Fire ? ExhaustFireEmit : ExhaustWhiteEmit;
-            // The density texture was turning the lobes into a grey veil.
-            // Solid ellipsoids stay white; only the fire core keeps the lumps.
-            _exhaustMats[i] = ExhaustMaterial(albedo, emission, puff.Fire ? noise : null);
-            _exhaustBaseSize[i] = puff.Size;
-            _exhaustPeakDensity[i] = puff.Density;
-            _exhaustPuffs[i] = ExhaustVolume(
-                puff.Fire ? $"ExhaustFire{i}" : $"ExhaustPuff{i}",
-                _exhaustMats[i],
-                puff.Size,
-                Place(puff.Angle, puff.Radius, puff.Height));
-        }
-        _flameLight = new OmniLight3D
-        {
-            Name = "ExhaustFlameLight",
-            LightColor = new Color(1f, 0.52f, 0.14f),
-            LightEnergy = 0f,
-            OmniRange = 26f,
-            OmniAttenuation = 1.6f,
-            ShadowEnabled = false,
-            LightVolumetricFogEnergy = 1.2f,
-            Position = new Vector3(0f, 8f, 0f),
-            Visible = false,
-        };
-    }
-
-    private static Vector3 Place(float angle, float radius, float height) =>
-        new(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
-
-    private static FogMaterial ExhaustMaterial(Color albedo, Color emission, Texture3D? noise) =>
-        new()
-        {
-            Albedo = albedo,
-            Emission = emission,
-            Density = 0f,
-            EdgeFade = 0.22f,
-            HeightFalloff = 0f,
-            DensityTexture = noise,
-        };
-
-    private static FogVolume ExhaustVolume(string name, FogMaterial material, Vector3 size, Vector3 position) =>
-        new()
-        {
-            Name = name,
-            Shape = RenderingServer.FogVolumeShape.Ellipsoid,
-            Material = material,
-            Size = size,
-            Position = position,
-            Visible = false,
-        };
-
-    private static Texture3D BuildExhaustNoise()
-    {
-        var noise = new FastNoiseLite
-        {
-            NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth,
-            FractalType = FastNoiseLite.FractalTypeEnum.Fbm,
-            FractalOctaves = 5,
-            Frequency = 0.045f,
-        };
-        var ramp = new Gradient
-        {
-            // Keep only the dense peaks, so the volume reads as lumps
-            // instead of a smooth glowing ellipsoid.
-            // A hard threshold emptied the ellipsoids, so the liftoff frame
-            // showed only a faint orange core. Keep a soft body and brighter peaks.
-            Offsets = new[] { 0f, 0.18f, 0.55f, 1f },
-            Colors = new[]
-            {
-                new Color(0.15f, 0.15f, 0.15f),
-                new Color(0.45f, 0.45f, 0.45f),
-                Colors.White,
-                Colors.White,
-            },
-        };
-        return new NoiseTexture3D
-        {
-            Width = 64,
-            Height = 64,
-            Depth = 64,
-            Noise = noise,
-            Seamless = true,
-            ColorRamp = ramp,
-        };
-    }
-
-    private void SetExhaustVolume(float weight, float grow)
-    {
-        EnsureVolumetricExhaust();
-        bool show = _volumetricExhaust && weight > 0.05f;
-        for (int i = 0; i < _exhaustPuffs.Length; i++)
-            _exhaustPuffs[i].Visible = show;
-        _flameLight.Visible = show;
-        _flameLight.LightEnergy = show ? 8f * weight : 0f;
-        if (_flightEnvironment != null && _volumetricFogEnabled != show)
-        {
-            _flightEnvironment.VolumetricFogEnabled = show;
-            _volumetricFogEnabled = show;
-        }
-        if (!show)
-            return;
-
-        for (int i = 0; i < _exhaustPuffs.Length; i++)
-        {
-            _exhaustMats[i].Density = _exhaustPeakDensity[i] * weight;
-            float scale = ExhaustLayout[i].Fire ? Mathf.Lerp(0.8f, 1f, grow) : grow;
-            _exhaustPuffs[i].Size = _exhaustBaseSize[i] * scale;
-        }
-    }
-
-    private void EnsureVolumetricExhaust()
-    {
-        if (_flightEnvironment != null || _volumetricExhaust)
-            return;
-        if (RenderingServer.GetCurrentRenderingMethod().ToString() != "forward_plus")
-            return;
-        if (GetTree()?.Root.FindChild("WorldEnvironment", true, false) is not WorldEnvironment world
-            || world.Environment == null)
-            return;
-
-        _flightEnvironment = world.Environment;
-        _flightEnvironment.VolumetricFogDensity = 0f;
-        _flightEnvironment.VolumetricFogAlbedo = new Color(0.94f, 0.95f, 0.97f);
-        _flightEnvironment.VolumetricFogEmission = new Color(0f, 0f, 0f);
-        _flightEnvironment.VolumetricFogLength = 1100f;
-        _flightEnvironment.VolumetricFogDetailSpread = 2.2f;
-        _flightEnvironment.VolumetricFogAmbientInject = 0.32f;
-        _flightEnvironment.VolumetricFogAnisotropy = 0.35f;
-        _flightEnvironment.VolumetricFogSkyAffect = 0.7f;
-        _volumetricExhaust = true;
-    }
-
-    private static void PoseWideBank(
-        MultiMeshInstance3D bank, WideCard[] cards, float grow, float weight, float age, bool core)
-    {
-        MultiMesh? mesh = bank.Multimesh;
-        if (mesh == null)
-            return;
-
-        float spread = core ? Mathf.Lerp(0.88f, 1f, grow) : grow;
-        for (int i = 0; i < cards.Length; i++)
-        {
-            WideCard card = cards[i];
-            float radius = card.Radius * spread;
-            float y = card.Height * grow
-                + Mathf.Sin(age * 0.4f + card.Angle) * (core ? 0.8f : 2.5f);
-            var basis = Basis.Identity.Scaled(new Vector3(card.WidthScale, card.HeightScale, 1f));
-            var origin = new Vector3(Mathf.Cos(card.Angle) * radius, y, Mathf.Sin(card.Angle) * radius);
-            mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
-            // Optically thick centers. The previous 0.4 alpha left each card
-            // readable as its own disc.
-            float alpha = (core ? 0.78f : 0.94f) * weight;
-            float tone = 0.72f + card.Shade * 0.26f;
-            Color color = core
-                ? new Color(1f, 0.46f + card.Shade * 0.14f, 0.10f + card.Shade * 0.08f, alpha)
-                : new Color(tone, tone, tone * 0.97f, alpha);
-            mesh.SetInstanceColor(i, color);
-        }
-    }
-
-    private MultiMeshInstance3D BuildWideBank(string name, int count, float emission, Vector2 quadSize)
-    {
-        // Own texture: the close-range soft circle has a pixel sine that turns
-        // into a visible grid once a card is hundreds of metres across.
-        var material = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            BlendMode = BaseMaterial3D.BlendModeEnum.Mix,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoTexture = WideCloudTexture,
-            AlbedoColor = Colors.White,
-            EmissionEnabled = true,
-            EmissionEnergyMultiplier = emission,
-            VertexColorUseAsAlbedo = true,
-        };
-        material.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-        var quad = new QuadMesh { Size = quadSize };
-        quad.SurfaceSetMaterial(0, material);
-        var mesh = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true,
-            Mesh = quad,
-            InstanceCount = count,
-        };
-        return new MultiMeshInstance3D
-        {
-            Name = name,
-            Multimesh = mesh,
-            Visible = false,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            CustomAabb = new Aabb(new Vector3(-460f, -8f, -460f), new Vector3(920f, 240f, 920f)),
-        };
+        // Condensed water scatters sunlight and localized exhaust radiance.
+        float daylight = Mathf.SmoothStep(-0.08f, 0.15f, _sunDirection.Dot(_sampledUp))
+            * SunController.SolarVisibility;
+        _steamCloud.UpdateCloud(intensity, _sampledTarget, age, _sunDirection, daylight);
     }
 
     private void FadeOut(double delta)
@@ -674,171 +252,11 @@ public partial class LaunchEffectsController : Node3D
             SetEmitting(false);
             Visible = false;
         }
+        DriveSteamCloud(_intensity, _ignitionAge);
     }
 
     // ── Layer builders (called once) ─────────────────────────────────────────
 
-    /// <summary>
-    /// Dense, fast deluge billow: a wide ring of vapour shot OUTWARD low to the
-    /// ground with strong damping so it spreads sideways and rolls up. Big soft
-    /// white billboards that grow over their lifetime — the iconic cloud body.
-    /// </summary>
-    private GpuParticles3D BuildSteamCore()
-    {
-        // White-grey steam ramp: bright vapour → cooler grey → soft fade.
-        var grad = new Gradient
-        {
-            Colors = new[]
-            {
-                new Color(1.00f, 0.34f, 0.08f, 0.68f), // exhaust-lit steam at the source
-                new Color(1.00f, 0.66f, 0.30f, 0.88f), // orange inner cloud
-                new Color(0.96f, 0.95f, 0.96f, 0.84f), // dense white steam
-                new Color(0.82f, 0.83f, 0.86f, 0.70f), // cooling grey
-                new Color(0.70f, 0.71f, 0.75f, 0.00f), // dissipate
-            },
-            Offsets = new[] { 0f, 0.16f, 0.42f, 0.76f, 1f },
-        };
-
-        var pm = new ParticleProcessMaterial
-        {
-            // N5: wider emission ring — the deluge arc spans the full pad diameter.
-            EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
-            EmissionRingAxis        = Vector3.Up,
-            EmissionRingRadius      = 9.0f,   // N5: ~25 m radius ring (was 6 m)
-            EmissionRingInnerRadius = 1.2f,
-            EmissionRingHeight      = 1.5f,   // N5: taller emission band (was 1.0)
-
-            // Fire mostly OUTWARD & slightly up; wide spread so it fans across pad.
-            // Lower the vertical bias so the FIRST motion is a ground-hugging surge.
-            Direction          = new Vector3(0f, 0.22f, 1f).Normalized(),
-            Spread             = 88f,
-            Flatness           = 0.78f,        // strong bias toward horizontal sheeting
-            // N5: faster initial burst so the cloud DOMINATES the screen at 0-3 s.
-            // Godot values are render units/s: 11–26 corresponds to roughly
-            // 31–73 m/s, consistent with a violent but ground-bound deluge front.
-            InitialVelocityMin = 11f,
-            InitialVelocityMax = 26f,
-
-            // Heavy damping so it decelerates and balloons rather than streaking.
-            DampingMin = 1.3f,
-            DampingMax = 3.4f,
-
-            // Buoyancy: once the outward surge slows, it mushrooms upward.
-            Gravity = new Vector3(0f, 0.75f, 0f),
-
-            // Turbulent, slow drift for that churning volume.
-            TurbulenceEnabled               = true,
-            TurbulenceNoiseStrength         = 4.0f,   // N5: chunkier turbulence (was 3.4)
-            TurbulenceNoiseScale            = 1.1f,
-            TurbulenceInfluenceMin          = 0.14f,
-            TurbulenceInfluenceMax          = 0.60f,
-
-            AngularVelocityMin = -55f,
-            AngularVelocityMax = 55f,
-
-            // N5: bigger initial scale — the billows dominate the frame from birth.
-            ScaleMin = 1.3f,
-            ScaleMax = 3.4f,
-            ColorRamp = new GradientTexture1D { Gradient = grad },
-        };
-        SetGrowCurve(pm, 0.30f, 1.0f); // N5: start smaller and grow more aggressively
-
-        // N5: larger quad mesh — each billboard covers more screen area.
-        var quad = new QuadMesh { Size = new Vector2(6.8f, 2.6f) };
-        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 0.72f)); // N5: brighter (was 1.15)
-
-        return new GpuParticles3D
-        {
-            Name            = "DelugeSteamCore",
-            Amount          = 560,
-            Lifetime        = 7.5f,           // N5: longer-lived (was 6.5)
-            Preprocess      = 1.85f,          // dense, already-developed ignition frame
-            Explosiveness   = 0.12f,          // N5: more burst-like at ignition (was 0.08)
-            Randomness      = 0.5f,
-            ProcessMaterial = pm,
-            DrawPass1       = quad,
-            Emitting        = false,
-            LocalCoords     = true,           // follows the explicitly body-fixed ground pivot
-            VisibilityAabb  = new Aabb(new Vector3(-320f, -12f, -320f), new Vector3(640f, 380f, 640f)),
-        };
-    }
-
-    /// <summary>
-    /// Taller, slower boil-up column behind the core — fills in the vertical
-    /// mushrooming as the cloud climbs. Larger, dimmer, longer-lived puffs.
-    /// </summary>
-    private GpuParticles3D BuildSteamBoil()
-    {
-        var grad = new Gradient
-        {
-            Colors = new[]
-            {
-                new Color(1.00f, 0.48f, 0.18f, 0.40f),
-                new Color(0.98f, 0.86f, 0.78f, 0.70f),
-                new Color(0.74f, 0.75f, 0.79f, 0.45f),
-                new Color(0.62f, 0.63f, 0.68f, 0.00f),
-            },
-            Offsets = new[] { 0f, 0.08f, 0.65f, 1f },
-        };
-
-        var pm = new ParticleProcessMaterial
-        {
-            EmissionShape           = ParticleProcessMaterial.EmissionShapeEnum.Ring,
-            EmissionRingAxis        = Vector3.Up,
-            EmissionRingRadius      = 16.0f,   // N5: wider boil column (was 13)
-            EmissionRingInnerRadius = 3.0f,
-            EmissionRingHeight      = 2.0f,    // N5: taller emission band (was 1.5)
-
-            Direction          = new Vector3(0f, 1f, 0.45f).Normalized(),
-            Spread             = 62f,
-            // N5: faster vertical surge during 0-3 s — tower of steam above the pad.
-            InitialVelocityMin = 3.5f,
-            InitialVelocityMax = 9.0f,
-
-            DampingMin = 0.8f,
-            DampingMax = 2.2f,
-
-            Gravity = new Vector3(0f, 1.1f, 0f),
-
-            TurbulenceEnabled       = true,
-            TurbulenceNoiseStrength = 4.2f,     // N5: chunkier (was 3.8)
-            TurbulenceNoiseScale    = 0.85f,
-            TurbulenceInfluenceMin  = 0.18f,
-            TurbulenceInfluenceMax  = 0.65f,
-
-            AngularVelocityMin = -32f,
-            AngularVelocityMax = 32f,
-
-            // N5: larger puffs — the boil column fills the sky above the pad.
-            ScaleMin = 1.6f,
-            ScaleMax = 4.2f,
-            ColorRamp = new GradientTexture1D { Gradient = grad },
-        };
-        SetGrowCurve(pm, 0.40f, 1.0f);
-
-        var quad = new QuadMesh { Size = new Vector2(7.2f, 2.8f) };
-        quad.SurfaceSetMaterial(0, SteamDrawMaterial(energy: 0.62f));   // N5: slightly brighter (was 0.9)
-
-        return new GpuParticles3D
-        {
-            Name            = "DelugeSteamBoil",
-            Amount          = 300,
-            Lifetime        = 11.0f,           // N5: slightly longer (was 10.0)
-            Preprocess      = 1.0f,
-            Explosiveness   = 0.05f,           // N5: slight burst at ignition (was 0.0)
-            Randomness      = 0.6f,
-            ProcessMaterial = pm,
-            DrawPass1       = quad,
-            Emitting        = false,
-            LocalCoords     = true,
-            VisibilityAabb  = new Aabb(new Vector3(-360f, -12f, -360f), new Vector3(720f, 560f, 720f)),
-        };
-    }
-
-    /// <summary>
-    /// Low, dark dust/debris kicked outward across the deck. Smaller, faster,
-    /// hugs the ground, browner and more opaque than steam.
-    /// </summary>
     private GpuParticles3D BuildDust()
     {
         var grad = new Gradient
@@ -1090,31 +508,6 @@ public partial class LaunchEffectsController : Node3D
 
     // ── Shared material / texture helpers ────────────────────────────────────
 
-    /// <summary>
-    /// Soft, slightly self-illuminated steam billboard. Camera-facing alpha
-    /// cards are required here because this material is shared by both the GPU
-    /// particle layers and the immediate ignition bank.
-    /// </summary>
-    private static StandardMaterial3D SteamDrawMaterial(float energy)
-    {
-        return new StandardMaterial3D
-        {
-            BillboardMode            = BaseMaterial3D.BillboardModeEnum.Enabled,
-            ShadingMode              = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            // Alpha mixing lets hundreds of overlapping billows become an
-            // optically dense wall instead of isolated glowing discs.
-            BlendMode                = BaseMaterial3D.BlendModeEnum.Mix,
-            Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
-            DepthDrawMode            = BaseMaterial3D.DepthDrawModeEnum.Disabled,
-            CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoTexture            = SoftCircle,
-            AlbedoColor              = Colors.White,
-            EmissionEnabled          = true,
-            EmissionEnergyMultiplier = energy,
-            VertexColorUseAsAlbedo   = true,
-        };
-    }
-
     /// <summary>Sets a scale-over-lifetime curve so billboards grow as they age.</summary>
     private static void SetGrowCurve(ParticleProcessMaterial pm, float start, float end)
     {
@@ -1154,36 +547,6 @@ public partial class LaunchEffectsController : Node3D
                 0f, 1f);
             float a = Mathf.SmoothStep(0f, 1f, density * edge * breakup);
             img.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-        }
-        return ImageTexture.CreateFromImage(img);
-    }
-
-    /// <summary>
-    /// Low-frequency cumulus card. The center saturates so overlapping lobes
-    /// become one mass; only the rim stays soft.
-    /// </summary>
-    private static ImageTexture BuildWideCloudTexture()
-    {
-        const int Size = 192;
-        var img = Image.CreateEmpty(Size, Size, false, Image.Format.Rgba8);
-        float half = Size * 0.5f;
-        for (int y = 0; y < Size; y++)
-        for (int x = 0; x < Size; x++)
-        {
-            float dx = (x - half) / half;
-            float dy = (y - half) / half;
-            // Elliptical falloff that is zero before the quad border. A square
-            // edge left the card corners visible.
-            float r2 = dx * dx * 0.85f + dy * dy * 1.55f;
-            float falloff = r2 >= 1f ? 0f : Mathf.SmoothStep(1f, 0.20f, r2);
-            float lump0 = Mathf.Exp(-((dx + 0.22f) * (dx + 0.22f) * 3.1f
-                + (dy + 0.05f) * (dy + 0.05f) * 4.2f));
-            float lump1 = Mathf.Exp(-((dx - 0.18f) * (dx - 0.18f) * 2.6f
-                + (dy - 0.12f) * (dy - 0.12f) * 5.0f));
-            float lump2 = Mathf.Exp(-(dx * dx * 4.4f + (dy + 0.18f) * (dy + 0.18f) * 3.6f));
-            float density = Mathf.Clamp(lump0 * 0.85f + lump1 * 0.75f + lump2 * 0.65f, 0f, 1f);
-            float alpha = density * falloff;
-            img.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
         }
         return ImageTexture.CreateFromImage(img);
     }

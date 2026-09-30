@@ -2,6 +2,8 @@ namespace Exosphere.Game;
 
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Presentation;
+using Exosphere.Simulation.Parts;
 
 /// <summary>
 /// Site-aware orbital launch complex. Starbase receives its OLM/Mechazilla
@@ -41,7 +43,7 @@ public partial class LaunchPadController : Node3D
     private MeshInstance3D? _wellFlame;
     private ShaderMaterial? _wellFlameMat;
     private OmniLight3D? _padExhaustLight;
-    private StandardMaterial3D? _steamSheetMat;
+    private readonly List<EngineReadout> _exhaustReadouts = new(39);
     private float _padExhaustIntensity;
 
     // ── Mechazilla catch feedback (cosmetic only — the sim decides the catch, see
@@ -1734,55 +1736,6 @@ public partial class LaunchPadController : Node3D
         };
         _padExhaustRoot.AddChild(_wellFlame);
 
-        _steamSheetMat = new StandardMaterial3D
-        {
-            // The pad-side camera can approach from any azimuth. Face the steam
-            // sheets toward it instead of relying on the authored radial rotation,
-            // which leaves most of the deluge edge-on in the acceptance shot.
-            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode = BaseMaterial3D.BlendModeEnum.Mix,
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
-            AlbedoColor = new Color(0.88f, 0.86f, 0.82f, 0.58f),
-            EmissionEnabled = true,
-            Emission = new Color(0.78f, 0.76f, 0.72f),
-            EmissionEnergyMultiplier = 0.55f,
-        };
-
-        const int sheets = 18;
-        float ringR = 5.2f;
-        for (int i = 0; i < sheets; i++)
-        {
-            float a = i * Mathf.Tau / sheets;
-            var sheet = new MeshInstance3D
-            {
-                Name = $"DelugeSheet{i}",
-                Mesh = new QuadMesh { Size = new Vector2(9.2f, 6.2f) },
-                Position = new Vector3(Mathf.Cos(a) * ringR, GradeY + 2.2f, Mathf.Sin(a) * ringR),
-                RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a) + 90f, 0f),
-                MaterialOverride = _steamSheetMat,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            };
-            _padExhaustRoot.AddChild(sheet);
-        }
-
-        for (int i = 0; i < 8; i++)
-        {
-            float a = i * Mathf.Tau / 8f + 0.2f;
-            var sheet = new MeshInstance3D
-            {
-                Name = $"DelugeWall{i}",
-                Mesh = new QuadMesh { Size = new Vector2(9.5f, 6.4f) },
-                Position = new Vector3(Mathf.Cos(a) * 9.5f, GradeY + 3.4f, Mathf.Sin(a) * 9.5f),
-                RotationDegrees = new Vector3(0f, -Mathf.RadToDeg(a) + 90f, 0f),
-                MaterialOverride = _steamSheetMat,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            };
-            _padExhaustRoot.AddChild(sheet);
-        }
-
         _padExhaustLight = new OmniLight3D
         {
             Name = "PadExhaustLight",
@@ -1806,8 +1759,10 @@ public partial class LaunchPadController : Node3D
         {
             var body = SimulationBridge.Instance?.Universe?.GetDominantBody(vessel.Position);
             double alt = body != null ? vessel.GetAltitude(body) : 0.0;
-            if (alt < 480.0)
-                target = (float)vessel.Throttle * (1f - Mathf.Clamp((float)((alt - 80.0) / 400.0), 0f, 1f));
+            vessel.FillEngineReadoutsAtPressure(_exhaustReadouts, vessel.GetAmbientPressure(body));
+            float delivered = (float)EngineHudPresentation.DeliveredThrottle(_exhaustReadouts);
+            if (alt < 260.0)
+                target = delivered * (1f - Mathf.SmoothStep(40f, 260f, (float)alt));
         }
 
         float rate = target > _padExhaustIntensity ? 10f : 2.2f;
@@ -1825,15 +1780,8 @@ public partial class LaunchPadController : Node3D
         if (_wellFlame != null)
             _wellFlame.Scale = new Vector3(0.85f + 0.45f * k, _wellFlame.Scale.Y, 0.85f + 0.45f * k);
 
-        if (_steamSheetMat != null)
-        {
-            float a = Mathf.Clamp(0.38f + 0.40f * k, 0.2f, 0.82f);
-            _steamSheetMat.AlbedoColor = new Color(0.86f, 0.84f, 0.80f, a);
-            _steamSheetMat.EmissionEnergyMultiplier = 0.35f + 0.55f * k;
-        }
-
         if (_padExhaustLight != null)
-            _padExhaustLight.LightEnergy = 8f + 18f * k;
+            _padExhaustLight.LightEnergy = 26f * k;
     }
 
 }

@@ -4050,6 +4050,12 @@ public partial class _PlaytestShot : Node
             + $"nominal={summary.NominalEngineCount} rows={summary.ReadoutEngineCount} "
             + $"delivered={delivered} starting={starting} failed={failed} "
             + $"deliveredThrottle={EngineHudPresentation.DeliveredThrottle(rows):F3}");
+        var deluge = GetTree().Root.FindChild("LaunchEffectsController", true, false)
+            as LaunchEffectsController;
+        if (deluge != null)
+            _log.WriteLine($"VISUAL_DELUGE slug={slug} sourcePower={deluge.DeliveredSourcePower:F3} "
+                + $"ageSeconds={deluge.CloudAgeSeconds:F3} opticalWeight={deluge.CloudOpticalWeight:F3} "
+                + $"visible={deluge.Visible} anchor=launch_site model=noisy_optical_volume");
         _log.Flush();
     }
 
