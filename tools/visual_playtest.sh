@@ -638,6 +638,11 @@ public partial class _PlaytestShot : Node
 
     StreamWriter _log = null!;
     double _t0;
+    double _ascentStartedSimulationTime = double.NaN;
+    double _deorbitStartedSimulationTime = double.NaN;
+    double _fullPeakQ, _fullPeakHeat, _fullPeakG;
+    double _fullMinimumWindward = 1.0;
+    bool _fullEntryMeasured;
     double _lastProcessWallSeconds;
     int _frame;
     int _readyFrames;
@@ -1537,6 +1542,7 @@ public partial class _PlaytestShot : Node
         {
             MissionManager.Instance.StartCountdown();
             _ascentEngaged = true;
+            _ascentStartedSimulationTime = universe.CurrentTime;
             _log.WriteLine(
                 $"ACTION start {bridge.ActiveFlightProfileId} historical countdown");
             _log.Flush();
@@ -1545,6 +1551,7 @@ public partial class _PlaytestShot : Node
         {
             AscentController.Instance.Engage();
             _ascentEngaged = true;
+            _ascentStartedSimulationTime = universe.CurrentTime;
             _log.WriteLine("ACTION engage AscentController [G] autopilot");
             _log.Flush();
         }
@@ -1669,13 +1676,14 @@ public partial class _PlaytestShot : Node
         // physical failure. Never convert that failure into a fake orbit for later
         // screenshots.
         if (_mode == "full"
-            && !_orbit && !_ascentFallbackUsed && elapsed > AscentFallbackSec &&
+            && !_orbit && !_ascentFallbackUsed
+            && universe.CurrentTime - _ascentStartedSimulationTime > AscentFallbackSec &&
             mission?.Phase is MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN or MissionPhase.IGNITION
                 or MissionPhase.LIFTOFF or MissionPhase.ASCENT_SH or MissionPhase.MAX_Q or MissionPhase.MECO
                 or MissionPhase.SEPARATION or MissionPhase.ASCENT_SHIP)
         {
             _ascentFallbackUsed = true;
-            _log.WriteLine($"GAP flown ascent did not reach ORBIT within {AscentFallbackSec:F0}s "
+            _log.WriteLine($"GAP flown ascent did not reach ORBIT within {AscentFallbackSec:F0} simulated seconds "
                 + $"phase={mission?.Phase} alt={alt:F0} speed={spd:F0}");
             _log.Flush();
             Finish("ASCENT_ORBIT_GAP");
@@ -1742,9 +1750,10 @@ public partial class _PlaytestShot : Node
         }
 
         // End when robust milestones done and EDL did not activate in time.
-        if (_orbitBeauty && _pendingSlug == null && !_landed && elapsed > 720.0 && !_entry)
+        if (_orbitBeauty && _pendingSlug == null && !_landed
+            && universe.CurrentTime - _deorbitStartedSimulationTime > 720.0 && !_entry)
         {
-            _log.WriteLine("GAP deorbit→EDL: no ENTRY phase reached within 720s (see PLAN_PLAYTEST.md milestone 7)");
+            _log.WriteLine("GAP deorbit→EDL: no ENTRY phase reached within 720 simulated seconds of deorbit arming (see PLAN_PLAYTEST.md milestone 7)");
             _log.Flush();
             Finish("EDL_GAP");
         }
@@ -2076,9 +2085,7 @@ public partial class _PlaytestShot : Node
                 Keycode = Key.B,
                 Pressed = true,
             });
-            if (!map.Planner.HasNode
-                || map.Planner.DvPrograde >= -50.0
-                || !double.IsFinite(map.Planner.DeltaVMagnitude))
+            if (!IsAtmosphericDeorbit(map.Planner, body))
             {
                 _log.WriteLine($"GAP normal deorbit planner refused targetPe={DeorbitTargetPeM:F1} " +
                     $"dv={map.Planner.DeltaVMagnitude:F1} prograde={map.Planner.DvPrograde:F1}");
@@ -2668,6 +2675,21 @@ public partial class _PlaytestShot : Node
         _log.Flush();
     }
 
+    private static bool IsAtmosphericDeorbit(ManeuverPlanner planner, CelestialBody body)
+    {
+        if (!planner.HasNode || planner.DvPrograde >= 0.0
+            || !double.IsFinite(planner.DeltaVMagnitude)
+            || body.Atmosphere == null)
+            return false;
+        var state = planner.PostBurnState();
+        var orbit = Exosphere.Simulation.OrbitalElements.FromStateVector(
+            state.pos, state.vel, body.GM, body.Id, 0.0);
+        double periapsis = orbit.Periapsis - body.Radius;
+        return !orbit.IsHyperbolic && double.IsFinite(periapsis) && periapsis > 0.0
+            && periapsis < body.Atmosphere.MaxAltitude
+            && orbit.PeriapsisRadius < planner.PeriapsisRadius;
+    }
+
     private void ProcessDeorbit(SimulationBridge bridge, Vessel vessel, Universe universe,
         CelestialBody body, MissionManager? mission, double alt)
     {
@@ -2687,9 +2709,7 @@ public partial class _PlaytestShot : Node
 
             if (!map.Visible) map.ToggleVisible();
             map._UnhandledInput(new InputEventKey { Keycode = Key.B, Pressed = true });
-            if (!map.Planner.HasNode
-                || map.Planner.DvPrograde >= -50.0
-                || !double.IsFinite(map.Planner.DeltaVMagnitude))
+            if (!IsAtmosphericDeorbit(map.Planner, body))
             {
                 _log.WriteLine($"GAP continuous deorbit planner refused "
                     + $"dv={map.Planner.DeltaVMagnitude:F1} prograde={map.Planner.DvPrograde:F1}");
@@ -2714,6 +2734,7 @@ public partial class _PlaytestShot : Node
             double propellant = vessel.Parts.Parts.Sum(
                 part => part.LiquidFuel + part.Oxidizer);
             _deorbitStarted = true;
+            _deorbitStartedSimulationTime = universe.CurrentTime;
             _deorbitDone = true;
             _log.WriteLine($"ACTION continuous deorbit armed source=map_deorbit_autopilot "
                 + $"dv={plannedDv:F1} propellant={propellant:F0} "
@@ -2919,7 +2940,20 @@ public partial class _PlaytestShot : Node
     private void LogFullMissionProgress(Vessel vessel, CelestialBody body,
         Universe universe, string phase)
     {
-        if (!_deorbitStarted || universe.CurrentTime < _nextFullTelemetry) return;
+        if (!_deorbitStarted) return;
+        EntryFlightState flight = EntryFlightDiagnostics.Evaluate(vessel, body);
+        if (phase is nameof(MissionPhase.ENTRY) or nameof(MissionPhase.PEAK_HEATING)
+            or nameof(MissionPhase.AERO_DESCENT))
+        {
+            _fullEntryMeasured = true;
+            _fullPeakQ = System.Math.Max(_fullPeakQ, flight.DynamicPressurePa);
+            _fullPeakHeat = System.Math.Max(_fullPeakHeat, flight.StagnationHeatFluxWPerM2);
+            _fullPeakG = System.Math.Max(_fullPeakG, flight.AerodynamicLoadG);
+            _fullMinimumWindward = System.Math.Min(_fullMinimumWindward,
+                ThermalModel.WindwardFactor(vessel.Orientation.Inverse().Rotate(
+                    vessel.GetSurfaceVelocity(body))));
+        }
+        if (universe.CurrentTime < _nextFullTelemetry) return;
 
         Vector3d surfVel = vessel.GetSurfaceVelocity(body);
         Vector3d up = (vessel.Position - body.Position).Normalized;
@@ -2963,9 +2997,17 @@ public partial class _PlaytestShot : Node
             $"engines={engineCluster?.SelectedEngineCount ?? 0} " +
             $"runtime={engineRuntime} failures={engineFailures} starts={completedStarts} " +
             $"lf={liquidFuel:F0} ox={oxidizer:F0} " +
-            $"upright={upright:F4} authority={vessel.ControlAuthorityFactor:F2}");
+            $"upright={upright:F4} authority={vessel.ControlAuthorityFactor:F2} " +
+            $"inertialMps={flight.InertialSpeedMps:F1} qPa={flight.DynamicPressurePa:F1} " +
+            $"mach={flight.Mach:F3} alphaDeg={flight.AngleOfAttackDegrees:F2} " +
+            $"gammaDeg={flight.FlightPathAngleDegrees:F3} bankDeg={flight.BankAngleDegrees:F2} " +
+            $"aeroG={flight.AerodynamicLoadG:F3} heatWm2={flight.StagnationHeatFluxWPerM2:F1} " +
+            $"energyJkg={flight.PointMassSpecificOrbitalEnergyJPerKg:F1} " +
+            $"guidanceDt={EDLController.Instance?.GuidanceUpdatePeriodSeconds:F6} " +
+            $"guidanceUpdates={EDLController.Instance?.GuidanceUpdateCount} " +
+            $"forecasts={EDLController.Instance?.CorridorPredictionCount}");
         _log.Flush();
-        _nextFullTelemetry = universe.CurrentTime + 20.0;
+        _nextFullTelemetry = universe.CurrentTime + 2.0;
     }
 
     private void ApplyVisualCaptureConfiguration(
@@ -4536,6 +4578,11 @@ public partial class _PlaytestShot : Node
                 $"minInsertionVSpeed={minimumVSpeed} " +
                 $"maxInsertionDescent={_maximumInsertionDescent:F1}");
         }
+        if (_fullEntryMeasured)
+            _log.WriteLine($"FULL_ENTRY_METRICS peakQPa={_fullPeakQ:F1} " +
+                $"peakHeatWm2={_fullPeakHeat:F1} peakG={_fullPeakG:F3} " +
+                $"minimumWindward={_fullMinimumWindward:F4} " +
+                "orientationWritesAfterSeed=0 teleport=False fuelReseed=False");
         _log.WriteLine($"SUMMARY reason={reason} frames={_frame}");
         _log.Flush();
         _log.Dispose();

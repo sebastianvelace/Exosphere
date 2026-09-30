@@ -34,6 +34,10 @@ public sealed class ManeuverPlanner
     /// <summary>Target periapsis radius for the current deorbit node, when one exists.</summary>
     public double TargetPeriapsisRadius { get; private set; }
 
+    /// <summary>Explicit deorbit intent, independent of the size of the retrograde burn.</summary>
+    public bool IsDeorbitNode => HasNode && DvPrograde < 0.0
+        && TargetPeriapsisRadius > 0.0;
+
     /// <summary>Periapsis radius of the latest live orbit snapshot.</summary>
     public double PeriapsisRadius => SemiMajorAxis > 0.0
         ? SemiMajorAxis * (1.0 - Eccentricity)
@@ -100,6 +104,7 @@ public sealed class ManeuverPlanner
     public void CreateNodeAt(double trueAnomaly)
     {
         HasNode = true;
+        TargetPeriapsisRadius = 0.0;
         NodeTrueAnomaly = WrapTwoPi(trueAnomaly);
     }
 

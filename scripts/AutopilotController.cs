@@ -65,8 +65,8 @@ public partial class AutopilotController : Node
             _prevNu = double.NaN;
             _burnCommandCommitted = false;
 
-            // Deorbit-ish retro burn: leave ORBIT into COAST while waiting for ignition.
-            if (_planner.DvPrograde < -50.0
+            // Explicit deorbit preset: leave ORBIT into COAST while waiting for ignition.
+            if (_planner.IsDeorbitNode
                 && MissionManager.Instance?.Phase == MissionPhase.ORBIT)
             {
                 MissionManager.Instance.EnterPhase(MissionPhase.COAST);
@@ -115,7 +115,7 @@ public partial class AutopilotController : Node
             // true anomaly. Waiting for a future node-crossing test here is numerically
             // fragile: SetOrbit's tiny eccentricity noise can move the angle outside the
             // 0.10 rad window on the next frame, leaving the armed burn permanently idle.
-            if (_planner.DvPrograde < -50.0 && _planner.Eccentricity < 0.01)
+            if (_planner.IsDeorbitNode && _planner.Eccentricity < 0.01)
             {
                 BeginBurn(vessel, relVel);
             }
@@ -231,7 +231,7 @@ public partial class AutopilotController : Node
         IsBurning   = true;
         _targetDv   = _planner.DeltaVMagnitude;
         _deliveredDv = 0.0;
-        _deorbitBurn = _planner.DvPrograde < -50.0;
+        _deorbitBurn = _planner.IsDeorbitNode;
         _targetPeriapsisRadius = _planner.TargetPeriapsisRadius;
         _burnDirectionWorld = _deorbitBurn
             && currentRelativeVelocity.MagnitudeSquared > 1e-9
@@ -240,8 +240,8 @@ public partial class AutopilotController : Node
         _restoreSas = vessel.SASEnabled;
         vessel.SASEnabled = false;
 
-        // Orbital deorbit burn (map preset / large retro Δv): expose RETRO_BURN on the mission track.
-        if (_planner.DvPrograde < -50.0)
+        // Orbital deorbit preset: expose RETRO_BURN on the mission track.
+        if (_planner.IsDeorbitNode)
             MissionManager.Instance?.EnterPhase(MissionPhase.RETRO_BURN);
     }
 
