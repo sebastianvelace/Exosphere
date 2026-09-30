@@ -495,18 +495,20 @@ public partial class LaunchEffectsController : Node3D
                     ? Mathf.Lerp(-0.95f, 0.95f, isHead ? seed : h)
                     : Mathf.Lerp(Mathf.Pi - 0.95f, Mathf.Pi + 0.95f, isHead ? seed : h);
                 theta += Mathf.Sin(age * (0.45f + seed * 0.4f) + w * 4f) * (0.12f + 0.28f * t);
-                float rx = Mathf.Lerp(36f, isHead ? 205f : 165f, out01) * spread;
-                float rz = Mathf.Lerp(28f, isHead ? 150f : 125f, out01) * spread;
-                // Stretch the screen-right mass toward the camera.
+                // Keep the ellipse nearly round so the bank is a mass, not a
+                // horizontal sausage (Flight 14 T+7/T+10 side walls).
+                float rx = Mathf.Lerp(40f, isHead ? 175f : 145f, out01) * spread;
+                float rz = Mathf.Lerp(44f, isHead ? 165f : 140f, out01) * spread;
                 if (side > 0)
-                    rz *= 1.18f;
+                    rz *= 1.22f;
                 float along = Mathf.Cos(theta) * rx;
                 float fore = Mathf.Sin(theta) * rz;
                 // Keep the stack corridor open.
                 if (Mathf.Abs(along) < 42f)
                     along = side * 42f + (along >= 0f ? 1f : -1f) * Mathf.Abs(along) * 0.15f;
 
-                spine = Mathf.Lerp(2f, isHead ? 80f : 34f, up01);
+                // Carpet also gains height as it expands so the wall has body.
+                spine = Mathf.Lerp(3f, isHead ? 82f : 52f, Mathf.Max(up01, out01 * 0.55f));
                 float churn = Mathf.Sin(age * (0.85f + seed * 0.55f) + u * 5f);
                 spine += churn * (2f + 12f * boil);
                 float localA = (h - 0.5f) * Mathf.Lerp(10f, 30f, out01);
