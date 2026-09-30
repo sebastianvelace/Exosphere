@@ -60,9 +60,16 @@ Base tecnica cerrada en `main`:
 - El entorno de lanzamiento tiene una primera pasada costera/industrial con
   caminos, relleno, juntas, bermas y detalles de deluge visibles desde pad.
 - Ascenso [G] usa gravity turn mas realista y hot-staging en MECO.
-- Reentry/EDL Starship esta validado por telemetria: belly-flop sostenido,
-  flip-and-burn bajo y touchdown sobre seis patas físicas con resorte, damping,
-  fricción, torque, límites de carga/recorrido y asentamiento persistente.
+- The leg-equipped Starship EDL fixtures cover belly-flop, flip-and-burn and six
+  physical landing legs with spring/damper response, friction, torque, load/travel
+  limits and persistent settling. This does not certify the no-legs V3 return:
+  the 2026-09-30 continuous V3 run reached `LANDED` through simplified surface
+  support, without a confirmed tower catch or stable multi-point contact.
+- Atmosphere/entry audit (2026-09-30): continuous automated ascent→orbit→deorbit→entry,
+  902 passing simulation tests, cloud/horizon corrections and hull-aligned plasma.
+  Valid ~28 m/s deorbits now retain planner intent; high-entry footprint forecasting
+  runs at bounded 5 Hz while control stays at 50 Hz. Full rendered mission acceptance
+  remains open. See `docs/audits/atmosphere_reentry_visual_physics_2026-09-30.md`.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
   prediction, marcador/readout de encuentro y readout de maniobra. La base lunar
   ya resuelve Lambert geocéntrico contra la efeméride móvil, busca una ventana
@@ -224,6 +231,12 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      dependen de tooling.
    - El gate ahora exige también el volumen procedural `HotStagePlume` visible y anclado
      durante el overlap; validado en framebuffer real a 640x360 como evidencia reproducible.
+
+   - Flight 14 early-flight reference pass (2026-09-30): delivered-thrust deluge,
+     fixed-site shaded water volumes, a slender rose booster column, neutral PBR
+     steel and low-angle camera framing. Real 1920x1080 launch-to-1 km gate passed;
+     897 simulation tests passed. Scope and residual sky/Pad 2/onboard gaps:
+     `docs/audits/starship_flight14_visual_reference_2026-09-30.md`.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.

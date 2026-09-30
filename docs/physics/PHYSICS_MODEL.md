@@ -259,6 +259,14 @@ lift-up reference. Latitude is held for the duration of one prediction. The vacu
 how far an overflight command may bank toward the body. The rendered non-demo catch and
 the coupled 6-DoF migration remain open.
 
+The production entry controller holds this outer-loop footprint prediction for at
+most 0.2 simulation seconds above 25 km. Vessel/body changes, time rewind or a
+body-relative displacement over 2 km refresh it immediately. Below 25 km it refreshes
+every control epoch. Attitude commands, flap actuators and forces continue at their
+existing 20 ms cadence; the hold changes forecast latency, not force integration.
+See the [2026-09-30 continuous-entry audit](../audits/atmosphere_reentry_visual_physics_2026-09-30.md)
+for the validated envelope and remaining landing boundaries.
+
 ## Propulsion and mass flow
 
 Engine and vehicle data live in JSON. At a given ambient pressure, the engine model applies a

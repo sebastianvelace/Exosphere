@@ -9,6 +9,31 @@ Objetivo: hacer que el juego se lea visualmente como un simulador Starship/Super
 Heavy real-scale, sin romper la fisica, el VAB ni el flujo de vuelo ya validados.
 Este plan prioriza mejoras visibles y verificables sobre sistemas nuevos.
 
+## Flight 14 reference evidence — 2026-09-30
+
+The shared Starship presentation now uses ground-anchored optical deluge volumes,
+local exhaust lighting, a longer narrow rose booster column and readable low-angle
+framing. The 1920x1080 launch-to-1 km capture passed and its PNGs were inspected;
+897 simulation tests passed. This is a scoped improvement, not photographic closure:
+cumulus weather, finer Pad 2 reconstruction and the supplied onboard view remain open.
+See `docs/audits/starship_flight14_visual_reference_2026-09-30.md` for all eight references,
+physical boundaries, before/after evidence and reproduction commands.
+
+## Atmosphere and physical-entry audit — 2026-09-30
+
+Cloud interpolation and foreground extinction are corrected; the daylight dome now
+follows the geometric horizon instead of producing a constant-colour stripe below
+local horizontal. Plasma follows the hull span and live flap transforms, uses a
+simulation clock, and retains the production heat-flux input. Entry instruments leave
+the ship visible at smaller resolutions. 902 simulation tests passed.
+
+A continuous automated V3 run reached the `LANDED` event after actual ascent, orbit,
+deorbit and entry, with no orbit-to-entry teleport or fuel reseed. It was headless
+dynamics evidence; separate framebuffer captures validate atmosphere/plasma visuals.
+The final event used simplified surface support without legs or a confirmed catch.
+Photographic entry closure, cloud silhouettes and persistent final contact remain open.
+See `docs/audits/atmosphere_reentry_visual_physics_2026-09-30.md`.
+
 ## Criterio Rector
 
 - Mantener jugabilidad y telemetria existentes: no romper ascenso [G], hot-staging,
