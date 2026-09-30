@@ -351,7 +351,9 @@ public partial class LaunchEffectsController : Node3D
     // without ever covering the pad camera.
     private const float WideCameraStartDistance = 200f;
     private const float WideCameraFullDistance = 360f;
-    private const int WideSheetCount = 78;
+    // Dense enough that overlapping heads read as one cauliflower bank
+    // (Flight 14 T+7..T+18), not sparse beads on radial arms.
+    private const int WideSheetCount = 108;
     private const int WideCoreCount = 6;
 
     private void DriveWideCloud(float intensity, float age)
@@ -432,7 +434,8 @@ public partial class LaunchEffectsController : Node3D
         int skirts = Mathf.Min(8, count);
         // Cluster cards into a few cauliflower lobes per side so the silhouette
         // is a clump of heads, not evenly spaced beads on a string.
-        const int lobesPerSide = 5;
+        // More lobes + denser cards so overlaps read as one bank (T+7..T+18).
+        const int lobesPerSide = 7;
         for (int i = 0; i < count; i++)
         {
             bool skirt = i >= count - skirts;
@@ -468,27 +471,27 @@ public partial class LaunchEffectsController : Node3D
             }
             else
             {
-                // Flight 14's cauliflower is clumps of steam, not beads on a
-                // ray. Cards in one lobe share the same travel phase so they
-                // sit as a head; only local scatter separates them.
+                // Clumps share a travel phase. A growing circumferential wave
+                // keeps successive radii from lining up into a ray — the
+                // Flight 14 stills are rolling heads, not spokes.
                 int lobe = (i / 2) % lobesPerSide;
                 float lobeSeed = PuffHash(lobe * 19 + (side > 0 ? 7 : 3));
                 float lobeSpeed = 0.065f + lobeSeed * 0.035f;
                 float t = Mathf.PosMod(lobeSeed * 0.85f + age * lobeSpeed, 1f);
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
                 float out01 = Mathf.Pow(t, 0.55f);
-                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.70f) / 0.30f, 0f, 1f), 1.05f);
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.68f) / 0.32f, 0f, 1f), 1.05f);
                 float boil = up01 * up01;
 
                 float lobeCenter = (lobe + 0.5f) / lobesPerSide;
-                // Fan around screen-left / screen-right. Screen-right leans
-                // toward the camera the way the Flight 14 still does.
                 float fan = side > 0
-                    ? Mathf.Lerp(-0.15f, 0.85f, lobeCenter)
-                    : Mathf.Lerp(-0.85f, 0.25f, lobeCenter);
-                float curl = side * (0.35f + 0.40f * lobeSeed) * t * t;
-                float meander = Mathf.Sin(age * (0.42f + lobeSeed * 0.5f) + lobe * 1.7f)
-                    * (0.10f + 0.32f * t);
+                    ? Mathf.Lerp(-0.25f, 0.95f, lobeCenter)
+                    : Mathf.Lerp(-0.95f, 0.30f, lobeCenter);
+                float curl = side * (0.40f + 0.45f * lobeSeed) * t * t;
+                // Two-frequency wander so the path is not a circular arc either.
+                float meander = Mathf.Sin(age * (0.38f + lobeSeed * 0.45f) + lobe * 1.7f)
+                        * (0.12f + 0.30f * t)
+                    + Mathf.Sin(age * (1.1f + h) + w * 4f) * 0.10f * t;
                 float ang = fan + curl + meander;
 
                 Vector3 heading = (lateral * side * Mathf.Cos(ang)
@@ -499,38 +502,48 @@ public partial class LaunchEffectsController : Node3D
                 else
                     sideway = sideway.Normalized();
 
-                float radius = Mathf.Lerp(14f, 195f, out01) * spread;
-                spine = Mathf.Lerp(3f, 72f, up01);
-                // Lobe body rolls; individual cards only jitter inside it.
+                float radius = Mathf.Lerp(16f, 200f, out01) * spread;
+                spine = Mathf.Lerp(3f, 70f, up01);
+                // Circumferential wave grows with radius — breaks colinearity
+                // with the pad without changing how fast the bank expands.
+                float wave = Mathf.Sin(t * Mathf.Tau * (1.2f + lobeSeed) + age * 0.7f + lobe)
+                    * radius * (0.18f + 0.16f * boil);
                 float swirl = Mathf.Sin(age * (0.9f + lobeSeed * 0.7f) + lobe * 2.3f)
-                    * (6f + 22f * boil);
+                    * (8f + 24f * boil);
                 float churn = Mathf.Sin(age * (0.75f + lobeSeed * 0.6f) + lobe);
-                spine += churn * (2f + 9f * boil);
-                radius += Mathf.Sin(age * 0.5f + lobeSeed * 5f) * (2f + 7f * boil);
+                spine += churn * (2f + 10f * boil);
+                radius += Mathf.Sin(age * 0.5f + lobeSeed * 5f) * (2f + 8f * boil);
 
-                // Local scatter around the lobe centre — this is what makes
-                // a cauliflower head instead of a single disc on a path.
-                float localR = (h - 0.5f) * Mathf.Lerp(6f, 24f, out01);
-                float localS = (w - 0.5f) * Mathf.Lerp(8f, 30f, out01);
-                float localY = (u - 0.5f) * Mathf.Lerp(3f, 18f, Mathf.Max(out01, up01));
-                float depthBias = side > 0 ? 26f : -12f;
+                float localR = (h - 0.5f) * Mathf.Lerp(8f, 28f, out01);
+                float localS = (w - 0.5f) * Mathf.Lerp(10f, 34f, out01);
+                float localY = (u - 0.5f) * Mathf.Lerp(4f, 20f, Mathf.Max(out01, up01));
+                float depthBias = side > 0 ? 24f : -10f;
 
                 origin = heading * (radius + localR)
-                    + sideway * (swirl + localS)
+                    + sideway * (swirl + wave + localS)
                     + towardCamera * depthBias
                     + Vector3.Up * (2f + Mathf.Max(spine + localY, 1f));
+                // Keep a clear stack corridor — the Flight 14 needle slot.
+                float latAmt = origin.Dot(lateral);
+                const float corridor = 38f;
+                if (Mathf.Abs(latAmt) < corridor)
+                {
+                    float push = (latAmt >= 0f ? 1f : -1f) * (corridor - Mathf.Abs(latAmt));
+                    if (Mathf.Abs(latAmt) < 1e-3f)
+                        push = side * corridor;
+                    origin += lateral * push;
+                }
                 outward = heading;
 
-                float scale = side > 0 ? 1.16f : 0.94f;
-                // Bigger head at the lobe centre, smaller edge puffs.
+                float scale = side > 0 ? 1.14f : 0.94f;
                 float edge = Mathf.Clamp(Mathf.Abs(h - 0.5f) + Mathf.Abs(w - 0.5f), 0f, 1f);
-                float puff = Mathf.Lerp(24f, 46f, Mathf.Max(t * 0.2f, up01))
-                    * scale * Mathf.Lerp(1.18f, 0.72f, edge);
-                width = Mathf.Max(puff * Mathf.Lerp(1.22f, 1.0f, up01), 14f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.60f, 1.08f, up01), 12f);
+                float puff = Mathf.Lerp(22f, 42f, Mathf.Max(t * 0.2f, up01))
+                    * scale * Mathf.Lerp(1.15f, 0.74f, edge);
+                width = Mathf.Max(puff * Mathf.Lerp(1.28f, 1.0f, up01), 14f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.58f, 1.06f, up01), 12f);
                 rise = up01;
                 flame = 1f - out01;
-                lean = Mathf.Lerp(0.08f, 0.52f, up01);
+                lean = Mathf.Lerp(0.08f, 0.50f, up01);
             }
 
             Vector3 cardZ = towardCamera;
@@ -556,7 +569,8 @@ public partial class LaunchEffectsController : Node3D
                 lit,
                 lit * Mathf.Lerp(0.98f, 0.55f, warm),
                 lit * Mathf.Lerp(0.96f, 0.26f, warm),
-                (skirt ? 0.94f : 0.90f * fade) * weight));
+                // Softer so overlapping heads fuse into one bank.
+                (skirt ? 0.92f : 0.72f * fade) * weight));
         }
     }
 
