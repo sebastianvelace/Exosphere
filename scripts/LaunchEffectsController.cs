@@ -433,21 +433,21 @@ public partial class LaunchEffectsController : Node3D
     // large enough to read at a kilometre becomes a dome over the vehicle.
     private static readonly ExhaustPuff[] ExhaustLayout =
     {
-        new(2.05f, 78f, 34f, new Vector3(72f, 96f, 64f), 0.042f, false),
-        new(2.28f, 102f, 52f, new Vector3(84f, 110f, 70f), 0.046f, false),
-        new(2.48f, 70f, 64f, new Vector3(58f, 100f, 52f), 0.038f, false),
-        new(1.82f, 90f, 24f, new Vector3(80f, 70f, 66f), 0.040f, false),
-        new(-0.70f, 82f, 32f, new Vector3(76f, 100f, 66f), 0.044f, false),
-        new(-0.95f, 108f, 56f, new Vector3(90f, 118f, 74f), 0.048f, false),
-        new(-1.18f, 72f, 68f, new Vector3(60f, 104f, 54f), 0.038f, false),
-        new(-0.48f, 94f, 22f, new Vector3(84f, 72f, 68f), 0.040f, false),
+        new(2.05f, 78f, 34f, new Vector3(72f, 96f, 64f), 0.090f, false),
+        new(2.28f, 102f, 52f, new Vector3(84f, 110f, 70f), 0.100f, false),
+        new(2.48f, 70f, 64f, new Vector3(58f, 100f, 52f), 0.080f, false),
+        new(1.82f, 90f, 24f, new Vector3(80f, 70f, 66f), 0.085f, false),
+        new(-0.70f, 82f, 32f, new Vector3(76f, 100f, 66f), 0.095f, false),
+        new(-0.95f, 108f, 56f, new Vector3(90f, 118f, 74f), 0.105f, false),
+        new(-1.18f, 72f, 68f, new Vector3(60f, 104f, 54f), 0.080f, false),
+        new(-0.48f, 94f, 22f, new Vector3(84f, 72f, 68f), 0.085f, false),
         new(0.40f, 14f, 12f, new Vector3(40f, 28f, 36f), 0.140f, true),
         new(2.4f, 12f, 10f, new Vector3(36f, 24f, 32f), 0.120f, true),
         new(-0.15f, 16f, 9f, new Vector3(38f, 22f, 34f), 0.110f, true),
     };
 
     private static readonly Color ExhaustWhite = new(0.98f, 0.98f, 0.99f);
-    private static readonly Color ExhaustWhiteEmit = new(0.16f, 0.17f, 0.18f);
+    private static readonly Color ExhaustWhiteEmit = new(0.04f, 0.04f, 0.045f);
     private static readonly Color ExhaustFire = new(1f, 0.48f, 0.10f);
     private static readonly Color ExhaustFireEmit = new(1.1f, 0.32f, 0.05f);
 
@@ -464,7 +464,9 @@ public partial class LaunchEffectsController : Node3D
             ExhaustPuff puff = ExhaustLayout[i];
             Color albedo = puff.Fire ? ExhaustFire : ExhaustWhite;
             Color emission = puff.Fire ? ExhaustFireEmit : ExhaustWhiteEmit;
-            _exhaustMats[i] = ExhaustMaterial(albedo, emission, noise);
+            // The density texture was turning the lobes into a grey veil.
+            // Solid ellipsoids stay white; only the fire core keeps the lumps.
+            _exhaustMats[i] = ExhaustMaterial(albedo, emission, puff.Fire ? noise : null);
             _exhaustBaseSize[i] = puff.Size;
             _exhaustPeakDensity[i] = puff.Density;
             _exhaustPuffs[i] = ExhaustVolume(
@@ -478,10 +480,10 @@ public partial class LaunchEffectsController : Node3D
             Name = "ExhaustFlameLight",
             LightColor = new Color(1f, 0.52f, 0.14f),
             LightEnergy = 0f,
-            OmniRange = 78f,
-            OmniAttenuation = 1.1f,
+            OmniRange = 26f,
+            OmniAttenuation = 1.6f,
             ShadowEnabled = false,
-            LightVolumetricFogEnergy = 2.4f,
+            LightVolumetricFogEnergy = 1.2f,
             Position = new Vector3(0f, 8f, 0f),
             Visible = false,
         };
@@ -490,7 +492,7 @@ public partial class LaunchEffectsController : Node3D
     private static Vector3 Place(float angle, float radius, float height) =>
         new(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
 
-    private static FogMaterial ExhaustMaterial(Color albedo, Color emission, Texture3D noise) =>
+    private static FogMaterial ExhaustMaterial(Color albedo, Color emission, Texture3D? noise) =>
         new()
         {
             Albedo = albedo,

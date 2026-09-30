@@ -396,6 +396,11 @@ public partial class PhaseLightingController : Node
             _light.LightAngularDistance = 0.53f;
         if (FloatDiffers(_light.ShadowBlur, 1.0f))
             _light.ShadowBlur = 1.0f;
+        // The liftoff exhaust is a fog volume. Without this the sun does not
+        // light it, so the only way to make it white was emission, which bloomed
+        // over the vehicle.
+        if (FloatDiffers(_light.LightVolumetricFogEnergy, 8f))
+            _light.LightVolumetricFogEnergy = 8f;
     }
 
     private static float Smoothstep(float edge0, float edge1, float x)
