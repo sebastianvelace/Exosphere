@@ -354,14 +354,18 @@ float cloud_hash3(vec3 cell) {
 float cloud_value_noise3(vec3 position) {
 	vec3 cell = floor(position);
 	vec3 fraction = fract(position);
-	// A diagonal two-corner interpolation is deliberately used here instead of
-	// eight-corner trilinear noise. The weather map already supplies fine erosion;
-	// this field only needs a smooth, low-frequency 3D bias and is evaluated for
-	// every cloud view sample on software renderers.
-	vec3 smooth_fraction = fraction * fraction * (3.0 - 2.0 * fraction);
-	float a = cloud_hash3(cell);
-	float b = cloud_hash3(cell + vec3(1.0));
-	return mix(a, b, (smooth_fraction.x + smooth_fraction.y + smooth_fraction.z) / 3.0);
+	// Interpolate all eight corners. The former diagonal-only blend disagreed
+	// on either side of a cell face, creating block seams in the cloud density
+	// and its reciprocal sun-shadow integral.
+	vec3 w = fraction * fraction * (3.0 - 2.0 * fraction);
+	float x00 = mix(cloud_hash3(cell), cloud_hash3(cell + vec3(1.0, 0.0, 0.0)), w.x);
+	float x10 = mix(cloud_hash3(cell + vec3(0.0, 1.0, 0.0)),
+		cloud_hash3(cell + vec3(1.0, 1.0, 0.0)), w.x);
+	float x01 = mix(cloud_hash3(cell + vec3(0.0, 0.0, 1.0)),
+		cloud_hash3(cell + vec3(1.0, 0.0, 1.0)), w.x);
+	float x11 = mix(cloud_hash3(cell + vec3(0.0, 1.0, 1.0)),
+		cloud_hash3(cell + vec3(1.0)), w.x);
+	return mix(mix(x00, x10, w.y), mix(x01, x11, w.y), w.z);
 }
 
 // The global weather map is an 8K equirectangular image.  Near the horizon a
@@ -476,6 +480,21 @@ float cloud_density(vec3 position) {
 	return shape * smoothstep(threshold - 0.12 - threshold_softness,
 		threshold + 0.10 + threshold_softness,
 		weather_field + coverage_dither);
+}
+
+// Finite foreground path to the nearest cloud shell. Clouds must be seen through
+// the same RGB molecular/aerosol extinction as the rest of the scene; unattenuated
+// cloud emission otherwise draws a pale seam across a long tangent view.
+vec3 cloud_foreground_air_depth(vec3 origin, vec3 direction,
+        float start, float end, float closest) {
+    vec3 depth = vec3(0.0);
+    for (int j = 0; j < 4; j++) {
+        float a = tangent_warped_boundary(float(j) / 4.0, start, end, closest);
+        float b = tangent_warped_boundary(float(j + 1) / 4.0, start, end, closest);
+        vec3 p = origin + direction * (0.5 * (a + b));
+        depth += extinction(density_at_height(length(p) - planet_radius)) * max(b - a, 0.0);
+    }
+    return depth;
 }
 
 float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
@@ -639,6 +658,8 @@ void sky() {
 			float cloud_view_steps = effective_step_count(
 				render_step_count(8.0, float(CLOUD_VIEW_STEPS)));
 			float previous_cloud_density = 0.0;
+			vec3 cloud_air_depth = cloud_foreground_air_depth(origin, view_dir,
+				max(ray_start, 0.0), max(cloud_start, ray_start), cloud_closest);
 			for (int i = 0; i < CLOUD_VIEW_STEPS; i++) {
 				if (float(i) >= cloud_view_steps) break;
 				float segment_start = tangent_warped_boundary(
@@ -650,6 +671,11 @@ void sky() {
 				float t = mix(segment_start, segment_end,
 					clamp(0.5 + jitter * CLOUD_VIEW_JITTER, 0.14, 0.86));
 				vec3 p = origin + view_dir * t;
+				vec3 air_segment_depth = extinction(density_at_height(
+                    length(p) - planet_radius)) * cloud_step;
+				vec3 cloud_view_throughput = transmittance(
+                    cloud_air_depth + air_segment_depth * 0.5);
+				cloud_air_depth += air_segment_depth;
 				float rho = cloud_density(p);
 				// Trapezoidal density smoothing reuses the previous quadrature
 				// sample instead of adding a second lookup. It removes visible
@@ -664,7 +690,7 @@ void sky() {
 					vec3 atmospheric_sun = solar_transmittance(p, to_sun, outer_radius);
 					vec3 source = atmospheric_sun
 						* (direct_light * phase_cloud * atmospheric_solar_visibility + 0.018);
-					cloud_radiance += cloud_transmittance * source * segment_alpha;
+					cloud_radiance += cloud_view_throughput * cloud_transmittance * source * segment_alpha;
 					cloud_transmittance *= 1.0 - segment_alpha;
 				}
 			}
@@ -761,7 +787,14 @@ void sky() {
 			: 1.0 - smoothstep(0.0, tangent_shell_width,
 				max(view_tangent_altitude, 0.0));
 		float above = max(smoothstep(-0.045, 0.050, elev), tangent_sky);
-		float h = clamp(elev, 0.0, 1.0);
+		// From altitude, the visible ground tangent lies below local horizontal.
+		// Clamping local elevation to zero made that whole interval one flat colour:
+		// a conspicuous stripe at 10 km and a pale limb during entry. Measure the
+		// existing bounded dome from the geometric tangent instead; its surface
+		// limit is unchanged and the spherical scattering integral remains intact.
+		float radius_ratio = planet_radius / max(length(origin), planet_radius);
+		float ground_tangent_mu = -sqrt(max(1.0 - radius_ratio * radius_ratio, 0.0));
+		float h = clamp((elev - ground_tangent_mu) / (1.0 - ground_tangent_mu), 0.0, 1.0);
 		vec3 dome = mix(vec3(0.58, 0.74, 0.94), vec3(0.08, 0.28, 0.72), pow(h, 0.38));
 		float sun_glare = 0.08 * max(dot(view_dir, to_sun), 0.0);
 		dome += vec3(sun_glare, sun_glare * 0.85, sun_glare * 0.55);
