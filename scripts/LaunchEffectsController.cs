@@ -490,7 +490,9 @@ public partial class LaunchEffectsController : Node3D
                     : Mathf.Lerp(0.10f, 0.70f, Mathf.PosMod(v * 0.7f + age * speed * 0.6f, 1f));
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
                 float out01 = Mathf.Pow(t, 0.55f);
-                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.62f) / 0.38f, 0f, 1f), 1.05f);
+                // Rise earlier than before so T+10 walls have height, not a
+                // flat carpet with a few tall beads.
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.48f) / 0.52f, 0f, 1f), 1.0f);
                 float boil = up01 * up01;
 
                 float theta = side > 0
@@ -510,12 +512,12 @@ public partial class LaunchEffectsController : Node3D
                 if (Mathf.Abs(along) < 44f)
                     along = side * 44f + (along >= 0f ? 1f : -1f) * Mathf.Abs(along) * 0.15f;
 
-                spine = Mathf.Lerp(3f, isMega ? 92f : (isHead ? 78f : 54f),
-                    Mathf.Max(up01, out01 * 0.55f));
+                spine = Mathf.Lerp(4f, isMega ? 108f : (isHead ? 88f : 68f),
+                    Mathf.Max(up01, out01 * 0.62f));
                 // Stronger boil so the crown rolls instead of sliding flat.
-                float churn = Mathf.Sin(age * (1.05f + seed * 0.7f) + u * 5.5f);
-                float churn2 = Mathf.Sin(age * (1.7f + h) + w * 3.2f);
-                spine += churn * (3f + 16f * boil) + churn2 * (1.5f + 8f * boil);
+                float churn = Mathf.Sin(age * (1.15f + seed * 0.75f) + u * 5.5f);
+                float churn2 = Mathf.Sin(age * (1.9f + h) + w * 3.2f);
+                spine += churn * (4f + 20f * boil) + churn2 * (2f + 10f * boil);
                 float localA = (h - 0.5f) * Mathf.Lerp(isMicro ? 6f : 12f, isMicro ? 18f : 34f, out01);
                 float localF = (w - 0.5f) * Mathf.Lerp(isMicro ? 8f : 14f, isMicro ? 22f : 38f, out01);
                 float localY = (u - 0.5f) * Mathf.Lerp(3f, isMega ? 28f : (isHead ? 20f : 12f),
@@ -540,7 +542,7 @@ public partial class LaunchEffectsController : Node3D
                     * (isMega ? 1.55f : isMicro ? 0.48f : isHead ? 1.12f : 0.92f);
                 float puff = Mathf.Lerp(isMicro ? 14f : 28f, isMega ? 58f : 46f, out01) * scale;
                 width = Mathf.Max(puff * (isHead ? Mathf.Lerp(1.12f, 1.0f, up01) : 1.42f), 10f);
-                height = Mathf.Max(puff * (isHead ? Mathf.Lerp(0.68f, 1.12f, up01) : 0.55f), 10f);
+                height = Mathf.Max(puff * (isHead ? Mathf.Lerp(0.72f, 1.18f, up01) : Mathf.Lerp(0.62f, 0.95f, up01)), 10f);
                 rise = isHead ? up01 : out01 * 0.45f;
                 isHeadCard = isHead;
                 // Flame proximity for transmitted light (not a flat side tint).
