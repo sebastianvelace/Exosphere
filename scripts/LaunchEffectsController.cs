@@ -351,10 +351,10 @@ public partial class LaunchEffectsController : Node3D
     // without ever covering the pad camera.
     private const float WideCameraStartDistance = 200f;
     private const float WideCameraFullDistance = 360f;
-    // Dense enough that overlapping heads read as one cauliflower bank
-    // (Flight 14 T+7..T+18), not sparse beads on radial arms.
-    private const int WideSheetCount = 108;
-    private const int WideCoreCount = 6;
+    // Dense multi-scale bank: mega heads + body + micro edge puffs so the
+    // silhouette matches Flight 14 T+7..T+18 cauliflower, not uniform beads.
+    private const int WideSheetCount = 132;
+    private const int WideCoreCount = 8;
 
     private void DriveWideCloud(float intensity, float age)
     {
@@ -451,6 +451,7 @@ public partial class LaunchEffectsController : Node3D
             float lean;
             float fade = 1f;
             float flame = 0f;
+            bool isHeadCard = false;
             Vector3 origin;
             Vector3 outward;
             if (skirt)
@@ -471,66 +472,82 @@ public partial class LaunchEffectsController : Node3D
             }
             else
             {
-                // Flight 14 T+7..T+18 is rounded side masses, not rays from
-                // the pad. Cards sit on expanding elliptical arcs so a freeze
-                // frame is a cauliflower bank. Same expansion speed as before.
-                bool isHead = (i % 4) == 0;
-                // Bias mass to screen-left the way the T+7/T+10 aerials do;
-                // screen-right stays the closer gold lobe.
+                // Multi-scale roles: mega heads, body, micro edge puffs —
+                // Flight 14 T+10 cauliflower is not one disc size.
+                int role = i % 7;
+                bool isMega = role == 0;
+                bool isMicro = role >= 5;
+                bool isHead = isMega || role == 1;
+                // Dominant left mass (T+7/T+10); right stays closer and peach.
                 if (!isHead && (i % 10) < 6)
                     side = -1;
-                float seed = isHead ? PuffHash((i / 2) % lobesPerSide * 19 + (side > 0 ? 7 : 3)) : h;
+                float seed = isHead
+                    ? PuffHash((i / 2) % lobesPerSide * 19 + (side > 0 ? 7 : 3))
+                    : h;
                 float speed = 0.065f + seed * 0.035f;
                 float t = isHead
                     ? Mathf.PosMod(seed * 0.85f + age * speed, 1f)
                     : Mathf.Lerp(0.10f, 0.70f, Mathf.PosMod(v * 0.7f + age * speed * 0.6f, 1f));
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
                 float out01 = Mathf.Pow(t, 0.55f);
-                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.66f) / 0.34f, 0f, 1f), 1.05f);
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.62f) / 0.38f, 0f, 1f), 1.05f);
                 float boil = up01 * up01;
 
-                // Elliptical arc around ±lateral. θ spans a wide lobe so the
-                // silhouette is round, not a spoke.
                 float theta = side > 0
-                    ? Mathf.Lerp(-0.95f, 0.95f, isHead ? seed : h)
-                    : Mathf.Lerp(Mathf.Pi - 0.95f, Mathf.Pi + 0.95f, isHead ? seed : h);
-                theta += Mathf.Sin(age * (0.45f + seed * 0.4f) + w * 4f) * (0.12f + 0.28f * t);
-                // Keep the ellipse nearly round so the bank is a mass, not a
-                // horizontal sausage (Flight 14 T+7/T+10 side walls).
-                float rx = Mathf.Lerp(40f, isHead ? 175f : 145f, out01) * spread;
-                float rz = Mathf.Lerp(44f, isHead ? 165f : 140f, out01) * spread;
+                    ? Mathf.Lerp(-1.05f, 1.05f, isHead ? seed : h)
+                    : Mathf.Lerp(Mathf.Pi - 1.05f, Mathf.Pi + 1.05f, isHead ? seed : h);
+                theta += Mathf.Sin(age * (0.5f + seed * 0.45f) + w * 4f) * (0.14f + 0.32f * t);
+                // Micros cling to the rim of a mega so the head has small lobes.
+                if (isMicro)
+                    theta += (h - 0.5f) * 0.35f;
+                float sideGrow = side < 0 ? 1.12f : 1.0f; // left wall larger
+                float rx = Mathf.Lerp(38f, isHead ? 180f : 150f, out01) * spread * sideGrow;
+                float rz = Mathf.Lerp(42f, isHead ? 170f : 145f, out01) * spread * sideGrow;
                 if (side > 0)
-                    rz *= 1.22f;
+                    rz *= 1.24f;
                 float along = Mathf.Cos(theta) * rx;
                 float fore = Mathf.Sin(theta) * rz;
-                // Keep the stack corridor open.
-                if (Mathf.Abs(along) < 42f)
-                    along = side * 42f + (along >= 0f ? 1f : -1f) * Mathf.Abs(along) * 0.15f;
+                if (Mathf.Abs(along) < 44f)
+                    along = side * 44f + (along >= 0f ? 1f : -1f) * Mathf.Abs(along) * 0.15f;
 
-                // Carpet also gains height as it expands so the wall has body.
-                spine = Mathf.Lerp(3f, isHead ? 82f : 52f, Mathf.Max(up01, out01 * 0.55f));
-                float churn = Mathf.Sin(age * (0.85f + seed * 0.55f) + u * 5f);
-                spine += churn * (2f + 12f * boil);
-                float localA = (h - 0.5f) * Mathf.Lerp(10f, 30f, out01);
-                float localF = (w - 0.5f) * Mathf.Lerp(12f, 34f, out01);
-                float localY = (u - 0.5f) * Mathf.Lerp(3f, isHead ? 22f : 12f, Mathf.Max(out01, up01));
+                spine = Mathf.Lerp(3f, isMega ? 92f : (isHead ? 78f : 54f),
+                    Mathf.Max(up01, out01 * 0.55f));
+                // Stronger boil so the crown rolls instead of sliding flat.
+                float churn = Mathf.Sin(age * (1.05f + seed * 0.7f) + u * 5.5f);
+                float churn2 = Mathf.Sin(age * (1.7f + h) + w * 3.2f);
+                spine += churn * (3f + 16f * boil) + churn2 * (1.5f + 8f * boil);
+                float localA = (h - 0.5f) * Mathf.Lerp(isMicro ? 6f : 12f, isMicro ? 18f : 34f, out01);
+                float localF = (w - 0.5f) * Mathf.Lerp(isMicro ? 8f : 14f, isMicro ? 22f : 38f, out01);
+                float localY = (u - 0.5f) * Mathf.Lerp(3f, isMega ? 28f : (isHead ? 20f : 12f),
+                    Mathf.Max(out01, up01));
+                // Micros sit on the outer/upper rim of the bank.
+                if (isMicro)
+                {
+                    along *= 1.08f;
+                    spine += 8f + h * 14f;
+                }
 
                 origin = lateral * (along + localA)
                     + towardCamera * (fore + localF)
                     + Vector3.Up * (2f + Mathf.Max(spine + localY, 1f));
-                outward = (lateral * along + towardCamera * fore);
+                outward = lateral * along + towardCamera * fore;
                 if (outward.LengthSquared() > 1e-4f)
                     outward = outward.Normalized();
                 else
                     outward = lateral * side;
 
-                float scale = side > 0 ? 1.16f : 1.0f;
-                float puff = Mathf.Lerp(isHead ? 24f : 36f, isHead ? 48f : 56f, out01) * scale;
-                width = Mathf.Max(puff * (isHead ? Mathf.Lerp(1.15f, 1.0f, up01) : 1.50f), 16f);
-                height = Mathf.Max(puff * (isHead ? Mathf.Lerp(0.62f, 1.1f, up01) : 0.50f), 12f);
-                rise = isHead ? up01 : out01 * 0.4f;
-                flame = 1f - out01;
-                lean = isHead ? Mathf.Lerp(0.1f, 0.55f, up01) : 0.14f;
+                float scale = (side > 0 ? 1.14f : 1.05f)
+                    * (isMega ? 1.55f : isMicro ? 0.48f : isHead ? 1.12f : 0.92f);
+                float puff = Mathf.Lerp(isMicro ? 14f : 28f, isMega ? 58f : 46f, out01) * scale;
+                width = Mathf.Max(puff * (isHead ? Mathf.Lerp(1.12f, 1.0f, up01) : 1.42f), 10f);
+                height = Mathf.Max(puff * (isHead ? Mathf.Lerp(0.68f, 1.12f, up01) : 0.55f), 10f);
+                rise = isHead ? up01 : out01 * 0.45f;
+                isHeadCard = isHead;
+                // Flame proximity for transmitted light (not a flat side tint).
+                float padDist = Mathf.Sqrt(along * along + fore * fore);
+                flame = Mathf.Exp(-padDist / 88f)
+                    * Mathf.Clamp((85f - Mathf.Abs(along)) / 55f, 0.15f, 1f);
+                lean = isHead ? Mathf.Lerp(0.12f, 0.58f, up01) : 0.16f;
             }
 
             Vector3 cardZ = towardCamera;
@@ -543,21 +560,21 @@ public partial class LaunchEffectsController : Node3D
                 new Vector3(width / quad, height / quad, 1f));
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
 
-            // Screen-right body is flame-lit gold. Caps stay bright; bellies
-            // and crevices drop so neighbouring puffs stay separate.
+            // Flight 14: bright white caps, peach where the flame lights the
+            // inner face, cool grey crevices. Not a muddy brown wash.
             float warm = skirt
-                ? 0.18f
-                : side > 0
-                    ? Mathf.Lerp(0.20f, 0.86f, flame)
-                    : Mathf.Lerp(0.04f, 0.18f, flame);
+                ? 0.16f
+                : Mathf.Lerp(0.04f, side > 0 ? 0.82f : 0.48f, flame);
             float crevice = skirt ? 0f : (1f - rise) * (1f - Mathf.Abs(h - 0.45f) * 1.6f);
-            float lit = Mathf.Lerp(0.84f, 1f, rise) * Mathf.Lerp(1f, 0.72f, Mathf.Clamp(crevice, 0f, 1f));
+            float lit = Mathf.Lerp(0.90f, 1.05f, rise)
+                * Mathf.Lerp(1f, 0.68f, Mathf.Clamp(crevice, 0f, 1f));
+            lit = Mathf.Min(lit, 1.05f);
+            float alpha = skirt ? 0.92f : (isHeadCard ? 0.88f : 0.80f) * fade;
             mesh.SetInstanceColor(i, new Color(
-                lit,
-                lit * Mathf.Lerp(0.98f, 0.55f, warm),
-                lit * Mathf.Lerp(0.96f, 0.26f, warm),
-                // Body cards keep enough opacity to fuse; heads stay readable.
-                (skirt ? 0.92f : 0.84f * fade) * weight));
+                Mathf.Min(lit, 1f),
+                Mathf.Min(lit * Mathf.Lerp(0.99f, 0.78f, warm), 1f),
+                Mathf.Min(lit * Mathf.Lerp(0.97f, 0.52f, warm), 1f),
+                alpha * weight));
         }
     }
 
@@ -577,18 +594,19 @@ public partial class LaunchEffectsController : Node3D
         for (int i = 0; i < mesh.InstanceCount; i++)
         {
             float phase = Mathf.PosMod(i * 0.618034f, 1f);
-            float angle = i * 2.399963f;
-            float radius = (6f + phase * 10f) * Mathf.Lerp(0.9f, 1f, spread);
-            float y = 3.5f + phase * 4.5f + Mathf.Sin(age * 0.8f + angle) * 0.6f;
-            float size = 1.55f + phase * 0.85f;
-            var basis = Basis.Identity.Scaled(new Vector3(size * 1.35f, size, 1f));
+            float angle = i * 2.399963f + age * 0.35f;
+            // Wider trench glow so the flame lights the inner steam faces.
+            float radius = (8f + phase * 16f) * Mathf.Lerp(0.9f, 1.05f, spread);
+            float y = 3.0f + phase * 5.5f + Mathf.Sin(age * 1.1f + angle) * 1.1f;
+            float size = 1.85f + phase * 1.15f;
+            var basis = Basis.Identity.Scaled(new Vector3(size * 1.45f, size, 1f));
             var origin = new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
             mesh.SetInstanceColor(i, new Color(
                 1f,
-                0.42f + phase * 0.16f,
-                0.08f + phase * 0.06f,
-                Mathf.Clamp(0.88f * weight, 0f, 0.88f)));
+                0.48f + phase * 0.18f,
+                0.10f + phase * 0.08f,
+                Mathf.Clamp(0.92f * weight, 0f, 0.92f)));
         }
     }
 
@@ -1131,9 +1149,8 @@ public partial class LaunchEffectsController : Node3D
     }
 
     /// <summary>
-    /// One round puff. The top is sunlit and the belly is darker, so a stack
-    /// of cards reads as cauliflower instead of one flat sheet. Image row 0
-    /// is the top of a Godot texture.
+    /// Cauliflower puff: overlapping lobes, sunlit cap, shaded belly and a
+    /// soft crevice. Image row 0 is the top of a Godot texture.
     /// </summary>
     private static ImageTexture BuildWideCloudTexture()
     {
@@ -1145,13 +1162,24 @@ public partial class LaunchEffectsController : Node3D
         {
             float dx = (x - half) / half;
             float dy = (y - half) / half;
+            // Several anisotropic lobes so one card already looks like a
+            // mini cumulus head, not a perfect disc.
+            float l0 = Mathf.Exp(-(dx * dx * 2.1f + dy * dy * 2.6f));
+            float l1 = Mathf.Exp(-((dx + 0.38f) * (dx + 0.38f) * 4.8f
+                + (dy - 0.08f) * (dy - 0.08f) * 5.4f));
+            float l2 = Mathf.Exp(-((dx - 0.34f) * (dx - 0.34f) * 5.2f
+                + (dy + 0.14f) * (dy + 0.14f) * 4.6f));
+            float l3 = Mathf.Exp(-((dx + 0.06f) * (dx + 0.06f) * 6.4f
+                + (dy + 0.40f) * (dy + 0.40f) * 6.8f));
+            float density = Mathf.Clamp(l0 * 0.70f + l1 * 0.48f + l2 * 0.44f + l3 * 0.32f, 0f, 1f);
             float radius = Mathf.Sqrt(dx * dx + dy * dy);
-            float alpha = radius >= 1f ? 0f : Mathf.SmoothStep(0.98f, 0.46f, radius);
+            float edge = Mathf.Clamp(1f - radius * 0.92f, 0f, 1f);
+            float alpha = Mathf.SmoothStep(0f, 1f, density * edge);
             // Bright cap, shaded underside. y=0 is the top of the image.
-            float shade = Mathf.Lerp(1f, 0.42f, y / (float)(Size - 1));
-            float crevice = Mathf.Clamp(1f - radius * 0.35f, 0.7f, 1f);
+            float shade = Mathf.Lerp(1f, 0.38f, y / (float)(Size - 1));
+            float crevice = Mathf.Lerp(0.62f, 1f, density);
             float lit = shade * crevice;
-            img.SetPixel(x, y, new Color(lit, lit * 0.985f, lit * 0.96f, alpha));
+            img.SetPixel(x, y, new Color(lit, lit * 0.99f, lit * 0.97f, alpha));
         }
         return ImageTexture.CreateFromImage(img);
     }
