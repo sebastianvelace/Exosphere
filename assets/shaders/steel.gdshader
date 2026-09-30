@@ -27,9 +27,6 @@ uniform float sky_bounce : hint_range(0.0, 8.0) = 0.92;
 uniform vec3  emit_color   : source_color = vec3(1.0, 0.35, 0.0);
 uniform float emit_strength : hint_range(0.0, 4.0) = 0.0;
 
-uniform vec3  sun_dir = vec3(0.35, 0.78, 0.25);
-uniform float engine_light : hint_range(0.0, 8.0) = 0.0;
-
 varying vec3 v_local;
 
 float hash11(float p) {
@@ -74,17 +71,13 @@ void fragment() {
     vec3 n = normalize(NORMAL);
     vec3 v = normalize(VIEW);
     float nDotV = clamp(dot(n, v), 0.0, 1.0);
-    vec3 L = normalize(sun_dir);
-    // Keep the legacy sun vector only for the localized engine bounce mask.
-    // Direct sunlight and its terminator are handled by the PBR light pass.
-    float nDotL = dot(n, L);
-    float wrap = clamp((nDotL + 0.42) / 1.42, 0.0, 1.0);
     float rim = pow(1.0 - nDotV, 2.15) * rim_strength;
 
     float skyFloor = clamp(sky_bounce / 1.10, 0.0, 1.0);
     vec3 emission = col * fill_strength * mix(0.55, 1.0, skyFloor);
     emission += rim_color * rim * 0.12;
-    emission += vec3(1.0, 0.52, 0.22) * engine_light * (1.0 - wrap) * 0.24;
+    // Engine-bay OmniLights already illuminate surfaces with distance falloff.
+    // A whole-hull orange emission made the booster look copper during ascent.
     if (emit_strength > 0.001) {
         emission += emit_color * emit_strength;
     }

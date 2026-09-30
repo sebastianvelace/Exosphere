@@ -104,12 +104,12 @@ public partial class CameraController : Node3D
                 SetExternalChaseFrame(0f, 12f, EdlPresentationDistance);
                 break;
             case "liftoff_wide":
-                // Aerial liftoff, about 1.3 km out. The gaze sits below the
-                // vehicle so the pad cloud shares the frame with the stack.
-                // The tighter vertical FOV keeps the vehicle a needle instead
-                // of a fisheye subject. Gameplay chase distances are unchanged.
-                SetExternalChaseFrame(38f, 15f, 460f, lookAtY: -26f);
-                _externalFov = 32f;
+                // Low-angle liftoff, about 1.3 km out: keep the stack against
+                // the sky, with the lateral deluge banks below it. The modest
+                // upward pitch and grade clamp keep it above the pad before release.
+                // Gameplay chase distances are unchanged.
+                SetExternalChaseFrame(32f, -2f, 460f, lookAtY: -16f);
+                _externalFov = 28f;
                 break;
             default:
                 return false;
@@ -148,7 +148,7 @@ public partial class CameraController : Node3D
         {
             // Low angle, looking up the stack. The previous downward aerial
             // left only a pale horizon band where Flight 14 shows blue sky.
-            SetExternalChaseFrame(32f, -8f, 280f, lookAtY: 26f);
+            SetExternalChaseFrame(32f, -8f, 280f, lookAtY: -8f);
             _externalFov = 36f;
             _liftoffWideHold = true;
             return;
@@ -462,6 +462,8 @@ public partial class CameraController : Node3D
                 // assignment replaced the target with the vessel center, so a far-field
                 // fixture could move the camera down but still look back at the ship.
                 targetLookTarget += localChaseCenter;
+                if (_liftoffWideHold || VisualPreset == "liftoff_wide")
+                    targetCamPos.Y = Mathf.Max(targetCamPos.Y, -(float)(trackAlt / 2.8) + 3f);
             }
         }
 

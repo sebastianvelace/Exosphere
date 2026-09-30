@@ -69,6 +69,8 @@ uniform float shock_cell_softness : hint_range(0.0, 0.6) = 0.10;
 uniform float steam_occlusion : hint_range(0.0, 1.0) = 0.0;
 uniform float afterburn_strength : hint_range(0.0, 1.0) = 1.0;
 uniform float pad_interaction : hint_range(0.0, 1.0) = 0.0;
+// Cluster overlap washes out individual shock cells in the booster reference.
+uniform float merged_cluster : hint_range(0.0, 1.0) = 0.0;
 
 // Master energy multiplier.
 uniform float energy : hint_range(0.0, 10.0) = 3.2;
@@ -140,7 +142,8 @@ void fragment() {
 
 	// ── Radial profile: bright on axis, fades to skin. The plume narrows
 	// downstream at sea level but stays fat (underexpanded) in vacuum. ───────
-	float widthAtA = mix(1.0 - a * 0.70, 1.0 - a * 0.08, effExpansion);
+	float cluster = merged_cluster * (1.0 - effExpansion);
+	float widthAtA = mix(1.0 - a * mix(0.70, 0.24, cluster), 1.0 - a * 0.08, effExpansion);
 	float coreR    = clamp(r / max(widthAtA, 0.05), 0.0, 1.4);
 	// Tighter gaussian at SL (a pencil core), softer/broader in vacuum.
 	float falloff  = mix(3.6, 2.2, effExpansion);
@@ -174,7 +177,7 @@ void fragment() {
 	float diamondStrength = mix(1.0, 0.08, effExpansion)
 		* shock_cell_strength * (1.0 - steam_occlusion * 0.55);
 	float diamondMask = (1.0 - smoothstep(0.0, dReach, a)) * exp(-coreR * coreR * 4.5);
-	diamond *= diamondMask * diamondStrength;
+	diamond *= diamondMask * diamondStrength * mix(1.0, 0.18, cluster);
 
 	// ── Flicker: high-frequency turbulence so the flame is alive. ───────────
 	float flick = 0.85
@@ -187,6 +190,9 @@ void fragment() {
 	vec3 whiteHot = vec3(1.0);
 	// White at the throat → blue-white core downstream.
 	vec3 col = mix(whiteHot, core_color, smoothstep(0.0, 0.45, a));
+	// Reference-calibrated pale rose hot-gas appearance, not a temperature lookup.
+	// Only the merged sea-level booster receives this tint; vacuum is unchanged.
+	col = mix(col, vec3(1.0, 0.64, 0.78), cluster * smoothstep(0.02, 0.32, a) * 0.62);
 	// Hot orange root, only at the very base and mostly at sea level.
 	float hotBase = (1.0 - smoothstep(0.0, 0.18, a))
 		* (1.0 - effExpansion * 0.85) * afterburn_strength;

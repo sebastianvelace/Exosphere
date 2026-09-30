@@ -1915,8 +1915,6 @@ public partial class VesselRenderer : Node3D
             mat.SetShaderParameter("fill_strength", fill);
             mat.SetShaderParameter("rim_strength", rim);
             mat.SetShaderParameter("sky_bounce", bounce);
-            mat.SetShaderParameter("sun_dir", sunDir);
-            mat.SetShaderParameter("engine_light", t * (1.4f - space * 0.5f));
         }
         foreach (var list in _tileZoneMats.Values)
         {
@@ -2992,8 +2990,6 @@ public partial class VesselRenderer : Node3D
         m.SetShaderParameter("rim_color",    new Color(0.55f, 0.72f, 1.0f));
         m.SetShaderParameter("rim_strength", 0.18f);
         m.SetShaderParameter("sky_bounce",   0.92f);
-        m.SetShaderParameter("sun_dir",      new Vector3(0.35f, 0.78f, 0.25f));
-        m.SetShaderParameter("engine_light", 0.0f);
         m.SetShaderParameter("emit_strength", 0.0f);
         _steelMats.Add(m);
         return m;

@@ -94,30 +94,30 @@ public partial class PlumeSystem : Node3D
     {
         // 33 Raptors firing together merge into one enormous incandescent plume.
         // We model it as a bright merged central column plus three concentric
-        // rings; the column dominates and the rings broaden the silhouette. Base
-        // lengths are generous — at sea level this is a short, fat, blinding flame;
-        // altitude then stretches it far longer (see Update()).
+        // rings; the column dominates and the rings broaden the silhouette.
+        // The merged luminous column extends about 100 m below the nozzle in the
+        // early-ascent references. These are optical lengths, not thrust parameters.
 
         // Bright central column (the merged plume core of the densely-packed cluster).
-        // Real Super Heavy liftoff is a SHORT but very WIDE, blinding flame disk — the 33
-        // engines merge into one incandescent column that spills past the OLM ring.
+        // The airborne column stays close to the hull diameter. Ground impingement
+        // is a separate wide fan, and must not widen the entire airborne core.
         _shUnits.Add(BuildUnit("SH_Core", bellY, mouthR: 1.75f,
-            length: 15.0f, count: 33,
+            length: 46.0f, count: 33,
             core: new Color(0.95f, 0.97f, 1.00f), withLight: true, sh: true));
 
         // Inner ring — 3 engines.
         _shUnits.Add(BuildUnit("SH_Inner", bellY, mouthR: innerR + 0.56f,
-            length: 13.2f, count: 3,
+            length: 42.0f, count: 3,
             core: new Color(0.90f, 0.94f, 1.00f), withLight: false, sh: true));
 
         // Mid ring — 10 engines.
         _shUnits.Add(BuildUnit("SH_Mid", bellY + 0.05f, mouthR: midR + 0.62f,
-            length: 12.4f, count: 10,
+            length: 39.0f, count: 10,
             core: new Color(0.88f, 0.93f, 1.00f), withLight: false, sh: true));
 
         // Outer ring — 20 engines, broadest cluster.
         _shUnits.Add(BuildUnit("SH_Outer", bellY + 0.10f, mouthR: outerR + 0.70f,
-            length: 11.6f, count: 20,
+            length: 36.0f, count: 20,
             core: new Color(0.86f, 0.92f, 1.00f), withLight: true, sh: true));
 
         // Expanding fountain under the stack: hits the water-cooled plate and
@@ -440,25 +440,40 @@ public partial class PlumeSystem : Node3D
                 // anchored at the nozzle via the pivot, so scaling the pivot's
                 // Y stretches the plume downward while the mouth stays put.
                 //
-                // SL→vacuum: at sea level the plume is short & fat; in vacuum it
-                // lengthens dramatically (up to ~4x) and widens (up to ~2.3x) into
-                // the long faint underexpanded plume.
+                // The sea-level booster stays a slender merged column. The
+                // pressure proxy lengthens and broadens the optical envelope
+                // downstream as ambient pressure falls; it does not set thrust.
                 float vacuumLengthGain = u.IsSuperHeavy ? 3.0f : 1.8f;
                 float minimumLength = u.IsSuperHeavy ? 0.78f : 0.55f;
                 float lenScale = (minimumLength + (1.0f - minimumLength) * throttle)
                                * (1.0f + expansion * vacuumLengthGain) * flick;
-                // The Super Heavy's sea-level exhaust is a broad merged disk, not a
-                // needle. Widen only the radial envelope so the pad-side silhouette
-                // reads at distance without lengthening the plume into a white streak.
-                float seaLevelBroadening = u.IsSuperHeavy ? 1.62f : 1.12f;
+                // Keep airborne booster width close to the hull diameter.
+                // The separate skirt layer provides the ground-interaction fan.
+                float seaLevelBroadening = u.IsSuperHeavy ? 1.08f : 1.12f;
                 float radScale = (0.85f + 0.30f * throttle)
                                * (1.0f + expansion * (u.IsSuperHeavy ? 1.3f : 0.72f))
                                * Mathf.Lerp(seaLevelBroadening, 1.0f, expansion);
                 if (farField)
                     radScale *= 1.42f;
+                float opticalLength = u.BaseLength * lenScale;
+                // A free jet ends at grade and becomes the separately rendered
+                // ground fan. Intersect along the actual nozzle axis, rather
+                // than letting the longer column pass through the launch site.
+                var pad = LaunchPadController.Instance;
+                if (u.IsSuperHeavy && altitude < 200.0 && pad?.Visible == true)
+                {
+                    Vector3 gradeUp = pad.GlobalBasis.Y.Normalized();
+                    float towardGrade = u.Pivot.GlobalBasis.Y.Normalized().Dot(gradeUp);
+                    if (towardGrade > 0.05f)
+                    {
+                        float nozzleHeight = (u.Pivot.GlobalPosition - pad.GlobalPosition).Dot(gradeUp);
+                        opticalLength = Mathf.Min(opticalLength,
+                            Mathf.Max(0.01f, nozzleHeight / towardGrade));
+                    }
+                }
                 u.Pivot.Scale = new Vector3(
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction),
-                    u.BaseLength * lenScale,
+                    opticalLength,
                     (u.BaseRadius / 0.5f) * radScale * Mathf.Sqrt(activeFraction));
                 float coreScale = u.CoreScale * (farField ? 1.28f : 1f);
                 u.Core.Scale = new Vector3(coreScale, 1f, coreScale);
@@ -572,7 +587,7 @@ public partial class PlumeSystem : Node3D
     {
         float resolvedTailRadius = tailRadius >= 0f
             ? tailRadius
-            : sh ? 0.14f : 0.90f;
+            : sh ? 0.36f : 0.90f;
         var unit = new PlumeUnit
         {
             BaseLength   = length,
@@ -607,6 +622,7 @@ public partial class PlumeSystem : Node3D
 
         var mat = new ShaderMaterial { Shader = PlumeShader };
         mat.SetShaderParameter("core_color",     core);
+        mat.SetShaderParameter("merged_cluster", sh && !unit.IsSkirt ? 1f : 0f);
         mat.SetShaderParameter("edge_color",    new Color(1.0f, 0.45f, 0.12f));
         mat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
         mat.SetShaderParameter("tail_radius", resolvedTailRadius);
@@ -633,7 +649,7 @@ public partial class PlumeSystem : Node3D
         // solid white teardrop. The core layer supplies the blue-white axial column;
         // the outer layer remains transparent enough to preserve the turbulent edge.
         float coreTailRadius = sh
-            ? resolvedTailRadius * 0.42f
+            ? resolvedTailRadius * (unit.IsSkirt ? 0.42f : 0.80f)
             : resolvedTailRadius * 0.34f;
         var coreMesh = new CylinderMesh
         {
@@ -647,6 +663,7 @@ public partial class PlumeSystem : Node3D
         };
         var coreMat = new ShaderMaterial { Shader = PlumeShader };
         coreMat.SetShaderParameter("core_color", core);
+        coreMat.SetShaderParameter("merged_cluster", sh && !unit.IsSkirt ? 1f : 0f);
         coreMat.SetShaderParameter("edge_color", new Color(1.0f, 0.45f, 0.12f));
         coreMat.SetShaderParameter("diamond_count", sh ? 8.0f : 9.0f);
         coreMat.SetShaderParameter("tail_radius", coreTailRadius);
