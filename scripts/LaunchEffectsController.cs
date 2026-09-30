@@ -468,67 +468,66 @@ public partial class LaunchEffectsController : Node3D
             }
             else
             {
-                // Same propagation speed the last pass settled on. The path
-                // itself is what has to stop looking like a straight ray.
-                float speed = 0.07f + h * 0.04f;
-                float t = Mathf.PosMod(v + age * speed, 1f);
+                // Flight 14's cauliflower is clumps of steam, not beads on a
+                // ray. Cards in one lobe share the same travel phase so they
+                // sit as a head; only local scatter separates them.
+                int lobe = (i / 2) % lobesPerSide;
+                float lobeSeed = PuffHash(lobe * 19 + (side > 0 ? 7 : 3));
+                float lobeSpeed = 0.065f + lobeSeed * 0.035f;
+                float t = Mathf.PosMod(lobeSeed * 0.85f + age * lobeSpeed, 1f);
                 fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
                 float out01 = Mathf.Pow(t, 0.55f);
                 float up01 = Mathf.Pow(Mathf.Clamp((t - 0.70f) / 0.30f, 0f, 1f), 1.05f);
                 float boil = up01 * up01;
 
-                // Lobes share a heading so neighbouring puffs form a head.
-                // Within a lobe, scatter is small; between lobes it is wide.
-                int lobe = (i / 2) % lobesPerSide;
                 float lobeCenter = (lobe + 0.5f) / lobesPerSide;
-                float lobeScatter = (h - 0.5f) * 0.22f;
-                // Fan ~±55° around screen-left / screen-right, biased so the
-                // screen-right mass leans toward the camera (Flight 14 still).
+                // Fan around screen-left / screen-right. Screen-right leans
+                // toward the camera the way the Flight 14 still does.
                 float fan = side > 0
-                    ? Mathf.Lerp(-0.20f, 0.95f, lobeCenter + lobeScatter)
-                    : Mathf.Lerp(-0.95f, 0.35f, lobeCenter + lobeScatter);
-                // Path curls as it travels — real steam rolls, it does not
-                // keep the birth bearing. Meander breaks the remaining line.
-                float curl = side * (0.28f + 0.45f * w) * t * t;
-                float meander = Mathf.Sin(age * (0.48f + h * 0.55f) + w * 5.1f)
-                    * (0.12f + 0.28f * t);
+                    ? Mathf.Lerp(-0.15f, 0.85f, lobeCenter)
+                    : Mathf.Lerp(-0.85f, 0.25f, lobeCenter);
+                float curl = side * (0.35f + 0.40f * lobeSeed) * t * t;
+                float meander = Mathf.Sin(age * (0.42f + lobeSeed * 0.5f) + lobe * 1.7f)
+                    * (0.10f + 0.32f * t);
                 float ang = fan + curl + meander;
 
                 Vector3 heading = (lateral * side * Mathf.Cos(ang)
                     + towardCamera * Mathf.Sin(ang)).Normalized();
-                // Perpendicular in the ground plane for vorticity.
                 Vector3 sideway = new Vector3(-heading.Z, 0f, heading.X);
                 if (sideway.LengthSquared() < 1e-4f)
                     sideway = towardCamera;
                 else
                     sideway = sideway.Normalized();
 
-                float radius = Mathf.Lerp(12f, 205f, out01) * spread;
-                spine = Mathf.Lerp(3f, 78f, up01);
-                // Vorticity grows with the boil: the crown rolls over itself.
-                float swirl = Mathf.Sin(age * (1.05f + h * 0.9f) + w * 6.8f)
-                    * (4f + 26f * boil);
-                float churn = Mathf.Sin(age * (0.85f + h * 0.7f) + u * 7.3f);
-                spine += churn * (2f + 10f * boil);
-                radius += Mathf.Sin(age * 0.55f + h * 4.1f) * (3f + 8f * boil);
+                float radius = Mathf.Lerp(14f, 195f, out01) * spread;
+                spine = Mathf.Lerp(3f, 72f, up01);
+                // Lobe body rolls; individual cards only jitter inside it.
+                float swirl = Mathf.Sin(age * (0.9f + lobeSeed * 0.7f) + lobe * 2.3f)
+                    * (6f + 22f * boil);
+                float churn = Mathf.Sin(age * (0.75f + lobeSeed * 0.6f) + lobe);
+                spine += churn * (2f + 9f * boil);
+                radius += Mathf.Sin(age * 0.5f + lobeSeed * 5f) * (2f + 7f * boil);
 
-                // Screen-right mass sits closer; a little fore bias keeps the
-                // corridor open without pinning cards to a single depth.
-                float depthBias = side > 0 ? 28f : -14f;
-                float foreJitter = (w - 0.5f) * Mathf.Lerp(10f, 28f, t);
-                origin = heading * radius
-                    + sideway * swirl
-                    + towardCamera * (depthBias + foreJitter)
-                    + Vector3.Up * (2f + Mathf.Max(spine, 1f));
+                // Local scatter around the lobe centre — this is what makes
+                // a cauliflower head instead of a single disc on a path.
+                float localR = (h - 0.5f) * Mathf.Lerp(6f, 24f, out01);
+                float localS = (w - 0.5f) * Mathf.Lerp(8f, 30f, out01);
+                float localY = (u - 0.5f) * Mathf.Lerp(3f, 18f, Mathf.Max(out01, up01));
+                float depthBias = side > 0 ? 26f : -12f;
+
+                origin = heading * (radius + localR)
+                    + sideway * (swirl + localS)
+                    + towardCamera * depthBias
+                    + Vector3.Up * (2f + Mathf.Max(spine + localY, 1f));
                 outward = heading;
 
-                float scale = side > 0 ? 1.18f : 0.94f;
-                // Multi-scale: lobe centres are larger heads, edge cards smaller.
-                float lobeRole = 1f - Mathf.Abs(lobeScatter) * 1.6f;
-                float puff = Mathf.Lerp(22f, 48f, Mathf.Max(t * 0.22f, up01))
-                    * scale * Mathf.Lerp(0.72f, 1.15f, Mathf.Clamp(lobeRole, 0f, 1f));
-                width = Mathf.Max(puff * Mathf.Lerp(1.25f, 1.0f, up01), 14f);
-                height = Mathf.Max(puff * Mathf.Lerp(0.58f, 1.08f, up01), 12f);
+                float scale = side > 0 ? 1.16f : 0.94f;
+                // Bigger head at the lobe centre, smaller edge puffs.
+                float edge = Mathf.Clamp(Mathf.Abs(h - 0.5f) + Mathf.Abs(w - 0.5f), 0f, 1f);
+                float puff = Mathf.Lerp(24f, 46f, Mathf.Max(t * 0.2f, up01))
+                    * scale * Mathf.Lerp(1.18f, 0.72f, edge);
+                width = Mathf.Max(puff * Mathf.Lerp(1.22f, 1.0f, up01), 14f);
+                height = Mathf.Max(puff * Mathf.Lerp(0.60f, 1.08f, up01), 12f);
                 rise = up01;
                 flame = 1f - out01;
                 lean = Mathf.Lerp(0.08f, 0.52f, up01);
