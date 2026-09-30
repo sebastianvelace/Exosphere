@@ -173,6 +173,25 @@ public partial class VesselRenderer : Node3D
         else                           BuildGenericVessel(vessel);
     }
 
+    /// <summary>Render-space bounds shared by the hull and its aerodynamic glow.</summary>
+    public bool TryGetReentryHull(out Vector3 centre, out float halfLength, out float radius)
+    {
+        centre = Vector3.Zero;
+        halfLength = 0f;
+        radius = BodyR;
+        if (TargetVessel == null) return false;
+        bool ship = false;
+        foreach (var part in TargetVessel.Parts.Parts)
+            ship |= part.Definition.IsStarshipFamily
+                && part.Definition.HasVehicleRole("ship_engines");
+        if (!ship) return false;
+        float span = ShipSkirtH + ShipBodyH + ShipNoseH;
+        float bottom = _hasSuperHeavy ? SepPlaneY : 0f;
+        halfLength = span * 0.5f;
+        centre = new Vector3(0f, bottom + halfLength, 0f);
+        return true;
+    }
+
     // ── Full Starship + Super Heavy stack ─────────────────────────────────
 
     private void BuildFullStack(Vessel vessel)

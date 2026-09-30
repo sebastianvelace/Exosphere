@@ -1086,10 +1086,21 @@ public partial class HUDController : Control
         bool edlActive = EDLController.Instance?.BannerStatus != null;
         _leftRoot.Visible = exterior && full && !edlActive;
         _rightRoot.Visible = exterior && full && !edlActive;
-        _navball.SetClusterBottomOffset(clean ? -16f : full ? -120f : -90f);
-        bool sideCluster = exterior && (edlActive || CameraController.Instance?.Mode == CameraMode.Pad);
+        Vector2 viewportSize = GetViewportRect().Size;
+        float instrumentScale = Mathf.Clamp(
+            Mathf.Min(viewportSize.X / 1600f, viewportSize.Y / 900f), 0.65f, 1f);
+        _navball.PivotOffset = _navball.Size * 0.5f;
+        _navball.Scale = Vector2.One * instrumentScale;
+        float bottom = clean ? -16f : full ? -120f : -90f;
+        _navball.SetClusterBottomOffset(
+            bottom + _navball.Size.Y * (1f - instrumentScale) * 0.5f);
+        bool sideCluster = exterior && (edlActive
+            || CameraController.Instance?.Mode == CameraMode.Pad
+            || viewportSize.X < 1400f || viewportSize.Y < 800f);
+        // Reserve a central sightline to the vehicle. Include the engine panel's
+        // left extent instead of measuring only the navball's centre.
         float clusterOffset = sideCluster
-            ? -Mathf.Clamp(GetViewportRect().Size.X * 0.22f, 140f, 280f) : 0f;
+            ? (24f + 222f * instrumentScale) - viewportSize.X * 0.5f : 0f;
         _navball.SetClusterHorizontalOffset(clusterOffset);
         // Centered navball needs the clock above its full height; side placement
         // leaves the clock in the open central lane.

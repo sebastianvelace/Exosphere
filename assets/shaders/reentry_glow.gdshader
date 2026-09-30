@@ -1,80 +1,60 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Exosphere — Reentry plasma glow shader.
-// Apply to rocket part meshes (or a duplicate shell mesh) during reentry.
-// Drive `heat_level` from the simulation's aerodynamic heating value.
-// ─────────────────────────────────────────────────────────────────────────────
+// Optical plasma proxy driven by measured convective flux, not a gas-temperature solver.
 shader_type spatial;
-render_mode unshaded, blend_add, cull_disabled;
+render_mode unshaded, blend_add, cull_disabled, depth_draw_never, fog_disabled;
 
-uniform float heat_level : hint_range(0.0, 1.0) = 0.0; // 0=cold, 1=max temp
+uniform float heat_level : hint_range(0.0, 1.0) = 0.0;
 uniform sampler2D noise_tex;
-
-// How far vertices are pushed along normals at heat_level = 1 (metres).
-uniform float halo_size : hint_range(0.0, 0.5) = 0.08;
+uniform float halo_size : hint_range(0.0, 0.5) = 0.08; // render units
+uniform float simulation_time = 0.0;
+uniform int effect_kind = 0; // bow cap / downstream wake / surface edge
+uniform float opacity_gain = 1.0;
 
 void vertex() {
-	// Expand vertices along normals slightly at high heat for plasma halo
-	// effect. Quadratic in heat so the halo only appears when glowing hot,
-	// with a fast flicker so the envelope looks alive.
-	float flicker = 1.0 + 0.15 * sin(TIME * 23.0 + VERTEX.y * 17.0 + VERTEX.x * 11.0);
-	VERTEX += NORMAL * halo_size * heat_level * heat_level * flicker;
+    VERTEX += NORMAL * halo_size * heat_level * heat_level;
 }
 
 void fragment() {
-	// ── Animated plasma turbulence ───────────────────────────────────────────
-	// Two noise samples scrolling at different speeds break up tiling.
-	float n1 = texture(noise_tex, UV + vec2(0.0, TIME * 0.3)).r;
-	float n2 = texture(noise_tex, UV * 2.3 + vec2(TIME * 0.17, TIME * 0.41)).r;
-	float turbulence = 0.6 + 0.6 * (0.65 * n1 + 0.35 * n2);
-
-	// Effective heat, modulated by turbulence.
-	float t = clamp(heat_level * turbulence, 0.0, 1.0);
-
-	// ── Temperature → colour ramp ────────────────────────────────────────────
-	// 0.0–0.08: no emission
-	// 0.08–0.5: dark orange
-	// 0.5–0.8 : bright orange / yellow
-	// 0.8–1.0 : white-hot with blue plasma edges
-	const vec3 DARK_ORANGE   = vec3(0.55, 0.13, 0.01);
-	const vec3 BRIGHT_ORANGE = vec3(1.0, 0.55, 0.08);
-	const vec3 YELLOW        = vec3(1.0, 0.85, 0.30);
-	const vec3 WHITE_HOT     = vec3(1.0, 0.97, 0.90);
-	const vec3 PLASMA_BLUE   = vec3(0.45, 0.65, 1.0);
-	const float PLASMA_ONSET  = 0.08;
-
-	vec3 col = vec3(0.0);
-	float strength = 0.0;
-
-	if (t > PLASMA_ONSET) {
-		if (t < 0.5) {
-			// Residual aero-descent plasma remains visible without becoming a flat
-			// orange card at the phase boundary.
-			float k = smoothstep(PLASMA_ONSET, 0.5, t);
-			col = mix(DARK_ORANGE * 0.32, BRIGHT_ORANGE, k);
-			strength = k * 0.75 + 0.06;
-		} else if (t < 0.8) {
-			// Bright orange → yellow.
-			float k = smoothstep(0.5, 0.8, t);
-			col = mix(BRIGHT_ORANGE, YELLOW, k);
-			strength = 0.7 + k * 0.8;
-		} else {
-			// White-hot core.
-			float k = smoothstep(0.8, 1.0, t);
-			col = mix(YELLOW, WHITE_HOT, k);
-			strength = 1.5 + k * 2.0;
-
-			// Blue plasma sheath on grazing edges (fresnel).
-			// NORMAL and VIEW are both view-space in the fragment stage.
-			float fresnel = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 3.0);
-			col = mix(col, PLASMA_BLUE, fresnel * k * 0.7);
-		}
-	}
-
-	vec3 emission = col * strength;
-
-	ALBEDO = emission;
-	EMISSION = emission;
-	// Keep the physical onset soft, while allowing the low-intensity tail to read
-	// at the actual game exposure used during aero descent.
-	ALPHA = t <= PLASMA_ONSET ? 0.0 : clamp(strength * 0.55, 0.0, 1.0);
+    // Advect both scales downstream. The clock comes from committed simulation time,
+    // so pause and time warp retain the relationship between heating and optical flow.
+    float n1 = texture(noise_tex, UV * vec2(3.0, 1.0)
+        + vec2(0.0, -simulation_time * 0.24)).r;
+    float n2 = texture(noise_tex, UV * vec2(7.0, 2.3)
+        + vec2(simulation_time * 0.04, -simulation_time * 0.51)).r;
+    float turbulence = 0.72 + 0.40 * (0.65 * n1 + 0.35 * n2);
+    float t = clamp(heat_level * turbulence, 0.0, 1.0);
+    const float PLASMA_ONSET  = 0.08;
+    float onset = smoothstep(PLASMA_ONSET, 0.26, t);
+    // Line emission has a different spectrum from the incandescent TPS. This
+    // calibrated orange/rose sheath is not a blackbody temperature measurement.
+    vec3 warm = mix(vec3(0.85, 0.16, 0.025), vec3(1.0, 0.48, 0.13),
+        smoothstep(0.15, 0.75, t));
+    float rim = pow(1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))), 1.6);
+    vec3 col = mix(warm, vec3(1.0, 0.34, 0.22), rim * 0.16);
+    col = mix(col, vec3(1.0, 0.86, 0.62), smoothstep(0.82, 1.0, t) * 0.45);
+    float mask = 1.0;
+    float gain = 1.0;
+    if (effect_kind == 0) {
+        // UV.y=0 is the windward pole. Feather the trailing half of the cap.
+        mask = 1.0 - smoothstep(0.20, 0.66, UV.y);
+        float filaments = smoothstep(0.28, 0.76, n1 * 0.65 + n2 * 0.35);
+        mask *= mix(0.12, 0.82, rim) * mix(0.22, 1.0, filaments);
+        gain = 12.0;
+    } else if (effect_kind == 1) {
+        // The open cone tapers toward +Y, downstream of the hull.
+        float downstream = 1.0 - UV.y;
+        mask = smoothstep(0.0, 0.10, UV.y) * smoothstep(0.0, 0.12, downstream);
+        // Suppress the cone silhouette: the downstream volume must read as a
+        // fading optical trail, rather than a rigid transparent shell.
+        mask *= exp(-downstream * 3.5) * mix(0.50, 0.08, rim);
+        mask *= smoothstep(0.18, 0.75, n1 * 0.65 + n2 * 0.35);
+        gain = 6.0;
+    } else {
+        mask = mix(0.22, 0.8, rim);
+        gain = 1.6;
+    }
+    ALBEDO = col * gain;
+    // Compatibility renders unshaded radiance from ALBEDO and ignores EMISSION.
+    // Supply it once here so both renderers display the same optical source.
+    EMISSION = vec3(0.0);
+    ALPHA = t <= PLASMA_ONSET ? 0.0 : onset * mask * opacity_gain * 0.65;
 }

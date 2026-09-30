@@ -21,7 +21,7 @@ public partial class ReentryPlasmaController : Node3D
     private MeshInstance3D?     _shock;   // bright shock cap on the windward side
     private MeshInstance3D?     _wake;    // trailing ionised wake
     private ShaderMaterial?     _shockMat;
-    private StandardMaterial3D? _wakeMat;
+    private ShaderMaterial?     _wakeMat;
     private readonly List<EdgeGlow> _edgeGlows = new();
     private double _visualSampleTimer;
     private Node3D? _vesselFrame;
@@ -54,12 +54,14 @@ public partial class ReentryPlasmaController : Node3D
     private sealed class EdgeGlow
     {
         public MeshInstance3D Mesh = null!;
-        public StandardMaterial3D Mat = null!;
+        public ShaderMaterial Mat = null!;
         public Vector3d LocalPosition;
         public Vector3 BaseScale;
         public float Weight;
         public float Delay;
         public EdgeKind Kind;
+        public string? AnchorName;
+        public Node3D? Anchor;
     }
 
     // Heat-flux thresholds (W/m²). Below FLUX_THRESH there is no visible plasma;
@@ -72,10 +74,12 @@ public partial class ReentryPlasmaController : Node3D
     public override void _Ready()
     {
         var shockShader = GD.Load<Shader>(ShockShaderPath);
-        var noise = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth, Frequency = 4f };
+        // NoiseTexture2D samples in texels: 4 cycles/texel aliases into a nearly
+        // uniform speckle. A few features per tile remain readable on the hull.
+        var noise = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth, Frequency = 0.018f };
         var noiseTex = new NoiseTexture2D { Noise = noise, Width = 256, Height = 256, Seamless = true };
 
-        _shockMat = new ShaderMaterial { Shader = shockShader };
+        _shockMat = new ShaderMaterial { Shader = shockShader, RenderPriority = 6 };
         _shockMat.SetShaderParameter("noise_tex", noiseTex);
         _shockMat.SetShaderParameter("heat_level", 0f);
         _shockMat.SetShaderParameter("halo_size", 0.12f);
@@ -89,21 +93,14 @@ public partial class ReentryPlasmaController : Node3D
         AddChild(_shock);
 
         // Trailing wake — a long faint cone of ionised gas behind the vessel.
-        _wakeMat = new StandardMaterial3D
-        {
-            Transparency             = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode                = BaseMaterial3D.BlendModeEnum.Add,
-            AlbedoColor              = new Color(1.0f, 0.30f, 0.08f, 0f),
-            EmissionEnabled          = true,
-            Emission                 = new Color(1.0f, 0.28f, 0.08f),
-            EmissionEnergyMultiplier = 1.4f,
-            CullMode                 = BaseMaterial3D.CullModeEnum.Disabled,
-            ShadingMode              = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        };
+        _wakeMat = new ShaderMaterial { Shader = shockShader, RenderPriority = 6 };
+        _wakeMat.SetShaderParameter("noise_tex", noiseTex);
+        _wakeMat.SetShaderParameter("effect_kind", 1);
+        _wakeMat.SetShaderParameter("heat_level", 0f);
         _wake = new MeshInstance3D
         {
             Name    = "ReentryWake",
-            Mesh    = new CylinderMesh { TopRadius = 0.05f, BottomRadius = 0.75f, Height = 10f, RadialSegments = 20 },
+            Mesh    = new CylinderMesh { TopRadius = 0.05f, BottomRadius = 1f, Height = 2f, RadialSegments = 32, CapTop = false, CapBottom = false },
             Visible = false,
         };
         _wake.SetSurfaceOverrideMaterial(0, _wakeMat);
@@ -198,23 +195,36 @@ public partial class ReentryPlasmaController : Node3D
         // Vessel body centre in the local frame synchronized above.
         bool hasSH = HasSuperHeavy(vessel);
         Vector3 bodyCentre = new(0f, hasSH ? 30f : 8f, 0f);
+        float halfLength = 1f;
+        float radius = 1.6f;
+        bool shipHull = false;
+        if (_vesselFrame is VesselRenderer renderer)
+            shipHull = renderer.TryGetReentryHull(out bodyCentre, out halfLength, out radius);
 
-        // Shock sits on the windward (leading) face; wake streams out behind.
-        _shock.Position = bodyCentre + flowDir * (hasSH ? 5f : 1.35f);
-        _wake.Position  = bodyCentre - flowDir * (hasSH ? 7f : 4.0f);
+        // Stretch across the actual windward hull, rather than leaving a one-metre
+        // fireball at its centre. The projected longitudinal axis collapses smoothly
+        // for an axial entry; no orientation or force is assigned to the simulation.
+        Vector3 projectedAxis = Vector3.Up - flowDir * Vector3.Up.Dot(flowDir);
+        float broadside = projectedAxis.Length();
+        Vector3 tangent = broadside > 1e-4f ? projectedAxis / broadside
+            : flowDir.Cross(Vector3.Forward).Normalized();
+        if (tangent.LengthSquared() < 1e-6f) tangent = Vector3.Right;
+        Vector3 crossFlow = tangent.Cross(flowDir).Normalized();
+        var bowBasis = new Basis(tangent, flowDir, crossFlow);
+        float span = shipHull ? Mathf.Lerp(radius, halfLength, broadside) : 1.5f;
+        _shock.Position = bodyCentre + flowDir * (radius + 0.16f);
+        _shock.Basis = bowBasis;
+        _wake.Basis = new Basis(tangent, -flowDir, -crossFlow);
+        float wakeLength = Mathf.Lerp(3f, 12f, (float)intensity);
+        _wake.Position = bodyCentre - flowDir * (radius + wakeLength * 0.5f);
+        _wake.Scale = new Vector3(span, wakeLength * 0.5f, radius * 1.25f);
 
-        // Flatten the shock into the flow plane so it reads as a bow cap hugging the
-        // windward face rather than a round ball. Squash along the flow axis.
-        OrientYAxis(_shock, flowDir);
-
-        // Orient the wake cylinder (+Y axis) to point downstream (away from the flow).
-        OrientYAxis(_wake, -flowDir);
-
-        // Flicker so the plasma boils rather than glowing flat.
-        float flicker = 0.8f + (float)(GD.Randf() * 0.4f);
-
+        // Simulation time keeps turbulence stable across captures and frozen on pause.
+        float plasmaTime = (float)(bridge.Universe.CurrentTime % 4096.0);
+        float flicker = 0.94f + 0.06f * Mathf.Sin(plasmaTime * 17f);
+        _shockMat.SetShaderParameter("simulation_time", plasmaTime);
+        _wakeMat.SetShaderParameter("simulation_time", plasmaTime);
         float align     = (float)windward;
-        float misalign  = 1f - align;
         float concentr  = Mathf.Lerp(0.55f, 1.0f, align);
         float exposure  = Mathf.Lerp(1.15f, 1.0f, align);
         float hudGuard  = Mathf.Lerp(0.68f, 1.0f, align);
@@ -225,16 +235,13 @@ public partial class ReentryPlasmaController : Node3D
         LastShockHeatLevel = heatLevel;
         _shockMat.SetShaderParameter("heat_level", heatLevel);
 
-        float wakeAlpha = (float)(intensity * VisualWakeTailGain) * Mathf.Lerp(0.55f, 1.0f, misalign);
-        _wakeMat.AlbedoColor              = new Color(1.0f, 0.28f, 0.08f, wakeAlpha);
-        _wakeMat.EmissionEnergyMultiplier = (float)(0.85 + intensity * 1.7);
+        _wakeMat.SetShaderParameter("heat_level", (float)intensity);
+        _wakeMat.SetShaderParameter("opacity_gain", VisualWakeTailGain);
 
-        // Windward cap: flatten along the flow (thin, wide bow shock) and grow with flux.
-        float sizeScale = Mathf.Lerp(0.62f, 1.12f, (float)intensity);
-        float flatten   = Mathf.Lerp(0.85f, 0.42f, align);       // belly-first = thinner cap
-        // Mesh local +Y now points along the flow (set by OrientYAxis above), so
-        // squash Y to press the cap onto the windward face.
-        _shock.Scale = new Vector3(sizeScale * (1f + 0.4f * align), sizeScale * flatten, sizeScale * (1f + 0.4f * align));
+        float thickness = Mathf.Lerp(0.20f, 0.48f, (float)intensity);
+        _shock.Scale = new Vector3(span, thickness, radius * 1.14f);
+        foreach (var edge in _edgeGlows)
+            edge.Mat.SetShaderParameter("simulation_time", plasmaTime);
 
         UpdateLocalizedEdgeGlows((float)intensity, align, exposure, hasSH, flicker);
     }
@@ -248,7 +255,7 @@ public partial class ReentryPlasmaController : Node3D
         AddEdgeGlow("BellyCenterHeat", new Vector3(-1.72f, 9.8f * shipSpanScale, 0.0f),
             new Vector3(0.11f, 5.4f, 0.11f), weight: 0.52f, delay: 0.05f, kind: EdgeKind.Belly);
 
-        // Edge anchors track the V1.1 flap layout (smaller forward, longer aft elevons).
+        // Fallback positions; when available, the live renderer flap transforms own the anchors.
         AddEdgeGlow("FwdFlapLeftHeat",  new Vector3(-1.62f, 15.35f * shipSpanScale,  1.12f),
             new Vector3(0.14f, 1.95f, 0.14f), weight: 0.80f, delay: 0.10f, kind: EdgeKind.Flap);
         AddEdgeGlow("FwdFlapRightHeat", new Vector3(-1.62f, 15.35f * shipSpanScale, -1.12f),
@@ -263,18 +270,14 @@ public partial class ReentryPlasmaController : Node3D
     private void AddEdgeGlow(string name, Vector3 position, Vector3 baseScale,
         float weight, float delay, EdgeKind kind)
     {
-        var mat = new StandardMaterial3D
+        var mat = new ShaderMaterial
         {
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
-            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
-            AlbedoColor = new Color(1.0f, 0.30f, 0.08f, 0f),
-            EmissionEnabled = true,
-            Emission = new Color(1.0f, 0.34f, 0.08f),
-            EmissionEnergyMultiplier = 0f,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Shader = GD.Load<Shader>(ShockShaderPath),
+            RenderPriority = 6,
         };
+        mat.SetShaderParameter("noise_tex", _shockMat!.GetShaderParameter("noise_tex"));
+        mat.SetShaderParameter("effect_kind", 2);
+        mat.SetShaderParameter("heat_level", 0f);
 
         Mesh mesh = kind == EdgeKind.Nose
             ? new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 24, Rings = 12 }
@@ -301,6 +304,14 @@ public partial class ReentryPlasmaController : Node3D
             Weight = weight,
             Delay = delay,
             Kind = kind,
+            AnchorName = name switch
+            {
+                "FwdFlapLeftHeat" => "FwdFlapL",
+                "FwdFlapRightHeat" => "FwdFlapR",
+                "AftFlapLeftHeat" => "AftFlapL",
+                "AftFlapRightHeat" => "AftFlapR",
+                _ => null,
+            },
         });
     }
 
@@ -350,18 +361,20 @@ public partial class ReentryPlasmaController : Node3D
             SetEdgeVisible(edge, true);
             edge.Mesh.Position = ToGodot(edge.LocalPosition);
             OrientYAxis(edge.Mesh, Vector3.Up);
-            edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.65f * k);
+            if (edge.AnchorName != null && _vesselFrame != null)
+            {
+                if (edge.Anchor == null || !GodotObject.IsInstanceValid(edge.Anchor))
+                    edge.Anchor = _vesselFrame.GetNodeOrNull<Node3D>(edge.AnchorName);
+                if (edge.Anchor != null)
+                {
+                    edge.Mesh.Position = edge.Anchor.Position + Vector3.Left * 0.08f;
+                    edge.Mesh.Basis = edge.Anchor.Basis;
+                }
+            }
+            edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.35f * k);
+            edge.Mat.SetShaderParameter("heat_level", Mathf.Clamp(k * exposure, 0f, 1f));
+            edge.Mat.SetShaderParameter("opacity_gain", alphaCap);
 
-            float white = Mathf.Clamp(k * 1.25f, 0f, 1f);
-            var col = new Color(
-                1.0f,
-                0.22f + 0.60f * white,
-                0.06f + 0.42f * white,
-                Mathf.Min(0.16f + 0.54f * k, alphaCap));
-
-            edge.Mat.AlbedoColor = col;
-            edge.Mat.Emission = new Color(col.R, col.G, col.B);
-            edge.Mat.EmissionEnergyMultiplier = (2.2f + 8.5f * k) * exposure;
         }
     }
 
