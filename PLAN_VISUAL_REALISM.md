@@ -1,6 +1,7 @@
 # Exosphere — Plan de Fidelidad Visual Realista
 
-> **Reconciliado el 2026-09-22.** Este documento sigue siendo el plan vivo de validación visual.
+> **Reconciliado el 2026-09-29.** Este documento sigue siendo el plan vivo de validación visual.
+> El despegue se compara contra Starship Flight 14 (Pad 2, 28 sep 2026), no contra IFT 4–6.
 > Los informes fechados de `docs/audits/` son evidencia histórica; no reemplazan este plan ni
 > `ROADMAP.md`. Toda afirmación de cierre debe distinguir implementación, telemetría y captura
 > de framebuffer real.
@@ -63,8 +64,13 @@ aceptacion explicito.
 
 Referencias iniciales a consultar antes de implementar:
 - SpaceX Starship official: https://www.spacex.com/vehicles/starship/
-- SpaceX flight webcasts / update pages de Starship Flight 4-6 para liftoff,
-  Max-Q, hot-staging, boostback, reentry y splashdown.
+- Liftoff: la foto del usuario del vuelo 14 (Pad 2, vista aérea). Dos masas
+  de cúmulo a izquierda y derecha, más altas que el booster, blancas por
+  fuera y doradas/naranjas en la cara interna; la nave queda en un corredor
+  despejado con una llama naranja corta en la base y la torre visible.
+  Es evidencia visual, no un parámetro físico.
+- SpaceX flight webcasts / update pages de Starship Flight 4-6 siguen siendo
+  la referencia de Max-Q, hot-staging, boostback, reentry y splashdown.
 - NASA / Artemis / HLS para variantes futuras y diferencias visuales: HLS no es
   la Starship atmosferica normal; no mezclar landing legs/solar arrays/HLS con el
   stack orbital actual salvo que se cree variante nueva.
@@ -76,7 +82,7 @@ Matriz de busqueda y aceptacion:
 | Fase | Referencia real | Captura actual | Diferencia observable | Archivo dueño | Criterio de aceptacion |
 | --- | --- | --- | --- | --- | --- |
 | Pad lateral | Starship/Super Heavy en Starbase, vista lateral diurna | `/tmp/exosphere_pad_*.png` | Silueta, proporcion nariz/flaps/grid fins, brillo acero, escala del OLM | `VesselRenderer.cs`, `LaunchPadController.cs`, `CameraController.cs` | Stack 9 m / ~121 m reconocible; detalles legibles sin ruido ni plastico blanco |
-| Liftoff | IFT liftoff daylight, 33 Raptors + deluge | `/tmp/exosphere_liftoff_*.png` | Pluma merged, nube horizontal, exposicion, tower clear | `PlumeSystem.cs`, `LaunchEffectsController.cs`, `LaunchPadController.cs` | Pluma brillante/ancha, deluge horizontal, nave no oculta, HUD legible |
+| Liftoff | Flight 14, dos cúmulos laterales y llama en el hueco | `/tmp/exosphere_liftoff_*.png` | Montículo bajo y columna pálida frente a masas laterales blanca/dorada | `PlumeSystem.cs`, `raptor_plume.gdshader`, `LaunchEffectsController.cs` | Corredor despejado, llama naranja en la base, cúmulos laterales, nave y HUD legibles |
 | Startup/ramp | Engine chill/startup T-3s a liftoff | `/tmp/exosphere_startup_*.png` | Preburn, flare progresivo, anillos encendiendo, vapor antes de release | `PlumeSystem.cs`, `LaunchEffectsController.cs`, `SimulationBridge.cs` solo si hace falta exponer estado | Secuencia no salta de apagado a full plume; hay progreso visual durante hold-down |
 | Hot-staging | IFT hot-stage frames T+2:39/T+2:40 | `/tmp/exosphere_hotstage_*.png` | Flash/plume entre etapas, soot ring, separacion Ship/Booster | `HotStageFlashController.cs`, `VesselRenderer.cs`, `PlumeSystem.cs` | Un frame estatico permite entender que Starship encendio antes de separarse |
 | Orbit burn | Upper-stage / Raptor vacuum plume references | `/tmp/exosphere_orbit_*.png` | Pluma larga, azul/blanca, opticamente delgada, sin humo denso | `PlumeSystem.cs`, `raptor_plume.gdshader` | Vac plume visible contra Tierra sin parecer pluma SL |
@@ -190,6 +196,16 @@ Mejoras:
   visible durante el overlap, con telemetría de anclaje/opacity y gate fail-closed en
   `tools/visual_playtest.sh`; validado en `/tmp/exo_play-visual-close-20260918-low/`.
 - [x] Ground cloud: vapor/polvo horizontal con blast radial y 5 capas N5.
+  La vista aérea de despegue usa un anillo de láminas alrededor del pad
+  (`LaunchEffectsController` wide sheets), no dos lóbulos fijos al yaw de
+  una cámara: esas cartas se perdían en la calima y el humo quedaba en un
+  soplo bajo la nave. Medición en `liftoff_wide` a ~107 m: banda de nube
+  casi blanca 9% → 36%, ventana de la nave estable, HUD superior sin cambio.
+- [x] Lóbulos de Flight 14 (stills T+0..T+30): arcos elípticos, alfombra +
+  cabezas, multi-escala mega/body/micro, textura coliflor, luz melocotón
+  por proximidad a la zanja (`PoseWideSheets` / `BuildWideCloudTexture`).
+  Captura `liftoff_wide` a 107 m, `LAUNCH_OK`, `neonGreenFrac` ~0.
+  Sigue siendo cartón: falta reflejo en agua y luz volumétrica real.
 - [x] Deluge cloud: peaking AmountRatio capped (&lt;1) so the lateral silhouette stays
   readable (`LaunchEffectsController.DriveAmounts`). Confirm with pad/liftoff capture.
 - [x] Pad: OLM mas reconocible, flame trench/deflector mas legible, escala humana
@@ -408,8 +424,10 @@ Sesion de fidelidad visual (jun 2026). Contexto para retomar sin re-derivar:
   vacio = largo/tenue/sin diamantes (a proposito).
 - Ground cloud (deluge): `LaunchEffectsController.cs`.
 
-**Proximo paso mas valioso:** comparación humana lado-a-lado contra stills IFT
-(hot-staging T+2:39/T+2:40, startup/ramp, pluma de vacío, reentry). El harness
-`--hotstage` / `--ship` / `--reentry-compare` ya produce frames de juego; no
-marcar esa comparación de referencia como hecha hasta juzgar las fotos reales.
+**Proximo paso mas valioso:** cerrar el despegue contra el still de Flight 14
+(columna naranja ancha, vapor blanco en la base, nave visible). Hot-staging,
+startup/ramp, pluma de vacío y reentry siguen contra stills IFT
+(hot-staging T+2:39/T+2:40). El harness `--launch` / `--hotstage` / `--ship` /
+`--reentry-compare` ya produce frames de juego; no marcar esa comparación
+de referencia como hecha hasta juzgar las fotos reales.
 Starbase fotogrametría / OSM extra queda **después** de ese juicio.
