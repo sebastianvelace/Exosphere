@@ -130,6 +130,51 @@ public static class EntryCorridorGuidance
     }
 
     /// <summary>
+    /// Builds a lateral bank side perpendicular to the current airflow and vertical.
+    /// A previous lift projected only off vertical can retain an axial component as
+    /// the flow turns; using it as bank authority silently loses lift-side steering.
+    /// </summary>
+    public static Vector3d ComputeBankSide(Vector3d flow, Vector3d up, Vector3d previousLift)
+    {
+        var side = up.Cross(flow).Normalized;
+        return previousLift.Dot(side) < -1e-5 ? -side : side;
+    }
+
+    /// <summary>
+    /// Bounds vertical lift through descent. A climb-rate feedback command plus the
+    /// local ballistic radial acceleration sets the bank ceiling; forces and state
+    /// remain owned by the integrator. Full lift-up remains available in a plunge.
+    /// </summary>
+    public static Vector3d LimitLiftForDescent(
+        Vector3d requestedLift, Vector3d liftUp, Vector3d lateralFallback,
+        double verticalSpeedMps, double airspeedMps,
+        double ballisticVerticalAccelerationMps2, double liftUpAccelerationMps2)
+    {
+        if (!double.IsFinite(verticalSpeedMps) || !double.IsFinite(airspeedMps)
+            || !double.IsFinite(ballisticVerticalAccelerationMps2)
+            || !double.IsFinite(liftUpAccelerationMps2)
+            || liftUpAccelerationMps2 < 0.05 || airspeedMps < 1_000.0)
+            return requestedLift.Normalized;
+
+        // A shallow descending corridor, with enough look-ahead for the physical
+        // roll actuator. At terminal speed the ordinary belly-flop/flip owns guidance.
+        double targetVerticalSpeed = -System.Math.Max(100.0, airspeedMps * 0.035);
+        double targetAcceleration = (targetVerticalSpeed - verticalSpeedMps) / 20.0;
+        double ceiling = System.Math.Clamp(
+            (targetAcceleration - ballisticVerticalAccelerationMps2)
+                / liftUpAccelerationMps2, -0.15, 1.0);
+        // Footprint steering cannot turn a steep entry into a down-lift plunge.
+        // Keep a 150 m/s descent deadband for its range command below the ceiling.
+        double floor = System.Math.Clamp(
+            ((targetVerticalSpeed - 150.0 - verticalSpeedMps) / 20.0
+                - ballisticVerticalAccelerationMps2) / liftUpAccelerationMps2, -0.15, ceiling);
+        var bounded = ConstrainVerticalLift(requestedLift, liftUp,
+            minimumVerticalFraction: floor, lateralFallback: lateralFallback);
+        return ConstrainVerticalLift(bounded, -liftUp,
+            minimumVerticalFraction: -ceiling, lateralFallback: lateralFallback);
+    }
+
+    /// <summary>
     /// Blends a bank command in only after aerodynamic control authority exists. Flaps
     /// cannot track a large roll reference in near-vacuum; integrating saturated commands
     /// there stores angular momentum and produces an artificial oscillation before entry.

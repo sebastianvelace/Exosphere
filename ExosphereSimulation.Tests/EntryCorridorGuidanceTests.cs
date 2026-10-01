@@ -2,6 +2,7 @@ namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Physics;
 using Xunit;
 
 public sealed class EntryCorridorGuidanceTests
@@ -224,6 +225,63 @@ public sealed class EntryCorridorGuidanceTests
         Assert.Equal(-0.15, nominal, 10);
         Assert.InRange(midpoint, 0.424999, 0.425001);
         Assert.Equal(1.0, relieved, 10);
+    }
+
+    [Theory]
+    [InlineData(-1000.0, 1.0)] // Preserve lift-up recovery in a steep plunge.
+    [InlineData(-100.0, 0.3)] // Hold descent against the remaining ballistic acceleration.
+    [InlineData(150.0, -0.15)] // Bank through neutral lift when already skipping.
+    public void DescentFeedbackBanksExcessLiftWithoutChangingItsMagnitude(
+        double verticalSpeed, double expectedVerticalFraction)
+    {
+        var lift = EntryCorridorGuidance.LimitLiftForDescent(
+            Vector3d.Up, Vector3d.Up, Vector3d.Forward,
+            verticalSpeed, 2000.0, -6.0, 20.0);
+        Assert.Equal(expectedVerticalFraction, lift.Dot(Vector3d.Up), 8);
+        Assert.Equal(1.0, lift.Magnitude, 8);
+        Assert.True(lift.Dot(Vector3d.Forward) >= 0.0);
+    }
+
+    [Fact]
+    public void DescentFeedbackPreservesBankSideAndStrongerDownrangeCommand()
+    {
+        var requested = (-Vector3d.Up * 0.05 - Vector3d.Forward).Normalized;
+        var selected = EntryCorridorGuidance.LimitLiftForDescent(
+            requested, Vector3d.Up, Vector3d.Forward, -100, 2000, -6, 20);
+        Assert.True((requested - selected).Magnitude < 1e-12);
+        var banked = EntryCorridorGuidance.LimitLiftForDescent(
+            (Vector3d.Up - Vector3d.Forward).Normalized, Vector3d.Up,
+            Vector3d.Forward, -100, 2000, -6, 20);
+        Assert.True(banked.Dot(-Vector3d.Forward) > 0.9);
+    }
+
+    [Theory]
+    [InlineData(800.0, 20.0)]
+    [InlineData(2000.0, 0.0)]
+    [InlineData(2000.0, double.NaN)]
+    public void DescentFeedbackLeavesTerminalOrUnauthoritativeStateAlone(double speed, double liftAcceleration)
+    {
+        var lift = EntryCorridorGuidance.LimitLiftForDescent(
+            Vector3d.Up, Vector3d.Up, Vector3d.Forward, 150, speed, -6, liftAcceleration);
+        Assert.Equal(Vector3d.Up, lift);
+    }
+
+    [Fact]
+    public void ChangingFlightPathCannotTurnBankAuthorityIntoAxialDirection()
+    {
+        var previousLift = Vector3d.Up;
+        var flow = (Vector3d.Right - Vector3d.Up * 0.2).Normalized;
+        var liftUp = (Vector3d.Up - flow * Vector3d.Up.Dot(flow)).Normalized;
+        var side = EntryCorridorGuidance.ComputeBankSide(flow, Vector3d.Up, previousLift);
+        Assert.Equal(0.0, side.Dot(flow), 10);
+        Assert.Equal(0.0, side.Dot(liftUp), 10);
+        var banked = EntryCorridorGuidance.LimitLiftForDescent(
+            liftUp, liftUp, side, 0, 2000, -6, 20);
+        var axis = AerodynamicsModel.ComputeEntryAxisForLift(flow, banked);
+        var actualLift = AerodynamicsModel.ComputeLift(0.01, flow * 2000, axis, 50, 9).Normalized;
+        Assert.InRange(actualLift.Dot(liftUp), 0.04999, 0.05001);
+        Assert.True(actualLift.Dot(side) > 0.99);
+        Assert.True(EntryCorridorGuidance.ComputeBankSide(flow, Vector3d.Up, -side).Dot(side) < -0.999);
     }
 
 }

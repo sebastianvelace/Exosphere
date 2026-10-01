@@ -259,6 +259,22 @@ lift-up reference. Latitude is held for the duration of one prediction. The vacu
 how far an overflight command may bank toward the body. The rendered non-demo catch and
 the coupled 6-DoF migration remain open.
 
+The trajectory envelope also bounds the requested **vertical lift fraction** using measured
+radial speed and the local ballistic radial acceleration
+`-mu/r^2 + v_inertial_tangent^2/r + a_drag_radial`. A 20 s feedback horizon targets
+`-max(100 m/s, 0.035 * airspeed)` with a 150 m/s descent deadband for footprint steering.
+The lift fraction remains in [-0.15, 1]; below 1 km/s the terminal EDL policy owns attitude.
+These are reduced-order guidance settings, not measured Flight 14 parameters. The existing
+attitude reference slew, flap limits and force integrator still own the response; no position,
+velocity, gravity or aerodynamic force is clamped. An excessively steep entry may still have
+unsafe loads, and physically commanded skip entries remain possible.
+
+The lateral bank fallback is the current `up × airflow` direction, with its sign retained
+from the previous lift reference. Removing only the up component from a previous lift vector
+is insufficient: as airflow turns, that vector can retain axial direction which the aerodynamic
+model later removes, silently erasing bank authority. The reference is retained across control
+epochs instead of being cleared before bank-side continuity is evaluated.
+
 The production entry controller holds this outer-loop footprint prediction for at
 most 0.2 simulation seconds above 25 km. Vessel/body changes, time rewind or a
 body-relative displacement over 2 km refresh it immediately. Below 25 km it refreshes

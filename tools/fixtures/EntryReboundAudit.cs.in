@@ -1,0 +1,95 @@
+namespace Exosphere.Game;
+
+using Godot;
+using Exosphere.Simulation.Flight;
+using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Physics;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+// Generated into scripts only for the audit. Never installed as an autoload.
+public partial class _EntryReboundAuditShot : Node
+{
+    private int _frames;
+    private double _start, _nextSample;
+    private System.IO.StreamWriter? _log;
+    private static double Parameter(string name, string fallback) => double.Parse(
+        System.Environment.GetEnvironmentVariable(name) ?? fallback, CultureInfo.InvariantCulture);
+
+    public override void _Process(double delta)
+    {
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.ActiveVessel == null || EDLController.Instance == null || ++_frames < 20) return;
+        var universe = bridge.Universe;
+        if (_log == null)
+        {
+            bridge.SetPhysicsProcess(false);
+            bridge.TriggerStaging();
+            var ship = bridge.ActiveVessel!;
+            var earth = universe.GetBody("earth")!;
+            var up = (ship.Position - earth.Position).Normalized;
+            ship.Position = earth.GetPositionAlongDirection(up, Parameter("ENTRY_ALT", "109000"));
+            var entry = EntryInterfaceState.Compose(earth, ship.Position,
+                earth.GetEastDirection(ship.Position), Parameter("ENTRY_SPEED", "6100"),
+                Parameter("ENTRY_ANGLE", "-9.7") * MathUtils.DEG_TO_RAD);
+            ship.PrepareForTeleport();
+            ship.ReleaseGroundHold();
+            ship.ReferenceBodyId = earth.Id;
+            ship.Velocity = earth.Velocity + entry.InertialRelativeToBody;
+            var flow = ship.GetSurfaceVelocity(earth).Normalized;
+            ship.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
+                AerodynamicsModel.ComputeLiftUpEntryAxis(up, flow), flow);
+            bridge.ConfigureOrbitalReturnReserve(Parameter("ENTRY_RESERVE", "0"));
+            MissionManager.Instance!.EnterPhase(MissionPhase.ORBIT);
+            universe.TimeScale = 1;
+            _start = universe.CurrentTime;
+            _log = new(System.Environment.GetEnvironmentVariable("ENTRY_AUDIT_LOG")!) { AutoFlush = true };
+        }
+
+        // Only the ordinary Universe/bridge physics controller evolves the state after
+        // this seed. No pose reset, velocity clamp, force injection or demo is permitted.
+        for (int i = 0; i < 250; i++)
+        {
+            universe.TimeScale = 1;
+            universe.Tick(0.02);
+            var ship = bridge.ActiveVessel!;
+            var body = universe.GetDominantBody(ship.Position);
+            double elapsed = universe.CurrentTime - _start;
+            double altitude = ship.GetAltitude(body);
+            if (elapsed >= _nextSample)
+            {
+                var state = EntryFlightDiagnostics.Evaluate(ship, body);
+                var radius = ship.Position - body.Position;
+                var up = radius.Normalized;
+                var flow = ship.GetSurfaceVelocity(body).Normalized;
+                var liftUp = (up - flow * up.Dot(flow)).Normalized;
+                _log.WriteLine(JsonSerializer.Serialize(new
+                {
+                    t = elapsed, alt = altitude, vUp = ship.GetSurfaceVelocity(body).Dot(up),
+                    speed = state.AtmosphereRelativeSpeedMps, q = state.DynamicPressurePa,
+                    bank = state.BankAngleDegrees, alpha = state.AngleOfAttackDegrees,
+                    drag = state.DragForceN, lift = state.LiftForceN, g = state.AerodynamicLoadG,
+                    gravity = body.GM / radius.MagnitudeSquared,
+                    gravityForceModel = ship.ComputeGravity(universe.Bodies).Magnitude,
+                    energy = state.PointMassSpecificOrbitalEnergyJPerKg, mass = ship.TotalMass,
+                    destroyed = ship.IsDestroyed, structuralLost = ship.StructuralControlLost,
+                    catchArmed = ship.IsAttemptingTowerCatch,
+                    commandUp = EDLController.Instance!.AeroLiftReference.Dot(liftUp),
+                    phase = MissionManager.Instance!.Phase.ToString(), throttle = ship.Throttle,
+                    demo = ship.IsTowerCatchDemonstration,
+                    guidanceDt = EDLController.Instance.GuidanceUpdatePeriodSeconds,
+                    guidanceUpdates = EDLController.Instance.GuidanceUpdateCount,
+                }, new JsonSerializerOptions { NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals }));
+                _nextSample = elapsed + 2;
+            }
+            if (ship.IsDestroyed || altitude < 10_000 || elapsed > 1600
+                || (elapsed > 100 && altitude > 180_000))
+            {
+                _log.Dispose();
+                GetTree().Quit();
+                return;
+            }
+        }
+    }
+}

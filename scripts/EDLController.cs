@@ -526,6 +526,7 @@ public partial class EDLController : Control
         // heat-shield windward) to bleed velocity aerodynamically like real Starship.
         // Retro/Final: flip so the engines (local +Y thrust) point retrograde.
         Vector3d aimAxis;
+        Vector3d priorLiftReference = _aeroLiftReference;
         _aeroLiftReference = Vector3d.Zero;
         if (_phase is Edl.Entry or Edl.Peak or Edl.Aero)
         {
@@ -600,12 +601,8 @@ public partial class EDLController : Control
                         // command becomes a 90-degree bank on the established side instead
                         // of a full lift-up skip or a plunge. Sign noise inside the cross-range
                         // deadband must not reverse that bank.
-                        Vector3d priorLateral = _aeroLiftReference
-                            - bodyLiftUp.Normalized
-                                * _aeroLiftReference.Dot(bodyLiftUp.Normalized);
-                        Vector3d neutralBankSide = priorLateral.MagnitudeSquared > 1e-12
-                            ? priorLateral
-                            : up.Cross(velDir);
+                        Vector3d neutralBankSide = EntryCorridorGuidance.ComputeBankSide(
+                            velDir, up, priorLiftReference);
                         double verticalLiftFloor = EntryCorridorGuidance
                             .ComputeLoadReliefVerticalFloor(
                                 _gForce,
@@ -642,6 +639,34 @@ public partial class EDLController : Control
                 _aeroLiftReference = (up - velDir * up.Dot(velDir)).Normalized;
                 aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(
                     up, velDir);
+            }
+
+            // Bank excess lift sideways before a lifting entry turns into a skip.
+            // Gravity and atmospheric forces still integrate normally; only the
+            // attainable attitude reference is changed, at its existing slew limit.
+            if (speed >= 1_000.0 && _aeroLiftReference.MagnitudeSquared > 1e-12)
+            {
+                Vector3d liftUp = up - velDir * up.Dot(velDir);
+                Vector3d axis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+                double density = body.Atmosphere!.GetDensity(_alt);
+                Vector3d drag = AerodynamicsModel.ComputeReentryDrag(density, surfVel,
+                    axis, vessel.VehicleLength, vessel.MaximumDiameter,
+                    body.Atmosphere.GetTemperature(_alt), vessel.Parts.AxialDragCoefficient);
+                Vector3d lift = AerodynamicsModel.ComputeLift(density, surfVel,
+                    axis, vessel.VehicleLength, vessel.MaximumDiameter);
+                Vector3d inertial = vessel.Velocity - body.Velocity;
+                Vector3d tangential = inertial - up * inertial.Dot(up);
+                double radius = (vessel.Position - body.Position).Magnitude;
+                double ballistic = -body.GM / (radius * radius)
+                    + tangential.MagnitudeSquared / radius + drag.Dot(up) / mass;
+                Vector3d bankSide = EntryCorridorGuidance.ComputeBankSide(
+                    velDir, up, priorLiftReference);
+                var limited = EntryCorridorGuidance.LimitLiftForDescent(
+                    _aeroLiftReference, liftUp, bankSide, _vUp, speed, ballistic,
+                    lift.Magnitude / mass * liftUp.Magnitude);
+                _aeroLiftReference = EntryCorridorGuidance.BlendForAerodynamicAuthority(
+                    limited, liftUp, vessel.GetDynamicPressure(body));
+                aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(velDir, _aeroLiftReference);
             }
         }
         else if (_phase == Edl.Catch

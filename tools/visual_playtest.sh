@@ -2502,6 +2502,9 @@ public partial class _PlaytestShot : Node
                 $"bankDeg={state.BankAngleDegrees:F3} " +
                 $"energyJkg={state.PointMassSpecificOrbitalEnergyJPerKg:F3} " +
                 $"hM2s={state.SpecificAngularMomentumM2PerS:F3} " +
+                $"vUp={vessel.GetSurfaceVelocity(earth).Dot((vessel.Position-earth.Position).Normalized):F3} " +
+                $"gravityMps2={earth.GM/(vessel.Position-earth.Position).MagnitudeSquared:F6} " +
+                $"liftN={state.LiftForceN:F1} dragN={state.DragForceN:F1} throttle={vessel.Throttle:F3} " +
                 $"ld={state.LiftToDragRatio:F4} aeroG={state.AerodynamicLoadG:F4} " +
                 $"heatWm2={state.StagnationHeatFluxWPerM2:F1} " +
                 $"guidanceDt={guidancePeriod:F6} guidanceUpdates={guidanceUpdates} " +
