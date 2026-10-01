@@ -109,24 +109,49 @@ float cloud_weather_spherical_sample(vec3 direction) {
 	return mix(center, prefiltered, prefilter);
 }
 
-// The erosion/detail lookup is repeated at 3x frequency. It needs the same
-// horizon-aware filtering as the weather mask; otherwise a prefiltered macro
-// field can still expose the source texture's latitude rows at 10 km.
-float cloud_detail_sample(vec2 uv) {
-	float detail_prefilter = clamp(cloud_weather_prefilter, 0.0, 1.0);
-	// The macro weather lookup owns the latitude-row prefilter. Keep the
-	// repeated erosion lookup aligned with the same spherical direction; its
-	// two existing reads are blended into the coarse mip below.
-	vec2 detail_uv = uv * 3.07 + vec2(0.17, 0.31);
-	float detail = texture(cloud_coverage_tex, detail_uv).r;
-	float coarse = textureLod(cloud_coverage_tex, detail_uv, 6.0).r;
-	return mix(detail, coarse, detail_prefilter);
+// Domain-warped spherical detail avoids scaled copies of the geographic map.
+// Reduce fine detail for grazing, low-sun views.
+float cloud_detail_sample(vec3 position) {
+    vec3 p = position * 0.00031;
+    float displacement = cloud_value_noise3(p * 0.31 + vec3(5.0)) - 0.5;
+    vec3 warp = displacement * vec3(1.0, -0.73, 0.49);
+    float coarse = cloud_value_noise3(p + warp * 2.0);
+    float fine = cloud_value_noise3(p * 2.73 + warp);
+    float filtered = clamp(cloud_weather_prefilter, 0.0, 1.0);
+    return mix(coarse * 0.68 + fine * 0.32, coarse, filtered);
 }
 
 bool cloud_in_local_core(vec3 position) {
     vec3 direction = normalize(cloud_world_to_texture * normalize(position));
     return cloud_local_weather_enabled && length(direction - cloud_local_center)
         * cloud_planet_radius_m < cloud_local_radius_m * 0.70;
+}
+
+// Shared occupancy and centres keep the empty-space bound conservative for the
+// same cloud cells used by view, shadow and foreground transmission rays.
+float cloud_coastal_threshold(vec2 id) {
+    vec2 p = id * 0.17;
+    vec2 cell = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float regional = mix(
+        mix(cloud_hash3(vec3(cell, 5.0)), cloud_hash3(vec3(cell + vec2(1.0, 0.0), 5.0)), f.x),
+        mix(cloud_hash3(vec3(cell + vec2(0.0, 1.0), 5.0)),
+            cloud_hash3(vec3(cell + vec2(1.0), 5.0)), f.x), f.y);
+    return mix(0.05, 0.995, smoothstep(0.25, 0.75, regional));
+}
+vec2 cloud_coastal_centre(vec2 id) {
+    return id + vec2(0.08) + 0.84 * vec2(
+        cloud_hash3(vec3(id, 31.0)), cloud_hash3(vec3(id, 47.0)));
+}
+
+// Smoothly bend the cell lattice into regional weather flow. The same mapping
+// must be used for density and empty-space bounds; its Jacobian norm stays below 2.
+vec2 cloud_coastal_xy(vec3 local, vec3 east, vec3 north, float scale, vec2 wind) {
+    vec2 xy = vec2(dot(local, east), dot(local, north)) / scale + wind;
+    vec2 warp = vec2(sin(xy.y * 0.21 + sin(xy.x * 0.11)),
+        cos(xy.x * 0.19 + sin(xy.y * 0.13))) * 0.8;
+    return xy + warp;
 }
 
 // Rounded, isolated coastal cells rather than thresholded value-noise columns.
@@ -139,7 +164,7 @@ float cloud_coastal_density(vec3 position, float height, vec3 wind) {
     vec3 north = cross(up, east);
     vec3 local = cloud_world_to_texture * position - up * cloud_planet_radius_m;
     float scale = max(cloud_local_scale_m, 1.0);
-    vec2 xy = vec2(dot(local, east), dot(local, north)) / scale + wind.xz;
+    vec2 xy = cloud_coastal_xy(local, east, north, scale, wind.xz);
     vec2 cell = floor(xy);
     float density = 0.0;
     float erosion = cloud_value_noise3(local * 0.0021 + wind);
@@ -149,21 +174,24 @@ float cloud_coastal_density(vec3 position, float height, vec3 wind) {
         for (int x = -1; x <= 1; x++) {
             vec2 id = cell + vec2(float(x), float(y));
             float seed = cloud_hash3(vec3(id, 19.0));
-            if (seed < 0.38) continue;
-            vec2 centre = id + vec2(0.2) + 0.6 * vec2(
-                cloud_hash3(vec3(id, 31.0)), cloud_hash3(vec3(id, 47.0)));
-            float radius = mix(0.25, 0.48, cloud_hash3(vec3(id, 73.0)));
-            float radial = length((xy - centre) / vec2(radius, radius * 0.82))
-                - (billow - 0.5) * 0.22;
+            if (seed < 0.05 || (seed < 0.995 && seed < cloud_coastal_threshold(id))) continue;
+            vec2 centre = cloud_coastal_centre(id);
+            float radius = mix(0.15, 0.56, cloud_hash3(vec3(id, 73.0)));
+            float angle = cloud_hash3(vec3(id, 67.0)) * 6.283185;
+            mat2 rotation = mat2(vec2(cos(angle), -sin(angle)), vec2(sin(angle), cos(angle)));
+            vec2 aspect = vec2(1.0, mix(0.60, 1.20, cloud_hash3(vec3(id, 71.0))));
+            vec2 offset = rotation * (xy - centre) / (radius * aspect);
+            float radial = length(offset) - (billow - 0.5) * 0.22;
             if (radial >= 1.05) continue;
             float footprint = 1.0 - smoothstep(0.65, 1.05, radial);
             // Several overlapping condensation lobes give a cell an uneven crown.
             // Their tops remain inside the declared meteorological shell.
             float dome = 0.45 * sqrt(max(1.0 - radial * radial * 0.80, 0.0));
-            vec2 offset = (xy - centre) / vec2(radius, radius * 0.82);
             for (int lobe = 0; lobe < 4; lobe++) {
-                float angle = float(lobe) * 1.570796 + seed * 6.283185;
-                vec2 lobe_centre = vec2(cos(angle), sin(angle)) * 0.35;
+                if (float(lobe) > mix(1.0, 3.99, cloud_hash3(vec3(id, 89.0)))) break;
+                float lobe_angle = cloud_hash3(vec3(id, 113.0 + float(lobe))) * 6.283185;
+                vec2 lobe_centre = vec2(cos(lobe_angle), sin(lobe_angle))
+                    * mix(0.15, 0.55, cloud_hash3(vec3(id, 127.0 + float(lobe))));
                 float lobe_radius = mix(0.45, 0.72,
                     cloud_hash3(vec3(id, 91.0 + float(lobe))));
                 float d = length(offset - lobe_centre) / lobe_radius;
@@ -192,21 +220,23 @@ float cloud_coastal_empty_distance(vec3 position) {
     vec3 local = cloud_world_to_texture * position - up * cloud_planet_radius_m;
     float scale = max(cloud_local_scale_m, 1.0);
     vec2 wind = vec2(cloud_longitude_offset * 64.0, cloud_longitude_offset * 31.0);
-    vec2 xy = vec2(dot(local, east), dot(local, north)) / scale + wind;
+    vec2 xy = cloud_coastal_xy(local, east, north, scale, wind);
     vec2 cell = floor(xy);
-    float distance_m = scale;
+    // Unvisited cells start at least 1.08 cells away. Their maximum enclosing
+    // radius is 0.56 * 1.45 = 0.812; a quarter-cell bound cannot jump into them.
+    float distance_m = scale * 0.25;
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
             vec2 id = cell + vec2(float(x), float(y));
-            if (cloud_hash3(vec3(id, 19.0)) < 0.38) continue;
-            vec2 centre = id + vec2(0.2) + 0.6 * vec2(
-                cloud_hash3(vec3(id, 31.0)), cloud_hash3(vec3(id, 47.0)));
-            float radius = mix(0.25, 0.48, cloud_hash3(vec3(id, 73.0)));
-            distance_m = min(distance_m, (length(xy - centre) - radius * 1.20) * scale);
+            float seed = cloud_hash3(vec3(id, 19.0));
+            if (seed < 0.05 || (seed < 0.995 && seed < cloud_coastal_threshold(id))) continue;
+            vec2 centre = cloud_coastal_centre(id);
+            float radius = mix(0.15, 0.56, cloud_hash3(vec3(id, 73.0)));
+            distance_m = min(distance_m, (length(xy - centre) - radius * 1.45) * scale);
         }
     }
     float height = length(position) - cloud_planet_radius_m;
-    return max(max(distance_m, cloud_local_base_m - height), height - cloud_local_top_m);
+    return max(max(distance_m / 2.0, cloud_local_base_m - height), height - cloud_local_top_m);
 }
 
 float cloud_density(vec3 position) {
@@ -227,12 +257,11 @@ float cloud_density(vec3 position) {
     if (local_weight > 0.0) {
         // Preserve clear holes; horizon map filtering does not alter local cells.
         local_density = cloud_coastal_density(position, height, wind_offset);
-        // Skip seven map/detail texture reads inside the procedural region.
+        // Skip global weather/detail sampling inside the procedural region.
         if (local_weight >= 1.0) return local_density;
     }
-    vec2 uv = cloud_equirect(texture_direction) + vec2(cloud_longitude_offset, 0.0);
     float weather = cloud_weather_spherical_sample(texture_direction);
-    float detail = cloud_detail_sample(uv);
+    float detail = cloud_detail_sample(noise_position + wind_offset * 3200.0);
     float macro = cloud_value_noise3(noise_position * max(cloud_macro_scale, 1e-6) + wind_offset);
     float u = (height - cloud_base_altitude) / max(cloud_top_altitude - cloud_base_altitude, 1.0);
     float top_fraction = mix(0.28, 0.68, macro);

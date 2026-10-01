@@ -671,7 +671,7 @@ public partial class _PlaytestShot : Node
         ? new (string, double)[] {
             ("cloud_below", 700.0), ("cloud_inside_off", 1650.0),
             ("cloud_inside_on", 1650.0), ("cloud_above", 4800.0),
-            ("cloud_domes", 12000.0),
+            ("cloud_domes", 12000.0), ("cloud_nadir", 110_000.0),
         }
         : IsTerrainCoverage
         ? new (string, double)[] {
@@ -3164,18 +3164,38 @@ public partial class _PlaytestShot : Node
             // Same arithmetic hash as the shader.
             static double Fract(double x) => x - System.Math.Floor(x);
             static double Hash(double cx, double cy, double z) {
-                double x = Fract(cx * 0.1031), y = Fract(cy * 0.1031), v = Fract(z * 0.1031);
-                double dot = x * (y + 33.33) + y * (v + 33.33) + v * (x + 33.33);
+                float x = (float)Fract((float)cx * 0.1031f), y = (float)Fract((float)cy * 0.1031f), v = (float)Fract((float)z * 0.1031f);
+                float dot = x * (y + 33.33f) + y * (v + 33.33f) + v * (x + 33.33f);
                 x += dot; y += dot; v += dot;
                 return Fract((x + y) * v);
             }
-            int ix = 0, iy = 0;
-            while (Hash(ix, iy, 19) < 0.75) ix++;
+            static double Smooth(double x) {
+                x = System.Math.Clamp(x, 0, 1); return x * x * (3 - 2 * x);
+            }
+            static double Threshold(int x, int y) {
+                double px=x*0.17, py=y*0.17, cx=System.Math.Floor(px), cy=System.Math.Floor(py);
+                double fx=Smooth(Fract(px)), fy=Smooth(Fract(py));
+                double a=Hash(cx,cy,5)*(1-fx)+Hash(cx+1,cy,5)*fx;
+                double b=Hash(cx,cy+1,5)*(1-fx)+Hash(cx+1,cy+1,5)*fx;
+                return 0.05+0.945*Smooth((a*(1-fy)+b*fy-0.25)/0.5);
+            }
+            int ix = -10, iy = 0;
+            while (ix < 10 && (Hash(ix,iy,19) < 0.80 || Hash(ix, iy, 19) < Threshold(ix,iy)+0.15
+                || Hash(ix,iy,73) < 0.70)) ix++;
+            if (ix == 10) throw new InvalidOperationException("No dense validation cell in the coastal core");
+            double centreX=ix+0.08+0.84*Hash(ix,iy,31), centreY=iy+0.08+0.84*Hash(ix,iy,47);
+            double mappedX=centreX, mappedY=centreY;
+            // Invert the production domain warp; its small gradient is contractive.
+            for (int n=0;n<12;n++) {
+                double wx=0.8*System.Math.Sin(mappedY*0.21+System.Math.Sin(mappedX*0.11));
+                double wy=0.8*System.Math.Cos(mappedX*0.19+System.Math.Sin(mappedY*0.13));
+                mappedX=centreX-wx; mappedY=centreY-wy;
+            }
             var textureUp = (FloatingOrigin.EarthTextureBasis.Inverse() * new Vector3((float)up.X, (float)up.Y, (float)up.Z)).Normalized();
             var east = textureUp.Cross(Vector3.Up).Normalized();
             var north = textureUp.Cross(east);
-            var offset = FloatingOrigin.EarthTextureBasis * (east * (float)(spacing * (ix + 0.2 + 0.6 * Hash(ix, iy, 31)))
-                + north * (float)(spacing * (iy + 0.2 + 0.6 * Hash(ix, iy, 47))));
+            var offset = FloatingOrigin.EarthTextureBasis * (east * (float)(spacing * mappedX)
+                + north * (float)(spacing * mappedY));
             up = (up * body.Radius + new Vector3d(offset.X, offset.Y, offset.Z)).Normalized;
         }
         vessel.Position = body.GetPositionAlongDirection(up, shot.AltitudeM);
@@ -3196,7 +3216,7 @@ public partial class _PlaytestShot : Node
             ? 0f
             : -(float)(shot.AltitudeM / 2.8);
         float pitch = IsTerrainCoverage && shot.Slug.EndsWith("nadir") ? 80f
-            : IsCloudTraverse ? (shot.Slug == "cloud_domes" ? 50f : 0f) : 28f;
+            : IsCloudTraverse ? (shot.Slug == "cloud_nadir" ? 80f : shot.Slug == "cloud_domes" ? 50f : 0f) : 28f;
         if (IsCloudTraverse) {
             var occlusion = GetTree().Root.FindChild("VesselCloudOcclusion", true, false) as VesselCloudOcclusion;
             if (occlusion != null) occlusion.PresentationEnabled = shot.Slug != "cloud_inside_off";

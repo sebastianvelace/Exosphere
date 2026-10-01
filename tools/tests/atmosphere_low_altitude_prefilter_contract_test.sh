@@ -24,8 +24,12 @@ rg -q 'float cloud_weather_spherical_sample' "$SHADER" "$ROOT/assets/shaders/clo
   || fail "low-altitude weather path is not using a spherical footprint"
 rg -q 'normalize\(direction \+ tangent \* footprint\)' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "spherical weather footprint has no tangent sampling"
-rg -q 'textureLod\(cloud_coverage_tex, detail_uv, 6\.0\)' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
-  || fail "low-altitude detail path is not using the coarser mip level"
+# Procedural detail replaces the repeated geographic texture. At full prefilter
+# strength it must discard the fine octave and retain only the coarse field.
+rg -q 'float coarse = cloud_value_noise3\(p \+ warp \* 2\.0\)' "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
+  || fail "cloud detail has no coarse procedural field"
+rg -q 'return mix\(coarse \* 0\.68 \+ fine \* 0\.32, coarse, filtered\)' "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
+  || fail "low-altitude detail prefilter does not remove the fine octave"
 rg -q 'textureLod\(cloud_coverage_tex,' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "low-altitude weather path has no filtered texture reads"
 rg -q 'prefiltered = center \* 0\.08' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
