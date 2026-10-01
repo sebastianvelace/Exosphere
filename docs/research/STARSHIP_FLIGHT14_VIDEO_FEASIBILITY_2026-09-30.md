@@ -124,3 +124,25 @@ bounded entry loads/thermal state and independently verified water outcomes for
 both stages. Keep the legacy coupled-6DoF switch unchanged until its own parity
 gates pass. Exact Flight 14 engine-failure and FTS behavior remains a separate
 modeling requirement; visual resemblance cannot certify those systems.
+
+## Observed calibration anchors (2026-10-01)
+
+`STARSHIP_FLIGHT14_OBSERVED_ANCHORS_2026-10-01.json` records eleven manually
+inspected frame/clock/value anchors from the pinned reference track. Each frame
+has its own SHA-256. Missing altitude or speed stays null. Display units remain
+km/h and km; the broadcast does not declare a velocity frame or altitude datum.
+Do not silently treat its speed as inertial or atmosphere-relative input to
+heating or guidance. Compare both model readouts until the broadcast convention
+is independently established.
+
+The insertion frame at T+25:44 shows an engine-bay plume while the displayed engine
+board is dim. Feed latency and overlays therefore cannot establish exact engine
+ignition/shutdown time from this single image. Similarly, the ocean frame at
+T+3:08:31 obscures the vehicle; it cannot establish resolved water-contact speed.
+These are reference observations, not additional propagated state vectors.
+
+The post-flight account was rechecked on 2026-10-01. It describes engine losses
+on both ascent stages, 31 boostback engines, a separate one-engine insertion and
+26 payloads, followed by early deorbit and a northern-Pacific arrival. The
+unimplemented mission controller must preserve these sequencing differences
+without using the original approximate nine-hour timeline as an observed schedule.

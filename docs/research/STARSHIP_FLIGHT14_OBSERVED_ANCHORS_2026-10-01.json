@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "status": "manually_transcribed_display_reference",
+  "physics_authority": false,
+  "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+  "source_video_sha256": "c0f95f009c3bacb68a1dd8a5edb70ff7463f072a88c6d7573a4d1d6b59807bbd",
+  "alignment_uncertainty_seconds": 1,
+  "speed_frame": "not_specified_by_broadcast",
+  "altitude_datum": "not_specified_by_broadcast",
+  "limitations": [
+    "Displayed values are rounded; alignment uncertainty is not physical measurement uncertainty.",
+    "Feed latency is unknown. Engine-bay flame and engine-board state must not be assumed synchronous.",
+    "Frames are evidence for comparison, never an instruction to overwrite propagated position or velocity.",
+    "The final ocean frame obscures exact water contact.",
+    "Published approximate nine-hour timeline remains planned timing, not observed early-return timing."
+  ],
+  "anchors": [
+    {
+      "video_seconds": 60,
+      "displayed_elapsed_seconds": 44,
+      "displayed_speed_kmh": 900,
+      "displayed_altitude_km": 4.1,
+      "view": "onboard_ascent",
+      "frame": "video_00060.jpg",
+      "frame_sha256": "a9ac1e2442acc0b07682ec2a6bf040eedbded3bffbf3ad0a5124e962b54fb2db"
+    },
+    {
+      "video_seconds": 140,
+      "displayed_elapsed_seconds": 124,
+      "displayed_speed_kmh": 5146,
+      "displayed_altitude_km": 40.5,
+      "view": "onboard_ascent",
+      "frame": "video_00140.jpg",
+      "frame_sha256": "2c151841e7a7c6db3e4e993270e6ce4e8e9e57924ad38be671dcfa37ed10847f"
+    },
+    {
+      "video_seconds": 180,
+      "displayed_elapsed_seconds": 164,
+      "displayed_speed_kmh": 6381,
+      "displayed_altitude_km": null,
+      "view": "hot_stage_onboard",
+      "frame": "video_00180.jpg",
+      "frame_sha256": "76b7dd3804eff552b862c6398a6146405396f56f08d8fd55ed4a47237debe3a8"
+    },
+    {
+      "video_seconds": 1535,
+      "displayed_elapsed_seconds": 1519,
+      "displayed_speed_kmh": 26105,
+      "displayed_altitude_km": 276,
+      "view": "orbital_insertion_interval",
+      "frame": "video_01535.jpg",
+      "frame_sha256": "2106bf6f4252b08d24fc054214a08d7290573c17188e5fe0f3f2ab82dc17d942"
+    },
+    {
+      "video_seconds": 1560,
+      "displayed_elapsed_seconds": 1544,
+      "displayed_speed_kmh": 26371,
+      "displayed_altitude_km": 276,
+      "view": "engine_bay_and_onboard",
+      "frame": "video_01560.jpg",
+      "frame_sha256": "1416e410f2c34cf2c6bef9e0c4fdeb7cb8b41fb5eaa48bd5bcdc78c830f34fc9"
+    },
+    {
+      "video_seconds": 7900,
+      "displayed_elapsed_seconds": 7884,
+      "displayed_speed_kmh": 26380,
+      "displayed_altitude_km": 271,
+      "view": "tracker_and_commentary",
+      "frame": "video_07900.jpg",
+      "frame_sha256": "62428f98b324e19c80340dfbda7e69fd9b8916690622c5a51bf0a348803d8ac0"
+    },
+    {
+      "video_seconds": 7920,
+      "displayed_elapsed_seconds": 7904,
+      "displayed_speed_kmh": 26381,
+      "displayed_altitude_km": 271,
+      "view": "engine_bay_deorbit_interval",
+      "frame": "video_07920.jpg",
+      "frame_sha256": "63f7bd8de197fb5cea6c3198195f07c67db38b66cd89a23094d4504eb9f9865f"
+    },
+    {
+      "video_seconds": 9900,
+      "displayed_elapsed_seconds": 9884,
+      "displayed_speed_kmh": 26947,
+      "displayed_altitude_km": 94.6,
+      "view": "luminous_entry",
+      "frame": "video_09900.jpg",
+      "frame_sha256": "1b7fdd8bf1c630c40e11f25403927c6085202b84c803075ac6f984f7942f074b"
+    },
+    {
+      "video_seconds": 11316,
+      "displayed_elapsed_seconds": 11300,
+      "displayed_speed_kmh": 203,
+      "displayed_altitude_km": 0.3,
+      "view": "powered_landing",
+      "frame": "video_11316.jpg",
+      "frame_sha256": "99f7e42df6a8f99da6f05eb2e5406c4fe993eac648b0130753e386137315464d"
+    },
+    {
+      "video_seconds": 11320,
+      "displayed_elapsed_seconds": 11304,
+      "displayed_speed_kmh": 60,
+      "displayed_altitude_km": 0.2,
+      "view": "powered_landing",
+      "frame": "video_11320.jpg",
+      "frame_sha256": "86c52f8724fcaa33cac332d71fd9a6bccc6ce336ed661b7689c89e3fcba602f0"
+    },
+    {
+      "video_seconds": 11327,
+      "displayed_elapsed_seconds": 11311,
+      "displayed_speed_kmh": null,
+      "displayed_altitude_km": null,
+      "view": "ocean_spray_contact_obscured",
+      "frame": "video_11327.jpg",
+      "frame_sha256": "fb5f03dc1a41309c5022b5400030ea786b7d353f00e15d32dd63643f1fc4eac4"
+    }
+  ]
+}
