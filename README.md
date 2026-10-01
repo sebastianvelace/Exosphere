@@ -96,3 +96,11 @@ Build, architecture, data, and current limits: [docs/DEVELOPMENT.md](docs/DEVELO
 The physics model is [docs/physics/PHYSICS_MODEL.md](docs/physics/PHYSICS_MODEL.md). The product plan is [ROADMAP.md](ROADMAP.md).
 
 Source code is [MIT](LICENSE). Fonts, terrain, and other third-party assets keep the licenses recorded in [data/licenses/assets_manifest.json](data/licenses/assets_manifest.json).
+
+The exterior flight HUD uses a broadcast-style bottom band: independent Super Heavy
+and Starship engine boards, the piloting navball, an observed-event timeline,
+mission clock, surface speed, altitude, vertical speed, throttle, TWR and orbital
+apsides. `[F3]` cycles Minimal → Full → Clean; Full adds diagnostics and Clean
+retains the expanded attitude cluster. Cockpit and map views use their existing
+instrument policies. Loaded flights without a known liftoff epoch display `SIM`
+time instead of inventing `T+`.

@@ -95,6 +95,7 @@ public partial class HUDController : Control
     private EngineGridHUD _engineGrid = null!;
     private AttitudeNavball _navball = null!;
     private AttitudeDataStrip _attitudeStrip = null!;
+    private FlightBroadcastHUD _broadcast = null!;
 
     // ── Pad help overlay + launch path callout (UX-001 / UX-002) ─────────────
     private PanelContainer _padHelpRoot = null!;
@@ -134,6 +135,8 @@ public partial class HUDController : Control
         // Attitude cluster: navball owns CenterBottom; engines/strip are children
         // with local Position so they cannot vanish from a zero-size HBox layout.
         BuildAttitudeCluster();
+        _broadcast = new FlightBroadcastHUD { Name = "FlightBroadcastHUD" };
+        AddChild(_broadcast);
         _objectives = new MissionObjectivesPanel { Name = "MissionObjectives" };
         AddChild(_objectives);
     }
@@ -945,6 +948,7 @@ public partial class HUDController : Control
         ((Label)_bigAlt.GetParent().GetChild(2)).Text =
             snapshot.AltitudeM >= 1000 ? "KM" : "M";
         _bigTime.Text = FormatClock(snapshot.MissionTimeS);
+        _broadcast.UpdateFromSnapshot(snapshot, PresentationRefreshPeriodSeconds);
         RenderNavigationAndAlerts(snapshot);
 
         if (mission != null)
@@ -1106,6 +1110,17 @@ public partial class HUDController : Control
         // leaves the clock in the open central lane.
         _timeRoot.OffsetBottom = sideCluster ? -220f : -330f;
         _timeRoot.OffsetLeft = sideCluster ? GetViewportRect().Size.X * 0.5f : 0f;
+        bool broadcast = exterior && !clean;
+        _broadcast.Visible = broadcast;
+        if (broadcast)
+        {
+            float broadcastScale = Mathf.Min(viewportSize.X / 1600f, 1f);
+            _broadcast.OffsetTop = -FlightBroadcastHUD.DesignHeight * broadcastScale;
+            _navball.Scale = Vector2.One * (0.58f * broadcastScale);
+            _navball.SetClusterHorizontalOffset(210f * broadcastScale - viewportSize.X * 0.5f);
+            _navball.SetClusterBottomOffset(-24f * broadcastScale
+                + _navball.Size.Y * (1f - 0.58f * broadcastScale) * 0.5f);
+        }
 
         if (_lastAppliedViewMode == viewMode && _lastAppliedHudDensity == density)
             return;
@@ -1114,8 +1129,8 @@ public partial class HUDController : Control
 
         // Secondary reference panels (loads/trajectory, orbit/vehicle, event log) are the
         // first thing to go: everything they carry is diagnostic, not fly-the-vehicle data.
-        _bottomRoot.Visible = exterior && !clean;
-        _timeRoot.Visible = exterior && !clean;
+        _bottomRoot.Visible = false;
+        _timeRoot.Visible = false;
         ApplyBandScale(full);
 
         _phaseRoot.Visible = banner || criticalOnly;
@@ -1139,8 +1154,8 @@ public partial class HUDController : Control
         _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
-        _engineGrid.Visible = cluster;
-        _attitudeStrip.Visible = cluster;
+        _engineGrid.Visible = cluster && !broadcast;
+        _attitudeStrip.Visible = cluster && !broadcast;
         _engineGrid.ApplyDensityLayout();
         _attitudeStrip.ApplyDensityLayout();
     }
@@ -1148,7 +1163,7 @@ public partial class HUDController : Control
     private bool HasCriticalAlert() =>
         _snapshot?.Alerts.Any(a => a.Severity == FlightAlertSeverity.Critical) == true;
 
-    /// <summary>MINIMAL keeps SPEED/ALTITUDE/T+ but at a compact size.</summary>
+    /// <summary>Legacy metric labels retained for auxiliary layouts.</summary>
     private void ApplyBandScale(bool full)
     {
         if (_bandScaleFull == full) return;

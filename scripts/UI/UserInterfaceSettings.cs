@@ -5,10 +5,8 @@ using Godot;
 public enum InterfaceLanguage { English, Spanish }
 
 /// <summary>
-/// How much of the in-flight HUD is drawn. All densities keep the attitude cluster
-/// (engines — navball — data strip). <see cref="HudDensity.Minimal"/> is the default
-/// (cluster + compact bottom band). <see cref="HudDensity.Full"/> adds top panels.
-/// <see cref="HudDensity.Clean"/> drops chrome around the cluster only.
+/// Exterior Minimal uses the broadcast band with live engine boards and navball.
+/// Full adds diagnostic panels. Clean retains the expanded attitude cluster.
 /// </summary>
 public enum HudDensity { Full, Minimal, Clean }
 

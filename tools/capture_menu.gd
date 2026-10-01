@@ -10,7 +10,7 @@ func _capture() -> void:
 	menu = (load("res://scenes/ui/MainMenu.tscn") as PackedScene).instantiate()
 	root.add_child(menu)
 	current_scene = menu
-	for _frame in range(45):
+	for _frame in range(12 if OS.get_environment("CAPTURE_FLIGHT_HUD") == "1" else 45):
 		await process_frame
 	var mode := OS.get_environment("CAPTURE_MENU_MODAL").to_lower()
 	var labels := {
@@ -44,11 +44,14 @@ func _capture() -> void:
 		if mode in ["launch", "missionlaunch"]:
 			var start_labels := ["START MISSION", "INICIAR MISIÓN"] if mode == "missionlaunch" else ["LAUNCH VEHICLE", "LANZAR VEHÍCULO"]
 			if not _press(start_labels): return
-			for _frame in range(90): await process_frame
+			for _frame in range(24 if OS.get_environment("CAPTURE_FLIGHT_HUD") == "1" else 90): await process_frame
 			if not root.has_node("Flight"):
 				_fail("Selected vehicle did not open Flight")
 				return
 			print("MENU_LAUNCH_OK selected_vehicle=" + OS.get_environment("CAPTURE_MENU_VEHICLE"))
+			if OS.get_environment("CAPTURE_FLIGHT_HUD") == "1":
+				await _capture_flight_hud()
+				return
 	for _frame in range(45): await process_frame
 	if mode not in ["launch", "missionlaunch", "vab"]:
 		if not _validate_layout(mode): return
@@ -169,3 +172,45 @@ func _find_button(node: Node, labels: Array) -> Button:
 func _fail(message: String) -> void:
 	push_error(message)
 	quit(1)
+
+# Exercise the production HUD through the same menu route and keyboard commands
+# as a player. Check actual bounds/visibility before accepting any screenshot.
+func _capture_flight_hud() -> void:
+	var flight := root.get_node("Flight")
+	var hud := flight.get_node("UI/HUDController")
+	hud.call("DismissPadHelp")
+	var band := hud.get_node("FlightBroadcastHUD") as Control
+	var output := OS.get_environment("CAPTURE_MENU_OUTPUT").get_base_dir()
+	DirAccess.make_dir_recursive_absolute(output)
+	for case in ["minimal", "full", "clean", "restored", "cockpit", "exterior", "map", "return"]:
+		if case in ["full", "clean", "restored"]: _key(KEY_F3)
+		if case == "cockpit": flight.get_node("CameraController").call("EnterCockpitView")
+		if case == "exterior": _key(KEY_C)
+		if case in ["map", "return"]: _key(KEY_M)
+		for _frame in range(6): await process_frame
+		var expected: bool = case in ["minimal", "full", "restored", "exterior", "return"]
+		if band.is_visible_in_tree() != expected:
+			_fail("Broadcast visibility incorrect: " + case)
+			return
+		if expected:
+			var bounds := band.get_global_rect()
+			var viewport := Rect2(Vector2.ZERO, root.get_visible_rect().size)
+			if bounds.size.x < viewport.size.x - 1 or bounds.size.y < 60 or not viewport.grow(1).encloses(bounds):
+				_fail("Broadcast band outside viewport or collapsed: " + str(bounds))
+				return
+		var path := output.path_join("hud-" + case + ".png")
+		if root.get_texture().get_image().save_png(path) != OK:
+			_fail("HUD capture failed: " + path)
+			return
+		print("FLIGHT_HUD_OK case=%s visible=%s bounds=%s" % [case, expected, band.get_global_rect()])
+	print("MENU_CAPTURE flight_hud_matrix=8")
+	quit()
+
+func _key(code: Key) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.pressed = true
+	Input.parse_input_event(event)
+	var release := event.duplicate() as InputEventKey
+	release.pressed = false
+	Input.parse_input_event(release)

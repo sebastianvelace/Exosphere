@@ -93,8 +93,14 @@ Base tecnica cerrada en `main`:
 - Cloud transport shares the Earth texture basis, simulation clock and elevated
   density field across the sky, local terrain and scaled Earth (2026-09-30).
   Starbase has an explicitly estimated coastal-cumulus appearance profile;
-  foreground in-cloud occlusion and exact Flight 14 camera/exposure matching
-  remain open. See `docs/audits/cloud_weather_lighting_2026-09-30.md`.
+  foreground hull/plume cloud occlusion is implemented; cloud morphology, target-hardware performance and exact Flight 14
+  camera/exposure matching remain open. See
+  `docs/audits/cloud_foreground_2026-10-01.md` and
+  `docs/audits/cloud_weather_lighting_2026-09-30.md`.
+- The exterior broadcast HUD has independent live engine boards, observed events,
+  mission clock and piloting telemetry (2026-10-01). F3 density/cockpit/map
+  transitions passed at 1280×720; actual ignition/liftoff passed at 1920×1080.
+  See `docs/audits/flight_broadcast_hud_2026-10-01.md`.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
   prediction, marcador/readout de encuentro y readout de maniobra. La base lunar
   ya resuelve Lambert geocéntrico contra la efeméride móvil, busca una ventana
