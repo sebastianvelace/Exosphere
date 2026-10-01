@@ -29,6 +29,7 @@ EXTERNAL_DISPLAY="${EXO_VISUAL_DISPLAY:-}"
 VERIFY_ONLY=0
 MODE="full"
 HARNESS_MODE=""
+OPTICS_MATRIX=0
 REENTRY_BELLY_FIRST=""
 REENTRY_SLUG=""
 SUN_ELEVATION_DEG=""
@@ -75,6 +76,7 @@ Options:
   --orbital-plume
                 Capture a deterministic 200 km Starship vacuum plume with the production
                 chase camera, HUD, vehicle silhouette, and fail-closed plume telemetry.
+  --ascent-optics Capture paused geographic rays from ground to 250 km; camera tracks vessel.
   --starbase-far Capture the mapped Starbase terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --kennedy-far  Capture the measured Kennedy LC-39A terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --orbit       Seed standalone Starship at orbit and capture the direct planetary view.
@@ -217,6 +219,7 @@ while [[ $# -gt 0 ]]; do
     --flaps) MODE="flaps"; shift ;;
     --enginebay) MODE="enginebay"; shift ;;
     --orbital-plume) MODE="orbital_plume"; shift ;;
+    --ascent-optics) MODE="ascent_optics"; HARNESS_MODE="starbase_far"; OPTICS_MATRIX=1; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
     --kennedy-far)
       MODE="kennedy_far"
@@ -355,7 +358,7 @@ fi
     VARIANT_PROFILE="starship-flight7-ascent"
   fi
 
-  if [[ "$MODE" == "starbase_far" && -z "$VARIANT_FILE" ]]; then
+  if [[ ( "$MODE" == "starbase_far" || "$MODE" == "ascent_optics" ) && -z "$VARIANT_FILE" ]]; then
     VARIANT_FILE="starship_flight7_block2_2025.json"
     VARIANT_SITE="starbase"
     VARIANT_PROFILE="starship-flight7-ascent"
@@ -656,8 +659,15 @@ public partial class _PlaytestShot : Node
     int _beautyWaitFrames;
     int _orbitalPlumeStableFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded, _engineBayCaptured;
-    readonly (string Slug, double AltitudeM)[] _starbaseFarCases =
-    {
+    static readonly bool IsAscentOptics = ${OPTICS_MATRIX} == 1;
+    readonly (string Slug, double AltitudeM)[] _starbaseFarCases = IsAscentOptics
+        ? new (string, double)[] {
+            ("ascent_optics_0km", 0.0), ("ascent_optics_12km", 12_000.0),
+            ("ascent_optics_15km", 15_000.0), ("ascent_optics_18km", 18_000.0),
+            ("ascent_optics_100km", 100_000.0), ("ascent_optics_250km", 250_000.0),
+        }
+        : new (string, double)[] {
+
         ("starbase_far_2km", 2_000.0),
         ("starbase_far_5km", 5_000.0),
         ("starbase_far_8km", 8_000.0),
@@ -3134,7 +3144,7 @@ public partial class _PlaytestShot : Node
         // aim at the launch site for the mapped context; at 20–40 km, track the
         // vessel from its real altitude so CameraAltOverEarth exercises the
         // production globe handoff instead of staying near the ground.
-        float lookAtY = shot.AltitudeM >= 20_000.0
+        float lookAtY = IsAscentOptics || shot.AltitudeM >= 20_000.0
             ? 0f
             : -(float)(shot.AltitudeM / 2.8);
         CameraController.Instance?.SetExternalChaseFrame(0f, 28f, 500f, lookAtY);
@@ -3142,7 +3152,7 @@ public partial class _PlaytestShot : Node
             hud.Visible = false;
         _log.WriteLine($"STARBASE_FAR_SETUP slug={shot.Slug} site={bridge.LaunchSiteId} " +
             $"targetAlt={shot.AltitudeM:F0} cameraDistanceRender=500 " +
-            $"cameraPitchDeg=28 lookAt={(shot.AltitudeM >= 20_000.0 ? "vessel" : "ground")} " +
+            $"cameraPitchDeg=28 lookAt={(IsAscentOptics || shot.AltitudeM >= 20_000.0 ? "vessel" : "ground")} " +
             "timeScale=0 source=public_site_frame");
         _log.Flush();
         _readyFrames = 0;
@@ -4492,6 +4502,7 @@ public partial class _PlaytestShot : Node
             _log.WriteLine($"VISUAL_COMPOSITOR slug={slug} vesselAlt={vessel.GetAltitude(body):F1} "
                 + $"cameraAlt={cameraAlt:F1} earthGlobeAlpha={globeAlpha:F3} "
                 + $"groundVisible={ground?.LocalPatchVisible ?? false} "
+                + "earthOpaque=True "
                 + $"groundOpacity={ground?.LocalPatchOpacity ?? 0f:F3} "
                 + $"padVisible={pad?.Visible ?? false} "
                 + $"farFieldVisible={pad?.FarFieldVisible ?? false} "
@@ -5147,6 +5158,30 @@ verify_pngs() {
         echo "ERROR: smoke image is empty, clipped, or contaminated by neon-green artifacts" >&2
         return 1
       fi
+    elif [[ "$MODE" == "ascent_optics" ]]; then
+      # This is a paused optical fixture, not a stable-orbit/flight dynamics gate.
+      python3 - "$OUT_DIR" "$LOG" <<'PYOPTICS'
+import pathlib, re, sys
+out, log = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]).read_text()
+assert 'SUMMARY reason=STARBASE_FAR_OK' in log, 'optics matrix did not finish'
+for km in (0, 12, 15, 18, 100, 250):
+    slug = f'ascent_optics_{km}km'
+    assert (out / f'exo_play_{slug}.png').is_file(), f'missing {slug}'
+    row = re.search(rf'^VISUAL_COMPOSITOR slug={slug} .*$', log, re.M)
+    assert row, f'missing physical camera state: {slug}'
+    state = dict(re.findall(r'(\w+)=([^ ]+)', row[0]))
+    assert abs(float(state['vesselAlt']) - km * 1000) < 1, f'wrong vessel altitude: {slug}'
+    assert 714 < float(state['cameraAlt']) - km * 1000 < 718, f'camera did not track vessel: {slug}'
+    assert state.get('earthOpaque') == 'True', f'planet coverage changed: {slug}'
+    if km >= 18:
+        assert state['groundVisible'] == 'False', f'local detail did not retire: {slug}'
+    image = re.search(rf'^IMAGE slug={slug} .*$', log, re.M)
+    assert image, f'missing framebuffer metrics: {slug}'
+    metrics = dict(re.findall(r'(\w+)=([^ ]+)', image[0]))
+    assert 0.005 < float(metrics['mean']) < 0.95, f'blank framebuffer: {slug}'
+    assert float(metrics['clippedFrac']) < 0.1, f'clipped framebuffer: {slug}'
+print('ascent_optics_matrix: PASS (six paused rays, actual camera heights; manual visual review required)')
+PYOPTICS
     elif [[ "$MODE" == "starbase_far" ]]; then
       if ! rg -q '^VISUAL_STARBASE_GEOMETRY slug=starbase_far_(2km|5km|8km|12km|20km|40km) topTriangles=[1-9][0-9]* backFacing=0 terrainTiles=[1-9][0-9]*$' "$LOG"; then
         echo "ERROR: Starbase terrain is missing or faces away from the overhead camera" >&2
@@ -6063,6 +6098,12 @@ verify_pngs() {
 }
 
 verify_post_run_contracts() {
+  # A fallback material can still produce a nonblank PNG after shader failure.
+  # Reject that run even when its physical state and image metrics look valid.
+  if [[ -f "$CONSOLE_LOG" ]] && rg -q 'SHADER ERROR:|Shader compilation failed|^SCRIPT ERROR:' "$CONSOLE_LOG"; then
+    echo "ERROR: rendering/script failure in $CONSOLE_LOG; captures cannot establish visual acceptance" >&2
+    return 1
+  fi
   local actual_renderer expected_renderer
   actual_renderer="$(awk '/^RENDERER_ACTUAL / { actual=$2 } END { print actual }' "$LOG")"
   expected_renderer="gl_compatibility"
@@ -6185,7 +6226,11 @@ if [[ "$MODE" == "reentry_compare" ]]; then
   LOG="$COMBINED_LOG"
   CONSOLE_LOG="$COMBINED_CONSOLE_LOG"
 else
-  HARNESS_MODE="$MODE"
+  if [[ "$MODE" == "ascent_optics" ]]; then
+    HARNESS_MODE="starbase_far"
+  else
+    HARNESS_MODE="$MODE"
+  fi
   write_harness
   dotnet build Exosphere.csproj --no-restore --nologo -v quiet
   prepare_godot_log_file

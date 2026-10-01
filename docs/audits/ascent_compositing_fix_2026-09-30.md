@@ -16,6 +16,10 @@ The fixed 1.016-radius atmosphere shell is removed. The existing spherical sky i
 
 Both Earth representations share NAIP site imagery, masks, no-data rejection and feathering. The global surface keeps measured coastal detail after local meshes retire. The imagery is anchored to the rotating launch site; the local patch offset follows vessel translation instead of dragging the raster underneath it. Shared LUT references are cleared when the sky scene exits; stable LUT bindings are not reassigned every frame.
 
+## Verification
+
+Actual framebuffer captures verified both Compatibility (960 × 540 diagnostic matrix) and Forward+ (640 × 360 maintained matrix). The Forward+ `ascent-optics-forward-v2` run passed all six fixture gates, with camera heights 715.7, 12,715.7, 15,715.7, 18,715.7, 100,715.7 and 250,715.8 m. The standard pre-ortho far-field run `ascent-surface-fix-v2` also passed its six gates. Each matrix finished 345 frames; their paused ORBIT labels do not establish orbital dynamics. A new `--ascent-optics` playtest mode captures six paused optical fixtures with the camera tracking the vessel. It checks framebuffer presence, clipping, real camera height and detail retirement. It does **not** claim stable orbit, aerodynamic entry or historical Flight 14 accuracy from a paused fixture.
+
 ## Limits
 
 - The reference surface is a sphere using the live local ellipsoid radius, matching the existing optical sky approximation. It is not a global analytic ellipsoid ray tracer.
@@ -26,6 +30,38 @@ Both Earth representations share NAIP site imagery, masks, no-data rejection and
 - Saturn rings retain the parent body’s established proxy depth and share its geographic Earth-occlusion mask. Distant bodies do not use the Earth far-depth compression, which cannot resolve their internal occlusion on the Compatibility depth buffer.
 - Dynamics, thermal damage, entry forces and integrator equations are unchanged. Regression tests and a continuous ascent run assess that separation; optical fixtures alone cannot validate it.
 
-## Validation
+## Reproduction
 
-The compositor was inspected in real Compatibility and Forward+ framebuffer captures from the coast to 250 km, and in a continuous Flight 12 V3 ascent that reached stable orbit without teleport fallback. These observations are not Flight 14 trajectory or weather telemetry. Source contracts cover opaque geographic coverage and bounded optical transport; GPU compilation and appearance require actual rendering. Capture workflow and exact run evidence are documented in the follow-up work unit.
+```sh
+bash tools/visual_playtest.sh --ascent-optics --renderer forward_plus \
+  --run-id ascent-optics-review --resolution 640x360 --max-runtime 600
+bash tools/visual_playtest.sh --ascent-optics --renderer compatibility \
+  --run-id ascent-optics-review-gl --resolution 960x540 --max-runtime 600
+bash tools/visual_playtest.sh --ascent-optics --renderer forward_plus \
+  --run-id ascent-optics-review --resolution 640x360 --verify-only
+bash tools/ci_check.sh
+```
+
+Set `GODOT_BIN` to the installed Godot mono executable if necessary. The harness owns Xvfb and restores its temporary autoload on exit. Local review artifacts are in ignored `exports/ascent-compositing-fix/comparison.html`; raw telemetry is preserved alongside each image matrix. The earlier ad-hoc matrix retains obsolete filenames and correctly failed the standard 2–40 km validator; it is diagnostic evidence, not a standard-mode PASS. The maintained mode has correct optical-height labels and its own camera gates.
+
+The full CI suite passed 902/902 tests with zero build warnings/errors and successful Godot smoke/startup checks. The visual contracts were changed deliberately: prior tests required the fixed atmosphere shell and an ALPHA limb, which contradicted the corrected opaque surface. Replacement contracts require bounded ground transport, geographic depth, shared profiles and single off-limb ownership. Source contracts remain distinct from GPU/framebuffer acceptance.
+
+Forward+ and Compatibility preserve the same geometry and foreground ordering, but their exposure/sky prefilter paths produce different brightness. Their screenshots should not be treated as identical photometric output. All recorded rendering runs used software rendering in this environment; these tests do not certify physical-GPU frame rate.
+
+## Continuous ascent evidence
+
+`ascent-compositor-e2e` passed the production `--ascent --flight12` gate at 640 × 360, `ASCENT_ORBIT_OK`, 2,265 frames. Ignition, ascent, coast, insertion and Done transitions were observed. Insertion ended at 150,201 m altitude with apoapsis 172,569 m and periapsis 148,704 m, above the 140 km atmospheric top. The verifier rejected fallback teleportation and invalid physical states; this run used neither. Framebuffer milestones include pad, liftoff, Max-Q, hot staging, separation and orbit. The low-resolution HUD occludes substantial parts of these images, so the uncluttered optical matrix is used for visual comparison.
+
+This fixture is the Flight 12 V3 scenario. It proves a continuous production trajectory through the revised compositor; it is not claimed to reproduce Flight 14's actual trajectory or timeline. No reentry dynamics acceptance is inferred from this ascent-only run.
+
+```sh
+bash tools/visual_playtest.sh --ascent --flight12 --run-id ascent-compositor-review \
+  --resolution 640x360 --max-runtime 900
+```
+
+## Final rendering evidence
+
+The final Compatibility optical run `ascent-optics-final` passed all six cases at 960 × 540 after extracting the common geographic ray function. `ascent-depth-saturn-verified` passed its 170-frame Saturn gate, and manual inspection confirmed the planet disc remained visible with correct front/rear ring ordering. The earlier physical-depth attempt for distant bodies lost the disc in Compatibility; it was removed before publication. The continuous ascent and Forward+ optical matrix preceded this distant-body correction; the final Compatibility matrix checks the refactored Earth shader. Physical ascent equations were unchanged throughout.
+
+
+Final CI was rerun after the geographic-depth scope correction: 902/902 tests, zero warnings/errors, and successful startup/scene smoke checks.
