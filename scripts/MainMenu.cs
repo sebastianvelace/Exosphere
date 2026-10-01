@@ -657,6 +657,12 @@ public partial class MainMenu : Control
         body.AddChild(SettingRow(UiText.Get("language"),
             UserInterfaceSettings.Language == InterfaceLanguage.English ? "ENGLISH" : "ESPAÑOL",
             ToggleLanguage));
+        body.AddChild(SettingRow(UiText.Get("hud_density"),
+            UiText.Get($"hud_{UserInterfaceSettings.HudDensity.ToString().ToLowerInvariant()}"), () =>
+            {
+                UserInterfaceSettings.CycleHudDensity();
+                ShowSettings();
+            }));
         body.AddChild(SettingRow(UiText.Get("motion"),
             UserInterfaceSettings.ReducedMotion ? "ON" : "OFF", () =>
             {

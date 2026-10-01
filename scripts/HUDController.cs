@@ -1019,7 +1019,7 @@ public partial class HUDController : Control
     private void CycleHudDensity()
     {
         var density = UserInterfaceSettings.CycleHudDensity();
-        _densityToast.Text = $"HUD  {density.ToString().ToUpperInvariant()}   [F3]";
+        _densityToast.Text = $"HUD  {UiText.Get($"hud_{density.ToString().ToLowerInvariant()}")}   [F3]";
         _densityToastRoot.Visible = true;
         _densityToastTimer = 2.0;
         _lastAppliedHudDensity = null;
@@ -1146,7 +1146,7 @@ public partial class HUDController : Control
         _countdownRoot.Visible = _countdownRequestedVisible
             && (exterior || cockpit) && !clean;
 
-        // Attitude cluster (navball + child engines/strip) in every exterior density.
+        // The navball survives Clean; engine/telemetry data belongs to the broadcast band.
         bool cluster = exterior;
         bool instruments = exterior && !clean;
         _objectives.DensityAllowed = instruments;
@@ -1154,8 +1154,8 @@ public partial class HUDController : Control
         _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
             : ProcessModeEnum.Disabled;
-        _engineGrid.Visible = cluster && !broadcast;
-        _attitudeStrip.Visible = cluster && !broadcast;
+        _engineGrid.Visible = false;
+        _attitudeStrip.Visible = false;
         _engineGrid.ApplyDensityLayout();
         _attitudeStrip.ApplyDensityLayout();
     }

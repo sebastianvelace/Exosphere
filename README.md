@@ -102,7 +102,9 @@ boards for every launch vehicle (and independent Super Heavy and Starship boards
 the piloting navball, an observed-event timeline,
 mission clock, surface speed, altitude, vertical speed, throttle, TWR and orbital
 apsides. `[F3]` cycles Minimal → Full → Clean; Full adds diagnostics and Clean
-retains the expanded attitude cluster. Cockpit and map views use their existing
+retains only the navball and critical alerts. The menu exposes this choice under
+Settings → Flight Telemetry. Legacy Clean settings migrate once to the broadcast
+band; explicitly choosing Clean afterwards remains persistent. Cockpit and map views use their existing
 instrument policies. Loaded flights without a known liftoff epoch display `SIM`
 time instead of inventing `T+`. Engine dots use catalog mount geometry and stable
 runtime identities; generic boards show the current and next propulsion stage.

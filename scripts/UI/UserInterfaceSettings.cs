@@ -6,13 +6,14 @@ public enum InterfaceLanguage { English, Spanish }
 
 /// <summary>
 /// Exterior Minimal uses the broadcast band with live engine boards and navball.
-/// Full adds diagnostic panels. Clean retains the expanded attitude cluster.
+/// Full adds diagnostic panels. Clean retains only the navball and critical alerts.
 /// </summary>
 public enum HudDensity { Full, Minimal, Clean }
 
 public static class UserInterfaceSettings
 {
     private const string Path = "user://interface.cfg";
+    private const int HudLayoutVersion = 1;
     public static InterfaceLanguage Language { get; private set; } = InterfaceLanguage.English;
     public static bool ReducedMotion { get; private set; }
     public static float UiScale { get; private set; } = 1.0f;
@@ -31,6 +32,13 @@ public static class UserInterfaceSettings
             (int)config.GetValue("interface", "hud_density", (int)HudDensity.Minimal),
             (int)HudDensity.Full,
             (int)HudDensity.Clean);
+        // Legacy Clean displayed the old engine/telemetry cluster. Offer the new band
+        // once when upgrading; an explicit Clean choice after migration stays clean.
+        if ((int)config.GetValue("interface", "hud_layout_version", 0) < HudLayoutVersion)
+        {
+            if (HudDensity == HudDensity.Clean) HudDensity = HudDensity.Minimal;
+            Save();
+        }
     }
 
     public static void SetLanguage(InterfaceLanguage language)
@@ -72,10 +80,12 @@ public static class UserInterfaceSettings
     private static void Save()
     {
         var config = new ConfigFile();
+        config.Load(Path);
         config.SetValue("interface", "language", (int)Language);
         config.SetValue("interface", "reduced_motion", ReducedMotion);
         config.SetValue("interface", "ui_scale", UiScale);
         config.SetValue("interface", "hud_density", (int)HudDensity);
+        config.SetValue("interface", "hud_layout_version", HudLayoutVersion);
         config.Save(Path);
     }
 }
@@ -148,6 +158,10 @@ public static class UiText
         ["settings_title"] = ("INTERFACE SETTINGS", "AJUSTES DE INTERFAZ"),
         ["language"] = ("LANGUAGE", "IDIOMA"),
         ["motion"] = ("REDUCED MOTION", "MOVIMIENTO REDUCIDO"),
+        ["hud_density"] = ("FLIGHT TELEMETRY", "TELEMETRÍA DE VUELO"),
+        ["hud_minimal"] = ("BROADCAST", "TRANSMISIÓN"),
+        ["hud_full"] = ("BROADCAST + DIAGNOSTICS", "TRANSMISIÓN + DIAGNÓSTICOS"),
+        ["hud_clean"] = ("NAVBALL ONLY", "SOLO NAVBALL"),
         ["scale"] = ("UI SCALE", "ESCALA DE INTERFAZ"),
         ["close"] = ("CLOSE", "CERRAR"),
         ["no_saves"] = ("No saved flights yet.", "Aún no hay partidas guardadas."),
