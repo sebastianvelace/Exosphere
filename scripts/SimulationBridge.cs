@@ -805,30 +805,23 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
         // Unit sphere — FloatingOrigin scales each planet per-frame to its correct angular
         // size as a precision-safe "scaled-space" backdrop. The shader supplies its own
-        // atmospheric Fresnel rim, so no separate glow shell is needed.
+        // camera-to-surface optical path; the sky owns the off-limb atmosphere.
         var sphere = GetSharedPlanetSphereMesh();
         var mat = body.Id == "earth"
-            ? PlanetMaterials.CreateEarth()
+            ? PlanetMaterials.CreateEarth(body, LaunchSiteId)
             : PlanetMaterials.CreatePlanet(body.Id, GetPlanetColor(body.Id));
 
-        var mesh = new MeshInstance3D { Name = body.Name + "_mesh", Mesh = sphere };
+        var mesh = new MeshInstance3D
+        {
+            Name = body.Name + "_mesh",
+            Mesh = body.Id == "earth" ? new QuadMesh { Size = new Vector2(2f, 2f) } : sphere,
+            // Earth's shader ray-tests the real sphere; its screen quad must not be
+            // culled by the unrelated scaled-space plane orientation.
+            CustomAabb = new Aabb(-Vector3.One * 2f, Vector3.One * 4f),
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
         mesh.SetSurfaceOverrideMaterial(0, mat);
         planetsNode.AddChild(mesh);
-
-        if (body.Id == "earth")
-        {
-            // Earth atmosphere reaches roughly 100 km over a 6,371 km radius.
-            // The 1.6% shell is presentation-only and follows the same scaled-space
-            // transform as the opaque globe, so it cannot affect simulation state.
-            var atmosphere = new MeshInstance3D
-            {
-                Name = "Earth_atmosphere",
-                Mesh = sphere,
-                Scale = Godot.Vector3.One * 1.016f,
-            };
-            atmosphere.SetSurfaceOverrideMaterial(0, PlanetMaterials.CreateEarthAtmosphere());
-            mesh.AddChild(atmosphere);
-        }
 
         fo.RegisterPlanetNode(body.Id, mesh);
 

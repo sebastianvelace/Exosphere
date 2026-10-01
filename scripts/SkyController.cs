@@ -51,7 +51,7 @@ public partial class SkyController : Node
     // 0.35 crushed zenith blue so the play camera read as a white slab. 0.55
     // restores Rayleigh blue; sun-disc radiance in the sky shader is lowered
     // separately so the photosphere does not bleach the frame.
-    private const float VisibleSolarRadianceScale = 0.55f;
+    public const float VisibleSolarRadianceScale = 0.55f;
     // Interactive runtime profile: preserve the same physical model and official order 4,
     // but bound CPU work tightly enough that llvmpipe/Godot remains responsive while the
     // worker builds. The offline spectral/reference tools keep their independent high-
@@ -112,6 +112,9 @@ public partial class SkyController : Node
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
     private string? _boundCloudBodyId;
+    public static Texture2D? EarthSurfaceDensityLut { get; private set; }
+    public static float EarthSurfaceDensityTopM { get; private set; }
+    public static Texture2D? EarthSurfaceTransmittanceLut { get; private set; }
     private readonly Dictionary<string, Texture2D> _transmittanceLuts = new();
     private readonly Dictionary<string, Texture2D> _multipleScatteringLuts = new();
     private readonly Dictionary<string, AtmosphereLutCpuResult> _cpuLutCache = new();
@@ -168,6 +171,8 @@ public partial class SkyController : Node
 
     public override void _Ready()
     {
+        EarthSurfaceDensityLut = null;
+        EarthSurfaceTransmittanceLut = null;
         ProcessPriority = -10;
         var worldEnvironment = GetTree().Root.FindChild(
             "WorldEnvironment", true, false) as WorldEnvironment;
@@ -211,6 +216,8 @@ public partial class SkyController : Node
 
     public override void _ExitTree()
     {
+        EarthSurfaceDensityLut = null;
+        EarthSurfaceTransmittanceLut = null;
         _isExiting = true;
         CancelAtmosphereLutBuild("exit_tree");
     }
@@ -233,7 +240,9 @@ public partial class SkyController : Node
 
         var body = universe.GetDominantBody(vessel.Position);
         var sun = universe.GetBody("sun");
-        Vector3d upD = body.GetGeodeticUp(vessel.Position);
+        Vector3d upD = body.Id == "earth"
+            ? new Vector3d(FloatingOrigin.CameraEarthRadialUp.X, FloatingOrigin.CameraEarthRadialUp.Y, FloatingOrigin.CameraEarthRadialUp.Z)
+            : body.GetGeodeticUp(vessel.Position);
         Vector3d physicalSunD = sun != null
             ? (sun.Position - vessel.Position).Normalized
             : new Vector3d(0.4, 0.5, 0.8).Normalized;
@@ -272,6 +281,8 @@ public partial class SkyController : Node
         // needs its own update path; otherwise an eclipse would remain visually stuck until
         // the vessel moved enough to rebuild the atmospheric bindings.
         BindSolarGeometry(vessel.Position, sun, body.Id);
+        if (body.Id == "earth" && _skyMat.GetShaderParameter("transmittance_lut_enabled").AsBool())
+            EarthSurfaceTransmittanceLut = _skyMat.GetShaderParameter("transmittance_lut").AsGodotObject() as Texture2D;
         UpdateEnvironment(body, altitude, upD.Dot(sunD));
     }
 
@@ -406,10 +417,7 @@ public partial class SkyController : Node
 
         _skyMat!.SetShaderParameter("local_up", ToGodot(up));
         _skyMat.SetShaderParameter("sun_dir", ToGodot(toSun));
-        double visualRadius = body.Id == "earth"
-            ? FloatingOrigin.VisualSurfaceRadiusMetres(body,
-                SimulationBridge.Instance!.ActiveVessel?.Position ?? body.Position)
-            : body.Radius;
+        double visualRadius = body.Id == "earth" ? FloatingOrigin.CameraEarthRadiusM : body.Radius;
         _skyMat.SetShaderParameter("planet_radius", (float)visualRadius);
         _skyMat.SetShaderParameter("observer_altitude", (float)System.Math.Max(1.0, altitude));
         // Disable before resolving a new body/profile so a missing texture can never
@@ -440,6 +448,11 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("density_lut", densityLut.Texture);
         _skyMat.SetShaderParameter("density_lut_top_altitude", densityLut.TopAltitude);
         _skyMat.SetShaderParameter("density_lut_enabled", true);
+        if (body.Id == "earth")
+        {
+            EarthSurfaceDensityLut = densityLut.Texture;
+            EarthSurfaceDensityTopM = densityLut.TopAltitude;
+        }
 
         // These tables are pure CPU work but can take seconds for Earth.  Queue them away
         // from the main thread and keep the shader's analytical fallback active until the

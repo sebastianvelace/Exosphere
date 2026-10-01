@@ -4,6 +4,7 @@
 // unshaded, alpha-blended; a soft day/night dim from the sun so the shadowed arc fades.
 // ─────────────────────────────────────────────────────────────────────────────
 shader_type spatial;
+#include "res://assets/shaders/earth_geometry.gdshaderinc"
 render_mode cull_disabled, unshaded, blend_mix, depth_draw_opaque;
 
 uniform sampler2D ring_tex : source_color, filter_linear_mipmap;
@@ -19,6 +20,7 @@ void vertex() {
 }
 
 void fragment() {
+    if (earth_occludes_backdrop(v_world_pos - CAMERA_POSITION_WORLD)) discard;
 	vec4 c = texture(ring_tex, vec2(v_uv.x, 0.5));
 	// Gentle sunlit/shadow gradient across the ring plane.
 	vec3 toSun = normalize(sun_dir);

@@ -12,9 +12,8 @@ using Exosphere.Simulation;
 /// camera-to-surface limb path because the opaque scaled disc occludes the sky behind it. Other bodies use a shared generic body shader
 /// (<c>planet_body.gdshader</c>) or a tuned <see cref="StandardMaterial3D"/>.
 ///
-/// All shaders sample detail from the *normalized* local vertex position, so the
-/// host <see cref="SphereMesh"/> may be scaled to any radius without altering the
-/// surface appearance. The default sun direction matches the Earth shader so the
+/// Earth reconstructs texture coordinates from the physical geographic ray hit;
+/// other bodies sample their normalized local sphere position. The default sun direction matches the Earth shader so the
 /// terminators across bodies stay consistent.
 /// </summary>
 public static class PlanetMaterials
@@ -30,7 +29,7 @@ public static class PlanetMaterials
     /// Textured Earth surface with animated clouds, a day/night terminator and
     /// city lights. Atmospheric haze and limb radiance belong to the sky integrator.
     /// </summary>
-    public static Material CreateEarth()
+    public static Material CreateEarth(CelestialBody? body = null, string? launchSiteId = null)
     {
         var shader = GD.Load<Shader>(EarthShaderPath);
         var mat = new ShaderMaterial { Shader = shader };
@@ -49,38 +48,69 @@ public static class PlanetMaterials
         mat.SetShaderParameter("earth_radius_m", 6371008.8f);
         GD.Print($"PERF_EARTH_RELIEF source=ETOPO2022 asset={EarthReliefPath} " +
             $"enabled={reliefTexture != null} visualOnly=True physicsAuthority=False");
-        var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
+        var atmosphere = body?.Atmosphere ?? AtmosphereModel.Earth();
+        var opticalDepth = atmosphere.Optics.VerticalOpticalDepth(0.0);
         mat.SetShaderParameter("vertical_optical_depth", new Vector3(
             (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
+        BindSurfaceOptics(mat, atmosphere.Optics, atmosphere.MaxAltitude);
         mat.SetShaderParameter("cloud_amount", 0.72f);
         mat.SetShaderParameter("night_lights", 2.4f);
         mat.SetShaderParameter("day_gain", 1.15f);
         mat.SetShaderParameter("night_floor", 0.12f);
         mat.SetShaderParameter("ocean_sky_fill_strength", 0.18f);
+        string prefix = launchSiteId == "starbase" ? "starbase" : launchSiteId == "kennedy" ? "kennedy" : string.Empty;
+        if (prefix.Length > 0)
+        {
+            string macroPrefix = prefix == "kennedy" ? "cape_canaveral" : prefix;
+            var regional = GD.Load<Texture2D>($"res://assets/textures/{prefix}_naip_10km.jpg");
+            var regionalMask = GD.Load<Texture2D>($"res://assets/textures/{prefix}_naip_10km_mask.png");
+            var macro = GD.Load<Texture2D>($"res://assets/textures/{macroPrefix}_naip_50km.jpg");
+            var macroMask = GD.Load<Texture2D>($"res://assets/textures/{macroPrefix}_naip_50km_mask.png");
+            bool ready = regional != null && regionalMask != null && macro != null && macroMask != null;
+            if (ready)
+            {
+                mat.SetShaderParameter("regional_ortho_tex", regional!);
+                mat.SetShaderParameter("regional_mask_tex", regionalMask!);
+                mat.SetShaderParameter("macro_ortho_tex", macro!);
+                mat.SetShaderParameter("macro_mask_tex", macroMask!);
+            }
+            mat.SetShaderParameter("site_ortho_enabled", ready);
+        }
         return mat;
     }
 
-    /// <summary>
-    /// Presentation-only Earth atmosphere shell. It uses the same Earth shader and
-    /// optical-depth calibration as the opaque disc, but is rendered on a 1.6% larger
-    /// mesh so the atmosphere extends beyond the geometric surface limb.
-    /// </summary>
-    public static ShaderMaterial CreateEarthAtmosphere()
+    public static void BindSurfaceLuts(ShaderMaterial material)
     {
-        var shader = GD.Load<Shader>(EarthShaderPath);
-        var mat = new ShaderMaterial { Shader = shader, RenderPriority = -1 };
-        mat.SetShaderParameter("sun_dir", DefaultSunDir);
-        mat.SetShaderParameter("day_tex", LoadTexture("res://assets/textures/earth_day.jpg"));
-        mat.SetShaderParameter("night_tex", LoadTexture("res://assets/textures/earth_night.jpg"));
-        mat.SetShaderParameter("cloud_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
-        mat.SetShaderParameter("relief_enabled", 0.0f);
-        var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
-        mat.SetShaderParameter("vertical_optical_depth", new Vector3(
-            (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
-        mat.SetShaderParameter("solar_visibility", 1.0f);
-        mat.SetShaderParameter("planet_alpha", 1.0f);
-        mat.SetShaderParameter("atmosphere_shell", 1.0f);
-        return mat;
+        var density = SkyController.EarthSurfaceDensityLut;
+        if (density != null && material.GetShaderParameter("surface_density_lut").AsGodotObject() != density)
+        {
+            material.SetShaderParameter("surface_density_lut", density);
+            material.SetShaderParameter("surface_density_lut_top_m", SkyController.EarthSurfaceDensityTopM);
+            material.SetShaderParameter("surface_density_lut_enabled", true);
+        }
+        var solar = SkyController.EarthSurfaceTransmittanceLut;
+        if (solar != null && material.GetShaderParameter("surface_solar_lut").AsGodotObject() != solar)
+        {
+            material.SetShaderParameter("surface_solar_lut", solar);
+            material.SetShaderParameter("surface_solar_lut_enabled", true);
+        }
+    }
+
+    /// <summary>Bind the same physical RGB optical profile used by the sky.</summary>
+    public static void BindSurfaceOptics(ShaderMaterial material, AtmosphereOptics optics, double atmosphereHeight)
+    {
+        static Vector3 Rgb(Exosphere.Simulation.Math.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
+        material.SetShaderParameter("surface_rayleigh_scattering", Rgb(optics.RayleighScattering));
+        material.SetShaderParameter("surface_mie_scattering", Rgb(optics.MieScattering));
+        material.SetShaderParameter("surface_mie_extinction", Rgb(optics.MieExtinction));
+        material.SetShaderParameter("surface_ozone_absorption", Rgb(optics.OzoneAbsorption));
+        material.SetShaderParameter("surface_rayleigh_height_m", (float)optics.RayleighScaleHeight);
+        material.SetShaderParameter("surface_mie_height_m", (float)optics.MieScaleHeight);
+        material.SetShaderParameter("surface_ozone_center_m", (float)optics.OzoneCenterAltitude);
+        material.SetShaderParameter("surface_ozone_half_width_m", (float)optics.OzoneHalfWidth);
+        material.SetShaderParameter("surface_mie_g", (float)optics.MieAnisotropy);
+        material.SetShaderParameter("surface_sun_illuminance", (float)(optics.SunIlluminanceScale * SkyController.VisibleSolarRadianceScale));
+        material.SetShaderParameter("surface_atmosphere_height_m", (float)atmosphereHeight);
     }
 
     /// <summary>

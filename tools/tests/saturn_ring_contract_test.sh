@@ -34,4 +34,10 @@ if ! rg -n 'SetExternalChaseFrame\(0f, 82f, 38f\)' "$harness" >/dev/null; then
   exit 1
 fi
 
+if ! rg -qF 'earth_occludes_backdrop(v_world_pos - CAMERA_POSITION_WORLD)' "$shader" \
+  || ! rg -q '_saturnRingMaterial.*SetShaderParameter\("physical_depth_scale"' scripts/FloatingOrigin.cs; then
+  echo "FAIL Saturn ring does not share Earth occlusion with its parent disc" >&2
+  exit 1
+fi
+
 echo "saturn_ring_contract_test: PASS imported_texture=mipmap shader_filter=linear_mipmap visual_mode=saturn"

@@ -8,8 +8,7 @@ using Exosphere.Simulation.Math;
 /// Local TRUE-scale Earth ground patch for low-altitude flight.
 ///
 /// The scaled-space backdrop (see <see cref="FloatingOrigin"/>) draws Earth as a
-/// 50,000-unit sphere; up close that curves FAR too hard and the planet looks like
-/// a small ball. This controller instead lays down a large tangent-plane mesh
+/// geographic ray surface. This controller overlays measured detail on a tangent-plane mesh
 /// directly under the active vessel, with each vertex dropped by the TRUE sphere
 /// curvature <c>y = -(x²+z²)/(2R)</c>. At 4–10 km altitude the horizon is then far
 /// and essentially flat — exactly as in reality — while coordinates stay float-safe.
@@ -76,11 +75,6 @@ public partial class EarthGroundController : Node3D
     // atmospheric columns; keep the geometric limb nearly opaque instead of
     // exposing a darker ground sample at the first visible patch row.
     private const float HorizonHazeStrength = 0.98f;
-    // Keep the opaque tangent ground on the same bounded daylight-dome floor used
-    // by space_sky.gdshader at the Earth horizon. The controller's live horizon
-    // colour can darken with altitude; using that darker value alone leaves a grey
-    // strip between the sky dome and the measured ground raster.
-    private static readonly Color EarthHorizonFloor = new(0.58f, 0.74f, 0.94f);
     private const float RegionalTerrainExtentM = 10_000f;
     private const float RegionalHeightMinM = -2.0f;
     private const float RegionalHeightMaxM = 12.0f;
@@ -96,7 +90,6 @@ public partial class EarthGroundController : Node3D
     private float _lastFade = float.NaN;
     private float _lastHorizonDistance = float.NaN;
     private float _lastEarthRadius = float.NaN;
-    private Color _lastHazeColor;
     private Vector3 _lastSunDirection;
     private MeshInstance3D? _civilGround;
     private readonly List<MeshInstance3D> _civilMeshes = new();
@@ -120,10 +113,12 @@ public partial class EarthGroundController : Node3D
         if (shader != null)
         {
             _mat = new ShaderMaterial { Shader = shader };
+            var atmosphere = SimulationBridge.Instance?.Universe?.GetBody("earth")?.Atmosphere ?? AtmosphereModel.Earth();
+            PlanetMaterials.BindSurfaceOptics(_mat, atmosphere.Optics, atmosphere.MaxAltitude);
             _mat.SetShaderParameter("fade", 1.0f);
             _mat.SetShaderParameter("earth_radius", (float)InitialEarthRadiusMetres());
             _mat.SetShaderParameter("metres_per_unit", MetresPerUnit);
-            var opticalDepth = AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0);
+            var opticalDepth = atmosphere.Optics.VerticalOpticalDepth(0.0);
             _mat.SetShaderParameter("vertical_optical_depth", new Vector3(
                 (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
             _mat.SetShaderParameter("night_floor", NightFloor);
@@ -246,9 +241,8 @@ public partial class EarthGroundController : Node3D
             return;
         }
 
-        // Complementary to FloatingOrigin.EarthGlobeAlpha: the patch owns the
-        // horizon on the pad, the globe owns it in space, and they share one
-        // 12–18 km camera-altitude handoff so neither a double-Earth nor a gap.
+        // Retire local detail over the continuous opaque globe at 12–18 km.
+        // EarthGlobeAlpha is the legacy detail-handoff weight, not planet alpha.
         float fade = 1f - FloatingOrigin.EarthGlobeAlpha(FloatingOrigin.CameraAltOverEarth);
         if (fade <= 0.001f)
         {
@@ -285,10 +279,20 @@ public partial class EarthGroundController : Node3D
 
         if (_mat != null)
         {
-            var hazeColor = SkyController.CurrentHorizonColor;
+            PlanetMaterials.BindSurfaceLuts(_mat);
+            if (bridge?.LaunchSiteOrNull is { } site)
+            {
+                var siteOffset = surfacePos - site.GetPosition(earth, universe.CurrentTime);
+                _mat.SetShaderParameter("site_patch_offset_m", new Vector2(
+                    (float)siteOffset.Dot(new Vector3d(east.X, east.Y, east.Z)),
+                    (float)siteOffset.Dot(new Vector3d(north.X, north.Y, north.Z))));
+            }
+            _mat.SetShaderParameter("backdrop_far_units", GetViewport().GetCamera3D()?.Far ?? 420_000f);
+            _mat.SetShaderParameter("physical_camera_up", FloatingOrigin.CameraEarthRadialUp);
+            _mat.SetShaderParameter("physical_camera_altitude_m", (float)FloatingOrigin.CameraEarthRadialAltitudeM);
+            _mat.SetShaderParameter("physical_planet_radius_m", (float)FloatingOrigin.CameraEarthRadiusM);
             var sun = universe.GetBody("sun");
             var sunDirection = Vector3.Zero;
-            var hasSunDirection = false;
             if (sun != null)
             {
                 var physicalDirection = (sun.Position - vessel.Position).Normalized;
@@ -296,25 +300,11 @@ public partial class EarthGroundController : Node3D
                     ? SunController.Instance.GetVisualSunDirection(
                         earth, vessel.Position, physicalDirection)
                     : physicalDirection);
-                hasSunDirection = true;
-            }
-            if (earth.Id == "earth" && hasSunDirection)
-            {
-                // Match space_sky.gdshader's bounded daylight dome at the actual
-                // horizon. At night retain the live atmospheric colour; the opaque
-                // ground must not keep a daylight floor through an eclipse/night side.
-                var daylight = Mathf.SmoothStep(-0.12f, 0.03f, renderUp.Dot(sunDirection));
-                hazeColor = hazeColor.Lerp(EarthHorizonFloor, daylight);
             }
             if (!_groundShaderStateInitialized || FloatDiffers(_lastFade, fade))
             {
                 _mat.SetShaderParameter("fade", fade);
                 _lastFade = fade;
-            }
-            if (!_groundShaderStateInitialized || ColorDiffers(_lastHazeColor, hazeColor))
-            {
-                _mat.SetShaderParameter("haze_color", hazeColor);
-                _lastHazeColor = hazeColor;
             }
             if (sun != null)
             {
@@ -433,11 +423,7 @@ public partial class EarthGroundController : Node3D
     private static bool FloatDiffers(float a, float b) =>
         float.IsNaN(a) || float.IsNaN(b) || Mathf.Abs(a - b) > 1e-4f;
 
-    private static bool ColorDiffers(Color a, Color b) =>
-        FloatDiffers(a.R, b.R)
-        || FloatDiffers(a.G, b.G)
-        || FloatDiffers(a.B, b.B)
-        || FloatDiffers(a.A, b.A);
+
 
     /// <summary>
     /// Geodetic disc whose vertices drop by ellipsoid sagitta

@@ -19,49 +19,49 @@ public sealed class EarthSurfaceShaderContractTests
     }
 
     [Fact]
-    public void SurfaceRadianceKeepsCameraDependentScatteringBoundedToTheGlobeLimb()
+    public void SurfaceTransportUsesTheFiniteGeographicRayAndSharedProfiles()
     {
-        string shader = Source("assets/shaders/earth_surface.gdshader");
-        int cameraPathStart = shader.IndexOf("vec3 V =", StringComparison.Ordinal);
-        int shellStart = shader.IndexOf("bool shell_render = atmosphere_shell > 0.5;", StringComparison.Ordinal);
-        Assert.True(shellStart > shader.IndexOf("lit += cities;", StringComparison.Ordinal));
-        Assert.True(cameraPathStart > shellStart);
-        string surfaceRadiance = shader[..shellStart];
-        // Direct surface lighting remains independent of the camera. The scaled
-        // globe gets a separate, bounded camera-to-surface path at the limb.
-        Assert.DoesNotMatch(@"\b(CAMERA_POSITION_WORLD|VIEW|ndotv|limb|FRAGCOORD|SCREEN_UV)\b", surfaceRadiance);
-        Assert.Matches(@"EMISSION\s*=\s*cities\s*\*\s*0\.6\s*;", shader);
-        Assert.Contains("float view_air_mass = 1.0 / max(", shader);
-        Assert.Contains("vec3 view_transmittance = exp(-vertical_optical_depth", shader);
-        Assert.Contains("float limb_scatter = smoothstep(0.0, 0.42", shader);
-        Assert.Contains("lit = mix(lit, aerial_radiance, limb_scatter);", shader);
+        string surface = Source("assets/shaders/earth_surface.gdshader");
+        string ground = Source("assets/shaders/earth_ground.gdshader");
+        string transport = Source("assets/shaders/surface_atmosphere.gdshaderinc");
+        Assert.Contains("surface_aerial_radiance(lit, world_ray, distance_m", surface);
+        Assert.Contains("surface_aerial_radiance(ground_radiance, view_ray, physical_distance_m", ground);
+        Assert.Contains("float end = min(distance_m, -b + sqrt(disc));", transport);
+        Assert.Contains("if (end <= start) return ground;", transport);
+        Assert.Contains("ground * exp(-optical_depth)", transport);
+        Assert.Contains("surface_density_lut_enabled", transport);
+        Assert.Contains("surface_solar_lut_enabled", transport);
+        Assert.DoesNotContain("limb_scatter", surface);
     }
 
     [Fact]
-    public void EarthAtmosphereShellUsesBoundedOpticalDepthAndSeparateCoverage()
+    public void OpaqueEarthLeavesOffLimbTransportToTheSphericalSky()
     {
         string shader = Source("assets/shaders/earth_surface.gdshader");
-        Assert.Contains("uniform float atmosphere_shell", shader);
-        Assert.Contains("vec3 shell_transmittance = exp(-vertical_optical_depth", shader);
-        Assert.Contains("float shell_limb = smoothstep(0.02, 0.82", shader);
-        Assert.Contains("ALPHA = clamp(shell_alpha, 0.0, 0.72);", shader);
-        Assert.Contains("Name = \"Earth_atmosphere\"", Source("scripts/SimulationBridge.cs"));
-        Assert.Contains("CreateEarthAtmosphere()", Source("scripts/PlanetMaterials.cs"));
+        Assert.DoesNotMatch(@"\bALPHA\s*=", shader);
+        Assert.DoesNotContain("atmosphere_shell", shader);
+        Assert.DoesNotContain("Earth_atmosphere", Source("scripts/SimulationBridge.cs"));
+        Assert.DoesNotContain("CreateEarthAtmosphere", Source("scripts/PlanetMaterials.cs"));
+        Assert.Contains("float distance_m = surface_distance_m(world_ray);", shader);
+        Assert.Contains("if (distance_m < 0.0) discard;", shader);
+        Assert.Contains("ALPHA     = clamp(fade, 0.0, 1.0) * rim;", Source("assets/shaders/earth_ground.gdshader"));
     }
 
     [Fact]
-    public void SilhouetteCoverageUsesPixelFootprintAtTangentNotAnInteriorAngularBand()
+    public void GeographicCoverageWritesPhysicalDepthInsteadOfProxyMeshDepth()
     {
         string shader = Source("assets/shaders/earth_surface.gdshader");
-        Assert.Contains("render_mode cull_back, unshaded, blend_mix;", shader);
-        Assert.Contains("float ndotv = dot(N, V);", shader);
-        Assert.Contains("vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);", shader);
-        Assert.Contains("float limb = 1.0 - ndotv;", shader);
-        // The floor is a numerical guard, not a visible angular width.
-        Assert.Contains("float limb_aa = max(fwidth(limb), 0.000001);", shader);
-        Assert.Contains("float silhouette = smoothstep(0.0, limb_aa, ndotv);", shader);
-        Assert.Contains("ALPHA = planet_alpha * silhouette;", shader);
-        Assert.Equal(2, Regex.Matches(shader, @"\bALPHA\s*=").Count);
+        string transport = Source("assets/shaders/earth_geometry.gdshaderinc");
+        Assert.Contains("render_mode cull_disabled, unshaded, fog_disabled;", shader);
+        Assert.Contains("INV_PROJECTION_MATRIX", shader);
+        Assert.Contains("INV_VIEW_MATRIX", shader);
+        Assert.Contains("DEPTH = physical_backdrop_depth", shader);
+        Assert.Contains("DEPTH = physical_backdrop_depth", Source("assets/shaders/earth_ground.gdshader"));
+        Assert.Contains("float c = h * (2.0 + h);", transport);
+        Assert.Contains("c / (-b + sqrt(discriminant))", transport);
+        Assert.Contains("CLIP_SPACE_FAR", Source("assets/shaders/backdrop_depth.gdshaderinc"));
+        Assert.Contains("new QuadMesh", Source("scripts/SimulationBridge.cs"));
+        Assert.DoesNotContain("planet_alpha", shader);
     }
 
     [Fact]
@@ -79,9 +79,12 @@ public sealed class EarthSurfaceShaderContractTests
     [Fact]
     public void EarthMaterialBindsDeclaredUniformsWithoutAnAtmosphericGlowControl()
     {
-        string shader = Source("assets/shaders/earth_surface.gdshader");
+        string shader = Source("assets/shaders/earth_surface.gdshader")
+            + Source("assets/shaders/surface_atmosphere.gdshaderinc")
+            + Source("assets/shaders/earth_ortho.gdshaderinc")
+            + Source("assets/shaders/earth_geometry.gdshaderinc");
         string materials = Source("scripts/PlanetMaterials.cs");
-        int start = materials.IndexOf("public static Material CreateEarth()", StringComparison.Ordinal);
+        int start = materials.IndexOf("public static Material CreateEarth(", StringComparison.Ordinal);
         int end = materials.IndexOf("return mat;", start, StringComparison.Ordinal);
         string earth = materials[start..end];
         var bindings = Regex.Matches(earth, "SetShaderParameter\\(\"([^\"]+)\"");
@@ -90,7 +93,8 @@ public sealed class EarthSurfaceShaderContractTests
             Assert.Matches(@"\buniform\s+\w+\s+" + Regex.Escape(binding.Groups[1].Value) + @"\b", shader);
         Assert.DoesNotContain("limb_strength", shader);
         Assert.DoesNotContain("limb_strength", earth);
-        Assert.Contains("AtmosphereModel.Earth().Optics.VerticalOpticalDepth(0.0)", earth);
+        Assert.Contains("body?.Atmosphere ?? AtmosphereModel.Earth()", earth);
+        Assert.Contains("atmosphere.Optics.VerticalOpticalDepth(0.0)", earth);
     }
 
     [Fact]

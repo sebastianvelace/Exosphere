@@ -14,28 +14,25 @@ shader_type spatial;
 // The patch owns its physically bounded direct/earthshine response. Keeping it
 // unshaded avoids the scene DirectionalLight multiplying the already attenuated
 // direct term and erasing the twilight/night floor on the real framebuffer.
-// Stay in the opaque pipeline. blend_mix put this 784 km disc on the
-// transparent pass; nadir views then sorted behind the sky and read as blue soup
-// with a postage-stamp civil apron. Rim fade is RGB into haze_color, not ALPHA.
-render_mode cull_back, unshaded, depth_draw_opaque;
+// Regional detail overlays an opaque geographic globe with physical depth.
+// Coverage fades reveal that surface; they never substitute a haze-colored disc.
+render_mode cull_back, unshaded, blend_mix, depth_draw_never, fog_disabled;
+
+#include "res://assets/shaders/surface_atmosphere.gdshaderinc"
+#include "res://assets/shaders/backdrop_depth.gdshaderinc"
+#include "res://assets/shaders/earth_ortho.gdshaderinc"
 
 uniform sampler2D day_tex : source_color, filter_linear_mipmap;
 uniform sampler2D night_tex : source_color, filter_linear_mipmap;
 // USDA NAIP reflectance and USGS 3DEP broad relief for the real Starbase
 // regional ground. A separate mask excludes provider no-data pixels.
-uniform sampler2D regional_ortho_tex : source_color, filter_linear_mipmap;
-uniform sampler2D regional_mask_tex : hint_default_white, filter_linear;
 uniform sampler2D regional_height_tex : hint_default_black, filter_linear;
-uniform float regional_extent_m = 10000.0;
 uniform float regional_height_min_m = -2.0;
 uniform float regional_height_max_m = 12.0;
 uniform float regional_height_reference_m = 0.96;
 // Lower-frequency NAIP/3DEP context prevents the 10 km measured layer from
 // reading as a lone square during the 10–40 km ascent transition.
-uniform sampler2D macro_ortho_tex : source_color, filter_linear_mipmap;
-uniform sampler2D macro_mask_tex : hint_default_black, filter_linear;
 uniform sampler2D macro_height_tex : hint_default_black, filter_linear;
-uniform float macro_extent_m = 50000.0;
 uniform float macro_height_min_m = -2.0;
 uniform float macro_height_max_m = 12.0;
 uniform float macro_height_reference_m = 0.96;
@@ -47,9 +44,6 @@ uniform float metres_per_unit = 2.8;
 
 uniform float fade : hint_range(0.0, 1.0) = 1.0;
 uniform float horizon_dist = 4000.0;
-// Matches the SkyController ground-horizon blue so the patch dissolves into the sky with
-// no grey seam (EarthGroundController overrides it with the live sky horizon colour).
-uniform vec3  haze_color : source_color = vec3(0.40, 0.65, 1.0);
 uniform vec3  sun_dir = vec3(0.42, 0.78, 0.46);
 uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform vec3  vertical_optical_depth = vec3(0.0615, 0.1420, 0.2714);
@@ -105,90 +99,6 @@ vec2 equirect(vec3 p) {
 	float lon = atan(p.z, p.x);
 	float lat = asin(clamp(p.y, -1.0, 1.0));
 	return vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI);
-}
-
-// Mesh +X is geodetic east and +Z is geodetic north. Imported rasters use
-// the conventional top-to-bottom image origin, so north maps toward V=0.
-vec2 regional_uv(vec2 patch_m) {
-	return vec2(0.5 + patch_m.x / regional_extent_m,
-		0.5 - patch_m.y / regional_extent_m);
-}
-
-float regional_edge_weight(vec2 uv) {
-	// The raster is square, but its handoff must follow the circular tangent
-	// patch. A max-component distance leaves a visible rectangular cookie over
-	// the coast when the regional layer retires in the mid-altitude view.
-	float radial_distance = length(uv - vec2(0.5)) * 2.0;
-	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
-}
-
-float regional_no_data_factor(vec2 uv) {
-	// The downloaded NAIP tile is JPEG, so its provider no-data area is an
-	// opaque neutral olive instead of alpha. The separate mask is only a broad
-	// feather and cannot describe the irregular tile footprint on its own.
-	// Reject a locally flat neutral plateau while preserving real water/land
-	// pixels and the narrow transition at the data boundary.
-	const vec2 texel = vec2(1.0 / 4096.0);
-	vec3 centre = textureLod(regional_ortho_tex, uv, 0.0).rgb;
-	vec3 east = textureLod(regional_ortho_tex,
-		clamp(uv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)), 0.0).rgb;
-	vec3 north = textureLod(regional_ortho_tex,
-		clamp(uv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)), 0.0).rgb;
-	float neutral = 1.0 - smoothstep(0.06, 0.18,
-		length(centre - vec3(0.54, 0.54, 0.45)));
-	float local_variation = max(length(east - centre), length(north - centre));
-	float flat_fill = 1.0 - smoothstep(0.004, 0.025, local_variation);
-	return 1.0 - neutral * flat_fill;
-}
-
-float regional_validity(vec2 uv) {
-	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
-		return 0.0;
-	return regional_edge_weight(uv)
-		// The exported mask is Gaussian-feathered around the provider footprint.
-		// Keep its low-valued tail invalid so the neutral JPEG fill cannot leak
-		// back into the scene as a rectangular patch.
-		* smoothstep(0.62, 0.80, texture(regional_mask_tex, uv).r)
-		* regional_no_data_factor(uv);
-}
-
-vec2 macro_uv(vec2 patch_m) {
-	return vec2(0.5 + patch_m.x / macro_extent_m,
-		0.5 - patch_m.y / macro_extent_m);
-}
-
-float macro_edge_weight(vec2 uv) {
-	// Keep the broad measured layer circular as well. Otherwise the 50 km
-	// bridge reintroduces the same square silhouette after the 10 km layer fades.
-	float radial_distance = length(uv - vec2(0.5)) * 2.0;
-	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
-}
-
-float macro_no_data_factor(vec2 uv) {
-	// The 50 km composite contains large opaque JPEG voids outside the
-	// available NAIP swaths. Detect their neutral, locally flat fill before it
-	// can be mistaken for real Gulf water or wetland in the LOD bridge.
-	const vec2 texel = vec2(1.0 / 4096.0);
-	vec3 centre = textureLod(macro_ortho_tex, uv, 0.0).rgb;
-	vec3 east = textureLod(macro_ortho_tex,
-		clamp(uv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)), 0.0).rgb;
-	vec3 north = textureLod(macro_ortho_tex,
-		clamp(uv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)), 0.0).rgb;
-	float neutral = 1.0 - smoothstep(0.06, 0.18,
-		length(centre - vec3(0.54, 0.54, 0.45)));
-	float local_variation = max(length(east - centre), length(north - centre));
-	float flat_fill = 1.0 - smoothstep(0.004, 0.025, local_variation);
-	return 1.0 - neutral * flat_fill;
-}
-
-float macro_validity(vec2 uv) {
-	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
-		return 0.0;
-	return macro_edge_weight(uv)
-		// The macro provider footprint is irregular; reject its feather tail
-		// before sampling the neutral fill colour stored in the JPEG void.
-		* smoothstep(0.62, 0.80, texture(macro_mask_tex, uv).r)
-		* macro_no_data_factor(uv);
 }
 
 float sample_height_m(sampler2D height_tex, vec2 uv, float min_m,
@@ -432,28 +342,20 @@ void fragment() {
 	vec3 city_lights = night_map * city_mask * night_side * night_city_gain;
 	vec3 ground_radiance = lit + indirect_emission + city_lights;
 
-	// Atmospheric perspective in RGB only. Nadir views (6–20 km) must keep
-	// coast/Gulf contrast, while a grazing ray must accumulate the long air path
-	// between the camera and the tangent surface. The exponential term is a bounded
-	// Beer–Lambert-style extinction proxy; it removes the former constant grey band
-	// without changing the measured raster or the flight model.
-	// view_up ≈ 1 when the camera looks at the ground face-on (nadir). Only
-	// apply grazing wash when the look is actually toward the horizon.
-	float look_down = smoothstep(0.55, 0.88, view_up);
-	float horizon_path = max(horizon_dist * 0.32, 1000.0);
-	float distance_haze = 1.0 - exp(-dist / horizon_path);
-	// Keep grazing haze close to the actual limb. The angular term represents the
-	// increasing tangent column; it fades before nadir so local pad detail remains.
-	float grazing_haze = (1.0 - smoothstep(0.0, 0.32, view_up)) * (1.0 - look_down);
-	// Combine independent distance and grazing columns in transmittance space.
-	// Taking max() creates a visible slope break where the dominant term changes;
-	// multiplying the remaining transmittances keeps the aerial perspective smooth.
-	float distance_transmittance = 1.0 - distance_haze * 0.92;
-	float grazing_transmittance = 1.0 - grazing_haze * horizon_haze_strength;
-	float haze = clamp(1.0 - distance_transmittance * grazing_transmittance, 0.0, 0.995)
-		* (1.0 - look_down * 0.85);
-	haze *= 1.0 - near_pad;
-	ground_radiance = mix(ground_radiance, haze_color, haze);
+    vec3 view_ray = normalize(v_world_pos - CAMERA_POSITION_WORLD);
+    float physical_distance_m = length(v_world_pos - CAMERA_POSITION_WORLD) * metres_per_unit;
+    float sphere_distance_m = surface_distance_m(view_ray);
+    // This material is a surface-detail overlay. Use the same geographic depth
+    // as the globe, with a metre-scale decal bias, not the coarse patch chord.
+    if (sphere_distance_m > 0.0) {
+        vec3 physical_view = (VIEW_MATRIX * vec4(view_ray, 0.0)).xyz
+            * (max(sphere_distance_m - 1.5, 0.01) / metres_per_unit);
+        DEPTH = physical_backdrop_depth(physical_view, PROJECTION_MATRIX);
+    } else {
+        discard;
+    }
+    ground_radiance = surface_aerial_radiance(ground_radiance, view_ray, physical_distance_m,
+        normalize(sun_dir), vertical_optical_depth, solar_visibility);
 	// Circular rim at the geometric horizon (not a camera-distance kill, and
 	// not the square mesh border).
 	float horizon_m = max(horizon_dist * metres_per_unit, 4000.0);
@@ -462,9 +364,9 @@ void fragment() {
 	// Unshaded materials do not receive the scene light a second time. Add the
 	// bounded earthshine to the manually computed radiance so it survives the
 	// zero-direct-light sunrise/night/eclipsed states.
-	ALBEDO    = mix(haze_color, ground_radiance, clamp(fade, 0.0, 1.0) * rim);
+	ALBEDO    = ground_radiance;
 	EMISSION  = vec3(0.0);
 	ROUGHNESS = 0.85;
 	METALLIC  = 0.0;
-	ALPHA     = 1.0;
+	ALPHA     = clamp(fade, 0.0, 1.0) * rim;
 }

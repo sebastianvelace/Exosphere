@@ -17,11 +17,11 @@ sun="$ROOT/scripts/SunController.cs"
 # (including the 28° pad override). Remapping L through PlanetOrientation⁻¹
 # while N stayed local, or crossing local N with world V, produced either
 # city-light night or a black ALPHA disc. Keep the frames matched.
-has 'vec3 N = normalize(v_world_normal);' "$shader" \
+has 'vec3 N = normalize(physical_point);' "$shader" \
   "scaled Earth lighting normal is not world-space"
 has 'vec3 L = normalize(sun_dir);' "$shader" \
   "scaled Earth sun is not used in world space"
-has 'vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);' "$shader" \
+has 'vec3 V = -world_ray;' "$shader" \
   "scaled Earth coverage is not the geometric camera silhouette"
 has_not 'ToEarthSurfaceSunDirection' "$sun" \
   "Earth sun_dir is still remapped into a second texture-local frame"
@@ -43,14 +43,12 @@ has 'vec3 rayleigh_sky = vec3(1.0) - exp(-vertical_optical_depth * 5.0);' "$shad
   "scaled Earth ocean sky fill is not derived from optical depth"
 has '* water * day * solar_visibility' "$shader" \
   "scaled Earth ocean sky fill is not gated by surface and solar state"
-has 'float view_air_mass = 1.0 / max(' "$shader" \
-  "scaled Earth has no camera-to-surface atmospheric path"
-has 'vec3 view_transmittance = exp(-vertical_optical_depth' "$shader" \
-  "scaled Earth limb does not attenuate surface radiance by optical depth"
-has 'vec3 aerial_radiance = lit * view_transmittance' "$shader" \
-  "scaled Earth limb has no Rayleigh in-scatter replacement"
-has 'float limb_scatter = smoothstep(0.0, 0.42' "$shader" \
-  "scaled Earth atmospheric path is not restricted to the geometric limb"
+has '#include "res://assets/shaders/surface_atmosphere.gdshaderinc"' "$shader" \
+  "scaled Earth must use finite camera-to-surface transport"
+has 'surface_aerial_radiance(lit, world_ray, distance_m' "$shader" \
+  "scaled Earth must integrate the actual geographic ray segment"
+has 'physical_camera_altitude_m' "$ROOT/scripts/FloatingOrigin.cs" \
+  "scaled Earth must read camera altitude instead of vessel altitude"
 has 'float water_fresnel = 0.0204 + 0.9796 * pow(1.0 - view_cosine, 5.0);' "$shader" \
   "scaled Earth ocean is missing air-water Fresnel reflection"
 has 'vec3 ocean_sun_reflection = vec3(water_fresnel * sun_glint)' "$shader" \
@@ -59,8 +57,8 @@ has 'uniform sampler2D relief_tex' "$shader" \
   "scaled Earth has no global relief texture"
 has 'textureLod(relief_tex' "$shader" \
   "scaled Earth relief is not sampled at a stable mip level"
-has 'VERTEX = p * (1.0 + radial_displacement)' "$shader" \
-  "scaled Earth relief does not affect the surface silhouette"
+has 'surface_distance_m(world_ray)' "$shader" \
+  "scaled Earth geographic silhouette must use the analytic camera ray"
 has 'float east_slope' "$shader" \
   "scaled Earth relief does not derive an east terrain slope"
 has 'float north_slope' "$shader" \

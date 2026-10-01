@@ -9,7 +9,15 @@
 // shader does its own lighting (so Godot's DirectionalLight does not double-light it).
 // ─────────────────────────────────────────────────────────────────────────────
 shader_type spatial;
-render_mode cull_back, unshaded, blend_mix;
+render_mode cull_disabled, unshaded, fog_disabled;
+
+#include "res://assets/shaders/surface_atmosphere.gdshaderinc"
+#include "res://assets/shaders/backdrop_depth.gdshaderinc"
+#include "res://assets/shaders/earth_ortho.gdshaderinc"
+uniform bool site_ortho_enabled = false;
+uniform vec3 site_radial_up = vec3(0.0, 1.0, 0.0);
+uniform vec3 site_east = vec3(1.0, 0.0, 0.0);
+uniform vec3 site_north = vec3(0.0, 0.0, 1.0);
 
 uniform vec3 sun_dir = vec3(0.42, 0.78, 0.46);
 // Limb-darkened solar-disc visibility supplied by SunController.  This keeps the
@@ -35,17 +43,6 @@ uniform float night_floor : hint_range(0.0, 0.16) = 0.12;
 // the same vertical Rayleigh optical depth used by the atmosphere integrator,
 // rather than from an arbitrary global brightness multiplier.
 uniform float ocean_sky_fill_strength : hint_range(0.0, 0.40) = 0.16;
-// Fades the whole distant-Earth backdrop in/out. Driven by FloatingOrigin from the CAMERA's
-// altitude: ~0 in the low launch view (so the local ground patch + sky own the horizon, no
-// grey seam between the two Earth representations) → 1 once the viewpoint is high enough that
-// the curved planet is what you should actually be seeing. The handoff is complementary with
-// the ground patch (40–75 km camera altitude).
-uniform float planet_alpha : hint_range(0.0, 1.0) = 1.0;
-// Presentation-only Earth shell. The shell is a separate, slightly larger mesh;
-// keeping this branch in the same shader reuses the measured RGB optical depth and
-// the live solar visibility without changing the opaque surface radiance.
-uniform float atmosphere_shell : hint_range(0.0, 1.0) = 0.0;
-
 // Global ETOPO relief is a low-frequency visual layer for the scaled Earth. Local
 // NAIP/3DEP terrain remains authoritative near launch sites; this texture never
 // participates in gravity, collision or flight dynamics.
@@ -60,9 +57,6 @@ uniform float detail_strength : hint_range(0.0, 0.5) = 0.18;
 // N4: cloud drift animation — set from script each frame (TIME * scale).
 uniform float time_offset : hint_range(0.0, 1000.0) = 0.0;
 
-varying vec3 v_local;
-varying vec3 v_world_normal;
-varying vec3 v_world_pos;
 
 // Point on the unit sphere → equirectangular UV (lon = atan2(z,x), lat = asin(y)).
 vec2 equirect(vec3 p) {
@@ -78,14 +72,9 @@ float relief_elevation_m(vec2 uv) {
 }
 
 void vertex() {
-	vec3 p = normalize(VERTEX);
-	float land_elevation_m = max(relief_elevation_m(equirect(p)), 0.0);
-	float radial_displacement = relief_enabled * land_elevation_m
-		/ max(earth_radius_m, 1.0);
-	VERTEX = p * (1.0 + radial_displacement);
-	v_local        = normalize(VERTEX);
-	v_world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-	v_world_pos    = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    // Projection is only a conservative coverage proxy. Fragment depth comes
+    // from the physical ray/sphere intersection, never this full-screen quad.
+    POSITION = vec4(VERTEX.xy, 0.5, 1.0);
 }
 
 // ── FBM helpers for N3 surface detail and N4 cloud detail ────────────────────
@@ -115,8 +104,16 @@ float es_fbm(vec2 p) {
 }
 
 void fragment() {
-	vec3 p = normalize(v_local);
-	vec3 N = normalize(v_world_normal);
+    vec4 view_near = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, 1.0, 1.0);
+    vec3 view_ray = normalize(view_near.xyz / view_near.w);
+    vec3 world_ray = normalize((INV_VIEW_MATRIX * vec4(view_ray, 0.0)).xyz);
+    float distance_m = surface_distance_m(world_ray);
+    if (distance_m < 0.0) discard;
+    vec3 physical_point = physical_camera_up * (physical_planet_radius_m + physical_camera_altitude_m)
+        + world_ray * distance_m;
+    vec3 N = normalize(physical_point);
+    vec3 p = normalize(transpose(mat3(MODEL_MATRIX)) * N);
+    DEPTH = physical_backdrop_depth(view_ray * (distance_m / 2.8), PROJECTION_MATRIX);
 	vec3 L = normalize(sun_dir);
 
 	vec2 uv = equirect(p);
@@ -152,6 +149,15 @@ void fragment() {
 	// this restores disc contrast without touching day_gain (A/B rejected lowering it).
 	float water = smoothstep(0.04, 0.16, dayCol.b - max(dayCol.r, dayCol.g) * 0.70);
 	dayCol = mix(dayCol, dayCol * vec3(0.70, 0.84, 1.08), water * 0.55);
+
+    if (site_ortho_enabled) {
+        vec3 site_offset_m = (normalize(physical_point) - site_radial_up) * physical_planet_radius_m;
+        vec2 site_m = vec2(dot(site_offset_m, site_east), dot(site_offset_m, site_north));
+        vec2 macro = macro_uv(site_m);
+        vec2 regional = regional_uv(site_m);
+        dayCol = mix(dayCol, texture(macro_ortho_tex, macro).rgb, macro_validity(macro));
+        dayCol = mix(dayCol, texture(regional_ortho_tex, regional).rgb, regional_validity(regional));
+    }
 
 	vec3 nightCol = texture(night_tex, uv).rgb;            // city lights (bright on black)
 
@@ -208,30 +214,8 @@ void fragment() {
 	vec3  cities = nightCol * smoothstep(0.07, 0.18, lum) * night * night_lights;
 	lit += cities;
 
-	bool shell_render = atmosphere_shell > 0.5;
-	vec3 shell_radiance = vec3(0.0);
-	float shell_alpha = 0.0;
-	if (shell_render) {
-		vec3 shell_view = normalize(CAMERA_POSITION_WORLD - v_world_pos);
-		float shell_view_cosine = clamp(dot(N, shell_view), 0.0, 1.0);
-		float shell_air_mass = 1.0 / max(
-			shell_view_cosine + 0.025 * exp(-11.0 * shell_view_cosine), 0.025);
-		vec3 shell_transmittance = exp(-vertical_optical_depth
-			* min(shell_air_mass, 40.0));
-		float shell_limb = smoothstep(0.02, 0.82,
-			clamp(1.0 - shell_view_cosine, 0.0, 1.0));
-		float shell_day = mix(0.12, 1.0,
-			smoothstep(-0.18, 0.30, dot(N, L)) * solar_visibility);
-		shell_radiance = rayleigh_sky * shell_day
-			* (vec3(1.0) - shell_transmittance);
-		float shell_luminance = dot(shell_radiance,
-			vec3(0.2126, 0.7152, 0.0722));
-		shell_alpha = planet_alpha * shell_limb
-			* clamp(shell_luminance * 2.8, 0.0, 0.72);
-	}
-
-	vec3 V = normalize(CAMERA_POSITION_WORLD - v_world_pos);
-	float ndotv = dot(N, V);
+    vec3 V = -world_ray;
+    float ndotv = dot(N, V);
 
 	// Air-to-water Fresnel reflectance: n_air≈1.000 and n_water≈1.333 give
 	// F0=(1.000-1.333)^2/(1.000+1.333)^2≈0.0204. At scaled-Earth range the
@@ -247,36 +231,9 @@ void fragment() {
 		* direct_transmittance * water * day * solar_visibility;
 	lit += ocean_sun_reflection;
 
-	// The scaled globe is opaque in front of the sky cubemap, so the atmosphere
-	// cannot paint its own limb over the surface. Apply the same bounded optical
-	// depth as a camera-to-surface path: surface radiance is attenuated and the
-	// missing energy is replaced by blue Rayleigh in-scatter. The blend is only
-	// active near the geometric limb; the disc centre keeps its measured albedo.
-	float view_air_mass = 1.0 / max(
-		view_cosine + 0.025 * exp(-11.0 * view_cosine), 0.025);
-	vec3 view_transmittance = exp(-vertical_optical_depth
-		* min(view_air_mass, 40.0));
-	float limb_illumination = mix(0.20, 1.0, day * solar_visibility);
-	vec3 aerial_radiance = lit * view_transmittance
-		+ rayleigh_sky * limb_illumination * (vec3(1.0) - view_transmittance);
-	float limb_scatter = smoothstep(0.0, 0.42,
-		clamp(1.0 - ndotv, 0.0, 1.0));
-	lit = mix(lit, aerial_radiance, limb_scatter);
-
-	if (shell_render) {
-		ALBEDO = shell_radiance;
-		EMISSION = vec3(0.0);
-		ALPHA = clamp(shell_alpha, 0.0, 0.72);
-	} else {
-		ALBEDO = lit;
-		EMISSION = cities * 0.6;
-		// Coverage only: the geometric silhouette is N dot V = 0, not an interior
-		// view-angle contour. Use the unclamped cosine for derivatives so the
-		// footprint remains valid across the tangent. The epsilon only guards zero
-		// derivatives; no fixed angular band should expose sky through the disc.
-		float limb = 1.0 - ndotv;
-		float limb_aa = max(fwidth(limb), 0.000001);
-		float silhouette = smoothstep(0.0, limb_aa, ndotv);
-		ALPHA = planet_alpha * silhouette;
-	}
+    // Only this camera-to-ground segment is composed over the surface. Off-limb
+    // rays are discarded above and retain the existing spherical sky integral.
+    ALBEDO = surface_aerial_radiance(lit, world_ray, distance_m,
+        normalize(sun_dir), vertical_optical_depth, solar_visibility);
+    EMISSION = vec3(0.0);
 }

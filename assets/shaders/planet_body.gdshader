@@ -10,6 +10,7 @@
 // A `sun_dir` terminator and faint Fresnel rim are applied to all modes.
 // ─────────────────────────────────────────────────────────────────────────────
 shader_type spatial;
+#include "res://assets/shaders/earth_geometry.gdshaderinc"
 // Unshaded: this shader does its own day/night lighting, so bypass Godot's light loop
 // (the 1.5-energy DirectionalLight would otherwise relight it to white).
 render_mode cull_back, unshaded;
@@ -109,6 +110,7 @@ void vertex() {
 }
 
 void fragment() {
+    if (earth_occludes_backdrop(v_world_pos - CAMERA_POSITION_WORLD)) discard;
 	vec3 p = normalize(v_local);
 	vec3 N = normalize(v_world_normal);
 	vec3 L = normalize(sun_dir);

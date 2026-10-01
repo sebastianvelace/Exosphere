@@ -21,7 +21,7 @@ public partial class FloatingOrigin : Node
     private const double MetresPerUnit   = 2.8;   // render scale (matches the vessel)
     private readonly Dictionary<string, Node3D> _planetNodes = new();
     private Camera3D? _camera;
-    private bool _earthGlobeRefined;
+    private ShaderMaterial? _saturnRingMaterial;
     private float _lastCameraFar = float.NaN;
 
     // Last scaled-space sample consumed by the visual harness/telemetry. Keeping this
@@ -77,8 +77,12 @@ public partial class FloatingOrigin : Node
     private Vector3d _currentOrigin = Vector3d.Zero;
 
     // Camera altitude over Earth's surface (metres), updated each frame. Both the distant-Earth
-    // backdrop and the local ground patch fade on this axis so they never overlap into a seam.
+    // detail overlay fades on this axis; the global Earth stays opaque.
     public static double CameraAltOverEarth { get; private set; } = 0.0;
+    public static Vector3 CameraEarthRadialUp { get; private set; } = Vector3.Up;
+    public static double CameraEarthRadiusM { get; private set; } = 6371008.8;
+    public static double CameraEarthRadialAltitudeM { get; private set; }
+
 
     /// <summary>
     /// Shared pad→globe handoff. The local patch owns the horizon through the whole
@@ -87,14 +91,13 @@ public partial class FloatingOrigin : Node
     /// </summary>
     // The tangent patch carries measured Starbase detail through the low ascent;
     // complete the globe handoff before the pulled-back 20 km view. Both render
-    // surfaces are opaque, so a long overlap reads as a central depth band.
+    // representations share optical transport and geographic depth.
     public const double EarthVisualHandoffLowM = 12_000.0;
     public const double EarthVisualHandoffHighM = 18_000.0;
 
     /// <summary>
-    /// Opacity of the scaled-space Earth globe for the current camera altitude.
-    /// Complementary to the local ground-patch fade so the two representations
-    /// never stack into a double-Earth seam and never leave a gap.
+    /// Legacy name for the global-detail handoff weight, not planet opacity.
+    /// The opaque Earth remains visible while local terrain coverage fades.
     /// </summary>
     public static float EarthGlobeAlpha(double cameraAltitudeM) =>
         (float)Smoothstep01(EarthVisualHandoffLowM, EarthVisualHandoffHighM, cameraAltitudeM);
@@ -189,6 +192,16 @@ public partial class FloatingOrigin : Node
         // Real (sim) camera position: vessel is at the render origin; render units → metres.
         var camSim = _currentOrigin + new Vector3d(camRender.X, camRender.Y, camRender.Z) * MetresPerUnit;
 
+        var earthReference = bridge.Universe.GetBody("earth");
+        if (earthReference != null)
+        {
+            var cameraFromEarth = camSim - earthReference.Position;
+            CameraEarthRadialUp = ToGodotV3(cameraFromEarth.Normalized);
+            CameraEarthRadiusM = VisualSurfaceRadiusMetres(earthReference, camSim);
+            CameraEarthRadialAltitudeM = System.Math.Max(cameraFromEarth.Magnitude - CameraEarthRadiusM, 0.0);
+            CameraAltOverEarth = System.Math.Max(earthReference.GetAltitude(camSim), 0.0);
+        }
+
         foreach (var body in bridge.Universe.Bodies)
         {
             if (_planetNodes.TryGetValue(body.Id, out var node))
@@ -203,33 +216,12 @@ public partial class FloatingOrigin : Node
                     : body.Radius;
                 if (d < R + 1.0) d = R + 1.0;                   // never inside the surface
 
-                // Earth: fade the distant backdrop in only as the CAMERA climbs (real ascent
-                // or zooming out). In the low launch view it stays hidden so the local ground
-                // patch + procedural sky own the horizon — no grey seam where the two meet.
+                // Earth stays opaque at every height. Only measured local detail fades.
                 if (body.Id == "earth")
                 {
-                    CameraAltOverEarth = System.Math.Max(0.0, body.GetAltitude(camSim));
-                    float a = EarthGlobeAlpha(CameraAltOverEarth);
-                    if (node is MeshInstance3D mi)
-                    {
-                        if (!_earthGlobeRefined && a > 0.02f)
-                        {
-                            // Shared 96-segment sphere aliases as a white sawtooth
-                            // limb at 50–80 km. Earth-only tessellation; other
-                            // bodies keep the cheap shared mesh.
-                            mi.Mesh = new SphereMesh
-                            {
-                                Radius = 1f,
-                                Height = 2f,
-                                RadialSegments = 384,
-                                Rings = 192,
-                            };
-                            _earthGlobeRefined = true;
-                        }
-                        if (mi.GetSurfaceOverrideMaterial(0) is ShaderMaterial sm)
-                            sm.SetShaderParameter("planet_alpha", a);
-                    }
-                    node.Visible = a > 0.002f;
+                    // The backdrop is a continuous surface. Only local detail fades;
+                    // fading Earth itself exposes the sky instead of the terrain below.
+                    node.Visible = true;
                     ExpandCameraFarForHorizon(R, CameraAltOverEarth);
                 }
 
@@ -255,6 +247,35 @@ public partial class FloatingOrigin : Node
                     (float)dir.X, (float)dir.Y, (float)dir.Z) * BackdropDistance;
                 node.Quaternion = body.Id == "earth" ? PlanetOrientation : PlanetTilt;
                 node.Scale = Godot.Vector3.One * System.Math.Max(rBackdrop, 0.001f);
+                if (node is MeshInstance3D planet
+                    && planet.GetSurfaceOverrideMaterial(0) is ShaderMaterial material)
+                {
+                    material.SetShaderParameter("physical_depth_scale", (float)(d / (BackdropDistance * MetresPerUnit)));
+                    material.SetShaderParameter("backdrop_far_units", _camera?.Far ?? 420_000f);
+                    BindEarthGeometry(material);
+
+                    if (body.Id == "saturn")
+                    {
+                        // Preserve the ring/body proxy depth, sharing Earth occlusion only.
+                        if (_saturnRingMaterial == null || !IsInstanceValid(_saturnRingMaterial))
+                            _saturnRingMaterial = node.GetNodeOrNull<MeshInstance3D>("SaturnRing")?
+                                .GetSurfaceOverrideMaterial(0) as ShaderMaterial;
+                        _saturnRingMaterial?.SetShaderParameter("physical_depth_scale", (float)(d / (BackdropDistance * MetresPerUnit)));
+                        if (_saturnRingMaterial != null) BindEarthGeometry(_saturnRingMaterial);
+                    }
+                    if (body.Id == "earth")
+                    {
+                        PlanetMaterials.BindSurfaceLuts(material);
+                        if (bridge.LaunchSiteOrNull is { } site)
+                        {
+                            var sitePosition = site.GetPosition(body, bridge.Universe.CurrentTime);
+                            var frame = site.GetLocalFrame(body, bridge.Universe.CurrentTime);
+                            material.SetShaderParameter("site_radial_up", ToGodotV3((sitePosition - body.Position).Normalized));
+                            material.SetShaderParameter("site_east", ToGodotV3(frame.East));
+                            material.SetShaderParameter("site_north", ToGodotV3(frame.North));
+                        }
+                    }
+                }
             }
         }
     }
@@ -272,6 +293,13 @@ public partial class FloatingOrigin : Node
     /// at 20 km is already ~490 km, so the far plane cut the ground disc into
     /// a cookie. Expand Far with the horizon while the local Earth patch is up.
     /// </summary>
+    private static void BindEarthGeometry(ShaderMaterial material)
+    {
+        material.SetShaderParameter("physical_camera_up", CameraEarthRadialUp);
+        material.SetShaderParameter("physical_camera_altitude_m", (float)CameraEarthRadialAltitudeM);
+        material.SetShaderParameter("physical_planet_radius_m", (float)CameraEarthRadiusM);
+    }
+
     private void ExpandCameraFarForHorizon(double surfaceRadiusM, double cameraAltM)
     {
         if (_camera == null || !IsInstanceValid(_camera)) return;
