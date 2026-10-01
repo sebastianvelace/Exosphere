@@ -30,8 +30,11 @@ requirements remain in [the Flight 14 feasibility study](../research/STARSHIP_FL
 
 ## Responsive behavior and input
 
-Home navigation scrolls when the viewport is short. The featured side panel
-collapses at smaller logical widths, and typography shrinks for short windows.
+Home navigation uses one column centered horizontally and vertically on the viewport,
+with centered title, description and button labels. Featured mission details live in
+the Flight 14 briefing instead of a separate side panel. A symmetric background
+scrim preserves contrast behind the central content. Navigation scrolls only when
+the content cannot fit; typography and spacing shrink for short windows.
 Logical dimensions already account for Godot's interface scale, avoiding a second
 division by that scale. Mission/vehicle lists scroll independently of the dialog
 heading and close action. Keyboard focus is confined to an open dialog; Escape

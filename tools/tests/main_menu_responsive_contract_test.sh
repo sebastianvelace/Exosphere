@@ -12,7 +12,6 @@ rg -q 'BuildBody\(\);' "$menu" || fail "operations menu is not reachable at boot
 rg -q 'float effectiveHeight = Size.Y;' "$menu" || fail "layout is not height aware"
 rg -q 'Name = "HomeScroll"' "$menu" || fail "short windows cannot scroll navigation"
 rg -q 'Name = "ModalScroll"' "$menu" || fail "mission lists cannot scroll"
-rg -q '_dossier.Visible = !narrow' "$menu" || fail "secondary content cannot collapse"
 rg -q 'SuspendBackgroundFocus\(\);' "$menu" || fail "modal keyboard isolation missing"
 rg -q 'flight14_launch_pending.*disabled: true' "$menu" || fail "Flight 14 unavailable launch must remain disabled"
 rg -q 'vehicle.SiteId, "manual", "sandbox"' "$menu" || fail "free flight bypasses vehicle selection"

@@ -8,7 +8,6 @@ using Godot;
 public partial class MainMenu : Control
 {
     private GridContainer _navigation = null!;
-    private PanelContainer _dossier = null!;
     private MarginContainer _bodyMargin = null!;
     private VBoxContainer _primaryColumn = null!;
     private Label _bodyTitle = null!;
@@ -122,12 +121,13 @@ public partial class MainMenu : Control
         {
             Colors =
             [
-                new Color(0.008f, 0.010f, 0.014f, 0.99f),
-                new Color(0.008f, 0.010f, 0.014f, 0.92f),
-                new Color(0.008f, 0.010f, 0.014f, 0.28f),
-                new Color(0.008f, 0.010f, 0.014f, 0.08f),
+                new Color(0.008f, 0.010f, 0.014f, 0.30f),
+                new Color(0.008f, 0.010f, 0.014f, 0.70f),
+                new Color(0.008f, 0.010f, 0.014f, 0.86f),
+                new Color(0.008f, 0.010f, 0.014f, 0.70f),
+                new Color(0.008f, 0.010f, 0.014f, 0.30f),
             ],
-            Offsets = [0f, 0.34f, 0.66f, 1f],
+            Offsets = [0f, 0.25f, 0.5f, 0.75f, 1f],
         };
         return new GradientTexture2D
         {
@@ -144,42 +144,21 @@ public partial class MainMenu : Control
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(LayoutPreset.TopWide);
         margin.OffsetLeft = 54;
-        margin.OffsetTop = 30;
+        margin.OffsetTop = 16;
         margin.OffsetRight = -54;
         AddChild(margin);
 
-        var row = new HBoxContainer();
+        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         row.AddThemeConstantOverride("separation", 14);
         margin.AddChild(row);
-
-        var mark = new Label
-        {
-            Text = "EXO",
-            CustomMinimumSize = new Vector2(48, 34),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        InterfaceTheme.ApplyLabel(mark, 19);
-        mark.AddThemeColorOverride("font_color", InterfaceTheme.Text);
-        row.AddChild(mark);
-
         var brand = new Label
         {
             Text = "EXOSPHERE",
             VerticalAlignment = VerticalAlignment.Center,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        InterfaceTheme.ApplyLabel(brand, 14);
-        brand.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        InterfaceTheme.ApplyLabel(brand, 20);
+        brand.AddThemeColorOverride("font_color", InterfaceTheme.Text);
         row.AddChild(brand);
-
-        var systemStatus = new Label
-        {
-            Text = UiText.Get("flight_operations"),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        InterfaceTheme.ApplyMono(systemStatus, 10);
-        systemStatus.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        row.AddChild(systemStatus);
 
         var language = new Button
         {
@@ -210,20 +189,24 @@ public partial class MainMenu : Control
             FollowFocus = true,
         };
         _bodyMargin.AddChild(_bodyScroll);
-        var split = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        split.AddThemeConstantOverride("separation", 48);
-        _bodyScroll.AddChild(split);
+        var center = new CenterContainer
+        {
+            Name = "HomeCenter",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        _bodyScroll.AddChild(center);
 
         _primaryColumn = new VBoxContainer
         {
             Name = "PrimaryNavigation",
-            CustomMinimumSize = new Vector2(430, 0),
-            SizeFlagsVertical = SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(520, 0),
         };
-        _primaryColumn.AddThemeConstantOverride("separation", 16);
-        split.AddChild(_primaryColumn);
+        _primaryColumn.AddThemeConstantOverride("separation", 12);
+        center.AddChild(_primaryColumn);
 
         var classification = new Label { Text = UiText.Get("flight14_label") + "  /  " + UiText.Get("in_development") };
+        classification.HorizontalAlignment = HorizontalAlignment.Center;
         InterfaceTheme.ApplyLabel(classification, 13);
         classification.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
         _primaryColumn.AddChild(classification);
@@ -231,7 +214,8 @@ public partial class MainMenu : Control
         var rule = new ColorRect
         {
             Color = InterfaceTheme.EdgeStrong,
-            CustomMinimumSize = new Vector2(52, 1),
+            CustomMinimumSize = new Vector2(64, 1),
+            SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
             MouseFilter = MouseFilterEnum.Ignore,
         };
         _primaryColumn.AddChild(rule);
@@ -239,6 +223,7 @@ public partial class MainMenu : Control
         _bodyTitle = new Label
         {
             Text = "STARSHIP\nFLIGHT 14",
+            HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.Off,
         };
         InterfaceTheme.ApplyDisplay(_bodyTitle, 88);
@@ -249,6 +234,7 @@ public partial class MainMenu : Control
         _bodySubtitle = new Label
         {
             Text = UiText.Get("flight14_home"),
+            HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             CustomMinimumSize = new Vector2(390, 54),
         };
@@ -268,6 +254,7 @@ public partial class MainMenu : Control
 
         _flight14Button = ModalButton(UiText.Get("flight14_details"), ShowFlight14, true);
         _flight14Button.Name = "Flight14";
+        _flight14Button.Alignment = HorizontalAlignment.Center;
         _flight14Button.CustomMinimumSize = new Vector2(0, 54);
         _primaryColumn.AddChild(_flight14Button);
         _firstButton = _flight14Button;
@@ -286,11 +273,6 @@ public partial class MainMenu : Control
         AddNavButton(UiText.Get("settings"), ShowSettings);
         AddNavButton(UiText.Get("quit"), () => GetTree().Quit());
 
-        var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        split.AddChild(spacer);
-
-        _dossier = BuildDossier();
-        split.AddChild(_dossier);
     }
 
     private void AddNavButton(
@@ -304,7 +286,7 @@ public partial class MainMenu : Control
         {
             Text = text,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            Alignment = HorizontalAlignment.Left,
+            Alignment = HorizontalAlignment.Center,
             Disabled = disabled,
             TooltipText = tooltip,
             FocusMode = FocusModeEnum.All,
@@ -318,74 +300,6 @@ public partial class MainMenu : Control
         _firstButton ??= button.Disabled ? null : button;
     }
 
-    private static PanelContainer BuildDossier()
-    {
-        var panel = new PanelContainer
-        {
-            Name = "FeaturedMission",
-            CustomMinimumSize = new Vector2(390, 410),
-            SizeFlagsVertical = SizeFlags.ShrinkCenter,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        var style = InterfaceTheme.PanelStyle(0.94f, 28, 25, deep: true);
-        style.BorderColor = InterfaceTheme.EdgeStrong;
-        panel.AddThemeStyleboxOverride("panel", style);
-
-        var content = new VBoxContainer();
-        content.AddThemeConstantOverride("separation", 15);
-        panel.AddChild(content);
-
-        var statusRow = new HBoxContainer();
-        statusRow.AddThemeConstantOverride("separation", 8);
-
-        var label = new Label
-        {
-            Text = UiText.Get("flight14_label"),
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        InterfaceTheme.ApplyLabel(label, 12);
-        label.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        statusRow.AddChild(label);
-
-        var nominal = new Label { Text = UiText.Get("in_development") };
-        InterfaceTheme.ApplyMono(nominal, 10);
-        nominal.AddThemeColorOverride("font_color", InterfaceTheme.Warning);
-        statusRow.AddChild(nominal);
-        content.AddChild(statusRow);
-
-        var mission = new Label { Text = UiText.Get("flight14_card_title") };
-        InterfaceTheme.ApplyLabel(mission, 30);
-        mission.AddThemeColorOverride("font_color", InterfaceTheme.Text);
-        content.AddChild(mission);
-        content.AddChild(Divider());
-        content.AddChild(Metric(UiText.Get("site"), "STARBASE / BOCA CHICA"));
-        content.AddChild(Metric(UiText.Get("vehicle"), "SHIP 41 / BOOSTER 21"));
-        content.AddChild(Divider());
-        foreach (string key in new[] { "phase_ascent", "phase_deploy", "phase_return" })
-        {
-            var phase = new Label { Text = UiText.Get(key) };
-            InterfaceTheme.ApplyBody(phase, 14);
-            phase.AddThemeColorOverride("font_color", InterfaceTheme.Text);
-            content.AddChild(phase);
-        }
-        content.AddChild(Divider());
-
-        var note = new Label
-        {
-            Text = UiText.Get("flight14_pending"),
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-        };
-        InterfaceTheme.ApplyBody(note, 12);
-        note.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        content.AddChild(note);
-
-        var profile = new Label { Text = UiText.Get("reference_only") };
-        InterfaceTheme.ApplyMono(profile, 10);
-        profile.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
-        content.AddChild(profile);
-        return panel;
-    }
-
     private void BuildFooter()
     {
         var footer = new MarginContainer();
@@ -396,33 +310,26 @@ public partial class MainMenu : Control
         footer.GrowVertical = GrowDirection.Begin;
         AddChild(footer);
 
-        var row = new HBoxContainer();
+        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         footer.AddChild(row);
 
         var note = new Label
         {
             Text = UiText.Get("footer_controls"),
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
         InterfaceTheme.ApplyMono(note, 10);
         note.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
         row.AddChild(note);
 
-        var status = new Label { Text = UiText.Get("physics_ready") };
-        InterfaceTheme.ApplyMono(status, 10);
-        status.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
-        row.AddChild(status);
     }
 
     private void ApplyEntrance()
     {
         if (UserInterfaceSettings.ReducedMotion) return;
-        _navigation.Modulate = new Color(1, 1, 1, 0);
-        _dossier.Modulate = new Color(1, 1, 1, 0);
+        _primaryColumn.Modulate = new Color(1, 1, 1, 0);
         var tween = CreateTween().SetParallel();
         tween.SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
-        tween.TweenProperty(_navigation, "modulate:a", 1.0f, 0.42f);
-        tween.TweenProperty(_dossier, "modulate:a", 1.0f, 0.55f).SetDelay(0.08f);
+        tween.TweenProperty(_primaryColumn, "modulate:a", 1.0f, 0.42f);
     }
 
     private void ContinueSave(string[] saves)
@@ -502,6 +409,10 @@ public partial class MainMenu : Control
     private void ShowFlight14() => ShowModal("STARSHIP FLIGHT 14", body =>
     {
         body.AddChild(Description(UiText.Get("flight14_pending")));
+        body.AddChild(Metric(UiText.Get("site"), "STARBASE / BOCA CHICA"));
+        body.AddChild(Metric(UiText.Get("vehicle"), "SHIP 41 / BOOSTER 21"));
+        foreach (string key in new[] { "phase_ascent", "phase_deploy", "phase_return" })
+            body.AddChild(Description(UiText.Get(key)));
         body.AddChild(Description(UiText.Get("flight14_scope")));
         body.AddChild(ModalButton(UiText.Get("flight14_launch_pending"), () => { }, disabled: true));
         body.AddChild(ModalButton(UiText.Get("choose_existing_vehicle"), ShowVehicles, true));
@@ -920,28 +831,28 @@ public partial class MainMenu : Control
 
     private void UpdateResponsiveLayout()
     {
-        if (_dossier == null || _bodyMargin == null || _primaryColumn == null) return;
+        if (_bodyMargin == null || _primaryColumn == null) return;
         // Size is already in logical UI coordinates; ContentScaleFactor has applied the scale.
         float effectiveWidth = Size.X;
         float effectiveHeight = Size.Y;
-        bool compact = effectiveHeight < 820f || effectiveWidth < 1380f;
-        bool narrow = effectiveWidth < 1180f;
+        bool compact = effectiveHeight < 820f;
         bool shortWindow = effectiveHeight < 560f;
-        _dossier.Visible = !narrow;
-        _bodyMargin.OffsetLeft = compact ? 32 : 70;
-        _bodyMargin.OffsetTop = shortWindow ? 76 : compact ? 90 : 122;
-        _bodyMargin.OffsetRight = compact ? -32 : -70;
-        _bodyMargin.OffsetBottom = compact ? -66 : -84;
-        _primaryColumn.CustomMinimumSize = new Vector2(Math.Min(440, Math.Max(0, effectiveWidth - 64)), 0);
-        _primaryColumn.AddThemeConstantOverride("separation", shortWindow ? 6 : compact ? 10 : 18);
+        _bodyMargin.OffsetLeft = 32;
+        _bodyMargin.OffsetRight = -32;
+        // Equal margins keep the content centered on the actual viewport, including vertically.
+        _bodyMargin.OffsetTop = shortWindow ? 56 : 76;
+        _bodyMargin.OffsetBottom = -_bodyMargin.OffsetTop;
+        _primaryColumn.CustomMinimumSize = new Vector2(Math.Min(520, Math.Max(0, effectiveWidth - 64)), 0);
+        _primaryColumn.AddThemeConstantOverride("separation", shortWindow ? 4 : compact ? 8 : 12);
         _navigation.Columns = effectiveWidth < 560 ? 1 : 2;
-        _bodyTitle.AddThemeFontSizeOverride("font_size", shortWindow ? 42 : compact ? 62 : 88);
+        _bodyTitle.AddThemeFontSizeOverride("font_size", shortWindow ? 32 : compact ? 52 : 80);
         if (_flight14Button != null)
-            _flight14Button.CustomMinimumSize = new Vector2(0, shortWindow ? 46 : 54);
-        _bodySubtitle.CustomMinimumSize = new Vector2(0, compact ? 44 : 64);
+            _flight14Button.CustomMinimumSize = new Vector2(0, compact ? 46 : 54);
+        _bodySubtitle.CustomMinimumSize = new Vector2(0, shortWindow ? 0 : compact ? 40 : 44);
+        _navigation.AddThemeConstantOverride("v_separation", shortWindow ? 4 : 10);
         foreach (Node child in _navigation.GetChildren())
             if (child is Button button)
-                button.CustomMinimumSize = new Vector2(0, compact ? 46 : 52);
+                button.CustomMinimumSize = new Vector2(0, shortWindow ? 42 : compact ? 46 : 52);
         if (_modalPanel != null && _modalScroll != null)
         {
             _modalPanel.CustomMinimumSize = new Vector2(Math.Max(0, Math.Min(680, effectiveWidth - 48)), 0);

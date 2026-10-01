@@ -26,6 +26,8 @@ Base tecnica cerrada en `main`:
   presets and their compatible pads, and campaign briefings expose objectives,
   limits, completion and prerequisites. Responsive scrolling, keyboard focus
   isolation and Escape return are covered by real-framebuffer menu checks.
+  Home content is centered horizontally and vertically; mission information lives
+  in its briefing rather than a side panel.
   Flight 14 has a featured briefing with an unavailable launch action until its
   independent vehicle/mission profile is implemented and validated. Vehicle
   fidelity audit and further cloud work remain separate follow-ups.
