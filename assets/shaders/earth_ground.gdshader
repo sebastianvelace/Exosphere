@@ -341,6 +341,10 @@ void fragment() {
 	vec3 lit = surface * direct;
 	vec3 earthshine_surface = max(surface, night_floor_tint * earthshine_min_reflectance);
 	vec3 indirect_emission = earthshine_surface * indirect_floor * earthshine_gain;
+    // A daytime cloud shadow removes direct irradiance, not the entire sky.
+    // Keep this bounded diffuse closure gated by daylight and solar visibility.
+    indirect_emission += surface * vec3(0.70, 0.85, 1.0) * 0.12
+        * smoothstep(-0.18, 0.30, sun_height) * solar_visibility;
 	float city_luma = dot(night_map, vec3(0.299, 0.587, 0.114));
 	float city_mask = smoothstep(0.018, 0.12, city_luma);
 	float night_side = 1.0 - smoothstep(-0.16, 0.18, sun_height);

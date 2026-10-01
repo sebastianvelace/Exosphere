@@ -78,6 +78,7 @@ Options:
                 chase camera, HUD, vehicle silhouette, and fail-closed plume telemetry.
   --starbase-coverage
                  Capture Starbase at 7/16/26 km in oblique and nadir views.
+  --cloud-traverse Capture below/inside/above a deterministic coastal cell and an occlusion A/B.
   --ascent-optics Capture paused geographic rays from ground to 250 km; camera tracks vessel.
   --starbase-far Capture the mapped Starbase terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --kennedy-far  Capture the measured Kennedy LC-39A terrain transition at 2, 5, 8, 12, 20 and 40 km.
@@ -222,6 +223,7 @@ while [[ $# -gt 0 ]]; do
     --enginebay) MODE="enginebay"; shift ;;
     --orbital-plume) MODE="orbital_plume"; shift ;;
     --starbase-coverage) MODE="terrain_coverage"; HARNESS_MODE="starbase_far"; OPTICS_MATRIX=2; shift ;;
+    --cloud-traverse) MODE="cloud_traverse"; HARNESS_MODE="starbase_far"; OPTICS_MATRIX=3; shift ;;
     --ascent-optics) MODE="ascent_optics"; HARNESS_MODE="starbase_far"; OPTICS_MATRIX=1; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
     --kennedy-far)
@@ -361,7 +363,7 @@ fi
     VARIANT_PROFILE="starship-flight7-ascent"
   fi
 
-  if [[ ( "$MODE" == "starbase_far" || "$MODE" == "ascent_optics" || "$MODE" == "terrain_coverage" ) && -z "$VARIANT_FILE" ]]; then
+  if [[ ( "$MODE" == "starbase_far" || "$MODE" == "ascent_optics" || "$MODE" == "terrain_coverage" || "$MODE" == "cloud_traverse" ) && -z "$VARIANT_FILE" ]]; then
     VARIANT_FILE="starship_flight7_block2_2025.json"
     VARIANT_SITE="starbase"
     VARIANT_PROFILE="starship-flight7-ascent"
@@ -664,7 +666,14 @@ public partial class _PlaytestShot : Node
     bool _edlSeeded, _flipComplete, _shipSeeded, _engineBayCaptured;
     static readonly bool IsAscentOptics = ${OPTICS_MATRIX} != 0;
     static readonly bool IsTerrainCoverage = ${OPTICS_MATRIX} == 2;
-    readonly (string Slug, double AltitudeM)[] _starbaseFarCases = IsTerrainCoverage
+    static readonly bool IsCloudTraverse = ${OPTICS_MATRIX} == 3;
+    readonly (string Slug, double AltitudeM)[] _starbaseFarCases = IsCloudTraverse
+        ? new (string, double)[] {
+            ("cloud_below", 700.0), ("cloud_inside_off", 1650.0),
+            ("cloud_inside_on", 1650.0), ("cloud_above", 4800.0),
+            ("cloud_domes", 12000.0),
+        }
+        : IsTerrainCoverage
         ? new (string, double)[] {
             ("coverage_7km_oblique", 7_000.0), ("coverage_7km_nadir", 7_000.0),
             ("coverage_16km_oblique", 16_000.0), ("coverage_16km_nadir", 16_000.0),
@@ -3112,7 +3121,7 @@ public partial class _PlaytestShot : Node
         if (_starbaseFarCaseIndex < 0)
             return;
 
-        if (!_starbaseFarCaptureQueued && _pendingSlug == null && _readyFrames >= 45)
+        if (!_starbaseFarCaptureQueued && _pendingSlug == null && _readyFrames >= (IsCloudTraverse ? 18 : 45))
         {
             QueueCapture(_starbaseFarCases[_starbaseFarCaseIndex].Slug);
             _starbaseFarCaptureQueued = true;
@@ -3140,6 +3149,32 @@ public partial class _PlaytestShot : Node
         Vector3d sitePosition = bridge.LaunchSiteOrNull!.GetPosition(
             body, universe.CurrentTime);
         Vector3d up = (sitePosition - body.Position).Normalized;
+        if (IsCloudTraverse) {
+            // Place inside an occupied coastal cell using the production profile.
+            using var weather = System.Text.Json.JsonDocument.Parse(
+                System.IO.File.ReadAllText(ProjectSettings.GlobalizePath("res://data/launch_sites/starbase_weather.json")));
+            double spacing = weather.RootElement.GetProperty("horizontal_scale_m").GetDouble();
+            double cloudBase = weather.RootElement.GetProperty("cloud_base_m").GetDouble();
+            double cloudTop = weather.RootElement.GetProperty("cloud_top_m").GetDouble();
+            if (shot.Slug.StartsWith("cloud_inside"))
+                shot = (shot.Slug, cloudBase + 0.20 * (cloudTop - cloudBase));
+            // Same arithmetic hash as the shader.
+            static double Fract(double x) => x - System.Math.Floor(x);
+            static double Hash(double cx, double cy, double z) {
+                double x = Fract(cx * 0.1031), y = Fract(cy * 0.1031), v = Fract(z * 0.1031);
+                double dot = x * (y + 33.33) + y * (v + 33.33) + v * (x + 33.33);
+                x += dot; y += dot; v += dot;
+                return Fract((x + y) * v);
+            }
+            int ix = 0, iy = 0;
+            while (Hash(ix, iy, 19) < 0.75) ix++;
+            var textureUp = (FloatingOrigin.EarthTextureBasis.Inverse() * new Vector3((float)up.X, (float)up.Y, (float)up.Z)).Normalized();
+            var east = textureUp.Cross(Vector3.Up).Normalized();
+            var north = textureUp.Cross(east);
+            var offset = FloatingOrigin.EarthTextureBasis * (east * (float)(spacing * (ix + 0.2 + 0.6 * Hash(ix, iy, 31)))
+                + north * (float)(spacing * (iy + 0.2 + 0.6 * Hash(ix, iy, 47))));
+            up = (up * body.Radius + new Vector3d(offset.X, offset.Y, offset.Z)).Normalized;
+        }
         vessel.Position = body.GetPositionAlongDirection(up, shot.AltitudeM);
         vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
         vessel.PrepareForTeleport();
@@ -3157,7 +3192,12 @@ public partial class _PlaytestShot : Node
         float lookAtY = IsAscentOptics || shot.AltitudeM >= 20_000.0
             ? 0f
             : -(float)(shot.AltitudeM / 2.8);
-        float pitch = IsTerrainCoverage && shot.Slug.EndsWith("nadir") ? 80f : 28f;
+        float pitch = IsTerrainCoverage && shot.Slug.EndsWith("nadir") ? 80f
+            : IsCloudTraverse ? (shot.Slug == "cloud_domes" ? 50f : 0f) : 28f;
+        if (IsCloudTraverse) {
+            var occlusion = GetTree().Root.FindChild("VesselCloudOcclusion", true, false) as VesselCloudOcclusion;
+            if (occlusion != null) occlusion.PresentationEnabled = shot.Slug != "cloud_inside_off";
+        }
         CameraController.Instance?.SetExternalChaseFrame(0f, pitch, 500f, lookAtY);
         if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
             hud.Visible = false;
@@ -3807,6 +3847,18 @@ public partial class _PlaytestShot : Node
         string path = Path.Combine(_outDir, $"exo_play_{slug}.png");
         img.SavePng(path);
         LogTelemetry(slug, path);
+        if (IsCloudTraverse) {
+            var overlay = GetTree().Root.FindChild("VesselCloudOcclusion", true, false) as VesselCloudOcclusion;
+            var camera = CameraController.Instance?.PresentationCamera;
+            var craft = SimulationBridge.Instance?.ActiveVessel;
+            if (overlay != null && camera != null && craft != null) {
+                var top = camera.UnprojectPosition(ToGodot(craft.Orientation.Rotate(Vector3d.Up)) * (float)(craft.VehicleLength / 2.8));
+                var bottom = camera.UnprojectPosition(Vector3.Zero);
+                _log.WriteLine($"CLOUD_FOREGROUND slug={slug} attached={overlay.IsAttached} "
+                    + $"enabled={overlay.PresentationEnabled} timeScale={SimulationBridge.Instance!.Universe.TimeScale:F1} "
+                    + $"x={bottom.X:F1} y0={System.Math.Min(top.Y, bottom.Y):F1} y1={System.Math.Max(top.Y, bottom.Y):F1}");
+            }
+        }
         LogImageMetrics(slug, img);
         LogOrbitalPlumeVisualTelemetry(slug, img);
         GD.Print($"[Playtest] captured {slug} -> {path}");
@@ -4524,7 +4576,7 @@ public partial class _PlaytestShot : Node
 
         if (body.Id == "earth")
         {
-            if (IsAscentOptics && bridge.LaunchSiteOrNull is { } geographicSite)
+            if (IsAscentOptics && bridge != null && bridge.LaunchSiteOrNull is { } geographicSite)
             {
                 var earthMesh = GetTree().Root.FindChild("Earth_mesh", true, false) as MeshInstance3D;
                 var earthMaterial = earthMesh?.GetSurfaceOverrideMaterial(0) as ShaderMaterial;
@@ -5243,6 +5295,9 @@ verify_pngs() {
         echo "ERROR: smoke image is empty, clipped, or contaminated by neon-green artifacts" >&2
         return 1
       fi
+    elif [[ "$MODE" == "cloud_traverse" ]]; then
+      rg -q '^SUMMARY reason=STARBASE_FAR_OK' "$LOG" || { echo "ERROR: cloud traversal incomplete" >&2; return 1; }
+      python3 tools/validate_cloud_occlusion.py "$OUT_DIR" "$LOG"
     elif [[ "$MODE" == "ascent_optics" ]]; then
       # This is a paused optical fixture, not a stable-orbit/flight dynamics gate.
       python3 - "$OUT_DIR" "$LOG" <<'PYOPTICS'
@@ -6366,7 +6421,7 @@ if [[ "$MODE" == "reentry_compare" ]]; then
   LOG="$COMBINED_LOG"
   CONSOLE_LOG="$COMBINED_CONSOLE_LOG"
 else
-  if [[ "$MODE" == "ascent_optics" || "$MODE" == "terrain_coverage" ]]; then
+  if [[ "$MODE" == "ascent_optics" || "$MODE" == "terrain_coverage" || "$MODE" == "cloud_traverse" ]]; then
     HARNESS_MODE="starbase_far"
   else
     HARNESS_MODE="$MODE"

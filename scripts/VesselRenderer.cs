@@ -171,6 +171,7 @@ public partial class VesselRenderer : Node3D
         else if (hasFalcon9)           BuildFalcon9Section(vessel);
         else if (hasNewGlenn)          BuildNewGlennSection(vessel);
         else                           BuildGenericVessel(vessel);
+        AddChild(new VesselCloudOcclusion { Name = "VesselCloudOcclusion" });
     }
 
     /// <summary>Render-space bounds shared by the hull and its aerodynamic glow.</summary>

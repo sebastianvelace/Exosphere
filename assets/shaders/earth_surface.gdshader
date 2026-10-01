@@ -174,7 +174,7 @@ void fragment() {
 	float diff = clamp(ndl, 0.0, 1.0);
 	float air_mass = 1.0 / max(diff + 0.025 * exp(-11.0 * diff), 0.025);
 	vec3 direct_transmittance = exp(-vertical_optical_depth * min(air_mass, 40.0));
-	float diffuse_fill = mix(night_floor, 0.045, smoothstep(-0.18, 0.30, ndl));
+	float diffuse_fill = mix(night_floor, max(night_floor, 0.12 * solar_visibility), smoothstep(-0.18, 0.30, ndl));
 	vec3 lit = surface * (vec3(diffuse_fill)
 		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility * cloud_shadow);
 	// The distant ocean is not a black Lambertian tile: it reflects a bounded

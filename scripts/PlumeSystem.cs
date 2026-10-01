@@ -354,7 +354,7 @@ public partial class PlumeSystem : Node3D
         return _farFieldActive;
     }
 
-    private static void UpdateGroup(List<PlumeUnit> units,
+    private void UpdateGroup(List<PlumeUnit> units,
         bool firing, float throttle, float expansion, float pressureRatio, double altitude,
         float activeFraction, int start = 0, int count = -1, int activeCount = -1,
         float flickerPhase = 0f, float flickerOffset = 0f, bool farField = false)
@@ -547,7 +547,7 @@ public partial class PlumeSystem : Node3D
         return 0.5f + 0.5f * Mathf.Sin(phase * 7.3f + offset * 2.1f);
     }
 
-    private static void SetPlumeMaterial(
+    private void SetPlumeMaterial(
         ShaderMaterial material,
         float throttle,
         float expansion,
@@ -577,6 +577,18 @@ public partial class PlumeSystem : Node3D
         material.SetShaderParameter("afterburn_strength", afterburnStrength);
         material.SetShaderParameter("pad_interaction", padInteraction);
         material.SetShaderParameter("far_field", farField ? 1f : 0f);
+        var bridge = SimulationBridge.Instance;
+        var vessel = (GetParent() as VesselRenderer)?.TargetVessel ?? bridge?.ActiveVessel;
+        var body = bridge != null && vessel != null
+            ? bridge.Universe.GetDominantBody(vessel.Position) : null;
+        if (body?.Id == "earth")
+        {
+            PlanetMaterials.BindEarthClouds(material, body, bridge!.Universe.CurrentTime);
+            material.SetShaderParameter("physical_camera_up", FloatingOrigin.CameraEarthRadialUp);
+            material.SetShaderParameter("physical_camera_altitude_m", (float)FloatingOrigin.CameraEarthRadialAltitudeM);
+            material.SetShaderParameter("physical_planet_radius_m", (float)FloatingOrigin.CameraEarthRadiusM);
+        }
+        else material.SetShaderParameter("cloud_enabled", false);
     }
 
     // ── Factory helpers ────────────────────────────────────────────────────

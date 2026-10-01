@@ -34,7 +34,7 @@ rg -q --fixed-strings 'if (float(i) >= view_steps) break;' "$SHADER" \
   || fail "view loop does not honor quality bound"
 rg -q --fixed-strings 'float cloud_view_steps = effective_step_count(' "$SHADER" \
   || fail "cloud integration minimum bound missing"
-rg -q --fixed-strings 'if (float(i) >= cloud_view_steps) break;' "$SHADER" \
+rg -q --fixed-strings 'if (!local_interval && float(i) >= cloud_view_steps) break;' "$SHADER" \
   || fail "cloud loop does not honor quality bound"
 rg -q --fixed-strings 'float light_steps = effective_step_count(' "$SHADER" \
   || fail "solar integration step normalization missing"
@@ -42,6 +42,18 @@ rg -q --fixed-strings 'float cloud_light_steps = effective_step_count(' "$SHADER
   || fail "cloud-shadow step normalization missing"
 rg -q '^const int CLOUD_VIEW_STEPS = 24;$' "$SHADER" \
   || fail "cloud view ceiling is not the validated 24-sample path"
+# The coastal core has a separate bounded adaptive path; the global sky budget
+# and quality floor above remain unchanged. Runtime speed still requires profiling.
+rg -q '^const int CLOUD_LOCAL_VIEW_STEPS = 96;$' "$SHADER" \
+  || fail "local cloud view ceiling is not explicitly bounded"
+rg -q --fixed-strings 'for (int i = 0; i < CLOUD_LOCAL_VIEW_STEPS; i++)' "$SHADER" \
+  || fail "local cloud loop bypasses its declared ceiling"
+rg -q --fixed-strings 'local_cursor >= cloud_end || cloud_transmittance < 0.005' "$SHADER" \
+  || fail "local cloud termination does not honor interval and opacity"
+rg -q --fixed-strings 'cloud_coastal_empty_distance(origin + view_dir * local_cursor)' "$SHADER" \
+  || fail "coastal empty-space bound is not used"
+rg -q --fixed-strings 'for (int i = 0; i < 10; i++)' "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
+  || fail "local solar quadrature ceiling missing"
 rg -q '^const int CLOUD_LIGHT_STEPS = 5;$' "$SHADER" \
   || fail "cloud shadow ceiling is not the bounded five-sample path"
 rg -q --fixed-strings 'private const float LowAltitudeAtmosphereQuality = 0.48f;' "$SKY" \
@@ -98,4 +110,4 @@ rg -q --fixed-strings 'FloatDiffers(_lastFade, fade)' "$GROUND" \
 rg -q --fixed-strings '_lastSunDirection.DistanceSquaredTo(sunDirection)' "$GROUND" \
   || fail "earth-ground sun direction dirty check missing"
 
-echo "sky_runtime_performance_contract_test: PASS (bounded 24x5 cloud quadrature, cached uniforms, low-priority LUT worker)"
+echo "sky_runtime_performance_contract_test: PASS (bounded global 24x5 and local 96x10 cloud paths, cached uniforms, low-priority LUT worker)"

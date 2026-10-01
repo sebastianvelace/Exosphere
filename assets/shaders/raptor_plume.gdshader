@@ -30,6 +30,7 @@
 //   throttle_level 0.0 = off, 1.0 = full thrust. Alias for `throttle`.
 // ─────────────────────────────────────────────────────────────────────────────
 shader_type spatial;
+#include "res://assets/shaders/cloud_foreground_transmission.gdshaderinc"
 // Mix (not additive): additive methalox cores vanish against a daylight sky and
 // the pale pad concrete — that is why THR 100% / 33/33 read as a dry stack.
 // Mix keeps a bright, readable column at sea level and a thinner vacuum plume.
@@ -270,4 +271,5 @@ void fragment() {
 		* mix(0.15, 0.18, far_field) * layer_opacity;
 	float profileAlpha = mix(sheathAlpha, coreAlpha, core_layer) + shockAlpha;
 	ALPHA = clamp(max(profileAlpha, vacuumCoreAlpha) * effThrottle, 0.0, 0.62);
+    ALPHA *= foreground_cloud_transmission((INV_VIEW_MATRIX * vec4(VERTEX, 0.0)).xyz);
 }

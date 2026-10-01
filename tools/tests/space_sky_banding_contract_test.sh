@@ -16,7 +16,7 @@ rg -q '^const float CLOUD_VIEW_JITTER = 0\.40;$' "$SHADER" \
   || fail "stable cloud-segment jitter changed without revalidation"
 rg -q 'float jitter = stable_jitter\(' "$SHADER" \
   || fail "cloud view integration lost deterministic sample jitter"
-rg -q 'clamp\(0\.5 \+ jitter \* CLOUD_VIEW_JITTER, 0\.14, 0\.86\)' "$SHADER" \
+rg -q --fixed-strings 'clamp(0.5 + jitter * (local_interval ? 0.04 : CLOUD_VIEW_JITTER), 0.14, 0.86)' "$SHADER" \
   || fail "cloud jitter is not bounded inside each ray segment"
 if rg -q 'CLOUD_VIEW_STEPS = (1[0-9]|2[0-3]);' "$SHADER"; then
   fail "cloud view quadrature is in the known banding-prone range"
@@ -41,4 +41,4 @@ rg -q 'float view_tangent_altitude = length\(origin \+ view_dir' "$SHADER" \
 rg -q 'float tangent_sky = hits_ground \? 0\.0' "$SHADER" \
   || fail "tangent sky floor is not gated away from opaque ground hits"
 
-echo "space_sky_banding_contract_test: PASS (24-sample stable cloud-shell quadrature)"
+echo "space_sky_banding_contract_test: PASS (stable cloud jitter: global 24 samples, bounded local adaptive path)"

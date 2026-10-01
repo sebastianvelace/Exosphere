@@ -81,6 +81,7 @@ uniform float ground_fill_strength : hint_range(0.0, 1.0) = 1.0;
 const int VIEW_STEPS = 28;
 const int LIGHT_STEPS = 14;
 const int CLOUD_VIEW_STEPS = 24;
+const int CLOUD_LOCAL_VIEW_STEPS = 96;
 // Keep the light integral cheaper than the camera integral, but sample the same
 // volumetric field in both directions.  Five warped samples are enough to resolve
 // the compact cloud shell while avoiding the old base-mask shortcut that made the
@@ -340,6 +341,8 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
 	float distance_to_edge = max(outer_hit.y, 0.0);
     if (cloud_in_local_core(position) && cloud_in_local_core(position + to_sun * distance_to_edge))
         distance_to_edge = max(ray_sphere(position, to_sun, planet_radius + cloud_local_top_m).y, 0.0);
+    if (cloud_in_local_core(position) && cloud_in_local_core(position + to_sun * distance_to_edge))
+        return cloud_local_sun_transmission(position, to_sun, distance_to_edge);
 	float closest = max(-dot(position, to_sun), 0.0);
 	float optical_depth = 0.0;
 	float cloud_light_steps = effective_step_count(
@@ -489,9 +492,10 @@ void sky() {
 		if (ground_hit.x > cloud_start && ground_hit.x < cloud_end)
 			cloud_end = ground_hit.x;
 
-        if (cloud_in_local_core(origin + view_dir * cloud_start)
-                && cloud_in_local_core(origin + view_dir * cloud_end)) {
-            vec2 local_hit = ray_sphere(origin, view_dir, planet_radius + cloud_local_top_m);
+        vec2 local_hit = ray_sphere(origin, view_dir, planet_radius + cloud_local_top_m);
+        bool local_interval = cloud_in_local_core(origin + view_dir * max(cloud_start, local_hit.x))
+                && cloud_in_local_core(origin + view_dir * min(cloud_end, local_hit.y));
+        if (local_interval) {
             cloud_start = max(cloud_start, local_hit.x);
             cloud_end = min(cloud_end, local_hit.y);
         }
@@ -505,16 +509,25 @@ void sky() {
 			float previous_cloud_density = 0.0;
 			vec3 cloud_air_depth = cloud_foreground_air_depth(origin, view_dir,
 				max(ray_start, 0.0), max(cloud_start, ray_start), cloud_closest);
-			for (int i = 0; i < CLOUD_VIEW_STEPS; i++) {
-				if (float(i) >= cloud_view_steps) break;
+            float local_cursor = cloud_start;
+			for (int i = 0; i < CLOUD_LOCAL_VIEW_STEPS; i++) {
+				if (!local_interval && float(i) >= cloud_view_steps) break;
+                if (local_interval && (local_cursor >= cloud_end || cloud_transmittance < 0.005)) break;
 				float segment_start = tangent_warped_boundary(
 					float(i) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
 				float segment_end = tangent_warped_boundary(
 					float(i + 1) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
 				float cloud_step = max(segment_end - segment_start, 0.0);
+                if (local_interval) {
+                    segment_start = local_cursor;
+                    float empty_distance = cloud_coastal_empty_distance(origin + view_dir * local_cursor);
+                    cloud_step = min(max(80.0, empty_distance * 0.65), cloud_end - local_cursor);
+                    segment_end = segment_start + cloud_step;
+                    local_cursor = segment_end;
+                }
 				float jitter = stable_jitter(view_dir + up * 11.0 + float(i) * vec3(0.29, 0.53, 0.71));
-				float t = mix(segment_start, segment_end,
-					clamp(0.5 + jitter * CLOUD_VIEW_JITTER, 0.14, 0.86));
+                float t = mix(segment_start, segment_end,
+					clamp(0.5 + jitter * (local_interval ? 0.04 : CLOUD_VIEW_JITTER), 0.14, 0.86));
 				vec3 p = origin + view_dir * t;
 				vec3 air_segment_depth = extinction(density_at_height(
                     length(p) - planet_radius)) * cloud_step;
@@ -525,7 +538,7 @@ void sky() {
 				// Trapezoidal density smoothing reuses the previous quadrature
 				// sample instead of adding a second lookup. It removes visible
 				// shell-step bands while preserving the same bounded integral.
-				float smoothed_rho = i == 0
+				float smoothed_rho = local_interval || i == 0
 					? rho : 0.5 * (previous_cloud_density + rho);
 				previous_cloud_density = rho;
 				if (smoothed_rho > 0.001) {
@@ -534,8 +547,8 @@ void sky() {
 					float direct_light = cloud_sun_transmittance(p, to_sun);
 					vec3 atmospheric_sun = solar_transmittance(p, to_sun, outer_radius);
                     float daylight = smoothstep(-0.16, 0.08, dot(normalize(p), to_sun));
-                    float diffuse = (0.015 + 0.035 * (1.0 - direct_light)) * daylight;
-                    vec3 sky_fill = 0.08 * (vec3(1.0)
+                    float diffuse = (0.018 + 0.025 * direct_light) * daylight;
+                    vec3 sky_fill = 0.03 * (vec3(1.0)
                         - exp(-rayleigh_scattering * rayleigh_scale_height * 4.0));
                     vec3 source = atmospheric_solar_visibility
                         * (atmospheric_sun * (direct_light * phase_cloud + diffuse) + sky_fill * daylight);

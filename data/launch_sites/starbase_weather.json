@@ -10,9 +10,9 @@
   ],
   "description": "Broken coastal cumulus observed in Flight 14 morning footage. Procedural placement, height and optical thickness are approximations, not recovered weather measurements.",
   "region_radius_m": 160000,
-  "horizontal_scale_m": 2800,
+  "horizontal_scale_m": 5000,
   "cloud_base_m": 1200,
-  "cloud_top_m": 3600,
+  "cloud_top_m": 2400,
   "physics_authority": false,
-  "optical_density_multiplier": 8.0
+  "optical_density_multiplier": 32.0
 }

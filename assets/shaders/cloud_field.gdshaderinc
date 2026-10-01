@@ -129,6 +129,86 @@ bool cloud_in_local_core(vec3 position) {
         * cloud_planet_radius_m < cloud_local_radius_m * 0.70;
 }
 
+// Rounded, isolated coastal cells rather than thresholded value-noise columns.
+// The flat condensation base and variable dome share one metre-coordinate field
+// for the sky, terrain and foreground vessel. This is appearance calibration.
+float cloud_coastal_density(vec3 position, float height, vec3 wind) {
+    if (height < cloud_local_base_m || height > cloud_local_top_m) return 0.0;
+    vec3 up = normalize(cloud_local_center);
+    vec3 east = normalize(cross(up, vec3(0.0, 1.0, 0.0)));
+    vec3 north = cross(up, east);
+    vec3 local = cloud_world_to_texture * position - up * cloud_planet_radius_m;
+    float scale = max(cloud_local_scale_m, 1.0);
+    vec2 xy = vec2(dot(local, east), dot(local, north)) / scale + wind.xz;
+    vec2 cell = floor(xy);
+    float density = 0.0;
+    float erosion = cloud_value_noise3(local * 0.0021 + wind);
+    float billow = 0.65 * cloud_value_noise3(local * 0.0011 + wind)
+        + 0.35 * cloud_value_noise3(local * 0.0041 + wind);
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 id = cell + vec2(float(x), float(y));
+            float seed = cloud_hash3(vec3(id, 19.0));
+            if (seed < 0.38) continue;
+            vec2 centre = id + vec2(0.2) + 0.6 * vec2(
+                cloud_hash3(vec3(id, 31.0)), cloud_hash3(vec3(id, 47.0)));
+            float radius = mix(0.25, 0.48, cloud_hash3(vec3(id, 73.0)));
+            float radial = length((xy - centre) / vec2(radius, radius * 0.82))
+                - (billow - 0.5) * 0.22;
+            if (radial >= 1.05) continue;
+            float footprint = 1.0 - smoothstep(0.65, 1.05, radial);
+            // Several overlapping condensation lobes give a cell an uneven crown.
+            // Their tops remain inside the declared meteorological shell.
+            float dome = 0.45 * sqrt(max(1.0 - radial * radial * 0.80, 0.0));
+            vec2 offset = (xy - centre) / vec2(radius, radius * 0.82);
+            for (int lobe = 0; lobe < 4; lobe++) {
+                float angle = float(lobe) * 1.570796 + seed * 6.283185;
+                vec2 lobe_centre = vec2(cos(angle), sin(angle)) * 0.35;
+                float lobe_radius = mix(0.45, 0.72,
+                    cloud_hash3(vec3(id, 91.0 + float(lobe))));
+                float d = length(offset - lobe_centre) / lobe_radius;
+                float crown = sqrt(max(1.0 - d * d, 0.0));
+                dome = max(dome, crown * mix(0.55, 1.0,
+                    cloud_hash3(vec3(id, 101.0 + float(lobe)))));
+            }
+            float depth = cloud_local_top_m - cloud_local_base_m;
+            float cap = cloud_local_base_m + depth * mix(0.45, 0.95, seed) * dome
+                + (billow - 0.5) * depth * 0.28;
+            float base = smoothstep(cloud_local_base_m, cloud_local_base_m + 140.0, height);
+            float top = 1.0 - smoothstep(cap - 180.0, cap + 50.0, height);
+            float detail = clamp(0.72 + billow * 0.55 - erosion * 0.38, 0.0, 1.0);
+            density = max(density, footprint * base * top * detail);
+        }
+    }
+    return density * cloud_local_density_multiplier;
+}
+
+// Conservative empty-space bound for local view rays. A cylinder encloses each
+// billowing cell; stepping less than this distance cannot skip a dense boundary.
+float cloud_coastal_empty_distance(vec3 position) {
+    vec3 up = normalize(cloud_local_center);
+    vec3 east = normalize(cross(up, vec3(0.0, 1.0, 0.0)));
+    vec3 north = cross(up, east);
+    vec3 local = cloud_world_to_texture * position - up * cloud_planet_radius_m;
+    float scale = max(cloud_local_scale_m, 1.0);
+    vec2 wind = vec2(cloud_longitude_offset * 64.0, cloud_longitude_offset * 31.0);
+    vec2 xy = vec2(dot(local, east), dot(local, north)) / scale + wind;
+    vec2 cell = floor(xy);
+    float distance_m = scale;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 id = cell + vec2(float(x), float(y));
+            if (cloud_hash3(vec3(id, 19.0)) < 0.38) continue;
+            vec2 centre = id + vec2(0.2) + 0.6 * vec2(
+                cloud_hash3(vec3(id, 31.0)), cloud_hash3(vec3(id, 47.0)));
+            float radius = mix(0.25, 0.48, cloud_hash3(vec3(id, 73.0)));
+            distance_m = min(distance_m, (length(xy - centre) - radius * 1.20) * scale);
+        }
+    }
+    float height = length(position) - cloud_planet_radius_m;
+    return max(max(distance_m, cloud_local_base_m - height), height - cloud_local_top_m);
+}
+
 float cloud_density(vec3 position) {
     float height = length(position) - cloud_planet_radius_m;
     float shape = cloud_height_shape(height);
@@ -145,16 +225,8 @@ float cloud_density(vec3 position) {
     float local_density = 0.0;
     float billow = cloud_value_noise3(noise_position * 0.00065 + wind_offset);
     if (local_weight > 0.0) {
-        // The horizon prefilter must not soften local holes into grey fog.
-        vec3 cells_position = texture_direction * cloud_planet_radius_m
-            / max(cloud_local_scale_m, 1.0) + vec3(89.0, 13.0, 41.0) + wind_offset;
-        float cells = cloud_value_noise3(cells_position);
-        float local_u = (height - cloud_local_base_m)
-            / max(cloud_local_top_m - cloud_local_base_m, 1.0);
-        float local_shape = smoothstep(0.0, 0.10, local_u)
-            * (1.0 - smoothstep(mix(0.50, 0.85, cells), mix(0.65, 1.0, cells), local_u));
-        local_density = local_shape * cloud_local_density_multiplier
-            * smoothstep(0.55, 0.73, cells + (billow - 0.5) * 0.25);
+        // Preserve clear holes; horizon map filtering does not alter local cells.
+        local_density = cloud_coastal_density(position, height, wind_offset);
         // Skip seven map/detail texture reads inside the procedural region.
         if (local_weight >= 1.0) return local_density;
     }
@@ -180,4 +252,20 @@ float cloud_density(vec3 position) {
     float global_density = shape * smoothstep(threshold - 0.12 - threshold_softness,
         threshold + 0.10 + threshold_softness, weather_field + coverage_dither);
     return mix(global_density, local_density, local_weight);
+}
+// Resolve the nearby illuminated face before sampling the opaque interior.
+// A coarse uniform light march skips thin sunlit crowns in dense coastal cells.
+// The integral still uses the same extinction/density as the camera ray.
+float cloud_local_sun_transmission(vec3 point, vec3 sun, float distance_m) {
+    float depth = 0.0;
+    for (int i = 0; i < 10; i++) {
+        float u0 = float(i) / 10.0;
+        float u1 = float(i + 1) / 10.0;
+        float a = u0 * u0 * distance_m;
+        float b = u1 * u1 * distance_m;
+        depth += cloud_density(point + sun * (0.5 * (a + b)))
+            * cloud_extinction * (b - a);
+        if (depth > 8.0) break;
+    }
+    return exp(-min(depth, 80.0));
 }

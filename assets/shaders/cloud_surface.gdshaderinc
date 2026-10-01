@@ -20,6 +20,8 @@ float surface_cloud_shadow(vec3 point, vec3 sun) {
     if (cloud_in_local_core(point) && cloud_in_local_core(point + sun * distance_m))
         distance_m = max(surface_cloud_sphere(point, sun,
             cloud_planet_radius_m + cloud_local_top_m).y, 0.0);
+    if (cloud_in_local_core(point) && cloud_in_local_core(point + sun * distance_m))
+        return cloud_local_sun_transmission(point, sun, distance_m);
     float depth = 0.0;
     for (int i = 0; i < 4; i++) {
         float t = (float(i) + 0.5) / 4.0;
@@ -70,8 +72,9 @@ vec4 surface_cloud_radiance(vec3 ray, float ground_distance, vec3 sun,
     if (length(origin) < cloud_planet_radius_m + cloud_base_altitude && inner.y > start)
         start = inner.y;
     else if (inner.x > start && inner.x < end) end = inner.x;
-    if (cloud_in_local_core(origin + ray * start) && cloud_in_local_core(origin + ray * end)) {
-        vec2 local_hit = surface_cloud_sphere(origin, ray, cloud_planet_radius_m + cloud_local_top_m);
+    vec2 local_hit = surface_cloud_sphere(origin, ray, cloud_planet_radius_m + cloud_local_top_m);
+    if (cloud_in_local_core(origin + ray * max(start, local_hit.x))
+            && cloud_in_local_core(origin + ray * min(end, local_hit.y))) {
         start = max(start, local_hit.x);
         end = min(end, local_hit.y);
     }
@@ -98,10 +101,10 @@ vec4 surface_cloud_radiance(vec3 ray, float ground_distance, vec3 sun,
             vec3 solar = surface_cloud_solar(point, sun);
             float daylight = smoothstep(-0.16, 0.08, dot(normalize(point), sun));
             float direct_light = surface_cloud_shadow(point, sun);
-            // Bounded diffuse closure for sunlight removed inside a cloud. This
-            // approximates higher scattering orders; it is not a droplet solver.
-            float diffuse = (0.015 + 0.035 * (1.0 - direct_light)) * daylight;
-            vec3 sky_fill = 0.08 * (vec3(1.0) - exp(-surface_rayleigh_scattering * surface_rayleigh_height_m * 4.0));
+            // Bounded diffuse closure: the lit crown receives more incident skylight
+            // than the shadowed base. This is not a droplet scattering solver.
+            float diffuse = (0.018 + 0.025 * direct_light) * daylight;
+            vec3 sky_fill = 0.03 * (vec3(1.0) - exp(-surface_rayleigh_scattering * surface_rayleigh_height_m * 4.0));
             vec3 source = cloud_solar_visibility * surface_sun_illuminance
                 * (solar * (direct_light * phase + diffuse) + sky_fill * daylight);
             radiance += source * weight;
