@@ -101,6 +101,11 @@ Base tecnica cerrada en `main`:
   mission clock and piloting telemetry (2026-10-01). F3 density/cockpit/map
   transitions passed at 1280×720; actual ignition/liftoff passed at 1920×1080.
   See `docs/audits/flight_broadcast_hud_2026-10-01.md`.
+  The shared band now follows the current/next propulsion stage for every catalog
+  launcher, uses actual engine mounts, retains installed off/failed engines and
+  resets on vessel switches. Atlas half-stage jettison and Saturn's four propulsion
+  groups have topology tests; Mercury retro packs retain aggregate telemetry.
+  See `docs/audits/all_vehicle_broadcast_hud_2026-10-01.md`.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
   prediction, marcador/readout de encuentro y readout de maniobra. La base lunar
   ya resuelve Lambert geocéntrico contra la efeméride móvil, busca una ventana

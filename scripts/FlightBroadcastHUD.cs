@@ -13,17 +13,17 @@ public partial class FlightBroadcastHUD : Control
     private MissionManager? _mission;
     private SimulationBridge? _bridge;
     private readonly HashSet<string> _events = new(StringComparer.Ordinal);
-    private readonly List<string> _boosterIds = new();
-    private readonly List<string> _shipIds = new();
+    private IReadOnlyList<FlightEngineBoard> _boards = Array.Empty<FlightEngineBoard>();
+    private FlightEngineBoard? _leftBoard, _rightBoard;
     private readonly HashSet<string> _enginePartIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, EngineHudIndicatorState> _engines = new(StringComparer.Ordinal);
     private readonly List<EngineReadout> _readouts = new();
-    private readonly List<int> _rings = new();
     private double? _launchEpoch;
     private double _lastTime = double.NaN;
     private double _engineTimer;
     private string _vehicleLabel = "FLIGHT OPERATIONS";
     private bool _starship;
+    private (string Label, string Event)[] _milestones = Milestones;
     private static readonly Color Dim = new(0.46f, 0.47f, 0.49f);
     private static readonly Color Track = new(0.22f, 0.23f, 0.24f);
     private static readonly (string Label, string Event)[] Milestones =
@@ -59,29 +59,28 @@ public partial class FlightBroadcastHUD : Control
             if (_mission != null) _mission.PhaseChanged += ObservePhase;
         }
         bool rewound = double.IsFinite(_lastTime) && snapshot.MissionTimeS < _lastTime - 0.01;
-        if (_snapshot == null || rewound)
+        if (_snapshot == null || rewound || _snapshot.VesselId != snapshot.VesselId)
         {
             _events.Clear();
             _launchEpoch = null;
-            _boosterIds.Clear();
-            _shipIds.Clear();
             _enginePartIds.Clear();
-            _starship = false;
+            _engines.Clear();
+            _boards = Array.Empty<FlightEngineBoard>();
+            _milestones = Milestones;
+            _leftBoard = _rightBoard = null;
             _vehicleLabel = snapshot.VesselName.ToUpperInvariant();
             var vessel = bridge.ActiveVessel;
+            _starship = vessel?.Parts.Parts.Any(p => p.Definition.IsStarshipFamily) == true;
             if (vessel != null)
             {
-                foreach (var part in vessel.Parts.Parts.Where(p => p.Definition.Category == PartCategory.Engine))
-                {
-                    _enginePartIds.Add(part.InstanceId);
-                    bool booster = part.Definition.IsStarshipFamily && part.Definition.HasVehicleRole("booster");
-                    bool ship = part.Definition.IsStarshipFamily && part.Definition.HasVehicleRole("ship_engines");
-                    _starship |= booster || ship;
-                    var ids = ship ? _shipIds : _boosterIds;
-                    if (part.HasEngineRuntime)
-                        ids.AddRange(part.EngineStates.Take(part.SelectedEngineCount).Select(e => e.InstanceId));
-                    else ids.Add(part.InstanceId);
-                }
+                _boards = FlightEngineBoards.Build(vessel.Parts);
+                foreach (var board in _boards)
+                    foreach (var engine in board.Engines) _enginePartIds.Add(engine.PartId);
+                bool suborbital = bridge.ActiveFlightProfileId.Contains("suborbital", StringComparison.Ordinal)
+                    || vessel.Parts.Parts.Any(p => p.Definition.EngineModelId.StartsWith("redstone-", StringComparison.Ordinal));
+                bool separation = vessel.Parts.Parts.Any(p => p.Definition.Category == PartCategory.Decoupler);
+                _milestones = Milestones.Where(m => separation || m.Event != "SEPARATION")
+                    .Select(m => suborbital && m.Event == "ORBIT" ? ("COAST", "COAST") : m).ToArray();
             }
         }
         _snapshot = snapshot;
@@ -92,11 +91,30 @@ public partial class FlightBroadcastHUD : Control
         {
             _engineTimer = 0;
             _engines.Clear();
+            if (bridge.ActiveVessel is { } active)
+            {
+                if (_starship)
+                {
+                    _leftBoard = _boards.FirstOrDefault(b => b.Label == "SUPER HEAVY");
+                    _rightBoard = _boards.FirstOrDefault(b => b.Label == "STARSHIP");
+                }
+                else (_leftBoard, _rightBoard) = FlightEngineBoards.Select(_boards, active.Parts);
+            }
             // Stable engine IDs follow the detached booster as well as the ship.
             // Never substitute commanded throttle for delivered chamber pressure.
             foreach (var vessel in bridge.Universe.Vessels)
             {
                 if (!vessel.Parts.Parts.Any(p => _enginePartIds.Contains(p.InstanceId))) continue;
+                foreach (var part in vessel.Parts.Parts.Where(p => _enginePartIds.Contains(p.InstanceId)))
+                {
+                    if (part.HasEngineRuntime)
+                        foreach (var state in part.EngineStates)
+                            _engines[state.InstanceId] = part.IsBroken || vessel.IsDestroyed
+                                || state.FailureCode != null || state.State == Exosphere.Simulation.Propulsion.EngineLifecycleState.Failed
+                                ? EngineHudIndicatorState.Failed : EngineHudIndicatorState.Off;
+                    else if (part.IsBroken || vessel.IsDestroyed)
+                        _engines[part.InstanceId] = EngineHudIndicatorState.Failed;
+                }
                 vessel.FillEngineReadouts(bridge.Universe.GetDominantBody(vessel.Position), _readouts);
                 foreach (var row in _readouts)
                     _engines[row.InstanceId] = vessel.IsDestroyed
@@ -139,7 +157,7 @@ public partial class FlightBroadcastHUD : Control
         DrawSetTransform(Vector2.Zero, 0, Vector2.One * scale);
         DrawRect(new Rect2(0, 0, width, DesignHeight), new Color(0.008f, 0.009f, 0.011f, 0.88f));
         DrawLine(new Vector2(28, 1), new Vector2(width - 28, 1), new Color(1, 1, 1, 0.12f), 1);
-        DrawEngineBoard(new Vector2(83, 90), _boosterIds, _starship ? "SUPER HEAVY" : "ENGINES");
+        DrawEngineBoard(new Vector2(83, 90), _leftBoard);
         DrawTimeline(330, width - 330);
         double seconds = _launchEpoch is { } epoch ? System.Math.Max(0, s.MissionTimeS - epoch) : s.MissionTimeS;
         string prefix = _launchEpoch.HasValue ? "T+" : "SIM";
@@ -154,7 +172,7 @@ public partial class FlightBroadcastHUD : Control
         Text($"AP {Distance(s.ApoapsisAltitudeM)}   ·   {orbit}", new Vector2(width * 0.5f, 165), 10, Dim, mono: true);
         DrawGauge(new Vector2(width - 222, 90), "SURFACE SPEED", $"{s.SurfaceSpeedMps * 3.6:0}", "KM/H",
             (float)System.Math.Clamp(s.SurfaceSpeedMps / 8000.0, 0, 1));
-        if (_starship) DrawEngineBoard(new Vector2(width - 83, 90), _shipIds, "STARSHIP");
+        if (_rightBoard != null) DrawEngineBoard(new Vector2(width - 83, 90), _rightBoard);
         else DrawGauge(new Vector2(width - 83, 90), "ALTITUDE", $"{s.AltitudeM / 1000:0.0}", "KM",
             (float)System.Math.Clamp(s.AltitudeM / 200000.0, 0, 1));
     }
@@ -165,16 +183,16 @@ public partial class FlightBroadcastHUD : Control
         const int segments = 80;
         Vector2 Point(float t) => new(Mathf.Lerp(left, right, t), 43 + 26 * Mathf.Pow(2 * t - 1, 2));
         int lastReached = -1;
-        for (int i = 0; i < Milestones.Length; i++)
-            if (_events.Contains(Milestones[i].Event)) lastReached = i;
-        float reachedT = lastReached < 0 ? -1 : (lastReached + 0.5f) / Milestones.Length;
+        for (int i = 0; i < _milestones.Length; i++)
+            if (_events.Contains(_milestones[i].Event)) lastReached = i;
+        float reachedT = lastReached < 0 ? -1 : (lastReached + 0.5f) / _milestones.Length;
         for (int i = 0; i < segments; i++)
             DrawLine(Point(i / (float)segments), Point((i + 1f) / segments),
                 i / (float)segments <= reachedT ? Colors.White : Track, 1.6f, true);
-        for (int i = 0; i < Milestones.Length; i++)
+        for (int i = 0; i < _milestones.Length; i++)
         {
-            var milestone = Milestones[i];
-            var point = Point((i + 0.5f) / Milestones.Length);
+            var milestone = _milestones[i];
+            var point = Point((i + 0.5f) / _milestones.Length);
             bool reached = _events.Contains(milestone.Event);
             DrawCircle(point, 4.5f, new Color(0.01f, 0.01f, 0.01f));
             DrawArc(point, 4.5f, 0, Mathf.Tau, 20, reached ? Colors.White : Track, 1.5f, true);
@@ -183,38 +201,40 @@ public partial class FlightBroadcastHUD : Control
         }
     }
 
-    private void DrawEngineBoard(Vector2 centre, List<string> ids, string label)
+    private void DrawEngineBoard(Vector2 centre, FlightEngineBoard? board)
     {
         DrawArc(centre, 49, 0, Mathf.Tau, 72, Track, 1.7f, true);
-        int on = ids.Count(id => _engines.GetValueOrDefault(id) == EngineHudIndicatorState.Running);
+        var dots = board?.Engines ?? Array.Empty<FlightEngineDot>();
+        int on = dots.Count(dot => _engines.GetValueOrDefault(dot.Id) == EngineHudIndicatorState.Running);
         DrawArc(centre, 55, Mathf.DegToRad(150), Mathf.DegToRad(390), 72, Dim, 2.8f, true);
-        if (ids.Count > 0 && on > 0)
-            DrawArc(centre, 55, Mathf.DegToRad(150), Mathf.DegToRad(150 + 240f * on / ids.Count), 72, Colors.White, 2.8f, true);
-        if (ids.Count == 6)
+        if (dots.Count > 0 && on > 0)
+            DrawArc(centre, 55, Mathf.DegToRad(150), Mathf.DegToRad(150 + 240f * on / dots.Count), 72, Colors.White, 2.8f, true);
+        double extent = dots.Count == 0 ? 0 : dots.Max(d => System.Math.Sqrt(d.X * d.X + d.Z * d.Z));
+        double nozzleMax = dots.Count == 0 ? 1 : dots.Max(d => d.NozzleRadius);
+        float maxRadius = dots.Count > 16 ? 4 : dots.Count > 6 ? 7 : 11;
+        foreach (var dot in dots)
         {
-            for (int i = 0; i < 6; i++)
-            {
-                bool outer = i >= 3;
-                int j = outer ? i - 3 : i;
-                float a = Mathf.DegToRad(outer ? 30 + 120 * j : -90 + 120 * j);
-                DrawEngine(centre + Vector2.FromAngle(a) * (outer ? 29 : 10), ids[i], outer ? 11 : 4.8f);
-            }
+            var point = extent > 1e-9
+                ? new Vector2((float)(dot.X / extent), (float)(dot.Z / extent)) * 36 : Vector2.Zero;
+            float radius = Mathf.Clamp((float)(maxRadius * dot.NozzleRadius / nozzleMax), 3.5f, maxRadius);
+            DrawEngine(centre + point, dot.Id, radius);
         }
-        else
-        {
-            EngineHudPresentation.FillBoardRings(ids.Count, _rings);
-            int index = 0;
-            for (int ring = 0; ring < _rings.Count; ring++)
-            {
-                float radius = ids.Count == 33 ? new[] { 37f, 25f, 11f }[ring]
-                    : _rings.Count == 1 ? 25 : Mathf.Lerp(37, 8, ring / (float)(_rings.Count - 1));
-                for (int i = 0; i < _rings[ring]; i++)
-                    DrawEngine(centre + Vector2.FromAngle(-Mathf.Pi / 2 + Mathf.Tau * i / _rings[ring]) * radius,
-                        ids[index++], 4);
-            }
-        }
-        Text(label, centre + new Vector2(0, 77), 10, Dim);
+        if (dots.Count == 0) Text("—", centre + new Vector2(0, 8), 24, Dim);
+        Text(board?.Label ?? "NO ENGINES", centre + new Vector2(0, 67), 10, Dim);
+        if (dots.Count > 0)
+            Text($"{on}/{dots.Count} {(dots.Any(d => d.IsAggregate) ? "GROUPS ON" : "RUNNING")}", centre + new Vector2(0, 81), 9, Dim, mono: true);
     }
+
+    /// <summary>Read-only instrument identities for real-scene validation and diagnostics.</summary>
+    public Godot.Collections.Dictionary GetInstrumentState() => new()
+    {
+        ["vessel_id"] = _snapshot?.VesselId ?? "",
+        ["left_label"] = _leftBoard?.Label ?? "NO ENGINES",
+        ["right_label"] = _rightBoard?.Label ?? "ALTITUDE",
+        ["left_ids"] = (_leftBoard?.Engines.Select(e => e.Id) ?? Array.Empty<string>()).ToArray(),
+        ["right_ids"] = (_rightBoard?.Engines.Select(e => e.Id) ?? Array.Empty<string>()).ToArray(),
+        ["stage_count"] = _boards.Count,
+    };
 
     private void DrawEngine(Vector2 point, string id, float radius)
     {

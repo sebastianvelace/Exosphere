@@ -180,6 +180,7 @@ func _capture_flight_hud() -> void:
 	var hud := flight.get_node("UI/HUDController")
 	hud.call("DismissPadHelp")
 	var band := hud.get_node("FlightBroadcastHUD") as Control
+	print("FLIGHT_INSTRUMENTS " + JSON.stringify(band.call("GetInstrumentState")))
 	var output := OS.get_environment("CAPTURE_MENU_OUTPUT").get_base_dir()
 	DirAccess.make_dir_recursive_absolute(output)
 	for case in ["minimal", "full", "clean", "restored", "cockpit", "exterior", "map", "return"]:
@@ -203,6 +204,17 @@ func _capture_flight_hud() -> void:
 			_fail("HUD capture failed: " + path)
 			return
 		print("FLIGHT_HUD_OK case=%s visible=%s bounds=%s" % [case, expected, band.get_global_rect()])
+	# Presentation fixture: mechanical staging on the pad, not a powered ascent claim.
+	var initial: Dictionary = band.call("GetInstrumentState")
+	for _stage in range(int(initial["stage_count"]) - 1):
+		_key(KEY_SPACE)
+		for _frame in range(6): await process_frame
+		var staged: Dictionary = band.call("GetInstrumentState")
+		print("FLIGHT_STAGE_INSTRUMENTS " + JSON.stringify(staged))
+		var path := output.path_join("hud-stage-%d.png" % (_stage + 2))
+		if root.get_texture().get_image().save_png(path) != OK:
+			_fail("Staged HUD capture failed: " + path)
+			return
 	print("MENU_CAPTURE flight_hud_matrix=8")
 	quit()
 

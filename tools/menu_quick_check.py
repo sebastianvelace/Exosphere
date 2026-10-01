@@ -2,6 +2,8 @@
 """Exercise the operations menu with real Godot pixels and isolated user data."""
 import argparse
 import os
+import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -10,7 +12,7 @@ import tempfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-build", action="store_true")
-    parser.add_argument("--flight-hud", action="store_true", help="Check broadcast bounds and camera/density transitions at 1280x720")
+    parser.add_argument("--flight-hud", action="store_true", help="Check all ten launchers, stage boards and camera/density transitions at 960x540")
     parser.add_argument("--case", help="Run one named case from the matrix")
     parser.add_argument("--output", type=Path, default=Path("exports/menu-operations-review"))
     args = parser.parse_args()
@@ -23,6 +25,10 @@ def main():
     if not args.skip_build:
         subprocess.run(["dotnet", "build", "Exosphere.csproj", "--nologo", "-v", "quiet"],
                        cwd=root, check=True)
+    launchers = re.findall(r'new MenuLauncher\("([^\"]+)", "([^\"]+)"',
+                           (root / "scripts/UI/FlightMenuCatalog.cs").read_text())
+    catalog = {definition["id"]: (definition, site) for file, site in launchers
+               for definition in [json.loads((root / "data/vehicles" / file).read_text())]}
     cases = [
         ("home-1920", "", "1920x1080", 1.0, 0, ""),
         ("home-es-1920", "", "1920x1080", 1.0, 1, ""),
@@ -45,7 +51,9 @@ def main():
          "falcon9-block5-standard-2025-05"),
     ]
     if args.flight_hud:
-        cases = [("starship-launch", "launch", "1280x720", 1.0, 0, "starship-flight-12-v3-2026-05-22")]
+        cases = [(Path(file).stem, "launch", "960x540", 1.0, 0,
+                  json.loads((root / "data/vehicles" / file).read_text())["id"])
+                 for file, _site in launchers]
     if args.case:
         cases = [case for case in cases if case[0] == args.case]
         if not cases:
@@ -61,9 +69,11 @@ def main():
                 saves.mkdir()
                 for slot in ("alpha", "zulu"):
                     (saves / f"{slot}.json").write_text("{}", encoding="utf-8")
+            case_output = output / name if args.flight_hud else output
+            case_output.mkdir(parents=True, exist_ok=True)
             env = dict(os.environ, XDG_DATA_HOME=profile, CAPTURE_MENU_MODAL=mode,
                        CAPTURE_MENU_VEHICLE=vehicle,
-                       CAPTURE_MENU_OUTPUT=str(output / f"{name}.png"),
+                       CAPTURE_MENU_OUTPUT=str(case_output / f"{name}.png"),
                        CAPTURE_FLIGHT_HUD="1" if args.flight_hud else "0")
             log_path = output / f"{name}.log"
             with log_path.open("w") as log:
@@ -88,14 +98,37 @@ def main():
             if result.returncode or any(marker not in evidence for marker in markers):
                 raise SystemExit(f"FAIL {name}: inspect {log_path}\n{evidence[-4000:]}")
             if mode == "launch":
-                expected = ("Starship Flight 12 — V3 / Raptor 3 at starbase_pad2" if name.startswith("starship")
-                            else "Falcon 9 Block 5 — Standard Fairing at kennedy")
+                definition, site = catalog[vehicle]
+                expected = definition["name"] + " at " + site + ";"
                 if expected not in evidence or "profile=manual, mission=sandbox" not in evidence:
                     raise SystemExit(f"FAIL {name}: wrong vehicle, pad or profile; inspect {log_path}")
             if mode == "missionlaunch" and (
                 "at cape_canaveral_lc5; profile=mercury-redstone3-suborbital, mission=mission-freedom7-1961" not in evidence
             ):
                 raise SystemExit(f"FAIL {name}: campaign mission intent was not preserved")
+            if args.flight_hud:
+                state = json.loads(next(line.removeprefix("FLIGHT_INSTRUMENTS ") for line in evidence.splitlines()
+                                        if line.startswith("FLIGHT_INSTRUMENTS ")))
+                expected_boards = {
+                    "starship_flight12_v3_2026": (33, 6, 2), "starship_flight7_block2_2025": (33, 6, 2),
+                    "falcon9_block5_standard_2025": (9, 1, 2), "falcon9_block5_extended_2025": (9, 1, 2),
+                    "newglenn_7x2_public_2026": (7, 2, 2), "mercury_redstone3_freedom7_1961": (1, 1, 2),
+                    "mercury_atlas6_friendship7_1962": (3, 1, 2), "gemini8_titan2_1966": (2, 1, 2),
+                    "apollo8_saturn5_as503_1968": (5, 5, 4), "apollo11_saturn5_as506_1969": (5, 5, 4),
+                }
+                actual = (len(state["left_ids"]), len(state["right_ids"]), state["stage_count"])
+                ids = state["left_ids"] + state["right_ids"]
+                if actual != expected_boards[name] or len(ids) != len(set(ids)) or not state["vessel_id"]:
+                    raise SystemExit(f"FAIL {name}: wrong live engine identities: {state}")
+                staged = [json.loads(line.removeprefix("FLIGHT_STAGE_INSTRUMENTS ")) for line in evidence.splitlines()
+                          if line.startswith("FLIGHT_STAGE_INSTRUMENTS ")]
+                current_counts = {
+                    "starship_flight12_v3_2026": [33], "starship_flight7_block2_2025": [33],
+                    "newglenn_7x2_public_2026": [2], "apollo8_saturn5_as503_1968": [5, 1, 1],
+                    "apollo11_saturn5_as506_1969": [5, 1, 1],
+                }.get(name, [1])
+                if len(staged) != len(current_counts) or [len(s["left_ids"]) for s in staged] != current_counts:
+                    raise SystemExit(f"FAIL {name}: staging did not update the live boards: {staged}")
             print(f"PASS {name}", flush=True)
     print(f"Menu checks passed. Captures: {output}")
 

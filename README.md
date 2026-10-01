@@ -97,10 +97,16 @@ The physics model is [docs/physics/PHYSICS_MODEL.md](docs/physics/PHYSICS_MODEL.
 
 Source code is [MIT](LICENSE). Fonts, terrain, and other third-party assets keep the licenses recorded in [data/licenses/assets_manifest.json](data/licenses/assets_manifest.json).
 
-The exterior flight HUD uses a broadcast-style bottom band: independent Super Heavy
-and Starship engine boards, the piloting navball, an observed-event timeline,
+The exterior flight HUD uses a broadcast-style bottom band: stage-aware engine
+boards for every launch vehicle (and independent Super Heavy and Starship boards),
+the piloting navball, an observed-event timeline,
 mission clock, surface speed, altitude, vertical speed, throttle, TWR and orbital
 apsides. `[F3]` cycles Minimal → Full → Clean; Full adds diagnostics and Clean
 retains the expanded attitude cluster. Cockpit and map views use their existing
 instrument policies. Loaded flights without a known liftoff epoch display `SIM`
-time instead of inventing `T+`.
+time instead of inventing `T+`. Engine dots use catalog mount geometry and stable
+runtime identities; generic boards show the current and next propulsion stage.
+Mercury retro packs remain aggregate indicators, rather than invented per-motor
+telemetry. Redstone uses a suborbital coast marker. Switching vessels resets the
+instrument identities. `python3 tools/menu_quick_check.py --flight-hud` captures
+all ten launchers and validates density/camera transitions plus mechanical staging.
