@@ -21,6 +21,7 @@ fi
 bash -n tools/visual_playtest.sh
 bash tools/tests/visual_playtest_contract_test.sh
 bash tools/tests/godot_smoke_log_contract_test.sh
+bash tools/tests/visual_shader_failure_contract_test.sh
 bash tools/tests/gameplay_regression_contract_test.sh
 bash tools/tests/flight_startup_contract_test.sh
 bash tools/tests/sky_runtime_performance_contract_test.sh

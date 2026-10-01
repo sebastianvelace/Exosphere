@@ -59,9 +59,10 @@ bash tools/visual_playtest.sh --ascent --flight12 --run-id ascent-compositor-rev
   --resolution 640x360 --max-runtime 900
 ```
 
-## Final rendering evidence
+## Final rendering safeguards
 
 The final Compatibility optical run `ascent-optics-final` passed all six cases at 960 × 540 after extracting the common geographic ray function. `ascent-depth-saturn-verified` passed its 170-frame Saturn gate, and manual inspection confirmed the planet disc remained visible with correct front/rear ring ordering. The earlier physical-depth attempt for distant bodies lost the disc in Compatibility; it was removed before publication. The continuous ascent and Forward+ optical matrix preceded this distant-body correction; the final Compatibility matrix checks the refactored Earth shader. Physical ascent equations were unchanged throughout.
 
+The harness now rejects `SHADER ERROR`, shader compilation failure and `SCRIPT ERROR` even when a fallback material produces a nonblank PNG. A recorded invalid-shader run (`ascent-depth-saturn-final`) was rechecked with `--verify-only` and correctly rejected. The CI fixture accepts benign UID/audio diagnostics and rejects three shader/script failure diagnostics. Neither a state gate nor a nonblank image certifies reference fidelity.
 
-Final CI was rerun after the geographic-depth scope correction: 902/902 tests, zero warnings/errors, and successful startup/scene smoke checks.
+Final CI was rerun after the geographic-depth scope correction and shader-health gate: 902/902 tests, zero warnings/errors, and successful startup/scene smoke checks.
