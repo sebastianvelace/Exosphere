@@ -21,6 +21,14 @@ Base tecnica cerrada en `main`:
 - Godot headless carga la escena principal y la escena de construccion.
 - CI descarga Godot 4.6.3 mono, compila la capa Godot C#, corre smoke headless y
   mantiene un guard contra harnesses temporales commiteados.
+- Flight operations menu restored and reorganized (2026-10-01): orbital Earth
+  backdrop replaces the black-hole title, Free Flight selects ten launchable
+  presets and their compatible pads, and campaign briefings expose objectives,
+  limits, completion and prerequisites. Responsive scrolling, keyboard focus
+  isolation and Escape return are covered by real-framebuffer menu checks.
+  Flight 14 has a featured briefing with an unavailable launch action until its
+  independent vehicle/mission profile is implemented and validated. Vehicle
+  fidelity audit and further cloud work remain separate follow-ups.
 - VAB 2.0 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click
   auto-attach, preview/picking 3D, undo/redo, templates Starter/Starship,
   validación de launch, save/load, entrada desde MainMenu y launch al pad.
