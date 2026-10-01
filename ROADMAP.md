@@ -80,6 +80,11 @@ Base tecnica cerrada en `main`:
   See `docs/audits/starbase_regional_coverage_2026-09-30.md`.
   Spectral/exposure calibration, richer clouds and final reference acceptance
   remain open; historical context is not Flight 14 weather or current buildings.
+- Cloud transport shares the Earth texture basis, simulation clock and elevated
+  density field across the sky, local terrain and scaled Earth (2026-09-30).
+  Starbase has an explicitly estimated coastal-cumulus appearance profile;
+  foreground in-cloud occlusion and exact Flight 14 camera/exposure matching
+  remain open. See `docs/audits/cloud_weather_lighting_2026-09-30.md`.
 - Interplanetario incluye Hohmann, patched-conic SOI transitions, encounter
   prediction, marcador/readout de encuentro y readout de maniobra. La base lunar
   ya resuelve Lambert geocéntrico contra la efeméride móvil, busca una ventana
@@ -247,6 +252,13 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      steel and low-angle camera framing. Real 1920x1080 launch-to-1 km gate passed;
      897 simulation tests passed. Scope and residual sky/Pad 2/onboard gaps:
      `docs/audits/starship_flight14_visual_reference_2026-09-30.md`.
+
+   - Flight 14 reconstruction: reference extraction and source-backed feasibility
+     are available in `docs/research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md`.
+     A separate mission profile is still needed for suborbital cutoff, insertion,
+     26 payload splits and early northern-Pacific return. The published long
+     timeline is not the actual early-return schedule. Existing Flight 12 and
+     tower-catch policies must not be relabelled as Flight 14.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.

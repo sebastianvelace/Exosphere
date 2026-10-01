@@ -14,6 +14,7 @@ render_mode cull_disabled, unshaded, fog_disabled;
 #include "res://assets/shaders/surface_atmosphere.gdshaderinc"
 #include "res://assets/shaders/backdrop_depth.gdshaderinc"
 #include "res://assets/shaders/earth_ortho.gdshaderinc"
+#include "res://assets/shaders/cloud_surface.gdshaderinc"
 uniform mat3 world_to_earth_texture;
 // Squared polar/equatorial radius ratio; radial direction to geodetic latitude.
 uniform float geodetic_latitude_factor = 1.0;
@@ -30,12 +31,9 @@ uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 
 uniform sampler2D day_tex   : source_color, filter_linear_mipmap;
 uniform sampler2D night_tex : source_color, filter_linear_mipmap;
-uniform sampler2D cloud_tex : hint_default_white, filter_linear_mipmap;
 
 uniform vec3 vertical_optical_depth = vec3(0.0615, 0.1420, 0.2714);
-uniform float cloud_amount : hint_range(0.0, 1.0) = 0.72;
-// ≈15 m/s zonal wind at Earth's equator: v/(2πR) in texture revolutions/s.
-uniform float cloud_speed  = 0.000000375;
+uniform float cloud_amount : hint_range(0.0, 1.0) = 1.0;
 uniform float night_lights : hint_range(0.0, 4.0) = 2.4;
 uniform float day_gain     : hint_range(0.5, 2.0) = 1.15;
 // Bounded earthshine for the scaled-space night hemisphere. The actual city-light
@@ -57,8 +55,6 @@ uniform float earth_radius_m = 6371008.8;
 
 // N3: high-frequency FBM micro-detail strength (0 = off, 0.18 = default).
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.18;
-// N4: cloud drift animation — set from script each frame (TIME * scale).
-uniform float time_offset : hint_range(0.0, 1000.0) = 0.0;
 
 
 // Earth radial direction → geodetic equirectangular UV in the reflected texture frame.
@@ -165,32 +161,12 @@ void fragment() {
 
 	vec3 nightCol = texture(night_tex, uv).rgb;            // city lights (bright on black)
 
-	// ── N4: Animated, volumetric-looking clouds ──────────────────────────────
-	// Drift UV: combine TIME-driven speed with time_offset for script-driven drift.
-	vec2 cloud_uv = uv + vec2((TIME * cloud_speed) + (time_offset * 0.00002), 0.0);
-	float cloud_raw = texture(cloud_tex, cloud_uv).r;
-
-	// FBM detail on cloud mask: breaks up hard edges and adds wispy variation.
-	float cloud_detail = es_fbm(uv * 60.0 + vec2(time_offset * 0.0001, 0.0));
-	// The source map is intentionally broad and smooth. Shape its coverage
-	// before adding detail so low-orbit views read as a continuous cloud deck
-	// instead of isolated opaque blobs with image-like edges.
-	float cloud_signal = cloud_raw + (cloud_detail - 0.5) * 0.22;
-	float cloud = smoothstep(0.18, 0.78, clamp(cloud_signal, 0.0, 1.0));
-
-	// Day / night from the real sun direction.
-	float ndl = dot(N, L);
-	float day = smoothstep(-0.12, 0.20, ndl);
-
-	// Cloud shadow: darken ground beneath thick clouds slightly.
-	float shadow = 1.0 - cloud * 0.16;
-	vec3 lit_day = dayCol * shadow;
-
-	// Cloud colour: slight blue-white tint; translucency via smoothstep so thin
-	// clouds (low coverage) remain semi-transparent.
-	vec3 cloud_col = vec3(0.97, 0.97, 1.0);
-	float cloud_alpha = smoothstep(0.24, 0.82, cloud) * cloud_amount * day;
-	vec3 surface = mix(lit_day, cloud_col, cloud_alpha);
+    // Lighting uses the ground normal, while cloud transport has its own
+    // elevated intersection, optical thickness and solar extinction.
+    float ndl = dot(N, L);
+    float day = smoothstep(-0.12, 0.20, ndl);
+    float cloud_shadow = cloud_enabled ? surface_cloud_shadow(physical_point, L) : 1.0;
+    vec3 surface = dayCol;
 
 	// Direct solar beam attenuated through the same RGB vertical optical depth as the sky.
 	// Kasten-style curvature guard keeps air mass finite at the terminator without inventing
@@ -200,7 +176,7 @@ void fragment() {
 	vec3 direct_transmittance = exp(-vertical_optical_depth * min(air_mass, 40.0));
 	float diffuse_fill = mix(night_floor, 0.045, smoothstep(-0.18, 0.30, ndl));
 	vec3 lit = surface * (vec3(diffuse_fill)
-		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility);
+		+ day_gain * pow(diff, 0.8) * direct_transmittance * solar_visibility * cloud_shadow);
 	// The distant ocean is not a black Lambertian tile: it reflects a bounded
 	// blue atmospheric dome. Use optical depth for the sky colour and keep this
 	// term view-independent so it cannot paint a camera-centred contour.
@@ -232,12 +208,12 @@ void fragment() {
 		? (L + V) / half_length : N;
 	float sun_glint = pow(max(dot(N, reflection_half), 0.0), 64.0);
 	vec3 ocean_sun_reflection = vec3(water_fresnel * sun_glint)
-		* direct_transmittance * water * day * solar_visibility;
+		* direct_transmittance * water * day * solar_visibility * cloud_shadow;
 	lit += ocean_sun_reflection;
 
     // Only this camera-to-ground segment is composed over the surface. Off-limb
     // rays are discarded above and retain the existing spherical sky integral.
-    ALBEDO = surface_aerial_radiance(lit, world_ray, distance_m,
-        normalize(sun_dir), vertical_optical_depth, solar_visibility);
+    ALBEDO = surface_weather_radiance(lit, world_ray, distance_m,
+        L, vertical_optical_depth, solar_visibility, cloud_amount);
     EMISSION = vec3(0.0);
 }

@@ -45,8 +45,10 @@ has '* water * day * solar_visibility' "$shader" \
   "scaled Earth ocean sky fill is not gated by surface and solar state"
 has '#include "res://assets/shaders/surface_atmosphere.gdshaderinc"' "$shader" \
   "scaled Earth must use finite camera-to-surface transport"
-has 'surface_aerial_radiance(lit, world_ray, distance_m' "$shader" \
+has 'surface_weather_radiance(lit, world_ray, distance_m' "$shader" \
   "scaled Earth must integrate the actual geographic ray segment"
+has 'surface_aerial_radiance(ground, ray, distance_m' "$ROOT/assets/shaders/cloud_surface.gdshaderinc" \
+  "cloud composition must preserve finite camera-to-ground transport"
 has 'physical_camera_altitude_m' "$ROOT/scripts/FloatingOrigin.cs" \
   "scaled Earth must read camera altitude instead of vessel altitude"
 has 'float water_fresnel = 0.0204 + 0.9796 * pow(1.0 - view_cosine, 5.0);' "$shader" \

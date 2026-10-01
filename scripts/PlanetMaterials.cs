@@ -44,7 +44,7 @@ public static class PlanetMaterials
         mat.SetShaderParameter("sun_dir", DefaultSunDir);
         mat.SetShaderParameter("day_tex",   LoadTexture("res://assets/textures/earth_day.jpg"));
         mat.SetShaderParameter("night_tex", LoadTexture("res://assets/textures/earth_night.jpg"));
-        mat.SetShaderParameter("cloud_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
+        mat.SetShaderParameter("cloud_coverage_tex", LoadTexture("res://assets/textures/earth_clouds.jpg"));
         var reliefTexture = GD.Load<Texture2D>(EarthReliefPath);
         if (reliefTexture != null)
             mat.SetShaderParameter("relief_tex", reliefTexture);
@@ -59,7 +59,7 @@ public static class PlanetMaterials
         mat.SetShaderParameter("vertical_optical_depth", new Vector3(
             (float)opticalDepth.X, (float)opticalDepth.Y, (float)opticalDepth.Z));
         BindSurfaceOptics(mat, atmosphere.Optics, atmosphere.MaxAltitude);
-        mat.SetShaderParameter("cloud_amount", 0.72f);
+        mat.SetShaderParameter("cloud_amount", 1.0f);
         mat.SetShaderParameter("night_lights", 2.4f);
         mat.SetShaderParameter("day_gain", 1.15f);
         mat.SetShaderParameter("night_floor", 0.12f);
@@ -84,6 +84,33 @@ public static class PlanetMaterials
             LaunchTerrainImagery.Bind(mat, launchSiteId!);
         }
         return mat;
+    }
+
+    private static Texture2D? _earthCloudTexture;
+
+    /// <summary>Earth clouds share geography, optical shell and simulation clock with the sky.</summary>
+    public static void BindEarthClouds(ShaderMaterial material, CelestialBody body, double time)
+    {
+        _earthCloudTexture ??= LoadTexture("res://assets/textures/earth_clouds.jpg");
+        if (material.GetShaderParameter("cloud_coverage_tex").AsGodotObject() != _earthCloudTexture)
+            material.SetShaderParameter("cloud_coverage_tex", _earthCloudTexture);
+        float cloudSolarVisibility = 1.0f;
+        if (SunController.Instance?.TryGetCachedSolarGeometry(body.Id, out var geometry) == true)
+            cloudSolarVisibility = geometry.AtmosphericVisibility;
+        material.SetShaderParameter("cloud_solar_visibility", cloudSolarVisibility);
+        var optics = body.Atmosphere?.Optics;
+        CloudWeatherPresentation.Bind(material, body);
+        material.SetShaderParameter("cloud_enabled", optics?.HasCloudLayer == true && !SkyController.CloudsDisabled);
+        if (optics == null) return;
+        material.SetShaderParameter("cloud_world_to_texture", FloatingOrigin.EarthTextureBasis.Inverse());
+        material.SetShaderParameter("cloud_planet_radius_m", (float)FloatingOrigin.CameraEarthRadiusM);
+        material.SetShaderParameter("cloud_observer_altitude_m", (float)FloatingOrigin.CameraAltOverEarth);
+        material.SetShaderParameter("cloud_base_altitude", (float)optics.CloudBaseAltitude);
+        material.SetShaderParameter("cloud_top_altitude", (float)optics.CloudTopAltitude);
+        material.SetShaderParameter("cloud_extinction", (float)optics.CloudExtinction);
+        material.SetShaderParameter("cloud_coverage", (float)optics.CloudCoverage);
+        material.SetShaderParameter("cloud_longitude_offset", (float)(time * optics.CloudWindRadiansPerSecond / Mathf.Tau));
+        material.SetShaderParameter("cloud_weather_prefilter", SkyController.CloudWeatherPrefilter);
     }
 
     public static void BindSurfaceLuts(ShaderMaterial material)

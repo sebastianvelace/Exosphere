@@ -281,6 +281,7 @@ public partial class EarthGroundController : Node3D
         if (_mat != null)
         {
             PlanetMaterials.BindSurfaceLuts(_mat);
+            PlanetMaterials.BindEarthClouds(_mat, earth, universe.CurrentTime);
             if (bridge?.LaunchSiteOrNull is { } site)
             {
                 var siteOffset = surfacePos - site.GetPosition(earth, universe.CurrentTime);

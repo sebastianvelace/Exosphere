@@ -19,6 +19,7 @@ shader_type spatial;
 render_mode cull_back, unshaded, blend_mix, depth_draw_never, fog_disabled;
 
 #include "res://assets/shaders/surface_atmosphere.gdshaderinc"
+#include "res://assets/shaders/cloud_surface.gdshaderinc"
 #include "res://assets/shaders/backdrop_depth.gdshaderinc"
 #include "res://assets/shaders/earth_ortho.gdshaderinc"
 
@@ -328,7 +329,10 @@ void fragment() {
 	float terminator = smoothstep(-terminator_width, terminator_width, sun_height);
 	float twilight_fill = mix(1.0, 1.45, terminator);
 	vec3 indirect_floor = night_floor_tint * night_floor * twilight_fill;
-	vec3 direct = vec3(1.05 * ndl * solar_visibility) * direct_transmittance;
+	vec3 physical_ground = physical_camera_up * (physical_planet_radius_m + physical_camera_altitude_m)
+        + normalize(v_world_pos - CAMERA_POSITION_WORLD) * surface_distance_m(normalize(v_world_pos - CAMERA_POSITION_WORLD));
+    float cloud_shadow = cloud_enabled ? surface_cloud_shadow(physical_ground, L) : 1.0;
+    vec3 direct = vec3(1.05 * ndl * solar_visibility) * direct_transmittance * cloud_shadow;
 	// ALBEDO is multiplied by Godot's scene lights. At sunrise (solar_visibility=0)
 	// and on the night side that multiplication can erase the bounded floor entirely.
 	// Keep the floor as a low-energy emission: it represents sky/earthshine and remains
@@ -355,8 +359,8 @@ void fragment() {
     } else {
         discard;
     }
-    ground_radiance = surface_aerial_radiance(ground_radiance, view_ray, physical_distance_m,
-        normalize(sun_dir), vertical_optical_depth, solar_visibility);
+    ground_radiance = surface_weather_radiance(ground_radiance, view_ray, physical_distance_m,
+        normalize(sun_dir), vertical_optical_depth, solar_visibility, 1.0);
 	// Circular rim at the geometric horizon (not a camera-distance kill, and
 	// not the square mesh border).
 	float horizon_m = max(horizon_dist * metres_per_unit, 4000.0);

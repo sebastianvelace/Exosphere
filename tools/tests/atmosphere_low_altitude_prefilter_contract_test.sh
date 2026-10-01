@@ -16,25 +16,25 @@ rg -q 'altitudePrefilter\);' "$SKY" \
 rg -q 'Mathf\.Max\(' "$SKY" \
   || fail "solar prefilter is not combined conservatively"
 SHADER="$ROOT/assets/shaders/space_sky.gdshader"
-rg -q 'float cloud_detail_sample' "$SHADER" \
+rg -q 'float cloud_detail_sample' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "high-frequency cloud detail has no shared prefilter path"
-rg -q 'clamp\(cloud_weather_prefilter, 0\.0, 1\.0\)' "$SHADER" \
+rg -q 'clamp\(cloud_weather_prefilter, 0\.0, 1\.0\)' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "cloud detail prefilter is not fully applied"
-rg -q 'float cloud_weather_spherical_sample' "$SHADER" \
+rg -q 'float cloud_weather_spherical_sample' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "low-altitude weather path is not using a spherical footprint"
-rg -q 'normalize\(direction \+ tangent \* footprint\)' "$SHADER" \
+rg -q 'normalize\(direction \+ tangent \* footprint\)' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "spherical weather footprint has no tangent sampling"
-rg -q 'textureLod\(cloud_coverage_tex, detail_uv, 6\.0\)' "$SHADER" \
+rg -q 'textureLod\(cloud_coverage_tex, detail_uv, 6\.0\)' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "low-altitude detail path is not using the coarser mip level"
-rg -q 'textureLod\(cloud_coverage_tex,' "$SHADER" \
+rg -q 'textureLod\(cloud_coverage_tex,' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "low-altitude weather path has no filtered texture reads"
-rg -q 'prefiltered = center \* 0\.08' "$SHADER" \
+rg -q 'prefiltered = center \* 0\.08' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "low-altitude weather path retains too much aliased centre sampling"
-rg -q 'float threshold_softness = mix\(0\.055, 0\.175' "$SHADER" \
+rg -q 'float threshold_softness = mix\(0\.055, 0\.175' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "cloud coverage threshold is not softened at low altitude"
-rg -q 'float dither_strength = mix\(0\.004, 0\.025' "$SHADER" \
+rg -q 'float dither_strength = mix\(0\.004, 0\.025' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "low-altitude cloud dither is not bounded"
-rg -q 'float horizon_cloud_fade = smoothstep\(-0\.01, 0\.10' "$SHADER" \
+rg -q 'float horizon_cloud_fade = smoothstep\(-0\.01, 0\.10' "$SHADER" "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "low-altitude cloud horizon silhouette is not softened"
 IMPORT="$ROOT/assets/textures/earth_clouds.jpg.import"
 [[ -f "$IMPORT" ]] || fail "Earth cloud import metadata missing"

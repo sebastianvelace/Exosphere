@@ -111,6 +111,9 @@ public partial class SkyController : Node
 
     private ShaderMaterial? _skyMat;
     private Godot.Environment? _env;
+    internal static bool CloudsDisabled => DiagnosticCloudsDisabled;
+    internal static float CloudWeatherPrefilter { get; private set; } = 1.0f;
+
     private string? _boundCloudBodyId;
     public static Texture2D? EarthSurfaceDensityLut { get; private set; }
     public static float EarthSurfaceDensityTopM { get; private set; }
@@ -493,8 +496,11 @@ public partial class SkyController : Node
         _skyMat.SetShaderParameter("refractive_scale_height", (float)optics.RefractiveScaleHeight);
         _skyMat.SetShaderParameter("low_order_diffuse_strength",
             (float)optics.LowOrderDiffuseStrength);
+        CloudWeatherPresentation.Bind(_skyMat, body);
         _skyMat.SetShaderParameter("cloud_enabled",
             optics.HasCloudLayer && !DiagnosticCloudsDisabled);
+        _skyMat.SetShaderParameter("cloud_planet_radius_m", (float)visualRadius);
+        _skyMat.SetShaderParameter("cloud_observer_altitude_m", (float)System.Math.Max(0.0, altitude));
         _skyMat.SetShaderParameter("cloud_base_altitude", (float)optics.CloudBaseAltitude);
         _skyMat.SetShaderParameter("cloud_top_altitude", (float)optics.CloudTopAltitude);
         _skyMat.SetShaderParameter("cloud_extinction", (float)optics.CloudExtinction);
@@ -503,7 +509,8 @@ public partial class SkyController : Node
             (float)(SimulationBridge.Instance!.Universe.CurrentTime
                 * optics.CloudWindRadiansPerSecond / Mathf.Tau));
         _skyMat.SetShaderParameter("cloud_world_to_texture",
-            new Basis(FloatingOrigin.PlanetOrientation.Inverse()));
+            body.Id == "earth" ? FloatingOrigin.EarthTextureBasis.Inverse()
+                : new Basis(FloatingOrigin.PlanetOrientation.Inverse()));
         if (_boundCloudBodyId != body.Id)
         {
             _skyMat.SetShaderParameter("cloud_coverage_tex", LoadCloudTexture(body.Id));
@@ -537,6 +544,7 @@ public partial class SkyController : Node
             1.0f - Smoothstep(6_000.0f, 45_000.0f, (float)System.Math.Max(0.0, altitude));
         float cloudWeatherPrefilter = Mathf.Max(
             solarPrefilter, altitudePrefilter);
+        CloudWeatherPrefilter = cloudWeatherPrefilter;
         float atmosphereQuality = altitude < 45_000.0
             ? LowAltitudeAtmosphereQuality
             : InteractiveAtmosphereQuality;

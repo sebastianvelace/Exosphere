@@ -3249,6 +3249,10 @@ public partial class _PlaytestShot : Node
       private void ProcessAtmosphereMatrix(double delta, SimulationBridge bridge,
         Vessel vessel, Universe universe, CelestialBody body)
     {
+        // Physical solar fixtures must not inherit the fresh-pad 28 degree
+        // presentation override; otherwise even the night case renders as day.
+        if (SunController.Instance?.VisualSunElevationOverrideDegrees != null)
+            SunController.Instance.SetVisualSunElevationOverride(null);
         if (_spectralOracle == null || _spectralBodyId != body.Id)
         {
             _spectralOracle = SpectralAtmosphereOracle.Build(
@@ -3638,6 +3642,18 @@ public partial class _PlaytestShot : Node
         var camera = GetTree().Root.FindChild("Camera3D", true, false) as Camera3D;
         var world = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
         float exposure = world?.Environment?.TonemapExposure ?? -1.0f;
+        var skyMaterial = world?.Environment?.Sky?.SkyMaterial as ShaderMaterial;
+        double renderedElevation = double.NaN;
+        if (skyMaterial != null)
+        {
+            var renderedUp = skyMaterial.GetShaderParameter("local_up").AsVector3().Normalized();
+            var renderedSun = skyMaterial.GetShaderParameter("sun_dir").AsVector3().Normalized();
+            renderedElevation = System.Math.Asin(System.Math.Clamp(renderedUp.Dot(renderedSun), -1.0, 1.0))
+                * 180.0 / System.Math.PI;
+        }
+        _log.WriteLine($"ATMOS_RENDER slug={shot.Slug} sunElevation={renderedElevation:F3} "
+            + $"sunOverride={(SunController.Instance?.VisualSunElevationOverrideDegrees.HasValue == true ? "active" : "none")} "
+            + "source=bound_sky_parameters");
         double meanMs = _atmosPerfFrames > 0
             ? _atmosFrameSeconds * 1000.0 / _atmosPerfFrames : 0.0;
         var moon = universe.GetBody("moon");
@@ -4521,6 +4537,45 @@ public partial class _PlaytestShot : Node
                     double mappedLatitude = System.Math.Atan2(local.Y,
                         System.Math.Sqrt(local.X * local.X + local.Z * local.Z) * factor) * 180 / System.Math.PI;
                     double mappedLongitude = System.Math.Atan2(local.Z, local.X) * 180 / System.Math.PI;
+                    var world = GetTree().Root.FindChild("WorldEnvironment", true, false) as WorldEnvironment;
+                    var skyMaterial = world?.Environment?.Sky?.SkyMaterial as ShaderMaterial;
+                    if (skyMaterial != null)
+                    {
+                        var skyMap = skyMaterial.GetShaderParameter("cloud_world_to_texture").AsBasis();
+                        var earthCloudMap = earthMaterial.GetShaderParameter("cloud_world_to_texture").AsBasis();
+                        double frameError = (skyMap.X - earthCloudMap.X).Length()
+                            + (skyMap.Y - earthCloudMap.Y).Length() + (skyMap.Z - earthCloudMap.Z).Length();
+                        double clockError = System.Math.Abs(skyMaterial.GetShaderParameter("cloud_longitude_offset").AsDouble()
+                            - earthMaterial.GetShaderParameter("cloud_longitude_offset").AsDouble());
+                        bool localWeather = skyMaterial.GetShaderParameter("cloud_local_weather_enabled").AsBool()
+                            && earthMaterial.GetShaderParameter("cloud_local_weather_enabled").AsBool();
+                        var groundMesh = GetTree().Root.FindChild("EarthGround", true, false) as MeshInstance3D;
+                        var groundMaterial = groundMesh?.GetSurfaceOverrideMaterial(0) as ShaderMaterial;
+                        var groundMap = groundMaterial?.GetShaderParameter("cloud_world_to_texture").AsBasis() ?? default;
+                        double groundFrameError = groundMaterial == null ? double.NaN
+                            : (skyMap.X - groundMap.X).Length() + (skyMap.Y - groundMap.Y).Length()
+                                + (skyMap.Z - groundMap.Z).Length();
+                        double groundClockError = groundMaterial == null ? double.NaN
+                            : System.Math.Abs(skyMaterial.GetShaderParameter("cloud_longitude_offset").AsDouble()
+                                - groundMaterial.GetShaderParameter("cloud_longitude_offset").AsDouble());
+                        double solarError = System.Math.Abs(
+                            skyMaterial.GetShaderParameter("atmospheric_solar_visibility").AsDouble()
+                                - earthMaterial.GetShaderParameter("cloud_solar_visibility").AsDouble());
+                        if (groundMaterial != null)
+                            solarError = System.Math.Max(solarError, System.Math.Abs(
+                                skyMaterial.GetShaderParameter("atmospheric_solar_visibility").AsDouble()
+                                    - groundMaterial.GetShaderParameter("cloud_solar_visibility").AsDouble()));
+                        bool textureMatch = groundMaterial != null
+                            && skyMaterial.GetShaderParameter("cloud_coverage_tex").AsGodotObject()
+                                == earthMaterial.GetShaderParameter("cloud_coverage_tex").AsGodotObject()
+                            && skyMaterial.GetShaderParameter("cloud_coverage_tex").AsGodotObject()
+                                == groundMaterial.GetShaderParameter("cloud_coverage_tex").AsGodotObject();
+                        _log.WriteLine($"VISUAL_CLOUD_FIELD slug={slug} frameError={frameError:F8} "
+                            + $"clockError={clockError:F8} determinant={skyMap.Determinant():F3} "
+                            + $"localWeather={localWeather} timeScale={universe.TimeScale:F3} "
+                            + $"groundFrameError={groundFrameError:F8} groundClockError={groundClockError:F8} solarError={solarError:F8} textureMatch={textureMatch} "
+                            + "source=bound_shader_parameters");
+                    }
                     _log.WriteLine($"VISUAL_GEOGRAPHIC_FRAME slug={slug} determinant={map.Determinant():F3} " +
                         $"latitudeErrorDeg={System.Math.Abs(mappedLatitude - geographicSite.Latitude):F6} " +
                         $"longitudeErrorDeg={System.Math.Abs(mappedLongitude - geographicSite.Longitude):F6} " +
@@ -5208,6 +5263,15 @@ for km in (0, 12, 15, 18, 100, 250):
     mapped = dict(re.findall(r'(\w+)=([^ ]+)', geo[0]))
     assert float(mapped['latitudeErrorDeg']) < 0.001 and float(mapped['longitudeErrorDeg']) < 0.001
     assert abs(float(mapped['determinant']) + 1) < 0.001
+    cloud = re.search(rf'^VISUAL_CLOUD_FIELD slug={slug} .*$', log, re.M)
+    assert cloud, f'missing bound cloud field {slug}'
+    cloud_state = dict(re.findall(r'(\w+)=([^ ]+)', cloud[0]))
+    assert float(cloud_state['frameError']) < 1e-6 and float(cloud_state['clockError']) < 1e-6
+    assert abs(float(cloud_state['determinant']) + 1) < 0.001
+    assert cloud_state['localWeather'] == 'True' and float(cloud_state['timeScale']) == 0
+    assert cloud_state['textureMatch'] == 'True' and float(cloud_state['solarError']) < 1e-6
+    if km < 18:
+        assert float(cloud_state['groundFrameError']) < 1e-6 and float(cloud_state['groundClockError']) < 1e-6
     if km >= 18:
         assert state['groundVisible'] == 'False', f'local detail did not retire: {slug}'
     image = re.search(rf'^IMAGE slug={slug} .*$', log, re.M)
@@ -5238,6 +5302,15 @@ for km in (7, 16, 26):
         mapped = dict(re.findall(r'(\w+)=([^ ]+)', geo[0]))
         assert float(mapped['latitudeErrorDeg']) < 0.001 and float(mapped['longitudeErrorDeg']) < 0.001
         assert abs(float(mapped['determinant']) + 1) < 0.001
+        cloud = re.search(rf'^VISUAL_CLOUD_FIELD slug={slug} .*$', log, re.M)
+        assert cloud, f'missing bound cloud field {slug}'
+        cloud_state = dict(re.findall(r'(\w+)=([^ ]+)', cloud[0]))
+        assert float(cloud_state['frameError']) < 1e-6 and float(cloud_state['clockError']) < 1e-6
+        assert abs(float(cloud_state['determinant']) + 1) < 0.001
+        assert cloud_state['localWeather'] == 'True' and float(cloud_state['timeScale']) == 0
+        assert cloud_state['textureMatch'] == 'True' and float(cloud_state['solarError']) < 1e-6
+        if km < 18:
+            assert float(cloud_state['groundFrameError']) < 1e-6 and float(cloud_state['groundClockError']) < 1e-6
         assert re.search(rf'^STARBASE_FAR_SETUP slug={slug} .*cameraPitchDeg={pitch} ', log, re.M), f'wrong viewing angle {slug}'
         metrics = re.search(rf'^IMAGE slug={slug} .*$', log, re.M)
         assert metrics, f'missing framebuffer metrics {slug}'
@@ -6161,6 +6234,10 @@ PYCOVERAGE
 }
 
 verify_post_run_contracts() {
+  if [[ "$MODE" == "atmosphere_ground" || "$MODE" == "atmosphere" \
+    || "$MODE" == "atmosphere_low" || "$MODE" == "atmosphere_orbit" ]]; then
+    python3 "$ROOT/tools/validate_atmosphere_render_state.py" "$LOG" || return 1
+  fi
   # A fallback material can still produce a nonblank PNG after shader failure.
   # Reject that run even when its physical state and image metrics look valid.
   if [[ -f "$CONSOLE_LOG" ]] && rg -q 'SHADER ERROR:|Shader compilation failed|^SCRIPT ERROR:|^ERROR: (Failed loading resource|Unable to open file|Error loading resource)' "$CONSOLE_LOG"; then

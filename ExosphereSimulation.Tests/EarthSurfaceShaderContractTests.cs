@@ -24,8 +24,12 @@ public sealed class EarthSurfaceShaderContractTests
         string surface = Source("assets/shaders/earth_surface.gdshader");
         string ground = Source("assets/shaders/earth_ground.gdshader");
         string transport = Source("assets/shaders/surface_atmosphere.gdshaderinc");
-        Assert.Contains("surface_aerial_radiance(lit, world_ray, distance_m", surface);
-        Assert.Contains("surface_aerial_radiance(ground_radiance, view_ray, physical_distance_m", ground);
+        Assert.Contains("surface_weather_radiance(lit, world_ray, distance_m", surface);
+        Assert.Contains("surface_weather_radiance(ground_radiance, view_ray, physical_distance_m", ground);
+        string clouds = Source("assets/shaders/cloud_surface.gdshaderinc");
+        Assert.Contains("surface_aerial_radiance(ground, ray, distance_m", clouds);
+        Assert.Contains("cloud_solar_visibility * surface_sun_illuminance", clouds);
+        Assert.Contains("geometry.AtmosphericVisibility", Source("scripts/PlanetMaterials.cs"));
         Assert.Contains("float end = min(distance_m, -b + sqrt(disc));", transport);
         Assert.Contains("if (end <= start) return ground;", transport);
         Assert.Contains("ground * exp(-optical_depth)", transport);
@@ -82,7 +86,8 @@ public sealed class EarthSurfaceShaderContractTests
         string shader = Source("assets/shaders/earth_surface.gdshader")
             + Source("assets/shaders/surface_atmosphere.gdshaderinc")
             + Source("assets/shaders/earth_ortho.gdshaderinc")
-            + Source("assets/shaders/earth_geometry.gdshaderinc");
+            + Source("assets/shaders/earth_geometry.gdshaderinc")
+            + Source("assets/shaders/cloud_field.gdshaderinc");
         string materials = Source("scripts/PlanetMaterials.cs");
         int start = materials.IndexOf("public static Material CreateEarth(", StringComparison.Ordinal);
         int end = materials.IndexOf("return mat;", start, StringComparison.Ordinal);

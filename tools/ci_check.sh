@@ -19,6 +19,7 @@ if grep -Eq '(_[A-Za-z0-9]*Shot|[A-Za-z0-9]*VerifyShot)' project.godot; then
 fi
 
 bash -n tools/visual_playtest.sh
+python3 tools/tests/atmosphere_render_state_test.py
 bash tools/tests/visual_playtest_contract_test.sh
 bash tools/tests/godot_smoke_log_contract_test.sh
 bash tools/tests/visual_shader_failure_contract_test.sh

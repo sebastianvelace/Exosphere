@@ -267,6 +267,7 @@ public partial class FloatingOrigin : Node
                     if (body.Id == "earth")
                     {
                         PlanetMaterials.BindSurfaceLuts(material);
+                        PlanetMaterials.BindEarthClouds(material, body, bridge.Universe.CurrentTime);
                         material.SetShaderParameter("world_to_earth_texture", EarthTextureBasis.Inverse());
                         if (bridge.LaunchSiteOrNull is { } site)
                         {
