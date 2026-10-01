@@ -22,7 +22,7 @@ PYEXTRACT
 printf '%s\n' 'RENDERER_ACTUAL gl_compatibility' > "$scratch/state.log"
 printf '%s\n' 'WARNING: invalid UID; falling back to text path' 'ALSA: no audio device' > "$scratch/console.log"
 bash "$scratch/check.sh" "$scratch/console.log" "$scratch/state.log"
-for diagnostic in 'SHADER ERROR: Unknown identifier' 'ERROR: Shader compilation failed.' 'SCRIPT ERROR: Invalid call'; do
+for diagnostic in 'SHADER ERROR: Unknown identifier' 'ERROR: Shader compilation failed.' 'SCRIPT ERROR: Invalid call' 'ERROR: Failed loading resource: missing.ctex.'; do
   printf '%s\n' "$diagnostic" > "$scratch/console.log"
   if bash "$scratch/check.sh" "$scratch/console.log" "$scratch/state.log" > "$scratch/output.log" 2>&1; then
     echo "FAIL rendering failure accepted: $diagnostic" >&2

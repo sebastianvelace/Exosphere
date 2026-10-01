@@ -76,6 +76,8 @@ Options:
   --orbital-plume
                 Capture a deterministic 200 km Starship vacuum plume with the production
                 chase camera, HUD, vehicle silhouette, and fail-closed plume telemetry.
+  --starbase-coverage
+                 Capture Starbase at 7/16/26 km in oblique and nadir views.
   --ascent-optics Capture paused geographic rays from ground to 250 km; camera tracks vessel.
   --starbase-far Capture the mapped Starbase terrain transition at 2, 5, 8, 12, 20 and 40 km.
   --kennedy-far  Capture the measured Kennedy LC-39A terrain transition at 2, 5, 8, 12, 20 and 40 km.
@@ -219,6 +221,7 @@ while [[ $# -gt 0 ]]; do
     --flaps) MODE="flaps"; shift ;;
     --enginebay) MODE="enginebay"; shift ;;
     --orbital-plume) MODE="orbital_plume"; shift ;;
+    --starbase-coverage) MODE="terrain_coverage"; HARNESS_MODE="starbase_far"; OPTICS_MATRIX=2; shift ;;
     --ascent-optics) MODE="ascent_optics"; HARNESS_MODE="starbase_far"; OPTICS_MATRIX=1; shift ;;
     --starbase-far) MODE="starbase_far"; shift ;;
     --kennedy-far)
@@ -358,7 +361,7 @@ fi
     VARIANT_PROFILE="starship-flight7-ascent"
   fi
 
-  if [[ ( "$MODE" == "starbase_far" || "$MODE" == "ascent_optics" ) && -z "$VARIANT_FILE" ]]; then
+  if [[ ( "$MODE" == "starbase_far" || "$MODE" == "ascent_optics" || "$MODE" == "terrain_coverage" ) && -z "$VARIANT_FILE" ]]; then
     VARIANT_FILE="starship_flight7_block2_2025.json"
     VARIANT_SITE="starbase"
     VARIANT_PROFILE="starship-flight7-ascent"
@@ -659,8 +662,15 @@ public partial class _PlaytestShot : Node
     int _beautyWaitFrames;
     int _orbitalPlumeStableFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded, _engineBayCaptured;
-    static readonly bool IsAscentOptics = ${OPTICS_MATRIX} == 1;
-    readonly (string Slug, double AltitudeM)[] _starbaseFarCases = IsAscentOptics
+    static readonly bool IsAscentOptics = ${OPTICS_MATRIX} != 0;
+    static readonly bool IsTerrainCoverage = ${OPTICS_MATRIX} == 2;
+    readonly (string Slug, double AltitudeM)[] _starbaseFarCases = IsTerrainCoverage
+        ? new (string, double)[] {
+            ("coverage_7km_oblique", 7_000.0), ("coverage_7km_nadir", 7_000.0),
+            ("coverage_16km_oblique", 16_000.0), ("coverage_16km_nadir", 16_000.0),
+            ("coverage_26km_oblique", 26_000.0), ("coverage_26km_nadir", 26_000.0),
+        }
+        : IsAscentOptics
         ? new (string, double)[] {
             ("ascent_optics_0km", 0.0), ("ascent_optics_12km", 12_000.0),
             ("ascent_optics_15km", 15_000.0), ("ascent_optics_18km", 18_000.0),
@@ -3147,12 +3157,13 @@ public partial class _PlaytestShot : Node
         float lookAtY = IsAscentOptics || shot.AltitudeM >= 20_000.0
             ? 0f
             : -(float)(shot.AltitudeM / 2.8);
-        CameraController.Instance?.SetExternalChaseFrame(0f, 28f, 500f, lookAtY);
+        float pitch = IsTerrainCoverage && shot.Slug.EndsWith("nadir") ? 80f : 28f;
+        CameraController.Instance?.SetExternalChaseFrame(0f, pitch, 500f, lookAtY);
         if (GetTree().Root.FindChild("HUDController", true, false) is CanvasItem hud)
             hud.Visible = false;
         _log.WriteLine($"STARBASE_FAR_SETUP slug={shot.Slug} site={bridge.LaunchSiteId} " +
             $"targetAlt={shot.AltitudeM:F0} cameraDistanceRender=500 " +
-            $"cameraPitchDeg=28 lookAt={(IsAscentOptics || shot.AltitudeM >= 20_000.0 ? "vessel" : "ground")} " +
+            $"cameraPitchDeg={pitch:F0} lookAt={(IsAscentOptics || shot.AltitudeM >= 20_000.0 ? "vessel" : "ground")} " +
             "timeScale=0 source=public_site_frame");
         _log.Flush();
         _readyFrames = 0;
@@ -4497,6 +4508,25 @@ public partial class _PlaytestShot : Node
 
         if (body.Id == "earth")
         {
+            if (IsAscentOptics && bridge.LaunchSiteOrNull is { } geographicSite)
+            {
+                var earthMesh = GetTree().Root.FindChild("Earth_mesh", true, false) as MeshInstance3D;
+                var earthMaterial = earthMesh?.GetSurfaceOverrideMaterial(0) as ShaderMaterial;
+                if (earthMaterial != null)
+                {
+                    var map = earthMaterial.GetShaderParameter("world_to_earth_texture").AsBasis();
+                    var siteVector = (geographicSite.GetPosition(body, universe.CurrentTime) - body.Position).Normalized;
+                    var local = (map * new Vector3((float)siteVector.X, (float)siteVector.Y, (float)siteVector.Z)).Normalized();
+                    double factor = earthMaterial.GetShaderParameter("geodetic_latitude_factor").AsDouble();
+                    double mappedLatitude = System.Math.Atan2(local.Y,
+                        System.Math.Sqrt(local.X * local.X + local.Z * local.Z) * factor) * 180 / System.Math.PI;
+                    double mappedLongitude = System.Math.Atan2(local.Z, local.X) * 180 / System.Math.PI;
+                    _log.WriteLine($"VISUAL_GEOGRAPHIC_FRAME slug={slug} determinant={map.Determinant():F3} " +
+                        $"latitudeErrorDeg={System.Math.Abs(mappedLatitude - geographicSite.Latitude):F6} " +
+                        $"longitudeErrorDeg={System.Math.Abs(mappedLongitude - geographicSite.Longitude):F6} " +
+                        "source=bound_shader_matrix");
+                }
+            }
             double cameraAlt = FloatingOrigin.CameraAltOverEarth;
             float globeAlpha = FloatingOrigin.EarthGlobeAlpha(cameraAlt);
             _log.WriteLine($"VISUAL_COMPOSITOR slug={slug} vesselAlt={vessel.GetAltitude(body):F1} "
@@ -5173,6 +5203,11 @@ for km in (0, 12, 15, 18, 100, 250):
     assert abs(float(state['vesselAlt']) - km * 1000) < 1, f'wrong vessel altitude: {slug}'
     assert 714 < float(state['cameraAlt']) - km * 1000 < 718, f'camera did not track vessel: {slug}'
     assert state.get('earthOpaque') == 'True', f'planet coverage changed: {slug}'
+    geo = re.search(rf'^VISUAL_GEOGRAPHIC_FRAME slug={slug} .*$', log, re.M)
+    assert geo, f'missing geographic frame: {slug}'
+    mapped = dict(re.findall(r'(\w+)=([^ ]+)', geo[0]))
+    assert float(mapped['latitudeErrorDeg']) < 0.001 and float(mapped['longitudeErrorDeg']) < 0.001
+    assert abs(float(mapped['determinant']) + 1) < 0.001
     if km >= 18:
         assert state['groundVisible'] == 'False', f'local detail did not retire: {slug}'
     image = re.search(rf'^IMAGE slug={slug} .*$', log, re.M)
@@ -5182,6 +5217,34 @@ for km in (0, 12, 15, 18, 100, 250):
     assert float(metrics['clippedFrac']) < 0.1, f'clipped framebuffer: {slug}'
 print('ascent_optics_matrix: PASS (six paused rays, actual camera heights; manual visual review required)')
 PYOPTICS
+    elif [[ "$MODE" == "terrain_coverage" ]]; then
+      python3 - "$OUT_DIR" "$LOG" "$CONSOLE_LOG" <<'PYCOVERAGE'
+import pathlib, re, sys
+out, log, console = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]).read_text(), pathlib.Path(sys.argv[3]).read_text()
+assert 'SUMMARY reason=STARBASE_FAR_OK' in log, 'coverage matrix did not finish'
+assert re.search(r'^TERRAIN_COVERAGE site=starbase context=True ', console, re.M), 'context texture was not bound'
+for km in (7, 16, 26):
+    for view, pitch in (('oblique', 28), ('nadir', 80)):
+        slug = f'coverage_{km}km_{view}'
+        assert (out / f'exo_play_{slug}.png').is_file(), f'missing {slug}'
+        row = re.search(rf'^VISUAL_COMPOSITOR slug={slug} .*$', log, re.M)
+        assert row, f'missing camera state {slug}'
+        state = dict(re.findall(r'(\w+)=([^ ]+)', row[0]))
+        assert abs(float(state['vesselAlt']) - km * 1000) < 1
+        assert km * 1000 + 650 < float(state['cameraAlt']) < km * 1000 + 1500
+        assert state.get('earthOpaque') == 'True'
+        geo = re.search(rf'^VISUAL_GEOGRAPHIC_FRAME slug={slug} .*$', log, re.M)
+        assert geo, f'missing geographic frame {slug}'
+        mapped = dict(re.findall(r'(\w+)=([^ ]+)', geo[0]))
+        assert float(mapped['latitudeErrorDeg']) < 0.001 and float(mapped['longitudeErrorDeg']) < 0.001
+        assert abs(float(mapped['determinant']) + 1) < 0.001
+        assert re.search(rf'^STARBASE_FAR_SETUP slug={slug} .*cameraPitchDeg={pitch} ', log, re.M), f'wrong viewing angle {slug}'
+        metrics = re.search(rf'^IMAGE slug={slug} .*$', log, re.M)
+        assert metrics, f'missing framebuffer metrics {slug}'
+        values = dict(re.findall(r'(\w+)=([^ ]+)', metrics[0]))
+        assert 0.005 < float(values['mean']) < 0.95
+print('starbase_coverage_matrix: PASS (six paused geographic views; visual review required)')
+PYCOVERAGE
     elif [[ "$MODE" == "starbase_far" ]]; then
       if ! rg -q '^VISUAL_STARBASE_GEOMETRY slug=starbase_far_(2km|5km|8km|12km|20km|40km) topTriangles=[1-9][0-9]* backFacing=0 terrainTiles=[1-9][0-9]*$' "$LOG"; then
         echo "ERROR: Starbase terrain is missing or faces away from the overhead camera" >&2
@@ -6100,7 +6163,7 @@ PYOPTICS
 verify_post_run_contracts() {
   # A fallback material can still produce a nonblank PNG after shader failure.
   # Reject that run even when its physical state and image metrics look valid.
-  if [[ -f "$CONSOLE_LOG" ]] && rg -q 'SHADER ERROR:|Shader compilation failed|^SCRIPT ERROR:' "$CONSOLE_LOG"; then
+  if [[ -f "$CONSOLE_LOG" ]] && rg -q 'SHADER ERROR:|Shader compilation failed|^SCRIPT ERROR:|^ERROR: (Failed loading resource|Unable to open file|Error loading resource)' "$CONSOLE_LOG"; then
     echo "ERROR: rendering/script failure in $CONSOLE_LOG; captures cannot establish visual acceptance" >&2
     return 1
   fi
@@ -6226,7 +6289,7 @@ if [[ "$MODE" == "reentry_compare" ]]; then
   LOG="$COMBINED_LOG"
   CONSOLE_LOG="$COMBINED_CONSOLE_LOG"
 else
-  if [[ "$MODE" == "ascent_optics" ]]; then
+  if [[ "$MODE" == "ascent_optics" || "$MODE" == "terrain_coverage" ]]; then
     HARNESS_MODE="starbase_far"
   else
     HARNESS_MODE="$MODE"
