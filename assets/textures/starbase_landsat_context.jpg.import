@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://g58n8cf27soj"
-path="res://.godot/imported/starbase_naip_50km.jpg-aaf0428c2ead82c913943288fab3152c.ctex"
+uid="uid://d8kucho54isi"
+path="res://.godot/imported/starbase_landsat_context.jpg-c59884d16baea77ce31899c1b53970e7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/starbase_naip_50km.jpg"
-dest_files=["res://.godot/imported/starbase_naip_50km.jpg-aaf0428c2ead82c913943288fab3152c.ctex"]
+source_file="res://assets/textures/starbase_landsat_context.jpg"
+dest_files=["res://.godot/imported/starbase_landsat_context.jpg-c59884d16baea77ce31899c1b53970e7.ctex"]
 
 [params]
 

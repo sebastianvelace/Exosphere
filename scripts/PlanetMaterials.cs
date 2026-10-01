@@ -34,6 +34,12 @@ public static class PlanetMaterials
         var shader = GD.Load<Shader>(EarthShaderPath);
         var mat = new ShaderMaterial { Shader = shader };
 
+        // A proper quaternion loses the handedness of the latitude/longitude
+        // frame. Earth sampling receives the full world-to-texture basis.
+        mat.SetShaderParameter("world_to_earth_texture", FloatingOrigin.EarthTextureBasis.Inverse());
+        double latitudeFactor = body is { EquatorialRadius: > 0, PolarRadius: > 0 }
+            ? System.Math.Pow(body.PolarRadius / body.EquatorialRadius, 2) : 1.0;
+        mat.SetShaderParameter("geodetic_latitude_factor", (float)latitudeFactor);
         // Real NASA imagery: natural-colour day map, Black-Marble city lights, clouds.
         mat.SetShaderParameter("sun_dir", DefaultSunDir);
         mat.SetShaderParameter("day_tex",   LoadTexture("res://assets/textures/earth_day.jpg"));
@@ -58,7 +64,7 @@ public static class PlanetMaterials
         mat.SetShaderParameter("day_gain", 1.15f);
         mat.SetShaderParameter("night_floor", 0.12f);
         mat.SetShaderParameter("ocean_sky_fill_strength", 0.18f);
-        string prefix = launchSiteId == "starbase" ? "starbase" : launchSiteId == "kennedy" ? "kennedy" : string.Empty;
+        string prefix = launchSiteId?.StartsWith("starbase", StringComparison.OrdinalIgnoreCase) == true ? "starbase" : launchSiteId == "kennedy" ? "kennedy" : string.Empty;
         if (prefix.Length > 0)
         {
             string macroPrefix = prefix == "kennedy" ? "cape_canaveral" : prefix;
@@ -75,6 +81,7 @@ public static class PlanetMaterials
                 mat.SetShaderParameter("macro_mask_tex", macroMask!);
             }
             mat.SetShaderParameter("site_ortho_enabled", ready);
+            LaunchTerrainImagery.Bind(mat, launchSiteId!);
         }
         return mat;
     }

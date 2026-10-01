@@ -107,14 +107,14 @@ float sample_height_m(sampler2D height_tex, vec2 uv, float min_m,
 	return mix(min_m, max_m, encoded) - reference_m;
 }
 
-vec2 sample_height_slope(sampler2D height_tex, vec2 uv, float extent_m,
+vec2 sample_height_slope(sampler2D height_tex, vec2 uv, vec2 extent_m,
 		float min_m, float max_m, float reference_m) {
 	// Both checked-in DEMs are 2048². Sample one source texel on either side,
 	// then convert the finite difference back to a dimensionless grade. The
 	// renderer's relief displacement is in metres, so this remains scale-safe
 	// when the Godot patch uses 1 u = 2.8 m.
 	const float source_inv_size = 1.0 / 2048.0;
-	float source_step_m = extent_m * source_inv_size;
+	vec2 source_step_m = extent_m * source_inv_size;
 	float east = sample_height_m(height_tex, uv + vec2(source_inv_size, 0.0),
 		min_m, max_m, reference_m);
 	float west = sample_height_m(height_tex, uv - vec2(source_inv_size, 0.0),
@@ -124,8 +124,8 @@ vec2 sample_height_slope(sampler2D height_tex, vec2 uv, float extent_m,
 	float south = sample_height_m(height_tex, uv + vec2(0.0, source_inv_size),
 		min_m, max_m, reference_m);
 	return vec2(
-		(east - west) / max(2.0 * source_step_m, 0.001),
-		(north - south) / max(2.0 * source_step_m, 0.001));
+		(east - west) / max(2.0 * source_step_m.x, 0.001),
+		(north - south) / max(2.0 * source_step_m.y, 0.001));
 }
 
 void vertex() {
@@ -141,7 +141,7 @@ void vertex() {
 			macro_height_min_m, macro_height_max_m, macro_height_reference_m);
 		terrain_offset = terrain_height / metres_per_unit * macro_weight;
 		terrain_slope = sample_height_slope(macro_height_tex, macro,
-			macro_extent_m, macro_height_min_m, macro_height_max_m,
+			macro_size_m, macro_height_min_m, macro_height_max_m,
 			macro_height_reference_m) * macro_weight;
 	}
 	if (regional_weight > 0.0) {
@@ -149,7 +149,7 @@ void vertex() {
 			regional_height_min_m, regional_height_max_m, regional_height_reference_m);
 		float regional_offset = regional_height / metres_per_unit;
 		vec2 regional_slope = sample_height_slope(regional_height_tex, regional,
-			regional_extent_m, regional_height_min_m, regional_height_max_m,
+			regional_size_m, regional_height_min_m, regional_height_max_m,
 			regional_height_reference_m);
 		terrain_offset = mix(terrain_offset, regional_offset, regional_weight);
 		terrain_slope = mix(terrain_slope, regional_slope, regional_weight);
@@ -188,12 +188,14 @@ void fragment() {
 	float macro_weight = macro_validity(macro_uv_value);
 	vec3 macro_surface = texture(macro_ortho_tex, macro_uv_value).rgb;
 	float macro_luma = dot(macro_surface, vec3(0.299, 0.587, 0.114));
-	macro_surface = mix(vec3(macro_luma), macro_surface, 0.82) * 0.90;
+	if (!precise_coverage_masks)
+        macro_surface = mix(vec3(macro_luma), macro_surface, 0.82) * 0.90;
 	// NAIP is observed daylight reflectance. Desaturate it slightly before the
 	// same solar/earthshine model used by the fallback, retaining roads, lagoons,
 	// dunes and pad geometry without baking a second artificial geography layer.
 	float regional_luma = dot(regional_surface, vec3(0.299, 0.587, 0.114));
-	regional_surface = mix(vec3(regional_luma), regional_surface, 0.88);
+	if (!precise_coverage_masks)
+        regional_surface = mix(vec3(regional_luma), regional_surface, 0.88);
 
 	// Low-altitude launch views should read as coastal fill, marsh and sand,
 	// not as saturated satellite green. Keep the Blue Marble macro-shapes, but
@@ -281,10 +283,9 @@ void fragment() {
     pad_ground = mix(pad_ground, apron_color, apron * 0.55);
 	surface = mix(pad_ground, surface, map_blend);
 	surface = mix(surface, pad_ground, site_core * 0.92);
-	// The measured regional material owns the first ~8.4 km and feathers into
-	// the existing procedural/geographic fallback. This prevents the 10 km
-	// raster from reading as a rectangular cookie while keeping coverage gaps
-	// transparent through the provider mask.
+	// Observed footprints overlay continuous geographic context. The imagery
+    // mask is independent of the geometric disc and atmospheric visibility.
+	surface = context_surface(surface, v_patch);
 	surface = mix(surface, macro_surface, macro_weight);
 	surface = mix(surface, regional_surface, regional_weight);
 	// Chase views look across the pad, so the first kilometre keeps the NAIP

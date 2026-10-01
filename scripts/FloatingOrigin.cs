@@ -36,20 +36,18 @@ public partial class FloatingOrigin : Node
     public Vector3 LastPresentationBackdropPosition { get; private set; } = Vector3.Zero;
 
     /// <summary>
-    /// Rotation carrying the Earth texture's own lat/lon frame onto the simulation's
-    /// body-fixed frame, so a point at (lat, lon) in the texture is drawn exactly where
-    /// the simulation puts that latitude and longitude.
-    ///
-    /// This used to be a compensating tilt: the rocket was spawned on the inertial +Y axis
-    /// and the planet was spun until Florida happened to sit under it. Now the pad is
-    /// placed at its real geodetic coordinates, so the texture only has to agree with the
-    /// spin axis and the launch site lands on Florida on its own.
-    ///
-    /// Public so the ground patch can undo it and sample the same texture region.
+    /// Legacy proper rotation for backdrop node placement. Earth texture
+    /// sampling uses <see cref="EarthTextureBasis"/>: latitude/longitude axes
+    /// include a reflection that cannot be encoded in this quaternion.
     /// </summary>
     public static Godot.Quaternion PlanetTilt { get; private set; } = Godot.Quaternion.Identity;
-    /// <summary>Texture-to-inertial orientation including the live sidereal spin phase.</summary>
+    /// <summary>Legacy backdrop rotation including the live sidereal spin phase.</summary>
     public static Godot.Quaternion PlanetOrientation { get; private set; } = Godot.Quaternion.Identity;
+    // Texture coordinates (east, north, ninety-east) form a reflected basis.
+    // A quaternion cannot represent it: Godot flips its north axis when
+    // extracting a proper rotation. Retain the full basis for Earth sampling.
+    public static Basis EarthTextureBasis { get; private set; } = Basis.Identity;
+    private static Basis _earthTextureBaseBasis = Basis.Identity;
 
     /// <summary>
     /// Builds <see cref="PlanetTilt"/> from the body's spin axis, using the SAME body-fixed
@@ -69,6 +67,8 @@ public partial class FloatingOrigin : Node
             new Godot.Vector3((float)north.X,         (float)north.Y,         (float)north.Z),
             new Godot.Vector3((float)ninetyEast.X,    (float)ninetyEast.Y,    (float)ninetyEast.Z));
 
+        _earthTextureBaseBasis = basis;
+        EarthTextureBasis = basis;
         PlanetTilt = basis.GetRotationQuaternion();
         PlanetOrientation = PlanetTilt;
     }
@@ -152,6 +152,7 @@ public partial class FloatingOrigin : Node
             var spin = new Godot.Quaternion(axis,
                 (float)(liveEarth.AngularSpeed * bridge.Universe.CurrentTime));
             PlanetOrientation = spin * PlanetTilt;
+            EarthTextureBasis = new Basis(spin) * _earthTextureBaseBasis;
         }
 
         // El nuevo origen es la posición del vessel activo
@@ -266,6 +267,7 @@ public partial class FloatingOrigin : Node
                     if (body.Id == "earth")
                     {
                         PlanetMaterials.BindSurfaceLuts(material);
+                        material.SetShaderParameter("world_to_earth_texture", EarthTextureBasis.Inverse());
                         if (bridge.LaunchSiteOrNull is { } site)
                         {
                             var sitePosition = site.GetPosition(body, bridge.Universe.CurrentTime);

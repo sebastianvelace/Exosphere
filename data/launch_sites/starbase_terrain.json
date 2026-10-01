@@ -19,7 +19,20 @@
     "height": 4096,
     "source": "USDA NAIP CONUS ImageServer",
     "source_url": "https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer",
-    "license": "USDA public service; attribution retained for provenance"
+    "license": "USDA public service; attribution retained for provenance",
+    "runtime_size_m": [
+      10012.009,
+      9970.915
+    ],
+    "mask_preparation": {
+      "method": "distance inside observed footprint; legacy neutral JPEG fill rejected",
+      "feather_pixels": 12,
+      "ocean_handoff_m": [
+        250,
+        1250
+      ],
+      "valid_fraction": 0.840081
+    }
   },
   "elevation": {
     "file": "assets/textures/starbase_3dep_10km_height.png",
@@ -39,7 +52,9 @@
   "notes": [
     "NAIP provides observed surface reflectance for the low-altitude regional ground.",
     "3DEP is bare-earth elevation and is used only for broad displacement.",
-    "Invalid provider pixels are masked and filled at the launch-site reference height."
+    "Invalid provider pixels are masked and filled at the launch-site reference height.",
+    "runtime_size_m is the raster georeference; legacy runtime_extent_m is retained for compatibility only.",
+    "No circular imagery cutout: narrow footprint masks reveal continuous Landsat/BMNG context."
   ],
   "macro_bbox_wgs84": {
     "west": -97.6566,
@@ -54,7 +69,20 @@
     "height": 4096,
     "source": "USDA NAIP CONUS ImageServer",
     "source_url": "https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer",
-    "license": "USDA public service; attribution retained for provenance"
+    "license": "USDA public service; attribution retained for provenance",
+    "runtime_size_m": [
+      100120.088,
+      110787.95
+    ],
+    "mask_preparation": {
+      "method": "distance inside observed footprint; legacy neutral JPEG fill rejected",
+      "feather_pixels": 24,
+      "ocean_handoff_m": [
+        250,
+        1250
+      ],
+      "valid_fraction": 0.310681
+    }
   },
   "macro_elevation": {
     "file": "assets/textures/starbase_3dep_50km_height.png",
@@ -69,5 +97,53 @@
     "reference_m": 0.96,
     "valid_input_fraction": 0.780596
   },
-  "macro_runtime_extent_m": 50000.0
+  "macro_runtime_extent_m": 50000.0,
+  "context_ortho": {
+    "file": "assets/textures/starbase_landsat_context.jpg",
+    "width": 4096,
+    "height": 4096,
+    "bbox_wgs84": {
+      "west": -98.822,
+      "south": 24.4972,
+      "east": -95.4912,
+      "north": 27.4972
+    },
+    "runtime_size_m": [
+      333479.989,
+      332363.849
+    ],
+    "source": "NASA GIBS Landsat WELD annual true color with Blue Marble Next Generation ocean",
+    "source_url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi",
+    "landsat_layer": "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual",
+    "landsat_time": "2000-12-01",
+    "ocean_layer": "BlueMarble_NextGeneration",
+    "ocean_time": "August 2004 static composite",
+    "preparation": "Land-focused WELD over continuous BMNG ocean; 8 pixel interior blend",
+    "attribution": "NASA GIBS / NASA GSFC / USGS Landsat / WELD",
+    "request": {
+      "service": "WMS",
+      "version": "1.3.0",
+      "crs": "EPSG:4326",
+      "bbox_latitude_first": [
+        24.4972,
+        -98.822,
+        27.4972,
+        -95.4912
+      ],
+      "landsat_size_px": [
+        4096,
+        4096
+      ],
+      "ocean_size_px": [
+        1024,
+        1024
+      ],
+      "format": "image/png"
+    },
+    "source_sha256": {
+      "landsat": "af071e20932266c49d0797e7c49bf8e280690dda15e2e7d18e653c30de95e441",
+      "ocean": "e609c5eb963ae40eaeaf27661c8331bd2f7f5d3e91a85d6d0991e5a57e6b8cd5"
+    },
+    "limitations": "Historical geographic context; not current buildings or flight-specific weather"
+  }
 }

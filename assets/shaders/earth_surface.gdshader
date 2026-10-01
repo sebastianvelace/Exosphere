@@ -14,6 +14,9 @@ render_mode cull_disabled, unshaded, fog_disabled;
 #include "res://assets/shaders/surface_atmosphere.gdshaderinc"
 #include "res://assets/shaders/backdrop_depth.gdshaderinc"
 #include "res://assets/shaders/earth_ortho.gdshaderinc"
+uniform mat3 world_to_earth_texture;
+// Squared polar/equatorial radius ratio; radial direction to geodetic latitude.
+uniform float geodetic_latitude_factor = 1.0;
 uniform bool site_ortho_enabled = false;
 uniform vec3 site_radial_up = vec3(0.0, 1.0, 0.0);
 uniform vec3 site_east = vec3(1.0, 0.0, 0.0);
@@ -58,10 +61,10 @@ uniform float detail_strength : hint_range(0.0, 0.5) = 0.18;
 uniform float time_offset : hint_range(0.0, 1000.0) = 0.0;
 
 
-// Point on the unit sphere → equirectangular UV (lon = atan2(z,x), lat = asin(y)).
+// Earth radial direction → geodetic equirectangular UV in the reflected texture frame.
 vec2 equirect(vec3 p) {
 	float lon = atan(p.z, p.x);                 // −π … π
-	float lat = asin(clamp(p.y, -1.0, 1.0));    // −π/2 … π/2
+	float lat = atan(p.y, length(p.xz) * geodetic_latitude_factor);
 	return vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI);
 }
 
@@ -112,7 +115,7 @@ void fragment() {
     vec3 physical_point = physical_camera_up * (physical_planet_radius_m + physical_camera_altitude_m)
         + world_ray * distance_m;
     vec3 N = normalize(physical_point);
-    vec3 p = normalize(transpose(mat3(MODEL_MATRIX)) * N);
+    vec3 p = normalize(world_to_earth_texture * N);
     DEPTH = physical_backdrop_depth(view_ray * (distance_m / 2.8), PROJECTION_MATRIX);
 	vec3 L = normalize(sun_dir);
 
@@ -125,8 +128,8 @@ void fragment() {
 		vec3 local_east = east_len > 0.00001
 			? vec3(-p.z, 0.0, p.x) / east_len : vec3(1.0, 0.0, 0.0);
 		vec3 local_north = normalize(cross(local_east, p));
-		vec3 east = normalize((MODEL_MATRIX * vec4(local_east, 0.0)).xyz);
-		vec3 north = normalize((MODEL_MATRIX * vec4(local_north, 0.0)).xyz);
+		vec3 east = normalize(transpose(world_to_earth_texture) * local_east);
+		vec3 north = normalize(transpose(world_to_earth_texture) * local_north);
 		float du = 1.0 / 4096.0;
 		float dv = 1.0 / 2048.0;
 		float east_m = max(earth_radius_m * 2.0 * PI * max(cos(lat), 0.08) * du, 1.0);
@@ -153,6 +156,7 @@ void fragment() {
     if (site_ortho_enabled) {
         vec3 site_offset_m = (normalize(physical_point) - site_radial_up) * physical_planet_radius_m;
         vec2 site_m = vec2(dot(site_offset_m, site_east), dot(site_offset_m, site_north));
+        dayCol = context_surface(dayCol, site_m);
         vec2 macro = macro_uv(site_m);
         vec2 regional = regional_uv(site_m);
         dayCol = mix(dayCol, texture(macro_ortho_tex, macro).rgb, macro_validity(macro));

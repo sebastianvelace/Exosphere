@@ -152,6 +152,7 @@ public partial class EarthGroundController : Node3D
                 macroMask = GD.Load<Texture2D>($"res://assets/textures/{macroPrefix}_naip_50km_mask.png");
                 macroHeight = GD.Load<Texture2D>($"res://assets/textures/{macroPrefix}_3dep_50km_height.png");
             }
+            LaunchTerrainImagery.Bind(_mat, launchSiteId);
             RegionalTerrainReady = regionalOrtho != null && regionalMask != null && regionalHeight != null;
             if (RegionalTerrainReady)
             {
@@ -319,7 +320,7 @@ public partial class EarthGroundController : Node3D
             // Map the patch to the real Earth texture: the sub-vessel point and the patch's
             // east/north axes, expressed in the texture/mesh-local frame (undo the planet
             // tilt that the backdrop uses), so the ground shows the real launch-site terrain.
-            var tiltInv  = FloatingOrigin.PlanetOrientation.Inverse();
+            var tiltInv  = FloatingOrigin.EarthTextureBasis.Inverse();
             var subP     = tiltInv * renderUp;
             var eastL    = tiltInv * basis.X;    // patch +X (east)  in texture space
             var northL   = tiltInv * basis.Z;    // patch +Z (north) in texture space

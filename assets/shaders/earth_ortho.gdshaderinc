@@ -1,28 +1,35 @@
-// Shared site imagery, masks and feathering for local and global Earth surfaces.
+// Shared georeferenced coverage, independent of camera altitude and atmosphere.
 uniform sampler2D regional_ortho_tex : source_color, filter_linear_mipmap;
-uniform sampler2D regional_mask_tex : hint_default_white, filter_linear;
-uniform float regional_extent_m = 10000.0;
+uniform sampler2D regional_mask_tex : hint_default_white, filter_linear_mipmap;
+uniform float regional_extent_m = 10000.0; // legacy fallback for other sites
+uniform vec2 regional_size_m = vec2(10000.0);
 uniform sampler2D macro_ortho_tex : source_color, filter_linear_mipmap;
-uniform sampler2D macro_mask_tex : hint_default_black, filter_linear;
-uniform float macro_extent_m = 50000.0;
+uniform sampler2D macro_mask_tex : hint_default_black, filter_linear_mipmap;
+uniform float macro_extent_m = 50000.0; // legacy fallback for other sites
+uniform vec2 macro_size_m = vec2(50000.0);
 uniform vec2 site_patch_offset_m = vec2(0.0);
+uniform vec2 site_raster_offset_m = vec2(0.0);
+uniform bool precise_coverage_masks = false;
+uniform bool context_ortho_enabled = false;
+uniform sampler2D context_ortho_tex : source_color, filter_linear_mipmap;
+uniform vec2 context_size_m = vec2(333000.0);
 
-// Mesh +X is geodetic east and +Z is geodetic north. Imported rasters use
-// the conventional top-to-bottom image origin, so north maps toward V=0.
+vec2 raster_uv(vec2 patch_m, vec2 size_m) {
+    vec2 offset = patch_m + site_patch_offset_m + site_raster_offset_m;
+    return vec2(0.5 + offset.x / size_m.x, 0.5 - offset.y / size_m.y);
+}
+
+// Only the actual rectangle boundary retires the raster. Never discard valid
+// geography to hide the tangent mesh; geographic coverage and mesh LOD differ.
+float raster_edge_weight(vec2 uv) {
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 0.0;
+    vec2 edge = min(uv, vec2(1.0) - uv);
+    return smoothstep(0.0, 0.015, min(edge.x, edge.y));
+}
+
 vec2 regional_uv(vec2 patch_m) {
-    patch_m += site_patch_offset_m;
-	return vec2(0.5 + patch_m.x / regional_extent_m,
-		0.5 - patch_m.y / regional_extent_m);
+    return raster_uv(patch_m, precise_coverage_masks ? regional_size_m : vec2(regional_extent_m));
 }
-
-float regional_edge_weight(vec2 uv) {
-	// The raster is square, but its handoff must follow the circular tangent
-	// patch. A max-component distance leaves a visible rectangular cookie over
-	// the coast when the regional layer retires in the mid-altitude view.
-	float radial_distance = length(uv - vec2(0.5)) * 2.0;
-	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
-}
-
 float regional_no_data_factor(vec2 uv) {
 	// The downloaded NAIP tile is JPEG, so its provider no-data area is an
 	// opaque neutral olive instead of alpha. The separate mask is only a broad
@@ -42,30 +49,18 @@ float regional_no_data_factor(vec2 uv) {
 	return 1.0 - neutral * flat_fill;
 }
 
+float legacy_radial_weight(vec2 uv) {
+    return 1.0 - smoothstep(0.84, 1.0, length(uv - vec2(0.5)) * 2.0);
+}
 float regional_validity(vec2 uv) {
-	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
-		return 0.0;
-	return regional_edge_weight(uv)
-		// The exported mask is Gaussian-feathered around the provider footprint.
-		// Keep its low-valued tail invalid so the neutral JPEG fill cannot leak
-		// back into the scene as a rectangular patch.
-		* smoothstep(0.62, 0.80, texture(regional_mask_tex, uv).r)
-		* regional_no_data_factor(uv);
+    float mask = texture(regional_mask_tex, uv).r;
+    return precise_coverage_masks ? raster_edge_weight(uv) * mask
+        : raster_edge_weight(uv) * legacy_radial_weight(uv)
+            * smoothstep(0.62, 0.80, mask) * regional_no_data_factor(uv);
 }
-
 vec2 macro_uv(vec2 patch_m) {
-    patch_m += site_patch_offset_m;
-	return vec2(0.5 + patch_m.x / macro_extent_m,
-		0.5 - patch_m.y / macro_extent_m);
+    return raster_uv(patch_m, precise_coverage_masks ? macro_size_m : vec2(macro_extent_m));
 }
-
-float macro_edge_weight(vec2 uv) {
-	// Keep the broad measured layer circular as well. Otherwise the 50 km
-	// bridge reintroduces the same square silhouette after the 10 km layer fades.
-	float radial_distance = length(uv - vec2(0.5)) * 2.0;
-	return 1.0 - smoothstep(0.84, 1.0, radial_distance);
-}
-
 float macro_no_data_factor(vec2 uv) {
 	// The 50 km composite contains large opaque JPEG voids outside the
 	// available NAIP swaths. Detect their neutral, locally flat fill before it
@@ -84,11 +79,14 @@ float macro_no_data_factor(vec2 uv) {
 }
 
 float macro_validity(vec2 uv) {
-	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
-		return 0.0;
-	return macro_edge_weight(uv)
-		// The macro provider footprint is irregular; reject its feather tail
-		// before sampling the neutral fill colour stored in the JPEG void.
-		* smoothstep(0.62, 0.80, texture(macro_mask_tex, uv).r)
-		* macro_no_data_factor(uv);
+    float mask = texture(macro_mask_tex, uv).r;
+    return precise_coverage_masks ? raster_edge_weight(uv) * mask
+        : raster_edge_weight(uv) * legacy_radial_weight(uv)
+            * smoothstep(0.62, 0.80, mask) * macro_no_data_factor(uv);
+}
+vec3 context_surface(vec3 fallback, vec2 patch_m) {
+    if (!context_ortho_enabled) return fallback;
+    vec2 uv = raster_uv(patch_m, context_size_m);
+    return mix(fallback, texture(context_ortho_tex, uv).rgb,
+        smoothstep(0.0, 0.15, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y))));
 }
