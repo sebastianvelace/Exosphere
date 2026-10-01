@@ -1,0 +1,56 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+  "alignment_uncertainty_s": 1,
+  "status": "visual_reference_not_flight_state",
+  "windows": [
+    {
+      "label": "ascent and hot staging",
+      "start_s": 0,
+      "end_s": 181,
+      "step_s": 1,
+      "mission_time_at_start_s": -16,
+      "clock_evidence": "Manual HUD anchors: video 60s T+00:00:44; 1535s T+00:25:19; 7920s T+02:11:44; 11320s T+03:08:24. Integer-second quantization; verify cuts per window."
+    },
+    {
+      "label": "orbital insertion",
+      "start_s": 1530,
+      "end_s": 1576,
+      "step_s": 1,
+      "mission_time_at_start_s": 1514,
+      "clock_evidence": "Manual HUD anchors: video 60s T+00:00:44; 1535s T+00:25:19; 7920s T+02:11:44; 11320s T+03:08:24. Integer-second quantization; verify cuts per window."
+    },
+    {
+      "label": "early deorbit",
+      "start_s": 7880,
+      "end_s": 7941,
+      "step_s": 1,
+      "mission_time_at_start_s": 7864,
+      "clock_evidence": "Manual HUD anchors: video 60s T+00:00:44; 1535s T+00:25:19; 7920s T+02:11:44; 11320s T+03:08:24. Integer-second quantization; verify cuts per window."
+    },
+    {
+      "label": "entry radiance",
+      "start_s": 9900,
+      "end_s": 9911,
+      "step_s": 1,
+      "mission_time_at_start_s": 9884,
+      "clock_evidence": "Manual HUD anchors: video 60s T+00:00:44; 1535s T+00:25:19; 7920s T+02:11:44; 11320s T+03:08:24. Integer-second quantization; verify cuts per window."
+    },
+    {
+      "label": "landing and water contact",
+      "start_s": 11306,
+      "end_s": 11341,
+      "step_s": 1,
+      "mission_time_at_start_s": 11290,
+      "clock_evidence": "Manual HUD anchors: video 60s T+00:00:44; 1535s T+00:25:19; 7920s T+02:11:44; 11320s T+03:08:24. Integer-second quantization; verify cuts per window."
+    }
+  ],
+  "video_sha256": "c0f95f009c3bacb68a1dd8a5edb70ff7463f072a88c6d7573a4d1d6b59807bbd",
+  "reference_track": {
+    "format_id": "136",
+    "codec": "H.264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_s": 11474.866667
+  }
+}

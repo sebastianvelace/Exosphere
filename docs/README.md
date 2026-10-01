@@ -15,6 +15,7 @@ as provenance, but they are not the current product plan.
 | Coupled 6-DoF migration and parity gates | [`physics/coupled_6dof_migration.md`](physics/coupled_6dof_migration.md) |
 | Starship/Super Heavy data baseline | [`starship_physics_baseline.md`](starship_physics_baseline.md) |
 | Visual and gameplay capture workflow | [`../PLAN_PLAYTEST.md`](../PLAN_PLAYTEST.md), [`../PLAN_VISUAL_REALISM.md`](../PLAN_VISUAL_REALISM.md) |
+| Flight 14 visual references and reconstruction limits | [`research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md`](research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md) |
 | Documentation status and archive policy | [`DOCUMENTATION_AUDIT.md`](DOCUMENTATION_AUDIT.md) |
 
 ## Information hierarchy
