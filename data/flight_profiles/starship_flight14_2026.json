@@ -1,0 +1,147 @@
+{
+  "id": "starship-flight14-orbital-early-return",
+  "launchUtc": "2026-09-28T12:48:00Z",
+  "launchSiteId": "starbase_pad2",
+  "sourceUrl": "https://www.spacex.com/launches/starship-flight-14",
+  "accessedDate": "2026-10-01",
+  "payloadCount": 26,
+  "returnRegion": "northern-pacific",
+  "boosterRecovery": "gulf-splashdown",
+  "shipRecovery": "pacific-splashdown",
+  "boosterAscentEngines": 33,
+  "boosterAscentEngineLosses": 1,
+  "boosterBoostbackEngines": 31,
+  "boosterLandingEngineSequence": [
+    11,
+    5,
+    3
+  ],
+  "shipAscentEngines": 6,
+  "shipVacuumEngineLosses": 1,
+  "insertionSeaLevelEngines": 1,
+  "deorbitSeaLevelEngines": 1,
+  "shipLandingIgnitionEngines": 3,
+  "boosterBoostbackResourceLimit": "main-tank-lox-exhaustion",
+  "observationsFile": "docs/research/STARSHIP_FLIGHT14_OBSERVED_ANCHORS_2026-10-01.json",
+  "unknowns": [
+    "Flight 14 dry mass and initial tank loads",
+    "Starlink V3 payload mass and deployment impulse",
+    "Ascent engine fault identities and precise times",
+    "Header/main tank feed routing and residual methane",
+    "Both splashdown coordinates and uncertainty",
+    "Water-contact speeds and resolved outcomes"
+  ],
+  "plannedEvents": [
+    {
+      "id": "liftoff",
+      "elapsedSeconds": 0
+    },
+    {
+      "id": "max-q",
+      "elapsedSeconds": 58
+    },
+    {
+      "id": "booster-meco",
+      "elapsedSeconds": 140
+    },
+    {
+      "id": "hot-stage",
+      "elapsedSeconds": 142
+    },
+    {
+      "id": "boostback-start",
+      "elapsedSeconds": 147
+    },
+    {
+      "id": "boostback-stop",
+      "elapsedSeconds": 187
+    },
+    {
+      "id": "booster-landing-start",
+      "elapsedSeconds": 396
+    },
+    {
+      "id": "booster-landing-stop",
+      "elapsedSeconds": 421
+    },
+    {
+      "id": "ship-ascent-cutoff",
+      "elapsedSeconds": 491
+    },
+    {
+      "id": "insertion-start",
+      "elapsedSeconds": 1517
+    },
+    {
+      "id": "insertion-stop",
+      "elapsedSeconds": 1536
+    },
+    {
+      "id": "payload-start",
+      "elapsedSeconds": 2047
+    },
+    {
+      "id": "payload-complete",
+      "elapsedSeconds": 3879
+    },
+    {
+      "id": "deorbit-start",
+      "elapsedSeconds": 31957
+    },
+    {
+      "id": "deorbit-stop",
+      "elapsedSeconds": 31968
+    },
+    {
+      "id": "entry",
+      "elapsedSeconds": 34136
+    },
+    {
+      "id": "ship-landing-start",
+      "elapsedSeconds": 35411
+    },
+    {
+      "id": "ship-contact",
+      "elapsedSeconds": 35430
+    }
+  ],
+  "referenceWindows": [
+    {
+      "id": "insertion-interval",
+      "startSeconds": 1519,
+      "endSeconds": 1544,
+      "source": "user-video-clock-anchors",
+      "notes": "Single-engine indication and engine-bay plume; exact ignition/shutdown are not established."
+    },
+    {
+      "id": "early-deorbit-interval",
+      "startSeconds": 7884,
+      "endSeconds": 7904,
+      "source": "user-video-clock-anchors",
+      "notes": "Tracker and engine-bay interval; not exact burn endpoints."
+    },
+    {
+      "id": "luminous-entry",
+      "startSeconds": 9884,
+      "endSeconds": 9884,
+      "source": "user-video-clock-anchors",
+      "notes": "94.6 km displayed; speed frame and altitude datum unspecified."
+    },
+    {
+      "id": "powered-landing",
+      "startSeconds": 11300,
+      "endSeconds": 11304,
+      "source": "user-video-clock-anchors",
+      "notes": "Displayed altitude 0.3 to 0.2 km; no resolved water contact."
+    },
+    {
+      "id": "ocean-view",
+      "startSeconds": 11311,
+      "endSeconds": 11311,
+      "source": "user-video-clock-anchors",
+      "notes": "Spray obscures vehicle and exact contact."
+    }
+  ],
+  "comparisonOnly": true,
+  "clockUncertaintySeconds": 1
+}

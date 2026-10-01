@@ -720,6 +720,7 @@ public partial class _PlaytestShot : Node
 
     // ── ascent diagnostics ─────────────────────────────────────────────────
     double _nextAscentTelemetry;
+    double _ascentLaunchEpoch = double.NaN;
     double _insertStartedAt = double.NaN;
     double _minimumInsertionVSpeed = double.PositiveInfinity;
     double _maximumInsertionDescent = 0.0;
@@ -2797,6 +2798,16 @@ public partial class _PlaytestShot : Node
         double dynamicPressure,
         double properAccelerationG)
     {
+        if (!double.IsFinite(_ascentLaunchEpoch))
+        {
+            var launch = MissionManager.Instance?.CaptureCallbackState().Events
+                .FirstOrDefault(e => e.EventType == "LaunchCommitted");
+            if (launch != null)
+            {
+                _ascentLaunchEpoch = launch.SimulationTime;
+                _log.WriteLine($"FLIGHT_CLOCK liftoffEpoch={_ascentLaunchEpoch:R} source=LaunchCommitted");
+            }
+        }
         var controller = AscentController.Instance;
         string guidance = controller?.GuidancePhase ?? "Unavailable";
         var trajectory = OrbitalElements.FromStateVector(
@@ -2950,8 +2961,11 @@ public partial class _PlaytestShot : Node
         _ascentTraceCount++;
         _log.WriteLine(
             $"TRACE_ASCENT t={universe.CurrentTime:F1} mission={missionPhase} " +
+            $"missionElapsed={universe.CurrentTime - _ascentLaunchEpoch:F3} " +
             $"guidance={guidance} active={controller?.IsEngaged ?? false} " +
             $"alt={altitude:F1} spd={surfaceSpeed:F1} vSpeed={verticalSpeed:F1} " +
+            $"inertialSpeed={(vessel.Velocity-body.Velocity).Magnitude:F3} " +
+            $"radialAltitude={(vessel.Position-body.Position).Magnitude-body.Radius:F3} " +
             $"apo={apo:F1} pe={pe:F1} atmoTop={atmosphereTop:F1} " +
             $"q={dynamicPressure:F1} g={properAccelerationG:F2} " +
             $"throttle={vessel.Throttle:F3} spool={engineCluster?.ThrottleLevel ?? 0.0:F3} " +

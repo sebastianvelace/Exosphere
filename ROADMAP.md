@@ -276,10 +276,14 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
 
    - Flight 14 reconstruction: reference extraction and source-backed feasibility
      are available in `docs/research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md`.
-     A separate mission profile is still needed for suborbital cutoff, insertion,
-     26 payload splits and early northern-Pacific return. The published long
-     timeline is not the actual early-return schedule. Existing Flight 12 and
-     tower-catch policies must not be relabelled as Flight 14.
+     A comparison-only mission reference now separates the planned long timeline
+     from observed early-return windows. Single-sea-level-engine insertion and
+     deorbit components are tested with continuous propagated state and resources;
+     display-comparison tooling preserves frame and clock uncertainty. Evidence:
+     `docs/audits/flight14_orbital_components_2026-10-01.md`. Dedicated ascent,
+     26 physical payload splits, both water returns and a complete playable mission
+     remain open. Existing Flight 12 and tower-catch policies must not be relabelled
+     as Flight 14; the featured launch action remains unavailable.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
