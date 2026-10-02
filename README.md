@@ -79,7 +79,7 @@ Warp levels are `1`, `2`, `3`, `5`, `10`, `50`, `100`, `1000`, `10000`, and `100
 ## What you can fly
 
 - **Free Flight** offers ten launch vehicle presets: Starship Flight 7/12, Falcon 9 standard/extended fairings, New Glenn, Mercury-Redstone, Mercury-Atlas, Titan II, and Saturn V Apollo 8/11. Each opens at a compatible home pad with manual control.
-- **Explore Flight 14** opens the featured mission briefing. The full Flight 14 simulation is in development; this entry does not launch another preset under its name.
+- **Explore Flight 14** opens a briefing with **Start Exploration**. It runs the current estimated loaded mission automatically from Starbase Pad 2 through insertion, 26 satellite deployments, deorbit, entry and the terminal burn. Camera, map, pause/resume, restart and time acceleration (up to x100) remain available. The preview freezes at its 100 m diagnostic boundary: ocean targeting, splashdown and independent booster recovery are pending. Flight controls and quicksave/load are unavailable in this automatic preview.
 - **Scenarios** includes Falcon 9 from Kennedy, New Glenn from Cape Canaveral, Starship Flight 7, Starship Flight 12, and a Starship entry from 70 km.
 - **Historical Campaign** lists sixteen planned missions. Briefings show objectives, flight limits, progress and prerequisites. Playable definitions currently cover Freedom 7, Friendship 7, Gemini VIII, Apollo 8 and partial Apollo 11; the remaining entries are marked as planned.
 - **Vehicle Assembly** builds a craft from the parts catalog and launches it to the pad.
@@ -119,7 +119,7 @@ python3 tools/compare_flight14_telemetry.py /tmp/flight14-return/telemetry.jsonl
 ```
 
 This is an engineering diagnostic, with estimated hardware and guidance. It does
-not enable the featured mission or establish either controlled water return.
+not establish either controlled water return. The menu now exposes this progress as an explicitly labelled engineering exploration, rather than full mission acceptance.
 See [the continuous-return audit](docs/audits/flight14_continuous_return_2026-10-02.md)
 and [the conditional entry timing correction](docs/audits/flight14_entry_timing_correction_2026-10-02.md).
 The probe also records [the rotating-body ground track](docs/audits/flight14_ground_track_2026-10-02.md)

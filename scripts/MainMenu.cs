@@ -1,3 +1,4 @@
+using Exosphere.Simulation.Flight;
 namespace Exosphere.Game;
 
 using Exosphere.Simulation.Construction;
@@ -411,11 +412,20 @@ public partial class MainMenu : Control
     {
         body.AddChild(Description(UiText.Get("flight14_pending")));
         body.AddChild(Metric(UiText.Get("site"), "STARBASE / BOCA CHICA"));
-        body.AddChild(Metric(UiText.Get("vehicle"), "SHIP 41 / BOOSTER 21"));
+        body.AddChild(Metric(UiText.Get("vehicle"), "V3 ENGINEERING BASELINE / 26 PAYLOADS"));
         foreach (string key in new[] { "phase_ascent", "phase_deploy", "phase_return" })
             body.AddChild(Description(UiText.Get(key)));
         body.AddChild(Description(UiText.Get("flight14_scope")));
-        body.AddChild(ModalButton(UiText.Get("flight14_launch_pending"), () => { }, disabled: true));
+        body.AddChild(ModalButton(UiText.Get("flight14_launch_preview"), () =>
+        {
+            CraftLaunchRequest.Set(new LaunchIntent
+            {
+                Mode = "exploration",
+                FlightProfileId = Flight14Exploration.ProfileId,
+                LaunchSiteId = "starbase_pad2",
+            });
+            OpenFlight();
+        }, primary: true));
         body.AddChild(ModalButton(UiText.Get("choose_existing_vehicle"), ShowVehicles, true));
     });
 

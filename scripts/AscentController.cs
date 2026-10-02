@@ -78,6 +78,11 @@ public partial class AscentController : Control
     // Live readout.
     private double _apo, _per, _ecc, _alt;
 
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public override void _Ready()
     {
         Instance = this;

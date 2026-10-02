@@ -677,6 +677,7 @@ public partial class HUDController : Control
 
     private void OnReentryDemoPressed()
     {
+        if (SimulationBridge.Instance?.IsFlight14Exploration == true) return;
         if (SimulationBridge.Instance?.BeginReentryDemonstration() != true) return;
         _padHelpDismissed = true;
         _events.Insert(0, $"{FormatClock(SimulationBridge.Instance.Universe.CurrentTime)}  REENTRY DEMO");
@@ -793,49 +794,53 @@ public partial class HUDController : Control
         var mission  = MissionManager.Instance;
         if (bridge == null || vessel == null || universe == null) return;
 
-        // ── Attitude / throttle ─────────────────────────────────────────────
-        // Crewed craft fly an onboard FCS: stick writes the vessel directly and
-        // must not be gated by ground LOS/blackout. Unmanned / deep-space ground
-        // mode still rides GroundCommandRelay (light-time + link drop).
-        double pitchIn = 0, yawIn = 0, rollIn = 0;
-        if (Input.IsKeyPressed(Key.W)) pitchIn += 1.0;
-        if (Input.IsKeyPressed(Key.S)) pitchIn -= 1.0;
-        if (Input.IsKeyPressed(Key.A)) yawIn   -= 1.0;
-        if (Input.IsKeyPressed(Key.D)) yawIn   += 1.0;
-        if (Input.IsKeyPressed(Key.Q)) rollIn  -= 1.0;
-        if (Input.IsKeyPressed(Key.E)) rollIn  += 1.0;
-        var stick = new Vector3d(pitchIn, yawIn, rollIn);
-
-        bool crewAlive = SystemsController.Instance?.LifeSupport.CrewAlive ?? true;
-        bool groundUplink = SystemsController.Instance != null
-            && PilotCommandRouting.UsesGroundUplink(crewAlive, vessel.StructuralControlLost);
-
-        // Onboard (crewed) or structural dead-stick (Vessel.Tick zeros authority): local write.
-        // Unmanned only: ground relay.
-        if (groundUplink)
-            SystemsController.Instance!.SubmitGroundAttitude(stick);
-        else
-            vessel.PitchYawRoll = stick;
-
-        // ── Hold-throttle (despegue manual) ─────────────────────────────────
-        // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al commit);
-        // ya en vuelo, sube el throttle de forma progresiva. [X] mantenida lo baja.
-        // Hold [Z]: on the pad starts ignition (releases hold-down at commit-to-launch);
-        // already flying, spools the throttle up. Hold [X] spools it down.
-        if (Input.IsPhysicalKeyPressed(Key.Z))
+        if (!bridge.IsFlight14Exploration)
         {
-            if (vessel.IsGroundHeld || bridge.IsIgnitionActive) bridge.Ignite();
-            else if (groundUplink)
-                SystemsController.Instance!.SubmitGroundThrottleDelta(0.5 * delta);
-            else
-                bridge.ThrottleUp(delta);
-        }
-        else if (Input.IsPhysicalKeyPressed(Key.X))
-        {
+            // ── Attitude / throttle ─────────────────────────────────────────────
+            // Crewed craft fly an onboard FCS: stick writes the vessel directly and
+            // must not be gated by ground LOS/blackout. Unmanned / deep-space ground
+            // mode still rides GroundCommandRelay (light-time + link drop).
+            double pitchIn = 0, yawIn = 0, rollIn = 0;
+            if (Input.IsKeyPressed(Key.W)) pitchIn += 1.0;
+            if (Input.IsKeyPressed(Key.S)) pitchIn -= 1.0;
+            if (Input.IsKeyPressed(Key.A)) yawIn   -= 1.0;
+            if (Input.IsKeyPressed(Key.D)) yawIn   += 1.0;
+            if (Input.IsKeyPressed(Key.Q)) rollIn  -= 1.0;
+            if (Input.IsKeyPressed(Key.E)) rollIn  += 1.0;
+            var stick = new Vector3d(pitchIn, yawIn, rollIn);
+
+            bool crewAlive = SystemsController.Instance?.LifeSupport.CrewAlive ?? true;
+            bool groundUplink = SystemsController.Instance != null
+                && PilotCommandRouting.UsesGroundUplink(crewAlive, vessel.StructuralControlLost);
+
+            // Onboard (crewed) or structural dead-stick (Vessel.Tick zeros authority): local write.
+            // Unmanned only: ground relay.
             if (groundUplink)
-                SystemsController.Instance!.SubmitGroundThrottleDelta(-0.5 * delta);
+                SystemsController.Instance!.SubmitGroundAttitude(stick);
             else
-                bridge.ThrottleDown(delta);
+                vessel.PitchYawRoll = stick;
+
+            // ── Hold-throttle (despegue manual) ─────────────────────────────────
+            // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al commit);
+            // ya en vuelo, sube el throttle de forma progresiva. [X] mantenida lo baja.
+            // Hold [Z]: on the pad starts ignition (releases hold-down at commit-to-launch);
+            // already flying, spools the throttle up. Hold [X] spools it down.
+            if (Input.IsPhysicalKeyPressed(Key.Z))
+            {
+                if (vessel.IsGroundHeld || bridge.IsIgnitionActive) bridge.Ignite();
+                else if (groundUplink)
+                    SystemsController.Instance!.SubmitGroundThrottleDelta(0.5 * delta);
+                else
+                    bridge.ThrottleUp(delta);
+            }
+            else if (Input.IsPhysicalKeyPressed(Key.X))
+            {
+                if (groundUplink)
+                    SystemsController.Instance!.SubmitGroundThrottleDelta(-0.5 * delta);
+                else
+                    bridge.ThrottleDown(delta);
+            }
+
         }
 
         // Toast expiry remains wall-clock driven even while the heavy presentation
@@ -978,6 +983,13 @@ public partial class HUDController : Control
     /// </summary>
     private void UpdateGuidanceLine()
     {
+        if (SimulationBridge.Instance?.Flight14Preview is { } preview)
+        {
+            _guidanceLabel.Text = "FLIGHT 14 EXPLORATION · AUTOMATIC · ESTIMATED GUIDANCE";
+            _padHelpDismissed = true;
+            _reentryDemoButton.Disabled = true;
+            return;
+        }
         if (EDLController.Instance?.BannerStatus is { Length: > 0 } edl)
         {
             // EDL replaces the large reference sidebars. Keep reserve and aero-load
@@ -1459,6 +1471,12 @@ public partial class HUDController : Control
 
         if (@event is InputEventKey key && key.Pressed && !key.Echo)
         {
+            if (bridge.IsFlight14Exploration && key.Keycode is
+                (Key.Space or Key.T or Key.L or Key.O or Key.R or Key.V or Key.F5 or Key.F9))
+            {
+                viewport.SetInputAsHandled();
+                return;
+            }
             switch (key.Keycode)
             {
                 case Key.Escape:

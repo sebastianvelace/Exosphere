@@ -28,9 +28,10 @@ Base tecnica cerrada en `main`:
   isolation and Escape return are covered by real-framebuffer menu checks.
   Home content is centered horizontally and vertically; mission information lives
   in its briefing rather than a side panel.
-  Flight 14 has a featured briefing with an unavailable launch action until its
-  independent vehicle/mission profile is implemented and validated. Vehicle
-  fidelity audit and further cloud work remain separate follow-ups.
+  Flight 14 now exposes an automatic engineering exploration from the featured
+  briefing: loaded ascent, insertion, 26 payload releases and return to the 100 m
+  diagnostic boundary. Ocean targeting, controlled water returns and exact mission
+  acceptance remain pending. Vehicle fidelity and further cloud work remain separate.
 - VAB 2.0 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click
   auto-attach, preview/picking 3D, undo/redo, templates Starter/Starship,
   validación de launch, save/load, entrada desde MainMenu y launch al pad.
@@ -316,9 +317,11 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
       descent comparisons; residual timing, speed and altitude errors remain explicit
       in `docs/audits/flight14_shallow_corridor_2026-10-02.md`.
       Actual mass/release
-     timing, moving-body gameplay integration, both water returns
-     and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled
-     as Flight 14; the featured launch action remains unavailable.
+     timing, both water returns and exact reconstruction acceptance remain open.
+     The featured action now runs a labelled engineering exploration with exclusive
+     guidance, moving-body ephemerides, whole 20 ms physics steps and an explicit
+     100 m stop. Its estimated V3 hardware is disclosed; existing tower-catch policies
+     do not own this preview. See `docs/audits/flight14_gameplay_exploration_2026-10-02.md`.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.

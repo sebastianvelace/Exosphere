@@ -70,6 +70,11 @@ public partial class HistoricalFlightProfileController : Node
     private double _apolloLoiTime;
     private LunarTransferPlan? _apolloLunarPlan;
 
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public override void _Ready()
     {
         Instance = this;

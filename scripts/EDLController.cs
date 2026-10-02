@@ -139,6 +139,11 @@ public partial class EDLController : Control
     public double GuidanceUpdatePeriodSeconds { get; private set; } = double.NaN;
     public double LastGuidanceSimulationTimeSeconds { get; private set; } = double.NaN;
 
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public override void _Ready()
     {
         Instance = this;

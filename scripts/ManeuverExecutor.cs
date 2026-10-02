@@ -32,6 +32,7 @@ public partial class ManeuverExecutor : Node
     /// <summary>Comienza la secuencia de burn para el nodo dado.</summary>
     public void ExecuteNode(ManeuverNode node)
     {
+        if (SimulationBridge.Instance?.IsFlight14Exploration == true) return;
         _node              = node;
         RemainingDv        = node.DvMagnitude * node.DvAdjustFactor;
         IsExecuting        = true;

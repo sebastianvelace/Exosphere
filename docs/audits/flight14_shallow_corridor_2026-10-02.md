@@ -142,5 +142,7 @@ attitude commands and hardware parameters remain uncertain. Geography needs a
 defined estimated target and closed-loop footprint evidence, rather than labelling
 an incidental diagnostic endpoint as a successful Pacific return. Physical hull
 contact, water outcomes and the independent Gulf booster sequence remain absent.
-Gameplay ownership, moving-body/frame cadence and integrated-graphics rendered
-mission captures still require verification before the featured button can be enabled.
+This numerical refinement did not establish playable mission acceptance. The subsequent
+explicitly labelled engineering preview and its separate gameplay validation are documented
+in [the exploration audit](flight14_gameplay_exploration_2026-10-02.md). Water outcomes
+and reference-matched full mission captures remain required for reconstruction acceptance.

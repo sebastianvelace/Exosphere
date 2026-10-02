@@ -222,6 +222,36 @@ public partial class MissionManager : Node
 
         DispatchPendingMissionCallbacks();
 
+        if (bridge.Flight14Preview is { } preview)
+        {
+            IsCountingDown = false;
+            if (double.IsFinite(preview.Run.Controller.LiftoffEpoch)
+                && Phase is MissionPhase.PRE_LAUNCH or MissionPhase.IGNITION)
+                NotifyHoldDownReleased();
+            MissionPhase phase = preview.Run.Ship.IsDestroyed ? MissionPhase.CRASHED
+                : preview.Run.PoweredReturnController?.Landing != null
+                ? MissionPhase.RETRO_BURN
+                : preview.Run.DescentController?.Phase is Flight14DescentPhase.AerodynamicDescent or Flight14DescentPhase.DescentReached
+                    ? MissionPhase.AERO_DESCENT
+                : preview.Run.ReturnController?.Phase is Flight14ReturnPhase.AtmosphericEntry or Flight14ReturnPhase.EntryReached
+                    ? MissionPhase.ENTRY
+                : preview.Run.ReturnController?.Phase is not (null or Flight14ReturnPhase.WaitingForPayload)
+                    ? MissionPhase.COAST
+                : preview.Run.Controller.Phase switch
+                {
+                    Flight14LaunchPhase.Ignition => MissionPhase.IGNITION,
+                    Flight14LaunchPhase.BoosterAscent => MissionPhase.ASCENT_SH,
+                    Flight14LaunchPhase.HotStage => MissionPhase.MECO,
+                    Flight14LaunchPhase.ShipAscent => MissionPhase.ASCENT_SHIP,
+                    Flight14LaunchPhase.SuborbitalCoast => MissionPhase.COAST,
+                    Flight14LaunchPhase.Insertion => MissionPhase.ASCENT_SHIP,
+                    Flight14LaunchPhase.OrbitReady => MissionPhase.ORBIT,
+                    _ => Phase,
+                };
+            if (Phase != phase) SetPhase(phase);
+            return; // This preview's pure controller exclusively owns ignition and guidance.
+        }
+
         // ── Crash detection (highest priority) ────────────────────────────────
         if (vessel != null && vessel.IsDestroyed && Phase != MissionPhase.CRASHED)
         {

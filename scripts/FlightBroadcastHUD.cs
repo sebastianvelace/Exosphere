@@ -83,6 +83,23 @@ public partial class FlightBroadcastHUD : Control
                     .Select(m => suborbital && m.Event == "ORBIT" ? ("COAST", "COAST") : m).ToArray();
             }
         }
+        if (bridge.Flight14Preview is { } preview)
+        {
+            _vehicleLabel = "STARSHIP FLIGHT 14 / EXPLORATION";
+            if (double.IsFinite(preview.Run.Controller.LiftoffEpoch))
+            {
+                _launchEpoch = preview.Run.Controller.LiftoffEpoch;
+                _events.Add("LIFTOFF");
+            }
+            if (preview.Run.Controller.DetachedBooster != null) _events.Add("SEPARATION");
+            if (double.IsFinite(preview.Run.Controller.OrbitElapsedSeconds)) _events.Add("ORBIT");
+            _milestones = new[]
+            {
+                ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"), ("ORBIT", "ORBIT"),
+                ("DEPLOY", "PAYLOAD"), ("ENTRY", "ENTRY"), ("FLIP", "RETRO_BURN"),
+            };
+            if (preview.Run.PayloadController.Releases.Count > 0) _events.Add("PAYLOAD");
+        }
         _snapshot = snapshot;
         _lastTime = snapshot.MissionTimeS;
         RecordPhase(snapshot.MissionPhase);

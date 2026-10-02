@@ -4,7 +4,9 @@ using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Math;
 
 /// <summary>
-/// Reproducible isolated-Earth launch fixture. Only initial pad placement seeds state.
+/// Shared continuous launch assembly. Defaults to an isolated-Earth diagnostic;
+/// a supplied empty gameplay universe retains its bodies, ephemerides and epoch.
+/// Only initial pad placement seeds state.
 /// Includes an estimated payload manifest; not a dated replay or water-return mission.
 /// </summary>
 public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody Earth,
@@ -17,9 +19,9 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     public Flight14PoweredReturnController? PoweredReturnController { get; private set; }
 
     /// <summary>Propagate the same loaded carrier through its physical flip and terminal burn.</summary>
-    public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory)
+    public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory, Universe? universe = null)
     {
-        var run = CreateWithReturn(dataDirectory);
+        var run = CreateWithReturn(dataDirectory, universe);
         var landing = Flight14LandingDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "flight_profiles/starship_flight14_landing_estimate.json"));
         var descent = Flight14DescentDefinition.LoadFromJson(Path.Combine(dataDirectory,
@@ -47,9 +49,9 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     }
 
     /// <summary>Extend the same loaded pad fixture through deorbit and atmospheric entry.</summary>
-    public static Flight14LaunchDiagnostic CreateWithReturn(string dataDirectory)
+    public static Flight14LaunchDiagnostic CreateWithReturn(string dataDirectory, Universe? universe = null)
     {
-        var run = Create(dataDirectory);
+        var run = Create(dataDirectory, universe);
         var definition = Flight14ReturnDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "flight_profiles/starship_flight14_return_estimate.json"));
         run.ReturnController = new Flight14ReturnController(run.Ship, run.Earth,
@@ -79,18 +81,29 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
         _pendingFrameSeconds = System.Math.Max(0, pending);
     }
 
-    public static Flight14LaunchDiagnostic Create(string dataDirectory)
+    public static Flight14LaunchDiagnostic Create(string dataDirectory, Universe? universe = null)
     {
         var guidance = Flight14LaunchGuidanceDefinition.LoadFromJson(Path.Combine(
             dataDirectory, "flight_profiles/starship_flight14_guidance_estimate.json"));
         var reference = Flight14MissionDefinition.LoadFromJson(Path.Combine(
             dataDirectory, "flight_profiles/starship_flight14_2026.json"));
-        var earth = CelestialBody.LoadFromJson(Path.Combine(dataDirectory, "bodies/earth.json"));
-        earth.Position = Vector3d.Zero;
-        earth.Velocity = Vector3d.Zero;
-        earth.OrbitalElements = null; // No absent Sun parent in this explicit isolated fixture.
-        var universe = new Universe();
-        universe.AddBody(earth);
+        CelestialBody earth;
+        if (universe == null)
+        {
+            earth = CelestialBody.LoadFromJson(Path.Combine(dataDirectory, "bodies/earth.json"));
+            earth.Position = Vector3d.Zero;
+            earth.Velocity = Vector3d.Zero;
+            earth.OrbitalElements = null; // Explicit isolated diagnostic, with no Sun parent.
+            universe = new Universe();
+            universe.AddBody(earth);
+        }
+        else
+        {
+            if (universe.Vessels.Count != 0 || universe.PhysicsStepController != null)
+                throw new InvalidOperationException("Flight 14 requires an unowned, empty launch universe.");
+            earth = universe.GetBody("earth")
+                ?? throw new InvalidOperationException("Flight 14 requires Earth.");
+        }
         var ship = VehicleVariantDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "vehicles", guidance.BaselineVehicleFile)).Build(PartCatalog.LoadFromDirectory(
                 Path.Combine(dataDirectory, "parts"))).ToVessel("Flight 14 engineering launch diagnostic");

@@ -35,6 +35,7 @@ def main():
         ("home-1280", "", "1280x720", 1.0, 0, ""),
         ("vehicles-1280", "vehicles", "1280x720", 1.0, 0, ""),
         ("flight14-1280", "flight14", "1280x720", 1.0, 0, ""),
+        ("flight14-launch-1280", "flight14launch", "1280x720", 1.0, 0, ""),
         ("campaign-1280", "campaign", "1280x720", 1.0, 0, ""),
         ("apollo11-partial", "partial", "1280x720", 1.0, 0, ""),
         ("mission-1280", "mission", "1280x720", 1.0, 0, ""),
@@ -87,11 +88,13 @@ def main():
                     "xvfb-run", "-a", "-s", f"-screen 0 {size}x24", godot,
                     "--path", str(root), "--rendering-driver", "opengl3",
                     "--resolution", size, "--script", "tools/capture_menu.gd",
-                ], cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=360 if args.flight_hud else 180)
+                ], cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=int(env.get("CAPTURE_FLIGHT14_TIMEOUT", "180")) if mode == "flight14launch" else (360 if args.flight_hud else 180))
             evidence = log_path.read_text()
-            route_marker = ("MENU_LAUNCH_OK" if mode in {"launch", "missionlaunch"}
+            route_marker = ("MENU_LAUNCH_OK" if mode in {"launch", "missionlaunch", "flight14launch"}
                             else "MENU_VAB_OK" if mode == "vab" else "MENU_LAYOUT_OK")
-            markers = ["MENU_CAPTURE", route_marker]
+            markers = (["FLIGHT14_PREVIEW_OK", route_marker] if mode == "flight14launch" else ["MENU_CAPTURE", route_marker])
+            if mode == "flight14launch" and float(env.get("CAPTURE_FLIGHT14_MET", "8")) <= 20:
+                markers.append("FLIGHT14_PREVIEW_CONTROLS_OK")
             if mode == "graphics":
                 markers.append("GRAPHICS_SETTINGS_OK")
             if args.flight_hud:
@@ -101,7 +104,7 @@ def main():
                 markers.append("MENU_HOME_FOCUS_OK")
             if mode == "continue":
                 markers.append("MENU_CONTINUE_CHOICE_OK")
-            if mode and mode not in {"launch", "missionlaunch", "vab"}:
+            if mode and mode not in {"launch", "missionlaunch", "flight14launch", "vab"}:
                 markers.append("MENU_BACK_OK")
             if (result.returncode or any(marker not in evidence for marker in markers)
                     or (mode == "graphics" and "This control can't grab focus" in evidence)):

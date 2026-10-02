@@ -59,6 +59,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     {
         get
         {
+            if (Flight14Preview != null) return _previewProcessedSeconds;
             if (Universe == null || !Universe.LastSchedulerTelemetry.IsInitialized)
                 return 0.0;
             double seconds = Universe.LastSchedulerTelemetry.ProcessedSimulationSeconds;
@@ -72,6 +73,11 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             ? Universe.LastSchedulerTelemetry.RequestedSimulationSeconds
             : 0.0;
     public string ActiveFlightProfileId { get; private set; } = "manual";
+    public Flight14Exploration? Flight14Preview { get; private set; }
+    public bool IsFlight14Exploration => ActiveFlightProfileId == Flight14Exploration.ProfileId;
+    private double _previewProcessedSeconds;
+    private readonly HashSet<string> _previewRenderedVessels = new(StringComparer.Ordinal);
+    private int _previewPartCount;
     public void SetActiveFlightProfile(string profileId)
     {
         if (!string.IsNullOrWhiteSpace(profileId))
@@ -228,20 +234,24 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             var map = new MapViewController { Name = "MapViewController" };
             uiLayer.CallDeferred("add_child", map);
 
-            var edl = new EDLController { Name = "EDLController" };
-            uiLayer.CallDeferred("add_child", edl);
-
-            var ascent = new AscentController { Name = "AscentController" };
-            uiLayer.CallDeferred("add_child", ascent);
-
-            var boosterReturn = new BoosterReturnController { Name = "BoosterReturnController" };
-            uiLayer.CallDeferred("add_child", boosterReturn);
-
-            var historical = new HistoricalFlightProfileController
+            if (!IsFlight14Exploration)
             {
-                Name = "HistoricalFlightProfileController",
-            };
-            uiLayer.CallDeferred("add_child", historical);
+                var edl = new EDLController { Name = "EDLController" };
+                uiLayer.CallDeferred("add_child", edl);
+
+                var ascent = new AscentController { Name = "AscentController" };
+                uiLayer.CallDeferred("add_child", ascent);
+
+                var boosterReturn = new BoosterReturnController { Name = "BoosterReturnController" };
+                uiLayer.CallDeferred("add_child", boosterReturn);
+
+                var historical = new HistoricalFlightProfileController
+                {
+                    Name = "HistoricalFlightProfileController",
+                };
+                uiLayer.CallDeferred("add_child", historical);
+            }
+            else uiLayer.CallDeferred("add_child", new Flight14ExplorationHUD { Name = "Flight14ExplorationHUD" });
 
             var warpCtrl = new WarpController { Name = "WarpController" };
             uiLayer.CallDeferred("add_child", warpCtrl);
@@ -282,10 +292,20 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         bool needsDefaultStack = pendingIntent == null
             || pendingIntent.Craft == null
                 && string.IsNullOrWhiteSpace(pendingIntent.SaveSlot);
-        if (needsDefaultStack)
+        if (IsFlight14Exploration)
+        {
+            Universe.PhysicsStepController = null;
+            Flight14Preview = new Flight14Exploration(Flight14LaunchDiagnostic.CreateWithPoweredReturn(dataPath, Universe));
+            Flight14Preview.Run.Ship.Name = "Starship Flight 14 / Engineering preview";
+            EnsureActiveVesselPresentation(Flight14Preview.Run.Ship);
+            _previewRenderedVessels.Add(Flight14Preview.Run.Ship.Id);
+            _previewPartCount = Flight14Preview.Run.Ship.Parts.Parts.Count;
+            MaxAllowedWarpIndex = 6;
+        }
+        else if (needsDefaultStack)
             SpawnStarshipStack(dataPath);
         GD.Print($"PERF_STARTUP phase=starship_spawned ms={startup.Elapsed.TotalMilliseconds:F1} vessels={Universe.Vessels.Count}");
-        SpawnPendingConstructedVessel(dataPath, pendingIntent);
+        if (!IsFlight14Exploration) SpawnPendingConstructedVessel(dataPath, pendingIntent);
         var campaignRuntime = new CampaignRuntime
         {
             Name = "CampaignRuntime",
@@ -346,7 +366,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
         // ── Recalculate MaxAllowedWarpIndex ──────────────────────────────
         var av = ActiveVessel;
-        if (av != null)
+        if (av != null && !IsFlight14Exploration)
         {
             var refB = Universe.GetDominantBody(av.Position);
             var warpRequirements = Universe.GetWarpPhysicsRequirements(av);
@@ -414,8 +434,18 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         if (av != null)
             SystemsController.Instance?.PrepareForPhysicsTick(av, Universe.CurrentTime);
 
-        Universe.Tick(delta);
-        ArmValidStarbaseReentryCatch();
+        if (Flight14Preview is { } preview)
+        {
+            MaxAllowedWarpIndex = 6; // Up to x100, always whole 20 ms full-physics steps.
+            if (WarpIndex > MaxAllowedWarpIndex) SetWarpIndex(MaxAllowedWarpIndex);
+            _previewProcessedSeconds = preview.AdvanceFrame(delta);
+            SyncFlight14Presentation(preview);
+        }
+        else
+        {
+            Universe.Tick(delta);
+            ArmValidStarbaseReentryCatch();
+        }
         // Consumable and blackout systems integrate only the committed simulation
         // interval. This call is deliberately after the scheduler and before ascent/EDL
         // post-processors; render/UI controllers continue to use wall-clock delta.
@@ -424,7 +454,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         SyncStructuralDebrisRenderers();
 
         // Hot-stage overlap finished in sim time → mechanical separation this frame.
-        if (av != null && av.HotStageOverlapCompletedPending)
+        if (!IsFlight14Exploration && av != null && av.HotStageOverlapCompletedPending)
         {
             av.HotStageOverlapCompletedPending = false;
             TriggerStaging();
@@ -611,7 +641,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// </summary>
     public bool ArmTowerCatchApproach(Vessel? vessel)
     {
-        if (vessel == null || !vessel.HasCatchPins
+        if (IsFlight14Exploration || vessel == null || !vessel.HasCatchPins
             || !LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
             return false;
         var body = Universe.GetDominantBody(vessel.Position);
@@ -644,7 +674,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// </summary>
     public bool TryArmStarbaseCatchForReentry(Vessel? vessel, CelestialBody? body)
     {
-        if (vessel == null || body == null || body.Id != "earth") return false;
+        if (IsFlight14Exploration || vessel == null || body == null || body.Id != "earth") return false;
         if (!LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
             return false;
         bool isStarshipShip = HasStarshipRole(vessel, "command")
@@ -947,7 +977,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    public void SetThrottle(double t) { if (ActiveVessel != null) ActiveVessel.Throttle = t; }
+    public void SetThrottle(double t) { if (!IsFlight14Exploration && ActiveVessel != null) ActiveVessel.Throttle = t; }
     public void SetSAS(bool on)       { if (ActiveVessel != null) ActiveVessel.SASEnabled = on; }
     public void ReleaseGroundHold()   { ActiveVessel?.ReleaseGroundHold(); }
 
@@ -1082,6 +1112,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// </summary>
     public void Ignite()
     {
+        if (IsFlight14Exploration) return;
         var v = ActiveVessel;
         if (v == null) return;
 
@@ -1135,6 +1166,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
     public void TriggerStaging()
     {
+        if (IsFlight14Exploration) return;
         if (ActiveVessel == null) return;
         // Instant stage (manual / post-overlap) cancels any remaining overlap cleanly.
         ActiveVessel.HotStageOverlapCompletedPending = false;
@@ -1297,6 +1329,50 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// (overload joints). Staging debris is registered in <see cref="TriggerStaging"/>
     /// and is not listed in the structural pending drain.
     /// </summary>
+    private void SyncFlight14Presentation(Flight14Exploration preview)
+    {
+        bool rebuild = _previewPartCount != preview.Run.Ship.Parts.Parts.Count;
+        foreach (var vessel in Universe.Vessels)
+        {
+            if (!_previewRenderedVessels.Add(vessel.Id)) continue;
+            SpawnDebrisRenderer(vessel, "Flight14Detached_");
+            if (ReferenceEquals(vessel, preview.Run.Controller.DetachedBooster))
+            {
+                MissionManager.Instance?.EnterPhase(MissionPhase.SEPARATION);
+                EmitSignal(SignalName.VesselStaged, vessel.Id);
+            }
+        }
+        if (rebuild)
+        {
+            _previewPartCount = preview.Run.Ship.Parts.Parts.Count;
+            _vesselRenderer?.BuildFromVessel(preview.Run.Ship);
+        }
+    }
+
+    public Godot.Collections.Dictionary GetFlight14ExplorationSnapshot()
+    {
+        var preview = Flight14Preview;
+        if (preview == null) return new();
+        return new()
+        {
+            ["phase"] = preview.Phase,
+            ["met"] = preview.MissionElapsedSeconds,
+            ["altitude"] = preview.Run.Ship.GetAltitude(preview.Run.Earth),
+            ["payloads"] = preview.Run.PayloadController.Releases.Count,
+            ["throttle"] = preview.Run.Ship.Throttle,
+            ["command_x"] = preview.Run.Ship.PitchYawRoll.X,
+            ["command_y"] = preview.Run.Ship.PitchYawRoll.Y,
+            ["command_z"] = preview.Run.Ship.PitchYawRoll.Z,
+            ["ship_id"] = preview.Run.Ship.Id,
+            ["mass"] = preview.Run.Ship.TotalMass,
+            ["rendered_vessels"] = _previewRenderedVessels.Count,
+            ["vessels"] = Universe.Vessels.Count,
+            ["paused"] = preview.IsPaused,
+            ["terminal"] = preview.IsTerminal,
+            ["blocked"] = preview.BlockReason ?? "",
+        };
+    }
+
     private void SyncStructuralDebrisRenderers()
     {
         var pending = Universe.DrainPendingStructuralDebris();

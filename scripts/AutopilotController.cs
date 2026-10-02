@@ -56,6 +56,7 @@ public partial class AutopilotController : Node
 
     public void Arm()
     {
+        if (SimulationBridge.Instance?.IsFlight14Exploration == true) return;
         _entryAttitudePreparation = false;
         if (_planner is { HasNode: true } && _planner.DeltaVMagnitude > 0.01)
         {

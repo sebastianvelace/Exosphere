@@ -133,6 +133,10 @@ public partial class MapViewController : Control
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (SimulationBridge.Instance?.IsFlight14Exploration == true
+            && @event is InputEventKey previewKey
+            && previewKey.Keycode is Key.Enter or Key.KpEnter or Key.J or Key.B)
+            return;
         if (@event is InputEventKey key && key.Pressed && !key.Echo)
         {
             switch (key.Keycode)

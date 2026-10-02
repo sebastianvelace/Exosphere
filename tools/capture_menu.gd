@@ -23,6 +23,7 @@ func _capture() -> void:
 		"partial": ["HISTORICAL CAMPAIGN", "CAMPAÑA HISTÓRICA"],
 		"vab": ["VEHICLE ASSEMBLY", "ENSAMBLAJE DE VEHÍCULOS"],
 		"flight14": ["EXPLORE FLIGHT 14", "EXPLORAR VUELO 14"],
+		"flight14launch": ["EXPLORE FLIGHT 14", "EXPLORAR VUELO 14"],
 		"settings": ["SETTINGS", "AJUSTES"],
 		"graphics": ["SETTINGS", "AJUSTES"],
 		"continue": ["CONTINUE", "CONTINUAR"],
@@ -44,24 +45,27 @@ func _capture() -> void:
 		if mode in ["mission", "missionlaunch", "partial"]:
 			if not _press(["05  APOLLO 11"] if mode == "partial" else ["01  FREEDOM"]): return
 			await process_frame
-		if mode in ["launch", "missionlaunch"]:
-			var start_labels := ["START MISSION", "INICIAR MISIÓN"] if mode == "missionlaunch" else ["LAUNCH VEHICLE", "LANZAR VEHÍCULO"]
+		if mode in ["launch", "missionlaunch", "flight14launch"]:
+			var start_labels := ["START EXPLORATION", "INICIAR EXPLORACIÓN"] if mode == "flight14launch" else (["START MISSION", "INICIAR MISIÓN"] if mode == "missionlaunch" else ["LAUNCH VEHICLE", "LANZAR VEHÍCULO"])
 			if not _press(start_labels): return
-			for _frame in range(24 if OS.get_environment("CAPTURE_FLIGHT_HUD") == "1" else 90): await process_frame
+			for _frame in range(24 if OS.get_environment("CAPTURE_FLIGHT_HUD") == "1" or mode == "flight14launch" else 90): await process_frame
 			if not root.has_node("Flight"):
 				_fail("Selected vehicle did not open Flight")
 				return
 			print("MENU_LAUNCH_OK selected_vehicle=" + OS.get_environment("CAPTURE_MENU_VEHICLE"))
+			if mode == "flight14launch":
+				await _explore_flight14()
+				return
 			if OS.get_environment("CAPTURE_FLIGHT_HUD") == "1":
 				await _capture_flight_hud()
 				return
 	for _frame in range(45): await process_frame
-	if mode not in ["launch", "missionlaunch", "vab"]:
+	if mode not in ["launch", "missionlaunch", "flight14launch", "vab"]:
 		if not _validate_layout(mode): return
 		if mode == "flight14":
-			var launch := _find_button(menu, ["LAUNCH FLIGHT 14", "INICIAR VUELO 14"])
-			if launch == null or not launch.disabled:
-				_fail("Unimplemented Flight 14 exposed as playable")
+			var launch := _find_button(menu, ["START EXPLORATION", "INICIAR EXPLORACIÓN"])
+			if launch == null or launch.disabled:
+				_fail("Flight 14 exploration route is unavailable")
 				return
 		if mode == "continue":
 			if _find_button(menu.get_node("MenuModal"), ["ALPHA"]) == null or _find_button(menu.get_node("MenuModal"), ["ZULU"]) == null:
@@ -266,3 +270,91 @@ func _key(code: Key) -> void:
 	var release := event.duplicate() as InputEventKey
 	release.pressed = false
 	Input.parse_input_event(release)
+
+func _explore_flight14() -> void:
+	var bridge := root.find_child("SimulationBridge", true, false)
+	if bridge == null or not bridge.has_method("GetFlight14ExplorationSnapshot"):
+		_fail("Flight 14 preview did not initialize")
+		return
+	var first: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+	if first.is_empty() or first["vessels"] != 1 or first["blocked"] != "":
+		_fail("Invalid loaded Flight 14 preview: " + str(first))
+		return
+	print("FLIGHT14_PREVIEW_STARTED " + JSON.stringify(first))
+	var target_met := float(OS.get_environment("CAPTURE_FLIGHT14_MET"))
+	if target_met <= 0: target_met = 8
+	bridge.call("SetWarpIndex", 6)
+	var previous := ""
+	var render_sparse := OS.get_environment("CAPTURE_FLIGHT14_SPARSE_RENDER") == "1"
+	if render_sparse: RenderingServer.set_render_loop_enabled(false)
+	var next_progress := 300.0
+	while true:
+		await process_frame
+		var state: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+		if state["phase"] != previous or state["met"] >= next_progress:
+			previous = state["phase"]
+			next_progress = float(state["met"]) + 300
+			print("FLIGHT14_PREVIEW_PROGRESS " + JSON.stringify(state))
+		if state["blocked"] != "":
+			_fail("Flight 14 preview blocked: " + str(state))
+			return
+		if state["terminal"] or state["met"] >= target_met:
+			bridge.call("SetWarpIndex", 0)
+			if render_sparse: RenderingServer.set_render_loop_enabled(true)
+			var pause := _find_button(root.get_node("Flight"), ["PAUSE"])
+			if not state["terminal"]:
+				if pause == null: _fail("Preview pause button missing"); return
+				pause.emit_signal("pressed")
+			for _frame in range(8): await process_frame
+			var paused: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+			if abs(float(paused["met"]) - float(state["met"])) > 0.021:
+				_fail("Preview advanced after pause or terminal boundary")
+				return
+			if paused["rendered_vessels"] != paused["vessels"]:
+				_fail("Detached payload/booster renderers missing")
+				return
+			var output := OS.get_environment("CAPTURE_MENU_OUTPUT")
+			if output.is_empty(): output = "/tmp/exosphere_flight14_preview.png"
+			if root.get_texture().get_image().save_png(output) != OK:
+				_fail("Preview capture failed"); return
+			print("FLIGHT14_PREVIEW_OK " + JSON.stringify(paused) + " path=" + output)
+			if not state["terminal"] and target_met <= 20:
+				for keycode in [KEY_W, KEY_Z, KEY_SPACE, KEY_T, KEY_L, KEY_O, KEY_R, KEY_F5, KEY_F9]:
+					var event := InputEventKey.new()
+					event.keycode = keycode
+					event.physical_keycode = keycode
+					event.pressed = true
+					Input.parse_input_event(event)
+					await process_frame
+					event.pressed = false
+					Input.parse_input_event(event)
+					await process_frame
+				var unchanged: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+				for field in ["met", "altitude", "mass", "ship_id", "throttle", "command_x", "command_y", "command_z"]:
+					if unchanged[field] != paused[field]:
+						_fail("Manual/free-flight input changed automatic preview: " + field)
+						return
+				var resume := _find_button(root.get_node("Flight"), ["RESUME"])
+				if resume == null: _fail("Resume missing"); return
+				resume.emit_signal("pressed")
+				for _frame in range(8): await process_frame
+				var resumed: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+				if resumed["paused"] or resumed["met"] <= paused["met"]:
+					_fail("Resume did not advance physics"); return
+				var restart := _find_button(root.get_node("Flight"), ["RESTART"])
+				if restart == null: _fail("Restart missing"); return
+				restart.emit_signal("pressed")
+				for _frame in range(12): await process_frame
+				bridge = root.find_child("SimulationBridge", true, false)
+				var restarted: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+				if restarted.is_empty() or restarted["ship_id"] == paused["ship_id"] or restarted["payloads"] != 0:
+					_fail("Restart did not create a fresh loaded pad mission"); return
+				var back := _find_button(root.get_node("Flight"), ["MENU"])
+				if back == null: _fail("Menu missing"); return
+				back.emit_signal("pressed")
+				for _frame in range(4): await process_frame
+				if current_scene.scene_file_path != "res://scenes/ui/MainMenu.tscn":
+					_fail("Preview menu exit failed"); return
+				print("FLIGHT14_PREVIEW_CONTROLS_OK pause=true resume=true restart=true menu=true manual_input_ignored=true")
+			quit(0)
+			return
