@@ -10,12 +10,17 @@ public sealed class Flight14ReturnDefinition
     public string Assumptions { get; set; } = "";
     public double EarliestDeorbitMissionSeconds { get; set; }
     public double AlignmentLeadSeconds { get; set; }
+    /// <summary>Osculating burn target above mean body radius; not geodetic altitude.</summary>
     public double TargetPeriapsisAltitudeM { get; set; }
+    /// <summary>Engineering bound above mean body radius, independent of geodetic entry gates.</summary>
+    public double MaximumTargetPeriapsisAltitudeM { get; set; }
     public double MinimumBurnAltitudeM { get; set; }
     public double MaximumBurnSeconds { get; set; }
     public double MaximumShutdownSeconds { get; set; }
     public double MinimumRemainingPropellantKg { get; set; }
+    /// <summary>Descending entry gate above the reference ellipsoid.</summary>
     public double EntryInterfaceAltitudeM { get; set; }
+    /// <summary>Descending diagnostic endpoint above the reference ellipsoid.</summary>
     public double DiagnosticEndAltitudeM { get; set; }
     public double MinimumEntrySpeedMps { get; set; }
     public double MaximumMissionSeconds { get; set; }
@@ -34,14 +39,17 @@ public sealed class Flight14ReturnDefinition
     public void Validate()
     {
         double[] values = [EarliestDeorbitMissionSeconds, AlignmentLeadSeconds,
-            TargetPeriapsisAltitudeM, MinimumBurnAltitudeM, MaximumBurnSeconds,
+            TargetPeriapsisAltitudeM, MaximumTargetPeriapsisAltitudeM, MinimumBurnAltitudeM, MaximumBurnSeconds,
             MaximumShutdownSeconds, MinimumRemainingPropellantKg, EntryInterfaceAltitudeM,
             DiagnosticEndAltitudeM, MinimumEntrySpeedMps, MaximumMissionSeconds,
             EntryReferenceRateRadPerSecond, DeorbitReferenceRateRadPerSecond];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || values.Any(v => !double.IsFinite(v) || v <= 0)
             || AlignmentLeadSeconds >= EarliestDeorbitMissionSeconds
-            || TargetPeriapsisAltitudeM >= DiagnosticEndAltitudeM
+            // Periapsis is measured above mean body radius; the diagnostic endpoint
+            // is geodetic. A shallow radial target may exceed that endpoint, and
+            // production atmospheric propagation decides whether it is reached.
+            || TargetPeriapsisAltitudeM > MaximumTargetPeriapsisAltitudeM
             || DiagnosticEndAltitudeM >= EntryInterfaceAltitudeM
             || EntryInterfaceAltitudeM >= MinimumBurnAltitudeM
             || EarliestDeorbitMissionSeconds + MaximumBurnSeconds + MaximumShutdownSeconds >= MaximumMissionSeconds)

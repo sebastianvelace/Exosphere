@@ -3,6 +3,7 @@ namespace ExosphereSimulation.Tests;
 using Exosphere.Simulation;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
+using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -20,12 +21,19 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         var engines = run.Ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("ship_engines"));
         var tank = run.Ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
         var originalTank = tank;
+        var returnDefinition = Flight14ReturnDefinition.LoadFromJson(Path.Combine(DataDirectory(),
+            "flight_profiles/starship_flight14_return_estimate.json"));
+        var observations = EntryDisplayObservations();
+        var samples = new List<(double Time, double Altitude)>();
         int maximumDeorbitEngines = 0;
         double maximumReturnAngularRate = 0;
         for (int i = 0; i < 11020 * fps && returning.Phase is not
             (Flight14ReturnPhase.EntryReached or Flight14ReturnPhase.Blocked); i++)
         {
             run.AdvanceFrame(1.0 / fps);
+            double elapsed = run.Universe.CurrentTime - run.Controller.LiftoffEpoch;
+            if (samples.Count < observations.Length && elapsed >= observations[samples.Count].Time)
+                samples.Add((elapsed, run.Ship.GetAltitude(run.Earth)));
             if (returning.Phase != Flight14ReturnPhase.WaitingForPayload)
                 maximumReturnAngularRate = System.Math.Max(maximumReturnAngularRate, run.Ship.AngularVelocity.Magnitude);
             if (returning.Phase == Flight14ReturnPhase.DeorbitBurn)
@@ -46,7 +54,8 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         Assert.Equal(returning.PostDeploymentPropellantKg, returning.PreDeorbitPropellantKg, 6);
         Assert.True(returning.PostDeorbitPropellantKg < returning.PreDeorbitPropellantKg);
         Assert.True(returning.PostDeorbitEnergyJPerKg < returning.PreDeorbitEnergyJPerKg);
-        Assert.InRange(returning.PostDeorbitPeriapsisAltitudeM, 50000, 60000);
+        Assert.InRange(returning.PostDeorbitPeriapsisAltitudeM,
+            returnDefinition.TargetPeriapsisAltitudeM - 10000, returnDefinition.TargetPeriapsisAltitudeM);
         Assert.True(returning.HasDeliveredDeorbitThrust);
         Assert.Equal(1, maximumDeorbitEngines);
         Assert.Equal(0, run.Ship.Throttle);
@@ -66,9 +75,24 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         var relativeVelocity = run.Ship.Velocity - run.Earth.Velocity;
         Assert.Equal(relativeVelocity - run.Earth.GetSurfaceVelocity(run.Ship.Position),
             run.Ship.GetSurfaceVelocity(run.Earth));
+        // Conditional display calibration: the broadcast does not specify its datum.
+        // These are read-only comparison samples, never flight-controller targets.
+        Assert.Equal(observations.Length, samples.Count);
+        for (int i = 0; i < observations.Length; i++)
+        {
+            Assert.InRange(samples[i].Time - observations[i].Time, 0, 1.0 / fps + 0.02);
+            Assert.InRange(samples[i].Altitude - observations[i].Altitude, -500, 500);
+        }
+        // Rounded 94.6 -> 93.9 km over 10 seconds suggests ~70 m/s down.
+        // Allow rounding, clock quantization and residual model uncertainty.
+        double intervalDescent = (samples[1].Altitude - samples[0].Altitude)
+            / (samples[1].Time - samples[0].Time);
+        Assert.InRange(intervalDescent, -110, -40);
         output.WriteLine($"{fps} FPS: deorbit={returning.DeorbitCommandElapsedSeconds:F2}..{returning.DeorbitShutdownElapsedSeconds:F2}s "
             + $"entry120={returning.EntryInterface.MissionElapsedSeconds:F2}s entry90={returning.DiagnosticEnd.MissionElapsedSeconds:F2}s "
             + $"reserve={returning.PreDeorbitPropellantKg:F2}->{returning.PostDeorbitPropellantKg:F2}kg");
+        output.WriteLine($"Conditional geodetic display residuals: {samples[0].Altitude-observations[0].Altitude:F2}, "
+            + $"{samples[1].Altitude-observations[1].Altitude:F2}m; interval vertical speed={intervalDescent:F2}m/s");
     }
 
     [Fact]
@@ -84,12 +108,22 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void InvalidReturnEstimateCannotPlacePeriapsisAboveItsEntryGate()
+    public void InvalidReturnEstimateCannotExceedItsRadialCommandEnvelope()
     {
         var definition = Flight14ReturnDefinition.LoadFromJson(Path.Combine(DataDirectory(),
             "flight_profiles/starship_flight14_return_estimate.json"));
-        definition.TargetPeriapsisAltitudeM = definition.EntryInterfaceAltitudeM;
+        definition.TargetPeriapsisAltitudeM = definition.MaximumTargetPeriapsisAltitudeM + 1;
         Assert.Throws<InvalidDataException>(definition.Validate);
+    }
+
+    [Fact]
+    public void RadialPeriapsisTargetMayExceedTheGeodeticDiagnosticEndpoint()
+    {
+        var definition = Flight14ReturnDefinition.LoadFromJson(Path.Combine(DataDirectory(),
+            "flight_profiles/starship_flight14_return_estimate.json"));
+        definition.TargetPeriapsisAltitudeM = 97500;
+        Assert.True(definition.TargetPeriapsisAltitudeM > definition.DiagnosticEndAltitudeM);
+        definition.Validate();
     }
 
     private sealed class KinematicGuard(Flight14ReturnController controller, Vessel ship) : IPhysicsStepController
@@ -116,5 +150,17 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory != null && !Directory.Exists(Path.Combine(directory.FullName, "data"))) directory = directory.Parent;
         return Path.Combine(directory?.FullName ?? throw new DirectoryNotFoundException("Repository data not found."), "data");
+    }
+
+    private static (double Time, double Altitude)[] EntryDisplayObservations()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(DataDirectory(), "..",
+            "docs/research/STARSHIP_FLIGHT14_OBSERVED_ANCHORS_2026-10-01.json")));
+        var observations = document.RootElement.GetProperty("anchors").EnumerateArray()
+            .Where(anchor => anchor.GetProperty("view").GetString() is "luminous_entry" or "luminous_entry_followup")
+            .Select(anchor => (Time: anchor.GetProperty("displayed_elapsed_seconds").GetDouble(),
+                Altitude: anchor.GetProperty("displayed_altitude_km").GetDouble() * 1000)).ToArray();
+        Assert.Equal(2, observations.Length);
+        return observations;
     }
 }

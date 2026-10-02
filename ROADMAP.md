@@ -298,7 +298,10 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
       diagnostic now continues through a single-engine deorbit and descending
       atmospheric entry to 90 km, retaining tank contents and deployed vessels;
       return estimates and remaining reference discrepancies are documented in
-      `docs/audits/flight14_continuous_return_2026-10-02.md`. Actual mass/release
+      `docs/audits/flight14_continuous_return_2026-10-02.md`. A conditional geodetic
+      HUD calibration now refines the shallow deorbit target and independently
+      bounds radial commands; see `docs/audits/flight14_entry_timing_correction_2026-10-02.md`.
+      Actual mass/release
      timing, moving-body gameplay integration, both water returns
      and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled
      as Flight 14; the featured launch action remains unavailable.

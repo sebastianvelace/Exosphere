@@ -1,10 +1,11 @@
 {
   "id": "starship-flight14-early-return-engineering-estimate",
   "status": "engineering-estimate",
-  "assumptions": "Continuous numerical extension of the loaded Flight 12 V3 hardware estimate used for Flight 14 launch/deployment. The earliest deorbit command uses the observed early-deorbit window as a design input, not an exact flown ignition timestamp. Periapsis, alignment lead, safety limits and lift-up entry attitude are engineering estimates. No geographic landing target, dated Earth orientation, controlled terminal landing, booster return or water-contact outcome is reconstructed. The 90 km diagnostic endpoint is a descending physical-state gate; video values never overwrite state or drive target tracking forces.",
+  "assumptions": "Continuous numerical extension of the loaded Flight 12 V3 hardware and 2 t satellite estimates used for Flight 14 launch/deployment. The earliest deorbit command uses the observed early-deorbit window as a design input, not an exact flown ignition timestamp. The 106.5 km mean-radius periapsis command is calibrated within this model to the T+9884 s 94.6 km display under an explicitly conditional geodetic-datum interpretation; the T+9894 s followup checks descent consistency. It is not a measured flown periapsis or a unique solution. Alignment lead, radial command ceiling, safety limits and lift-up entry attitude remain engineering estimates. No geographic landing target, dated Earth orientation, controlled terminal landing, booster return or water-contact outcome is reconstructed. The 90 km geodetic endpoint is a descending physical-state gate; video values never overwrite state, shift the mission clock or drive target tracking forces.",
   "earliestDeorbitMissionSeconds": 7884,
   "alignmentLeadSeconds": 120,
-  "targetPeriapsisAltitudeM": 60000,
+  "targetPeriapsisAltitudeM": 106500,
+  "maximumTargetPeriapsisAltitudeM": 110000,
   "minimumBurnAltitudeM": 180000,
   "maximumBurnSeconds": 120,
   "maximumShutdownSeconds": 10,

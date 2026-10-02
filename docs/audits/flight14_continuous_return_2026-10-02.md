@@ -5,6 +5,10 @@ ascent, insertion, 26 payload deployments, early deorbit and descending entry to
 90 km. This extends the [payload diagnostic](flight14_payload_deployment_2026-10-01.md).
 It is not a playable Flight 14 mission or controlled water-return acceptance.
 
+The original 60 km return estimate and numerical results below are historical
+for revision `85dfa80`. The [entry timing correction](flight14_entry_timing_correction_2026-10-02.md)
+updates the default command to 106.5 km under a conditional geodetic HUD calibration.
+
 ## Source and estimate boundary
 
 [SpaceX's postflight report](https://www.spacex.com/launches/starship-flight-14%20)

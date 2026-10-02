@@ -88,6 +88,15 @@
       "frame_sha256": "1b7fdd8bf1c630c40e11f25403927c6085202b84c803075ac6f984f7942f074b"
     },
     {
+      "video_seconds": 9910,
+      "displayed_elapsed_seconds": 9894,
+      "displayed_speed_kmh": 26947,
+      "displayed_altitude_km": 93.9,
+      "view": "luminous_entry_followup",
+      "frame": "video_09910.jpg",
+      "frame_sha256": "bc5ffc0c9472cd6370f7d272c101d75e5b8143683a1f2bed3223cc7ddb40661c"
+    },
+    {
       "video_seconds": 11316,
       "displayed_elapsed_seconds": 11300,
       "displayed_speed_kmh": 203,
