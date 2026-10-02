@@ -1,0 +1,18 @@
+{
+  "id": "starship-flight14-early-return-engineering-estimate",
+  "status": "engineering-estimate",
+  "assumptions": "Continuous numerical extension of the loaded Flight 12 V3 hardware estimate used for Flight 14 launch/deployment. The earliest deorbit command uses the observed early-deorbit window as a design input, not an exact flown ignition timestamp. Periapsis, alignment lead, safety limits and lift-up entry attitude are engineering estimates. No geographic landing target, dated Earth orientation, controlled terminal landing, booster return or water-contact outcome is reconstructed. The 90 km diagnostic endpoint is a descending physical-state gate; video values never overwrite state or drive target tracking forces.",
+  "earliestDeorbitMissionSeconds": 7884,
+  "alignmentLeadSeconds": 120,
+  "targetPeriapsisAltitudeM": 60000,
+  "minimumBurnAltitudeM": 180000,
+  "maximumBurnSeconds": 120,
+  "maximumShutdownSeconds": 10,
+  "minimumRemainingPropellantKg": 15000,
+  "entryInterfaceAltitudeM": 120000,
+  "diagnosticEndAltitudeM": 90000,
+  "minimumEntrySpeedMps": 1200,
+  "maximumMissionSeconds": 11000,
+  "entryReferenceRateRadPerSecond": 0.025,
+  "deorbitReferenceRateRadPerSecond": 0.04
+}

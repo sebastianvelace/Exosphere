@@ -12,6 +12,19 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     Flight14PayloadDefinition PayloadDefinition, Flight14PayloadDeploymentController PayloadController)
 {
     private double _pendingFrameSeconds;
+    public Flight14ReturnController? ReturnController { get; private set; }
+
+    /// <summary>Extend the same loaded pad fixture through deorbit and atmospheric entry.</summary>
+    public static Flight14LaunchDiagnostic CreateWithReturn(string dataDirectory)
+    {
+        var run = Create(dataDirectory);
+        var definition = Flight14ReturnDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_return_estimate.json"));
+        run.ReturnController = new Flight14ReturnController(run.Ship, run.Earth,
+            run.Controller, run.PayloadController, definition, run.Guidance);
+        run.Universe.PhysicsStepController = run.ReturnController;
+        return run;
+    }
 
     /// <summary>
     /// Diagnostic driver: commit whole 20 ms steps, retaining the frame remainder.

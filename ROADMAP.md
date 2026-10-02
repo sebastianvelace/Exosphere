@@ -294,7 +294,11 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      `docs/audits/flight14_continuous_launch_2026-10-01.md`. The diagnostic now carries
      26 estimated-mass Starlink V3 parts from the pad and releases them as independent
      propagated vessels with conservation witnesses; see
-     `docs/audits/flight14_payload_deployment_2026-10-01.md`. Actual mass/release
+      `docs/audits/flight14_payload_deployment_2026-10-01.md`. The same loaded-state
+      diagnostic now continues through a single-engine deorbit and descending
+      atmospheric entry to 90 km, retaining tank contents and deployed vessels;
+      return estimates and remaining reference discrepancies are documented in
+      `docs/audits/flight14_continuous_return_2026-10-02.md`. Actual mass/release
      timing, moving-body gameplay integration, both water returns
      and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled
      as Flight 14; the featured launch action remains unavailable.

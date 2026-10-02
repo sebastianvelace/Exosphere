@@ -107,6 +107,21 @@ should leave this variable unset.
 
 ## Develop
 
+The Flight 14 numerical diagnostic can propagate the same loaded vehicle through
+launch, insertion, 26 payload releases, a single-engine deorbit and descending
+entry to 90 km:
+
+```bash
+dotnet run --project tools/Flight14TrajectoryProbe/Flight14TrajectoryProbe.csproj -- \
+  data /tmp/flight14-return 60 --return
+python3 tools/compare_flight14_telemetry.py /tmp/flight14-return/telemetry.jsonl \
+  --output /tmp/flight14-return/display-comparison.json
+```
+
+This is an engineering diagnostic, with estimated hardware and guidance. It does
+not enable the featured mission or establish either controlled water return.
+See [the continuous-return audit](docs/audits/flight14_continuous_return_2026-10-02.md).
+
 Menu capture and navigation checks: `python3 tools/menu_quick_check.py` (Godot .NET and Xvfb required). The checks use isolated user data and save real-framebuffer captures in `exports/menu-operations-review/`.
 
 Build, architecture, data, and current limits: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
