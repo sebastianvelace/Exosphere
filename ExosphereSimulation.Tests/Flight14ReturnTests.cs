@@ -71,6 +71,20 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         Assert.True(returning.DiagnosticEnd.WindwardShieldDotVelocity > 0.85);
         Assert.InRange(returning.DiagnosticEnd.InertialSpeedMps, 7000, 8500);
         Assert.Equal(returning.DiagnosticEnd.RemainingPropellantKg, tank.LiquidFuel + tank.Oxidizer, 6);
+        foreach (var witness in new[] { returning.EntryInterface, returning.DiagnosticEnd })
+        {
+            Assert.InRange(witness.BodyFixedLatitudeDegrees, -90, 90);
+            Assert.InRange(witness.BodyFixedLongitudeDegrees, -180, 180);
+            Assert.Equal(run.Controller.LiftoffEpoch,
+                witness.SimulationTimeSeconds - witness.MissionElapsedSeconds, 6);
+        }
+        // The witness belongs to the start of the final 20 ms integration step.
+        var endpoint = returning.DiagnosticEnd;
+        var endpointPosition = run.Earth.GetSurfacePositionAtTime(endpoint.BodyFixedLatitudeDegrees,
+            endpoint.BodyFixedLongitudeDegrees, endpoint.SimulationTimeSeconds, endpoint.GeodeticAltitudeM);
+        Assert.InRange(run.Universe.CurrentTime - endpoint.SimulationTimeSeconds, 0, 0.020001);
+        Assert.InRange((run.Ship.Position - endpointPosition).Magnitude,
+            0, endpoint.InertialSpeedMps * 0.02 + 1);
         // The state remains free fall: orbit-relative speed is distinct from rotating-air speed.
         var relativeVelocity = run.Ship.Velocity - run.Earth.Velocity;
         Assert.Equal(relativeVelocity - run.Earth.GetSurfaceVelocity(run.Ship.Position),

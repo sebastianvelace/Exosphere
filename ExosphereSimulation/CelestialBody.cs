@@ -425,6 +425,21 @@ public partial class CelestialBody
         return GetSurfacePosition(latitudeDeg, longitudeDeg + rotationDegrees, altitudeM);
     }
 
+    /// <summary>
+    /// Geodetic coordinates in the rotating body frame, inverse to
+    /// <see cref="GetSurfacePositionAtTime"/>. Longitude is in [-180, 180] degrees
+    /// relative to the simulation prime meridian at epoch zero, not a dated
+    /// Greenwich phase. Longitude at either pole is conventional.
+    /// </summary>
+    public void GetGeodeticCoordinatesAtTime(Vector3d worldPos, double simulationTime,
+        out double latitudeDeg, out double longitudeDeg, out double heightM)
+    {
+        if (!double.IsFinite(simulationTime))
+            throw new ArgumentOutOfRangeException(nameof(simulationTime));
+        var relative = ToBodyFixedDirection(worldPos - Position, simulationTime);
+        GetGeodeticCoordinates(Position + relative, out latitudeDeg, out longitudeDeg, out heightM);
+    }
+
     /// <summary>Transforms an inertial direction into the body's rotating frame.</summary>
     public Vector3d ToBodyFixedDirection(Vector3d inertialDirection, double simulationTime)
     {

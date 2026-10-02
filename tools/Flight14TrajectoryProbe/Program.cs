@@ -74,8 +74,11 @@ using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
         }
         if (double.IsFinite(elapsed) && elapsed >= 0 && (phaseChanged || elapsed >= nextSample))
         {
+            earth.GetGeodeticCoordinatesAtTime(ship.Position, universe.CurrentTime,
+                out double latitude, out double longitude, out _);
             trace.WriteLine(JsonSerializer.Serialize(new {
-                missionElapsedSeconds = elapsed, phase,
+                missionElapsedSeconds = elapsed, simulationTimeSeconds = universe.CurrentTime, phase,
+                bodyFixedLatitudeDegrees = latitude, bodyFixedLongitudeDegrees = longitude,
                 deployedPayloadCount = deployment.Releases.Count,
                 attachedPayloadMassKg = ship.Parts.Parts.Where(p => p.Definition.HasVehicleRole("payload")).Sum(p => p.CurrentMass),
                 geodeticAltitudeM = ship.GetAltitude(earth), radialAltitudeM = rel.Magnitude-earth.Radius,
@@ -128,6 +131,7 @@ bool passed = controller.Phase == Flight14LaunchPhase.OrbitReady
 var summary = new {
     status = passed ? "COMPONENT_PASS" : "COMPONENT_FAIL", missionAcceptance = false,
     diagnosticOnly = true, componentScope = includeReturn ? "pad-to-26-payload-release-deorbit-entry" : "pad-to-26-payload-release", frameModel = "isolated-Earth at simulation epoch zero",
+    geographicFrameModel = "rotating-body geodetic coordinates; conventional prime meridian at epoch zero, not dated Greenwich phase",
     integrationDriver = "whole-20ms-steps-with-retained-frame-remainder",
     hardwareBaseline = guidance.BaselineVehicleFile, hardwareIsEstimated = true,
     guidanceSha256 = Hash(Path.Combine(data, "flight_profiles/starship_flight14_guidance_estimate.json")),

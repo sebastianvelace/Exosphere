@@ -122,6 +122,9 @@ This is an engineering diagnostic, with estimated hardware and guidance. It does
 not enable the featured mission or establish either controlled water return.
 See [the continuous-return audit](docs/audits/flight14_continuous_return_2026-10-02.md)
 and [the conditional entry timing correction](docs/audits/flight14_entry_timing_correction_2026-10-02.md).
+The probe also records [the rotating-body ground track](docs/audits/flight14_ground_track_2026-10-02.md)
+at the absolute simulation epoch, with longitude tied to the simulation prime
+meridian. Geographic targeting and dated Greenwich orientation remain separate work.
 
 Menu capture and navigation checks: `python3 tools/menu_quick_check.py` (Godot .NET and Xvfb required). The checks use isolated user data and save real-framebuffer captures in `exports/menu-operations-review/`.
 

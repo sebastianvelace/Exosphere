@@ -301,6 +301,8 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
       `docs/audits/flight14_continuous_return_2026-10-02.md`. A conditional geodetic
       HUD calibration now refines the shallow deorbit target and independently
       bounds radial commands; see `docs/audits/flight14_entry_timing_correction_2026-10-02.md`.
+      Read-only ground-track telemetry now records rotating-body geodetic coordinates
+      and their absolute epochs; see `docs/audits/flight14_ground_track_2026-10-02.md`.
       Actual mass/release
      timing, moving-body gameplay integration, both water returns
      and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled

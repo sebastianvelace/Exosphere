@@ -12,7 +12,8 @@ public enum Flight14ReturnPhase
 public sealed record Flight14EntryWitness(double MissionElapsedSeconds, double GeodeticAltitudeM,
     double RadialAltitudeM, double InertialSpeedMps, double AtmosphereRelativeSpeedMps,
     double VerticalSpeedMps, double SpecificEnergyJPerKg, double RemainingPropellantKg,
-    double WindwardShieldDotVelocity);
+    double WindwardShieldDotVelocity, double SimulationTimeSeconds,
+    double BodyFixedLatitudeDegrees, double BodyFixedLongitudeDegrees);
 
 /// <summary>
 /// Composes the loaded launch/deployment with a real single-engine deorbit and entry.
@@ -157,13 +158,13 @@ public sealed class Flight14ReturnController : IPhysicsStepController
         if (altitude <= _definition.EntryInterfaceAltitudeM && verticalSpeed < -20
             && surfaceVelocity.Magnitude >= _definition.MinimumEntrySpeedMps)
         {
-            EntryInterface ??= Witness(elapsed);
+            EntryInterface ??= Witness(elapsed, universe.CurrentTime);
             Phase = Flight14ReturnPhase.AtmosphericEntry;
         }
         if (Phase == Flight14ReturnPhase.AtmosphericEntry
             && altitude <= _definition.DiagnosticEndAltitudeM && verticalSpeed < 0)
         {
-            DiagnosticEnd = Witness(elapsed);
+            DiagnosticEnd = Witness(elapsed, universe.CurrentTime);
             _ship.PitchYawRoll = Vector3d.Zero;
             Phase = Flight14ReturnPhase.EntryReached;
         }
@@ -176,11 +177,16 @@ public sealed class Flight14ReturnController : IPhysicsStepController
         _ship.Position - _body.Position, _ship.Velocity - _body.Velocity, _body.GM, _body.Id, epoch);
     private void PointAxis(Vector3d aim) => _ship.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
         _ship.Orientation, Vector3d.Up, aim, _ship.AngularVelocity, 2, 25);
-    private Flight14EntryWitness Witness(double elapsed) => new(elapsed, _ship.GetAltitude(_body),
-        (_ship.Position - _body.Position).Magnitude - _body.Radius,
-        (_ship.Velocity - _body.Velocity).Magnitude, _ship.GetSurfaceVelocity(_body).Magnitude,
-        _ship.GetSurfaceVelocity(_body).Dot(_body.GetGeodeticUp(_ship.Position)), Energy, PropellantKg,
-        -_ship.Orientation.Rotate(Vector3d.Right).Normalized.Dot(_ship.GetSurfaceVelocity(_body).Normalized));
+    private Flight14EntryWitness Witness(double elapsed, double simulationTime)
+    {
+        _body.GetGeodeticCoordinatesAtTime(_ship.Position, simulationTime,
+            out double latitude, out double longitude, out _);
+        return new(elapsed, _ship.GetAltitude(_body), (_ship.Position - _body.Position).Magnitude - _body.Radius,
+            (_ship.Velocity - _body.Velocity).Magnitude, _ship.GetSurfaceVelocity(_body).Magnitude,
+            _ship.GetSurfaceVelocity(_body).Dot(_body.GetGeodeticUp(_ship.Position)), Energy, PropellantKg,
+            -_ship.Orientation.Rotate(Vector3d.Right).Normalized.Dot(_ship.GetSurfaceVelocity(_body).Normalized),
+            simulationTime, latitude, longitude);
+    }
     private void Block(string reason)
     {
         _ship.Throttle = 0;
