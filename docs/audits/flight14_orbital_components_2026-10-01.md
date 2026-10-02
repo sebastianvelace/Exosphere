@@ -109,6 +109,14 @@ ascent profile; it does not justify adjusting gravity or assigning broadcast spe
 to the vessel. Generated JSON and Markdown are under
 `exports/flight14-mission-review/`.
 
+## Subsequent component evidence
+
+The continuous isolated-Earth pad-to-insertion diagnostic is now documented in
+[`flight14_continuous_launch_2026-10-01.md`](flight14_continuous_launch_2026-10-01.md).
+It adds a dedicated estimated ascent policy; payload masses, gameplay integration
+and both controlled water returns remain open. The historical generic comparison
+above is preserved as the initial baseline, not the current diagnostic.
+
 ## Next integration gate
 
 1. Give Flight 14 its own dated vehicle/resource assumptions and control policy.

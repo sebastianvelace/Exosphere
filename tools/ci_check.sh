@@ -80,6 +80,7 @@ bash tools/tests/optimization_phase23_contract_test.sh
 
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 dotnet build Exosphere.csproj --nologo -v quiet
+dotnet build tools/Flight14TrajectoryProbe/Flight14TrajectoryProbe.csproj --nologo -v quiet
 dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
 bash tools/flight_startup_quick_check.sh
 

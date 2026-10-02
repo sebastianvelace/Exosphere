@@ -280,9 +280,12 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      from observed early-return windows. Single-sea-level-engine insertion and
      deorbit components are tested with continuous propagated state and resources;
      display-comparison tooling preserves frame and clock uncertainty. Evidence:
-     `docs/audits/flight14_orbital_components_2026-10-01.md`. Dedicated ascent,
-     26 physical payload splits, both water returns and a complete playable mission
-     remain open. Existing Flight 12 and tower-catch policies must not be relabelled
+     `docs/audits/flight14_orbital_components_2026-10-01.md`. A continuous isolated-
+     Earth pad-to-insertion diagnostic now runs its own estimated ascent/hot-stage/
+     coast policy through the production physics controller; source and limits:
+     `docs/audits/flight14_continuous_launch_2026-10-01.md`. Payload mass,
+     26 physical payload splits, moving-body gameplay integration, both water returns
+     and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled
      as Flight 14; the featured launch action remains unavailable.
 
 2. **Reentry visual**

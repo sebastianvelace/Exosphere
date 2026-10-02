@@ -1,0 +1,72 @@
+{
+  "id": "starship-flight14-ascent-engineering-estimate",
+  "status": "engineering-estimate",
+  "baselineVehicleFile": "starship_flight12_v3_2026.json",
+  "seaLevelEngineModelId": "raptor3-starship-sl-flight12",
+  "assumptions": "Diagnostic Flight 14 control reconstruction using the explicitly estimated Flight 12 V3 hardware model. Full baseline tank loads, dry masses and engine maps are inherited estimates, not Flight 14 measurements. Pitch/throttle commands, fault times and fault mount identities are synthetic calibration assumptions. Planned times are guidance design inputs, never state assignments or success criteria. Targets use mean-radius orbital altitude; broadcast altitude datum is unknown. Payload mass and release are not represented in this launch-only diagnostic.",
+  "ignitionRampSeconds": 3,
+  "nominalMecoSeconds": 140,
+  "minimumStagingAltitudeM": 35000,
+  "hotStageSeconds": 2,
+  "nominalShipCutoffSeconds": 510,
+  "targetApoapsisAltitudeM": 276000,
+  "targetSuborbitalPeriapsisAltitudeM": 60000,
+  "targetInsertionPeriapsisAltitudeM": 250000,
+  "nominalCoastSeconds": 952,
+  "minimumCoastSeconds": 600,
+  "minimumInsertionAltitudeM": 260000,
+  "insertionLeadSeconds": 20,
+  "minimumShipReserveKg": 15000,
+  "maximumAscentSeconds": 650,
+  "maximumInsertionSeconds": 120,
+  "boosterFaultSeconds": 100,
+  "vacuumFaultSeconds": 200,
+  "shipThrottle": 0.83,
+  "boosterProgram": [
+    {
+      "elapsedSeconds": 0,
+      "elevationDeg": 90,
+      "throttle": 1
+    },
+    {
+      "elapsedSeconds": 2,
+      "elevationDeg": 90,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 10,
+      "elevationDeg": 89,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 44,
+      "elevationDeg": 70,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 80,
+      "elevationDeg": 43,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 124,
+      "elevationDeg": 22,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 140,
+      "elevationDeg": 20,
+      "throttle": 0.76
+    }
+  ],
+  "cutoffApoapsisToleranceM": 15000,
+  "terminalRadialGainPerSecond": 0.3,
+  "terminalEnergyFraction": 0.8,
+  "poweredPointingGain": 4,
+  "poweredPointingDamping": 8,
+  "maximumIgnitionSeconds": 15,
+  "maximumMissionSeconds": 2200,
+  "terminalBlendWidth": 0.12,
+  "terminalShipThrottle": 0.83,
+  "maximumInitialTurnReferenceRateRadPerSecond": 0.02
+}
