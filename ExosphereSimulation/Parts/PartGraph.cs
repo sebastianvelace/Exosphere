@@ -90,6 +90,9 @@ public class PartGraph
     public IReadOnlyList<Joint> Joints => _jointsView;
     public Part? Root => _root;
 
+    /// <summary>Enclosed payloads contribute mass/inertia, but not the carrier's outer hull.</summary>
+    public bool IsEnclosedPayload(Part part) => part.Definition.InternalPayload && part != _root;
+
     /// <summary>
     /// Concrete topology buffer for internal simulation loops. The public <see cref="Parts"/>
     /// facade remains read-only; physics callers use this stable list to avoid boxing the
@@ -203,7 +206,7 @@ public class PartGraph
         {
             double specified = 0.0;
             foreach (var part in _parts)
-                specified += System.Math.Max(0.0, part.Definition.LengthM);
+                if (!IsEnclosedPayload(part)) specified += System.Math.Max(0.0, part.Definition.LengthM);
             return specified > 0.0
                 ? specified
                 : System.Math.Max(1.0, _parts.Count * 12.0);
@@ -216,7 +219,7 @@ public class PartGraph
             if (_parts.Count == 0) return 1.0;
             double specified = 0.0;
             foreach (var part in _parts)
-                specified = System.Math.Max(specified, part.Definition.DiameterM);
+                if (!IsEnclosedPayload(part)) specified = System.Math.Max(specified, part.Definition.DiameterM);
             return specified > 0.0
                 ? specified
                 : System.Math.Max(1.0, 2.0 * System.Math.Sqrt(_parts.Count * 0.2));
@@ -231,6 +234,7 @@ public class PartGraph
             bool found = false;
             foreach (var part in _parts)
             {
+                if (IsEnclosedPayload(part)) continue;
                 double radius = part.Definition.NoseRadiusM;
                 if (radius > 0.0 && (!found || radius < declared))
                 {
@@ -254,6 +258,7 @@ public class PartGraph
             double weightedCoefficient = 0.0;
             foreach (var part in _parts)
             {
+                if (IsEnclosedPayload(part)) continue;
                 if (part.Definition.AxialDragCoefficient <= 0.0) continue;
                 double length = System.Math.Max(0.01, part.Definition.LengthM);
                 totalLength += length;

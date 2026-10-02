@@ -30,6 +30,8 @@ public class PartDefinition
     [JsonPropertyName("category")]    public string CategoryStr { get; set; } = "structure";
     [JsonPropertyName("vehicle_family")] public string VehicleFamily { get; set; } = "";
     [JsonPropertyName("vehicle_role")] public string VehicleRole { get; set; } = "";
+    /// <summary>Payload enclosed by its carrier; exposed when it becomes a graph root.</summary>
+    [JsonPropertyName("internal_payload")] public bool InternalPayload { get; set; }
     [JsonPropertyName("mass_dry")]    public double MassDry     { get; set; }
     [JsonPropertyName("cost")]        public double Cost        { get; set; }
     [JsonPropertyName("drag_coefficient")] public double DragCoefficient { get; set; } = 0.2;

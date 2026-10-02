@@ -1,0 +1,22 @@
+{
+  "id": "starship-flight14-payload-engineering-estimate",
+  "status": "engineering-estimate",
+  "partFile": "starlink_v3_flight14_estimate.json",
+  "count": 26,
+  "sourceUrl": "https://www.spacex.com/launches/starship-flight-14",
+  "assumptions": "Count 26 is source-backed. Mass, stowage layout and opening velocity are synthetic estimates, not published Flight 14 measurements. Planned payload start/complete clocks define this diagnostic deployment schedule; they are not observed actual release timestamps. The point-mass split abstracts the payload conveyor/door; no collision geometry, solar-array deployment, onboard orbit raising or network simulation is modeled.",
+  "firstReleaseMissionSeconds": 2047,
+  "releaseIntervalSeconds": 73.28,
+  "maximumMissionSeconds": 4500,
+  "minimumPeriapsisAltitudeM": 220000,
+  "minimumAltitudeM": 180000,
+  "maximumReleaseAngularRateRadPerSecond": 0.02,
+  "settleAfterInsertionSeconds": 5,
+  "stowageFirstYM": -7.5,
+  "stowageSpacingM": 0.6,
+  "openingVelocityLocalMps": [
+    1,
+    0,
+    0
+  ]
+}

@@ -283,6 +283,26 @@ existing 20 ms cadence; the hold changes forecast latency, not force integration
 See the [2026-09-30 continuous-entry audit](../audits/atmosphere_reentry_visual_physics_2026-09-30.md)
 for the validated envelope and remaining landing boundaries.
 
+## Enclosed payloads and release
+
+A part with `internal_payload: true` is enclosed while it is a non-root child of
+its carrier. It contributes mass, CoM and inertia, but not outer length, diameter,
+nose radius, aerodynamic coefficient or direct free-stream thermal heating.
+Internal heat conduction is not modeled. Root status exposes a separated payload
+without a separate runtime shielding flag; all other parts retain prior behavior.
+
+`Vessel.DeployPayload` transfers the original subtree into an independent vessel,
+using mass-weighted position offsets and equal/opposite opening impulses. Linear
+momentum and aggregate point-mass center are conserved, with inherited spin
+transport included in relative velocity. This does not establish conservation of
+full rigid-body angular momentum for a resolved conveyor/door mechanism.
+
+The Flight 14 diagnostic carries 26 payload parts through powered ascent, then
+releases them only after orbit, shutdown and angular-rate checks. Per-satellite
+mass, layout, schedule and impulse are explicit estimates; released unpowered
+satellites use the existing central-body Kepler approximation. Gameplay/save
+integration, active satellite orbit raising and complete mission return are pending.
+
 ## Propulsion and mass flow
 
 Engine and vehicle data live in JSON. At a given ambient pressure, the engine model applies a

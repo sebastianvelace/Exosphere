@@ -12,7 +12,7 @@ public sealed class Flight14LaunchControllerTests(ITestOutputHelper output)
     public void PadToInsertionUsesContinuousResourcesAndDeliveredSeaLevelThrust()
     {
         var run = Flight14LaunchDiagnostic.Create(DataDirectory());
-        var (universe, earth, ship, controller, guidance) = run;
+        var (universe, earth, ship, controller, guidance, _, _) = run;
         var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
         var engines = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("ship_engines"));
         var booster = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("booster"));

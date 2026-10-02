@@ -5,10 +5,11 @@ using Exosphere.Simulation.Math;
 
 /// <summary>
 /// Reproducible isolated-Earth launch fixture. Only initial pad placement seeds state.
-/// Not a dated solar-system replay, payload simulation or water-return mission.
+/// Includes an estimated payload manifest; not a dated replay or water-return mission.
 /// </summary>
 public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody Earth,
-    Vessel Ship, Flight14LaunchController Controller, Flight14LaunchGuidanceDefinition Guidance)
+    Vessel Ship, Flight14LaunchController Controller, Flight14LaunchGuidanceDefinition Guidance,
+    Flight14PayloadDefinition PayloadDefinition, Flight14PayloadDeploymentController PayloadController)
 {
     private double _pendingFrameSeconds;
 
@@ -48,6 +49,11 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
         var ship = VehicleVariantDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "vehicles", guidance.BaselineVehicleFile)).Build(PartCatalog.LoadFromDirectory(
                 Path.Combine(dataDirectory, "parts"))).ToVessel("Flight 14 engineering launch diagnostic");
+        var payloadDefinition = Flight14PayloadDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_payload_estimate.json"));
+        if (payloadDefinition.Count != reference.PayloadCount)
+            throw new InvalidDataException("Estimated manifest count differs from the source-backed reference.");
+        var payloadIds = payloadDefinition.AttachTo(ship, dataDirectory);
         var site = LaunchSite.LoadFromJson(Path.Combine(dataDirectory,
             "launch_sites", reference.LaunchSiteId+".json"));
         var pad = site.GetPosition(earth, universe.CurrentTime);
@@ -63,7 +69,8 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
         universe.AddVessel(ship);
         universe.SetActiveVessel(ship.Id);
         var controller = new Flight14LaunchController(ship, earth, guidance);
-        universe.PhysicsStepController = controller;
-        return new(universe, earth, ship, controller, guidance);
+        var deployment = new Flight14PayloadDeploymentController(ship, earth, controller, payloadDefinition, payloadIds);
+        universe.PhysicsStepController = deployment;
+        return new(universe, earth, ship, controller, guidance, payloadDefinition, deployment);
     }
 }

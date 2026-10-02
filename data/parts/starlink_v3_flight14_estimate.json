@@ -1,0 +1,27 @@
+{
+  "id": "starlink_v3_flight14_estimate",
+  "name": "Starlink V3 (Flight 14 estimate)",
+  "description": "Engineering estimate: 2000 kg all-up mass lumped into dry mass, 6.5 m equivalent stowed disk and 0.45 m thickness. Neither mass nor geometry is established by the Flight 14 report. Internal to the carrier until separation; no deployed solar arrays, onboard orbit-raising propellant or active propulsion is represented.",
+  "category": "command",
+  "vehicle_family": "starlink",
+  "vehicle_role": "payload",
+  "internal_payload": true,
+  "mass_dry": 2000,
+  "length_m": 0.45,
+  "diameter_m": 6.5,
+  "drag_coefficient": 0.3,
+  "heat_tolerance": 400,
+  "ec_capacity": 0,
+  "attachment_nodes": [
+    {
+      "id": "carrier",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "size": 1,
+      "type": "radial"
+    }
+  ]
+}

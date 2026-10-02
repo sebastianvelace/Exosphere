@@ -17,7 +17,7 @@ if (!double.IsFinite(fps) || fps < 1 || fps > 240)
     throw new ArgumentOutOfRangeException(nameof(fps));
 Directory.CreateDirectory(output);
 var run = Flight14LaunchDiagnostic.Create(data);
-var (universe, earth, ship, controller, guidance) = run;
+var (universe, earth, ship, controller, guidance, payloadDefinition, deployment) = run;
 double initialMass = ship.TotalMass, nextSample = 0;
 double maximumAngularRate = 0, maximumAngularRateElapsed = 0;
 string maximumAngularRatePhase = "";
@@ -25,10 +25,10 @@ var engines = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("ship_eng
 var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
 int maximumInsertionEngines = 0;
 var events = new List<object>();
-var previousPhase = controller.Phase;
+string previousPhase = "Ignition";
 using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
 {
-    int frames = (int)System.Math.Ceiling((guidance.MaximumMissionSeconds+guidance.MaximumIgnitionSeconds+1)*fps);
+    int frames = (int)System.Math.Ceiling((payloadDefinition.MaximumMissionSeconds+guidance.MaximumIgnitionSeconds+61)*fps);
     for (int i = 0; i < frames; i++)
     {
         run.AdvanceFrame(1/fps);
@@ -45,21 +45,25 @@ using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
         }
         if (controller.Phase == Flight14LaunchPhase.Insertion)
             maximumInsertionEngines = System.Math.Max(maximumInsertionEngines, running);
-        bool phaseChanged = controller.Phase != previousPhase;
+        string phase = controller.Phase == Flight14LaunchPhase.OrbitReady
+            ? "Payload"+deployment.Phase : controller.Phase.ToString();
+        bool phaseChanged = phase != previousPhase;
         if (phaseChanged)
         {
-            events.Add(new { phase = controller.Phase.ToString(), elapsedSeconds = Number(elapsed),
+            events.Add(new { phase, elapsedSeconds = Number(elapsed),
                 apoapsisAltitudeM = Number(orbit.Apoapsis-earth.Radius),
                 periapsisAltitudeM = Number(orbit.Periapsis-earth.Radius) });
-            Console.WriteLine($"T+{elapsed:F2} {controller.Phase} "
+            Console.WriteLine($"T+{elapsed:F2} {phase} "
                 + $"alt={ship.GetAltitude(earth):F0}m apo={orbit.Apoapsis-earth.Radius:F0}m "
                 + $"pe={orbit.Periapsis-earth.Radius:F0}m");
-            previousPhase = controller.Phase;
+            previousPhase = phase;
         }
         if (double.IsFinite(elapsed) && elapsed >= 0 && (phaseChanged || elapsed >= nextSample))
         {
             trace.WriteLine(JsonSerializer.Serialize(new {
-                missionElapsedSeconds = elapsed, phase = controller.Phase.ToString(),
+                missionElapsedSeconds = elapsed, phase,
+                deployedPayloadCount = deployment.Releases.Count,
+                attachedPayloadMassKg = ship.Parts.Parts.Where(p => p.Definition.HasVehicleRole("payload")).Sum(p => p.CurrentMass),
                 geodeticAltitudeM = ship.GetAltitude(earth), radialAltitudeM = rel.Magnitude-earth.Radius,
                 atmosphereRelativeSpeedMps = ship.GetSurfaceVelocity(earth).Magnitude,
                 inertialSpeedMps = velocity.Magnitude, radialSpeedMps = velocity.Dot(rel.Normalized),
@@ -70,9 +74,9 @@ using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
             }));
             if (elapsed >= nextSample) nextSample = System.Math.Floor(elapsed)+1;
         }
-        if (controller.Phase == Flight14LaunchPhase.Blocked
-            || (controller.Phase == Flight14LaunchPhase.OrbitReady
-                && elapsed >= controller.OrbitElapsedSeconds+60)) break;
+        if (controller.Phase == Flight14LaunchPhase.Blocked || deployment.Phase == Flight14PayloadPhase.Blocked
+            || (deployment.Phase == Flight14PayloadPhase.Complete
+                && elapsed >= deployment.Releases[^1].MissionElapsedSeconds+60)) break;
     }
 }
 var finalOrbit = OrbitalElements.FromStateVector(ship.Position-earth.Position,
@@ -84,22 +88,38 @@ foreach (string folder in new[] { "parts", "engines", "engine_clusters" })
 foreach (string file in new[] { "bodies/earth.json", "launch_sites/starbase_pad2.json",
     "vehicles/"+guidance.BaselineVehicleFile })
     physicalDataHashes[file] = Hash(Path.Combine(data, file));
-bool passed = controller.Phase == Flight14LaunchPhase.OrbitReady && maximumInsertionEngines == 1
+bool passed = controller.Phase == Flight14LaunchPhase.OrbitReady
+    && deployment.Phase == Flight14PayloadPhase.Complete && deployment.Releases.Count == payloadDefinition.Count
+    && deployment.Releases.All(r => System.Math.Abs(r.MassResidualKg) < 1e-6
+        && r.CenterResidualM < 1e-7 && r.MomentumResidualKgMps < 0.01
+        && r.RelativeOpeningResidualMps < 1e-7 && !r.Satellite.IsDestroyed
+        && r.Satellite.GetAltitude(earth) > earth.Atmosphere!.MaxAltitude)
+    && maximumInsertionEngines == 1
     && controller.CoastMinimumAltitudeM > earth.Atmosphere!.MaxAltitude
     && controller.CutoffPeriapsisAltitudeM < earth.Atmosphere.MaxAltitude
-    && finalOrbit.Periapsis-earth.Radius >= guidance.TargetInsertionPeriapsisAltitudeM
+    && finalOrbit.Periapsis-earth.Radius >= payloadDefinition.MinimumPeriapsisAltitudeM
     && maximumAngularRate <= 0.05;
 var summary = new {
     status = passed ? "COMPONENT_PASS" : "COMPONENT_FAIL", missionAcceptance = false,
-    diagnosticOnly = true, frameModel = "isolated-Earth at simulation epoch zero",
+    diagnosticOnly = true, componentScope = "pad-to-26-payload-release", frameModel = "isolated-Earth at simulation epoch zero",
     integrationDriver = "whole-20ms-steps-with-retained-frame-remainder",
     hardwareBaseline = guidance.BaselineVehicleFile, hardwareIsEstimated = true,
     guidanceSha256 = Hash(Path.Combine(data, "flight_profiles/starship_flight14_guidance_estimate.json")),
     referenceSha256 = Hash(Path.Combine(data, "flight_profiles/starship_flight14_2026.json")),
     physicsAssemblySha256 = Hash(typeof(Universe).Assembly.Location), physicalDataHashes,
-    orbitTailSeconds = 60, framesPerSecond = fps, initialStackMassKg = initialMass,
+    postDeploymentTailSeconds = 60,
+    payloadProfileSha256 = Hash(Path.Combine(data, "flight_profiles/starship_flight14_payload_estimate.json")), framesPerSecond = fps, initialStackMassKg = initialMass,
     remainingShipMassKg = ship.TotalMass, remainingShipPropellantKg = tank.LiquidFuel+tank.Oxidizer,
-    faultsAreSynthetic = true, payloadMassRepresentedKg = 0, simulatedPayloadDeployments = 0,
+    faultsAreSynthetic = true,
+    payloadMassIsEstimated = true,
+    payloadMassRepresentedKg = deployment.Releases.Sum(r => r.Satellite.TotalMass)
+        +ship.Parts.Parts.Where(p => p.Definition.HasVehicleRole("payload")).Sum(p => p.CurrentMass),
+    simulatedPayloadDeployments = deployment.Releases.Count,
+    payloadPhase = deployment.Phase.ToString(),
+    payloadBlockReason = deployment.BlockReason,
+    releases = deployment.Releases.Select(r => new { r.MissionElapsedSeconds, r.PartInstanceId,
+        satelliteId = r.Satellite.Id, massKg = r.Satellite.TotalMass, r.CarrierMassBeforeKg, r.CarrierMassAfterKg,
+        r.MassResidualKg, r.CenterResidualM, r.MomentumResidualKgMps, r.RelativeOpeningResidualMps, r.PeriapsisAltitudeM }),
     controlledBoosterRecovery = false, controlledShipRecovery = false,
     phase = controller.Phase.ToString(), blockReason = controller.BlockReason,
     liftoffEpochSeconds = Number(controller.LiftoffEpoch),
@@ -115,7 +135,7 @@ var summary = new {
 };
 File.WriteAllText(Path.Combine(output, "summary.json"),
     JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true })+"\n");
-Console.WriteLine($"{summary.status}: {controller.BlockReason ?? "isolated launch-to-insertion only; not mission acceptance"}");
+Console.WriteLine($"{summary.status}: {controller.BlockReason ?? deployment.BlockReason ?? "isolated launch-to-payload only; not mission acceptance"}");
 return passed ? 0 : 1;
 
 static double? Number(double value) => double.IsFinite(value) ? value : null;

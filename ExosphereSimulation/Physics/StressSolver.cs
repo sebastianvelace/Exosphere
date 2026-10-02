@@ -82,6 +82,7 @@ public static class StressSolver
         var destroyed = new List<Part>();
         foreach (var part in graph.Parts)
         {
+            if (graph.IsEnclosedPayload(part)) continue;
             // Landing hardware is stowed inside the aft skirt during entry. It must not
             // receive free-stream heating until EDL explicitly deploys it near the pad;
             // otherwise a recoverability kit burns off tens of kilometres above the site
@@ -115,6 +116,7 @@ public static class StressSolver
         var destroyed = new List<Part>();
         foreach (var part in graph.Parts)
         {
+            if (graph.IsEnclosedPayload(part)) continue;
             if (part.Definition.Category == PartCategory.Landing && !part.IsDeployed)
                 continue;
 
@@ -155,6 +157,7 @@ public static class StressSolver
         double worst = 0.0;
         foreach (var part in parts.Parts)
         {
+            if (parts.IsEnclosedPayload(part)) continue;
             if (part.IsBroken) continue;
             if (part.Definition.HeatTolerance <= 0.0) continue;
             double ratio = part.ThermalRatio;

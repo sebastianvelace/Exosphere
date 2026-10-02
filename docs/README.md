@@ -17,6 +17,7 @@ as provenance, but they are not the current product plan.
 | Visual and gameplay capture workflow | [`../PLAN_PLAYTEST.md`](../PLAN_PLAYTEST.md), [`../PLAN_VISUAL_REALISM.md`](../PLAN_VISUAL_REALISM.md) |
 | Flight 14 visual references and reconstruction limits | [`research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md`](research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md) |
 | Flight 14 orbital components, comparison evidence and remaining mission gates | [`audits/flight14_orbital_components_2026-10-01.md`](audits/flight14_orbital_components_2026-10-01.md) |
+| Flight 14 loaded ascent, 26 payload splits and conservation evidence | [`audits/flight14_payload_deployment_2026-10-01.md`](audits/flight14_payload_deployment_2026-10-01.md) |
 | Flight 14 continuous launch diagnostic and reconstruction assumptions | [`audits/flight14_continuous_launch_2026-10-01.md`](audits/flight14_continuous_launch_2026-10-01.md) |
 | Documentation status and archive policy | [`DOCUMENTATION_AUDIT.md`](DOCUMENTATION_AUDIT.md) |
 

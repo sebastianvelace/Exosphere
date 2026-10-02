@@ -1,5 +1,8 @@
 # Flight 14 continuous launch-to-insertion diagnostic
 
+Historical unloaded baseline at `f04a909`. The current tool includes estimated
+payload mass and release; see [the payload audit](flight14_payload_deployment_2026-10-01.md).
+
 Date: 2026-10-01. Scope: a reproducible numerical launch, hot-stage, suborbital
 cutoff, coast and single-engine insertion. This is a component integration gate,
 not a playable Flight 14 mission or a complete end-to-end flight.
@@ -151,3 +154,12 @@ then repeat the ascent and orbital evidence with that mass budget. Follow with
 payload release, early deorbit and water-return policies using the same propagated
 state. Integrate into the Godot mission adapter and compare real framebuffer views
 before enabling the featured mission launch.
+
+## Subsequent payload integration
+
+The results above preserve the unloaded component baseline at `f04a909`. The
+diagnostic now includes 26 estimated-mass satellite parts and continues through
+physical release. Its payload-loaded ascent, updated insertion lead and current
+verification are documented in [the payload integration audit](flight14_payload_deployment_2026-10-01.md).
+The unloaded numbers and reproduction scope above are historical evidence, not
+the current tool output.

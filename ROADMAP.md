@@ -283,8 +283,11 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      `docs/audits/flight14_orbital_components_2026-10-01.md`. A continuous isolated-
      Earth pad-to-insertion diagnostic now runs its own estimated ascent/hot-stage/
      coast policy through the production physics controller; source and limits:
-     `docs/audits/flight14_continuous_launch_2026-10-01.md`. Payload mass,
-     26 physical payload splits, moving-body gameplay integration, both water returns
+     `docs/audits/flight14_continuous_launch_2026-10-01.md`. The diagnostic now carries
+     26 estimated-mass Starlink V3 parts from the pad and releases them as independent
+     propagated vessels with conservation witnesses; see
+     `docs/audits/flight14_payload_deployment_2026-10-01.md`. Actual mass/release
+     timing, moving-body gameplay integration, both water returns
      and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled
      as Flight 14; the featured launch action remains unavailable.
 
