@@ -18,6 +18,8 @@ public sealed class Flight14DescentDefinition
     public double ReferenceSlewRateRadPerSecond { get; set; }
     public double BankOnsetDynamicPressurePa { get; set; }
     public double BankFullDynamicPressurePa { get; set; }
+    public double TrimOnsetDynamicPressurePa { get; set; }
+    public double TrimFullDynamicPressurePa { get; set; }
 
     public static Flight14DescentDefinition LoadFromJson(string path)
     {
@@ -33,13 +35,14 @@ public sealed class Flight14DescentDefinition
         double[] values = [MaximumMissionSeconds, DiagnosticEndAltitudeM, MaximumEndSpeedMps,
             HypersonicControlThresholdMps, TerminalAngleOfAttackSpeedMps, EntryAngleOfAttackDegrees,
             TerminalAngleOfAttackDegrees, ReferenceSlewRateRadPerSecond, BankOnsetDynamicPressurePa,
-            BankFullDynamicPressurePa];
+            BankFullDynamicPressurePa, TrimOnsetDynamicPressurePa, TrimFullDynamicPressurePa];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || values.Any(v => !double.IsFinite(v) || v <= 0)
             || EntryAngleOfAttackDegrees > TerminalAngleOfAttackDegrees || TerminalAngleOfAttackDegrees > 90
             || MaximumEndSpeedMps >= TerminalAngleOfAttackSpeedMps
             || TerminalAngleOfAttackSpeedMps >= HypersonicControlThresholdMps
-            || BankOnsetDynamicPressurePa >= BankFullDynamicPressurePa)
+            || BankOnsetDynamicPressurePa >= BankFullDynamicPressurePa
+            || TrimOnsetDynamicPressurePa >= TrimFullDynamicPressurePa)
             throw new InvalidDataException("Invalid Flight 14 descent engineering envelope.");
     }
 }

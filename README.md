@@ -135,6 +135,19 @@ dotnet run --project tools/Flight14TrajectoryProbe/Flight14TrajectoryProbe.cspro
 See [the aerodynamic-descent diagnostic](docs/audits/flight14_aerodynamic_descent_2026-10-02.md)
 for measured loads, attitude tracking error and remaining broadcast coverage.
 This endpoint does not establish flip-and-burn, powered landing or water contact.
+A further `--landing` diagnostic uses the same loaded state and reserve through
+an estimated three-sea-level-engine flip and terminal burn to its first 100 m
+crossing. It retains physical spool, gimbal and restart behavior and adds no
+header-tank refill or water-contact outcome:
+
+```bash
+dotnet run --project tools/Flight14TrajectoryProbe/Flight14TrajectoryProbe.csproj -- \
+  data /tmp/flight14-terminal-final-proof 60 --landing
+```
+
+Current trim/terminal results and remaining uncertainty are documented in
+[the trim and terminal-burn audit](docs/audits/flight14_trim_terminal_2026-10-02.md).
+
 
 
 Menu capture and navigation checks: `python3 tools/menu_quick_check.py` (Godot .NET and Xvfb required). The checks use isolated user data and save real-framebuffer captures in `exports/menu-operations-review/`.

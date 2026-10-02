@@ -131,8 +131,8 @@ public sealed class Flight14DescentController : IPhysicsStepController
         _reference = AttitudeGuidance.SlewQuaternion(_reference, desired,
             controlIntervalSeconds, _definition.ReferenceSlewRateRadPerSecond);
         _reference = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(_reference, flow, angle);
-        _ship.PitchYawRoll = AttitudeGuidance.ComputeCommand(_ship.Orientation, _reference,
-            _ship.AngularVelocity, 2, 25);
+        _ship.PitchYawRoll = Flight14AerodynamicAttitude.ComputeCommand(_ship, _body, _reference,
+            _definition.TrimOnsetDynamicPressurePa, _definition.TrimFullDynamicPressurePa);
     }
 
     private Flight14EntryWitness Witness(Universe universe)

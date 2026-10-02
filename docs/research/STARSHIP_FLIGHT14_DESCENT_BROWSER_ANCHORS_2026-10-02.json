@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "status": "manually_transcribed_browser_display_reference",
+  "physics_authority": false,
+  "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+  "accessed_date": "2026-10-02",
+  "capture_method": "Paused browser video screenshot; player currentTime read from the media element; HUD values read visually. Native screenshot clipped to the visible player.",
+  "source_video_sha256": null,
+  "alignment_uncertainty_seconds": 2,
+  "speed_frame": "not_specified_by_broadcast",
+  "altitude_datum": "not_specified_by_broadcast",
+  "limitations": [
+    "Browser playback uses a separately served encoding; the previously pinned local video file hash does not authenticate these screenshots.",
+    "HUD integer clocks and browser currentTime differ by approximately 15-16 seconds; each displayed mission clock was read independently.",
+    "Player overlays and clipping prevent photometric or calibrated attitude inference.",
+    "Displayed speed frame, altitude datum, transmission delay and rounding remain unresolved.",
+    "References are comparison evidence only and must not drive kinematic, resource or clock assignments."
+  ],
+  "anchors": [
+    {
+      "video_seconds": 9805.866931,
+      "displayed_elapsed_seconds": 9790,
+      "displayed_altitude_km": 102,
+      "displayed_speed_kmh": 26937,
+      "frame": "docs/research/flight14_descent_browser_captures_2026-10-02/video_09805.jpg",
+      "frame_sha256": "2107b226bfb9edc86e30f6eb1cc5bdfe29b25dc5ef6998600159faa0c71c6a49",
+      "view": "onboard_luminous_entry"
+    },
+    {
+      "video_seconds": 10556.441183,
+      "displayed_elapsed_seconds": 10541,
+      "displayed_altitude_km": 67.8,
+      "displayed_speed_kmh": 23567,
+      "frame": "docs/research/flight14_descent_browser_captures_2026-10-02/video_10556.jpg",
+      "frame_sha256": "f4a966ee2c8f8b91b3cb273b721c25b9ba8e385c5379028420833f2eedd26fa6",
+      "view": "onboard_atmospheric_descent"
+    },
+    {
+      "video_seconds": 10976.247659,
+      "displayed_elapsed_seconds": 10961,
+      "displayed_altitude_km": 44.5,
+      "displayed_speed_kmh": 9982,
+      "frame": "docs/research/flight14_descent_browser_captures_2026-10-02/video_10976.jpg",
+      "frame_sha256": "b33895183b7e5a59f6e77e0ca88ca33312eb90185b44e38cef02f3e32005f97e",
+      "view": "onboard_atmospheric_descent"
+    }
+  ]
+}

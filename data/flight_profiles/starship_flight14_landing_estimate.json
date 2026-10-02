@@ -1,0 +1,16 @@
+{
+  "id": "starship-flight14-ship-terminal-engineering-estimate",
+  "status": "engineering-estimate",
+  "assumptions": "Estimated continuation of the original launch, payload and entry state. Starts the three healthy sea-level Raptors during a physical flip at an estimated 1.2 km gate, then reduces selected engine count monotonically as thrust demand falls. Uses existing engine/gimbal/flap, shutdown/startup and tank-consumption models. This controller explicitly bounds actual start-attempt counters against engine-model restart metadata; the generic runtime does not enforce that metadata. A first 100 m descending gate is a terminal-burn diagnostic, not water contact or mission acceptance. Flip height, gains, tilt and descent profile are estimates; clocks do not command the trajectory. Uses the original remaining main-tank resources, with no new or refilled header tanks. No measured SpaceX bank schedule, throttle or landing coordinates are asserted.",
+  "flipAltitudeM": 1200,
+  "diagnosticEndAltitudeM": 100,
+  "maximumEndAirspeedMps": 15,
+  "maximumBurnSeconds": 90,
+  "descentProfileSlopePerSecond": 0.08,
+  "targetFinalDescentSpeedMps": 2,
+  "maximumTiltDegrees": 20,
+  "lateralDampingPerSecond": 0.5,
+  "verticalDampingPerSecond": 1.2,
+  "proportionalAttitudeGain": 2.2,
+  "attitudeDampingGain": 6
+}

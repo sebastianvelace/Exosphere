@@ -307,6 +307,11 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
       to a first 3 km crossing through physical bank/flap control. Actual attitude
       tracking error, deep-entry load/range response and terminal broadcast coverage
       remain open; see `docs/audits/flight14_aerodynamic_descent_2026-10-02.md`.
+      Estimated model-based flap trim now counters the existing static moment;
+      a composed three-sea-level-engine flip/terminal-burn diagnostic continues to
+      a first 100 m crossing, consuming the original reserve with finite engine
+      spool/restart and gimbal response. Water contact and source timing/range
+      agreement remain open; see `docs/audits/flight14_trim_terminal_2026-10-02.md`.
       Actual mass/release
      timing, moving-body gameplay integration, both water returns
      and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled

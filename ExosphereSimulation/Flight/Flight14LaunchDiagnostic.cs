@@ -14,6 +14,25 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     private double _pendingFrameSeconds;
     public Flight14ReturnController? ReturnController { get; private set; }
     public Flight14DescentController? DescentController { get; private set; }
+    public Flight14PoweredReturnController? PoweredReturnController { get; private set; }
+
+    /// <summary>Propagate the same loaded carrier through its physical flip and terminal burn.</summary>
+    public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory)
+    {
+        var run = CreateWithReturn(dataDirectory);
+        var landing = Flight14LandingDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_landing_estimate.json"));
+        var descent = Flight14DescentDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_descent_estimate.json"));
+        // A control endpoint from the separate estimated profile, never a state assignment.
+        descent.DiagnosticEndAltitudeM = landing.FlipAltitudeM;
+        run.DescentController = new Flight14DescentController(run.Ship, run.Earth,
+            run.ReturnController!, run.Controller, descent);
+        run.PoweredReturnController = new Flight14PoweredReturnController(run.Ship, run.Earth,
+            run.DescentController, run.Controller, landing, run.Guidance.SeaLevelEngineModelId);
+        run.Universe.PhysicsStepController = run.PoweredReturnController;
+        return run;
+    }
 
     /// <summary>Continue the loaded return through a bounded aerodynamic-descent diagnostic.</summary>
     public static Flight14LaunchDiagnostic CreateWithDescent(string dataDirectory)
