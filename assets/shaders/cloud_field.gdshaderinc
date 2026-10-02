@@ -78,7 +78,7 @@ float cloud_weather_spherical_sample(vec3 direction) {
 	vec3 bitangent = normalize(cross(direction, tangent));
 	vec2 center_uv = cloud_equirect(direction)
 		+ vec2(cloud_longitude_offset, 0.0);
-	float center = texture(cloud_coverage_tex, center_uv).r;
+	float center = textureLod(cloud_coverage_tex, center_uv, 0.0).r;
 	// Preserve the same four textureLod reads, but widen the meridional
 	// footprint slightly more than the horizontal one. This is a cheap
 	// anisotropic blend targeted at the latitude-row artifact, not a new
@@ -167,9 +167,9 @@ float cloud_coastal_density(vec3 position, float height, vec3 wind) {
     vec2 xy = cloud_coastal_xy(local, east, north, scale, wind.xz);
     vec2 cell = floor(xy);
     float density = 0.0;
-    float erosion = cloud_value_noise3(local * 0.0021 + wind);
-    float billow = 0.65 * cloud_value_noise3(local * 0.0011 + wind)
-        + 0.35 * cloud_value_noise3(local * 0.0041 + wind);
+    float erosion = 0.0;
+    float billow = 0.0;
+    bool detail_ready = false;
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
             vec2 id = cell + vec2(float(x), float(y));
@@ -177,10 +177,20 @@ float cloud_coastal_density(vec3 position, float height, vec3 wind) {
             if (seed < 0.05 || (seed < 0.995 && seed < cloud_coastal_threshold(id))) continue;
             vec2 centre = cloud_coastal_centre(id);
             float radius = mix(0.15, 0.56, cloud_hash3(vec3(id, 73.0)));
+            // The largest aspect is 1.20; billow can extend the 1.05 footprint
+            // by at most 0.11. 1.40 encloses 1.20 * 1.16, so empty samples can
+            // skip rotation, lobes and noise without changing any cloud density.
+            if (length(xy - centre) > radius * 1.40) continue;
             float angle = cloud_hash3(vec3(id, 67.0)) * 6.283185;
             mat2 rotation = mat2(vec2(cos(angle), -sin(angle)), vec2(sin(angle), cos(angle)));
             vec2 aspect = vec2(1.0, mix(0.60, 1.20, cloud_hash3(vec3(id, 71.0))));
             vec2 offset = rotation * (xy - centre) / (radius * aspect);
+            if (!detail_ready) {
+                erosion = cloud_value_noise3(local * 0.0021 + wind);
+                billow = 0.65 * cloud_value_noise3(local * 0.0011 + wind)
+                    + 0.35 * cloud_value_noise3(local * 0.0041 + wind);
+                detail_ready = true;
+            }
             float radial = length(offset) - (billow - 0.5) * 0.22;
             if (radial >= 1.05) continue;
             float footprint = 1.0 - smoothstep(0.65, 1.05, radial);
@@ -253,13 +263,13 @@ float cloud_density(vec3 position) {
         local_weight = 1.0 - smoothstep(cloud_local_radius_m * 0.70, cloud_local_radius_m, distance_m);
     }
     float local_density = 0.0;
-    float billow = cloud_value_noise3(noise_position * 0.00065 + wind_offset);
     if (local_weight > 0.0) {
         // Preserve clear holes; horizon map filtering does not alter local cells.
         local_density = cloud_coastal_density(position, height, wind_offset);
         // Skip global weather/detail sampling inside the procedural region.
         if (local_weight >= 1.0) return local_density;
     }
+    float billow = cloud_value_noise3(noise_position * 0.00065 + wind_offset);
     float weather = cloud_weather_spherical_sample(texture_direction);
     float detail = cloud_detail_sample(noise_position + wind_offset * 3200.0);
     float macro = cloud_value_noise3(noise_position * max(cloud_macro_scale, 1e-6) + wind_offset);
@@ -285,11 +295,12 @@ float cloud_density(vec3 position) {
 // Resolve the nearby illuminated face before sampling the opaque interior.
 // A coarse uniform light march skips thin sunlit crowns in dense coastal cells.
 // The integral still uses the same extinction/density as the camera ray.
-float cloud_local_sun_transmission(vec3 point, vec3 sun, float distance_m) {
+float cloud_local_sun_transmission_samples(vec3 point, vec3 sun, float distance_m, int samples) {
     float depth = 0.0;
     for (int i = 0; i < 10; i++) {
-        float u0 = float(i) / 10.0;
-        float u1 = float(i + 1) / 10.0;
+        if (i >= samples) break;
+        float u0 = float(i) / float(samples);
+        float u1 = float(i + 1) / float(samples);
         float a = u0 * u0 * distance_m;
         float b = u1 * u1 * distance_m;
         depth += cloud_density(point + sun * (0.5 * (a + b)))
@@ -297,4 +308,8 @@ float cloud_local_sun_transmission(vec3 point, vec3 sun, float distance_m) {
         if (depth > 8.0) break;
     }
     return exp(-min(depth, 80.0));
+}
+
+float cloud_local_sun_transmission(vec3 point, vec3 sun, float distance_m) {
+    return cloud_local_sun_transmission_samples(point, sun, distance_m, 10);
 }

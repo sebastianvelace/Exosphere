@@ -21,7 +21,7 @@ float surface_cloud_shadow(vec3 point, vec3 sun) {
         distance_m = max(surface_cloud_sphere(point, sun,
             cloud_planet_radius_m + cloud_local_top_m).y, 0.0);
     if (cloud_in_local_core(point) && cloud_in_local_core(point + sun * distance_m))
-        return cloud_local_sun_transmission(point, sun, distance_m);
+        return cloud_local_sun_transmission_samples(point, sun, distance_m, 4);
     float depth = 0.0;
     for (int i = 0; i < 4; i++) {
         float t = (float(i) + 0.5) / 4.0;
@@ -43,7 +43,7 @@ vec3 surface_cloud_solar(vec3 point, vec3 sun) {
     if (surface_solar_lut_enabled && mu >= -0.04) {
         float u = sqrt(clamp(height / max(surface_atmosphere_height_m, 1.0), 0.0, 1.0));
         float v = sqrt(clamp((mu + 0.04) / 1.04, 0.0, 1.0));
-        return texture(surface_solar_lut, vec2(u, v)).rgb;
+        return textureLod(surface_solar_lut, vec2(u, v), 0.0).rgb;
     }
     float air_mass = min(40.0, 1.0 / max(mu + 0.025 * exp(-11.0 * max(mu, 0.0)), 0.025));
     vec3 depth = surface_rayleigh_scattering * surface_rayleigh_height_m
@@ -85,6 +85,9 @@ vec4 surface_cloud_radiance(vec3 ray, float ground_distance, vec3 sun,
     float transmission = 1.0;
     float distance_weight = 0.0;
     for (int i = 0; i < 24; i++) {
+        // Opaque cloud interiors do not need another nested density/light march
+        // for each terrain fragment. Keep residual throughput below 0.5%.
+        if (transmission < 0.005) break;
         // Quadratic placement concentrates samples at the dense end of a
         // downward ray. Direction-stable jitter breaks coherent shell bands.
         float u0 = float(i) / 24.0;

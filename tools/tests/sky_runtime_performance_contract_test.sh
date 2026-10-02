@@ -34,7 +34,7 @@ rg -q --fixed-strings 'if (float(i) >= view_steps) break;' "$SHADER" \
   || fail "view loop does not honor quality bound"
 rg -q --fixed-strings 'float cloud_view_steps = effective_step_count(' "$SHADER" \
   || fail "cloud integration minimum bound missing"
-rg -q --fixed-strings 'if (!local_interval && float(i) >= cloud_view_steps) break;' "$SHADER" \
+rg -q --fixed-strings 'if (float(i) >= cloud_view_steps || cloud_transmittance < 0.005) break;' "$SHADER" \
   || fail "cloud loop does not honor quality bound"
 rg -q --fixed-strings 'float light_steps = effective_step_count(' "$SHADER" \
   || fail "solar integration step normalization missing"
@@ -42,22 +42,55 @@ rg -q --fixed-strings 'float cloud_light_steps = effective_step_count(' "$SHADER
   || fail "cloud-shadow step normalization missing"
 rg -q '^const int CLOUD_VIEW_STEPS = 24;$' "$SHADER" \
   || fail "cloud view ceiling is not the validated 24-sample path"
-# The coastal core has a separate bounded adaptive path; the global sky budget
-# and quality floor above remain unchanged. Runtime speed still requires profiling.
-rg -q '^const int CLOUD_LOCAL_VIEW_STEPS = 96;$' "$SHADER" \
+# The coastal core covers the entire ray with a 32 x 4 budget. A 96 x 10
+# adaptive march reproduced GPU watchdog resets during dense-cloud traversal.
+rg -q '^const int CLOUD_LOCAL_VIEW_STEPS = 32;$' "$SHADER" \
   || fail "local cloud view ceiling is not explicitly bounded"
 rg -q --fixed-strings 'for (int i = 0; i < CLOUD_LOCAL_VIEW_STEPS; i++)' "$SHADER" \
   || fail "local cloud loop bypasses its declared ceiling"
-rg -q --fixed-strings 'local_cursor >= cloud_end || cloud_transmittance < 0.005' "$SHADER" \
-  || fail "local cloud termination does not honor interval and opacity"
-rg -q --fixed-strings 'cloud_coastal_empty_distance(origin + view_dir * local_cursor)' "$SHADER" \
-  || fail "coastal empty-space bound is not used"
+rg -q --fixed-strings 'local_interval ? float(CLOUD_LOCAL_VIEW_STEPS)' "$SHADER" \
+  || fail "local quadrature does not cover the complete interval"
+rg -q --fixed-strings 'cloud_local_sun_transmission_samples(position, to_sun, distance_to_edge, 4)' "$SHADER" \
+  || fail "local sky shadow quadrature bypasses its four-sample budget"
 rg -q --fixed-strings 'for (int i = 0; i < 10; i++)' "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "local solar quadrature ceiling missing"
 rg -q '^const int CLOUD_LIGHT_STEPS = 5;$' "$SHADER" \
   || fail "cloud shadow ceiling is not the bounded five-sample path"
 rg -q --fixed-strings 'private const float LowAltitudeAtmosphereQuality = 0.48f;' "$SKY" \
   || fail "low-altitude visual quality is not bounded explicitly"
+
+# The expensive coastal march must stay out of the full-resolution atmosphere
+# and lighting cubemap. These routing guards supplement real GPU/image evidence;
+# they are not a timing benchmark or a guarantee against driver resets.
+rg -q '^render_mode use_quarter_res_pass;' "$SHADER" \
+  || fail "bounded cloud subpass missing"
+rg -q --fixed-strings 'vec4 integrate_clouds(vec3 view_dir)' "$SHADER" \
+  || fail "cloud integral is not separated from atmosphere lighting"
+rg -q --fixed-strings 'if (AT_QUARTER_RES_PASS)' "$SHADER" \
+  || fail "distant cloud march is not routed to the reduced-resolution pass"
+rg -q --fixed-strings 'lighting_pass ? 6.0 : render_step_count(12.0, float(VIEW_STEPS))' "$SHADER" \
+  || fail "lighting view quadrature bypasses its startup bound"
+rg -q --fixed-strings 'AT_CUBEMAP_PASS ? vec4(0.0, 0.0, 0.0, 1.0) : QUARTER_RES_COLOR' "$SHADER" \
+  || fail "cubemap repeats cloud transport or clear-air transmission is incorrect"
+# GLES in Godot 4.6.3 generates invalid sampler constructors for sky subpass
+# reads. Its camera path must retain clouds without requesting that subpass.
+rg -q '^#if CURRENT_RENDERER != RENDERER_COMPATIBILITY$' "$SHADER" \
+  || fail "GLES sky subpass exclusion missing"
+rg -q --fixed-strings 'if (!AT_CUBEMAP_PASS && cloud_enabled) clouds = integrate_clouds(normalize(EYEDIR));' "$SHADER" \
+  || fail "bounded direct GLES clouds or cloud-free lighting guard missing"
+
+# Removing the sky did not prevent the reproduced AMD reset. Terrain-side
+# cloud transport needs its own opacity termination and bounded solar budget.
+rg -q --fixed-strings 'if (transmission < 0.005) break;' "$ROOT/assets/shaders/cloud_surface.gdshaderinc" \
+  || fail "terrain cloud transport continues through an opaque interior"
+rg -q --fixed-strings 'cloud_local_sun_transmission_samples(point, sun, distance_m, 4)' "$ROOT/assets/shaders/cloud_surface.gdshaderinc" \
+  || fail "terrain local cloud lighting budget missing"
+# Lookup tables have no mipmaps. Implicit derivatives inside divergent marches
+# are undefined; explicit level zero preserves LUT filtering without derivatives.
+if rg -q 'texture\((density_lut|transmittance_lut|multiple_scattering_lut|surface_density_lut|surface_solar_lut),' \
+  "$SHADER" "$ROOT/assets/shaders/cloud_surface.gdshaderinc" "$ROOT/assets/shaders/surface_atmosphere.gdshaderinc"; then
+  fail "implicit-derivative lookup inside atmospheric/cloud transport"
+fi
 rg -q --fixed-strings 'float atmosphereQuality = altitude < 45_000.0' "$SKY" \
   || fail "low-altitude quality is not altitude-gated"
 rg -q --fixed-strings '_lastAtmosphereQuality' "$SKY" \
@@ -110,4 +143,4 @@ rg -q --fixed-strings 'FloatDiffers(_lastFade, fade)' "$GROUND" \
 rg -q --fixed-strings '_lastSunDirection.DistanceSquaredTo(sunDirection)' "$GROUND" \
   || fail "earth-ground sun direction dirty check missing"
 
-echo "sky_runtime_performance_contract_test: PASS (bounded global 24x5 and local 96x10 cloud paths, cached uniforms, low-priority LUT worker)"
+echo "sky_runtime_performance_contract_test: PASS (bounded global 24x5 and local 32x4 cloud paths, cached uniforms, low-priority LUT worker)"

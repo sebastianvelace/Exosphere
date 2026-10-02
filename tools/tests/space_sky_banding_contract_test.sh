@@ -41,4 +41,4 @@ rg -q 'float view_tangent_altitude = length\(origin \+ view_dir' "$SHADER" \
 rg -q 'float tangent_sky = hits_ground \? 0\.0' "$SHADER" \
   || fail "tangent sky floor is not gated away from opaque ground hits"
 
-echo "space_sky_banding_contract_test: PASS (stable cloud jitter: global 24 samples, bounded local adaptive path)"
+echo "space_sky_banding_contract_test: PASS (stable cloud jitter: global 24 samples, bounded local quadrature)"

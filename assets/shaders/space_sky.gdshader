@@ -2,6 +2,12 @@
 // Integrates wavelength-banded Rayleigh + aerosol Mie scattering, Mie/ozone absorption,
 // planet shadow and stellar extinction from the observer altitude to the atmosphere edge.
 shader_type sky;
+// Vulkan sky cloud transport uses 1/16 of the screen pixels, including traversal.
+// Retain the shared density field with bounded camera and lighting quadrature.
+// Stars, the solar disc and the spherical atmosphere remain at full resolution.
+#if CURRENT_RENDERER != RENDERER_COMPATIBILITY
+render_mode use_quarter_res_pass;
+#endif
 
 uniform sampler2D star_tex : source_color, filter_linear_mipmap;
 uniform vec3 sun_dir = vec3(0.4, 0.5, 0.8);
@@ -81,7 +87,10 @@ uniform float ground_fill_strength : hint_range(0.0, 1.0) = 1.0;
 const int VIEW_STEPS = 28;
 const int LIGHT_STEPS = 14;
 const int CLOUD_VIEW_STEPS = 24;
-const int CLOUD_LOCAL_VIEW_STEPS = 96;
+// Keep the local view/light product bounded alongside the terrain cloud pass.
+// Cover the complete shell with bounded quadrature,
+// rather than accumulating fixed 80 m steps that can stop before the ray ends.
+const int CLOUD_LOCAL_VIEW_STEPS = 32;
 // Keep the light integral cheaper than the camera integral, but sample the same
 // volumetric field in both directions.  Five warped samples are enough to resolve
 // the compact cloud shell while avoiding the old base-mask shortcut that made the
@@ -146,7 +155,7 @@ vec3 density_at_height(float height) {
 		// The CPU profile uses x² altitude packing; invert that warp before sampling.
 		float altitude_fraction = clamp(h / max(density_lut_top_altitude, 1.0), 0.0, 1.0);
 		float altitude_u = sqrt(altitude_fraction);
-		return max(texture(density_lut, vec2(altitude_u, 0.5)).rgb, vec3(0.0));
+		return max(textureLod(density_lut, vec2(altitude_u, 0.5), 0.0).rgb, vec3(0.0));
 	}
 	float rayleigh = exp(-h / max(rayleigh_scale_height, 1.0));
 	float mie = exp(-h / max(mie_scale_height, 1.0));
@@ -258,15 +267,15 @@ vec3 solar_transmittance(vec3 position, vec3 direction, float outer_radius) {
 		// without blurring the high-elevation sun path or adding temporal noise.
 		if (solar_v < 0.35) {
 			float texel = 1.0 / max(transmittance_lut_height - 1.0, 2.0);
-			vec3 lower = texture(transmittance_lut,
-				vec2(altitude_u, max(solar_v - texel, 0.0))).rgb;
-			vec3 center = texture(transmittance_lut, lut_uv).rgb;
-			vec3 upper = texture(transmittance_lut,
-				vec2(altitude_u, min(solar_v + texel, 1.0))).rgb;
+			vec3 lower = textureLod(transmittance_lut,
+				vec2(altitude_u, max(solar_v - texel, 0.0)), 0.0).rgb;
+			vec3 center = textureLod(transmittance_lut, lut_uv, 0.0).rgb;
+			vec3 upper = textureLod(transmittance_lut,
+				vec2(altitude_u, min(solar_v + texel, 1.0)), 0.0).rgb;
 			return clamp((lower + 2.0 * center + upper) * 0.25,
 				vec3(0.0), vec3(1.0));
 		}
-		return clamp(texture(transmittance_lut, lut_uv).rgb,
+		return clamp(textureLod(transmittance_lut, lut_uv, 0.0).rgb,
 			vec3(0.0), vec3(1.0));
 	}
 	return transmittance(optical_depth_to_sun(position, direction, outer_radius));
@@ -279,8 +288,8 @@ vec3 angular_multiple_scattering_slice(
 		+ solar_v * (multiple_scattering_solar_layers - 1.0) + 0.5;
 	float packed_height = multiple_scattering_solar_layers
 		* multiple_scattering_view_layers * multiple_scattering_mu_layers;
-	return max(texture(multiple_scattering_lut,
-		vec2(altitude_u, row / max(packed_height, 1.0))).rgb, vec3(0.0));
+	return max(textureLod(multiple_scattering_lut,
+		vec2(altitude_u, row / max(packed_height, 1.0)), 0.0).rgb, vec3(0.0));
 }
 
 vec3 angular_multiple_scattering_radiance(
@@ -342,7 +351,7 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
     if (cloud_in_local_core(position) && cloud_in_local_core(position + to_sun * distance_to_edge))
         distance_to_edge = max(ray_sphere(position, to_sun, planet_radius + cloud_local_top_m).y, 0.0);
     if (cloud_in_local_core(position) && cloud_in_local_core(position + to_sun * distance_to_edge))
-        return cloud_local_sun_transmission(position, to_sun, distance_to_edge);
+        return cloud_local_sun_transmission_samples(position, to_sun, distance_to_edge, 4);
 	float closest = max(-dot(position, to_sun), 0.0);
 	float optical_depth = 0.0;
 	float cloud_light_steps = effective_step_count(
@@ -371,8 +380,105 @@ float hg_phase(float mu, float g) {
 		* pow(max(1.0 + g2 - 2.0 * g * mu, 1e-3), 1.5));
 }
 
-void sky() {
-	vec3 view_dir = normalize(EYEDIR);
+// The filtered subpass carries linear cloud radiance in RGB and Beer-Lambert
+// transmission in alpha (1 means clear air). It uses the unchanged shared density
+// field, so terrain shadows and foreground vessel extinction remain reciprocal.
+vec4 integrate_clouds(vec3 view_dir) {
+	vec3 up = normalize(local_up);
+	vec3 to_sun = normalize(sun_dir);
+	float outer_radius = planet_radius + atmosphere_height;
+	vec3 origin = up * (planet_radius + max(observer_altitude, 1.0));
+	vec2 atmosphere_hit = ray_sphere(origin, view_dir, outer_radius);
+	float ray_start = max(atmosphere_hit.x, 0.0);
+	vec2 ground_hit = ray_sphere(origin, view_dir, planet_radius);
+	// Exact nearest interval through the spherical cloud shell. This remains geometric
+	// from below the base through orbit; no altitude colour fade is involved.
+	vec3 cloud_radiance = vec3(0.0);
+	float cloud_transmittance = 1.0;
+	if (cloud_enabled && cloud_top_altitude > cloud_base_altitude) {
+		vec2 outer_cloud = ray_sphere(origin, view_dir, planet_radius + cloud_top_altitude);
+		vec2 inner_cloud = ray_sphere(origin, view_dir, planet_radius + cloud_base_altitude);
+		float cloud_start = max(outer_cloud.x, 0.0);
+		float cloud_end = outer_cloud.y;
+		float origin_radius = length(origin);
+		if (origin_radius < planet_radius + cloud_base_altitude && inner_cloud.y > cloud_start)
+			cloud_start = inner_cloud.y;
+		else if (inner_cloud.x > cloud_start && inner_cloud.x < cloud_end)
+			cloud_end = inner_cloud.x;
+		if (ground_hit.x > cloud_start && ground_hit.x < cloud_end)
+			cloud_end = ground_hit.x;
+
+        vec2 local_hit = ray_sphere(origin, view_dir, planet_radius + cloud_local_top_m);
+        bool local_interval = cloud_in_local_core(origin + view_dir * max(cloud_start, local_hit.x))
+                && cloud_in_local_core(origin + view_dir * min(cloud_end, local_hit.y));
+        if (local_interval) {
+            cloud_start = max(cloud_start, local_hit.x);
+            cloud_end = min(cloud_end, local_hit.y);
+        }
+		if (cloud_end > cloud_start) {
+			float cloud_closest = max(-dot(origin, view_dir), 0.0);
+			float mu_cloud = dot(view_dir, to_sun);
+			float phase_cloud = 0.82 * hg_phase(mu_cloud, 0.82)
+				+ 0.18 * hg_phase(mu_cloud, -0.20);
+			float cloud_view_steps = effective_step_count(
+				local_interval ? float(CLOUD_LOCAL_VIEW_STEPS)
+				: render_step_count(8.0, float(CLOUD_VIEW_STEPS)));
+			float previous_cloud_density = 0.0;
+			vec3 cloud_air_depth = cloud_foreground_air_depth(origin, view_dir,
+				max(ray_start, 0.0), max(cloud_start, ray_start), cloud_closest);
+			for (int i = 0; i < CLOUD_LOCAL_VIEW_STEPS; i++) {
+				if (float(i) >= cloud_view_steps || cloud_transmittance < 0.005) break;
+				float segment_start = tangent_warped_boundary(
+					float(i) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
+				float segment_end = tangent_warped_boundary(
+					float(i + 1) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
+				float cloud_step = max(segment_end - segment_start, 0.0);
+				float jitter = stable_jitter(view_dir + up * 11.0 + float(i) * vec3(0.29, 0.53, 0.71));
+                float t = mix(segment_start, segment_end,
+					clamp(0.5 + jitter * (local_interval ? 0.04 : CLOUD_VIEW_JITTER), 0.14, 0.86));
+				vec3 p = origin + view_dir * t;
+				vec3 air_segment_depth = extinction(density_at_height(
+                    length(p) - planet_radius)) * cloud_step;
+				vec3 cloud_view_throughput = transmittance(
+                    cloud_air_depth + air_segment_depth * 0.5);
+				cloud_air_depth += air_segment_depth;
+				float rho = cloud_density(p);
+				// Trapezoidal density smoothing reuses the previous quadrature
+				// sample instead of adding a second lookup. It removes visible
+				// shell-step bands while preserving the same bounded integral.
+				float smoothed_rho = local_interval || i == 0
+					? rho : 0.5 * (previous_cloud_density + rho);
+				previous_cloud_density = rho;
+				if (smoothed_rho > 0.001) {
+					float segment_alpha = 1.0
+						- exp(-smoothed_rho * cloud_extinction * cloud_step);
+					float direct_light = cloud_sun_transmittance(p, to_sun);
+					vec3 atmospheric_sun = solar_transmittance(p, to_sun, outer_radius);
+                    float daylight = smoothstep(-0.16, 0.08, dot(normalize(p), to_sun));
+                    float diffuse = (0.018 + 0.025 * direct_light) * daylight;
+                    vec3 sky_fill = 0.03 * (vec3(1.0)
+                        - exp(-rayleigh_scattering * rayleigh_scale_height * 4.0));
+                    vec3 source = atmospheric_solar_visibility
+                        * (atmospheric_sun * (direct_light * phase_cloud + diffuse) + sky_fill * daylight);
+					cloud_radiance += cloud_view_throughput * cloud_transmittance * source * segment_alpha;
+					cloud_transmittance *= 1.0 - segment_alpha;
+				}
+			}
+		}
+	}
+	// Near the surface the first visible cloud samples sit exactly on the
+	// geometric horizon. Keep the cloud bank volumetric above that edge, but fade
+	// the tangent silhouette over a small angular interval so the shell does not
+	// become a one-pixel white seam against the ground. Orbital views are untouched.
+	float low_altitude_cloud_fade = 1.0 - smoothstep(6000.0, 45000.0,
+		max(observer_altitude, 0.0));
+	float horizon_cloud_fade = smoothstep(-0.01, 0.10, dot(view_dir, up));
+	cloud_radiance *= mix(1.0, horizon_cloud_fade, low_altitude_cloud_fade);
+
+	return vec4(cloud_radiance, cloud_transmittance);
+}
+
+vec3 integrate_atmosphere(vec3 view_dir, bool lighting_pass, vec4 clouds) {
 	vec3 up = normalize(local_up);
 	vec3 to_sun = normalize(sun_dir);
 	vec3 apparent_sun = refracted_sun_direction(to_sun, up, observer_altitude);
@@ -409,7 +515,10 @@ void sky() {
 			* pow(max(1.0 + g2 - 2.0 * mie_g * mu, 1e-3), 1.5));
 
 		float view_steps = effective_step_count(
-			render_step_count(12.0, float(VIEW_STEPS)));
+			// Lighting is a low-frequency integral over six cubemap faces. Keep the
+			// same spherical transport and LUTs, but reserve fine quadrature for the
+			// camera; startup must also stay bounded before the LUT worker completes.
+			lighting_pass ? 6.0 : render_step_count(12.0, float(VIEW_STEPS)));
 		for (int i = 0; i < VIEW_STEPS; i++) {
 			if (float(i) >= view_steps) break;
 			float segment_start = tangent_warped_boundary(float(i) / view_steps,
@@ -475,97 +584,10 @@ void sky() {
 		}
 	}
 
-	// Exact nearest interval through the spherical cloud shell. This remains geometric
-	// from below the base through orbit; no altitude colour fade is involved.
-	vec3 cloud_radiance = vec3(0.0);
-	float cloud_transmittance = 1.0;
-	if (cloud_enabled && cloud_top_altitude > cloud_base_altitude) {
-		vec2 outer_cloud = ray_sphere(origin, view_dir, planet_radius + cloud_top_altitude);
-		vec2 inner_cloud = ray_sphere(origin, view_dir, planet_radius + cloud_base_altitude);
-		float cloud_start = max(outer_cloud.x, 0.0);
-		float cloud_end = outer_cloud.y;
-		float origin_radius = length(origin);
-		if (origin_radius < planet_radius + cloud_base_altitude && inner_cloud.y > cloud_start)
-			cloud_start = inner_cloud.y;
-		else if (inner_cloud.x > cloud_start && inner_cloud.x < cloud_end)
-			cloud_end = inner_cloud.x;
-		if (ground_hit.x > cloud_start && ground_hit.x < cloud_end)
-			cloud_end = ground_hit.x;
-
-        vec2 local_hit = ray_sphere(origin, view_dir, planet_radius + cloud_local_top_m);
-        bool local_interval = cloud_in_local_core(origin + view_dir * max(cloud_start, local_hit.x))
-                && cloud_in_local_core(origin + view_dir * min(cloud_end, local_hit.y));
-        if (local_interval) {
-            cloud_start = max(cloud_start, local_hit.x);
-            cloud_end = min(cloud_end, local_hit.y);
-        }
-		if (cloud_end > cloud_start) {
-			float cloud_closest = max(-dot(origin, view_dir), 0.0);
-			float mu_cloud = dot(view_dir, to_sun);
-			float phase_cloud = 0.82 * hg_phase(mu_cloud, 0.82)
-				+ 0.18 * hg_phase(mu_cloud, -0.20);
-			float cloud_view_steps = effective_step_count(
-				render_step_count(8.0, float(CLOUD_VIEW_STEPS)));
-			float previous_cloud_density = 0.0;
-			vec3 cloud_air_depth = cloud_foreground_air_depth(origin, view_dir,
-				max(ray_start, 0.0), max(cloud_start, ray_start), cloud_closest);
-            float local_cursor = cloud_start;
-			for (int i = 0; i < CLOUD_LOCAL_VIEW_STEPS; i++) {
-				if (!local_interval && float(i) >= cloud_view_steps) break;
-                if (local_interval && (local_cursor >= cloud_end || cloud_transmittance < 0.005)) break;
-				float segment_start = tangent_warped_boundary(
-					float(i) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
-				float segment_end = tangent_warped_boundary(
-					float(i + 1) / cloud_view_steps, cloud_start, cloud_end, cloud_closest);
-				float cloud_step = max(segment_end - segment_start, 0.0);
-                if (local_interval) {
-                    segment_start = local_cursor;
-                    float empty_distance = cloud_coastal_empty_distance(origin + view_dir * local_cursor);
-                    cloud_step = min(max(80.0, empty_distance * 0.65), cloud_end - local_cursor);
-                    segment_end = segment_start + cloud_step;
-                    local_cursor = segment_end;
-                }
-				float jitter = stable_jitter(view_dir + up * 11.0 + float(i) * vec3(0.29, 0.53, 0.71));
-                float t = mix(segment_start, segment_end,
-					clamp(0.5 + jitter * (local_interval ? 0.04 : CLOUD_VIEW_JITTER), 0.14, 0.86));
-				vec3 p = origin + view_dir * t;
-				vec3 air_segment_depth = extinction(density_at_height(
-                    length(p) - planet_radius)) * cloud_step;
-				vec3 cloud_view_throughput = transmittance(
-                    cloud_air_depth + air_segment_depth * 0.5);
-				cloud_air_depth += air_segment_depth;
-				float rho = cloud_density(p);
-				// Trapezoidal density smoothing reuses the previous quadrature
-				// sample instead of adding a second lookup. It removes visible
-				// shell-step bands while preserving the same bounded integral.
-				float smoothed_rho = local_interval || i == 0
-					? rho : 0.5 * (previous_cloud_density + rho);
-				previous_cloud_density = rho;
-				if (smoothed_rho > 0.001) {
-					float segment_alpha = 1.0
-						- exp(-smoothed_rho * cloud_extinction * cloud_step);
-					float direct_light = cloud_sun_transmittance(p, to_sun);
-					vec3 atmospheric_sun = solar_transmittance(p, to_sun, outer_radius);
-                    float daylight = smoothstep(-0.16, 0.08, dot(normalize(p), to_sun));
-                    float diffuse = (0.018 + 0.025 * direct_light) * daylight;
-                    vec3 sky_fill = 0.03 * (vec3(1.0)
-                        - exp(-rayleigh_scattering * rayleigh_scale_height * 4.0));
-                    vec3 source = atmospheric_solar_visibility
-                        * (atmospheric_sun * (direct_light * phase_cloud + diffuse) + sky_fill * daylight);
-					cloud_radiance += cloud_view_throughput * cloud_transmittance * source * segment_alpha;
-					cloud_transmittance *= 1.0 - segment_alpha;
-				}
-			}
-		}
-	}
-	// Near the surface the first visible cloud samples sit exactly on the
-	// geometric horizon. Keep the cloud bank volumetric above that edge, but fade
-	// the tangent silhouette over a small angular interval so the shell does not
-	// become a one-pixel white seam against the ground. Orbital views are untouched.
-	float low_altitude_cloud_fade = 1.0 - smoothstep(6000.0, 45000.0,
-		max(observer_altitude, 0.0));
-	float horizon_cloud_fade = smoothstep(-0.01, 0.10, dot(view_dir, up));
-	cloud_radiance *= mix(1.0, horizon_cloud_fade, low_altitude_cloud_fade);
+	// The radiance cubemap needs broad atmospheric lighting, not a repeated
+	// nested coastal-cloud march. The camera samples the filtered cloud subpass.
+	vec3 cloud_radiance = clouds.rgb;
+	float cloud_transmittance = clamp(clouds.a, 0.0, 1.0);
 
 	vec3 stars = texture(star_tex, dir_to_equirect(view_dir)).rgb * star_energy;
 	vec3 star_transmittance = crosses_atmosphere ? transmittance(optical_depth) : vec3(1.0);
@@ -717,5 +739,30 @@ void sky() {
 	// blue-noise-like offset prevents 8-bit twilight gradients from forming horizontal
 	// contour bands; it is view-stable (unlike TIME noise) and far below visible radiance.
 	float output_dither = stable_jitter(view_dir * 4096.0 + up * 13.0) * 0.0015;
-	COLOR = max(color + vec3(output_dither), vec3(0.0));
+	return max(color + vec3(output_dither), vec3(0.0));
+}
+
+void sky() {
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	// Godot 4.6.3's GLES sky subpass lookup emits Vulkan-style sampler
+	// constructors, which fail GLSL compilation. Retain the bounded integral
+	// directly for camera rays; keep cloud transport out of lighting cubemaps.
+	vec4 clouds = vec4(0.0, 0.0, 0.0, 1.0);
+	if (!AT_CUBEMAP_PASS && cloud_enabled) clouds = integrate_clouds(normalize(EYEDIR));
+	COLOR = integrate_atmosphere(normalize(EYEDIR), AT_CUBEMAP_PASS, clouds);
+#else
+	if (AT_QUARTER_RES_PASS) {
+		if (AT_CUBEMAP_PASS || !cloud_enabled) {
+			COLOR = vec3(0.0);
+			ALPHA = 1.0;
+		} else {
+			vec4 clouds = integrate_clouds(normalize(EYEDIR));
+			COLOR = clouds.rgb;
+			ALPHA = clouds.a;
+		}
+	} else {
+		vec4 clouds = AT_CUBEMAP_PASS ? vec4(0.0, 0.0, 0.0, 1.0) : QUARTER_RES_COLOR;
+		COLOR = integrate_atmosphere(normalize(EYEDIR), AT_CUBEMAP_PASS, clouds);
+	}
+#endif
 }

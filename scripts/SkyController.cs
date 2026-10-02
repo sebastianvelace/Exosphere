@@ -214,7 +214,9 @@ public partial class SkyController : Node
         _env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;
         _lastSkyProcessRealtime = true;
         GD.Print($"PERF_RENDER stage=sky_config radiance={(compatibility ? 128 : 256)} process=realtime "
-            + $"atmosphereQuality={InteractiveAtmosphereQuality:F2}");
+            + $"atmosphereQuality={InteractiveAtmosphereQuality:F2} "
+            + $"cloudPass={(compatibility ? "direct_bounded" : "quarter_resolution")} "
+            + "lightingViewSteps=6 lightingClouds=False");
     }
 
     public override void _ExitTree()

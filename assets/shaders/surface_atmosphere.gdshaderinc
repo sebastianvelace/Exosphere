@@ -47,7 +47,7 @@ vec3 surface_aerial_radiance(vec3 ground, vec3 ray, float distance_m,
         vec3 densities;
         if (surface_density_lut_enabled) {
             float u = sqrt(clamp(height / max(surface_density_lut_top_m, 1.0), 0.0, 1.0));
-            densities = max(texture(surface_density_lut, vec2(u, 0.5)).rgb, vec3(0.0));
+            densities = max(textureLod(surface_density_lut, vec2(u, 0.5), 0.0).rgb, vec3(0.0));
         } else {
             densities = vec3(exp(-height / max(surface_rayleigh_height_m, 1.0)),
                 exp(-height / max(surface_mie_height_m, 1.0)),
@@ -68,7 +68,7 @@ vec3 surface_aerial_radiance(vec3 ground, vec3 ray, float distance_m,
         if (surface_solar_lut_enabled && sun_mu > horizon_mu) {
             float u = sqrt(clamp(height / max(surface_atmosphere_height_m, 1.0), 0.0, 1.0));
             float v = sqrt(clamp((sun_mu + 0.04) / 1.04, 0.0, 1.0));
-            solar = sun_mu >= -0.04 ? texture(surface_solar_lut, vec2(u, v)).rgb : vec3(0.0);
+            solar = sun_mu >= -0.04 ? textureLod(surface_solar_lut, vec2(u, v), 0.0).rgb : vec3(0.0);
         }
         vec3 scattering = surface_rayleigh_scattering * rho_r * phase_r
             + surface_mie_scattering * rho_m * phase_m;
