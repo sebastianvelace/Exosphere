@@ -159,7 +159,9 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, allow_nan=False)+"\n")
     args.output.with_suffix(".md").write_text(markdown(report))
-    print(f"Display comparison: {report['sampledAnchors']}/{len(comparisons)} anchors sampled; remaining coverage missing.")
+    not_sampled = len(comparisons) - report["sampledAnchors"]
+    print(f"Display comparison: {report['sampledAnchors']}/{len(comparisons)} anchors sampled; "
+          f"{not_sampled} anchors not sampled.")
 
 
 if __name__ == "__main__":

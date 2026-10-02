@@ -312,6 +312,9 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
       a first 100 m crossing, consuming the original reserve with finite engine
       spool/restart and gimbal response. Water contact and source timing/range
       agreement remain open; see `docs/audits/flight14_trim_terminal_2026-10-02.md`.
+      A Flight 14-specific shallow-entry/55° control estimate improves the reviewed
+      descent comparisons; residual timing, speed and altitude errors remain explicit
+      in `docs/audits/flight14_shallow_corridor_2026-10-02.md`.
       Actual mass/release
      timing, moving-body gameplay integration, both water returns
      and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled

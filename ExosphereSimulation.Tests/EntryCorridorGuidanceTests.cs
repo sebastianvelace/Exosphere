@@ -284,4 +284,24 @@ public sealed class EntryCorridorGuidanceTests
         Assert.True(EntryCorridorGuidance.ComputeBankSide(flow, Vector3d.Up, -side).Dot(side) < -0.999);
     }
 
+    [Fact]
+    public void FlightSpecificCorridorRecoversDeepEntryWithoutChangingGenericPolicy()
+    {
+        var generic = EntryCorridorGuidance.LimitLiftForDescent(
+            Vector3d.Up, Vector3d.Up, Vector3d.Forward, -150, 7450, -1, 10);
+        var shallow = EntryCorridorGuidance.LimitLiftForDescent(
+            Vector3d.Up, Vector3d.Up, Vector3d.Forward, -150, 7450, -1, 10,
+            minimumDownwardSpeedMps: 20, downwardSpeedFraction: 0.006,
+            verticalResponseSeconds: 20, downwardSpeedDeadbandMps: 30);
+        Assert.InRange(generic.Dot(Vector3d.Up), -0.15000001, -0.14999999);
+        Assert.InRange(shallow.Dot(Vector3d.Up), 0.62, 0.64);
+        Assert.Equal(1, shallow.Magnitude, 10);
+        Assert.True(shallow.Dot(Vector3d.Forward) > 0);
+        var unchanged = EntryCorridorGuidance.LimitLiftForDescent(
+            Vector3d.Up, Vector3d.Up, Vector3d.Forward, -150, 7450, -1, 10,
+            minimumDownwardSpeedMps: 100, downwardSpeedFraction: 0.035,
+            verticalResponseSeconds: 20, downwardSpeedDeadbandMps: 150);
+        Assert.Equal(generic, unchanged);
+    }
+
 }

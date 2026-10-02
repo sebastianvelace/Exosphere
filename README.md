@@ -147,6 +147,8 @@ dotnet run --project tools/Flight14TrajectoryProbe/Flight14TrajectoryProbe.cspro
 
 Current trim/terminal results and remaining uncertainty are documented in
 [the trim and terminal-burn audit](docs/audits/flight14_trim_terminal_2026-10-02.md).
+The subsequent estimated shallow-entry policy and unresolved reference residuals
+are documented in [the entry control audit](docs/audits/flight14_shallow_corridor_2026-10-02.md).
 
 
 

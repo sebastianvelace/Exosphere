@@ -79,6 +79,10 @@ public sealed class Flight14DescentTests(ITestOutputHelper output)
     [InlineData("pressure")]
     [InlineData("rate")]
     [InlineData("duration")]
+    [InlineData("downward-speed")]
+    [InlineData("downward-fraction")]
+    [InlineData("vertical-response")]
+    [InlineData("descent-deadband")]
     public void InvalidEngineeringEnvelopeCannotLoad(string field)
     {
         var definition = Definition();
@@ -90,6 +94,10 @@ public sealed class Flight14DescentTests(ITestOutputHelper output)
             case "pressure": definition.BankFullDynamicPressurePa = definition.BankOnsetDynamicPressurePa; break;
             case "rate": definition.ReferenceSlewRateRadPerSecond = double.NaN; break;
             case "duration": definition.MaximumMissionSeconds = double.PositiveInfinity; break;
+            case "downward-speed": definition.MinimumDownwardSpeedMps = 0; break;
+            case "downward-fraction": definition.DownwardSpeedFraction = 1; break;
+            case "vertical-response": definition.VerticalResponseSeconds = double.NaN; break;
+            case "descent-deadband": definition.DownwardSpeedDeadbandMps = -1; break;
         }
         Assert.Throws<InvalidDataException>(definition.Validate);
     }

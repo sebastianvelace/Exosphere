@@ -13,6 +13,7 @@ public sealed class Flight14AerodynamicAttitudeTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData(70, 4000, 50000, false)]
+    [InlineData(55, 4000, 50000, false)]
     [InlineData(90, 80, 3000, false)]
     [InlineData(90, 80, 3000, true)]
     public void PhysicalFlapServosHoldEntryAndBroadsideAgainstTheStaticMoment(

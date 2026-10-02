@@ -148,25 +148,33 @@ public static class EntryCorridorGuidance
     public static Vector3d LimitLiftForDescent(
         Vector3d requestedLift, Vector3d liftUp, Vector3d lateralFallback,
         double verticalSpeedMps, double airspeedMps,
-        double ballisticVerticalAccelerationMps2, double liftUpAccelerationMps2)
+        double ballisticVerticalAccelerationMps2, double liftUpAccelerationMps2,
+        double minimumDownwardSpeedMps = 100.0, double downwardSpeedFraction = 0.035,
+        double verticalResponseSeconds = 20.0, double downwardSpeedDeadbandMps = 150.0)
     {
+        if (!double.IsFinite(minimumDownwardSpeedMps) || minimumDownwardSpeedMps <= 0
+            || !double.IsFinite(downwardSpeedFraction) || downwardSpeedFraction <= 0 || downwardSpeedFraction >= 1
+            || !double.IsFinite(verticalResponseSeconds) || verticalResponseSeconds <= 0
+            || !double.IsFinite(downwardSpeedDeadbandMps) || downwardSpeedDeadbandMps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(minimumDownwardSpeedMps), "Invalid estimated descent policy.");
         if (!double.IsFinite(verticalSpeedMps) || !double.IsFinite(airspeedMps)
             || !double.IsFinite(ballisticVerticalAccelerationMps2)
             || !double.IsFinite(liftUpAccelerationMps2)
             || liftUpAccelerationMps2 < 0.05 || airspeedMps < 1_000.0)
             return requestedLift.Normalized;
 
-        // A shallow descending corridor, with enough look-ahead for the physical
-        // roll actuator. At terminal speed the ordinary belly-flop/flip owns guidance.
-        double targetVerticalSpeed = -System.Math.Max(100.0, airspeedMps * 0.035);
-        double targetAcceleration = (targetVerticalSpeed - verticalSpeedMps) / 20.0;
+        // Caller-owned engineering policy, with enough look-ahead for the physical
+        // roll actuator. Defaults retain generic catch/EDL behavior; Flight 14 supplies
+        // its own estimated corridor rather than changing the shared force model.
+        double targetVerticalSpeed = -System.Math.Max(minimumDownwardSpeedMps, airspeedMps * downwardSpeedFraction);
+        double targetAcceleration = (targetVerticalSpeed - verticalSpeedMps) / verticalResponseSeconds;
         double ceiling = System.Math.Clamp(
             (targetAcceleration - ballisticVerticalAccelerationMps2)
                 / liftUpAccelerationMps2, -0.15, 1.0);
         // Footprint steering cannot turn a steep entry into a down-lift plunge.
-        // Keep a 150 m/s descent deadband for its range command below the ceiling.
+        // Keep the policy's descent deadband for its range command below the ceiling.
         double floor = System.Math.Clamp(
-            ((targetVerticalSpeed - 150.0 - verticalSpeedMps) / 20.0
+            ((targetVerticalSpeed - downwardSpeedDeadbandMps - verticalSpeedMps) / verticalResponseSeconds
                 - ballisticVerticalAccelerationMps2) / liftUpAccelerationMps2, -0.15, ceiling);
         var bounded = ConstrainVerticalLift(requestedLift, liftUp,
             minimumVerticalFraction: floor, lateralFallback: lateralFallback);

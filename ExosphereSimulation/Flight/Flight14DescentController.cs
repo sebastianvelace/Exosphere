@@ -114,7 +114,9 @@ public sealed class Flight14DescentController : IPhysicsStepController
                 + drag.Dot(up)/_ship.TotalMass;
             var side = EntryCorridorGuidance.ComputeBankSide(flow, up, _priorLift);
             var limited = EntryCorridorGuidance.LimitLiftForDescent(liftUp, liftUp, side,
-                verticalSpeed, speed, ballistic, lift.Magnitude/_ship.TotalMass*liftUp.Magnitude);
+                verticalSpeed, speed, ballistic, lift.Magnitude/_ship.TotalMass*liftUp.Magnitude,
+                _definition.MinimumDownwardSpeedMps, _definition.DownwardSpeedFraction,
+                _definition.VerticalResponseSeconds, _definition.DownwardSpeedDeadbandMps);
             liftReference = EntryCorridorGuidance.BlendForAerodynamicAuthority(limited, liftUp,
                 state.DynamicPressurePa, _definition.BankOnsetDynamicPressurePa, _definition.BankFullDynamicPressurePa);
         }

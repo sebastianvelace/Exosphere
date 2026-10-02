@@ -1,17 +1,21 @@
 {
   "id": "starship-flight14-aerodynamic-descent-engineering-estimate",
   "status": "engineering-estimate",
-  "assumptions": "Continues the original loaded launch/deployment/deorbit state below its descending 90 km witness. Uses existing production aerodynamic forces and flap/attitude actuators, bank-limited descent guidance and an estimated transition from 70 degree entry to 90 degree broadside descent. Controls, transition thresholds, rate and the 3 km diagnostic endpoint are engineering estimates, not measured Flight 14 commands. No forces, state, fuel or thermal values are imposed. No geographic landing corridor, powered landing, header-tank routing, real water contact or mission acceptance is established by this diagnostic. Model-based static pitching-moment trim blends over estimated 250-1000 Pa, using the unchanged production rotational/flap model; it is not a measured SpaceX control law.",
+  "assumptions": "Continues the original loaded launch/deployment/deorbit state below its descending 90 km witness. Uses existing production aerodynamic forces and flap/attitude actuators, bank-limited descent guidance and an estimated transition from 55 degree hypersonic entry to 90 degree broadside descent. Controls, transition thresholds, rate and the 3 km diagnostic endpoint are engineering estimates, not measured Flight 14 commands. No forces, state, fuel or thermal values are imposed. No geographic landing corridor, powered landing, header-tank routing, real water contact or mission acceptance is established by this diagnostic. Model-based static pitching-moment trim blends over estimated 250-1000 Pa, using the unchanged production rotational/flap model; it is not a measured SpaceX control law. The hypersonic vertical corridor targets max(20 m/s, 0.006 times airspeed) downward with a 20 s feedback response and 30 m/s deadband. These are control estimates investigated against independently clock-read descent displays; they are not reconstructed SpaceX bank commands and never drive the clock or prescribed kinematics. The 55 degree hypersonic angle is a bounded engineering-control experiment: the unchanged body-lift/drag polar provides higher usable lift-to-drag than the former 70 degree assumption, which saturates lift-up and still descends too early. It is not a measured flight attitude.",
   "maximumMissionSeconds": 13000,
   "diagnosticEndAltitudeM": 3000,
   "maximumEndSpeedMps": 150,
   "hypersonicControlThresholdMps": 1000,
   "terminalAngleOfAttackSpeedMps": 250,
-  "entryAngleOfAttackDegrees": 70,
+  "entryAngleOfAttackDegrees": 55,
   "terminalAngleOfAttackDegrees": 90,
   "referenceSlewRateRadPerSecond": 0.05,
   "bankOnsetDynamicPressurePa": 25,
   "bankFullDynamicPressurePa": 250,
   "trimOnsetDynamicPressurePa": 250,
-  "trimFullDynamicPressurePa": 1000
+  "trimFullDynamicPressurePa": 1000,
+  "minimumDownwardSpeedMps": 20,
+  "downwardSpeedFraction": 0.006,
+  "verticalResponseSeconds": 20,
+  "downwardSpeedDeadbandMps": 30
 }

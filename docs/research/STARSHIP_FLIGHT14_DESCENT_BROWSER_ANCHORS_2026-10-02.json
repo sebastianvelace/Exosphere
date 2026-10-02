@@ -4,7 +4,7 @@
   "physics_authority": false,
   "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
   "accessed_date": "2026-10-02",
-  "capture_method": "Paused browser video screenshot; player currentTime read from the media element; HUD values read visually. Native screenshot clipped to the visible player.",
+  "capture_method": "Paused browser video screenshot; player currentTime read from the media element; HUD values read visually. First three native screenshots are clipped to the visible player; the additional validation screenshot retains the browser page and source title.",
   "source_video_sha256": null,
   "alignment_uncertainty_seconds": 2,
   "speed_frame": "not_specified_by_broadcast",
@@ -25,6 +25,16 @@
       "frame": "docs/research/flight14_descent_browser_captures_2026-10-02/video_09805.jpg",
       "frame_sha256": "2107b226bfb9edc86e30f6eb1cc5bdfe29b25dc5ef6998600159faa0c71c6a49",
       "view": "onboard_luminous_entry"
+    },
+    {
+      "video_seconds": 10384.814714,
+      "displayed_elapsed_seconds": 10369,
+      "displayed_altitude_km": 74.1,
+      "displayed_speed_kmh": 25369,
+      "frame": "docs/research/flight14_descent_browser_captures_2026-10-02/video_10384.jpg",
+      "frame_sha256": "d53fe6faf1f99ec5cd8cb31b42e7b250a66858491210797505011e826f07ffd7",
+      "view": "onboard_luminous_entry",
+      "comparison_role": "additional_validation_not_used_to_select_corridor_or_55_degree_candidate"
     },
     {
       "video_seconds": 10556.441183,
