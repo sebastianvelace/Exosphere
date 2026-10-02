@@ -7,22 +7,27 @@ using Exosphere.Simulation.Flight;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 if (args.Length is < 2 or > 4)
 {
-    Console.Error.WriteLine("Usage: Flight14TrajectoryProbe <data-directory> <output-directory> [frames-per-second] [--return]");
+    Console.Error.WriteLine("Usage: Flight14TrajectoryProbe <data-directory> <output-directory> [frames-per-second] [--return|--descent]");
     return 2;
 }
 string data = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(args[1]);
-bool includeReturn = args.Contains("--return");
-var options = args.Skip(2).Where(a => a != "--return").ToArray();
+bool includeDescent = args.Contains("--descent");
+bool includeReturn = args.Contains("--return") || includeDescent;
+var options = args.Skip(2).Where(a => a is not ("--return" or "--descent")).ToArray();
 if (options.Length > 1) throw new ArgumentException("Expected one frame-rate argument.");
 double fps = options.Length == 1 ? double.Parse(options[0], CultureInfo.InvariantCulture) : 60;
 if (!double.IsFinite(fps) || fps < 1 || fps > 240)
     throw new ArgumentOutOfRangeException(nameof(fps));
 Directory.CreateDirectory(output);
-var run = includeReturn ? Flight14LaunchDiagnostic.CreateWithReturn(data) : Flight14LaunchDiagnostic.Create(data);
+var run = includeDescent ? Flight14LaunchDiagnostic.CreateWithDescent(data)
+    : includeReturn ? Flight14LaunchDiagnostic.CreateWithReturn(data) : Flight14LaunchDiagnostic.Create(data);
 var returning = run.ReturnController;
+var descent = run.DescentController;
 var returnDefinition = includeReturn ? Flight14ReturnDefinition.LoadFromJson(Path.Combine(data,
     "flight_profiles/starship_flight14_return_estimate.json")) : null;
+var descentDefinition = includeDescent ? Flight14DescentDefinition.LoadFromJson(Path.Combine(data,
+    "flight_profiles/starship_flight14_descent_estimate.json")) : null;
 var (universe, earth, ship, controller, guidance, payloadDefinition, deployment) = run;
 double initialMass = ship.TotalMass, nextSample = 0;
 double maximumAngularRate = 0, maximumAngularRateElapsed = 0, maximumPreReturnAngularRate = 0;
@@ -34,7 +39,8 @@ var events = new List<object>();
 string previousPhase = "Ignition";
 using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
 {
-    double duration = returnDefinition?.MaximumMissionSeconds ?? payloadDefinition.MaximumMissionSeconds + 61;
+    double duration = descentDefinition?.MaximumMissionSeconds
+        ?? returnDefinition?.MaximumMissionSeconds ?? payloadDefinition.MaximumMissionSeconds + 61;
     int frames = (int)System.Math.Ceiling((duration + guidance.MaximumIgnitionSeconds + 1)*fps);
     for (int i = 0; i < frames; i++)
     {
@@ -50,7 +56,8 @@ using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
         {
             maximumAngularRate = ship.AngularVelocity.Magnitude;
             maximumAngularRateElapsed = elapsed;
-            maximumAngularRatePhase = returning != null && returning.Phase != Flight14ReturnPhase.WaitingForPayload
+            maximumAngularRatePhase = descent != null && descent.Phase != Flight14DescentPhase.WaitingForEntry
+                ? "Descent" + descent.Phase : returning != null && returning.Phase != Flight14ReturnPhase.WaitingForPayload
                 ? "Return" + returning.Phase : controller.Phase.ToString();
         }
         if (controller.Phase == Flight14LaunchPhase.Insertion)
@@ -59,6 +66,8 @@ using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
             ? "Payload"+deployment.Phase : controller.Phase.ToString();
         if (returning != null && returning.Phase != Flight14ReturnPhase.WaitingForPayload)
             phase = "Return" + returning.Phase;
+        if (descent != null && descent.Phase != Flight14DescentPhase.WaitingForEntry)
+            phase = "Descent" + descent.Phase;
         if (returning?.Phase == Flight14ReturnPhase.DeorbitBurn)
             maximumDeorbitEngines = System.Math.Max(maximumDeorbitEngines, running);
         bool phaseChanged = phase != previousPhase;
@@ -76,6 +85,7 @@ using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
         {
             earth.GetGeodeticCoordinatesAtTime(ship.Position, universe.CurrentTime,
                 out double latitude, out double longitude, out _);
+            var entry = EntryFlightDiagnostics.Evaluate(ship, earth);
             trace.WriteLine(JsonSerializer.Serialize(new {
                 missionElapsedSeconds = elapsed, simulationTimeSeconds = universe.CurrentTime, phase,
                 bodyFixedLatitudeDegrees = latitude, bodyFixedLongitudeDegrees = longitude,
@@ -89,12 +99,22 @@ using (var trace = new StreamWriter(Path.Combine(output, "telemetry.jsonl")))
                 specificEnergyJPerKg = velocity.MagnitudeSquared * 0.5 - earth.GM / rel.Magnitude,
                 verticalSpeedMps = ship.GetSurfaceVelocity(earth).Dot(earth.GetGeodeticUp(ship.Position)),
                 remainingShipPropellantKg = tank.LiquidFuel+tank.Oxidizer,
-                runningShipEngines = running, angularRateRadPerSecond = ship.AngularVelocity.Magnitude
+                runningShipEngines = running, angularRateRadPerSecond = ship.AngularVelocity.Magnitude,
+                dynamicPressurePa = entry.DynamicPressurePa,
+                aerodynamicLoadG = entry.AerodynamicLoadG,
+                angleOfAttackDegrees = Number(entry.AngleOfAttackDegrees),
+                bankAngleDegrees = Number(entry.BankAngleDegrees),
+                stagnationHeatFluxWPerM2 = entry.StagnationHeatFluxWPerM2,
+                maximumSkinTemperatureK = ship.Parts.Parts.Max(p => p.SkinTemperature),
+                maximumHullTemperatureK = ship.Parts.Parts.Max(p => p.Temperature),
+                maximumThermalDamage = ship.Parts.Parts.Max(p => p.ThermalDamage)
             }));
             if (elapsed >= nextSample) nextSample = System.Math.Floor(elapsed)+1;
         }
         if (controller.Phase == Flight14LaunchPhase.Blocked || deployment.Phase == Flight14PayloadPhase.Blocked
-            || returning?.Phase is Flight14ReturnPhase.Blocked or Flight14ReturnPhase.EntryReached
+            || returning?.Phase == Flight14ReturnPhase.Blocked
+            || (includeDescent ? descent?.Phase is Flight14DescentPhase.Blocked or Flight14DescentPhase.DescentReached
+                : returning?.Phase == Flight14ReturnPhase.EntryReached)
             || (!includeReturn && deployment.Phase == Flight14PayloadPhase.Complete
                 && elapsed >= deployment.Releases[^1].MissionElapsedSeconds+60)) break;
     }
@@ -127,10 +147,15 @@ bool passed = controller.Phase == Flight14LaunchPhase.OrbitReady
             && returning.DiagnosticEnd.VerticalSpeedMps < 0 && maximumAngularRate <= 0.15
             && returning.EntryInterface.WindwardShieldDotVelocity > 0.85
             && returning.DiagnosticEnd.WindwardShieldDotVelocity > 0.85
+            && (!includeDescent || descent!.Phase == Flight14DescentPhase.DescentReached
+                && descent.EndWitness != null && descent.EndWitness.VerticalSpeedMps < 0
+                && descent.EndWitness.AtmosphereRelativeSpeedMps <= descentDefinition!.MaximumEndSpeedMps
+                && descent.EndWitness.RemainingPropellantKg == returning.PostDeorbitPropellantKg)
         : finalOrbit.Periapsis-earth.Radius >= payloadDefinition.MinimumPeriapsisAltitudeM && maximumAngularRate <= 0.05);
 var summary = new {
     status = passed ? "COMPONENT_PASS" : "COMPONENT_FAIL", missionAcceptance = false,
-    diagnosticOnly = true, componentScope = includeReturn ? "pad-to-26-payload-release-deorbit-entry" : "pad-to-26-payload-release", frameModel = "isolated-Earth at simulation epoch zero",
+    diagnosticOnly = true, componentScope = includeDescent ? "pad-to-26-payload-release-deorbit-aerodynamic-descent"
+        : includeReturn ? "pad-to-26-payload-release-deorbit-entry" : "pad-to-26-payload-release", frameModel = "isolated-Earth at simulation epoch zero",
     geographicFrameModel = "rotating-body geodetic coordinates; conventional prime meridian at epoch zero, not dated Greenwich phase",
     integrationDriver = "whole-20ms-steps-with-retained-frame-remainder",
     hardwareBaseline = guidance.BaselineVehicleFile, hardwareIsEstimated = true,
@@ -139,6 +164,11 @@ var summary = new {
     physicsAssemblySha256 = Hash(typeof(Universe).Assembly.Location), physicalDataHashes,
     postDeploymentTailSeconds = includeReturn ? 0 : 60,
     returnProfileSha256 = includeReturn ? Hash(Path.Combine(data, "flight_profiles/starship_flight14_return_estimate.json")) : null,
+    descentProfileSha256 = includeDescent ? Hash(Path.Combine(data, "flight_profiles/starship_flight14_descent_estimate.json")) : null,
+    descentPhase = descent?.Phase.ToString(), descentBlockReason = descent?.BlockReason,
+    descentWitness = descent == null ? null : new { descent.StartWitness, descent.EndWitness,
+        descent.PeakAerodynamicLoadG, descent.PeakDynamicPressurePa, descent.PeakStagnationHeatFluxWPerM2,
+        descent.MaximumAltitudeAfterHandoffM, descent.MaximumClimbRateMps, descent.MaximumAngularRateRadPerSecond },
     returnPhase = returning?.Phase.ToString(), returnBlockReason = returning?.BlockReason,
     maximumDeorbitEngines, returnRegionTargeted = false,
     returnWitness = returning == null ? null : new { postDeploymentMassKg = Number(returning.PostDeploymentMassKg),
@@ -179,7 +209,7 @@ var summary = new {
 };
 File.WriteAllText(Path.Combine(output, "summary.json"),
     JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true })+"\n");
-Console.WriteLine($"{summary.status}: {controller.BlockReason ?? deployment.BlockReason ?? returning?.BlockReason ?? "isolated component only; not mission acceptance"}");
+Console.WriteLine($"{summary.status}: {controller.BlockReason ?? deployment.BlockReason ?? returning?.BlockReason ?? descent?.BlockReason ?? "isolated component only; not mission acceptance"}");
 return passed ? 0 : 1;
 
 static double? Number(double value) => double.IsFinite(value) ? value : null;

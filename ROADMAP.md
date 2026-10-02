@@ -303,6 +303,10 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
       bounds radial commands; see `docs/audits/flight14_entry_timing_correction_2026-10-02.md`.
       Read-only ground-track telemetry now records rotating-body geodetic coordinates
       and their absolute epochs; see `docs/audits/flight14_ground_track_2026-10-02.md`.
+      A composed aerodynamic-descent diagnostic now continues the original reserve
+      to a first 3 km crossing through physical bank/flap control. Actual attitude
+      tracking error, deep-entry load/range response and terminal broadcast coverage
+      remain open; see `docs/audits/flight14_aerodynamic_descent_2026-10-02.md`.
       Actual mass/release
      timing, moving-body gameplay integration, both water returns
      and a complete playable mission remain open. Existing Flight 12 and tower-catch policies must not be relabelled

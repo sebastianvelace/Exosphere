@@ -125,6 +125,17 @@ and [the conditional entry timing correction](docs/audits/flight14_entry_timing_
 The probe also records [the rotating-body ground track](docs/audits/flight14_ground_track_2026-10-02.md)
 at the absolute simulation epoch, with longitude tied to the simulation prime
 meridian. Geographic targeting and dated Greenwich orientation remain separate work.
+An additional `--descent` mode continues that same state to its first 3 km crossing:
+
+```bash
+dotnet run --project tools/Flight14TrajectoryProbe/Flight14TrajectoryProbe.csproj -- \
+  data /tmp/flight14-descent 60 --descent
+```
+
+See [the aerodynamic-descent diagnostic](docs/audits/flight14_aerodynamic_descent_2026-10-02.md)
+for measured loads, attitude tracking error and remaining broadcast coverage.
+This endpoint does not establish flip-and-burn, powered landing or water contact.
+
 
 Menu capture and navigation checks: `python3 tools/menu_quick_check.py` (Godot .NET and Xvfb required). The checks use isolated user data and save real-framebuffer captures in `exports/menu-operations-review/`.
 

@@ -1,0 +1,15 @@
+{
+  "id": "starship-flight14-aerodynamic-descent-engineering-estimate",
+  "status": "engineering-estimate",
+  "assumptions": "Continues the original loaded launch/deployment/deorbit state below its descending 90 km witness. Uses existing production aerodynamic forces and flap/attitude actuators, bank-limited descent guidance and an estimated transition from 70 degree entry to 90 degree broadside descent. Controls, transition thresholds, rate and the 3 km diagnostic endpoint are engineering estimates, not measured Flight 14 commands. No forces, state, fuel or thermal values are imposed. No geographic landing corridor, powered landing, header-tank routing, real water contact or mission acceptance is established by this diagnostic.",
+  "maximumMissionSeconds": 13000,
+  "diagnosticEndAltitudeM": 3000,
+  "maximumEndSpeedMps": 150,
+  "hypersonicControlThresholdMps": 1000,
+  "terminalAngleOfAttackSpeedMps": 250,
+  "entryAngleOfAttackDegrees": 70,
+  "terminalAngleOfAttackDegrees": 90,
+  "referenceSlewRateRadPerSecond": 0.05,
+  "bankOnsetDynamicPressurePa": 25,
+  "bankFullDynamicPressurePa": 250
+}

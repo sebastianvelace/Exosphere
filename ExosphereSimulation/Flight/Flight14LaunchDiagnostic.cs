@@ -13,6 +13,19 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
 {
     private double _pendingFrameSeconds;
     public Flight14ReturnController? ReturnController { get; private set; }
+    public Flight14DescentController? DescentController { get; private set; }
+
+    /// <summary>Continue the loaded return through a bounded aerodynamic-descent diagnostic.</summary>
+    public static Flight14LaunchDiagnostic CreateWithDescent(string dataDirectory)
+    {
+        var run = CreateWithReturn(dataDirectory);
+        var definition = Flight14DescentDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_descent_estimate.json"));
+        run.DescentController = new Flight14DescentController(run.Ship, run.Earth,
+            run.ReturnController!, run.Controller, definition);
+        run.Universe.PhysicsStepController = run.DescentController;
+        return run;
+    }
 
     /// <summary>Extend the same loaded pad fixture through deorbit and atmospheric entry.</summary>
     public static Flight14LaunchDiagnostic CreateWithReturn(string dataDirectory)
