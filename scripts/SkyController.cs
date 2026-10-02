@@ -182,13 +182,13 @@ public partial class SkyController : Node
         _env = worldEnvironment?.Environment;
 
         var viewport = GetViewport();
-        if (viewport != null && viewport.Msaa3D == Viewport.Msaa.Disabled)
-            viewport.Msaa3D = Viewport.Msaa.Msaa2X;
+        if (viewport != null) GraphicsSettings.ApplyViewport(viewport);
 
         if (_env?.Sky == null) return;
         _skyMat = new ShaderMaterial { Shader = GD.Load<Shader>(SkyShaderPath) };
         _skyMat.SetShaderParameter("star_tex", LoadStarTexture());
         _skyMat.SetShaderParameter("cloud_coverage_tex", LoadTexture(EarthCloudTexPath, Colors.Black));
+        GraphicsSettings.BindCloudQuality(_skyMat);
         _skyMat.SetShaderParameter("star_energy", 0.0f);
         _skyMat.SetShaderParameter("transmittance_lut_min_solar_sin",
             (float)AtmosphereTransmittanceLut.MinimumSolarElevationSin);

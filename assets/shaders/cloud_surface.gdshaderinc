@@ -4,7 +4,7 @@
 uniform float cloud_solar_visibility : hint_range(0.0, 1.0) = 1.0;
 
 // Bounded visual transport through an elevated cloud shell, not a ground decal.
-// Twenty-four camera and four shadow samples share the sky's density field. Molecular
+// Twenty-four camera and two to four shadow samples share the sky's density field. Molecular
 // foreground transport uses a radiance-weighted distance closure at the caller.
 vec2 surface_cloud_sphere(vec3 origin, vec3 ray, float radius) {
     float b = dot(origin, ray);
@@ -21,13 +21,16 @@ float surface_cloud_shadow(vec3 point, vec3 sun) {
         distance_m = max(surface_cloud_sphere(point, sun,
             cloud_planet_radius_m + cloud_local_top_m).y, 0.0);
     if (cloud_in_local_core(point) && cloud_in_local_core(point + sun * distance_m))
-        return cloud_local_sun_transmission_samples(point, sun, distance_m, 4);
+        return cloud_local_sun_transmission_samples(point, sun, distance_m,
+            clamp(cloud_light_sample_budget, 2, 4));
     float depth = 0.0;
+    int light_steps = clamp(cloud_light_sample_budget, 2, 4);
     for (int i = 0; i < 4; i++) {
-        float t = (float(i) + 0.5) / 4.0;
+        if (i >= light_steps) break;
+        float t = (float(i) + 0.5) / float(light_steps);
         // Quadratic placement resolves the nearby lit cloud face on tangent rays.
-        float a = float(i) / 4.0;
-        float b = float(i + 1) / 4.0;
+        float a = float(i) / float(light_steps);
+        float b = float(i + 1) / float(light_steps);
         float ds = (b * b - a * a) * distance_m;
         depth += cloud_density(point + sun * (t * t * distance_m))
             * cloud_extinction * ds;

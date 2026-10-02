@@ -50,7 +50,7 @@ rg -q --fixed-strings 'for (int i = 0; i < CLOUD_LOCAL_VIEW_STEPS; i++)' "$SHADE
   || fail "local cloud loop bypasses its declared ceiling"
 rg -q --fixed-strings 'local_interval ? float(CLOUD_LOCAL_VIEW_STEPS)' "$SHADER" \
   || fail "local quadrature does not cover the complete interval"
-rg -q --fixed-strings 'cloud_local_sun_transmission_samples(position, to_sun, distance_to_edge, 4)' "$SHADER" \
+rg -q --fixed-strings 'cloud_local_sun_transmission_samples(position, to_sun, distance_to_edge,' "$SHADER" \
   || fail "local sky shadow quadrature bypasses its four-sample budget"
 rg -q --fixed-strings 'for (int i = 0; i < 10; i++)' "$ROOT/assets/shaders/cloud_field.gdshaderinc" \
   || fail "local solar quadrature ceiling missing"
@@ -83,8 +83,12 @@ rg -q --fixed-strings 'if (!AT_CUBEMAP_PASS && cloud_enabled) clouds = integrate
 # cloud transport needs its own opacity termination and bounded solar budget.
 rg -q --fixed-strings 'if (transmission < 0.005) break;' "$ROOT/assets/shaders/cloud_surface.gdshaderinc" \
   || fail "terrain cloud transport continues through an opaque interior"
-rg -q --fixed-strings 'cloud_local_sun_transmission_samples(point, sun, distance_m, 4)' "$ROOT/assets/shaders/cloud_surface.gdshaderinc" \
+rg -q --fixed-strings 'cloud_local_sun_transmission_samples(point, sun, distance_m,' "$ROOT/assets/shaders/cloud_surface.gdshaderinc" \
   || fail "terrain local cloud lighting budget missing"
+for shader in "$SHADER" "$ROOT/assets/shaders/cloud_surface.gdshaderinc"; do
+  rg -q --fixed-strings 'clamp(cloud_light_sample_budget, 2, 4)' "$shader" \
+    || fail "local solar quadrature bypasses its two-to-four-sample bound"
+done
 # Lookup tables have no mipmaps. Implicit derivatives inside divergent marches
 # are undefined; explicit level zero preserves LUT filtering without derivatives.
 if rg -q 'texture\((density_lut|transmittance_lut|multiple_scattering_lut|surface_density_lut|surface_solar_lut),' \

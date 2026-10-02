@@ -156,6 +156,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     public override void _Ready()
     {
         Instance = this;
+        GraphicsSettings.ApplyViewport(GetViewport());
 
         // Render timing is opt-in because enabling viewport measurements can add
         // backend work every frame. The probe is attached to the Flight root only

@@ -11,6 +11,7 @@ internal static class CloudWeatherPresentation
 
     public static void Bind(ShaderMaterial material, CelestialBody body)
     {
+        GraphicsSettings.BindCloudQuality(material);
         var bridge = SimulationBridge.Instance;
         bool starbase = body.Id == "earth"
             && bridge?.LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase) == true;

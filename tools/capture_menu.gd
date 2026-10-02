@@ -24,11 +24,14 @@ func _capture() -> void:
 		"vab": ["VEHICLE ASSEMBLY", "ENSAMBLAJE DE VEHÍCULOS"],
 		"flight14": ["EXPLORE FLIGHT 14", "EXPLORAR VUELO 14"],
 		"settings": ["SETTINGS", "AJUSTES"],
+		"graphics": ["SETTINGS", "AJUSTES"],
 		"continue": ["CONTINUE", "CONTINUAR"],
 	}
 	if labels.has(mode):
 		if not _press(labels[mode]): return
 		await process_frame
+		if mode == "graphics":
+			if not await _check_graphics(): return
 		if mode in ["vehicle", "launch"]:
 			var variant := OS.get_environment("CAPTURE_MENU_VEHICLE")
 			if variant.is_empty(): variant = "starship-flight-12-v3-2026-05-22"
@@ -114,6 +117,43 @@ func _capture() -> void:
 			return
 		print("MENU_BACK_OK")
 	quit()
+
+func _check_graphics() -> bool:
+	var initial_scale := root.content_scale_factor
+	var initial_size := root.size
+	# Exercise the real preference control; never write the config in this process.
+	for expected in [0.75, 1.0]:
+		var button := menu.find_child("GraphicsPreset", true, false) as Button
+		if button == null:
+			_fail("Graphics preference action missing")
+			return false
+		button.emit_signal("pressed")
+		for _frame in range(6): await process_frame
+		var current_button := menu.find_child("GraphicsPreset", true, false) as Button
+		if root.gui_get_focus_owner() != current_button:
+			_fail("Keyboard focus did not stay on the graphics preference")
+			return false
+		if not is_equal_approx(root.scaling_3d_scale, expected):
+			_fail("Graphics choice did not apply the 3D resolution")
+			return false
+		if root.content_scale_factor != initial_scale or root.size != initial_size:
+			_fail("3D graphics preset changed the UI resolution or scale")
+			return false
+		if root.msaa_3d != (Viewport.MSAA_DISABLED if expected < 1.0 else Viewport.MSAA_2X):
+			_fail("Graphics choice did not restore antialiasing")
+			return false
+		if not _validate_layout("graphics"): return false
+		if expected < 1.0:
+			var path := OS.get_environment("CAPTURE_MENU_OUTPUT").get_basename() + "-integrated.png"
+			if root.get_texture().get_image().save_png(path) != OK:
+				_fail("Graphics settings capture failed")
+				return false
+	var config := ConfigFile.new()
+	if config.load("user://graphics.cfg") != OK or config.get_value("graphics", "preset", -1) != 2:
+		_fail("Quality preference was not saved by the menu")
+		return false
+	print("GRAPHICS_SETTINGS_OK profile_cycle=integrated,quality ui_unchanged=true saved_quality=true")
+	return true
 
 func _validate_layout(mode: String) -> bool:
 	var viewport_rect := Rect2(Vector2.ZERO, root.get_visible_rect().size)

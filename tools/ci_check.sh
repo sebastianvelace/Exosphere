@@ -96,6 +96,9 @@ if [[ -x "$GODOT" ]]; then
     --log-file /tmp/exo_ci_construction.godot.log \
     res://scenes/construction/Construction.tscn
 
+  GODOT_BIN="$GODOT" python3 tools/menu_quick_check.py --skip-build \
+    --case graphics-1280 --output /tmp/exo_ci_graphics
+
   # Captura de viewport con framebuffer real: --headless usa el renderer dummy y no
   # produce píxeles. Para aceptación visual completa usar:
   #   bash tools/visual_playtest.sh          # local full matrix

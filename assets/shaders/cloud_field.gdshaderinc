@@ -1,5 +1,7 @@
 // Shared visual cloud field for sky and opaque Earth rays. SI metre coordinates;
 // geography and advection use the same full basis and simulation-clock offset.
+// Visual solar quadrature only; density, placement and extinction stay shared.
+uniform int cloud_light_sample_budget : hint_range(2, 4) = 4;
 uniform sampler2D cloud_coverage_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
 uniform bool cloud_enabled = false;
 uniform float cloud_base_altitude = 1200.0;

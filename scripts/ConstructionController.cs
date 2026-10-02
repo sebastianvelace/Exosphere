@@ -262,6 +262,7 @@ public partial class ConstructionController : Control
         // viewport can render its nodes but World3D may remain null on the first
         // input event, making the VAB raycast throw instead of selecting a part.
         viewport.World3D = new World3D();
+        GraphicsSettings.ApplyViewport(viewport);
         viewportContainer.AddChild(viewport);
         _previewViewport = viewport;
         SetPreviewRenderingActive(active: false);

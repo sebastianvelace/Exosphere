@@ -35,7 +35,7 @@ The standard Godot build, without .NET, cannot open this project.
 2. Open this folder in Godot 4.6.3 .NET and run the project. The main scene is the flight operations menu.
 3. Choose **Free Flight**, select a vehicle, review its configuration and launch. Use **Historical Campaign** for mission objectives or **Scenarios** for prepared flights.
 
-On the pad, `L` starts the countdown, hold `Z` to throttle up, and `G` flies the ascent autopilot. `F5` quicksaves and `F9` loads. **Settings** switches the interface language. Use `Tab` and `Enter` to navigate menus; `Esc` closes a briefing or selector.
+On the pad, `L` starts the countdown, hold `Z` to throttle up, and `G` flies the ascent autopilot. `F5` quicksaves and `F9` loads. **Settings** selects the graphics profile, interface language and telemetry density. Use `Tab` and `Enter` to navigate menus; `Esc` closes a briefing or selector.
 
 Lighting follows simulation time. Warp forward to see dawn and night. The full HUD shows solar elevation.
 
@@ -86,6 +86,24 @@ Warp levels are `1`, `2`, `3`, `5`, `10`, `50`, `100`, `1000`, `10000`, and `100
 - **Scenarios → Starship / 70 km entry interface** starts a belly-flop entry, with the flip and landing burn still left to fly.
 
 Time warp, a navball, a cockpit, and an orbital map are available in flight. Transfer planning covers Hohmann planetary transfers and an Earth–Moon route.
+
+## Graphics profiles
+
+**Settings → Graphics Profile** saves your choice across launches. **Auto** chooses
+**Integrated GPU** when Godot identifies an integrated adapter, otherwise **Quality**.
+You can select either profile manually.
+
+Integrated GPU renders the 3D world at 75% resolution per axis, disables
+MSAA (FXAA on Forward+/Mobile) and reduces cloud lighting samples and
+screen-space effects. Menu text and telemetry stay at native resolution; physics and simulation clocks are unchanged.
+Quality restores native 3D resolution, 2× MSAA and the existing lighting effects.
+Dense clouds still run slowly on the tested Ryzen 5 7530U Radeon; this preset is a
+measured improvement, not a 30 FPS guarantee. See
+[the target-hardware comparison](docs/audits/integrated_gpu_preset_2026-10-02.md).
+
+For reproducible captures, `EXOSPHERE_GRAPHICS_PRESET=integrated`, `quality` or
+`automatic` overrides the loaded preference without saving it. Normal launches
+should leave this variable unset.
 
 ## Develop
 

@@ -312,17 +312,18 @@ public partial class PhaseLightingController : Node
         // Forward+, so never leave unsupported effects enabled in OpenGL captures.
         string renderer = RenderingServer.GetCurrentRenderingMethod().ToString();
         bool forwardPlus = renderer == "forward_plus";
-        _env.SsaoEnabled = forwardPlus || renderer == "gl_compatibility";
+        bool screenSpaceEffects = !GraphicsSettings.IsIntegrated;
+        _env.SsaoEnabled = screenSpaceEffects && (forwardPlus || renderer == "gl_compatibility");
         _env.SsaoRadius = 1.45f;
         _env.SsaoIntensity = 1.15f;
         _env.SsaoPower = 1.25f;
         _env.SsaoDetail = 0.55f;
         _env.SsaoLightAffect = 0.08f;
 
-        _env.SsilEnabled = forwardPlus;
+        _env.SsilEnabled = screenSpaceEffects && forwardPlus;
         _env.SsilRadius = 2.2f;
         _env.SsilIntensity = 0.65f;
-        _env.SsrEnabled = forwardPlus;
+        _env.SsrEnabled = screenSpaceEffects && forwardPlus;
         _env.SsrMaxSteps = 32;
         _env.SsrFadeIn = 0.18f;
         _env.SsrFadeOut = 2.4f;

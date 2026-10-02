@@ -351,11 +351,13 @@ float cloud_sun_transmittance(vec3 position, vec3 to_sun) {
     if (cloud_in_local_core(position) && cloud_in_local_core(position + to_sun * distance_to_edge))
         distance_to_edge = max(ray_sphere(position, to_sun, planet_radius + cloud_local_top_m).y, 0.0);
     if (cloud_in_local_core(position) && cloud_in_local_core(position + to_sun * distance_to_edge))
-        return cloud_local_sun_transmission_samples(position, to_sun, distance_to_edge, 4);
+        return cloud_local_sun_transmission_samples(position, to_sun, distance_to_edge,
+            clamp(cloud_light_sample_budget, 2, 4));
 	float closest = max(-dot(position, to_sun), 0.0);
 	float optical_depth = 0.0;
 	float cloud_light_steps = effective_step_count(
 		render_step_count(3.0, float(CLOUD_LIGHT_STEPS)));
+	if (cloud_light_sample_budget <= 2) cloud_light_steps = 2.0;
 	for (int i = 0; i < CLOUD_LIGHT_STEPS; i++) {
 		if (float(i) >= cloud_light_steps) break;
 		float segment_start = tangent_warped_boundary(float(i) / cloud_light_steps,

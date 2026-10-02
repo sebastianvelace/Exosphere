@@ -24,6 +24,7 @@ public partial class MainMenu : Control
     public override void _Ready()
     {
         UserInterfaceSettings.Load();
+        GraphicsSettings.ApplyViewport(GetViewport());
         GetWindow().ContentScaleFactor = UserInterfaceSettings.UiScale;
         SetAnchorsPreset(LayoutPreset.FullRect);
         BuildBackground();
@@ -654,6 +655,21 @@ public partial class MainMenu : Control
 
     private void ShowSettings() => ShowModal(UiText.Get("settings_title"), body =>
     {
+        var graphicsRow = SettingRow(UiText.Get("graphics_profile"), GraphicsProfileName(), () =>
+        {
+            GraphicsSettings.SetPreset(GraphicsSettings.Selected switch
+            {
+                GraphicsPreset.Automatic => GraphicsPreset.IntegratedGpu,
+                GraphicsPreset.IntegratedGpu => GraphicsPreset.Quality,
+                _ => GraphicsPreset.Automatic,
+            });
+            GraphicsSettings.ApplyViewport(GetViewport());
+            ShowSettings();
+        });
+        graphicsRow.GetChild<Button>(1).Name = "GraphicsPreset";
+        body.AddChild(graphicsRow);
+        body.AddChild(Description(UiText.Get(GraphicsSettings.IsIntegrated
+            ? "graphics_integrated_note" : "graphics_quality_note")));
         body.AddChild(SettingRow(UiText.Get("language"),
             UserInterfaceSettings.Language == InterfaceLanguage.English ? "ENGLISH" : "ESPAÑOL",
             ToggleLanguage));
@@ -684,6 +700,14 @@ public partial class MainMenu : Control
             }));
     });
 
+    private static string GraphicsProfileName()
+    {
+        string resolved = UiText.Get(GraphicsSettings.IsIntegrated
+            ? "graphics_integrated" : "graphics_quality");
+        return GraphicsSettings.Selected == GraphicsPreset.Automatic
+            ? $"{UiText.Get("graphics_automatic")} / {resolved}" : resolved;
+    }
+
     private static Control SettingRow(string label, string value, Action action)
     {
         var row = new HBoxContainer();
@@ -697,7 +721,7 @@ public partial class MainMenu : Control
 
     private void ShowModal(string titleText, Action<VBoxContainer> populate)
     {
-        CloseModal();
+        CloseModal(restoreFocus: false);
         var shade = new ColorRect
         {
             Color = new Color(0.004f, 0.006f, 0.009f, 0.72f),
@@ -787,7 +811,9 @@ public partial class MainMenu : Control
         return button;
     }
 
-    private void CloseModal()
+    private void CloseModal() => CloseModal(restoreFocus: true);
+
+    private void CloseModal(bool restoreFocus)
     {
         if (_modal == null) return;
         RemoveChild(_modal);
@@ -798,6 +824,8 @@ public partial class MainMenu : Control
         foreach (var (control, mode) in _suspendedFocus)
             if (IsInstanceValid(control)) control.FocusMode = mode;
         _suspendedFocus.Clear();
+        // A replacement modal immediately suspends background focus again.
+        if (!restoreFocus) return;
         if (IsInstanceValid(_returnFocus)) _returnFocus!.CallDeferred(Control.MethodName.GrabFocus);
         else _firstButton?.CallDeferred(Control.MethodName.GrabFocus);
     }

@@ -119,9 +119,9 @@ has 'AmbientLightSkyContribution = AmbientSkyContribution' "$lighting" "procedur
 has 'ReflectedLightSource = Godot.Environment.ReflectionSource.Sky' "$lighting" "procedural sky is not a specular reflection source"
 has 'FogMode = Godot.Environment.FogModeEnum.Depth' "$lighting" "early flight has no bounded depth haze"
 has 'UpdateAerialPerspective(1.0f - s)' "$lighting" "depth haze does not fade with atmospheric density"
-has '_env.SsaoEnabled = forwardPlus || renderer == "gl_compatibility"' "$lighting" "ambient occlusion is not restricted to supported renderers"
-has '_env.SsilEnabled = forwardPlus' "$lighting" "Forward+ indirect lighting is not renderer-gated"
-has '_env.SsrEnabled = forwardPlus' "$lighting" "Forward+ reflections are not renderer-gated"
+has '_env.SsaoEnabled = screenSpaceEffects && (forwardPlus || renderer == "gl_compatibility")' "$lighting" "ambient occlusion is not restricted to supported renderers"
+has '_env.SsilEnabled = screenSpaceEffects && forwardPlus' "$lighting" "Indirect lighting is not renderer/profile-gated"
+has '_env.SsrEnabled = screenSpaceEffects && forwardPlus' "$lighting" "Reflections are not renderer/profile-gated"
 
 # The local overlay and global planet share optical transport and physical depth.
 has '#include "res://assets/shaders/surface_atmosphere.gdshaderinc"' "$shader" "detail must use bounded camera-to-ground transport"

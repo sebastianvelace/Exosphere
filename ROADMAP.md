@@ -97,6 +97,14 @@ Base tecnica cerrada en `main`:
   camera/exposure matching remain open. See
   `docs/audits/cloud_foreground_2026-10-01.md` and
   `docs/audits/cloud_weather_lighting_2026-09-30.md`.
+- Integrated-GPU presentation preset (2026-10-02): Settings persists Auto /
+  Integrated GPU / Quality. Auto detects integrated adapters; the lighter profile
+  scales only 3D to 75%, reduces solar cloud quadrature to two samples and disables
+  screen-space lighting/reflections. Native telemetry and simulation are retained.
+  Paired Radeon Forward+ cloud fixtures pass all six views with 55–64% lower GPU
+  frame time in occupied/above-cloud views; dense cells still take approximately
+  380 ms, so smooth gameplay performance remains open. See
+  `docs/audits/integrated_gpu_preset_2026-10-02.md`.
 - The exterior broadcast HUD has independent live engine boards, observed events,
   mission clock and piloting telemetry (2026-10-01). F3 density/cockpit/map
   transitions passed at 1280×720; actual ignition/liftoff passed at 1920×1080.

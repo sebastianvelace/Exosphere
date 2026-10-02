@@ -40,6 +40,7 @@ def main():
         ("mission-1280", "mission", "1280x720", 1.0, 0, ""),
         ("continue-choice", "continue", "1280x720", 1.0, 0, ""),
         ("settings-1280", "settings", "1280x720", 1.0, 0, ""),
+        ("graphics-1280", "graphics", "1280x720", 1.0, 0, ""),
         ("home-es-scale150", "", "1280x720", 1.5, 1, ""),
         ("vehicles-es-scale150", "vehicles", "1280x720", 1.5, 1, ""),
         ("vehicle-es-scale150", "vehicle", "1280x720", 1.5, 1, ""),
@@ -69,12 +70,17 @@ def main():
                 saves.mkdir()
                 for slot in ("alpha", "zulu"):
                     (saves / f"{slot}.json").write_text("{}", encoding="utf-8")
+            if mode == "graphics":
+                # Exercise corrupt preference recovery before choosing/saving profiles.
+                (settings.parent / "graphics.cfg").write_text('[graphics]\npreset="invalid"\n')
             case_output = output / name if args.flight_hud else output
             case_output.mkdir(parents=True, exist_ok=True)
             env = dict(os.environ, XDG_DATA_HOME=profile, CAPTURE_MENU_MODAL=mode,
                        CAPTURE_MENU_VEHICLE=vehicle,
                        CAPTURE_MENU_OUTPUT=str(case_output / f"{name}.png"),
                        CAPTURE_FLIGHT_HUD="1" if args.flight_hud else "0")
+            if mode == "graphics":
+                env.pop("EXOSPHERE_GRAPHICS_PRESET", None)
             log_path = output / f"{name}.log"
             with log_path.open("w") as log:
                 result = subprocess.run([
@@ -86,6 +92,8 @@ def main():
             route_marker = ("MENU_LAUNCH_OK" if mode in {"launch", "missionlaunch"}
                             else "MENU_VAB_OK" if mode == "vab" else "MENU_LAYOUT_OK")
             markers = ["MENU_CAPTURE", route_marker]
+            if mode == "graphics":
+                markers.append("GRAPHICS_SETTINGS_OK")
             if args.flight_hud:
                 markers.extend(f"FLIGHT_HUD_OK case={case} " for case in
                                ("minimal", "full", "clean", "restored", "cockpit", "exterior", "map", "return"))
@@ -95,8 +103,24 @@ def main():
                 markers.append("MENU_CONTINUE_CHOICE_OK")
             if mode and mode not in {"launch", "missionlaunch", "vab"}:
                 markers.append("MENU_BACK_OK")
-            if result.returncode or any(marker not in evidence for marker in markers):
+            if (result.returncode or any(marker not in evidence for marker in markers)
+                    or (mode == "graphics" and "This control can't grab focus" in evidence)):
                 raise SystemExit(f"FAIL {name}: inspect {log_path}\n{evidence[-4000:]}")
+            if mode == "graphics":
+                # New process: loading the persisted explicit choice must beat detection.
+                reload_env = dict(env, CAPTURE_MENU_MODAL="settings")
+                reload_log = output / f"{name}-reload.log"
+                with reload_log.open("w") as log:
+                    reloaded = subprocess.run([
+                        "xvfb-run", "-a", "-s", f"-screen 0 {size}x24", godot,
+                        "--path", str(root), "--rendering-driver", "opengl3",
+                        "--resolution", size, "--script", "tools/capture_menu.gd",
+                    ], cwd=root, env=reload_env, stdout=log, stderr=subprocess.STDOUT, timeout=180)
+                saved_evidence = reload_log.read_text()
+                if reloaded.returncode or any(marker not in saved_evidence for marker in
+                        ("GRAPHICS_PROFILE selected=Quality resolved=Quality scale3d=1.00",
+                         "MENU_LAYOUT_OK", "MENU_BACK_OK")):
+                    raise SystemExit(f"FAIL {name}: persisted preference not restored; inspect {reload_log}")
             if mode == "launch":
                 definition, site = catalog[vehicle]
                 expected = definition["name"] + " at " + site + ";"
