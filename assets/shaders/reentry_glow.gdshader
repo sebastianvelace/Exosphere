@@ -6,11 +6,15 @@ uniform float heat_level : hint_range(0.0, 1.0) = 0.0;
 uniform sampler2D noise_tex;
 uniform float halo_size : hint_range(0.0, 0.5) = 0.08; // render units
 uniform float simulation_time = 0.0;
-uniform int effect_kind = 0; // bow cap / downstream wake / surface edge
+uniform int effect_kind = 0; // bow cap / downstream wake / surface edge / conforming sheath
 uniform float opacity_gain = 1.0;
+uniform vec3 flow_dir = vec3(-1.0, 0.0, 0.0);
+varying vec3 surface_normal;
 
 void vertex() {
-    VERTEX += NORMAL * halo_size * heat_level * heat_level;
+    surface_normal = NORMAL;
+    float expansion = effect_kind == 4 ? sqrt(heat_level) : heat_level * heat_level;
+    VERTEX += NORMAL * halo_size * expansion;
 }
 
 void fragment() {
@@ -29,8 +33,12 @@ void fragment() {
     vec3 warm = mix(vec3(0.85, 0.16, 0.025), vec3(1.0, 0.48, 0.13),
         smoothstep(0.15, 0.75, t));
     float rim = pow(1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))), 1.6);
-    vec3 col = mix(warm, vec3(1.0, 0.34, 0.22), rim * 0.16);
-    col = mix(col, vec3(1.0, 0.86, 0.62), smoothstep(0.82, 1.0, t) * 0.45);
+    // Flight 14 onboard frames show violet/rose line emission around a white
+    // luminous core. Camera exposure and gas spectrum cannot be recovered from
+    // these colours; this palette is an optical reference calibration only.
+    vec3 rose = mix(vec3(0.30, 0.10, 0.95), vec3(1.0, 0.32, 0.62), smoothstep(0.12, 0.75, t));
+    vec3 col = mix(rose, vec3(1.0, 0.89, 0.96), smoothstep(0.20, 0.55, t) * (0.20 + 0.80 * rim));
+    if (effect_kind == 0) col = warm;
     float mask = 1.0;
     float gain = 1.0;
     if (effect_kind == 0) {
@@ -48,9 +56,29 @@ void fragment() {
         mask *= exp(-downstream * 3.5) * mix(0.50, 0.08, rim);
         mask *= smoothstep(0.18, 0.75, n1 * 0.65 + n2 * 0.35);
         gain = 6.0;
+    } else if (effect_kind == 4) {
+        float incidence = dot(normalize(surface_normal), normalize(flow_dir));
+        mask = smoothstep(-0.18, 0.55, incidence) * pow(rim, 0.65);
+        // Fade at the outer silhouette rather than drawing a neon contour.
+        mask *= 1.0 - pow(rim, 12.0);
+        mask *= smoothstep(0.16, 0.73, n1 * 0.65 + n2 * 0.35);
+        mask *= smoothstep(0.0, 0.035, UV.y);
+        col = mix(vec3(0.32, 0.14, 0.85), col, 0.30);
+        gain = 5.0;
+    } else if (effect_kind == 3) {
+        float incidence = dot(normalize(surface_normal), normalize(flow_dir));
+        float windward = smoothstep(-0.08, 0.62, incidence);
+        // Keep the shield readable through the sheath; radiance concentrates
+        // at grazing optical paths and moving strands, not an opaque flat cap.
+        float strands = smoothstep(0.23, 0.78, 0.65 * n1 + 0.35 * n2);
+        mask = windward * mix(0.065, 0.85, rim) * mix(0.18, 1.0, strands);
+        mask *= smoothstep(0.0, 0.035, UV.y);
+        gain = 7.0;
     } else {
-        mask = mix(0.22, 0.8, rim);
-        gain = 1.6;
+        float incidence = dot(normalize(surface_normal), normalize(flow_dir));
+        mask = smoothstep(-0.12, 0.55, incidence) * mix(0.04, 0.72, rim);
+        mask *= smoothstep(0.20, 0.72, n1 * 0.65 + n2 * 0.35);
+        gain = 5.0;
     }
     ALBEDO = col * gain;
     // Compatibility renders unshaded radiance from ALBEDO and ignores EMISSION.

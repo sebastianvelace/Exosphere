@@ -22,9 +22,13 @@ public partial class ReentryPlasmaController : Node3D
     private MeshInstance3D?     _wake;    // trailing ionised wake
     private ShaderMaterial?     _shockMat;
     private ShaderMaterial?     _wakeMat;
+    private MeshInstance3D? _halo;
+    private ShaderMaterial? _haloMat;
     private readonly List<EdgeGlow> _edgeGlows = new();
     private double _visualSampleTimer;
     private Node3D? _vesselFrame;
+    private VesselRenderer? _sheathRenderer;
+    private bool _sheathFullStack;
 
     // Plasma is a presentation effect. Its physical inputs can be sampled at 20 Hz while
     // the deterministic thermal solver continues at the simulation tick rate.
@@ -88,9 +92,24 @@ public partial class ReentryPlasmaController : Node3D
             Name    = "ReentryShock",
             Mesh    = new SphereMesh { Radius = 0.95f, Height = 1.9f, RadialSegments = 24, Rings = 12 },
             Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         _shock.SetSurfaceOverrideMaterial(0, _shockMat);
         AddChild(_shock);
+        // A faint outer optical path gives the sheath depth without a volume
+        // raymarch or many particle layers on integrated graphics.
+        _haloMat = new ShaderMaterial { Shader = shockShader, RenderPriority = 5 };
+        _haloMat.SetShaderParameter("noise_tex", noiseTex);
+        _haloMat.SetShaderParameter("effect_kind", 4);
+        _haloMat.SetShaderParameter("halo_size", 0.48f);
+        _haloMat.SetShaderParameter("opacity_gain", 0.22f);
+        _halo = new MeshInstance3D
+        {
+            Name = "ReentrySheathHalo", Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            MaterialOverride = _haloMat,
+        };
+        AddChild(_halo);
 
         // Trailing wake — a long faint cone of ionised gas behind the vessel.
         _wakeMat = new ShaderMaterial { Shader = shockShader, RenderPriority = 6 };
@@ -212,8 +231,40 @@ public partial class ReentryPlasmaController : Node3D
         Vector3 crossFlow = tangent.Cross(flowDir).Normalized();
         var bowBasis = new Basis(tangent, flowDir, crossFlow);
         float span = shipHull ? Mathf.Lerp(radius, halfLength, broadside) : 1.5f;
-        _shock.Position = bodyCentre + flowDir * (radius + 0.16f);
-        _shock.Basis = bowBasis;
+        if (shipHull && _vesselFrame is VesselRenderer hullRenderer)
+        {
+            // Reuse the actual barrel/ogive, so the shock wraps the windward face
+            // rather than forming a detached longitudinal disc beside it.
+            if (_sheathRenderer != hullRenderer || _sheathFullStack != hasSH)
+            {
+                _shock.Mesh = hullRenderer.BuildReentrySheathMesh(0.10f);
+                _sheathRenderer = hullRenderer;
+                _sheathFullStack = hasSH;
+                _halo!.Mesh = _shock.Mesh;
+            }
+            _shock.Position = bodyCentre;
+            _shock.Basis = Basis.Identity;
+            _shock.Scale = Vector3.One;
+            _shockMat.SetShaderParameter("effect_kind", 3);
+            _shockMat.SetShaderParameter("flow_dir", flowDir);
+        }
+        else
+        {
+            if (_sheathRenderer != null)
+            {
+                _shock.Mesh = new SphereMesh { Radius = 0.95f, Height = 1.9f, RadialSegments = 24, Rings = 12 };
+                _sheathRenderer = null;
+            }
+            _shock.Position = bodyCentre + flowDir * (radius + 0.16f);
+            _shock.Basis = bowBasis;
+            _shockMat.SetShaderParameter("effect_kind", 0);
+        }
+        if (_halo != null && _haloMat != null)
+        {
+            if (_halo.Visible != shipHull) _halo.Visible = shipHull;
+            _halo.Position = bodyCentre;
+            _haloMat.SetShaderParameter("flow_dir", flowDir);
+        }
         _wake.Basis = new Basis(tangent, -flowDir, -crossFlow);
         float wakeLength = Mathf.Lerp(3f, 12f, (float)intensity);
         _wake.Position = bodyCentre - flowDir * (radius + wakeLength * 0.5f);
@@ -224,6 +275,7 @@ public partial class ReentryPlasmaController : Node3D
         float flicker = 0.94f + 0.06f * Mathf.Sin(plasmaTime * 17f);
         _shockMat.SetShaderParameter("simulation_time", plasmaTime);
         _wakeMat.SetShaderParameter("simulation_time", plasmaTime);
+        _haloMat?.SetShaderParameter("simulation_time", plasmaTime);
         float align     = (float)windward;
         float concentr  = Mathf.Lerp(0.55f, 1.0f, align);
         float exposure  = Mathf.Lerp(1.15f, 1.0f, align);
@@ -234,16 +286,17 @@ public partial class ReentryPlasmaController : Node3D
             (float)intensity * concentr * hudGuard * dangerMul * flicker, 0f, 1f);
         LastShockHeatLevel = heatLevel;
         _shockMat.SetShaderParameter("heat_level", heatLevel);
+        _haloMat?.SetShaderParameter("heat_level", heatLevel);
 
         _wakeMat.SetShaderParameter("heat_level", (float)intensity);
         _wakeMat.SetShaderParameter("opacity_gain", VisualWakeTailGain);
 
         float thickness = Mathf.Lerp(0.20f, 0.48f, (float)intensity);
-        _shock.Scale = new Vector3(span, thickness, radius * 1.14f);
+        if (!shipHull) _shock.Scale = new Vector3(span, thickness, radius * 1.14f);
         foreach (var edge in _edgeGlows)
             edge.Mat.SetShaderParameter("simulation_time", plasmaTime);
 
-        UpdateLocalizedEdgeGlows((float)intensity, align, exposure, hasSH, flicker);
+        UpdateLocalizedEdgeGlows((float)intensity, align, exposure, hasSH, flicker, flowDir, shipHull);
     }
 
     private void BuildLocalizedEdgeGlows()
@@ -316,7 +369,7 @@ public partial class ReentryPlasmaController : Node3D
     }
 
     private void UpdateLocalizedEdgeGlows(float intensity,
-        float align, float exposure, bool hasSH, float flicker)
+        float align, float exposure, bool hasSH, float flicker, Vector3 flowDir, bool shipHull)
     {
         // The localized cues are authored for standalone Starship. During full-stack
         // ascent/reentry, hide them rather than drawing heat on the booster stack.
@@ -335,6 +388,13 @@ public partial class ReentryPlasmaController : Node3D
 
         foreach (var edge in _edgeGlows)
         {
+            // Nose/barrel now belong to the continuous hull sheath. Extra tubes
+            // there would recreate the floating rods visible in the old effect.
+            if (shipHull && edge.Kind != EdgeKind.Flap)
+            {
+                SetEdgeVisible(edge, false);
+                continue;
+            }
             float k = Mathf.Clamp((edgeBase - edge.Delay) / (1f - edge.Delay), 0f, 1f);
             if (k <= 0.01f)
             {
@@ -369,9 +429,18 @@ public partial class ReentryPlasmaController : Node3D
                 {
                     edge.Mesh.Position = edge.Anchor.Position + Vector3.Left * 0.08f;
                     edge.Mesh.Basis = edge.Anchor.Basis;
+                    if (edge.Anchor is MeshInstance3D blade)
+                    {
+                        edge.Mesh.Mesh = blade.Mesh;
+                        edge.Mesh.Position = blade.Position;
+                        edge.Mesh.Scale = blade.Scale;
+                        edge.Mat.SetShaderParameter("halo_size", 0.06f);
+                        edge.Mat.SetShaderParameter("flow_dir", blade.Basis.Inverse() * flowDir);
+                    }
                 }
             }
-            edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.35f * k);
+            if (edge.Anchor is not MeshInstance3D)
+                edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.35f * k);
             edge.Mat.SetShaderParameter("heat_level", Mathf.Clamp(k * exposure, 0f, 1f));
             edge.Mat.SetShaderParameter("opacity_gain", alphaCap);
 
@@ -390,6 +459,7 @@ public partial class ReentryPlasmaController : Node3D
         CoreEffectsVisible = visible;
         if (_shock != null && _shock.Visible != visible) _shock.Visible = visible;
         if (_wake != null && _wake.Visible != visible) _wake.Visible = visible;
+        if (!visible && _halo != null && _halo.Visible) _halo.Visible = false;
     }
 
     private static void SetEdgeVisible(EdgeGlow edge, bool visible)

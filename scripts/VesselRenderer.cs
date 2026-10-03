@@ -193,6 +193,24 @@ public partial class VesselRenderer : Node3D
         return true;
     }
 
+    /// <summary>Optical sheath sharing the rendered barrel/ogive profile; no physical geometry is changed.</summary>
+    public ArrayMesh BuildReentrySheathMesh(float standOff)
+    {
+        float span = ShipSkirtH + ShipBodyH + ShipNoseH;
+        float barrelLength = span - ShipNoseH;
+        float radius = BodyR + standOff;
+        using var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+        surface.AppendFrom(BuildCylindricalSectorMesh(radius, barrelLength, 0f, Mathf.Tau,
+            radialSegments: 40, axialSegments: 12), 0,
+            new Transform3D(Basis.Identity, Vector3.Down * (ShipNoseH * 0.5f)));
+        float NoseRadius(float u) => (float)VehicleVisualPhysics.TangentOgiveRadius(u, radius, ShipNoseH);
+        surface.AppendFrom(BuildOgiveSectorMesh(ShipNoseH, NoseRadius, 0f, Mathf.Tau,
+            axialSegments: 20, radialSegments: 40), 0,
+            new Transform3D(Basis.Identity, Vector3.Up * (barrelLength - span * 0.5f)));
+        return surface.Commit()!;
+    }
+
     // ── Full Starship + Super Heavy stack ─────────────────────────────────
 
     private void BuildFullStack(Vessel vessel)
@@ -1482,7 +1500,7 @@ public partial class VesselRenderer : Node3D
         {
             float ratioGlow = Mathf.Clamp(
                 (float)((hottestThermalRatio - 0.15) / 0.85), 0f, 1f);
-            glow = Mathf.Max(glow, ratioGlow * 0.72f);
+            glow = Mathf.Max(glow, ratioGlow * 0.28f);
         }
 
         if (!float.IsNaN(_lastGlow) && Mathf.Abs(glow - _lastGlow) < 0.001f)
@@ -1502,7 +1520,7 @@ public partial class VesselRenderer : Node3D
         foreach (var mats in _tileZoneMats.Values)
         foreach (var tileMat in mats)
         {
-            tileMat.SetShaderParameter("emit_strength", glow * 1.6f);
+            tileMat.SetShaderParameter("emit_strength", glow * 0.65f);
             tileMat.SetShaderParameter("rim_strength", 0.035f + glow * 0.04f);
         }
 

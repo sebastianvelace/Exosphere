@@ -325,6 +325,9 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
 
 2. **Reentry visual**
    - Plasma/shock layer mas fisico, ligado a heat flux y densidad atmosferica.
+     Flight 14 now has a hull-conforming sheath, live flap proxies and bounded x200
+     exploration; final reference/CFD fidelity remains open. See
+     `docs/audits/flight14_plasma_warp_2026-10-02.md`.
    - Primera pasada de glow localizado en nose, belly y flap leading edges ya implementada.
    - Alpha/timing por fase EDL ✅ (`ReentryPlasmaVisualIntensity`: ENTRY soft → PEAK → AERO fade).
    - Harness de comparacion ya existe (`tools/visual_playtest.sh --reentry-compare`, captura
