@@ -283,7 +283,7 @@ func _explore_flight14() -> void:
 	print("FLIGHT14_PREVIEW_STARTED " + JSON.stringify(first))
 	var target_met := float(OS.get_environment("CAPTURE_FLIGHT14_MET"))
 	if target_met <= 0: target_met = 8
-	bridge.call("SetWarpIndex", 6)
+	bridge.call("SetWarpIndex", 7)
 	var previous := ""
 	var render_sparse := OS.get_environment("CAPTURE_FLIGHT14_SPARSE_RENDER") == "1"
 	if render_sparse: RenderingServer.set_render_loop_enabled(false)

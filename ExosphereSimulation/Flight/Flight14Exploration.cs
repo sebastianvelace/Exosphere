@@ -24,13 +24,13 @@ public sealed class Flight14Exploration(Flight14LaunchDiagnostic run)
     private double _remainder;
 
     /// <returns>Actual committed simulation seconds, for rate-dependent game systems.</returns>
-    public double AdvanceFrame(double frameSeconds, int maximumSteps = 50)
+    public double AdvanceFrame(double frameSeconds, int maximumSteps = 100)
     {
         if (!double.IsFinite(frameSeconds) || frameSeconds < 0 || maximumSteps < 1)
             throw new ArgumentOutOfRangeException(nameof(frameSeconds));
         var universe = Run.Universe;
         double requestedWarp = universe.TimeScale;
-        if (!double.IsFinite(requestedWarp) || requestedWarp < 0 || requestedWarp > 100)
+        if (!double.IsFinite(requestedWarp) || requestedWarp < 0 || requestedWarp > 200)
             throw new ArgumentOutOfRangeException(nameof(universe.TimeScale));
         if (IsPaused || IsStopped || frameSeconds == 0 || requestedWarp == 0) return 0;
         double period = Universe.DeterministicControlPeriodSeconds;

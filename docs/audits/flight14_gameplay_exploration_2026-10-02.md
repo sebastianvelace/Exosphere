@@ -16,7 +16,7 @@ remains available for previous reproducibility checks.
 
 `Flight14Exploration.AdvanceFrame` accumulates whole 20 ms steps. Acceleration requests
 more full-physics steps; it never enlarges actuator integration or switches the carrier
-to rails. Each rendered frame processes at most 50 steps (one simulation second),
+to rails. Each rendered frame processes at most 100 steps (two simulation seconds, updated for the x200 option),
 with less than one step of retained remainder. An overloaded machine runs slower
 than requested acceleration; the telemetry clock shows actual committed physics.
 The external warp value is restored after each batch. Systems consume the batch's
@@ -36,6 +36,9 @@ or a physical failure/control block. It never emits a landed/caught success for 
 boundary. Pause, resume, fresh loaded-pad restart and menu return remain available.
 The broadcast band uses the controller's actual liftoff epoch and observed orbit,
 separation and release milestones. The final milestone is flip, not an invented landing.
+
+The x200 option was added in the subsequent plasma/acceleration increment. See
+`docs/audits/flight14_plasma_warp_2026-10-02.md` for its verification.
 
 ## Verification
 

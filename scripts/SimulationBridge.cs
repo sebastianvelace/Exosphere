@@ -91,9 +91,9 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     [Signal] public delegate void SimulationLoadedEventHandler();
 
     // ── Time-warp API ─────────────────────────────────────────────────────
-    public static readonly double[] WarpLevels = { 1, 2, 3, 5, 10, 50, 100, 1000, 10000, 100000 };
+    public static readonly double[] WarpLevels = { 1, 2, 3, 5, 10, 50, 100, 200, 1000, 10000, 100000 };
     public int WarpIndex          { get; private set; } = 0;
-    public int MaxAllowedWarpIndex { get; private set; } = 9;
+    public int MaxAllowedWarpIndex { get; private set; } = WarpLevels.Length - 1;
 
     /// <summary>Reason shown when the player tries to warp above <see cref="MaxAllowedWarpIndex"/>.</summary>
     public string? WarpClampReason { get; private set; }
@@ -300,7 +300,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             EnsureActiveVesselPresentation(Flight14Preview.Run.Ship);
             _previewRenderedVessels.Add(Flight14Preview.Run.Ship.Id);
             _previewPartCount = Flight14Preview.Run.Ship.Parts.Parts.Count;
-            MaxAllowedWarpIndex = 6;
+            MaxAllowedWarpIndex = 7;
         }
         else if (needsDefaultStack)
             SpawnStarshipStack(dataPath);
@@ -421,7 +421,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
                     && av.GetAltitude(refB) > 120_000.0;
                 MaxAllowedWarpIndex = forceSensitive
                     ? historicalOrbitalCoast ? 6 : 2
-                    : boundedEntry ? 7                         // x1000 bounded coast to entry
+                    : boundedEntry ? 8                         // x1000 bounded coast to entry
                     : WarpLevels.Length - 1;
             }
             // Clamp current warp index if it now exceeds the allowed maximum
@@ -436,7 +436,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
         if (Flight14Preview is { } preview)
         {
-            MaxAllowedWarpIndex = 6; // Up to x100, always whole 20 ms full-physics steps.
+            MaxAllowedWarpIndex = 7; // Up to x200, always whole 20 ms full-physics steps.
             if (WarpIndex > MaxAllowedWarpIndex) SetWarpIndex(MaxAllowedWarpIndex);
             _previewProcessedSeconds = preview.AdvanceFrame(delta);
             SyncFlight14Presentation(preview);

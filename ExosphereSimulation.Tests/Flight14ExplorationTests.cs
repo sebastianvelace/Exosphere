@@ -36,17 +36,19 @@ public sealed class Flight14ExplorationTests
     }
 
     [Theory]
-    [InlineData(30)]
-    [InlineData(120)]
-    public void WarpAndRenderCadenceMatchWholeStepIgnitionAndAscent(int fps)
+    [InlineData(30, 10)]
+    [InlineData(120, 10)]
+    [InlineData(120, 200)]
+    [InlineData(240, 200)]
+    public void WarpAndRenderCadenceMatchWholeStepIgnitionAndAscent(int fps, int warp)
     {
         var baseline = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory());
         var accelerated = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory());
         var preview = new Flight14Exploration(accelerated);
         for (int i = 0; i < 1000; i++) baseline.Universe.Tick(0.02);
-        accelerated.Universe.TimeScale = 10;
-        for (int i = 0; i < 2 * fps; i++) preview.AdvanceFrame(1.0 / fps);
-        Assert.Equal(10, accelerated.Universe.TimeScale);
+        accelerated.Universe.TimeScale = warp;
+        for (int i = 0; i < 20 * fps / warp; i++) preview.AdvanceFrame(1.0 / fps);
+        Assert.Equal(warp, accelerated.Universe.TimeScale);
         Assert.InRange(System.Math.Abs(baseline.Universe.CurrentTime - accelerated.Universe.CurrentTime), 0, 1e-10);
         Assert.Equal(baseline.Controller.Phase, accelerated.Controller.Phase);
         Assert.InRange((baseline.Ship.Position - accelerated.Ship.Position).Magnitude, 0, 1e-6);
@@ -59,7 +61,7 @@ public sealed class Flight14ExplorationTests
     {
         var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory());
         var preview = new Flight14Exploration(run) { IsPaused = true };
-        run.Universe.TimeScale = 100;
+        run.Universe.TimeScale = 200;
         Assert.Equal(0, preview.AdvanceFrame(30));
         Assert.Equal(0, run.Universe.CurrentTime);
         Assert.Equal(0, run.Ship.Throttle);
@@ -76,7 +78,7 @@ public sealed class Flight14ExplorationTests
         var universe = Universe.LoadFromDataDirectory(DataDirectory());
         var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory(), universe);
         var preview = new Flight14Exploration(run);
-        universe.TimeScale = 100;
+        universe.TimeScale = 200;
         var shipId = run.Ship.Id;
         for (int i = 0; i < 16000 && !preview.IsStopped; i++) preview.AdvanceFrame(0.02);
         Assert.Null(preview.BlockReason);

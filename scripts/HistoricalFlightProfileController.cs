@@ -579,7 +579,7 @@ public partial class HistoricalFlightProfileController : Node
                     earth,
                     moon,
                     _startTime + Apollo8FlightProfile.TliIgnitionSeconds);
-                bridge.SetWarpIndex(7);
+                bridge.SetWarpIndex(8);
                 GD.Print(
                     "[HISTORICAL] Apollo 8 Earth parking orbit; "
                     + "TLI solution loaded.");
@@ -598,7 +598,7 @@ public partial class HistoricalFlightProfileController : Node
             double burnTime = _apolloLunarPlan.BurnTime;
             if (universe.CurrentTime < burnTime - 45.0)
             {
-                bridge.SetWarpIndex(7);
+                bridge.SetWarpIndex(8);
                 return;
             }
             bridge.SetWarpIndex(0);
@@ -650,7 +650,7 @@ public partial class HistoricalFlightProfileController : Node
             vessel.ReferenceBodyId = earth.Id;
             vessel.IsOnRails = true;
             _apolloTliComplete = true;
-            bridge.SetWarpIndex(7);
+            bridge.SetWarpIndex(8);
             GD.Print("[HISTORICAL] Apollo 8 TLI cutoff; translunar coast.");
             return;
         }
@@ -674,7 +674,7 @@ public partial class HistoricalFlightProfileController : Node
             }
             else
             {
-                bridge.SetWarpIndex(8);
+                bridge.SetWarpIndex(9);
                 GD.Print("[HISTORICAL] CSM-103 separated from S-IVB/LTA-B.");
             }
         }
@@ -696,7 +696,7 @@ public partial class HistoricalFlightProfileController : Node
         {
             if (dominant.Id != moon.Id)
             {
-                bridge.SetWarpIndex(8);
+                bridge.SetWarpIndex(9);
                 return;
             }
 
@@ -726,7 +726,7 @@ public partial class HistoricalFlightProfileController : Node
             _apolloLoiComplete = true;
             _apolloLoiTime = universe.CurrentTime;
             MissionManager.Instance?.EnterPhase(MissionPhase.LOI);
-            bridge.SetWarpIndex(7);
+            bridge.SetWarpIndex(8);
             GD.Print(
                 "[HISTORICAL] Apollo 8 LOI complete; "
                 + "60.0 × 168.5 nmi lunar orbit.");
@@ -741,7 +741,7 @@ public partial class HistoricalFlightProfileController : Node
             if (universe.CurrentTime - _apolloLoiTime
                 < circularizationDelay)
             {
-                bridge.SetWarpIndex(7);
+                bridge.SetWarpIndex(8);
                 return;
             }
             bridge.SetWarpIndex(0);
@@ -759,7 +759,7 @@ public partial class HistoricalFlightProfileController : Node
                 universe.CurrentTime);
             _apolloCircularized = true;
             MissionManager.Instance?.EnterPhase(MissionPhase.LUNAR_ORBIT);
-            bridge.SetWarpIndex(8);
+            bridge.SetWarpIndex(9);
             GD.Print("[HISTORICAL] Apollo 8 lunar orbit circularized.");
             return;
         }
@@ -772,7 +772,7 @@ public partial class HistoricalFlightProfileController : Node
             if (lunarOrbits + 1e-6
                 < Apollo8FlightProfile.HistoricalLunarRevolutions)
             {
-                bridge.SetWarpIndex(8);
+                bridge.SetWarpIndex(9);
                 return;
             }
 
@@ -783,7 +783,7 @@ public partial class HistoricalFlightProfileController : Node
                 vessel, Apollo8FlightProfile.TeiDeltaVMps);
             _apolloTeiComplete = true;
             MissionManager.Instance?.EnterPhase(MissionPhase.TEI);
-            bridge.SetWarpIndex(8);
+            bridge.SetWarpIndex(9);
             GD.Print(
                 "[HISTORICAL] Apollo 8 TEI complete after ten lunar revolutions.");
             return;
@@ -792,7 +792,7 @@ public partial class HistoricalFlightProfileController : Node
         dominant = universe.GetDominantBody(vessel.Position);
         if (dominant.Id != earth.Id)
         {
-            bridge.SetWarpIndex(8);
+            bridge.SetWarpIndex(9);
             return;
         }
 
@@ -802,7 +802,7 @@ public partial class HistoricalFlightProfileController : Node
         double returnRadialSpeed = returnVelocity.Dot(returnUp);
         if (earthAltitude > 5_000_000.0)
         {
-            bridge.SetWarpIndex(8);
+            bridge.SetWarpIndex(9);
             return;
         }
         if (earthAltitude > 800_000.0)
@@ -1239,7 +1239,7 @@ public partial class HistoricalFlightProfileController : Node
             vessel.OrbitalState = null;
             _retroComplete = true;
             MissionManager.Instance?.EnterPhase(MissionPhase.RETRO_BURN);
-            bridge.SetWarpIndex(7);
+            bridge.SetWarpIndex(8);
             GD.Print(
                 "[HISTORICAL] Emergency retrofire complete; ballistic return.");
         }
@@ -1336,7 +1336,7 @@ public partial class HistoricalFlightProfileController : Node
             columbia.ReferenceBodyId = earth.Id;
         }
         columbia.Throttle = 0.0;
-        bridge.SetWarpIndex(8);
+        bridge.SetWarpIndex(9);
         GD.Print(
             "[HISTORICAL] Columbia hard-docked to Eagle — TD&E complete; "
             + "docked stack coasts to LOI.");
@@ -1355,7 +1355,7 @@ public partial class HistoricalFlightProfileController : Node
             CelestialBody dominant = universe.GetDominantBody(columbia.Position);
             if (dominant.Id != moon.Id)
             {
-                bridge.SetWarpIndex(8);
+                bridge.SetWarpIndex(9);
                 return;
             }
 
@@ -1386,7 +1386,7 @@ public partial class HistoricalFlightProfileController : Node
             _apolloLoiComplete = true;
             _apolloLoiTime = universe.CurrentTime;
             MissionManager.Instance?.EnterPhase(MissionPhase.LOI);
-            bridge.SetWarpIndex(7);
+            bridge.SetWarpIndex(8);
             GD.Print(
                 "[HISTORICAL] Apollo 11 docked-stack LOI complete; "
                 + "elliptical lunar orbit.");
@@ -1398,7 +1398,7 @@ public partial class HistoricalFlightProfileController : Node
             if (universe.CurrentTime - _apolloLoiTime
                 < Apollo11FlightProfile.CircularizationDelaySeconds)
             {
-                bridge.SetWarpIndex(7);
+                bridge.SetWarpIndex(8);
                 return;
             }
             bridge.SetWarpIndex(0);
