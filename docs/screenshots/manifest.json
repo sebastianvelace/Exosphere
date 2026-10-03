@@ -1,0 +1,42 @@
+{
+  "captured_date": "2026-10-03",
+  "source_revision": "0b6aab5065fc86891abc6aae1e3847a2f50936d6",
+  "images": [
+    {
+      "file": "menu.png",
+      "width": 1280,
+      "height": 720,
+      "sha256": "d0597caf602783e69987c0372dc55a642f483dbf3e1e85ef4646d2af32e0f6d7"
+    },
+    {
+      "file": "pad.png",
+      "width": 1280,
+      "height": 720,
+      "sha256": "a7036bdaf605b9e753dcc15563e1cfa9b1025a359208482638743437bedf8d17"
+    },
+    {
+      "file": "orbit.png",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "224476582e09bb596b5b3099369584739e2413818269352d0edc4c1961c66fe5"
+    },
+    {
+      "file": "cockpit.png",
+      "width": 1280,
+      "height": 720,
+      "sha256": "eb98e85afc45fa8be36283a3dcf1cab7ed692d2183f1b7d497a43a9174649b1a"
+    },
+    {
+      "file": "entry.png",
+      "width": 1280,
+      "height": 720,
+      "sha256": "6ee677c69d6c37876faefbf199874ef05d934ebdf9b4f63bf9109d995f76f0fc"
+    },
+    {
+      "file": "water-motion.png",
+      "width": 1280,
+      "height": 720,
+      "sha256": "e69f1ba1decb9da77d61f573a83a52078889f0f4f6b673f4d658b690e74c082f"
+    }
+  ]
+}

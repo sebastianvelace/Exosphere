@@ -6,21 +6,31 @@ There is no installer yet. You play by opening the source in the Godot .NET edit
 
 ## Screenshots
 
+Captured from the current simulator on 2026-10-03. Prepared scenes and the water-motion bench are labelled below; this gallery is not evidence of a reconstructed full Flight 14 mission. [Capture provenance](docs/screenshots/README.md).
+
+![Centered flight operations menu](docs/screenshots/menu.png)
+
+*Flight operations menu with direct access to Flight 14 exploration and free flight.*
+
 ![Starship on the Starbase pad before launch](docs/screenshots/pad.png)
 
-*Starship on the Starbase pad before launch.*
+*Starship Flight 12 V3 on the Starbase pad, with the current broadcast telemetry.*
 
-![Earth limb from low orbit](docs/screenshots/orbit.png)
+![Starship over Earth's limb in a prepared orbital scene](docs/screenshots/orbit.png)
 
-*Earth limb from low orbit, with the flight HUD.*
+*Prepared orbital Starship scene with the current Earth limb, vacuum plume and telemetry.*
 
-![Cockpit view over the day side](docs/screenshots/cockpit.png)
+![Simulator cockpit in a prepared low-orbit scene](docs/screenshots/cockpit.png)
 
-*Cockpit view over the day side as entry interface approaches.*
+*Simulator cockpit in a prepared low-orbit scene.*
 
-![Starship at entry interface](docs/screenshots/entry.png)
+![Starship in the prepared atmospheric entry scenario](docs/screenshots/entry.png)
 
-*Starship at entry interface, about 67 km, nose toward Earth.*
+*Starship descending in the prepared 70 km atmospheric-entry scenario.*
+
+![Sealed-hull water-motion bench after ten seconds](docs/screenshots/water-motion.png)
+
+*Seeded terminal bench after ten seconds of calculated water motion. Estimated sealed-hull heeling; flooding and real capsize timing remain unmodelled.*
 
 ## Play
 
