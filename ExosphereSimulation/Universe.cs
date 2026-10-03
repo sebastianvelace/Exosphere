@@ -1661,10 +1661,13 @@ public class Universe
         vessel.OrbitalState = null;
     }
 
-    private void ApplyPostIntegrationPhysics(Vessel vessel, CelestialBody refBody, double dt)
+    private void ApplyPostIntegrationPhysics(Vessel vessel, CelestialBody refBody, double dt,
+        Vector3d? forcePosition = null, Vector3d? forceVelocity = null)
     {
-        var netAccel  = vessel.ComputeNetAcceleration(_bodies, refBody);
-        var gravAccel = vessel.ComputeGravity(_bodies);
+        var position = forcePosition ?? vessel.Position;
+        var velocity = forceVelocity ?? vessel.Velocity;
+        var netAccel = vessel.ComputeNetAccelerationAt(position, velocity, _bodies, refBody);
+        var gravAccel = vessel.ComputeGravityAt(position, _bodies);
         var contactAccel = vessel.TotalMass > 0.0
             ? vessel.LastContactForceWorld / vessel.TotalMass
             : Vector3d.Zero;
@@ -1672,10 +1675,10 @@ public class Universe
         Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation);
         TryStructuralBreakup(vessel, nonGrav.Magnitude);
 
-        double density = refBody.GetAtmosphericDensity(vessel.Position);
+        double density = refBody.GetAtmosphericDensity(position);
         if (density > 0.0 && !vessel.IsGroundHeld)
         {
-            var surfVel = vessel.GetSurfaceVelocity(refBody);
+            var surfVel = velocity-refBody.Velocity-refBody.GetSurfaceVelocity(position);
             double airspeed = surfVel.Magnitude;
             double heatFlux = vessel.ComputeStagnationHeatFlux(density, surfVel);
             var flowDirLocal = airspeed > 1e-6
@@ -2066,6 +2069,11 @@ public class Universe
 
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
     {
+        if (vessel.WaterMotionEnabled && vessel.WaterContact is { } water)
+        {
+            IntegrateVesselWaterMotion(vessel, refBody, water, dt);
+            return;
+        }
         // Celestial bodies are already at CurrentTime + dt, while the vessel still carries
         // its CurrentTime state. Integrating those absolute states together injects the
         // reference body's orbital displacement into low-altitude motion (Earth travels
@@ -2147,6 +2155,65 @@ public class Universe
         Vector3d position, Vector3d velocity, double time) =>
         vessel.WaterContact is { } water && water.Covers(body, position, time)
             ? Physics.WaterContactSolver.Evaluate(vessel, body, water, position, velocity) : null;
+
+    /// <summary>
+    /// Water-only coupled motion. Keeps the global ascent/EDL integration mode unchanged.
+    /// The public vessel position remains the visible skirt datum; only RK4 advances COM.
+    /// </summary>
+    private void IntegrateVesselWaterMotion(Vessel vessel, CelestialBody body,
+        Physics.WaterContactDefinition water, double dt)
+    {
+        var (startPosition, startVelocity) = BodyStateAt(body, CurrentTime);
+        vessel.Position = body.Position+(vessel.Position-startPosition);
+        vessel.Velocity = body.Velocity+(vessel.Velocity-startVelocity);
+        double evaluationTime = CurrentTime+dt;
+        var frameAcceleration = GetReferenceBodyRailAcceleration(body);
+        Physics.RigidBody6DofState finalAbsolute;
+        vessel.BeginCoupledPhysicsStep(dt, body);
+        try
+        {
+            var mass = Physics.WaterMotionFrame.ResolveMassProperties(vessel.Parts, water);
+            var initialAbsolute = Physics.WaterMotionFrame.FromSkirt(vessel.Position, vessel.Velocity,
+                vessel.Orientation, vessel.AngularVelocity, mass.CenterOfMassBody);
+            var initialRelative = new Physics.RigidBody6DofState(
+                initialAbsolute.Position-body.Position, initialAbsolute.Velocity-body.Velocity,
+                initialAbsolute.Orientation, initialAbsolute.AngularVelocityBody);
+            var finalRelative = Integrators.RigidBody6DofIntegrator.Step(initialRelative, CurrentTime, dt, mass,
+                (candidate, _) =>
+                {
+                    var absolute = ToAbsoluteState(body, candidate);
+                    var contact = EvaluateWaterMotionContact(body, water, absolute, mass, evaluationTime);
+                    var context = new Physics.RigidBodyForceContext(_bodies, body,
+                        (contact?.ForceWorld ?? Vector3d.Zero)-frameAcceleration*mass.Mass,
+                        contact?.TorqueWorld ?? Vector3d.Zero);
+                    return Physics.RigidBodyForceEvaluator.Evaluate(vessel, absolute, context);
+                });
+            finalAbsolute = ToAbsoluteState(body, finalRelative);
+            (vessel.Position, vessel.Velocity) = Physics.WaterMotionFrame.ToSkirt(finalAbsolute, mass.CenterOfMassBody);
+            vessel.Orientation = finalAbsolute.Orientation;
+            vessel.AngularVelocity = finalAbsolute.AngularVelocityWorld;
+            vessel.LastWaterContact = EvaluateWaterMotionContact(body, water, finalAbsolute, mass, evaluationTime);
+            vessel.LastSurfaceContact = null; vessel.LastCatchContact = null;
+            vessel.LastContactForceWorld = vessel.LastWaterContact?.ForceWorld ?? Vector3d.Zero;
+            vessel.LastContactTorqueWorld = vessel.LastWaterContact?.TorqueWorld ?? Vector3d.Zero;
+            vessel.LastWaterMotionTelemetry = new Physics.Coupled6DofTelemetry(true, evaluationTime, dt,
+                mass.Mass, initialAbsolute.Position, finalAbsolute.Position,
+                initialAbsolute.Velocity, finalAbsolute.Velocity,
+                finalAbsolute.Orientation, finalAbsolute.AngularVelocityWorld);
+        }
+        finally { vessel.EndCoupledPhysicsStep(); }
+        ApplyPostIntegrationPhysics(vessel, body, dt, finalAbsolute.Position, finalAbsolute.Velocity);
+    }
+
+    private static Physics.WaterContactWrench? EvaluateWaterMotionContact(CelestialBody body,
+        Physics.WaterContactDefinition water, in Physics.RigidBody6DofState state,
+        in Physics.RigidBodyMassProperties mass, double time)
+    {
+        var (position, velocity) = Physics.WaterMotionFrame.ToSkirt(state, mass.CenterOfMassBody);
+        return water.Covers(body, position, time)
+            ? Physics.WaterContactSolver.Evaluate(body, water, position, velocity,
+                state.Orientation, state.AngularVelocityWorld, mass.CenterOfMassBody) : null;
+    }
 
     private void IntegrateVesselOffRailsCoupled6Dof(
         Vessel vessel,

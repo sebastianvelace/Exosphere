@@ -70,10 +70,17 @@ public sealed class Flight14LandingBurnTests(ITestOutputHelper output)
         Assert.True(burn.WaterEntryWitness.VerticalSpeedMps < 0);
         Assert.True(universe.CurrentTime-burn.WaterEntryWitness.SimulationTimeSeconds >= definition.WaterObservationSeconds);
         Assert.NotNull(ship.LastWaterContact);
-        Assert.True(ship.LastWaterContact.Value.LowestPointAltitudeM < 0);
+        Assert.True(ship.LastWaterContact.Value.LowestPointAltitudeM < 0
+            || ship.LastWaterContact.Value.HullLowestAltitudeM < 0);
+        Assert.True(ship.LastWaterContact.Value.SubmergedVolumeM3 > 0);
         Assert.True(ship.LastWaterContact.Value.ForceWorld.Magnitude > 0);
         Assert.False(ship.IsGroundHeld); Assert.False(ship.IsDestroyed);
         Assert.Equal(0, ship.Throttle);
+        Assert.True(ship.WaterMotionEnabled);
+        Assert.True(ship.LastWaterMotionTelemetry?.IsFinite);
+        Assert.NotNull(burn.WaterMotionEndWitness);
+        Assert.InRange(burn.WaterMotionEndWitness.SimulationTimeSeconds-burn.WaterEntryWitness.SimulationTimeSeconds,
+            definition.WaterObservationSeconds, definition.WaterObservationSeconds+0.04);
     }
 
     [Fact]

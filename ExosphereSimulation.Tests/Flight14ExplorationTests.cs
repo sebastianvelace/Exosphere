@@ -90,11 +90,18 @@ public sealed class Flight14ExplorationTests
         Assert.Equal(Flight14LandingPhase.SplashdownReached, run.PoweredReturnController.Landing.Phase);
         Assert.InRange(run.PoweredReturnController.Landing.WaterEntryWitness.AtmosphereRelativeSpeedMps, 0, 5);
         Assert.NotNull(run.Ship.LastWaterContact);
-        Assert.True(run.Ship.LastWaterContact.Value.LowestPointAltitudeM < 0);
+        Assert.True(run.Ship.LastWaterContact.Value.LowestPointAltitudeM < 0
+            || run.Ship.LastWaterContact.Value.HullLowestAltitudeM < 0);
+        Assert.True(run.Ship.LastWaterContact.Value.SubmergedVolumeM3 > 0);
         Assert.False(run.Ship.IsGroundHeld);
-        var up = run.Earth.GetGeodeticUp(run.Ship.Position);
-        Assert.True(run.Ship.Orientation.Rotate(Exosphere.Simulation.Math.Vector3d.Up).Dot(up)
-            > System.Math.Cos(15*Exosphere.Simulation.Math.MathUtils.DEG_TO_RAD));
+        // The entry gate is upright; post-contact attitude follows the coupled water loads.
+        Assert.True(run.PoweredReturnController.Landing.WaterEntryWitness.UprightAlignment
+            > System.Math.Cos(10*Exosphere.Simulation.Math.MathUtils.DEG_TO_RAD));
+        Assert.True(run.Ship.WaterMotionEnabled);
+        Assert.True(run.Ship.LastWaterMotionTelemetry?.IsFinite);
+        Assert.NotNull(run.PoweredReturnController.Landing.WaterMotionEndWitness);
+        Assert.InRange(run.Ship.Orientation.Norm, 0.999999999, 1.000000001);
+        Assert.InRange(run.Ship.LastWaterMotionTelemetry!.Value.StepSeconds, 0.019999, 0.020001);
         Assert.NotNull(run.PoweredReturnController!.Landing!.EndWitness);
         double epoch = universe.CurrentTime;
         var position = run.Ship.Position; var velocity = run.Ship.Velocity; double mass = run.Ship.TotalMass;

@@ -87,6 +87,9 @@ public class Vessel
     /// <summary>Opt-in water entry; only a declared open-water region bypasses the rigid surface fallback.</summary>
     public WaterContactDefinition? WaterContact { get; set; }
     public WaterContactWrench? LastWaterContact { get; internal set; }
+    /// <summary>Opt-in mass-centred water motion, activated only by accepted physical contact.</summary>
+    public bool WaterMotionEnabled { get; set; }
+    public Coupled6DofTelemetry? LastWaterMotionTelemetry { get; internal set; }
 
     // ── Physical landing contact ─────────────────────────────────────────
     private ContactPointDefinition[] _landingContactPoints = [];

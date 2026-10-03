@@ -101,10 +101,14 @@ public partial class Flight14LandingVisualController : Node3D
         var contactOffset = contact is { SubmergedVolumeM3: > 0 } displaced
             ? displaced.BuoyancyCenterOffsetWorld : ship.Orientation.Rotate(Vector3d.Up)*water.LowestPointYM;
         var contactCenter = new Vector2((float)contactOffset.Dot(east), (float)contactOffset.Dot(south));
-        _material.SetShaderParameter("contact_center_m", contactCenter);
+        var start = contact is { SubmergedVolumeM3: > 0 } wetHull ? wetHull.WetHullStartOffsetWorld : contactOffset;
+        var end = contact is { SubmergedVolumeM3: > 0 } wetEnd ? wetEnd.WetHullEndOffsetWorld : contactOffset;
+        _material.SetShaderParameter("wet_hull_start_m", new Vector2((float)start.Dot(east), (float)start.Dot(south)));
+        _material.SetShaderParameter("wet_hull_end_m", new Vector2((float)end.Dot(east), (float)end.Dot(south)));
+        _material.SetShaderParameter("hull_radius_m", (float)water.RadiusM);
         _material.SetShaderParameter("contact_gain", wet ? 1f : 0f);
         _mist.Position = new Vector3(contactCenter.X/2.8f, 0, contactCenter.Y/2.8f);
-        _mist.Emitting = delivered > 0.03f || wet && contact is { EntrySpeedMps: > 0.6 };
+        _mist.Emitting = delivered > 0.03f || wet && contact is { WetMotionSpeedMps: > 0.6 };
         _mist.SpeedScale = delta > 0 ? (float)System.Math.Clamp(advance/delta, 0, 8) : 0;
     }
 

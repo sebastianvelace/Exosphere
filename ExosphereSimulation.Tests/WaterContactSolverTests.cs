@@ -170,5 +170,23 @@ public sealed class WaterContactSolverTests
         Assert.InRange(wrench.DragTorqueWorld.Magnitude, 0, 1e-8);
     }
 
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(0, false)]
+    [InlineData(4, true)]
+    [InlineData(4, false)]
+    public void HorizontalWetStripDragMatchesItsProjectedSilhouette(double altitude, bool verticalFlow)
+    {
+        var body = Earth();
+        var ship = new Vessel { Orientation = Quaterniond.FromAxisAngle(Vector3d.Forward, System.Math.PI/2) };
+        var velocity = (verticalFlow ? Vector3d.Up : Vector3d.Forward)*2;
+        var wrench = WaterContactSolver.Evaluate(ship, body, Water, Vector3d.Up*(body.Radius+altitude), velocity);
+        // Vertical projection is the wet segment's chord; horizontal projection is its depth.
+        double width = verticalFlow ? 2*System.Math.Sqrt(Water.RadiusM*Water.RadiusM-altitude*altitude)
+            : Water.RadiusM-altitude;
+        var expected = velocity*(-0.5*Water.DensityKgPerM3*Water.DragCoefficient*width*Water.CylinderHeightM*2);
+        Assert.InRange((wrench.DragForceWorld-expected).Magnitude, 0, 1e-7);
+    }
+
     private static CelestialBody Earth() => new() { Id = "earth", Radius = 6371000, GM = 3.986004418e14 };
 }

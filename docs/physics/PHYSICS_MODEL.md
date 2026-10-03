@@ -402,33 +402,43 @@ actual orientation, including horizontal and inverted poses. Sixteen-point
 Gauss-Legendre quadrature splits the axial integration at dry/full-section
 boundaries to retain shallow penetration at near-vertical attitude. Displaced
 volume and its first moment set `Fb = rho * displacedVolume * g` and its lever arm.
-Projected side strips (`2R dy`, weighted by wet section fraction) apply quadratic
-cross-flow drag at each wet section centroid. Separate axial nozzle drag ramps
+Projected wet-section widths apply quadratic cross-flow drag at each wet section
+centroid. The width is the clipped circle's silhouette perpendicular to local
+cross-flow, rather than diameter multiplied by submerged area fraction. Separate axial nozzle drag ramps
 over an estimated 0.5 m entry depth. This is an engineering strip approximation,
 not a calibrated hydrodynamic coefficient distribution. Point velocity includes
 angular transport; rotating water includes body translation and rotation once.
-Drag force and torque form a dissipative wrench in the mass-centre frame. Buoyancy and drag are evaluated
-at RK4 translation stages; external torque uses the existing legacy angular tick.
+Drag force and torque form a dissipative wrench in the mass-centre frame. Before
+accepted contact, buoyancy/drag use the existing legacy translation/angular path.
+After accepted contact, the water-only RK4 path jointly advances mass-centre
+translation, orientation and body angular velocity. Each candidate state supplies
+its own attitude and angular transport to the water solver. Actual part-graph mass
+and inertia include remaining propellant; engines/resources prepare once per step.
+`WaterMotionFrame` converts the rendered skirt datum to/from the mass centre,
+including `omega cross offset` point velocity and the part-root-to-skirt offset.
+Gravity, prepared thrust and aerodynamic loads use the candidate mass-centre state.
 Water forces also contribute to proper-acceleration and structural diagnostics.
 The generic rigid-floor clamp is bypassed only for actual opted-in wet contact.
 
 This is a first-order inclined sealed-cylinder estimate, not slamming CFD, flooding
-or a resolved nozzle/skirt/nose/flap geometry. Lever geometry is frozen at handoff.
+or a resolved nozzle/skirt/nose/flap geometry. The skirt offset is fixed at handoff;
+the water-motion mass centre follows actual part-graph mass properties.
 The dry-floor bypass uses either the exposed nozzle or lowest cylindrical hull
 support, so side contact does not require the axial nozzle to be submerged. Sea swell is optical only; its
-mean plane remains at geodetic altitude zero. Coupled 6-DoF water parity is unverified
-and the Flight 14 controller rejects that configuration. No global mode is changed.
+mean plane remains at geodetic altitude zero. The generic global coupled 6-DoF
+configuration is still rejected by this controller; only the explicit post-contact
+`WaterMotionEnabled` path is active. No global ascent/EDL mode is changed.
 
 Three delivered sea-level engines must have performed the flip. Control progressively
 removes lateral tilt below the diagnostic height and retains engine throttle floors,
 monotone selection and original fuel. Water entry is accepted only while descending,
 within 10 degrees upright and below 5 m/s exposed-point speed in the declared region.
 Shutdown is commanded on that physical witness; spool-down still integrates. After
-one second the preview freezes as `SplashdownReached`, meaning observed bounded
+ten seconds the preview freezes as `SplashdownReached`, meaning observed bounded
 water entry, not a stable floating vessel, recovered hardware or full mission success.
-Flooding, capsize, sea-state forces and independent booster recovery remain open.
-Inclined force geometry alone does not validate capsize: the legacy integration
-advances the skirt datum independently of the angular step. A longer post-contact
-motion needs mass-centre translation/rotation conservation and time-step convergence
-before extending the current one-second preview. See the
-[2026-10-03 inclined-water audit](../audits/flight14_inclined_water_2026-10-03.md).
+Free-motion tests preserve mass-centre velocity, angular momentum and rotational
+energy. A ten-second production water fixture compares 20/10/5 ms steps and retains
+wet contact through heeling. This supports the bounded sealed-hull estimate; it does
+not validate real flooding, capsize timing, slamming/added mass, sea-state forces or
+independent booster recovery. See the
+[2026-10-03 water-motion audit](../audits/flight14_water_motion_2026-10-03.md).

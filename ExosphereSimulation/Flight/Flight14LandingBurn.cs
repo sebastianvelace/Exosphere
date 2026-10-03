@@ -26,6 +26,7 @@ public sealed class Flight14LandingBurn
     private int _engineCount = 3;
     private double _waterContactTime = double.NaN;
     public Flight14LandingWitness? WaterEntryWitness { get; private set; }
+    public Flight14LandingWitness? WaterMotionEndWitness { get; private set; }
     public Flight14LandingPhase Phase { get; private set; } = Flight14LandingPhase.Flip;
     public string? BlockReason { get; private set; }
     public Flight14LandingWitness? StartWitness { get; private set; }
@@ -56,8 +57,14 @@ public sealed class Flight14LandingBurn
             _ship.Throttle = 0; _ship.PitchYawRoll = Vector3d.Zero;
             if (_ship.IsDestroyed || _ship.StructuralControlLost || _ship.IsGroundHeld)
             { Block("water-entry-vehicle-lost"); return; }
+            if (_ship.WaterContact is not { } waterRegion
+                || !waterRegion.Covers(_body, _ship.Position, universe.CurrentTime))
+            { Block("water-motion-outside-declared-ocean-region"); return; }
             if (universe.CurrentTime-_waterContactTime >= _definition.WaterObservationSeconds)
+            {
+                WaterMotionEndWitness = Witness(universe);
                 Phase = Flight14LandingPhase.SplashdownReached;
+            }
             return;
         }
         if (_ship.IsDestroyed || _ship.StructuralControlLost || _ship.IsGroundHeld
@@ -92,7 +99,7 @@ public sealed class Flight14LandingBurn
                     _ship.VehicleLength, _definition.LowestPointYM, _ship.Parts.CenterOfMass.Y-bottom,
                     _definition.WaterDensityKgPerM3, _definition.WaterDragCoefficient, _definition.WettingDepthM,
                     _definition.MinimumWaterLatitudeDegrees, _definition.MaximumWaterLatitudeDegrees,
-                    _definition.MinimumWaterLongitudeDegrees, _definition.MaximumWaterLongitudeDegrees);
+                    _definition.MinimumWaterLongitudeDegrees, _definition.MaximumWaterLongitudeDegrees, bottom);
             }
         }
         if (!double.IsFinite(witness.GeodeticAltitudeM) || !double.IsFinite(witness.AtmosphereRelativeSpeedMps)
@@ -130,6 +137,7 @@ public sealed class Flight14LandingBurn
                 { Block("water-entry-state-envelope"); return; }
                 WaterEntryWitness = witness; _waterContactTime = universe.CurrentTime;
                 _ship.Throttle = 0; _ship.PitchYawRoll = Vector3d.Zero;
+                _ship.WaterMotionEnabled = true;
                 Phase = Flight14LandingPhase.WaterEntry; return;
             }
         }

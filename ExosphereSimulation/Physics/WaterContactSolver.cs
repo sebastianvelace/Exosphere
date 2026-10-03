@@ -6,7 +6,8 @@ using Exosphere.Simulation.Math;
 public sealed record WaterContactDefinition(double RadiusM, double CylinderHeightM,
     double LowestPointYM, double CenterOfMassYM, double DensityKgPerM3,
     double DragCoefficient, double WettingDepthM, double MinimumLatitudeDegrees,
-    double MaximumLatitudeDegrees, double MinimumLongitudeDegrees, double MaximumLongitudeDegrees)
+    double MaximumLatitudeDegrees, double MinimumLongitudeDegrees, double MaximumLongitudeDegrees,
+    double? SkirtDatumYM = null)
 {
     public bool Covers(CelestialBody body, Vector3d position, double time)
     {
@@ -21,7 +22,9 @@ public readonly record struct WaterContactWrench(Vector3d ForceWorld, Vector3d T
     double LowestPointAltitudeM, double EntrySpeedMps, double SubmergedVolumeM3,
     double HullLowestAltitudeM = double.PositiveInfinity,
     Vector3d BuoyancyCenterOffsetWorld = default,
-    Vector3d DragForceWorld = default, Vector3d DragTorqueWorld = default);
+    Vector3d DragForceWorld = default, Vector3d DragTorqueWorld = default,
+    Vector3d WetHullStartOffsetWorld = default, Vector3d WetHullEndOffsetWorld = default,
+    double WetMotionSpeedMps = 0);
 
 /// <summary>
 /// Calm-water sealed-cylinder estimate at arbitrary inclination. Circular sections are clipped
@@ -45,9 +48,16 @@ public static class WaterContactSolver
 
     public static WaterContactWrench Evaluate(Vessel ship, CelestialBody body,
         WaterContactDefinition definition, Vector3d position, Vector3d velocity)
+        => Evaluate(body, definition, position, velocity, ship.Orientation, ship.AngularVelocity,
+            Vector3d.Up*definition.CenterOfMassYM);
+
+    /// <summary>Pure stage evaluator; all kinematics belong to the same candidate state.</summary>
+    public static WaterContactWrench Evaluate(CelestialBody body, WaterContactDefinition definition,
+        Vector3d position, Vector3d velocity, Quaterniond orientation, Vector3d angularVelocityWorld,
+        Vector3d centerOfMassFromSkirtBody)
     {
         var up = body.GetGeodeticUp(position);
-        var axis = ship.Orientation.Rotate(Vector3d.Up);
+        var axis = orientation.Rotate(Vector3d.Up);
         double vertical = System.Math.Clamp(axis.Dot(up), -1, 1);
         var radialUp = up-axis*vertical;
         double radialVertical = radialUp.Magnitude;
@@ -63,13 +73,13 @@ public static class WaterContactSolver
             return new(Vector3d.Zero, Vector3d.Zero, gap, pointVelocity.Magnitude, 0, hullGap);
 
         double area = System.Math.PI*radius*radius;
-        var comOffset = axis*definition.CenterOfMassYM;
+        var comOffset = orientation.Rotate(centerOfMassFromSkirtBody);
         double axialSpeed = pointVelocity.Dot(axis);
         double wetting = System.Math.Clamp(-gap/definition.WettingDepthM, 0, 1);
         var drag = axis*(-0.5*definition.DensityKgPerM3*definition.DragCoefficient
             *area*wetting*System.Math.Abs(axialSpeed)*axialSpeed);
         var dragTorque = (nozzleOffset-comOffset).Cross(drag);
-        double volume = 0;
+        double volume = 0, wetSpeedMoment = 0;
         var firstMoment = Vector3d.Zero;
         Span<double> boundaries = stackalloc double[4];
         boundaries[0] = 0; boundaries[1] = height;
@@ -90,11 +100,11 @@ public static class WaterContactSolver
                 double y = middle+half*Nodes[sample];
                 double sectionAltitude = altitude+y*vertical;
                 double sectionArea, radialMoment;
+                double cut = radialVertical > 1e-12 ? -sectionAltitude/radialVertical : radius;
                 if (radialVertical < 1e-12)
                 { sectionArea = sectionAltitude < 0 ? area : 0; radialMoment = 0; }
                 else
                 {
-                    double cut = -sectionAltitude/radialVertical;
                     if (cut <= -radius) { sectionArea = 0; radialMoment = 0; }
                     else if (cut >= radius) { sectionArea = area; radialMoment = 0; }
                     else
@@ -109,21 +119,36 @@ public static class WaterContactSolver
                 double displaced = sectionArea*lengthWeight;
                 var offset = axis*y+radialDirection*(radialMoment/sectionArea);
                 volume += displaced; firstMoment += offset*displaced;
-                // Strip approximation: projected side area 2R dy, weighted by the wet
-                // cross-section fraction. Pitch/yaw damping follows real lever arms.
+                // Project the wet circular segment onto the direction perpendicular
+                // to cross-flow. A shallow horizontal hull has a much wider silhouette
+                // than its wet volume fraction would suggest.
                 var sectionVelocity = RelativeVelocity(offset);
+                wetSpeedMoment += displaced*sectionVelocity.Magnitude;
                 var crossFlow = sectionVelocity-axis*sectionVelocity.Dot(axis);
+                double width = 2*radius;
+                if (cut < radius && crossFlow.MagnitudeSquared > 1e-24)
+                {
+                    var side = axis.Cross(crossFlow.Normalized);
+                    double k = System.Math.Clamp(side.Dot(radialDirection), -1, 1);
+                    double edge = System.Math.Sqrt(System.Math.Max(0, (1-k*k)*(radius*radius-cut*cut)));
+                    double maximum = radius*k <= cut ? radius : k*cut+edge;
+                    double minimum = -radius*k <= cut ? -radius : k*cut-edge;
+                    width = System.Math.Max(0, maximum-minimum);
+                }
                 var sectionDrag = crossFlow*(-0.5*definition.DensityKgPerM3*definition.DragCoefficient
-                    *2*radius*lengthWeight*(sectionArea/area)*crossFlow.Magnitude);
+                    *width*lengthWeight*crossFlow.Magnitude);
                 drag += sectionDrag; dragTorque += (offset-comOffset).Cross(sectionDrag);
             }
         }
         var center = volume > 0 ? firstMoment/volume : Vector3d.Zero;
         var buoyancy = up*(definition.DensityKgPerM3*volume*body.GetGravityAt(position).Magnitude);
         return new(buoyancy+drag, (center-comOffset).Cross(buoyancy)+dragTorque,
-            gap, pointVelocity.Magnitude, volume, hullGap, center, drag, dragTorque);
+            gap, pointVelocity.Magnitude, volume, hullGap, center, drag, dragTorque,
+            axis*(vertical < -1e-12 ? System.Math.Clamp((-altitude+radius*radialVertical)/vertical, 0, height) : 0),
+            axis*(vertical > 1e-12 ? System.Math.Clamp((-altitude+radius*radialVertical)/vertical, 0, height) : height),
+            volume > 0 ? wetSpeedMoment/volume : pointVelocity.Magnitude);
 
-        Vector3d RelativeVelocity(Vector3d offset) => velocity+ship.AngularVelocity.Cross(offset)
+        Vector3d RelativeVelocity(Vector3d offset) => velocity+angularVelocityWorld.Cross(offset)
             -body.Velocity-body.GetSurfaceVelocity(position+offset);
     }
 }

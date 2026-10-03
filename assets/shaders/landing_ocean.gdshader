@@ -6,7 +6,9 @@ render_mode cull_disabled, blend_mix, depth_draw_always;
 uniform float sim_time = 0.0;
 uniform float exhaust_gain = 0.0;
 uniform float contact_gain = 0.0;
-uniform vec2 contact_center_m = vec2(0.0);
+uniform vec2 wet_hull_start_m = vec2(0.0);
+uniform vec2 wet_hull_end_m = vec2(0.0);
+uniform float hull_radius_m = 4.5;
 uniform float sea_radius_m = 6371000.0;
 varying vec2 sea_m;
 
@@ -30,7 +32,10 @@ void fragment() {
     NORMAL_MAP_DEPTH = 0.8;
     float range_m = length(sea_m);
     float spray = exhaust_gain*exp(-pow((range_m-15.0)/12.0, 2.0));
-    float foam = (spray*0.55+contact_gain*exp(-pow((length(sea_m-contact_center_m)-8.0)/3.5, 2.0))*0.32)
+    vec2 wet_axis = wet_hull_end_m-wet_hull_start_m;
+    float along_hull = clamp(dot(sea_m-wet_hull_start_m, wet_axis)/max(dot(wet_axis, wet_axis), 0.001), 0.0, 1.0);
+    float hull_range = length(sea_m-mix(wet_hull_start_m, wet_hull_end_m, along_hull));
+    float foam = (spray*0.55+contact_gain*exp(-pow((hull_range-hull_radius_m-1.5)/3.5, 2.0))*0.32)
         * (0.6+0.4*detail);
     ALBEDO = mix(vec3(0.025, 0.055, 0.080), vec3(0.50, 0.57, 0.61), clamp(foam, 0.0, 0.65));
     ROUGHNESS = mix(0.42, 0.70, clamp(foam, 0.0, 1.0));
