@@ -959,7 +959,9 @@ public partial class HUDController : Control
         if (mission != null)
         {
             UpdateEntryInterfaceLatch(mission.Phase);
-            _phaseLabel.Text = FormatPhase(mission.Phase);
+            _phaseLabel.Text = SimulationBridge.Instance?.Flight14Preview?.Run.PoweredReturnController?.Landing?.Phase
+                is Exosphere.Simulation.Flight.Flight14LandingPhase.WaterEntry or Exosphere.Simulation.Flight.Flight14LandingPhase.SplashdownReached
+                ? "WATER ENTRY / ESTIMATE" : FormatPhase(mission.Phase);
             _phaseLabel.AddThemeColorOverride("font_color", PhaseColor(mission.Phase));
             UpdatePhaseTrack(mission.Phase);
             UpdateEventLog(mission.Phase, universe.CurrentTime);

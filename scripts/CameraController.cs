@@ -480,6 +480,12 @@ public partial class CameraController : Node3D
             _smoothedFrameTarget = _smoothedFrameTarget.Lerp(targetLookTarget, blend);
         }
 
+        // Keep an orbiting landing camera above the opted-in mean sea surface, including
+        // its eased position. Pitch/zoom remain player-owned; this only prevents underwater views.
+        if (bridge?.ActiveVessel is { WaterContact: not null } wetShip
+            && bridge.Flight14Preview != null && trackAlt < 1500)
+            _smoothedFramePosition.Y = Mathf.Max(_smoothedFramePosition.Y, -(float)(trackAlt/2.8)+1.5f);
+
         // The presets above are authored in local launch coordinates. Rotate them into the
         // vessel's geodetic frame so screen-up follows radial up instead of inertial +Y.
         camera.Position = surfaceFrame * _smoothedFramePosition;

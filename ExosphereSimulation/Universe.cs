@@ -1782,6 +1782,9 @@ public class Universe
 
     private static void HandleSurfaceImpact(Vessel vessel, CelestialBody refBody)
     {
+        // Water loads are integrated in the translating-body frame. Do not subsequently
+        // turn a wet vessel into a grounded object through the legacy rigid-floor clamp.
+        if (vessel.LastWaterContact is { LowestPointAltitudeM: < 0 }) return;
         double altitude = refBody.GetAltitude(vessel.Position);
         if (altitude >= 0.0) return;
 
@@ -2081,14 +2084,17 @@ public class Universe
             refBody.Velocity + relativeVelocity;
 
         double evaluationTime = CurrentTime + dt;
+        var waterBefore = EvaluateWaterContact(vessel, refBody, framedPosition, framedVelocity, evaluationTime);
         var contactBefore = EvaluateLandingContact(
             vessel, refBody, framedPosition, framedVelocity);
         var catchContactBefore = EvaluateCatchContact(
             vessel, framedPosition, framedVelocity, evaluationTime);
         vessel.LastContactForceWorld =
-            (contactBefore?.ForceWorld ?? Vector3d.Zero) + (catchContactBefore?.ForceWorld ?? Vector3d.Zero);
+            (contactBefore?.ForceWorld ?? Vector3d.Zero) + (catchContactBefore?.ForceWorld ?? Vector3d.Zero)
+                + (waterBefore?.ForceWorld ?? Vector3d.Zero);
         vessel.LastContactTorqueWorld =
-            (contactBefore?.TorqueWorld ?? Vector3d.Zero) + (catchContactBefore?.TorqueWorld ?? Vector3d.Zero);
+            (contactBefore?.TorqueWorld ?? Vector3d.Zero) + (catchContactBefore?.TorqueWorld ?? Vector3d.Zero)
+                + (waterBefore?.TorqueWorld ?? Vector3d.Zero);
 
         vessel.Position = framedPosition;
         vessel.Velocity = framedVelocity;
@@ -2104,13 +2110,15 @@ public class Universe
             {
                 Vector3d position = refBody.Position + relativePos;
                 Vector3d velocity = refBody.Velocity + relativeVel;
+                var stageWater = EvaluateWaterContact(vessel, refBody, position, velocity, evaluationTime);
                 var stageContact = EvaluateLandingContact(
                     vessel, refBody, position, velocity);
                 var stageCatchContact = EvaluateCatchContact(
                     vessel, position, velocity, evaluationTime);
                 var contactAcceleration = vessel.TotalMass > 0.0
                     ? ((stageContact?.ForceWorld ?? Vector3d.Zero)
-                        + (stageCatchContact?.ForceWorld ?? Vector3d.Zero)) / vessel.TotalMass
+                        + (stageCatchContact?.ForceWorld ?? Vector3d.Zero)
+                        + (stageWater?.ForceWorld ?? Vector3d.Zero)) / vessel.TotalMass
                     : Vector3d.Zero;
                 return vessel.ComputeNetAccelerationAt(
                         position, velocity, _bodies, refBody)
@@ -2125,8 +2133,19 @@ public class Universe
         var catchContactAfter = EvaluateCatchContact(
             vessel, vessel.Position, vessel.Velocity, evaluationTime);
         UpdateCatchContactState(vessel, catchContactAfter, dt);
+        vessel.LastWaterContact = EvaluateWaterContact(vessel, refBody, vessel.Position, vessel.Velocity, evaluationTime);
+        if (vessel.LastWaterContact is { } waterAfter)
+        {
+            vessel.LastContactForceWorld += waterAfter.ForceWorld;
+            vessel.LastContactTorqueWorld += waterAfter.TorqueWorld;
+        }
         ApplyPostIntegrationPhysics(vessel, refBody, dt);
     }
+
+    private static Physics.WaterContactWrench? EvaluateWaterContact(Vessel vessel, CelestialBody body,
+        Vector3d position, Vector3d velocity, double time) =>
+        vessel.WaterContact is { } water && water.Covers(body, position, time)
+            ? Physics.WaterContactSolver.Evaluate(vessel, body, water, position, velocity) : null;
 
     private void IntegrateVesselOffRailsCoupled6Dof(
         Vessel vessel,

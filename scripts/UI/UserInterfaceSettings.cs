@@ -104,7 +104,7 @@ public static class UiText
         ["phase_return"] = ("03   Deorbit, entry & terminal burn", "03   Desorbitado, reentrada y frenado final"),
         ["flight14_pending"] = ("Explore the current continuous simulation: launch, orbital insertion, 26 payload releases, deorbit and atmospheric descent. Estimated guidance and hardware; reconstruction is still in development.", "Explora la simulación continua actual: lanzamiento, inserción orbital, 26 despliegues, desorbitado y descenso atmosférico. Guiado y vehículo estimados; la reconstrucción sigue en desarrollo."),
         ["reference_only"] = ("MISSION BRIEFING / REFERENCE", "INFORMACIÓN DE MISIÓN / REFERENCIA"),
-        ["flight14_scope"] = ("Automatic flight. Camera and time acceleration remain available. The preview stops at 100 m: ocean targeting, splashdown and independent booster recovery are pending.", "Vuelo automático. Puedes mover la cámara y acelerar el tiempo. La exploración se detiene a 100 m: destino oceánico, amerizaje y recuperación independiente del booster pendientes."),
+        ["flight14_scope"] = ("Automatic flight. Camera and time acceleration remain available. Continues through estimated water entry. Exact ocean targeting, post-entry capsize and independent booster recovery remain pending.", "Vuelo automático. Puedes mover la cámara y acelerar el tiempo. Continúa hasta la entrada al agua estimada. Destino oceánico exacto, vuelco posterior y recuperación independiente del booster pendientes."),
         ["flight14_launch_preview"] = ("START EXPLORATION  →", "INICIAR EXPLORACIÓN  →"),
         ["choose_existing_vehicle"] = ("FREE FLIGHT / CHOOSE A VEHICLE", "VUELO LIBRE / ELEGIR VEHÍCULO"),
         ["free_flight"] = ("FREE FLIGHT", "VUELO LIBRE"),

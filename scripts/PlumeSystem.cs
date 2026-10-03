@@ -2,6 +2,7 @@ namespace Exosphere.Game;
 
 using Godot;
 using System.Collections.Generic;
+using Exosphere.Simulation.Parts;
 
 /// <summary>
 /// Engine-plume VFX for Starship + Super Heavy Raptor engines.
@@ -203,7 +204,7 @@ public partial class PlumeSystem : Node3D
     /// </summary>
     public void Update(float superHeavyThrottle, float shipThrottle, double altitude,
         double ambientPressureRatio, int selectedShipEngines = 6,
-        double visualDeltaSeconds = 1.0 / 30.0)
+        double visualDeltaSeconds = 1.0 / 30.0, IReadOnlyList<EngineReadout>? shipReadouts = null)
     {
         // Advance optical turbulence from wall-clock frame time, not from the number
         // of renderer callbacks. The latter slows the plume under llvmpipe and makes
@@ -233,16 +234,34 @@ public partial class PlumeSystem : Node3D
 
         int slActive = System.Math.Clamp(selectedShipEngines, 0, 3);
         int vacActive = System.Math.Clamp(selectedShipEngines - 3, 0, 3);
-        if (_shipUnits.Count >= 3)
-            UpdateGroup(_shipUnits, shipThrottle > 0.01f && vacActive > 0,
-                shipThrottle, expansion, pressRatio, altitude, 1f,
-                start: 0, count: 3, activeCount: vacActive,
-                flickerPhase: _visualTimeSeconds, flickerOffset: 1.7f, farField: farField);
-        if (_shipUnits.Count >= 6)
-            UpdateGroup(_shipUnits, shipThrottle > 0.01f && slActive > 0,
-                shipThrottle, expansion, pressRatio, altitude, 1f,
-                start: 3, count: 3, activeCount: slActive,
-                flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f, farField: farField);
+        if (_shipUnits.Count >= 6 && shipReadouts?.Count == 6)
+        {
+            // The runtime cluster is SL[0..2], VAC[3..5]; the visible plume array is
+            // VAC[0..2], SL[3..5]. An installed-engine average is appropriate for
+            // total output, but applying it to each remaining nozzle dims a one-engine
+            // landing burn sixfold and lights the wrong nozzle after an engine-out.
+            for (int i = 0; i < 6; i++)
+            {
+                var row = shipReadouts[i];
+                float delivered = row.ThrustN > 1 ? (float)row.Throttle : 0f;
+                UpdateGroup(_shipUnits, delivered > 0.001f, delivered, expansion, pressRatio, altitude, 1f,
+                    start: i < 3 ? i+3 : i-3, count: 1, flickerPhase: _visualTimeSeconds,
+                    flickerOffset: i < 3 ? 3.1f : 1.7f, farField: farField);
+            }
+        }
+        else
+        {
+            if (_shipUnits.Count >= 3)
+                UpdateGroup(_shipUnits, shipThrottle > 0.01f && vacActive > 0,
+                    shipThrottle, expansion, pressRatio, altitude, 1f,
+                    start: 0, count: 3, activeCount: vacActive,
+                    flickerPhase: _visualTimeSeconds, flickerOffset: 1.7f, farField: farField);
+            if (_shipUnits.Count >= 6)
+                UpdateGroup(_shipUnits, shipThrottle > 0.01f && slActive > 0,
+                    shipThrottle, expansion, pressRatio, altitude, 1f,
+                    start: 3, count: 3, activeCount: slActive,
+                    flickerPhase: _visualTimeSeconds, flickerOffset: 3.1f, farField: farField);
+        }
 
         RefreshDiagnostics();
     }

@@ -3,14 +3,14 @@ namespace Exosphere.Simulation.Flight;
 /// <summary>
 /// Playable engineering preview of the continuous loaded mission. Warp requests more
 /// whole control steps, never rails, reseeding or larger actuator integration intervals.
-/// Stops at the diagnostic boundary; it does not assert a water recovery.
+/// Stops at the configured contact observation boundary; it does not assert recovery or capsize.
 /// </summary>
 public sealed class Flight14Exploration(Flight14LaunchDiagnostic run)
 {
     public const string ProfileId = "starship-flight14-exploration";
     public Flight14LaunchDiagnostic Run { get; } = run;
     public bool IsPaused { get; set; }
-    public bool IsTerminal => Run.PoweredReturnController?.Landing?.Phase == Flight14LandingPhase.TerminalReached;
+    public bool IsTerminal => Run.PoweredReturnController?.Landing?.Phase is Flight14LandingPhase.TerminalReached or Flight14LandingPhase.SplashdownReached;
     public string? BlockReason => Run.PoweredReturnController?.BlockReason;
     public bool IsStopped => IsTerminal || BlockReason != null || Run.Ship.IsDestroyed;
     public double MissionElapsedSeconds => double.IsFinite(Run.Controller.LiftoffEpoch)

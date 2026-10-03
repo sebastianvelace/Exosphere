@@ -275,6 +275,8 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             // features for motion at low altitude; fades into the scaled-space backdrop.
             var earthGround = new EarthGroundController { Name = "EarthGroundController" };
             worldNode.CallDeferred("add_child", earthGround);
+            if (IsFlight14Exploration)
+                worldNode.CallDeferred("add_child", new Flight14LandingVisualController { Name = "Flight14LandingVisuals" });
 
             // Liftoff steam/dust deluge cloud at the pad.
             var launchFx = new LaunchEffectsController { Name = "LaunchEffectsController" };
@@ -295,7 +297,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         if (IsFlight14Exploration)
         {
             Universe.PhysicsStepController = null;
-            Flight14Preview = new Flight14Exploration(Flight14LaunchDiagnostic.CreateWithPoweredReturn(dataPath, Universe));
+            Flight14Preview = new Flight14Exploration(Flight14LaunchDiagnostic.CreateWithPoweredReturn(dataPath, Universe, continueToWaterContact: true));
             Flight14Preview.Run.Ship.Name = "Starship Flight 14 / Engineering preview";
             EnsureActiveVesselPresentation(Flight14Preview.Run.Ship);
             _previewRenderedVessels.Add(Flight14Preview.Run.Ship.Id);
@@ -1356,6 +1358,10 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         return new()
         {
             ["phase"] = preview.Phase,
+            ["water_entry_speed"] = preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness?.AtmosphereRelativeSpeedMps ?? -1,
+            ["water_clearance"] = preview.Run.Ship.LastWaterContact?.LowestPointAltitudeM ?? -1,
+            ["water_force"] = preview.Run.Ship.LastWaterContact?.ForceWorld.Magnitude ?? 0,
+            ["ground_held"] = preview.Run.Ship.IsGroundHeld,
             ["met"] = preview.MissionElapsedSeconds,
             ["altitude"] = preview.Run.Ship.GetAltitude(preview.Run.Earth),
             ["payloads"] = preview.Run.PayloadController.Releases.Count,

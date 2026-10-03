@@ -385,3 +385,36 @@ For the coupled migration, the required order is:
 7. real-framebuffer confirmation after numerical parity, never before.
 
 The coupled path remains disabled by default until the final three gates are closed.
+
+## Flight 14 bounded water-entry estimate
+
+The playable engineering exploration opts into `WaterContactSolver` during its
+terminal flip. The older powered-return diagnostic still stops at 100 m by default.
+No shared vessel receives water loads without explicit configuration and a matching
+Earth body-fixed region. The current region (25..35 N, 165..140 W) is open northern
+Pacific context, not measured SpaceX coordinates or geographic targeting.
+
+The skirt datum matches the standalone renderer. The lowest exposed nozzle witness
+is at -3.78 m; a sealed upright cylinder uses the declared vehicle diameter/length,
+with its centre-of-mass lever derived from the part graph at landing handoff.
+The model uses `Fb = rho * displacedVolume * g` and
+`Fd = -0.5 * rho * Cd * wettedArea * |vWater| * vWater`. Wetted area ramps over an
+estimated 0.5 m entry depth. Point velocity includes angular transport; rotating
+water includes body translation and rotation once. Buoyancy and drag are evaluated
+at RK4 translation stages; external torque uses the existing legacy angular tick.
+Water forces also contribute to proper-acceleration and structural diagnostics.
+The generic rigid-floor clamp is bypassed only for actual opted-in wet contact.
+
+This is a first-order upright entry approximation, not slamming CFD or distributed
+hydrodynamics. Lever geometry is frozen at handoff. Sea swell is optical only; its
+mean plane remains at geodetic altitude zero. Coupled 6-DoF water parity is unverified
+and the Flight 14 controller rejects that configuration. No global mode is changed.
+
+Three delivered sea-level engines must have performed the flip. Control progressively
+removes lateral tilt below the diagnostic height and retains engine throttle floors,
+monotone selection and original fuel. Water entry is accepted only while descending,
+within 10 degrees upright and below 5 m/s exposed-point speed in the declared region.
+Shutdown is commanded on that physical witness; spool-down still integrates. After
+one second the preview freezes as `SplashdownReached`, meaning observed bounded
+water entry, not a stable floating vessel, recovered hardware or full mission success.
+Flooding, capsize, sea-state forces and independent booster recovery remain open.

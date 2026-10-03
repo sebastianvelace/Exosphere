@@ -73,10 +73,10 @@ public sealed class Flight14ExplorationTests
     }
 
     [Fact]
-    public void MovingSolarSystemPreviewPropagatesLoadedShipToDiagnosticBoundaryAndFreezes()
+    public void MovingSolarSystemPreviewPropagatesLoadedShipToWaterEntryAndFreezes()
     {
         var universe = Universe.LoadFromDataDirectory(DataDirectory());
-        var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory(), universe);
+        var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory(), universe, continueToWaterContact: true);
         var preview = new Flight14Exploration(run);
         universe.TimeScale = 200;
         var shipId = run.Ship.Id;
@@ -86,7 +86,15 @@ public sealed class Flight14ExplorationTests
         Assert.True(preview.IsTerminal, preview.Phase);
         Assert.Equal(shipId, universe.ActiveVessel!.Id);
         Assert.Equal(26, run.PayloadController.Releases.Count);
-        Assert.InRange(run.Ship.GetAltitude(run.Earth), 98, 101);
+        Assert.NotNull(run.PoweredReturnController!.Landing!.WaterEntryWitness);
+        Assert.Equal(Flight14LandingPhase.SplashdownReached, run.PoweredReturnController.Landing.Phase);
+        Assert.InRange(run.PoweredReturnController.Landing.WaterEntryWitness.AtmosphereRelativeSpeedMps, 0, 5);
+        Assert.NotNull(run.Ship.LastWaterContact);
+        Assert.True(run.Ship.LastWaterContact.Value.LowestPointAltitudeM < 0);
+        Assert.False(run.Ship.IsGroundHeld);
+        var up = run.Earth.GetGeodeticUp(run.Ship.Position);
+        Assert.True(run.Ship.Orientation.Rotate(Exosphere.Simulation.Math.Vector3d.Up).Dot(up)
+            > System.Math.Cos(15*Exosphere.Simulation.Math.MathUtils.DEG_TO_RAD));
         Assert.NotNull(run.PoweredReturnController!.Landing!.EndWitness);
         double epoch = universe.CurrentTime;
         var position = run.Ship.Position; var velocity = run.Ship.Velocity; double mass = run.Ship.TotalMass;

@@ -96,8 +96,9 @@ public partial class FlightBroadcastHUD : Control
             _milestones = new[]
             {
                 ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"), ("ORBIT", "ORBIT"),
-                ("DEPLOY", "PAYLOAD"), ("ENTRY", "ENTRY"), ("FLIP", "RETRO_BURN"),
+                ("DEPLOY", "PAYLOAD"), ("ENTRY", "ENTRY"), ("FLIP", "RETRO_BURN"), ("WATER", "WATER_ENTRY"),
             };
+            if (preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null) _events.Add("WATER_ENTRY");
             if (preview.Run.PayloadController.Releases.Count > 0) _events.Add("PAYLOAD");
         }
         _snapshot = snapshot;

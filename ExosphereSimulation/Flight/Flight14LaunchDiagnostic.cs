@@ -19,11 +19,12 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     public Flight14PoweredReturnController? PoweredReturnController { get; private set; }
 
     /// <summary>Propagate the same loaded carrier through its physical flip and terminal burn.</summary>
-    public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory, Universe? universe = null)
+    public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory, Universe? universe = null, bool continueToWaterContact = false)
     {
         var run = CreateWithReturn(dataDirectory, universe);
         var landing = Flight14LandingDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "flight_profiles/starship_flight14_landing_estimate.json"));
+        landing.ContinueToWaterContact = continueToWaterContact;
         var descent = Flight14DescentDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "flight_profiles/starship_flight14_descent_estimate.json"));
         // A control endpoint from the separate estimated profile, never a state assignment.

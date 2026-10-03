@@ -1,7 +1,7 @@
 {
   "id": "starship-flight14-ship-terminal-engineering-estimate",
   "status": "engineering-estimate",
-  "assumptions": "Estimated continuation of the original launch, payload and entry state. Starts the three healthy sea-level Raptors during a physical flip at an estimated 1.2 km gate, then reduces selected engine count monotonically as thrust demand falls. Uses existing engine/gimbal/flap, shutdown/startup and tank-consumption models. This controller explicitly bounds actual start-attempt counters against engine-model restart metadata; the generic runtime does not enforce that metadata. A first 100 m descending gate is a terminal-burn diagnostic, not water contact or mission acceptance. Flip height, gains, tilt and descent profile are estimates; clocks do not command the trajectory. Uses the original remaining main-tank resources, with no new or refilled header tanks. No measured SpaceX bank schedule, throttle or landing coordinates are asserted.",
+  "assumptions": "Estimated continuation of the original launch, payload and entry state. Starts the three healthy sea-level Raptors during a physical flip at an estimated 1.2 km gate, then reduces selected engine count monotonically as thrust demand falls. Uses existing engine/gimbal/flap, shutdown/startup and tank-consumption models. This controller explicitly bounds actual start-attempt counters against engine-model restart metadata; the generic runtime does not enforce that metadata. A first 100 m descending gate is a terminal-burn diagnostic, not water contact or mission acceptance. Flip height, gains, tilt and descent profile are estimates; clocks do not command the trajectory. Uses the original remaining main-tank resources, with no new or refilled header tanks. No measured SpaceX bank schedule, throttle or landing coordinates are asserted. Gameplay optionally continues beyond the retained 100 m diagnostic to a bounded northern Pacific open-water region (25..35 N, 165..140 W), an engineering envelope rather than measured targeting coordinates. Lowest exposed vacuum nozzle follows the current visible skirt datum at -3.78 m. Water loads approximate an upright sealed cylinder with seawater density 1025 kg/m3 and drag coefficient 0.8, not slamming CFD, flooding, waves or capsize. Cutoff follows actual nozzle contact, with one second of integrated water response before the preview freezes. Physical wave displacement is zero; visual ripples do not move the contact surface.",
   "flipAltitudeM": 1200,
   "diagnosticEndAltitudeM": 100,
   "maximumEndAirspeedMps": 15,
@@ -12,5 +12,16 @@
   "lateralDampingPerSecond": 0.5,
   "verticalDampingPerSecond": 1.2,
   "proportionalAttitudeGain": 2.2,
-  "attitudeDampingGain": 6
+  "attitudeDampingGain": 6,
+  "continueToWaterContact": true,
+  "maximumWaterEntrySpeedMps": 5,
+  "waterObservationSeconds": 1,
+  "lowestPointYM": -3.78,
+  "waterDensityKgPerM3": 1025,
+  "waterDragCoefficient": 0.8,
+  "wettingDepthM": 0.5,
+  "minimumWaterLatitudeDegrees": 25,
+  "maximumWaterLatitudeDegrees": 35,
+  "minimumWaterLongitudeDegrees": -165,
+  "maximumWaterLongitudeDegrees": -140
 }

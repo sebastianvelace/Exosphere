@@ -280,6 +280,8 @@ public partial class EarthGroundController : Node3D
 
         if (_mat != null)
         {
+            _mat.SetShaderParameter("open_water_patch", vessel.WaterContact is { } water
+                && water.Covers(earth, vessel.Position, universe.CurrentTime));
             PlanetMaterials.BindSurfaceLuts(_mat);
             PlanetMaterials.BindEarthClouds(_mat, earth, universe.CurrentTime);
             if (bridge?.LaunchSiteOrNull is { } site)

@@ -29,8 +29,8 @@ Base tecnica cerrada en `main`:
   Home content is centered horizontally and vertically; mission information lives
   in its briefing rather than a side panel.
   Flight 14 now exposes an automatic engineering exploration from the featured
-  briefing: loaded ascent, insertion, 26 payload releases and return to the 100 m
-  diagnostic boundary. Ocean targeting, controlled water returns and exact mission
+  briefing: loaded ascent, insertion, 26 payload releases and estimated ship water entry.
+  Exact ocean targeting, post-entry flooding/capsize, booster return and exact mission
   acceptance remain pending. Vehicle fidelity and further cloud work remain separate.
 - VAB 2.0 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click
   auto-attach, preview/picking 3D, undo/redo, templates Starter/Starship,
@@ -471,3 +471,16 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
 4. Mejorar camara/luz/atmosfera.
 5. Recien despues: Apollo 11 alunizaje (DOI→surface→APS→rendezvous→TEI).
    (R11 ✅; R12 ✅; Apollo 11 TD&E + LOI ✅)
+
+### Flight 14 ship water-entry increment (2026-10-02)
+
+- Gameplay continues the original loaded ship beyond the retained 100 m witness,
+  tapers lateral braking tilt near sea level, and commands shutdown on nozzle contact.
+- Opt-in calm-water cylinder buoyancy and dissipative drag act in the translating,
+  rotating Earth frame. The declared open-water envelope is 25..35 N, 165..140 W,
+  an engineering region, not a source-backed target or global water classifier.
+- The preview freezes after one second of integrated water response. Independent
+  booster return, exact targeting, flooding, slamming, waves and capsize remain open.
+- Near-sea ripples, spray and exhaust illumination follow actual delivered thrust/contact;
+  the launch-site procedural fallback is now geographically anchored. Visual waves
+  do not change the physical calm-water plane. No GPU performance certification.

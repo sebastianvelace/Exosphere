@@ -45,6 +45,53 @@ public sealed class Flight14LandingBurnTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void FlipContinuesToRealNozzleContactAndIntegratesWaterWithoutGroundClamp()
+    {
+        var (universe, ship, body, definition) = Fixture();
+        definition.ContinueToWaterContact = true;
+        // This bench is open water near the date line, separate from the loaded return envelope.
+        definition.MinimumWaterLatitudeDegrees = 22;
+        definition.MaximumWaterLatitudeDegrees = 24;
+        definition.MinimumWaterLongitudeDegrees = -179;
+        definition.MaximumWaterLongitudeDegrees = -177;
+        var burn = new Flight14LandingBurn(ship, body, definition, "raptor3-starship-sl-flight12", 0);
+        universe.PhysicsStepController = new Controller(burn);
+        for (int i = 0; i < 6000 && burn.Phase is not
+            (Flight14LandingPhase.SplashdownReached or Flight14LandingPhase.Blocked); i++) universe.Tick(0.02);
+        output.WriteLine($"Water: {burn.Phase} {burn.BlockReason} alt={ship.GetAltitude(body):F3} "
+            + $"entry={burn.WaterEntryWitness?.AtmosphereRelativeSpeedMps:F3}m/s "
+            + $"v={ship.GetSurfaceVelocity(body).Magnitude:F3} up={ship.Orientation.Rotate(Vector3d.Up).Dot(body.GetGeodeticUp(ship.Position)):F4} "
+            + $"water={ship.LastWaterContact}");
+        Assert.True(burn.Phase == Flight14LandingPhase.SplashdownReached, burn.BlockReason);
+        Assert.NotNull(burn.EndWitness); // The 100 m diagnostic remains evidence, not a cutoff.
+        Assert.NotNull(burn.WaterEntryWitness);
+        Assert.InRange(burn.WaterEntryWitness.GeodeticAltitudeM, 3.6, 3.8);
+        Assert.InRange(burn.WaterEntryWitness.AtmosphereRelativeSpeedMps, 0, definition.MaximumWaterEntrySpeedMps);
+        Assert.True(burn.WaterEntryWitness.VerticalSpeedMps < 0);
+        Assert.True(universe.CurrentTime-burn.WaterEntryWitness.SimulationTimeSeconds >= definition.WaterObservationSeconds);
+        Assert.NotNull(ship.LastWaterContact);
+        Assert.True(ship.LastWaterContact.Value.LowestPointAltitudeM < 0);
+        Assert.True(ship.LastWaterContact.Value.ForceWorld.Magnitude > 0);
+        Assert.False(ship.IsGroundHeld); Assert.False(ship.IsDestroyed);
+        Assert.Equal(0, ship.Throttle);
+    }
+
+    [Fact]
+    public void ContactOutsideDeclaredOceanCannotBeReportedAsSplashdown()
+    {
+        var (universe, ship, body, definition) = Fixture();
+        definition.ContinueToWaterContact = true; // The default region excludes the seeded bench.
+        var burn = new Flight14LandingBurn(ship, body, definition, "raptor3-starship-sl-flight12", 0);
+        universe.PhysicsStepController = new Controller(burn);
+        for (int i = 0; i < 6000 && burn.Phase != Flight14LandingPhase.Blocked; i++) universe.Tick(0.02);
+        Assert.Equal(Flight14LandingPhase.Blocked, burn.Phase);
+        Assert.Equal("water-entry-outside-declared-ocean-region", burn.BlockReason);
+        Assert.Null(burn.WaterEntryWitness);
+        Assert.Equal(0, ship.Throttle);
+        Assert.False(ship.IsGroundHeld);
+    }
+
+    [Fact]
     public void FailedCentreEngineCannotBeReplacedByAVacuumRaptor()
     {
         var (universe, ship, body, definition) = Fixture();
@@ -158,7 +205,9 @@ public sealed class Flight14LandingBurnTests(ITestOutputHelper output)
             AerodynamicsModel.ComputeEntryAxisForLift(flow, Vector3d.Right, 90), flow);
         ship.ReferenceBodyId = body.Id; ship.SASEnabled = false;
         var universe = new Universe(); universe.AddBody(body); universe.AddVessel(ship); universe.ActiveVessel = ship;
-        return (universe, ship, body, Flight14LandingDefinition.LoadFromJson(Path.Combine(data,
-            "flight_profiles/starship_flight14_landing_estimate.json")));
+        var definition = Flight14LandingDefinition.LoadFromJson(Path.Combine(data,
+            "flight_profiles/starship_flight14_landing_estimate.json"));
+        definition.ContinueToWaterContact = false;
+        return (universe, ship, body, definition);
     }
 }

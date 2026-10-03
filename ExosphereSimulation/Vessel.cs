@@ -84,6 +84,10 @@ public class Vessel
     /// </summary>
     public bool HotStageOverlapCompletedPending { get; set; }
 
+    /// <summary>Opt-in water entry; only a declared open-water region bypasses the rigid surface fallback.</summary>
+    public WaterContactDefinition? WaterContact { get; set; }
+    public WaterContactWrench? LastWaterContact { get; internal set; }
+
     // ── Physical landing contact ─────────────────────────────────────────
     private ContactPointDefinition[] _landingContactPoints = [];
     private Vector3d _landingCenterOfMassFromDatumLocal = Vector3d.Zero;

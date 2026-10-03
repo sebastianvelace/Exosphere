@@ -1404,7 +1404,7 @@ public partial class VesselRenderer : Node3D
                 out float shipThrottle);
             float throttle = Mathf.Max(superHeavyThrottle, shipThrottle);
             _plumes?.Update(superHeavyThrottle, shipThrottle, alt,
-                _cachedPresentationPressureRatio, _selectedShipEngines, delta);
+                _cachedPresentationPressureRatio, _selectedShipEngines, delta, _shipReadoutScratch);
             ReportVisualPlumeTelemetry(superHeavyThrottle, shipThrottle);
             if (_usesGenericPlumes && _plumes != null)
             {

@@ -50,6 +50,7 @@ uniform float solar_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform vec3  vertical_optical_depth = vec3(0.0615, 0.1420, 0.2714);
 // 0 = Starbase/Boca Chica, 1 = Kennedy/Cape Canaveral. This only changes the
 // presentation fallback outside measured rasters; site imagery remains authoritative.
+uniform bool open_water_patch = false;
 uniform float site_profile = 0.0;
 uniform float detail_strength : hint_range(0.0, 0.5) = 0.18;
 uniform float coastal_grade : hint_range(0.0, 1.0) = 0.46;
@@ -251,14 +252,15 @@ void fragment() {
 	// camera used to show a toy-blue tiled plane. Rebuild sand, marsh, lagoon and
 	// Gulf out to ~80 km (nadir at 6–20 km still has to read as a peninsula, not
 	// a cookie) and only then hand back to Blue Marble.
-	float pad_range = length(v_patch);
+	vec2 site_patch = v_patch + site_patch_offset_m;
+	float pad_range = length(site_patch);
 	float site_core = 1.0 - smoothstep(80.0, 1400.0, pad_range);
 	float coastal_belt = 1.0 - smoothstep(400.0, 140000.0, pad_range);
 	float map_blend = smoothstep(90000.0, 180000.0, pad_range);
-	float coast_noise = noise01(gnoise(v_patch * 0.00018 + vec2(91.0, -17.0)));
-	float inlet = noise01(gnoise(v_patch * 0.00048 + vec2(-41.0, 23.0)));
-	float gulf = smoothstep(200.0, 8000.0, v_patch.x);
-	float lagoon = smoothstep(300.0, 12000.0, -v_patch.x);
+	float coast_noise = noise01(gnoise(site_patch * 0.00018 + vec2(91.0, -17.0)));
+	float inlet = noise01(gnoise(site_patch * 0.00048 + vec2(-41.0, 23.0)));
+	float gulf = smoothstep(200.0, 8000.0, site_patch.x);
+	float lagoon = smoothstep(300.0, 12000.0, -site_patch.x);
 	float reconstructed_water = max(
 		(1.0 - site_core) * coastal_belt
 			* smoothstep(0.52, 0.80, mix(inlet, coast_noise, 0.42)),
@@ -289,6 +291,9 @@ void fragment() {
 	surface = context_surface(surface, v_patch);
 	surface = mix(surface, macro_surface, macro_weight);
 	surface = mix(surface, regional_surface, regional_weight);
+    // The opted-in landing envelope is open sea. Regional launch-site reconstruction
+    // must never replace its mean surface with a new pad beneath the descending ship.
+    if (open_water_patch) surface = vec3(0.035, 0.080, 0.12);
 	// Chase views look across the pad, so the first kilometre keeps the NAIP
 	// contrast instead of the desaturated fallback, and the haze term below
 	// does not wash that ortho into the sky.

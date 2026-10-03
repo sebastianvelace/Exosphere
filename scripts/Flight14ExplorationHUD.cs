@@ -59,7 +59,9 @@ public partial class Flight14ExplorationHUD : Control
         if (SimulationBridge.Instance?.Flight14Preview is not { } preview) return;
         _pause.Text = preview.IsPaused ? "RESUME" : "PAUSE";
         _pause.Disabled = preview.IsStopped;
-        string state = preview.IsTerminal ? "PREVIEW ENDS AT 100 M · SPLASHDOWN / BOOSTER RECOVERY PENDING"
+        string state = preview.IsTerminal ? preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null
+                ? "WATER ENTRY OBSERVED · ESTIMATED OCEAN RESPONSE · BOOSTER RECOVERY PENDING"
+                : "100 M DIAGNOSTIC COMPLETE · WATER CONTACT PENDING"
             : preview.BlockReason != null ? "PREVIEW STOPPED · " + preview.BlockReason
             : preview.Run.Ship.IsDestroyed ? "VEHICLE LOST · RESTART TO EXPLORE AGAIN"
             : $"{preview.Phase.ToUpperInvariant()} · PAYLOADS {preview.Run.PayloadController.Releases.Count}/26"

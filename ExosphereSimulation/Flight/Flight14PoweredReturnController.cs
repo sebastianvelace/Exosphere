@@ -9,10 +9,10 @@ public sealed class Flight14PoweredReturnController(Vessel ship, CelestialBody b
     public string? BlockReason => descent.Phase == Flight14DescentPhase.Blocked
         ? "descent:"+descent.BlockReason : Landing?.BlockReason;
     public bool RequiresFixedCadence(Universe universe) => BlockReason == null
-        && Landing?.Phase != Flight14LandingPhase.TerminalReached;
+        && Landing?.Phase is not (Flight14LandingPhase.TerminalReached or Flight14LandingPhase.SplashdownReached);
     public void BeforePhysicsStep(Universe universe, double interval)
     {
-        if (BlockReason != null || Landing?.Phase == Flight14LandingPhase.TerminalReached) return;
+        if (BlockReason != null || Landing?.Phase is Flight14LandingPhase.TerminalReached or Flight14LandingPhase.SplashdownReached) return;
         if (Landing == null)
         {
             descent.BeforePhysicsStep(universe, interval);
