@@ -6,6 +6,7 @@ render_mode cull_disabled, blend_mix, depth_draw_always;
 uniform float sim_time = 0.0;
 uniform float exhaust_gain = 0.0;
 uniform float contact_gain = 0.0;
+uniform vec2 contact_center_m = vec2(0.0);
 uniform float sea_radius_m = 6371000.0;
 varying vec2 sea_m;
 
@@ -29,7 +30,7 @@ void fragment() {
     NORMAL_MAP_DEPTH = 0.8;
     float range_m = length(sea_m);
     float spray = exhaust_gain*exp(-pow((range_m-15.0)/12.0, 2.0));
-    float foam = (spray*0.55+contact_gain*exp(-pow((range_m-8.0)/3.5, 2.0))*0.32)
+    float foam = (spray*0.55+contact_gain*exp(-pow((length(sea_m-contact_center_m)-8.0)/3.5, 2.0))*0.32)
         * (0.6+0.4*detail);
     ALBEDO = mix(vec3(0.025, 0.055, 0.080), vec3(0.50, 0.57, 0.61), clamp(foam, 0.0, 0.65));
     ROUGHNESS = mix(0.42, 0.70, clamp(foam, 0.0, 1.0));
@@ -43,7 +44,13 @@ void fragment() {
     float sea_distance = surface_distance_m(world_ray);
     if (sea_distance <= 0.0) discard;
     // Analytic depth avoids coarse horizon triangles falling behind the opaque globe.
-    DEPTH = physical_backdrop_depth(view_ray*(max(sea_distance-2.8, 0.01)/2.8), PROJECTION_MATRIX);
+    float water_depth = physical_backdrop_depth(view_ray*(max(sea_distance-2.8, 0.01)/2.8), PROJECTION_MATRIX);
+    #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+    // At grazing range the metre bias can quantize to the same 24-bit depth as
+    // the geographic sea. Two depth steps keep this decal ordered in reverse Z.
+    water_depth += (2.0/16777216.0)*smoothstep(1000.0, 5000.0, sea_distance);
+    #endif
+    DEPTH = min(water_depth, 1.0);
     // Fade the grazing row where geographic ray depth becomes ill-conditioned.
     float horizon_alpha = smoothstep(0.0, 0.0015, -dot(world_ray, physical_camera_up));
     ALPHA = (1.0-smoothstep(20000.0, 25000.0, range_m))*horizon_alpha;

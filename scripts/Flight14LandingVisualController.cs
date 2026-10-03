@@ -74,9 +74,10 @@ public partial class Flight14LandingVisualController : Node3D
         Visible = true;
         var up = earth.GetGeodeticUp(ship.Position);
         var east = earth.RotationAxis.Cross(up).Normalized;
-        var north = up.Cross(east).Normalized;
+        // +Z is south: east/up/south form a right-handed basis.
+        var south = east.Cross(up).Normalized;
         var offset = (earth.GetSurfacePoint(ship.Position, 0)-ship.Position)/2.8;
-        GlobalTransform = new Transform3D(new Basis(ToGodot(east), ToGodot(up), ToGodot(north)), ToGodot(offset));
+        GlobalTransform = new Transform3D(new Basis(ToGodot(east), ToGodot(up), ToGodot(south)), ToGodot(offset));
         double time = bridge.Universe.CurrentTime;
         double advance = double.IsFinite(_lastTime) ? System.Math.Max(0, time-_lastTime) : 0;
         _lastTime = time;
@@ -93,8 +94,17 @@ public partial class Flight14LandingVisualController : Node3D
         float proximity = (float)System.Math.Clamp(1-clearance/65, 0, 1);
         float delivered = (float)System.Math.Clamp(thrust/3_000_000, 0, 1)*proximity;
         _material.SetShaderParameter("exhaust_gain", delivered);
-        _material.SetShaderParameter("contact_gain", ship.LastWaterContact is { LowestPointAltitudeM: < 0 } ? 1f : 0f);
-        _mist.Emitting = delivered > 0.03f || ship.LastWaterContact is { EntrySpeedMps: > 0.6, LowestPointAltitudeM: < 0 };
+        var contact = ship.LastWaterContact;
+        bool wet = contact is { } load && (load.LowestPointAltitudeM < 0 || load.HullLowestAltitudeM < 0);
+        // Keep the fan over the projected wet hull rather than over the floating-origin
+        // datum when the vehicle heels. Before displacement starts, use the nozzle witness.
+        var contactOffset = contact is { SubmergedVolumeM3: > 0 } displaced
+            ? displaced.BuoyancyCenterOffsetWorld : ship.Orientation.Rotate(Vector3d.Up)*water.LowestPointYM;
+        var contactCenter = new Vector2((float)contactOffset.Dot(east), (float)contactOffset.Dot(south));
+        _material.SetShaderParameter("contact_center_m", contactCenter);
+        _material.SetShaderParameter("contact_gain", wet ? 1f : 0f);
+        _mist.Position = new Vector3(contactCenter.X/2.8f, 0, contactCenter.Y/2.8f);
+        _mist.Emitting = delivered > 0.03f || wet && contact is { EntrySpeedMps: > 0.6 };
         _mist.SpeedScale = delta > 0 ? (float)System.Math.Clamp(advance/delta, 0, 8) : 0;
     }
 

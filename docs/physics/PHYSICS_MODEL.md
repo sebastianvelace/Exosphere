@@ -395,18 +395,27 @@ Earth body-fixed region. The current region (25..35 N, 165..140 W) is open north
 Pacific context, not measured SpaceX coordinates or geographic targeting.
 
 The skirt datum matches the standalone renderer. The lowest exposed nozzle witness
-is at -3.78 m; a sealed upright cylinder uses the declared vehicle diameter/length,
+is at -3.78 m; a sealed cylinder uses the declared vehicle diameter/length,
 with its centre-of-mass lever derived from the part graph at landing handoff.
-The model uses `Fb = rho * displacedVolume * g` and
-`Fd = -0.5 * rho * Cd * wettedArea * |vWater| * vWater`. Wetted area ramps over an
-estimated 0.5 m entry depth. Point velocity includes angular transport; rotating
-water includes body translation and rotation once. Buoyancy and drag are evaluated
+Circular sections are clipped against the local geodetic mean sea plane at the
+actual orientation, including horizontal and inverted poses. Sixteen-point
+Gauss-Legendre quadrature splits the axial integration at dry/full-section
+boundaries to retain shallow penetration at near-vertical attitude. Displaced
+volume and its first moment set `Fb = rho * displacedVolume * g` and its lever arm.
+Projected side strips (`2R dy`, weighted by wet section fraction) apply quadratic
+cross-flow drag at each wet section centroid. Separate axial nozzle drag ramps
+over an estimated 0.5 m entry depth. This is an engineering strip approximation,
+not a calibrated hydrodynamic coefficient distribution. Point velocity includes
+angular transport; rotating water includes body translation and rotation once.
+Drag force and torque form a dissipative wrench in the mass-centre frame. Buoyancy and drag are evaluated
 at RK4 translation stages; external torque uses the existing legacy angular tick.
 Water forces also contribute to proper-acceleration and structural diagnostics.
 The generic rigid-floor clamp is bypassed only for actual opted-in wet contact.
 
-This is a first-order upright entry approximation, not slamming CFD or distributed
-hydrodynamics. Lever geometry is frozen at handoff. Sea swell is optical only; its
+This is a first-order inclined sealed-cylinder estimate, not slamming CFD, flooding
+or a resolved nozzle/skirt/nose/flap geometry. Lever geometry is frozen at handoff.
+The dry-floor bypass uses either the exposed nozzle or lowest cylindrical hull
+support, so side contact does not require the axial nozzle to be submerged. Sea swell is optical only; its
 mean plane remains at geodetic altitude zero. Coupled 6-DoF water parity is unverified
 and the Flight 14 controller rejects that configuration. No global mode is changed.
 
@@ -418,3 +427,8 @@ Shutdown is commanded on that physical witness; spool-down still integrates. Aft
 one second the preview freezes as `SplashdownReached`, meaning observed bounded
 water entry, not a stable floating vessel, recovered hardware or full mission success.
 Flooding, capsize, sea-state forces and independent booster recovery remain open.
+Inclined force geometry alone does not validate capsize: the legacy integration
+advances the skirt datum independently of the angular step. A longer post-contact
+motion needs mass-centre translation/rotation conservation and time-step convergence
+before extending the current one-second preview. See the
+[2026-10-03 inclined-water audit](../audits/flight14_inclined_water_2026-10-03.md).

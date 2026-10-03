@@ -1784,7 +1784,8 @@ public class Universe
     {
         // Water loads are integrated in the translating-body frame. Do not subsequently
         // turn a wet vessel into a grounded object through the legacy rigid-floor clamp.
-        if (vessel.LastWaterContact is { LowestPointAltitudeM: < 0 }) return;
+        if (vessel.LastWaterContact is { } waterContact
+            && (waterContact.LowestPointAltitudeM < 0 || waterContact.HullLowestAltitudeM < 0)) return;
         double altitude = refBody.GetAltitude(vessel.Position);
         if (altitude >= 0.0) return;
 

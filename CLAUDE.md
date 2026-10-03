@@ -152,7 +152,7 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - CI builds/tests the sim, builds the Godot C# layer, downloads Godot 4.6.3 mono in GitHub Actions, and runs strict headless smoke checks. Local `tools/ci_check.sh` runs Godot smoke only when `GODOT_BIN` or the default local Godot path exists.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 - Current product priority after documentation cleanup: visual fidelity against real Starship/Super Heavy references. Prefer scoped improvements to `VesselRenderer`, `ReentryPlasmaController`, `PlumeSystem`, camera/lighting, and visual capture before broad new gameplay systems.
-- Flight 14 exploration now continues beyond its retained 100 m witness to estimated low-speed water entry, then freezes after one second of integrated water response. Calm-water buoyancy/drag are opt-in and region-gated; exact targeting, flooding/capsize and booster recovery remain pending. See `docs/audits/flight14_water_entry_2026-10-02.md`.
+- Flight 14 exploration now continues beyond its retained 100 m witness to estimated low-speed water entry, then freezes after one second of integrated water response. Inclined sealed-cylinder buoyancy and sectional drag are opt-in and region-gated; exact targeting, flooding/capsize and booster recovery remain pending. See `docs/audits/flight14_water_entry_2026-10-02.md` and `docs/audits/flight14_inclined_water_2026-10-03.md`.
 - The coupled 6-DoF path remains disabled by default. Coast and simplified powered parity pass;
   Starship ascent/EDL parity and full SAS/flap/RCS equivalence are still required before activation.
 

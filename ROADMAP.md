@@ -479,7 +479,8 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
 - Opt-in calm-water cylinder buoyancy and dissipative drag act in the translating,
   rotating Earth frame. The declared open-water envelope is 25..35 N, 165..140 W,
   an engineering region, not a source-backed target or global water classifier.
-- The preview freezes after one second of integrated water response. Independent
+- Inclined sealed-cylinder displacement and distributed cross-flow drag now cover horizontal/inverted load geometry. Water foam follows the projected displaced centre.
+- The preview freezes after one second of integrated water response; conserved mass-centre translation/rotation and time-step convergence are required before extending post-contact motion. Independent
   booster return, exact targeting, flooding, slamming, waves and capsize remain open.
 - Near-sea ripples, spray and exhaust illumination follow actual delivered thrust/contact;
   the launch-site procedural fallback is now geographically anchored. Visual waves
