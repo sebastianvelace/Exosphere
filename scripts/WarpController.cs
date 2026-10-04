@@ -97,6 +97,12 @@ public partial class WarpController : Control
 
     public override void _Process(double delta)
     {
+        // In the compact broadcast view, keep the clock outside the centred
+        // phase banner on narrower windows. The flight sidebar is hidden here.
+        float left = UserInterfaceSettings.HudDensity == HudDensity.Minimal
+            && GetViewportRect().Size.X < 1660 ? 18f : 320f;
+        OffsetLeft = left;
+        OffsetRight = left + 178f;
         bool viewAllows = CameraController.Instance?.IsCockpitView != true
             && MapViewController.Instance?.Visible != true;
         Visible = viewAllows && DensityAllows();

@@ -36,7 +36,8 @@ public partial class SystemsHUD : Control
         // C3: consumables and comms are reference data, not fly-the-vehicle data — FULL only.
         bool shouldBeVisible = CameraController.Instance?.IsCockpitView != true
             && MapViewController.Instance?.Visible != true
-            && UserInterfaceSettings.HudDensity == HudDensity.Full;
+            && UserInterfaceSettings.HudDensity == HudDensity.Full
+            && SimulationBridge.Instance?.Flight14Preview?.IsObservingBooster != true;
         if (Visible != shouldBeVisible)
         {
             Visible = shouldBeVisible;

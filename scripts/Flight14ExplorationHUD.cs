@@ -8,6 +8,9 @@ public partial class Flight14ExplorationHUD : Control
 {
     private Label _status = null!;
     private Button _pause = null!;
+    private Button _observe = null!;
+    private HBoxContainer _row = null!;
+    private Control? _phaseBanner;
 
     public override void _Ready()
     {
@@ -15,6 +18,7 @@ public partial class Flight14ExplorationHUD : Control
         MouseFilter = MouseFilterEnum.Ignore;
         ZIndex = 30;
         var row = new HBoxContainer { OffsetLeft = 20, OffsetTop = 96, OffsetRight = -20 };
+        _row = row;
         row.SetAnchorsPreset(LayoutPreset.TopWide);
         row.AddThemeConstantOverride("separation", 10);
         AddChild(row);
@@ -30,6 +34,12 @@ public partial class Flight14ExplorationHUD : Control
         {
             if (SimulationBridge.Instance?.Flight14Preview is { } preview && !preview.IsStopped)
                 preview.IsPaused = !preview.IsPaused;
+        });
+        _observe = AddButton(row, "SUPER HEAVY", () =>
+        {
+            if (SimulationBridge.Instance?.Flight14Preview is { } preview
+                && preview.ObserveBooster(!preview.IsObservingBooster))
+                CameraController.Instance?.EnterShipChaseView();
         });
         AddButton(row, "RESTART", () =>
         {
@@ -57,14 +67,26 @@ public partial class Flight14ExplorationHUD : Control
     public override void _Process(double delta)
     {
         if (SimulationBridge.Instance?.Flight14Preview is not { } preview) return;
+        _phaseBanner ??= GetTree().Root.FindChild("FlightPhaseBanner", true, false) as Control;
+        _row.OffsetTop = _phaseBanner is { Visible: true }
+            ? Mathf.Max(96, _phaseBanner.GetGlobalRect().End.Y+10) : 96;
         _pause.Text = preview.IsPaused ? "RESUME" : "PAUSE";
-        _pause.Disabled = preview.IsStopped;
+        _pause.Disabled = preview.IsStopped || preview.IsObservingBooster && preview.Run.BoosterReturnController is { IsStopped: true };
+        _observe.Disabled = preview.Run.BoosterReturnController?.Booster == null
+            || !preview.IsObservingBooster && preview.Run.BoosterReturnController.Booster.IsDestroyed;
+        _observe.Text = preview.IsObservingBooster ? "STARSHIP" : "SUPER HEAVY";
         string state = preview.IsTerminal ? preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null
-                ? "WATER RESPONSE OBSERVED · SEALED-HULL ESTIMATE · BOOSTER RECOVERY PENDING"
+                ? "WATER RESPONSE OBSERVED · SEALED-HULL ESTIMATE · "
+                    + (preview.Run.BoosterReturnController?.FlightTerminationTriggered == true
+                        ? "BOOSTER FTS RECORDED" : "BOOSTER RETURN UNRESOLVED")
                 : "100 M DIAGNOSTIC COMPLETE · WATER CONTACT PENDING"
             : preview.BlockReason != null ? "PREVIEW STOPPED · " + preview.BlockReason
             : preview.Run.Ship.IsDestroyed ? "VEHICLE LOST · RESTART TO EXPLORE AGAIN"
             : $"{preview.Phase.ToUpperInvariant()} · PAYLOADS {preview.Run.PayloadController.Releases.Count}/26"
+                + (preview.IsPaused ? " · PAUSED" : " · [, .] TIME · DRAG / SCROLL CAMERA");
+        if (preview.IsObservingBooster && preview.Run.BoosterReturnController is { } booster)
+            state = "SUPER HEAVY · " + (booster.BlockReason ?? booster.Phase.ToString()).ToUpperInvariant()
+                + (booster.FlightTerminationTriggered ? " · FTS RECORDED" : "")
                 + (preview.IsPaused ? " · PAUSED" : " · [, .] TIME · DRAG / SCROLL CAMERA");
         _status.Text = "FLIGHT 14 / ENGINEERING EXPLORATION\n" + state;
     }

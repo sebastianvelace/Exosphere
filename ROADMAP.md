@@ -30,8 +30,10 @@ Base tecnica cerrada en `main`:
   in its briefing rather than a side panel.
   Flight 14 now exposes an automatic engineering exploration from the featured
   briefing: loaded ascent, insertion, 26 payload releases and estimated ship water entry.
-  Exact ocean targeting, post-entry flooding/capsize, booster return and exact mission
-  acceptance remain pending. Vehicle fidelity and further cloud work remain separate.
+  The independent booster estimate now reaches Gulf water contact with 31-engine
+  boostback and 11/5/3 landing; camera observation preserves ship ownership. Exact
+  ocean targeting, post-entry flooding/capsize, booster timing/trajectory calibration
+  and exact mission acceptance remain pending. Vehicle fidelity and further cloud work remain separate.
 - VAB 2.0 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click
   auto-attach, preview/picking 3D, undo/redo, templates Starter/Starship,
   validación de launch, save/load, entrada desde MainMenu y launch al pad.
@@ -480,7 +482,7 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
   rotating Earth frame. The declared open-water envelope is 25..35 N, 165..140 W,
   an engineering region, not a source-backed target or global water classifier.
 - Inclined sealed-cylinder displacement and projected wet-section drag cover horizontal/inverted load geometry. Water foam follows the projected wet hull segment; spray follows its displaced centre and relative motion.
-- Water-only coupled mass-centre integration now advances translation and attitude together after accepted contact. Free-motion conservation and production 20/10/5 ms convergence checks support a ten-second observation of estimated sealed-hull heeling. The global ascent/EDL mode remains unchanged. Independent booster return, exact targeting, flooding, slamming, physical waves and measured capsize timing remain open. See `docs/audits/flight14_water_motion_2026-10-03.md`.
+- Water-only coupled mass-centre integration now advances translation and attitude together after accepted contact. Free-motion conservation and production 20/10/5 ms convergence checks support a ten-second observation of estimated sealed-hull heeling. The global ascent/EDL mode remains unchanged. Independent booster return is now playable as an engineering estimate; its resource/trajectory calibration, exact targeting, flooding, slamming, physical waves and measured capsize timing remain open. See `docs/audits/flight14_water_motion_2026-10-03.md`.
 - Near-sea ripples, spray and exhaust illumination follow actual delivered thrust/contact;
   the launch-site procedural fallback is now geographically anchored. Visual waves
   do not change the physical calm-water plane. No GPU performance certification.

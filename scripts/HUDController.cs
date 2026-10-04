@@ -274,6 +274,7 @@ public partial class HUDController : Control
     {
         var center = new PanelContainer();
         _phaseRoot = center;
+        center.Name = "FlightPhaseBanner";
         center.SetAnchorsPreset(LayoutPreset.CenterTop);
         center.GrowHorizontal = GrowDirection.Both;
         center.OffsetLeft = -320;
@@ -853,6 +854,15 @@ public partial class HUDController : Control
                 ? FlightHudViewMode.Cockpit
                 : FlightHudViewMode.Exterior;
         string phaseName = (mission?.Phase ?? MissionPhase.PRE_LAUNCH).ToString();
+        if (bridge.Flight14Preview is { IsObservingBooster: true } focusedBooster)
+            phaseName = focusedBooster.Run.BoosterReturnController?.Phase switch
+            {
+                Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.Flip or Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.Boostback => "ASCENT_SH",
+                Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.Coast => "AERO_DESCENT",
+                Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.Landing => "RETRO_BURN",
+                Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.WaterEntry or Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.ContactObserved => "LANDED",
+                _ => "COAST",
+            };
         bool hasNavigationTarget = MapViewController.Instance?.HasNavigationTarget == true;
         bool presentationBoundaryChanged = _snapshot == null
             || _snapshot.VesselId != vessel.Id
@@ -972,6 +982,11 @@ public partial class HUDController : Control
             UpdatePadHelp(mission);
         }
         UpdateGuidanceLine();
+        if (bridge.Flight14Preview is { IsObservingBooster: true } boosterPreview)
+        {
+            _phaseLabel.Text = "SUPER HEAVY / " + boosterPreview.ObservedPhase.ToUpperInvariant();
+            _launchPathLabel.Text = "GULF SPLASHDOWN / ENGINEERING ESTIMATE";
+        }
         UpdateBoosterLine();
         _attitudeStrip.UpdateFromSnapshot(snapshot);
         ApplyViewMode(snapshot.ViewMode);
@@ -987,7 +1002,9 @@ public partial class HUDController : Control
     {
         if (SimulationBridge.Instance?.Flight14Preview is { } preview)
         {
-            _guidanceLabel.Text = "FLIGHT 14 EXPLORATION · AUTOMATIC · ESTIMATED GUIDANCE";
+            _guidanceLabel.Text = preview.IsObservingBooster
+                ? "SUPER HEAVY RETURN · AUTOMATIC · ESTIMATED GUIDANCE"
+                : "FLIGHT 14 EXPLORATION · AUTOMATIC · ESTIMATED GUIDANCE";
             _padHelpDismissed = true;
             _reentryDemoButton.Disabled = true;
             return;
@@ -1020,6 +1037,8 @@ public partial class HUDController : Control
     private void UpdateBoosterLine()
     {
         string? line = BoosterReturnController.Instance?.StatusLine;
+        if (SimulationBridge.Instance?.Flight14Preview?.Run.BoosterReturnController is { Booster: not null } booster)
+            line = "SUPER HEAVY · " + (booster.BlockReason ?? booster.Phase.ToString()).ToUpperInvariant();
         _boosterLabel.Text = string.IsNullOrEmpty(line) ? "" : line!;
     }
 

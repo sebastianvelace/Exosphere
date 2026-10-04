@@ -232,7 +232,8 @@ public sealed class FlightHudPresenter
             impactTrajectory,
             verticalSpeed > 0.0 && engineTelemetry.ThrustN > 1.0,
             nominalEngines,
-            failedEngines);
+            failedEngines,
+            vessel.Crew.Count > 0);
 
         double engineWeightN = vessel.GetWeightNewtons(body);
         double thrustToWeight = engineWeightN > 0.0
@@ -315,11 +316,12 @@ public sealed class FlightHudPresenter
         bool impactTrajectory,
         bool poweredClimb,
         int nominalEngines,
-        int failedEngines)
+        int failedEngines,
+        bool crewAboard)
     {
         _alertScratch.Clear();
 
-        AddThresholdAlert(
+        if (crewAboard) AddThresholdAlert(
             _alertScratch, "LOAD-G", g, 4.0, 3.7, 6.0,
             "CREW LOAD", AlertValueFormat.G, "4.0 g",
             "Reduce thrust or adjust the flight profile");

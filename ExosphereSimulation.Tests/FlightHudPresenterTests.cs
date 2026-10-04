@@ -236,6 +236,22 @@ public sealed class FlightHudPresenterTests
         Assert.Equal(0, snapshot.FailedEngineCount);
     }
 
+    [Fact]
+    public void CrewLoadAlertRequiresActualCrewWhileAccelerationRemainsVisible()
+    {
+        var (universe, body, vessel, tank) = CreateVehicle();
+        tank.Definition.DiameterM = 9.0;
+        vessel.Velocity = body.Velocity + new Vector3d(0, 0, 1000);
+        var presenter = new FlightHudPresenter();
+        FlightHudSnapshot snapshot = null!;
+        for (int i = 0; i < 30; i++) snapshot = presenter.Capture(universe, vessel, "BOOSTBACK", FlightHudViewMode.Exterior);
+        Assert.True(snapshot.ProperAccelerationG > 6);
+        Assert.DoesNotContain(snapshot.Alerts, a => a.Code == "LOAD-G");
+        vessel.Crew.Add(new CrewMember { FirstName = "Test", LastName = "Pilot" });
+        snapshot = presenter.Capture(universe, vessel, "BOOSTBACK", FlightHudViewMode.Exterior);
+        Assert.Contains(snapshot.Alerts, a => a.Code == "LOAD-G" && a.Severity == FlightAlertSeverity.Critical);
+    }
+
     private static (Universe universe, CelestialBody body, Vessel vessel, Part tank)
         CreateVehicle()
     {

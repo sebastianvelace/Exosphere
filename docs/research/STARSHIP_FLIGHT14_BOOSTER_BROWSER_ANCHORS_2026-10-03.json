@@ -1,0 +1,65 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+  "captured_date": "2026-10-03",
+  "method": "Manual reading of paused browser framebuffer; no trajectory inference from footage.",
+  "status": "partial-manual-reference",
+  "physics_authority": false,
+  "limitations": [
+    "The approximate video-minus-16-seconds alignment has a one-second clock tolerance and is local to this segment.",
+    "Altitude is a rounded broadcast display; altitude datum, feed latency and measurement uncertainty are unknown.",
+    "The right-hand SPEED instrument belongs to Starship and is not booster speed.",
+    "A 0.0 km display does not certify water contact or shutdown.",
+    "Engine-board brightness is qualitative; exact counts are not assigned from blurred frames.",
+    "Captures remain in an ignored local evidence directory; hashes identify these browser screenshots, not the previously researched downloaded video track."
+  ],
+  "anchors": [
+    {
+      "video_seconds": 408.473387,
+      "broadcast_met_seconds": 393,
+      "booster_altitude_display_km": 4.1,
+      "booster_engine_board": "unlit",
+      "capture_path": "exports/flight14-booster-return-review/reference-video-408.jpg",
+      "capture_sha256": "d82f94c76690325e76b994551fe265638c64800f3759d4645101ae0035c5c2e6"
+    },
+    {
+      "video_seconds": 413.473387,
+      "broadcast_met_seconds": 398,
+      "booster_altitude_display_km": 2.4,
+      "booster_engine_board": "lit",
+      "capture_path": "exports/flight14-booster-return-review/reference-video-413.jpg",
+      "capture_sha256": "838eb2080926af50d1a2dd5d168bd22e10837e1da8afa52faf4e9cf3b09ecf92"
+    },
+    {
+      "video_seconds": 418.473387,
+      "broadcast_met_seconds": 403,
+      "booster_altitude_display_km": 1.2,
+      "booster_engine_board": "lit",
+      "capture_path": "exports/flight14-booster-return-review/reference-video-418.jpg",
+      "capture_sha256": "f1017f6137d6b22192d8b8cefb583bcf15c042b1df6cf044dc6cd9aa9dad6e1f"
+    },
+    {
+      "video_seconds": 423.473387,
+      "broadcast_met_seconds": 408,
+      "booster_altitude_display_km": 0.5,
+      "booster_engine_board": "lit",
+      "capture_path": "exports/flight14-booster-return-review/reference-video-423.jpg",
+      "capture_sha256": "d12bdc167ab578c4afc23f08f4caf48c730331a1524650d4a2c557e961594334"
+    },
+    {
+      "video_seconds": 428.473387,
+      "broadcast_met_seconds": 413,
+      "booster_altitude_display_km": 0.1,
+      "booster_engine_board": "lit",
+      "capture_path": "exports/flight14-booster-return-review/reference-video-428.jpg",
+      "capture_sha256": "f144ab2d8c1b35570d34a265640330055765db7a9fc50fbab33f2289031bbed1"
+    },
+    {
+      "video_seconds": 433.473387,
+      "broadcast_met_seconds": 418,
+      "booster_altitude_display_km": 0.0,
+      "booster_engine_board": "lit",
+      "capture_path": "exports/flight14-booster-return-review/reference-video-433.jpg",
+      "capture_sha256": "54277ebdd70c7886109f9ea78645980c6300f4b518855824d4ddf887db650642"
+    }
+  ]
+}

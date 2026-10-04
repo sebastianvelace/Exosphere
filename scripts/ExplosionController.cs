@@ -62,7 +62,8 @@ public partial class ExplosionController : Node3D
         }
 
         var vessel = SimulationBridge.Instance?.ActiveVessel;
-        if (vessel == null || !vessel.IsDestroyed) return;
+        if (vessel == null || !vessel.IsDestroyed
+            || vessel.DestructionCause == Exosphere.Simulation.VesselDestructionCause.FlightTermination) return;
 
         TriggerExplosion(vessel);
     }

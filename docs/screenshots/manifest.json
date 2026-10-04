@@ -37,6 +37,16 @@
       "width": 1280,
       "height": 720,
       "sha256": "e69f1ba1decb9da77d61f573a83a52078889f0f4f6b673f4d658b690e74c082f"
+    },
+    {
+      "file": "booster-return.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "3d9603ad96cb79367bac959d19e329c2e483395886750ae79fec94a25074d8be",
+      "source_base_revision": "91dd7b7",
+      "source_working_tree": "Independent Super Heavy return implementation included in the gallery commit.",
+      "mode": "Continuous production exploration; IntegratedGpu profile; software OpenGL Compatibility."
     }
-  ]
+  ],
+  "source_revision_scope": "Default for the original six images; later additions declare their own source base and working-tree scope."
 }

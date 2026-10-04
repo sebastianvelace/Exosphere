@@ -381,8 +381,19 @@ public partial class PlumeSystem : Node3D
         float altT = (float)System.Math.Clamp((altitude - 50.0) / 450.0, 0.0, 1.0);
         var dir = Vector3.Down;
         float smokeSpread = Mathf.Lerp(58f, 10f + expansion * 6f, altT);
-        float groundInteraction = 1f - Mathf.SmoothStep(
-            0f, 260f, (float)System.Math.Max(0.0, altitude));
+        // Deluge, skirt fan and pad ejecta belong near the visible launch site.
+        // Returning near sea level must not create a second launch-pad cloud offshore.
+        var pad = LaunchPadController.Instance;
+        bool hasPadInteraction = false;
+        if (pad?.Visible == true)
+        {
+            Vector3 padUp = pad.GlobalBasis.Y.Normalized();
+            Vector3 offset = GlobalPosition - pad.GlobalPosition;
+            Vector3 horizontalOffset = offset - padUp * offset.Dot(padUp);
+            hasPadInteraction = horizontalOffset.LengthSquared() < 120f * 120f;
+        }
+        float groundInteraction = hasPadInteraction ? 1f - Mathf.SmoothStep(
+            0f, 260f, (float)System.Math.Max(0.0, altitude)) : 0f;
 
         // Smooth deterministic modulation shared per group. Randomizing this at 30 Hz made
         // the plume and its light stutter independently of the physical engine cadence.
@@ -402,7 +413,7 @@ public partial class PlumeSystem : Node3D
             // Near-field skirt: keep a broad, low-energy exhaust fan through the
             // first 140 m so the 33-engine cluster reads as a merged plume rather
             // than a tiny white cone. It fades before the camera's ascent handoff.
-            if (u.IsSkirt && altitude > 140.0)
+            if (u.IsSkirt && (altitude > 140.0 || !hasPadInteraction))
                 unitFiring = false;
             float interactionOpacity = u.IsSkirt
                 ? 1f - Mathf.SmoothStep(30f, 140f, (float)altitude) : 1f;
@@ -478,10 +489,9 @@ public partial class PlumeSystem : Node3D
                 // A free jet ends at grade and becomes the separately rendered
                 // ground fan. Intersect along the actual nozzle axis, rather
                 // than letting the longer column pass through the launch site.
-                var pad = LaunchPadController.Instance;
-                if (u.IsSuperHeavy && altitude < 200.0 && pad?.Visible == true)
+                if (u.IsSuperHeavy && altitude < 200.0 && hasPadInteraction)
                 {
-                    Vector3 gradeUp = pad.GlobalBasis.Y.Normalized();
+                    Vector3 gradeUp = pad!.GlobalBasis.Y.Normalized();
                     float towardGrade = u.Pivot.GlobalBasis.Y.Normalized().Dot(gradeUp);
                     if (towardGrade > 0.05f)
                     {

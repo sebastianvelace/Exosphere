@@ -85,7 +85,7 @@ public partial class FlightBroadcastHUD : Control
         }
         if (bridge.Flight14Preview is { } preview)
         {
-            _vehicleLabel = "STARSHIP FLIGHT 14 / EXPLORATION";
+            _vehicleLabel = preview.IsObservingBooster ? "SUPER HEAVY / FLIGHT 14 EXPLORATION" : "STARSHIP FLIGHT 14 / EXPLORATION";
             if (double.IsFinite(preview.Run.Controller.LiftoffEpoch))
             {
                 _launchEpoch = preview.Run.Controller.LiftoffEpoch;
@@ -100,6 +100,21 @@ public partial class FlightBroadcastHUD : Control
             };
             if (preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null) _events.Add("WATER_ENTRY");
             if (preview.Run.PayloadController.Releases.Count > 0) _events.Add("PAYLOAD");
+            if (preview.IsObservingBooster && preview.Run.BoosterReturnController is { } booster)
+            {
+                _milestones = new[] { ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"),
+                    ("BOOSTBACK", "BOOSTER_BOOSTBACK"), ("COAST", "BOOSTER_COAST"),
+                    ("LANDING", "BOOSTER_LANDING"), ("WATER", "BOOSTER_WATER") };
+                foreach (var witness in booster.Events)
+                    _events.Add(witness.Phase switch
+                    {
+                        Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.Boostback => "BOOSTER_BOOSTBACK",
+                        Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.Coast => "BOOSTER_COAST",
+                        Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.Landing => "BOOSTER_LANDING",
+                        Exosphere.Simulation.Flight.Flight14BoosterReturnPhase.WaterEntry => "BOOSTER_WATER",
+                        _ => "SEPARATION",
+                    });
+            }
         }
         _snapshot = snapshot;
         _lastTime = snapshot.MissionTimeS;

@@ -59,3 +59,21 @@ Capture logs, image copies and the temporary entry script are preserved locally 
 in `exports/flight14-water-motion-review/`. These ignored directories are review
 artifacts; temporary scripts/autoloads are not part of the shipped game.
 The published PNG checksums are in [manifest.json](manifest.json).
+
+## Independent Super Heavy return addition
+
+`booster-return.png` is an unedited 1280 × 800 production framebuffer captured on
+2026-10-03 from the working tree based on `91dd7b7`, including the independent
+booster implementation committed with this gallery addition. The original six
+images above keep their source revision and provenance. This capture uses the
+IntegratedGpu profile with software OpenGL Compatibility under Xvfb. It shows
+water entry after continuous simulation from the original loaded launch stack;
+it is not a seeded terminal scene or a reconstruction of the flown trajectory.
+
+The completed seven-frame sequence witnesses boostback, coast, ignition,
+three-engine braking, contact, abstracted FTS retirement, and return of camera/HUD
+to the continuing Starship. Landing uses requested 3x warp and water observation
+1x; production physics retains whole 20 ms steps. Local capture scripts, console
+log and hashes are in `exports/flight14-booster-return-review/`. The timing,
+protected fuel budget, distant surface silhouette, cloud spacing and near-water
+visual fidelity remain bounded as described in [the booster audit](../audits/flight14_booster_return_2026-10-03.md).

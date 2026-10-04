@@ -59,7 +59,7 @@ public partial class BoosterReturnController : Node
     {
         if (!_wired) TryWire();
         var bridge = SimulationBridge.Instance;
-        if (bridge?.Universe == null) return;
+        if (bridge?.Universe == null || bridge.IsFlight14Exploration) return;
 
         if (Booster == null)
         {
@@ -140,7 +140,7 @@ public partial class BoosterReturnController : Node
     private void OnVesselStaged(string detachedVesselId)
     {
         var bridge = SimulationBridge.Instance;
-        if (bridge?.Universe == null) return;
+        if (bridge?.Universe == null || bridge.IsFlight14Exploration) return;
 
         var debris = bridge.Universe.Vessels.FirstOrDefault(v => v.Id == detachedVesselId);
         if (debris == null || !BoosterReturnGuidance.IsStarshipBooster(debris))

@@ -1377,6 +1377,8 @@ public partial class VesselRenderer : Node3D
         // visible frame runs the normal cadence immediately (timers are not advanced
         // while hidden), keeping re-entry and cockpit exit visually synchronized.
         if (!Visible || TargetVessel == null) return;
+        if (TargetVessel.DestructionCause == VesselDestructionCause.FlightTermination)
+        { Visible = false; return; }
 
         _presentationSampleTimer -= System.Math.Max(0.0, delta);
         if (_presentationSampleTimer <= 0.0)

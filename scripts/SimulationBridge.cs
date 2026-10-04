@@ -16,7 +16,10 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     public static SimulationBridge Instance { get; private set; } = null!;
 
     public Universe Universe { get; private set; } = null!;
-    public Vessel?  ActiveVessel => Universe.ActiveVessel;
+    /// <summary>Presentation focus in exploration; Universe retains the mission's physics owner.</summary>
+    public Vessel?  ActiveVessel => Flight14Preview?.ObservedVessel ?? Universe.ActiveVessel;
+    /// <summary>Camera observation never hands the automatic mission's systems authority to a detached stage.</summary>
+    public Vessel? ControlledVessel => IsFlight14Exploration ? Universe.ActiveVessel : ActiveVessel;
 
     /// <summary>
     /// Observes interest for one vessel and overlays authoritative active-mission/system
@@ -297,7 +300,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         if (IsFlight14Exploration)
         {
             Universe.PhysicsStepController = null;
-            Flight14Preview = new Flight14Exploration(Flight14LaunchDiagnostic.CreateWithPoweredReturn(dataPath, Universe, continueToWaterContact: true));
+            Flight14Preview = new Flight14Exploration(Flight14LaunchDiagnostic.CreateWithBoosterReturn(dataPath, Universe));
             Flight14Preview.Run.Ship.Name = "Starship Flight 14 / Engineering preview";
             EnsureActiveVesselPresentation(Flight14Preview.Run.Ship);
             _previewRenderedVessels.Add(Flight14Preview.Run.Ship.Id);
@@ -433,8 +436,8 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
         // Ownership handoff happens before physics so the systems runtime epoch is the
         // same committed epoch that AdvanceProcessedSimulation will close below.
-        if (av != null)
-            SystemsController.Instance?.PrepareForPhysicsTick(av, Universe.CurrentTime);
+        if (ControlledVessel is { } controlled)
+            SystemsController.Instance?.PrepareForPhysicsTick(controlled, Universe.CurrentTime);
 
         if (Flight14Preview is { } preview)
         {
@@ -1358,6 +1361,10 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         return new()
         {
             ["phase"] = preview.Phase,
+            ["observed_vessel_id"] = preview.ObservedVessel.Id,
+            ["observing_booster"] = preview.IsObservingBooster,
+            ["booster_phase"] = preview.Run.BoosterReturnController?.Phase.ToString() ?? "",
+            ["booster_blocked"] = preview.Run.BoosterReturnController?.BlockReason ?? "",
             ["water_entry_speed"] = preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness?.AtmosphereRelativeSpeedMps ?? -1,
             ["water_clearance"] = preview.Run.Ship.LastWaterContact?.LowestPointAltitudeM ?? -1,
             ["water_force"] = preview.Run.Ship.LastWaterContact?.ForceWorld.Magnitude ?? 0,

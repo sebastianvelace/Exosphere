@@ -62,7 +62,7 @@ public partial class SystemsController : Node
     /// </summary>
     public SimulationExternalInterestInputs BuildSimulationInterestInputs()
     {
-        var activeVessel = SimulationBridge.Instance?.ActiveVessel;
+        var activeVessel = SimulationBridge.Instance?.ControlledVessel;
         return activeVessel is null
             ? SimulationExternalInterestInputs.None
             : BuildSimulationInterestInputs(activeVessel);
@@ -79,7 +79,7 @@ public partial class SystemsController : Node
     {
         ArgumentNullException.ThrowIfNull(vessel);
         var bridge = SimulationBridge.Instance;
-        bool isActive = ReferenceEquals(vessel, bridge?.ActiveVessel);
+        bool isActive = ReferenceEquals(vessel, bridge?.ControlledVessel);
         MissionPhase phase = MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH;
         bool missionControlled = isActive && phase is
             (MissionPhase.COUNTDOWN
@@ -127,7 +127,8 @@ public partial class SystemsController : Node
         bool systemsAlert = (isActive && ControlLimited)
             || runtime.HasSystemsAlert
             || (!runtime.Comms.HasSignal && !runtime.Comms.PlasmaBlackout);
-        int crewCount = vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
+        int crewCount = bridge?.IsFlight14Exploration == true ? vessel.Crew.Count
+            : vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
         double? systemsDeadline = runtime.GetNextAlertDeadlineSeconds(crewCount);
 
         return new SimulationExternalInterestInputs(
@@ -151,7 +152,7 @@ public partial class SystemsController : Node
         Instance = this;
 
         var bridge = SimulationBridge.Instance;
-        if (bridge?.ActiveVessel is { } active && bridge.Universe != null)
+        if (bridge?.ControlledVessel is { } active && bridge.Universe != null)
         {
             if (!TryActivateVesselRuntime(active, bridge.Universe.CurrentTime))
                 GD.PushWarning("[Systems] Active vessel runtime could not be materialized.");
@@ -237,7 +238,7 @@ public partial class SystemsController : Node
             simulationTime);
 
         _activeRuntime = _fallbackRuntime;
-        if (bridge.ActiveVessel is { } active
+        if (bridge.ControlledVessel is { } active
             && RuntimeRegistry.TryGet(active.Id, out var restored)
             && restored is not null)
         {
@@ -293,7 +294,7 @@ public partial class SystemsController : Node
         var bridge = SimulationBridge.Instance;
         RuntimeRegistry.Clear();
         _activeRuntime = _fallbackRuntime;
-        if (bridge?.ActiveVessel is { } active && bridge.Universe != null)
+        if (bridge?.ControlledVessel is { } active && bridge.Universe != null)
             TryActivateVesselRuntime(active, bridge.Universe.CurrentTime);
         _activeRuntime.Reset(bridge?.Universe?.CurrentTime ?? _activeRuntime.SimulationTime);
         GroundRelay.Clear();
@@ -305,7 +306,7 @@ public partial class SystemsController : Node
     public override void _Process(double _delta)
     {
         var bridge   = SimulationBridge.Instance;
-        var vessel   = bridge?.ActiveVessel;
+        var vessel   = bridge?.ControlledVessel;
         var universe = bridge?.Universe;
         if (bridge == null || vessel == null || universe == null) return;
 
@@ -460,7 +461,7 @@ public partial class SystemsController : Node
     public void AdvanceProcessedSimulation()
     {
         var bridge   = SimulationBridge.Instance;
-        var vessel   = bridge?.ActiveVessel;
+        var vessel   = bridge?.ControlledVessel;
         var universe = bridge?.Universe;
         if (bridge == null || vessel == null || universe == null) return;
 
@@ -477,7 +478,8 @@ public partial class SystemsController : Node
         var refBody = universe.GetDominantBody(vessel.Position);
         double alt  = vessel.GetAltitude(refBody);
 
-        int crewCount = vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
+        int crewCount = bridge?.IsFlight14Exploration == true ? vessel.Crew.Count
+            : vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
         CurrentSystemsPhase = MapMissionPhase(MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
         var sysPhase = CurrentSystemsPhase;
 
@@ -529,7 +531,7 @@ public partial class SystemsController : Node
     public void SubmitGroundAttitude(Vector3d pitchYawRoll)
     {
         var universe = SimulationBridge.Instance?.Universe;
-        var vessel = SimulationBridge.Instance?.ActiveVessel;
+        var vessel = SimulationBridge.Instance?.ControlledVessel;
         if (universe == null || vessel == null) return;
 
         GroundRelay.SubmitAttitude(
@@ -546,7 +548,7 @@ public partial class SystemsController : Node
     public void SubmitGroundThrottleDelta(double deltaThrottle)
     {
         var universe = SimulationBridge.Instance?.Universe;
-        var vessel = SimulationBridge.Instance?.ActiveVessel;
+        var vessel = SimulationBridge.Instance?.ControlledVessel;
         if (universe == null || vessel == null) return;
 
         GroundRelay.SubmitThrottleDelta(

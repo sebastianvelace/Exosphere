@@ -442,3 +442,34 @@ wet contact through heeling. This supports the bounded sealed-hull estimate; it 
 not validate real flooding, capsize timing, slamming/added mass, sea-state forces or
 independent booster recovery. See the
 [2026-10-03 water-motion audit](../audits/flight14_water_motion_2026-10-03.md).
+
+## Flight 14 independent booster return estimate
+
+The exploration factory now attaches independent Starship and Super Heavy
+controllers to the same deterministic 20 ms pre-integration boundary. Separation
+continues the original booster object, resources, engine failures and inertial
+state. Camera observation never changes Universe ownership or the ship systems
+runtime. Main-feed LOX exhaustion and Gulf-region low-speed contact are physical
+transition gates; published clocks do not assign kinematics.
+
+Protected landing LF/LOX remains in wet mass and is excluded from main-feed
+consumption. Opening that feed only removes the partition; it adds no propellant
+and repairs no failed engines. Both save formats preserve this inventory. The
+current 200 t resource budget is an unvalidated engineering assumption within
+the original 3.6 Mt launch loading, not measured header-tank capacity.
+
+Intact root integrated avionics enables standalone booster command authority.
+The optional standalone aerodynamic-centre offset overrides the attached-stack
+selection only for that root; the estimated +5.44 m offset is not resolved
+grid-fin actuator aerodynamics. Engine-first landing guidance subtracts actual
+aerodynamic up-force from its thrust demand and conservatively retains capacity
+for the later low-drag portion when selecting 11 → 5 → 3 engines. Actual lifecycle
+and positive thrust witness delivery. Gravity, drag coefficients and engine
+rating remain unchanged.
+
+Accepted water contact opts into the existing bounded sealed-hull solver for
+three estimated seconds. FTS then records retirement; explosive energy, fragments
+and measured FTS delay are not simulated. The full mission and original stage
+continuity are tested; matching the flown boostback altitude, descent timing,
+landing inventory and near-water visuals remains open. See
+[the booster return audit](../audits/flight14_booster_return_2026-10-03.md).
