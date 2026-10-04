@@ -112,6 +112,8 @@ public static class MissionSaveSerializer
                 DefinitionId    = part.Definition.Id,
                 LiquidFuel      = part.LiquidFuel,
                 Oxidizer        = part.Oxidizer,
+                ReservedLiquidFuel = part.ReservedLiquidFuel,
+                ReservedOxidizer = part.ReservedOxidizer,
                 SolidFuel       = part.SolidFuel,
                 Monopropellant  = part.Monopropellant,
                 Temperature     = part.Temperature,
@@ -174,6 +176,7 @@ public static class MissionSaveSerializer
                 IsStagingActive = ps.IsStagingActive,
                 IsBroken        = ps.IsBroken,
             };
+            part.ReserveLandingPropellant(ps.ReservedLiquidFuel, ps.ReservedOxidizer);
             liveParts.Add(part);
             vessel.Parts.AddPart(part);
         }

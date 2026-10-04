@@ -5,6 +5,8 @@
   "category": "engine",
   "vehicle_family": "starship",
   "vehicle_role": "booster",
+  "integrated_avionics": true,
+  "standalone_aerodynamic_center_offset_y_m": 5.44,
   "mass_dry": 214000,
   "length_m": 68.0,
   "diameter_m": 9.0,

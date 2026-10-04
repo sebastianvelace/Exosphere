@@ -52,6 +52,8 @@ public sealed class PartSaveState
     public string DefinitionId { get; set; } = "";
     public double LiquidFuel { get; set; }
     public double Oxidizer { get; set; }
+    public double ReservedLiquidFuel { get; set; }
+    public double ReservedOxidizer { get; set; }
     public double SolidFuel { get; set; }
     public double Monopropellant { get; set; }
     public double Temperature { get; set; } = 290.0;

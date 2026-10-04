@@ -86,15 +86,7 @@ public static class RigidBodyForceEvaluator
         if (density <= 0.0 || speed <= 1.0) return Vector3d.Zero;
 
         double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
-        double? aerodynamicCenterOffset = null;
-        foreach (var part in vessel.Parts.PartList)
-        {
-            if (part.Definition.AerodynamicCenterOffsetYM.HasValue)
-            {
-                aerodynamicCenterOffset = part.Definition.AerodynamicCenterOffsetYM;
-                break;
-            }
-        }
+        double? aerodynamicCenterOffset = vessel.Parts.AerodynamicCenterOffsetYM;
 
         var angularAccelerationWorld = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
             density,

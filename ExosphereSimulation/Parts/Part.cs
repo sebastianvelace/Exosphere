@@ -25,6 +25,29 @@ public class Part
     public double Monopropellant  { get; set; }
     public double ElectricCharge  { get; set; }
 
+    /// <summary>Protected feed inventory, still included in wet mass. Defaults to no isolation.</summary>
+    public double ReservedLiquidFuel { get; private set; }
+    public double ReservedOxidizer { get; private set; }
+    public double AvailableLiquidFuel => System.Math.Max(0, LiquidFuel-ReservedLiquidFuel);
+    public double AvailableOxidizer => System.Math.Max(0, Oxidizer-ReservedOxidizer);
+
+    public void ReserveLandingPropellant(double liquidFuelKg, double oxidizerKg)
+    {
+        if (!double.IsFinite(liquidFuelKg) || !double.IsFinite(oxidizerKg)
+            || liquidFuelKg < 0 || oxidizerKg < 0 || liquidFuelKg > LiquidFuel || oxidizerKg > Oxidizer)
+            throw new ArgumentOutOfRangeException(nameof(liquidFuelKg));
+        ReservedLiquidFuel = liquidFuelKg;
+        ReservedOxidizer = oxidizerKg;
+    }
+
+    /// <summary>Open the protected feed without creating resources or repairing failed engines.</summary>
+    public void OpenLandingPropellantFeed()
+    {
+        ReservedLiquidFuel = 0;
+        ReservedOxidizer = 0;
+        if (LiquidFuel > 0 && Oxidizer > 0) FuelDepleted = false;
+    }
+
     // ── Estado físico ─────────────────────────────────────────────────────
 
     /// <summary>
@@ -578,6 +601,8 @@ public class Part
     // ── Inicializar recursos al máximo de capacidad ───────────────────────
     public void ResetResources()
     {
+        ReservedLiquidFuel = 0;
+        ReservedOxidizer = 0;
         FuelDepleted   = false;
         LiquidFuel     = Definition.FuelCapacityLF;
         Oxidizer       = Definition.FuelCapacityOx;
@@ -1032,7 +1057,7 @@ public class Part
                 : total > 1e-9 ? LiquidFuel / total : 0.45;
             double lfRate = massFlowRate * lfFrac;
             double oxRate = massFlowRate * (1.0 - lfFrac);
-            if (LiquidFuel < lfRate * dt || Oxidizer < oxRate * dt) return false;
+            if (AvailableLiquidFuel < lfRate * dt || AvailableOxidizer < oxRate * dt) return false;
             LiquidFuel -= lfRate * dt;
             Oxidizer   -= oxRate * dt;
         }

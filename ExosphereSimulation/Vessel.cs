@@ -10,6 +10,7 @@ public enum VesselDestructionCause
     GroundImpact,
     ThermalBreakup,
     StructuralBreakup,
+    FlightTermination,
 }
 
 public class Vessel
@@ -1008,13 +1009,10 @@ public class Vessel
             if (density > 0.0 && surfVel.Magnitude > 1.0)
             {
                 double temp = System.Math.Max(1.0, refBody.Atmosphere.GetTemperature(altitude));
-                double? aerodynamicCenterOffset = null;
+                double? aerodynamicCenterOffset = Parts.AerodynamicCenterOffsetYM;
                 bool hasBodyFlaps = false;
                 foreach (var part in Parts.PartList)
                 {
-                    if (!aerodynamicCenterOffset.HasValue
-                        && part.Definition.AerodynamicCenterOffsetYM.HasValue)
-                        aerodynamicCenterOffset = part.Definition.AerodynamicCenterOffsetYM;
                     if (part.Definition.IsStarshipFamily
                         && part.Definition.HasVehicleRole("command")
                         && !part.IsBroken)

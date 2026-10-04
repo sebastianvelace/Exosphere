@@ -30,6 +30,8 @@ public class PartDefinition
     [JsonPropertyName("category")]    public string CategoryStr { get; set; } = "structure";
     [JsonPropertyName("vehicle_family")] public string VehicleFamily { get; set; } = "";
     [JsonPropertyName("vehicle_role")] public string VehicleRole { get; set; } = "";
+    /// <summary>Guidance electronics included in this aggregate part's dry mass.</summary>
+    [JsonPropertyName("integrated_avionics")] public bool IntegratedAvionics { get; set; }
     /// <summary>Payload enclosed by its carrier; exposed when it becomes a graph root.</summary>
     [JsonPropertyName("internal_payload")] public bool InternalPayload { get; set; }
     [JsonPropertyName("mass_dry")]    public double MassDry     { get; set; }
@@ -45,6 +47,9 @@ public class PartDefinition
     /// </summary>
     [JsonPropertyName("aerodynamic_center_offset_y_m")]
     public double? AerodynamicCenterOffsetYM { get; set; }
+    /// <summary>Static margin for the standalone root configuration, not the attached launch stack.</summary>
+    [JsonPropertyName("standalone_aerodynamic_center_offset_y_m")]
+    public double? StandaloneAerodynamicCenterOffsetYM { get; set; }
     [JsonPropertyName("heat_tolerance")]   public double HeatTolerance   { get; set; } = 1200;
     [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
     /// <summary>

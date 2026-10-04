@@ -89,6 +89,16 @@ public class PartGraph
     public IReadOnlyList<Part>  Parts  => _partsView;
     public IReadOnlyList<Joint> Joints => _jointsView;
     public Part? Root => _root;
+    public double? AerodynamicCenterOffsetYM
+    {
+        get
+        {
+            if (_root?.Definition.StandaloneAerodynamicCenterOffsetYM is { } standalone) return standalone;
+            foreach (var part in _parts)
+                if (part.Definition.AerodynamicCenterOffsetYM is { } offset) return offset;
+            return null;
+        }
+    }
 
     /// <summary>Enclosed payloads contribute mass/inertia, but not the carrier's outer hull.</summary>
     public bool IsEnclosedPayload(Part part) => part.Definition.InternalPayload && part != _root;
@@ -1371,8 +1381,8 @@ public class PartGraph
             double totalOx = 0.0;
             for (int i = 0; i < tankPool.Count; i++)
             {
-                totalLF += tankPool[i].LiquidFuel;
-                totalOx += tankPool[i].Oxidizer;
+                totalLF += tankPool[i].AvailableLiquidFuel;
+                totalOx += tankPool[i].AvailableOxidizer;
             }
             double remainingLF = totalLF;
             double remainingOx = totalOx;
@@ -1423,9 +1433,9 @@ public class PartGraph
                 {
                     var p = tankPool[tankIndex];
                     if (totalLF > 0.0)
-                        p.LiquidFuel -= fundedLF * (p.LiquidFuel / totalLF);
+                        p.LiquidFuel = System.Math.Max(p.ReservedLiquidFuel, p.LiquidFuel - fundedLF * (p.AvailableLiquidFuel / totalLF));
                     if (totalOx > 0.0)
-                        p.Oxidizer -= fundedOx * (p.Oxidizer / totalOx);
+                        p.Oxidizer = System.Math.Max(p.ReservedOxidizer, p.Oxidizer - fundedOx * (p.AvailableOxidizer / totalOx));
                 }
             }
         }

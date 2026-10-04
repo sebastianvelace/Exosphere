@@ -36,6 +36,7 @@ public static class ControlAuthority
         foreach (var part in vessel.Parts.PartList)
         {
             if (part.IsBroken) continue;
+            if (part.Definition.IntegratedAvionics && ReferenceEquals(part, vessel.Parts.Root)) hasCommand = true;
             if (part.Definition.Category == PartCategory.Command)
             {
                 hasCommand = true;

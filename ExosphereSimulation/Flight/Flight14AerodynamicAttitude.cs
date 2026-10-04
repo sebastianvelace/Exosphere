@@ -24,10 +24,7 @@ public static class Flight14AerodynamicAttitude
         var velocity = ship.GetSurfaceVelocity(body);
         double altitude = ship.GetAltitude(body);
         double density = body.Atmosphere.GetDensity(altitude);
-        double? centerOffset = null;
-        foreach (var part in ship.Parts.PartList)
-            if (part.Definition.AerodynamicCenterOffsetYM.HasValue)
-            { centerOffset = part.Definition.AerodynamicCenterOffsetYM; break; }
+        double? centerOffset = ship.Parts.AerodynamicCenterOffsetYM;
         var disturbance = ship.Orientation.Inverse().Rotate(
             AerodynamicsModel.ComputeAttitudeAngularAcceleration(density, velocity,
                 ship.Orientation.Rotate(Vector3d.Up), Vector3d.Zero,

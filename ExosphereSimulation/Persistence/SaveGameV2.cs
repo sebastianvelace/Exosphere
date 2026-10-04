@@ -77,6 +77,8 @@ public sealed class PartSaveV2
     public string DefinitionId { get; set; } = "";
     public double LiquidFuel { get; set; }
     public double Oxidizer { get; set; }
+    public double ReservedLiquidFuel { get; set; }
+    public double ReservedOxidizer { get; set; }
     public double SolidFuel { get; set; }
     public double Monopropellant { get; set; }
     public double ElectricCharge { get; set; }
@@ -312,6 +314,9 @@ public static class SaveGameV2Codec
                     throw new InvalidDataException($"Duplicate global part id '{part.InstanceId}'.");
                 ownedPartIds.Add(part.InstanceId);
                 foreach (double value in PartFiniteValues(part)) RequireFinite(value, part.InstanceId);
+                if (part.ReservedLiquidFuel < 0 || part.ReservedOxidizer < 0
+                    || part.ReservedLiquidFuel > part.LiquidFuel || part.ReservedOxidizer > part.Oxidizer)
+                    throw new InvalidDataException($"Invalid protected inventory on '{part.InstanceId}'.");
                 var engineIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var engine in part.EngineInstances)
                 {
@@ -626,6 +631,8 @@ public static class SaveGameV2Codec
         DefinitionId = part.Definition.Id,
         LiquidFuel = part.LiquidFuel,
         Oxidizer = part.Oxidizer,
+        ReservedLiquidFuel = part.ReservedLiquidFuel,
+        ReservedOxidizer = part.ReservedOxidizer,
         SolidFuel = part.SolidFuel,
         Monopropellant = part.Monopropellant,
         ElectricCharge = part.ElectricCharge,
@@ -687,6 +694,7 @@ public static class SaveGameV2Codec
             GimbalOffset = state.GimbalOffset.ToVector(),
             ActiveEngineFraction = state.ActiveEngineFraction,
         };
+        part.ReserveLandingPropellant(state.ReservedLiquidFuel, state.ReservedOxidizer);
         part.RestoreEngineStates(state.EngineInstances.Select(engine => new EngineInstanceState
         {
             InstanceId = engine.InstanceId,
@@ -772,7 +780,7 @@ public static class SaveGameV2Codec
 
     private static IEnumerable<double> PartFiniteValues(PartSaveV2 p) =>
     [
-        p.LiquidFuel, p.Oxidizer, p.SolidFuel, p.Monopropellant, p.ElectricCharge,
+        p.LiquidFuel, p.Oxidizer, p.ReservedLiquidFuel, p.ReservedOxidizer, p.SolidFuel, p.Monopropellant, p.ElectricCharge,
         p.Temperature, p.SkinTemperature, p.ThermalDamage, p.ThrottleLevel,
         p.GimbalOffset.X, p.GimbalOffset.Y, p.GimbalOffset.Z, p.ActiveEngineFraction,
     ];
