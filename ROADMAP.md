@@ -31,7 +31,11 @@ Base tecnica cerrada en `main`:
   Flight 14 now exposes an automatic engineering exploration from the featured
   briefing: loaded ascent, insertion, 26 payload releases and estimated ship water entry.
   The independent booster estimate now reaches Gulf water contact with 31-engine
-  boostback and 11/5/3 landing; camera observation preserves ship ownership. Exact
+  boostback and 11/5/3 landing; camera observation preserves ship ownership.
+  Estimated apogee steering and thrust-scaled lateral damping reduce the 207 km /
+  T+582 s baseline to approximately 97 km / T+418 s; intermediate altitude/speed,
+  main-feed cutoff and protected inventory still need joint reference calibration.
+  See `docs/audits/flight14_booster_calibration_2026-10-03.md`. Exact
   ocean targeting, post-entry flooding/capsize, booster timing/trajectory calibration
   and exact mission acceptance remain pending. Vehicle fidelity and further cloud work remain separate.
 - VAB 2.0 esta conectado al vuelo: catálogo con búsqueda/filtros, doble-click

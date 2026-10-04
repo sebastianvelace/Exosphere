@@ -12,11 +12,13 @@ public sealed class Flight14BoosterReturnDefinition
     public double TargetLatitudeDegrees { get; set; }
     public double TargetLongitudeDegrees { get; set; }
     public double BoostbackThrottle { get; set; }
+    public double EstimatedCoastApogeeM { get; set; }
     public double MinimumFlipAlignment { get; set; }
     public double PointingGain { get; set; }
     public double PointingDamping { get; set; }
     public double MaximumReturnSeconds { get; set; }
     public double LandingArmAltitudeM { get; set; }
+    public double LandingBrakingMargin { get; set; }
     public double TargetContactSpeedMps { get; set; }
     public double HorizontalDampingPerSecond { get; set; }
     public double MaximumLandingTiltDegrees { get; set; }
@@ -42,7 +44,7 @@ public sealed class Flight14BoosterReturnDefinition
     public void Validate()
     {
         double[] positive = [LandingReserveKg, PointingGain, PointingDamping,
-            MaximumReturnSeconds, LandingArmAltitudeM, TargetContactSpeedMps,
+            MaximumReturnSeconds, EstimatedCoastApogeeM, LandingArmAltitudeM, TargetContactSpeedMps,
             HorizontalDampingPerSecond, MaximumLandingTiltDegrees,
             MaximumContactSpeedMps, WaterDensityKgPerM3, WaterDragCoefficient, WettingDepthM, WaterObservationSeconds];
         double[] coordinates = [TargetLatitudeDegrees, TargetLongitudeDegrees, MinimumWaterLatitudeDegrees,
@@ -52,6 +54,8 @@ public sealed class Flight14BoosterReturnDefinition
             || !double.IsFinite(BoostbackThrottle) || BoostbackThrottle <= 0 || BoostbackThrottle > 1
             || !double.IsFinite(MinimumFlipAlignment) || MinimumFlipAlignment <= 0 || MinimumFlipAlignment >= 1
             || !double.IsFinite(LowestPointYM) || LowestPointYM >= 0 || MaximumLandingTiltDegrees >= 45
+            || !double.IsFinite(LandingBrakingMargin) || LandingBrakingMargin < 1 || LandingBrakingMargin > 2
+            || EstimatedCoastApogeeM <= LandingArmAltitudeM
             || TargetContactSpeedMps >= MaximumContactSpeedMps
             || MinimumWaterLatitudeDegrees < -90 || MaximumWaterLatitudeDegrees > 90
             || MinimumWaterLongitudeDegrees < -180 || MaximumWaterLongitudeDegrees > 180

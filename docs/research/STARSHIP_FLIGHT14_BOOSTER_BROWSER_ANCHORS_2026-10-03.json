@@ -10,9 +10,26 @@
     "The right-hand SPEED instrument belongs to Starship and is not booster speed.",
     "A 0.0 km display does not certify water contact or shutdown.",
     "Engine-board brightness is qualitative; exact counts are not assigned from blurred frames.",
-    "Captures remain in an ignored local evidence directory; hashes identify these browser screenshots, not the previously researched downloaded video track."
+    "Captures remain in an ignored local evidence directory; hashes identify these browser screenshots, not the previously researched downloaded video track.",
+    "Only explicitly labelled left-hand booster speed readings are transcribed. Display rounding, reference frame and feed latency are unknown; they are not exact velocity samples."
   ],
   "anchors": [
+    {
+      "video_seconds": 263.585509,
+      "broadcast_met_seconds": 248,
+      "booster_altitude_display_km": 98.8,
+      "booster_speed_display_kmh": 1010,
+      "capture_path": "exports/flight14-booster-calibration/reference-video-263.jpg",
+      "capture_sha256": "22dd50284a5e95c35ef7ab444bd190e99c1581a08302404e7891cf0ed622becf"
+    },
+    {
+      "video_seconds": 323.585509,
+      "broadcast_met_seconds": 308,
+      "booster_altitude_display_km": 78.5,
+      "booster_speed_display_kmh": 2510,
+      "capture_path": "exports/flight14-booster-calibration/reference-video-323.jpg",
+      "capture_sha256": "9d5da36304eaf202c5686697258b3b7c81036b20751a2e454cca2da38b50d844"
+    },
     {
       "video_seconds": 408.473387,
       "broadcast_met_seconds": 393,

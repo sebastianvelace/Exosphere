@@ -351,7 +351,7 @@ public sealed class FlightHudPresenter
         bool trajectoryWarningActive = activeFlight
             && impactTrajectory
             && !IsControlledDescentPhase(phase);
-        SetLatch("TRAJECTORY", trajectoryWarningActive, !impactTrajectory);
+        SetLatch("TRAJECTORY", trajectoryWarningActive, !impactTrajectory || IsControlledDescentPhase(phase));
         if (_latchedAlerts.Contains("TRAJECTORY"))
         {
             // An osculating orbit assumes thrust stops now. Below-surface periapsis

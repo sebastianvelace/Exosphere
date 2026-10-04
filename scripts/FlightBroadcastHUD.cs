@@ -25,6 +25,7 @@ public partial class FlightBroadcastHUD : Control
     private bool _starship;
     private (string Label, string Event)[] _milestones = Milestones;
     private static readonly Color Dim = new(0.46f, 0.47f, 0.49f);
+    private static readonly Color Readout = new(0.78f, 0.79f, 0.81f);
     private static readonly Color Track = new(0.22f, 0.23f, 0.24f);
     private static readonly (string Label, string Event)[] Milestones =
     {
@@ -200,8 +201,8 @@ public partial class FlightBroadcastHUD : Control
         Text(clock, new Vector2(width * 0.5f, 95), 36, Colors.White, mono: true);
         Text(_vehicleLabel, new Vector2(width * 0.5f, 117), 13, Dim, maxWidth: width - 680);
         string orbit = s.IsImpactTrajectory ? "PE IMPACT" : $"PE {Distance(s.PeriapsisAltitudeM)}";
-        Text($"ALT {Distance(s.AltitudeM)}   ·   VERT {s.VerticalSpeedMps:+0;−0;0} M/S   ·   THR {s.Throttle:P0}   ·   TWR {s.ThrustToWeightRatio:0.00}",
-            new Vector2(width * 0.5f, 147), 11, Dim, mono: true);
+        Text($"ALT {Distance(s.AltitudeM)}   ·   VERT {s.VerticalSpeedMps:+0;−0;0} M/S   ·   THR {s.Throttle * 100:0}%   ·   TWR {s.ThrustToWeightRatio:0.00}",
+            new Vector2(width * 0.5f, 147), 12, Readout, mono: true);
         Text($"AP {Distance(s.ApoapsisAltitudeM)}   ·   {orbit}", new Vector2(width * 0.5f, 165), 10, Dim, mono: true);
         DrawGauge(new Vector2(width - 222, 90), "SURFACE SPEED", $"{s.SurfaceSpeedMps * 3.6:0}", "KM/H",
             (float)System.Math.Clamp(s.SurfaceSpeedMps / 8000.0, 0, 1));
@@ -267,6 +268,7 @@ public partial class FlightBroadcastHUD : Control
         ["left_ids"] = (_leftBoard?.Engines.Select(e => e.Id) ?? Array.Empty<string>()).ToArray(),
         ["right_ids"] = (_rightBoard?.Engines.Select(e => e.Id) ?? Array.Empty<string>()).ToArray(),
         ["stage_count"] = _boards.Count,
+        ["commanded_throttle"] = _snapshot?.Throttle ?? 0,
     };
 
     private void DrawEngine(Vector2 point, string id, float radius)

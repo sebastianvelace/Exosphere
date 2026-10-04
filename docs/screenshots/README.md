@@ -60,20 +60,32 @@ in `exports/flight14-water-motion-review/`. These ignored directories are review
 artifacts; temporary scripts/autoloads are not part of the shipped game.
 The published PNG checksums are in [manifest.json](manifest.json).
 
-## Independent Super Heavy return addition
+## Independent Super Heavy return refresh
 
 `booster-return.png` is an unedited 1280 × 800 production framebuffer captured on
-2026-10-03 from the working tree based on `91dd7b7`, including the independent
-booster implementation committed with this gallery addition. The original six
-images above keep their source revision and provenance. This capture uses the
-IntegratedGpu profile with software OpenGL Compatibility under Xvfb. It shows
-water entry after continuous simulation from the original loaded launch stack;
-it is not a seeded terminal scene or a reconstruction of the flown trajectory.
+2026-10-03 from the working tree based on `a2d6ce3`, including this increment's
+boostback/landing calibration and HUD correction. The original six images above
+retain their source revision and provenance. This frame replaces only the earlier
+booster addition; its prior sequence remains local evidence in
+`exports/flight14-booster-return-review/`.
 
-The completed seven-frame sequence witnesses boostback, coast, ignition,
-three-engine braking, contact, abstracted FTS retirement, and return of camera/HUD
-to the continuing Starship. Landing uses requested 3x warp and water observation
-1x; production physics retains whole 20 ms steps. Local capture scripts, console
-log and hashes are in `exports/flight14-booster-return-review/`. The timing,
-protected fuel budget, distant surface silhouette, cloud spacing and near-water
-visual fidelity remain bounded as described in [the booster audit](../audits/flight14_booster_return_2026-10-03.md).
+The IntegratedGpu preset uses software OpenGL Compatibility under Xvfb. The
+frame is at T+418.84 s, shortly after continuously simulated water contact;
+it is not a seeded terminal scene or the exact transition witness. Engine
+shutdown is commanded and the sealed-hull water response has already begun.
+
+The seven-frame sequence captures boostback (THR 60%), coast with the stale
+impact alert cleared, eleven-engine ignition, three delivered landing engines,
+water observation, abstracted FTS retirement and camera/HUD return to the
+continuing Starship. Landing uses requested 3x warp and water observation 1x;
+whole 20 ms physics steps remain authoritative.
+
+Local console log, source-file hashes, screenshot hashes and temporary helper
+backups are in `exports/flight14-booster-calibration/`. The helper scripts were
+removed after capture; `project.godot` was never modified. Gallery SHA-256:
+`db90f31538bdb5ab9b4f6a96b01adc95297c4c6a05bbd67f94751f680d24c7d3`.
+
+The timing and height improvement does not establish exact flown targeting,
+header inventory, engine-transition timing or ocean appearance. Distant surface
+silhouette, cloud spacing and water spray remain visual limitations. See
+[the calibration audit](../audits/flight14_booster_calibration_2026-10-03.md).

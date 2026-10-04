@@ -6,6 +6,7 @@ using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Persistence;
+using Exosphere.Simulation.Presentation;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -30,6 +31,9 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         double previousFuel = part.LiquidFuel+part.Oxidizer;
         var deliveredLandingCounts = new HashSet<int>();
         int minimumSelected = 11;
+        double maximumAltitude = 0, deliveredThreeEngineSeconds = 0;
+        bool observedBoostbackThrottle = false;
+        var presenter = new FlightHudPresenter();
         for (int step = 0; step < 100000 && run.Controller.Phase != Flight14LaunchPhase.Blocked
             && !(run.Controller.Phase == Flight14LaunchPhase.OrbitReady && controller.IsStopped); step++)
         {
@@ -38,6 +42,17 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
             Assert.False(run.Ship.IsDestroyed);
             Assert.True(part.LiquidFuel+part.Oxidizer <= previousFuel+1e-6);
             previousFuel = part.LiquidFuel+part.Oxidizer;
+            if (controller.Booster is { } observed && !controller.IsStopped)
+                maximumAltitude = System.Math.Max(maximumAltitude, observed.GetAltitude(run.Earth));
+            if (!observedBoostbackThrottle && controller.HasDeliveredBoostbackEngines
+                && controller.Phase == Flight14BoosterReturnPhase.Boostback)
+            {
+                var snapshot = presenter.Capture(universe, controller.Booster!, "BOOSTBACK", FlightHudViewMode.Exterior);
+                Assert.Equal(controller.Booster!.Id, snapshot.VesselId);
+                Assert.Equal(controller.Booster.Throttle, snapshot.Throttle);
+                Assert.InRange(snapshot.Throttle, 0.4, 1);
+                observedBoostbackThrottle = true;
+            }
             if (controller.Phase is Flight14BoosterReturnPhase.Flip or Flight14BoosterReturnPhase.Boostback or Flight14BoosterReturnPhase.Coast)
             {
                 Assert.InRange(part.LiquidFuel, reserveLF-1e-6, double.MaxValue);
@@ -53,6 +68,7 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
                 minimumSelected = part.SelectedEngineCount;
                 int running = part.GetEngineTelemetry(controller.Booster!.GetAmbientPressure(run.Earth)).Count(e => e.State == Exosphere.Simulation.Propulsion.EngineLifecycleState.Running && e.ThrustN > 1);
                 if (running == part.SelectedEngineCount) deliveredLandingCounts.Add(running);
+                if (running == 3) deliveredThreeEngineSeconds += 0.02;
             }
         }
         Assert.Equal(Flight14LaunchPhase.OrbitReady, run.Controller.Phase);
@@ -71,6 +87,12 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         var contact = Assert.Single(controller.Events.Where(e => e.Phase == Flight14BoosterReturnPhase.WaterEntry));
         Assert.InRange(contact.AirspeedMps, 0, 8);
         Assert.True(contact.VerticalSpeedMps < 0);
+        // Broad engineering regression envelopes, not measured Flight 14 tolerances.
+        // Reject the former 207 km apogee / T+582 return and instant final relight.
+        Assert.InRange(maximumAltitude, 80_000, 115_000);
+        Assert.InRange(contact.MissionElapsedSeconds, 380, 460);
+        Assert.InRange(deliveredThreeEngineSeconds, 1, 30);
+        Assert.True(observedBoostbackThrottle);
         Assert.InRange(contact.LatitudeDegrees, 23, 29); Assert.InRange(contact.LongitudeDegrees, -97.25, -90);
         Assert.True(controller.Booster.WaterMotionEnabled);
         Assert.NotNull(controller.Booster.LastWaterMotionTelemetry);
@@ -83,6 +105,22 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         output.WriteLine($"Booster: boostback cutoff T+{cutoff.MissionElapsedSeconds:F2}; water T+{contact.MissionElapsedSeconds:F2}; "
             + $"speed={contact.AirspeedMps:F3}m/s latitude={contact.LatitudeDegrees:F6} longitude={contact.LongitudeDegrees:F6}; "
             + $"ship orbit T+{run.Controller.OrbitElapsedSeconds:F2}");
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 1.3)]
+    [InlineData(double.PositiveInfinity, 1.3)]
+    [InlineData(6000, 1.3)]
+    [InlineData(102000, double.NaN)]
+    [InlineData(102000, 0.99)]
+    [InlineData(102000, 2.01)]
+    public void ReturnEstimateRejectsInvalidApogeeAndBrakingEnvelope(double apogee, double margin)
+    {
+        var definition = Flight14BoosterReturnDefinition.LoadFromJson(
+            Path.Combine(DataDirectory(), "flight_profiles/starship_flight14_booster_return_estimate.json"));
+        definition.EstimatedCoastApogeeM = apogee;
+        definition.LandingBrakingMargin = margin;
+        Assert.Throws<InvalidDataException>(() => definition.Validate());
     }
 
     [Fact]

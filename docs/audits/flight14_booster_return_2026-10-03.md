@@ -1,5 +1,7 @@
 # Flight 14 independent Super Heavy return — 2026-10-03
 
+This audit records the initial implementation. [The subsequent guidance calibration](flight14_booster_calibration_2026-10-03.md) supersedes its 207 km / T+582 s trajectory results.
+
 Status: playable engineering estimate. Engine sequence and recovery mode are source-backed; the flown trajectory and exact event clocks are not reconstructed.
 
 ## Primary reference and interpretation

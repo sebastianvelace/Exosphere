@@ -180,7 +180,7 @@ public sealed class Flight14BoosterReturnController : IPhysicsStepController
         // stop, excess propellant consumption and a climb before water contact.
         double aerodynamicUpForce = booster.ComputeDrag(_body).Dot(up);
         double forceWithoutAerodynamics = booster.TotalMass*(gravity
-            + System.Math.Max(0, vertical*vertical-_definition.TargetContactSpeedMps*_definition.TargetContactSpeedMps)
+            + _definition.LandingBrakingMargin*System.Math.Max(0, vertical*vertical-_definition.TargetContactSpeedMps*_definition.TargetContactSpeedMps)
                 /(2*System.Math.Max(1, clearance)))/alignment;
         double force = System.Math.Max(0, forceWithoutAerodynamics-aerodynamicUpForce/alignment);
         // One continuous ignition, monotone 11 -> 5 -> 3. Require delivered thrust
@@ -202,7 +202,12 @@ public sealed class Flight14BoosterReturnController : IPhysicsStepController
         booster.Throttle = engine.ApplyThrottleFloor(System.Math.Max(engine.Definition.MinThrottle, force/System.Math.Max(1, rated)));
         double tiltLimit = System.Math.Tan(_definition.MaximumLandingTiltDegrees*MathUtils.DEG_TO_RAD)
             *System.Math.Clamp(clearance/100, 0, 1);
-        double tilt = System.Math.Min(tiltLimit, _definition.HorizontalDampingPerSecond*horizontal.Magnitude/gravity);
+        // Lateral damping acts through engine thrust, not gravity. Using g
+        // here overcommands tilt during the high-thrust braking segment and
+        // can reverse the horizontal error faster than attitude can follow.
+        double thrustAcceleration = System.Math.Max(gravity, rated*booster.Throttle/booster.TotalMass);
+        double tilt = System.Math.Min(tiltLimit,
+            _definition.HorizontalDampingPerSecond*horizontal.Magnitude/thrustAcceleration);
         Aim((up-horizontal.Normalized*tilt).Normalized);
     }
 
@@ -237,7 +242,19 @@ public sealed class Flight14BoosterReturnController : IPhysicsStepController
             desiredHorizontal = (horizontalOffset-horizontal*burnTime*0.5)/(coastTime+burnTime*0.5);
             ratio = System.Math.Min(0.95, (desiredHorizontal-horizontal).Magnitude/System.Math.Max(1, deltaV));
         }
-        var aim = ((desiredHorizontal-horizontal).Normalized*ratio+up*System.Math.Sqrt(1-ratio*ratio)).Normalized;
+        // Consuming the main feed does not justify converting every unused
+        // horizontal delta-v into altitude. Bound the upward impulse by an
+        // estimated coast apogee, using finite-burn travel and gravity losses.
+        // This changes an attitude command, never the propagated flight state.
+        double halfGravityBurn = 0.5*gravity*burnTime;
+        double targetEndVertical = -halfGravityBurn+System.Math.Sqrt(System.Math.Max(0,
+            halfGravityBurn*halfGravityBurn+2*gravity*(_definition.EstimatedCoastApogeeM
+                -altitude-0.5*vertical*burnTime)));
+        double maximumUpFraction = System.Math.Clamp(
+            (targetEndVertical-vertical+gravity*burnTime)/System.Math.Max(1, deltaV), 0, 1);
+        double upFraction = System.Math.Min(System.Math.Sqrt(1-ratio*ratio), maximumUpFraction);
+        var aim = ((desiredHorizontal-horizontal).Normalized*System.Math.Sqrt(1-upFraction*upFraction)
+            +up*upFraction).Normalized;
         if (aim.MagnitudeSquared < 1e-12) aim = up;
         return aim;
     }

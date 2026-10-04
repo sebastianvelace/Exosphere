@@ -48,6 +48,7 @@ internal static class Flight14BoosterProbe
                 propellantKg = engine.LiquidFuel+engine.Oxidizer,
                 protectedLandingPropellantKg = engine.ReservedLiquidFuel+engine.ReservedOxidizer,
                 availableFeedOxidizerKg = engine.AvailableOxidizer,
+                commandedThrottle = vessel.Throttle,
                 selectedEngines = engine.SelectedEngineCount,
                 runningEngines = engine.GetEngineTelemetry(vessel.GetAmbientPressure(run.Earth)).Count(e => e.State == Exosphere.Simulation.Propulsion.EngineLifecycleState.Running && e.ThrustN > 1),
                 angularRateRadPerSecond = vessel.AngularVelocity.Magnitude,

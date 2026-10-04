@@ -43,6 +43,22 @@ public sealed class FlightHudPresenterTests
             Assert.Single(descending.Alerts, a => a.Code == "TRAJECTORY").Severity);
     }
 
+    [Fact]
+    public void ControlledReturnClearsEarlierImpactLatchAndUncontrolledCoastWarnsAgain()
+    {
+        var (universe, body, vessel, _) = CreateVehicle();
+        vessel.Position = body.GetPositionAlongDirection(Vector3d.Right, 8_000.0);
+        vessel.Velocity = body.Velocity + new Vector3d(-100.0, 0.0, 300.0);
+        var presenter = new FlightHudPresenter();
+        var uncontrolled = presenter.Capture(universe, vessel, "COAST", FlightHudViewMode.Exterior);
+        Assert.Contains(uncontrolled.Alerts, a => a.Code == "TRAJECTORY");
+        var controlled = presenter.Capture(universe, vessel, "AERO_DESCENT", FlightHudViewMode.Exterior);
+        Assert.True(controlled.IsImpactTrajectory);
+        Assert.DoesNotContain(controlled.Alerts, a => a.Code == "TRAJECTORY");
+        var relinquished = presenter.Capture(universe, vessel, "COAST", FlightHudViewMode.Exterior);
+        Assert.Contains(relinquished.Alerts, a => a.Code == "TRAJECTORY");
+    }
+
     [Theory]
     [InlineData("ENTRY")]
     [InlineData("PEAK_HEATING")]
