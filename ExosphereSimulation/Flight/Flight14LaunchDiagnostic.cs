@@ -17,6 +17,21 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     public Flight14ReturnController? ReturnController { get; private set; }
     public Flight14DescentController? DescentController { get; private set; }
     public Flight14PoweredReturnController? PoweredReturnController { get; private set; }
+    public Flight14BoosterReturnController? BoosterReturnController { get; private set; }
+
+    /// <summary>Continue both original stages, retaining Starship as the physics owner.</summary>
+    public static Flight14LaunchDiagnostic CreateWithBoosterReturn(string dataDirectory, Universe? universe = null)
+    {
+        var run = CreateWithPoweredReturn(dataDirectory, universe, continueToWaterContact: true);
+        var definition = Flight14BoosterReturnDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_booster_return_estimate.json"));
+        var reference = Flight14MissionDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_2026.json"));
+        run.BoosterReturnController = new(run.Ship, run.Earth, run.Controller, definition, reference);
+        run.Universe.PhysicsStepController = new Flight14IndependentReturnController(
+            run.PoweredReturnController!, run.BoosterReturnController);
+        return run;
+    }
 
     /// <summary>Propagate the same loaded carrier through its physical flip and terminal burn.</summary>
     public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory, Universe? universe = null, bool continueToWaterContact = false)

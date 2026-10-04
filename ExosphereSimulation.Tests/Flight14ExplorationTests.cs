@@ -21,7 +21,7 @@ public sealed class Flight14ExplorationTests
         var earth = universe.GetBody("earth")!;
         var position = earth.Position; var velocity = earth.Velocity; var elements = earth.OrbitalElements;
         int bodies = universe.Bodies.Count;
-        var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory(), universe);
+        var run = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory(), universe);
         Assert.Same(universe, run.Universe);
         Assert.Same(earth, run.Earth);
         Assert.Equal(bodies, universe.Bodies.Count);
@@ -31,7 +31,7 @@ public sealed class Flight14ExplorationTests
         Assert.True(velocity.Magnitude > 10000);
         Assert.InRange(run.Ship.GetSurfaceVelocity(earth).Magnitude, 0, 0.01);
         Assert.Equal(26, run.Ship.Parts.Parts.Count(p => p.Definition.HasVehicleRole("payload")));
-        Assert.Same(run.PoweredReturnController, universe.PhysicsStepController);
+        Assert.IsType<Flight14IndependentReturnController>(universe.PhysicsStepController);
         Assert.Throws<InvalidOperationException>(() => Flight14LaunchDiagnostic.Create(DataDirectory(), universe));
     }
 
@@ -42,8 +42,8 @@ public sealed class Flight14ExplorationTests
     [InlineData(240, 200)]
     public void WarpAndRenderCadenceMatchWholeStepIgnitionAndAscent(int fps, int warp)
     {
-        var baseline = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory());
-        var accelerated = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory());
+        var baseline = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory());
+        var accelerated = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory());
         var preview = new Flight14Exploration(accelerated);
         for (int i = 0; i < 1000; i++) baseline.Universe.Tick(0.02);
         accelerated.Universe.TimeScale = warp;
@@ -59,7 +59,7 @@ public sealed class Flight14ExplorationTests
     [Fact]
     public void PauseAndCpuBudgetDoNotCommitOrQueueUnboundedSimulationTime()
     {
-        var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory());
+        var run = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory());
         var preview = new Flight14Exploration(run) { IsPaused = true };
         run.Universe.TimeScale = 200;
         Assert.Equal(0, preview.AdvanceFrame(30));
@@ -76,7 +76,7 @@ public sealed class Flight14ExplorationTests
     public void MovingSolarSystemPreviewPropagatesLoadedShipToWaterEntryAndFreezes()
     {
         var universe = Universe.LoadFromDataDirectory(DataDirectory());
-        var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(DataDirectory(), universe, continueToWaterContact: true);
+        var run = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory(), universe);
         var preview = new Flight14Exploration(run);
         universe.TimeScale = 200;
         var shipId = run.Ship.Id;
@@ -110,5 +110,7 @@ public sealed class Flight14ExplorationTests
         Assert.Equal(position, run.Ship.Position); Assert.Equal(velocity, run.Ship.Velocity);
         Assert.Equal(mass, run.Ship.TotalMass);
         Assert.False(run.Ship.IsAttemptingTowerCatch);
+        Assert.Equal(Flight14BoosterReturnPhase.ContactObserved, run.BoosterReturnController!.Phase);
+        Assert.True(run.BoosterReturnController.FlightTerminationTriggered);
     }
 }

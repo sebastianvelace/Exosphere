@@ -9,6 +9,17 @@ public sealed class Flight14Exploration(Flight14LaunchDiagnostic run)
 {
     public const string ProfileId = "starship-flight14-exploration";
     public Flight14LaunchDiagnostic Run { get; } = run;
+    public bool IsObservingBooster { get; private set; }
+    private bool _boosterBoundaryPaused;
+    public Vessel ObservedVessel => IsObservingBooster && Run.BoosterReturnController?.Booster is { } booster ? booster : Run.Ship;
+    public string ObservedPhase => IsObservingBooster ? Run.BoosterReturnController?.Phase.ToString() ?? "WaitingForSeparation" : Phase;
+    public bool ObserveBooster(bool observe)
+    {
+        if (observe && (Run.BoosterReturnController?.Booster == null
+            || !IsObservingBooster && Run.BoosterReturnController.Booster.IsDestroyed)) return false;
+        if (!observe && _boosterBoundaryPaused) { IsPaused = false; _boosterBoundaryPaused = false; }
+        IsObservingBooster = observe; return true;
+    }
     public bool IsPaused { get; set; }
     public bool IsTerminal => Run.PoweredReturnController?.Landing?.Phase is Flight14LandingPhase.TerminalReached or Flight14LandingPhase.SplashdownReached;
     public string? BlockReason => Run.PoweredReturnController?.BlockReason;
@@ -45,6 +56,10 @@ public sealed class Flight14Exploration(Flight14LaunchDiagnostic run)
             {
                 universe.Tick(period);
                 pending -= period;
+                if (IsObservingBooster && Run.BoosterReturnController is { IsStopped: true })
+                {
+                    IsPaused = true; _boosterBoundaryPaused = true; pending = 0; break;
+                }
             }
         }
         finally { universe.TimeScale = requestedWarp; }
