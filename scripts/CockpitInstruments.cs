@@ -169,7 +169,7 @@ public partial class ScreenPanel : Control
             snapshot.VerticalSpeedMps >= 0 ? White : Amber,
             32);
         Label(300, 380, "G-LOAD");
-        Text(300, 425, $"{snapshot.ProperAccelerationG:F2} g",
+        Text(300, 425, double.IsFinite(snapshot.ProperAccelerationG) ? $"{snapshot.ProperAccelerationG:F2} g" : "—",
             snapshot.ProperAccelerationG > 4.0 ? Amber : White, 32);
     }
 
@@ -181,23 +181,27 @@ public partial class ScreenPanel : Control
         double pitch = snapshot.VehiclePitchDeg;
 
         // Sky/ground split shifted by pitch — two flat tones, white horizon.
-        float ph = (float)(pitch / 90.0) * r;
         DrawCircle(c, r, new Color(0.145f, 0.155f, 0.170f));
-        DrawRect(new Rect2(c.X - r, c.Y - ph, 2 * r, r + ph + 4),
-            new Color(0.048f, 0.051f, 0.055f));
-        DrawLine(new Vector2(c.X - r, c.Y - ph), new Vector2(c.X + r, c.Y - ph), White, 2f);
+        if (double.IsFinite(pitch))
+        {
+            float ph = (float)(pitch / 90.0) * r;
+            DrawRect(new Rect2(c.X - r, c.Y - ph, 2 * r, r + ph + 4),
+                new Color(0.048f, 0.051f, 0.055f));
+            DrawLine(new Vector2(c.X - r, c.Y - ph), new Vector2(c.X + r, c.Y - ph), White, 2f);
+        }
+        else Text(150, 320, "NO ATTITUDE", Dim, 22);
         DrawArc(c, r, 0, Mathf.Tau, 48, InterfaceTheme.EdgeStrong, 1f);
         // Fixed nose reticle.
         DrawLine(c - new Vector2(28, 0), c - new Vector2(8, 0), White, 2f);
         DrawLine(c + new Vector2(8, 0), c + new Vector2(28, 0), White, 2f);
 
         Label(20, 460, "PITCH");
-        Text(110, 460, $"{pitch:+0;-0}°", White, 24);
+        Text(110, 460, FormatDegrees(pitch, signed: true), White, 24);
         Label(230, 460, "AOA");
         Text(300, 460, FormatDegrees(snapshot.AngleOfAttackDeg, signed: false), White, 24);
         Label(20, 496, "BANK");
         Text(110, 496, FormatDegrees(snapshot.AerodynamicBankDeg, signed: true), White, 24);
-        if (snapshot.SurfaceSpeedMps > 1)
+        if (snapshot.SurfaceSpeedMps > 1 && double.IsFinite(snapshot.FlightPathAngleDeg))
             Text(300, 496, "PROGRADE", Green, 18);
     }
 
@@ -218,11 +222,11 @@ public partial class ScreenPanel : Control
             snapshot.ThrustToWeightRatio >= 1 ? White : Amber,
             22);
         Label(20, 220, "STAGE Δv");
-        Text(250, 220, $"{snapshot.StageDeltaVMps:N0} m/s", White, 22);
+        Text(250, 220, double.IsFinite(snapshot.StageDeltaVMps) ? $"{snapshot.StageDeltaVMps:N0} m/s" : "—", White, 22);
 
         Heading(20, 272, "ENTRY", 460);
         Label(20, 312, "DYN q");
-        Text(250, 312, $"{snapshot.DynamicPressurePa / 1000:N1} kPa", White, 22);
+        Text(250, 312, double.IsFinite(snapshot.DynamicPressurePa) ? $"{snapshot.DynamicPressurePa / 1000:N1} kPa" : "—", White, 22);
         if (snapshot.DynamicPressurePa > 28_000)
             Text(400, 312, "MAX-Q", Amber, 20);
         Label(20, 350, "HEAT FLUX");

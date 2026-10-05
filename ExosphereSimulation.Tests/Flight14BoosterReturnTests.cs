@@ -31,7 +31,8 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         double previousFuel = part.LiquidFuel+part.Oxidizer;
         var deliveredLandingCounts = new HashSet<int>();
         int minimumSelected = 11;
-        double maximumAltitude = 0, deliveredThreeEngineSeconds = 0;
+        double maximumAltitude = 0, deliveredThreeEngineSeconds = 0, previousDeltaVProgress = 0;
+        double previousElevation = 90;
         bool observedBoostbackThrottle = false;
         var presenter = new FlightHudPresenter();
         for (int step = 0; step < 100000 && run.Controller.Phase != Flight14LaunchPhase.Blocked
@@ -55,6 +56,14 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
             }
             if (controller.Phase is Flight14BoosterReturnPhase.Flip or Flight14BoosterReturnPhase.Boostback or Flight14BoosterReturnPhase.Coast)
             {
+                if (controller.Phase is Flight14BoosterReturnPhase.Flip or Flight14BoosterReturnPhase.Boostback)
+                {
+                    Assert.InRange(controller.BoostbackDeltaVProgress, previousDeltaVProgress, 1);
+                    Assert.InRange(controller.BoostbackElevationDegrees, -78, previousElevation);
+                    previousDeltaVProgress = controller.BoostbackDeltaVProgress;
+                    previousElevation = controller.BoostbackElevationDegrees;
+                    Assert.True(double.IsFinite(controller.Booster!.PitchYawRoll.Magnitude));
+                }
                 Assert.InRange(part.LiquidFuel, reserveLF-1e-6, double.MaxValue);
                 Assert.InRange(part.Oxidizer, reserveOx-1e-6, double.MaxValue);
                 Assert.Equal(reserveLF, part.ReservedLiquidFuel); Assert.Equal(reserveOx, part.ReservedOxidizer);
@@ -82,6 +91,7 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         Assert.Contains(11, deliveredLandingCounts); Assert.Contains(5, deliveredLandingCounts); Assert.Contains(3, deliveredLandingCounts);
         var cutoff = Assert.Single(controller.Events.Where(e => e.Phase == Flight14BoosterReturnPhase.Coast));
         Assert.InRange(cutoff.MainOxidizerKg, 0, 1e-6);
+        Assert.InRange(controller.BoostbackDeltaVProgress, 0.99, 1);
         // LOX exhaustion can leave unmatched fuel in the inherited tank mixture.
         Assert.InRange(cutoff.PropellantKg, reserveLF+reserveOx-1e-6, reserveLF+reserveOx+1000);
         var contact = Assert.Single(controller.Events.Where(e => e.Phase == Flight14BoosterReturnPhase.WaterEntry));
@@ -100,6 +110,32 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         Assert.True(controller.FlightTerminationTriggered);
         Assert.Equal(VesselDestructionCause.FlightTermination, controller.Booster.DestructionCause);
         Assert.Equal(0, controller.Booster.Throttle);
+        var terminal = controller.Events.Last();
+        var terminalSnapshot = presenter.CaptureRetiredBooster(controller, run.Earth.Id,
+            run.Controller.LiftoffEpoch, universe.TimeScale, FlightHudViewMode.Exterior);
+        Assert.Equal(terminal.AltitudeM, terminalSnapshot.AltitudeM);
+        Assert.Equal(terminal.AirspeedMps, terminalSnapshot.SurfaceSpeedMps);
+        Assert.Equal(terminal.VerticalSpeedMps, terminalSnapshot.VerticalSpeedMps);
+        Assert.Equal(run.Controller.LiftoffEpoch + terminal.MissionElapsedSeconds, terminalSnapshot.MissionTimeS);
+        Assert.Null(terminalSnapshot.ApoapsisAltitudeM); Assert.Null(terminalSnapshot.PeriapsisAltitudeM);
+        Assert.True(double.IsNaN(terminalSnapshot.ProperAccelerationG));
+        Assert.True(double.IsNaN(terminalSnapshot.DynamicPressurePa));
+        Assert.True(double.IsNaN(terminalSnapshot.VehiclePitchDeg));
+        Assert.True(double.IsNaN(terminalSnapshot.HeadingDeg));
+        Assert.False(terminalSnapshot.HasDownrangeReference);
+        Assert.Equal(33, terminalSnapshot.NominalEngineCount);
+        Assert.Empty(terminalSnapshot.Alerts); Assert.Equal(0, terminalSnapshot.ActiveEngineCount);
+        // Earth has continued to propagate all the way to the ship's orbital boundary.
+        // A wreck's old inertial position must never masquerade as a new altitude/orbit.
+        Assert.NotEqual(terminal.AltitudeM, controller.Booster.GetAltitude(run.Earth));
+        var repeated = presenter.CaptureRetiredBooster(controller, run.Earth.Id,
+            run.Controller.LiftoffEpoch, universe.TimeScale, FlightHudViewMode.Cockpit);
+        Assert.Equal(terminalSnapshot.AltitudeM, repeated.AltitudeM);
+        Assert.Equal(terminalSnapshot.SurfaceSpeedMps, repeated.SurfaceSpeedMps);
+        var shipSnapshot = presenter.Capture(universe, run.Ship, "ORBIT", FlightHudViewMode.Exterior);
+        Assert.Equal(run.Ship.Id, shipSnapshot.VesselId);
+        Assert.Equal(run.Ship.GetAltitude(run.Earth), shipSnapshot.AltitudeM);
+        Assert.True(double.IsFinite(shipSnapshot.DynamicPressurePa));
         Assert.False(new Flight14Exploration(run).ObserveBooster(true));
         Assert.Single(part.EngineStates.Where(e => e.FailureCode == "F14_ESTIMATED_ASCENT_OUT"));
         output.WriteLine($"Booster: boostback cutoff T+{cutoff.MissionElapsedSeconds:F2}; water T+{contact.MissionElapsedSeconds:F2}; "
@@ -108,19 +144,74 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData(double.NaN, 1.3)]
-    [InlineData(double.PositiveInfinity, 1.3)]
-    [InlineData(6000, 1.3)]
-    [InlineData(102000, double.NaN)]
-    [InlineData(102000, 0.99)]
-    [InlineData(102000, 2.01)]
-    public void ReturnEstimateRejectsInvalidApogeeAndBrakingEnvelope(double apogee, double margin)
+    [InlineData(double.NaN, -78)]
+    [InlineData(double.PositiveInfinity, -78)]
+    [InlineData(90, -78)]
+    [InlineData(-90, -89)]
+    [InlineData(89, double.NaN)]
+    [InlineData(89, double.NegativeInfinity)]
+    [InlineData(89, -90)]
+    [InlineData(89, 90)]
+    [InlineData(89, 89)]
+    [InlineData(-79, -78)]
+    public void ReturnEstimateRejectsInvalidPitchSweep(double initialElevation, double finalElevation)
     {
         var definition = Flight14BoosterReturnDefinition.LoadFromJson(
             Path.Combine(DataDirectory(), "flight_profiles/starship_flight14_booster_return_estimate.json"));
-        definition.EstimatedCoastApogeeM = apogee;
+        definition.BoostbackInitialElevationDegrees = initialElevation;
+        definition.BoostbackFinalElevationDegrees = finalElevation;
+        Assert.Throws<InvalidDataException>(() => definition.Validate());
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(0.99)]
+    [InlineData(2.01)]
+    public void ReturnEstimateRejectsInvalidBrakingMargin(double margin)
+    {
+        var definition = Flight14BoosterReturnDefinition.LoadFromJson(
+            Path.Combine(DataDirectory(), "flight_profiles/starship_flight14_booster_return_estimate.json"));
         definition.LandingBrakingMargin = margin;
         Assert.Throws<InvalidDataException>(() => definition.Validate());
+    }
+
+    [Fact]
+    public void UnintegratedControlUpdatesCannotAdvancePitchSweepOrFlightState()
+    {
+        var run = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory());
+        var controller = run.BoosterReturnController!;
+        while (!controller.HasDeliveredBoostbackEngines && !controller.IsStopped && run.Universe.CurrentTime < 200)
+            run.Universe.Tick(0.02);
+        Assert.True(controller.HasDeliveredBoostbackEngines);
+        var booster = controller.Booster!;
+        // Synchronize the pre-integration command reference after the last tick.
+        controller.BeforePhysicsStep(run.Universe, 0.02);
+        var position = booster.Position; var velocity = booster.Velocity; var orientation = booster.Orientation;
+        double mass = booster.TotalMass, progress = controller.BoostbackDeltaVProgress, elevation = controller.BoostbackElevationDegrees;
+        for (int i = 0; i < 100; i++) controller.BeforePhysicsStep(run.Universe, 0.02);
+        Assert.Equal(progress, controller.BoostbackDeltaVProgress);
+        Assert.Equal(elevation, controller.BoostbackElevationDegrees);
+        Assert.Equal(mass, booster.TotalMass);
+        Assert.Equal(position, booster.Position); Assert.Equal(velocity, booster.Velocity);
+        Assert.Equal(orientation, booster.Orientation);
+    }
+
+    [Fact]
+    public void ExhaustedMainFeedCannotCreatePitchProgressOrCertifyBoostback()
+    {
+        var run = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory());
+        var controller = run.BoosterReturnController!;
+        while (controller.Booster == null && run.Universe.CurrentTime < 200) run.Universe.Tick(0.02);
+        var engine = controller.Booster!.Parts.Root!;
+        engine.LiquidFuel = engine.ReservedLiquidFuel; engine.Oxidizer = engine.ReservedOxidizer;
+        controller.BeforePhysicsStep(run.Universe, 0.02);
+        Assert.Equal(Flight14BoosterReturnPhase.Blocked, controller.Phase);
+        Assert.Equal("boostback-thrust-not-delivered", controller.BlockReason);
+        Assert.False(controller.HasDeliveredBoostbackEngines);
+        Assert.Equal(0, controller.Booster.Throttle);
+        Assert.True(double.IsFinite(controller.BoostbackDeltaVProgress));
+        Assert.True(double.IsFinite(controller.Booster.PitchYawRoll.Magnitude));
+        Assert.Same(run.Ship, run.Universe.ActiveVessel);
     }
 
     [Fact]
@@ -146,6 +237,8 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         var run = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory());
         var preview = new Flight14Exploration(run);
         Assert.False(preview.ObserveBooster(true));
+        Assert.Throws<InvalidOperationException>(() => new FlightHudPresenter().CaptureRetiredBooster(
+            run.BoosterReturnController!, run.Earth.Id, 0, 1, FlightHudViewMode.Exterior));
         while (run.BoosterReturnController!.Booster == null && run.Universe.CurrentTime < 200) run.Universe.Tick(0.02);
         Assert.True(preview.ObserveBooster(true));
         Assert.Same(run.BoosterReturnController!.Booster, preview.ObservedVessel);

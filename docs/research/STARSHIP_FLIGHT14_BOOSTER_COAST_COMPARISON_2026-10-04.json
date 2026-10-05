@@ -1,0 +1,285 @@
+{
+  "status": "reference-comparison-only",
+  "physics_authority": false,
+  "baseline_revision": "d5cc7bd5e07039a8613c5f6ff14570c4e4f11810",
+  "candidate": "Working-tree coast calibration and terminal presentation fix, included in this report commit. Diagnostic propagation is numerically unchanged by the presentation fix and delta-v naming clarification.",
+  "candidate_source_sha256": {
+    "ExosphereSimulation/Flight/Flight14BoosterReturnController.cs": "4ac16c5b7668de0906d8f0e2889cd50a7dedaf4bcf24337fe1351457f3bdbd34",
+    "ExosphereSimulation/Flight/Flight14BoosterReturnDefinition.cs": "a72f2ba39cdc0fb331c648f0ea241442a4f880d02f3f419853454e414a9c9f65",
+    "data/flight_profiles/starship_flight14_booster_return_estimate.json": "d8898cc1c9359770abc661b421da72542bb7dc9fc3d412cf715e70788f7b0ad6",
+    "ExosphereSimulation/Presentation/FlightHudPresenter.cs": "e84fffffe4b4d726d92faf32d50de7bf59422cf79410a0b71ae13b0dd1baadda",
+    "scripts/HUDController.cs": "2cc7cf12ebf55e9d05051e5a30e518014f8f8ecb7aaf154e6ccddcbb3c03ca8d",
+    "tools/Flight14TrajectoryProbe/Flight14BoosterProbe.cs": "c3bbd798289a7c160ad53c3fde30b6aebeeaa6cbf6526c4fa243334ac35537ac",
+    "scripts/CockpitInstruments.cs": "afbbcd2c423a70cfe85548e8dce64710c1ec174092c0d99ba8f1b57cd66bdb2c",
+    "scripts/AttitudeNavball.cs": "882e140c21aca255e8289cbb5f61df066291de272494c9a544e3d6164e2d575f",
+    "ExosphereSimulation.Tests/Flight14BoosterReturnTests.cs": "fb741b4cb565654d3e8ae94395e7d0bbbe5a9c5dcba48a3f4139a768c0eeb824"
+  },
+  "limitations": [
+    "Residuals compare rounded displays, not measured state or reconstruction tolerances.",
+    "Broadcast altitude datum, speed frame, feed latency and measurement uncertainty are unknown.",
+    "Both speed frames are reported when available; neither is assumed to be the broadcast frame.",
+    "Sample clock tolerance only matches recorded model clocks; it is not reference timing uncertainty.",
+    "Missing samples remain missing. A retired booster state is not extrapolated to a later epoch."
+  ],
+  "baseline_coast": {
+    "missing_samples": 0,
+    "altitude_display_residual_m": {
+      "count": 5,
+      "mean_absolute_residual": 4266.0999687831845,
+      "root_mean_square_residual": 4900.016640176552
+    },
+    "atmosphere_relative_speed_display_residual_kmh": {
+      "count": 5,
+      "mean_absolute_residual": 345.41519585962226,
+      "root_mean_square_residual": 369.55945215226734
+    },
+    "body_centred_inertial_speed_display_residual_kmh": {
+      "count": 0,
+      "mean_absolute_residual": null,
+      "root_mean_square_residual": null
+    }
+  },
+  "candidate_coast": {
+    "missing_samples": 0,
+    "altitude_display_residual_m": {
+      "count": 5,
+      "mean_absolute_residual": 3297.6416670326144,
+      "root_mean_square_residual": 3952.27728712747
+    },
+    "atmosphere_relative_speed_display_residual_kmh": {
+      "count": 5,
+      "mean_absolute_residual": 211.23619175307394,
+      "root_mean_square_residual": 234.41243066807436
+    },
+    "body_centred_inertial_speed_display_residual_kmh": {
+      "count": 5,
+      "mean_absolute_residual": 1101.650320366593,
+      "root_mean_square_residual": 1143.2957197611488
+    }
+  },
+  "common_terminal_altitude_comparison": {
+    "met_seconds": [
+      393,
+      398,
+      403,
+      408,
+      413
+    ],
+    "baseline": {
+      "count": 5,
+      "rms_m": 2811.329201106192
+    },
+    "candidate": {
+      "count": 5,
+      "rms_m": 1268.6068938367277
+    }
+  },
+  "candidate_anchors": [
+    {
+      "broadcast_met_seconds": 200,
+      "reference_altitude_display_km": 90.3,
+      "reference_speed_display_kmh": 1691,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "7faa57a758e63099a9b0cf86067440d06d9db0c381cf64f1eec1670934fae4d8",
+      "segment": "coast",
+      "model_sample_clock_residual_seconds": 2.9956481739645824e-11,
+      "status": "sampled",
+      "model_phase": "Coast",
+      "model_geodetic_altitude_m": 89925.80052423105,
+      "altitude_display_residual_m": -374.19947576895356,
+      "model_atmosphere_relative_speed_kmh": 1888.7332317892703,
+      "model_body_centred_inertial_speed_kmh": 2908.0596060765033,
+      "atmosphere_relative_speed_display_residual_kmh": 197.73323178927035,
+      "body_centred_inertial_speed_display_residual_kmh": 1217.0596060765033
+    },
+    {
+      "broadcast_met_seconds": 240,
+      "reference_altitude_display_km": 98.9,
+      "reference_speed_display_kmh": 977,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "96ffa153673c8bdf74ccf31667d92f2ff07e12bf2c75d01dcba5b32cc4414926",
+      "segment": "coast",
+      "model_sample_clock_residual_seconds": 5.042011252953671e-11,
+      "status": "sampled",
+      "model_phase": "Coast",
+      "model_geodetic_altitude_m": 101006.30750946235,
+      "altitude_display_residual_m": 2106.307509462349,
+      "model_atmosphere_relative_speed_kmh": 915.514780351239,
+      "model_body_centred_inertial_speed_kmh": 2391.3882993027914,
+      "atmosphere_relative_speed_display_residual_kmh": -61.48521964876102,
+      "body_centred_inertial_speed_display_residual_kmh": 1414.3882993027914
+    },
+    {
+      "broadcast_met_seconds": 248,
+      "reference_altitude_display_km": 98.8,
+      "reference_speed_display_kmh": 1010,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "22dd50284a5e95c35ef7ab444bd190e99c1581a08302404e7891cf0ed622becf",
+      "segment": "coast",
+      "model_sample_clock_residual_seconds": 5.4512838687514886e-11,
+      "status": "sampled",
+      "model_phase": "Coast",
+      "model_geodetic_altitude_m": 101407.50611167587,
+      "altitude_display_residual_m": 2607.5061116758734,
+      "model_atmosphere_relative_speed_kmh": 859.9643089879387,
+      "model_body_centred_inertial_speed_kmh": 2370.5788478374834,
+      "atmosphere_relative_speed_display_residual_kmh": -150.0356910120613,
+      "body_centred_inertial_speed_display_residual_kmh": 1360.5788478374834
+    },
+    {
+      "broadcast_met_seconds": 280,
+      "reference_altitude_display_km": 92.2,
+      "reference_speed_display_kmh": 1670,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "aa1b99de261805947e8bf86effa9dc9aa2b5d2ca3cba33378ac20fa93adfc537",
+      "segment": "coast",
+      "model_sample_clock_residual_seconds": 3.2741809263825417e-11,
+      "status": "sampled",
+      "model_phase": "Coast",
+      "model_geodetic_altitude_m": 96966.12536524888,
+      "altitude_display_residual_m": 4766.125365248881,
+      "model_atmosphere_relative_speed_kmh": 1353.579803400713,
+      "model_body_centred_inertial_speed_kmh": 2591.2894312816825,
+      "atmosphere_relative_speed_display_residual_kmh": -316.420196599287,
+      "body_centred_inertial_speed_display_residual_kmh": 921.2894312816825
+    },
+    {
+      "broadcast_met_seconds": 308,
+      "reference_altitude_display_km": 78.5,
+      "reference_speed_display_kmh": 2510,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "9d5da36304eaf202c5686697258b3b7c81036b20751a2e454cca2da38b50d844",
+      "segment": "coast",
+      "model_sample_clock_residual_seconds": 7.275957614183426e-12,
+      "status": "sampled",
+      "model_phase": "Coast",
+      "model_geodetic_altitude_m": 85134.06987300701,
+      "altitude_display_residual_m": 6634.069873007014,
+      "model_atmosphere_relative_speed_kmh": 2179.49338028401,
+      "model_body_centred_inertial_speed_kmh": 3104.935417334503,
+      "atmosphere_relative_speed_display_residual_kmh": -330.5066197159899,
+      "body_centred_inertial_speed_display_residual_kmh": 594.9354173345032
+    },
+    {
+      "broadcast_met_seconds": 393,
+      "reference_altitude_display_km": 4.1,
+      "reference_speed_display_kmh": null,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "d82f94c76690325e76b994551fe265638c64800f3759d4645101ae0035c5c2e6",
+      "segment": "terminal",
+      "model_sample_clock_residual_seconds": 0.019999999929950718,
+      "status": "sampled",
+      "model_phase": "Coast",
+      "model_geodetic_altitude_m": 6801.912822951563,
+      "altitude_display_residual_m": 2701.9128229515627,
+      "model_atmosphere_relative_speed_kmh": 3160.3288529773486,
+      "model_body_centred_inertial_speed_kmh": 3710.229658073908
+    },
+    {
+      "broadcast_met_seconds": 398,
+      "reference_altitude_display_km": 2.4,
+      "reference_speed_display_kmh": null,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "838eb2080926af50d1a2dd5d168bd22e10837e1da8afa52faf4e9cf3b09ecf92",
+      "segment": "terminal",
+      "model_sample_clock_residual_seconds": 0.019999999925403245,
+      "status": "sampled",
+      "model_phase": "Landing",
+      "model_geodetic_altitude_m": 3226.7937529431656,
+      "altitude_display_residual_m": 826.7937529431656,
+      "model_atmosphere_relative_speed_kmh": 1985.0008698566498,
+      "model_body_centred_inertial_speed_kmh": 2670.421571044346
+    },
+    {
+      "broadcast_met_seconds": 403,
+      "reference_altitude_display_km": 1.2,
+      "reference_speed_display_kmh": null,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "f1017f6137d6b22192d8b8cefb583bcf15c042b1df6cf044dc6cd9aa9dad6e1f",
+      "segment": "terminal",
+      "model_sample_clock_residual_seconds": 0.01999999992085577,
+      "status": "sampled",
+      "model_phase": "Landing",
+      "model_geodetic_altitude_m": 1203.3412518370897,
+      "altitude_display_residual_m": 3.341251837089658,
+      "model_atmosphere_relative_speed_kmh": 1024.6044222916578,
+      "model_body_centred_inertial_speed_kmh": 1922.954617255422
+    },
+    {
+      "broadcast_met_seconds": 408,
+      "reference_altitude_display_km": 0.5,
+      "reference_speed_display_kmh": null,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "d12bdc167ab578c4afc23f08f4caf48c730331a1524650d4a2c557e961594334",
+      "segment": "terminal",
+      "model_sample_clock_residual_seconds": 0.019999999916308298,
+      "status": "sampled",
+      "model_phase": "Landing",
+      "model_geodetic_altitude_m": 266.18289200682193,
+      "altitude_display_residual_m": -233.81710799317807,
+      "model_atmosphere_relative_speed_kmh": 386.01682304534813,
+      "model_body_centred_inertial_speed_kmh": 1531.4751081040783
+    },
+    {
+      "broadcast_met_seconds": 413,
+      "reference_altitude_display_km": 0.1,
+      "reference_speed_display_kmh": null,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "f144ab2d8c1b35570d34a265640330055765db7a9fc50fbab33f2289031bbed1",
+      "segment": "terminal",
+      "model_sample_clock_residual_seconds": 0.019999999911760824,
+      "status": "sampled",
+      "model_phase": "Landing",
+      "model_geodetic_altitude_m": 9.364252304658294,
+      "altitude_display_residual_m": -90.6357476953417,
+      "model_atmosphere_relative_speed_kmh": 40.90085152749866,
+      "model_body_centred_inertial_speed_kmh": 1501.5098056210968
+    },
+    {
+      "broadcast_met_seconds": 418,
+      "reference_altitude_display_km": 0.0,
+      "reference_speed_display_kmh": null,
+      "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+      "capture_sha256": "54277ebdd70c7886109f9ea78645980c6300f4b518855824d4ddf887db650642",
+      "segment": "terminal",
+      "model_sample_clock_residual_seconds": -0.9800000000918772,
+      "status": "model-sample-missing"
+    }
+  ],
+  "raw_trace_provenance": {
+    "baseline": [
+      {
+        "path": "exports/flight14-booster-calibration/final-candidate/booster-telemetry.jsonl",
+        "sha256": "6bc728488997d81a09cc72781dc5dedc32216ab1b4b9b8095f15e1243f3bee39"
+      },
+      {
+        "path": "docs/research/STARSHIP_FLIGHT14_BOOSTER_BROWSER_ANCHORS_2026-10-03.json",
+        "sha256": "d0464b87d466b29eb1b56386716a3c14bddc13e7c75ff8dbbf6bf69362eb3f4d"
+      },
+      {
+        "path": "docs/research/STARSHIP_FLIGHT14_BOOSTER_BROWSER_ANCHORS_2026-10-04.json",
+        "sha256": "615ef133efa00dd70ccdb14471efe0797e66b06328089bcdc4aa630765cac34e"
+      }
+    ],
+    "candidate": [
+      {
+        "path": "exports/flight14-booster-coast-refinement/final-evidence/booster-telemetry.jsonl",
+        "sha256": "e8191acf80ef899467eb0a4c8aa75d0fc20870cbe8a9c33631543544bc7eff52"
+      },
+      {
+        "path": "docs/research/STARSHIP_FLIGHT14_BOOSTER_BROWSER_ANCHORS_2026-10-03.json",
+        "sha256": "d0464b87d466b29eb1b56386716a3c14bddc13e7c75ff8dbbf6bf69362eb3f4d"
+      },
+      {
+        "path": "docs/research/STARSHIP_FLIGHT14_BOOSTER_BROWSER_ANCHORS_2026-10-04.json",
+        "sha256": "615ef133efa00dd70ccdb14471efe0797e66b06328089bcdc4aa630765cac34e"
+      }
+    ]
+  },
+  "visualization": {
+    "path": "docs/research/STARSHIP_FLIGHT14_BOOSTER_COAST_COMPARISON_2026-10-04.png",
+    "sha256": "31dfee93ff371cd426f496c39ec17adb7302b406581578262427ed30ce39bbed",
+    "generator_local_path": "exports/flight14-booster-coast-refinement/plot-comparison.py",
+    "generator_sha256": "4af578f0c5b41cc960223d1f8332652156c8c040bef712db5d1a73f2e829cb8e"
+  }
+}

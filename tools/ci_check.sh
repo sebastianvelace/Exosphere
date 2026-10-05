@@ -21,6 +21,7 @@ fi
 bash -n tools/visual_playtest.sh
 python3 tools/tests/atmosphere_render_state_test.py
 python3 -m unittest discover -s tools/tests -p test_flight14_telemetry.py
+python3 -m unittest discover -s tools/tests -p test_flight14_booster_comparison.py
 bash tools/tests/visual_playtest_contract_test.sh
 bash tools/tests/godot_smoke_log_contract_test.sh
 bash tools/tests/visual_shader_failure_contract_test.sh

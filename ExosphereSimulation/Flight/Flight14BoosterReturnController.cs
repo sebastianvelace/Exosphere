@@ -20,11 +20,13 @@ public sealed class Flight14BoosterReturnController : IPhysicsStepController
     private readonly Flight14BoosterReturnDefinition _definition;
     private readonly Flight14MissionDefinition _reference;
     private Part? _engine;
-    private double _separationTime, _waterTime;
+    private double _separationTime, _waterTime, _boostbackStartMass, _boostbackEndMass;
     private int _landingSequenceIndex;
     private bool _deliveredLandingIgnition;
     private bool _landingFeedOpened;
-    private Vector3d _boostbackAim;
+    private Vector3d _boostbackHorizontalAim;
+    public double BoostbackDeltaVProgress { get; private set; }
+    public double BoostbackElevationDegrees { get; private set; }
     private readonly List<Flight14BoosterWitness> _events = new();
     public Vessel? Booster { get; private set; }
     public Flight14BoosterReturnPhase Phase { get; private set; } = Flight14BoosterReturnPhase.WaitingForSeparation;
@@ -90,8 +92,31 @@ public sealed class Flight14BoosterReturnController : IPhysicsStepController
 
         if (Phase is Flight14BoosterReturnPhase.Flip or Flight14BoosterReturnPhase.Boostback)
         {
-            if (_boostbackAim.MagnitudeSquared < 1e-12) _boostbackAim = ComputeBoostbackAim(universe);
-            var aim = _boostbackAim;
+            if (engine.FuelDepleted || engine.AvailableOxidizer <= 1e-6)
+            {
+                booster.Throttle = 0; engine.SelectEngineCount(0);
+                if (!HasDeliveredBoostbackEngines) { Block("boostback-thrust-not-delivered"); return; }
+                Transition(Flight14BoosterReturnPhase.Coast, universe); return;
+            }
+            if (_boostbackStartMass == 0)
+            {
+                double available = engine.AvailableLiquidFuel+engine.AvailableOxidizer;
+                if (available <= 1 || available >= booster.TotalMass)
+                { Block("boostback-feed-budget-unavailable"); return; }
+                _boostbackStartMass = booster.TotalMass;
+                _boostbackEndMass = booster.TotalMass-available;
+                _boostbackHorizontalAim = ComputeBoostbackHorizontalAim(universe);
+            }
+            // Sweep a control reference in proportion to ideal rocket
+            // delta-v progress, not elapsed time. Fuel consumption and the physical attitude
+            // response determine the trajectory; the sweep never assigns a pose.
+            BoostbackDeltaVProgress = System.Math.Clamp(System.Math.Log(_boostbackStartMass/booster.TotalMass)
+                /System.Math.Log(_boostbackStartMass/_boostbackEndMass), 0, 1);
+            BoostbackElevationDegrees = _definition.BoostbackInitialElevationDegrees+BoostbackDeltaVProgress
+                *(_definition.BoostbackFinalElevationDegrees-_definition.BoostbackInitialElevationDegrees);
+            double elevation = BoostbackElevationDegrees*MathUtils.DEG_TO_RAD;
+            var direction = (_boostbackHorizontalAim-up*_boostbackHorizontalAim.Dot(up)).Normalized;
+            var aim = (up*System.Math.Sin(elevation)+direction*System.Math.Cos(elevation)).Normalized;
             Aim(aim);
             if (Phase == Flight14BoosterReturnPhase.Flip)
             {
@@ -100,12 +125,6 @@ public sealed class Flight14BoosterReturnController : IPhysicsStepController
                 engine.SelectEngineCount(3); booster.Throttle = engine.Definition.MinThrottle;
                 if (booster.Orientation.Rotate(Vector3d.Up).Dot(aim) < _definition.MinimumFlipAlignment) return;
                 Transition(Flight14BoosterReturnPhase.Boostback, universe);
-            }
-            if (engine.FuelDepleted || engine.AvailableOxidizer <= 1e-6)
-            {
-                booster.Throttle = 0; engine.SelectEngineCount(0);
-                if (!HasDeliveredBoostbackEngines) { Block("boostback-thrust-not-delivered"); return; }
-                Transition(Flight14BoosterReturnPhase.Coast, universe); return;
             }
             if (HealthyEngines() < _reference.BoosterBoostbackEngines)
             { Block("boostback-engine-count-unavailable"); return; }
@@ -211,52 +230,48 @@ public sealed class Flight14BoosterReturnController : IPhysicsStepController
         Aim((up-horizontal.Normalized*tilt).Normalized);
     }
 
-    private Vector3d ComputeBoostbackAim(Universe universe)
+    private Vector3d ComputeBoostbackHorizontalAim(Universe universe)
     {
         var booster = Booster!; var engine = _engine!;
         var target = _body.GetSurfacePositionAtTime(_definition.TargetLatitudeDegrees,
             _definition.TargetLongitudeDegrees, 0, universe.CurrentTime);
-        var offset = target-booster.Position;
         var up = _body.GetGeodeticUp(booster.Position);
         var velocity = booster.GetSurfaceVelocity(_body);
         double vertical = velocity.Dot(up), altitude = booster.GetAltitude(_body);
         double gravity = _body.GM/(booster.Position-_body.Position).MagnitudeSquared;
         var horizontal = velocity-up*vertical;
+        var offset = target-booster.Position;
         var horizontalOffset = offset-up*offset.Dot(up);
-        double pressure = booster.GetAmbientPressure(_body);
         engine.SelectEngineCount(_reference.BoosterBoostbackEngines);
         double available = engine.AvailableLiquidFuel+engine.AvailableOxidizer;
-        double finalMass = System.Math.Max(1, booster.TotalMass-available);
         double exhaustSpeed = engine.Definition.IspVac*9.80665;
-        double deltaV = exhaustSpeed*System.Math.Log(booster.TotalMass/finalMass);
-        double boostbackRated = engine.GetFullThrottleThrustMagnitude(pressure)*_definition.BoostbackThrottle;
-        double burnTime = available*exhaustSpeed/System.Math.Max(1, boostbackRated);
-        var desiredHorizontal = Vector3d.Zero;
-        double ratio = 0;
-        for (int iteration = 0; iteration < 6; iteration++)
+        double thrust = engine.GetFullThrottleThrustMagnitude(booster.GetAmbientPressure(_body))
+            *engine.ApplyThrottleFloor(_definition.BoostbackThrottle);
+        double duration = available*exhaustSpeed/System.Math.Max(1, thrust);
+        double totalDeltaV = exhaustSpeed*System.Math.Log(_boostbackStartMass/_boostbackEndMass);
+        double upwardDeltaV = 0, upwardTravel = 0;
+        // Bearing forecast only: constant ambient pressure/thrust, ideal attitude,
+        // variable mass, local constant gravity, no drag or body rotation in the
+        // predicted coast. Production propagation retains all existing forces.
+        const int samples = 32;
+        for (int i = 0; i < samples; i++)
         {
-            double endVertical = vertical+deltaV*System.Math.Sqrt(1-ratio*ratio)-gravity*burnTime;
-            double endAltitude = altitude+(vertical+endVertical)*0.5*burnTime;
-            double coastTime = System.Math.Max(1, (endVertical+System.Math.Sqrt(endVertical*endVertical
-                +2*gravity*System.Math.Max(0, endAltitude)))/gravity);
-            desiredHorizontal = (horizontalOffset-horizontal*burnTime*0.5)/(coastTime+burnTime*0.5);
-            ratio = System.Math.Min(0.95, (desiredHorizontal-horizontal).Magnitude/System.Math.Max(1, deltaV));
+            double fraction = (i+0.5)/samples;
+            double mass = _boostbackStartMass-available*fraction;
+            double progress = exhaustSpeed*System.Math.Log(_boostbackStartMass/mass)/totalDeltaV;
+            double elevation = (_definition.BoostbackInitialElevationDegrees+progress
+                *(_definition.BoostbackFinalElevationDegrees-_definition.BoostbackInitialElevationDegrees))*MathUtils.DEG_TO_RAD;
+            double verticalDeltaV = thrust/mass*duration/samples*System.Math.Sin(elevation);
+            upwardDeltaV += verticalDeltaV;
+            upwardTravel += verticalDeltaV*duration*(1-fraction);
         }
-        // Consuming the main feed does not justify converting every unused
-        // horizontal delta-v into altitude. Bound the upward impulse by an
-        // estimated coast apogee, using finite-burn travel and gravity losses.
-        // This changes an attitude command, never the propagated flight state.
-        double halfGravityBurn = 0.5*gravity*burnTime;
-        double targetEndVertical = -halfGravityBurn+System.Math.Sqrt(System.Math.Max(0,
-            halfGravityBurn*halfGravityBurn+2*gravity*(_definition.EstimatedCoastApogeeM
-                -altitude-0.5*vertical*burnTime)));
-        double maximumUpFraction = System.Math.Clamp(
-            (targetEndVertical-vertical+gravity*burnTime)/System.Math.Max(1, deltaV), 0, 1);
-        double upFraction = System.Math.Min(System.Math.Sqrt(1-ratio*ratio), maximumUpFraction);
-        var aim = ((desiredHorizontal-horizontal).Normalized*System.Math.Sqrt(1-upFraction*upFraction)
-            +up*upFraction).Normalized;
-        if (aim.MagnitudeSquared < 1e-12) aim = up;
-        return aim;
+        double endVertical = vertical+upwardDeltaV-gravity*duration;
+        double endAltitude = altitude+vertical*duration+upwardTravel-0.5*gravity*duration*duration;
+        double coastTime = System.Math.Max(1, (endVertical+System.Math.Sqrt(endVertical*endVertical
+            +2*gravity*System.Math.Max(0, endAltitude)))/gravity);
+        var desiredHorizontal = (horizontalOffset-horizontal*duration*0.5)/(coastTime+duration*0.5);
+        var direction = (desiredHorizontal-horizontal).Normalized;
+        return direction.MagnitudeSquared > 1e-12 ? direction : _body.GetEastDirection(booster.Position);
     }
 
     private int HealthyEngines() => _engine!.EngineStates.Count(e => e.FailureCode == null

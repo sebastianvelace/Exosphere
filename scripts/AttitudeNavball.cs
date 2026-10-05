@@ -104,7 +104,7 @@ public partial class AttitudeNavball : Control
         var bridge = SimulationBridge.Instance;
         var vessel = bridge?.ActiveVessel;
         var universe = bridge?.Universe;
-        if (vessel == null || universe == null)
+        if (vessel == null || universe == null || vessel.IsDestroyed)
         {
             if (_valid)
             {

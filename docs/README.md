@@ -19,6 +19,7 @@ as provenance, but they are not the current product plan.
 | Flight 14 orbital components, comparison evidence and remaining mission gates | [`audits/flight14_orbital_components_2026-10-01.md`](audits/flight14_orbital_components_2026-10-01.md) |
 | Flight 14 loaded ascent, 26 payload splits and conservation evidence | [`audits/flight14_payload_deployment_2026-10-01.md`](audits/flight14_payload_deployment_2026-10-01.md) |
 | Flight 14 continuous launch diagnostic and reconstruction assumptions | [`audits/flight14_continuous_launch_2026-10-01.md`](audits/flight14_continuous_launch_2026-10-01.md) |
+| Independent Super Heavy coast comparison and retired-state HUD correction | [`audits/flight14_booster_coast_calibration_2026-10-04.md`](audits/flight14_booster_coast_calibration_2026-10-04.md) |
 | Documentation status and archive policy | [`DOCUMENTATION_AUDIT.md`](DOCUMENTATION_AUDIT.md) |
 
 ## Information hierarchy

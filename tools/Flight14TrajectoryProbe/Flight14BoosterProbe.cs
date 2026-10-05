@@ -43,14 +43,18 @@ internal static class Flight14BoosterProbe
                 vesselId = vessel.Id, geodeticAltitudeM = altitude,
                 radialAltitudeM = (vessel.Position-run.Earth.Position).Magnitude-run.Earth.Radius,
                 atmosphereRelativeSpeedMps = velocity.Magnitude,
+                bodyCentredInertialSpeedMps = (vessel.Velocity-run.Earth.Velocity).Magnitude,
                 verticalSpeedMps = velocity.Dot(run.Earth.GetGeodeticUp(vessel.Position)),
                 bodyFixedLatitudeDegrees = latitude, bodyFixedLongitudeDegrees = longitude,
                 propellantKg = engine.LiquidFuel+engine.Oxidizer,
                 protectedLandingPropellantKg = engine.ReservedLiquidFuel+engine.ReservedOxidizer,
                 availableFeedOxidizerKg = engine.AvailableOxidizer,
                 commandedThrottle = vessel.Throttle,
+                boostbackDeltaVProgress = controller.BoostbackDeltaVProgress,
+                boostbackElevationDegrees = controller.BoostbackElevationDegrees,
                 selectedEngines = engine.SelectedEngineCount,
                 runningEngines = engine.GetEngineTelemetry(vessel.GetAmbientPressure(run.Earth)).Count(e => e.State == Exosphere.Simulation.Propulsion.EngineLifecycleState.Running && e.ThrustN > 1),
+                thrustAxisUp = vessel.Orientation.Rotate(Exosphere.Simulation.Math.Vector3d.Up).Dot(run.Earth.GetGeodeticUp(vessel.Position)),
                 angularRateRadPerSecond = vessel.AngularVelocity.Magnitude,
                 groundHeld = vessel.IsGroundHeld, flightTerminationTriggered = controller.FlightTerminationTriggered,
             }));
@@ -65,7 +69,7 @@ internal static class Flight14BoosterProbe
             shipPhase = run.Controller.Phase, shipDestroyed = run.Ship.IsDestroyed,
             activeVesselRemainsShip = ReferenceEquals(run.Universe.ActiveVessel, run.Ship),
             events = controller.Events,
-            comparison = "Published timeline is approximate planned timing. Partial manual booster altitude/clock anchors are recorded in docs/research/STARSHIP_FLIGHT14_BOOSTER_BROWSER_ANCHORS_2026-10-03.json; model agreement is not established.",
+            comparison = "Partial manual booster altitude/speed/clock anchors are recorded in docs/research/STARSHIP_FLIGHT14_BOOSTER_BROWSER_ANCHORS_2026-10-03.json and STARSHIP_FLIGHT14_BOOSTER_BROWSER_ANCHORS_2026-10-04.json. Displays never drive propagation; exact flown trajectory acceptance remains open.",
         };
         File.WriteAllText(Path.Combine(output, "summary.json"), JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true })+"\n");
         Console.WriteLine($"{controller.Phase}: {controller.BlockReason ?? "continuous contact observed; FTS abstracted"}");

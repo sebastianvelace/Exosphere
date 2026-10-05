@@ -1,0 +1,55 @@
+{
+  "source_url": "https://www.youtube.com/watch?v=lw0nj_XiUoU",
+  "captured_date": "2026-10-04",
+  "method": "Manual reading of paused browser framebuffer; DOM only confirms media time, readyState=4 and paused status.",
+  "status": "partial-manual-reference",
+  "physics_authority": false,
+  "limitations": [
+    "Broadcast rounding, datum, speed frame, telemetry latency and measurement uncertainty are unknown.",
+    "MET alignment is local and approximate within one second.",
+    "Only the labelled left Super Heavy speed display is used. The right speed belongs to Starship.",
+    "Engine-board lighting is qualitative; blurred frames do not establish exact counts or cutoff timing.",
+    "T+240 shows 98.9 km; the actual apogee time and height are not measured by this single frame.",
+    "These frames complement the 2026-10-03 anchors. They never control the simulated trajectory."
+  ],
+  "anchors": [
+    {
+      "video_seconds": 160.699881,
+      "broadcast_met_seconds": 145,
+      "capture_path": "exports/flight14-booster-coast-refinement/reference-video-160.jpg",
+      "capture_sha256": "ad3b34b1d0d445d783c66989b10bd3b822074b293c1277d72b4046fabc9661ca",
+      "booster_engine_board": "lit-centre-cluster"
+    },
+    {
+      "video_seconds": 195.699881,
+      "broadcast_met_seconds": 180,
+      "capture_path": "exports/flight14-booster-coast-refinement/reference-video-195.jpg",
+      "capture_sha256": "c9920ba8c2d2ab8d49278fd3e59eb41b04492179f6984034fb3ded9899fe99d0",
+      "booster_engine_board": "unlit"
+    },
+    {
+      "video_seconds": 215.699881,
+      "broadcast_met_seconds": 200,
+      "capture_path": "exports/flight14-booster-coast-refinement/reference-video-215.jpg",
+      "capture_sha256": "7faa57a758e63099a9b0cf86067440d06d9db0c381cf64f1eec1670934fae4d8",
+      "booster_altitude_display_km": 90.3,
+      "booster_speed_display_kmh": 1691
+    },
+    {
+      "video_seconds": 255.699881,
+      "broadcast_met_seconds": 240,
+      "capture_path": "exports/flight14-booster-coast-refinement/reference-video-255.jpg",
+      "capture_sha256": "96ffa153673c8bdf74ccf31667d92f2ff07e12bf2c75d01dcba5b32cc4414926",
+      "booster_altitude_display_km": 98.9,
+      "booster_speed_display_kmh": 977
+    },
+    {
+      "video_seconds": 295.699881,
+      "broadcast_met_seconds": 280,
+      "capture_path": "exports/flight14-booster-coast-refinement/reference-video-295.jpg",
+      "capture_sha256": "aa1b99de261805947e8bf86effa9dc9aa2b5d2ca3cba33378ac20fa93adfc537",
+      "booster_altitude_display_km": 92.2,
+      "booster_speed_display_kmh": 1670
+    }
+  ]
+}

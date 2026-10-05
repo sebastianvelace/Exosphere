@@ -63,29 +63,36 @@ The published PNG checksums are in [manifest.json](manifest.json).
 ## Independent Super Heavy return refresh
 
 `booster-return.png` is an unedited 1280 × 800 production framebuffer captured on
-2026-10-03 from the working tree based on `a2d6ce3`, including this increment's
-boostback/landing calibration and HUD correction. The original six images above
-retain their source revision and provenance. This frame replaces only the earlier
-booster addition; its prior sequence remains local evidence in
-`exports/flight14-booster-return-review/`.
+2026-10-04 from the working tree based on `d5cc7bd5`, including this increment's
+resource-driven boostback refinement and retired-booster HUD correction. The
+original six images above retain their source revision and provenance. This frame
+replaces only the booster addition; the prior sequences remain local evidence in
+`exports/flight14-booster-return-review/` and `exports/flight14-booster-calibration/`.
 
-The IntegratedGpu preset uses software OpenGL Compatibility under Xvfb. The
-frame is at T+418.84 s, shortly after continuously simulated water contact;
-it is not a seeded terminal scene or the exact transition witness. Engine
-shutdown is commanded and the sealed-hull water response has already begun.
+The IntegratedGpu preset uses software OpenGL Compatibility under Xvfb. The frame
+is at T+414.78 s, shortly after continuously simulated water contact at T+414.36;
+it is not a seeded terminal scene or the exact transition witness. Shutdown has
+completed in the frame and the bounded sealed-hull water response has begun.
 
-The seven-frame sequence captures boostback (THR 60%), coast with the stale
-impact alert cleared, eleven-engine ignition, three delivered landing engines,
-water observation, abstracted FTS retirement and camera/HUD return to the
-continuing Starship. Landing uses requested 3x warp and water observation 1x;
-whole 20 ms physics steps remain authoritative.
+The seven-frame sequence captures delivered boostback (THR 40%), coast,
+eleven-engine ignition request (startup not completed), the three-engine selection
+request (five still delivered while spooling down), water observation, abstracted
+FTS retirement and camera/HUD return to the continuing Starship. Actual delivery
+of 11/5/3 is separately checked by the continuous integration test; screenshot
+filenames describe the selected cluster, not instantaneous running engine count.
+Landing requests 3x warp and water observation 1x; whole 20 ms physics steps remain
+authoritative. Paused frame scheduling can show the previous time-scale display.
 
-Local console log, source-file hashes, screenshot hashes and temporary helper
-backups are in `exports/flight14-booster-calibration/`. The helper scripts were
-removed after capture; `project.godot` was never modified. Gallery SHA-256:
-`db90f31538bdb5ab9b4f6a96b01adc95297c4c6a05bbd67f94751f680d24c7d3`.
+The retirement capture preserves the final geodetic altitude −7.119 m and surface
+speed 5.302 m/s instead of recomputing them against a later moving Earth. Its
+navball is unavailable. Returning observation restores the ship's live HUD; the
+left fleet engine board is currently empty after that observer switch.
 
-The timing and height improvement does not establish exact flown targeting,
-header inventory, engine-transition timing or ocean appearance. Distant surface
-silhouette, cloud spacing and water spray remain visual limitations. See
-[the calibration audit](../audits/flight14_booster_calibration_2026-10-03.md).
+Local console log, source/image hashes and temporary helper backups are in
+`exports/flight14-booster-coast-refinement/`. Helpers were removed after capture;
+`project.godot` was never modified. Gallery SHA-256: `79196025210ea7a36cbaf72a3f10e54fec98d960c7151173586fa1c606d38d54`.
+
+The closer aggregate coast comparison does not establish exact flown attitude,
+targeting, header inventory, engine-transition timing or ocean appearance. Distant
+surface silhouette, cloud spacing and water spray remain visual limitations. See
+[the coast calibration audit](../audits/flight14_booster_coast_calibration_2026-10-04.md).

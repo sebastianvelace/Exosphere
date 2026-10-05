@@ -42,10 +42,12 @@
       "file": "booster-return.png",
       "width": 1280,
       "height": 800,
-      "sha256": "3d9603ad96cb79367bac959d19e329c2e483395886750ae79fec94a25074d8be",
-      "source_base_revision": "91dd7b7",
-      "source_working_tree": "Independent Super Heavy return implementation included in the gallery commit.",
-      "mode": "Continuous production exploration; IntegratedGpu profile; software OpenGL Compatibility."
+      "sha256": "79196025210ea7a36cbaf72a3f10e54fec98d960c7151173586fa1c606d38d54",
+      "source_base_revision": "d5cc7bd5e07039a8613c5f6ff14570c4e4f11810",
+      "source_working_tree": "Resource-driven boostback coast calibration and retired-booster presentation correction included in this gallery commit.",
+      "mode": "Continuous production exploration; IntegratedGpu profile; software OpenGL Compatibility; water observation after propagated contact.",
+      "captured_date": "2026-10-04",
+      "mission_elapsed_seconds": 414.77999999991016
     }
   ],
   "source_revision_scope": "Default for the original six images; later additions declare their own source base and working-tree scope."

@@ -287,6 +287,50 @@ public sealed class FlightHudPresenter
         };
     }
 
+    /// <summary>
+    /// A retired booster is no longer propagated with its moving reference body. Present
+    /// its immutable termination witness, never derive a new trajectory from the wreck.
+    /// Undefined terminal diagnostics remain unavailable, including its osculating orbit.
+    /// </summary>
+    public FlightHudSnapshot CaptureRetiredBooster(
+        Flight14BoosterReturnController controller, string referenceBodyId,
+        double liftoffEpoch, double timeScale, FlightHudViewMode viewMode)
+    {
+        ArgumentNullException.ThrowIfNull(controller);
+        if (!controller.FlightTerminationTriggered || controller.Booster is not { IsDestroyed: true } vessel
+            || controller.Events.LastOrDefault() is not { Phase: Flight14BoosterReturnPhase.ContactObserved } witness)
+            throw new InvalidOperationException("A retired booster requires its recorded termination witness.");
+        if (!double.IsFinite(liftoffEpoch)) throw new ArgumentOutOfRangeException(nameof(liftoffEpoch));
+        if (!double.IsFinite(timeScale) || timeScale < 0) throw new ArgumentOutOfRangeException(nameof(timeScale));
+
+        if (_activeVesselId != vessel.Id) ResetForVessel(vessel.Id);
+        double liquidCapacity = vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityLF);
+        double oxidizerCapacity = vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityOx);
+        double liquidFuel = vessel.Parts.TotalLiquidFuel;
+        double oxidizer = vessel.Parts.TotalOxidizer;
+        return new FlightHudSnapshot
+        {
+            VesselId = vessel.Id, VesselName = vessel.Name, ReferenceBodyId = referenceBodyId,
+            MissionPhase = "LANDED", ViewMode = viewMode, NavigationMode = FlightNavigationMode.Land,
+            MissionTimeS = liftoffEpoch + witness.MissionElapsedSeconds, TimeScale = timeScale,
+            AltitudeM = witness.AltitudeM, SurfaceSpeedMps = witness.AirspeedMps,
+            VerticalSpeedMps = witness.VerticalSpeedMps,
+            ProperAccelerationG = double.NaN, DynamicPressurePa = double.NaN,
+            MachNumber = double.NaN, AngleOfAttackDeg = double.NaN, AerodynamicBankDeg = double.NaN,
+            StagnationHeatFluxWPerM2 = double.NaN, FlightPathAngleDeg = double.NaN,
+            HeadingDeg = double.NaN, VehiclePitchDeg = double.NaN,
+            DownrangeM = double.NaN, HasDownrangeReference = false,
+            TotalMassKg = vessel.TotalMass, StageDeltaVMps = double.NaN,
+            CurrentThrustN = 0, ThrustToWeightRatio = 0, Throttle = 0, IsGroundHeld = false,
+            NominalEngineCount = vessel.Parts.Parts.Sum(p => p.EngineStates.Count),
+            ActiveEngineCount = 0, FailedEngineCount = 0, PrimaryEngineFailureCode = null,
+            LiquidFuelKg = liquidFuel, LiquidFuelFraction = liquidCapacity > 0 ? liquidFuel / liquidCapacity : 0,
+            OxidizerKg = oxidizer, OxidizerFraction = oxidizerCapacity > 0 ? oxidizer / oxidizerCapacity : 0,
+            ApoapsisAltitudeM = null, PeriapsisAltitudeM = null, TimeToPeriapsisS = double.NaN,
+            IsImpactTrajectory = false, Alerts = Array.Empty<FlightAlertSnapshot>(),
+        };
+    }
+
     public void AcknowledgeAlert(string code)
     {
         if (!string.IsNullOrWhiteSpace(code) && _latchedAlerts.Contains(code))

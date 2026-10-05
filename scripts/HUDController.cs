@@ -874,7 +874,11 @@ public partial class HUDController : Control
             return;
         _presentationAccumulator %= PresentationRefreshPeriodSeconds;
 
-        _snapshot = _presenter.Capture(
+        _snapshot = bridge.Flight14Preview is { IsObservingBooster: true } retiredPreview
+            && retiredPreview.Run.BoosterReturnController is { FlightTerminationTriggered: true } retiredController
+            ? _presenter.CaptureRetiredBooster(retiredController, retiredPreview.Run.Earth.Id,
+                retiredPreview.Run.Controller.LiftoffEpoch, universe.TimeScale, viewMode)
+            : _presenter.Capture(
             universe,
             vessel,
             phaseName,
@@ -884,14 +888,14 @@ public partial class HUDController : Control
         LatestSnapshot = snapshot;
 
         _vspeedValue.Text = $"{snapshot.VerticalSpeedMps:+0.0;-0.0} m/s";
-        _gValue.Text = $"{snapshot.ProperAccelerationG:F2} g";
+        _gValue.Text = double.IsFinite(snapshot.ProperAccelerationG) ? $"{snapshot.ProperAccelerationG:F2} g" : "—";
         _gValue.AddThemeColorOverride(
             "font_color", snapshot.ProperAccelerationG > 4.0 ? WarnCol : ValueBright);
-        _qValue.Text = $"{snapshot.DynamicPressurePa / 1000.0:F1} kPa";
-        _pitchValue.Text = snapshot.SurfaceSpeedMps > 0.5
+        _qValue.Text = double.IsFinite(snapshot.DynamicPressurePa) ? $"{snapshot.DynamicPressurePa / 1000.0:F1} kPa" : "—";
+        _pitchValue.Text = snapshot.SurfaceSpeedMps > 0.5 && double.IsFinite(snapshot.FlightPathAngleDeg)
             ? $"{snapshot.FlightPathAngleDeg:F0}°"
             : "—";
-        _hdgValue.Text = snapshot.SurfaceSpeedMps > 0.5
+        _hdgValue.Text = snapshot.SurfaceSpeedMps > 0.5 && double.IsFinite(snapshot.HeadingDeg)
             ? $"{snapshot.HeadingDeg:F0}°"
             : "—";
         _downrangeValue.Text = snapshot.HasDownrangeReference

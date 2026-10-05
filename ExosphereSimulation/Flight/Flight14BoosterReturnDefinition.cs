@@ -12,7 +12,8 @@ public sealed class Flight14BoosterReturnDefinition
     public double TargetLatitudeDegrees { get; set; }
     public double TargetLongitudeDegrees { get; set; }
     public double BoostbackThrottle { get; set; }
-    public double EstimatedCoastApogeeM { get; set; }
+    public double BoostbackInitialElevationDegrees { get; set; }
+    public double BoostbackFinalElevationDegrees { get; set; }
     public double MinimumFlipAlignment { get; set; }
     public double PointingGain { get; set; }
     public double PointingDamping { get; set; }
@@ -44,7 +45,7 @@ public sealed class Flight14BoosterReturnDefinition
     public void Validate()
     {
         double[] positive = [LandingReserveKg, PointingGain, PointingDamping,
-            MaximumReturnSeconds, EstimatedCoastApogeeM, LandingArmAltitudeM, TargetContactSpeedMps,
+            MaximumReturnSeconds, LandingArmAltitudeM, TargetContactSpeedMps,
             HorizontalDampingPerSecond, MaximumLandingTiltDegrees,
             MaximumContactSpeedMps, WaterDensityKgPerM3, WaterDragCoefficient, WettingDepthM, WaterObservationSeconds];
         double[] coordinates = [TargetLatitudeDegrees, TargetLongitudeDegrees, MinimumWaterLatitudeDegrees,
@@ -55,7 +56,9 @@ public sealed class Flight14BoosterReturnDefinition
             || !double.IsFinite(MinimumFlipAlignment) || MinimumFlipAlignment <= 0 || MinimumFlipAlignment >= 1
             || !double.IsFinite(LowestPointYM) || LowestPointYM >= 0 || MaximumLandingTiltDegrees >= 45
             || !double.IsFinite(LandingBrakingMargin) || LandingBrakingMargin < 1 || LandingBrakingMargin > 2
-            || EstimatedCoastApogeeM <= LandingArmAltitudeM
+            || !double.IsFinite(BoostbackInitialElevationDegrees) || !double.IsFinite(BoostbackFinalElevationDegrees)
+            || System.Math.Abs(BoostbackInitialElevationDegrees) >= 90 || System.Math.Abs(BoostbackFinalElevationDegrees) >= 90
+            || BoostbackInitialElevationDegrees <= BoostbackFinalElevationDegrees
             || TargetContactSpeedMps >= MaximumContactSpeedMps
             || MinimumWaterLatitudeDegrees < -90 || MaximumWaterLatitudeDegrees > 90
             || MinimumWaterLongitudeDegrees < -180 || MaximumWaterLongitudeDegrees > 180

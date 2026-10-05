@@ -1,12 +1,11 @@
 {
   "id": "starship-flight14-booster-return-engineering-estimate",
   "status": "engineering-estimate",
-  "assumptions": "Retains the original launch assembly fuel and oxidizer inventory without changing tank loading. Continuous detached Super Heavy return using the inherited estimated Flight 12 V3 hardware. Landing feed inventory is isolated within the original aggregate tank at initial assembly, remains part of wet mass, and is opened without refilling after main-feed exhaustion. This is a resource partition, not a measured header-tank location or feed-pressure model. Reserve, Gulf aim point, boostback steering, descent gains and burn gates are engineering estimates. A finite-burn upward-impulse bound uses an estimated 102 km coast apogee parameter; it is not a measured apogee or a hard trajectory clamp. The 1.3 braking margin anticipates finite attitude response and permits earlier monotone cluster reduction. The 6 km nominal arming altitude remains subject to the physical stopping-distance gate. Source-backed engine counts are 31 and 11/5/3; no engine fault identities are inferred. Actual propagated water contact is observed independently of Starship, with no tower catch, trajectory reseed or timed landing shutdown. After a three-second engineering water-observation window, the source-backed FTS event retires the booster from further propagation. This estimated delay is not measured FTS timing; explosive energy and fragments are not simulated. Sealed-cylinder water response excludes flooding, waves and structural breakup from FTS.",
+  "assumptions": "Retains the original launch assembly fuel and oxidizer inventory without changing tank loading. Continuous detached Super Heavy return using the inherited estimated Flight 12 V3 hardware. Landing feed inventory is isolated within the original aggregate tank at initial assembly, remains part of wet mass, and is opened without refilling after main-feed exhaustion. This is a resource partition, not a measured header-tank location or feed-pressure model. Reserve, Gulf aim point, boostback steering, descent gains and burn gates are engineering estimates. Boostback uses an estimated 0.4 throttle and a smooth 89 to -78 degree elevation reference, swept by logarithmic wet-mass loss (ideal rocket delta-v progress) instead of a fixed separation-state attitude. These angles and throttle are calibration parameters, not measured SpaceX guidance. Main-feed exhaustion controls cutoff; no clock, apogee clamp or reference display controls the flight state. A reduced-order variable-mass finite-burn forecast chooses only the horizontal bearing; its constant-gravity, ideal-attitude coast estimate is not the production force model. The 1.3 braking margin anticipates finite attitude response and permits earlier monotone cluster reduction. The 6 km nominal arming altitude remains subject to the physical stopping-distance gate. Source-backed engine counts are 31 and 11/5/3; no engine fault identities are inferred. Actual propagated water contact is observed independently of Starship, with no tower catch, trajectory reseed or timed landing shutdown. After a three-second engineering water-observation window, the source-backed FTS event retires the booster from further propagation. This estimated delay is not measured FTS timing; explosive energy and fragments are not simulated. Sealed-cylinder water response excludes flooding, waves and structural breakup from FTS.",
   "landingReserveKg": 200000,
   "targetLatitudeDegrees": 25.9,
   "targetLongitudeDegrees": -95.5,
-  "boostbackThrottle": 0.6,
-  "estimatedCoastApogeeM": 102000,
+  "boostbackThrottle": 0.4,
   "minimumFlipAlignment": 0.94,
   "pointingGain": 2.2,
   "pointingDamping": 6,
@@ -25,5 +24,7 @@
   "minimumWaterLatitudeDegrees": 23,
   "maximumWaterLatitudeDegrees": 29,
   "minimumWaterLongitudeDegrees": -97.25,
-  "maximumWaterLongitudeDegrees": -90
+  "maximumWaterLongitudeDegrees": -90,
+  "boostbackInitialElevationDegrees": 89,
+  "boostbackFinalElevationDegrees": -78
 }

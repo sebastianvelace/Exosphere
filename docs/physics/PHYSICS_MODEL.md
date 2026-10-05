@@ -464,9 +464,15 @@ selection only for that root; the estimated +5.44 m offset is not resolved
 grid-fin actuator aerodynamics. Engine-first landing guidance subtracts actual
 aerodynamic up-force from its thrust demand and conservatively retains capacity
 for the later low-drag portion when selecting 11 → 5 → 3 engines. Actual lifecycle
-and positive thrust witness delivery. Estimated finite-burn boostback steering
-bounds upward impulse using a coast-apogee control parameter; it never clamps
-altitude or velocity. The landing deceleration margin and nominal arm altitude
+and positive thrust witness delivery. Estimated boostback steering sweeps its
+commanded elevation from +89° to −78° at 40% throttle, driven by normalized ideal
+rocket delta-v progress `ln(m_start/m) / ln(m_start/m_end)`. The main-feed budget
+sets `m_end`; the protected landing partition stays in wet mass. These angles and
+throttle are engineering calibration, not measured SpaceX controls. A coarse
+variable-mass, constant-gravity forecast selects only the horizontal bearing;
+actual attitude, propellant and flight remain propagated by existing actuators
+and forces. Exhausted feed cannot advance the sweep or certify thrust delivery.
+No altitude/velocity is assigned or clamped. The landing deceleration margin and nominal arm altitude
 are profile estimates, with a physical stopping-distance/startup gate. Lateral
 landing damping uses commanded thrust acceleration rather than gravity.
 Gravity, drag coefficients and engine
@@ -478,4 +484,9 @@ and measured FTS delay are not simulated. The full mission and original stage
 continuity are tested; matching the flown boostback altitude, descent timing,
 landing inventory and near-water visuals remains open. See
 [the booster return audit](../audits/flight14_booster_return_2026-10-03.md) and
-[the subsequent guidance calibration](../audits/flight14_booster_calibration_2026-10-03.md).
+[the subsequent guidance calibration](../audits/flight14_booster_calibration_2026-10-03.md),
+and [the coast/reference refinement](../audits/flight14_booster_coast_calibration_2026-10-04.md).
+Terminal HUD altitude and speed use the immutable retirement witness. Undefined
+force/orbit diagnostics display as unavailable; the inertial wreck is not
+re-evaluated against a later moving Earth. Returning observation to Starship
+restores live instrumentation without changing the physics owner.
