@@ -49,7 +49,7 @@ for arg in "$@"; do
     --windows-only) DO_LINUX=0 ;;
     --skip-build) SKIP_BUILD=1 ;;
     -h|--help)
-      sed -n '2,25p' "$0"
+      awk 'NR>=2 && NR<=25' "$0"
       exit 0
       ;;
     *)
@@ -74,23 +74,9 @@ GODOT_VERSION="$("$GODOT_BIN" --version 2>/dev/null | head -n1 || true)"
 echo "Godot: $GODOT_VERSION"
 echo "Templates: $TEMPLATE_VERSION ($TEMPLATE_DIR)"
 
-# Strip a temporary visual-playtest autoload if a concurrent harness left it in
-# project.godot. Never leave PlaytestShot in a private test zip.
-PROJECT_BACKUP=""
-restore_project_godot() {
-  if [[ -n "$PROJECT_BACKUP" && -f "$PROJECT_BACKUP" ]]; then
-    mv -f "$PROJECT_BACKUP" project.godot
-    PROJECT_BACKUP=""
-  fi
-}
-trap restore_project_godot EXIT
-
-if grep -q 'PlaytestShot=' project.godot 2>/dev/null; then
-  PROJECT_BACKUP="$(mktemp)"
-  cp -a project.godot "$PROJECT_BACKUP"
-  # Delete only the temporary harness line; restore from backup on EXIT.
-  sed -i '/PlaytestShot=/d' project.godot
-  echo "Temporarily removed PlaytestShot autoload from project.godot for export."
+# An export must never rewrite a scene owned by a running visual harness.
+if rg -q 'PlaytestShot=|res://scripts/_[^\"]*Shot|VerifyShot' project.godot; then
+  die "Temporary capture autoload detected. Finish the playtest and restore project.godot before exporting."
 fi
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
@@ -125,7 +111,13 @@ print_tree_summary() {
   echo "--- $dir ---"
   du -sh "$dir" 2>/dev/null || true
   # Avoid `head` under `set -o pipefail` (SIGPIPE → exit 141).
-  find "$dir" -maxdepth 2 -mindepth 1 | sort | awk 'NR<=40'
+  python3 - "$dir" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+entries = sorted(str(p) for p in root.glob('*'))
+print('\n'.join(entries[:40]))
+PY
 }
 
 LINUX_ZIP=""
@@ -136,10 +128,9 @@ if [[ "$DO_LINUX" -eq 1 ]]; then
   mkdir -p "$LINUX_DIR"
   export_preset "$LINUX_PRESET" "${LINUX_DIR}/Exosphere.x86_64"
   copy_loose_data "$LINUX_DIR"
+  "$GODOT_BIN" --headless --path "$ROOT" --script tools/export_licenses.gd -- "$ROOT/$LINUX_DIR"
   LINUX_ZIP="${DIST_ROOT}/Exosphere-linux-x86_64.zip"
-  # zip from inside dist so the archive root is "linux/"
-  rm -f "$LINUX_ZIP"
-  (cd "$DIST_ROOT" && zip -qr "$(basename "$LINUX_ZIP")" linux)
+  python3 tools/package_game.py "$LINUX_DIR" --platform linux --archive "$LINUX_ZIP"
   print_tree_summary "$LINUX_DIR"
   echo "Linux zip: $LINUX_ZIP ($(du -h "$LINUX_ZIP" | awk '{print $1}'))"
 fi
@@ -149,15 +140,12 @@ if [[ "$DO_WINDOWS" -eq 1 ]]; then
   mkdir -p "$WINDOWS_DIR"
   export_preset "$WINDOWS_PRESET" "${WINDOWS_DIR}/Exosphere.exe"
   copy_loose_data "$WINDOWS_DIR"
+  "$GODOT_BIN" --headless --path "$ROOT" --script tools/export_licenses.gd -- "$ROOT/$WINDOWS_DIR"
   WINDOWS_ZIP="${DIST_ROOT}/Exosphere-windows-x86_64.zip"
-  rm -f "$WINDOWS_ZIP"
-  (cd "$DIST_ROOT" && zip -qr "$(basename "$WINDOWS_ZIP")" windows)
+  python3 tools/package_game.py "$WINDOWS_DIR" --platform windows --archive "$WINDOWS_ZIP"
   print_tree_summary "$WINDOWS_DIR"
   echo "Windows zip: $WINDOWS_ZIP ($(du -h "$WINDOWS_ZIP" | awk '{print $1}'))"
 fi
-
-restore_project_godot
-trap - EXIT
 
 echo
 echo "Export complete (private test build — not a public release)."

@@ -2,7 +2,7 @@
 
 Exosphere is a space-mission simulator. You fly a launch vehicle from the pad, through ascent, orbit, and reentry, in a double-precision model of the solar system. Free flight, the historical campaign, and the vehicle assembly building all use that same physics.
 
-There is no installer yet. You play by opening the source in the Godot .NET editor.
+Private desktop test builds are portable ZIPs; extract the entire archive before launching. Windows builds include Godot and the .NET runtime. For development, open the source in the Godot .NET editor.
 
 ## Screenshots
 
@@ -37,6 +37,24 @@ Captured on 2026-10-03, with the independent booster return updated on 2026-10-0
 *Original detached Super Heavy shortly after estimated Gulf water contact, following continuous launch and return. Guidance calibration improves height and timing; this is still an engineering estimate.*
 
 ## Play
+
+### Windows test build
+
+Extract the entire Windows ZIP, then open **Start Exosphere.bat**. Keep its executable,
+PCK, `data/` and runtime folder together. No editor or .NET installation is required.
+The normal launcher uses Vulkan with automatic graphics quality. On a hybrid laptop,
+select the high-performance GPU for `Exosphere.exe` in Windows graphics settings.
+**Start Compatibility.bat** provides OpenGL with a lighter profile if needed; its effects differ.
+Read `README-FIRST.txt` for controls, logs and the known simulation limits.
+
+Build with `bash tools/export_game.sh --windows-only`. This requires the .NET SDK,
+Godot 4.6.3 .NET and matching mono export templates. The script verifies the native
+runtime, checks every loose simulation-data file, records the revision, includes licenses,
+and validates the ZIP CRCs and SHA-256 payloads. It writes the ZIP and a SHA-256 sidecar
+under `dist/`; these generated artifacts are not committed. A native Windows GPU playtest
+remains necessary even when export and Wine checks pass.
+
+### Run from source
 
 | Need | Version |
 |------|---------|

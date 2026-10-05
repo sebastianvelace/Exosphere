@@ -1,0 +1,85 @@
+name: Windows package smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Test release containing Exosphere-windows-x86_64.zip
+        required: true
+        type: string
+      archive_sha256:
+        description: Expected SHA-256 of the exact ZIP under test
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-startup:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
+    steps:
+      - name: Download the exact test package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:ARCHIVE_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid SHA-256 input' }
+          gh release download "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --pattern Exosphere-windows-x86_64.zip --dir download
+          if ($LASTEXITCODE -ne 0) { throw 'Release asset download failed' }
+          $actual = (Get-FileHash download/Exosphere-windows-x86_64.zip -Algorithm SHA256).Hash
+          if ($actual -ne $env:ARCHIVE_SHA256) { throw 'Downloaded archive SHA-256 differs' }
+          Expand-Archive download/Exosphere-windows-x86_64.zip -DestinationPath 'Extracted Game With Spaces'
+
+      - name: Verify every extracted payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Resolve-Path 'Extracted Game With Spaces/windows'
+          foreach ($line in Get-Content "$root/CHECKSUMS.sha256") {
+            if ($line -notmatch '^([a-f0-9]{64})  (.+)$') { throw 'Malformed payload checksum' }
+            $expected, $relative = $Matches[1], $Matches[2]
+            if ((Get-FileHash (Join-Path $root $relative) -Algorithm SHA256).Hash -ne $expected) {
+              throw "Extracted payload differs: $relative"
+            }
+          }
+          Get-Content "$root/BUILD-INFO.json"
+
+      - name: Boot the menu and load the universe on native Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = (Resolve-Path 'Extracted Game With Spaces/windows').Path
+          New-Item -ItemType Directory evidence -Force | Out-Null
+          $env:EXOSPHERE_GRAPHICS_PRESET = 'automatic'
+          foreach ($scenario in @('menu', 'flight')) {
+            $log = Join-Path (Resolve-Path evidence) "$scenario.log"
+            $arguments = "--headless --audio-driver Dummy --max-fps 50 --quit-after 600 --log-file `"$log`""
+            if ($scenario -eq 'flight') { $arguments += ' -- --exo-smoke-flight' }
+            $process = Start-Process "$root/Exosphere.exe" -WorkingDirectory $root -ArgumentList $arguments -PassThru
+            if (-not $process.WaitForExit(120000)) {
+              Stop-Process -Id $process.Id -Force
+              throw "$scenario timed out"
+            }
+            if ($process.ExitCode -ne 0) { throw "$scenario exited with $($process.ExitCode)" }
+            $text = Get-Content $log -Raw
+            Write-Output $text
+            if ($text -match '(?m)^(ERROR:|SCRIPT ERROR:)|Unhandled exception') { throw "$scenario reported an engine or runtime error" }
+            if ($text -notmatch 'GRAPHICS_PROFILE') { throw "$scenario did not initialize the C# menu" }
+            if ($scenario -eq 'flight' -and $text -notmatch 'PERF_STARTUP phase=universe_loaded') {
+              throw 'Packaged universe/data loading was not verified'
+            }
+          }
+          "Native Windows menu/runtime/data smoke passed. GPU rendering and performance remain untested." | Tee-Object evidence/result.txt
+
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package-smoke-evidence
+          path: evidence/
+          if-no-files-found: ignore
