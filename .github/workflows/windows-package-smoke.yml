@@ -19,13 +19,18 @@ jobs:
   packaged-startup:
     runs-on: windows-latest
     timeout-minutes: 10
+    # Draft releases are visible only to identities with repository write access.
+    # The token is supplied solely to the download step, never to the game process.
+    permissions:
+      contents: write
     env:
-      GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.release_tag }}
       ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
     steps:
       - name: Download the exact test package
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:ARCHIVE_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid SHA-256 input' }
