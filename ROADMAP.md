@@ -30,6 +30,11 @@ Base tecnica cerrada en `main`:
   in its briefing rather than a side panel.
   Flight 14 now exposes an automatic engineering exploration from the featured
   briefing: loaded ascent, insertion, 26 payload releases and estimated ship water entry.
+  A presentation shortcut becomes available after all 26 payload releases: **SKIP TO
+  ENTRY** advances the continuous physical mission and pauses at its entry interface.
+  Bounded work keeps cancel/menu usable; the 3D view hides during advancement and
+  returns at cancellation/arrival. Passive payload coast integrates gravity and
+  residual drag at <=0.5 s, while both original stages retain their 50 Hz control steps.
   The independent booster estimate now reaches Gulf water contact with 31-engine
   boostback and 11/5/3 landing; camera observation preserves ship ownership.
   The earlier guidance calibration reduced the 207 km / T+582 s baseline to

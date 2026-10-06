@@ -443,6 +443,25 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         {
             MaxAllowedWarpIndex = 7; // Up to x200, always whole 20 ms full-physics steps.
             if (WarpIndex > MaxAllowedWarpIndex) SetWarpIndex(MaxAllowedWarpIndex);
+            if (preview.IsAdvancingToEntry)
+            {
+                // No threads mutate the live universe. Yield between bounded batches so
+                // cancel/menu remain usable, and sample systems for each committed interval.
+                var budget = System.Diagnostics.Stopwatch.StartNew();
+                double totalProcessed = 0;
+                for (int batch = 0; batch < 32 && preview.IsAdvancingToEntry; batch++)
+                {
+                    _previewProcessedSeconds = preview.AdvanceToEntry();
+                    totalProcessed += _previewProcessedSeconds;
+                    SystemsController.Instance?.AdvanceProcessedSimulation();
+                    if (budget.Elapsed.TotalMilliseconds >= 40) break;
+                }
+                _previewProcessedSeconds = totalProcessed;
+                SyncFlight14Presentation(preview);
+                QueueRequiredPlanetPresentation();
+                SyncStructuralDebrisRenderers();
+                return; // Systems already consumed each batch; never integrate twice.
+            }
             _previewProcessedSeconds = preview.AdvanceFrame(delta);
             SyncFlight14Presentation(preview);
         }
@@ -1381,6 +1400,11 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             ["rendered_vessels"] = _previewRenderedVessels.Count,
             ["vessels"] = Universe.Vessels.Count,
             ["paused"] = preview.IsPaused,
+            ["advancing_to_entry"] = preview.IsAdvancingToEntry,
+            ["can_advance_to_entry"] = preview.CanAdvanceToEntry,
+            ["entry_reached"] = preview.Run.ReturnController?.EntryInterface != null,
+            ["vertical_speed"] = preview.Run.Ship.GetSurfaceVelocity(preview.Run.Earth)
+                .Dot(preview.Run.Earth.GetGeodeticUp(preview.Run.Ship.Position)),
             ["terminal"] = preview.IsTerminal,
             ["blocked"] = preview.BlockReason ?? "",
         };

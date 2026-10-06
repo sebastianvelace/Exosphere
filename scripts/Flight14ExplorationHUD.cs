@@ -9,8 +9,11 @@ public partial class Flight14ExplorationHUD : Control
     private Label _status = null!;
     private Button _pause = null!;
     private Button _observe = null!;
+    private Button _entry = null!;
     private VBoxContainer _controls = null!;
     private Control? _phaseBanner;
+    private Viewport? _shortcutViewport;
+    private bool _previousDisable3D;
 
     public override void _Ready()
     {
@@ -40,13 +43,25 @@ public partial class Flight14ExplorationHUD : Control
         _pause = AddButton(row, "PAUSE", () =>
         {
             if (SimulationBridge.Instance?.Flight14Preview is { } preview && !preview.IsStopped)
-                preview.IsPaused = !preview.IsPaused;
+            {
+                if (preview.IsAdvancingToEntry) preview.CancelAdvanceToEntry();
+                else preview.IsPaused = !preview.IsPaused;
+            }
         });
         _observe = AddButton(row, "SUPER HEAVY", () =>
         {
             if (SimulationBridge.Instance?.Flight14Preview is { } preview
                 && preview.ObserveBooster(!preview.IsObservingBooster))
                 CameraController.Instance?.EnterShipChaseView();
+        });
+        _entry = AddButton(row, "SKIP TO ENTRY", () =>
+        {
+            if (SimulationBridge.Instance is { Flight14Preview: { } preview } bridge
+                && preview.BeginAdvanceToEntry())
+            {
+                bridge.SetWarpIndex(0);
+                CameraController.Instance?.EnterShipChaseView();
+            }
         });
         AddButton(row, "RESTART", () =>
         {
@@ -58,6 +73,15 @@ public partial class Flight14ExplorationHUD : Control
             GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
         });
         AddButton(row, "MENU", () => GetTree().ChangeSceneToFile("res://scenes/ui/MainMenu.tscn"));
+    }
+
+    public override void _ExitTree() => RestoreWorldView();
+
+    private void RestoreWorldView()
+    {
+        if (_shortcutViewport != null && GodotObject.IsInstanceValid(_shortcutViewport))
+            _shortcutViewport.Disable3D = _previousDisable3D;
+        _shortcutViewport = null;
     }
 
     private static Button AddButton(HBoxContainer row, string text, Action action)
@@ -73,15 +97,28 @@ public partial class Flight14ExplorationHUD : Control
     public override void _Process(double delta)
     {
         if (SimulationBridge.Instance?.Flight14Preview is not { } preview) return;
+        if (preview.IsAdvancingToEntry && _shortcutViewport == null)
+        {
+            _shortcutViewport = GetViewport();
+            _previousDisable3D = _shortcutViewport.Disable3D;
+            _shortcutViewport.Disable3D = true;
+        }
+        else if (!preview.IsAdvancingToEntry) RestoreWorldView();
         _phaseBanner ??= GetTree().Root.FindChild("FlightPhaseBanner", true, false) as Control;
         // Work in this canvas's coordinates: global pixels are not local offsets at UI scale.
         var inverse = GetGlobalTransform().AffineInverse();
         float bannerBottom = _phaseBanner is { Visible: true }
             ? (inverse * _phaseBanner.GetGlobalRect().End).Y : 86;
         _controls.OffsetTop = Mathf.Max(96, bannerBottom + 10);
-        _pause.Text = preview.IsPaused ? "RESUME" : "PAUSE";
+        _pause.Text = preview.IsAdvancingToEntry ? "CANCEL SKIP" : preview.IsPaused ? "RESUME" : "PAUSE";
+        _entry.Disabled = !preview.CanAdvanceToEntry;
+        _entry.TooltipText = preview.IsAdvancingToEntry
+            ? "Advancing continuously to entry. CANCEL SKIP pauses at the current state."
+            : preview.Run.ReturnController?.EntryInterface != null
+                ? "The entry interface has already been reached."
+                : "Available after all 26 satellites are deployed. Advances physics to entry and pauses; processing time depends on CPU speed.";
         _pause.Disabled = preview.IsStopped || preview.IsObservingBooster && preview.Run.BoosterReturnController is { IsStopped: true };
-        _observe.Disabled = preview.Run.BoosterReturnController?.Booster == null
+        _observe.Disabled = preview.IsAdvancingToEntry || preview.Run.BoosterReturnController?.Booster == null
             || !preview.IsObservingBooster && preview.Run.BoosterReturnController.Booster.IsDestroyed;
         _observe.Text = preview.IsObservingBooster ? "STARSHIP" : "SUPER HEAVY";
         string state = preview.IsTerminal ? preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null
@@ -97,6 +134,11 @@ public partial class Flight14ExplorationHUD : Control
             state = "SUPER HEAVY · " + (booster.BlockReason ?? booster.Phase.ToString()).ToUpperInvariant()
                 + (booster.FlightTerminationTriggered ? " · FTS RECORDED" : "")
                 + (preview.IsPaused ? " · PAUSED" : " · [, .] TIME · DRAG / SCROLL CAMERA");
+        if (preview.IsAdvancingToEntry)
+        {
+            var elapsed = TimeSpan.FromSeconds(preview.MissionElapsedSeconds);
+            state = $"ADVANCING TO ENTRY · T+ {elapsed:hh\\:mm\\:ss} · CANCEL SKIP TO PAUSE";
+        }
         _status.Text = "FLIGHT 14 / ENGINEERING EXPLORATION\n" + state;
     }
 }

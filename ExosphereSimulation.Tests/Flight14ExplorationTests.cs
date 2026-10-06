@@ -62,6 +62,10 @@ public sealed class Flight14ExplorationTests
         var run = Flight14LaunchDiagnostic.CreateWithBoosterReturn(DataDirectory());
         var preview = new Flight14Exploration(run) { IsPaused = true };
         run.Universe.TimeScale = 200;
+        Assert.False(preview.CanAdvanceToEntry);
+        Assert.False(preview.BeginAdvanceToEntry());
+        Assert.Equal(0, preview.AdvanceToEntry());
+        Assert.Throws<ArgumentOutOfRangeException>(() => preview.AdvanceToEntry(101));
         Assert.Equal(0, preview.AdvanceFrame(30));
         Assert.Equal(0, run.Universe.CurrentTime);
         Assert.Equal(0, run.Ship.Throttle);
@@ -80,7 +84,55 @@ public sealed class Flight14ExplorationTests
         var preview = new Flight14Exploration(run);
         universe.TimeScale = 200;
         var shipId = run.Ship.Id;
-        for (int i = 0; i < 16000 && !preview.IsStopped; i++) preview.AdvanceFrame(0.02);
+        bool shortcutUsed = false;
+        bool entryPaused = false;
+        for (int i = 0; i < 16000 && !preview.IsStopped; i++)
+        {
+            if (!shortcutUsed && preview.CanAdvanceToEntry)
+            {
+                shortcutUsed = true;
+                preview.IsPaused = true;
+                Assert.True(preview.BeginAdvanceToEntry());
+                Assert.False(preview.IsPaused);
+                Assert.False(preview.IsObservingBooster);
+                Assert.False(preview.BeginAdvanceToEntry());
+                Assert.False(preview.ObserveBooster(true));
+                double epochBefore = universe.CurrentTime;
+                Assert.Equal(0, preview.AdvanceFrame(1));
+                Assert.InRange(preview.AdvanceToEntry(3), 0.059999, 0.060001);
+                Assert.Equal(200, universe.TimeScale);
+                preview.CancelAdvanceToEntry();
+                Assert.True(preview.IsPaused);
+                Assert.False(preview.IsAdvancingToEntry);
+                Assert.InRange(universe.CurrentTime - epochBefore, 0.059999, 0.060001);
+                Assert.Equal(0, preview.AdvanceFrame(1));
+                Assert.True(preview.BeginAdvanceToEntry());
+            }
+            if (preview.IsAdvancingToEntry)
+            {
+                preview.AdvanceToEntry();
+                if (!preview.IsAdvancingToEntry)
+                {
+                    entryPaused = true;
+                    Assert.True(preview.IsPaused);
+                    Assert.False(preview.CanAdvanceToEntry);
+                    Assert.False(preview.BeginAdvanceToEntry());
+                    Assert.NotNull(run.ReturnController!.EntryInterface);
+                    Assert.Equal(26, run.PayloadController.Releases.Count);
+                    Assert.True(run.ReturnController.HasDeliveredDeorbitThrust);
+                    Assert.Equal(Flight14ReturnPhase.AtmosphericEntry, run.ReturnController.Phase);
+                    Assert.InRange(run.Ship.GetAltitude(run.Earth), 119900, 120000);
+                    Assert.True(run.ReturnController.EntryInterface.VerticalSpeedMps < -20);
+                    double entryEpoch = universe.CurrentTime;
+                    Assert.Equal(0, preview.AdvanceFrame(10));
+                    Assert.Equal(entryEpoch, universe.CurrentTime);
+                    preview.IsPaused = false;
+                }
+            }
+            else preview.AdvanceFrame(0.02);
+        }
+        Assert.True(shortcutUsed);
+        Assert.True(entryPaused);
         Assert.Null(preview.BlockReason);
         Assert.False(run.Ship.IsDestroyed);
         Assert.True(preview.IsTerminal, preview.Phase);

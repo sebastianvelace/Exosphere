@@ -31,7 +31,7 @@ public partial class WarpController : Control
         if (ev is InputEventKey { Pressed: true, Echo: false } key)
         {
             var bridge = SimulationBridge.Instance;
-            if (bridge == null) return;
+            if (bridge == null || bridge.Flight14Preview is { IsAdvancingToEntry: true }) return;
 
             bool handled = false;
             if (key.Keycode == Key.Period)
@@ -58,7 +58,8 @@ public partial class WarpController : Control
         double currentRate = SimulationBridge.WarpLevels[bridge.WarpIndex];
         double maxRate     = SimulationBridge.WarpLevels[bridge.MaxAllowedWarpIndex];
 
-        string line1 = $"TIME  x{currentRate:G}";
+        string line1 = bridge.Flight14Preview is { IsAdvancingToEntry: true }
+            ? "TIME  TO ENTRY" : $"TIME  x{currentRate:G}";
         string solarPhase = SunController.SolarPhase switch
         {
             "CIVIL_TWILIGHT" => "CIVIL",
@@ -129,7 +130,8 @@ public partial class WarpController : Control
             HudDensity.Full => true,
             HudDensity.Clean => false,
             _ => bridge != null
-                && (bridge.WarpIndex > 0
+                && (bridge.Flight14Preview is { IsAdvancingToEntry: true }
+                    || bridge.WarpIndex > 0
                     || bridge.WarpClampReason != null
                         && bridge.Universe is { } universe
                         && universe.CurrentTime < bridge.WarpClampReasonUntil),

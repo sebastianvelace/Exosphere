@@ -692,6 +692,89 @@ public class Universe
         return fallback;
     }
 
+    public const int MaxPassivePayloadBatchSteps = 25; // <=0.5 s; stricter than the general 2 s coast cap.
+    private Dictionary<Vessel, double>? _passivePayloadBatch;
+
+    /// <summary>
+    /// Advances the controlled vehicle at 50 Hz while batching passive deployed payloads
+    /// for <=0.5 seconds, below the existing coast integration cap. Payloads retain RK4 gravity
+    /// and residual atmospheric drag; active propulsion, entry and contacts never batch.
+    /// Control callbacks must not read the passive payloads until this method returns.
+    /// </summary>
+    public double TickPassivePayloadBatch(int maximumSteps, IEnumerable<Vessel> payloads,
+        Func<bool> shouldStop)
+    {
+        ArgumentNullException.ThrowIfNull(payloads);
+        ArgumentNullException.ThrowIfNull(shouldStop);
+        if (maximumSteps < 1 || maximumSteps > MaxPassivePayloadBatchSteps)
+            throw new ArgumentOutOfRangeException(nameof(maximumSteps));
+        if (TimeScale != 1 || _passivePayloadBatch != null || _pendingSimulationSeconds > 1e-12)
+            throw new InvalidOperationException("Passive payload batches require real-time physics, no scheduler debt and exclusive ownership.");
+        double start = CurrentTime;
+        _passivePayloadBatch = payloads.Distinct()
+            .Where(v => _vessels.Contains(v) && CanBatchPassivePayload(v))
+            .ToDictionary(v => v, _ => start);
+        try
+        {
+            for (int step = 0; step < maximumSteps && !shouldStop(); step++)
+                Tick(DeterministicControlPeriodSeconds);
+        }
+        finally
+        {
+            var pending = _passivePayloadBatch;
+            _passivePayloadBatch = null;
+            foreach (var (vessel, epoch) in pending)
+                MaterializePassivePayload(vessel, epoch);
+        }
+        return CurrentTime - start;
+    }
+
+    private bool CanBatchPassivePayload(Vessel vessel)
+    {
+        if (Coupled6DofIntegrationEnabled || _bodies.Count == 0
+            || vessel == ActiveVessel || IsDockedSecondary(vessel) || vessel.IsDestroyed
+            || vessel.IsGroundHeld || vessel.IsSurfaceSettled || vessel.WaterMotionEnabled
+            || !HasFinitePhysicalState(vessel) || HasWakeCommand(vessel)
+            || vessel.Crew.Count != 0 || vessel.Parts.Parts.Count != 1
+            || !vessel.Parts.Parts[0].Definition.HasVehicleRole("payload")
+            || vessel.Parts.ActiveEngineList.Count != 0 || vessel.AngularVelocity.Magnitude > 1e-4)
+            return false;
+        var body = GetDominantBody(vessel.Position);
+        // Guard the entire passive-coast travel envelope, rather than a stale public state
+        // inside the batch. Low LEO residual drag is still integrated, never put on rails.
+        double clearance = vessel.GetSurfaceVelocity(body).Magnitude * MaxPassivePayloadBatchSteps * DeterministicControlPeriodSeconds;
+        return vessel.GetAltitude(body) > (body.Atmosphere?.MaxAltitude * 1.05 ?? 1000) + clearance
+            && vessel.GetDynamicPressure(body) < 0.5
+            && vessel.ComputeStagnationHeatFlux(body.GetAtmosphericDensity(vessel.Position),
+                vessel.GetSurfaceVelocity(body)) < 500;
+    }
+
+    private void MaterializePassivePayload(Vessel vessel, double start, double? bodyEpochToRestore = null)
+    {
+        double target = CurrentTime;
+        double dt = target - start;
+        if (dt <= 1e-12 || vessel.IsDestroyed) return;
+        if (bodyEpochToRestore.HasValue)
+            KeplerPropagator.PropagateAllBodies(_bodies, target, _bodyPropagationWorkspace);
+        CurrentTime = start;
+        try
+        {
+            if (vessel.IsOnRails && !RequiresOffRailsPhysics(vessel))
+                PropagateVesselOnRails(vessel, start, target);
+            else
+            {
+                WakeVesselFromRails(vessel);
+                IntegrateVesselOffRails(vessel, GetDominantBodyAt(vessel.Position, start), dt);
+            }
+        }
+        finally
+        {
+            CurrentTime = target;
+            if (bodyEpochToRestore is { } bodyEpoch)
+                KeplerPropagator.PropagateAllBodies(_bodies, bodyEpoch, _bodyPropagationWorkspace);
+        }
+    }
+
     // ── Main tick ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -1556,6 +1639,18 @@ public class Universe
                     + heldBody.GetSurfaceVelocity(vessel.Position);
                 vessel.Tick(dt, heldBody);
                 continue;
+            }
+
+            if (_passivePayloadBatch != null && _passivePayloadBatch.TryGetValue(vessel, out double batchEpoch))
+            {
+                if (!HasWakeCommand(vessel))
+                {
+                    _tickDeadlineDeferredSkips++;
+                    continue;
+                }
+                // Commands wake an epoch-correct payload before full integration.
+                MaterializePassivePayload(vessel, batchEpoch, CurrentTime + dt);
+                _passivePayloadBatch.Remove(vessel);
             }
 
             if (vessel.IsOnRails)

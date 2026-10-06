@@ -299,9 +299,23 @@ full rigid-body angular momentum for a resolved conveyor/door mechanism.
 
 The Flight 14 diagnostic carries 26 payload parts through powered ascent, then
 releases them only after orbit, shutdown and angular-rate checks. Per-satellite
-mass, layout, schedule and impulse are explicit estimates; released unpowered
-satellites use the existing central-body Kepler approximation. Gameplay/save
-integration, active satellite orbit raising and complete mission return are pending.
+mass, layout, schedule and impulse are explicit estimates. Released unpowered
+satellites initially request central-body Kepler propagation; the normal force guard
+wakes them to RK4 wherever residual atmospheric drag requires it. Active satellite
+orbit raising and complete historical mission acceptance remain pending.
+
+The exploration's **SKIP TO ENTRY** shortcut unlocks after all releases and advances
+the existing controls through coast/deorbit to the first observed 120 km geodetic
+entry interface, then pauses. It does not assign a checkpoint, refill resources or
+change the original stages' 20 ms physics/control cadence. Each bounded batch may
+integrate safe passive single-part payloads at <=0.5 s, retaining RK4 gravity and
+residual drag; commands, entry/contact envelopes, high angular rates, propulsion,
+crew and coupled-6-DoF mode fall back to normal integration. Payload states are
+materialized at the committed epoch before rendering and systems sampling. Return
+controllers do not query these released payloads during a batch. This is a numerical
+coast approximation for the presentation shortcut, not a historical playback.
+`PassivePayloadBatchTests` compare it against 20 ms propagation over both short and
+100-minute moving-Earth coasts and exercise mid-batch wake and interrupted resume.
 
 ## Propulsion and mass flow
 
