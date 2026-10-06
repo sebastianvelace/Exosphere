@@ -9,7 +9,7 @@ public partial class Flight14ExplorationHUD : Control
     private Label _status = null!;
     private Button _pause = null!;
     private Button _observe = null!;
-    private HBoxContainer _row = null!;
+    private VBoxContainer _controls = null!;
     private Control? _phaseBanner;
 
     public override void _Ready()
@@ -17,19 +17,26 @@ public partial class Flight14ExplorationHUD : Control
         SetAnchorsAndOffsetsPreset(LayoutPreset.TopWide);
         MouseFilter = MouseFilterEnum.Ignore;
         ZIndex = 30;
-        var row = new HBoxContainer { OffsetLeft = 20, OffsetTop = 96, OffsetRight = -20 };
-        _row = row;
-        row.SetAnchorsPreset(LayoutPreset.TopWide);
+        _controls = new VBoxContainer { Name = "ExplorationControls" };
+        _controls.SetAnchorsPreset(LayoutPreset.CenterTop);
+        _controls.GrowHorizontal = GrowDirection.Both;
+        _controls.OffsetLeft = -300;
+        _controls.OffsetRight = 300;
+        _controls.OffsetTop = 96;
+        _controls.AddThemeConstantOverride("separation", 8);
+        AddChild(_controls);
+        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         row.AddThemeConstantOverride("separation", 10);
-        AddChild(row);
         _status = new Label
         {
+            Name = "ExplorationStatus",
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            CustomMinimumSize = new Vector2(280, 42),
         };
         InterfaceTheme.ApplyLabel(_status, 12);
-        row.AddChild(_status);
+        _controls.AddChild(_status);
+        _controls.AddChild(row);
         _pause = AddButton(row, "PAUSE", () =>
         {
             if (SimulationBridge.Instance?.Flight14Preview is { } preview && !preview.IsStopped)
@@ -56,8 +63,7 @@ public partial class Flight14ExplorationHUD : Control
     private static Button AddButton(HBoxContainer row, string text, Action action)
     {
         var button = new Button { Text = text, CustomMinimumSize = new Vector2(80, 34) };
-        InterfaceTheme.StyleButton(button);
-        button.CustomMinimumSize = new Vector2(84, 34);
+        InterfaceTheme.StyleButton(button, minSize: new Vector2(84, 34), paddingX: 12, paddingY: 8);
         button.SizeFlagsHorizontal = SizeFlags.ShrinkEnd;
         button.Pressed += action;
         row.AddChild(button);
@@ -68,8 +74,11 @@ public partial class Flight14ExplorationHUD : Control
     {
         if (SimulationBridge.Instance?.Flight14Preview is not { } preview) return;
         _phaseBanner ??= GetTree().Root.FindChild("FlightPhaseBanner", true, false) as Control;
-        _row.OffsetTop = _phaseBanner is { Visible: true }
-            ? Mathf.Max(96, _phaseBanner.GetGlobalRect().End.Y+10) : 96;
+        // Work in this canvas's coordinates: global pixels are not local offsets at UI scale.
+        var inverse = GetGlobalTransform().AffineInverse();
+        float bannerBottom = _phaseBanner is { Visible: true }
+            ? (inverse * _phaseBanner.GetGlobalRect().End).Y : 86;
+        _controls.OffsetTop = Mathf.Max(96, bannerBottom + 10);
         _pause.Text = preview.IsPaused ? "RESUME" : "PAUSE";
         _pause.Disabled = preview.IsStopped || preview.IsObservingBooster && preview.Run.BoosterReturnController is { IsStopped: true };
         _observe.Disabled = preview.Run.BoosterReturnController?.Booster == null

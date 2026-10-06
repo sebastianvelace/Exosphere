@@ -202,6 +202,7 @@ public partial class HUDController : Control
     private void BuildLeftPanel()
     {
         var panel = MakePanel();
+        panel.Name = "FlightLoadsPanel";
         _leftRoot = panel;
         panel.OffsetLeft = 18; panel.OffsetTop = 18;
         AddChild(panel);
@@ -228,6 +229,7 @@ public partial class HUDController : Control
     private void BuildRightPanel()
     {
         var panel = MakePanel();
+        panel.Name = "FlightOrbitPanel";
         _rightRoot = panel;
         panel.SetAnchorsPreset(LayoutPreset.TopRight);
         panel.GrowHorizontal = GrowDirection.Begin;
@@ -241,8 +243,10 @@ public partial class HUDController : Control
         vbox.AddChild(MakeHeader("ORBIT / VEHICLE"));
         _massValue = AddRow(vbox, "MASS", "—");
         _dvValue   = AddRow(vbox, "STAGE Δv", "—");
-        _apValue   = AddRow(vbox, "APOAPSIS", "—");
-        _peValue   = AddRow(vbox, "PERIAPSIS", "—");
+        _apValue   = AddRow(vbox, "APOAPSIS", "—", valueFontSize: 24);
+        _peValue   = AddRow(vbox, "PERIAPSIS", "—", valueFontSize: 24);
+        _apValue.Name = "ApoapsisValue";
+        _peValue.Name = "PeriapsisValue";
 
         // Aviso de trayectoria suborbital: parte del bloque de órbita (en el VBox), por lo
         // que nunca solapa otros paneles. Vacío salvo cuando la periapsis cae bajo superficie.
@@ -725,7 +729,7 @@ public partial class HUDController : Control
         return lbl;
     }
 
-    private static Label AddRow(VBoxContainer parent, string caption, string initial)
+    private static Label AddRow(VBoxContainer parent, string caption, string initial, int valueFontSize = 12)
     {
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 8);
@@ -738,7 +742,7 @@ public partial class HUDController : Control
 
         // Numeric readouts are monospaced so a changing digit never shifts the column.
         var val = new Label { Text = initial };
-        InterfaceTheme.ApplyMono(val, 12);
+        InterfaceTheme.ApplyMono(val, valueFontSize);
         val.AddThemeColorOverride("font_color", ValueBright);
         val.HorizontalAlignment = HorizontalAlignment.Right;
         val.SizeFlagsHorizontal = SizeFlags.ExpandFill;

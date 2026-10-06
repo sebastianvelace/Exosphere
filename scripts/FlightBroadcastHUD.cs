@@ -200,10 +200,13 @@ public partial class FlightBroadcastHUD : Control
         else if (s.MissionPhase == "PRE_LAUNCH") clock = "T− HOLD";
         Text(clock, new Vector2(width * 0.5f, 95), 36, Colors.White, mono: true);
         Text(_vehicleLabel, new Vector2(width * 0.5f, 117), 13, Dim, maxWidth: width - 680);
-        string orbit = s.IsImpactTrajectory ? "PE IMPACT" : $"PE {Distance(s.PeriapsisAltitudeM)}";
+        string periapsis = s.IsImpactTrajectory ? "IMPACT" : Distance(s.PeriapsisAltitudeM);
         Text($"ALT {Distance(s.AltitudeM)}   ·   VERT {s.VerticalSpeedMps:+0;−0;0} M/S   ·   THR {s.Throttle * 100:0}%   ·   TWR {s.ThrustToWeightRatio:0.00}",
-            new Vector2(width * 0.5f, 147), 12, Readout, mono: true);
-        Text($"AP {Distance(s.ApoapsisAltitudeM)}   ·   {orbit}", new Vector2(width * 0.5f, 165), 10, Dim, mono: true);
+            new Vector2(width * 0.5f, 140), 12, Readout, mono: true);
+        float orbitCentre = width * 0.5f;
+        Text($"APOAPSIS  {Distance(s.ApoapsisAltitudeM)}", new Vector2(orbitCentre - 180, 171), 22, Colors.White, mono: true);
+        Text($"PERIAPSIS  {periapsis}", new Vector2(orbitCentre + 180, 171), 22,
+            s.IsImpactTrajectory ? InterfaceTheme.Warning : Colors.White, mono: true);
         DrawGauge(new Vector2(width - 222, 90), "SURFACE SPEED", $"{s.SurfaceSpeedMps * 3.6:0}", "KM/H",
             (float)System.Math.Clamp(s.SurfaceSpeedMps / 8000.0, 0, 1));
         if (_rightBoard != null) DrawEngineBoard(new Vector2(width - 83, 90), _rightBoard);

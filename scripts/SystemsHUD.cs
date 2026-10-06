@@ -16,6 +16,7 @@ public partial class SystemsHUD : Control
     private StyleBoxFlat _panelStyle = null!;
     private double _refreshAccumulator = double.MaxValue;
     private bool _wasVisible;
+    private Control? _orbitPanel;
 
     public override void _Ready()
     {
@@ -48,6 +49,25 @@ public partial class SystemsHUD : Control
         {
             _wasVisible = false;
             return;
+        }
+
+        _orbitPanel ??= GetTree().Root.FindChild("FlightOrbitPanel", true, false) as Control;
+        if (_orbitPanel is { Visible: true })
+        {
+            // Stack below the live orbit panel; large readouts and event logs change its height.
+            float top = (GetGlobalTransform().AffineInverse()
+                * _orbitPanel.GetGlobalRect().End).Y + Position.Y + 14;
+            float bandHeight = FlightBroadcastHUD.DesignHeight * Mathf.Min(GetViewportRect().Size.X / 1600f, 1f);
+            float height = Mathf.Clamp(GetViewportRect().Size.Y - bandHeight - top - 12, 170, 200);
+            CustomMinimumSize = new Vector2(278, height);
+            OffsetTop = top;
+            OffsetBottom = top + height;
+        }
+        else
+        {
+            CustomMinimumSize = new Vector2(278, 200);
+            OffsetTop = 340;
+            OffsetBottom = 540;
         }
 
         if (!_wasVisible)

@@ -11,6 +11,7 @@ public partial class WarpController : Control
 {
     private Font _font = null!;
     private StyleBoxFlat _panelStyle = null!;
+    private Control? _flightPanel;
 
     public override void _Ready()
     {
@@ -97,12 +98,18 @@ public partial class WarpController : Control
 
     public override void _Process(double delta)
     {
-        // In the compact broadcast view, keep the clock outside the centred
-        // phase banner on narrower windows. The flight sidebar is hidden here.
-        float left = UserInterfaceSettings.HudDensity == HudDensity.Minimal
-            && GetViewportRect().Size.X < 1660 ? 18f : 320f;
+        _flightPanel ??= GetTree().Root.FindChild("FlightLoadsPanel", true, false) as Control;
+        bool narrow = GetViewportRect().Size.X < 1660;
+        float left = narrow ? 18f : 320f;
+        // On narrow windows, stack with the flight sidebar instead of crossing the banner.
+        float top = narrow && _flightPanel is { Visible: true }
+            ? (GetGlobalTransform().AffineInverse() * _flightPanel.GetGlobalRect().End).Y + Position.Y + 12
+            : 18f;
         OffsetLeft = left;
         OffsetRight = left + 178f;
+        float height = Size.Y;
+        OffsetTop = top;
+        OffsetBottom = top + height;
         bool viewAllows = CameraController.Instance?.IsCockpitView != true
             && MapViewController.Instance?.Visible != true;
         Visible = viewAllows && DensityAllows();
