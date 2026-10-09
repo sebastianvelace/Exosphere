@@ -14,12 +14,15 @@ public partial class Flight14ExplorationHUD : Control
     private Control? _phaseBanner;
     private Viewport? _shortcutViewport;
     private bool _previousDisable3D;
+    private EntryAdvancePresentation _advancePresentation = null!;
 
     public override void _Ready()
     {
-        SetAnchorsAndOffsetsPreset(LayoutPreset.TopWide);
+        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
         ZIndex = 30;
+        _advancePresentation = new EntryAdvancePresentation { Name = "EntryAdvancePresentation" };
+        AddChild(_advancePresentation);
         _controls = new VBoxContainer { Name = "ExplorationControls" };
         _controls.SetAnchorsPreset(LayoutPreset.CenterTop);
         _controls.GrowHorizontal = GrowDirection.Both;
@@ -57,8 +60,11 @@ public partial class Flight14ExplorationHUD : Control
         _entry = AddButton(row, "SKIP TO ENTRY", () =>
         {
             if (SimulationBridge.Instance is { Flight14Preview: { } preview } bridge
-                && preview.BeginAdvanceToEntry())
+                && preview.CanAdvanceToEntry)
             {
+                // Capture before disabling 3D, while the last flight frame is available.
+                _advancePresentation.CaptureBackground();
+                if (!preview.BeginAdvanceToEntry()) return;
                 bridge.SetWarpIndex(0);
                 CameraController.Instance?.EnterShipChaseView();
             }
@@ -82,6 +88,7 @@ public partial class Flight14ExplorationHUD : Control
         if (_shortcutViewport != null && GodotObject.IsInstanceValid(_shortcutViewport))
             _shortcutViewport.Disable3D = _previousDisable3D;
         _shortcutViewport = null;
+        if (GodotObject.IsInstanceValid(_advancePresentation)) _advancePresentation.HideProgress();
     }
 
     private static Button AddButton(HBoxContainer row, string text, Action action)
@@ -110,6 +117,8 @@ public partial class Flight14ExplorationHUD : Control
         float bannerBottom = _phaseBanner is { Visible: true }
             ? (inverse * _phaseBanner.GetGlobalRect().End).Y : 86;
         _controls.OffsetTop = Mathf.Max(96, bannerBottom + 10);
+        if (preview.IsAdvancingToEntry)
+            _advancePresentation.ShowProgress(preview, inverse * _controls.GetGlobalRect().End);
         _pause.Text = preview.IsAdvancingToEntry ? "CANCEL SKIP" : preview.IsPaused ? "RESUME" : "PAUSE";
         _entry.Disabled = !preview.CanAdvanceToEntry;
         _entry.TooltipText = preview.IsAdvancingToEntry
