@@ -120,6 +120,11 @@ Base tecnica cerrada en `main`:
   frame time in occupied/above-cloud views; dense cells still take approximately
   380 ms, so smooth gameplay performance remains open. See
   `docs/audits/integrated_gpu_preset_2026-10-02.md`.
+- Near-pad cloud density reuse (2026-10-09): double-buffered, rendered-slice
+  completion and stale-clock fallback retain shared foreground/terrain/sky transport.
+  The same paused Radeon Quality fixture improves GPU time from 594 to 134 ms;
+  smooth target-hardware performance remains open. See
+  `docs/audits/cloud_density_cache_2026-10-09.md`.
 - The exterior broadcast HUD has independent live engine boards, observed events,
   mission clock and piloting telemetry (2026-10-01). F3 density/cockpit/map
   transitions passed at 1280×720; actual ignition/liftoff passed at 1920×1080.

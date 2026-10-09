@@ -30,6 +30,40 @@ uniform float cloud_local_top_m = 3600.0;
 uniform float cloud_planet_radius_m = 6371000.0;
 uniform float cloud_observer_altitude_m = 0.0;
 
+#ifndef CLOUD_DENSITY_BAKE
+uniform bool cloud_density_cache_enabled = false;
+uniform sampler2D cloud_density_cache_tex : filter_linear, repeat_disable;
+uniform vec3 cloud_density_cache_center;
+uniform float cloud_density_cache_bottom_m = 1100.0;
+uniform float cloud_density_cache_height_m = 1400.0;
+uniform int cloud_density_cache_side = 256;
+uniform float cloud_density_cache_half_extent_m = 16000.0;
+
+float cloud_cached_slice(vec2 xy, float slice) {
+    vec2 tile = vec2(mod(slice, 16.0), floor(slice / 16.0));
+    float side = float(cloud_density_cache_side);
+    vec2 texel = tile * side + vec2(0.5) + xy * (side - 1.0);
+    return textureLod(cloud_density_cache_tex, texel / vec2(side * 16.0, side * 2.0), 0.0).a;
+}
+
+// Return a sentinel outside the bounded near-pad volume. No clamping of rays
+// into its edge: the exact procedural field remains the distant fallback.
+float cloud_cached_density(vec3 position, float height) {
+    if (!cloud_density_cache_enabled) return -1.0;
+    vec3 up = normalize(cloud_density_cache_center);
+    vec3 east = normalize(cross(up, vec3(0.0, 1.0, 0.0)));
+    vec3 north = cross(up, east);
+    vec3 local = cloud_world_to_texture * position;
+    vec2 xy = vec2(dot(local, east), dot(local, north)) / (2.0 * cloud_density_cache_half_extent_m) + vec2(0.5);
+    float z = (height - cloud_density_cache_bottom_m) / cloud_density_cache_height_m * 31.0;
+    if (any(lessThan(xy, vec2(0.0))) || any(greaterThan(xy, vec2(1.0))) || z < 0.0 || z > 31.0)
+        return -1.0;
+    float a = floor(z);
+    return mix(cloud_cached_slice(xy, a), cloud_cached_slice(xy, min(a + 1.0, 31.0)), fract(z))
+        * cloud_local_density_multiplier;
+}
+#endif
+
 vec2 cloud_equirect(vec3 p) {
     return vec2(atan(p.z, p.x) / (2.0 * PI) + 0.5,
         0.5 - asin(clamp(p.y, -1.0, 1.0)) / PI);
@@ -267,7 +301,11 @@ float cloud_density(vec3 position) {
     float local_density = 0.0;
     if (local_weight > 0.0) {
         // Preserve clear holes; horizon map filtering does not alter local cells.
-        local_density = cloud_coastal_density(position, height, wind_offset);
+        local_density = -1.0;
+#ifndef CLOUD_DENSITY_BAKE
+        local_density = cloud_cached_density(position, height);
+#endif
+        if (local_density < 0.0) local_density = cloud_coastal_density(position, height, wind_offset);
         // Skip global weather/detail sampling inside the procedural region.
         if (local_weight >= 1.0) return local_density;
     }

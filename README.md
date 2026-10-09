@@ -132,6 +132,9 @@ Quality restores native 3D resolution, 2× MSAA and the existing lighting effect
 Dense clouds still run slowly on the tested Ryzen 5 7530U Radeon; this preset is a
 measured improvement, not a 30 FPS guarantee. See
 [the target-hardware comparison](docs/audits/integrated_gpu_preset_2026-10-02.md).
+Near Starbase, a bounded density cache now reduces repeated cloud calculations;
+a paused Quality fixture measured 4.42× lower GPU time on the local Radeon.
+Distant clouds retain procedural rendering. See [the cache audit and limits](docs/audits/cloud_density_cache_2026-10-09.md).
 
 For reproducible captures, `EXOSPHERE_GRAPHICS_PRESET=integrated`, `quality` or
 `automatic` overrides the loaded preference without saving it. Normal launches

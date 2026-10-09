@@ -3116,6 +3116,15 @@ public partial class _PlaytestShot : Node
     private void ProcessStarbaseFarField(SimulationBridge bridge, Vessel vessel,
         Universe universe, CelestialBody body)
     {
+        // Keep the off/on comparison on the same atmospheric lighting path.
+        // Otherwise the asynchronous LUT upload can change the background
+        // between captures, independently of foreground cloud occlusion.
+        if (IsCloudTraverse && (SkyController.EarthSurfaceDensityLut == null
+            || SkyController.EarthSurfaceTransmittanceLut == null))
+        {
+            _readyFrames = 0;
+            return;
+        }
         if (_starbaseFarCaseIndex < 0 && _readyFrames >= 45)
         {
             if (!string.Equals(body.Id, "earth", StringComparison.OrdinalIgnoreCase)
@@ -3138,7 +3147,8 @@ public partial class _PlaytestShot : Node
         if (_starbaseFarCaseIndex < 0)
             return;
 
-        if (!_starbaseFarCaptureQueued && _pendingSlug == null && _readyFrames >= (IsCloudTraverse ? 18 : 45))
+        // Let the 32 rendered density slices settle before a paused occlusion A/B.
+        if (!_starbaseFarCaptureQueued && _pendingSlug == null && _readyFrames >= (IsCloudTraverse ? 64 : 45))
         {
             QueueCapture(_starbaseFarCases[_starbaseFarCaseIndex].Slug);
             _starbaseFarCaptureQueued = true;

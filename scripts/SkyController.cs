@@ -213,6 +213,7 @@ public partial class SkyController : Node
             ? Sky.RadianceSizeEnum.Size128 : Sky.RadianceSizeEnum.Size256;
         _env.Sky.ProcessMode = Sky.ProcessModeEnum.Realtime;
         _lastSkyProcessRealtime = true;
+        AddChild(new CloudDensityCache { Name = "CloudDensityCache" });
         GD.Print($"PERF_RENDER stage=sky_config radiance={(compatibility ? 128 : 256)} process=realtime "
             + $"atmosphereQuality={InteractiveAtmosphereQuality:F2} "
             + $"cloudPass={(compatibility ? "direct_bounded" : "quarter_resolution")} "

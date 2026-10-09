@@ -9,9 +9,10 @@ internal static class CloudWeatherPresentation
 {
     private static JsonDocument? _starbaseProfile;
 
-    public static void Bind(ShaderMaterial material, CelestialBody body)
+    public static void Bind(ShaderMaterial material, CelestialBody body, bool bindDensityCache = true)
     {
         GraphicsSettings.BindCloudQuality(material);
+        if (bindDensityCache) CloudDensityCache.Bind(material);
         var bridge = SimulationBridge.Instance;
         bool starbase = body.Id == "earth"
             && bridge?.LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase) == true;
