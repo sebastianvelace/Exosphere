@@ -13,9 +13,11 @@ using Exosphere.Simulation.Math;
 ///
 /// This is purely the ground cloud; the engine flame itself is owned by
 /// <c>PlumeSystem</c>. The close layers stay sized for the gameplay chase
-/// camera. A second bank of large cards supplies the kilometre-scale deluge
-/// seen from the aerial liftoff frame, and fades out inside chase range so
-/// that view does not collapse into white balls. We anchor the cloud to the
+/// camera. The aerial bank is a fan of cauliflower lobes that leave the trench,
+/// curve as they roll, and boil up outboard of a clear stack — white outside,
+/// gold toward the flame, matching Flight 14 Pad 2 stills from T+0 to T+30.
+/// It fades out inside chase range so that view does not collapse into white
+/// balls. We anchor the cloud to the
 /// ground point directly under the vessel. Because the active vessel sits at the render origin and the
 /// floating-origin scheme keeps it there, the ground recedes downward as the
 /// rocket climbs: we place the emitters at <c>-up * (altitude / MetresPerUnit)</c>
@@ -68,6 +70,7 @@ public partial class LaunchEffectsController : Node3D
     // Smoothed intensity so ignition/cutoff ramps instead of popping.
     private float _intensity;
     private bool _emitting;
+    private bool _wideShown;
     private float _ignitionAge;
     private const double PhysicsSamplePeriodSeconds = 1.0 / 20.0;
     private double _physicsSampleTimer;
@@ -90,8 +93,13 @@ public partial class LaunchEffectsController : Node3D
         _dustRadial = BuildDustRadial();  // N5: ground-level radial blast ring
         _instantSteam = BuildImmediateSteamBank();
         _billowBank = BuildBillowBank();
-        _wideLobes = BuildWideBank("WideDelugeLobes", WideLobeCards.Length, 0.08f, new Vector2(78f, 40f));
-        _wideCore = BuildWideBank("WideDelugeCore", WideCoreCards.Length, 1.15f, new Vector2(34f, 26f));
+        // Sheets are oriented in the pad frame. A billboard here stood the
+        // cloud up into the hazy sky and it disappeared. The core stays a
+        // camera-facing trench glow.
+        // Low emission so the gold/white vertex colours survive. A bright
+        // emission multiplier clipped both lobes back to the same white.
+        _wideLobes = BuildWideBank("WideDelugeLobes", WideSheetCount, 0.10f, new Vector2(40f, 40f), billboard: false);
+        _wideCore = BuildWideBank("WideDelugeCore", WideCoreCount, 0.85f, new Vector2(22f, 14f), billboard: true);
 
         _pivot.AddChild(_haze);        // faint ground haze underneath everything
         _pivot.AddChild(_dustRadial);  // N5: radial blast wave at pad deck level
@@ -341,95 +349,271 @@ public partial class LaunchEffectsController : Node3D
     // Gameplay chase tops out near 200 render units. The aerial preset sits
     // at 460. Fade across that gap so zooming out reveals the large cloud
     // without ever covering the pad camera.
-    private const float WideCameraStartDistance = 240f;
-    private const float WideCameraFullDistance = 420f;
-
-    private readonly record struct WideCard(
-        float Angle, float Radius, float Height, float WidthScale, float HeightScale, float Shade);
-
-    // Authored for liftoff_wide yaw 38°: two overlapping masses sit left and
-    // right of the stack, clear of the vehicle, with a little depth behind
-    // the pad. Distances are render units (1 unit = 2.8 m).
-    private static readonly WideCard[] WideLobeCards =
-    {
-        // Left bank, tight overlap so the cards read as one mass.
-        new(2.08f, 124f, 22f, 2.15f, 1.70f, 0.15f),
-        new(2.20f, 132f, 28f, 2.40f, 1.90f, 0.45f),
-        new(2.34f, 128f, 18f, 2.05f, 1.55f, 0.70f),
-        new(2.16f, 140f, 34f, 1.85f, 1.65f, 0.90f),
-        // Right bank.
-        new(-0.78f, 126f, 24f, 2.25f, 1.75f, 0.20f),
-        new(-0.92f, 136f, 30f, 2.50f, 2.00f, 0.50f),
-        new(-1.06f, 130f, 18f, 2.10f, 1.60f, 0.75f),
-        new(-0.88f, 146f, 36f, 1.90f, 1.70f, 0.95f),
-    };
-
-    private static readonly WideCard[] WideCoreCards =
-    {
-        new(0.20f, 14f, 12f, 0.85f, 0.90f, 0.10f),
-        new(1.35f, 24f, 16f, 1.00f, 1.05f, 0.35f),
-        new(-0.55f, 20f, 14f, 0.90f, 0.95f, 0.55f),
-        new(2.40f, 28f, 10f, 0.95f, 0.70f, 0.75f),
-        new(0.66f, 16f, 22f, 0.70f, 1.20f, 0.20f),
-        new(-1.10f, 22f, 11f, 0.80f, 0.75f, 0.90f),
-    };
+    private const float WideCameraStartDistance = 200f;
+    private const float WideCameraFullDistance = 360f;
+    // Dense multi-scale bank: mega heads + body + micro edge puffs so the
+    // silhouette matches Flight 14 T+7..T+18 cauliflower, not uniform beads.
+    private const int WideSheetCount = 132;
+    private const int WideCoreCount = 8;
 
     private void DriveWideCloud(float intensity, float age)
     {
-        Camera3D? camera = GetViewport()?.GetCamera3D();
-        float distance = camera == null
+        // The viewport camera can be a sub-viewport during the same frame the
+        // chase camera is already at the aerial preset. Measure that camera.
+        Camera3D? camera = CameraController.Instance?.PresentationCamera
+            ?? GetViewport()?.GetCamera3D();
+        float distance = camera == null || !GodotObject.IsInstanceValid(camera)
             ? 0f
             : _pivot.GlobalPosition.DistanceTo(camera.GlobalPosition);
-        // The close deluge eases off above 140 m. This bank is the subject of
-        // the wide shot and stays on the pad through the first several hundred metres.
+        // Keep the carpet through tower clear. The close particle bank still
+        // eases off above 140 m; this one is the aerial subject.
         float altitudeFade = 1f;
-        if (_sampledAltitude > 250.0)
+        if (_sampledAltitude > 420.0)
         {
-            float t = ((float)_sampledAltitude - 250f) / (900f - 250f);
+            float t = ((float)_sampledAltitude - 420f) / (1100f - 420f);
             altitudeFade = 1f - Mathf.Clamp(t, 0f, 1f);
         }
         float weight = Mathf.SmoothStep(WideCameraStartDistance, WideCameraFullDistance, distance)
-            * altitudeFade;
-        bool show = intensity > 0.02f && weight > 0.05f;
+            * altitudeFade * Mathf.Clamp(intensity, 0f, 1f);
+        bool show = weight > 0.05f;
         _wideLobes.Visible = show;
         _wideCore.Visible = show;
+        if (show != _wideShown)
+        {
+            _wideShown = show;
+            GD.Print($"[VISUAL_DELUGE] wide={(show ? "on" : "off")} weight={weight:F2} " +
+                $"dist={distance:F0} age={age:F1} alt={_sampledAltitude:F0}");
+        }
         if (!show)
             return;
 
-        float grow = Mathf.Lerp(0.74f, 1f, Mathf.Clamp(age / 5f, 0f, 1f));
-        PoseWideBank(_wideLobes, WideLobeCards, grow, weight, age, core: false);
-        PoseWideBank(_wideCore, WideCoreCards, grow, weight, age, core: true);
+        float spread = Mathf.Lerp(0.85f, 1.15f, Mathf.Clamp(age / 8f, 0f, 1f));
+        // Flight 14's still is two cumulus masses left and right of a clear
+        // stack. Orient them to this camera so the corridor stays open.
+        Vector3 lateral = Vector3.Right;
+        Vector3 towardCamera = Vector3.Back;
+        if (camera != null && GodotObject.IsInstanceValid(camera))
+        {
+            Basis pivot = _pivot.GlobalTransform.Basis;
+            lateral = pivot.Inverse() * camera.GlobalTransform.Basis.X;
+            lateral.Y = 0f;
+            towardCamera = pivot.Inverse() * (camera.GlobalPosition - _pivot.GlobalPosition);
+            towardCamera.Y = 0f;
+        }
+        PoseWideSheets(_wideLobes, spread, weight, age, lateral, towardCamera);
+        PoseWideCore(_wideCore, spread, weight, age);
     }
 
-    private static void PoseWideBank(
-        MultiMeshInstance3D bank, WideCard[] cards, float grow, float weight, float age, bool core)
+    /// <summary>
+    /// Flight 14's steam leaves the trench as a fan, curves as it rolls, and
+    /// only then boils up. Real frames (T+0..T+30) are cauliflower banks with
+    /// jagged tops, not two rays glued to the camera lateral. Screen-right
+    /// stays closer and gold; the stack corridor stays empty.
+    /// </summary>
+    private static void PoseWideSheets(
+        MultiMeshInstance3D bank, float spread, float weight, float age,
+        Vector3 lateral, Vector3 towardCamera)
     {
         MultiMesh? mesh = bank.Multimesh;
         if (mesh == null)
             return;
 
-        float spread = core ? Mathf.Lerp(0.88f, 1f, grow) : grow;
-        for (int i = 0; i < cards.Length; i++)
+        lateral.Y = 0f;
+        if (lateral.LengthSquared() < 1e-4f)
+            lateral = Vector3.Right;
+        else
+            lateral = lateral.Normalized();
+        towardCamera.Y = 0f;
+        if (towardCamera.LengthSquared() < 1e-4f)
+            towardCamera = new Vector3(-lateral.Z, 0f, lateral.X);
+        else
+            towardCamera = towardCamera.Normalized();
+
+        const float quad = 40f;
+        int count = mesh.InstanceCount;
+        int skirts = Mathf.Min(8, count);
+        // Cluster cards into a few cauliflower lobes per side so the silhouette
+        // is a clump of heads, not evenly spaced beads on a string.
+        // More lobes + denser cards so overlaps read as one bank (T+7..T+18).
+        const int lobesPerSide = 7;
+        for (int i = 0; i < count; i++)
         {
-            WideCard card = cards[i];
-            float radius = card.Radius * spread;
-            float y = card.Height * grow
-                + Mathf.Sin(age * 0.4f + card.Angle) * (core ? 0.8f : 2.5f);
-            var basis = Basis.Identity.Scaled(new Vector3(card.WidthScale, card.HeightScale, 1f));
-            var origin = new Vector3(Mathf.Cos(card.Angle) * radius, y, Mathf.Sin(card.Angle) * radius);
+            bool skirt = i >= count - skirts;
+            int side = (i % 2 == 0) ? -1 : 1;
+            float h = PuffHash(i * 3 + 1);
+            float v = PuffHash(i * 5 + 2);
+            float w = PuffHash(i * 7 + 3);
+            float u = PuffHash(i * 11 + 4);
+            float width;
+            float height;
+            float rise;
+            float spine;
+            float lean;
+            float fade = 1f;
+            float flame = 0f;
+            bool isHeadCard = false;
+            Vector3 origin;
+            Vector3 outward;
+            if (skirt)
+            {
+                // Short bank behind the stack. Covers the far wetland in the
+                // horizon slot without climbing the clear corridor.
+                int k = i - (count - skirts);
+                float along = (k - (skirts - 1) * 0.5f) * 18f;
+                float fore = -70f - h * 16f;
+                width = 56f;
+                height = 34f;
+                rise = 0.15f;
+                spine = 20f + (k % 3) * 5f;
+                lean = 0.15f;
+                side = along >= 0f ? 1 : -1;
+                outward = lateral * side;
+                origin = lateral * along + towardCamera * fore + Vector3.Up * (2f + spine);
+            }
+            else
+            {
+                // Multi-scale roles: mega heads, body, micro edge puffs —
+                // Flight 14 T+10 cauliflower is not one disc size.
+                int role = i % 7;
+                bool isMega = role == 0;
+                bool isMicro = role >= 5;
+                bool isHead = isMega || role == 1;
+                // Dominant left mass (T+7/T+10); right stays closer and peach.
+                if (!isHead && (i % 10) < 6)
+                    side = -1;
+                float seed = isHead
+                    ? PuffHash((i / 2) % lobesPerSide * 19 + (side > 0 ? 7 : 3))
+                    : h;
+                float speed = 0.065f + seed * 0.035f;
+                float t = isHead
+                    ? Mathf.PosMod(seed * 0.85f + age * speed, 1f)
+                    : Mathf.Lerp(0.10f, 0.70f, Mathf.PosMod(v * 0.7f + age * speed * 0.6f, 1f));
+                fade = Mathf.SmoothStep(0f, 0.08f, t) * (1f - Mathf.SmoothStep(0.90f, 1f, t));
+                float out01 = Mathf.Pow(t, 0.55f);
+                // Rise earlier than before so T+10 walls have height, not a
+                // flat carpet with a few tall beads.
+                float up01 = Mathf.Pow(Mathf.Clamp((t - 0.48f) / 0.52f, 0f, 1f), 1.0f);
+                float boil = up01 * up01;
+
+                float theta = side > 0
+                    ? Mathf.Lerp(-1.05f, 1.05f, isHead ? seed : h)
+                    : Mathf.Lerp(Mathf.Pi - 1.05f, Mathf.Pi + 1.05f, isHead ? seed : h);
+                theta += Mathf.Sin(age * (0.5f + seed * 0.45f) + w * 4f) * (0.14f + 0.32f * t);
+                // Micros cling to the rim of a mega so the head has small lobes.
+                if (isMicro)
+                    theta += (h - 0.5f) * 0.35f;
+                float sideGrow = side < 0 ? 1.12f : 1.0f; // left wall larger
+                float rx = Mathf.Lerp(38f, isHead ? 180f : 150f, out01) * spread * sideGrow;
+                float rz = Mathf.Lerp(42f, isHead ? 170f : 145f, out01) * spread * sideGrow;
+                if (side > 0)
+                    rz *= 1.24f;
+                float along = Mathf.Cos(theta) * rx;
+                float fore = Mathf.Sin(theta) * rz;
+                if (Mathf.Abs(along) < 44f)
+                    along = side * 44f + (along >= 0f ? 1f : -1f) * Mathf.Abs(along) * 0.15f;
+
+                spine = Mathf.Lerp(4f, isMega ? 108f : (isHead ? 88f : 68f),
+                    Mathf.Max(up01, out01 * 0.62f));
+                // Stronger boil so the crown rolls instead of sliding flat.
+                float churn = Mathf.Sin(age * (1.15f + seed * 0.75f) + u * 5.5f);
+                float churn2 = Mathf.Sin(age * (1.9f + h) + w * 3.2f);
+                spine += churn * (4f + 20f * boil) + churn2 * (2f + 10f * boil);
+                float localA = (h - 0.5f) * Mathf.Lerp(isMicro ? 6f : 12f, isMicro ? 18f : 34f, out01);
+                float localF = (w - 0.5f) * Mathf.Lerp(isMicro ? 8f : 14f, isMicro ? 22f : 38f, out01);
+                float localY = (u - 0.5f) * Mathf.Lerp(3f, isMega ? 28f : (isHead ? 20f : 12f),
+                    Mathf.Max(out01, up01));
+                // Micros sit on the outer/upper rim of the bank.
+                if (isMicro)
+                {
+                    along *= 1.08f;
+                    spine += 8f + h * 14f;
+                }
+
+                origin = lateral * (along + localA)
+                    + towardCamera * (fore + localF)
+                    + Vector3.Up * (2f + Mathf.Max(spine + localY, 1f));
+                outward = lateral * along + towardCamera * fore;
+                if (outward.LengthSquared() > 1e-4f)
+                    outward = outward.Normalized();
+                else
+                    outward = lateral * side;
+
+                float scale = (side > 0 ? 1.14f : 1.05f)
+                    * (isMega ? 1.55f : isMicro ? 0.48f : isHead ? 1.12f : 0.92f);
+                float puff = Mathf.Lerp(isMicro ? 14f : 28f, isMega ? 58f : 46f, out01) * scale;
+                width = Mathf.Max(puff * (isHead ? Mathf.Lerp(1.12f, 1.0f, up01) : 1.42f), 10f);
+                height = Mathf.Max(puff * (isHead ? Mathf.Lerp(0.72f, 1.18f, up01) : Mathf.Lerp(0.62f, 0.95f, up01)), 10f);
+                rise = isHead ? up01 : out01 * 0.45f;
+                isHeadCard = isHead;
+                // Flame proximity for transmitted light (not a flat side tint).
+                float padDist = Mathf.Sqrt(along * along + fore * fore);
+                flame = Mathf.Exp(-padDist / 88f)
+                    * Mathf.Clamp((85f - Mathf.Abs(along)) / 55f, 0.15f, 1f);
+                lean = isHead ? Mathf.Lerp(0.12f, 0.58f, up01) : 0.16f;
+            }
+
+            Vector3 cardZ = towardCamera;
+            Vector3 cardUp = (Vector3.Up * Mathf.Lerp(0.55f, 0.88f, lean) + outward * lean).Normalized();
+            Vector3 cardX = cardUp.Cross(cardZ).Normalized();
+            if (cardX.LengthSquared() < 1e-4f)
+                cardX = outward;
+            cardUp = cardZ.Cross(cardX).Normalized();
+            var basis = new Basis(cardX, cardUp, cardZ).Scaled(
+                new Vector3(width / quad, height / quad, 1f));
             mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
-            // Optically thick centers. The previous 0.4 alpha left each card
-            // readable as its own disc.
-            float alpha = (core ? 0.78f : 0.94f) * weight;
-            float tone = 0.72f + card.Shade * 0.26f;
-            Color color = core
-                ? new Color(1f, 0.46f + card.Shade * 0.14f, 0.10f + card.Shade * 0.08f, alpha)
-                : new Color(tone, tone, tone * 0.97f, alpha);
-            mesh.SetInstanceColor(i, color);
+
+            // Flight 14: bright white caps, peach where the flame lights the
+            // inner face, cool grey crevices. Not a muddy brown wash.
+            float warm = skirt
+                ? 0.16f
+                : Mathf.Lerp(0.04f, side > 0 ? 0.82f : 0.48f, flame);
+            float crevice = skirt ? 0f : (1f - rise) * (1f - Mathf.Abs(h - 0.45f) * 1.6f);
+            float lit = Mathf.Lerp(0.90f, 1.05f, rise)
+                * Mathf.Lerp(1f, 0.68f, Mathf.Clamp(crevice, 0f, 1f));
+            lit = Mathf.Min(lit, 1.05f);
+            float alpha = skirt ? 0.92f : (isHeadCard ? 0.88f : 0.80f) * fade;
+            mesh.SetInstanceColor(i, new Color(
+                Mathf.Min(lit, 1f),
+                Mathf.Min(lit * Mathf.Lerp(0.99f, 0.78f, warm), 1f),
+                Mathf.Min(lit * Mathf.Lerp(0.97f, 0.52f, warm), 1f),
+                alpha * weight));
         }
     }
 
-    private MultiMeshInstance3D BuildWideBank(string name, int count, float emission, Vector2 quadSize)
+    private static float PuffHash(int n)
+    {
+        uint x = (uint)n * 747796405u + 2891336453u;
+        x = ((x >> 16) ^ x) * 73244475u;
+        return (x & 65535) / 65535f;
+    }
+
+    private static void PoseWideCore(MultiMeshInstance3D bank, float spread, float weight, float age)
+    {
+        MultiMesh? mesh = bank.Multimesh;
+        if (mesh == null)
+            return;
+
+        for (int i = 0; i < mesh.InstanceCount; i++)
+        {
+            float phase = Mathf.PosMod(i * 0.618034f, 1f);
+            float angle = i * 2.399963f + age * 0.35f;
+            // Wider trench glow so the flame lights the inner steam faces.
+            float radius = (8f + phase * 16f) * Mathf.Lerp(0.9f, 1.05f, spread);
+            float y = 3.0f + phase * 5.5f + Mathf.Sin(age * 1.1f + angle) * 1.1f;
+            float size = 1.85f + phase * 1.15f;
+            var basis = Basis.Identity.Scaled(new Vector3(size * 1.45f, size, 1f));
+            var origin = new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
+            mesh.SetInstanceTransform(i, new Transform3D(basis, origin));
+            mesh.SetInstanceColor(i, new Color(
+                1f,
+                0.48f + phase * 0.18f,
+                0.10f + phase * 0.08f,
+                Mathf.Clamp(0.92f * weight, 0f, 0.92f)));
+        }
+    }
+
+    private MultiMeshInstance3D BuildWideBank(
+        string name, int count, float emission, Vector2 quadSize, bool billboard)
     {
         // Own texture: the close-range soft circle has a pixel sine that turns
         // into a visible grid once a card is hundreds of metres across.
@@ -445,8 +629,10 @@ public partial class LaunchEffectsController : Node3D
             EmissionEnabled = true,
             EmissionEnergyMultiplier = emission,
             VertexColorUseAsAlbedo = true,
+            BillboardMode = billboard
+                ? BaseMaterial3D.BillboardModeEnum.Enabled
+                : BaseMaterial3D.BillboardModeEnum.Disabled,
         };
-        material.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
         var quad = new QuadMesh { Size = quadSize };
         quad.SurfaceSetMaterial(0, material);
         var mesh = new MultiMesh
@@ -462,7 +648,7 @@ public partial class LaunchEffectsController : Node3D
             Multimesh = mesh,
             Visible = false,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            CustomAabb = new Aabb(new Vector3(-460f, -8f, -460f), new Vector3(920f, 240f, 920f)),
+            CustomAabb = new Aabb(new Vector3(-520f, -8f, -520f), new Vector3(1040f, 260f, 1040f)),
         };
     }
 
@@ -965,12 +1151,12 @@ public partial class LaunchEffectsController : Node3D
     }
 
     /// <summary>
-    /// Low-frequency cumulus card. The center saturates so overlapping lobes
-    /// become one mass; only the rim stays soft.
+    /// Cauliflower puff: overlapping lobes, sunlit cap, shaded belly and a
+    /// soft crevice. Image row 0 is the top of a Godot texture.
     /// </summary>
     private static ImageTexture BuildWideCloudTexture()
     {
-        const int Size = 192;
+        const int Size = 128;
         var img = Image.CreateEmpty(Size, Size, false, Image.Format.Rgba8);
         float half = Size * 0.5f;
         for (int y = 0; y < Size; y++)
@@ -978,18 +1164,24 @@ public partial class LaunchEffectsController : Node3D
         {
             float dx = (x - half) / half;
             float dy = (y - half) / half;
-            // Elliptical falloff that is zero before the quad border. A square
-            // edge left the card corners visible.
-            float r2 = dx * dx * 0.85f + dy * dy * 1.55f;
-            float falloff = r2 >= 1f ? 0f : Mathf.SmoothStep(1f, 0.20f, r2);
-            float lump0 = Mathf.Exp(-((dx + 0.22f) * (dx + 0.22f) * 3.1f
-                + (dy + 0.05f) * (dy + 0.05f) * 4.2f));
-            float lump1 = Mathf.Exp(-((dx - 0.18f) * (dx - 0.18f) * 2.6f
-                + (dy - 0.12f) * (dy - 0.12f) * 5.0f));
-            float lump2 = Mathf.Exp(-(dx * dx * 4.4f + (dy + 0.18f) * (dy + 0.18f) * 3.6f));
-            float density = Mathf.Clamp(lump0 * 0.85f + lump1 * 0.75f + lump2 * 0.65f, 0f, 1f);
-            float alpha = density * falloff;
-            img.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            // Several anisotropic lobes so one card already looks like a
+            // mini cumulus head, not a perfect disc.
+            float l0 = Mathf.Exp(-(dx * dx * 2.1f + dy * dy * 2.6f));
+            float l1 = Mathf.Exp(-((dx + 0.38f) * (dx + 0.38f) * 4.8f
+                + (dy - 0.08f) * (dy - 0.08f) * 5.4f));
+            float l2 = Mathf.Exp(-((dx - 0.34f) * (dx - 0.34f) * 5.2f
+                + (dy + 0.14f) * (dy + 0.14f) * 4.6f));
+            float l3 = Mathf.Exp(-((dx + 0.06f) * (dx + 0.06f) * 6.4f
+                + (dy + 0.40f) * (dy + 0.40f) * 6.8f));
+            float density = Mathf.Clamp(l0 * 0.70f + l1 * 0.48f + l2 * 0.44f + l3 * 0.32f, 0f, 1f);
+            float radius = Mathf.Sqrt(dx * dx + dy * dy);
+            float edge = Mathf.Clamp(1f - radius * 0.92f, 0f, 1f);
+            float alpha = Mathf.SmoothStep(0f, 1f, density * edge);
+            // Bright cap, shaded underside. y=0 is the top of the image.
+            float shade = Mathf.Lerp(1f, 0.38f, y / (float)(Size - 1));
+            float crevice = Mathf.Lerp(0.62f, 1f, density);
+            float lit = shade * crevice;
+            img.SetPixel(x, y, new Color(lit, lit * 0.99f, lit * 0.97f, alpha));
         }
         return ImageTexture.CreateFromImage(img);
     }

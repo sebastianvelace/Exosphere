@@ -450,7 +450,9 @@ public partial class PlumeSystem : Node3D
                 // The Super Heavy's sea-level exhaust is a broad merged disk, not a
                 // needle. Widen only the radial envelope so the pad-side silhouette
                 // reads at distance without lengthening the plume into a white streak.
-                float seaLevelBroadening = u.IsSuperHeavy ? 1.62f : 1.12f;
+                // Flight 14's daylight column is wider than the booster skirt.
+                // Radial only: length stays the short sea-level flame.
+                float seaLevelBroadening = u.IsSuperHeavy ? 2.15f : 1.12f;
                 float radScale = (0.85f + 0.30f * throttle)
                                * (1.0f + expansion * (u.IsSuperHeavy ? 1.3f : 0.72f))
                                * Mathf.Lerp(seaLevelBroadening, 1.0f, expansion);
