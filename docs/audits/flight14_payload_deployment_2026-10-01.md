@@ -183,10 +183,19 @@ SpaceX Flight 14 report confirms deployment and communications but publishes no 
 attitude telemetry. The earlier screenshots above predate this correction and must not be
 treated as visual verification of the updated spin behavior.
 
+The corrected build passed `--flight14-deployment --run-id f14-attitude-rails-4 --max-runtime
+7200 --skip-build` and its verify-only gate. The live mission reached orbit and released both
+estimated 2,000 kg payloads at MET 2047.02 s and 2120.30 s. Mass residuals were zero;
+momentum residuals were 1.066e-6 and 0 kg m/s; relative-opening residuals were 1.861e-9
+and 1.510e-8 m/s. The capture at MET 2123.40 s is only about three seconds after release,
+so the small inherited angular rate is not visibly distinguishable from the prior frame.
+It verifies the real release/render path, not a visible attitude change. Capture:
+`/tmp/exo_play-f14-attitude-rails-4/exo_play_flight14_payload_deployment_e2e.png`.
+
 ## Next scope
 
-Rerun the deployment capture and compare the attitude evolution against visible reference
-frames without treating camera perspective as attitude measurement. Resolve mass/impulse
-uncertainty and onboard propulsion. Implement early deorbit and both water-return policies
-from this loaded and then depleted carrier state; integrate the mission into Godot with real
-frame comparisons before enabling its menu action.
+Add a longer post-release observation window and explicit attitude telemetry to the
+deployment harness so a framebuffer can show the on-rails spin without changing the mission
+schedule. Compare those poses against video frames without treating camera perspective as
+attitude truth. The next Flight 14 physics gaps remain the estimated payload mass/impulse,
+onboard propulsion, early deorbit, and both water-return policies.
