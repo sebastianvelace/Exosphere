@@ -5003,14 +5003,33 @@ verify_pngs() {
       return 1
     fi
     if ! awk '
-      /^IMAGE slug=(pad|liftoff) / {
+      /^VISUAL_PLANET body=earth slug=liftoff / {
         for (i = 1; i <= NF; i++) {
+          if ($i ~ /^cameraForwardCos=/) {
+            split($i, p, "=")
+            # A positive Earth-center component means this liftoff composition
+            # looks down across terrain; its green pixels are not atmospheric
+            # airglow, and single-channel land saturation is not white clipping.
+            groundView = (p[2] + 0) > 0.15
+          }
+        }
+      }
+      /^IMAGE slug=(pad|liftoff) / {
+        imageSlug = ""
+        clipped = surface = white = neon = 0
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^slug=/) { split($i, p, "="); imageSlug = p[2] }
           if ($i ~ /^clippedFrac=/) { split($i, p, "="); clipped = p[2] + 0 }
           if ($i ~ /^surfaceClippedFrac=/) { split($i, p, "="); surface = p[2] + 0 }
+          if ($i ~ /^surfaceWhiteClipFrac=/) { split($i, p, "="); white = p[2] + 0 }
           if ($i ~ /^neonGreenFrac=/) { split($i, p, "="); neon = p[2] + 0 }
         }
-        if (clipped > 0.10 || surface > 0.10 || neon > 0.001)
+        if (clipped > 0.10) bad = 1
+        if (imageSlug == "liftoff" && groundView) {
+          if (white > 0.10) bad = 1
+        } else if (surface > 0.10 || neon > 0.001) {
           bad = 1
+        }
         found++
       }
       END { exit !(found == 2 && !bad) }
