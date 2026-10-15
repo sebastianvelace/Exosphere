@@ -170,10 +170,23 @@ closer composition. One pack still projects nearly edge-on, consistent with its 
 attitude; the renderer does not billboard or rotate payloads to fake visibility. Evidence:
 `/tmp/exo_play-f14-payload-close/exo_play_flight14_payload_deployment_e2e.png`.
 
+## On-rails attitude propagation (2026-10-15)
+
+The visual audit exposed a physics omission: `Vessel.DeployPayload` correctly transfers the
+carrier's orientation and world angular velocity, but Kepler/on-rails propagation advanced
+only position and velocity. A released payload with nonzero spin therefore rendered at a
+frozen attitude until it woke to full physics. The on-rails path now advances attitude on its
+existing bounded coast slices using the same constant-world-angular-velocity update as the
+legacy free-flight integrator. This leaves translational orbital state unchanged. The
+approximation omits gravity-gradient torque and general torque-free Euler precession; the
+SpaceX Flight 14 report confirms deployment and communications but publishes no satellite
+attitude telemetry. The earlier screenshots above predate this correction and must not be
+treated as visual verification of the updated spin behavior.
+
 ## Next scope
 
-Compare actual release observations from the broadcast rather than treating the
-planned timetable as flown truth. Resolve mass/impulse uncertainty and onboard
-propulsion. Implement early deorbit and both water-return policies from this loaded
-and then depleted carrier state; integrate the mission into Godot with real frame
-comparisons before enabling its menu action.
+Rerun the deployment capture and compare the attitude evolution against visible reference
+frames without treating camera perspective as attitude measurement. Resolve mass/impulse
+uncertainty and onboard propulsion. Implement early deorbit and both water-return policies
+from this loaded and then depleted carrier state; integrate the mission into Godot with real
+frame comparisons before enabling its menu action.

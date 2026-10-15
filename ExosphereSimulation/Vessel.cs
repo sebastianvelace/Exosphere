@@ -855,6 +855,25 @@ public class Vessel
         }
     }
 
+    /// <summary>
+    /// Advances the vessel attitude during an analytic translational coast. This uses the
+    /// existing world-space constant-angular-velocity approximation; it does not integrate
+    /// gravity-gradient torque or full torque-free Euler motion.
+    /// </summary>
+    internal void AdvanceCoastingAttitude(double dt)
+    {
+        if (!double.IsFinite(dt) || dt <= 0.0)
+            return;
+
+        double angularRate = AngularVelocity.Magnitude;
+        if (!double.IsFinite(angularRate) || angularRate <= 1e-12)
+            return;
+
+        var deltaRotation = Quaterniond.FromAxisAngle(
+            AngularVelocity / angularRate, angularRate * dt);
+        Orientation = (deltaRotation * Orientation).Normalize();
+    }
+
     private void TickPhysics(
         double dt,
         CelestialBody refBody,

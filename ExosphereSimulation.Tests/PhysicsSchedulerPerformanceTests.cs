@@ -97,6 +97,35 @@ public sealed class PhysicsSchedulerPerformanceTests
     }
 
     [Fact]
+    public void CoastingRailsVesselAdvancesAttitudeUsingInheritedWorldAngularVelocity()
+    {
+        var earth = LoadBody("earth");
+        var vessel = SafeRailVessel(earth, "coasting-rails-attitude");
+        vessel.IsOnRails = true;
+        vessel.Orientation = Quaterniond.FromAxisAngle(Vector3d.Right, 0.37);
+        vessel.AngularVelocity = new Vector3d(0.0, 0.01, 0.0);
+        var initialOrientation = vessel.Orientation;
+        var angularVelocity = vessel.AngularVelocity;
+        const double elapsedSeconds = 74.0;
+        var expectedOrientation = Quaterniond.FromAxisAngle(
+            angularVelocity.Normalized, angularVelocity.Magnitude * elapsedSeconds)
+            * initialOrientation;
+        var universe = new Universe { TimeScale = 100.0 };
+        universe.AddBody(earth);
+        universe.AddVessel(vessel);
+
+        for (int i = 0; i < 37; i++)
+            universe.Tick(0.02);
+
+        Assert.True(vessel.IsOnRails);
+        Assert.Equal(angularVelocity, vessel.AngularVelocity);
+        AssertVectorClose(
+            expectedOrientation.Rotate(Vector3d.Up),
+            vessel.Orientation.Rotate(Vector3d.Up),
+            1e-10);
+    }
+
+    [Fact]
     public void RailsClassificationAndPropagationAreDeterministic()
     {
         var first = CreateCoastingUniverse("deterministic-a");

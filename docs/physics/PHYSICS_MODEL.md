@@ -134,6 +134,9 @@ the adapter does not reduce the scheduler's normal coast/warp step.
 - Surface altitude/contact use the configured sphere or oblate WGS-style ellipsoid.
 - Celestial bodies and vessels outside active force-sensitive conditions may use Keplerian
   on-rails propagation and patched-conic sphere-of-influence transitions.
+- On-rails vessels advance attitude using their inherited world-space angular velocity with
+  a constant-axis spin approximation. Gravity-gradient torque and torque-free Euler
+  precession are not modeled on rails; bodies with significant tumble require full propagation.
 - On-rails Kepler propagation intentionally ignores live \(J_2\) perturbations; active RK4
   vessels feel `CelestialBody.GetGravityAt`. This is an explicit model boundary, not an
   unreported contradiction.

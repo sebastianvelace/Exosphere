@@ -2749,6 +2749,7 @@ public class Universe
             double slice = System.Math.Min(remaining, MaxCoastStep);
             sampleTime  += slice;
             remaining   -= slice;
+            vessel.AdvanceCoastingAttitude(slice);
 
             (lastRelP, lastRelV) = KeplerPropagator.PropagateToTime(
                 vessel.OrbitalState, sampleTime, reference.GM);
