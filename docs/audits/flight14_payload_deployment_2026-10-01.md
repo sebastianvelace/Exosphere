@@ -162,8 +162,13 @@ not change vessel states, release impulses, or coast propagation. The new
 same two live releases; the log confirms two flat-pack renderers, nonzero focus offset,
 automatic tracking, and `physicsReplay=False`. Its real framebuffer shows both packs in
 the same view. The second remains small and close to Ship's silhouette, so visibility is
-improved but not yet presentation-quality; a closer oblique orbital shot is the next
-visual refinement. Evidence: `/tmp/exo_play-f14-payload-camera/exo_play_flight14_payload_deployment_e2e.png`.
+improved but not yet presentation-quality. A follow-up scales only the automatic camera
+offset to 78% during payload release; it leaves zoom untouched when the player adjusts
+the camera. `--flight14-deployment --run-id f14-payload-close --skip-build` passed on the
+same two live releases, and its framebuffer shows the same carriers and payloads with a
+closer composition. One pack still projects nearly edge-on, consistent with its vessel
+attitude; the renderer does not billboard or rotate payloads to fake visibility. Evidence:
+`/tmp/exo_play-f14-payload-close/exo_play_flight14_payload_deployment_e2e.png`.
 
 ## Next scope
 

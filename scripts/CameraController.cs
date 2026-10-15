@@ -24,6 +24,7 @@ public partial class CameraController : Node3D
     public float PresentationDistance => _distance;
     public float PresentationFov => _externalFov;
     public bool Flight14PayloadAutoTracking { get; private set; }
+    public bool Flight14PayloadCloserFraming { get; private set; }
     public float Flight14PayloadFocusOffsetMetres =>
         _flight14PayloadFocusOffset.Length() * MetresPerRenderUnit;
     public float ShakePositionMagnitude => _shake.PositionOffset.Length();
@@ -479,6 +480,14 @@ public partial class CameraController : Node3D
             bridge, bridge?.ActiveVessel, surfaceFrame);
         targetCamPos += payloadFocusOffset;
         targetLookTarget += payloadFocusOffset;
+        Flight14PayloadCloserFraming = Flight14PayloadAutoTracking;
+        if (Flight14PayloadCloserFraming)
+        {
+            // Keep both released proxies legible in the carrier shot without changing
+            // their scale or state; manual camera input still disables this framing.
+            targetCamPos = targetLookTarget
+                + (targetCamPos - targetLookTarget) * 0.78f;
+        }
 
         if (!_hasSmoothedFrame)
         {
@@ -537,6 +546,7 @@ public partial class CameraController : Node3D
         SimulationBridge? bridge, Vessel? activeVessel, Basis surfaceFrame)
     {
         Flight14PayloadAutoTracking = false;
+        Flight14PayloadCloserFraming = false;
         _flight14PayloadFocusOffset = Vector3.Zero;
         if (_cameraUserAdjusted
             || bridge?.Flight14Preview is not { IsObservingBooster: false } preview

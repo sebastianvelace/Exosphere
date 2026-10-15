@@ -4155,6 +4155,7 @@ public partial class _PlaytestShot : Node
             _log.WriteLine($"FLIGHT14_DEPLOYMENT_RENDERERS detached={detachedRenderers.Length} "
                 + $"payloadFlatPacks={payloadFlatPacks} "
                 + $"payloadAutoTracking={camera?.Flight14PayloadAutoTracking == true} "
+                + $"payloadCloserFraming={camera?.Flight14PayloadCloserFraming == true} "
                 + $"payloadFocusOffsetNonzero={camera?.Flight14PayloadFocusOffsetMetres > 0.1f} "
                 + $"cameraYawDeg={camera?.PresentationYawDegrees ?? 0f:F1} "
                 + "physicsReplay=False");
@@ -6033,7 +6034,7 @@ PYCOVERAGE
       echo "ERROR: capture was not taken after two live releases with two detached vessel renderers" >&2
       return 1
     fi
-    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_RENDERERS detached=[3-9][0-9]* payloadFlatPacks=2 payloadAutoTracking=True payloadFocusOffsetNonzero=True cameraYawDeg=-?[0-9.]+ physicsReplay=False' "$LOG"; then
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_RENDERERS detached=[3-9][0-9]* payloadFlatPacks=2 payloadAutoTracking=True payloadCloserFraming=True payloadFocusOffsetNonzero=True cameraYawDeg=-?[0-9.]+ physicsReplay=False' "$LOG"; then
       echo "ERROR: both flat-pack renderers or the physical deployment camera tracking are missing" >&2
       return 1
     fi
