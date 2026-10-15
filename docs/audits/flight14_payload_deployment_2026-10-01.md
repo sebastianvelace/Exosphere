@@ -170,32 +170,61 @@ closer composition. One pack still projects nearly edge-on, consistent with its 
 attitude; the renderer does not billboard or rotate payloads to fake visibility. Evidence:
 `/tmp/exo_play-f14-payload-close/exo_play_flight14_payload_deployment_e2e.png`.
 
-## On-rails attitude propagation (2026-10-15)
+## Attitude propagation and Flight 14 payload frame (2026-10-15)
 
-The visual audit exposed a physics omission: `Vessel.DeployPayload` correctly transfers the
-carrier's orientation and world angular velocity, but Kepler/on-rails propagation advanced
-only position and velocity. A released payload with nonzero spin therefore rendered at a
-frozen attitude until it woke to full physics. The on-rails path now advances attitude on its
-existing bounded coast slices using the same constant-world-angular-velocity update as the
-legacy free-flight integrator. This leaves translational orbital state unchanged. The
-approximation omits gravity-gradient torque and general torque-free Euler precession; the
-SpaceX Flight 14 report confirms deployment and communications but publishes no satellite
-attitude telemetry. The earlier screenshots above predate this correction and must not be
-treated as visual verification of the updated spin behavior.
+The generic analytic-coast path previously advanced only position and velocity. It now also
+advances attitude on the same bounded slices using constant world angular velocity, matching
+the legacy free-flight orientation update while leaving translation unchanged. This remains
+an approximation: it omits gravity-gradient torque and torque-free Euler precession.
 
-The corrected build passed `--flight14-deployment --run-id f14-attitude-rails-4 --max-runtime
-7200 --skip-build` and its verify-only gate. The live mission reached orbit and released both
-estimated 2,000 kg payloads at MET 2047.02 s and 2120.30 s. Mass residuals were zero;
-momentum residuals were 1.066e-6 and 0 kg m/s; relative-opening residuals were 1.861e-9
-and 1.510e-8 m/s. The capture at MET 2123.40 s is only about three seconds after release,
-so the small inherited angular rate is not visibly distinguishable from the prior frame.
-It verifies the real release/render path, not a visible attitude change. Capture:
+The first hypothesis that this omission froze the actual Flight 14 satellites was incorrect.
+The live deployment profile releases them at roughly 251–252 km, below Earth's configured
+1,000 km thermosphere top. `Universe.RequiresOffRailsPhysics` keeps vessels with residual
+atmospheric density in full physics in this region, and the 26-payload diagnostic confirmed
+the last satellite was not on rails after its 60 s coast. Thus the earlier 3 s framebuffer
+verified the real release/render path, but neither demonstrated a frozen attitude nor proved
+that the on-rails correction changed the Flight 14 image. The near-edge-on pack remains a
+camera/pose observation without public satellite attitude telemetry to identify the flown
+pose as truth.
+
+The live mission run `f14-attitude-rails-4` still provides valid deployment evidence: both
+estimated 2,000 kg payloads released at MET 2047.02 s and 2120.30 s with zero mass residuals,
+momentum residuals of 1.066e-6 and 0 kg m/s, and relative-opening residuals of 1.861e-9 and
+1.510e-8 m/s. Its capture at MET 2123.40 s is only about three seconds after release and
+predates the new 60 s attitude-observation harness. Capture:
 `/tmp/exo_play-f14-attitude-rails-4/exo_play_flight14_payload_deployment_e2e.png`.
+
+## Estimated payload rate damping correction (2026-10-15)
+
+The 26-payload diagnostic showed a second attitude issue. `DeployPayload` enables SAS by
+default, while `Vessel` implements SAS as idealized rate damping (`0.005^dt`) without modeling
+the controller's actuators or their torque. The estimated Flight 14 payload contains no
+onboard propulsion or attitude actuators, so the deployment controller now disables SAS on
+that payload. It preserves the inherited release angular velocity instead of silently
+removing it; this is an explicit model limitation, not a claim about actual Starlink attitude
+control.
+
+The 26-release integration test passes with this behavior. In the live E2E run
+`f14-payload-spin-sas-off`, releases remained at MET 2047.02 s and 2120.30 s, and the 60 s
+post-release samples showed full physics with SAS off. The second payload retained angular
+rate 1.167e-3 → 1.173e-3 rad/s and rotated 0.070387 rad versus a constant-rate estimate of
+0.070186 rad; the first payload rotated 0.155138 rad over 132.16 s versus 0.154184 rad. The
+release mass and momentum residuals remained zero or below 1.1e-6 kg m/s, and the E2E route
+passed its validation gate. Log: `/tmp/exo_play-f14-payload-spin-sas-off.log`.
+
+The associated real framebuffer capture is useful as orbit and mission-state evidence, but
+not as visual proof of the payload attitudes: the 32-unit experiment cropped the carrier and
+still did not frame the small payloads clearly. The harness is restored to its previous
+65-unit distance. Next, improve the capture camera to track and compose the carrier plus both
+detached payloads, then compare the resulting real framebuffer. Do not alter the release
+schedule or infer a true flown satellite pose from camera perspective. The remaining mission
+physics gaps include estimated payload mass/impulse, onboard propulsion, early deorbit, and
+both water-return policies.
 
 ## Next scope
 
-Add a longer post-release observation window and explicit attitude telemetry to the
-deployment harness so a framebuffer can show the on-rails spin without changing the mission
-schedule. Compare those poses against video frames without treating camera perspective as
-attitude truth. The next Flight 14 physics gaps remain the estimated payload mass/impulse,
-onboard propulsion, early deorbit, and both water-return policies.
+Implement a dedicated Flight 14 payload-group camera target so the carrier and detached
+satellites are all visible at an appropriate scale; do not use renderer billboarding or
+physics changes to force visibility. Compare actual frames from the real E2E route before
+tuning payload visuals further. Continue to label unmeasured masses, separation velocities,
+attitudes, onboard propulsion, deorbit timing, and ocean-return outcomes as estimates.
