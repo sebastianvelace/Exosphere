@@ -1,0 +1,11 @@
+status=PASS
+mode=launch_track
+renderer=forward_plus
+renderer_args=--rendering-driver vulkan --rendering-method forward_plus
+renderer_actual=forward_plus
+run_id=priority1-launch-2026-10-14-elevated
+log=/tmp/exo_play-priority1-launch-2026-10-14-elevated.log
+console_log=/tmp/exo_play-priority1-launch-2026-10-14-elevated.log.console
+artifacts=/tmp/exo_play-priority1-launch-2026-10-14-elevated
+milestones=pad,startup_ramp,liftoff,tower_clear,early_ascent
+SUMMARY reason=LAUNCH_TRACK_OK frames=165

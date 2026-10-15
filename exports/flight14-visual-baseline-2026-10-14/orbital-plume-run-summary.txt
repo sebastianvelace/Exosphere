@@ -1,0 +1,11 @@
+status=PASS
+mode=orbital_plume
+renderer=forward_plus
+renderer_args=--rendering-driver vulkan --rendering-method forward_plus
+renderer_actual=forward_plus
+run_id=priority1-orbital-plume-2026-10-14
+log=/tmp/exo_play-priority1-orbital-plume-2026-10-14.log
+console_log=/tmp/exo_play-priority1-orbital-plume-2026-10-14.log.console
+artifacts=/tmp/exo_play-priority1-orbital-plume-2026-10-14
+milestones=orbital_plume
+SUMMARY reason=ORBITAL_PLUME_OK frames=82
