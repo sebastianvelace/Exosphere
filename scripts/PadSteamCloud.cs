@@ -28,14 +28,20 @@ public partial class PadSteamCloud : Node3D
         };
         var shader = GD.Load<Shader>("res://assets/shaders/pad_steam.gdshader");
         var box = new BoxMesh { Size = Vector3.One };
-        // Two exhaust outflows with overlapping rising lobes, not camera-authored cards.
+        // Overlapping exhaust-driven lobes, not camera-authored cards. Their
+        // deterministic offsets and proportions deliberately avoid a mirrored pair
+        // of identical banks; they are an optical proxy, not a wind-field solution.
         // Units below are render units (2.8 m). Max height is about one stack height.
         for (int side = -1; side <= 1; side += 2)
         for (int i = 0; i < 6; i++)
         {
-            float phase = Mathf.PosMod(i * 0.618034f, 1f);
-            var center = new Vector3(side * (14f + i * 9f),
-                0f, (phase - 0.5f) * 24f);
+            float bankOffset = side < 0 ? 0.17f : 0.61f;
+            float phase = Mathf.PosMod(i * 0.618034f + bankOffset, 1f);
+            float lateralJitter = (phase - 0.5f) * 4f;
+            var center = new Vector3(
+                side * (14f + i * 9f + lateralJitter),
+                0f,
+                (phase - 0.5f) * 24f);
             var size = new Vector3(34f + phase * 12f, 16f + i * 6f, 30f + phase * 14f);
             // Composite local condensed water after planetary transparency and
             // the exhaust. Opaque terrain/hull still clip the ray integration.
@@ -78,7 +84,9 @@ public partial class PadSteamCloud : Node3D
             material.SetShaderParameter("solar_visibility", solarVisibility);
             material.SetShaderParameter("fire_local", (new Vector3(0f, 4f, 0f) - origin) / scale);
             material.SetShaderParameter("source_power", sourcePower);
-            material.SetShaderParameter("opacity", weight * fill);
+            // Keep the water plume detailed under direct sun instead of letting
+            // the overlapping proxy volumes collapse into a clipped white slab.
+            material.SetShaderParameter("opacity", weight * fill * 0.90f);
             material.SetShaderParameter("age", age);
         }
     }
