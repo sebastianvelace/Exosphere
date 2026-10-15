@@ -146,10 +146,10 @@ public partial class CameraController : Node3D
         bool lit = vessel.Throttle > 0.02 && vessel.HasActiveEngineParts;
         if (!_liftoffWideHold && _liftoffWideArmed && lit && altitude is > 40.0 and < 250.0)
         {
-            // Low angle, looking up the stack. The previous downward aerial
-            // left only a pale horizon band where Flight 14 shows blue sky.
-            SetExternalChaseFrame(32f, -8f, 280f, lookAtY: -8f);
-            _externalFov = 36f;
+            // Elevated oblique tracking view: keep the full vehicle readable while
+            // revealing Starbase around the exhaust in the early liftoff beat.
+            SetExternalChaseFrame(32f, 20f, 185f, lookAtY: -8f);
+            _externalFov = 28f;
             _liftoffWideHold = true;
             return;
         }
