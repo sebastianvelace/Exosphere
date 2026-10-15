@@ -214,17 +214,21 @@ passed its validation gate. Log: `/tmp/exo_play-f14-payload-spin-sas-off.log`.
 
 The associated real framebuffer capture is useful as orbit and mission-state evidence, but
 not as visual proof of the payload attitudes: the 32-unit experiment cropped the carrier and
-still did not frame the small payloads clearly. The harness is restored to its previous
-65-unit distance. Next, improve the capture camera to track and compose the carrier plus both
-detached payloads, then compare the resulting real framebuffer. Do not alter the release
-schedule or infer a true flown satellite pose from camera perspective. The remaining mission
-physics gaps include estimated payload mass/impulse, onboard propulsion, early deorbit, and
-both water-return policies.
+still did not frame the small payloads clearly. The product camera already recenters the
+carrier and two newest released vehicles, biases its yaw along their separation axis, and
+shortens the framing when the user has not moved the camera. The E2E log confirms that path
+was active. The harness is restored to its previous 65-unit distance. A second live capture
+at that distance was interrupted at MET 319 s on the llvmpipe software renderer before
+payload release, so there is no new framebuffer acceptance evidence for the normal-distance
+composition. Do not alter release schedule or infer a true flown satellite pose from camera
+perspective. The remaining mission physics gaps include estimated payload mass/impulse,
+onboard propulsion, early deorbit, and both water-return policies.
 
 ## Next scope
 
-Implement a dedicated Flight 14 payload-group camera target so the carrier and detached
-satellites are all visible at an appropriate scale; do not use renderer billboarding or
-physics changes to force visibility. Compare actual frames from the real E2E route before
-tuning payload visuals further. Continue to label unmeasured masses, separation velocities,
-attitudes, onboard propulsion, deorbit timing, and ocean-return outcomes as estimates.
+Capture and review the existing payload-group camera at the normal 65-unit chase distance.
+If that composition still hides the small payloads, add a user-selectable inspection zoom or
+camera mode; preserve physical scale and never use billboarding. Use a faster seeded visual
+fixture only for composition review, separate from the live route evidence. Continue to label
+unmeasured masses, separation velocities, attitudes, onboard propulsion, deorbit timing, and
+ocean-return outcomes as estimates.
