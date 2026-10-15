@@ -68,6 +68,8 @@ Options:
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --flight14-payload
                 Capture the isolated Flight 14 estimated Starlink payload renderer.
+  --flight14-deployment
+                Fly the Flight 14 exploration through two real payload releases and capture them.
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --launch-track Capture launch, tower-clear and 1 km using the production camera.
@@ -218,6 +220,7 @@ while [[ $# -gt 0 ]]; do
       VARIANT_PROFILE="starship-flight12-ascent"
       shift ;;
     --flight14-payload) MODE="flight14_payload"; shift ;;
+    --flight14-deployment) MODE="flight14_deployment"; shift ;;
     --ascent) MODE="ascent"; shift ;;
     --launch) MODE="launch"; shift ;;
     --launch-track) MODE="launch_track"; shift ;;
@@ -665,6 +668,10 @@ public partial class _PlaytestShot : Node
     bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     bool _flight14PayloadVisualSeeded;
+    bool _flight14DeploymentE2EStarted, _flight14DeploymentCaptureQueued;
+    double _flight14DeploymentCaptureStart = double.NaN;
+    double _lastFlight14DeploymentProgressWall;
+    int _flight14DeploymentLoggedReleases;
     int _beautyWaitFrames;
     int _orbitalPlumeStableFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded, _engineBayCaptured;
@@ -855,6 +862,16 @@ public partial class _PlaytestShot : Node
         }
         _authorized = true;
 
+        if (_mode == "flight14_deployment")
+        {
+            CraftLaunchRequest.Set(new LaunchIntent
+            {
+                Mode = "exploration",
+                FlightProfileId = Flight14Exploration.ProfileId,
+                LaunchSiteId = "starbase_pad2",
+            });
+        }
+
         if ("${VARIANT_FILE}".Length > 0)
         {
             string data = ProjectSettings.GlobalizePath("res://data");
@@ -931,6 +948,11 @@ public partial class _PlaytestShot : Node
         if (_mode == "flight14_payload")
         {
             ProcessFlight14PayloadVisual(bridge, universe);
+            return;
+        }
+        if (_mode == "flight14_deployment")
+        {
+            ProcessFlight14Deployment(bridge);
             return;
         }
 
@@ -1880,6 +1902,110 @@ public partial class _PlaytestShot : Node
         }
         if (_orbitBeauty && _pendingSlug == null)
             Finish("FLIGHT14_PAYLOAD_VISUAL_OK");
+    }
+
+    private void ProcessFlight14Deployment(SimulationBridge bridge)
+    {
+        TryCapturePending();
+        var preview = bridge.Flight14Preview;
+        if (preview == null)
+        {
+            if (_readyFrames > 300) Finish("FLIGHT14_EXPLORATION_NOT_STARTED");
+            return;
+        }
+
+        if (!_flight14DeploymentE2EStarted)
+        {
+            if (_readyFrames < 45) return;
+            bridge.SetWarpIndex(7);
+            _flight14DeploymentE2EStarted = true;
+            _lastFlight14DeploymentProgressWall = Time.GetTicksMsec() / 1000.0;
+            _log.WriteLine("FLIGHT14_DEPLOYMENT_E2E started=True profile=flight14 "
+                + "launchSite=starbase_pad2 warpIndex=7 physicsReplay=False");
+            _log.Flush();
+        }
+
+        var run = preview.Run;
+        var payloadController = run.PayloadController;
+        double wallNow = Time.GetTicksMsec() / 1000.0;
+        if (wallNow - _lastFlight14DeploymentProgressWall >= 5.0)
+        {
+            _lastFlight14DeploymentProgressWall = wallNow;
+            _log.WriteLine($"FLIGHT14_DEPLOYMENT_E2E_PROGRESS met={preview.MissionElapsedSeconds:F1} "
+                + $"phase={run.Controller.Phase} payloadPhase={payloadController.Phase} "
+                + $"releases={payloadController.Releases.Count} "
+                + $"altitudeM={run.Ship.GetAltitude(run.Earth):F0} "
+                + $"warp={SimulationBridge.WarpLevels[bridge.WarpIndex]:G}");
+            _log.Flush();
+        }
+
+        if (run.Ship.IsDestroyed || run.Ship.StructuralControlLost
+            || payloadController.Phase == Flight14PayloadPhase.Blocked)
+        {
+            _log.WriteLine($"FLIGHT14_DEPLOYMENT_E2E_ABORT destroyed={run.Ship.IsDestroyed} "
+                + $"structuralControlLost={run.Ship.StructuralControlLost} "
+                + $"payloadPhase={payloadController.Phase} "
+                + $"blockReason={payloadController.BlockReason ?? "none"} "
+                + $"releases={payloadController.Releases.Count}");
+            _log.Flush();
+            Finish("FLIGHT14_DEPLOYMENT_E2E_ABORT");
+            return;
+        }
+
+        if (payloadController.Releases.Count > _flight14DeploymentLoggedReleases)
+        {
+            for (int releaseIndex = _flight14DeploymentLoggedReleases;
+                releaseIndex < payloadController.Releases.Count; releaseIndex++)
+            {
+                var release = payloadController.Releases[releaseIndex];
+                _log.WriteLine($"FLIGHT14_DEPLOYMENT_E2E_RELEASE index={releaseIndex + 1} "
+                    + $"met={release.MissionElapsedSeconds:F2} satellite={release.Satellite.Name} "
+                    + $"massKg={release.Satellite.TotalMass:F1} periapsisM={release.PeriapsisAltitudeM:F1} "
+                    + $"massResidualKg={release.MassResidualKg:E3} "
+                    + $"momentumResidualKgMps={release.MomentumResidualKgMps:E3} "
+                    + $"relativeOpeningResidualMps={release.RelativeOpeningResidualMps:E3}");
+            }
+            _flight14DeploymentLoggedReleases = payloadController.Releases.Count;
+            _log.Flush();
+        }
+
+        if (payloadController.Releases.Count >= 2
+            && double.IsNaN(_flight14DeploymentCaptureStart))
+        {
+            _flight14DeploymentCaptureStart = preview.MissionElapsedSeconds;
+            bridge.SetWarpIndex(0);
+            CameraController.Instance?.SetExternalChaseFrame(
+                20f, 18f, 65f, allowCloseup: true);
+            _log.WriteLine($"FLIGHT14_DEPLOYMENT_E2E_TWO_RELEASES "
+                + $"met={_flight14DeploymentCaptureStart:F2} count={payloadController.Releases.Count} "
+                + $"intervalS={payloadController.Releases[1].MissionElapsedSeconds - payloadController.Releases[0].MissionElapsedSeconds:F2} "
+                + "warp=1 camera=close_external");
+            _log.Flush();
+        }
+
+        if (!double.IsNaN(_flight14DeploymentCaptureStart)
+            && preview.MissionElapsedSeconds - _flight14DeploymentCaptureStart >= 3.0
+            && !_flight14DeploymentCaptureQueued)
+        {
+            var vesselsRoot = GetTree().Root.FindChild(
+                "Vessels", true, false) as Node3D;
+            int detachedRenderers = vesselsRoot?.GetChildren()
+                .OfType<VesselRenderer>()
+                .Count(renderer => renderer.Name.ToString().StartsWith(
+                    "Flight14Detached_", StringComparison.Ordinal)) ?? 0;
+            _log.WriteLine($"FLIGHT14_DEPLOYMENT_E2E_CAPTURE_STATE "
+                + $"released={payloadController.Releases.Count} detachedRenderers={detachedRenderers} "
+                + $"vessels={bridge.Universe.Vessels.Count} "
+                + $"shipAltitudeM={run.Ship.GetAltitude(run.Earth):F1} "
+                + $"missionElapsedS={preview.MissionElapsedSeconds:F2} physicsReplay=False");
+            _log.Flush();
+            QueueCapture("flight14_payload_deployment_e2e");
+            _flight14DeploymentCaptureQueued = true;
+            return;
+        }
+
+        if (_flight14DeploymentCaptureQueued && _pendingSlug == null)
+            Finish("FLIGHT14_DEPLOYMENT_E2E_OK");
     }
 
     private void ProcessEdlVerification(SimulationBridge bridge, Vessel vessel, Universe universe,
@@ -4007,6 +4133,23 @@ public partial class _PlaytestShot : Node
 
     private void LogFlight14PayloadVisualTelemetry(string slug)
     {
+        if (slug == "flight14_payload_deployment_e2e")
+        {
+            var vesselsRoot = GetTree().Root.FindChild(
+                "Vessels", true, false) as Node3D;
+            var detachedRenderers = vesselsRoot?.GetChildren()
+                .OfType<VesselRenderer>()
+                .Where(renderer => renderer.Name.ToString().StartsWith(
+                    "Flight14Detached_", StringComparison.Ordinal))
+                .ToArray() ?? Array.Empty<VesselRenderer>();
+            int payloadDisks = detachedRenderers.Count(renderer =>
+                renderer.FindChild("StarlinkV3_EstimatedStowedDisk", true, false)
+                    is MeshInstance3D { Mesh: CylinderMesh });
+            _log.WriteLine($"FLIGHT14_DEPLOYMENT_RENDERERS detached={detachedRenderers.Length} "
+                + $"payloadDisks={payloadDisks} physicsReplay=False");
+            _log.Flush();
+            return;
+        }
         if (slug != "flight14_payload_disk") return;
         var renderer = GetTree().Root.FindChild(
             "Flight14PayloadVisualRenderer", true, false) as Node3D;
@@ -5859,6 +6002,28 @@ PYCOVERAGE
       echo "ERROR: framebuffer capture did not verify the rendered Flight 14 payload disk" >&2
       return 1
     fi
+  elif [[ "$MODE" == "flight14_deployment" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_flight14_payload_deployment_e2e.png" ]]; then
+      echo "ERROR: missing Flight 14 real deployment framebuffer" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=FLIGHT14_DEPLOYMENT_E2E_OK' "$LOG"; then
+      echo "ERROR: Flight 14 physical deployment did not finish cleanly" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_E2E_RELEASE index=1 met=[0-9.]+ satellite=Starlink V3 01 \(estimate\) massKg=[0-9.]+ periapsisM=[0-9.]+ massResidualKg=[0-9.eE+-]+ momentumResidualKgMps=[0-9.eE+-]+ relativeOpeningResidualMps=[0-9.eE+-]+' "$LOG" \
+      || ! grep -Eq 'FLIGHT14_DEPLOYMENT_E2E_RELEASE index=2 met=[0-9.]+ satellite=Starlink V3 02 \(estimate\) massKg=[0-9.]+ periapsisM=[0-9.]+ massResidualKg=[0-9.eE+-]+ momentumResidualKgMps=[0-9.eE+-]+ relativeOpeningResidualMps=[0-9.eE+-]+' "$LOG"; then
+      echo "ERROR: first two physical payload releases or their conservation residuals are missing" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_E2E_CAPTURE_STATE released=2 detachedRenderers=[3-9][0-9]* vessels=[0-9]+ shipAltitudeM=[0-9.]+ missionElapsedS=[0-9.]+ physicsReplay=False' "$LOG"; then
+      echo "ERROR: capture was not taken after two live releases with two detached vessel renderers" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_RENDERERS detached=[3-9][0-9]* payloadDisks=2 physicsReplay=False' "$LOG"; then
+      echo "ERROR: both detached Starlink renderers do not contain the estimated stowed-disk mesh" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "hotstage" ]]; then
     if [[ ! -f "$OUT_DIR/exo_play_hotstage.png" ]]; then
       echo "ERROR: missing required hot-stage milestone PNG: exo_play_hotstage.png" >&2
@@ -6646,6 +6811,8 @@ elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "flight14_payload" ]]; then
   echo "visual_playtest: Flight 14 estimated payload renderer capture OK — visual review still required"
+elif [[ "$MODE" == "flight14_deployment" ]]; then
+  echo "visual_playtest: Flight 14 real ascent and first two payload releases captured — visual review still required"
 elif [[ "$MODE" == "orbital_plume" ]]; then
   echo "visual_playtest: orbital vacuum-plume capture OK"
 elif [[ "$MODE" == "reentry_compare" ]]; then
