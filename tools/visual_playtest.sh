@@ -1872,31 +1872,37 @@ public partial class _PlaytestShot : Node
             CameraController.Instance?.SetExternalChaseFrame(
                 28f, 52f, 8f, allowCloseup: true);
 
-            var disk = renderer.GetNodeOrNull<MeshInstance3D>(
-                "StarlinkV3_EstimatedStowedDisk");
-            var cylinder = disk?.Mesh as CylinderMesh;
-            if (cylinder == null)
+            var flatPack = renderer.GetNodeOrNull<MeshInstance3D>(
+                "StarlinkV3_EstimatedFlatPack");
+            var box = flatPack?.Mesh as BoxMesh;
+            if (box == null
+                || box.Size.X <= box.Size.Z
+                || box.Size.Z <= box.Size.Y
+                || Mathf.Sqrt(box.Size.X * box.Size.X + box.Size.Z * box.Size.Z)
+                    > (float)definition.DiameterM / 2.8f + 0.01f)
             {
                 _log.WriteLine($"FLIGHT14_PAYLOAD_VISUAL_DEBUG family={definition.VehicleFamily} "
                     + $"role={definition.VehicleRole} parts={payload.Parts.Parts.Count} "
                     + $"children={string.Join(',', renderer.GetChildren().Select(node => node.Name.ToString()))}");
                 _log.Flush();
-                Finish("PAYLOAD_DISK_RENDER_MISSING");
+                Finish("PAYLOAD_FLAT_PACK_RENDER_INVALID");
                 return;
             }
 
             _flight14PayloadVisualSeeded = true;
             _log.WriteLine("FLIGHT14_PAYLOAD_VISUAL_SETUP fixture=True "
                 + $"physicsReplay=False timeScale=0 altitudeM=400000 "
-                + $"diameterM={cylinder.TopRadius * 2f * 2.8f:F2} "
-                + $"thicknessM={cylinder.Height * 2.8f:F2}");
+                + $"lengthM={box.Size.X * 2.8f:F2} "
+                + $"widthM={box.Size.Z * 2.8f:F2} "
+                + $"thicknessM={box.Size.Y * 2.8f:F2} "
+                + $"equivalentEnvelopeM={definition.DiameterM:F2} faceSections=2 centerBus=True");
             _log.Flush();
             return;
         }
 
         if (!_orbitBeauty && _readyFrames > 65)
         {
-            QueueCapture("flight14_payload_disk");
+            QueueCapture("flight14_payload_flat_pack");
             _orbitBeauty = true;
             return;
         }
@@ -4142,24 +4148,26 @@ public partial class _PlaytestShot : Node
                 .Where(renderer => renderer.Name.ToString().StartsWith(
                     "Flight14Detached_", StringComparison.Ordinal))
                 .ToArray() ?? Array.Empty<VesselRenderer>();
-            int payloadDisks = detachedRenderers.Count(renderer =>
-                renderer.FindChild("StarlinkV3_EstimatedStowedDisk", true, false)
-                    is MeshInstance3D { Mesh: CylinderMesh });
+            int payloadFlatPacks = detachedRenderers.Count(renderer =>
+                renderer.FindChild("StarlinkV3_EstimatedFlatPack", true, false)
+                    is MeshInstance3D { Mesh: BoxMesh });
             _log.WriteLine($"FLIGHT14_DEPLOYMENT_RENDERERS detached={detachedRenderers.Length} "
-                + $"payloadDisks={payloadDisks} physicsReplay=False");
+                + $"payloadFlatPacks={payloadFlatPacks} physicsReplay=False");
             _log.Flush();
             return;
         }
-        if (slug != "flight14_payload_disk") return;
+        if (slug != "flight14_payload_flat_pack") return;
         var renderer = GetTree().Root.FindChild(
             "Flight14PayloadVisualRenderer", true, false) as Node3D;
-        var disk = renderer?.FindChild(
-            "StarlinkV3_EstimatedStowedDisk", true, false) as MeshInstance3D;
-        var cylinder = disk?.Mesh as CylinderMesh;
+        var flatPack = renderer?.FindChild(
+            "StarlinkV3_EstimatedFlatPack", true, false) as MeshInstance3D;
+        var box = flatPack?.Mesh as BoxMesh;
         _log.WriteLine($"FLIGHT14_PAYLOAD_VISUAL_CAPTURE rendererFound={renderer != null} "
-            + $"diskFound={disk != null} cylinder={cylinder != null} "
-            + $"diameterM={(cylinder?.TopRadius ?? 0f) * 2f * 2.8f:F2} "
-            + $"thicknessM={(cylinder?.Height ?? 0f) * 2.8f:F2} "
+            + $"flatPackFound={flatPack != null} box={box != null} "
+            + $"lengthM={(box?.Size.X ?? 0f) * 2.8f:F2} "
+            + $"widthM={(box?.Size.Z ?? 0f) * 2.8f:F2} "
+            + $"thicknessM={(box?.Size.Y ?? 0f) * 2.8f:F2} "
+            + $"faceSections={flatPack?.GetChildCount() - 1 ?? 0} "
             + "physicsReplay=False");
         _log.Flush();
     }
@@ -5986,20 +5994,20 @@ PYCOVERAGE
       return 1
     fi
   elif [[ "$MODE" == "flight14_payload" ]]; then
-    if [[ ! -f "$OUT_DIR/exo_play_flight14_payload_disk.png" ]]; then
-      echo "ERROR: missing Flight 14 estimated payload disk framebuffer" >&2
+    if [[ ! -f "$OUT_DIR/exo_play_flight14_payload_flat_pack.png" ]]; then
+      echo "ERROR: missing Flight 14 estimated payload flat-pack framebuffer" >&2
       return 1
     fi
     if ! grep -q 'SUMMARY reason=FLIGHT14_PAYLOAD_VISUAL_OK' "$LOG"; then
       echo "ERROR: Flight 14 payload visual fixture did not finish cleanly" >&2
       return 1
     fi
-    if ! grep -Eq 'FLIGHT14_PAYLOAD_VISUAL_SETUP fixture=True physicsReplay=False timeScale=0 altitudeM=400000 diameterM=6\.50 thicknessM=0\.45' "$LOG"; then
-      echo "ERROR: payload renderer setup does not match the disclosed estimated disk envelope" >&2
+    if ! grep -Eq 'FLIGHT14_PAYLOAD_VISUAL_SETUP fixture=True physicsReplay=False timeScale=0 altitudeM=400000 lengthM=5\.26 widthM=3\.77 thicknessM=0\.45 equivalentEnvelopeM=6\.50 faceSections=2 centerBus=True' "$LOG"; then
+      echo "ERROR: payload renderer does not match the estimated flat-pack presentation envelope" >&2
       return 1
     fi
-    if ! grep -Eq 'FLIGHT14_PAYLOAD_VISUAL_CAPTURE rendererFound=True diskFound=True cylinder=True diameterM=6\.50 thicknessM=0\.45 physicsReplay=False' "$LOG"; then
-      echo "ERROR: framebuffer capture did not verify the rendered Flight 14 payload disk" >&2
+    if ! grep -Eq 'FLIGHT14_PAYLOAD_VISUAL_CAPTURE rendererFound=True flatPackFound=True box=True lengthM=5\.26 widthM=3\.77 thicknessM=0\.45 faceSections=2 physicsReplay=False' "$LOG"; then
+      echo "ERROR: framebuffer capture did not verify the rendered Flight 14 flat-pack proxy" >&2
       return 1
     fi
   elif [[ "$MODE" == "flight14_deployment" ]]; then
@@ -6020,8 +6028,8 @@ PYCOVERAGE
       echo "ERROR: capture was not taken after two live releases with two detached vessel renderers" >&2
       return 1
     fi
-    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_RENDERERS detached=[3-9][0-9]* payloadDisks=2 physicsReplay=False' "$LOG"; then
-      echo "ERROR: both detached Starlink renderers do not contain the estimated stowed-disk mesh" >&2
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_RENDERERS detached=[3-9][0-9]* payloadFlatPacks=2 physicsReplay=False' "$LOG"; then
+      echo "ERROR: both detached Starlink renderers do not contain the estimated flat-pack proxy" >&2
       return 1
     fi
   elif [[ "$MODE" == "hotstage" ]]; then
@@ -6810,7 +6818,7 @@ elif [[ "$MODE" == "orbital_reentry" ]]; then
 elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "flight14_payload" ]]; then
-  echo "visual_playtest: Flight 14 estimated payload renderer capture OK — visual review still required"
+  echo "visual_playtest: Flight 14 estimated payload flat-pack capture OK — visual review still required"
 elif [[ "$MODE" == "flight14_deployment" ]]; then
   echo "visual_playtest: Flight 14 real ascent and first two payload releases captured — visual review still required"
 elif [[ "$MODE" == "orbital_plume" ]]; then

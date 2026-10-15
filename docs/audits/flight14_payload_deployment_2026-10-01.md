@@ -18,6 +18,11 @@ This is a configurable engineering assumption, not a sourced Flight 14 measureme
 All-up mass is lumped into dry mass; onboard propellant, thrusters, deployed arrays,
 communication and subsequent orbit raising are not modeled. The 6.5 m equivalent
 stowed disk and 0.45 m thickness are also estimates, not recovered flight geometry.
+The renderer now depicts that estimate as a low-profile rectangular flat-pack proxy,
+with two face sections and a small center feature. Its 5.26 x 3.77 x 0.45 m visual
+dimensions use an estimated aspect ratio; the planform diagonal remains inside the
+6.5 m equivalent-disk envelope. These presentation-only faces do not represent
+deployed solar arrays and do not affect mass, drag, heating, or release dynamics.
 
 `starship_flight14_payload_estimate.json` describes a single internal rack with 26
 positions, 0.6 m spacing, and a 1 m/s opening velocity along carrier local +X.
@@ -133,8 +138,24 @@ The existing cadence test now uses the loaded manifest at 30/120 FPS.
 
 Full-project CI passed: 949 xUnit tests, nine comparator tests, source-contract
 checks, all three builds with zero warnings/errors, and flight/menu/VAB Godot startup
-smokes. The loaded 30/120 FPS cadence test passed. No Flight 14 framebuffer replay
-or satellite/conveyor rendering acceptance is claimed.
+smokes. The loaded 30/120 FPS cadence test passed.
+
+## Payload renderer update (2026-10-14)
+
+The former circular renderer has been replaced with a flat rectangular visual proxy.
+`bash tools/visual_playtest.sh --flight14-payload --run-id f14-flat-pack-final
+--skip-build` passed with a real Xvfb framebuffer capture and verified that the
+low-profile box stays inside the estimated equivalent-disk envelope. This is a
+display-only aspect-ratio choice; it adds no deployed-array geometry or physical effect.
+
+`bash tools/visual_playtest.sh --flight14-deployment --run-id f14-flat-pack-live
+--skip-build` then ran the loaded mission through the first two actual releases and
+passed its framebuffer and physical gates. Release times were T+2047.02 and 2120.30 s;
+the largest logged linear-momentum residual was 1.066e-6 kg m/s and the two detached
+satellite renderers both contained the flat-pack mesh. In the saved close-external
+frame, one pack is clear while the other is occluded or outside the view. Thus the
+renderer integration is verified, but simultaneous in-frame visibility remains a
+camera-composition issue and should not be solved by changing the separation physics.
 
 ## Next scope
 

@@ -2256,30 +2256,71 @@ public partial class VesselRenderer : Node3D
 
     private static Node3D CreateEstimatedStarlinkPayloadNode(PartDefinition definition)
     {
-        // Flight 14's payload entry only supplies an estimated equivalent stowed
-        // disk (diameter and thickness). Keep that disclosed envelope visible;
-        // do not imply deployed arrays or satellite hardware absent from the model.
-        float radius = (float)System.Math.Max(
-            0.2 / MetresPerUnit, definition.DiameterM * 0.5 / MetresPerUnit);
+        // The declared dimensions are an estimated equivalent disk, not recovered
+        // flight geometry. Render a flat-pack silhouette whose diagonal stays inside
+        // that envelope; this is presentation-only and does not imply deployed arrays.
+        float envelope = (float)System.Math.Max(
+            0.2 / MetresPerUnit, definition.DiameterM / MetresPerUnit);
+        float length = envelope * 0.81f;
+        float width = envelope * 0.58f;
         float thickness = (float)System.Math.Max(
             0.08 / MetresPerUnit, definition.LengthM / MetresPerUnit);
         var node = new MeshInstance3D
         {
-            Name = "StarlinkV3_EstimatedStowedDisk",
-            Mesh = new CylinderMesh
+            Name = "StarlinkV3_EstimatedFlatPack",
+            Mesh = new BoxMesh
             {
-                TopRadius = radius,
-                BottomRadius = radius,
-                Height = thickness,
-                RadialSegments = 48,
+                Size = new Vector3(length, thickness, width),
             },
         };
         node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.34f, 0.36f, 0.39f),
-            Metallic = 0.22f,
-            Roughness = 0.76f,
+            AlbedoColor = new Color(0.62f, 0.64f, 0.66f),
+            Metallic = 0.16f,
+            Roughness = 0.72f,
         });
+
+        var faceMaterial = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.39f, 0.43f, 0.47f),
+            Metallic = 0.18f,
+            Roughness = 0.72f,
+        };
+        for (int panel = 0; panel < 2; panel++)
+        {
+            float panelLength = length * 0.465f;
+            var face = new MeshInstance3D
+            {
+                Name = $"EstimatedPackedFace{panel + 1}",
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(panelLength, thickness * 0.10f, width * 0.90f),
+                },
+                Position = new Vector3(
+                    (panel == 0 ? -1f : 1f) * length * 0.255f,
+                    thickness * 0.55f,
+                    0f),
+            };
+            face.SetSurfaceOverrideMaterial(0, faceMaterial);
+            node.AddChild(face);
+        }
+
+        var centerBus = new MeshInstance3D
+        {
+            Name = "EstimatedPayloadCenterBus",
+            Mesh = new BoxMesh
+            {
+                Size = new Vector3(length * 0.18f, thickness * 0.18f, width * 0.42f),
+            },
+            Position = new Vector3(0f, thickness * 0.59f, 0f),
+        };
+        centerBus.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.72f, 0.73f, 0.71f),
+            Metallic = 0.34f,
+            Roughness = 0.58f,
+        });
+        node.AddChild(centerBus);
         return node;
     }
 
