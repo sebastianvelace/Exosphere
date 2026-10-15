@@ -5248,7 +5248,7 @@ verify_pngs() {
     # This gate intentionally combines physical fixture identity, rendered-layer
     # diagnostics, camera composition and decoded image metrics. A valid PNG or a
     # shader source string alone must not satisfy the orbital-plume acceptance.
-    if ! awk '
+    if ! awk -v RESOLUTION_WIDTH="$RESOLUTION_WIDTH" -v RESOLUTION_HEIGHT="$RESOLUTION_HEIGHT" '
       function value(prefix,    i, pair) {
         for (i = 1; i <= NF; i++)
           if ($i ~ ("^" prefix "=")) {
@@ -5292,8 +5292,8 @@ verify_pngs() {
         valid = valid && value("cameraMode") == "Chase"
         valid = valid && value("rendererVisible") == "True"
         valid = valid && value("hudVisible") == "True"
-        valid = valid && value("imageWidth") + 0 == 1920
-        valid = valid && value("imageHeight") + 0 == 1080
+        valid = valid && value("imageWidth") + 0 == RESOLUTION_WIDTH
+        valid = valid && value("imageHeight") + 0 == RESOLUTION_HEIGHT
         seen++
       }
       END { exit !(seen == 1 && valid) }
