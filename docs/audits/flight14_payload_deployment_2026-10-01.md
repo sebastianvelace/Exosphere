@@ -152,10 +152,18 @@ display-only aspect-ratio choice; it adds no deployed-array geometry or physical
 --skip-build` then ran the loaded mission through the first two actual releases and
 passed its framebuffer and physical gates. Release times were T+2047.02 and 2120.30 s;
 the largest logged linear-momentum residual was 1.066e-6 kg m/s and the two detached
-satellite renderers both contained the flat-pack mesh. In the saved close-external
-frame, one pack is clear while the other is occluded or outside the view. Thus the
-renderer integration is verified, but simultaneous in-frame visibility remains a
-camera-composition issue and should not be solved by changing the separation physics.
+satellite renderers both contained the flat-pack mesh. In that original close-external
+frame, one pack was clear while the other was occluded or outside the view.
+
+The 2026-10-14 follow-up added temporary renderer-only tracking of the carrier and two
+newest releases, with a yaw update derived from their actual inertial positions. It does
+not change vessel states, release impulses, or coast propagation. The new
+`--flight14-deployment --run-id f14-payload-camera --skip-build` E2E passed through the
+same two live releases; the log confirms two flat-pack renderers, nonzero focus offset,
+automatic tracking, and `physicsReplay=False`. Its real framebuffer shows both packs in
+the same view. The second remains small and close to Ship's silhouette, so visibility is
+improved but not yet presentation-quality; a closer oblique orbital shot is the next
+visual refinement. Evidence: `/tmp/exo_play-f14-payload-camera/exo_play_flight14_payload_deployment_e2e.png`.
 
 ## Next scope
 

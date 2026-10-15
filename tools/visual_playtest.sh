@@ -4151,8 +4151,13 @@ public partial class _PlaytestShot : Node
             int payloadFlatPacks = detachedRenderers.Count(renderer =>
                 renderer.FindChild("StarlinkV3_EstimatedFlatPack", true, false)
                     is MeshInstance3D { Mesh: BoxMesh });
+            var camera = CameraController.Instance;
             _log.WriteLine($"FLIGHT14_DEPLOYMENT_RENDERERS detached={detachedRenderers.Length} "
-                + $"payloadFlatPacks={payloadFlatPacks} physicsReplay=False");
+                + $"payloadFlatPacks={payloadFlatPacks} "
+                + $"payloadAutoTracking={camera?.Flight14PayloadAutoTracking == true} "
+                + $"payloadFocusOffsetNonzero={camera?.Flight14PayloadFocusOffsetMetres > 0.1f} "
+                + $"cameraYawDeg={camera?.PresentationYawDegrees ?? 0f:F1} "
+                + "physicsReplay=False");
             _log.Flush();
             return;
         }
@@ -6028,8 +6033,8 @@ PYCOVERAGE
       echo "ERROR: capture was not taken after two live releases with two detached vessel renderers" >&2
       return 1
     fi
-    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_RENDERERS detached=[3-9][0-9]* payloadFlatPacks=2 physicsReplay=False' "$LOG"; then
-      echo "ERROR: both detached Starlink renderers do not contain the estimated flat-pack proxy" >&2
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_RENDERERS detached=[3-9][0-9]* payloadFlatPacks=2 payloadAutoTracking=True payloadFocusOffsetNonzero=True cameraYawDeg=-?[0-9.]+ physicsReplay=False' "$LOG"; then
+      echo "ERROR: both flat-pack renderers or the physical deployment camera tracking are missing" >&2
       return 1
     fi
   elif [[ "$MODE" == "hotstage" ]]; then

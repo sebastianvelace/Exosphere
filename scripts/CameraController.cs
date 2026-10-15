@@ -1,6 +1,8 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Visual;
 
@@ -21,6 +23,9 @@ public partial class CameraController : Node3D
     public float PresentationPitchDegrees => _pitch;
     public float PresentationDistance => _distance;
     public float PresentationFov => _externalFov;
+    public bool Flight14PayloadAutoTracking { get; private set; }
+    public float Flight14PayloadFocusOffsetMetres =>
+        _flight14PayloadFocusOffset.Length() * MetresPerRenderUnit;
     public float ShakePositionMagnitude => _shake.PositionOffset.Length();
     public float ShakeRotationDegrees => Mathf.RadToDeg(_shake.RotationOffset.Length());
     public float ShakePeakPositionStepPerSecond => _shake.PeakPositionStepPerSecond;
@@ -182,6 +187,8 @@ public partial class CameraController : Node3D
     private float? _presentationDistanceTarget;
     private float? _externalLookAtY;
     private bool _allowCloseExternalFrame;
+    private Vector3 _flight14PayloadFocusOffset;
+    private int _flight14PayloadYawReleaseCount;
 
     // Event changes (Pad -> Chase, staging, and the return from EDL presentation) update
     // the requested frame below. Keep the rendered frame in local vessel coordinates and
@@ -252,6 +259,7 @@ public partial class CameraController : Node3D
     // This bound is applied only while the EDL overlay is active and eases through the same
     // frame interpolation as staging; it does not alter vessel state or player zoom input.
     private const float EdlPresentationDistance = 28f;
+    private const float MetresPerRenderUnit = 2.8f;
 
     public override void _Ready()
     {
@@ -467,6 +475,11 @@ public partial class CameraController : Node3D
             }
         }
 
+        Vector3 payloadFocusOffset = GetFlight14PayloadFocusOffset(
+            bridge, bridge?.ActiveVessel, surfaceFrame);
+        targetCamPos += payloadFocusOffset;
+        targetLookTarget += payloadFocusOffset;
+
         if (!_hasSmoothedFrame)
         {
             _smoothedFramePosition = targetCamPos;
@@ -520,6 +533,66 @@ public partial class CameraController : Node3D
     }
 
     // ── First-person cockpit camera ───────────────────────────────────────────
+    private Vector3 GetFlight14PayloadFocusOffset(
+        SimulationBridge? bridge, Vessel? activeVessel, Basis surfaceFrame)
+    {
+        Flight14PayloadAutoTracking = false;
+        _flight14PayloadFocusOffset = Vector3.Zero;
+        if (_cameraUserAdjusted
+            || bridge?.Flight14Preview is not { IsObservingBooster: false } preview
+            || activeVessel == null
+            || preview.Run.PayloadController.Phase != Flight14PayloadPhase.Deploying)
+        {
+            _flight14PayloadYawReleaseCount = 0;
+            return Vector3.Zero;
+        }
+
+        var releases = preview.Run.PayloadController.Releases;
+        if (releases.Count == 0)
+        {
+            _flight14PayloadYawReleaseCount = 0;
+            return Vector3.Zero;
+        }
+
+        // Keep the carrier and two newest released vehicles in the same frame.
+        // Their physical states and Kepler coast remain untouched.
+        int firstRelease = System.Math.Max(0, releases.Count - 2);
+        Vector3d focusOffsetMetres = Vector3d.Zero;
+        Vector3d releaseAxis = Vector3d.Zero;
+        int includedSatellites = 0;
+        for (int index = firstRelease; index < releases.Count; index++)
+        {
+            var satellitePosition = releases[index].Satellite.Position;
+            focusOffsetMetres += satellitePosition - activeVessel.Position;
+            includedSatellites++;
+            if (index == releases.Count - 1 && index > firstRelease)
+                releaseAxis = satellitePosition - releases[index - 1].Satellite.Position;
+        }
+
+        // Include Ship in the centroid so the target remains between the carrier
+        // and payloads instead of framing the released satellites alone.
+        focusOffsetMetres /= includedSatellites + 1;
+        _flight14PayloadFocusOffset = surfaceFrame.Inverse()
+            * ToG(focusOffsetMetres / MetresPerRenderUnit);
+        Flight14PayloadAutoTracking = true;
+
+        if (releases.Count >= 2 && releases.Count != _flight14PayloadYawReleaseCount)
+        {
+            Vector3 localAxis = surfaceFrame.Inverse() * ToG(releaseAxis);
+            Vector2 horizontalAxis = new(localAxis.X, localAxis.Z);
+            if (horizontalAxis.LengthSquared() > 1e-8f)
+            {
+                // View the along-track interval broadside to separate the flat-pack
+                // silhouettes that otherwise stack behind Ship in the chase view.
+                _yaw = Mathf.RadToDeg(Mathf.Atan2(
+                    horizontalAxis.Y, -horizontalAxis.X));
+            }
+            _flight14PayloadYawReleaseCount = releases.Count;
+        }
+
+        return _flight14PayloadFocusOffset;
+    }
+
     private void DriveCockpit(double delta)
     {
         var camera = _camera;
