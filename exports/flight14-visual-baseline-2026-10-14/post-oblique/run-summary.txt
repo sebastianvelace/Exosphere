@@ -1,0 +1,11 @@
+status=PASS
+mode=launch_track
+renderer=forward_plus
+renderer_args=--rendering-driver vulkan --rendering-method forward_plus
+renderer_actual=forward_plus
+run_id=flight14-liftoff-final-2026-10-14
+log=/tmp/exo_play-flight14-liftoff-final-2026-10-14.log
+console_log=/tmp/exo_play-flight14-liftoff-final-2026-10-14.log.console
+artifacts=/tmp/exo_play-flight14-liftoff-final-2026-10-14
+milestones=pad,startup_ramp,liftoff,tower_clear,early_ascent
+SUMMARY reason=LAUNCH_TRACK_OK frames=179

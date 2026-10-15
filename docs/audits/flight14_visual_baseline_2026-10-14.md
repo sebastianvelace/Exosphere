@@ -58,9 +58,9 @@ vehicle is large in frame, the pad and surrounding wetlands remain visible, and 
 voluminous asymmetric vapor cloud extends to one side. The cloud has warm light near
 the exhaust and retains texture through its bright regions.
 
-The current production launch capture is a lower, more distant view. The stack is
-roughly one quarter of the scene height; the plume resolves into two similarly sized
-white lobes, and the brightest region loses detail. That makes the current mismatch
+In the original baseline capture, the production view was low and distant. The stack
+was roughly one quarter of the scene height; the plume resolved into two similarly
+sized white lobes, and the brightest region lost detail. This made the mismatch
 primarily a combination of camera composition, steam-cloud morphology, and highlight
 range—not evidence of a flight-dynamics error.
 
@@ -89,3 +89,25 @@ more representative treatment before keeping a closer aerial preset.
    hot-stage, payload deployment, Flight 14's early deorbit, and entry/plasma.
 
 No trajectory, atmosphere, propulsion, or thermal physics were changed for this audit.
+
+## Post-baseline liftoff framing update
+
+The first two visual priorities have since received presentation-only changes:
+Starbase deluge lobes now have deterministic asymmetry and slightly lower optical
+density, and the early liftoff camera now uses an elevated oblique composition (20°
+pitch, 185 render-unit distance, 28° FOV). The gameplay camera remains user-controlled
+outside the automatic liftoff beat. No trajectory, atmosphere, propulsion, or thermal
+physics were changed.
+
+The updated `--launch-track` run passed at 1280×720 in Forward+ under Xvfb/llvmpipe,
+capturing liftoff, tower clear, and early ascent through 1 km. Liftoff metrics were
+`clippedFrac=0.01493`, `surfaceClippedFrac=0.06143`, and
+`surfaceWhiteClipFrac=0.01802`. The image gate now distinguishes a ground-facing camera
+from a horizon view: terrain color saturation is not counted as atmospheric green
+airglow, while total-frame clipping and broad white clipping remain gated. The two
+relevant post-change captures and run summary are in
+`exports/flight14-visual-baseline-2026-10-14/post-oblique/`.
+
+The framing better matches the elevated Flight 14 reference and makes the vehicle
+larger in the launch-site context. The launch vehicle remains the Flight 12 V3 fixture,
+and llvmpipe captures are not physical-GPU performance evidence.
