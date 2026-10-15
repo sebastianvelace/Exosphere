@@ -86,6 +86,10 @@ public sealed class Flight14PayloadTests(ITestOutputHelper output)
         double lastFuel = tank.LiquidFuel+tank.Oxidizer, settledFuel = double.NaN;
         double initialManifestMass = run.Ship.Parts.Parts.Where(p => p.Definition.HasVehicleRole("payload")).Sum(p => p.CurrentMass);
         int previousCount = 0;
+        Vessel? lastReleasedSatellite = null;
+        Quaterniond lastReleaseOrientation = Quaterniond.Identity;
+        Vector3d lastReleaseAngularVelocity = Vector3d.Zero;
+        double lastReleaseMissionTime = double.NaN;
         while (run.Universe.CurrentTime < run.PayloadDefinition.MaximumMissionSeconds+5
             && run.PayloadController.Phase is not (Flight14PayloadPhase.Complete or Flight14PayloadPhase.Blocked))
         {
@@ -111,6 +115,10 @@ public sealed class Flight14PayloadTests(ITestOutputHelper output)
                 Assert.InRange(release.MomentumResidualKgMps, 0, 0.01);
                 Assert.InRange(release.RelativeOpeningResidualMps, 0, 1e-7);
                 Assert.True(release.PeriapsisAltitudeM >= run.PayloadDefinition.MinimumPeriapsisAltitudeM);
+                lastReleasedSatellite = release.Satellite;
+                lastReleaseOrientation = release.Satellite.Orientation;
+                lastReleaseAngularVelocity = release.Satellite.AngularVelocity;
+                lastReleaseMissionTime = release.MissionElapsedSeconds;
                 previousCount = count;
             }
         }
@@ -123,6 +131,32 @@ public sealed class Flight14PayloadTests(ITestOutputHelper output)
         var firstPosition = firstRelease.Satellite.Position;
         for (int i = 0; i < 1800; i++) run.AdvanceFrame(1.0/30);
         Assert.True(firstRelease.Satellite.Position.DistanceTo(firstPosition) > 1e5);
+        Assert.NotNull(lastReleasedSatellite);
+        double observedMissionTime = run.Universe.CurrentTime-run.Controller.LiftoffEpoch;
+        double elapsedSinceLastRelease = observedMissionTime-lastReleaseMissionTime;
+        Quaterniond finalOrientation = lastReleasedSatellite.Orientation;
+        double orientationDot = System.Math.Abs(
+            lastReleaseOrientation.W*finalOrientation.W
+            + lastReleaseOrientation.X*finalOrientation.X
+            + lastReleaseOrientation.Y*finalOrientation.Y
+            + lastReleaseOrientation.Z*finalOrientation.Z);
+        double measuredAngle = 2*System.Math.Acos(System.Math.Clamp(orientationDot, 0.0, 1.0));
+        double expectedAngle = lastReleaseAngularVelocity.Magnitude*elapsedSinceLastRelease;
+        double finalAngularRate = lastReleasedSatellite.AngularVelocity.Magnitude;
+        Assert.InRange(elapsedSinceLastRelease, 59.9, 60.1);
+        Assert.True(double.IsFinite(measuredAngle));
+        Assert.True(double.IsFinite(expectedAngle));
+        Assert.False(lastReleasedSatellite.SASEnabled,
+            "The estimated payload has no modeled attitude actuators, so SAS must not damp its spin.");
+        if (expectedAngle > 1e-5)
+        {
+            Assert.True(finalAngularRate > lastReleaseAngularVelocity.Magnitude*0.5,
+                $"Payload spin was damped without modeled actuators: "
+                + $"{lastReleaseAngularVelocity.Magnitude:E3} -> {finalAngularRate:E3} rad/s.");
+            Assert.True(measuredAngle > expectedAngle*0.5,
+                $"Payload attitude advanced only {measuredAngle:E3} rad over {elapsedSinceLastRelease:F2}s; "
+                + $"inherited-rate estimate is {expectedAngle:E3} rad.");
+        }
         Assert.All(run.PayloadController.Releases, r => {
             Assert.False(r.Satellite.IsDestroyed);
             Assert.True(r.Satellite.GetAltitude(run.Earth) > run.Earth.Atmosphere!.MaxAltitude);
@@ -131,7 +165,10 @@ public sealed class Flight14PayloadTests(ITestOutputHelper output)
         output.WriteLine($"Payload-loaded launch: cutoff={run.Controller.CutoffElapsedSeconds:F2}s "
             +$"insertion={run.Controller.InsertionElapsedSeconds:F2}s releases="
             +$"{firstRelease.MissionElapsedSeconds:F2}..{run.PayloadController.Releases[^1].MissionElapsedSeconds:F2}s "
-            +$"mass={initialManifestMass:F0}kg remainingFuel={lastFuel:F0}kg");
+            +$"mass={initialManifestMass:F0}kg remainingFuel={lastFuel:F0}kg "
+            +$"lastPayloadSpin={measuredAngle:F6}/{expectedAngle:F6}rad over={elapsedSinceLastRelease:F2}s "
+            +$"angularRate={lastReleaseAngularVelocity.Magnitude:E3}->{finalAngularRate:E3}rad/s "
+            +$"sas={lastReleasedSatellite.SASEnabled} onRails={lastReleasedSatellite.IsOnRails}");
     }
 
     [Fact]

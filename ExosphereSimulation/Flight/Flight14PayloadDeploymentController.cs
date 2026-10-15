@@ -88,6 +88,10 @@ public sealed class Flight14PayloadDeploymentController : IPhysicsStepController
         var satellite = _ship.DeployPayload(id, $"Starlink V3 { _releases.Count+1:00} (estimate)",
             _definition.OpeningVelocity);
         if (satellite == null) { Block("payload-separation-failed"); return; }
+        // The estimated payload has no modeled attitude actuators. DeployPayload's generic
+        // default enables SAS, whose idealized rate damping would remove inherited spin
+        // without applying physical control torque.
+        satellite.SASEnabled = false;
         double mass = satellite.TotalMass+_ship.TotalMass;
         var center = (satellite.Position*satellite.TotalMass+_ship.Position*_ship.TotalMass)/mass;
         var momentum = satellite.Velocity*satellite.TotalMass+_ship.Velocity*_ship.TotalMass;

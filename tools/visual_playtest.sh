@@ -69,7 +69,7 @@ Options:
   --flight14-payload
                 Capture the isolated Flight 14 estimated Starlink payload renderer.
   --flight14-deployment
-                Fly the Flight 14 exploration through two real payload releases and capture them.
+                Fly the Flight 14 exploration through two real payload releases, observe their attitude for 60 s, and capture them.
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --launch-track Capture launch, tower-clear and 1 km using the production camera.
@@ -672,6 +672,9 @@ public partial class _PlaytestShot : Node
     double _flight14DeploymentCaptureStart = double.NaN;
     double _lastFlight14DeploymentProgressWall;
     int _flight14DeploymentLoggedReleases;
+    readonly List<(Vessel Satellite, Quaterniond OrientationAtSample,
+        Vector3d AngularVelocityAtSample, double MissionElapsedAtSample)>
+        _flight14DeploymentAttitudeSamples = new();
     int _beautyWaitFrames;
     int _orbitalPlumeStableFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded, _engineBayCaptured;
@@ -1970,6 +1973,9 @@ public partial class _PlaytestShot : Node
                     + $"massResidualKg={release.MassResidualKg:E3} "
                     + $"momentumResidualKgMps={release.MomentumResidualKgMps:E3} "
                     + $"relativeOpeningResidualMps={release.RelativeOpeningResidualMps:E3}");
+                _flight14DeploymentAttitudeSamples.Add((release.Satellite,
+                    release.Satellite.Orientation, release.Satellite.AngularVelocity,
+                    preview.MissionElapsedSeconds));
             }
             _flight14DeploymentLoggedReleases = payloadController.Releases.Count;
             _log.Flush();
@@ -1990,9 +1996,53 @@ public partial class _PlaytestShot : Node
         }
 
         if (!double.IsNaN(_flight14DeploymentCaptureStart)
-            && preview.MissionElapsedSeconds - _flight14DeploymentCaptureStart >= 3.0
+            && preview.MissionElapsedSeconds - _flight14DeploymentCaptureStart >= 60.0
             && !_flight14DeploymentCaptureQueued)
         {
+            bool attitudePropagationValid = true;
+            for (int i = 0; i < _flight14DeploymentAttitudeSamples.Count; i++)
+            {
+                var sample = _flight14DeploymentAttitudeSamples[i];
+                var initial = sample.OrientationAtSample.Normalize();
+                var current = sample.Satellite.Orientation.Normalize();
+                double dot = System.Math.Abs(initial.W * current.W
+                    + initial.X * current.X + initial.Y * current.Y + initial.Z * current.Z);
+                double measuredAngle = 2.0 * System.Math.Acos(System.Math.Clamp(dot, 0.0, 1.0));
+                double elapsed = preview.MissionElapsedSeconds - sample.MissionElapsedAtSample;
+                double expectedAngle = sample.AngularVelocityAtSample.Magnitude * elapsed;
+                double angleError = System.Math.Abs(measuredAngle - expectedAngle);
+                double currentAngularRate = sample.Satellite.AngularVelocity.Magnitude;
+                bool spinPreservedWithoutSas = !sample.Satellite.SASEnabled
+                    && (sample.AngularVelocityAtSample.Magnitude <= 1e-5
+                        || (currentAngularRate >= sample.AngularVelocityAtSample.Magnitude * 0.5
+                            && measuredAngle >= expectedAngle * 0.5));
+                bool sampleValid = double.IsFinite(measuredAngle)
+                    && double.IsFinite(currentAngularRate)
+                    && !sample.Satellite.SASEnabled
+                    && (sample.Satellite.IsOnRails
+                        ? angleError <= 1e-6
+                        : spinPreservedWithoutSas);
+                attitudePropagationValid &= sampleValid;
+                _log.WriteLine($"FLIGHT14_DEPLOYMENT_ATTITUDE index={i + 1} "
+                    + $"elapsedS={elapsed:F2} angularRateRadPerS={sample.AngularVelocityAtSample.Magnitude:E3} "
+                    + $"currentAngularRateRadPerS={currentAngularRate:E3} "
+                    + $"expectedAngleRad={expectedAngle:F6} measuredAngleRad={measuredAngle:F6} "
+                    + $"errorRad={angleError:E3} integrationTier="
+                    + $"{(sample.Satellite.IsOnRails ? "onrails" : "fullphysics")} "
+                    + $"sas={sample.Satellite.SASEnabled} "
+                    + $"onRails={sample.Satellite.IsOnRails}");
+            }
+
+            if (!attitudePropagationValid
+                || _flight14DeploymentAttitudeSamples.Count != 2)
+            {
+                _log.WriteLine($"FLIGHT14_DEPLOYMENT_ATTITUDE_INVALID samples="
+                    + $"{_flight14DeploymentAttitudeSamples.Count} valid={attitudePropagationValid}");
+                _log.Flush();
+                Finish("FLIGHT14_ATTITUDE_PROPAGATION_INVALID");
+                return;
+            }
+
             var vesselsRoot = GetTree().Root.FindChild(
                 "Vessels", true, false) as Node3D;
             int detachedRenderers = vesselsRoot?.GetChildren()
@@ -2003,7 +2053,8 @@ public partial class _PlaytestShot : Node
                 + $"released={payloadController.Releases.Count} detachedRenderers={detachedRenderers} "
                 + $"vessels={bridge.Universe.Vessels.Count} "
                 + $"shipAltitudeM={run.Ship.GetAltitude(run.Earth):F1} "
-                + $"missionElapsedS={preview.MissionElapsedSeconds:F2} physicsReplay=False");
+                + $"missionElapsedS={preview.MissionElapsedSeconds:F2} "
+                + "attitudePropagation=True observationS=60 physicsReplay=False");
             _log.Flush();
             QueueCapture("flight14_payload_deployment_e2e");
             _flight14DeploymentCaptureQueued = true;
@@ -6030,7 +6081,12 @@ PYCOVERAGE
       echo "ERROR: first two physical payload releases or their conservation residuals are missing" >&2
       return 1
     fi
-    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_E2E_CAPTURE_STATE released=2 detachedRenderers=[3-9][0-9]* vessels=[0-9]+ shipAltitudeM=[0-9.]+ missionElapsedS=[0-9.]+ physicsReplay=False' "$LOG"; then
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_ATTITUDE index=1 elapsedS=[0-9.]+ angularRateRadPerS=[0-9.eE+-]+ currentAngularRateRadPerS=[0-9.eE+-]+ expectedAngleRad=[0-9.]+ measuredAngleRad=[0-9.]+ errorRad=[0-9.eE+-]+ integrationTier=(onrails|fullphysics) sas=(True|False) onRails=(True|False)' "$LOG" \
+      || ! grep -Eq 'FLIGHT14_DEPLOYMENT_ATTITUDE index=2 elapsedS=[0-9.]+ angularRateRadPerS=[0-9.eE+-]+ currentAngularRateRadPerS=[0-9.eE+-]+ expectedAngleRad=[0-9.]+ measuredAngleRad=[0-9.]+ errorRad=[0-9.eE+-]+ integrationTier=(onrails|fullphysics) sas=(True|False) onRails=(True|False)' "$LOG"; then
+      echo "ERROR: the two released payloads did not pass the 60-second attitude propagation check" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_DEPLOYMENT_E2E_CAPTURE_STATE released=2 detachedRenderers=[3-9][0-9]* vessels=[0-9]+ shipAltitudeM=[0-9.]+ missionElapsedS=[0-9.]+ attitudePropagation=True observationS=60 physicsReplay=False' "$LOG"; then
       echo "ERROR: capture was not taken after two live releases with two detached vessel renderers" >&2
       return 1
     fi
