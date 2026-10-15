@@ -66,6 +66,8 @@ Options:
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
+  --flight14-payload
+                Capture the isolated Flight 14 estimated Starlink payload renderer.
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
   --launch      Capture ignition and early vertical liftoff, then exit.
   --launch-track Capture launch, tower-clear and 1 km using the production camera.
@@ -215,6 +217,7 @@ while [[ $# -gt 0 ]]; do
       VARIANT_SITE="starbase_pad2"
       VARIANT_PROFILE="starship-flight12-ascent"
       shift ;;
+    --flight14-payload) MODE="flight14_payload"; shift ;;
     --ascent) MODE="ascent"; shift ;;
     --launch) MODE="launch"; shift ;;
     --launch-track) MODE="launch_track"; shift ;;
@@ -661,6 +664,7 @@ public partial class _PlaytestShot : Node
     bool _towerClear, _earlyAscent;
     bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
+    bool _flight14PayloadVisualSeeded;
     int _beautyWaitFrames;
     int _orbitalPlumeStableFrames;
     bool _edlSeeded, _flipComplete, _shipSeeded, _engineBayCaptured;
@@ -923,6 +927,13 @@ public partial class _PlaytestShot : Node
         }
 
         _readyFrames++;
+
+        if (_mode == "flight14_payload")
+        {
+            ProcessFlight14PayloadVisual(bridge, universe);
+            return;
+        }
+
         if (frameSeconds > 0.0 && double.IsFinite(frameSeconds))
         {
             var schedulerTelemetry = universe.LastSchedulerTelemetry;
@@ -1787,6 +1798,88 @@ public partial class _PlaytestShot : Node
             _log.Flush();
             Finish("EDL_GAP");
         }
+    }
+
+    private void ProcessFlight14PayloadVisual(
+        SimulationBridge bridge, Universe universe)
+    {
+        universe.TimeScale = 0.0;
+        TryCapturePending();
+        if (!_flight14PayloadVisualSeeded)
+        {
+            if (_readyFrames < 45) return;
+            var carrier = bridge.ActiveVessel;
+            if (carrier == null) { Finish("NO_CARRIER"); return; }
+
+            string data = ProjectSettings.GlobalizePath("res://data");
+            var definition = PartDefinition.LoadFromJson(Path.Combine(
+                data, "parts", "starlink_v3_flight14_estimate.json"));
+            var payload = new Vessel("flight14-payload-visual-fixture")
+            {
+                Name = "Flight 14 Starlink V3 payload visual fixture",
+                Position = carrier.Position,
+                Velocity = carrier.Velocity,
+                Orientation = carrier.Orientation,
+                ReferenceBodyId = carrier.ReferenceBodyId,
+            };
+            payload.Parts.SetRoot(new Part(
+                definition, "flight14-starlink-v3-visual-fixture"));
+            universe.AddVessel(payload);
+            if (!universe.SetActiveVessel(payload.Id))
+            {
+                Finish("PAYLOAD_FIXTURE_NOT_ACTIVE");
+                return;
+            }
+
+            // A display-only circular orbit gives the production floating origin and
+            // chase camera a stable vacuum background; no Flight 14 state is replayed.
+            bridge.JumpToOrbit(400_000.0);
+            bridge.SetTimeScale(0.0);
+
+            var vessels = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
+            if (vessels == null) { Finish("NO_VESSELS_RENDER_ROOT"); return; }
+            var renderer = new VesselRenderer
+            {
+                Name = "Flight14PayloadVisualRenderer",
+            };
+            vessels.AddChild(renderer);
+            renderer.BuildFromVessel(payload);
+            var floatingOrigin = GetTree().Root.FindChild(
+                "FloatingOrigin", true, false) as FloatingOrigin;
+            floatingOrigin?.RegisterVesselNode(payload.Id, renderer);
+            CameraController.Instance?.SetExternalChaseFrame(
+                28f, 52f, 8f, allowCloseup: true);
+
+            var disk = renderer.GetNodeOrNull<MeshInstance3D>(
+                "StarlinkV3_EstimatedStowedDisk");
+            var cylinder = disk?.Mesh as CylinderMesh;
+            if (cylinder == null)
+            {
+                _log.WriteLine($"FLIGHT14_PAYLOAD_VISUAL_DEBUG family={definition.VehicleFamily} "
+                    + $"role={definition.VehicleRole} parts={payload.Parts.Parts.Count} "
+                    + $"children={string.Join(',', renderer.GetChildren().Select(node => node.Name.ToString()))}");
+                _log.Flush();
+                Finish("PAYLOAD_DISK_RENDER_MISSING");
+                return;
+            }
+
+            _flight14PayloadVisualSeeded = true;
+            _log.WriteLine("FLIGHT14_PAYLOAD_VISUAL_SETUP fixture=True "
+                + $"physicsReplay=False timeScale=0 altitudeM=400000 "
+                + $"diameterM={cylinder.TopRadius * 2f * 2.8f:F2} "
+                + $"thicknessM={cylinder.Height * 2.8f:F2}");
+            _log.Flush();
+            return;
+        }
+
+        if (!_orbitBeauty && _readyFrames > 65)
+        {
+            QueueCapture("flight14_payload_disk");
+            _orbitBeauty = true;
+            return;
+        }
+        if (_orbitBeauty && _pendingSlug == null)
+            Finish("FLIGHT14_PAYLOAD_VISUAL_OK");
     }
 
     private void ProcessEdlVerification(SimulationBridge bridge, Vessel vessel, Universe universe,
@@ -3862,6 +3955,7 @@ public partial class _PlaytestShot : Node
           LogEngineVisualTelemetry(slug);
           LogEngineBayVisualTelemetry(slug);
           LogFlapVisualTelemetry(slug);
+          LogFlight14PayloadVisualTelemetry(slug);
           _log.WriteLine($"RENDERER_ACTUAL {RenderingServer.GetCurrentRenderingMethod()}");
           if (slug is "tower_clear" or "early_ascent")
           {
@@ -3909,6 +4003,22 @@ public partial class _PlaytestShot : Node
         LogImageMetrics(slug, img);
         LogOrbitalPlumeVisualTelemetry(slug, img);
         GD.Print($"[Playtest] captured {slug} -> {path}");
+    }
+
+    private void LogFlight14PayloadVisualTelemetry(string slug)
+    {
+        if (slug != "flight14_payload_disk") return;
+        var renderer = GetTree().Root.FindChild(
+            "Flight14PayloadVisualRenderer", true, false) as Node3D;
+        var disk = renderer?.FindChild(
+            "StarlinkV3_EstimatedStowedDisk", true, false) as MeshInstance3D;
+        var cylinder = disk?.Mesh as CylinderMesh;
+        _log.WriteLine($"FLIGHT14_PAYLOAD_VISUAL_CAPTURE rendererFound={renderer != null} "
+            + $"diskFound={disk != null} cylinder={cylinder != null} "
+            + $"diameterM={(cylinder?.TopRadius ?? 0f) * 2f * 2.8f:F2} "
+            + $"thicknessM={(cylinder?.Height ?? 0f) * 2.8f:F2} "
+            + "physicsReplay=False");
+        _log.Flush();
     }
 
     private void LogHotStageVisualTelemetry(string slug)
@@ -5732,6 +5842,23 @@ PYCOVERAGE
       echo "ERROR: missing normal-flow telemetry (demo must not satisfy this gate)" >&2
       return 1
     fi
+  elif [[ "$MODE" == "flight14_payload" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_flight14_payload_disk.png" ]]; then
+      echo "ERROR: missing Flight 14 estimated payload disk framebuffer" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=FLIGHT14_PAYLOAD_VISUAL_OK' "$LOG"; then
+      echo "ERROR: Flight 14 payload visual fixture did not finish cleanly" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_PAYLOAD_VISUAL_SETUP fixture=True physicsReplay=False timeScale=0 altitudeM=400000 diameterM=6\.50 thicknessM=0\.45' "$LOG"; then
+      echo "ERROR: payload renderer setup does not match the disclosed estimated disk envelope" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_PAYLOAD_VISUAL_CAPTURE rendererFound=True diskFound=True cylinder=True diameterM=6\.50 thicknessM=0\.45 physicsReplay=False' "$LOG"; then
+      echo "ERROR: framebuffer capture did not verify the rendered Flight 14 payload disk" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "hotstage" ]]; then
     if [[ ! -f "$OUT_DIR/exo_play_hotstage.png" ]]; then
       echo "ERROR: missing required hot-stage milestone PNG: exo_play_hotstage.png" >&2
@@ -6517,6 +6644,8 @@ elif [[ "$MODE" == "orbital_reentry" ]]; then
   echo "visual_playtest: normal orbital Starbase reentry verification OK — physical catch confirmed"
 elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
+elif [[ "$MODE" == "flight14_payload" ]]; then
+  echo "visual_playtest: Flight 14 estimated payload renderer capture OK — visual review still required"
 elif [[ "$MODE" == "orbital_plume" ]]; then
   echo "visual_playtest: orbital vacuum-plume capture OK"
 elif [[ "$MODE" == "reentry_compare" ]]; then
