@@ -2165,6 +2165,10 @@ public partial class VesselRenderer : Node3D
         Part part, bool hasNeighborAbove = false, bool hasNeighborBelow = false)
     {
         var definition = part.Definition;
+        if (definition.VehicleFamily.Equals("starlink", StringComparison.OrdinalIgnoreCase)
+            && definition.HasVehicleRole("payload"))
+            return CreateEstimatedStarlinkPayloadNode(definition);
+
         if (definition.VehicleFamily.Equals(
                 "mercury", StringComparison.OrdinalIgnoreCase))
         {
@@ -2247,6 +2251,35 @@ public partial class VesselRenderer : Node3D
         node.Mesh = mesh;
         node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
             { AlbedoColor = GetCategoryColor(definition.Category), Roughness = 0.48f });
+        return node;
+    }
+
+    private static Node3D CreateEstimatedStarlinkPayloadNode(PartDefinition definition)
+    {
+        // Flight 14's payload entry only supplies an estimated equivalent stowed
+        // disk (diameter and thickness). Keep that disclosed envelope visible;
+        // do not imply deployed arrays or satellite hardware absent from the model.
+        float radius = (float)System.Math.Max(
+            0.2 / MetresPerUnit, definition.DiameterM * 0.5 / MetresPerUnit);
+        float thickness = (float)System.Math.Max(
+            0.08 / MetresPerUnit, definition.LengthM / MetresPerUnit);
+        var node = new MeshInstance3D
+        {
+            Name = "StarlinkV3_EstimatedStowedDisk",
+            Mesh = new CylinderMesh
+            {
+                TopRadius = radius,
+                BottomRadius = radius,
+                Height = thickness,
+                RadialSegments = 48,
+            },
+        };
+        node.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.34f, 0.36f, 0.39f),
+            Metallic = 0.22f,
+            Roughness = 0.76f,
+        });
         return node;
     }
 
