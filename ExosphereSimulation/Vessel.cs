@@ -1013,7 +1013,7 @@ public class Vessel
 
         // SAS: solo amortigua cuando el jugador no está dando input
         if (SASEnabled && !hasInput && auth > 1e-6)
-            AngularVelocity = AngularVelocity * System.Math.Pow(0.005, dt);
+            ApplyStabilityAugmentation(dt, pressure, auth);
 
         // ── Aerodinámica rotacional por torque real ─────────────────────────
         // El arrastre actúa en un centro de presión detrás del CoM y crea un momento que se
@@ -1101,6 +1101,34 @@ public class Vessel
             var    deltaRot = Quaterniond.FromAxisAngle(AngularVelocity.Normalized, angle);
             Orientation = (deltaRot * Orientation).Normalize();
         }
+    }
+
+    /// <summary>
+    /// Rate damping by the vehicle's own attitude actuators. Each body axis keeps the
+    /// former 0.005^dt response as an upper bound, but can only shed what the available
+    /// angular acceleration (RCS floor or live differential TVC) removes in <paramref name="dt"/>.
+    /// SAS is a controller, not a torque source: without authority it cannot stop a tumble.
+    /// </summary>
+    private void ApplyStabilityAugmentation(double dt, double pressure, double auth)
+    {
+        var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
+        double pitchYawAuthority = System.Math.Max(ReactionControlAuthority, envelope.X) * auth;
+        double rollAuthority = System.Math.Max(ReactionControlAuthority, envelope.Y) * auth;
+        double exponentialFactor = System.Math.Pow(0.005, dt);
+
+        static double Damp(double rate, double factor, double maximumChange)
+        {
+            double magnitude = System.Math.Abs(rate);
+            double damped = System.Math.Max(magnitude * factor, magnitude - maximumChange);
+            return System.Math.CopySign(System.Math.Max(0.0, damped), rate);
+        }
+
+        var local = Orientation.Inverse().Rotate(AngularVelocity);
+        local = new Vector3d(
+            Damp(local.X, exponentialFactor, pitchYawAuthority * dt),
+            Damp(local.Y, exponentialFactor, rollAuthority * dt),
+            Damp(local.Z, exponentialFactor, pitchYawAuthority * dt));
+        AngularVelocity = Orientation.Rotate(local);
     }
 
     private void AdvanceFlapActuators(double dt, Vector3d command)
