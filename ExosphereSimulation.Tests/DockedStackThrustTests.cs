@@ -36,6 +36,37 @@ public sealed class DockedStackThrustTests
         Assert.Equal(primary.Velocity, secondary.Velocity);
     }
 
+    [Fact]
+    public void PilotTorqueRotatesTheWholeDockedStackMoreSlowly()
+    {
+        var (alone, aloneVessel, _) = CreateScenario(dock: false);
+        var (docked, primary, secondary) = CreateScenario(dock: true);
+        foreach (var vessel in new[] { aloneVessel, primary })
+        {
+            vessel.Throttle = 0.0;
+            vessel.PitchYawRoll = new Vector3d(1.0, 0.0, 0.0);
+        }
+
+        for (int step = 0; step < 50; step++)
+        {
+            alone.Tick(0.02);
+            docked.Tick(0.02);
+        }
+
+        double totalMass = primary.TotalMass + secondary.TotalMass;
+        var centre = (primary.CenterOfMass * primary.TotalMass
+            + secondary.CenterOfMass * secondary.TotalMass) / totalMass;
+        double stackInertia = primary.Parts.TransverseMomentOfInertia
+            + primary.TotalMass * (primary.CenterOfMass - centre).MagnitudeSquared
+            + secondary.Parts.TransverseMomentOfInertia
+            + secondary.TotalMass * (secondary.CenterOfMass - centre).MagnitudeSquared;
+        double expected = primary.Parts.TransverseMomentOfInertia / stackInertia;
+        double ratio = primary.AngularVelocity.Magnitude / aloneVessel.AngularVelocity.Magnitude;
+        Assert.True(aloneVessel.AngularVelocity.Magnitude > 1e-4);
+        Assert.InRange(ratio, expected * 0.98, expected * 1.02);
+        Assert.Equal(primary.AngularVelocity, secondary.AngularVelocity);
+    }
+
     private static (Universe Universe, Vessel Primary, Vessel Secondary) CreateScenario(bool dock)
     {
         var catalog = PartCatalog.LoadFromDirectory(Path.Combine(DataDirectory(), "parts"));
@@ -52,6 +83,11 @@ public sealed class DockedStackThrustTests
         var tank = tug.AttachPartAutomatically(port.InstanceId, "fuel_tank_small");
         tug.AttachPartAutomatically(tank.InstanceId, "engine_liquid_vac");
         var primary = tug.ToVessel("tug", "tug");
+        // Attitude commands need command authority; a 1 kg avionics box supplies it.
+        primary.Parts.AddPart(new Exosphere.Simulation.Parts.Part(new Exosphere.Simulation.Parts.PartDefinition
+        {
+            Id = "tug-avionics", CategoryStr = "command", MassDry = 1.0,
+        }));
         primary.Position = new Vector3d(1.0e6, 0.0, 0.0);
         primary.ReferenceBodyId = "test-body";
         primary.SASEnabled = false;

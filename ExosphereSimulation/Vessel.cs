@@ -405,6 +405,25 @@ public class Vessel
 
     /// <summary>Mass the translational forces of this vessel accelerate (kg).</summary>
     public double TranslationalMassKg => TotalMass + DockedSecondaryMassKg;
+
+    /// <summary>
+    /// Transverse moment of inertia (kg·m²) of the whole docked stack about its combined
+    /// centre of mass, or 0 when nothing is docked. <see cref="Universe"/> refreshes it with
+    /// <see cref="DockedSecondaryMassKg"/>.
+    /// </summary>
+    public double DockedStackTransverseInertiaKgM2 { get; internal set; }
+
+    /// <summary>
+    /// Factor that turns this vessel's own torque/inertia angular acceleration into the
+    /// docked stack's: I_vessel / I_stack (1 when undocked). The same factor is applied to
+    /// every axis, a documented approximation for the slaved secondary.
+    /// </summary>
+    private double DockedInertiaScale()
+    {
+        double own = Parts.TransverseMomentOfInertia;
+        double stack = DockedStackTransverseInertiaKgM2;
+        return own > 0.0 && stack > own ? own / stack : 1.0;
+    }
     public Vector3d  CenterOfMass  => Position + Orientation.Rotate(Parts.CenterOfMass);
     public double    VehicleLength => Parts.VehicleLength;
     public double    MaximumDiameter => Parts.MaximumDiameter;
@@ -1019,7 +1038,8 @@ public class Vessel
             FloorByMagnitude(engineAngAccel.Y, rcsFloorAngAccel.Y),
             FloorByMagnitude(engineAngAccel.Z, rcsFloorAngAccel.Z));
         if (appliedAngAccel.MagnitudeSquared > 0.0)
-            AngularVelocity = AngularVelocity + Orientation.Rotate(appliedAngAccel) * dt;
+            AngularVelocity = AngularVelocity
+                + Orientation.Rotate(appliedAngAccel) * (dt * DockedInertiaScale());
 
         // Limitar velocidad angular máxima (20°/s = 0.35 rad/s) — solo mientras se pilota
         // activamente; un disturbio no comandado (motor caído) no está sujeto a este límite
@@ -1070,7 +1090,7 @@ public class Vessel
                     temp,
                     aerodynamicCenterOffset,
                     refBody.Atmosphere.SoundSpeedConstant);
-                AngularVelocity += angularAccel * dt;
+                AngularVelocity += angularAccel * (dt * DockedInertiaScale());
 
                 // Starship's four body flaps remain the primary attitude actuators during
                 // unpowered entry. Their hinge force scales with q and their physical lever
@@ -1085,7 +1105,7 @@ public class Vessel
                         FlapActuators,
                         VehicleLength,
                         MaximumDiameter,
-                        Parts.TransverseMomentOfInertia) * dt;
+                        Parts.TransverseMomentOfInertia) * (dt * DockedInertiaScale());
                 }
             }
         }
@@ -1112,7 +1132,7 @@ public class Vessel
                 torqueLocal.X / iTrans,
                 torqueLocal.Y / iAxial,
                 torqueLocal.Z / iTrans);
-            AngularVelocity += Orientation.Rotate(angularAccelerationLocal) * dt;
+            AngularVelocity += Orientation.Rotate(angularAccelerationLocal) * (dt * DockedInertiaScale());
         }
 
         // Integrar velocidad angular → orientación
@@ -1134,8 +1154,9 @@ public class Vessel
     private void ApplyStabilityAugmentation(double dt, double pressure, double auth)
     {
         var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
-        double pitchYawAuthority = System.Math.Max(ReactionControlAuthority, envelope.X) * auth;
-        double rollAuthority = System.Math.Max(ReactionControlAuthority, envelope.Y) * auth;
+        double inertiaScale = DockedInertiaScale();
+        double pitchYawAuthority = System.Math.Max(ReactionControlAuthority, envelope.X) * auth * inertiaScale;
+        double rollAuthority = System.Math.Max(ReactionControlAuthority, envelope.Y) * auth * inertiaScale;
         double exponentialFactor = System.Math.Pow(0.005, dt);
 
         static double Damp(double rate, double factor, double maximumChange)

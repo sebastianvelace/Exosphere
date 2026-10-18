@@ -622,6 +622,37 @@ public class Universe
         return mass;
     }
 
+    /// <summary>
+    /// Transverse inertia of a primary and its docked secondaries about their combined
+    /// centre of mass (parallel-axis theorem), or 0 when nothing is docked.
+    /// </summary>
+    private double DockedStackTransverseInertia(Vessel primary)
+    {
+        if (primary.DockedSecondaryMassKg <= 0.0) return 0.0;
+        var members = new List<Vessel> { primary };
+        foreach (var connection in _dockingConnections)
+        {
+            if (connection.PrimaryVesselId != primary.Id) continue;
+            foreach (var vessel in _vessels)
+                if (vessel.Id == connection.SecondaryVesselId && !vessel.IsDestroyed)
+                    members.Add(vessel);
+        }
+        double totalMass = 0.0;
+        var weighted = Vector3d.Zero;
+        foreach (var member in members)
+        {
+            totalMass += member.TotalMass;
+            weighted += member.CenterOfMass * member.TotalMass;
+        }
+        if (totalMass <= 0.0) return 0.0;
+        var centre = weighted / totalMass;
+        double inertia = 0.0;
+        foreach (var member in members)
+            inertia += member.Parts.TransverseMomentOfInertia
+                + member.TotalMass * (member.CenterOfMass - centre).MagnitudeSquared;
+        return inertia;
+    }
+
     private bool IsDockedSecondary(Vessel vessel) =>
         _dockingConnections.Any(connection =>
             connection.SecondaryVesselId == vessel.Id);
@@ -2249,6 +2280,7 @@ public class Universe
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
     {
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
+        vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
         if (vessel.WaterMotionEnabled && vessel.WaterContact is { } water)
         {
             IntegrateVesselWaterMotion(vessel, refBody, water, dt);
