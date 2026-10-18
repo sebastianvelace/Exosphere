@@ -180,6 +180,10 @@ public class PartDefinition
     public double SemiDeployAltitude { get; set; }
     [JsonPropertyName("semi_deploy_drag")]
     public double SemiDeployDrag { get; set; }
+    /// <summary>
+    /// Minimum ambient pressure for parachute deployment, as a FRACTION of 101 325 Pa
+    /// (dimensionless, [0, 1]), not pascals. A pascal value such as 1800 can never be met.
+    /// </summary>
     [JsonPropertyName("min_pressure_deploy")]
     public double MinPressureDeploy { get; set; }
     [JsonPropertyName("splashdown_capable")]
@@ -258,7 +262,17 @@ public class PartDefinition
             ?? throw new InvalidOperationException(
                 $"Failed to parse part JSON: {jsonPath}");
         definition.ValidateDockingDefinition(jsonPath);
+        definition.ValidateParachuteDefinition(jsonPath);
         return definition;
+    }
+
+    private void ValidateParachuteDefinition(string source)
+    {
+        if (DragChute <= 0.0) return;
+        if (!double.IsFinite(MinPressureDeploy) || MinPressureDeploy is < 0.0 or > 1.0)
+            throw new InvalidDataException(
+                $"Parachute part '{Id}' in '{source}' declares min_pressure_deploy "
+                + $"{MinPressureDeploy}; it must be a sea-level pressure fraction in [0, 1].");
     }
 
     private void ValidateDockingDefinition(string source)

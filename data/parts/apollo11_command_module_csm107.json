@@ -20,7 +20,7 @@
   "semi_deploy_altitude": 7300,
   "semi_deploy_drag": 95,
   "deploy_altitude": 3000,
-  "min_pressure_deploy": 1800,
+  "min_pressure_deploy": 0.0178,
   "splashdown_capable": true,
   "max_splashdown_speed_mps": 11,
   "is_docking_port": true,

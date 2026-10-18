@@ -20,7 +20,7 @@
   "semi_deploy_altitude": 12192,
   "semi_deploy_drag": 80,
   "deploy_altitude": 3200,
-  "min_pressure_deploy": 1800,
+  "min_pressure_deploy": 0.0178,
   "splashdown_capable": true,
   "max_splashdown_speed_mps": 11,
   "attachment_nodes": [
