@@ -58,6 +58,16 @@ local `+Y`; thrust, drag attitude and contact lever arms are transformed through
 orientation. Angular velocity for the coupled solver is stored in the body frame so Euler's
 rigid-body equation can use the body inertia tensor directly.
 
+### Body spin axis
+
+Orbital elements use the J2000 ecliptic frame (+X vernal equinox, +Z ecliptic north).
+`CelestialBody.RotationAxis` is the ecliptic normal tilted by `axial_tilt` toward +Y,
+which for Earth is the north celestial pole. Seasonal solar declination, launch-site
+daylight and the Moon's 18–29° inclination to the equator follow from it
+(`PlanetaryAxisOrientationTests`). Other planets share Earth's tilt azimuth: their
+obliquity is exact, their pole longitude is an approximation. Before 2026-10-18 the axis
+was tilted from +Y and therefore lay in the orbital plane.
+
 ### Datum versus centre of mass
 
 The legacy gameplay contract keeps `Vessel.Position` as a datum. The coupled solver integrates
@@ -350,6 +360,13 @@ all motors are one physical point.
 - TPS skin and load-bearing structure are separate thermal nodes coupled by conduction and
   radiative loss.
 - Thermal damage can trigger progressive per-part breakup and control-authority loss.
+- Joint loads are quasi-static rigid-body statics: each joint carries
+  `m_child·a − ΣF_ext(child side)`, with engine thrust on its engine parts and the
+  remaining non-gravitational force spread by part length. Axial load is split into
+  tension and compression (each with its own strength); lateral load is shear. Bending
+  moment from aerodynamic angle of attack is not modeled.
+- Legacy SAS damps body rates only through available authority (RCS floor or live
+  differential TVC); it cannot remove a tumble faster than those actuators allow.
 - Landing contact uses multiple points, spring/damper normal response, friction, lever arms,
   torque and suspension travel.
 - Tower catch uses explicit pin/contact geometry, relative velocity, alignment and a moving
