@@ -375,8 +375,12 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         {
             var refB = Universe.GetDominantBody(av.Position);
             var warpRequirements = Universe.GetWarpPhysicsRequirements(av);
-            bool forceSensitive = warpRequirements.ForceSensitive;
-            bool boundedEntry = warpRequirements.BoundedEntry;
+            // An idle residual-thermosphere coast (LEO) or an idle pad hold still needs
+            // off-rails integration, but at coast-sized steps it is safe at high warp.
+            bool highWarpCoast = warpRequirements.ForceSensitive
+                && Universe.AllowsHighWarpCoast(av);
+            bool forceSensitive = warpRequirements.ForceSensitive && !highWarpCoast;
+            bool boundedEntry = warpRequirements.BoundedEntry && !highWarpCoast;
             bool atmosphericZone = refB.Atmosphere != null
                 && av.GetAltitude(refB) <= refB.Atmosphere.MaxAltitude * 1.05;
             var missionPhase = MissionManager.Instance?.Phase;

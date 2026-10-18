@@ -1227,6 +1227,11 @@ public class Universe
             if (!RequiresOffRailsPhysics(vessel))
                 continue;
 
+            // Residual-thermosphere drag is weak and slowly varying: a coarse RK4 coast
+            // step still integrates it, while 20 ms steps made LEO warp unaffordable.
+            if (IsResidualThermosphereCoast(vessel))
+                continue;
+
             bool thrusting = HasWakeCommand(vessel);
             double vesselCap = thrusting ? MaxThrustStep : MaxPhysicsStep;
             cap = System.Math.Min(cap, vesselCap);
@@ -1274,6 +1279,64 @@ public class Universe
         return altitude <= body.Atmosphere.MaxAltitude * 1.05
             || q >= 0.5
             || heatFlux >= 500.0;
+    }
+
+    /// <summary>
+    /// Clearance (m) the osculating periapsis must keep above the 1.05 × MaxAltitude
+    /// aerodynamic boundary for a residual-thermosphere coast to use coast-sized steps.
+    /// </summary>
+    public const double ResidualCoastPeriapsisMarginM = 10_000.0;
+
+    /// <summary>
+    /// True for an idle vessel whose only off-rails requirement is residual thermosphere
+    /// drag: no commands, outside the aerodynamic atmosphere, negligible q and heating, and
+    /// a periapsis that cannot reach the atmosphere. Such a coast still integrates drag
+    /// with RK4, but at <see cref="MaxCoastStep"/> instead of the 20 ms flight step.
+    /// </summary>
+    public bool IsResidualThermosphereCoast(Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        if (vessel.IsDestroyed || vessel.IsGroundHeld || vessel.IsSurfaceSettled
+            || vessel.IsAttemptingTowerCatch || vessel.WaterMotionEnabled
+            || _bodies.Count == 0 || !HasFinitePhysicalState(vessel) || HasWakeCommand(vessel))
+            return false;
+        var body = GetDominantBody(vessel.Position);
+        var atmosphere = body.Atmosphere;
+        if (atmosphere == null) return false;
+        double boundary = atmosphere.MaxAltitude * 1.05;
+        double altitude = body.GetAltitude(vessel.Position);
+        if (altitude <= boundary || altitude >= atmosphere.ThermosphereTopAltitude)
+            return false;
+        double density = body.GetAtmosphericDensity(vessel.Position);
+        var surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        double speed = surfaceVelocity.Magnitude;
+        if (0.5 * density * speed * speed >= 0.5
+            || vessel.ComputeStagnationHeatFlux(density, surfaceVelocity) >= 500.0)
+            return false;
+        try
+        {
+            var orbit = OrbitalElements.FromStateVector(
+                vessel.Position - body.Position, vessel.Velocity - body.Velocity,
+                body.GM, body.Id, CurrentTime);
+            return orbit.Periapsis > body.MaximumRadius + boundary + ResidualCoastPeriapsisMarginM;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// True when time warp cannot discard a force-sensitive event for this vessel even
+    /// though <see cref="RequiresOffRailsPhysics"/> is set: an idle residual-thermosphere
+    /// coast, or an idle vessel held on the pad (its state is kinematic).
+    /// </summary>
+    public bool AllowsHighWarpCoast(Vessel vessel)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        if (vessel.IsGroundHeld)
+            return !vessel.IsDestroyed && !HasWakeCommand(vessel);
+        return IsResidualThermosphereCoast(vessel);
     }
 
     private static bool HasActiveEngineAboveThrottle(Vessel vessel, double threshold)
