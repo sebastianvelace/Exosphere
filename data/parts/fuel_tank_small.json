@@ -5,11 +5,13 @@
   "category": "fuel_tank",
   "vehicle_family": "generic",
   "mass_dry": 125,
+  "length_m": 1.8,
+  "diameter_m": 1.25,
   "cost": 275,
   "drag_coefficient": 0.2,
   "heat_tolerance": 1200,
-  "fuel_capacity_lf": 90,
-  "fuel_capacity_ox": 110,
+  "fuel_capacity_lf": 595,
+  "fuel_capacity_ox": 1405,
   "attachment_nodes": [
     {"id": "top",    "position": [0,  0.9, 0], "size": 1, "type": "stack"},
     {"id": "bottom", "position": [0, -0.9, 0], "size": 1, "type": "stack"}

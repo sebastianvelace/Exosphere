@@ -5,6 +5,8 @@
   "category": "decoupler",
   "vehicle_family": "generic",
   "mass_dry": 38,
+  "length_m": 0.2,
+  "diameter_m": 1.25,
   "cost": 150,
   "drag_coefficient": 0.2,
   "heat_tolerance": 1200,

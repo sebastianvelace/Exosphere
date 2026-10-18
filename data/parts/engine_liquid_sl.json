@@ -5,6 +5,8 @@
   "category": "engine",
   "vehicle_family": "generic",
   "mass_dry": 630,
+  "length_m": 1.5,
+  "diameter_m": 1.25,
   "cost": 3900,
   "drag_coefficient": 0.2,
   "heat_tolerance": 2000,

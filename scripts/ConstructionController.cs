@@ -1085,11 +1085,13 @@ public partial class ConstructionController : Control
         SetStatus("New vehicle. Double-click a command part to begin.");
     }
 
+    // A suborbital hop to space: TWR ~2, ~90 s burn, ~3 km/s ideal delta-v. The Merlin-class
+    // engine_liquid_sl needs tens of tonnes of propellant and is not a starter engine.
     private void OnStarterRocket() => BuildTemplate(
         "Starter Rocket",
         "command_pod_mk1",
         "fuel_tank_small",
-        "engine_liquid_sl");
+        "engine_liquid_small");
 
     private void OnStarshipTemplate() => BuildTemplate(
         "Starship / Super Heavy",

@@ -1,0 +1,25 @@
+{
+  "id": "engine_liquid_small",
+  "name": "Pax-S Small Liquid Engine",
+  "description": "A small pressure-fed sea-level liquid engine sized for 1.25 m stacks. Pairs with one or two small tanks for suborbital hops and light upper stages.",
+  "category": "engine",
+  "vehicle_family": "generic",
+  "mass_dry": 120,
+  "length_m": 0.95,
+  "diameter_m": 1.25,
+  "cost": 900,
+  "drag_coefficient": 0.2,
+  "heat_tolerance": 2000,
+  "thrust_vac": 66000,
+  "thrust_sl": 60000,
+  "isp_vac": 300,
+  "isp_sl": 270,
+  "gimbal_range": 5.0,
+  "fuel_type": "LiquidFuel+Oxidizer",
+  "mixture_ratio": 2.36,
+  "is_rcs": false,
+  "attachment_nodes": [
+    {"id": "top",         "position": [0,  0.35, 0], "size": 1, "type": "stack"},
+    {"id": "engine_bell", "position": [0, -0.6, 0], "size": 0, "type": "engine_bell"}
+  ]
+}
