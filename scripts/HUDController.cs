@@ -1521,6 +1521,19 @@ public partial class HUDController : Control
                 case Key.T:
                     bridge.SetSAS(!(bridge.ActiveVessel?.SASEnabled ?? true));
                     break;
+                case Key.P:
+                    if (bridge.ActiveVessel is { HasParachutes: true } chuteVessel)
+                    {
+                        chuteVessel.ParachutesArmed = !chuteVessel.ParachutesArmed;
+                        PushToast(chuteVessel.ParachutesArmed
+                            ? "PARACHUTES ARMED" : "PARACHUTES DISARMED");
+                    }
+                    else
+                    {
+                        PushToast("NO PARACHUTES");
+                    }
+                    viewport.SetInputAsHandled();
+                    break;
                 case Key.L:
                     MissionManager.Instance?.StartCountdown();
                     break;

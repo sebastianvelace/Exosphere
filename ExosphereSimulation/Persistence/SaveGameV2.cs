@@ -55,6 +55,7 @@ public sealed class VesselSaveV2
     public double Throttle { get; set; }
     public VectorSaveV2 PitchYawRoll { get; set; } = new();
     public bool SasEnabled { get; set; }
+    public bool ParachutesArmed { get; set; }
     public bool IsGroundHeld { get; set; }
     public VectorSaveV2 GroundNormal { get; set; } = new();
     public double GroundOffset { get; set; }
@@ -508,6 +509,7 @@ public static class SaveGameV2Codec
             Throttle = vessel.Throttle,
             PitchYawRoll = VectorSaveV2.From(vessel.PitchYawRoll),
             SasEnabled = vessel.SASEnabled,
+            ParachutesArmed = vessel.ParachutesArmed,
             IsGroundHeld = vessel.IsGroundHeld,
             GroundNormal = VectorSaveV2.From(vessel.GroundNormal),
             GroundOffset = vessel.GroundOffset,
@@ -583,6 +585,7 @@ public static class SaveGameV2Codec
             Throttle = saved.Throttle,
             PitchYawRoll = saved.PitchYawRoll.ToVector(),
             SASEnabled = saved.SasEnabled,
+            ParachutesArmed = saved.ParachutesArmed,
             IsGroundHeld = saved.IsGroundHeld,
             GroundNormal = saved.GroundNormal.ToVector(),
             GroundOffset = saved.GroundOffset,

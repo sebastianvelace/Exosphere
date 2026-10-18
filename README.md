@@ -82,6 +82,7 @@ Lighting follows simulation time. Warp forward to see dawn and night. The full H
 | `A` `D` | Yaw |
 | `Q` `E` | Roll |
 | `T` | SAS |
+| `P` | Arm / disarm parachutes (they open within their altitude and pressure envelope while descending) |
 | `Space` | Stage |
 | `G` | Ascent autopilot |
 | `H` | Gravity-turn assist |

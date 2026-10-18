@@ -151,6 +151,16 @@ public class Vessel
         return CatchTargetPositionWorld
             + CatchTargetVelocityWorld * (simulationTime - CatchTargetEpochSeconds);
     }
+    /// <summary>True when the vessel carries at least one parachute part.</summary>
+    public bool HasParachutes => Parts.Parts.Any(p => p.Definition.DragChute > 0.0);
+
+    /// <summary>
+    /// Pilot arming of the parachute sequence. While armed and descending, the simulation
+    /// opens each canopy as soon as its declared altitude and pressure envelope is met,
+    /// exactly as a staged chute does; arming never deploys outside that envelope.
+    /// </summary>
+    public bool ParachutesArmed { get; set; }
+
     public bool HasDeployedParachute => Parts.Parts.Any(
         p => p.IsDeployed && p.Definition.DragChute > 0.0);
     public double MaximumSplashdownSpeedMps => Parts.Parts

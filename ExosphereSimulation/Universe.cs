@@ -1862,6 +1862,10 @@ public class Universe
                 TryThermalBreakup(vessel, burned, airspeed);
         }
 
+        if (vessel.ParachutesArmed && refBody.Atmosphere != null && !vessel.IsDestroyed
+            && vessel.GetSurfaceVelocity(refBody).Dot(refBody.GetGeodeticUp(position)) < -1.0)
+            vessel.DeployParachutes(refBody);
+
         HandleSurfaceImpact(vessel, refBody);
     }
 
