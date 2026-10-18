@@ -120,8 +120,8 @@ Important implemented systems:
 ## Data Rules
 
 Data lives in JSON:
-- `data/bodies/*.json` — an atmosphere must declare `molar_mass`, `surface_gravity` and
-  `geopotential_radius`; the defaults are Earth's, so omitting them silently holds an alien
+- `data/bodies/*.json` — an atmosphere must declare `molar_mass`, `heat_capacity_ratio`
+  (non-air gases), `surface_gravity` and `geopotential_radius`; the defaults are Earth's, so omitting them silently holds an alien
   column up with Earth gravity and Earth air. Layer `alt_min`/`alt_max` are GEOPOTENTIAL
   metres (USSA-76 convention), not geometric.
 - `data/parts/*.json`

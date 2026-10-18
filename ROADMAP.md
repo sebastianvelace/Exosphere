@@ -160,10 +160,11 @@ Base tecnica cerrada en `main`:
   planetario inclinado desde la normal eclíptica (estaciones, luz diurna y la Luna a
   18–29° del ecuador; antes el eje yacía en el plano orbital), paracaídas de Apollo 8/11 y
   Gemini VIII que nunca abrían (unidad Pa vs fracción), SAS limitado a la autoridad real
-  de RCS/TVC y cargas de joints según el camino de carga real con compresión. Pendientes
-  de esa auditoría: warp x3 en LEO/pad por paso de 20 ms en coast termosférico, masa
-  acoplada ignorada en docking, datum render/masas inconsistente, Cd transónico >2,
-  Mach con γ/R terrestres en Marte/Venus.
+  de RCS/TVC y cargas de joints según el camino de carga real con compresión. Segunda
+  etapa: warp alto en LEO y pad (coast termosférico a paso de 2 s, mismo decaimiento),
+  masa acoplada en el empuje del docking y Mach con el gas de cada planeta. Pendientes:
+  inercia combinada del stack acoplado, datum render/masas inconsistente (bloquea el
+  6-DoF) y Cd transónico >2 (requiere recalibrar EDL contra telemetría IFT).
 - Impactos de superficie anclados al cuerpo ✅: un wreck destruido ya no queda
   congelado en el marco heliocentrico mientras la Tierra se aleja, ni parece
   rebotar a ~30 km/s. El anclaje rotante persiste en `SaveGameV2` y bajo warp.
