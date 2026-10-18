@@ -1767,7 +1767,8 @@ public class Universe
             ? vessel.LastContactForceWorld / vessel.TotalMass
             : Vector3d.Zero;
         var nonGrav   = netAccel - gravAccel + contactAccel;
-        Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation);
+        Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation,
+            refBody.GetAtmosphericPressure(position));
         TryStructuralBreakup(vessel, nonGrav.Magnitude);
 
         double density = refBody.GetAtmosphericDensity(position);
@@ -1875,7 +1876,10 @@ public class Universe
         double shear = joint.ShearStrength > 0.0
             ? joint.CurrentShearLoad / joint.ShearStrength
             : 0.0;
-        return System.Math.Max(tensile, shear);
+        double compressive = joint.CompressiveStrength > 0.0
+            ? joint.CurrentCompressiveLoad / joint.CompressiveStrength
+            : 0.0;
+        return System.Math.Max(System.Math.Max(tensile, shear), compressive);
     }
 
     private static void HandleSurfaceImpact(Vessel vessel, CelestialBody refBody)

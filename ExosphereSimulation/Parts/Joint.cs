@@ -15,12 +15,14 @@ public class Joint
     public double ShearStrength       { get; set; } = 25_000_000.0;
 
     // Cargas actuales (actualizadas por StressSolver cada tick)
-    public double CurrentTensileLoad { get; set; }
-    public double CurrentShearLoad   { get; set; }
+    public double CurrentTensileLoad     { get; set; }
+    public double CurrentCompressiveLoad { get; set; }
+    public double CurrentShearLoad       { get; set; }
 
     public bool IsBreaking =>
-        CurrentTensileLoad > TensileStrength ||
-        CurrentShearLoad   > ShearStrength;
+        CurrentTensileLoad     > TensileStrength ||
+        CurrentCompressiveLoad > CompressiveStrength ||
+        CurrentShearLoad       > ShearStrength;
 
     public Joint(Part parent, Part child, string parentNodeId, string childNodeId)
     {

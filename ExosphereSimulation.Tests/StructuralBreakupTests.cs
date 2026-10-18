@@ -58,6 +58,8 @@ public sealed class StructuralBreakupTests
         var weak = vessel.Parts.Joints.First(j => j.Child.Definition.Id == "super_heavy_booster");
         weak.TensileStrength = 1.0;
         weak.ShearStrength = 1.0;
+        // Booster thrust pushes the ship: the interstage carries compression.
+        weak.CompressiveStrength = 1.0;
 
         vessel.Position = earth.Position + Vector3d.Right * (earth.Radius + 120_000.0);
         vessel.Velocity = earth.Velocity + earth.GetSurfaceVelocity(vessel.Position);

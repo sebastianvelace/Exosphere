@@ -5,45 +5,90 @@ using Exosphere.Simulation.Parts;
 
 public static class StressSolver
 {
-    // Calcula las cargas en todos los joints dado la aceleración neta no gravitacional del vessel.
-    // (La gravedad produce caída libre y no genera estrés interno en órbita.)
+    /// <summary>
+    /// Quasi-static joint loads of a rigid vehicle under the non-gravitational acceleration
+    /// <paramref name="netAcceleration"/> (gravity causes free fall, not internal stress).
+    ///
+    /// <para>Each joint carries the force the parent side applies to the child side:
+    /// F = m_child·a − ΣF_ext(child side). Engine thrust acts on the engine parts that
+    /// produce it; the remaining external force (aerodynamics, contact) is distributed by
+    /// part length as a projected-area proxy. A thrusting stack therefore compresses each
+    /// interface by the mass it pushes, not by the mass hanging below the root.</para>
+    ///
+    /// <para>The axial component is tension when it pulls the child toward the parent and
+    /// compression when it pushes it away; the lateral component is shear.</para>
+    /// </summary>
     public static void ComputeLoads(
         PartGraph graph,
         Vector3d netAcceleration,
-        Quaterniond vesselOrientation)
+        Quaterniond vesselOrientation,
+        double ambientPressure = 0.0)
     {
         if (graph.Root == null) return;
 
-        // Transformar aceleración al espacio local del vessel
         var localAccel = vesselOrientation.Inverse().Rotate(netAcceleration);
-        ComputeJointLoads(graph, graph.Root, localAccel);
+        var thrust = new Dictionary<Part, Vector3d>();
+        var totalThrust = Vector3d.Zero;
+        foreach (var engine in graph.ActiveEngineList)
+        {
+            var vector = engine.GetThrustVector(ambientPressure);
+            thrust[engine] = vector;
+            totalThrust += vector;
+        }
+
+        double totalMass = 0.0, totalLength = 0.0;
+        foreach (var part in graph.Parts)
+        {
+            totalMass += part.CurrentMass;
+            totalLength += System.Math.Max(0.0, part.Definition.LengthM);
+        }
+        var distributedForce = localAccel * totalMass - totalThrust;
+        var positions = graph.ComputePartLocalPositions();
+        ComputeJointLoads(graph, graph.Root, localAccel, thrust, distributedForce,
+            totalLength, graph.Parts.Count, positions);
     }
 
-    private static void ComputeJointLoads(PartGraph graph, Part part, Vector3d localAccel)
+    private static (double Mass, Vector3d ExternalForce) ComputeJointLoads(
+        PartGraph graph,
+        Part part,
+        Vector3d localAccel,
+        IReadOnlyDictionary<Part, Vector3d> thrust,
+        Vector3d distributedForce,
+        double totalLength,
+        int partCount,
+        IReadOnlyDictionary<Part, Vector3d> positions)
     {
+        double share = totalLength > 0.0
+            ? System.Math.Max(0.0, part.Definition.LengthM) / totalLength
+            : 1.0 / System.Math.Max(1, partCount);
+        double mass = part.CurrentMass;
+        var external = distributedForce * share
+            + (thrust.TryGetValue(part, out var partThrust) ? partThrust : Vector3d.Zero);
+
         foreach (var child in graph.GetChildren(part))
         {
+            var (childMass, childExternal) = ComputeJointLoads(graph, child, localAccel,
+                thrust, distributedForce, totalLength, partCount, positions);
+            mass += childMass;
+            external += childExternal;
+
             var joint = graph.GetJoint(part, child);
             if (joint == null) continue;
 
-            double massBelow    = CollectSubtreeMass(graph, child);
-            double axialAccel   = System.Math.Abs(localAccel.Y);
-            double lateralAccel = System.Math.Sqrt(
-                localAccel.X * localAccel.X + localAccel.Z * localAccel.Z);
-
-            joint.CurrentTensileLoad = massBelow * axialAccel;
-            joint.CurrentShearLoad   = massBelow * lateralAccel;
-
-            ComputeJointLoads(graph, child, localAccel);
+            var forceOnChild = localAccel * childMass - childExternal;
+            var towardParent = positions.TryGetValue(part, out var parentPosition)
+                && positions.TryGetValue(child, out var childPosition)
+                && System.Math.Abs(parentPosition.Y - childPosition.Y) > 1e-9
+                    ? System.Math.Sign(parentPosition.Y - childPosition.Y)
+                    : 1.0;
+            double axial = forceOnChild.Y * towardParent;
+            joint.CurrentTensileLoad = System.Math.Max(0.0, axial);
+            joint.CurrentCompressiveLoad = System.Math.Max(0.0, -axial);
+            joint.CurrentShearLoad = System.Math.Sqrt(
+                forceOnChild.X * forceOnChild.X + forceOnChild.Z * forceOnChild.Z);
         }
-    }
 
-    private static double CollectSubtreeMass(PartGraph graph, Part root)
-    {
-        double mass = root.CurrentMass;
-        foreach (var child in graph.GetChildren(root))
-            mass += CollectSubtreeMass(graph, child);
-        return mass;
+        return (mass, external);
     }
 
     // Joints que están sobre sus límites de carga
