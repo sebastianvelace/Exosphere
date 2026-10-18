@@ -609,6 +609,19 @@ public class Universe
             + commonAngularVelocity.Cross(secondaryArm);
     }
 
+    private double DockedSecondaryMass(Vessel primary)
+    {
+        double mass = 0.0;
+        foreach (var connection in _dockingConnections)
+        {
+            if (connection.PrimaryVesselId != primary.Id) continue;
+            foreach (var vessel in _vessels)
+                if (vessel.Id == connection.SecondaryVesselId && !vessel.IsDestroyed)
+                    mass += vessel.TotalMass;
+        }
+        return mass;
+    }
+
     private bool IsDockedSecondary(Vessel vessel) =>
         _dockingConnections.Any(connection =>
             connection.SecondaryVesselId == vessel.Id);
@@ -1827,7 +1840,7 @@ public class Universe
         var netAccel = vessel.ComputeNetAccelerationAt(position, velocity, _bodies, refBody);
         var gravAccel = vessel.ComputeGravityAt(position, _bodies);
         var contactAccel = vessel.TotalMass > 0.0
-            ? vessel.LastContactForceWorld / vessel.TotalMass
+            ? vessel.LastContactForceWorld / vessel.TranslationalMassKg
             : Vector3d.Zero;
         var nonGrav   = netAccel - gravAccel + contactAccel;
         Physics.StressSolver.ComputeLoads(vessel.Parts, nonGrav, vessel.Orientation,
@@ -2231,6 +2244,7 @@ public class Universe
 
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
     {
+        vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
         if (vessel.WaterMotionEnabled && vessel.WaterContact is { } water)
         {
             IntegrateVesselWaterMotion(vessel, refBody, water, dt);
@@ -2289,7 +2303,7 @@ public class Universe
                 var contactAcceleration = vessel.TotalMass > 0.0
                     ? ((stageContact?.ForceWorld ?? Vector3d.Zero)
                         + (stageCatchContact?.ForceWorld ?? Vector3d.Zero)
-                        + (stageWater?.ForceWorld ?? Vector3d.Zero)) / vessel.TotalMass
+                        + (stageWater?.ForceWorld ?? Vector3d.Zero)) / vessel.TranslationalMassKg
                     : Vector3d.Zero;
                 return vessel.ComputeNetAccelerationAt(
                         position, velocity, _bodies, refBody)

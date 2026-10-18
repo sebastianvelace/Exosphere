@@ -385,6 +385,16 @@ public class Vessel
 
     // ── Propiedades calculadas ─────────────────────────────────────────────
     public double    TotalMass     => Parts.TotalMass;
+
+    /// <summary>
+    /// Mass (kg) of vessels hard-docked to this one as secondaries. <see cref="Universe"/>
+    /// refreshes it before each integration step; docked secondaries are slaved to this
+    /// vessel, so its thrust, drag and contact forces must accelerate the whole stack.
+    /// </summary>
+    public double DockedSecondaryMassKg { get; internal set; }
+
+    /// <summary>Mass the translational forces of this vessel accelerate (kg).</summary>
+    public double TranslationalMassKg => TotalMass + DockedSecondaryMassKg;
     public Vector3d  CenterOfMass  => Position + Orientation.Rotate(Parts.CenterOfMass);
     public double    VehicleLength => Parts.VehicleLength;
     public double    MaximumDiameter => Parts.MaximumDiameter;
@@ -713,10 +723,10 @@ public class Vessel
         // ThrottleLevel ya fue avanzado por ApplyThrottle(dt) en Tick() antes de este subpaso,
         // así que aquí solo leemos el valor spooled sin modificarlo.
         double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
-        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TotalMass;
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TranslationalMassKg;
 
         var drag = refBody != null
-            ? ComputeDragAt(pos, vel, refBody) / TotalMass
+            ? ComputeDragAt(pos, vel, refBody) / TranslationalMassKg
             : Vector3d.Zero;
 
         return gravity + thrust + drag;
@@ -733,9 +743,9 @@ public class Vessel
         if (TotalMass <= 0.0) return gravity;
 
         double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
-        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TotalMass;
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TranslationalMassKg;
         var drag = refBody != null
-            ? ComputeDragAt(pos, vel, refBody) / TotalMass
+            ? ComputeDragAt(pos, vel, refBody) / TranslationalMassKg
             : Vector3d.Zero;
         return gravity + thrust + drag;
     }
