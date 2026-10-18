@@ -182,7 +182,9 @@ The current model includes:
 - data-driven atmospheric layers and planet-specific composition/gravity inputs;
 - a residual thermosphere density tail above the nominal atmosphere boundary;
 - orientation-dependent cylinder drag with axial/broadside area blending;
-- transonic/hypersonic continuity handling;
+- transonic/hypersonic continuity handling, with Mach from each atmosphere's own gas
+  (`heat_capacity_ratio` and `molar_mass`; CO2 on Mars/Venus carries sound ~22% slower
+  than Earth air at the same temperature);
 - body lift driven by angle of attack, with `CL` proportional to `sin(2α)`;
 - aerodynamic-centre attitude torque in the coupled evaluator;
 - aggregate four-body-flap authority driven by dynamic pressure and the shared

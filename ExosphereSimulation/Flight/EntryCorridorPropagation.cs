@@ -35,7 +35,8 @@ public static class EntryCorridorPropagation
         double PlanetAngularSpeedRadPerS = 0.0,
         double LatitudeRad = 0.0,
         double TrackEast = 0.0,
-        double CrossEast = 0.0);
+        double CrossEast = 0.0,
+        double SoundSpeedConstant = AerodynamicsModel.EarthAirSoundSpeedConstant);
 
     public readonly record struct Result(
         double DurationS,
@@ -77,7 +78,9 @@ public static class EntryCorridorPropagation
             PlanetAngularSpeedRadPerS: body.AngularSpeed,
             LatitudeRad: body.GetLatitude(vessel.Position) * MathUtils.DEG_TO_RAD,
             TrackEast: trackEast,
-            CrossEast: crossEast);
+            CrossEast: crossEast,
+            SoundSpeedConstant: atmosphere?.SoundSpeedConstant
+                ?? AerodynamicsModel.EarthAirSoundSpeedConstant);
     }
 
     private static (double TrackEast, double CrossEast) TrackBasis(
@@ -273,7 +276,8 @@ public static class EntryCorridorPropagation
             dynamics.VehicleLengthM,
             dynamics.VehicleDiameterM,
             temperature,
-            dynamics.AxialDragCoefficient).Magnitude;
+            dynamics.AxialDragCoefficient,
+            dynamics.SoundSpeedConstant).Magnitude;
         double lift = AerodynamicsModel.ComputeLift(
             density,
             flow,

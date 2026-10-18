@@ -55,7 +55,7 @@ public static class EntryFlightDiagnostics
         double density = body.Atmosphere?.GetDensity(altitude) ?? 0.0;
         double temperature = body.Atmosphere?.GetTemperature(altitude) ?? 0.0;
         double mach = density > 0.0 && temperature > 0.0
-            ? AerodynamicsModel.ComputeMach(airspeed, temperature)
+            ? AerodynamicsModel.ComputeMach(airspeed, temperature, body.Atmosphere!.SoundSpeedConstant)
             : double.NaN;
         double dynamicPressure = AerodynamicsModel.ComputeDynamicPressure(density, airspeed);
 
@@ -82,7 +82,8 @@ public static class EntryFlightDiagnostics
                 vessel.VehicleLength,
                 vessel.MaximumDiameter,
                 temperature,
-                vessel.Parts.AxialDragCoefficient);
+                vessel.Parts.AxialDragCoefficient,
+                body.Atmosphere!.SoundSpeedConstant);
             lift = AerodynamicsModel.ComputeLift(
                 density,
                 atmosphereVelocity,

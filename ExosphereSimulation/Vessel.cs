@@ -585,7 +585,8 @@ public class Vessel
             VehicleLength,
             MaximumDiameter,
             temp,
-            Parts.AxialDragCoefficient);
+            Parts.AxialDragCoefficient,
+            body.Atmosphere.SoundSpeedConstant);
         var lift = AerodynamicsModel.ComputeLift(
             density, surfVel, axis, VehicleLength, MaximumDiameter);
         double parachuteArea = GetDeployedParachuteDragArea(body, pos);
@@ -1057,7 +1058,8 @@ public class Vessel
                     MaximumDiameter,
                     Parts.TransverseMomentOfInertia,
                     temp,
-                    aerodynamicCenterOffset);
+                    aerodynamicCenterOffset,
+                    refBody.Atmosphere.SoundSpeedConstant);
                 AngularVelocity += angularAccel * dt;
 
                 // Starship's four body flaps remain the primary attitude actuators during

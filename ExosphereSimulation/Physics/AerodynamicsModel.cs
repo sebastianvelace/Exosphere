@@ -29,12 +29,19 @@ public static class AerodynamicsModel
     public static double ComputeDynamicPressure(double density, double speed) =>
         0.5 * density * speed * speed;
 
-    /// <summary>Mach number from airspeed (m/s) and local temperature (K): M = v / √(γ·R·T).</summary>
-    public static double ComputeMach(double speed, double temperature)
+    /// <summary>γ·R_specific of Earth air (J/(kg·K)), the default for callers without an atmosphere.</summary>
+    public const double EarthAirSoundSpeedConstant = 1.4 * 287.0;
+
+    /// <summary>
+    /// Mach number from airspeed (m/s) and local temperature (K): M = v / √(γ·R·T).
+    /// <paramref name="soundSpeedConstant"/> is γ·R_specific of the gas
+    /// (<see cref="AtmosphereModel.SoundSpeedConstant"/>); Earth air by default.
+    /// </summary>
+    public static double ComputeMach(double speed, double temperature,
+        double soundSpeedConstant = EarthAirSoundSpeedConstant)
     {
-        const double gamma = 1.4;
-        const double R     = 287.0;  // J/(kg·K) gas específico del aire
-        double sos = System.Math.Sqrt(gamma * R * System.Math.Max(1.0, temperature));
+        double sos = System.Math.Sqrt(System.Math.Max(1.0, soundSpeedConstant)
+            * System.Math.Max(1.0, temperature));
         return speed / sos;
     }
 
@@ -305,7 +312,8 @@ public static class AerodynamicsModel
         double vehicleLength,
         double vehicleDiameter,
         double temperature,
-        double axialDragCoefficient = 0.6)
+        double axialDragCoefficient = 0.6,
+        double soundSpeedConstant = EarthAirSoundSpeedConstant)
     {
         double speed = surfaceVelocity.Magnitude;
         if (density <= 0.0 || speed < 1e-3) return Vector3d.Zero;
@@ -315,7 +323,7 @@ public static class AerodynamicsModel
         double aa = System.Math.Clamp(cosAlpha * cosAlpha, 0.0, 1.0);
         double cd = 1.5 + (
             System.Math.Max(0.05, axialDragCoefficient) - 1.5) * aa;
-        double machMul  = GetMachDragMultiplier(ComputeMach(speed, temperature));
+        double machMul  = GetMachDragMultiplier(ComputeMach(speed, temperature, soundSpeedConstant));
 
         double magnitude = 0.5 * density * speed * speed * cd * area * machMul;
         return surfaceVelocity.Normalized * (-magnitude);
@@ -338,7 +346,8 @@ public static class AerodynamicsModel
         double vehicleDiameter,
         double transverseMomentOfInertia,
         double temperature,
-        double? aerodynamicCenterOffsetYM = null)
+        double? aerodynamicCenterOffsetYM = null,
+        double soundSpeedConstant = EarthAirSoundSpeedConstant)
     {
         double speed = surfaceVelocity.Magnitude;
         if (density <= 0.0 || speed < 1.0 || transverseMomentOfInertia <= 0.0)
@@ -346,7 +355,8 @@ public static class AerodynamicsModel
 
         var axis = longitudinalAxis.Normalized;
         var drag = ComputeReentryDrag(
-            density, surfaceVelocity, axis, vehicleLength, vehicleDiameter, temperature);
+            density, surfaceVelocity, axis, vehicleLength, vehicleDiameter, temperature,
+            soundSpeedConstant: soundSpeedConstant);
 
         // A modest static margin. Long launch stacks place their aerodynamic centre farther
         // behind the CoM than the shorter Ship; limiting it avoids an unrealistically violent

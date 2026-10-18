@@ -70,6 +70,7 @@
       }
     ],
     "molar_mass": 0.04401,
+    "heat_capacity_ratio": 1.29,
     "surface_gravity": 8.87,
     "geopotential_radius": 6051800.0
   },

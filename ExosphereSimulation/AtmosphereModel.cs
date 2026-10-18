@@ -60,6 +60,15 @@ public partial class AtmosphereModel
     /// <summary>Molar mass of atmosphere (kg/mol). Used for derived properties.</summary>
     public double MolarMass { get; init; } = 0.0289644;     // Earth air
 
+    /// <summary>Ratio of specific heats γ = cp/cv of the atmospheric gas (dimensionless).</summary>
+    public double HeatCapacityRatio { get; init; } = 1.4;    // Earth air
+
+    /// <summary>
+    /// γ·R_specific (J/(kg·K)); the speed of sound is √(γ·R_specific·T). Earth air gives
+    /// ≈401.9, the value the aerodynamic model previously hardcoded as 1.4·287.
+    /// </summary>
+    public double SoundSpeedConstant => HeatCapacityRatio * R / MolarMass;
+
     /// <summary>
     /// Scale height of the residual thermosphere above <see cref="MaxAltitude"/> (m).
     /// 0 disables the tail (density hard-cuts to vacuum at the top of the ISA layers).

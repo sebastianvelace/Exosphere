@@ -97,7 +97,8 @@ public static class RigidBodyForceEvaluator
             vessel.MaximumDiameter,
             vessel.Parts.TransverseMomentOfInertia,
             temperature,
-            aerodynamicCenterOffset);
+            aerodynamicCenterOffset,
+            body.Atmosphere.SoundSpeedConstant);
         if (vessel.FlapActuators.IsZero is false && vessel.HasFunctionalBodyFlaps())
         {
             angularAccelerationWorld += AerodynamicsModel.ComputeFlapControlAngularAcceleration(

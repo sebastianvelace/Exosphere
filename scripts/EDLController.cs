@@ -656,7 +656,8 @@ public partial class EDLController : Control
                 double density = body.Atmosphere!.GetDensity(_alt);
                 Vector3d drag = AerodynamicsModel.ComputeReentryDrag(density, surfVel,
                     axis, vessel.VehicleLength, vessel.MaximumDiameter,
-                    body.Atmosphere.GetTemperature(_alt), vessel.Parts.AxialDragCoefficient);
+                    body.Atmosphere.GetTemperature(_alt), vessel.Parts.AxialDragCoefficient,
+                    body.Atmosphere.SoundSpeedConstant);
                 Vector3d lift = AerodynamicsModel.ComputeLift(density, surfVel,
                     axis, vessel.VehicleLength, vessel.MaximumDiameter);
                 Vector3d inertial = vessel.Velocity - body.Velocity;
