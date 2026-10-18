@@ -39,13 +39,15 @@ public sealed class OrbitalReentrySurvivalTests
 
         var vessel = BuildStarship();
 
-        // Start on a shallow descending trajectory at entry interface.
-        var up = new Vector3d(1, 0, 0);
-        var east = new Vector3d(0, 0, 1);
+        // Start on a shallow descending trajectory at entry interface. The calibrated case
+        // is expressed in planet coordinates: 23.44 deg N, heading due west (against the
+        // rotating atmosphere), which is the geometry these thresholds were measured on.
+        var up = (earth.GetSurfacePosition(23.44, 0.0) - earth.Position).Normalized;
+        var west = -earth.GetEastDirection(earth.Position + up * earth.Radius);
         vessel.Position = earth.Position + up * (earth.Radius + EntryAltitude);
 
         double fpa = FlightPathDeg * MathUtils.DEG_TO_RAD;
-        var velDir = (east * System.Math.Cos(fpa) + up * System.Math.Sin(fpa)).Normalized;
+        var velDir = (west * System.Math.Cos(fpa) + up * System.Math.Sin(fpa)).Normalized;
         vessel.Velocity = earth.Velocity + velDir * EntrySpeed;
 
         universe.AddVessel(vessel);

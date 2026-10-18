@@ -170,7 +170,12 @@ public partial class CelestialBody
     }
 
     /// <summary>
-    /// Unit rotation axis in the inertial frame: +Y tilted toward +X by the axial tilt.
+    /// Unit rotation axis in the inertial frame. Orbital elements live in the J2000
+    /// ecliptic frame (+X vernal equinox, +Z ecliptic north), so the spin axis is the
+    /// ecliptic normal tilted by the axial tilt toward +Y. For Earth this is the north
+    /// celestial pole (ecliptic longitude 90°, latitude 90° − ε), which gives the real
+    /// seasonal solar declination. Other bodies share the same tilt azimuth: their
+    /// obliquity is exact, their pole longitude is an approximation.
     /// This is the single definition of the body's spin axis — surface velocity, latitude
     /// and the local east direction are all derived from it, so they cannot drift apart.
     /// </summary>
@@ -180,9 +185,9 @@ public partial class CelestialBody
         {
             double tiltRad = AxialTilt * MathUtils.DEG_TO_RAD;
             return new Vector3d(
+                0.0,
                 System.Math.Sin(tiltRad),
-                System.Math.Cos(tiltRad),
-                0.0).Normalized;
+                System.Math.Cos(tiltRad)).Normalized;
         }
     }
 

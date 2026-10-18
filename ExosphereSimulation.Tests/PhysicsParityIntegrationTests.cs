@@ -467,7 +467,11 @@ public sealed class PhysicsParityIntegrationTests
                 Velocity = Vector3d.Zero,
             };
         var vessel = LoadFlight7Assembly(root).ToVessel("Starship Flight 7", vesselId);
-        vessel.Position = Vector3d.Up * (body.Radius + 2_000.0);
+        // 2 km above the reference surface: on the oblate Earth, mean radius + 2 km
+        // can lie below the ellipsoid depending on latitude.
+        vessel.Position = useEarthData
+            ? body.GetSurfacePoint(Vector3d.Up * body.Radius, 2_000.0)
+            : Vector3d.Up * (body.Radius + 2_000.0);
         vessel.Velocity = useEarthData
             ? body.GetSurfaceVelocity(vessel.Position)
             : Vector3d.Zero;

@@ -78,13 +78,16 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
             Assert.Equal(run.Controller.LiftoffEpoch,
                 witness.SimulationTimeSeconds - witness.MissionElapsedSeconds, 6);
         }
-        // The witness belongs to the start of the final 20 ms integration step.
+        // The witness belongs to the start of one of the final frame's 20 ms integration
+        // steps; a frame can carry more than one step once its retained remainder is added.
         var endpoint = returning.DiagnosticEnd;
         var endpointPosition = run.Earth.GetSurfacePositionAtTime(endpoint.BodyFixedLatitudeDegrees,
             endpoint.BodyFixedLongitudeDegrees, endpoint.SimulationTimeSeconds, endpoint.GeodeticAltitudeM);
-        Assert.InRange(run.Universe.CurrentTime - endpoint.SimulationTimeSeconds, 0, 0.020001);
+        double stepsPerFrame = System.Math.Floor((0.02 + 1.0 / fps) / 0.02);
+        double finalFrameSeconds = stepsPerFrame * 0.02;
+        Assert.InRange(run.Universe.CurrentTime - endpoint.SimulationTimeSeconds, 0, finalFrameSeconds + 1e-6);
         Assert.InRange((run.Ship.Position - endpointPosition).Magnitude,
-            0, endpoint.InertialSpeedMps * 0.02 + 1);
+            0, endpoint.InertialSpeedMps * finalFrameSeconds + 1);
         // The state remains free fall: orbit-relative speed is distinct from rotating-air speed.
         var relativeVelocity = run.Ship.Velocity - run.Earth.Velocity;
         Assert.Equal(relativeVelocity - run.Earth.GetSurfaceVelocity(run.Ship.Position),
