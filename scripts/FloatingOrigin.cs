@@ -287,6 +287,9 @@ public partial class FloatingOrigin : Node
     public void RegisterBodyNode(string bodyId, Node3D node)     => _bodyNodes[bodyId]     = node;
     public void RegisterVesselNode(string vesselId, Node3D node) => _vesselNodes[vesselId] = node;
     public void UnregisterVesselNode(string vesselId)            => _vesselNodes.Remove(vesselId);
+    public Node3D? GetVesselNode(string vesselId) =>
+        _vesselNodes.TryGetValue(vesselId, out var node) && GodotObject.IsInstanceValid(node)
+            ? node : null;
 
     // Registrar un nodo de planeta que se posiciona con PlanetRenderScale
     public void RegisterPlanetNode(string bodyId, Node3D node) => _planetNodes[bodyId] = node;

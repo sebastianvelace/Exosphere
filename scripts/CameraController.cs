@@ -54,6 +54,9 @@ public partial class CameraController : Node3D
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
         _externalLookAtY = null;
+        _externalTargetOffsetMetres = null;
+        _presentationTargetVessel = null;
+        _presentationTargetNode = null;
         _allowCloseExternalFrame = false;
         _yaw = 28f;
         _pitch = 10f;
@@ -71,7 +74,8 @@ public partial class CameraController : Node3D
 
     /// <summary>Set a deterministic external chase frame for visual acceptance scenes.</summary>
     public void SetExternalChaseFrame(float yaw, float pitch, float distance,
-        float? lookAtY = null, bool allowCloseup = false)
+        float? lookAtY = null, bool allowCloseup = false,
+        Vector3d? targetOffsetMetres = null)
     {
         _cockpit = false;
         _padPresetIdx = 0;
@@ -79,10 +83,35 @@ public partial class CameraController : Node3D
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
         _externalLookAtY = lookAtY;
+        _externalTargetOffsetMetres = targetOffsetMetres;
+        _presentationTargetVessel = null;
+        _presentationTargetNode = null;
         _allowCloseExternalFrame = allowCloseup;
         _yaw = yaw;
         _pitch = Mathf.Clamp(pitch, -89f, 89f);
         _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
+    }
+
+    /// <summary>Focus an existing vessel in the exterior camera without changing its state.</summary>
+    public void FocusPresentationTarget(Vessel target, float distance = 10f)
+    {
+        _cockpit = false;
+        _padPresetIdx = 0;
+        Mode = CameraMode.Chase;
+        _presentationDistanceTarget = null;
+        _hasSmoothedFrame = false;
+        _externalLookAtY = null;
+        _externalTargetOffsetMetres = null;
+        _presentationTargetVessel = target;
+        var floatingOrigin = GetTree().Root.FindChild(
+            "FloatingOrigin", true, false) as FloatingOrigin;
+        _presentationTargetNode = floatingOrigin?.GetVesselNode(target.Id);
+        _allowCloseExternalFrame = true;
+        _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
+        // Payloads are represented as flat packs in the vessel's local XZ plane;
+        // start above that face while leaving yaw/pitch available for manual orbiting.
+        _yaw = 35f;
+        _pitch = 55f;
     }
 
     /// <summary>
@@ -176,6 +205,9 @@ public partial class CameraController : Node3D
         _presentationDistanceTarget = null;
         _hasSmoothedFrame = false;
         _externalLookAtY = null;
+        _externalTargetOffsetMetres = null;
+        _presentationTargetVessel = null;
+        _presentationTargetNode = null;
         _yaw = yaw;
         _pitch = Mathf.Clamp(pitch, -89f, 89f);
         _distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
@@ -187,6 +219,9 @@ public partial class CameraController : Node3D
     private float _distance = 80f;   // full stack is ~43 units tall; 80 gives a nice frame
     private float? _presentationDistanceTarget;
     private float? _externalLookAtY;
+    private Vector3d? _externalTargetOffsetMetres;
+    private Vessel? _presentationTargetVessel;
+    private Node3D? _presentationTargetNode;
     private bool _allowCloseExternalFrame;
     private Vector3 _flight14PayloadFocusOffset;
     private int _flight14PayloadYawReleaseCount;
@@ -346,6 +381,24 @@ public partial class CameraController : Node3D
         // Auto-switch to Chase mode once the opening tower shot has converged
         // exactly on the vehicle-focused frame.
         var bridge = SimulationBridge.Instance;
+        if (_presentationTargetVessel is { } presentationTarget
+            && (presentationTarget.IsDestroyed
+                || bridge?.Universe.Vessels.Contains(presentationTarget) != true))
+        {
+            // A focused payload that burned up or left the universe has no renderer to
+            // follow; return to the normal chase frame instead of searching every frame.
+            _presentationTargetVessel = null;
+            _presentationTargetNode = null;
+        }
+        if (_presentationTargetVessel != null
+            && (_presentationTargetNode == null
+                || !GodotObject.IsInstanceValid(_presentationTargetNode)))
+        {
+            var floatingOrigin = GetTree().Root.FindChild(
+                "FloatingOrigin", true, false) as FloatingOrigin;
+            _presentationTargetNode = floatingOrigin?.GetVesselNode(
+                _presentationTargetVessel.Id);
+        }
         if (bridge?.ActiveVessel != null)
         {
             var body = bridge.Universe.GetDominantBody(bridge.ActiveVessel.Position);
@@ -478,6 +531,20 @@ public partial class CameraController : Node3D
 
         Vector3 payloadFocusOffset = GetFlight14PayloadFocusOffset(
             bridge, bridge?.ActiveVessel, surfaceFrame);
+        if (_presentationTargetNode is { } targetNode
+            && GodotObject.IsInstanceValid(targetNode))
+        {
+            payloadFocusOffset = Vector3.Zero;
+            Flight14PayloadAutoTracking = false;
+            Flight14PayloadCloserFraming = false;
+        }
+        if (_externalTargetOffsetMetres is { } externalOffsetMetres)
+        {
+            Vector3 externalOffset = surfaceFrame.Inverse()
+                * ToG(externalOffsetMetres / MetresPerRenderUnit);
+            targetCamPos += externalOffset;
+            targetLookTarget += externalOffset;
+        }
         targetCamPos += payloadFocusOffset;
         targetLookTarget += payloadFocusOffset;
         Flight14PayloadCloserFraming = Flight14PayloadAutoTracking;
@@ -510,10 +577,54 @@ public partial class CameraController : Node3D
 
         // The presets above are authored in local launch coordinates. Rotate them into the
         // vessel's geodetic frame so screen-up follows radial up instead of inertial +Y.
-        camera.Position = surfaceFrame * _smoothedFramePosition;
-        Vector3 lookTarget = surfaceFrame * _smoothedFrameTarget;
+        Vector3 lookTarget;
+        if (_presentationTargetNode is { } focusedNode
+            && GodotObject.IsInstanceValid(focusedNode))
+        {
+            // Use the rendered vessel node as the authoritative presentation anchor. This
+            // avoids small inertial/floating-origin frame differences placing a nearby
+            // satellite behind the camera when the vehicle itself is the active vessel.
+            Vector3 cameraLocalDirection = new(
+                Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
+                Mathf.Sin(pitchRad),
+                Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
+            float illuminatedFaceSign = 1f;
+            if (_presentationTargetVessel is { } focusedVessel
+                && SimulationBridge.Instance is { } simulation)
+            {
+                var body = simulation.Universe.GetDominantBody(focusedVessel.Position);
+                var sun = simulation.Universe.GetBody("sun");
+                if (body != null && sun != null)
+                {
+                    Vector3d physicalSunDirection =
+                        (sun.Position - focusedVessel.Position).Normalized;
+                    Vector3d visualSunDirection = SunController.Instance?.GetVisualSunDirection(
+                        body, focusedVessel.Position, physicalSunDirection)
+                        ?? physicalSunDirection;
+                    Vector3 renderSunDirection = ToG(visualSunDirection).Normalized();
+                    if (focusedNode.GlobalBasis.Y.Dot(renderSunDirection) < 0f)
+                        illuminatedFaceSign = -1f;
+                }
+            }
+            cameraLocalDirection.Y *= illuminatedFaceSign;
+            Vector3 viewDirection = (focusedNode.GlobalBasis * cameraLocalDirection).Normalized();
+            if (Mathf.Abs(viewDirection.Dot(renderUp)) > 0.94f)
+            {
+                cameraLocalDirection.X += 0.5f;
+                cameraLocalDirection.Y *= 0.9f;
+                cameraLocalDirection = cameraLocalDirection.Normalized();
+                viewDirection = (focusedNode.GlobalBasis * cameraLocalDirection).Normalized();
+            }
+            camera.GlobalPosition = focusedNode.GlobalPosition + viewDirection * _distance;
+            lookTarget = focusedNode.GlobalPosition;
+        }
+        else
+        {
+            camera.Position = surfaceFrame * _smoothedFramePosition;
+            lookTarget = surfaceFrame * _smoothedFrameTarget;
+        }
         camera.Near = (float)VehicleCameraFraming.ExternalNearPlane(
-            camera.Position.DistanceTo(lookTarget), _externalNear);
+            camera.GlobalPosition.DistanceTo(lookTarget), _externalNear);
         camera.LookAt(lookTarget, renderUp);
 
         // ── Force-feel shake — applied AFTER LookAt so the orbit framing is intact.

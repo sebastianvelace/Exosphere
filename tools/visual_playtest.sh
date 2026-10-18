@@ -68,6 +68,8 @@ Options:
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
   --flight14-payload
                 Capture the isolated Flight 14 estimated Starlink payload renderer.
+  --flight14-payload-group
+                Capture a seeded post-release carrier + two-payload composition at wide and inspection zooms.
   --flight14-deployment
                 Fly the Flight 14 exploration through two real payload releases, observe their attitude for 60 s, and capture them.
   --ascent      Fly only pad→stable orbit with dense guidance/physics diagnostics, then exit.
@@ -220,6 +222,7 @@ while [[ $# -gt 0 ]]; do
       VARIANT_PROFILE="starship-flight12-ascent"
       shift ;;
     --flight14-payload) MODE="flight14_payload"; shift ;;
+    --flight14-payload-group) MODE="flight14_payload_group"; shift ;;
     --flight14-deployment) MODE="flight14_deployment"; shift ;;
     --ascent) MODE="ascent"; shift ;;
     --launch) MODE="launch"; shift ;;
@@ -668,6 +671,12 @@ public partial class _PlaytestShot : Node
     bool _entry, _peak, _retro, _landed, _caught;
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     bool _flight14PayloadVisualSeeded;
+    bool _flight14PayloadGroupSeeded;
+    int _flight14PayloadGroupCaptureStage;
+    Vector3d _flight14PayloadGroupFocusOffsetMetres;
+    Vector3d[] _flight14PayloadGroupSatelliteOffsetsMetres = [];
+    Vessel[] _flight14PayloadGroupSatellites = [];
+    int _flight14PayloadGroupInspectionIndex;
     bool _flight14DeploymentE2EStarted, _flight14DeploymentCaptureQueued;
     double _flight14DeploymentCaptureStart = double.NaN;
     double _lastFlight14DeploymentProgressWall;
@@ -951,6 +960,11 @@ public partial class _PlaytestShot : Node
         if (_mode == "flight14_payload")
         {
             ProcessFlight14PayloadVisual(bridge, universe);
+            return;
+        }
+        if (_mode == "flight14_payload_group")
+        {
+            ProcessFlight14PayloadGroupVisual(bridge, universe);
             return;
         }
         if (_mode == "flight14_deployment")
@@ -1911,6 +1925,164 @@ public partial class _PlaytestShot : Node
         }
         if (_orbitBeauty && _pendingSlug == null)
             Finish("FLIGHT14_PAYLOAD_VISUAL_OK");
+    }
+
+    private void ProcessFlight14PayloadGroupVisual(
+        SimulationBridge bridge, Universe universe)
+    {
+        universe.TimeScale = 0.0;
+        TryCapturePending();
+        if (!_flight14PayloadGroupSeeded)
+        {
+            if (_readyFrames < 45) return;
+            var carrier = bridge.ActiveVessel;
+            var earth = universe.GetBody("earth");
+            if (carrier == null || earth == null)
+            {
+                Finish("PAYLOAD_GROUP_FIXTURE_MISSING_CARRIER_OR_EARTH");
+                return;
+            }
+
+            // This is a presentation fixture, not a replay of the Flight 14 physics run.
+            // Seed the carrier in circular orbit, then reconstruct two estimated release
+            // states and propagate each with the same two-body Kepler model used by rails.
+            bridge.JumpToOrbit(400_000.0);
+            carrier = bridge.ActiveVessel;
+            if (carrier == null) { Finish("PAYLOAD_GROUP_FIXTURE_ORBIT_SEED_FAILED"); return; }
+            string data = ProjectSettings.GlobalizePath("res://data");
+            var profile = Flight14PayloadDefinition.LoadFromJson(Path.Combine(
+                data, "flight_profiles", "starship_flight14_payload_estimate.json"));
+            var partDefinition = PartDefinition.LoadFromJson(Path.Combine(
+                data, "parts", "starlink_v3_flight14_estimate.json"));
+            double observationTime = universe.CurrentTime;
+            var carrierOrbit = OrbitalElements.FromStateVector(
+                carrier.Position-earth.Position, carrier.Velocity-earth.Velocity,
+                earth.GM, earth.Id, observationTime);
+            var carrierOrbitState = carrierOrbit.GetStateAtTime(
+                observationTime, earth.GM);
+            double carrierStateClosureM = carrierOrbitState.position.DistanceTo(
+                carrier.Position-earth.Position);
+            var openingVelocity = carrier.Orientation.Rotate(profile.OpeningVelocity);
+            double[] elapsedSinceRelease =
+            [profile.ReleaseIntervalSeconds + 60.0, 60.0];
+            var payloadPositions = new Vector3d[elapsedSinceRelease.Length];
+            _flight14PayloadGroupSatelliteOffsetsMetres =
+                new Vector3d[elapsedSinceRelease.Length];
+            _flight14PayloadGroupSatellites = new Vessel[elapsedSinceRelease.Length];
+            var vesselsRoot = GetTree().Root.FindChild("Vessels", true, false) as Node3D;
+            var floatingOrigin = GetTree().Root.FindChild(
+                "FloatingOrigin", true, false) as FloatingOrigin;
+            if (vesselsRoot == null)
+            {
+                Finish("PAYLOAD_GROUP_FIXTURE_NO_RENDER_ROOT");
+                return;
+            }
+
+            Vector3d focusOffsetMetres = Vector3d.Zero;
+            for (int i = 0; i < elapsedSinceRelease.Length; i++)
+            {
+                double elapsed = elapsedSinceRelease[i];
+                double releaseEpoch = observationTime-elapsed;
+                var releaseCarrier = carrierOrbit.GetStateAtTime(releaseEpoch, earth.GM);
+                var satelliteOrbit = OrbitalElements.FromStateVector(
+                    releaseCarrier.position,
+                    releaseCarrier.velocity+openingVelocity,
+                    earth.GM, earth.Id, releaseEpoch);
+                var satelliteState = satelliteOrbit.GetStateAtTime(
+                    observationTime, earth.GM);
+                var spin = carrier.AngularVelocity.Magnitude > 1e-12
+                    ? Quaterniond.FromAxisAngle(carrier.AngularVelocity.Normalized,
+                        carrier.AngularVelocity.Magnitude*elapsed)
+                    : Quaterniond.Identity;
+                var satellite = new Vessel($"flight14-payload-group-fixture-{i + 1}")
+                {
+                    Name = $"Starlink V3 {i + 1:00} (estimated visual fixture)",
+                    Position = earth.Position+satelliteState.position,
+                    Velocity = earth.Velocity+satelliteState.velocity,
+                    Orientation = spin*carrier.Orientation,
+                    AngularVelocity = carrier.AngularVelocity,
+                    ReferenceBodyId = earth.Id,
+                    OrbitalState = satelliteOrbit,
+                    IsOnRails = true,
+                    SASEnabled = false,
+                };
+                satellite.Parts.SetRoot(new Part(
+                    partDefinition, $"flight14-payload-group-part-{i + 1}"));
+                universe.AddVessel(satellite);
+                _flight14PayloadGroupSatellites[i] = satellite;
+                payloadPositions[i] = satellite.Position;
+                _flight14PayloadGroupSatelliteOffsetsMetres[i] =
+                    satellite.Position-carrier.Position;
+
+                var renderer = new VesselRenderer
+                {
+                    Name = $"Flight14PayloadGroup_{i + 1:00}",
+                };
+                vesselsRoot.AddChild(renderer);
+                renderer.BuildFromVessel(satellite);
+                floatingOrigin?.RegisterVesselNode(satellite.Id, renderer);
+                focusOffsetMetres += satellite.Position-carrier.Position;
+            }
+
+            focusOffsetMetres /= elapsedSinceRelease.Length+1;
+            _flight14PayloadGroupFocusOffsetMetres = focusOffsetMetres;
+            CameraController.Instance?.SetExternalChaseFrame(
+                35f, 22f, 65f, allowCloseup: true,
+                targetOffsetMetres: focusOffsetMetres);
+            _flight14PayloadGroupSeeded = true;
+            _log.WriteLine("FLIGHT14_PAYLOAD_GROUP_SETUP fixture=True physicsReplay=False "
+                + $"timeScale=0 altitudeM={carrier.GetAltitude(earth):F0} "
+                + $"payloadCount={payloadPositions.Length} "
+                + $"releaseElapsedS={elapsedSinceRelease[0]:F2},{elapsedSinceRelease[1]:F2} "
+                + $"openingVelocityMps={profile.OpeningVelocity.Magnitude:F2} "
+                + $"carrierStateClosureM={carrierStateClosureM:F2} "
+                + $"separationM={payloadPositions[0].DistanceTo(carrier.Position):F2},"
+                + $"{payloadPositions[1].DistanceTo(carrier.Position):F2} "
+                + $"groupFocusOffsetM={focusOffsetMetres.Magnitude:F2} "
+                + $"angularRateRadPerS={carrier.AngularVelocity.Magnitude:E3}");
+            _log.Flush();
+            return;
+        }
+
+        if (_pendingSlug != null) return;
+        if (_flight14PayloadGroupCaptureStage == 0 && _readyFrames > 30)
+        {
+            QueueCapture("flight14_payload_group_wide");
+            _flight14PayloadGroupCaptureStage = 1;
+            return;
+        }
+        if (_flight14PayloadGroupCaptureStage == 1)
+        {
+            CameraController.Instance?.FocusPresentationTarget(
+                _flight14PayloadGroupSatellites[0], distance: 10f);
+            _flight14PayloadGroupInspectionIndex = 1;
+            _readyFrames = 0;
+            _flight14PayloadGroupCaptureStage = 2;
+            return;
+        }
+        if (_flight14PayloadGroupCaptureStage == 2 && _readyFrames > 15)
+        {
+            QueueCapture("flight14_payload_inspection_01");
+            _flight14PayloadGroupCaptureStage = 3;
+            return;
+        }
+        if (_flight14PayloadGroupCaptureStage == 3)
+        {
+            CameraController.Instance?.FocusPresentationTarget(
+                _flight14PayloadGroupSatellites[1], distance: 10f);
+            _flight14PayloadGroupInspectionIndex = 2;
+            _readyFrames = 0;
+            _flight14PayloadGroupCaptureStage = 4;
+            return;
+        }
+        if (_flight14PayloadGroupCaptureStage == 4 && _readyFrames > 15)
+        {
+            QueueCapture("flight14_payload_inspection_02");
+            _flight14PayloadGroupCaptureStage = 5;
+            return;
+        }
+        if (_flight14PayloadGroupCaptureStage == 5)
+            Finish("FLIGHT14_PAYLOAD_GROUP_VISUAL_OK");
     }
 
     private void ProcessFlight14Deployment(SimulationBridge bridge)
@@ -4190,6 +4362,48 @@ public partial class _PlaytestShot : Node
 
     private void LogFlight14PayloadVisualTelemetry(string slug)
     {
+        if (slug.StartsWith("flight14_payload_group_", StringComparison.Ordinal)
+            || slug.StartsWith("flight14_payload_inspection_", StringComparison.Ordinal))
+        {
+            var vesselsRoot = GetTree().Root.FindChild(
+                "Vessels", true, false) as Node3D;
+            var payloadRenderers = vesselsRoot?.GetChildren()
+                .OfType<VesselRenderer>()
+                .Where(renderer => renderer.Name.ToString().StartsWith(
+                    "Flight14PayloadGroup_", StringComparison.Ordinal))
+                .ToArray() ?? Array.Empty<VesselRenderer>();
+            var camera = CameraController.Instance;
+            var presentationCamera = camera?.PresentationCamera;
+            var inspectedRenderer = _flight14PayloadGroupInspectionIndex is 1 or 2
+                ? payloadRenderers.ElementAtOrDefault(
+                    _flight14PayloadGroupInspectionIndex-1) : null;
+            Vector2 targetPixel = inspectedRenderer != null && presentationCamera != null
+                ? presentationCamera.UnprojectPosition(inspectedRenderer.GlobalPosition)
+                : new Vector2(float.NaN, float.NaN);
+            bool targetBehindCamera = inspectedRenderer != null
+                && presentationCamera?.IsPositionBehind(inspectedRenderer.GlobalPosition) == true;
+            Vector2 viewportSize = presentationCamera?.GetViewport().GetVisibleRect().Size
+                ?? Vector2.Zero;
+            bool targetOnScreen = inspectedRenderer != null
+                && !targetBehindCamera
+                && targetPixel.X >= 0f && targetPixel.X < viewportSize.X
+                && targetPixel.Y >= 0f && targetPixel.Y < viewportSize.Y;
+            double cameraTargetOffsetM = _flight14PayloadGroupInspectionIndex is 1 or 2
+                ? _flight14PayloadGroupSatelliteOffsetsMetres[
+                    _flight14PayloadGroupInspectionIndex-1].Magnitude
+                : _flight14PayloadGroupFocusOffsetMetres.Magnitude;
+            _log.WriteLine($"FLIGHT14_PAYLOAD_GROUP_CAPTURE slug={slug} "
+                + $"payloadRenderers={payloadRenderers.Length} "
+                + $"cameraDistance={camera?.PresentationDistance ?? 0f:F1} "
+                + $"cameraTargetOffsetM={cameraTargetOffsetM:F2} "
+                + $"inspectionTarget={_flight14PayloadGroupInspectionIndex} "
+                + $"targetPixel={targetPixel.X:F1},{targetPixel.Y:F1} "
+                + $"targetBehindCamera={targetBehindCamera} "
+                + $"targetOnScreen={targetOnScreen} "
+                + "fixture=True physicsReplay=False");
+            _log.Flush();
+            return;
+        }
         if (slug == "flight14_payload_deployment_e2e")
         {
             var vesselsRoot = GetTree().Root.FindChild(
@@ -6050,6 +6264,27 @@ PYCOVERAGE
       echo "ERROR: missing normal-flow telemetry (demo must not satisfy this gate)" >&2
       return 1
     fi
+  elif [[ "$MODE" == "flight14_payload_group" ]]; then
+    if [[ ! -f "$OUT_DIR/exo_play_flight14_payload_group_wide.png" \
+      || ! -f "$OUT_DIR/exo_play_flight14_payload_inspection_01.png" \
+      || ! -f "$OUT_DIR/exo_play_flight14_payload_inspection_02.png" ]]; then
+      echo "ERROR: missing Flight 14 wide or per-payload inspection framebuffer" >&2
+      return 1
+    fi
+    if ! grep -q 'SUMMARY reason=FLIGHT14_PAYLOAD_GROUP_VISUAL_OK' "$LOG"; then
+      echo "ERROR: Flight 14 payload group visual fixture did not finish cleanly" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_PAYLOAD_GROUP_SETUP fixture=True physicsReplay=False timeScale=0 altitudeM=[0-9]+ payloadCount=2 releaseElapsedS=[0-9.]+,[0-9.]+ openingVelocityMps=1\.00 carrierStateClosureM=[0-9.]+ separationM=[0-9.]+,[0-9.]+ groupFocusOffsetM=[0-9.]+ angularRateRadPerS=[0-9.eE+-]+' "$LOG"; then
+      echo "ERROR: missing orbit-propagated estimated Flight 14 payload group state" >&2
+      return 1
+    fi
+    if ! grep -Eq 'FLIGHT14_PAYLOAD_GROUP_CAPTURE slug=flight14_payload_group_wide payloadRenderers=2 cameraDistance=65\.0 cameraTargetOffsetM=[0-9.]+ inspectionTarget=0 targetPixel=NaN,NaN targetBehindCamera=False targetOnScreen=False fixture=True physicsReplay=False' "$LOG" \
+      || ! grep -Eq 'FLIGHT14_PAYLOAD_GROUP_CAPTURE slug=flight14_payload_inspection_01 payloadRenderers=2 cameraDistance=10\.0 cameraTargetOffsetM=[0-9.]+ inspectionTarget=1 targetPixel=[0-9.-]+,[0-9.-]+ targetBehindCamera=False targetOnScreen=True fixture=True physicsReplay=False' "$LOG" \
+      || ! grep -Eq 'FLIGHT14_PAYLOAD_GROUP_CAPTURE slug=flight14_payload_inspection_02 payloadRenderers=2 cameraDistance=10\.0 cameraTargetOffsetM=[0-9.]+ inspectionTarget=2 targetPixel=[0-9.-]+,[0-9.-]+ targetBehindCamera=False targetOnScreen=True fixture=True physicsReplay=False' "$LOG"; then
+      echo "ERROR: wide group and both per-payload inspection frames must keep their targets on-screen" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "flight14_payload" ]]; then
     if [[ ! -f "$OUT_DIR/exo_play_flight14_payload_flat_pack.png" ]]; then
       echo "ERROR: missing Flight 14 estimated payload flat-pack framebuffer" >&2
@@ -6881,6 +7116,8 @@ elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "flight14_payload" ]]; then
   echo "visual_playtest: Flight 14 estimated payload flat-pack capture OK — visual review still required"
+elif [[ "$MODE" == "flight14_payload_group" ]]; then
+  echo "visual_playtest: seeded Flight 14 wide and per-payload inspection frames captured — composition review required; no physics replay"
 elif [[ "$MODE" == "flight14_deployment" ]]; then
   echo "visual_playtest: Flight 14 real ascent and first two payload releases captured — visual review still required"
 elif [[ "$MODE" == "orbital_plume" ]]; then

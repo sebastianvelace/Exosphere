@@ -9,11 +9,13 @@ public partial class Flight14ExplorationHUD : Control
     private Label _status = null!;
     private Button _pause = null!;
     private Button _observe = null!;
+    private Button _payloadView = null!;
     private Button _entry = null!;
     private VBoxContainer _controls = null!;
     private Control? _phaseBanner;
     private Viewport? _shortcutViewport;
     private bool _previousDisable3D;
+    private int _payloadFocusIndex = -1;
     private EntryAdvancePresentation _advancePresentation = null!;
 
     public override void _Ready()
@@ -26,8 +28,8 @@ public partial class Flight14ExplorationHUD : Control
         _controls = new VBoxContainer { Name = "ExplorationControls" };
         _controls.SetAnchorsPreset(LayoutPreset.CenterTop);
         _controls.GrowHorizontal = GrowDirection.Both;
-        _controls.OffsetLeft = -300;
-        _controls.OffsetRight = 300;
+        _controls.OffsetLeft = -340;
+        _controls.OffsetRight = 340;
         _controls.OffsetTop = 96;
         _controls.AddThemeConstantOverride("separation", 8);
         AddChild(_controls);
@@ -53,10 +55,14 @@ public partial class Flight14ExplorationHUD : Control
         });
         _observe = AddButton(row, "SUPER HEAVY", () =>
         {
+            _payloadFocusIndex = -1;
             if (SimulationBridge.Instance?.Flight14Preview is { } preview
                 && preview.ObserveBooster(!preview.IsObservingBooster))
                 CameraController.Instance?.EnterShipChaseView();
         });
+        _payloadView = AddButton(row, "PAYLOAD VIEW", CyclePayloadView);
+        _payloadView.CustomMinimumSize = new Vector2(124, 34);
+        _payloadView.TooltipText = "Cycle the camera through released payloads, then return to Starship.";
         _entry = AddButton(row, "SKIP TO ENTRY", () =>
         {
             if (SimulationBridge.Instance is { Flight14Preview: { } preview } bridge
@@ -101,6 +107,27 @@ public partial class Flight14ExplorationHUD : Control
         return button;
     }
 
+    private void CyclePayloadView()
+    {
+        if (SimulationBridge.Instance?.Flight14Preview is not { } preview
+            || preview.IsObservingBooster || preview.IsAdvancingToEntry)
+            return;
+
+        var releases = preview.Run.PayloadController.Releases;
+        if (releases.Count == 0) return;
+        if (_payloadFocusIndex + 1 < releases.Count)
+        {
+            _payloadFocusIndex++;
+            CameraController.Instance?.FocusPresentationTarget(
+                releases[_payloadFocusIndex].Satellite);
+        }
+        else
+        {
+            _payloadFocusIndex = -1;
+            CameraController.Instance?.EnterShipChaseView();
+        }
+    }
+
     public override void _Process(double delta)
     {
         if (SimulationBridge.Instance?.Flight14Preview is not { } preview) return;
@@ -130,6 +157,14 @@ public partial class Flight14ExplorationHUD : Control
         _observe.Disabled = preview.IsAdvancingToEntry || preview.Run.BoosterReturnController?.Booster == null
             || !preview.IsObservingBooster && preview.Run.BoosterReturnController.Booster.IsDestroyed;
         _observe.Text = preview.IsObservingBooster ? "STARSHIP" : "SUPER HEAVY";
+        int releasedPayloads = preview.Run.PayloadController.Releases.Count;
+        _payloadView.Disabled = releasedPayloads == 0 || preview.IsObservingBooster
+            || preview.IsAdvancingToEntry;
+        _payloadView.Text = _payloadFocusIndex >= 0
+            && _payloadFocusIndex < releasedPayloads
+                ? $"PAYLOAD {_payloadFocusIndex + 1:00}/{releasedPayloads:00}"
+                : "PAYLOAD VIEW";
+        if (_payloadFocusIndex >= releasedPayloads) _payloadFocusIndex = -1;
         string state = preview.IsTerminal ? preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null
                 ? "WATER RESPONSE OBSERVED · SEALED-HULL ESTIMATE · "
                     + (preview.Run.BoosterReturnController?.FlightTerminationTriggered == true
