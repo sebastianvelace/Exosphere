@@ -348,13 +348,39 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             light.RotationDegrees = new Godot.Vector3(-45f, -30f, 0f);
     }
 
+    private AutopilotController? _autopilotController;
+
+    /// <summary>
+    /// True while an onboard autopilot owns the attitude command. An idle pilot stick must
+    /// not overwrite it between control epochs; any held attitude key still takes over.
+    /// </summary>
+    public bool IsAttitudeAutopilotEngaged()
+    {
+        if (AscentController.Instance is { } ascent && (ascent.IsEngaged || ascent.IsAssistEngaged))
+            return true;
+        if (EDLController.Instance?.IsPresentationActive == true
+            || ManeuverExecutor.Instance?.IsExecuting == true
+            || HistoricalFlightProfileController.Instance?.IsEngaged == true)
+            return true;
+        if (_autopilotController == null || !IsInstanceValid(_autopilotController))
+            _autopilotController = GetTree().Root.FindChild(
+                "AutopilotController", true, false) as AutopilotController;
+        return _autopilotController is { } autopilot
+            && (autopilot.IsArmed || autopilot.IsBurning || autopilot.IsPreparingEntryAttitude);
+    }
+
     bool IPhysicsStepController.RequiresFixedCadence(Universe universe) =>
-        EDLController.Instance?.RequiresFixedPhysicsCadence(universe) == true;
+        AscentController.Instance?.RequiresFixedPhysicsCadence == true
+        || EDLController.Instance?.RequiresFixedPhysicsCadence(universe) == true;
 
     void IPhysicsStepController.BeforePhysicsStep(
         Universe universe,
-        double controlIntervalSeconds) =>
+        double controlIntervalSeconds)
+    {
+        // Ascent first: it yields to EDL itself once the mission enters descent.
+        AscentController.Instance?.AdvancePhysicsStep(controlIntervalSeconds);
         EDLController.Instance?.AdvancePhysicsStep(universe, controlIntervalSeconds);
+    }
 
     public override void _ExitTree()
     {

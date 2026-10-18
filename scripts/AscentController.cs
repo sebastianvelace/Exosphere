@@ -33,6 +33,7 @@ public partial class AscentController : Control
     /// <summary>Read-only diagnostic state consumed by the playtest harness.</summary>
     public string GuidancePhase => _phase.ToString();
     public bool IsEngaged => _active;
+    public bool IsAssistEngaged => _assist;
 
     // ── Assist mode ([H]) ───────────────────────────────────────────────────────
     // Pilot-in-the-loop helper: applies ONLY the gravity-turn PITCH GUIDANCE (commanded
@@ -227,7 +228,26 @@ public partial class AscentController : Control
             universe.TimeScale = 1.0;
     }
 
+    /// <summary>Presentation only; guidance runs on the simulation's fixed control clock.</summary>
     public override void _Process(double delta)
+    {
+        if (_active || _assist) QueueRedraw();
+    }
+
+    /// <summary>True while [G] or [H] needs the fixed 20 ms control clock.</summary>
+    public bool RequiresFixedPhysicsCadence => _active || _assist;
+
+    /// <summary>
+    /// Advances ascent guidance at a simulation control boundary, before the forces of that
+    /// interval are integrated. Commands therefore no longer depend on render frame rate.
+    /// </summary>
+    public void AdvancePhysicsStep(double controlIntervalSeconds)
+    {
+        if (!double.IsFinite(controlIntervalSeconds) || controlIntervalSeconds <= 0.0) return;
+        StepGuidance(controlIntervalSeconds);
+    }
+
+    private void StepGuidance(double delta)
     {
         // Assist mode runs on its own (it does not require the full autopilot to be active).
         if (_assist && !_active) { ProcessAssist(); return; }
@@ -442,8 +462,10 @@ public partial class AscentController : Control
         Vector3d rel  = vessel.Position - body.Position;
         Vector3d vel  = vessel.Velocity - body.Velocity;
         Vector3d up   = rel.Magnitude > 1e-6 ? rel.Normalized : Vector3d.Up;
-        Vector3d east = new Vector3d(0, 1, 0).Cross(up);
-        east = east.Magnitude > 1e-6 ? east.Normalized : new Vector3d(0, 0, 1);
+        // East from the body's spin axis, as in the [G] ascent: an inertial +Y axis is not
+        // the planet's pole, and steering toward it throws the launch-site boost away.
+        Vector3d east = body.GetEastDirection(vessel.Position);
+        if (east.Magnitude < 1e-6) east = new Vector3d(0, 0, 1);
         _alt = body.GetAltitude(vessel.Position);
 
         // Live readout so the banner shows the orbit building under the player's throttle.

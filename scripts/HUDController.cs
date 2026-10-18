@@ -819,11 +819,16 @@ public partial class HUDController : Control
                 && PilotCommandRouting.UsesGroundUplink(crewAlive, vessel.StructuralControlLost);
 
             // Onboard (crewed) or structural dead-stick (Vessel.Tick zeros authority): local write.
-            // Unmanned only: ground relay.
-            if (groundUplink)
-                SystemsController.Instance!.SubmitGroundAttitude(stick);
-            else
-                vessel.PitchYawRoll = stick;
+            // Unmanned only: ground relay. An idle stick does not overwrite an engaged
+            // autopilot's command, which it refreshes on its own control clock.
+            bool pilotHasInput = stick.MagnitudeSquared > 0.0;
+            if (pilotHasInput || !bridge.IsAttitudeAutopilotEngaged())
+            {
+                if (groundUplink)
+                    SystemsController.Instance!.SubmitGroundAttitude(stick);
+                else
+                    vessel.PitchYawRoll = stick;
+            }
 
             // ── Hold-throttle (despegue manual) ─────────────────────────────────
             // [Z] mantenida: en tierra arranca la ignición (suelta el clamp al commit);
