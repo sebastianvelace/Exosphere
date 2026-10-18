@@ -2620,14 +2620,21 @@ public class Universe
         }
     }
 
+    /// <summary>
+    /// Inertial acceleration of a body moving on chained Kepler rails: its parent's pull
+    /// plus the parent's own rail acceleration. The Moon's frame therefore also carries
+    /// Earth's acceleration toward the Sun; omitting it left a ~6 mm/s² spurious force on
+    /// every vessel integrated in lunar space.
+    /// </summary>
     private Vector3d GetReferenceBodyRailAcceleration(
         CelestialBody reference)
     {
         if (reference.OrbitalElements is not { } orbit)
             return Vector3d.Zero;
         var parent = GetBody(orbit.ReferenceBodyId);
-        return parent?.GetGravityAt(reference.Position)
-            ?? Vector3d.Zero;
+        if (parent == null) return Vector3d.Zero;
+        return parent.GetGravityAt(reference.Position)
+            + GetReferenceBodyRailAcceleration(parent);
     }
 
     private static Physics.ContactWrench? EvaluateLandingContact(
