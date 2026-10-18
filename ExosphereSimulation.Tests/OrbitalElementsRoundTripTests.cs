@@ -111,6 +111,38 @@ public sealed class OrbitalElementsRoundTripTests
             "circular_retrograde.velocity");
     }
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.20)]
+    [InlineData(1.70)]
+    [InlineData(3.30)]
+    [InlineData(5.40)]
+    public void CircularInclinedOrbitSeededLikeDebugOrbitRoundTripsAtEpoch(double phase)
+    {
+        const double radius = 6_771_000.0;
+        var up = new Vector3d(-0.078, 0.914, -0.398).Normalized;
+        var reference = System.Math.Abs(up.Dot(new Vector3d(0.0, 1.0, 0.0))) < 0.9
+            ? new Vector3d(0.0, 1.0, 0.0)
+            : new Vector3d(1.0, 0.0, 0.0);
+        var baseTangent = reference.Cross(up).Normalized;
+        var orbitNormal = up.Cross(baseTangent).Normalized;
+        var radial = up * System.Math.Cos(phase) + baseTangent * System.Math.Sin(phase);
+        var tangent = orbitNormal.Cross(radial).Normalized;
+        var expectedPosition = radial * radius;
+        var expectedVelocity = tangent * System.Math.Sqrt(EarthGm / radius);
+
+        var elements = OrbitalElements.FromStateVector(
+            expectedPosition, expectedVelocity, EarthGm, ReferenceBody, Epoch);
+        var reconstructed = elements.GetStateAtTime(Epoch, EarthGm);
+
+        AssertClose(expectedPosition, reconstructed.position,
+            PositionAbsoluteTolerance, PositionRelativeTolerance,
+            "debug_seeded_circular_inclined.position");
+        AssertClose(expectedVelocity, reconstructed.velocity,
+            VelocityAbsoluteTolerance, VelocityRelativeTolerance,
+            "debug_seeded_circular_inclined.velocity");
+    }
+
     [Fact]
     public void EquatorialProgradeUsesNonRetrogradeConvention()
     {

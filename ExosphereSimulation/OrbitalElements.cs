@@ -367,8 +367,15 @@ public class OrbitalElements
             else
             {
                 double nDotR = nVec.Dot(pos);
-                nu = System.Math.Acos(System.Math.Clamp(nDotR / (nMag * r), -1.0, 1.0));
-                if (vel.Dot(pos) < 0.0) nu = 2.0 * System.Math.PI - nu;
+                double cosNu = System.Math.Clamp(nDotR / (nMag * r), -1.0, 1.0);
+                // At circular-orbit points, r·v is zero (up to roundoff), so it cannot
+                // determine which half of the orbital plane contains the position.
+                // Use the signed angle from the ascending-node vector instead; acos
+                // plus a radial-velocity sign mirrored valid states in some inclinations.
+                double sinNu = System.Math.Clamp(
+                    h.Dot(nVec.Cross(pos)) / (hMag * nMag * r), -1.0, 1.0);
+                nu = System.Math.Atan2(sinNu, cosNu);
+                if (nu < 0.0) nu += 2.0 * System.Math.PI;
             }
         }
         else
