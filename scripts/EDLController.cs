@@ -183,7 +183,7 @@ public partial class EDLController : Control
         if (_phase != Edl.Inactive) return true;
 
         Vessel? vessel = universe.ActiveVessel;
-        if (vessel == null) return false;
+        if (vessel == null || !IsStarshipEdlVehicle(vessel)) return false;
         CelestialBody body = universe.GetDominantBody(vessel.Position);
         if (body.Atmosphere == null) return false;
 
@@ -226,6 +226,10 @@ public partial class EDLController : Control
         // ── Activation check ───────────────────────────────────────────────────
         if (_phase == Edl.Inactive)
         {
+            // The belly-flop/flip/catch director is Starship-specific. Capsules, upper
+            // stages and VAB craft keep their pilot (and their armed parachutes) instead
+            // of being handed a Starship attitude and throttle program.
+            if (!IsStarshipEdlVehicle(vessel)) return;
             bool descending = _vUp < -20.0;
             bool inAtmo     = _alt < body.Atmosphere.MaxAltitude * 1.05;
             bool hasSuperHeavy = vessel.Parts.Parts.Any(
@@ -290,6 +294,11 @@ public partial class EDLController : Control
         AdvancePhase(vessel, body, mission, mass, speed, up, surfVel,
             controlIntervalSeconds, universe);
     }
+
+    /// <summary>True when the vessel is a Starship (ship or full stack) this director can fly.</summary>
+    public static bool IsStarshipEdlVehicle(Vessel vessel) =>
+        vessel.Parts.Parts.Any(p => p.Definition.IsStarshipFamily
+            && p.Definition.HasVehicleRole("command"));
 
     private void RefreshFlightTelemetry(
         Vessel vessel,
