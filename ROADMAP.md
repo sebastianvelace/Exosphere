@@ -156,6 +156,14 @@ Base tecnica cerrada en `main`:
 - Panel THERMAL en el HUD del EDL: cara del TPS, barra de casco contra tolerancia y
   alineacion del escudo con el flujo (el unico numero accionable), con aviso SHIELD OFF FLOW
   solo cuando hay flujo real detras. Sin el, la reentrada letal mataba a ciegas.
+- Auditoría física 2026-10-18 — cerrados con tests de escenario integrados: eje de giro
+  planetario inclinado desde la normal eclíptica (estaciones, luz diurna y la Luna a
+  18–29° del ecuador; antes el eje yacía en el plano orbital), paracaídas de Apollo 8/11 y
+  Gemini VIII que nunca abrían (unidad Pa vs fracción), SAS limitado a la autoridad real
+  de RCS/TVC y cargas de joints según el camino de carga real con compresión. Pendientes
+  de esa auditoría: warp x3 en LEO/pad por paso de 20 ms en coast termosférico, masa
+  acoplada ignorada en docking, datum render/masas inconsistente, Cd transónico >2,
+  Mach con γ/R terrestres en Marte/Venus.
 - Impactos de superficie anclados al cuerpo ✅: un wreck destruido ya no queda
   congelado en el marco heliocentrico mientras la Tierra se aleja, ni parece
   rebotar a ~30 km/s. El anclaje rotante persiste en `SaveGameV2` y bajo warp.
