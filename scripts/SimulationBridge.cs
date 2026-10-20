@@ -371,6 +371,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
     bool IPhysicsStepController.RequiresFixedCadence(Universe universe) =>
         AscentController.Instance?.RequiresFixedPhysicsCadence == true
+        || HistoricalFlightProfileController.Instance?.RequiresFixedPhysicsCadence == true
         || EDLController.Instance?.RequiresFixedPhysicsCadence(universe) == true;
 
     void IPhysicsStepController.BeforePhysicsStep(
@@ -379,6 +380,8 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     {
         // Ascent first: it yields to EDL itself once the mission enters descent.
         AscentController.Instance?.AdvancePhysicsStep(controlIntervalSeconds);
+        if (HistoricalFlightProfileController.Instance?.RequiresFixedPhysicsCadence == true)
+            HistoricalFlightProfileController.Instance.AdvancePhysicsStep();
         EDLController.Instance?.AdvancePhysicsStep(universe, controlIntervalSeconds);
     }
 
