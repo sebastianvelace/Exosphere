@@ -14,10 +14,15 @@ public sealed class ResidualThermosphereWarpTests
 {
     private const double CircularAltitude = 400_000.0;
 
-    [Fact]
-    public void IdleLeoCoastUsesCoastStepsAtHighWarp()
+    // Apollo's parking orbit: denser residual air and ~0.9 kW/m² free-molecular heating.
+    private const double ApolloParkingAltitude = 191_310.0;
+
+    [Theory]
+    [InlineData(CircularAltitude)]
+    [InlineData(ApolloParkingAltitude)]
+    public void IdleLeoCoastUsesCoastStepsAtHighWarp(double altitude)
     {
-        var (universe, vessel, _) = CircularOrbit(CircularAltitude);
+        var (universe, vessel, _) = CircularOrbit(altitude);
         Assert.True(universe.RequiresOffRailsPhysics(vessel));
         Assert.True(universe.IsResidualThermosphereCoast(vessel));
         Assert.True(universe.AllowsHighWarpCoast(vessel));
@@ -30,13 +35,15 @@ public sealed class ResidualThermosphereWarpTests
         Assert.False(vessel.IsOnRails);
     }
 
-    [Fact]
-    public void CoastStepsReproduceTwentyMillisecondDecayOverOneOrbit()
+    [Theory]
+    [InlineData(CircularAltitude)]
+    [InlineData(ApolloParkingAltitude)]
+    public void CoastStepsReproduceTwentyMillisecondDecayOverOneOrbit(double altitude)
     {
-        var (coarse, coarseVessel, coarseEarth) = CircularOrbit(CircularAltitude);
-        var (fine, fineVessel, fineEarth) = CircularOrbit(CircularAltitude);
+        var (coarse, coarseVessel, coarseEarth) = CircularOrbit(altitude);
+        var (fine, fineVessel, fineEarth) = CircularOrbit(altitude);
         double period = 2.0 * System.Math.PI * System.Math.Sqrt(
-            System.Math.Pow(fineEarth.Radius + CircularAltitude, 3) / fineEarth.GM);
+            System.Math.Pow(fineEarth.Radius + altitude, 3) / fineEarth.GM);
         double a0 = SemiMajorAxis(fineVessel, fineEarth, 0.0);
 
         coarse.TimeScale = 1000.0;

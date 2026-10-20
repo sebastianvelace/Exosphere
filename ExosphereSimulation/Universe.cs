@@ -1332,6 +1332,13 @@ public class Universe
     public const double ResidualCoastPeriapsisMarginM = 10_000.0;
 
     /// <summary>
+    /// Largest free-molecular stagnation heat flux (W/m²) still treated as a residual coast,
+    /// about 1.5 × the solar constant. A 191 km parking orbit sees ~0.9 kW/m², which is
+    /// thermally negligible; a 500 W/m² gate capped every orbit below ~225 km at x3 warp.
+    /// </summary>
+    public const double ResidualCoastMaxHeatFluxWPerM2 = 2_000.0;
+
+    /// <summary>
     /// True for an idle vessel whose only off-rails requirement is residual thermosphere
     /// drag: no commands, outside the aerodynamic atmosphere, negligible q and heating, and
     /// a periapsis that cannot reach the atmosphere. Such a coast still integrates drag
@@ -1355,7 +1362,7 @@ public class Universe
         var surfaceVelocity = vessel.GetSurfaceVelocity(body);
         double speed = surfaceVelocity.Magnitude;
         if (0.5 * density * speed * speed >= 0.5
-            || vessel.ComputeStagnationHeatFlux(density, surfaceVelocity) >= 500.0)
+            || vessel.ComputeStagnationHeatFlux(density, surfaceVelocity) >= ResidualCoastMaxHeatFluxWPerM2)
             return false;
         try
         {
