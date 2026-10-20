@@ -165,6 +165,11 @@ Base tecnica cerrada en `main`:
   masa acoplada en el empuje del docking y Mach con el gas de cada planeta. Pendientes:
   inercia combinada del stack acoplado, datum render/masas inconsistente (bloquea el
   6-DoF) y Cd transónico >2 (requiere recalibrar EDL contra telemetría IFT).
+  Tercera etapa (jugabilidad): paracaídas armables con `[P]` en vuelo libre, el director
+  EDL solo engancha vehículos Starship, ascenso `[G]`/`[H]` en el reloj fijo de 20 ms y
+  sin que el stick ocioso pise al autopiloto, catálogo genérico del VAB coherente (tanques
+  llenos a su volumen, geometría declarada, motor chico de 60 kN; el Starter sube a
+  ~119 km en vez de estrellarse a 48 m) e inercia combinada del stack acoplado.
 - Impactos de superficie anclados al cuerpo ✅: un wreck destruido ya no queda
   congelado en el marco heliocentrico mientras la Tierra se aleja, ni parece
   rebotar a ~30 km/s. El anclaje rotante persiste en `SaveGameV2` y bajo warp.
@@ -430,7 +435,17 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
   end-to-end sin teleport. El mapa ya selecciona esta ruta para `moon`, centra
   la quema TLI finita sobre su época impulsiva, muestra la trayectoria Tierra–Luna, SOI, perilunio y
   estimación LOI, y rechaza ventanas de plano que exigirían TLI >4,5 km/s.
-  Pendiente: maniobra LOI ejecutable, ventana multi-día y dataset lunar fechado.
+  Apollo 8/11 vuelan TLI finita (J-2), MCC con guiado Lambert, LOI y circularización
+  finitas (SPS) sin asignar estado; corregido además el marco lunar, que omitía la
+  aceleración de la Tierra hacia el Sol (73 km de deriva por órbita lunar a x1).
+  Lanzamientos históricos: los hold-downs vuelven a soltarse (desde 217a01d ninguna misión
+  de campaña despegaba con [L]); S-II/S-IVB con guiado de inserción en lazo cerrado hasta
+  una órbita real (S-IC con giro gravitatorio, S-II/S-IVB con tiempo-a-ir y amortiguamiento
+  según autoridad TVC). Verificado en Godot con `--apollo8-mission`: inserción T+717 s,
+  TLI 307 s, MCC 27 s, LOI 107×310 km y circularización 107×110 km, en 55 min de reloj.
+  Warp en LEO baja (<225 km) ya no queda en x3. Pendiente: azimut de lanzamiento dirigido al plano lunar (hoy la órbita
+  volada se rota por script), TEI/entrada físicas,
+  ventana multi-día y dataset lunar fechado.
 - Nodos de maniobra arrastrables con mouse.
 
 ### Gameplay

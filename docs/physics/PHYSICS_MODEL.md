@@ -134,7 +134,46 @@ control boundary and calls `IPhysicsStepController.BeforePhysicsStep` before for
 The Godot `SimulationBridge` is only the adapter; the render loop no longer advances EDL timers
 or writes its flight commands. Consequently, 30, 60 and 120 FPS outer ticks produce the same
 guidance epochs and hold each command for one declared control interval. When EDL is inactive,
-the adapter does not reduce the scheduler's normal coast/warp step.
+the adapter does not reduce the scheduler's normal coast/warp step. The `[G]` ascent and `[H]`
+assist use the same clock, and an idle pilot stick does not overwrite an engaged autopilot's
+command between control epochs.
+
+Vessels integrated off rails work in their reference body's translating frame and subtract that
+body's full rail acceleration, summed along its parent chain (the Moon's frame includes Earth's
+acceleration toward the Sun). A 111 km lunar orbit integrated at real time holds within 241 m
+over one revolution (`LunarFrameAccelerationTests`).
+
+### Guided burns
+
+`ProgradeEnergyBurn`, `LambertGuidedBurn` and `PeriapsisCaptureBurn` (in `Flight/`) fly
+injections, course corrections and capture/circularization burns by writing only throttle and
+attitude. Apollo 8 and Apollo 11 use them for TLI, a mid-course correction, LOI and lunar
+circularization; `TranslunarInjectionScenarioTests` flies parking orbit to lunar orbit with no
+state assignment. Historical launches release their hold-downs under the shared
+`HoldDownReleasePolicy`. The Saturn V S-IC flies a pitch-over and then a zero-angle-of-attack
+gravity turn (`GravityTurnGuidance`); the S-II/S-IVB fly time-to-go `ClosedLoopInsertionGuidance`
+and cut off on the flown periapsis (`SaturnVAscentScenarioTests`: 181 x 195 km at T+714 s with
+~67 t left for TLI). The open-loop S-IC elevation program it replaced paid ~660 m/s of steering
+loss; transonic drag costs only ~35 m/s. The flown parking orbit is then rotated into the lunar
+plane by a scripted placement until launch-azimuth targeting exists, and TEI/entry remain
+scripted.
+
+Pointing loops are linear PD laws on the attitude error, so their damping depends on the
+vehicle's angular authority a: ω_n² = a·Kp and 2ζω_n = a·Kd. Gains tuned for a booster leave
+a low-authority upper stage underdamped; the S-IVB (~0.09 rad/s² of J-2 TVC) at Kd 1.2 sits
+at ζ ≈ 0.1, and a 30° / 0.3 rad/s separation transient grew into a saturated tumble that
+reached orbit with 28 t instead of 67 t. Upper stages size Kd with
+`AttitudeGuidance.DampingGainFor` from `Vessel.GetPitchYawAngularAuthority` (ζ ≈ 0.8).
+
+### Low-orbit time warp
+
+Low Earth orbits stay inside the residual thermosphere, so they are integrated off rails. An
+idle coast whose periapsis clears the aerodynamic boundary by 10 km, with q < 0.5 Pa and
+free-molecular stagnation heating below 2 kW/m² (`Universe.ResidualCoastMaxHeatFluxWPerM2`,
+about 1.5 × the solar constant), uses 2 s coast steps and full warp. A 191 km parking orbit
+sees ~0.9 kW/m²; the earlier 500 W/m² gate capped every orbit below ~225 km at x3.
+`ResidualThermosphereWarpTests` checks that coast steps reproduce the 20 ms drag decay at
+191 km and 400 km.
 
 ## Gravity and orbital mechanics
 
