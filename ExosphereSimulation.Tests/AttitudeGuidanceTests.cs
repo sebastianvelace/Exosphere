@@ -7,6 +7,17 @@ using Xunit;
 
 public sealed class AttitudeGuidanceTests
 {
+    [Theory]
+    [InlineData(0.087)]
+    [InlineData(0.5)]
+    public void DampingGainGivesTheRequestedLinearDampingRatio(double authority)
+    {
+        double kp = 2.3;
+        double kd = AttitudeGuidance.DampingGainFor(kp, authority, dampingRatio: 0.8);
+        double naturalFrequency = System.Math.Sqrt(authority * kp);
+        Assert.Equal(0.8, authority * kd / (2.0 * naturalFrequency), 9);
+    }
+
     [Fact]
     public void QuaternionErrorMapsToSemanticYawForAYUpVehicle()
     {

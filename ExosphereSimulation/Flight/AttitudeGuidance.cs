@@ -52,6 +52,21 @@ public static class AttitudeGuidance
     }
 
     /// <summary>
+    /// Damping gain giving the pointing loop a chosen damping ratio on a vehicle whose full
+    /// command yields <paramref name="angularAuthorityRadPerS2"/>. Linearised, the loop has
+    /// ω_n² = a·Kp and 2ζω_n = a·Kd, so Kd = 2ζ√(Kp/a). Gains tuned for a high-authority
+    /// booster leave a low-authority upper stage (S-IVB: ~0.09 rad/s²) at ζ ≈ 0.1, where a
+    /// staging transient can grow into a saturated tumble.
+    /// </summary>
+    public static double DampingGainFor(double proportionalGain, double angularAuthorityRadPerS2,
+        double dampingRatio = 0.8)
+    {
+        if (!(angularAuthorityRadPerS2 > 0.0) || !(proportionalGain > 0.0))
+            throw new ArgumentOutOfRangeException(nameof(angularAuthorityRadPerS2));
+        return 2.0 * dampingRatio * System.Math.Sqrt(proportionalGain / angularAuthorityRadPerS2);
+    }
+
+    /// <summary>
     /// Unit aim for a pitch program: <paramref name="elevationRad"/> above the local
     /// horizon, in the plane of <paramref name="localUp"/> and <paramref name="downrange"/>.
     /// Downrange is re-orthonormalized so geodetic vertical and a geodetic-horizon

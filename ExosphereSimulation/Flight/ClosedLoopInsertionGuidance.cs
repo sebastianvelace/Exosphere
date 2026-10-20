@@ -3,25 +3,20 @@ namespace Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 
 /// <summary>
-/// Closed-loop upper-stage insertion steering ("PEG-lite"): the vertical thrust component
-/// supports gravity minus centrifugal relief and drives the vertical speed toward a
-/// profile that flattens at the target altitude, while the rest of the thrust builds
-/// horizontal speed. It replaces open-loop pitch programs that cannot react to the actual
-/// stage performance. Pure function: it returns an aim direction and never writes state.
+/// Closed-loop upper-stage insertion steering with a time-to-go. The horizontal speed still
+/// to gain to circular velocity, divided by the available acceleration, sets t_go; the
+/// vertical acceleration is the linear profile that reaches the target altitude with zero
+/// climb rate exactly at t_go, plus gravity minus centrifugal relief. Thrust left over
+/// builds horizontal speed. This replaces open-loop pitch programs that cannot react to
+/// the actual stage performance. Pure function: it returns an aim direction only.
 /// </summary>
 public static class ClosedLoopInsertionGuidance
 {
-    /// <summary>Seconds over which the altitude error is converted into a climb rate.</summary>
-    public const double AltitudeTimeConstantSeconds = 60.0;
+    /// <summary>Shortest time-to-go used, so the law stays bounded near cutoff.</summary>
+    public const double MinimumTimeToGoSeconds = 10.0;
 
-    /// <summary>Seconds over which the vertical-speed error is corrected.</summary>
-    public const double ClimbRateTimeConstantSeconds = 25.0;
-
-    /// <summary>Largest commanded climb rate (m/s) while below the target altitude.</summary>
-    public const double MaximumClimbRateMps = 300.0;
-
-    /// <summary>Largest sine of the thrust elevation above the local horizontal.</summary>
-    public const double MaximumPitchSine = 0.6;
+    /// <summary>Largest sine of the thrust elevation above (or below) the local horizontal.</summary>
+    public const double MaximumPitchSine = 0.95;
 
     /// <param name="vessel">Thrusting vessel.</param>
     /// <param name="body">Central body.</param>
@@ -42,19 +37,23 @@ public static class ClosedLoopInsertionGuidance
             ? horizontalVelocity.Normalized
             : (downrange - up * downrange.Dot(up)).Normalized;
 
-        double gravity = body.GM / (radius * radius);
-        double centrifugal = horizontalVelocity.MagnitudeSquared / radius;
         double acceleration = vessel.GetMaximumThrust(body) / System.Math.Max(1.0, vessel.TotalMass);
         if (acceleration <= 0.0) return horizontal;
+        double gravity = body.GM / (radius * radius);
+        double centrifugal = horizontalVelocity.MagnitudeSquared / radius;
 
-        double altitude = body.GetAltitude(vessel.Position);
-        double targetClimbRate = System.Math.Clamp(
-            (targetAltitudeM - altitude) / AltitudeTimeConstantSeconds, -60.0, MaximumClimbRateMps);
-        double verticalAcceleration = gravity - centrifugal
-            + (targetClimbRate - verticalSpeed) / ClimbRateTimeConstantSeconds;
-        // Cap the upward pitch: a low-thrust upper stage should let the inherited climb rate
-        // decay while it builds horizontal speed, not fight gravity to hold altitude early.
-        double sine = System.Math.Clamp(verticalAcceleration / acceleration, -0.5, MaximumPitchSine);
+        double targetRadius = body.Radius + targetAltitudeM;
+        double circularSpeed = System.Math.Sqrt(body.GM / targetRadius);
+        double horizontalDeficit = System.Math.Max(0.0, circularSpeed - horizontalVelocity.Magnitude);
+        double timeToGo = System.Math.Max(MinimumTimeToGoSeconds, horizontalDeficit / acceleration);
+
+        // Linear vertical acceleration a(τ) = A + Bτ reaching Δh with zero final climb rate.
+        double altitudeError = targetAltitudeM - body.GetAltitude(vessel.Position);
+        double commandedVertical = 6.0 * altitudeError / (timeToGo * timeToGo)
+            - 4.0 * verticalSpeed / timeToGo;
+        double sine = System.Math.Clamp(
+            (commandedVertical + gravity - centrifugal) / acceleration,
+            -MaximumPitchSine, MaximumPitchSine);
         return (horizontal * System.Math.Sqrt(1.0 - sine * sine) + up * sine).Normalized;
     }
 

@@ -8,16 +8,21 @@ using Xunit;
 using Xunit.Abstractions;
 
 /// <summary>
-/// Apollo 8's AS-503 flown from LC-39A to a real parking orbit: the historical S-IC pitch
-/// program and staging times, then closed-loop insertion steering on the S-II and S-IVB
-/// until the integrated periapsis clears the atmosphere. No state is assigned.
+/// Apollo 8's AS-503 flown from LC-39A to a real parking orbit: an S-IC pitch-over and
+/// zero-AoA gravity turn with the historical staging times, then time-to-go insertion
+/// steering on the S-II and S-IVB until the integrated periapsis clears the atmosphere.
+/// No state is assigned. The disturbed case reproduces the S-II separation transient seen
+/// in the game (30° off the aim and ~0.2 rad/s): with booster-tuned damping the low-authority
+/// S-IVB fell into a saturated tumble and reached orbit with ~28 t instead of ~67 t.
 /// </summary>
 public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
 {
     private const double MinimumParkingPeriapsisM = 180_000.0;
 
-    [Fact]
-    public void ClosedLoopUpperStagesReachTheParkingOrbit()
+    [Theory]
+    [InlineData(0.0, 0.0)]
+    [InlineData(30.0, 0.3)]
+    public void ClosedLoopUpperStagesReachTheParkingOrbit(double separationErrorDeg, double separationRateRadPerS)
     {
         var root = DataDirectory();
         var catalog = PartCatalog.LoadFromDirectory(Path.Combine(root, "parts"));
@@ -56,13 +61,12 @@ public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
             }
 
             double elapsed = universe.CurrentTime - liftoff;
-            var localUp = earth.GetGeodeticUp(vessel.Position);
             var downrange = earth.GetEastDirection(vessel.Position);
             Vector3d aim;
             if (!sicSeparated)
             {
-                aim = AttitudeGuidance.AimFromElevation(localUp, downrange,
-                    Apollo8FlightProfile.ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD);
+                aim = GravityTurnGuidance.ComputeAim(vessel, earth, downrange, elapsed,
+                    Apollo8FlightProfile.PitchOverDegrees, Apollo8FlightProfile.PitchOverEndSeconds);
                 vessel.Parts.Parts.FirstOrDefault(p => p.Definition.HasVehicleRole("sic_engine_cluster"))
                     ?.SelectEngineCount(elapsed >= Apollo8FlightProfile.SicCenterEngineCutoffSeconds ? 4 : 5);
                 vessel.Throttle = elapsed < Apollo8FlightProfile.SicOutboardCutoffSeconds ? 1.0 : 0.0;
@@ -87,6 +91,10 @@ public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
                 {
                     universe.AddVessel(vessel.Stage()!);
                     siiSeparated = true;
+                    vessel.Orientation = (Quaterniond.FromAxisAngle(vessel.Orientation.Rotate(Vector3d.Right),
+                        separationErrorDeg * MathUtils.DEG_TO_RAD) * vessel.Orientation).Normalize();
+                    vessel.AngularVelocity += vessel.Orientation.Rotate(
+                        new Vector3d(separationRateRadPerS, 0.0, 0.5 * separationRateRadPerS));
                 }
                 vessel.Throttle = siiSeparated || elapsed < Apollo8FlightProfile.SiiCutoffSeconds ? 1.0 : 0.0;
                 if (siiSeparated && ClosedLoopInsertionGuidance.IsInserted(
@@ -97,8 +105,11 @@ public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
                     insertionTime = elapsed;
                 }
             }
+            double damping = sicSeparated
+                ? Apollo8FlightProfile.UpperStageDampingGain(vessel.GetPitchYawAngularAuthority(earth))
+                : 1.2;
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(vessel.Orientation,
-                Vector3d.Up, aim, vessel.AngularVelocity, proportionalGain: 2.3, dampingGain: 1.2);
+                Vector3d.Up, aim, vessel.AngularVelocity, proportionalGain: 2.3, dampingGain: damping);
             universe.Tick(0.02);
         }
 
@@ -114,7 +125,7 @@ public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
         // Historical S-IVB first cutoff: T+685 s with roughly 70 t left for TLI.
         Assert.InRange(insertionTime, 560.0, 800.0);
         Assert.InRange(orbit.Apoapsis - earth.Radius, MinimumParkingPeriapsisM, 260_000.0);
-        Assert.True(sivbPropellant > 50_000.0, $"Only {sivbPropellant / 1000:F1} t left for TLI.");
+        Assert.True(sivbPropellant > 60_000.0, $"Only {sivbPropellant / 1000:F1} t left for TLI.");
     }
 
     private static string DataDirectory()

@@ -44,6 +44,34 @@ public static class Apollo8FlightProfile
     public const double EntryInterfaceAltitudeM = 121_920.0;
     public const int HistoricalLunarRevolutions = 10;
 
+    /// <summary>End of the S-IC pitch-over; afterwards the boost flies a zero-AoA gravity turn.</summary>
+    public const double PitchOverEndSeconds = 42.0;
+
+    /// <summary>Elevation reached at <see cref="PitchOverEndSeconds"/> (degrees).</summary>
+    public const double PitchOverElevationDegrees = 76.0;
+
+    /// <summary>
+    /// S-IC pitch-over: vertical rise to T+12 s, then a linear kick to
+    /// <see cref="PitchOverElevationDegrees"/>. Simulator calibration for the gravity turn
+    /// that follows (S-IC cutoff ~59 km / 2.56 km/s; flight: 67 km / 2.75 km/s).
+    /// </summary>
+    public static double PitchOverDegrees(double elapsedSeconds)
+    {
+        if (!double.IsFinite(elapsedSeconds))
+            throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
+        if (elapsedSeconds <= 12.0) return 90.0;
+        double fraction = System.Math.Clamp(
+            (elapsedSeconds - 12.0) / (PitchOverEndSeconds - 12.0), 0.0, 1.0);
+        return 90.0 - (90.0 - PitchOverElevationDegrees) * fraction;
+    }
+
+    /// <summary>
+    /// S-II/S-IVB pointing damping for the live pitch/yaw authority (ζ ≈ 0.8 at Kp 2.3). The
+    /// S-IC's 1.2 is kept as a floor; the S-IVB (~0.09 rad/s²) needs roughly 8.
+    /// </summary>
+    public static double UpperStageDampingGain(double pitchYawAuthorityRadPerS2) =>
+        System.Math.Max(1.2, AttitudeGuidance.DampingGainFor(2.3, pitchYawAuthorityRadPerS2));
+
     public static double ElevationDegrees(double elapsedSeconds)
     {
         if (!double.IsFinite(elapsedSeconds))

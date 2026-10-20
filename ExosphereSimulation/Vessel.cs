@@ -793,6 +793,18 @@ public class Vessel
     private const double ReactionControlAuthority = 0.01;
 
     /// <summary>
+    /// Pitch/yaw angular acceleration (rad/s²) a full attitude command produces at the
+    /// current ambient pressure: the live TVC envelope, floored by reaction control.
+    /// </summary>
+    public double GetPitchYawAngularAuthority(CelestialBody body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        double pressure = body.Atmosphere?.GetPressure(GetAltitude(body)) ?? 0.0;
+        return System.Math.Max(ReactionControlAuthority,
+            Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).X);
+    }
+
+    /// <summary>
     /// Advances stateful propulsion/control preparation exactly once while leaving attitude
     /// integration to the coupled 6-DoF path. The PartGraph physics cache remains open until
     /// <see cref="EndCoupledPhysicsStep"/> so every RK4 stage reads the same prepared engine
