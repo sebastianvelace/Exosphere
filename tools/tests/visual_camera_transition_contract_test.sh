@@ -23,7 +23,7 @@ rg -q '_presentationDistanceTarget = null' "$camera" \
   || fail "manual camera input cannot clear the presentation distance target"
 rg -q 'camera\.Position = surfaceFrame \* _smoothedFramePosition' "$camera" \
   || fail "camera left the floating-origin surface frame"
-rg -q 'Vector3 lookTarget = surfaceFrame \* _smoothedFrameTarget' "$camera" \
+rg -q '(Vector3 )?lookTarget = surfaceFrame \* _smoothedFrameTarget' "$camera" \
   || fail "look target left the floating-origin surface frame"
 
 if rg -q 'camera\.Position = .*_distance' "$camera"; then
