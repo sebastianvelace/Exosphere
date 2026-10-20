@@ -45,6 +45,9 @@ APOLLO11_HARDWARE=0
 OWNS_HARNESS=0
 OWNS_LOCK=0
 CLEANUP_DONE=0
+FAST_FORWARD_ASCENT=1
+UNTIL_PHASE=""
+GODOT_PIPELINE_PID=""
 
 usage() {
   cat <<'EOF'
@@ -62,6 +65,9 @@ Options:
   --gemini-docking  Seed and capture Gemini 8 docked to Agena 5003.
   --apollo8     Seed Apollo 8 / Saturn V AS-503 at LC-39A.
   --apollo8-lunar  Seed CSM-103 in its historical low lunar orbit.
+  --apollo8-mission
+                Fly Apollo 8 from the pad through ascent, TLI, mid-course correction and LOI
+                with the historical director alone, and finish in lunar orbit.
   --apollo11    Validate Apollo 11 / AS-506 hardware at LC-39A (launch mode by default).
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
@@ -133,6 +139,13 @@ Options:
   --out-dir DIR PNG output directory (default: /tmp/exo_play)
   --log FILE    Telemetry log path (default: /tmp/exo_play.log)
   --skip-build  Skip the simulation-library prebuild (the Godot project is still built)
+  --no-fast-forward
+                Keep --apollo8-mission powered ascent at the director's warp. By default the
+                harness raises it to the allowed maximum: guidance runs on the fixed 20 ms
+                clock, so only wall time changes.
+  --until-phase PHASE
+                End --apollo8-mission successfully once the mission enters PHASE (for example
+                ORBIT or TLI) instead of flying on to lunar orbit; for fast segment checks.
   -h, --help    Show this help
 
 Environment:
@@ -194,6 +207,12 @@ while [[ $# -gt 0 ]]; do
       VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
       shift ;;
     --apollo8)
+      VARIANT_FILE="apollo8_saturn5_as503_1968.json"
+      VARIANT_SITE="kennedy"
+      VARIANT_PROFILE="apollo8-lunar-orbit-return"
+      shift ;;
+    --apollo8-mission)
+      MODE="apollo8_mission"
       VARIANT_FILE="apollo8_saturn5_as503_1968.json"
       VARIANT_SITE="kennedy"
       VARIANT_PROFILE="apollo8-lunar-orbit-return"
@@ -284,6 +303,8 @@ while [[ $# -gt 0 ]]; do
     --out-dir) require_option_value "$1" "${2-}"; OUT_DIR="$2"; OUT_DIR_SET=1; shift 2 ;;
     --log) require_option_value "$1" "${2-}"; LOG="$2"; LOG_SET=1; shift 2 ;;
     --skip-build) SKIP_BUILD=1; shift ;;
+    --no-fast-forward) FAST_FORWARD_ASCENT=0; shift ;;
+    --until-phase) require_option_value "$1" "${2-}"; UNTIL_PHASE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -308,6 +329,20 @@ case "$RENDERER" in
     exit 2
     ;;
 esac
+
+if [[ -n "$UNTIL_PHASE" ]]; then
+  if [[ "$MODE" != "apollo8_mission" ]]; then
+    echo "ERROR: --until-phase is only valid with --apollo8-mission" >&2
+    exit 2
+  fi
+  case "$UNTIL_PHASE" in
+    LIFTOFF|ASCENT_SH|MAX_Q|SEPARATION|ASCENT_SHIP|ORBIT|TLI|LUNAR_APPROACH|LOI) ;;
+    *)
+      echo "ERROR: --until-phase must be LIFTOFF, ASCENT_SH, MAX_Q, SEPARATION, ASCENT_SHIP, ORBIT, TLI, LUNAR_APPROACH or LOI" >&2
+      exit 2
+      ;;
+  esac
+fi
 
 if [[ ! "${EDL_YAW_DEG:-0}" =~ ^-?[0-9]+([.][0-9]+)?$ ]] \
   || ! awk -v yaw="${EDL_YAW_DEG:-0}" 'BEGIN { exit !(yaw >= -180.0 && yaw <= 180.0) }'; then
@@ -466,6 +501,7 @@ write_run_summary() {
       grep -aE '^(SUMMARY|PARTIAL|FAIL|GAP|FALLBACK) ' "$LOG" | tail -20 || true
       grep -aE '^(ASCENT_METRICS|TRANSITION_ASCENT) ' "$LOG" | tail -8 || true
       grep -a '^TRACE_ASCENT ' "$LOG" | tail -1 || true
+      grep -a '^TRACE_MISSION ' "$LOG" | tail -1 || true
       grep -aE 'failures=[^ ]*[A-Z][A-Z_]+:[1-9]' "$LOG" | tail -1 || true
     fi
   } > "$OUT_DIR/run-summary.txt"
@@ -475,7 +511,7 @@ print_failure_diagnostics() {
   echo "visual_playtest: diagnostics mode=$MODE out=$OUT_DIR log=$LOG" >&2
   if [[ -f "$LOG" ]]; then
     echo "visual_playtest: last state evidence:" >&2
-    grep -aE '^(CAPTURE|TRACE_ASCENT|TRANSITION_ASCENT|ASCENT_METRICS|TRACE_FULL|TRACE |FAIL|GAP|PARTIAL|FALLBACK|SUMMARY)' "$LOG" \
+    grep -aE '^(CAPTURE|TRACE_ASCENT|TRANSITION_ASCENT|ASCENT_METRICS|TRACE_FULL|TRACE_MISSION|TRACE |APOLLO8_MISSION|FAIL|GAP|PARTIAL|FALLBACK|SUMMARY)' "$LOG" \
       | tail -25 >&2 || true
   else
     echo "visual_playtest: telemetry log was not created" >&2
@@ -516,16 +552,31 @@ run_godot() {
 
   echo "visual_playtest: launch renderer=$RENDERER renderer_args=${GODOT_RENDERER_ARGS[*]}" \
     | tee -a "$CONSOLE_LOG"
+  # Run the pipeline in the background and wait for it: bash defers traps while a
+  # foreground child runs, so an interrupted harness kept Godot alive and left
+  # project.godot dirty until the whole flight finished. `wait` returns on a signal.
   if [[ -n "$EXTERNAL_DISPLAY" ]]; then
-    DISPLAY="$EXTERNAL_DISPLAY" EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
-      "${godot_args[@]}" 2>&1 | tee -a "$CONSOLE_LOG" || godot_status=$?
+    (DISPLAY="$EXTERNAL_DISPLAY" EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" \
+      "${godot_args[@]}" 2>&1 | tee -a "$CONSOLE_LOG") &
   else
-    xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" env \
+    (xvfb-run -a -s "-screen 0 ${RESOLUTION}x24" env \
       EXOSPHERE_PLAYTEST_TOKEN="$RUN_TOKEN" "${godot_args[@]}" \
-      2>&1 | tee -a "$CONSOLE_LOG" || godot_status=$?
+      2>&1 | tee -a "$CONSOLE_LOG") &
   fi
+  GODOT_PIPELINE_PID=$!
+  wait "$GODOT_PIPELINE_PID" || godot_status=$?
+  GODOT_PIPELINE_PID=""
   printf 'RENDERER name=%s args=%s\n' "$RENDERER" "${GODOT_RENDERER_ARGS[*]}" >> "$LOG"
   return "$godot_status"
+}
+
+# Signal a process and all of its descendants, deepest first.
+kill_process_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    kill_process_tree "$child"
+  done
+  kill -TERM "$pid" 2>/dev/null || true
 }
 
 cleanup() {
@@ -535,6 +586,10 @@ cleanup() {
   fi
   CLEANUP_DONE=1
   set +e
+  if [[ -n "$GODOT_PIPELINE_PID" ]]; then
+    kill_process_tree "$GODOT_PIPELINE_PID"
+    wait "$GODOT_PIPELINE_PID" 2>/dev/null
+  fi
   local status="FAIL"
   if [[ $ec -eq 130 || $ec -eq 143 ]]; then
     status="PARTIAL"
@@ -641,7 +696,9 @@ public partial class _PlaytestShot : Node
     const double FluxPeak = 6.0e5;
     const int SettleFrames = 4;
     const double MaxRuntimeSec = ${MAX_RUNTIME_SEC}.0;
-    const double AscentFallbackSec = 720.0;
+    // Starship inserts near T+500 s; the Saturn V's historical S-IVB cutoff is T+685 s
+    // after a countdown, and a physically flown insertion can run tens of seconds later.
+    const double AscentFallbackSec = 900.0;
     // Keep these runtime fields rather than compile-time constants. A matrix mode that
     // does not request a visual override must still compile the shared branch without
     // CS0162 unreachable-code warnings in the temporary harness.
@@ -672,6 +729,10 @@ public partial class _PlaytestShot : Node
     bool _ascentEngaged, _deorbitStarted, _deorbitDone, _ascentFallbackUsed;
     bool _flight14PayloadVisualSeeded;
     bool _flight14PayloadGroupSeeded;
+    MissionPhase? _apollo8MissionLastPhase;
+    ulong _missionTraceWallMs;
+    static readonly bool _fastForwardAscent = ${FAST_FORWARD_ASCENT} == 1;
+    const string UntilPhase = "${UNTIL_PHASE}";
     int _flight14PayloadGroupCaptureStage;
     Vector3d _flight14PayloadGroupFocusOffsetMetres;
     Vector3d[] _flight14PayloadGroupSatelliteOffsetsMetres = [];
@@ -1627,13 +1688,85 @@ public partial class _PlaytestShot : Node
                 $"ACTION start {bridge.ActiveFlightProfileId} historical countdown");
             _log.Flush();
         }
-        else if (_pad && !_ascentEngaged && AscentController.Instance != null)
+        else if (_pad && !_ascentEngaged && _mode != "apollo8_mission"
+            && AscentController.Instance != null)
         {
             AscentController.Instance.Engage();
             _ascentEngaged = true;
             _ascentStartedSimulationTime = universe.CurrentTime;
             _log.WriteLine("ACTION engage AscentController [G] autopilot");
             _log.Flush();
+        }
+
+        if (_mode == "apollo8_mission")
+        {
+            // The historical director owns the whole flight; the harness only observes.
+            var missionPhase = MissionManager.Instance?.Phase;
+            if (missionPhase != _apollo8MissionLastPhase)
+            {
+                _apollo8MissionLastPhase = missionPhase;
+                var dominantBody = universe.GetDominantBody(vessel.Position);
+                _log.WriteLine($"APOLLO8_MISSION phase={missionPhase} t={universe.CurrentTime:F1} "
+                    + $"body={dominantBody.Id} alt={vessel.GetAltitude(dominantBody):F0}");
+                _log.Flush();
+            }
+            // Periodic state evidence: a long mission that hits the wall-clock budget must
+            // still show where it was, how fast it was advancing and why warp was limited.
+            ulong traceNowMs = Time.GetTicksMsec();
+            if (traceNowMs - _missionTraceWallMs >= 15_000)
+            {
+                _missionTraceWallMs = traceNowMs;
+                var traceBody = universe.GetDominantBody(vessel.Position);
+                var traceRel = vessel.Position - traceBody.Position;
+                var traceVel = vessel.Velocity - traceBody.Velocity;
+                double traceEnergy = 0.5 * traceVel.MagnitudeSquared - traceBody.GM / traceRel.Magnitude;
+                var traceOrbit = OrbitalElements.FromStateVector(traceRel, traceVel, traceBody.GM,
+                    traceBody.Id, universe.CurrentTime);
+                var sched = universe.LastSchedulerTelemetry;
+                var traceNose = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+                _log.WriteLine($"TRACE_MISSION wall={traceNowMs / 1000.0:F0} t={universe.CurrentTime:F1} "
+                    + $"phase={MissionManager.Instance?.Phase} body={traceBody.Id} "
+                    + $"alt={vessel.GetAltitude(traceBody):F0} spd={traceVel.Magnitude:F1} "
+                    + $"energy={traceEnergy:F0} pe={(traceOrbit.Periapsis - traceBody.Radius) / 1000:F1}km "
+                    + $"e={traceOrbit.Eccentricity:F4} throttle={vessel.Throttle:F2} "
+                    + $"mass={vessel.TotalMass:F0} rails={vessel.IsOnRails} warp={bridge.WarpIndex}/{bridge.MaxAllowedWarpIndex} "
+                    + $"branch={sched.Branch} cap={sched.EffectiveStepCap:F3} simPerFrame={sched.SimulatedSeconds:F3} "
+                    + $"noseUp={traceNose.Dot(traceRel.Normalized):F3} noseVel={traceNose.Dot(traceVel.Normalized):F3} "
+                    + $"rate={vessel.AngularVelocity.Magnitude:F4} cmd={vessel.PitchYawRoll.Magnitude:F3} sas={vessel.SASEnabled}");
+                _log.Flush();
+            }
+            // Powered ascent guidance runs on the fixed 20 ms control clock, so warp changes
+            // only wall time, never the flown trajectory. Coasts and burns stay under the
+            // director's own warp choice: it uses warp to sequence ignition times.
+            if (_fastForwardAscent
+                && missionPhase is MissionPhase.ASCENT_SH or MissionPhase.MAX_Q
+                    or MissionPhase.SEPARATION or MissionPhase.ASCENT_SHIP
+                && bridge.WarpIndex < bridge.MaxAllowedWarpIndex)
+                bridge.SetWarpIndex(bridge.MaxAllowedWarpIndex);
+            if (UntilPhase.Length > 0 && missionPhase?.ToString() == UntilPhase)
+            {
+                Finish("APOLLO8_MISSION_PHASE_REACHED");
+                return;
+            }
+            if (vessel.IsDestroyed)
+            {
+                Finish("APOLLO8_MISSION_VEHICLE_LOST");
+                return;
+            }
+            if (missionPhase == MissionPhase.LUNAR_ORBIT && !_orbitBeauty && _pendingSlug == null)
+            {
+                var lunar = universe.GetBody("moon")!;
+                var lunarOrbit = OrbitalElements.FromStateVector(vessel.Position - lunar.Position,
+                    vessel.Velocity - lunar.Velocity, lunar.GM, lunar.Id, universe.CurrentTime);
+                _log.WriteLine($"APOLLO8_MISSION_LUNAR_ORBIT periluneKm={(lunarOrbit.Periapsis - lunar.Radius) / 1000:F1} "
+                    + $"apoluneKm={(lunarOrbit.Apoapsis - lunar.Radius) / 1000:F1} e={lunarOrbit.Eccentricity:F4}");
+                _log.Flush();
+                QueueCapture("apollo8_mission_lunar_orbit");
+                _orbitBeauty = true;
+            }
+            if (_orbitBeauty && _pendingSlug == null)
+                Finish("APOLLO8_MISSION_LUNAR_ORBIT_OK");
+            return;
         }
 
         if (_mode is ("full" or "ascent")
@@ -6264,6 +6397,19 @@ PYCOVERAGE
       echo "ERROR: missing normal-flow telemetry (demo must not satisfy this gate)" >&2
       return 1
     fi
+  elif [[ "$MODE" == "apollo8_mission" && -n "$UNTIL_PHASE" ]]; then
+    if ! grep -q 'SUMMARY reason=APOLLO8_MISSION_PHASE_REACHED' "$LOG" \
+      || ! grep -q "APOLLO8_MISSION phase=${UNTIL_PHASE} " "$LOG"; then
+      echo "ERROR: the Apollo 8 director did not reach mission phase $UNTIL_PHASE" >&2
+      return 1
+    fi
+  elif [[ "$MODE" == "apollo8_mission" ]]; then
+    if ! grep -q 'SUMMARY reason=APOLLO8_MISSION_LUNAR_ORBIT_OK' "$LOG" \
+      || ! grep -Eq 'APOLLO8_MISSION_LUNAR_ORBIT periluneKm=[0-9.]+ apoluneKm=[0-9.]+ e=0\.[0-9]+' "$LOG" \
+      || [[ ! -f "$OUT_DIR/exo_play_apollo8_mission_lunar_orbit.png" ]]; then
+      echo "ERROR: the Apollo 8 director did not fly the stack into a bound lunar orbit" >&2
+      return 1
+    fi
   elif [[ "$MODE" == "flight14_payload_group" ]]; then
     if [[ ! -f "$OUT_DIR/exo_play_flight14_payload_group_wide.png" \
       || ! -f "$OUT_DIR/exo_play_flight14_payload_inspection_01.png" \
@@ -7116,6 +7262,10 @@ elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "flight14_payload" ]]; then
   echo "visual_playtest: Flight 14 estimated payload flat-pack capture OK — visual review still required"
+elif [[ "$MODE" == "apollo8_mission" && -n "$UNTIL_PHASE" ]]; then
+  echo "visual_playtest: Apollo 8 director reached $UNTIL_PHASE (segment check, not a full mission)"
+elif [[ "$MODE" == "apollo8_mission" ]]; then
+  echo "visual_playtest: Apollo 8 flown from the pad into lunar orbit by the historical director"
 elif [[ "$MODE" == "flight14_payload_group" ]]; then
   echo "visual_playtest: seeded Flight 14 wide and per-payload inspection frames captured — composition review required; no physics replay"
 elif [[ "$MODE" == "flight14_deployment" ]]; then
