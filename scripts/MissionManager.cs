@@ -42,6 +42,13 @@ public partial class MissionManager : Node
     public MissionPhase Phase        { get; private set; } = MissionPhase.PRE_LAUNCH;
     public double       CountdownTimer { get; private set; } = 10.0;
     public bool         IsCountingDown { get; private set; }
+
+    /// <summary>
+    /// Simulation time at which a held launch-window countdown resumes, or NaN when no hold
+    /// is active. Lunar profiles hold on the pad (at warp) until their window opens.
+    /// </summary>
+    public double LaunchWindowCountdownStart { get; private set; } = double.NaN;
+    public bool IsHoldingForLaunchWindow => double.IsFinite(LaunchWindowCountdownStart);
     public bool         IsCrashed => Phase == MissionPhase.CRASHED;
 
     [Signal] public delegate void PhaseChangedEventHandler(string phaseName);
@@ -148,8 +155,27 @@ public partial class MissionManager : Node
 
     public void StartCountdown()
     {
-        if (Phase != MissionPhase.PRE_LAUNCH) return;
-        CountdownTimer  = 10.0;
+        if (Phase != MissionPhase.PRE_LAUNCH || IsHoldingForLaunchWindow) return;
+        var universe = SimulationBridge.Instance?.Universe;
+        if (universe != null
+            && HistoricalFlightProfileController.Instance?.PlanLaunchWindow(
+                universe.CurrentTime + CountdownSeconds) is double liftoff
+            && liftoff - CountdownSeconds > universe.CurrentTime + 1.0)
+        {
+            LaunchWindowCountdownStart = liftoff - CountdownSeconds;
+            GD.Print($"[Mission] Launch-window hold: countdown resumes in "
+                + $"{(LaunchWindowCountdownStart - universe.CurrentTime) / 3600.0:F2} h.");
+            return;
+        }
+        BeginCountdown();
+    }
+
+    private const double CountdownSeconds = 10.0;
+
+    private void BeginCountdown()
+    {
+        LaunchWindowCountdownStart = double.NaN;
+        CountdownTimer  = CountdownSeconds;
         IsCountingDown  = true;
         _maxQTriggered  = false;
         _lastTickSecond = -1;
@@ -221,6 +247,27 @@ public partial class MissionManager : Node
         if (bridge == null || universe == null) return;
 
         DispatchPendingMissionCallbacks();
+
+        if (IsHoldingForLaunchWindow)
+        {
+            // Pad hold at warp: step down as the window approaches so a long frame cannot
+            // overshoot the countdown start (pad holds already allow high warp).
+            double remaining = LaunchWindowCountdownStart - universe.CurrentTime;
+            if (remaining <= 0.0 || Phase != MissionPhase.PRE_LAUNCH)
+            {
+                bridge.SetWarpIndex(0);
+                if (Phase == MissionPhase.PRE_LAUNCH) BeginCountdown();
+                else LaunchWindowCountdownStart = double.NaN;
+            }
+            else
+            {
+                int warp = 0;
+                while (warp + 1 < SimulationBridge.WarpLevels.Length
+                    && SimulationBridge.WarpLevels[warp + 1] * 0.5 < 0.25 * remaining)
+                    warp++;
+                bridge.SetWarpIndex(warp);
+            }
+        }
 
         if (bridge.Flight14Preview is { } preview)
         {

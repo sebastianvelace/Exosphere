@@ -71,6 +71,14 @@ public partial class HistoricalFlightProfileController : Node
     private PeriapsisCaptureBurn? _apolloLunarBurn;
     private double _apolloLunarBurnLastTime = double.NaN;
     private ProgradeEnergyBurn? _apolloTliBurn;
+    // Planned at countdown request (before Engage resets the profile) and adopted at liftoff.
+    private LunarLaunchWindowSolution? _pendingApolloLaunchWindow;
+    private LunarLaunchWindowSolution? _apolloLaunchWindow;
+    private ProgradeEnergyBurn? _apolloTeiBurn;
+    private double _apolloTeiIgnitionTime;
+    private LambertGuidedBurn? _apolloTransearthBurn;
+    private int _apolloTransearthCorrections;
+    private double _apolloEarthReturnTime = double.NaN;
     private LambertGuidedBurn? _apolloMidcourseBurn;
     private double _apolloGuidedBurnLastTime = double.NaN;
     private bool _apolloMidcourseComplete;
@@ -112,6 +120,35 @@ public partial class HistoricalFlightProfileController : Node
                     elapsed,
                     profileId == MercuryAtlasFlightProfile.Id);
         }
+    }
+
+    /// <summary>
+    /// Plans the next Apollo lunar launch window for liftoff no earlier than
+    /// <paramref name="earliestLiftoffTime"/> and returns its liftoff time, or null for
+    /// profiles without one (the countdown then starts immediately).
+    /// </summary>
+    public double? PlanLaunchWindow(double earliestLiftoffTime)
+    {
+        _pendingApolloLaunchWindow = null;
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.ActiveFlightProfileId is not (Apollo8FlightProfile.Id or Apollo11FlightProfile.Id))
+            return null;
+        var earth = bridge.Universe.GetBody("earth");
+        var moon = bridge.Universe.GetBody("moon");
+        if (earth == null || moon?.OrbitalElements == null || bridge.LaunchSiteOrNull is not { } site)
+            return null;
+        _pendingApolloLaunchWindow = LunarLaunchWindow.FindNext(earth, moon.OrbitalElements, site,
+            earliestLiftoffTime, Apollo8FlightProfile.LoiIgnitionSeconds,
+            Apollo8FlightProfile.MinimumLaunchAzimuthDegrees,
+            Apollo8FlightProfile.MaximumLaunchAzimuthDegrees);
+        if (_pendingApolloLaunchWindow is not { } window)
+        {
+            GD.PrintErr("[HISTORICAL] No Apollo launch window within 24 h; launching due east.");
+            return null;
+        }
+        GD.Print($"[HISTORICAL] Apollo launch window: azimuth {window.AzimuthDegrees:F1} deg, "
+            + $"liftoff in {(window.LiftoffTime - bridge.Universe.CurrentTime) / 3600.0:F2} h.");
+        return window.LiftoffTime;
     }
 
     public bool EngageIfSupported()
@@ -171,6 +208,9 @@ public partial class HistoricalFlightProfileController : Node
         _apolloMidcourseBurn = null;
         _apolloMidcourseComplete = false;
         _apolloLunarBurn = null;
+        _apolloLaunchWindow = _apolloProfile ? _pendingApolloLaunchWindow : null;
+        ResetApolloReturn();
+        _pendingApolloLaunchWindow = null;
         vessel.SASEnabled = false;
         bridge.SetWarpIndex(0);
         if (_apollo11Tde)
@@ -281,6 +321,9 @@ public partial class HistoricalFlightProfileController : Node
         _geminiProfile = false;
         _apolloProfile = true;
         _apollo11Tde = false;
+        // The launch window is not persisted: a resumed ascent keeps the scripted fallback.
+        _apolloLaunchWindow = null;
+        ResetApolloReturn();
         _startTime = bridge.Universe.CurrentTime
             - System.Math.Max(0.0, elapsedSeconds);
         _apolloSicSeparated = !vessel.Parts.Parts.Any(part =>
@@ -557,7 +600,11 @@ public partial class HistoricalFlightProfileController : Node
         if (moon == null) return;
 
         CelestialBody dominant = universe.GetDominantBody(vessel.Position);
-        Vector3d downrange = bridge.GetLaunchHeadingDirection();
+        // A planned window fixes the parking-orbit plane: downrange is the in-plane horizontal.
+        Vector3d? launchPlane = _apolloLaunchWindow?.PlaneNormal;
+        Vector3d downrange = launchPlane is { } plane
+            ? plane.Cross(earth.GetGeodeticUp(vessel.Position)).Normalized
+            : bridge.GetLaunchHeadingDirection();
 
         if (!_apolloSicSeparated)
         {
@@ -589,7 +636,7 @@ public partial class HistoricalFlightProfileController : Node
 
         if (!_apolloSiiSeparated)
         {
-            GuideApolloInsertion(vessel, earth, downrange);
+            GuideApolloInsertion(vessel, earth, downrange, launchPlane);
             vessel.Throttle = elapsed
                 < Apollo8FlightProfile.SiiCutoffSeconds ? 1.0 : 0.0;
             if (!_towerJettisoned
@@ -622,29 +669,38 @@ public partial class HistoricalFlightProfileController : Node
         {
             // Closed-loop S-IVB insertion: cut off once the flown orbit clears the
             // atmosphere, not at the historical clock.
-            GuideApolloInsertion(vessel, earth, downrange);
+            GuideApolloInsertion(vessel, earth, downrange, launchPlane);
             vessel.Throttle = 1.0;
             if (ClosedLoopInsertionGuidance.IsInserted(
                     vessel, earth, ApolloParkingPeriapsisAltitudeM, universe.CurrentTime))
             {
                 vessel.Throttle = 0.0;
                 vessel.PitchYawRoll = Vector3d.Zero;
-                // The flown orbit follows the launch heading; rotating it into the lunar
-                // plane remains a scripted step until launch-azimuth targeting exists.
-                PlaceInEarthParkingOrbit(
-                    vessel, earth, moon, downrange, universe.CurrentTime);
                 _apolloParkingOrbit = true;
                 MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
-                _apolloLunarPlan = PlanApolloLunarTransfer(
-                    universe,
-                    vessel,
-                    earth,
-                    moon,
-                    _startTime + Apollo8FlightProfile.TliIgnitionSeconds);
+                // A windowed launch flies straight into the lunar plane: TLI is planned from
+                // the flown orbit. Without a window (resumed ascent, no window in 24 h) the
+                // flown plane is rotated into the lunar plane by script, and says so.
+                _apolloLunarPlan = _apolloLaunchWindow != null
+                    ? TryPlanApolloLunarTransfer(universe, vessel, earth, moon)
+                    : null;
+                if (_apolloLunarPlan == null)
+                {
+                    GD.PrintErr("[HISTORICAL] Parking orbit outside the lunar plane; "
+                        + "applying the scripted plane correction.");
+                    PlaceInEarthParkingOrbit(
+                        vessel, earth, moon, downrange, universe.CurrentTime);
+                    _apolloLunarPlan = PlanApolloLunarTransfer(
+                        universe,
+                        vessel,
+                        earth,
+                        moon,
+                        _startTime + Apollo8FlightProfile.TliIgnitionSeconds);
+                }
                 bridge.SetWarpIndex(8);
                 GD.Print(
                     "[HISTORICAL] Apollo 8 Earth parking orbit; "
-                    + "TLI solution loaded.");
+                    + $"TLI solution loaded ({_apolloLunarPlan.InjectionDeltaVMag:F0} m/s).");
             }
             return;
         }
@@ -723,7 +779,13 @@ public partial class HistoricalFlightProfileController : Node
                 GD.Print("[HISTORICAL] CSM-103 separated from S-IVB/LTA-B.");
             }
         }
-        if (!_apolloCsmSeparated) return;
+        if (!_apolloCsmSeparated)
+        {
+            // Re-assert every frame: right after cutoff the spooling J-2 briefly limits warp,
+            // and a one-shot request left the post-TLI coast at x3.
+            bridge.SetWarpIndex(8);
+            return;
+        }
 
         if (_apollo11Tde)
         {
@@ -751,7 +813,12 @@ public partial class HistoricalFlightProfileController : Node
             double altitude = vessel.GetAltitude(moon);
             if (altitude > 600_000.0)
             {
-                bridge.SetWarpIndex(5);
+                // Approach from the sphere-of-influence edge: a fixed x50 spent ~20 min of
+                // wall time here; scale the warp down as perilune nears instead.
+                double untilPerilune = PeriapsisCaptureBurn.TimeToPeriapsis(
+                    vessel.Position - moon.Position, vessel.Velocity - moon.Velocity, moon.GM);
+                bridge.SetWarpIndex(double.IsNaN(untilPerilune) || untilPerilune < 3_600.0 ? 5
+                    : untilPerilune < 6.0 * 3_600.0 ? 7 : 8);
                 return;
             }
             if (!RunApolloLunarBurn(bridge, vessel, moon,
@@ -789,9 +856,15 @@ public partial class HistoricalFlightProfileController : Node
 
         if (!_apolloTeiComplete)
         {
-            double lunarOrbits =
-                CampaignRuntime.Instance?.Director?.Evidence
-                    .CompletedLunarOrbits ?? 0.0;
+            // Campaign evidence counts revolutions only when a campaign director runs; a sandbox
+            // or harness flight had none and waited in lunar orbit forever. Count from LOI too.
+            var lunarState = OrbitalElements.FromStateVector(vessel.Position - moon.Position,
+                vessel.Velocity - moon.Velocity, moon.GM, moon.Id, universe.CurrentTime);
+            double lunarPeriod = 2.0 * System.Math.PI
+                * System.Math.Sqrt(System.Math.Pow(lunarState.SemiMajorAxis, 3.0) / moon.GM);
+            double lunarOrbits = System.Math.Max(
+                CampaignRuntime.Instance?.Director?.Evidence.CompletedLunarOrbits ?? 0.0,
+                (universe.CurrentTime - _apolloLoiTime) / lunarPeriod);
             if (lunarOrbits + 1e-6
                 < Apollo8FlightProfile.HistoricalLunarRevolutions)
             {
@@ -799,16 +872,11 @@ public partial class HistoricalFlightProfileController : Node
                 return;
             }
 
-            bridge.SetWarpIndex(0);
-            ApplyApolloTransearthInjection(
-                vessel, earth, moon, universe.CurrentTime);
-            ConsumeApolloSpsPropellant(
-                vessel, Apollo8FlightProfile.TeiDeltaVMps);
+            if (!RunApolloTransearthInjection(bridge, vessel, earth, moon))
+                return;
             _apolloTeiComplete = true;
             MissionManager.Instance?.EnterPhase(MissionPhase.TEI);
             bridge.SetWarpIndex(9);
-            GD.Print(
-                "[HISTORICAL] Apollo 8 TEI complete after ten lunar revolutions.");
             return;
         }
 
@@ -816,6 +884,14 @@ public partial class HistoricalFlightProfileController : Node
         if (dominant.Id != earth.Id)
         {
             bridge.SetWarpIndex(9);
+            return;
+        }
+
+        // Transearth corrections to the entry-corridor perigee on TransearthCorrection's
+        // schedule: one after leaving the Moon's sphere of influence, then trims 8 h and 2 h out.
+        if (_apolloTransearthCorrections < TransearthCorrection.CorrectionCount && !_apolloSmSeparated)
+        {
+            RunApolloTransearthCorrection(bridge, vessel, earth);
             return;
         }
 
@@ -849,12 +925,10 @@ public partial class HistoricalFlightProfileController : Node
             GD.Print("[HISTORICAL] Apollo 8 CM/SM separation.");
         }
 
-        if (returnVelocity.MagnitudeSquared > 1e-12)
-        {
-            vessel.Orientation = Quaterniond.FromTo(
-                Vector3d.Up, -returnVelocity.Normalized);
-            vessel.AngularVelocity = Vector3d.Zero;
-        }
+        // The CM is aerodynamically stable at its trim angle; reaction control holds the trim
+        // attitude before the air bites and then only banks the lift vector.
+        if (_apolloSmSeparated)
+            vessel.PitchYawRoll = CapsuleEntryGuidance.ComputeCommand(vessel, earth);
         vessel.IsOnRails = false;
         vessel.OrbitalState = null;
         vessel.ReferenceBodyId = earth.Id;
@@ -888,10 +962,11 @@ public partial class HistoricalFlightProfileController : Node
     private const double ApolloParkingPeriapsisAltitudeM = 180_000.0;
 
     /// <summary>S-II/S-IVB closed-loop steering toward the parking-orbit altitude.</summary>
-    private static void GuideApolloInsertion(Vessel vessel, CelestialBody earth, Vector3d downrange)
+    private static void GuideApolloInsertion(Vessel vessel, CelestialBody earth, Vector3d downrange,
+        Vector3d? launchPlane)
     {
         Vector3d desired = ClosedLoopInsertionGuidance.ComputeAim(
-            vessel, earth, Apollo8FlightProfile.ParkingOrbitAltitudeM, downrange);
+            vessel, earth, Apollo8FlightProfile.ParkingOrbitAltitudeM, downrange, launchPlane);
         vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
             vessel.Orientation,
             Vector3d.Up,
@@ -938,6 +1013,21 @@ public partial class HistoricalFlightProfileController : Node
         vessel.Throttle = 0.0;
     }
 
+    private LunarTransferPlan? TryPlanApolloLunarTransfer(
+        Universe universe, Vessel vessel, CelestialBody earth, CelestialBody moon)
+    {
+        try
+        {
+            return PlanApolloLunarTransfer(universe, vessel, earth, moon,
+                _startTime + Apollo8FlightProfile.TliIgnitionSeconds);
+        }
+        catch (InvalidOperationException error)
+        {
+            GD.PrintErr($"[HISTORICAL] TLI from the flown orbit failed: {error.Message}");
+            return null;
+        }
+    }
+
     private static LunarTransferPlan PlanApolloLunarTransfer(
         Universe universe,
         Vessel vessel,
@@ -977,36 +1067,101 @@ public partial class HistoricalFlightProfileController : Node
         return plan;
     }
 
-    private static void ApplyApolloTransearthInjection(
-        Vessel vessel,
-        CelestialBody earth,
-        CelestialBody moon,
-        double departureTime)
+    private void ResetApolloReturn()
     {
-        Vector3d departure = vessel.Position - earth.Position;
-        Vector3d planeNormal =
-            departure.Cross(vessel.Velocity - earth.Velocity).Normalized;
-        if (planeNormal.MagnitudeSquared < 1e-9)
-            planeNormal = earth.RotationAxis;
-        Vector3d targetDirection =
-            planeNormal.Cross(departure.Normalized).Normalized;
-        Vector3d target = targetDirection
-            * (earth.Radius + 60_000.0);
-        double returnTime =
-            Apollo8FlightProfile.EntryInterfaceSeconds
-            - Apollo8FlightProfile.TeiCutoffSeconds;
-        LambertSolution solution = LambertSolver.Solve(
-            earth.GM,
-            departure,
-            target,
-            returnTime,
-            planeNormal);
-        vessel.Velocity = earth.Velocity + solution.DepartureVelocity;
-        vessel.AngularVelocity = Vector3d.Zero;
+        _apolloTeiBurn = null;
+        _apolloTeiIgnitionTime = 0.0;
+        _apolloTransearthBurn = null;
+        _apolloTransearthCorrections = 0;
+        _apolloEarthReturnTime = double.NaN;
+    }
+
+    /// <summary>
+    /// Transearth injection as a finite prograde SPS burn cut on the planned Moon-relative
+    /// energy (<see cref="TransearthInjectionPlanner"/>). Returns true once it has finished.
+    /// </summary>
+    private bool RunApolloTransearthInjection(SimulationBridge bridge, Vessel vessel,
+        CelestialBody earth, CelestialBody moon)
+    {
+        var universe = bridge.Universe;
+        if (_apolloTeiBurn == null)
+        {
+            var lunarOrbit = OrbitalElements.FromStateVector(vessel.Position - moon.Position,
+                vessel.Velocity - moon.Velocity, moon.GM, moon.Id, universe.CurrentTime);
+            var plan = TransearthInjectionPlanner.Compute(earth.GM, moon.GM, moon.OrbitalElements!,
+                lunarOrbit, universe.CurrentTime + 600.0, Apollo8FlightProfile.TransearthTimeOfFlightSeconds,
+                earth.Radius + Apollo8FlightProfile.EntryCorridorVacuumPerigeeAltitudeM,
+                maximumTimeOfFlight: Apollo8FlightProfile.MaximumTransearthTimeOfFlightSeconds);
+            double halfBurn = 0.5 * vessel.TotalMass * plan.ImpulsiveDeltaV
+                / System.Math.Max(1.0, vessel.GetMaximumThrust(moon));
+            _apolloTeiIgnitionTime = plan.BurnTime - halfBurn;
+            _apolloTeiBurn = new ProgradeEnergyBurn(plan.TargetSelenocentricEnergy,
+                _apolloTeiIgnitionTime, maximumBurnSeconds: 600.0);
+            GD.Print($"[HISTORICAL] Apollo TEI planned: {plan.ImpulsiveDeltaV:F0} m/s, ignition in "
+                + $"{(_apolloTeiIgnitionTime - universe.CurrentTime) / 60.0:F0} min.");
+        }
+        double untilIgnition = _apolloTeiIgnitionTime - universe.CurrentTime;
+        if (_apolloTeiBurn.Status == ProgradeEnergyBurnStatus.WaitingForIgnition && untilIgnition > 300.0)
+        {
+            bridge.SetWarpIndex(untilIgnition > 1_200.0 ? 6 : 4);
+            _apolloGuidedBurnLastTime = universe.CurrentTime;
+            return false;
+        }
+        bridge.SetWarpIndex(0);
         vessel.IsOnRails = false;
         vessel.OrbitalState = null;
-        vessel.ReferenceBodyId = moon.Id;
+        _apolloTeiBurn.Advance(vessel, moon, GuidedBurnStep(universe), universe.CurrentTime);
+        if (!_apolloTeiBurn.IsFinished) return false;
+
+        if (_apolloTeiBurn.Status == ProgradeEnergyBurnStatus.Blocked)
+            GD.PrintErr($"[HISTORICAL] TEI stopped: {_apolloTeiBurn.BlockReason}");
+        GD.Print($"[HISTORICAL] Apollo TEI cutoff after {_apolloTeiBurn.BurnSeconds:F1} s; transearth coast.");
         vessel.Throttle = 0.0;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        _apolloTeiBurn = null;
+        return true;
+    }
+
+    /// <summary>Flies the next transearth correction once it is due (see the call site).</summary>
+    private void RunApolloTransearthCorrection(SimulationBridge bridge, Vessel vessel, CelestialBody earth)
+    {
+        var universe = bridge.Universe;
+        var relative = vessel.Position - earth.Position;
+        var velocity = vessel.Velocity - earth.Velocity;
+        if (_apolloTransearthBurn == null)
+        {
+            if (double.IsNaN(_apolloEarthReturnTime)) _apolloEarthReturnTime = universe.CurrentTime;
+            double timeToPerigee = PeriapsisCaptureBurn.TimeToPeriapsis(relative, velocity, earth.GM);
+            if (!TransearthCorrection.IsDue(_apolloTransearthCorrections,
+                    universe.CurrentTime - _apolloEarthReturnTime, timeToPerigee))
+            {
+                bridge.SetWarpIndex(8);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            _apolloTransearthBurn = TransearthCorrection.Create(vessel, earth, universe.CurrentTime,
+                earth.Radius + Apollo8FlightProfile.EntryCorridorVacuumPerigeeAltitudeM,
+                TransearthCorrection.CutoffDeltaVFor(_apolloTransearthCorrections));
+            _apolloGuidedBurnLastTime = universe.CurrentTime;
+        }
+        bridge.SetWarpIndex(0);
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
+        _apolloTransearthBurn.Advance(vessel, earth, GuidedBurnStep(universe), universe.CurrentTime);
+        if (!_apolloTransearthBurn.IsFinished) return;
+
+        if (_apolloTransearthBurn.Status == LambertGuidedBurnStatus.Blocked)
+            GD.PrintErr($"[HISTORICAL] Transearth correction stopped: {_apolloTransearthBurn.BlockReason}");
+        var corrected = OrbitalElements.FromStateVector(vessel.Position - earth.Position,
+            vessel.Velocity - earth.Velocity, earth.GM, earth.Id, universe.CurrentTime);
+        GD.Print($"[HISTORICAL] Transearth correction {_apolloTransearthCorrections + 1}: "
+            + $"{_apolloTransearthBurn.BurnSeconds:F1} s, vacuum perigee "
+            + $"{(corrected.Periapsis - earth.Radius) / 1000.0:F1} km.");
+        vessel.Throttle = 0.0;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        _apolloTransearthBurn = null;
+        _apolloTransearthCorrections++;
+        bridge.SetWarpIndex(8);
     }
 
     /// <summary>Simulation seconds since the previous guided-burn update (paused frames: one control period).</summary>
@@ -1107,36 +1262,6 @@ public partial class HistoricalFlightProfileController : Node
         vessel.PitchYawRoll = Vector3d.Zero;
         _apolloLunarBurn = null;
         return true;
-    }
-
-    private static void ConsumeApolloSpsPropellant(
-        Vessel vessel,
-        double deltaVMps)
-    {
-        const double ispSeconds = 314.8;
-        const double standardGravity = 9.80665;
-        double initialMass = vessel.TotalMass;
-        double propellant = initialMass * (
-            1.0 - System.Math.Exp(
-                -deltaVMps / (ispSeconds * standardGravity)));
-        var tanks = vessel.Parts.Parts
-            .Where(part => part.Definition.HasVehicleRole("service_module"))
-            .ToArray();
-        double available = tanks.Sum(part =>
-            part.LiquidFuel + part.Oxidizer);
-        if (available <= 0.0) return;
-        double consumed = System.Math.Min(propellant, available);
-        foreach (var tank in tanks)
-        {
-            double tankAvailable = tank.LiquidFuel + tank.Oxidizer;
-            double tankShare = consumed * tankAvailable / available;
-            double fuelShare = tankAvailable > 0.0
-                ? tank.LiquidFuel / tankAvailable : 0.0;
-            tank.LiquidFuel = System.Math.Max(
-                0.0, tank.LiquidFuel - tankShare * fuelShare);
-            tank.Oxidizer = System.Math.Max(
-                0.0, tank.Oxidizer - tankShare * (1.0 - fuelShare));
-        }
     }
 
     private void ProcessGemini8(

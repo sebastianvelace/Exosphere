@@ -1361,6 +1361,15 @@ public partial class HUDController : Control
             return;
         }
 
+        if (mission.IsHoldingForLaunchWindow)
+        {
+            var span = TimeSpan.FromSeconds(System.Math.Max(0.0,
+                mission.LaunchWindowCountdownStart - bridge.Universe.CurrentTime));
+            _launchPathLabel.Text = $"LAUNCH WINDOW HOLD / count resumes in {(int)span.TotalHours:00}:{span.Minutes:00}:{span.Seconds:00}";
+            _launchPathLabel.AddThemeColorOverride("font_color", LabelDim);
+            return;
+        }
+
         if (mission.Phase == MissionPhase.PRE_LAUNCH)
         {
             _launchPathLabel.Text = "AUTO SEQUENCE [L]  ·  MANUAL STARTUP [hold Z]";
