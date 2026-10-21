@@ -606,6 +606,14 @@ public class Vessel
 
         Vector3d axis = orientation.Rotate(Vector3d.Up);   // eje longitudinal en mundo
         double   temp = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
+        double parachuteArea = GetDeployedParachuteDragArea(body, pos);
+        var parachuteDrag = parachuteArea > 0.0
+            ? -surfVel.Normalized
+                * (0.5 * density * speed * speed * parachuteArea)
+            : Vector3d.Zero;
+        if (Parts.CapsuleAerodynamics is { } capsule)
+            return AerodynamicsModel.ComputeCapsuleForce(density, surfVel, axis, MaximumDiameter,
+                capsule.AxialForceCoefficient) + parachuteDrag;
 
         var drag = AerodynamicsModel.ComputeReentryDrag(
             density,
@@ -618,11 +626,6 @@ public class Vessel
             body.Atmosphere.SoundSpeedConstant);
         var lift = AerodynamicsModel.ComputeLift(
             density, surfVel, axis, VehicleLength, MaximumDiameter);
-        double parachuteArea = GetDeployedParachuteDragArea(body, pos);
-        var parachuteDrag = parachuteArea > 0.0
-            ? -surfVel.Normalized
-                * (0.5 * density * speed * speed * parachuteArea)
-            : Vector3d.Zero;
         return drag + lift + parachuteDrag;
     }
 
@@ -1094,7 +1097,7 @@ public class Vessel
                 var angularAccel = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
                     density,
                     surfVel,
-                    Orientation.Rotate(Vector3d.Up),
+                    Orientation.Rotate(Parts.AerodynamicReferenceAxisLocal),
                     AngularVelocity,
                     VehicleLength,
                     MaximumDiameter,

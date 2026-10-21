@@ -100,6 +100,24 @@ public class PartGraph
         }
     }
 
+    /// <summary>
+    /// Blunt-capsule aerodynamics when the root is a trimmed capsule flying alone: trim angle
+    /// (rad) and axial-force coefficient. Null for any stack, which keeps the slender-body model.
+    /// </summary>
+    public (double TrimAngleRad, double AxialForceCoefficient)? CapsuleAerodynamics =>
+        _parts.Count == 1 && _root?.Definition.CapsuleTrimAngleOfAttackDeg is { } trimDeg
+            ? (trimDeg * Math.MathUtils.DEG_TO_RAD,
+                _root.Definition.CapsuleAxialForceCoefficient > 0.0 ? _root.Definition.CapsuleAxialForceCoefficient : 1.3)
+            : null;
+
+    /// <summary>
+    /// Body axis the aerodynamic restoring moment aligns against the flow: local +Y, or for a
+    /// trimmed capsule +Y tilted by the trim angle about local +X (the offset-CG equilibrium).
+    /// </summary>
+    public Math.Vector3d AerodynamicReferenceAxisLocal => CapsuleAerodynamics is { } capsule
+        ? new Math.Vector3d(0.0, System.Math.Cos(capsule.TrimAngleRad), System.Math.Sin(capsule.TrimAngleRad))
+        : Math.Vector3d.Up;
+
     /// <summary>Enclosed payloads contribute mass/inertia, but not the carrier's outer hull.</summary>
     public bool IsEnclosedPayload(Part part) => part.Definition.InternalPayload && part != _root;
 

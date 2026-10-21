@@ -11,6 +11,8 @@
   "drag_coefficient": 0.92,
   "axial_drag_coefficient": 0.82,
   "aerodynamic_center_offset_y_m": 0.8,
+  "capsule_trim_angle_of_attack_deg": 16.7,
+  "capsule_axial_force_coefficient": 1.3,
   "heat_tolerance": 3100,
   "has_heat_shield": true,
   "heat_shield_normal": [0, -1, 0],

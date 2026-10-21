@@ -91,7 +91,7 @@ public static class RigidBodyForceEvaluator
         var angularAccelerationWorld = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
             density,
             surfaceVelocity,
-            state.Orientation.Rotate(Vector3d.Up),
+            state.Orientation.Rotate(vessel.Parts.AerodynamicReferenceAxisLocal),
             state.AngularVelocityWorld,
             vessel.VehicleLength,
             vessel.MaximumDiameter,

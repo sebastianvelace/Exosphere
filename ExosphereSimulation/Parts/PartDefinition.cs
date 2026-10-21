@@ -47,6 +47,16 @@ public class PartDefinition
     /// </summary>
     [JsonPropertyName("aerodynamic_center_offset_y_m")]
     public double? AerodynamicCenterOffsetYM { get; set; }
+    /// <summary>
+    /// Hypersonic trim angle of attack (degrees) of a blunt capsule whose centre of mass is
+    /// offset from its axis (Apollo CM: ~17° for L/D ≈ 0.3). Applies while the capsule flies
+    /// alone: its aerodynamic force then runs along the axis and the trim tilt makes lift.
+    /// </summary>
+    [JsonPropertyName("capsule_trim_angle_of_attack_deg")]
+    public double? CapsuleTrimAngleOfAttackDeg { get; set; }
+    /// <summary>Hypersonic axial-force coefficient of that capsule (Apollo CM ≈ 1.3).</summary>
+    [JsonPropertyName("capsule_axial_force_coefficient")]
+    public double CapsuleAxialForceCoefficient { get; set; }
     /// <summary>Static margin for the standalone root configuration, not the attached launch stack.</summary>
     [JsonPropertyName("standalone_aerodynamic_center_offset_y_m")]
     public double? StandaloneAerodynamicCenterOffsetYM { get; set; }

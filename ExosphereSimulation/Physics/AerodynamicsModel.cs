@@ -286,6 +286,30 @@ public static class AerodynamicsModel
     }
 
     /// <summary>
+    /// Blunt-capsule aerodynamic force (world space, N). Pressure on the heat shield acts
+    /// along the body axis, so the force is q·S·C_A along the axis away from the windward
+    /// face; a trim angle α tilts it into drag q·S·C_A·cos α and lift q·S·C_A·sin α (L/D = tan α).
+    /// A small cross-flow term keeps a tumbling capsule from losing all drag broadside.
+    /// </summary>
+    public static Vector3d ComputeCapsuleForce(
+        double density,
+        Vector3d surfaceVelocity,
+        Vector3d longitudinalAxis,
+        double diameter,
+        double axialForceCoefficient)
+    {
+        double speed = surfaceVelocity.Magnitude;
+        if (density <= 0.0 || speed < 1e-3) return Vector3d.Zero;
+        var flow = surfaceVelocity / speed;
+        var axis = longitudinalAxis.Normalized;
+        double c = axis.Dot(flow);
+        double qs = 0.5 * density * speed * speed * System.Math.PI * 0.25 * diameter * diameter;
+        double sign = c <= 0.0 ? 1.0 : -1.0;
+        return axis * (sign * qs * axialForceCoefficient * System.Math.Abs(c))
+            - flow * (qs * axialForceCoefficient * 0.5 * (1.0 - c * c));
+    }
+
+    /// <summary>
     /// Full re-entry drag force (world space, N) for a vessel: orientation-dependent
     /// area and Cd, with the transonic Mach multiplier folded in. <paramref name="surfaceVelocity"/>
     /// is the velocity relative to the rotating atmosphere; <paramref name="longitudinalAxis"/> is
