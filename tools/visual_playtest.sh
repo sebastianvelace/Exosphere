@@ -144,8 +144,8 @@ Options:
                 harness raises it to the allowed maximum: guidance runs on the fixed 20 ms
                 clock, so only wall time changes.
   --until-phase PHASE
-                End --apollo8-mission successfully once the mission enters PHASE (for example
-                ORBIT or TLI) instead of flying on to lunar orbit; for fast segment checks.
+                End --apollo8-mission successfully once the mission enters PHASE (ORBIT, TLI,
+                LOI, ... or TEI, ENTRY, LANDED to fly on through lunar orbit to splashdown).
   -h, --help    Show this help
 
 Environment:
@@ -336,9 +336,9 @@ if [[ -n "$UNTIL_PHASE" ]]; then
     exit 2
   fi
   case "$UNTIL_PHASE" in
-    LIFTOFF|ASCENT_SH|MAX_Q|SEPARATION|ASCENT_SHIP|ORBIT|TLI|LUNAR_APPROACH|LOI) ;;
+    LIFTOFF|ASCENT_SH|MAX_Q|SEPARATION|ASCENT_SHIP|ORBIT|TLI|LUNAR_APPROACH|LOI|LUNAR_ORBIT|TEI|ENTRY|LANDED) ;;
     *)
-      echo "ERROR: --until-phase must be LIFTOFF, ASCENT_SH, MAX_Q, SEPARATION, ASCENT_SHIP, ORBIT, TLI, LUNAR_APPROACH or LOI" >&2
+      echo "ERROR: --until-phase must be LIFTOFF, ASCENT_SH, MAX_Q, SEPARATION, ASCENT_SHIP, ORBIT, TLI, LUNAR_APPROACH, LOI, LUNAR_ORBIT, TEI, ENTRY or LANDED" >&2
       exit 2
       ;;
   esac
@@ -627,6 +627,13 @@ cleanup() {
   exit "$ec"
 }
 trap cleanup EXIT INT TERM
+
+# The artifact and console gates below search logs with rg; without it every `if rg -q`
+# evaluates false and the gates pass silently (this hid an unimported CI project).
+if ! command -v rg >/dev/null 2>&1; then
+  echo "ERROR: ripgrep (rg) is required by the visual_playtest gates" >&2
+  exit 1
+fi
 
 # --verify-only re-reads existing artifacts and logs; it needs neither Godot nor a display.
 if [[ "$VERIFY_ONLY" -eq 0 && ! -x "$GODOT" ]]; then
@@ -1756,7 +1763,8 @@ public partial class _PlaytestShot : Node
                 Finish("APOLLO8_MISSION_VEHICLE_LOST");
                 return;
             }
-            if (missionPhase == MissionPhase.LUNAR_ORBIT && !_orbitBeauty && _pendingSlug == null)
+            // A segment target past lunar orbit (TEI, ENTRY, LANDED) flies through it.
+            if (UntilPhase.Length == 0 && missionPhase == MissionPhase.LUNAR_ORBIT && !_orbitBeauty && _pendingSlug == null)
             {
                 var lunar = universe.GetBody("moon")!;
                 var lunarOrbit = OrbitalElements.FromStateVector(vessel.Position - lunar.Position,

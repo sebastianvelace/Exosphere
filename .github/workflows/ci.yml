@@ -114,6 +114,15 @@ jobs:
       - name: Build game layer
         run: dotnet build Exosphere.csproj --nologo -v quiet
 
+      # A fresh checkout has no .godot/imported cache: without an import pass every font and
+      # texture fails to load and the HUD draws with null resources, so the smoke checks
+      # below would only exercise a broken game.
+      - name: Import Godot project resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path . --import
+
       # Smoke headless: arranca la escena principal y la de construcción y sale.
       # Headless smoke: boot the main scene and the construction scene, then quit.
       - name: Godot headless smoke
