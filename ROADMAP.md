@@ -181,7 +181,8 @@ asignar estado, y que cada etapa tenga un test headless y una corrida Godot veri
 Cada ítem se cierra solo con su criterio cumplido, `tools/ci_check.sh` en verde y el CI de
 GitHub en verde. Orden por impacto para el jugador:
 
-1. **Cerrar el lote en curso (Apollo 8 de la plataforma al amerizaje).**
+1. ✅ **Cerrar el lote en curso (Apollo 8 de la plataforma al amerizaje).** Cerrado en
+   e7a7c7c: amerizaje en Godot en 93 min de reloj, CI local y de GitHub en verde.
    Criterio: `visual_playtest.sh --apollo8-mission --until-phase LANDED` pasa en Godot con
    ventana de lanzamiento, TEI finita, dos correcciones transtierra y entrada sustentadora;
    suite completa, commit coherente y push; CI de GitHub verde con el paso de importación.
