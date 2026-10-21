@@ -628,11 +628,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if [[ ! -x "$GODOT" ]]; then
+# --verify-only re-reads existing artifacts and logs; it needs neither Godot nor a display.
+if [[ "$VERIFY_ONLY" -eq 0 && ! -x "$GODOT" ]]; then
   echo "ERROR: Godot not found at $GODOT (set GODOT_BIN)" >&2
   exit 1
 fi
-if [[ -n "$EXTERNAL_DISPLAY" ]]; then
+if [[ "$VERIFY_ONLY" -eq 1 ]]; then
+  :
+elif [[ -n "$EXTERNAL_DISPLAY" ]]; then
   if ! command -v xdpyinfo >/dev/null 2>&1; then
     echo "ERROR: xdpyinfo is required to validate --display" >&2
     exit 1
