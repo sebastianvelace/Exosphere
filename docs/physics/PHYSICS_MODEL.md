@@ -154,9 +154,37 @@ state assignment. Historical launches release their hold-downs under the shared
 gravity turn (`GravityTurnGuidance`); the S-II/S-IVB fly time-to-go `ClosedLoopInsertionGuidance`
 and cut off on the flown periapsis (`SaturnVAscentScenarioTests`: 181 x 195 km at T+714 s with
 ~67 t left for TLI). The open-loop S-IC elevation program it replaced paid ~660 m/s of steering
-loss; transonic drag costs only ~35 m/s. The flown parking orbit is then rotated into the lunar
-plane by a scripted placement until launch-azimuth targeting exists, and TEI/entry remain
-scripted.
+loss; transonic drag costs only ~35 m/s.
+
+Lunar launches hold on the pad for a launch window (`Navigation/LunarLaunchWindow`). Flights
+start at J2000, not on the historical date, so the Moon's geometry at [L] is arbitrary. A
+coplanar TLI needs a parking orbit whose plane contains the Moon at arrival; at liftoff that
+plane must also contain the pad, which fixes it, and Earth's rotation sweeps the required
+azimuth through the day. The countdown resumes once the azimuth enters Apollo's 72°–108°
+range. The S-IC flies along that plane and the S-II/S-IVB steer the horizontal velocity to be
+gained in it, which also removes the Earth-rotation cross-track share. TLI is then planned from
+the flown orbit (`LunarLaunchWindowTests`: azimuth 72.1°, plane error 0.44°, TLI 3.18 km/s).
+Only a resumed ascent, which does not persist the window, still rotates the parking orbit into
+the lunar plane by script, and logs it.
+
+The return is flown the same way. `TransearthInjectionPlanner` searches one lunar revolution for
+the burn epoch whose prograde-burn asymptote (rotated ν∞ = acos(−1/e) ahead of the burn point)
+matches the v∞ an Earth-centred Lambert arc to the entry corridor needs; the SPS burn is cut on
+that Moon-relative energy. The return coast is searched up to 1.5 × the historical 57.4 h: a
+longer coast needs a smaller v∞, and with the SPS budget the flown sequence leaves (20.25 t at
+TEI) the historical coast does not close. Three `TransearthCorrection` burns then retarget the
+vacuum perigee to 38 km (the perigee of a 121.92 km, −6.5° corridor entry): one after leaving
+the Moon's sphere of influence, trims 8 h and 2 h out where the corridor is progressively less
+sensitive to velocity error (`TransearthReturnScenarioTests`: TEI 869 m/s with 0.9 t of SPS
+propellant to spare, perigee 38.9 km, entry 11.0 km/s at −6.68°).
+
+A trimmed blunt capsule flying alone (`capsule_trim_angle_of_attack_deg`, Apollo CM 16.7°) uses
+capsule aerodynamics: heat-shield pressure acts along the body axis, so the force is q·S·C_A
+along the axis and the trim tilt gives L/D = tan α ≈ 0.3; the restoring moment centres on the
+trim axis, the effect of the real CM's offset centre of mass. `CapsuleEntryGuidance` holds the
+trim attitude before the air bites, then only rolls the lift vector: its vertical share rises
+when drag exceeds 4 g and falls while the capsule climbs, so it neither overloads nor skips out.
+Apollo 8's entry peaks at 7.1 g (flight: 6.8 g) versus 16 g flown ballistically.
 
 Pointing loops are linear PD laws on the attitude error, so their damping depends on the
 vehicle's angular authority a: ω_n² = a·Kp and 2ζω_n = a·Kd. Gains tuned for a booster leave

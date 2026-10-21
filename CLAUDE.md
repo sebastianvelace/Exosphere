@@ -149,8 +149,12 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   geocentric Moon route, patched-conic SOI transitions, encounter/perilunium prediction
   and TLI/LOI readouts. Apollo 8/11 now fly finite TLI, mid-course correction, LOI and
   circularization burns (`Flight/ProgradeEnergyBurn`, `LambertGuidedBurn`,
-  `PeriapsisCaptureBurn`); the S-II/S-IVB fly closed-loop insertion to a real parking orbit,
-  which is then rotated into the lunar plane by script; TEI/entry are scripted.
+  `PeriapsisCaptureBurn`); [L] holds on the pad for a lunar launch window
+  (`Navigation/LunarLaunchWindow`, azimuth 72°–108°) and the S-II/S-IVB fly closed-loop,
+  plane-steered insertion into the lunar plane (only a resumed ascent falls back to a
+  scripted plane correction). TEI is a finite SPS burn (`Navigation/TransearthInjectionPlanner`),
+  three `TransearthCorrection` burns hit the 38 km corridor perigee, and the CM flies a lifting
+  entry on trimmed-capsule aerodynamics with `CapsuleEntryGuidance` bank control.
   Dated lunar ephemerides and timeline maneuver nodes are still needed.
 - CI runs `tools/contract_checks.sh` (the same static contract list as local `tools/ci_check.sh`), builds/tests the sim, builds the Godot C# layer, downloads Godot 4.6.3 mono in GitHub Actions, and runs strict headless smoke checks. Local `tools/ci_check.sh` runs Godot smoke only when `GODOT_BIN` or the default local Godot path exists.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.

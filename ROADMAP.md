@@ -174,6 +174,39 @@ Base tecnica cerrada en `main`:
   congelado en el marco heliocentrico mientras la Tierra se aleja, ni parece
   rebotar a ~30 km/s. El anclaje rotante persiste en `SaveGameV2` y bajo warp.
 
+## Objetivo Activo (2026-10-21)
+
+**Meta:** que toda misión de campaña se vuele de la plataforma al final por física, sin
+asignar estado, y que cada etapa tenga un test headless y una corrida Godot verificable.
+Cada ítem se cierra solo con su criterio cumplido, `tools/ci_check.sh` en verde y el CI de
+GitHub en verde. Orden por impacto para el jugador:
+
+1. **Cerrar el lote en curso (Apollo 8 de la plataforma al amerizaje).**
+   Criterio: `visual_playtest.sh --apollo8-mission --until-phase LANDED` pasa en Godot con
+   ventana de lanzamiento, TEI finita, dos correcciones transtierra y entrada sustentadora;
+   suite completa, commit coherente y push; CI de GitHub verde con el paso de importación.
+2. **Rendezvous de Gemini 8 sin teletransporte.** Hoy `gemini.Position = target.Position + …`
+   coloca la cápsula junto a la Agena. Criterio: fases físicas (NC/NSR/TPI con
+   `LambertGuidedBurn`, aproximación final con RCS) hasta el contacto de docking real;
+   test headless del encuentro y corrida Godot del modo `--gemini-docking`.
+3. **Apollo 11 TD&E y descenso.** Hoy la extracción del LM asigna la posición de Columbia
+   respecto a Eagle. Criterio: transposición y docking por RCS con `DockingConstraint`; luego
+   el descenso motorizado a la superficie lunar (guiado de frenado + aproximación) con test
+   headless de aterrizaje bajo 3 m/s.
+4. **Persistir la ventana de lanzamiento y los burns guiados en `SaveGameV2`.** Hoy reanudar un
+   ascenso guardado cae en la corrección de plano por script. Criterio: un save en ascenso,
+   en costa translunar y en órbita lunar reanuda con el mismo plan y sin corrección.
+5. **Datum render/masa inconsistente** (bloquea el 6-DoF acoplado). Criterio: un único origen
+   de piezas compartido por `VesselRenderer`, inercia y contacto, con test de coincidencia de
+   centro de masa render/física por familia de vehículo.
+6. **Cd transónico de costado > 2.** Criterio: curva calibrada contra datos publicados y la
+   telemetría IFT, sin romper los tests EDL de Starship ni el amerizaje del Flight 14.
+7. **Paridad del integrador acoplado** (ver Prioridad Inmediata): ascenso controlado largo,
+   SAS/flaps/RCS equivalentes, EDL con contactos; recién entonces evaluar activarlo.
+8. **Harness.** Corridas paralelas (sin el lock global: autoload por variable de entorno o
+   worktree), telemetría por cuadro opcional en misiones largas, y un modo de reproducción de
+   misiones históricas en CI nocturno con `--until-phase`.
+
 ## Prioridad Inmediata
 
 La prioridad inmediata es cerrar la paridad física antes de activar el integrador acoplado en
@@ -443,8 +476,14 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
   una órbita real (S-IC con giro gravitatorio, S-II/S-IVB con tiempo-a-ir y amortiguamiento
   según autoridad TVC). Verificado en Godot con `--apollo8-mission`: inserción T+717 s,
   TLI 307 s, MCC 27 s, LOI 107×310 km y circularización 107×110 km, en 55 min de reloj.
-  Warp en LEO baja (<225 km) ya no queda en x3. Pendiente: azimut de lanzamiento dirigido al plano lunar (hoy la órbita
-  volada se rota por script), TEI/entrada físicas,
+  Warp en LEO baja (<225 km) ya no queda en x3. Ventana de lanzamiento lunar: [L] espera en
+  la plataforma hasta que el azimut que pone la Luna (a la llegada) en el plano orbital entra
+  en 72°–108°, y la inserción vuela ese plano; la TLI se planea desde la órbita volada, sin
+  rotación por script (salvo al reanudar un ascenso guardado). Regreso físico: TEI finita con
+  el SPS (planificador transtierra por asíntota, costa de regreso hasta 1,5× la histórica para
+  cerrar con el SPS que deja la misión volada), tres correcciones al perigeo del corredor de
+  38 km y entrada sustentadora del CM (aerodinámica de cápsula con trim de 16,7°, L/D≈0,3,
+  control por alabeo): pico de 7,1 g (Apollo 8: 6,8 g) en vez de 16 g balístico. Pendiente:
   ventana multi-día y dataset lunar fechado.
 - Nodos de maniobra arrastrables con mouse.
 
