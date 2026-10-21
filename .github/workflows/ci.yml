@@ -37,6 +37,15 @@ jobs:
           fi
           echo "No committed capture harness detected."
 
+      # Same static contract list as tools/ci_check.sh; most of them search sources with rg.
+      - name: Contract checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+          bash tools/contract_checks.sh
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
