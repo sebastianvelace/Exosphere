@@ -22,8 +22,13 @@ public static class ClosedLoopInsertionGuidance
     /// <param name="body">Central body.</param>
     /// <param name="targetAltitudeM">Insertion altitude above the reference surface.</param>
     /// <param name="downrange">Fallback horizontal direction when horizontal speed is ~0.</param>
+    /// <param name="targetPlaneNormal">
+    /// Optional orbit-plane normal: the horizontal thrust then points along the horizontal
+    /// velocity still to be gained toward circular speed in that plane, which also removes
+    /// any cross-track velocity (for example the Earth-rotation share off a non-east azimuth).
+    /// </param>
     public static Vector3d ComputeAim(Vessel vessel, CelestialBody body, double targetAltitudeM,
-        Vector3d downrange)
+        Vector3d downrange, Vector3d? targetPlaneNormal = null)
     {
         ArgumentNullException.ThrowIfNull(vessel);
         ArgumentNullException.ThrowIfNull(body);
@@ -45,6 +50,16 @@ public static class ClosedLoopInsertionGuidance
         double targetRadius = body.Radius + targetAltitudeM;
         double circularSpeed = System.Math.Sqrt(body.GM / targetRadius);
         double horizontalDeficit = System.Math.Max(0.0, circularSpeed - horizontalVelocity.Magnitude);
+        if (targetPlaneNormal is { } normal && normal.MagnitudeSquared > 1e-12)
+        {
+            var inPlane = normal.Normalized.Cross(up);
+            if (inPlane.MagnitudeSquared > 1e-12)
+            {
+                var toGain = inPlane.Normalized * circularSpeed - horizontalVelocity;
+                horizontalDeficit = toGain.Magnitude;
+                horizontal = toGain.MagnitudeSquared > 1.0 ? toGain.Normalized : inPlane.Normalized;
+            }
+        }
         double timeToGo = System.Math.Max(MinimumTimeToGoSeconds, horizontalDeficit / acceleration);
 
         // Linear vertical acceleration a(τ) = A + Bτ reaching Δh with zero final climb rate.

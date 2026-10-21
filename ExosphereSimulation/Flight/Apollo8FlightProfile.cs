@@ -44,6 +44,18 @@ public static class Apollo8FlightProfile
     public const double EntryInterfaceAltitudeM = 121_920.0;
     public const int HistoricalLunarRevolutions = 10;
 
+    /// <summary>Historical TEI cutoff to entry interface (s).</summary>
+    public const double TransearthTimeOfFlightSeconds = EntryInterfaceSeconds - TeiCutoffSeconds;
+
+    /// <summary>Longest transearth coast the TEI planner may trade for a smaller burn (s).</summary>
+    public const double MaximumTransearthTimeOfFlightSeconds = 1.5 * TransearthTimeOfFlightSeconds;
+
+    /// <summary>
+    /// Vacuum-perigee altitude of a lunar-return conic crossing the 121.92 km entry interface
+    /// at ~11 km/s and −6.5° flight-path angle (the centre of the Apollo entry corridor).
+    /// </summary>
+    public const double EntryCorridorVacuumPerigeeAltitudeM = 38_000.0;
+
     /// <summary>End of the S-IC pitch-over; afterwards the boost flies a zero-AoA gravity turn.</summary>
     public const double PitchOverEndSeconds = 42.0;
 
@@ -64,6 +76,10 @@ public static class Apollo8FlightProfile
             (elapsedSeconds - 12.0) / (PitchOverEndSeconds - 12.0), 0.0, 1.0);
         return 90.0 - (90.0 - PitchOverElevationDegrees) * fraction;
     }
+
+    /// <summary>Apollo range-safety launch azimuth limits from LC-39 (degrees from north).</summary>
+    public const double MinimumLaunchAzimuthDegrees = 72.0;
+    public const double MaximumLaunchAzimuthDegrees = 108.0;
 
     /// <summary>
     /// S-II/S-IVB pointing damping for the live pitch/yaw authority (ζ ≈ 0.8 at Kp 2.3). The
