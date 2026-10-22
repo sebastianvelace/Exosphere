@@ -4,7 +4,17 @@
 # writes PNG milestones + telemetry, and always cleans up on exit.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Bash reads a script while it runs it, so editing this file during an hour-long mission run
+# corrupted that run's final gates. Run from a private snapshot taken at startup instead.
+if [[ -z "${EXO_PLAYTEST_SNAPSHOT:-}" ]]; then
+  snapshot="$(mktemp "${TMPDIR:-/tmp}/exo_playtest_snapshot.XXXXXX")"
+  cp "$0" "$snapshot"
+  EXO_PLAYTEST_SNAPSHOT="$snapshot" EXO_PLAYTEST_SOURCE="$0" exec bash "$snapshot" "$@"
+fi
+# Early exits (usage, argument errors) leave before the full cleanup trap below exists.
+trap 'rm -f "$EXO_PLAYTEST_SNAPSHOT"' EXIT
+
+ROOT="$(cd "$(dirname "${EXO_PLAYTEST_SOURCE:-$0}")/.." && pwd)"
 cd "$ROOT"
 source "$ROOT/tools/lib/playtest_contracts.sh"
 
@@ -68,6 +78,9 @@ Options:
   --apollo8-mission
                 Fly Apollo 8 from the pad through ascent, TLI, mid-course correction and LOI
                 with the historical director alone, and finish in lunar orbit.
+  --gemini-mission
+                Fly Gemini 8 from the pad through rendezvous, docking and the emergency return
+                with the historical director alone (default --until-phase LANDED).
   --apollo11    Validate Apollo 11 / AS-506 hardware at LC-39A (launch mode by default).
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
@@ -206,6 +219,12 @@ while [[ $# -gt 0 ]]; do
       VARIANT_SITE="cape_canaveral_lc19"
       VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
       shift ;;
+    --gemini-mission)
+      MODE="gemini_mission"
+      VARIANT_FILE="gemini8_titan2_1966.json"
+      VARIANT_SITE="cape_canaveral_lc19"
+      VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
+      shift ;;
     --apollo8)
       VARIANT_FILE="apollo8_saturn5_as503_1968.json"
       VARIANT_SITE="kennedy"
@@ -330,9 +349,12 @@ case "$RENDERER" in
     ;;
 esac
 
+if [[ "$MODE" == "gemini_mission" && -z "$UNTIL_PHASE" ]]; then
+  UNTIL_PHASE="LANDED"
+fi
 if [[ -n "$UNTIL_PHASE" ]]; then
-  if [[ "$MODE" != "apollo8_mission" ]]; then
-    echo "ERROR: --until-phase is only valid with --apollo8-mission" >&2
+  if [[ "$MODE" != "apollo8_mission" && "$MODE" != "gemini_mission" ]]; then
+    echo "ERROR: --until-phase is only valid with --apollo8-mission or --gemini-mission" >&2
     exit 2
   fi
   case "$UNTIL_PHASE" in
@@ -511,7 +533,7 @@ print_failure_diagnostics() {
   echo "visual_playtest: diagnostics mode=$MODE out=$OUT_DIR log=$LOG" >&2
   if [[ -f "$LOG" ]]; then
     echo "visual_playtest: last state evidence:" >&2
-    grep -aE '^(CAPTURE|TRACE_ASCENT|TRANSITION_ASCENT|ASCENT_METRICS|TRACE_FULL|TRACE_MISSION|TRACE |APOLLO8_MISSION|FAIL|GAP|PARTIAL|FALLBACK|SUMMARY)' "$LOG" \
+    grep -aE '^(CAPTURE|TRACE_ASCENT|TRANSITION_ASCENT|ASCENT_METRICS|TRACE_FULL|TRACE_MISSION|TRACE |HISTORICAL_MISSION|FAIL|GAP|PARTIAL|FALLBACK|SUMMARY)' "$LOG" \
       | tail -25 >&2 || true
   else
     echo "visual_playtest: telemetry log was not created" >&2
@@ -586,6 +608,7 @@ cleanup() {
   fi
   CLEANUP_DONE=1
   set +e
+  rm -f "${EXO_PLAYTEST_SNAPSHOT:-}" 2>/dev/null
   if [[ -n "$GODOT_PIPELINE_PID" ]]; then
     kill_process_tree "$GODOT_PIPELINE_PID"
     wait "$GODOT_PIPELINE_PID" 2>/dev/null
@@ -1698,7 +1721,7 @@ public partial class _PlaytestShot : Node
                 $"ACTION start {bridge.ActiveFlightProfileId} historical countdown");
             _log.Flush();
         }
-        else if (_pad && !_ascentEngaged && _mode != "apollo8_mission"
+        else if (_pad && !_ascentEngaged && _mode is not ("apollo8_mission" or "gemini_mission")
             && AscentController.Instance != null)
         {
             AscentController.Instance.Engage();
@@ -1708,7 +1731,7 @@ public partial class _PlaytestShot : Node
             _log.Flush();
         }
 
-        if (_mode == "apollo8_mission")
+        if (_mode is "apollo8_mission" or "gemini_mission")
         {
             // The historical director owns the whole flight; the harness only observes.
             var missionPhase = MissionManager.Instance?.Phase;
@@ -1716,7 +1739,7 @@ public partial class _PlaytestShot : Node
             {
                 _apollo8MissionLastPhase = missionPhase;
                 var dominantBody = universe.GetDominantBody(vessel.Position);
-                _log.WriteLine($"APOLLO8_MISSION phase={missionPhase} t={universe.CurrentTime:F1} "
+                _log.WriteLine($"HISTORICAL_MISSION phase={missionPhase} t={universe.CurrentTime:F1} "
                     + $"body={dominantBody.Id} alt={vessel.GetAltitude(dominantBody):F0}");
                 _log.Flush();
             }
@@ -1742,7 +1765,9 @@ public partial class _PlaytestShot : Node
                     + $"mass={vessel.TotalMass:F0} rails={vessel.IsOnRails} warp={bridge.WarpIndex}/{bridge.MaxAllowedWarpIndex} "
                     + $"branch={sched.Branch} cap={sched.EffectiveStepCap:F3} simPerFrame={sched.SimulatedSeconds:F3} "
                     + $"noseUp={traceNose.Dot(traceRel.Normalized):F3} noseVel={traceNose.Dot(traceVel.Normalized):F3} "
-                    + $"rate={vessel.AngularVelocity.Magnitude:F4} cmd={vessel.PitchYawRoll.Magnitude:F3} sas={vessel.SASEnabled}");
+                    + $"rate={vessel.AngularVelocity.Magnitude:F4} cmd={vessel.PitchYawRoll.Magnitude:F3} sas={vessel.SASEnabled} "
+                    + $"rcs={vessel.TranslationCommand.Magnitude:F2} mono={vessel.Parts.TotalMonopropellant:F1} "
+                    + $"targetRange={TraceTargetRange(universe, vessel)}");
                 _log.Flush();
             }
             // Powered ascent guidance runs on the fixed 20 ms control clock, so warp changes
@@ -1755,12 +1780,12 @@ public partial class _PlaytestShot : Node
                 bridge.SetWarpIndex(bridge.MaxAllowedWarpIndex);
             if (UntilPhase.Length > 0 && missionPhase?.ToString() == UntilPhase)
             {
-                Finish("APOLLO8_MISSION_PHASE_REACHED");
+                Finish("HISTORICAL_MISSION_PHASE_REACHED");
                 return;
             }
             if (vessel.IsDestroyed)
             {
-                Finish("APOLLO8_MISSION_VEHICLE_LOST");
+                Finish("HISTORICAL_MISSION_VEHICLE_LOST");
                 return;
             }
             // A segment target past lunar orbit (TEI, ENTRY, LANDED) flies through it.
@@ -1769,14 +1794,14 @@ public partial class _PlaytestShot : Node
                 var lunar = universe.GetBody("moon")!;
                 var lunarOrbit = OrbitalElements.FromStateVector(vessel.Position - lunar.Position,
                     vessel.Velocity - lunar.Velocity, lunar.GM, lunar.Id, universe.CurrentTime);
-                _log.WriteLine($"APOLLO8_MISSION_LUNAR_ORBIT periluneKm={(lunarOrbit.Periapsis - lunar.Radius) / 1000:F1} "
+                _log.WriteLine($"HISTORICAL_MISSION_LUNAR_ORBIT periluneKm={(lunarOrbit.Periapsis - lunar.Radius) / 1000:F1} "
                     + $"apoluneKm={(lunarOrbit.Apoapsis - lunar.Radius) / 1000:F1} e={lunarOrbit.Eccentricity:F4}");
                 _log.Flush();
                 QueueCapture("apollo8_mission_lunar_orbit");
                 _orbitBeauty = true;
             }
             if (_orbitBeauty && _pendingSlug == null)
-                Finish("APOLLO8_MISSION_LUNAR_ORBIT_OK");
+                Finish("HISTORICAL_MISSION_LUNAR_ORBIT_OK");
             return;
         }
 
@@ -5436,6 +5461,13 @@ public partial class _PlaytestShot : Node
         return Quaterniond.FromAxisAngle(axis, System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0)));
     }
 
+    /// <summary>Distance (m) to the rendezvous/docking target, or "none".</summary>
+    private static string TraceTargetRange(Universe universe, Vessel vessel)
+    {
+        var target = universe.Vessels.FirstOrDefault(other => other.Id == "gemini8-agena-5003" && other != vessel);
+        return target == null ? "none" : $"{(target.Position - vessel.Position).Magnitude:F0}";
+    }
+
     private void Finish(string reason)
     {
         if (_finished) return;
@@ -6408,15 +6440,15 @@ PYCOVERAGE
       echo "ERROR: missing normal-flow telemetry (demo must not satisfy this gate)" >&2
       return 1
     fi
-  elif [[ "$MODE" == "apollo8_mission" && -n "$UNTIL_PHASE" ]]; then
-    if ! grep -q 'SUMMARY reason=APOLLO8_MISSION_PHASE_REACHED' "$LOG" \
-      || ! grep -q "APOLLO8_MISSION phase=${UNTIL_PHASE} " "$LOG"; then
+  elif [[ ( "$MODE" == "apollo8_mission" || "$MODE" == "gemini_mission" ) && -n "$UNTIL_PHASE" ]]; then
+    if ! grep -q 'SUMMARY reason=HISTORICAL_MISSION_PHASE_REACHED' "$LOG" \
+      || ! grep -q "HISTORICAL_MISSION phase=${UNTIL_PHASE} " "$LOG"; then
       echo "ERROR: the Apollo 8 director did not reach mission phase $UNTIL_PHASE" >&2
       return 1
     fi
   elif [[ "$MODE" == "apollo8_mission" ]]; then
-    if ! grep -q 'SUMMARY reason=APOLLO8_MISSION_LUNAR_ORBIT_OK' "$LOG" \
-      || ! grep -Eq 'APOLLO8_MISSION_LUNAR_ORBIT periluneKm=[0-9.]+ apoluneKm=[0-9.]+ e=0\.[0-9]+' "$LOG" \
+    if ! grep -q 'SUMMARY reason=HISTORICAL_MISSION_LUNAR_ORBIT_OK' "$LOG" \
+      || ! grep -Eq 'HISTORICAL_MISSION_LUNAR_ORBIT periluneKm=[0-9.]+ apoluneKm=[0-9.]+ e=0\.[0-9]+' "$LOG" \
       || [[ ! -f "$OUT_DIR/exo_play_apollo8_mission_lunar_orbit.png" ]]; then
       echo "ERROR: the Apollo 8 director did not fly the stack into a bound lunar orbit" >&2
       return 1
@@ -7273,8 +7305,8 @@ elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "flight14_payload" ]]; then
   echo "visual_playtest: Flight 14 estimated payload flat-pack capture OK — visual review still required"
-elif [[ "$MODE" == "apollo8_mission" && -n "$UNTIL_PHASE" ]]; then
-  echo "visual_playtest: Apollo 8 director reached $UNTIL_PHASE (segment check, not a full mission)"
+elif [[ ( "$MODE" == "apollo8_mission" || "$MODE" == "gemini_mission" ) && -n "$UNTIL_PHASE" ]]; then
+  echo "visual_playtest: historical director reached $UNTIL_PHASE (mode=$MODE)"
 elif [[ "$MODE" == "apollo8_mission" ]]; then
   echo "visual_playtest: Apollo 8 flown from the pad into lunar orbit by the historical director"
 elif [[ "$MODE" == "flight14_payload_group" ]]; then
