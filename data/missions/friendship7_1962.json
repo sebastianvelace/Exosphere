@@ -10,17 +10,21 @@
   "vehicleVariantId": "mercury-atlas6-friendship7-1962-02-20",
   "launchSiteId": "cape_canaveral_lc14",
   "flightProfileId": "mercury-atlas6-three-orbit",
-  "crewIds": ["john-h-glenn-jr"],
-  "prerequisiteMissionIds": ["mission-freedom7-1961"],
+  "crewIds": [
+    "john-h-glenn-jr"
+  ],
+  "prerequisiteMissionIds": [
+    "mission-freedom7-1961"
+  ],
   "objectives": [
     {
-      "id": "reach-ma6-orbit",
-      "titleEn": "Reach the MA-6 orbital altitude corridor",
-      "titleEs": "Alcanza el corredor de altitud orbital MA-6",
-      "metric": "peak_altitude_m",
-      "comparison": "between",
-      "target": 240000,
-      "upperTarget": 285000,
+      "id": "reach-orbit-phase",
+      "titleEn": "Achieve orbital flight",
+      "titleEs": "Alcanza el vuelo orbital",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "ORBIT",
       "required": true
     },
     {
@@ -42,16 +46,6 @@
       "required": true
     },
     {
-      "id": "complete-ma6-duration",
-      "titleEn": "Complete the historical mission-duration corridor",
-      "titleEs": "Completa el corredor histórico de duración",
-      "metric": "elapsed_seconds",
-      "comparison": "between",
-      "target": 17200,
-      "upperTarget": 18250,
-      "required": true
-    },
-    {
       "id": "atlantic-recovery",
       "titleEn": "Splash down safely in the Atlantic",
       "titleEs": "Ameriza de forma segura en el Atlántico",
@@ -61,14 +55,24 @@
       "required": true
     },
     {
-      "id": "reach-orbit-phase",
-      "titleEn": "Achieve orbital flight",
-      "titleEs": "Alcanza el vuelo orbital",
-      "metric": "phase_reached",
-      "comparison": "reached",
-      "target": 0,
-      "expectedText": "ORBIT",
-      "required": true
+      "id": "reach-ma6-orbit",
+      "titleEn": "Historical: reach the MA-6 orbital altitude corridor",
+      "titleEs": "Histórico: alcanza el corredor de altitud orbital MA-6",
+      "metric": "peak_altitude_m",
+      "comparison": "between",
+      "target": 240000,
+      "upperTarget": 285000,
+      "required": false
+    },
+    {
+      "id": "complete-ma6-duration",
+      "titleEn": "Historical: complete the historical mission-duration corridor",
+      "titleEs": "Histórico: completa el corredor histórico de duración",
+      "metric": "elapsed_seconds",
+      "comparison": "between",
+      "target": 17200,
+      "upperTarget": 18250,
+      "required": false
     }
   ],
   "limits": [
@@ -91,13 +95,22 @@
       "required": true
     },
     {
+      "id": "crew-load-limit",
+      "titleEn": "Remain below 12 g",
+      "titleEs": "Mantente por debajo de 12 g",
+      "metric": "maximum_g_force",
+      "comparison": "at_most",
+      "target": 12.0,
+      "required": true
+    },
+    {
       "id": "crew-load-envelope",
-      "titleEn": "Remain below 8.2 g",
-      "titleEs": "Mantente por debajo de 8,2 g",
+      "titleEn": "Historical: remain below 8.2 g",
+      "titleEs": "Histórico: mantente por debajo de 8,2 g",
       "metric": "maximum_g_force",
       "comparison": "at_most",
       "target": 8.2,
-      "required": true
+      "required": false
     }
   ],
   "anomalies": [

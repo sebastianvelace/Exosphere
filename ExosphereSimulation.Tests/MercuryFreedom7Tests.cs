@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Campaign;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Data;
 using Exosphere.Simulation.Flight;
@@ -105,10 +106,10 @@ public sealed class MercuryFreedom7Tests
         Assert.Equal(90.0, MercuryRedstoneFlightProfile.ElevationDegrees(12.0));
         Assert.InRange(
             MercuryRedstoneFlightProfile.ElevationDegrees(77.0),
-            69.9,
-            70.1);
+            70.9,
+            71.1);
         Assert.Equal(
-            50.0,
+            52.0,
             MercuryRedstoneFlightProfile.ElevationDegrees(142.0),
             10);
     }
@@ -233,6 +234,7 @@ public sealed class MercuryFreedom7Tests
         double splashdownTime = double.NaN;
         double alt20 = double.NaN;
         double alt40 = double.NaN;
+        var evidence = new MissionEvidence();
 
         for (int step = 0; step < 12_000 && !vessel.IsDestroyed; step++)
         {
@@ -333,11 +335,23 @@ public sealed class MercuryFreedom7Tests
             Vector3d currentSurface = earth.ToBodyFixedDirection(
                 (vessel.Position - earth.Position).Normalized,
                 universe.CurrentTime).Normalized;
-            maxDownrange = System.Math.Max(
-                maxDownrange,
-                System.Math.Acos(System.Math.Clamp(
-                    currentSurface.Dot(launchDirection), -1.0, 1.0))
-                    * earth.Radius);
+            double groundTrack = System.Math.Acos(System.Math.Clamp(
+                currentSurface.Dot(launchDirection), -1.0, 1.0)) * earth.Radius;
+            maxDownrange = System.Math.Max(maxDownrange, groundTrack);
+            bool splashed = towerJettisoned && altitude <= 1.1 && surfaceVelocity.Magnitude < 1.0;
+            evidence.Observe(new MissionTelemetrySnapshot
+            {
+                MissionTimeSeconds = universe.CurrentTime - startTime,
+                Phase = splashed ? "LANDED" : "ASCENT_SH",
+                AltitudeM = altitude,
+                SurfaceSpeedMps = surfaceVelocity.Magnitude,
+                InertialSpeedMps = (vessel.Velocity - earth.Velocity).Magnitude,
+                GForce = currentG,
+                DownrangeM = groundTrack,
+                CrewAlive = !vessel.IsDestroyed,
+                VesselDestroyed = vessel.IsDestroyed,
+                Splashdown = splashed,
+            });
             if (towerJettisoned
                 && altitude <= 1.1
                 && surfaceVelocity.Magnitude < 1.0)
@@ -353,22 +367,31 @@ public sealed class MercuryFreedom7Tests
         Assert.False(vessel.IsDestroyed,
             $"capsule destroyed at {vessel.CrashImpactSpeed:F1} m/s");
         Assert.True(double.IsFinite(splashdownTime), "capsule never splashed down");
-        string evidence =
+        string evidenceText =
             $"alt20={alt20:F0} alt40={alt40:F0} " +
             $"apogee={peakAltitude:F1}m speed={peakSpeed:F1}m/s " +
             $"range={maxDownrange:F1}m duration={splashdownTime:F1}s " +
             $"maxG={peakG:F2}@{peakGAltitude:F0}m/{peakGTime:F1}s " +
             $"cosA={peakGCosAlpha:F3}";
         // Redstone sea-level TWR ≈ 1.18: T+20 is ~0.6–1 km; several km is T+40.
-        Assert.True(alt20 >= 400.0, evidence);
-        Assert.True(alt40 >= 2_000.0, evidence);
+        Assert.True(alt20 >= 400.0, evidenceText);
+        Assert.True(alt40 >= 2_000.0, evidenceText);
         Assert.True(
             peakAltitude is >= 160_000.0 and <= 220_000.0
             && peakSpeed is >= 2_100.0 and <= 2_600.0
             && maxDownrange is >= 400_000.0 and <= 560_000.0
             && splashdownTime is >= 800.0 and <= 1_050.0
             && peakG is >= 0.0 and <= 13.0,
-            evidence);
+            evidenceText);
+
+        // The automatic director must fly the mission the player is graded on: every required
+        // objective and every optional historical one in data/missions/freedom7_1961.json.
+        var mission = MissionDefinition.LoadFromJson(Path.Combine(data, "missions", "freedom7_1961.json"));
+        var debrief = MissionEvaluator.Evaluate(mission, evidence, isFinal: true);
+        var missed = debrief.Objectives.Concat(debrief.Limits).Where(result => !result.Passed)
+            .Select(result => $"{result.Id}: {result.Evidence}");
+        Assert.True(debrief.IsSuccess, string.Join("; ", missed));
+        Assert.Empty(missed);
     }
 
     private static VehicleVariantDefinition LoadVariant() =>

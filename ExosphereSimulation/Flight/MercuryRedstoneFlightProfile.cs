@@ -16,6 +16,13 @@ public static class MercuryRedstoneFlightProfile
     public const double MainDeployAltitudeM = 3_048.0;
     public const double HistoricalSplashdownSeconds = 922.0;
 
+    /// <summary>
+    /// Total pitch-over (degrees from vertical) at A-7 cutoff. 38° reproduces the published
+    /// arc (187 km apogee, 487 km range, 15:22 flight); the earlier 40° flew flatter and
+    /// stopped at 179 km, below the mission's own historical apogee objective.
+    /// </summary>
+    public const double PitchOverDegrees = 38.0;
+
     /// <summary>Commanded elevation above the local horizon during the A-7 burn.</summary>
     public static double ElevationDegrees(double elapsedSeconds)
     {
@@ -27,6 +34,6 @@ public static class MercuryRedstoneFlightProfile
             0.0,
             1.0);
         double smooth = fraction * fraction * (3.0 - 2.0 * fraction);
-        return 90.0 - 40.0 * smooth;
+        return 90.0 - PitchOverDegrees * smooth;
     }
 }

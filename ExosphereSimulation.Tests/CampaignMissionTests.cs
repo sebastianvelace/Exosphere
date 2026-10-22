@@ -23,15 +23,21 @@ public sealed class CampaignMissionTests
         Assert.Equal("cape_canaveral_lc5", mission.LaunchSiteId);
         Assert.Equal(["alan-b-shepard-jr"], mission.CrewIds);
         Assert.NotEqual(mission.SummaryEn, mission.SummaryEs);
-        Assert.Equal(6, mission.Objectives.Count);
-        Assert.Equal(3, mission.Limits.Count);
+        Assert.Equal(7, mission.Objectives.Count);
+        Assert.Equal(4, mission.Limits.Count);
         Assert.Equal(2, mission.Sources.Count);
 
+        // Two tiers: reaching space and recovering the crew pass the mission; matching
+        // Shepard's numbers is the optional historical tier.
+        var space = mission.Objectives.Single(objective => objective.Id == "reach-space");
+        Assert.True(space.Required);
+        Assert.Equal(100_000.0, space.Target);
         var apogee = mission.Objectives.Single(
             objective => objective.Id == "reach-suborbital-apogee");
         Assert.Equal(MissionMetric.PeakAltitudeM, apogee.Metric);
         Assert.Equal(MissionComparison.AtLeast, apogee.Comparison);
         Assert.Equal(180_000.0, apogee.Target);
+        Assert.False(apogee.Required);
     }
 
     [Fact]
@@ -94,20 +100,30 @@ public sealed class CampaignMissionTests
     [Fact]
     public void DirectorReportsIrreversibleCrewLoadFailureBeforeFinalization()
     {
-        var director = new MissionDirector(LoadFreedom7());
-
-        var debrief = director.Observe(Snapshot(
+        // Above Shepard's 13 g only misses the optional historical limit; the flight goes on.
+        var historical = new MissionDirector(LoadFreedom7()).Observe(Snapshot(
             140, "ASCENT_SH",
             altitudeM: 50_000,
             speedMps: 1_500,
             gForce: 13.5));
+        Assert.Equal(MissionOutcome.InProgress, historical.Outcome);
+        var envelope = historical.Limits.Single(result => result.Id == "crew-load-envelope");
+        Assert.False(envelope.Passed);
+        Assert.False(envelope.Required);
+
+        // Above the 15 g crew limit the mission fails at once, before finalization.
+        var debrief = new MissionDirector(LoadFreedom7()).Observe(Snapshot(
+            140, "ASCENT_SH",
+            altitudeM: 50_000,
+            speedMps: 1_500,
+            gForce: 15.5));
 
         Assert.Equal(MissionOutcome.Failure, debrief.Outcome);
         var limit = debrief.Limits.Single(
-            result => result.Id == "crew-load-envelope");
+            result => result.Id == "crew-load-limit");
         Assert.False(limit.Passed);
-        Assert.Equal(13.5, limit.ActualValue);
-        Assert.Equal(13.0, limit.TargetValue);
+        Assert.Equal(15.5, limit.ActualValue);
+        Assert.Equal(15.0, limit.TargetValue);
     }
 
     [Fact]

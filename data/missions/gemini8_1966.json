@@ -10,58 +10,89 @@
   "vehicleVariantId": "gemini8-titan2-glv8-1966-03-16",
   "launchSiteId": "cape_canaveral_lc19",
   "flightProfileId": "gemini8-rendezvous-emergency-return",
-  "crewIds": ["neil-a-armstrong", "david-r-scott"],
-  "prerequisiteMissionIds": ["mission-friendship7-1962"],
+  "crewIds": [
+    "neil-a-armstrong",
+    "david-r-scott"
+  ],
+  "prerequisiteMissionIds": [
+    "mission-friendship7-1962"
+  ],
   "objectives": [
     {
-      "id": "gemini-orbit", "titleEn": "Insert Spacecraft 8 into its rendezvous orbit",
-      "titleEs": "Inserta la nave 8 en su órbita de rendezvous",
-      "metric": "peak_altitude_m", "comparison": "between",
-      "target": 250000, "upperTarget": 310000, "required": true
-    },
-    {
-      "id": "first-docking", "titleEn": "Achieve the first orbital docking",
+      "id": "first-docking",
+      "titleEn": "Achieve the first orbital docking",
       "titleEs": "Logra el primer docking orbital",
-      "metric": "docking_achieved", "comparison": "true",
-      "target": 1, "required": true
+      "metric": "docking_achieved",
+      "comparison": "true",
+      "target": 1,
+      "required": true
     },
     {
-      "id": "survive-tumble", "titleEn": "Regain control after the OAMS failure",
+      "id": "survive-tumble",
+      "titleEn": "Regain control after the OAMS failure",
       "titleEs": "Recupera el control tras la falla OAMS",
-      "metric": "emergency_control_recovered", "comparison": "true",
-      "target": 1, "required": true
+      "metric": "emergency_control_recovered",
+      "comparison": "true",
+      "target": 1,
+      "required": true
     },
     {
-      "id": "emergency-return", "titleEn": "Splash down in the Pacific contingency area",
+      "id": "emergency-return",
+      "titleEn": "Splash down in the Pacific contingency area",
       "titleEs": "Ameriza en el área de contingencia del Pacífico",
-      "metric": "splashdown", "comparison": "true",
-      "target": 1, "required": true
+      "metric": "splashdown",
+      "comparison": "true",
+      "target": 1,
+      "required": true
     },
     {
-      "id": "historical-duration", "titleEn": "Complete the emergency mission-duration corridor",
-      "titleEs": "Completa el corredor de duración de la misión de emergencia",
-      "metric": "elapsed_seconds", "comparison": "between",
-      "target": 37800, "upperTarget": 39200, "required": true
+      "id": "gemini-orbit",
+      "titleEn": "Historical: insert Spacecraft 8 into its rendezvous orbit",
+      "titleEs": "Histórico: inserta la nave 8 en su órbita de rendezvous",
+      "metric": "peak_altitude_m",
+      "comparison": "between",
+      "target": 250000,
+      "upperTarget": 310000,
+      "required": false
+    },
+    {
+      "id": "historical-duration",
+      "titleEn": "Historical: complete the emergency mission-duration corridor",
+      "titleEs": "Histórico: completa el corredor de duración de la misión de emergencia",
+      "metric": "elapsed_seconds",
+      "comparison": "between",
+      "target": 37800,
+      "upperTarget": 39200,
+      "required": false
     }
   ],
   "limits": [
     {
-      "id": "crew-survival", "titleEn": "Return both pilots alive",
+      "id": "crew-survival",
+      "titleEn": "Return both pilots alive",
       "titleEs": "Regresa con ambos pilotos vivos",
-      "metric": "crew_alive", "comparison": "true",
-      "target": 1, "required": true
+      "metric": "crew_alive",
+      "comparison": "true",
+      "target": 1,
+      "required": true
     },
     {
-      "id": "capsule-survival", "titleEn": "Recover Spacecraft 8",
+      "id": "capsule-survival",
+      "titleEn": "Recover Spacecraft 8",
       "titleEs": "Recupera la nave 8",
-      "metric": "vessel_destroyed", "comparison": "false",
-      "target": 0, "required": true
+      "metric": "vessel_destroyed",
+      "comparison": "false",
+      "target": 0,
+      "required": true
     },
     {
-      "id": "tumble-envelope", "titleEn": "Keep the tumble below the documented envelope",
+      "id": "tumble-envelope",
+      "titleEn": "Keep the tumble below the documented envelope",
       "titleEs": "Mantén el giro bajo el sobre documentado",
-      "metric": "maximum_angular_rate_deg_per_s", "comparison": "at_most",
-      "target": 310, "required": true
+      "metric": "maximum_angular_rate_deg_per_s",
+      "comparison": "at_most",
+      "target": 310,
+      "required": true
     }
   ],
   "anomalies": [
@@ -74,8 +105,12 @@
   ],
   "rewards": [
     {
-      "id": "historical-completion", "amount": 175,
-      "unlockIds": ["mission-apollo8-1968", "vehicle-family-apollo"]
+      "id": "historical-completion",
+      "amount": 175,
+      "unlockIds": [
+        "mission-apollo8-1968",
+        "vehicle-family-apollo"
+      ]
     }
   ],
   "sources": [
