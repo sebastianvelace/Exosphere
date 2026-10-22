@@ -51,6 +51,15 @@ public partial class HistoricalFlightProfileController : Node
     private bool _orbitWarpArmed;
     private bool _geminiStageOneSeparated;
     private bool _rendezvousConfigured;
+    private RendezvousInterceptPlan? _geminiTpi;
+    private bool _geminiTpiReplanned;
+    private bool _geminiReentryRcsArmed;
+    private double _geminiBeco = double.NaN;
+    private double _geminiRetroIgnition = double.NaN;
+    private bool _geminiThrusterIsolated;
+    private TranslationLambertBurn? _geminiBurn;
+    private int _geminiBurnIndex;
+    private ProximityApproach? _geminiProximity;
     private bool _docked;
     private bool _undocked;
     private bool _failureAnnounced;
@@ -74,6 +83,8 @@ public partial class HistoricalFlightProfileController : Node
     // Planned at countdown request (before Engage resets the profile) and adopted at liftoff.
     private LunarLaunchWindowSolution? _pendingApolloLaunchWindow;
     private LunarLaunchWindowSolution? _apolloLaunchWindow;
+    private LambertGuidedBurn? _apolloTranslunarTrim;
+    private bool _apolloTranslunarTrimDone;
     private ProgradeEnergyBurn? _apolloTeiBurn;
     private double _apolloTeiIgnitionTime;
     private LambertGuidedBurn? _apolloTransearthBurn;
@@ -185,6 +196,15 @@ public partial class HistoricalFlightProfileController : Node
         _orbitWarpArmed = false;
         _geminiStageOneSeparated = false;
         _rendezvousConfigured = false;
+        _geminiTpi = null;
+        _geminiTpiReplanned = false;
+        _geminiReentryRcsArmed = false;
+        _geminiThrusterIsolated = false;
+        _geminiBeco = double.NaN;
+        _geminiRetroIgnition = double.NaN;
+        _geminiBurn = null;
+        _geminiBurnIndex = 0;
+        _geminiProximity = null;
         _docked = false;
         _undocked = false;
         _failureAnnounced = false;
@@ -297,6 +317,16 @@ public partial class HistoricalFlightProfileController : Node
             elapsedSeconds >= Gemini8FlightProfile.ThrusterAnomalySeconds;
         _controlRecovered =
             elapsedSeconds >= Gemini8FlightProfile.ControlRecoveredSeconds;
+        _geminiReentryRcsArmed =
+            elapsedSeconds >= Gemini8FlightProfile.ReentryControlActivationSeconds;
+        _geminiThrusterIsolated =
+            elapsedSeconds >= Gemini8FlightProfile.ThrusterIsolationSeconds;
+        // The stuck-thruster torque is not persisted: a save taken mid-anomaly resumes it.
+        if (_failureAnnounced && !_geminiThrusterIsolated)
+        {
+            vessel.DisturbanceTorqueBody = new Vector3d(0.0, Gemini8FlightProfile.StuckThrusterTorqueNm, 0.0);
+            vessel.DisturbanceMassFlowKgPerS = Gemini8FlightProfile.StuckThrusterMassFlowKgPerS;
+        }
         _adapterSeparated = !vessel.Parts.Parts.Any(part =>
             part.Definition.HasVehicleRole("gemini_equipment_adapter"));
         _retroComplete =
@@ -414,7 +444,8 @@ public partial class HistoricalFlightProfileController : Node
     public bool RequiresFixedPhysicsCadence =>
         _active && SimulationBridge.Instance?.ActiveVessel is { } vessel
         && (vessel.IsGroundHeld || vessel.Throttle > 1e-3
-            || vessel.PitchYawRoll.MagnitudeSquared > 1e-6);
+            || vessel.PitchYawRoll.MagnitudeSquared > 1e-6
+            || vessel.TranslationCommand.MagnitudeSquared > 1e-12);
 
     /// <summary>Advances the profile at a simulation control boundary, before integration.</summary>
     public void AdvancePhysicsStep()
@@ -810,6 +841,12 @@ public partial class HistoricalFlightProfileController : Node
                 return;
             }
 
+            if (!_apolloTranslunarTrimDone)
+            {
+                RunApolloTranslunarTrim(bridge, vessel, moon);
+                return;
+            }
+
             double altitude = vessel.GetAltitude(moon);
             if (altitude > 600_000.0)
             {
@@ -1067,8 +1104,55 @@ public partial class HistoricalFlightProfileController : Node
         return plan;
     }
 
+    /// <summary>
+    /// Translunar trim (MCC-4) inside the Moon's sphere of influence: a periapsis correction of
+    /// the Moon-centred hyperbola to the LOI perilune, once perilune is close enough.
+    /// </summary>
+    private void RunApolloTranslunarTrim(SimulationBridge bridge, Vessel vessel, CelestialBody moon)
+    {
+        var universe = bridge.Universe;
+        if (_apolloTranslunarTrim == null)
+        {
+            if (!TranslunarCorrection.IsTrimDue(universe, vessel, moon))
+            {
+                // Already past perilune (no periapsis ahead): nothing left to trim; LOI decides.
+                if (universe.GetDominantBody(vessel.Position) == moon && double.IsNaN(
+                        PeriapsisCaptureBurn.TimeToPeriapsis(vessel.Position - moon.Position,
+                            vessel.Velocity - moon.Velocity, moon.GM)))
+                {
+                    _apolloTranslunarTrimDone = true;
+                    return;
+                }
+                bridge.SetWarpIndex(8);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            _apolloTranslunarTrim = TranslunarCorrection.CreateTrim(vessel, moon, universe.CurrentTime,
+                moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM);
+            _apolloGuidedBurnLastTime = universe.CurrentTime;
+        }
+        bridge.SetWarpIndex(0);
+        vessel.IsOnRails = false;
+        vessel.OrbitalState = null;
+        _apolloTranslunarTrim.Advance(vessel, moon, GuidedBurnStep(universe), universe.CurrentTime);
+        if (!_apolloTranslunarTrim.IsFinished) return;
+
+        if (_apolloTranslunarTrim.Status == LambertGuidedBurnStatus.Blocked)
+            GD.PrintErr($"[HISTORICAL] Translunar trim stopped: {_apolloTranslunarTrim.BlockReason}");
+        var approach = OrbitalElements.FromStateVector(vessel.Position - moon.Position,
+            vessel.Velocity - moon.Velocity, moon.GM, moon.Id, universe.CurrentTime);
+        GD.Print($"[HISTORICAL] Translunar trim {_apolloTranslunarTrim.BurnSeconds:F1} s, perilune "
+            + $"{(approach.Periapsis - moon.Radius) / 1000.0:F1} km.");
+        vessel.Throttle = 0.0;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        _apolloTranslunarTrim = null;
+        _apolloTranslunarTrimDone = true;
+    }
+
     private void ResetApolloReturn()
     {
+        _apolloTranslunarTrim = null;
+        _apolloTranslunarTrimDone = false;
         _apolloTeiBurn = null;
         _apolloTeiIgnitionTime = 0.0;
         _apolloTransearthBurn = null;
@@ -1196,10 +1280,12 @@ public partial class HistoricalFlightProfileController : Node
                 return false;
             }
             bridge.SetWarpIndex(0);
+            // Aim at the perilune altitude through the predicted encounter, not at the point
+            // the TLI plan estimated (that left a 211 km perilune instead of 111 km).
             var aim = plan.EarthTransferOrbit.GetStateAtTime(plan.ArrivalTime, earth.GM).position;
-            _apolloMidcourseBurn = new LambertGuidedBurn(aim, plan.ArrivalTime, correctionTime,
-                (vessel.Position - earth.Position).Cross(vessel.Velocity - earth.Velocity),
-                cutoffDeltaVMps: 0.1, maximumBurnSeconds: 300.0);
+            var moon = universe.GetBody("moon")!;
+            _apolloMidcourseBurn = TranslunarCorrection.Create(vessel, earth, moon, universe.CurrentTime,
+                plan.ArrivalTime, aim, moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM);
             _apolloGuidedBurnLastTime = universe.CurrentTime;
         }
         bridge.SetWarpIndex(0);
@@ -1273,7 +1359,12 @@ public partial class HistoricalFlightProfileController : Node
         Vessel? target = bridge.EnsureGemini8AgenaTarget();
         double altitude = vessel.GetAltitude(earth);
         Vector3d up = earth.GetGeodeticUp(vessel.Position);
-        Vector3d downrange = bridge.GetLaunchHeadingDirection();
+        // The Agena's orbit plane: Titan flies into it and stage two steers to stay in it.
+        Vector3d? agenaPlane = target == null ? null
+            : (target.Position - earth.Position).Cross(target.Velocity - earth.Velocity).Normalized;
+        Vector3d downrange = agenaPlane is { } plane
+            ? plane.Cross(up).Normalized
+            : bridge.GetLaunchHeadingDirection();
 
         if (!_geminiStageOneSeparated)
         {
@@ -1288,9 +1379,13 @@ public partial class HistoricalFlightProfileController : Node
                 vessel.AngularVelocity,
                 proportionalGain: 2.5,
                 dampingGain: 1.2);
-            vessel.Throttle = elapsed
-                < Gemini8FlightProfile.StageOneCutoffSeconds ? 1.0 : 0.0;
-            if (elapsed >= Gemini8FlightProfile.StageSeparationSeconds)
+            // BECO was propellant depletion, not a clock: burn stage one out, then separate.
+            vessel.Throttle = 1.0;
+            if (double.IsNaN(_geminiBeco)
+                && Gemini8FlightProfile.IsStageOneDepleted(vessel, earth, elapsed))
+                _geminiBeco = elapsed;
+            if (!double.IsNaN(_geminiBeco)
+                && elapsed >= _geminiBeco + Gemini8FlightProfile.StagingDelaySeconds)
             {
                 bridge.TriggerStaging();
                 _geminiStageOneSeparated = true;
@@ -1304,19 +1399,22 @@ public partial class HistoricalFlightProfileController : Node
 
         if (!_meco)
         {
-            double elevation = Gemini8FlightProfile
-                .ElevationDegrees(elapsed) * MathUtils.DEG_TO_RAD;
-            Vector3d desired = AttitudeGuidance.AimFromElevation(
-                up, downrange, elevation);
+            // Closed-loop stage-two insertion into the Agena plane; cut on the flown periapsis
+            // or at burnout. The open-loop program stalled at 115 km and fell back.
+            Vector3d desired = ClosedLoopInsertionGuidance.ComputeAim(vessel, earth,
+                Gemini8FlightProfile.InsertionAltitudeM, downrange, agenaPlane);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation,
                 Vector3d.Up,
                 desired,
                 vessel.AngularVelocity,
                 proportionalGain: 2.3,
-                dampingGain: 1.15);
+                dampingGain: Gemini8FlightProfile.StageTwoDampingGain(vessel.GetPitchYawAngularAuthority(earth)));
             vessel.Throttle = 1.0;
-            if (elapsed >= Gemini8FlightProfile.StageTwoCutoffSeconds)
+            double sinceBeco = double.IsNaN(_geminiBeco) ? double.PositiveInfinity : elapsed - _geminiBeco;
+            if (ClosedLoopInsertionGuidance.IsInserted(vessel, earth,
+                    Gemini8FlightProfile.MinimumInsertionPeriapsisM, bridge.Universe.CurrentTime)
+                || Gemini8FlightProfile.IsStageTwoBurnedOut(vessel, earth, sinceBeco))
             {
                 _meco = true;
                 vessel.Throttle = 0.0;
@@ -1339,66 +1437,61 @@ public partial class HistoricalFlightProfileController : Node
         }
         if (!_separated || target == null) return;
 
-        double approachStart =
-            Gemini8FlightProfile.RendezvousCompleteSeconds;
-        if (!_orbitWarpArmed
-            && elapsed >= Gemini8FlightProfile.SpacecraftSeparationSeconds + 30.0
-            && elapsed < approachStart - 60.0)
+        // Rendezvous on OAMS translation thrusters: terminal phase initiation, a
+        // mid-transfer correction, then braking and a final approach to a real capture.
+        if (!_rendezvousConfigured)
         {
-            bridge.SetWarpIndex(6);
-            _orbitWarpArmed = bridge.WarpIndex >= 6;
+            RunGeminiIntercept(bridge, vessel, target, earth);
+            return;
         }
-        else if (_orbitWarpArmed && elapsed >= approachStart - 60.0)
+        if (!_docked && !_undocked)
         {
-            bridge.SetWarpIndex(0);
-            _orbitWarpArmed = false;
+            RunGeminiProximity(bridge, vessel, target, earth);
+            if (!_docked) return;
         }
 
-        if (!_rendezvousConfigured && elapsed >= approachStart)
+        // Docked coast to the anomaly: warp, stepping down so the failure epoch is not overshot.
+        if (_docked && !_failureAnnounced)
         {
-            ConfigureGeminiFinalApproach(vessel, target);
-            _rendezvousConfigured = true;
-            bridge.SetWarpIndex(4);
-            MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
-            GD.Print(
-                "[HISTORICAL] Rendezvous complete; calibrated OAMS final "
-                + "approach initiated.");
-        }
-        if (_rendezvousConfigured
-            && !_docked
-            && elapsed >= Gemini8FlightProfile.DockingSeconds - 10.0)
-            bridge.SetWarpIndex(0);
-
-        if (!_docked
-            && !_undocked
-            && elapsed >= Gemini8FlightProfile.DockingSeconds)
-        {
-            DockingAttempt attempt = CaptureGeminiDocking(
-                bridge, vessel, target);
-            _docked = attempt.Succeeded;
-            if (_docked)
-                GD.Print("[HISTORICAL] First docking achieved with Agena 5003.");
-            else
-                GD.PushWarning(
-                    $"[HISTORICAL] Gemini docking rejected: {attempt.Failure}.");
+            double untilAnomaly = Gemini8FlightProfile.ThrusterAnomalySeconds - elapsed;
+            bridge.SetWarpIndex(untilAnomaly > 3_600.0 ? 8 : untilAnomaly > 600.0 ? 6
+                : untilAnomaly > 60.0 ? 4 : 0);
         }
 
+        // OAMS thruster 8 stuck on: a real torque and propellant drain, not a rate profile.
         if (!_failureAnnounced
             && elapsed >= Gemini8FlightProfile.ThrusterAnomalySeconds)
         {
             _failureAnnounced = true;
-            bridge.SetWarpIndex(4);
+            vessel.DisturbanceTorqueBody = new Vector3d(0.0, Gemini8FlightProfile.StuckThrusterTorqueNm, 0.0);
+            vessel.DisturbanceMassFlowKgPerS = Gemini8FlightProfile.StuckThrusterMassFlowKgPerS;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            bridge.SetWarpIndex(0);
             GD.Print(
                 "[ANOMALY] OAMS thruster 8 failed ON; docked stack tumbling.");
         }
 
         if (_failureAnnounced && !_controlRecovered)
         {
-            double rate = Gemini8FlightProfile.AnomalyAngularRateDegPerS(
-                elapsed) * MathUtils.DEG_TO_RAD;
-            Vector3d rollAxis =
-                vessel.Orientation.Rotate(Vector3d.Up).Normalized;
-            vessel.AngularVelocity = rollAxis * rate;
+            bridge.SetWarpIndex(0);
+            // The crew hands attitude control from the OAMS to the re-entry RCS rings...
+            if (!_geminiReentryRcsArmed
+                && elapsed >= Gemini8FlightProfile.ReentryControlActivationSeconds)
+            {
+                _geminiReentryRcsArmed = true;
+                SetGeminiAttitudeRcs(vessel, oamsEnabled: false, reentryEnabled: true);
+                GD.Print("[HISTORICAL] Re-entry control system armed; OAMS attitude off.");
+            }
+            // ...then isolates the failed circuit.
+            if (!_geminiThrusterIsolated
+                && elapsed >= Gemini8FlightProfile.ThrusterIsolationSeconds)
+            {
+                _geminiThrusterIsolated = true;
+                vessel.DisturbanceTorqueBody = Vector3d.Zero;
+                vessel.DisturbanceMassFlowKgPerS = 0.0;
+                GD.Print("[HISTORICAL] Thruster 8 isolated.");
+            }
+            vessel.PitchYawRoll = _geminiReentryRcsArmed ? RateDampingCommand(vessel) : Vector3d.Zero;
         }
 
         if (!_undocked
@@ -1413,16 +1506,23 @@ public partial class HistoricalFlightProfileController : Node
                     + "accelerating in roll.");
         }
 
-        if (!_controlRecovered
-            && elapsed >= Gemini8FlightProfile.ControlRecoveredSeconds)
+        if (!_controlRecovered && _geminiThrusterIsolated
+            && vessel.AngularVelocity.Magnitude < Gemini8FlightProfile.ControlRecoveredRateRadPerS)
         {
             _controlRecovered = true;
-            vessel.AngularVelocity = Vector3d.Zero;
             vessel.PitchYawRoll = Vector3d.Zero;
-            ConsumeGeminiOamsReserve(vessel);
             bridge.SetWarpIndex(6);
             GD.Print(
-                "[HISTORICAL] Thruster 8 isolated; reentry RCS restored control.");
+                "[HISTORICAL] Re-entry RCS damped the roll; control restored "
+                + $"({vessel.Parts.TotalMonopropellant:F0} kg OAMS left).");
+        }
+
+        // Coast to the retro sequence: re-asserted every frame so a transient limit cannot stick.
+        if (_controlRecovered && !_adapterSeparated)
+        {
+            double untilAdapter = Gemini8FlightProfile.AdapterSeparationSeconds - elapsed;
+            bridge.SetWarpIndex(untilAdapter > 3_600.0 ? 8 : untilAdapter > 600.0 ? 6
+                : untilAdapter > 60.0 ? 4 : 0);
         }
 
         if (!_adapterSeparated
@@ -1441,21 +1541,50 @@ public partial class HistoricalFlightProfileController : Node
             GD.Print("[HISTORICAL] Equipment adapter separated.");
         }
 
-        if (!_retroComplete
-            && elapsed >= Gemini8FlightProfile.RetrofireSeconds)
+        // Retrofire with the retrograde section's solid rockets: hold the thrust axis
+        // retrograde on the re-entry RCS, fire once aligned, and let them burn out.
+        if (!_retroComplete && _adapterSeparated
+            && elapsed >= Gemini8FlightProfile.RetrofireSeconds - 120.0)
         {
-            Vector3d relativeVelocity = vessel.Velocity - earth.Velocity;
-            Vector3d retrograde = -relativeVelocity.Normalized;
-            vessel.Velocity += retrograde
-                * Gemini8FlightProfile.CalibratedEmergencyRetroDeltaVMps;
+            bridge.SetWarpIndex(0);
             vessel.IsOnRails = false;
             vessel.OrbitalState = null;
-            _retroComplete = true;
-            MissionManager.Instance?.EnterPhase(MissionPhase.RETRO_BURN);
-            bridge.SetWarpIndex(8);
-            GD.Print(
-                "[HISTORICAL] Emergency retrofire complete; ballistic return.");
+            Vector3d retrograde = -(vessel.Velocity - earth.Velocity).Normalized;
+            vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(vessel.Orientation, Vector3d.Up,
+                retrograde, vessel.AngularVelocity, proportionalGain: 2.3,
+                dampingGain: AttitudeGuidance.DampingGainFor(2.3, vessel.GetPitchYawAngularAuthority(earth)));
+            var retroPack = vessel.Parts.Parts.FirstOrDefault(part =>
+                part.Definition.HasVehicleRole("gemini_retro_module"));
+            bool aligned = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(retrograde)
+                > System.Math.Cos(3.0 * MathUtils.DEG_TO_RAD);
+            if (elapsed >= Gemini8FlightProfile.RetrofireSeconds && (aligned || vessel.Throttle > 0.0))
+            {
+                if (vessel.Throttle <= 0.0)
+                    MissionManager.Instance?.EnterPhase(MissionPhase.RETRO_BURN);
+                vessel.Throttle = 1.0;
+            }
+            if (vessel.Throttle > 0.0 && double.IsNaN(_geminiRetroIgnition))
+                _geminiRetroIgnition = elapsed;
+            // Burnout is the end of thrust (the solid motors leave a sub-tick residue), then the
+            // retrograde section is jettisoned to expose the heat shield, as on the flight.
+            if (!double.IsNaN(_geminiRetroIgnition) && elapsed - _geminiRetroIgnition > 2.0
+                && vessel.ComputeThrust(earth).Magnitude < 1.0)
+            {
+                vessel.Throttle = 0.0;
+                vessel.PitchYawRoll = Vector3d.Zero;
+                if (retroPack != null)
+                    bridge.DeployPartAsVessel(retroPack.InstanceId, "Gemini VIII Retrograde Section",
+                        new Vector3d(0.0, -0.5, 0.0));
+                vessel = bridge.ActiveVessel ?? vessel;
+                _retroComplete = true;
+                bridge.SetWarpIndex(8);
+                GD.Print("[HISTORICAL] Emergency retrofire complete; retrograde section jettisoned.");
+            }
         }
+
+        // Heat shield into the airstream from retrofire through entry.
+        if (_retroComplete && vessel.GetAltitude(earth) < 400_000.0)
+            vessel.PitchYawRoll = CapsuleEntryGuidance.ComputeCommand(vessel, earth);
 
         altitude = vessel.GetAltitude(earth);
         up = (vessel.Position - earth.Position).Normalized;
@@ -1695,73 +1824,116 @@ public partial class HistoricalFlightProfileController : Node
             Apollo11FlightProfile.DockingConnectionId);
     }
 
-    private static void ConfigureGeminiFinalApproach(
-        Vessel gemini,
-        Vessel target)
+    private void RunGeminiIntercept(SimulationBridge bridge, Vessel gemini, Vessel agena, CelestialBody earth)
     {
-        target.IsOnRails = false;
-        target.OrbitalState = null;
-        Vector3d dockingAxis =
-            target.Orientation.Rotate(Vector3d.Up).Normalized;
-        const double initialPortSeparationM = 150.0;
-        const double centreToPortsM = 0.975;
-        double coastTime = Gemini8FlightProfile.DockingSeconds
-            - Gemini8FlightProfile.RendezvousCompleteSeconds;
-        gemini.Position = target.Position
-            - dockingAxis
-                * (initialPortSeparationM + centreToPortsM);
-        gemini.Velocity = target.Velocity
-            + dockingAxis * (initialPortSeparationM / coastTime);
-        gemini.Orientation = target.Orientation;
-        gemini.AngularVelocity = Vector3d.Zero;
+        var universe = bridge.Universe;
+        const double standoffM = 500.0;
+        if (_geminiTpi == null)
+        {
+            _geminiTpi = RendezvousPlanner.PlanIntercept(earth.GM, Osculating(gemini, earth, universe.CurrentTime),
+                Osculating(agena, earth, universe.CurrentTime), universe.CurrentTime + 600.0, 6.0 * 3_600.0,
+                standoffM);
+            GD.Print($"[HISTORICAL] Gemini TPI planned in {(_geminiTpi.BurnTime - universe.CurrentTime) / 60.0:F0} min "
+                + $"({_geminiTpi.TotalDeltaVMps:F0} m/s with braking).");
+        }
+        if (_geminiBurn == null)
+        {
+            // The OAMS TPI is a several-minute burn: centre it on the impulsive epoch.
+            double ignition = _geminiBurnIndex == 0
+                ? _geminiTpi.BurnTime - RendezvousPlanner.HalfBurnSeconds(gemini, _geminiTpi.InitiationDeltaV.Magnitude)
+                : 0.5 * (_geminiTpi.BurnTime + _geminiTpi.ArrivalTime);
+            double untilIgnition = ignition - universe.CurrentTime;
+            // The coast is integrated with oblateness and drag; replan the TPI from the flown
+            // states 15 min out so it does not pay for the two-body prediction error.
+            if (_geminiBurnIndex == 0 && !_geminiTpiReplanned && untilIgnition <= 900.0)
+            {
+                _geminiTpi = RendezvousPlanner.PlanIntercept(earth.GM, Osculating(gemini, earth, universe.CurrentTime),
+                    Osculating(agena, earth, universe.CurrentTime), universe.CurrentTime + 300.0, 1_800.0, standoffM);
+                _geminiTpiReplanned = true;
+                return;
+            }
+            if (untilIgnition > 0.0)
+            {
+                bridge.SetWarpIndex(untilIgnition > 3_600.0 ? 7 : untilIgnition > 600.0 ? 5 : untilIgnition > 60.0 ? 3 : 0);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            var aim = RendezvousPlanner.AimPosition(Osculating(agena, earth, universe.CurrentTime), earth.GM,
+                _geminiTpi.ArrivalTime, standoffM);
+            _geminiBurn = new TranslationLambertBurn(aim, _geminiTpi.ArrivalTime, universe.CurrentTime,
+                (gemini.Position - earth.Position).Cross(gemini.Velocity - earth.Velocity));
+            _apolloGuidedBurnLastTime = universe.CurrentTime;
+        }
+        if (!_geminiBurn.IsFinished)
+        {
+            bridge.SetWarpIndex(0);
+            gemini.IsOnRails = false;
+            gemini.OrbitalState = null;
+            _geminiBurn.Advance(gemini, earth, GuidedBurnStep(universe), universe.CurrentTime);
+            if (!_geminiBurn.IsFinished) return;
+            if (_geminiBurn.Status == TranslationBurnStatus.Blocked)
+                GD.PrintErr($"[HISTORICAL] Gemini OAMS burn stopped: {_geminiBurn.BlockReason}");
+            GD.Print($"[HISTORICAL] Gemini {(_geminiBurnIndex == 0 ? "TPI" : "transfer correction")}: "
+                + $"{_geminiBurn.BurnSeconds:F1} s on OAMS.");
+            _geminiBurnIndex++;
+            if (_geminiBurnIndex < 2) _geminiBurn = null;
+            return;
+        }
+        double range = (gemini.Position - agena.Position).Magnitude;
+        if (range > ProximityApproach.HandoverRangeM(gemini, _geminiTpi.BrakingDeltaV.Magnitude))
+        {
+            bridge.SetWarpIndex(range > 60_000.0 ? 4 : 2);
+            return;
+        }
+        bridge.SetWarpIndex(0);
+        _rendezvousConfigured = true;
+        _geminiProximity = new ProximityApproach();
+        MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);
+        GD.Print($"[HISTORICAL] Rendezvous: {range:F0} m from Agena 5003; braking and final approach.");
+    }
+
+    private void RunGeminiProximity(SimulationBridge bridge, Vessel gemini, Vessel agena, CelestialBody earth)
+    {
+        bridge.SetWarpIndex(0);
         gemini.IsOnRails = false;
         gemini.OrbitalState = null;
-    }
-
-    private static DockingAttempt CaptureGeminiDocking(
-        SimulationBridge bridge,
-        Vessel gemini,
-        Vessel target)
-    {
-        Vector3d axis = target.Orientation.Rotate(Vector3d.Up).Normalized;
-        const double centreToPortsM = 0.975;
-        const double captureGapM = 0.10;
-        gemini.Position = target.Position
-            - axis * (centreToPortsM + captureGapM);
-        gemini.Velocity = target.Velocity + axis * 0.10;
-        gemini.Orientation = target.Orientation;
-        gemini.AngularVelocity = Vector3d.Zero;
-        target.AngularVelocity = Vector3d.Zero;
-        string? geminiPort = gemini.Parts.Parts.FirstOrDefault(part =>
-            part.Definition.HasVehicleRole(
-                "gemini_docking_port"))?.InstanceId;
-        string? targetPort = target.Parts.Parts.FirstOrDefault(part =>
-            part.Definition.HasVehicleRole(
-                "agena_target_docking_port"))?.InstanceId;
-        if (geminiPort == null || targetPort == null)
-            return new DockingAttempt(
-                false,
-                DockingFailure.PortMissing,
-                null,
-                double.NaN,
-                double.NaN,
-                double.NaN);
-        return bridge.Universe.TryDock(
-            gemini.Id,
-            geminiPort,
-            target.Id,
-            targetPort,
+        agena.IsOnRails = false;
+        agena.OrbitalState = null;
+        var geminiPort = gemini.Parts.Parts.FirstOrDefault(part => part.Definition.HasVehicleRole("gemini_docking_port"));
+        var agenaPort = agena.Parts.Parts.FirstOrDefault(part => part.Definition.HasVehicleRole("agena_target_docking_port"));
+        if (geminiPort == null || agenaPort == null) return;
+        _geminiProximity ??= new ProximityApproach();
+        _geminiProximity.Advance(gemini, geminiPort, agena, agenaPort, earth);
+        if (!_geminiProximity.IsOnFinalApproach || _geminiProximity.PortDistanceM > 0.65) return;
+        var attempt = bridge.Universe.TryDock(agena.Id, agenaPort.InstanceId, gemini.Id, geminiPort.InstanceId,
             "gemini8-agena-docking");
+        if (!attempt.Succeeded) return;
+        _docked = true;
+        gemini.TranslationCommand = Vector3d.Zero;
+        gemini.PitchYawRoll = Vector3d.Zero;
+        GD.Print("[HISTORICAL] First docking achieved with Agena 5003.");
     }
 
-    private static void ConsumeGeminiOamsReserve(Vessel vessel)
+    private static OrbitalElements Osculating(Vessel vessel, CelestialBody earth, double epoch) =>
+        OrbitalElements.FromStateVector(vessel.Position - earth.Position, vessel.Velocity - earth.Velocity,
+            earth.GM, earth.Id, epoch);
+
+    private static void SetGeminiAttitudeRcs(Vessel vessel, bool oamsEnabled, bool reentryEnabled)
     {
-        foreach (var part in vessel.Parts.Parts.Where(part =>
-                     part.Definition.HasVehicleRole(
-                         "gemini_equipment_adapter")))
-            part.Monopropellant = System.Math.Min(
-                part.Monopropellant,
-                part.Definition.FuelCapacityMono * 0.30);
+        foreach (var part in vessel.Parts.Parts)
+        {
+            if (part.Definition.HasVehicleRole("gemini_equipment_adapter")) part.RcsAttitudeEnabled = oamsEnabled;
+            if (part.Definition.HasVehicleRole("gemini_reentry_capsule")) part.RcsAttitudeEnabled = reentryEnabled;
+        }
+    }
+
+    /// <summary>Pure rate damping on all three axes (Gemini re-entry RCS rate mode).</summary>
+    private static Vector3d RateDampingCommand(Vessel vessel)
+    {
+        var rate = vessel.Orientation.Inverse().Rotate(vessel.AngularVelocity);
+        const double gain = 4.0;
+        return new Vector3d(System.Math.Clamp(-gain * rate.X, -1.0, 1.0),
+            System.Math.Clamp(-gain * rate.Z, -1.0, 1.0), System.Math.Clamp(-gain * rate.Y, -1.0, 1.0));
     }
 
     private void ProcessMercuryAtlas(
