@@ -189,6 +189,21 @@ public sealed class CampaignMissionTests
     }
 
     [Fact]
+    public void UnlockAllMissionsLetsATestPilotStartAnyMissionWithoutRecordingProgress()
+    {
+        var catalog = MissionDefinitionCatalog.LoadFromDirectory(
+            Path.Combine(Root.FullName, "data", "missions"));
+        var locked = new CampaignService(new CampaignSaveV2 { ProfileId = "new-pilot" }, catalog.Ordered);
+        Assert.False(locked.CanStart("mission-gemini8-1966"));
+
+        var state = new CampaignSaveV2 { ProfileId = "test-pilot" };
+        var unlocked = new CampaignService(state, catalog.Ordered) { UnlockAllMissions = true };
+        Assert.All(catalog.Ordered, mission => Assert.True(unlocked.CanStart(mission.Id)));
+        Assert.Empty(state.CompletedMissionIds);
+        Assert.False(unlocked.CanStart("mission-does-not-exist"));
+    }
+
+    [Fact]
     public void CampaignRewardsAndUnlocksAreIdempotent()
     {
         var mission = LoadFreedom7();

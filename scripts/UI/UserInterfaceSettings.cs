@@ -18,6 +18,8 @@ public static class UserInterfaceSettings
     public static bool ReducedMotion { get; private set; }
     public static float UiScale { get; private set; } = 1.0f;
     public static HudDensity HudDensity { get; private set; } = HudDensity.Minimal;
+    /// <summary>Testing aid: campaign missions start without their prerequisites.</summary>
+    public static bool UnlockAllMissions { get; private set; }
 
     public static void Load()
     {
@@ -26,6 +28,7 @@ public static class UserInterfaceSettings
         Language = (InterfaceLanguage)(int)config.GetValue(
             "interface", "language", (int)InterfaceLanguage.English);
         ReducedMotion = (bool)config.GetValue("interface", "reduced_motion", false);
+        UnlockAllMissions = (bool)config.GetValue("campaign", "unlock_all_missions", false);
         UiScale = System.Math.Clamp(
             (float)config.GetValue("interface", "ui_scale", 1.0f), 1.0f, 1.5f);
         HudDensity = (HudDensity)System.Math.Clamp(
@@ -50,6 +53,12 @@ public static class UserInterfaceSettings
     public static void SetReducedMotion(bool value)
     {
         ReducedMotion = value;
+        Save();
+    }
+
+    public static void SetUnlockAllMissions(bool value)
+    {
+        UnlockAllMissions = value;
         Save();
     }
 
@@ -86,6 +95,7 @@ public static class UserInterfaceSettings
         config.SetValue("interface", "ui_scale", UiScale);
         config.SetValue("interface", "hud_density", (int)HudDensity);
         config.SetValue("interface", "hud_layout_version", HudLayoutVersion);
+        config.SetValue("campaign", "unlock_all_missions", UnlockAllMissions);
         config.Save(Path);
     }
 }
@@ -164,6 +174,7 @@ public static class UiText
         ["graphics_quality_note"] = ("Native world resolution with detailed cloud lighting and reflections. Best for dedicated graphics.", "Resolución nativa con iluminación de nubes y reflejos detallados. Recomendado para gráficos dedicados."),
         ["language"] = ("LANGUAGE", "IDIOMA"),
         ["motion"] = ("REDUCED MOTION", "MOVIMIENTO REDUCIDO"),
+        ["unlock_all_missions"] = ("UNLOCK ALL MISSIONS (TESTING)", "DESBLOQUEAR TODAS LAS MISIONES (PRUEBAS)"),
         ["hud_density"] = ("FLIGHT TELEMETRY", "TELEMETRÍA DE VUELO"),
         ["hud_minimal"] = ("BROADCAST", "TRANSMISIÓN"),
         ["hud_full"] = ("BROADCAST + DIAGNOSTICS", "TRANSMISIÓN + DIAGNÓSTICOS"),

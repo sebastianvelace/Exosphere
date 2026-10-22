@@ -14,6 +14,12 @@ public sealed class CampaignService
 
     public CampaignSaveV2 State { get; }
 
+    /// <summary>
+    /// Testing aid: every catalogued mission can be started regardless of prerequisites.
+    /// Progression and rewards still record normally.
+    /// </summary>
+    public bool UnlockAllMissions { get; init; }
+
     public CampaignService(
         CampaignSaveV2 state,
         IEnumerable<MissionDefinition> missions)
@@ -28,9 +34,9 @@ public sealed class CampaignService
 
     public bool CanStart(string missionId) =>
         _missions.TryGetValue(missionId, out var definition)
-        && State.UnlockedIds.Contains(missionId)
-        && definition.PrerequisiteMissionIds.All(
-            State.CompletedMissionIds.Contains);
+        && (UnlockAllMissions
+            || State.UnlockedIds.Contains(missionId)
+                && definition.PrerequisiteMissionIds.All(State.CompletedMissionIds.Contains));
 
     public CampaignRewardResult ApplyDebrief(MissionDebrief debrief)
     {

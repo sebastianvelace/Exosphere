@@ -492,7 +492,10 @@ public partial class MainMenu : Control
         var missionCatalog = MissionDefinitionCatalog.LoadFromDirectory(
             System.IO.Path.Combine(data, "missions"));
         CampaignSaveV2 state = SaveSystem.ReadMostRecentCampaignState();
-        var service = new CampaignService(state, missionCatalog.Ordered);
+        var service = new CampaignService(state, missionCatalog.Ordered)
+        {
+            UnlockAllMissions = UserInterfaceSettings.UnlockAllMissions,
+        };
         bool spanish =
             UserInterfaceSettings.Language == InterfaceLanguage.Spanish;
 
@@ -687,6 +690,12 @@ public partial class MainMenu : Control
             UiText.Get($"hud_{UserInterfaceSettings.HudDensity.ToString().ToLowerInvariant()}"), () =>
             {
                 UserInterfaceSettings.CycleHudDensity();
+                ShowSettings();
+            }));
+        body.AddChild(SettingRow(UiText.Get("unlock_all_missions"),
+            UserInterfaceSettings.UnlockAllMissions ? "ON" : "OFF", () =>
+            {
+                UserInterfaceSettings.SetUnlockAllMissions(!UserInterfaceSettings.UnlockAllMissions);
                 ShowSettings();
             }));
         body.AddChild(SettingRow(UiText.Get("motion"),

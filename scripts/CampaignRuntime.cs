@@ -47,7 +47,10 @@ public partial class CampaignRuntime : Node
             System.IO.Path.Combine(dataPath, "missions"));
         Campaign = new CampaignService(
             campaignState ?? new CampaignSaveV2(),
-            catalog.Ordered);
+            catalog.Ordered)
+        {
+            UnlockAllMissions = UserInterfaceSettings.UnlockAllMissions,
+        };
 
         string? missionId = requestedMissionId;
         if (string.IsNullOrWhiteSpace(missionId))
