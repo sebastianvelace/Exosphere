@@ -154,7 +154,12 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   plane-steered insertion into the lunar plane (only a resumed ascent falls back to a
   scripted plane correction). TEI is a finite SPS burn (`Navigation/TransearthInjectionPlanner`),
   three `TransearthCorrection` burns hit the 38 km corridor perigee, and the CM flies a lifting
-  entry on trimmed-capsule aerodynamics with `CapsuleEntryGuidance` bank control.
+  entry on trimmed-capsule aerodynamics with `CapsuleEntryGuidance` bank control. Translunar
+  corrections target the perilune (`TranslunarCorrection`, in-SOI trim), LOI 108 × 312 km.
+- Gemini 8 flies rendezvous and docking on translation RCS (`Vessel.TranslationCommand`,
+  `RendezvousPlanner`, `ProximityApproach`, real `TryDock`), the thruster 8 failure as a
+  `DisturbanceTorqueBody` with re-entry RCS recovery, and a solid-motor retrofire. Its launch
+  still starts from an Agena placed overhead (scenario geometry).
   Dated lunar ephemerides and timeline maneuver nodes are still needed.
 - CI runs `tools/contract_checks.sh` (the same static contract list as local `tools/ci_check.sh`), builds/tests the sim, builds the Godot C# layer, downloads Godot 4.6.3 mono in GitHub Actions, and runs strict headless smoke checks. Local `tools/ci_check.sh` runs Godot smoke only when `GODOT_BIN` or the default local Godot path exists.
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.

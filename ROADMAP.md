@@ -186,7 +186,18 @@ GitHub en verde. Orden por impacto para el jugador:
    Criterio: `visual_playtest.sh --apollo8-mission --until-phase LANDED` pasa en Godot con
    ventana de lanzamiento, TEI finita, dos correcciones transtierra y entrada sustentadora;
    suite completa, commit coherente y push; CI de GitHub verde con el paso de importación.
-2. **Rendezvous de Gemini 8 sin teletransporte.** Hoy `gemini.Position = target.Position + …`
+2. ✅ **Rendezvous de Gemini 8 sin teletransporte.** RCS de traslación, TPI por Lambert
+   replanificada desde el estado volado, corrección a mitad de transferencia, aproximación
+   por el eje y captura real; la falla del propulsor 8 es un torque físico con recuperación
+   por el RCS de reentrada, y el retrofuego usa los cohetes sólidos (desprendidos al agotarse
+   para exponer el escudo). El Titan II ahora sí llega a órbita (BECO por agotamiento, segunda
+   etapa en lazo cerrado al plano de la Agena): antes el teletransporte ocultaba que el ascenso
+   caía. Queda: la Agena nace sobre la plataforma (geometría de escenario), inserción en
+   145 × 152 km (vuelo: 160 × 272) y reentrada balística (sin el L/D 0,2 de Gemini).
+   Objetivos de campaña en dos niveles: obligatorios (esencia de la misión y límites de
+   tripulación) y "Histórico:" opcionales (réplica exacta); el piloto automático de Freedom 7
+   vuela ahora 187 km / 487 km / 15:22 como Shepard.
+   Antes: Hoy `gemini.Position = target.Position + …`
    coloca la cápsula junto a la Agena. Criterio: fases físicas (NC/NSR/TPI con
    `LambertGuidedBurn`, aproximación final con RCS) hasta el contacto de docking real;
    test headless del encuentro y corrida Godot del modo `--gemini-docking`.

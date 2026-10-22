@@ -178,6 +178,48 @@ the Moon's sphere of influence, trims 8 h and 2 h out where the corridor is prog
 sensitive to velocity error (`TransearthReturnScenarioTests`: TEI 869 m/s with 0.9 t of SPS
 propellant to spare, perigee 38.9 km, entry 11.0 km/s at −6.68°).
 
+The translunar corrections aim at a perilune altitude, not at the point the TLI plan stored:
+`TranslunarCorrection` re-solves the Earth-centred Lambert arc from the flown state and secant-
+iterates the lunar B-plane offset until the patched-conic encounter predicts 111 km, and a trim
+inside the Moon's sphere of influence corrects the Moon-centred hyperbola directly
+(`PeriapsisCorrection`). Aiming at the stored point had left a 211 km perilune; the flown LOI is
+now 108 × 312 km (Apollo 8: 111 × 312). The prograde TLI still leaves a ~140 m/s first
+correction (Apollo: ~6 m/s); a prograde-then-Lambert hybrid cut it to ~8 m/s but diverged near
+the 180° Lambert singularity, so iterative (IGM-style) injection guidance remains open.
+
+Spacecraft translation uses reaction control independent of the engines: `TranslationCommand`
+per body axis, `rcs_translation_thrust_n` and `rcs_isp` on the part, monopropellant drawn at
+F / (Isp g0) (`RcsTranslationTests`). Gemini 8's rendezvous flies on it: a terminal-phase-
+initiation Lambert intercept (`RendezvousPlanner`, 130° transfer, aimed 500 m above the Agena),
+replanned from the flown states 15 min before the burn because the coast is integrated with
+oblateness and drag; a mid-transfer correction re-aimed from the Agena's current state; then
+`ProximityApproach` brakes to a waypoint on the docking axis and closes at 0.12 m/s into the
+real `TryDock` capture envelope (`Gemini8RendezvousScenarioTests`: TPI 12.3 m/s, 143 kg of the
+286 kg OAMS load).
+
+The OAMS thruster 8 failure is a `DisturbanceTorqueBody` that bypasses the control-rate
+envelope and drains monopropellant (116 N·m, calibrated to the post-undock 20 → 296 °/s growth
+on the model's roll inertia, which is one 25 lbf thruster on a ~1 m arm). Recovery is the
+re-entry RCS rings (`rcs_attitude_torque_nm`, armed by the crew) damping the roll, and the
+retrograde section is a solid-motor part fired retrograde instead of an impulsive Δv
+(`Gemini8AnomalyScenarioTests`), jettisoned at burnout to expose the heat shield
+(`Gemini8ReturnScenarioTests`: 8.6 g entry, 8.9 m/s splashdown on the 8.4 ft drogue at 15.2 km
+and the main at 3.2 km).
+
+Removing the rendezvous teleport exposed that GLV-8 never reached orbit: its open-loop stage two
+stalled at 115 km. Titan now flies the historical stage-one program to propellant depletion
+(BECO was depletion, not a clock), then closed-loop stage-two insertion into the Agena's plane
+with time-to-go from the rocket equation (a mass ratio of ~5 made the constant-acceleration
+estimate 2.3x too long), cut on the flown periapsis or at burnout (`Gemini8AscentScenarioTests`:
+145 x 152 km at T+347 s). Large OAMS burns point the aft thrusters along the velocity to gain
+(firing several axes at once costs |x|+|y|+|z|), the TPI is centred on its impulsive epoch, and
+proximity operations take over where braking the planned arrival speed at 80% of the OAMS
+deceleration ends at the target, with the port facing the line of sight so braking is axial.
+
+Heating: a part in the wake of a heat-shielded part that leads into the flow (downstream and
+no wider) receives `StressSolver.AfterbodyHeatingFraction` (5%) of the stagnation flux. Every
+part used to take the full flux, which burned Gemini's docking nose through behind its shield.
+
 A trimmed blunt capsule flying alone (`capsule_trim_angle_of_attack_deg`, Apollo CM 16.7°) uses
 capsule aerodynamics: heat-shield pressure acts along the body axis, so the force is q·S·C_A
 along the axis and the trim tilt gives L/D = tan α ≈ 0.3; the restoring moment centres on the
