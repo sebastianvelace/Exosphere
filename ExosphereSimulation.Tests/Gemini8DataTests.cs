@@ -349,20 +349,15 @@ public sealed class Gemini8DataTests
         Assert.Equal(peakRate, gemini.AngularVelocity.Magnitude, 5);
         gemini.AngularVelocity = Vector3d.Zero;
 
-        Vector3d relativeVelocity = gemini.Velocity - earth.Velocity;
-        gemini.Velocity -= relativeVelocity.Normalized
-            * Gemini8FlightProfile.CalibratedEmergencyRetroDeltaVMps;
-        OrbitalElements returnOrbit = OrbitalElements.FromStateVector(
-            gemini.Position - earth.Position,
-            gemini.Velocity - earth.Velocity,
-            earth.GM,
-            earth.Id,
-            universe.CurrentTime);
-
-        Assert.InRange(
-            returnOrbit.PeriapsisRadius - earth.Radius,
-            40_000.0,
-            140_000.0);
+        // The retrograde section is a real solid-motor part now (fired by the director, not
+        // an impulsive Δv): its propellant must give the capsule a Gemini-class retro Δv.
+        var retro = gemini.Parts.Parts.First(part => part.Definition.HasVehicleRole("gemini_retro_module"));
+        double capsuleMass = gemini.Parts.Parts
+            .Where(part => !part.Definition.HasVehicleRole("gemini_equipment_adapter"))
+            .Sum(part => part.CurrentMass);
+        double retroDeltaV = retro.Definition.IspVac * 9.80665
+            * System.Math.Log(capsuleMass / (capsuleMass - retro.SolidFuel));
+        Assert.InRange(retroDeltaV, 80.0, 120.0);
         Assert.Empty(universe.DockingConnections);
         Assert.False(gemini.IsDestroyed);
     }

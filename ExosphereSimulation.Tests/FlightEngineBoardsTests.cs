@@ -16,7 +16,7 @@ public sealed class FlightEngineBoardsTests
     [InlineData("newglenn_7x2_public_2026", "7,2")]
     [InlineData("mercury_redstone3_freedom7_1961", "1,1")]
     [InlineData("mercury_atlas6_friendship7_1962", "3,1")]
-    [InlineData("gemini8_titan2_1966", "2,1")]
+    [InlineData("gemini8_titan2_1966", "2,1,1")]
     [InlineData("apollo8_saturn5_as503_1968", "5,5,1,1")]
     [InlineData("apollo11_saturn5_as506_1969", "5,5,1,1")]
     [InlineData("apollo11_lm5_eagle_1969", "1,1")]

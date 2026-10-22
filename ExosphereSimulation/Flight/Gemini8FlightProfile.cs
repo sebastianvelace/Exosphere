@@ -27,9 +27,56 @@ public static class Gemini8FlightProfile
     public const double HistoricalInsertionPerigeeM = 159_900.0;
     public const double HistoricalInsertionApogeeM = 271_900.0;
     public const double HistoricalTargetOrbitM = 298_730.0;
+
+    /// <summary>Stage-one shutdown to separation (historical BECO T+154.61 s, separation T+155.29 s).</summary>
+    public const double StagingDelaySeconds = StageSeparationSeconds - StageOneCutoffSeconds;
+
+    /// <summary>
+    /// Stage one is out once its engines deliver no thrust (propellant depletion, as BECO was),
+    /// with the historical cutoff plus a margin as a backstop.
+    /// </summary>
+    public static bool IsStageOneDepleted(Vessel vessel, CelestialBody earth, double elapsedSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        return elapsedSeconds > 20.0
+            && (vessel.ComputeThrust(earth).Magnitude < 1.0 || elapsedSeconds >= StageOneCutoffSeconds + 30.0);
+    }
+
+    /// <summary>
+    /// Stage-two closed-loop insertion target. With the historical stage-one program and a
+    /// propellant-depletion BECO, stage two reaches a ~145 x 152 km orbit at T+347 s (flight:
+    /// 160 x 272 km at T+337.5 s); the model's ascent losses leave no margin for the higher arc.
+    /// </summary>
+    public const double InsertionAltitudeM = 150_000.0;
+
+    /// <summary>Stage-two cutoff once the flown periapsis clears this altitude.</summary>
+    public const double MinimumInsertionPeriapsisM = 140_000.0;
+
+    /// <summary>Stage two has burned out: no thrust once its engine is well past start-up.</summary>
+    public static bool IsStageTwoBurnedOut(Vessel vessel, CelestialBody earth, double secondsSinceBeco)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
+        return secondsSinceBeco > 20.0 && vessel.ComputeThrust(earth).Magnitude < 1.0;
+    }
+
+    /// <summary>Stage-two pointing damping for the live pitch/yaw authority (ζ ≈ 0.8, Kd floor 1.2).</summary>
+    public static double StageTwoDampingGain(double pitchYawAuthorityRadPerS2) =>
+        System.Math.Max(1.2, AttitudeGuidance.DampingGainFor(2.3, pitchYawAuthorityRadPerS2));
     public const double HistoricalPeakAngularRateDegPerS = 296.0;
     public const double DockedTumbleRateDegPerS = 20.0;
-    public const double CalibratedEmergencyRetroDeltaVMps = 70.0;
+
+    /// <summary>
+    /// Roll torque (N·m) of the OAMS thruster that stuck on. Calibrated to the post-undock
+    /// rate growth, 20 → 296 °/s in 183 s, on the model's 4,405 kg·m² roll inertia; it is
+    /// what one 25 lbf (111 N) attitude thruster gives on a ~1 m arm.
+    /// </summary>
+    public const double StuckThrusterTorqueNm = 116.0;
+
+    /// <summary>Propellant (kg/s) that thruster burns: 111 N at the OAMS 260 s specific impulse.</summary>
+    public const double StuckThrusterMassFlowKgPerS = 111.2 / (260.0 * 9.80665);
+
+    /// <summary>Body rate (rad/s) below which control counts as recovered.</summary>
+    public const double ControlRecoveredRateRadPerS = 0.2 * System.Math.PI / 180.0;
 
     public static double ElevationDegrees(double elapsedSeconds)
     {

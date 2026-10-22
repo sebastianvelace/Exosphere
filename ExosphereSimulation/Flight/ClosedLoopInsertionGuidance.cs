@@ -60,7 +60,15 @@ public static class ClosedLoopInsertionGuidance
                 horizontal = toGain.MagnitudeSquared > 1.0 ? toGain.Normalized : inPlane.Normalized;
             }
         }
-        double timeToGo = System.Math.Max(MinimumTimeToGoSeconds, horizontalDeficit / acceleration);
+        // Burn time for the velocity still to gain from the rocket equation, not deficit over the
+        // current acceleration: a stage with a mass ratio of ~5 (Titan II stage two) accelerates
+        // from 14 to ~70 m/s², and the constant-acceleration estimate was 2.3x too long.
+        double exhaustVelocity = vessel.GetCurrentIsp(body) * 9.80665;
+        double timeToGo = exhaustVelocity > 1.0
+            ? vessel.TotalMass * exhaustVelocity / vessel.GetMaximumThrust(body)
+                * (1.0 - System.Math.Exp(-horizontalDeficit / exhaustVelocity))
+            : horizontalDeficit / acceleration;
+        timeToGo = System.Math.Max(MinimumTimeToGoSeconds, timeToGo);
 
         // Linear vertical acceleration a(τ) = A + Bτ reaching Δh with zero final climb rate.
         double altitudeError = targetAltitudeM - body.GetAltitude(vessel.Position);

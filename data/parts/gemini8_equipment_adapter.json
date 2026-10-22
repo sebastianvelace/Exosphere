@@ -11,6 +11,9 @@
   "drag_coefficient": 0.35,
   "heat_tolerance": 1050,
   "fuel_capacity_mono": 286,
+  "rcs_translation_thrust_n": 890,
+  "rcs_isp": 260,
+  "rcs_attitude_torque_nm": 230,
   "attachment_nodes": [
     {"id": "top", "position": [0, 1.4205, 0], "size": 1, "type": "stack"},
     {"id": "bottom", "position": [0, -1.4205, 0], "size": 1, "type": "stack"}

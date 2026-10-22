@@ -1,17 +1,47 @@
 {
   "id": "gemini8_retro_module",
   "name": "Gemini VIII Retrograde Section",
-  "description": "Four solid retrorockets and jettisonable retrograde structure.",
-  "category": "rcs",
+  "description": "Four solid retrorockets (11.1 kN, ~5.5 s each, fired in ripple) represented as one aggregate solid-motor part, plus the jettisonable retrograde structure. Thrust and propellant split are public-data engineering estimates.",
+  "category": "engine",
   "vehicle_family": "gemini",
   "vehicle_role": "gemini_retro_module",
-  "mass_dry": 389,
+  "mass_dry": 291,
   "length_m": 0.55,
   "diameter_m": 3.05,
   "drag_coefficient": 0.4,
   "heat_tolerance": 1700,
+  "thrust_sl": 11100,
+  "thrust_vac": 11100,
+  "isp_sl": 255,
+  "isp_vac": 255,
+  "gimbal_range": 0.0,
+  "fuel_type": "solid",
+  "fuel_capacity_solid": 98,
+  "engine_count": 1,
+  "engine_startup_seconds": 0.05,
+  "engine_shutdown_seconds": 0.05,
+  "min_throttle": 1.0,
+  "thrust_position_y_m": 0.0,
   "attachment_nodes": [
-    {"id": "top", "position": [0, 0.275, 0], "size": 1, "type": "stack"},
-    {"id": "bottom", "position": [0, -0.275, 0], "size": 1, "type": "stack"}
+    {
+      "id": "top",
+      "position": [
+        0,
+        0.275,
+        0
+      ],
+      "size": 1,
+      "type": "stack"
+    },
+    {
+      "id": "bottom",
+      "position": [
+        0,
+        -0.275,
+        0
+      ],
+      "size": 1,
+      "type": "stack"
+    }
   ]
 }

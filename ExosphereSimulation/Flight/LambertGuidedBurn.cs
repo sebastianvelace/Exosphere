@@ -63,14 +63,19 @@ public sealed class LambertGuidedBurn
     /// transfer angle instead of always forcing the short way, which would select the
     /// retrograde branch for the first part of the burn.
     /// </summary>
-    public Vector3d RequiredVelocity(Vector3d relativePosition, double epoch, double gm)
+    public Vector3d RequiredVelocity(Vector3d relativePosition, double epoch, double gm) =>
+        RequiredVelocity(_aimPosition, _arrivalTime, _planeNormal, relativePosition, epoch, gm);
+
+    /// <summary>Shared form of <see cref="RequiredVelocity(Vector3d, double, double)"/>.</summary>
+    public static Vector3d RequiredVelocity(Vector3d aimPosition, double arrivalTime, Vector3d planeNormal,
+        Vector3d relativePosition, double epoch, double gm)
     {
         double angle = System.Math.Atan2(
-            relativePosition.Cross(_aimPosition).Dot(_planeNormal),
-            relativePosition.Dot(_aimPosition));
+            relativePosition.Cross(aimPosition).Dot(planeNormal),
+            relativePosition.Dot(aimPosition));
         if (angle < 0.0) angle += 2.0 * System.Math.PI;
-        return LambertSolver.Solve(gm, relativePosition, _aimPosition, _arrivalTime - epoch,
-            _planeNormal, longWay: angle > System.Math.PI).DepartureVelocity;
+        return LambertSolver.Solve(gm, relativePosition, aimPosition, arrivalTime - epoch,
+            planeNormal, longWay: angle > System.Math.PI).DepartureVelocity;
     }
 
     /// <summary>Call before each committed physics step.</summary>
