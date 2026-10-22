@@ -10,8 +10,8 @@ using Xunit.Abstractions;
 
 /// <summary>
 /// Apollo 8 from Earth parking orbit to the Moon with no state assignment: a finite J-2
-/// injection under velocity-to-be-gained Lambert guidance, a translunar coast and the
-/// resulting lunar approach, then a finite SPS insertion into lunar orbit.
+/// injection, a perilune-targeted SPS correction, a trim of the Moon-centred approach inside the
+/// sphere of influence, then a finite SPS insertion into lunar orbit.
 /// </summary>
 public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
 {
@@ -40,26 +40,27 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
         output.WriteLine($"TLI {tli.Status} burn={tli.BurnSeconds:F1}s propellant={(wetMass - stack.TotalMass) / 1000:F1} t");
         Assert.Equal(ProgradeEnergyBurnStatus.Completed, tli.Status);
 
-        // 2. CSM separation, then a mid-course correction by the SPS toward the plan's aim point.
+        // 2. CSM separation, then an SPS correction aimed at the perilune altitude (Apollo MCC-2).
         var sivb = stack.Stage();
         Assert.NotNull(sivb);
         universe.AddVessel(sivb!);
         var csm = stack;
-        CoastUntil(universe, plan.BurnTime + 6.0 * 3_600.0, warp: 1_000.0);
         var aim = plan.EarthTransferOrbit.GetStateAtTime(plan.ArrivalTime, earth.GM).position;
-        var mcc = new LambertGuidedBurn(aim, plan.ArrivalTime, universe.CurrentTime,
-            (csm.Position - earth.Position).Cross(csm.Velocity - earth.Velocity),
-            cutoffDeltaVMps: 0.1, maximumBurnSeconds: 300.0);
-        double mccDeltaV = double.NaN;
-        Fly(universe, csm, earth, (dt, t) =>
-        {
-            mcc.Advance(csm, earth, dt, t);
-            if (double.IsNaN(mccDeltaV)) mccDeltaV = mcc.RemainingDeltaVMps;
-        }, () => mcc.IsFinished, universe.CurrentTime + 1_200.0);
-        output.WriteLine($"MCC {mcc.Status} initial dv={mccDeltaV:F1} m/s burn={mcc.BurnSeconds:F1}s");
-        Assert.Equal(LambertGuidedBurnStatus.Completed, mcc.Status);
+        double targetPerilune = moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM;
+        CoastUntil(universe, plan.BurnTime + 6.0 * 3_600.0, warp: 1_000.0);
+        FlyCorrection(universe, csm, earth, TranslunarCorrection.Create(csm, earth, moon, universe.CurrentTime,
+            plan.ArrivalTime, aim, targetPerilune), "MCC");
 
-        // 3. Translunar coast on rails into the Moon's sphere of influence.
+        // 3. Inside the Moon's sphere of influence, trim the hyperbola's perilune (MCC-4).
+        csm.Throttle = 0.0;
+        csm.PitchYawRoll = Vector3d.Zero;
+        universe.TimeScale = 1_000.0;
+        while (!TranslunarCorrection.IsTrimDue(universe, csm, moon) && universe.CurrentTime < plan.ArrivalTime + 86_400.0)
+            universe.Tick(1.0 / 60.0);
+        FlyCorrection(universe, csm, moon,
+            TranslunarCorrection.CreateTrim(csm, moon, universe.CurrentTime, targetPerilune), "trim");
+
+        // 4. Coast to the approach.
         csm.Throttle = 0.0;
         csm.PitchYawRoll = Vector3d.Zero;
         universe.TimeScale = 10_000.0;
@@ -70,9 +71,9 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
             csm.Velocity - moon.Velocity, moon.GM, moon.Id, universe.CurrentTime);
         double perilune = approach.Periapsis - moon.Radius;
         output.WriteLine($"lunar approach: perilune={perilune / 1000:F0} km e={approach.Eccentricity:F3}");
-        Assert.InRange(perilune, 50_000.0, 250_000.0);
+        Assert.InRange(perilune, 96_000.0, 126_000.0); // Apollo 8: 111 km
 
-        // 4. LOI by finite SPS burn.
+        // 5. LOI by finite SPS burn.
         var loi = new PeriapsisCaptureBurn(Apollo8FlightProfile.InitialLunarApoluneAltitudeM, 600.0);
         CoastUntil(universe, universe.CurrentTime, warp: 1.0);
         universe.TimeScale = 100.0;
@@ -90,6 +91,20 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
         Assert.False(csm.IsDestroyed);
         Assert.InRange(loi.PeriapsisAltitudeM, 30_000.0, 300_000.0);
         Assert.InRange(loi.ApoapsisAltitudeM, 0.0, Apollo8FlightProfile.InitialLunarApoluneAltitudeM);
+    }
+
+    private void FlyCorrection(Universe universe, Vessel vessel, CelestialBody body, LambertGuidedBurn burn,
+        string label)
+    {
+        double initial = double.NaN;
+        Fly(universe, vessel, body, (dt, t) =>
+        {
+            burn.Advance(vessel, body, dt, t);
+            if (double.IsNaN(initial)) initial = burn.RemainingDeltaVMps;
+        }, () => burn.IsFinished, universe.CurrentTime + 1_200.0);
+        output.WriteLine($"{label} {burn.Status} initial dv={initial:F2} m/s burn={burn.BurnSeconds:F1}s");
+        Assert.Equal(LambertGuidedBurnStatus.Completed, burn.Status);
+        vessel.PitchYawRoll = Vector3d.Zero;
     }
 
     private static void CoastUntil(Universe universe, double time, double warp)
