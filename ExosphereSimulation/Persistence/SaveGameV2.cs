@@ -82,6 +82,8 @@ public sealed class PartSaveV2
     public double ReservedOxidizer { get; set; }
     public double SolidFuel { get; set; }
     public double Monopropellant { get; set; }
+    /// <summary>Attitude RCS armed state; null in older saves (the part definition's default).</summary>
+    public bool? RcsAttitudeEnabled { get; set; }
     public double ElectricCharge { get; set; }
     public double Temperature { get; set; }
     public double SkinTemperature { get; set; }
@@ -638,6 +640,7 @@ public static class SaveGameV2Codec
         ReservedOxidizer = part.ReservedOxidizer,
         SolidFuel = part.SolidFuel,
         Monopropellant = part.Monopropellant,
+        RcsAttitudeEnabled = part.RcsAttitudeEnabled,
         ElectricCharge = part.ElectricCharge,
         Temperature = part.Temperature,
         SkinTemperature = part.SkinTemperature,
@@ -686,6 +689,7 @@ public static class SaveGameV2Codec
             Oxidizer = state.Oxidizer,
             SolidFuel = state.SolidFuel,
             Monopropellant = state.Monopropellant,
+            RcsAttitudeEnabled = state.RcsAttitudeEnabled ?? definition.RcsAttitudeStartsEnabled,
             ElectricCharge = state.ElectricCharge,
             Temperature = state.Temperature,
             SkinTemperature = state.SkinTemperature,

@@ -165,6 +165,20 @@ public class PartDefinition
     [JsonPropertyName("fuel_capacity_ox")]    public double FuelCapacityOx    { get; set; }
     [JsonPropertyName("fuel_capacity_solid")] public double FuelCapacitySolid { get; set; }
     [JsonPropertyName("fuel_capacity_mono")]  public double FuelCapacityMono  { get; set; }
+    /// <summary>
+    /// Translation reaction-control thrust (N) available along each body axis in either
+    /// direction (Gemini OAMS: 2 × 445 N per axis). Fed from the vessel's monopropellant.
+    /// </summary>
+    [JsonPropertyName("rcs_translation_thrust_n")] public double RcsTranslationThrustN { get; set; }
+    /// <summary>Attitude torque (N·m) this part's reaction-control thrusters give about each axis.</summary>
+    [JsonPropertyName("rcs_attitude_torque_nm")] public double RcsAttitudeTorqueNm { get; set; }
+    /// <summary>
+    /// Whether those attitude thrusters are live at launch. Gemini's re-entry RCS rings stayed
+    /// off until the crew armed them, which is how Gemini 8 regained control.
+    /// </summary>
+    [JsonPropertyName("rcs_attitude_starts_enabled")] public bool RcsAttitudeStartsEnabled { get; set; } = true;
+    /// <summary>Vacuum specific impulse (s) of those translation thrusters.</summary>
+    [JsonPropertyName("rcs_isp")] public double RcsIsp { get; set; }
     [JsonPropertyName("ec_capacity")]         public double ECCapacity        { get; set; }
 
     // Crew / landing / parachute

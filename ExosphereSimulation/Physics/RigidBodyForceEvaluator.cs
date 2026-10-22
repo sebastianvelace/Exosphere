@@ -49,7 +49,7 @@ public static class RigidBodyForceEvaluator
         double pressure = context.ReferenceBody?.Atmosphere?.GetPressure(
             context.ReferenceBody.GetAltitude(state.Position)) ?? 0.0;
         forceWorld += state.Orientation.Rotate(
-            vessel.Parts.GetTotalThrust(pressure));
+            vessel.Parts.GetTotalThrust(pressure) + vessel.GetRcsTranslationThrustLocal());
 
         if (context.ReferenceBody != null)
         {
@@ -64,6 +64,7 @@ public static class RigidBodyForceEvaluator
 
         var torqueBody = vessel.Parts.GetTotalTorque(pressure);
         torqueBody += state.Orientation.Inverse().Rotate(context.ExternalTorqueWorld);
+        torqueBody += vessel.DisturbanceTorqueBody;
         torqueBody += ComputeAerodynamicTorqueBody(vessel, state, context.ReferenceBody, massProperties);
 
         return new RigidBodyForces(forceWorld, torqueBody);

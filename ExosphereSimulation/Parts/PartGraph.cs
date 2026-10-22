@@ -118,6 +118,58 @@ public class PartGraph
         ? new Math.Vector3d(0.0, System.Math.Cos(capsule.TrimAngleRad), System.Math.Sin(capsule.TrimAngleRad))
         : Math.Vector3d.Up;
 
+    /// <summary>Per-axis translation RCS thrust (N) of the intact parts, and its specific impulse (s).</summary>
+    public (double ThrustN, double IspSeconds) RcsTranslation
+    {
+        get
+        {
+            double thrust = 0.0, impulseWeight = 0.0;
+            foreach (var part in _parts)
+            {
+                if (part.IsBroken || part.Definition.RcsTranslationThrustN <= 0.0) continue;
+                thrust += part.Definition.RcsTranslationThrustN;
+                impulseWeight += part.Definition.RcsTranslationThrustN
+                    * (part.Definition.RcsIsp > 0.0 ? part.Definition.RcsIsp : 220.0);
+            }
+            return (thrust, thrust > 0.0 ? impulseWeight / thrust : 0.0);
+        }
+    }
+
+    /// <summary>Attitude torque (N·m) of the intact parts whose RCS is enabled.</summary>
+    public double RcsAttitudeTorqueNm
+    {
+        get
+        {
+            double torque = 0.0;
+            foreach (var part in _parts)
+                if (!part.IsBroken && part.RcsAttitudeEnabled) torque += part.Definition.RcsAttitudeTorqueNm;
+            return torque;
+        }
+    }
+
+    /// <summary>Monopropellant left in all parts (kg).</summary>
+    public double TotalMonopropellant
+    {
+        get
+        {
+            double total = 0.0;
+            foreach (var part in _parts) total += part.Monopropellant;
+            return total;
+        }
+    }
+
+    /// <summary>Draws monopropellant from every part in proportion to its load; false if short.</summary>
+    public bool DrawMonopropellant(double kilograms)
+    {
+        if (kilograms <= 0.0) return true;
+        double total = TotalMonopropellant;
+        if (total < kilograms) return false;
+        foreach (var part in _parts)
+            if (part.Monopropellant > 0.0)
+                part.Monopropellant -= kilograms * (part.Monopropellant / total);
+        return true;
+    }
+
     /// <summary>Enclosed payloads contribute mass/inertia, but not the carrier's outer hull.</summary>
     public bool IsEnclosedPayload(Part part) => part.Definition.InternalPayload && part != _root;
 

@@ -539,7 +539,8 @@ public class Universe
         double alignmentError = double.NaN) =>
         new(false, failure, null, distance, relativeSpeed, alignmentError);
 
-    private static bool TryGetDockingFrame(
+    /// <summary>World position, outward axis and velocity of a docking port, as capture sees it.</summary>
+    public static bool TryGetDockingFrame(
         Vessel vessel,
         Parts.Part part,
         out Vector3d position,
@@ -1405,7 +1406,9 @@ public class Universe
     private static bool HasWakeCommand(Vessel vessel) =>
         vessel.Throttle > 1e-3
         || HasActiveEngineAboveThrottle(vessel, 1e-3)
-        || HasAttitudeCommand(vessel);
+        || HasAttitudeCommand(vessel)
+        || vessel.TranslationCommand.MagnitudeSquared > 1e-12
+        || vessel.DisturbanceTorqueBody.MagnitudeSquared > 1e-12;
 
     /// <summary>
     /// A non-zero pilot/autopilot attitude command is a wake condition even when the

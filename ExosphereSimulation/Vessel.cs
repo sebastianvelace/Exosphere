@@ -563,14 +563,65 @@ public class Vessel
     // Empuje total en world space (N) — empuje de vacío (compatibilidad).
     public Vector3d ComputeThrust()
     {
-        return Orientation.Rotate(Parts.GetTotalThrust());
+        return Orientation.Rotate(Parts.GetTotalThrust() + GetRcsTranslationThrustLocal());
     }
 
     // Empuje total en world space (N), corregido por presión ambiente del cuerpo.
     public Vector3d ComputeThrust(CelestialBody? refBody)
     {
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
-        return Orientation.Rotate(Parts.GetTotalThrust(pressure));
+        return Orientation.Rotate(Parts.GetTotalThrust(pressure) + GetRcsTranslationThrustLocal());
+    }
+
+    /// <summary>
+    /// Translation reaction-control command per body axis in [−1, 1] (local X, Y = nose, Z).
+    /// Independent of the engines: it is how a spacecraft brakes toward a target it points at.
+    /// </summary>
+    public Vector3d TranslationCommand { get; set; }
+
+    /// <summary>
+    /// External torque (N·m, body axes) from a failure, such as a thruster stuck on. It
+    /// bypasses the control-rate envelope and lasts until cleared or its propellant runs out.
+    /// </summary>
+    public Vector3d DisturbanceTorqueBody { get; set; }
+
+    /// <summary>Monopropellant (kg/s) the disturbance source burns; it stops when the supply is gone.</summary>
+    public double DisturbanceMassFlowKgPerS { get; set; }
+
+    /// <summary>True once a translation command could not be fed (monopropellant exhausted).</summary>
+    public bool RcsPropellantDepleted { get; private set; }
+
+    /// <summary>Body-frame translation RCS force (N) for the current command, or zero when unfed.</summary>
+    public Vector3d GetRcsTranslationThrustLocal()
+    {
+        var command = TranslationCommand;
+        if (command.MagnitudeSquared < 1e-12 || IsDestroyed || StructuralControlLost
+            || RcsPropellantDepleted)
+            return Vector3d.Zero;
+        double thrust = Parts.RcsTranslation.ThrustN;
+        if (thrust <= 0.0) return Vector3d.Zero;
+        return new Vector3d(
+            System.Math.Clamp(command.X, -1.0, 1.0),
+            System.Math.Clamp(command.Y, -1.0, 1.0),
+            System.Math.Clamp(command.Z, -1.0, 1.0)) * thrust;
+    }
+
+    /// <summary>Burns the monopropellant the translation command and any disturbance use over one tick.</summary>
+    private void ConsumeRcsTranslationPropellant(double dt)
+    {
+        if (DisturbanceMassFlowKgPerS > 0.0 && !Parts.DrawMonopropellant(DisturbanceMassFlowKgPerS * dt))
+        {
+            // A stuck thruster stops when its feed runs dry.
+            DisturbanceTorqueBody = Vector3d.Zero;
+            DisturbanceMassFlowKgPerS = 0.0;
+        }
+        var force = GetRcsTranslationThrustLocal();
+        if (force.MagnitudeSquared < 1e-12) return;
+        var (_, isp) = Parts.RcsTranslation;
+        double flow = (System.Math.Abs(force.X) + System.Math.Abs(force.Y) + System.Math.Abs(force.Z))
+            / (isp * 9.80665);
+        if (!Parts.DrawMonopropellant(flow * dt))
+            RcsPropellantDepleted = true;
     }
 
     // Fuerza aerodinámica total (drag + lift de cuerpo) en world space (N) — estado actual.
@@ -756,7 +807,8 @@ public class Vessel
         // ThrottleLevel ya fue avanzado por ApplyThrottle(dt) en Tick() antes de este subpaso,
         // así que aquí solo leemos el valor spooled sin modificarlo.
         double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
-        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TranslationalMassKg;
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + GetRcsTranslationThrustLocal())
+            / TranslationalMassKg;
 
         var drag = refBody != null
             ? ComputeDragAt(pos, vel, refBody) / TranslationalMassKg
@@ -776,7 +828,8 @@ public class Vessel
         if (TotalMass <= 0.0) return gravity;
 
         double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
-        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure)) / TranslationalMassKg;
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + GetRcsTranslationThrustLocal())
+            / TranslationalMassKg;
         var drag = refBody != null
             ? ComputeDragAt(pos, vel, refBody) / TranslationalMassKg
             : Vector3d.Zero;
@@ -796,6 +849,16 @@ public class Vessel
     private const double ReactionControlAuthority = 0.01;
 
     /// <summary>
+    /// Reaction-control angular acceleration (rad/s²): the generic floor, or the enabled RCS
+    /// thrusters' declared torque over this vessel's inertia (Gemini re-entry RCS rings).
+    /// </summary>
+    private double PitchYawRcsAuthority => System.Math.Max(ReactionControlAuthority,
+        Parts.RcsAttitudeTorqueNm / System.Math.Max(1.0, Parts.TransverseMomentOfInertia));
+
+    private double RollRcsAuthority => System.Math.Max(ReactionControlAuthority,
+        Parts.RcsAttitudeTorqueNm / System.Math.Max(1.0, Parts.AxialMomentOfInertia));
+
+    /// <summary>
     /// Pitch/yaw angular acceleration (rad/s²) a full attitude command produces at the
     /// current ambient pressure: the live TVC envelope, floored by reaction control.
     /// </summary>
@@ -803,7 +866,7 @@ public class Vessel
     {
         ArgumentNullException.ThrowIfNull(body);
         double pressure = body.Atmosphere?.GetPressure(GetAltitude(body)) ?? 0.0;
-        return System.Math.Max(ReactionControlAuthority,
+        return System.Math.Max(PitchYawRcsAuthority,
             Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).X);
     }
 
@@ -823,6 +886,7 @@ public class Vessel
 
             double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
             Parts.ConsumePropellant(dt, pressure);
+            ConsumeRcsTranslationPropellant(dt);
             AdvanceHotStageOverlap(dt);
 
             foreach (var crew in Crew)
@@ -850,10 +914,10 @@ public class Vessel
             if (!hasInput) return;
 
             double pitchYawAuthority =
-                System.Math.Max(ReactionControlAuthority,
+                System.Math.Max(PitchYawRcsAuthority,
                     Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).X) * auth;
             double rollAuthority =
-                System.Math.Max(ReactionControlAuthority,
+                System.Math.Max(RollRcsAuthority,
                     Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).Y) * auth;
             var desiredLocalAngAccel = new Vector3d(
                 command.X * pitchYawAuthority,
@@ -950,6 +1014,7 @@ public class Vessel
         Parts.InvalidateTickActiveEngineCache();
 
         Parts.ConsumePropellant(dt, pressure);
+        ConsumeRcsTranslationPropellant(dt);
         AdvanceHotStageOverlap(dt);
 
         foreach (var crew in Crew)
@@ -999,9 +1064,9 @@ public class Vessel
             // target even when the live cluster's own authority momentarily reads near zero.
             var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
             double pitchYawAuthority =
-                System.Math.Max(ReactionControlAuthority, envelope.X) * auth;
+                System.Math.Max(PitchYawRcsAuthority, envelope.X) * auth;
             double rollAuthority =
-                System.Math.Max(ReactionControlAuthority, envelope.Y) * auth;
+                System.Math.Max(RollRcsAuthority, envelope.Y) * auth;
             var desiredLocalAngAccel = new Vector3d(
                 command.X * pitchYawAuthority,
                 command.Z * rollAuthority,
@@ -1045,7 +1110,8 @@ public class Vessel
         // exceeding what a real gimballed cluster delivers on something the size of a
         // Super Heavy). Only fills the gap when the real engine term reads below the floor.
         var rcsFloorAngAccel = hasInput
-            ? new Vector3d(command.X, command.Z, command.Y) * ReactionControlAuthority * auth
+            ? new Vector3d(command.X * PitchYawRcsAuthority, command.Z * RollRcsAuthority,
+                command.Y * PitchYawRcsAuthority) * auth
             : Vector3d.Zero;
 
         var appliedAngAccel = new Vector3d(
@@ -1135,12 +1201,13 @@ public class Vessel
         if (finalAngularRate > controlledRateEnvelope)
             AngularVelocity *= controlledRateEnvelope / finalAngularRate;
 
-        // Ground contact is an external physical torque, not an actuator command. Apply it
-        // after the vehicle-control rate envelope so an impact can genuinely rotate/tip the
-        // rigid body instead of being silently clipped to the autopilot's 20°/s limit.
-        if (externalContactTorqueWorld.MagnitudeSquared > 1e-12)
+        // Ground contact and disturbances (a failed-on thruster) are external physical
+        // torques, not actuator commands. Apply them after the vehicle-control rate envelope
+        // so they can genuinely rotate the rigid body instead of being clipped to 20°/s.
+        var externalTorqueWorld = externalContactTorqueWorld + Orientation.Rotate(DisturbanceTorqueBody);
+        if (externalTorqueWorld.MagnitudeSquared > 1e-12)
         {
-            var torqueLocal = Orientation.Inverse().Rotate(externalContactTorqueWorld);
+            var torqueLocal = Orientation.Inverse().Rotate(externalTorqueWorld);
             double iTrans = System.Math.Max(1.0, Parts.TransverseMomentOfInertia);
             double iAxial = System.Math.Max(1.0, Parts.AxialMomentOfInertia);
             var angularAccelerationLocal = new Vector3d(
@@ -1170,8 +1237,8 @@ public class Vessel
     {
         var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
         double inertiaScale = DockedInertiaScale();
-        double pitchYawAuthority = System.Math.Max(ReactionControlAuthority, envelope.X) * auth * inertiaScale;
-        double rollAuthority = System.Math.Max(ReactionControlAuthority, envelope.Y) * auth * inertiaScale;
+        double pitchYawAuthority = System.Math.Max(PitchYawRcsAuthority, envelope.X) * auth * inertiaScale;
+        double rollAuthority = System.Math.Max(RollRcsAuthority, envelope.Y) * auth * inertiaScale;
         double exponentialFactor = System.Math.Pow(0.005, dt);
 
         static double Damp(double rate, double factor, double maximumChange)

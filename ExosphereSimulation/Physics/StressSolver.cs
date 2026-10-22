@@ -125,6 +125,7 @@ public static class StressSolver
         PartGraph graph, double heatFlux, double dt, Vector3d flowDirLocal)
     {
         var destroyed = new List<Part>();
+        var shadowed = FindHeatShieldWake(graph, flowDirLocal);
         foreach (var part in graph.Parts)
         {
             if (graph.IsEnclosedPayload(part)) continue;
@@ -140,14 +141,50 @@ public static class StressSolver
                     flowDirLocal,
                     ShieldNormal(part.Definition.HeatShieldNormal))
                 : 0.0;
+            double partFlux = shadowed.Contains(part) ? heatFlux * AfterbodyHeatingFraction : heatFlux;
             if (ThermalModel.ApplyHeat(
-                    part, heatFlux, dt, shieldedFraction))
+                    part, partFlux, dt, shieldedFraction))
             {
                 part.IsBroken = true;
                 destroyed.Add(part);
             }
         }
         return destroyed;
+    }
+
+    /// <summary>
+    /// Share of the stagnation heat flux that reaches an afterbody in the wake of a blunt
+    /// heat shield (a few percent behind capsule shields).
+    /// </summary>
+    public const double AfterbodyHeatingFraction = 0.05;
+
+    /// <summary>
+    /// Parts in the wake of a heat-shielded part that leads into the flow: downstream of it by
+    /// more than 0.1 m and no wider. Without this every part took the full stagnation flux, so
+    /// Gemini's docking nose, behind the heat shield, burned through at 72 km.
+    /// </summary>
+    private static HashSet<Part> FindHeatShieldWake(PartGraph graph, Vector3d flowDirLocal)
+    {
+        var wake = new HashSet<Part>();
+        if (flowDirLocal.MagnitudeSquared < 1e-12) return wake;
+        var flow = flowDirLocal.Normalized;
+        Dictionary<Part, Vector3d>? positions = null;
+        foreach (var shield in graph.Parts)
+        {
+            if (!shield.Definition.HasHeatShield || shield.IsBroken
+                || ThermalModel.WindwardFactor(flow, ShieldNormal(shield.Definition.HeatShieldNormal)) < 0.7)
+                continue;
+            positions ??= graph.ComputePartLocalPositions();
+            if (!positions.TryGetValue(shield, out var shieldPosition)) continue;
+            foreach (var part in graph.Parts)
+            {
+                if (part == shield || !positions.TryGetValue(part, out var position)) continue;
+                if ((position - shieldPosition).Dot(flow) < -0.1
+                    && part.Definition.DiameterM <= shield.Definition.DiameterM + 1e-6)
+                    wake.Add(part);
+            }
+        }
+        return wake;
     }
 
     /// <summary>

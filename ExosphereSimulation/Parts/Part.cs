@@ -23,6 +23,8 @@ public class Part
     public double Oxidizer        { get; set; }
     public double SolidFuel       { get; set; }
     public double Monopropellant  { get; set; }
+    /// <summary>Whether this part's attitude RCS is live (see <c>rcs_attitude_starts_enabled</c>).</summary>
+    public bool RcsAttitudeEnabled { get; set; }
     public double ElectricCharge  { get; set; }
 
     /// <summary>Protected feed inventory, still included in wet mass. Defaults to no isolation.</summary>
@@ -608,6 +610,7 @@ public class Part
         Oxidizer       = Definition.FuelCapacityOx;
         SolidFuel      = Definition.FuelCapacitySolid;
         Monopropellant = Definition.FuelCapacityMono;
+        RcsAttitudeEnabled = Definition.RcsAttitudeStartsEnabled;
         ElectricCharge = Definition.ECCapacity;
     }
 
