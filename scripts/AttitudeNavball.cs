@@ -48,6 +48,13 @@ public partial class AttitudeNavball : Control
     private Vector2 _radialOut;
     private bool   _progradeVisible;
     private bool   _radialVisible;
+    private Vector2 _normal, _antiNormal, _target, _held;
+    private bool   _normalVisible, _antiNormalVisible, _targetVisible, _heldVisible;
+    private string _sasLabel = "";
+    private bool   _orbitalFrame;
+    private static readonly Color NormalCol = new(0.80f, 0.58f, 0.98f, 1f);
+    private static readonly Color TargetCol = new(0.98f, 0.45f, 0.82f, 1f);
+    private static readonly Color HeldCol   = InterfaceTheme.Warning;
     private double _speed;
     /// <summary>True when HDG is surface-track (velocity), not nose compass.</summary>
     private bool   _headingIsTrack;
@@ -166,10 +173,35 @@ public partial class AttitudeNavball : Control
             _rollDeg = System.Math.Atan2(sinR, cosR) * Rad2Deg;
         }
 
-        // ── Velocity markers (surface-relative) ───────────────────────────────
+        // ── Velocity markers: surface-relative in the atmosphere, orbital above it
+        // (the same switch the SAS hold modes use) ────────────────────────────
         var surfVel = vessel.GetSurfaceVelocity(body);
         _speed = surfVel.Magnitude;
-        var prograde = _speed > 0.1 ? surfVel.Normalized : nose;
+        _orbitalFrame = !Exosphere.Simulation.Flight.SasHold.UsesSurfaceFrame(vessel, body);
+        var frameVel = _orbitalFrame ? vessel.Velocity - body.Velocity : surfVel;
+        var prograde = frameVel.Magnitude > 0.1 ? frameVel.Normalized : nose;
+        var orbitNormal = up.Cross(vessel.Velocity - body.Velocity);
+        if (orbitNormal.MagnitudeSquared > 1e-9)
+        {
+            orbitNormal = orbitNormal.Normalized;
+            (_normal, _normalVisible) = ProjectMarker(orbitNormal, nose, noseRight, up);
+            (_antiNormal, _antiNormalVisible) = ProjectMarker(-orbitNormal, nose, noseRight, up);
+        }
+        else _normalVisible = _antiNormalVisible = false;
+        var dockingTarget = Exosphere.Simulation.Flight.DockingTargeting.FindNearest(universe, vessel);
+        _targetVisible = false;
+        if (dockingTarget is { } tgt)
+            (_target, _targetVisible) = ProjectMarker(tgt.LineOfSight, nose, noseRight, up);
+        var sas = SasModeController.Instance;
+        _heldVisible = false;
+        _sasLabel = "";
+        if (vessel.SASEnabled && sas != null)
+        {
+            _sasLabel = "SAS " + SasModeController.Label(sas.Mode,
+                UserInterfaceSettings.Language == InterfaceLanguage.Spanish);
+            if (sas.HeldDirection is { } held)
+                (_held, _heldVisible) = ProjectMarker(held, nose, noseRight, up);
+        }
 
         (_prograde, _progradeVisible)   = ProjectMarker(prograde, nose, noseRight, up);
         (_retrograde, _)                = ProjectMarker(-prograde, nose, noseRight, up);
@@ -253,6 +285,10 @@ public partial class AttitudeNavball : Control
         if (_progradeVisible) DrawProgradeMarker(center + RotateOffset(_prograde, roll), ProgradeCol, true);
         else                  DrawProgradeMarker(center + RotateOffset(_retrograde, roll), RetroCol, false);
         if (_radialVisible)   DrawRadialMarker(center + RotateOffset(_radialOut, roll));
+        if (_normalVisible)     DrawNormalMarker(center + RotateOffset(_normal, roll), true);
+        if (_antiNormalVisible) DrawNormalMarker(center + RotateOffset(_antiNormal, roll), false);
+        if (_targetVisible)     DrawTargetMarker(center + RotateOffset(_target, roll));
+        if (_heldVisible)       DrawHeldMarker(center + RotateOffset(_held, roll));
 
         // Heading tape under the ball + numeric attitude line.
         DrawHeadingTape(new Vector2(center.X, center.Y + Radius + 14f));
@@ -366,6 +402,27 @@ public partial class AttitudeNavball : Control
             DrawLine(p + new Vector2(0, 6), p + new Vector2(0, 9), col, 1.6f, true);
     }
 
+    /// <summary>Orbit normal: a triangle pointing up (normal) or down (anti-normal).</summary>
+    private void DrawNormalMarker(Vector2 p, bool normal)
+    {
+        float s = normal ? -1f : 1f;
+        DrawPolyline(new[] { p + new Vector2(0, 7f * s), p + new Vector2(-6f, -4f * s),
+            p + new Vector2(6f, -4f * s), p + new Vector2(0, 7f * s) }, NormalCol, 1.5f, true);
+    }
+
+    private void DrawTargetMarker(Vector2 p)
+    {
+        DrawArc(p, 7f, 0, Mathf.Tau, 16, TargetCol, 1.6f, true);
+        DrawCircle(p, 2f, TargetCol);
+    }
+
+    /// <summary>Where the SAS hold mode is pointing the nose.</summary>
+    private void DrawHeldMarker(Vector2 p)
+    {
+        DrawPolyline(new[] { p + new Vector2(0, -9), p + new Vector2(9, 0), p + new Vector2(0, 9),
+            p + new Vector2(-9, 0), p + new Vector2(0, -9) }, HeldCol, 1.8f, true);
+    }
+
     private void DrawRadialMarker(Vector2 p)
     {
         DrawArc(p, 4.5f, 0, Mathf.Tau, 12, RadialCol, 1.4f, true);
@@ -427,6 +484,15 @@ public partial class AttitudeNavball : Control
         var sz = _font.GetStringSize(line, HorizontalAlignment.Center, -1, 11);
         DrawString(_font, new Vector2(Size.X / 2f - sz.X / 2f, Size.Y - 4f), line,
             HorizontalAlignment.Left, -1, 11, ValueBright);
+
+        // SAS hold mode and velocity frame, above the ball.
+        if (_sasLabel.Length > 0)
+        {
+            string sasLine = _sasLabel + (_orbitalFrame ? "  · ORB" : "  · SRF");
+            var ssz = _font.GetStringSize(sasLine, HorizontalAlignment.Center, -1, 11);
+            DrawString(_font, new Vector2(Size.X / 2f - ssz.X / 2f, 0f), sasLine,
+                HorizontalAlignment.Left, -1, 11, HeldCol);
+        }
 
         // Pitch objetivo del director, justo encima de la línea de actitud (sólo en ascenso).
         // Director target pitch, just above the attitude line (ascent only).

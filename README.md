@@ -82,6 +82,7 @@ Lighting follows simulation time. Warp forward to see dawn and night. The full H
 | `A` `D` | Yaw |
 | `Q` `E` | Roll |
 | `T` | SAS |
+| `Y` / `Shift+Y` | SAS hold mode: stability, prograde, retrograde, normal, anti-normal, radial out/in, target, anti-target, maneuver (surface vectors in the atmosphere, orbital above it) |
 | `P` | Arm / disarm parachutes (they open within their altitude and pressure envelope while descending) |
 | `Space` | Stage |
 | `G` | Ascent autopilot |
@@ -98,7 +99,7 @@ Lighting follows simulation time. Warp forward to see dawn and night. The full H
 
 Warp levels are `1`, `2`, `3`, `5`, `10`, `50`, `100`, `1000`, `10000`, and `100000`. The sim clamps warp during powered flight and inside the atmosphere.
 
-Historical missions guide the player. The objectives panel opens with the current step in plain words, the keys that do it and the next steps. The same procedure is in the briefing. Flight milestones (orbit, TLI, lunar arrival and orbit, TEI, entry, touchdown) are recognised from the flown state, so a hand-flown mission counts like an automated one. On lunar missions an edge arrow and a status line show where the Moon is and whether the coast reaches it. Near another vessel with a free docking port, a target marker shows range, closing speed, drift, port alignment and a safe closing speed, and flying the ports into their capture envelope docks for real.
+Historical missions guide the player. The objectives panel opens with the current step in plain words, the keys that do it and the next steps. The same procedure is in the briefing. Flight milestones (orbit, TLI, lunar arrival and orbit, TEI, entry, touchdown) are recognised from the flown state, so a hand-flown mission counts like an automated one. On lunar missions an edge arrow and a status line show where the Moon is and whether the coast reaches it. While descending low over a body, a landing line shows altitude, vertical and horizontal speed, time to impact and the altitude left before a full-thrust braking burn must start. The navball shows orbit-normal, target and SAS-held markers. Near another vessel with a free docking port, a target marker shows range, closing speed, drift, port alignment and a safe closing speed, and flying the ports into their capture envelope docks for real.
 
 ### Map
 
@@ -111,6 +112,9 @@ Historical missions guide the player. The objectives panel opens with the curren
 | `[` `]` | Adjust maneuver time |
 | `Shift` | Larger maneuver step |
 | `Alt` | Radial adjustment |
+| `Ctrl` | Normal (plane-change) adjustment |
+| `B` | Earth: deorbit node. Moon: lunar orbit insertion at perilune, then circularization; in low lunar orbit, transearth injection |
+| `N` | Warp to 60 s before the burn starts (press again to stop) |
 | `Delete` | Clear maneuver |
 
 ## What you can fly

@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using System.Collections.Generic;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 
 /// <summary>
@@ -159,6 +160,10 @@ public partial class MapViewController : Control
                         _autopilot.Arm();
                     break;
 
+                case Key.N:
+                    ToggleWarpToNode();
+                    break;
+
                 case Key.J when Visible && _selectedTarget != null:
                     SimulationBridge.Instance?.JumpToBody(_selectedTarget);
                     Visible = false;
@@ -175,7 +180,13 @@ public partial class MapViewController : Control
                     var bridge = SimulationBridge.Instance;
                     var vessel = bridge?.ActiveVessel;
                     var universe = bridge?.Universe;
-                    if (vessel != null && universe != null)
+                    if (vessel != null && universe != null
+                        && universe.GetDominantBody(vessel.Position) is { Id: "moon" } moonBody)
+                    {
+                        PlanLunarPreset(universe, vessel, moonBody);
+                        QueueRedraw();
+                    }
+                    else if (vessel != null && universe != null)
                     {
                         var earth = universe.GetBody("earth")
                             ?? universe.GetDominantBody(vessel.Position);
@@ -265,8 +276,9 @@ public partial class MapViewController : Control
             {
                 double dir  = mb.ButtonIndex == MouseButton.WheelUp ? 1.0 : -1.0;
                 double step = Input.IsKeyPressed(Key.Shift) ? 100.0 : 10.0;
-                if (Input.IsKeyPressed(Key.Alt)) Planner.DvRadial   += dir * step;
-                else                             Planner.DvPrograde += dir * step;
+                if (Input.IsKeyPressed(Key.Alt))       Planner.DvRadial   += dir * step;
+                else if (Input.IsKeyPressed(Key.Ctrl)) Planner.DvNormal   += dir * step;
+                else                                   Planner.DvPrograde += dir * step;
                 _autopilot.Disarm();   // editing invalidates a previously-armed burn
                 QueueRedraw();
                 AcceptEvent();
@@ -294,8 +306,87 @@ public partial class MapViewController : Control
 
     public override void _Process(double delta)
     {
+        AdvanceWarpToNode();
         if (!Visible) return;
         QueueRedraw();   // orbit evolves with the vessel; redraw live
+    }
+
+    /// <summary>
+    /// [B] at the Moon: on arrival (open or elliptical orbit) a periapsis burn to a 110 km
+    /// apolune — lunar orbit insertion, and pressed again after it the circularization; in a
+    /// circular low lunar orbit it plans transearth injection.
+    /// </summary>
+    private void PlanLunarPreset(Universe universe, Vessel vessel, CelestialBody moon)
+    {
+        var relPos = vessel.Position - moon.Position;
+        var relVel = vessel.Velocity - moon.Velocity;
+        Planner.SetOrbit(relPos, relVel, moon.GM);
+        var orbit = OrbitalElements.FromStateVector(relPos, relVel, moon.GM, moon.Id, universe.CurrentTime);
+        bool lowLunarOrbit = orbit.Eccentricity < 1.0 && orbit.Apoapsis - moon.Radius < 150_000.0;
+        _autopilot.Disarm();
+        if (lowLunarOrbit && universe.GetBody("earth") is { } earth
+            && Planner.PlanTransearth(orbit, moon, earth, universe.CurrentTime))
+            GD.Print($"[Map] TEI planned: Δv={Planner.DeltaVMagnitude:F0} m/s prograde.");
+        else if (!lowLunarOrbit && Planner.PlanCapture(moon))
+            GD.Print($"[Map] LOI planned at perilune: Δv={Planner.DeltaVMagnitude:F0} m/s retrograde.");
+        else
+            GD.Print("[Map] No lunar preset: impact course or no orbit to plan from.");
+    }
+
+    // ── Warp to node ([N]) ────────────────────────────────────────────────────
+    /// <summary>Lead before the burn starts at which warp-to-node drops back to x1.</summary>
+    private const double WarpToNodeLeadSeconds = 60.0;
+    private double _warpToNodeUntil = double.NaN;
+
+    /// <summary>
+    /// Sim time the burn of the current node starts: half its duration before the node,
+    /// so the Δv is centred on it. NaN when there is no node.
+    /// </summary>
+    private double NodeBurnStartTime()
+    {
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        if (bridge == null || vessel == null) return double.NaN;
+        double now = bridge.Universe.CurrentTime;
+        double thrust = vessel.GetMaximumThrust(bridge.Universe.GetDominantBody(vessel.Position));
+        if (TransferPlanner.Instance?.CurrentNode is { } node)
+        {
+            double burn = thrust > 0.0 ? vessel.TotalMass * node.DvMagnitude / thrust : 0.0;
+            return node.BurnTime - 0.5 * burn;
+        }
+        if (!Planner.HasNode) return double.NaN;
+        double toNode = Planner.TimeToNode();
+        return toNode > 0.0 ? now + toNode - 0.5 * Planner.EstimateBurnTime(thrust, vessel.TotalMass) : double.NaN;
+    }
+
+    private void ToggleWarpToNode()
+    {
+        if (double.IsFinite(_warpToNodeUntil))
+        {
+            _warpToNodeUntil = double.NaN;
+            SimulationBridge.Instance?.SetWarpIndex(0);
+            return;
+        }
+        double start = NodeBurnStartTime();
+        if (double.IsFinite(start)) _warpToNodeUntil = start - WarpToNodeLeadSeconds;
+        GD.Print(double.IsFinite(_warpToNodeUntil)
+            ? $"[Map] Warping to {WarpToNodeLeadSeconds:F0} s before the burn."
+            : "[Map] No maneuver node to warp to.");
+    }
+
+    private void AdvanceWarpToNode()
+    {
+        if (!double.IsFinite(_warpToNodeUntil)) return;
+        var bridge = SimulationBridge.Instance;
+        if (bridge?.ActiveVessel == null) { _warpToNodeUntil = double.NaN; return; }
+        double remaining = _warpToNodeUntil - bridge.Universe.CurrentTime;
+        int index = WarpSchedule.IndexFor(remaining, SimulationBridge.WarpLevels);
+        bridge.SetWarpIndex(index);
+        if (remaining <= 0.0 || bridge.ActiveVessel.Throttle > 0.0)
+        {
+            _warpToNodeUntil = double.NaN;
+            bridge.SetWarpIndex(0);
+        }
     }
 
     // ── Draw ──────────────────────────────────────────────────────────────────
@@ -735,7 +826,7 @@ public partial class MapViewController : Control
             double thrustVac = 0;
             foreach (var en in vessel.Parts.ActiveEngines) thrustVac += en.Definition.ThrustVac;
             double burn = Planner.EstimateBurnTime(thrustVac, vessel.TotalMass);
-            DrawText($"ΔV {Planner.DeltaVMagnitude:F0} m/s  (pro {Planner.DvPrograde:+0;-0}  rad {Planner.DvRadial:+0;-0})",
+            DrawText($"ΔV {Planner.DeltaVMagnitude:F0} m/s  (pro {Planner.DvPrograde:+0;-0}  nrm {Planner.DvNormal:+0;-0}  rad {Planner.DvRadial:+0;-0})",
                      new Vector2(x, y), NodeCol, 13);
             y += 17;
 
@@ -747,6 +838,11 @@ public partial class MapViewController : Control
             DrawText($"T-node {etaStr}   burn {burnStr}{armed}",
                      new Vector2(x, y), _autopilot.IsArmed ? GreenCol : TextDim, 13);
             y += 17;
+            DrawText(double.IsFinite(_warpToNodeUntil)
+                    ? "[N] WARPING TO NODE · [N] stops"
+                    : "wheel pro · Ctrl nrm · Alt rad · Shift x10 · [N] warp · [Enter] burn",
+                     new Vector2(x, y), TextDim, 11);
+            y += 15;
 
             // Resulting orbit after the burn (drawn dashed above) — its Ap/Pe in numbers.
             if (projOrbit != null)
@@ -870,7 +966,7 @@ public partial class MapViewController : Control
 
     private void DrawFooter()
     {
-        DrawText("drag: node  wheel: ΔV  [B] deorbit  ⏎ exec  ⌫ clear  1-6 transfer  [/] adj  Tab: sys",
+        DrawText("drag: node  wheel: ΔV  [B] deorbit·LOI·TEI  ⏎ exec  ⌫ clear  1-6 transfer  [/] adj  Tab: sys",
                  new Vector2(14, PanelSize - 14), new Color(0.50f, 0.58f, 0.68f, 0.9f), 10);
     }
 

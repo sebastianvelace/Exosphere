@@ -236,8 +236,9 @@ public sealed class ManeuverPlanner
     /// </summary>
     public double TimeToNode()
     {
-        if (!HasOrbit || !HasNode || Eccentricity >= 1.0 || SemiMajorAxis <= 0.0)
-            return 0.0;
+        if (!HasOrbit || !HasNode) return 0.0;
+        if (Eccentricity >= 1.0) return TimeToNodeOnOpenConic();
+        if (SemiMajorAxis <= 0.0) return 0.0;
 
         double n = System.Math.Sqrt(Mu / (SemiMajorAxis * SemiMajorAxis * SemiMajorAxis));
         if (n <= 0.0 || double.IsNaN(n)) return 0.0;
@@ -246,6 +247,78 @@ public sealed class ManeuverPlanner
         double mNode = MeanAnomalyFromTrue(NodeTrueAnomaly, Eccentricity);
         double dM    = WrapTwoPi(mNode - mNow);   // forward to the next node pass
         return dM / n;
+    }
+
+    /// <summary>
+    /// A hyperbolic approach passes each point once: time to the node if it is still ahead
+    /// (the lunar-arrival perilune, where LOI burns), else 0.
+    /// </summary>
+    private double TimeToNodeOnOpenConic()
+    {
+        if (SemiMajorAxis >= 0.0 || Eccentricity <= 1.0) return 0.0;
+        double n = System.Math.Sqrt(Mu / -(SemiMajorAxis * SemiMajorAxis * SemiMajorAxis));
+        double now = HyperbolicMeanAnomaly(Signed(TrueAnomalyNow), Eccentricity);
+        double node = HyperbolicMeanAnomaly(Signed(NodeTrueAnomaly), Eccentricity);
+        double dt = (node - now) / n;
+        return dt > 0.0 && double.IsFinite(dt) ? dt : 0.0;
+
+        static double Signed(double nu) => nu > System.Math.PI ? nu - 2.0 * System.Math.PI : nu;
+    }
+
+    private static double HyperbolicMeanAnomaly(double nu, double e)
+    {
+        double x = System.Math.Sqrt((e - 1.0) / (e + 1.0)) * System.Math.Tan(nu * 0.5);
+        double h = 2.0 * System.Math.Atanh(System.Math.Clamp(x, -0.999999999, 0.999999999));
+        return e * System.Math.Sinh(h) - h;
+    }
+
+    /// <summary>
+    /// Lunar orbit insertion preset: a retrograde node at periapsis that puts the apoapsis at
+    /// <paramref name="targetApoapsisAltitudeM"/> (Apollo flew 111 x 312 km, then 110 km).
+    /// False on an impact course (periapsis below the surface) or without an orbit.
+    /// </summary>
+    public bool PlanCapture(CelestialBody body, double targetApoapsisAltitudeM = 110_000.0)
+    {
+        if (!HasOrbit || body == null) return false;
+        double periapsis = SemiLatusRectum / (1.0 + Eccentricity);
+        if (periapsis <= body.Radius) return false;
+        double target = body.Radius + targetApoapsisAltitudeM;
+        if (Eccentricity < 1.0 && periapsis > target + 20_000.0)
+        {
+            // Both apsides high (a high near-circular orbit): lower the far side to the target
+            // first; pressed again, the preset then circularizes at the new periapsis.
+            // On a circular orbit burn two minutes ahead (time to turn): a node at the current
+            // anomaly falls behind the vessel within a frame and waits a whole revolution.
+            double meanMotion = System.Math.Sqrt(Mu / (SemiMajorAxis * SemiMajorAxis * SemiMajorAxis));
+            double nu = Eccentricity < 0.01 ? TrueAnomalyNow + meanMotion * 120.0 : System.Math.PI;
+            CreateNodeAt(nu);
+            DvPrograde = CapturePlanner.ApsisDeltaV(Mu, PositionAt(nu).Magnitude, SemiMajorAxis, target);
+        }
+        else
+        {
+            CreateNodeAt(0.0);
+            DvPrograde = CapturePlanner.PeriapsisDeltaV(Mu, periapsis, SemiMajorAxis, target);
+        }
+        DvNormal = DvRadial = 0.0;
+        return System.Math.Abs(DvPrograde) > 0.1;
+    }
+
+    /// <summary>
+    /// Transearth injection preset from lunar orbit: the planner's burn epoch becomes the
+    /// node and its prograde Δv the burn (a later correction trims the entry corridor).
+    /// </summary>
+    public bool PlanTransearth(OrbitalElements lunarOrbit, CelestialBody moon, CelestialBody earth, double now)
+    {
+        if (!HasOrbit || moon.OrbitalElements == null) return false;
+        var plan = TransearthInjectionPlanner.Compute(earth.GM, moon.GM, moon.OrbitalElements, lunarOrbit,
+            now + 300.0, Exosphere.Simulation.Flight.Apollo8FlightProfile.TransearthTimeOfFlightSeconds,
+            earth.Radius + Exosphere.Simulation.Flight.Apollo8FlightProfile.EntryCorridorVacuumPerigeeAltitudeM,
+            maximumTimeOfFlight: Exosphere.Simulation.Flight.Apollo8FlightProfile.MaximumTransearthTimeOfFlightSeconds);
+        var burnPosition = lunarOrbit.GetStateAtTime(plan.BurnTime, moon.GM).position;
+        CreateNodeAt(System.Math.Atan2(burnPosition.Dot(AheadDir), burnPosition.Dot(PeriapsisDir)));
+        DvPrograde = plan.ImpulsiveDeltaV;
+        DvNormal = DvRadial = 0.0;
+        return plan.ImpulsiveDeltaV > 0.0;
     }
 
     /// <summary>Mean anomaly (rad) from true anomaly for an elliptic orbit (e &lt; 1).</summary>

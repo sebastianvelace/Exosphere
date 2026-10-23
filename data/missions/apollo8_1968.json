@@ -163,8 +163,8 @@
       "id": "loi",
       "titleEn": "Brake into lunar orbit (LOI)",
       "titleEs": "Frená en órbita lunar (LOI)",
-      "hintEn": "At the closest point to the Moon point retrograde and burn until the orbit closes. [K] hands this step to Mission Control and back.",
-      "hintEs": "En el punto más cercano a la Luna apuntá retrógrado y quemá hasta que la órbita se cierre. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "hintEn": "At the Moon open the map [M] and press [B]: it places the LOI node at perilune. [N] warps to it, [Enter] flies the burn, [Y] holds the node attitude. [K] hands this step to Mission Control and back.",
+      "hintEs": "Ya en la Luna abrí el mapa [M] y pulsá [B]: pone el nodo de LOI en el perilunio. [N] hace warp hasta él, [Enter] ejecuta el encendido y [Y] mantiene la actitud del nodo. [K] le pasa este paso a Control de Misión y te lo devuelve.",
       "doneWhenObjectiveId": "lunar-orbit-insertion"
     },
     {
@@ -179,8 +179,8 @@
       "id": "tei",
       "titleEn": "Burn for home (TEI)",
       "titleEs": "Encendé de regreso (TEI)",
-      "hintEn": "Leave lunar orbit on a trajectory that grazes Earth's atmosphere. [K] hands this step to Mission Control and back.",
-      "hintEs": "Salí de la órbita lunar en una trayectoria que roce la atmósfera terrestre. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "hintEn": "In lunar orbit [M] then [B] plans the TEI node; [N] warps to it and [Enter] burns. [K] hands this step to Mission Control and back.",
+      "hintEs": "En órbita lunar, [M] y después [B] planifica el nodo de TEI; [N] hace warp y [Enter] quema. [K] le pasa este paso a Control de Misión y te lo devuelve.",
       "doneWhenObjectiveId": "transearth-injection"
     },
     {

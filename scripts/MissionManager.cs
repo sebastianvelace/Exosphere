@@ -264,11 +264,7 @@ public partial class MissionManager : Node
             }
             else
             {
-                int warp = 0;
-                while (warp + 1 < SimulationBridge.WarpLevels.Length
-                    && SimulationBridge.WarpLevels[warp + 1] * 0.5 < 0.25 * remaining)
-                    warp++;
-                bridge.SetWarpIndex(warp);
+                bridge.SetWarpIndex(WarpSchedule.IndexFor(remaining, SimulationBridge.WarpLevels));
             }
         }
 

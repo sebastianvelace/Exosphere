@@ -360,7 +360,8 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             return true;
         if (EDLController.Instance?.IsPresentationActive == true
             || ManeuverExecutor.Instance?.IsExecuting == true
-            || HistoricalFlightProfileController.Instance?.IsEngaged == true)
+            || HistoricalFlightProfileController.Instance?.IsEngaged == true
+            || SasModeController.Instance?.IsHolding == true)
             return true;
         if (_autopilotController == null || !IsInstanceValid(_autopilotController))
             _autopilotController = GetTree().Root.FindChild(

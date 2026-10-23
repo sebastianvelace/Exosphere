@@ -143,6 +143,9 @@ public partial class HUDController : Control
         AddChild(_moonIndicator);
         _targetIndicator = new TargetIndicator { Name = "TargetIndicator" };
         AddChild(_targetIndicator);
+        AddChild(new SasModeController { Name = "SasModeController" });
+        _landingAid = new LandingAidIndicator { Name = "LandingAidIndicator" };
+        AddChild(_landingAid);
     }
 
     private void BuildAttitudeCluster()
@@ -197,6 +200,7 @@ public partial class HUDController : Control
     private MissionObjectivesPanel _objectives = null!;
     private MoonIndicator _moonIndicator = null!;
     private TargetIndicator _targetIndicator = null!;
+    private LandingAidIndicator _landingAid = null!;
 
     public override void _ExitTree()
     {
@@ -571,6 +575,7 @@ public partial class HUDController : Control
             ("A D", "YAW"),
             ("Q E", "ROLL"),
             ("T", "SAS HOLD ON / OFF"),
+            ("Y Shift+Y", "SAS MODE: PRO/RETRO · NORMAL · RADIAL · TARGET · NODE"),
             ("arrows", "RCS TRANSLATE FWD/AFT · LEFT/RIGHT"),
             ("PgUp PgDn", "RCS TRANSLATE UP / DOWN"),
         });
@@ -607,7 +612,9 @@ public partial class HUDController : Control
             ("Tab", "SOLAR / LOCAL VIEW"),
             ("1…6", "TRANSFER TARGET"),
             ("Enter", "EXECUTE NODE"),
-            ("B", "PLAN DEORBIT BURN"),
+            ("B", "DEORBIT · AT THE MOON: LOI / TEI"),
+            ("N", "WARP TO NODE"),
+            ("wheel Ctrl Alt", "NODE Δv PRO / NORMAL / RADIAL"),
             ("[ ]", "NODE Δv −5% / +5%"),
             ("Del", "CLEAR NODE"),
         });
@@ -1222,6 +1229,7 @@ public partial class HUDController : Control
         _objectives.DensityAllowed = instruments;
         _moonIndicator.DensityAllowed = instruments;
         _targetIndicator.DensityAllowed = instruments;
+        _landingAid.DensityAllowed = instruments;
         _navball.Visible = cluster;
         _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit

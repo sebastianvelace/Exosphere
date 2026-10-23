@@ -146,16 +146,16 @@
       "id": "loi",
       "titleEn": "Brake into lunar orbit (LOI)",
       "titleEs": "Frená en órbita lunar (LOI)",
-      "hintEn": "At the closest point to the Moon point retrograde and burn until the orbit closes. [K] hands this step to Mission Control and back.",
-      "hintEs": "En el punto más cercano a la Luna apuntá retrógrado y quemá hasta que la órbita se cierre. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "hintEn": "At the Moon open the map [M] and press [B]: it places the LOI node at perilune. [N] warps to it, [Enter] flies the burn, [Y] holds the node attitude. [K] hands this step to Mission Control and back.",
+      "hintEs": "Ya en la Luna abrí el mapa [M] y pulsá [B]: pone el nodo de LOI en el perilunio. [N] hace warp hasta él, [Enter] ejecuta el encendido y [Y] mantiene la actitud del nodo. [K] le pasa este paso a Control de Misión y te lo devuelve.",
       "doneWhenObjectiveId": "lunar-orbit-insertion"
     },
     {
       "id": "circular",
       "titleEn": "Circularize in low lunar orbit",
       "titleEs": "Circularizá en órbita lunar baja",
-      "hintEn": "Burn retrograde again at the closest point to round the orbit off near 110 km. [K] hands this step to Mission Control and back.",
-      "hintEs": "Volvé a quemar retrógrado en el punto más cercano para redondear la órbita cerca de 110 km. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "hintEn": "Press [B] in the map again: it places the circularization node at perilune (apolune ~110 km); [N] warps, [Enter] burns. [K] hands this step to Mission Control and back.",
+      "hintEs": "Volvé a pulsar [B] en el mapa: pone el nodo de circularización en el perilunio (apolunio ~110 km); [N] hace warp, [Enter] quema. [K] le pasa este paso a Control de Misión y te lo devuelve.",
       "doneWhenObjectiveId": "circular-lunar-orbit"
     },
     {

@@ -272,7 +272,17 @@ hacer.
 5. ✅ **Kit de rendezvous manual (Gemini).** Agena siempre presente, objetivo seleccionable,
    rango y velocidad relativa, teclas de traslación RCS, indicador de alineación del puerto
    y captura real al entrar en el sobre.
-6. **Herramientas de vuelo.** Modos SAS (pro/retro/normal/radial/objetivo/nodo), nodo de
+6. ✅ **Herramientas de vuelo.** (2026-10-23) Lo entregado:
+   - modos SAS ([Y]) con marcadores en el navball;
+   - nodo con eje normal (Ctrl+rueda) y warp al nodo ([N]);
+   - [B] lunar: LOI en el perilunio, después circularización y TEI;
+   - `TimeToNode` en hiperbólicas;
+   - línea de aterrizaje (altitud, tiempo al impacto, margen de encendido).
+
+   Se probó jugando: salto a la Luna, luego [B], [N] y [Enter], y la órbita pasó de
+   1.040 km circular a 1.040 × 93 km. Falta: precisión del ejecutor de quemado finito (93 contra
+   110 km) y un predictor de punto de toque.
+   Plan original: Modos SAS (pro/retro/normal/radial/objetivo/nodo), nodo de
    maniobra con los tres ejes, tiempo de quemado y "warp al nodo", ejecutores de LOI/TEI,
    ayudas de aterrizaje (altitud radar, tiempo al impacto, inicio de quemado).
 7. **Práctica y dificultad.** Volver al inicio de la fase, quickload visible, asistencias
