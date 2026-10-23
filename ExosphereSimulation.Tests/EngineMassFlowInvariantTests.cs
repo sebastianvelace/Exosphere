@@ -54,8 +54,6 @@ public sealed class EngineMassFlowInvariantTests
             ["lm-dps-lm5-1969"] = 0.145943,
             ["j2-sivb-as503-1968"] = 0.139384,
             ["j2-sii-as503-1968"] = 0.128907,
-            ["j2-sivb-as506-1969"] = 0.114673,
-            ["j2-sii-as506-1969"] = 0.111830,
             ["titan2-lr87-glv8-1966"] = 0.044982,
             ["f1-as506-1969"] = 0.035362,
             ["titan2-lr91-glv8-1966"] = 0.020143,

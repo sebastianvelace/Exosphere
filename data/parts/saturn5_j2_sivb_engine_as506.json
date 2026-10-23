@@ -12,7 +12,7 @@
   "heat_tolerance": 1450,
   "thrust_sl": 720000,
   "thrust_vac": 901223,
-  "isp_sl": 300,
+  "isp_sl": 342.4946,
   "isp_vac": 428.7,
   "gimbal_range": 7,
   "fuel_type": "liquid_fuel",
