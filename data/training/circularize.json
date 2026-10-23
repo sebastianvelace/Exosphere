@@ -1,0 +1,17 @@
+{
+  "id": "training-circularize",
+  "sequence": 1,
+  "titleEn": "Circularize an orbit",
+  "titleEs": "Circularizar una órbita",
+  "instructionsEn": "You are at the high point (apogee) of a 200 x 1000 km orbit in an Apollo CSM. Press [Y] until SAS reads PROGRADE, wait for the nose to settle, then hold [Z] to burn until the periapsis (right panel, [F3]) climbs to ~1000 km. Cut with [X]. Tip: burning at apogee raises the far side.",
+  "instructionsEs": "Estás en el punto alto (apogeo) de una órbita de 200 x 1000 km en un CSM de Apollo. Pulsá [Y] hasta que el SAS diga PROGRADE, esperá que la nariz se estabilice y mantené [Z] para quemar hasta que el periapsis (panel derecho, [F3]) suba a ~1000 km. Cortá con [X]. Tip: quemar en el apogeo levanta el lado opuesto.",
+  "vehicleParts": [
+    "apollo8_command_module_csm103",
+    "apollo8_service_module_csm103",
+    "apollo8_sps_engine_csm103"
+  ],
+  "start": "EllipticalEarthOrbit",
+  "goal": "CircularOrbit",
+  "vehicleVariantFile": "",
+  "targetVariantFile": ""
+}

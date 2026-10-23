@@ -51,6 +51,31 @@ public sealed class DockingTargetingTests
     }
 
     [Fact]
+    public void CoOrbitingCraftReadNoDriftInTheTargetsOrbitFrame()
+    {
+        var root = SaturnVAscentFlight.DataDirectory();
+        var catalog = PartCatalog.LoadFromDirectory(Path.Combine(root, "parts"));
+        var training = Exosphere.Simulation.Training.TrainingDefinition
+            .LoadAll(Path.Combine(root, "training")).Single(t => t.Id == "training-docking");
+        var universe = Universe.LoadFromDataDirectory(root);
+        var assembly = new VesselAssembly(catalog);
+        var current = assembly.AddRoot(training.VehicleParts[0]);
+        foreach (var part in training.VehicleParts.Skip(1))
+            current = assembly.AttachPartAutomatically(current.InstanceId, part);
+        var gemini = assembly.ToVessel("Gemini", "gemini");
+        var agena = VehicleVariantDefinition.LoadFromJson(Path.Combine(root, "vehicles", training.TargetVariantFile))
+            .Build(catalog).ToVessel("Agena", "agena");
+        universe.AddVessel(gemini);
+        universe.AddVessel(agena);
+        Exosphere.Simulation.Training.TrainingSeeder.Seed(training, universe, gemini, agena);
+        // Inertially they differ by v·θ ≈ 0.23 m/s; in the orbit frame they are at rest.
+        Assert.True((gemini.Velocity - agena.Velocity).Magnitude > 0.2);
+        var reading = DockingTargeting.FindNearest(universe, gemini)!.Value;
+        Assert.True(reading.LateralSpeedMps < 0.01, $"Drift {reading.LateralSpeedMps:F3} m/s.");
+        Assert.True(System.Math.Abs(reading.ClosingSpeedMps) < 0.01);
+    }
+
+    [Fact]
     public void CapturesOnlyInsideTheEnvelopeAndThenStopsTargetingTheTakenPort()
     {
         var (far, farChaser, _) = NoseToNose(portGapM: 3.0, closingMps: 0.1);

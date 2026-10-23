@@ -13,6 +13,8 @@ public sealed class LaunchIntent
     public string? SaveSlot { get; init; }
     public CraftDocumentV2? Craft { get; init; }
     public CampaignSaveV2? CampaignState { get; init; }
+    /// <summary>Training drill to seed after the vehicle spawns (Mode = "training").</summary>
+    public string? TrainingId { get; init; }
 }
 
 /// <summary>One-shot scene transition payload; replaces implicit Starship/Starbase globals.</summary>

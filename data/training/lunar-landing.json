@@ -1,0 +1,13 @@
+{
+  "id": "training-lunar-landing",
+  "sequence": 4,
+  "titleEn": "Land on the Moon",
+  "titleEs": "Alunizar",
+  "instructionsEn": "Eagle is 10 minutes from perilune at 15 km. Hold SAS RETROGRADE ([Y]) and burn with [Z] at perilune to kill most of the 1.7 km/s. The landing line shows altitude, speeds and BURN IN: when it turns amber, throttle up. Below 500 m point up, keep horizontal speed near zero and settle under 3 m/s. [K] is not available here: this one is yours.",
+  "instructionsEs": "El Eagle está a 10 minutos del perilunio a 15 km. Mantené el SAS en RETRÓGRADO ([Y]) y quemá con [Z] en el perilunio para matar casi todos los 1,7 km/s. La línea de aterrizaje muestra altitud, velocidades y FRENAR EN: cuando se pone ámbar, subí el acelerador. Debajo de 500 m apuntá hacia arriba, mantené la velocidad horizontal cerca de cero y apoyá a menos de 3 m/s. [K] no está disponible acá: este es tuyo.",
+  "vehicleVariantFile": "apollo11_lm5_eagle_1969.json",
+  "start": "LunarDescentOrbit",
+  "goal": "SoftLanding",
+  "vehicleParts": [],
+  "targetVariantFile": ""
+}

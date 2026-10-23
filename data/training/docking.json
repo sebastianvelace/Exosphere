@@ -1,0 +1,17 @@
+{
+  "id": "training-docking",
+  "sequence": 2,
+  "titleEn": "Dock with the Agena",
+  "titleEs": "Acoplar con la Agena",
+  "instructionsEn": "Gemini 8 is 200 m behind the Agena, nose on its docking cone. Press [Y] until SAS reads TARGET to hold the line of sight. Tap the arrow [Up] to start closing; keep the closing speed under the MAX shown on the target line and correct drift with [Left]/[Right] and [PgUp]/[PgDn]. Brake with [Down]. The ports capture on their own when you arrive slowly.",
+  "instructionsEs": "La Gemini 8 está 200 m detrás de la Agena, con la nariz apuntando a su cono de acople. Pulsá [Y] hasta que el SAS diga OBJETIVO para mantener la línea de visión. Tocá la flecha [Arriba] para empezar a acercarte; mantené la velocidad de cierre por debajo del MÁX de la línea del objetivo y corregí la deriva con [Izquierda]/[Derecha] y [RePág]/[AvPág]. Frená con [Abajo]. Los puertos capturan solos cuando llegás despacio.",
+  "vehicleParts": [
+    "gemini8_docking_nose",
+    "gemini8_reentry_module",
+    "gemini8_equipment_adapter"
+  ],
+  "targetVariantFile": "agena8_target_5003_1966.json",
+  "start": "DockingApproach",
+  "goal": "Docked",
+  "vehicleVariantFile": ""
+}

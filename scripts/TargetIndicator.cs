@@ -74,6 +74,14 @@ public partial class TargetIndicator : Control
             : (target.ClosingSpeedMps >= 0.0 ? $"CLOSING {target.ClosingSpeedMps:F2} m/s" : $"OPENING {-target.ClosingSpeedMps:F2} m/s");
         string text = $"{target.Target.Name.ToUpperInvariant()} {range} · {closing} · "
             + (es ? $"DERIVA {target.LateralSpeedMps:F2} m/s" : $"DRIFT {target.LateralSpeedMps:F2} m/s");
+        // Which translation keys null the drift (fire against it, in the body axes they use).
+        var drift = target.CrossTrackVelocityBody;
+        var corrections = new System.Collections.Generic.List<string>();
+        if (System.Math.Abs(drift.X) > 0.02) corrections.Add($"{(drift.X > 0 ? "←" : "→")} {System.Math.Abs(drift.X):F2}");
+        if (System.Math.Abs(drift.Z) > 0.02)
+            corrections.Add($"{(drift.Z > 0 ? (es ? "AvPág" : "PgDn") : (es ? "RePág" : "PgUp"))} {System.Math.Abs(drift.Z):F2}");
+        if (corrections.Count > 0)
+            text += (es ? " · CORREGÍ " : " · CORRECT ") + string.Join(" ", corrections);
         if (target.RangeM < 200.0)
         {
             // The same √(range) closing profile the automated approach flies, capped near the port.

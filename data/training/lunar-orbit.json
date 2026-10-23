@@ -1,0 +1,17 @@
+{
+  "id": "training-lunar-orbit",
+  "sequence": 3,
+  "titleEn": "Brake into lunar orbit",
+  "titleEs": "Frenar en órbita lunar",
+  "instructionsEn": "Your CSM falls toward the Moon and will pass 111 km above it in three hours. Open the map [M] and press [B]: it plans the LOI node at perilune. [N] warps to it, [Y] until SAS reads MANEUVER, then [Enter] flies the burn. Goal: a closed orbit below 500 km.",
+  "instructionsEs": "Tu CSM cae hacia la Luna y va a pasar a 111 km de ella en tres horas. Abrí el mapa [M] y pulsá [B]: planifica el nodo de LOI en el perilunio. [N] hace warp hasta él, [Y] hasta que el SAS diga NODO, y [Enter] ejecuta el encendido. Meta: una órbita cerrada por debajo de 500 km.",
+  "vehicleParts": [
+    "apollo8_command_module_csm103",
+    "apollo8_service_module_csm103",
+    "apollo8_sps_engine_csm103"
+  ],
+  "start": "LunarArrival",
+  "goal": "LunarOrbit",
+  "vehicleVariantFile": "",
+  "targetVariantFile": ""
+}

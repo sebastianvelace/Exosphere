@@ -481,7 +481,40 @@ public partial class MainMenu : Control
             LaunchStarshipFlight12Scenario));
         body.AddChild(ModalButton("STARSHIP / 70 KM ENTRY INTERFACE", OpenReentry));
         body.AddChild(ModalButton("STARSHIP / STARBASE MANUAL LAUNCH", OpenSandbox));
+        body.AddChild(InterfaceTheme.SectionLabel(UiText.Get("training_title")));
+        bool spanish = UserInterfaceSettings.Language == InterfaceLanguage.Spanish;
+        foreach (var training in Exosphere.Simulation.Training.TrainingDefinition.LoadAll(
+                     System.IO.Path.Combine(GameDataPath.Resolve(), "training")))
+            body.AddChild(ModalButton((spanish ? training.TitleEs : training.TitleEn).ToUpperInvariant(),
+                () => LaunchTraining(training)));
     });
+
+    /// <summary>Builds the drill's vehicle and hands it to the flight scene to be seeded.</summary>
+    private void LaunchTraining(Exosphere.Simulation.Training.TrainingDefinition training)
+    {
+        string data = GameDataPath.Resolve();
+        var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(data, "parts"));
+        VesselAssembly assembly;
+        if (!string.IsNullOrWhiteSpace(training.VehicleVariantFile))
+            assembly = VehicleVariantDefinition.LoadFromJson(
+                System.IO.Path.Combine(data, "vehicles", training.VehicleVariantFile)).Build(catalog);
+        else
+        {
+            assembly = new VesselAssembly(catalog);
+            var current = assembly.AddRoot(training.VehicleParts[0]);
+            foreach (string part in training.VehicleParts.Skip(1))
+                current = assembly.AttachPartAutomatically(current.InstanceId, part);
+        }
+        CraftLaunchRequest.Set(new LaunchIntent
+        {
+            Mode = "training",
+            TrainingId = training.Id,
+            LaunchSiteId = "kennedy",
+            FlightProfileId = "manual",
+            Craft = assembly.ToCraftDocument(training.TitleEn),
+        });
+        OpenFlight();
+    }
 
     private void ShowCampaign() => ShowModal(UiText.Get("campaign_preview"), body =>
     {

@@ -146,6 +146,8 @@ public partial class HUDController : Control
         AddChild(new SasModeController { Name = "SasModeController" });
         _landingAid = new LandingAidIndicator { Name = "LandingAidIndicator" };
         AddChild(_landingAid);
+        _trainingPanel = new TrainingPanel { Name = "TrainingPanel" };
+        AddChild(_trainingPanel);
     }
 
     private void BuildAttitudeCluster()
@@ -201,6 +203,7 @@ public partial class HUDController : Control
     private MoonIndicator _moonIndicator = null!;
     private TargetIndicator _targetIndicator = null!;
     private LandingAidIndicator _landingAid = null!;
+    private TrainingPanel _trainingPanel = null!;
 
     public override void _ExitTree()
     {
@@ -578,6 +581,7 @@ public partial class HUDController : Control
             ("Y Shift+Y", "SAS MODE: PRO/RETRO · NORMAL · RADIAL · TARGET · NODE"),
             ("arrows", "RCS TRANSLATE FWD/AFT · LEFT/RIGHT"),
             ("PgUp PgDn", "RCS TRANSLATE UP / DOWN"),
+            ("Shift+arrows", "RCS FINE CONTROL (20 %)"),
         });
         AddHelpGroup(left, "MISSION", new[]
         {
@@ -880,7 +884,9 @@ public partial class HUDController : Control
                 if (Input.IsKeyPressed(Key.Left)) lateral -= 1.0;
                 if (Input.IsKeyPressed(Key.Pageup)) normal += 1.0;
                 if (Input.IsKeyPressed(Key.Pagedown)) normal -= 1.0;
-                vessel.TranslationCommand = new Vector3d(lateral, fore, normal);
+                // Shift: fine control at 20 % thrust for the last metres (KSP's fine controls).
+                double fine = Input.IsKeyPressed(Key.Shift) ? 0.2 : 1.0;
+                vessel.TranslationCommand = new Vector3d(lateral, fore, normal) * fine;
             }
 
         }
@@ -1231,6 +1237,7 @@ public partial class HUDController : Control
         _moonIndicator.DensityAllowed = instruments;
         _targetIndicator.DensityAllowed = instruments;
         _landingAid.DensityAllowed = instruments;
+        _trainingPanel.DensityAllowed = instruments;
         _navball.Visible = cluster;
         _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit

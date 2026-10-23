@@ -296,7 +296,13 @@ hacer.
    estructurales".
    Plan original: Volver al inicio de la fase, quickload visible, asistencias
    opcionales (propelente infinito, sin fallas estructurales) puntuadas aparte.
-8. **Entrenamiento.** Misiones cortas aisladas (circularizar, interceptar en LEO, acoplar
+8. ✅ **Entrenamiento.** (2026-10-23) Cuatro ejercicios en Escenarios → Entrenamiento
+   (circularizar, acoplar desde 200 m, LOI, alunizar desde 15 km), cada uno con instrucciones,
+   estado sembrado una sola vez y meta evaluada. Jugando el de acople se corrigió la
+   "deriva" falsa de 0,23 m/s (se medía en el marco inercial; ahora en el orbital del
+   objetivo). También se agregaron la Agena estabilizada en su órbita, la sugerencia de qué
+   tecla anula la deriva y el control fino con Shift. Falta: puntaje y tiempos por ejercicio.
+   Plan original: Misiones cortas aisladas (circularizar, interceptar en LEO, acoplar
    desde 200 m, alunizar desde 15 km).
 
 Visual en paralelo: ✅ mallas procedurales detalladas de Mercury-Redstone, Atlas, Titan II/Gemini,

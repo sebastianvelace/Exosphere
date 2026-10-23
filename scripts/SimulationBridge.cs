@@ -311,6 +311,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             SpawnStarshipStack(dataPath);
         GD.Print($"PERF_STARTUP phase=starship_spawned ms={startup.Elapsed.TotalMilliseconds:F1} vessels={Universe.Vessels.Count}");
         if (!IsFlight14Exploration) SpawnPendingConstructedVessel(dataPath, pendingIntent);
+        if (pendingIntent is { Mode: "training", TrainingId: { } trainingId }) ApplyTraining(dataPath, trainingId);
         var campaignRuntime = new CampaignRuntime
         {
             Name = "CampaignRuntime",
@@ -400,6 +401,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         ApplyDefaultPadDaylightIfNeeded();
         if (ActiveVessel is { } practiceVessel)
             practiceVessel.InfinitePropellant = UserInterfaceSettings.InfinitePropellant;
+        HoldTrainingTargetAttitude();
 
         // ── Recalculate MaxAllowedWarpIndex ──────────────────────────────
         var av = ActiveVessel;
@@ -1076,6 +1078,64 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// <summary>
     /// Rebuilds the active vessel mesh after a mission load (Id and part graph may be new).
     /// </summary>
+    /// <summary>The training drill being flown, or null outside training.</summary>
+    public Exosphere.Simulation.Training.TrainingDefinition? ActiveTraining { get; private set; }
+
+    /// <summary>
+    /// Seeds a training drill: the player's vehicle (already spawned on the pad) and any
+    /// target are placed in the drill's starting situation, and the mission phase follows.
+    /// </summary>
+    private void ApplyTraining(string dataPath, string trainingId)
+    {
+        var training = Exosphere.Simulation.Training.TrainingDefinition
+            .LoadAll(System.IO.Path.Combine(dataPath, "training"))
+            .FirstOrDefault(t => t.Id == trainingId);
+        var player = ActiveVessel;
+        if (training == null || player == null) return;
+        Vessel? target = null;
+        if (!string.IsNullOrWhiteSpace(training.TargetVariantFile))
+        {
+            var catalog = PartCatalog.LoadFromDirectory(System.IO.Path.Combine(dataPath, "parts"));
+            target = VehicleVariantDefinition.LoadFromJson(
+                    System.IO.Path.Combine(dataPath, "vehicles", training.TargetVariantFile))
+                .Build(catalog).ToVessel("Agena Target Vehicle", "training-target");
+            Universe.AddVessel(target);
+        }
+        Exosphere.Simulation.Training.TrainingSeeder.Seed(training, Universe, player, target);
+        if (target != null) SpawnDebrisRenderer(target, "Target_");
+        ActiveTraining = training;
+        ActiveFlightProfileId = "manual";
+        var phase = training.Start switch
+        {
+            Exosphere.Simulation.Training.TrainingStart.LunarArrival => MissionPhase.LUNAR_APPROACH,
+            Exosphere.Simulation.Training.TrainingStart.LunarDescentOrbit => MissionPhase.LUNAR_ORBIT,
+            _ => MissionPhase.ORBIT,
+        };
+        if (MissionManager.Instance != null) MissionManager.Instance.EnterPhase(phase);
+        else SaveSystem.PendingMissionPhase = phase;
+        RebuildActiveVesselRenderer();
+        GD.Print($"[Training] {training.Id} seeded.");
+    }
+
+    /// <summary>
+    /// The docking drill's Agena flies stabilized in its orbit frame like the real one: nose
+    /// prograde, docking cone toward the chaser behind. Held inertially, the cone would
+    /// rotate away at orbital rate (~4°/min) during the approach.
+    /// </summary>
+    private void HoldTrainingTargetAttitude()
+    {
+        if (ActiveTraining?.Start != Exosphere.Simulation.Training.TrainingStart.DockingApproach) return;
+        var target = Universe.Vessels.FirstOrDefault(v => v.Id == "training-target");
+        if (target == null || Universe.DockingConnections.Any(c =>
+                c.PrimaryVesselId == target.Id || c.SecondaryVesselId == target.Id))
+            return;
+        var body = Universe.GetDominantBody(target.Position);
+        if (Exosphere.Simulation.Flight.SasHold.Direction(target, body,
+                Exosphere.Simulation.Flight.SasHoldMode.Prograde) is not { } prograde) return;
+        target.SASEnabled = false;
+        target.PitchYawRoll = Exosphere.Simulation.Flight.SasHold.Command(target, body, prograde);
+    }
+
     public void RebuildActiveVesselRenderer()
     {
         var vessel = ActiveVessel;
