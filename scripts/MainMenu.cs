@@ -742,6 +742,17 @@ public partial class MainMenu : Control
                 UserInterfaceSettings.SetUnlockAllMissions(!UserInterfaceSettings.UnlockAllMissions);
                 ShowSettings();
             }));
+        body.AddChild(SettingRow(UiText.Get("pad_lighting"),
+            UiText.Get(UserInterfaceSettings.PadLighting switch
+            {
+                PadLighting.Night => "pad_lighting_night",
+                PadLighting.RealSun => "pad_lighting_real",
+                _ => "pad_lighting_day",
+            }), () =>
+            {
+                UserInterfaceSettings.SetPadLighting((PadLighting)(((int)UserInterfaceSettings.PadLighting + 1) % 3));
+                ShowSettings();
+            }));
         body.AddChild(SettingRow(UiText.Get("infinite_propellant"),
             UserInterfaceSettings.InfinitePropellant ? "ON" : "OFF", () =>
             {

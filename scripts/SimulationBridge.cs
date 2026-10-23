@@ -1219,8 +1219,16 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         if (sun == null) return;
         _defaultPadDaylightApplied = true;
         if (sun.VisualSunElevationOverrideDegrees.HasValue) return;
-        sun.SetVisualSunElevationOverride(28.0);
-        GD.Print("PERF_SOLAR_CYCLE default_pad_daylight elevationDeg=28.0 "
+        // Settings → pad light: forced day (default), forced night, or the real Sun.
+        double? elevation = UserInterfaceSettings.PadLighting switch
+        {
+            PadLighting.Night => -20.0,
+            PadLighting.RealSun => null,
+            _ => 28.0,
+        };
+        if (elevation is not { } padElevation) return;
+        sun.SetVisualSunElevationOverride(padElevation);
+        GD.Print($"PERF_SOLAR_CYCLE default_pad_daylight elevationDeg={padElevation:F1} "
             + "presentationOnly=True");
     }
 

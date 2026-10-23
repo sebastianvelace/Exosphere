@@ -126,6 +126,11 @@ public partial class PhaseLightingController : Node
                 _env.AmbientLightColor = reentryColor;
         }
 
+        // Night pad: work lights and beacons need bloom to read as lamps, not dots, and the
+        // daytime pad ambient would light the whole complex like dusk.
+        glow = Mathf.Max(glow, PadNightLighting.NightGlowFloor);
+        if (PadNightLighting.NightGlowFloor > 0f) ambient = Mathf.Min(ambient, 0.05f);
+
         if (CameraController.Instance?.IsCockpitView == true)
         {
             ambient = Mathf.Min(AmbientEnergyPad, ambient + CockpitAmbientBoost * Mathf.Max(0.25f, reentry));

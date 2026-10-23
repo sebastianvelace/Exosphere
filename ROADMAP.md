@@ -305,6 +305,14 @@ hacer.
    Plan original: Misiones cortas aisladas (circularizar, interceptar en LEO, acoplar
    desde 200 m, alunizar desde 15 km).
 
+Visual nocturno (2026-10-23, inspirado en Roadster Stunt Arena): ✅ plataformas de noche con
+luces de trabajo en torres, mástiles, cubiertas y brazos (tamaño constante en pantalla), balizas
+rojas sincronizadas, conos de reflectores, venteo criogénico alrededor del vehículo cargado,
+glow y piso de exposición de "luz práctica". Hay un ajuste de luz de plataforma: día, noche o
+sol real. Pendiente: el terreno satelital y el mar siguen claros de noche (piso nocturno del
+`earth_ground` shader), hay una franja brillante en el horizonte nocturno y falta
+"luz horneada" en el piso.
+
 Visual en paralelo: ✅ mallas procedurales detalladas de Mercury-Redstone, Atlas, Titan II/Gemini,
 Agena y Saturn V/Apollo/LM (`HistoricalVehicleMeshes`). Pendiente: contrastar libreas contra
 fotos (bandas del Titan, franjas de la Agena, roll pattern del Redstone).

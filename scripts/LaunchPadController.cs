@@ -76,6 +76,9 @@ public partial class LaunchPadController : Node3D
         ? "CAUGHT"
         : CatchApproachArmed ? "ARMED" : "UNARMED";
 
+    /// <summary>The high-mast floodlights, for <see cref="PadNightLighting"/>'s beam cones.</summary>
+    public IReadOnlyList<SpotLight3D> NightFloodlights => _nightFloodlights;
+
     /// <summary>Number of presentation-only night work lights on the launch complex.</summary>
     public int NightFloodlightCount => _nightFloodlights.Count;
 
@@ -100,6 +103,8 @@ public partial class LaunchPadController : Node3D
         Position = new Vector3(0f, -(float)(VehicleInterfaceElevationM * U), 0f);
         BuildEnvironment();
         BuildStarbaseFarField();
+        // After the complex exists: night lighting is placed from its structures.
+        CallDeferred(Node.MethodName.AddChild, new PadNightLighting());
     }
 
     public override void _Process(double delta)

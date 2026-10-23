@@ -108,6 +108,8 @@ public partial class VisualExposureController : Node
         double skyLuminance = 0.12 * System.Math.Clamp(air, 0.0, 1.0) * daylight;
         double surfaceLuminance = 0.16 * directLuminance * SunController.SolarVisibility;
         double sceneLuminance = 0.0004 + skyLuminance + surfaceLuminance + 0.55 * plasma;
+        // A floodlit pad at night: adapt to the lit work area, not to the black sky.
+        sceneLuminance = System.Math.Max(sceneLuminance, PadNightLighting.PracticalLuminanceFloor);
         bool cockpit = CameraController.Instance?.IsCockpitView == true;
         if (cockpit)
             sceneLuminance = System.Math.Max(sceneLuminance, 0.056); // interior practical-light floor
