@@ -37,7 +37,7 @@ public sealed class Apollo11DataTests
             .Sum(part => WetMass(parts[part.DefinitionId]));
         Assert.Equal(28_799.94034841, csmMass, 6);
         Assert.Equal(
-            21_227.45964503,
+            Apollo11FlightProfile.EagleWetMassKg + 4_009.0 * 0.45359237,
             WetMass(parts["apollo11_sla_lm5"]),
             8);
     }
@@ -59,9 +59,9 @@ public sealed class Apollo11DataTests
         var sivb = Assert.IsType<Exosphere.Simulation.Vessel>(vessel.Stage());
 
         Assert.Equal(4_041.5080167, les.TotalMass, 8);
-        Assert.Equal(2_282_829.24711149, sic.TotalMass, 5);
+        Assert.Equal(2287176.72029934, sic.TotalMass, 5);
         Assert.Equal(484_097.36406724, sii.TotalMass, 5);
-        Assert.Equal(141_451.87339976, sivb.TotalMass, 5);
+        Assert.Equal(137104.40021191, sivb.TotalMass, 5);
         Assert.Equal(28_799.94034841, vessel.TotalMass, 6);
         Assert.Equal(
             ignitionMass,
@@ -120,11 +120,12 @@ public sealed class Apollo11DataTests
             engines.Clusters["f1-five-as506-1969"].Engines.Sum(mount =>
                 engines.Models["f1-as506-1969"].RatedThrustSeaLevelN),
             5);
+        // AS-506 S-II flight reconstruction: 5,141,516 N total at ESC+61 s (MPR-SAT-FE-69-9).
         Assert.Equal(
-            5_048_731.533320667,
+            5_141_516.0,
             engines.Clusters["j2-five-sii-as506-1969"].Engines.Sum(mount =>
                 engines.Models["j2-sii-as506-1969"].RatedThrustVacuumN),
-            5);
+            0);
         Assert.Equal(1, engines.Models["j2-sivb-as506-1969"].RestartLimit);
         Assert.Equal(
             43_903.94734262113,
@@ -240,7 +241,7 @@ public sealed class Apollo11DataTests
     }
 
     [Fact]
-    public void CommandModuleAndLmAscentDeclareOpposedDockingPorts()
+    public void CommandModuleAndLmAscentDeclareOutwardDockingPorts()
     {
         PartCatalog parts = LoadParts();
         var cm = parts["apollo11_command_module_csm107"];
@@ -251,7 +252,9 @@ public sealed class Apollo11DataTests
         Assert.Equal("top", cm.DockingNodeId);
         Assert.Equal("top", ascent.DockingNodeId);
         Assert.Equal(1.0, cm.DockingAxisLocal[1], 9);
-        Assert.Equal(-1.0, ascent.DockingAxisLocal[1], 9);
+        // Both drogue and probe face out of their vehicle's +Y top, so the CSM has to turn
+        // around (transposition) to bring its probe onto Eagle's drogue.
+        Assert.Equal(1.0, ascent.DockingAxisLocal[1], 9);
     }
 
     [Fact]
@@ -294,6 +297,7 @@ public sealed class Apollo11DataTests
         Assert.Contains(mission.Objectives, o => o.Id == "columbia-eagle-docking");
         Assert.Contains(mission.Objectives, o => o.Id == "lunar-orbit-insertion");
         Assert.Contains(mission.Objectives, o => o.Id == "circular-lunar-orbit");
+        Assert.Contains(mission.Objectives, o => o.Id == "lunar-landing");
 
         string campaignJson = File.ReadAllText(Path.Combine(
             Root.FullName, "data", "campaigns", "historical_nasa_spacex.json"));
@@ -303,7 +307,7 @@ public sealed class Apollo11DataTests
     }
 
     [Fact]
-    public void MissionEvaluatorSucceedsOnDockingAndLunarOrbit()
+    public void MissionEvaluatorSucceedsOnDockingLunarOrbitAndLanding()
     {
         MissionDefinition mission = MissionDefinition.LoadFromJson(Path.Combine(
             Root.FullName, "data", "missions", "apollo11_1969.json"));
@@ -354,9 +358,18 @@ public sealed class Apollo11DataTests
             DockingAchieved = true,
             CrewAlive = true,
         });
+        director.Observe(new MissionTelemetrySnapshot
+        {
+            MissionTimeSeconds = Apollo11FlightProfile.DockingSeconds + 130_000.0,
+            Phase = "LANDED",
+            AltitudeM = 0.0,
+            SurfaceSpeedMps = 0.0,
+            CrewAlive = true,
+        });
 
         MissionDebrief debrief = director.FinalizeMission();
         Assert.Equal(MissionOutcome.Success, debrief.Outcome);
+        Assert.True(debrief.Objectives.Single(r => r.Id == "lunar-landing").Passed);
         Assert.True(debrief.Objectives.Single(r => r.Id == "columbia-eagle-docking").Passed);
         Assert.True(debrief.Objectives.Single(r => r.Id == "lunar-orbit-insertion").Passed);
         Assert.True(debrief.Objectives.Single(r => r.Id == "circular-lunar-orbit").Passed);
@@ -450,11 +463,12 @@ public sealed class Apollo11DataTests
             lmPort, "top", out var lmPortLocal));
 
         Vector3d axis = eagle.Orientation.Rotate(Vector3d.Up);
-        stack.Orientation = eagle.Orientation;
+        stack.Orientation = Transposed(eagle.Orientation);
         stack.Position = eagle.Position
-            + eagle.Orientation.Rotate(lmPortLocal - cmPortLocal)
-            - axis * 0.12;
-        stack.Velocity = eagle.Velocity + axis * 0.08;
+            + eagle.Orientation.Rotate(lmPortLocal)
+            - stack.Orientation.Rotate(cmPortLocal)
+            + axis * 0.12;
+        stack.Velocity = eagle.Velocity - axis * 0.08;
 
         DockingAttempt docking = universe.TryDock(
             stack.Id, cmPort, eagle.Id, lmPort,
@@ -504,9 +518,10 @@ public sealed class Apollo11DataTests
             cmPort, "top", out var cmPortLocal));
         Assert.True(eagle.Parts.TryGetAttachmentNodeLocalPosition(
             lmPort, "top", out var lmPortLocal));
-        eagle.Orientation = columbia.Orientation;
+        eagle.Orientation = Transposed(columbia.Orientation);
         eagle.Position = columbia.Position
-            + columbia.Orientation.Rotate(cmPortLocal - lmPortLocal)
+            + columbia.Orientation.Rotate(cmPortLocal)
+            - eagle.Orientation.Rotate(lmPortLocal)
             + columbia.Orientation.Rotate(Vector3d.Up) * 0.12;
         eagle.Velocity = columbia.Velocity;
         eagle.ReferenceBodyId = moon.Id;
@@ -592,6 +607,10 @@ public sealed class Apollo11DataTests
     private static double WetMass(PartDefinition part) =>
         part.MassDry + part.FuelCapacityLF + part.FuelCapacityOx
         + part.FuelCapacitySolid + part.FuelCapacityMono;
+
+    /// <summary>The orientation turned end over end: +Y reversed about the body X axis.</summary>
+    private static Quaterniond Transposed(Quaterniond orientation) =>
+        orientation * Quaterniond.FromAxisAngle(Vector3d.Right, System.Math.PI);
 
     private static PartCatalog LoadParts() =>
         PartCatalog.LoadFromDirectory(Path.Combine(

@@ -82,6 +82,10 @@ Options:
                 Fly Gemini 8 from the pad through rendezvous, docking and the emergency return
                 with the historical director alone (default --until-phase LANDED).
   --apollo11    Validate Apollo 11 / AS-506 hardware at LC-39A (launch mode by default).
+  --apollo11-mission
+                Fly Apollo 11 from the pad through TLI, RCS transposition and docking with
+                Eagle and the docked LOI with the historical director alone (default
+                --until-phase LUNAR_ORBIT).
   --lunar-map   Seed Earth orbit and capture the Lambert TLI/LOI map dossier.
   --flight7     Seed the historical Starship Flight 7 / Starbase scenario.
   --flight12    Seed the historical Starship Flight 12 V3 / Starbase scenario.
@@ -248,6 +252,12 @@ while [[ $# -gt 0 ]]; do
       VARIANT_PROFILE="apollo11-lunar-landing-return"
       APOLLO11_HARDWARE=1
       shift ;;
+    --apollo11-mission)
+      MODE="apollo11_mission"
+      VARIANT_FILE="apollo11_saturn5_as506_1969.json"
+      VARIANT_SITE="kennedy"
+      VARIANT_PROFILE="apollo11-lunar-landing-return"
+      shift ;;
     --lunar-map) MODE="lunar_map"; shift ;;
     --flight7)
       VARIANT_FILE="starship_flight7_block2_2025.json"
@@ -352,9 +362,12 @@ esac
 if [[ "$MODE" == "gemini_mission" && -z "$UNTIL_PHASE" ]]; then
   UNTIL_PHASE="LANDED"
 fi
+if [[ "$MODE" == "apollo11_mission" && -z "$UNTIL_PHASE" ]]; then
+  UNTIL_PHASE="LUNAR_ORBIT"
+fi
 if [[ -n "$UNTIL_PHASE" ]]; then
-  if [[ "$MODE" != "apollo8_mission" && "$MODE" != "gemini_mission" ]]; then
-    echo "ERROR: --until-phase is only valid with --apollo8-mission or --gemini-mission" >&2
+  if [[ "$MODE" != "apollo8_mission" && "$MODE" != "gemini_mission" && "$MODE" != "apollo11_mission" ]]; then
+    echo "ERROR: --until-phase is only valid with --apollo8-mission, --gemini-mission or --apollo11-mission" >&2
     exit 2
   fi
   case "$UNTIL_PHASE" in
@@ -489,8 +502,8 @@ fi
   fi
 fi
 if [[ ! "$MAX_RUNTIME_SEC" =~ ^[0-9]+$ ]] \
-  || (( MAX_RUNTIME_SEC < 60 || MAX_RUNTIME_SEC > 7200 )); then
-  echo "ERROR: --max-runtime must be an integer between 60 and 7200 seconds" >&2
+  || (( MAX_RUNTIME_SEC < 60 || MAX_RUNTIME_SEC > 14400 )); then
+  echo "ERROR: --max-runtime must be an integer between 60 and 14400 seconds" >&2
   exit 2
 fi
 
@@ -1707,11 +1720,13 @@ public partial class _PlaytestShot : Node
 
         // ── Ascent autopilot ──────────────────────────────────────────────────
         if (_pad && !_ascentEngaged
-            && bridge.ActiveFlightProfileId is
-                "mercury-redstone3-suborbital"
-                or "mercury-atlas6-three-orbit"
-                or "gemini8-rendezvous-emergency-return"
-                or "apollo8-lunar-orbit-return"
+            && (bridge.ActiveFlightProfileId is
+                    "mercury-redstone3-suborbital"
+                    or "mercury-atlas6-three-orbit"
+                    or "gemini8-rendezvous-emergency-return"
+                    or "apollo8-lunar-orbit-return"
+                || _mode == "apollo11_mission"
+                    && bridge.ActiveFlightProfileId == "apollo11-lunar-landing-return")
             && MissionManager.Instance != null)
         {
             MissionManager.Instance.StartCountdown();
@@ -1721,7 +1736,7 @@ public partial class _PlaytestShot : Node
                 $"ACTION start {bridge.ActiveFlightProfileId} historical countdown");
             _log.Flush();
         }
-        else if (_pad && !_ascentEngaged && _mode is not ("apollo8_mission" or "gemini_mission")
+        else if (_pad && !_ascentEngaged && _mode is not ("apollo8_mission" or "gemini_mission" or "apollo11_mission")
             && AscentController.Instance != null)
         {
             AscentController.Instance.Engage();
@@ -1731,7 +1746,7 @@ public partial class _PlaytestShot : Node
             _log.Flush();
         }
 
-        if (_mode is "apollo8_mission" or "gemini_mission")
+        if (_mode is "apollo8_mission" or "gemini_mission" or "apollo11_mission")
         {
             // The historical director owns the whole flight; the harness only observes.
             var missionPhase = MissionManager.Instance?.Phase;
@@ -5464,7 +5479,8 @@ public partial class _PlaytestShot : Node
     /// <summary>Distance (m) to the rendezvous/docking target, or "none".</summary>
     private static string TraceTargetRange(Universe universe, Vessel vessel)
     {
-        var target = universe.Vessels.FirstOrDefault(other => other.Id == "gemini8-agena-5003" && other != vessel);
+        var target = universe.Vessels.FirstOrDefault(other =>
+            other.Id is "gemini8-agena-5003" or "apollo11-lm5-eagle" && other != vessel);
         return target == null ? "none" : $"{(target.Position - vessel.Position).Magnitude:F0}";
     }
 
@@ -6440,10 +6456,10 @@ PYCOVERAGE
       echo "ERROR: missing normal-flow telemetry (demo must not satisfy this gate)" >&2
       return 1
     fi
-  elif [[ ( "$MODE" == "apollo8_mission" || "$MODE" == "gemini_mission" ) && -n "$UNTIL_PHASE" ]]; then
+  elif [[ ( "$MODE" == "apollo8_mission" || "$MODE" == "gemini_mission" || "$MODE" == "apollo11_mission" ) && -n "$UNTIL_PHASE" ]]; then
     if ! grep -q 'SUMMARY reason=HISTORICAL_MISSION_PHASE_REACHED' "$LOG" \
       || ! grep -q "HISTORICAL_MISSION phase=${UNTIL_PHASE} " "$LOG"; then
-      echo "ERROR: the Apollo 8 director did not reach mission phase $UNTIL_PHASE" >&2
+      echo "ERROR: the historical director did not reach mission phase $UNTIL_PHASE (mode=$MODE)" >&2
       return 1
     fi
   elif [[ "$MODE" == "apollo8_mission" ]]; then
@@ -7305,7 +7321,7 @@ elif [[ "$MODE" == "hotstage" ]]; then
   echo "visual_playtest: hot-stage overlap capture OK"
 elif [[ "$MODE" == "flight14_payload" ]]; then
   echo "visual_playtest: Flight 14 estimated payload flat-pack capture OK — visual review still required"
-elif [[ ( "$MODE" == "apollo8_mission" || "$MODE" == "gemini_mission" ) && -n "$UNTIL_PHASE" ]]; then
+elif [[ ( "$MODE" == "apollo8_mission" || "$MODE" == "gemini_mission" || "$MODE" == "apollo11_mission" ) && -n "$UNTIL_PHASE" ]]; then
   echo "visual_playtest: historical director reached $UNTIL_PHASE (mode=$MODE)"
 elif [[ "$MODE" == "apollo8_mission" ]]; then
   echo "visual_playtest: Apollo 8 flown from the pad into lunar orbit by the historical director"

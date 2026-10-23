@@ -156,6 +156,27 @@ and cut off on the flown periapsis (`SaturnVAscentScenarioTests`: 181 x 195 km a
 ~67 t left for TLI). The open-loop S-IC elevation program it replaced paid ~660 m/s of steering
 loss; transonic drag costs only ~35 m/s.
 
+Each Saturn V flies its own ascent schedule (`SaturnVAscentSchedule`). Apollo 11 was flown on
+AS-503's clock. That cut AS-506's S-IC 8 s early with ~160 t of propellant aboard, left it low
+and flat on AS-503's pitch-over, and the S-II then paid ~1 km/s of gravity loss. The S-IVB
+reached TLI with 30 t instead of ~72 t, ran dry halfway through the injection, and
+`ProgradeEnergyBurn` kept the throttle up on an empty stage. The fixes:
+
+- AS-506 uses the flown event times.
+- Its S-IC burns down to its flown 32.0 t cutoff residual, since OECO was LOX depletion.
+- Its pitch-over reaches 80°, which gives the flown 67 km / 2.8 km/s at S-IC cutoff.
+- The S-II centre engine cuts at T+460.6 s, and the S-II separates as soon as it burns out
+  instead of coasting to the clock.
+- Its J-2s use the flight reconstruction (S-IVB 4204 N·s/kg and 901 kN; S-II 4150 N·s/kg and
+  5.14 MN; MPR-SAT-FE-69-9), not the 421 s catalogue rating.
+- A burn now stops with `propellant-depleted` when thrust vanishes.
+- The 4.3 t "derived allocation" that closes NASA's ignition total moved from the SLA to the
+  S-IC. In the SLA it rode all the way to TLI, which the flight's 135,669 kg insertion mass
+  rules out; the SLA itself weighed 4,009 lb.
+
+`SaturnVAscentScenarioTests` checks that AS-506 inserts at T+684 s with 72.9 t in the S-IVB,
+3,380 m/s for a 3,182 m/s TLI (flight: T+709 s, 75.7 t).
+
 Lunar launches hold on the pad for a launch window (`Navigation/LunarLaunchWindow`). Flights
 start at J2000, not on the historical date, so the Moon's geometry at [L] is arbitrary. A
 coplanar TLI needs a parking orbit whose plane contains the Moon at arrival; at liftoff that
@@ -215,6 +236,28 @@ estimate 2.3x too long), cut on the flown periapsis or at burnout (`Gemini8Ascen
 (firing several axes at once costs |x|+|y|+|z|), the TPI is centred on its impulsive epoch, and
 proximity operations take over where braking the planned arrival speed at 80% of the OAMS
 deceleration ends at the target, with the port facing the line of sight so braking is axial.
+
+Apollo 11's transposition, docking and extraction use the same `ProximityApproach` on the SM RCS
+(four quads: 1780 N per axis, Isp 290 s, 610 kg). The CSM leaves the S-IVB/SLA on the
+separation impulse, turns end over end to face Eagle's drogue and closes to a real capture
+(`Apollo11TranspositionDockingScenarioTests`: docked 308 s after separation on 17.6 kg of RCS;
+flight: about 7 min). Both docking ports face out of their vehicle's +Y top. The LM drogue was
+declared along −Y, which let the teleported CSM dock without turning around and, under RCS,
+docked it from inside Eagle; the test now requires a nose-to-nose finish and a probe that never
+crosses the drogue plane. Armstrong and Aldrin move to Eagle through the tunnel only while
+docked (`Universe.TransferCrew`, limited to the destination's `max_crew` seats). Campaign crew
+survival counts every intact vessel, since the crew is split between Columbia and Eagle.
+
+Eagle's descent is `LunarPoweredDescent`. DOI is a retrograde DPS burn at 15% throttle that
+lowers the perilune to 15 km. PDI fires at that perilune. The braking phase flies explicit
+linear-acceleration guidance (the LGC's E-guidance form) to a low gate 150 m up at 3 m/s down.
+Vertically, a = 6(h_t − h − v·T)/T² − 2(v_t − v)/T, plus gravity net of the centrifugal relief.
+Horizontally, a constant deceleration nulls the speed and leaves downrange free. The time-to-go
+T is re-solved every step, so the demand stays at 85% of the DPS. Below the gate the LM lets
+down vertically, at a rate proportional to altitude, to 1 m/s at contact
+(`Apollo11PoweredDescentScenarioTests`: DOI 50 s; PDI to contact 646 s, flight 756 s; 1.0 m/s
+touchdown; ~1 t of DPS propellant left). There is no landing-site targeting or terrain yet. The
+Moon is a sphere, and contact uses the vessel datum like every other surface contact.
 
 Heating: a part in the wake of a heat-shielded part that leads into the flow (downstream and
 no wider) receives `StressSolver.AfterbodyHeatingFraction` (5%) of the stagnation flux. Every

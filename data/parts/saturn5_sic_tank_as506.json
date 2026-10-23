@@ -1,11 +1,11 @@
 {
   "id": "saturn5_sic_tank_as506",
   "name": "Saturn V AS-506 S-IC Stage",
-  "description": "First-stage airframe and published Apollo 11 RP-1/LOX allocation.",
+  "description": "First-stage airframe and published Apollo 11 RP-1/LOX allocation; carries the 4,347 kg derived allocation that closes NASA's ignition total (it rode in the SLA to TLI before, where the flight evaluation's 135,669 kg insertion mass rules it out).",
   "category": "fuel_tank",
   "vehicle_family": "apollo",
   "vehicle_role": "sic_tank",
-  "mass_dry": 88974.7968375,
+  "mass_dry": 93322.27002535,
   "length_m": 36.3,
   "diameter_m": 10.1,
   "drag_coefficient": 0.2,

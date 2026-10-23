@@ -457,6 +457,32 @@ public class Universe
             distance, relativeSpeed, alignmentError);
     }
 
+    /// <summary>
+    /// Moves the named crew members through the docking tunnel. Only vessels joined by a
+    /// docking connection can exchange crew, and the destination keeps to the seats its
+    /// parts declare (<c>max_crew</c>). Nothing moves unless every named member can.
+    /// </summary>
+    public bool TransferCrew(string fromVesselId, string toVesselId, IReadOnlyCollection<string> crewIds)
+    {
+        ArgumentNullException.ThrowIfNull(crewIds);
+        var from = _vessels.FirstOrDefault(v => v.Id == fromVesselId);
+        var to = _vessels.FirstOrDefault(v => v.Id == toVesselId);
+        if (from == null || to == null || from == to) return false;
+        bool docked = _dockingConnections.Any(connection =>
+            connection.PrimaryVesselId == from.Id && connection.SecondaryVesselId == to.Id
+            || connection.PrimaryVesselId == to.Id && connection.SecondaryVesselId == from.Id);
+        if (!docked) return false;
+        var moving = from.Crew.Where(crew => crewIds.Contains(crew.Id)).ToList();
+        int seats = to.Parts.Parts.Sum(part => part.Definition.MaxCrew);
+        if (moving.Count != crewIds.Count || to.Crew.Count + moving.Count > seats) return false;
+        foreach (var crew in moving)
+        {
+            from.Crew.Remove(crew);
+            to.Crew.Add(crew);
+        }
+        return true;
+    }
+
     public bool Undock(string connectionId, double separationSpeedMps = 0.0)
     {
         var connection = _dockingConnections.FirstOrDefault(candidate =>

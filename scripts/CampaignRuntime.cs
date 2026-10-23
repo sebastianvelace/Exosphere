@@ -111,11 +111,14 @@ public partial class CampaignRuntime : Node
                 * body.Radius
             : 0.0;
         UpdateOrbitProgress(phase.Value, body.Id, up);
+        // Crew may be split between spacecraft (Collins in Columbia while Armstrong and
+        // Aldrin fly Eagle): every member must be alive aboard some intact vessel.
         bool expectedCrewPresent = Director.Definition.CrewIds.Count == 0
             || Director.Definition.CrewIds.All(id =>
-                vessel.Crew.Any(crew =>
-                    string.Equals(crew.Id, id, StringComparison.Ordinal)
-                    && crew.Status != CrewStatus.Dead));
+                universe.Vessels.Any(craft => !craft.IsDestroyed
+                    && craft.Crew.Any(crew =>
+                        string.Equals(crew.Id, id, StringComparison.Ordinal)
+                        && crew.Status != CrewStatus.Dead)));
         bool hasLandingGear = vessel.Parts.Parts.Any(
             part => part.Definition.Category
                 == Exosphere.Simulation.Parts.PartCategory.Landing);

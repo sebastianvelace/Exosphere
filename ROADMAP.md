@@ -68,8 +68,9 @@ Base tecnica cerrada en `main`:
   `CampaignService`, `MissionDirector`, `MissionEvaluator`, debrief numérico,
   recompensas idempotentes y persistencia V2. Freedom 7, Friendship 7, Gemini 8
   y Apollo 8 tienen variantes históricas jugables. Apollo 11 ya dispone del
-  hardware fechado AS-506/CSM-107/LM-5, Eagle operativo, TD&E y LOI docked
-  hasta órbita lunar circular; alunizaje/retorno son el siguiente corte.
+  hardware fechado AS-506/CSM-107/LM-5, TD&E por RCS con captura real, LOI
+  acoplado, DOI y descenso propulsado hasta el alunizaje; el ascenso del LM, el
+  rendezvous y el retorno son el siguiente corte.
 - Starship/Super Heavy tiene malla procedural semántica por familia/rol, diámetro
   de 9 m, hot-stage
   ring, grid fins, flaps, tiles windward, clusters 33/6, acero procedural,
@@ -201,10 +202,22 @@ GitHub en verde. Orden por impacto para el jugador:
    coloca la cápsula junto a la Agena. Criterio: fases físicas (NC/NSR/TPI con
    `LambertGuidedBurn`, aproximación final con RCS) hasta el contacto de docking real;
    test headless del encuentro y corrida Godot del modo `--gemini-docking`.
-3. **Apollo 11 TD&E y descenso.** Hoy la extracción del LM asigna la posición de Columbia
-   respecto a Eagle. Criterio: transposición y docking por RCS con `DockingConstraint`; luego
-   el descenso motorizado a la superficie lunar (guiado de frenado + aproximación) con test
-   headless de aterrizaje bajo 3 m/s.
+3. ✅ **Apollo 11 TD&E y descenso.** `--apollo11-mission --until-phase LANDED` vuela en Godot
+   de la plataforma a la Base Tranquilidad sin asignar estado:
+   - TD&E por RCS del SM con captura real;
+   - LOI y circularización acopladas;
+   - transferencia de tripulación por el túnel y desacople;
+   - DOI y descenso `LunarPoweredDescent` (E-guidance hasta 150 m, descenso vertical), con
+     contacto a 1,00 m/s.
+
+   Quitar los teletransportes expuso otra vez fallas aguas arriba:
+   - el AS-506 volaba con el reloj del AS-503 y llegaba al TLI sin propelente;
+   - los J-2 tenían el Isp de catálogo en lugar del de vuelo;
+   - la SLA cargaba 4,3 t de una asignación derivada;
+   - el puerto del LM apuntaba hacia adentro.
+
+   Queda: perilunio LOI 52 km (vuelo: 114) y la cuenta regresiva de la ventana lunar es de 9 h
+   de espera.
 4. **Persistir la ventana de lanzamiento y los burns guiados en `SaveGameV2`.** Hoy reanudar un
    ascenso guardado cae en la corrección de plano por script. Criterio: un save en ascenso,
    en costa translunar y en órbita lunar reanuda con el mismo plan y sin corrección.
@@ -537,8 +550,8 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
   separar descenso y activa APS tras DPS. `--apollo11` valida pad/liftoff.
 - Apollo 11 TD&E + LOI ✅ — `apollo11-lunar-landing-return` + `mission-apollo11-1969`:
   parking→TLI→CSM sep→extract Eagle→hard-dock→LOI→órbita lunar circular;
-  finalize de campaña en `LUNAR_ORBIT`. Ver `docs/HITO4_APOLLO11_TDE.md`.
-  Pendiente: DOI, alunizaje, ascenso LM, rendezvous, TEI, entrada y amerizaje.
+  la campaña se cierra en `LANDED`, con el alunizaje. Ver `docs/HITO4_APOLLO11_TDE.md`.
+  Pendiente: ascenso LM, rendezvous, TEI, entrada y amerizaje.
 - Recursos de vida, energia, comunicaciones y termica conectados a fases reales.
 - Fallos, damage consequences y recuperacion.
 
@@ -563,8 +576,8 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      ajuste de alpha/timing/zone charring).
 3. Agregar capturas de aceptacion reproducibles con matriz V0.5.
 4. Mejorar camara/luz/atmosfera.
-5. Recien despues: Apollo 11 alunizaje (DOI→surface→APS→rendezvous→TEI).
-   (R11 ✅; R12 ✅; Apollo 11 TD&E + LOI ✅)
+5. Recien despues: Apollo 11 retorno (APS→rendezvous→TEI).
+   (R11 ✅; R12 ✅; Apollo 11 TD&E + LOI ✅; DOI + alunizaje ✅)
 
 ### Flight 14 ship water-entry increment (2026-10-02)
 

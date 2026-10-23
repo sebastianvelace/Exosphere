@@ -23,13 +23,17 @@ internal static class SaturnVAscentFlight
     /// <param name="planeNormal">Target orbit plane; null flies due east with no plane steering.</param>
     /// <param name="separationErrorDeg">Attitude error injected at S-II separation.</param>
     /// <param name="separationRateRadPerS">Body rate injected at S-II separation.</param>
+    /// <param name="variantFile">Vehicle variant under data/vehicles (Apollo 8 by default).</param>
     public static SaturnVAscentResult Fly(double liftoffEpoch = 0.0, Vector3d? planeNormal = null,
-        double separationErrorDeg = 0.0, double separationRateRadPerS = 0.0)
+        double separationErrorDeg = 0.0, double separationRateRadPerS = 0.0,
+        string variantFile = "apollo8_saturn5_as503_1968.json", SaturnVAscentSchedule? scheduleOverride = null)
     {
         var root = DataDirectory();
         var catalog = PartCatalog.LoadFromDirectory(Path.Combine(root, "parts"));
         var vessel = VehicleVariantDefinition.LoadFromJson(Path.Combine(root, "vehicles",
-            "apollo8_saturn5_as503_1968.json")).Build(catalog).ToVessel("AS-503", "as503");
+            variantFile)).Build(catalog).ToVessel("Saturn V", "saturn-v");
+        var schedule = scheduleOverride ?? (variantFile.Contains("as506", StringComparison.Ordinal)
+            ? SaturnVAscentSchedule.As506 : SaturnVAscentSchedule.As503);
         var universe = Universe.LoadFromDataDirectory(root);
         universe.SetCurrentTime(liftoffEpoch);
         var earth = universe.GetBody("earth")!;
@@ -50,7 +54,7 @@ internal static class SaturnVAscentFlight
 
         double liftoff = double.NaN;
         bool sicSeparated = false, towerJettisoned = false, siiSeparated = false, inserted = false;
-        double insertionTime = double.NaN;
+        double insertionTime = double.NaN, sicCutoff = double.NaN;
         for (int step = 0; step < 50 * 1_200 && !vessel.IsDestroyed && !inserted; step++)
         {
             if (vessel.IsGroundHeld)
@@ -71,11 +75,12 @@ internal static class SaturnVAscentFlight
             if (!sicSeparated)
             {
                 aim = GravityTurnGuidance.ComputeAim(vessel, earth, downrange, elapsed,
-                    Apollo8FlightProfile.PitchOverDegrees, Apollo8FlightProfile.PitchOverEndSeconds);
+                    schedule.PitchOverDegrees, Apollo8FlightProfile.PitchOverEndSeconds);
                 vessel.Parts.Parts.FirstOrDefault(p => p.Definition.HasVehicleRole("sic_engine_cluster"))
-                    ?.SelectEngineCount(elapsed >= Apollo8FlightProfile.SicCenterEngineCutoffSeconds ? 4 : 5);
-                vessel.Throttle = elapsed < Apollo8FlightProfile.SicOutboardCutoffSeconds ? 1.0 : 0.0;
-                if (elapsed >= Apollo8FlightProfile.SicSeparationSeconds)
+                    ?.SelectEngineCount(elapsed >= schedule.SicCenterEngineCutoffSeconds ? 4 : 5);
+                if (double.IsNaN(sicCutoff) && schedule.IsSicCutoff(vessel, elapsed)) sicCutoff = elapsed;
+                vessel.Throttle = double.IsNaN(sicCutoff) ? 1.0 : 0.0;
+                if (elapsed >= sicCutoff + schedule.SicSeparationDelaySeconds)
                 {
                     universe.AddVessel(vessel.Stage()!);
                     sicSeparated = true;
@@ -86,13 +91,16 @@ internal static class SaturnVAscentFlight
             {
                 aim = ClosedLoopInsertionGuidance.ComputeAim(vessel, earth,
                     Apollo8FlightProfile.ParkingOrbitAltitudeM, downrange, planeNormal);
-                if (!towerJettisoned && elapsed >= Apollo8FlightProfile.EscapeTowerJettisonSeconds)
+                if (!towerJettisoned && elapsed >= schedule.EscapeTowerJettisonSeconds)
                 {
                     var tower = vessel.Parts.Parts.First(p => p.Definition.HasVehicleRole("launch_escape_system"));
                     universe.AddVessel(vessel.DeployPayload(tower.InstanceId, "LES", new Vector3d(0, 1.5, 0))!);
                     towerJettisoned = true;
                 }
-                if (!siiSeparated && elapsed >= Apollo8FlightProfile.SiiSeparationSeconds)
+                if (!siiSeparated)
+                    vessel.Parts.Parts.FirstOrDefault(p => p.Definition.HasVehicleRole("sii_engine_cluster"))
+                        ?.SelectEngineCount(schedule.SiiEngineCount(elapsed));
+                if (!siiSeparated && schedule.IsSiiSeparationDue(vessel, earth, elapsed))
                 {
                     universe.AddVessel(vessel.Stage()!);
                     siiSeparated = true;
@@ -101,7 +109,7 @@ internal static class SaturnVAscentFlight
                     vessel.AngularVelocity += vessel.Orientation.Rotate(
                         new Vector3d(separationRateRadPerS, 0.0, 0.5 * separationRateRadPerS));
                 }
-                vessel.Throttle = siiSeparated || elapsed < Apollo8FlightProfile.SiiCutoffSeconds ? 1.0 : 0.0;
+                vessel.Throttle = siiSeparated || elapsed < schedule.SiiCutoffSeconds ? 1.0 : 0.0;
                 if (siiSeparated && ClosedLoopInsertionGuidance.IsInserted(
                         vessel, earth, MinimumParkingPeriapsisM, universe.CurrentTime))
                 {
@@ -120,7 +128,7 @@ internal static class SaturnVAscentFlight
 
         var orbit = OrbitalElements.FromStateVector(vessel.Position - earth.Position,
             vessel.Velocity - earth.Velocity, earth.GM, earth.Id, universe.CurrentTime);
-        double sivbPropellant = vessel.Parts.Parts.Where(p => p.Definition.Id == "saturn5_sivb_tank_as503")
+        double sivbPropellant = vessel.Parts.Parts.Where(p => p.Definition.HasVehicleRole("sivb_tank"))
             .Sum(p => p.LiquidFuel + p.Oxidizer);
         return new SaturnVAscentResult(universe, vessel, earth, inserted, insertionTime, sivbPropellant, orbit);
     }

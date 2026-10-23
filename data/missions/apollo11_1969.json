@@ -2,10 +2,10 @@
   "id": "mission-apollo11-1969",
   "sequence": 5,
   "program": "NASA Apollo Program",
-  "titleEn": "Apollo 11 — TD&E and Lunar Orbit",
-  "titleEs": "Apollo 11 — TD&E y órbita lunar",
-  "summaryEn": "Launch AS-506, reach Earth parking orbit, complete TLI, separate CSM-107, extract LM-5 Eagle, hard-dock Columbia to Eagle, then insert the docked stack into lunar orbit. Powered descent is deferred to a later slice.",
-  "summaryEs": "Lanza AS-506, alcanza la órbita de estacionamiento, completa TLI, separa CSM-107, extrae el LM-5 Eagle, acopla Columbia con Eagle e inserta el conjunto en órbita lunar. El descenso propulsado queda para una tanda posterior.",
+  "titleEn": "Apollo 11 — The Eagle Has Landed",
+  "titleEs": "Apollo 11 — El Águila ha alunizado",
+  "summaryEn": "Launch AS-506, reach Earth parking orbit, complete TLI, separate CSM-107, extract LM-5 Eagle, hard-dock Columbia to Eagle, insert the docked stack into lunar orbit, then fly Eagle through descent orbit insertion and powered descent to a soft landing. The return to Earth is a later slice.",
+  "summaryEs": "Lanza AS-506, alcanza la órbita de estacionamiento, completa TLI, separa CSM-107, extrae el LM-5 Eagle, acopla Columbia con Eagle e inserta el conjunto en órbita lunar y lleva al Eagle por la inserción en órbita de descenso y el descenso propulsado hasta un alunizaje suave. El regreso a la Tierra queda para una tanda posterior.",
   "historicalDate": "1969-07-16",
   "vehicleVariantId": "apollo11-saturn5-as506-csm107-lm5-1969-07-16",
   "launchSiteId": "kennedy",
@@ -15,7 +15,9 @@
     "edwin-e-buzz-aldrin-jr",
     "michael-collins"
   ],
-  "prerequisiteMissionIds": ["mission-apollo8-1968"],
+  "prerequisiteMissionIds": [
+    "mission-apollo8-1968"
+  ],
   "objectives": [
     {
       "id": "earth-parking-orbit",
@@ -75,6 +77,16 @@
       "target": 0,
       "expectedText": "LUNAR_ORBIT",
       "required": true
+    },
+    {
+      "id": "lunar-landing",
+      "titleEn": "Land Eagle softly on the Moon",
+      "titleEs": "Aluniza el Eagle con suavidad",
+      "metric": "phase_reached",
+      "comparison": "reached",
+      "target": 0,
+      "expectedText": "LANDED",
+      "required": true
     }
   ],
   "limits": [
@@ -89,8 +101,8 @@
     },
     {
       "id": "command-module-survival",
-      "titleEn": "Recover Command Module 107",
-      "titleEs": "Recupera el módulo de mando 107",
+      "titleEn": "Keep the flown spacecraft intact",
+      "titleEs": "Mantén intacta la nave en vuelo",
       "metric": "vessel_destroyed",
       "comparison": "false",
       "target": 0,
@@ -102,7 +114,10 @@
     {
       "id": "historical-completion",
       "amount": 275,
-      "unlockIds": ["mission-sts1-1981", "vehicle-family-apollo-lm"]
+      "unlockIds": [
+        "mission-sts1-1981",
+        "vehicle-family-apollo-lm"
+      ]
     }
   ],
   "sources": [

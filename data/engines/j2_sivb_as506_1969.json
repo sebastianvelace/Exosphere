@@ -1,15 +1,15 @@
 {
   "id": "j2-sivb-as506-1969",
   "name": "Rocketdyne J-2",
-  "variant": "AS-506 S-IVB mission engine",
+  "variant": "AS-506 S-IVB first-burn flight reconstruction",
   "asOfDate": "1969-07-16",
   "fuel": "LH2",
   "oxidizer": "LOX",
-  "mixtureRatioOxidizerToFuel": 5.0,
+  "mixtureRatioOxidizerToFuel": 4.932,
   "ratedThrustSeaLevelN": 720000,
-  "ratedThrustVacuumN": 906454.1525361694,
+  "ratedThrustVacuumN": 901223,
   "specificImpulseSeaLevelS": 300.0,
-  "specificImpulseVacuumS": 421.0,
+  "specificImpulseVacuumS": 428.7,
   "minimumThrottle": 1.0,
   "maximumThrottle": 1.0,
   "gimbalRangeDeg": 7.0,
@@ -24,6 +24,6 @@
   "cooldownTimeConstantSeconds": 25.0,
   "performanceMap": [
     {"ambientPressurePa": 101325, "throttle": 1.0, "thrustN": 720000, "specificImpulseS": 300.0},
-    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 906454.1525361694, "specificImpulseS": 421.0}
+    {"ambientPressurePa": 0, "throttle": 1.0, "thrustN": 901223, "specificImpulseS": 428.7}
   ]
 }

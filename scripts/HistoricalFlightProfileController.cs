@@ -60,6 +60,10 @@ public partial class HistoricalFlightProfileController : Node
     private TranslationLambertBurn? _geminiBurn;
     private int _geminiBurnIndex;
     private ProximityApproach? _geminiProximity;
+    private ProximityApproach? _apollo11Proximity;
+    private LunarPoweredDescent? _apollo11Descent;
+    private double _apollo11CircularizedTime = double.NaN;
+    private double _apollo11UndockTime = double.NaN;
     private bool _docked;
     private bool _undocked;
     private bool _failureAnnounced;
@@ -68,6 +72,7 @@ public partial class HistoricalFlightProfileController : Node
     private bool _apolloSicSeparated;
     private bool _apolloSiiSeparated;
     private bool _apolloParkingOrbit;
+    private double _apolloSicCutoffElapsed = double.NaN;
     private bool _apolloTliStarted;
     private bool _apolloTliComplete;
     private bool _apolloCsmSeparated;
@@ -205,6 +210,10 @@ public partial class HistoricalFlightProfileController : Node
         _geminiBurn = null;
         _geminiBurnIndex = 0;
         _geminiProximity = null;
+        _apollo11Proximity = null;
+        _apollo11Descent = null;
+        _apollo11CircularizedTime = double.NaN;
+        _apollo11UndockTime = double.NaN;
         _docked = false;
         _undocked = false;
         _failureAnnounced = false;
@@ -213,6 +222,7 @@ public partial class HistoricalFlightProfileController : Node
         _apolloSicSeparated = false;
         _apolloSiiSeparated = false;
         _apolloParkingOrbit = false;
+        _apolloSicCutoffElapsed = double.NaN;
         _apolloTliStarted = false;
         _apolloTliComplete = false;
         _apolloCsmSeparated = false;
@@ -235,8 +245,8 @@ public partial class HistoricalFlightProfileController : Node
         bridge.SetWarpIndex(0);
         if (_apollo11Tde)
             GD.Print(
-                "[HISTORICAL] Apollo 11 TD&E + docked LOI sequence engaged "
-                + "(powered descent deferred).");
+                "[HISTORICAL] Apollo 11 TD&E, docked LOI and powered descent "
+                + "sequence engaged.");
         else if (_apolloProfile)
             GD.Print(
                 "[HISTORICAL] Apollo 8 lunar-orbit and Earth-return "
@@ -397,7 +407,7 @@ public partial class HistoricalFlightProfileController : Node
     {
         ResumeApollo8(elapsedSeconds);
         _apollo11Tde = true;
-        // This slice stops at circular LLO — never TEI / Earth return.
+        // This slice ends at the lunar landing — never TEI / Earth return.
         _apolloTeiComplete = true;
         _apolloSmSeparated = true;
         _apollo11EagleExtracted = SimulationBridge.Instance?.Universe.Vessels
@@ -406,7 +416,18 @@ public partial class HistoricalFlightProfileController : Node
             .Any(c => c.Id == Apollo11FlightProfile.DockingConnectionId) == true;
 
         var phase = MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH;
-        if (!_docked)
+        var bridge = SimulationBridge.Instance;
+        if (!_docked && phase == MissionPhase.LUNAR_ORBIT
+            && bridge?.ActiveVessel?.Id == Apollo11FlightProfile.EagleVesselId)
+        {
+            // Saved after undocking: Eagle flies on, DOI is skipped if already flown.
+            _docked = true;
+            _apolloLoiComplete = true;
+            _apolloCircularized = true;
+            _apollo11UndockTime = bridge.Universe.CurrentTime - Apollo11FlightProfile.DoiStandoffSeconds;
+            _apollo11Descent = new LunarPoweredDescent();
+        }
+        else if (!_docked)
         {
             _apolloLoiComplete = false;
             _apolloCircularized = false;
@@ -425,7 +446,7 @@ public partial class HistoricalFlightProfileController : Node
         }
 
         GD.Print(
-            $"[HISTORICAL] Apollo 11 TD&E/LOI sequence resumed at "
+            $"[HISTORICAL] Apollo 11 TD&E/LOI/descent sequence resumed at "
             + $"T+{elapsedSeconds:F1}s.");
     }
 
@@ -620,6 +641,16 @@ public partial class HistoricalFlightProfileController : Node
         }
     }
 
+    /// <summary>
+    /// Warp for guided spacecraft burns: they run on the fixed 20 ms control clock, so x10
+    /// (the bridge's cap while thrusting in vacuum) shortens only the wall time of a TLI or
+    /// LOI, never the flown burn.
+    /// </summary>
+    private const int BurnWarpIndex = 4;
+
+    private string SaturnLabel => _apollo11Tde ? "AS-506" : "AS-503";
+    private string ApolloLabel => _apollo11Tde ? "Apollo 11" : "Apollo 8";
+
     private void ProcessApollo8(
         SimulationBridge bridge,
         Vessel vessel,
@@ -631,6 +662,7 @@ public partial class HistoricalFlightProfileController : Node
         if (moon == null) return;
 
         CelestialBody dominant = universe.GetDominantBody(vessel.Position);
+        var ascent = _apollo11Tde ? SaturnVAscentSchedule.As506 : SaturnVAscentSchedule.As503;
         // A planned window fixes the parking-orbit plane: downrange is the in-plane horizontal.
         Vector3d? launchPlane = _apolloLaunchWindow?.PlaneNormal;
         Vector3d downrange = launchPlane is { } plane
@@ -642,25 +674,26 @@ public partial class HistoricalFlightProfileController : Node
             // Pitch-over then zero-AoA gravity turn; the open-loop elevation program paid
             // ~660 m/s of steering loss on the S-IC.
             Vector3d boostAim = GravityTurnGuidance.ComputeAim(vessel, earth, downrange, elapsed,
-                Apollo8FlightProfile.PitchOverDegrees, Apollo8FlightProfile.PitchOverEndSeconds);
+                ascent.PitchOverDegrees, Apollo8FlightProfile.PitchOverEndSeconds);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation, Vector3d.Up, boostAim, vessel.AngularVelocity,
                 proportionalGain: 2.3, dampingGain: 1.2);
             var sicEngines = vessel.Parts.Parts.FirstOrDefault(part =>
                 part.Definition.HasVehicleRole("sic_engine_cluster"));
             sicEngines?.SelectEngineCount(
-                elapsed >= Apollo8FlightProfile.SicCenterEngineCutoffSeconds
+                elapsed >= ascent.SicCenterEngineCutoffSeconds
                     ? 4 : 5);
-            vessel.Throttle = elapsed
-                < Apollo8FlightProfile.SicOutboardCutoffSeconds ? 1.0 : 0.0;
-            if (elapsed >= Apollo8FlightProfile.SicSeparationSeconds)
+            if (double.IsNaN(_apolloSicCutoffElapsed) && ascent.IsSicCutoff(vessel, elapsed))
+                _apolloSicCutoffElapsed = elapsed;
+            vessel.Throttle = double.IsNaN(_apolloSicCutoffElapsed) ? 1.0 : 0.0;
+            if (elapsed >= _apolloSicCutoffElapsed + ascent.SicSeparationDelaySeconds)
             {
                 bridge.TriggerStaging();
                 _apolloSicSeparated = true;
                 vessel = bridge.ActiveVessel ?? vessel;
                 vessel.Throttle = 1.0;
                 MissionManager.Instance?.EnterPhase(MissionPhase.SEPARATION);
-                GD.Print("[HISTORICAL] AS-503 S-IC separation; S-II ignition.");
+                GD.Print($"[HISTORICAL] {SaturnLabel} S-IC separation; S-II ignition.");
             }
             return;
         }
@@ -668,10 +701,12 @@ public partial class HistoricalFlightProfileController : Node
         if (!_apolloSiiSeparated)
         {
             GuideApolloInsertion(vessel, earth, downrange, launchPlane);
+            vessel.Parts.Parts.FirstOrDefault(part => part.Definition.HasVehicleRole("sii_engine_cluster"))
+                ?.SelectEngineCount(ascent.SiiEngineCount(elapsed));
             vessel.Throttle = elapsed
-                < Apollo8FlightProfile.SiiCutoffSeconds ? 1.0 : 0.0;
+                < ascent.SiiCutoffSeconds ? 1.0 : 0.0;
             if (!_towerJettisoned
-                && elapsed >= Apollo8FlightProfile.EscapeTowerJettisonSeconds)
+                && elapsed >= ascent.EscapeTowerJettisonSeconds)
             {
                 string? towerId = vessel.Parts.Parts.FirstOrDefault(part =>
                     part.Definition.HasVehicleRole(
@@ -683,15 +718,15 @@ public partial class HistoricalFlightProfileController : Node
                         new Vector3d(0.0, 1.5, 0.0));
                 _towerJettisoned = true;
                 vessel = bridge.ActiveVessel ?? vessel;
-                GD.Print("[HISTORICAL] Apollo 8 launch escape tower jettisoned.");
+                GD.Print($"[HISTORICAL] {ApolloLabel} launch escape tower jettisoned.");
             }
-            if (elapsed >= Apollo8FlightProfile.SiiSeparationSeconds)
+            if (ascent.IsSiiSeparationDue(vessel, earth, elapsed))
             {
                 bridge.TriggerStaging();
                 _apolloSiiSeparated = true;
                 vessel = bridge.ActiveVessel ?? vessel;
                 vessel.Throttle = 1.0;
-                GD.Print("[HISTORICAL] AS-503 S-II separation; S-IVB ignition.");
+                GD.Print($"[HISTORICAL] {SaturnLabel} S-II separation; S-IVB ignition.");
             }
             return;
         }
@@ -730,7 +765,7 @@ public partial class HistoricalFlightProfileController : Node
                 }
                 bridge.SetWarpIndex(8);
                 GD.Print(
-                    "[HISTORICAL] Apollo 8 Earth parking orbit; "
+                    $"[HISTORICAL] {ApolloLabel} Earth parking orbit; "
                     + $"TLI solution loaded ({_apolloLunarPlan.InjectionDeltaVMag:F0} m/s).");
             }
             return;
@@ -764,14 +799,14 @@ public partial class HistoricalFlightProfileController : Node
             _apolloTliStarted = true;
             MissionManager.Instance?.EnterPhase(MissionPhase.TLI);
             GD.Print(
-                $"[HISTORICAL] Apollo 8 TLI ignition; planned Δv "
+                $"[HISTORICAL] {ApolloLabel} TLI ignition; planned Δv "
                 + $"{_apolloLunarPlan.InjectionDeltaVMag:F0} m/s.");
             return;
         }
 
         if (!_apolloTliComplete)
         {
-            bridge.SetWarpIndex(0);
+            bridge.SetWarpIndex(BurnWarpIndex);
             vessel.IsOnRails = false;
             vessel.OrbitalState = null;
             _apolloTliBurn!.Advance(vessel, earth, GuidedBurnStep(universe), universe.CurrentTime);
@@ -822,7 +857,12 @@ public partial class HistoricalFlightProfileController : Node
         {
             if (!_docked)
             {
-                ProcessApollo11TranspositionAndDocking(bridge, vessel, elapsed);
+                ProcessApollo11TranspositionAndDocking(bridge, vessel, earth);
+                return;
+            }
+            if (_apolloCircularized)
+            {
+                ProcessApollo11Descent(bridge);
                 return;
             }
             ProcessApollo11LunarOrbitInsertion(bridge, vessel);
@@ -1131,7 +1171,7 @@ public partial class HistoricalFlightProfileController : Node
                 moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM);
             _apolloGuidedBurnLastTime = universe.CurrentTime;
         }
-        bridge.SetWarpIndex(0);
+        bridge.SetWarpIndex(BurnWarpIndex);
         vessel.IsOnRails = false;
         vessel.OrbitalState = null;
         _apolloTranslunarTrim.Advance(vessel, moon, GuidedBurnStep(universe), universe.CurrentTime);
@@ -1191,7 +1231,7 @@ public partial class HistoricalFlightProfileController : Node
             _apolloGuidedBurnLastTime = universe.CurrentTime;
             return false;
         }
-        bridge.SetWarpIndex(0);
+        bridge.SetWarpIndex(BurnWarpIndex);
         vessel.IsOnRails = false;
         vessel.OrbitalState = null;
         _apolloTeiBurn.Advance(vessel, moon, GuidedBurnStep(universe), universe.CurrentTime);
@@ -1228,7 +1268,7 @@ public partial class HistoricalFlightProfileController : Node
                 TransearthCorrection.CutoffDeltaVFor(_apolloTransearthCorrections));
             _apolloGuidedBurnLastTime = universe.CurrentTime;
         }
-        bridge.SetWarpIndex(0);
+        bridge.SetWarpIndex(BurnWarpIndex);
         vessel.IsOnRails = false;
         vessel.OrbitalState = null;
         _apolloTransearthBurn.Advance(vessel, earth, GuidedBurnStep(universe), universe.CurrentTime);
@@ -1288,7 +1328,7 @@ public partial class HistoricalFlightProfileController : Node
                 plan.ArrivalTime, aim, moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM);
             _apolloGuidedBurnLastTime = universe.CurrentTime;
         }
-        bridge.SetWarpIndex(0);
+        bridge.SetWarpIndex(BurnWarpIndex);
         vessel.IsOnRails = false;
         vessel.OrbitalState = null;
         _apolloMidcourseBurn.Advance(vessel, earth, GuidedBurnStep(universe), universe.CurrentTime);
@@ -1318,12 +1358,13 @@ public partial class HistoricalFlightProfileController : Node
         double timeToPeriapsis = PeriapsisCaptureBurn.TimeToPeriapsis(
             vessel.Position - moon.Position, vessel.Velocity - moon.Velocity, moon.GM);
         bool coasting = _apolloLunarBurn?.Status is null or PeriapsisCaptureBurnStatus.Coasting;
-        int warpIndex = !coasting || double.IsNaN(timeToPeriapsis) ? 0
+        int warpIndex = !coasting ? BurnWarpIndex
+            : double.IsNaN(timeToPeriapsis) ? 0
             : timeToPeriapsis > 1_200.0 ? 6
             : timeToPeriapsis > 300.0 ? 4
             : 0;
         bridge.SetWarpIndex(warpIndex);
-        if (warpIndex == 0)
+        if (warpIndex <= BurnWarpIndex)
         {
             vessel.IsOnRails = false;
             vessel.OrbitalState = null;
@@ -1627,7 +1668,7 @@ public partial class HistoricalFlightProfileController : Node
     private void ProcessApollo11TranspositionAndDocking(
         SimulationBridge bridge,
         Vessel columbia,
-        double elapsed)
+        CelestialBody earth)
     {
         Vessel? eagle = bridge.EnsureApollo11EagleExtracted();
         if (eagle == null)
@@ -1637,46 +1678,42 @@ public partial class HistoricalFlightProfileController : Node
         }
         _apollo11EagleExtracted = true;
 
-        if (!_rendezvousConfigured
-            && elapsed >= Apollo11FlightProfile.EagleExtractSeconds)
+        // Transposition and docking flown on SM RCS: the CSM turns its probe toward Eagle's
+        // drogue and closes to a real port capture (no state assignment).
+        bridge.SetWarpIndex(0);
+        columbia.IsOnRails = false;
+        columbia.OrbitalState = null;
+        eagle.IsOnRails = false;
+        eagle.OrbitalState = null;
+        var columbiaPort = columbia.Parts.Parts.FirstOrDefault(part =>
+            part.Definition.IsDockingPort && part.Definition.HasVehicleRole("command_module"));
+        var eaglePort = eagle.Parts.Parts.FirstOrDefault(part =>
+            part.Definition.IsDockingPort && part.Definition.HasVehicleRole("lunar_module_ascent_stage"));
+        if (columbiaPort == null || eaglePort == null) return;
+        if (_apollo11Proximity == null)
         {
-            ConfigureApollo11FinalApproach(columbia, eagle);
-            _rendezvousConfigured = true;
-            bridge.SetWarpIndex(0);
-            GD.Print("[HISTORICAL] Columbia on final approach to Eagle.");
-            return;
+            _apollo11Proximity = new ProximityApproach();
+            GD.Print("[HISTORICAL] Columbia transposing toward Eagle on SM RCS.");
         }
+        _apollo11Proximity.Advance(columbia, columbiaPort, eagle, eaglePort, earth);
+        if (!_apollo11Proximity.IsOnFinalApproach || _apollo11Proximity.PortDistanceM > 0.65) return;
+        DockingAttempt attempt = bridge.Universe.TryDock(columbia.Id, columbiaPort.InstanceId, eagle.Id,
+            eaglePort.InstanceId, Apollo11FlightProfile.DockingConnectionId);
+        if (!attempt.Succeeded) return;
 
-        if (!_rendezvousConfigured) return;
-
-        if (elapsed < Apollo11FlightProfile.DockingSeconds) return;
-
-        DockingAttempt attempt = CaptureApollo11Docking(bridge, columbia, eagle);
-        if (!attempt.Succeeded)
-        {
-            GD.PrintErr(
-                $"[HISTORICAL] Apollo 11 docking failed: {attempt.Failure} "
-                + $"d={attempt.DistanceM:F2} m v={attempt.RelativeSpeedMps:F2} m/s "
-                + $"align={attempt.AlignmentErrorDeg:F1}°");
-            _active = false;
-            return;
-        }
-
+        columbia.TranslationCommand = Vector3d.Zero;
+        columbia.PitchYawRoll = Vector3d.Zero;
         _docked = true;
         _apolloLoiComplete = false;
         _apolloCircularized = false;
-        var earth = bridge.Universe.GetBody("earth");
-        if (earth != null)
-        {
-            columbia.IsOnRails = true;
-            columbia.OrbitalState = OrbitalElements.FromStateVector(
-                columbia.Position - earth.Position,
-                columbia.Velocity - earth.Velocity,
-                earth.GM,
-                earth.Id,
-                bridge.Universe.CurrentTime);
-            columbia.ReferenceBodyId = earth.Id;
-        }
+        columbia.IsOnRails = true;
+        columbia.OrbitalState = OrbitalElements.FromStateVector(
+            columbia.Position - earth.Position,
+            columbia.Velocity - earth.Velocity,
+            earth.GM,
+            earth.Id,
+            bridge.Universe.CurrentTime);
+        columbia.ReferenceBodyId = earth.Id;
         columbia.Throttle = 0.0;
         bridge.SetWarpIndex(9);
         GD.Print(
@@ -1705,10 +1742,19 @@ public partial class HistoricalFlightProfileController : Node
                 return;
             }
 
+            // The finite LOI pulls the perilune down: trim it inside the sphere first, as Apollo 8.
+            if (!_apolloTranslunarTrimDone)
+            {
+                RunApolloTranslunarTrim(bridge, columbia, moon);
+                return;
+            }
             double altitude = columbia.GetAltitude(moon);
             if (altitude > 600_000.0)
             {
-                bridge.SetWarpIndex(5);
+                double untilPerilune = PeriapsisCaptureBurn.TimeToPeriapsis(
+                    columbia.Position - moon.Position, columbia.Velocity - moon.Velocity, moon.GM);
+                bridge.SetWarpIndex(double.IsNaN(untilPerilune) || untilPerilune < 3_600.0 ? 5
+                    : untilPerilune < 6.0 * 3_600.0 ? 7 : 8);
                 return;
             }
             // Columbia is the docked primary: its SPS accelerates the CSM + Eagle stack.
@@ -1737,91 +1783,103 @@ public partial class HistoricalFlightProfileController : Node
                     Apollo11FlightProfile.CircularLunarOrbitAltitudeM, maximumBurnSeconds: 120.0))
                 return;
             _apolloCircularized = true;
+            _apollo11CircularizedTime = universe.CurrentTime;
             MissionManager.Instance?.EnterPhase(MissionPhase.LUNAR_ORBIT);
-            bridge.SetWarpIndex(0);
-            _active = false;
-            GD.Print(
-                "[HISTORICAL] Apollo 11 circular lunar orbit — LOI slice complete "
-                + "(powered descent deferred).");
-            CampaignRuntime.Instance?.RequestFinalize();
+            bridge.SetWarpIndex(8);
+            GD.Print("[HISTORICAL] Apollo 11 circular lunar orbit; Eagle checkout before undocking.");
         }
     }
 
-    private static void ConfigureApollo11FinalApproach(
-        Vessel columbia,
-        Vessel eagle)
+    /// <summary>
+    /// Undocking, descent orbit insertion and powered descent to the surface. Armstrong and
+    /// Aldrin move to Eagle through the tunnel while docked; Eagle then separates on the
+    /// docking springs and takes the camera, and <see cref="LunarPoweredDescent"/> flies DOI,
+    /// PDI and the let-down on the DPS.
+    /// </summary>
+    private void ProcessApollo11Descent(SimulationBridge bridge)
     {
-        eagle.IsOnRails = false;
-        eagle.OrbitalState = null;
-        // Same orientation on both craft (Gemini pattern): CM +Y probe faces LM -Y drogue.
-        Vector3d dockingAxis =
-            eagle.Orientation.Rotate(Vector3d.Up).Normalized;
-        const double initialPortSeparationM = 180.0;
-        double centreToPortsM = Apollo11FlightProfile.DockingCentreToPortsM;
-        double coastTime = System.Math.Max(
-            30.0,
-            Apollo11FlightProfile.DockingSeconds
-                - Apollo11FlightProfile.EagleExtractSeconds);
-        columbia.Position = eagle.Position
-            - dockingAxis * (initialPortSeparationM + centreToPortsM);
-        columbia.Velocity = eagle.Velocity
-            + dockingAxis * (initialPortSeparationM / coastTime);
-        columbia.Orientation = eagle.Orientation;
-        columbia.AngularVelocity = Vector3d.Zero;
-        columbia.IsOnRails = false;
-        columbia.OrbitalState = null;
-    }
+        var universe = bridge.Universe;
+        var moon = universe.GetBody("moon");
+        var eagle = universe.Vessels.FirstOrDefault(v => v.Id == Apollo11FlightProfile.EagleVesselId);
+        if (moon == null || eagle == null) return;
 
-    private static DockingAttempt CaptureApollo11Docking(
-        SimulationBridge bridge,
-        Vessel columbia,
-        Vessel eagle)
-    {
-        string? columbiaPort = columbia.Parts.Parts.FirstOrDefault(part =>
-            part.Definition.IsDockingPort
-            && part.Definition.HasVehicleRole("command_module"))?.InstanceId;
-        string? eaglePort = eagle.Parts.Parts.FirstOrDefault(part =>
-            part.Definition.IsDockingPort
-            && part.Definition.HasVehicleRole(
-                "lunar_module_ascent_stage"))?.InstanceId;
-        if (columbiaPort == null || eaglePort == null)
-            return new DockingAttempt(
-                false,
-                DockingFailure.PortMissing,
-                null,
-                double.NaN,
-                double.NaN,
-                double.NaN);
+        if (double.IsNaN(_apollo11UndockTime))
+        {
+            if (universe.CurrentTime - _apollo11CircularizedTime < Apollo11FlightProfile.UndockDelaySeconds)
+            {
+                bridge.SetWarpIndex(8);
+                return;
+            }
+            bridge.SetWarpIndex(0);
+            var columbia = bridge.ActiveVessel;
+            if (columbia == null) return;
+            var lunarCrew = columbia.Crew
+                .Where(crew => Apollo11FlightProfile.LunarModuleCrewIds.Contains(crew.Id))
+                .Select(crew => crew.Id)
+                .ToList();
+            if (lunarCrew.Count > 0 && !universe.TransferCrew(columbia.Id, eagle.Id, lunarCrew))
+                GD.PrintErr("[HISTORICAL] Apollo 11 crew transfer to Eagle failed.");
+            if (!universe.Undock(Apollo11FlightProfile.DockingConnectionId,
+                    Apollo11FlightProfile.UndockingSeparationSpeedMps))
+            {
+                GD.PrintErr("[HISTORICAL] Apollo 11 undocking failed.");
+                _active = false;
+                return;
+            }
+            columbia.Throttle = 0.0;
+            columbia.PitchYawRoll = Vector3d.Zero;
+            columbia.SASEnabled = true;
+            bridge.TransferControlTo(eagle);
+            _apollo11UndockTime = universe.CurrentTime;
+            _apollo11Descent = new LunarPoweredDescent();
+            GD.Print($"[HISTORICAL] Eagle undocked from Columbia with {lunarCrew.Count} crew; "
+                + "\"The Eagle has wings.\"");
+            return;
+        }
 
-        // Match Universe.TryGetDockingFrame: Position + R*portLocal (root frame).
-        if (!columbia.Parts.TryGetAttachmentNodeLocalPosition(
-                columbiaPort, "top", out var cmPortLocal)
-            || !eagle.Parts.TryGetAttachmentNodeLocalPosition(
-                eaglePort, "top", out var lmPortLocal))
-            return new DockingAttempt(
-                false,
-                DockingFailure.PortMissing,
-                null,
-                double.NaN,
-                double.NaN,
-                double.NaN);
+        // Stand off from Columbia before the DPS lights for DOI.
+        if (universe.CurrentTime - _apollo11UndockTime < Apollo11FlightProfile.DoiStandoffSeconds)
+        {
+            bridge.SetWarpIndex(0);
+            return;
+        }
 
-        Vector3d axis = eagle.Orientation.Rotate(Vector3d.Up).Normalized;
-        const double captureGapM = 0.12;
-        columbia.Orientation = eagle.Orientation;
-        columbia.Position = eagle.Position
-            + eagle.Orientation.Rotate(lmPortLocal - cmPortLocal)
-            - axis * captureGapM;
-        columbia.Velocity = eagle.Velocity + axis * 0.08;
-        columbia.AngularVelocity = Vector3d.Zero;
-        eagle.AngularVelocity = Vector3d.Zero;
+        var descent = _apollo11Descent ??= new LunarPoweredDescent();
+        double timeToPerilune = PeriapsisCaptureBurn.TimeToPeriapsis(
+            eagle.Position - moon.Position, eagle.Velocity - moon.Velocity, moon.GM);
+        // Burns run on the fixed control clock, so warp only shortens the wait: x10 while
+        // braking high up, real time for the last 3 km and the contact.
+        int warpIndex = descent.Status is LunarPoweredDescentStatus.DescentOrbitInsertion
+                or LunarPoweredDescentStatus.Braking
+            ? (descent.AltitudeM > 3_000.0 ? 4 : 0)
+            : descent.Status != LunarPoweredDescentStatus.Coasting || double.IsNaN(timeToPerilune) ? 0
+            : timeToPerilune > 1_200.0 ? 6
+            : timeToPerilune > 300.0 ? 4
+            : 0;
+        bridge.SetWarpIndex(warpIndex);
+        if (warpIndex == 0)
+        {
+            eagle.IsOnRails = false;
+            eagle.OrbitalState = null;
+        }
+        var before = descent.Status;
+        descent.Advance(eagle, moon, GuidedBurnStep(universe), universe.CurrentTime);
+        if (descent.Status != before)
+            GD.Print($"[HISTORICAL] Eagle descent: {before} -> {descent.Status} "
+                + $"(alt {descent.AltitudeM / 1000.0:F1} km).");
+        if (!descent.IsFinished) return;
 
-        return bridge.Universe.TryDock(
-            columbia.Id,
-            columbiaPort,
-            eagle.Id,
-            eaglePort,
-            Apollo11FlightProfile.DockingConnectionId);
+        _active = false;
+        bridge.SetWarpIndex(0);
+        if (descent.Status == LunarPoweredDescentStatus.Blocked)
+        {
+            GD.PrintErr($"[HISTORICAL] Eagle descent stopped: {descent.BlockReason}");
+            return;
+        }
+        MissionManager.Instance?.EnterPhase(MissionPhase.LANDED);
+        GD.Print($"[HISTORICAL] Tranquility Base: Eagle landed at {descent.TouchdownSpeedMps:F2} m/s "
+            + $"after a {descent.BurnSeconds:F0} s powered descent.");
+        CampaignRuntime.Instance?.RequestFinalize();
     }
 
     private void RunGeminiIntercept(SimulationBridge bridge, Vessel gemini, Vessel agena, CelestialBody earth)

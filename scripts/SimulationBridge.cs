@@ -1367,6 +1367,32 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         return eagle;
     }
 
+    /// <summary>
+    /// Hands control and the camera to another vessel already in flight (Eagle undocking
+    /// from Columbia). The active renderer is rebuilt for <paramref name="next"/>, whose own
+    /// secondary renderer is retired, and the previous active vessel gets one of its own.
+    /// </summary>
+    public bool TransferControlTo(Vessel next)
+    {
+        var previous = ActiveVessel;
+        if (previous == null || next == previous || next.IsDestroyed
+            || !Universe.Vessels.Contains(next))
+            return false;
+
+        var floating = GetTree().Root.FindChild("FloatingOrigin", true, false) as FloatingOrigin;
+        var nextRenderer = floating?.GetVesselNode(next.Id);
+        if (nextRenderer != null && nextRenderer != _vesselRenderer)
+        {
+            floating!.UnregisterVesselNode(next.Id);
+            nextRenderer.QueueFree();
+        }
+        Universe.SetActiveVessel(next.Id);
+        SpawnDebrisRenderer(previous, "Handover_");
+        EnsureActiveVesselPresentation(next);
+        GD.Print($"[SimulationBridge] Control handed from {previous.Name} to {next.Name}.");
+        return true;
+    }
+
     public Vector3d GetLaunchHeadingDirection()
     {
         var earth = Universe.GetBody("earth");

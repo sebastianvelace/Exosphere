@@ -15,6 +15,8 @@ public sealed class ProgradeEnergyBurn
 {
     private const double AlignmentToleranceRad = 3.0 * MathUtils.DEG_TO_RAD;
     private const double SettledAngularRateRadPerS = 0.02;
+    /// <summary>Longest engine start sequence in the catalogue (8.9 s) with margin.</summary>
+    private const double DepletionCheckDelaySeconds = 15.0;
 
     private readonly double _targetSpecificEnergy;
     private readonly double _ignitionTime;
@@ -87,6 +89,14 @@ public sealed class ProgradeEnergyBurn
         if (_burnSeconds > _maximumBurnSeconds)
         {
             Block(vessel, "burn-duration-envelope-exceeded");
+            return;
+        }
+        // A stage that runs dry short of the target leaves the throttle up with no thrust;
+        // stop there instead of "burning" out the whole duration envelope. Only after the
+        // engine start sequence (a J-2 takes 5 s to build thrust, the slowest engine 8.9 s).
+        if (_burnSeconds > DepletionCheckDelaySeconds && vessel.ComputeThrust(body).Magnitude < 1.0)
+        {
+            Block(vessel, "propellant-depleted");
             return;
         }
         vessel.Throttle = 1.0;
