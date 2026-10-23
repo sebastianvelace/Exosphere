@@ -159,6 +159,35 @@ public class PartGraph
     }
 
     /// <summary>Draws monopropellant from every part in proportion to its load; false if short.</summary>
+    /// <summary>Every part's propellant load, in part order, for <see cref="RestorePropellant"/>.</summary>
+    public double[] CapturePropellant()
+    {
+        var loads = new double[_parts.Count * 4];
+        for (int i = 0; i < _parts.Count; i++)
+        {
+            var part = _parts[i];
+            loads[4 * i] = part.LiquidFuel;
+            loads[4 * i + 1] = part.Oxidizer;
+            loads[4 * i + 2] = part.SolidFuel;
+            loads[4 * i + 3] = part.Monopropellant;
+        }
+        return loads;
+    }
+
+    public void RestorePropellant(double[] loads)
+    {
+        ArgumentNullException.ThrowIfNull(loads);
+        if (loads.Length != _parts.Count * 4) return; // the graph changed (staging) mid-step
+        for (int i = 0; i < _parts.Count; i++)
+        {
+            var part = _parts[i];
+            part.LiquidFuel = loads[4 * i];
+            part.Oxidizer = loads[4 * i + 1];
+            part.SolidFuel = loads[4 * i + 2];
+            part.Monopropellant = loads[4 * i + 3];
+        }
+    }
+
     public bool DrawMonopropellant(double kilograms)
     {
         if (kilograms <= 0.0) return true;

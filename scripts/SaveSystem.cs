@@ -82,6 +82,16 @@ public static class SaveSystem
         GD.Print($"[SaveSystem] Saved V2 to {path}");
     }
 
+    public static bool HasSlot(string slotName) =>
+        ResolveExistingSaveFile(NormalizeSlotName(slotName)) is { } path && System.IO.File.Exists(path);
+
+    /// <summary>Removes a slot from the primary save folder (legacy copies are left alone).</summary>
+    public static void DeleteSlot(string slotName)
+    {
+        string path = System.IO.Path.Combine(PrimarySaveDirectory, $"{NormalizeSlotName(slotName)}.json");
+        if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+    }
+
     public static bool LoadGame(string slotName = "quicksave")
     {
         PendingSystemsState = null;

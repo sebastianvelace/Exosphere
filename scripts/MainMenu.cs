@@ -709,6 +709,12 @@ public partial class MainMenu : Control
                 UserInterfaceSettings.SetUnlockAllMissions(!UserInterfaceSettings.UnlockAllMissions);
                 ShowSettings();
             }));
+        body.AddChild(SettingRow(UiText.Get("infinite_propellant"),
+            UserInterfaceSettings.InfinitePropellant ? "ON" : "OFF", () =>
+            {
+                UserInterfaceSettings.SetInfinitePropellant(!UserInterfaceSettings.InfinitePropellant);
+                ShowSettings();
+            }));
         body.AddChild(SettingRow(UiText.Get("motion"),
             UserInterfaceSettings.ReducedMotion ? "ON" : "OFF", () =>
             {

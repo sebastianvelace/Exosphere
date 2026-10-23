@@ -7,7 +7,8 @@ public static class CampaignDebriefPanel
 {
     public static void Show(
         MissionDebrief debrief,
-        CampaignRewardResult rewards)
+        CampaignRewardResult rewards,
+        bool assisted = false)
     {
         var tree = Engine.GetMainLoop() as SceneTree;
         var ui = tree?.Root.FindChild("UI", true, false) as CanvasLayer;
@@ -55,6 +56,16 @@ public static class CampaignDebriefPanel
                 : (spanish ? "MISIÓN NO COMPLETADA" : "MISSION NOT COMPLETE"),
         };
         InterfaceTheme.ApplyDisplay(title, 34);
+        if (assisted)
+        {
+            var practice = new Label
+            {
+                Text = spanish ? "VUELO DE PRÁCTICA · PROPELENTE INFINITO" : "PRACTICE FLIGHT · INFINITE PROPELLANT",
+            };
+            InterfaceTheme.ApplyMono(practice, 11);
+            practice.AddThemeColorOverride("font_color", InterfaceTheme.Warning);
+            content.AddChild(practice);
+        }
         title.AddThemeColorOverride(
             "font_color",
             debrief.IsSuccess ? new Color(0.55f, 0.95f, 0.65f)
@@ -104,6 +115,19 @@ public static class CampaignDebriefPanel
             reward.AddThemeColorOverride(
                 "font_color", InterfaceTheme.Success);
             content.AddChild(reward);
+        }
+
+        if (debrief.Outcome != MissionOutcome.Success && MissionCheckpoints.Exists)
+        {
+            string at = MissionCheckpoints.LastPhase?.ToString() ?? "";
+            var revert = new Button
+            {
+                Text = spanish ? $"VOLVER AL CHECKPOINT {at}".Trim() : $"BACK TO CHECKPOINT {at}".Trim(),
+                CustomMinimumSize = new Vector2(280, 44),
+            };
+            InterfaceTheme.StyleDossierButton(revert, primary: false);
+            revert.Pressed += () => MissionCheckpoints.Revert(revert.GetTree());
+            content.AddChild(revert);
         }
 
         var close = new Button

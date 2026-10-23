@@ -20,6 +20,8 @@ public static class UserInterfaceSettings
     public static HudDensity HudDensity { get; private set; } = HudDensity.Minimal;
     /// <summary>Testing aid: campaign missions start without their prerequisites.</summary>
     public static bool UnlockAllMissions { get; private set; }
+    /// <summary>Practice assist: tanks never run down. Campaign debriefs mark the flight assisted.</summary>
+    public static bool InfinitePropellant { get; private set; }
 
     public static void Load()
     {
@@ -29,6 +31,7 @@ public static class UserInterfaceSettings
             "interface", "language", (int)InterfaceLanguage.English);
         ReducedMotion = (bool)config.GetValue("interface", "reduced_motion", false);
         UnlockAllMissions = (bool)config.GetValue("campaign", "unlock_all_missions", false);
+        InfinitePropellant = (bool)config.GetValue("practice", "infinite_propellant", false);
         UiScale = System.Math.Clamp(
             (float)config.GetValue("interface", "ui_scale", 1.0f), 1.0f, 1.5f);
         HudDensity = (HudDensity)System.Math.Clamp(
@@ -59,6 +62,12 @@ public static class UserInterfaceSettings
     public static void SetUnlockAllMissions(bool value)
     {
         UnlockAllMissions = value;
+        Save();
+    }
+
+    public static void SetInfinitePropellant(bool value)
+    {
+        InfinitePropellant = value;
         Save();
     }
 
@@ -96,6 +105,7 @@ public static class UserInterfaceSettings
         config.SetValue("interface", "hud_density", (int)HudDensity);
         config.SetValue("interface", "hud_layout_version", HudLayoutVersion);
         config.SetValue("campaign", "unlock_all_missions", UnlockAllMissions);
+        config.SetValue("practice", "infinite_propellant", InfinitePropellant);
         config.Save(Path);
     }
 }
@@ -177,6 +187,7 @@ public static class UiText
         ["language"] = ("LANGUAGE", "IDIOMA"),
         ["motion"] = ("REDUCED MOTION", "MOVIMIENTO REDUCIDO"),
         ["unlock_all_missions"] = ("UNLOCK ALL MISSIONS (TESTING)", "DESBLOQUEAR TODAS LAS MISIONES (PRUEBAS)"),
+        ["infinite_propellant"] = ("INFINITE PROPELLANT (PRACTICE)", "PROPELENTE INFINITO (PRÁCTICA)"),
         ["hud_density"] = ("FLIGHT TELEMETRY", "TELEMETRÍA DE VUELO"),
         ["hud_minimal"] = ("BROADCAST", "TRANSMISIÓN"),
         ["hud_full"] = ("BROADCAST + DIAGNOSTICS", "TRANSMISIÓN + DIAGNÓSTICOS"),

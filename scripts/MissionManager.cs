@@ -40,6 +40,12 @@ public partial class MissionManager : Node
 {
     public static MissionManager? Instance { get; private set; }
 
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public MissionPhase Phase        { get; private set; } = MissionPhase.PRE_LAUNCH;
     public double       CountdownTimer { get; private set; } = 10.0;
     public bool         IsCountingDown { get; private set; }
@@ -467,11 +473,16 @@ public partial class MissionManager : Node
         }
     }
 
+    private void SaveMilestoneCheckpoint() => MissionCheckpoints.Save(Phase);
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private void SetPhase(MissionPhase newPhase)
     {
+        bool milestone = newPhase != Phase && MissionCheckpoints.IsMilestone(newPhase);
         Phase = newPhase;
+        // Deferred: phases change inside physics steps, and a save belongs between frames.
+        if (milestone) CallDeferred(MethodName.SaveMilestoneCheckpoint);
 
         // Audio cues on phase entry (null-safe; AudioManager may not exist yet).
         // COAST is set by AutopilotController on deorbit arm / post-burn — do not override here.

@@ -13,6 +13,12 @@ public partial class ManeuverExecutor : Node
 {
     public static ManeuverExecutor? Instance { get; private set; }
 
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public bool   IsExecuting  { get; private set; }
     public double RemainingDv  { get; private set; }
     public double TimeToBurn =>

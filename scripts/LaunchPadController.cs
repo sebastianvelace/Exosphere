@@ -21,6 +21,12 @@ using Exosphere.Simulation.Parts;
 public partial class LaunchPadController : Node3D
 {
     public static LaunchPadController? Instance { get; private set; }
+
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
     [Export] public string LaunchSiteId { get; set; } = "starbase";
     private bool IsStarbaseSite =>
         LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase);

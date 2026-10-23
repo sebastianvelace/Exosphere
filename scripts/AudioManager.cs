@@ -43,6 +43,12 @@ public partial class AudioManager : Node
     /// <summary>Global access point, set in <see cref="_Ready"/>.</summary>
     public static AudioManager? Instance { get; private set; }
 
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     // ── Generator configuration ───────────────────────────────────────────────
     private const float MixRate     = 44100f;
     private const float BufferLen   = 0.1f;     // seconds; small for low latency

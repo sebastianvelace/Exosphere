@@ -92,6 +92,7 @@ Lighting follows simulation time. Warp forward to see dawn and night. The full H
 | Arrows / `PgUp` `PgDn` | RCS translation: fore/aft and left/right / up/down (rendezvous and docking) |
 | `.` `,` | Warp up / down |
 | `F5` `F9` | Quicksave / quickload |
+| `F6` | Back to the last milestone checkpoint (campaign: saved on reaching orbit, TLI, lunar arrival, LOI, lunar orbit, TEI and entry; the debrief of a failed flight offers it too) |
 | `C` | Camera presets and cockpit |
 | `V` | Vehicle assembly |
 | Right-drag | Orbit camera |
@@ -99,7 +100,7 @@ Lighting follows simulation time. Warp forward to see dawn and night. The full H
 
 Warp levels are `1`, `2`, `3`, `5`, `10`, `50`, `100`, `1000`, `10000`, and `100000`. The sim clamps warp during powered flight and inside the atmosphere.
 
-Historical missions guide the player. The objectives panel opens with the current step in plain words, the keys that do it and the next steps. The same procedure is in the briefing. Flight milestones (orbit, TLI, lunar arrival and orbit, TEI, entry, touchdown) are recognised from the flown state, so a hand-flown mission counts like an automated one. On lunar missions an edge arrow and a status line show where the Moon is and whether the coast reaches it. While descending low over a body, a landing line shows altitude, vertical and horizontal speed, time to impact and the altitude left before a full-thrust braking burn must start. The navball shows orbit-normal, target and SAS-held markers. Near another vessel with a free docking port, a target marker shows range, closing speed, drift, port alignment and a safe closing speed, and flying the ports into their capture envelope docks for real.
+Historical missions guide the player. The objectives panel opens with the current step in plain words, the keys that do it and the next steps. The same procedure is in the briefing. Flight milestones (orbit, TLI, lunar arrival and orbit, TEI, entry, touchdown) are recognised from the flown state, so a hand-flown mission counts like an automated one. On lunar missions an edge arrow and a status line show where the Moon is and whether the coast reaches it. While descending low over a body, a landing line shows altitude, vertical and horizontal speed, time to impact and the altitude left before a full-thrust braking burn must start. The navball shows orbit-normal, target and SAS-held markers. Settings has an **infinite propellant** practice assist; campaign debriefs mark such flights as practice. Near another vessel with a free docking port, a target marker shows range, closing speed, drift, port alignment and a safe closing speed, and flying the ports into their capture envelope docks for real.
 
 ### Map
 

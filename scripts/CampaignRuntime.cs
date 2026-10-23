@@ -15,6 +15,12 @@ public partial class CampaignRuntime : Node
     private const double StandardGravity = 9.80665;
 
     public static CampaignRuntime? Instance { get; private set; }
+
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
     public MissionDirector? Director { get; private set; }
     public CampaignService? Campaign { get; private set; }
     public MissionDebrief? LastDebrief { get; private set; }
@@ -35,6 +41,8 @@ public partial class CampaignRuntime : Node
     private bool _hasOrbitalDirection;
     private string _orbitReferenceBodyId = "";
     private bool _finalized;
+    /// <summary>A practice assist was on at some point of this flight.</summary>
+    private bool _assisted;
 
     public void Initialize(
         string dataPath,
@@ -66,6 +74,8 @@ public partial class CampaignRuntime : Node
 
         MissionSaveV2? state = restoredMission?.MissionId == missionId
             ? restoredMission : null;
+        // A fresh launch starts without the previous mission's checkpoint.
+        if (state == null) MissionCheckpoints.Clear();
         Director = new MissionDirector(definition, state);
         SimulationBridge.Instance?.SetActiveFlightProfile(
             definition.FlightProfileId);
@@ -92,6 +102,7 @@ public partial class CampaignRuntime : Node
     public override void _Process(double delta)
     {
         if (Director == null || Campaign == null || _finalized) return;
+        _assisted |= UserInterfaceSettings.InfinitePropellant;
         var bridge = SimulationBridge.Instance;
         var universe = bridge?.Universe;
         var vessel = bridge?.ActiveVessel;
@@ -173,7 +184,7 @@ public partial class CampaignRuntime : Node
         LastDebrief = Director.FinalizeMission();
         CampaignRewardResult rewards =
             Campaign.ApplyDebrief(LastDebrief);
-        CampaignDebriefPanel.Show(LastDebrief, rewards);
+        CampaignDebriefPanel.Show(LastDebrief, rewards, _assisted);
         SaveSystem.SaveGame("campaign_autosave");
     }
 

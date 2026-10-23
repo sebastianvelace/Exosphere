@@ -285,7 +285,16 @@ hacer.
    Plan original: Modos SAS (pro/retro/normal/radial/objetivo/nodo), nodo de
    maniobra con los tres ejes, tiempo de quemado y "warp al nodo", ejecutores de LOI/TEI,
    ayudas de aterrizaje (altitud radar, tiempo al impacto, inicio de quemado).
-7. **Práctica y dificultad.** Volver al inicio de la fase, quickload visible, asistencias
+7. ✅ **Práctica y dificultad.** (2026-10-23) Lo entregado:
+   - checkpoint automático en cada hito y [F6] o el botón del debrief para volver (recarga la
+     escena desde el guardado y restaura la evidencia de campaña);
+   - propelente infinito opcional, marcado como "vuelo de práctica".
+
+   Al jugarlo aparecieron dos bugs, ya corregidos: singletons sin `_ExitTree` (recarga
+   vuelo→vuelo con objetos liberados) y el director reanudando por reloj histórico (encendía
+   el Atlas en órbita). Falta: puntuación separada de vuelos asistidos y "sin fallas
+   estructurales".
+   Plan original: Volver al inicio de la fase, quickload visible, asistencias
    opcionales (propelente infinito, sin fallas estructurales) puntuadas aparte.
 8. **Entrenamiento.** Misiones cortas aisladas (circularizar, interceptar en LEO, acoplar
    desde 200 m, alunizar desde 15 km).

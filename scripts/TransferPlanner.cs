@@ -19,6 +19,12 @@ public partial class TransferPlanner : Node
 
     public static TransferPlanner? Instance { get; private set; }
 
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public string? TargetBodyId  { get; private set; }
     public ManeuverNode? CurrentNode { get; private set; }
     public LunarTransferPlan? LunarPlan { get; private set; }

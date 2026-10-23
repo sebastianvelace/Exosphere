@@ -135,6 +135,8 @@ public partial class HistoricalFlightProfileController : Node
                 Resume(
                     elapsed,
                     profileId == MercuryAtlasFlightProfile.Id);
+            // A save records where the flight is; the clock may not match the historical one.
+            AlignFlagsWithPhase(phase.Value);
         }
     }
 
@@ -243,7 +245,12 @@ public partial class HistoricalFlightProfileController : Node
             _apolloCircularized = reached(MissionPhase.LUNAR_ORBIT);
             if (!_apollo11Tde) _apolloTeiComplete = reached(MissionPhase.TEI);
         }
-        else if (_geminiProfile)
+        else if (!_geminiProfile)
+        {
+            // Mercury: in orbit the booster is spent whatever the clock says.
+            _meco = reached(MissionPhase.ORBIT) || _meco;
+        }
+        else
         {
             _meco = reached(MissionPhase.ORBIT) || _meco;
             if (!_docked)

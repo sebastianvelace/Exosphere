@@ -398,6 +398,8 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     {
         if (!_running || Universe == null) return;
         ApplyDefaultPadDaylightIfNeeded();
+        if (ActiveVessel is { } practiceVessel)
+            practiceVessel.InfinitePropellant = UserInterfaceSettings.InfinitePropellant;
 
         // ── Recalculate MaxAllowedWarpIndex ──────────────────────────────
         var av = ActiveVessel;

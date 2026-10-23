@@ -23,6 +23,12 @@ public partial class SystemsController : Node
 
     public static SystemsController? Instance { get; private set; }
 
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     /// <summary>Explicitly materialized systems runtimes keyed by stable vessel id.</summary>
     public VesselSystemsRuntimeRegistry RuntimeRegistry { get; } = new();
 

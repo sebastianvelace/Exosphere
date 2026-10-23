@@ -606,6 +606,7 @@ public partial class HUDController : Control
             (", .", "TIME WARP DOWN / UP"),
             ("F5", "QUICKSAVE"),
             ("F9", "QUICKLOAD"),
+            ("F6", "BACK TO LAST MILESTONE CHECKPOINT"),
         });
         AddHelpGroup(right, "MAP VIEW", new[]
         {
@@ -1621,6 +1622,10 @@ public partial class HUDController : Control
                 case Key.F5:
                     SaveSystem.SaveGame("quicksave");
                     PushToast("QUICKSAVE");
+                    viewport.SetInputAsHandled();
+                    break;
+                case Key.F6:
+                    if (!MissionCheckpoints.Revert(GetTree())) PushToast("NO CHECKPOINT");
                     viewport.SetInputAsHandled();
                     break;
                 case Key.F9:

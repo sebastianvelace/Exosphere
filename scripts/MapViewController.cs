@@ -16,6 +16,12 @@ public partial class MapViewController : Control
 {
     public static MapViewController? Instance { get; private set; }
 
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public ManeuverPlanner Planner { get; } = new();
     public bool HasNavigationTarget =>
         _selectedTarget != null || Planner.HasNode || TransferPlanner.Instance?.CurrentNode != null;

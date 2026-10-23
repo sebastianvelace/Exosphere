@@ -607,6 +607,21 @@ public class Vessel
     }
 
     /// <summary>Burns the monopropellant the translation command and any disturbance use over one tick.</summary>
+    /// <summary>
+    /// Practice assist: tanks never run down. The engines still go through their normal
+    /// consumption step (flameout, feed and hot-stage logic stay identical); the propellant
+    /// is put back afterwards.
+    /// </summary>
+    public bool InfinitePropellant { get; set; }
+
+    private void ConsumePropellants(double dt, double pressure)
+    {
+        var snapshot = InfinitePropellant ? Parts.CapturePropellant() : null;
+        Parts.ConsumePropellant(dt, pressure);
+        ConsumeRcsTranslationPropellant(dt);
+        if (snapshot != null) Parts.RestorePropellant(snapshot);
+    }
+
     private void ConsumeRcsTranslationPropellant(double dt)
     {
         if (DisturbanceMassFlowKgPerS > 0.0 && !Parts.DrawMonopropellant(DisturbanceMassFlowKgPerS * dt))
@@ -885,8 +900,7 @@ public class Vessel
             Parts.InvalidateTickActiveEngineCache();
 
             double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
-            Parts.ConsumePropellant(dt, pressure);
-            ConsumeRcsTranslationPropellant(dt);
+            ConsumePropellants(dt, pressure);
             AdvanceHotStageOverlap(dt);
 
             foreach (var crew in Crew)
@@ -1013,8 +1027,7 @@ public class Vessel
         // let the active-engine snapshot taken by ApplyThrottle survive that state change.
         Parts.InvalidateTickActiveEngineCache();
 
-        Parts.ConsumePropellant(dt, pressure);
-        ConsumeRcsTranslationPropellant(dt);
+        ConsumePropellants(dt, pressure);
         AdvanceHotStageOverlap(dt);
 
         foreach (var crew in Crew)

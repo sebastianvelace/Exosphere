@@ -12,6 +12,12 @@ public partial class CameraController : Node3D
 {
     public static CameraController? Instance { get; private set; }
 
+    // Flight→flight scene reloads (checkpoint revert) must not leave a freed node behind.
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
+
     public CameraMode Mode { get; set; } = CameraMode.Pad;
 
     /// <summary>True while the first-person cockpit camera is active ([C] cycle).</summary>
