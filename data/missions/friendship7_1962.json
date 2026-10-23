@@ -113,6 +113,40 @@
       "required": false
     }
   ],
+  "procedure": [
+    {
+      "id": "launch",
+      "titleEn": "Launch the Mercury-Atlas",
+      "titleEs": "Lanzá el Mercury-Atlas",
+      "hintEn": "Press [L] for the automatic count; Mission Control flies the launch. Or hold [Z] to light the engines yourself.",
+      "hintEs": "Pulsá [L] para la cuenta automática; Control de Misión vuela el lanzamiento. O mantené [Z] para encender los motores vos.",
+      "doneWhenPhase": "LIFTOFF"
+    },
+    {
+      "id": "orbit",
+      "titleEn": "Reach orbit",
+      "titleEs": "Llegá a la órbita",
+      "hintEn": "[G] flies the ascent, [Space] stages. [F3] shows apoapsis and periapsis. [K] hands this step to Mission Control and back.",
+      "hintEs": "[G] vuela el ascenso, [Espacio] separa etapas. [F3] muestra apoapsis y periapsis. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "reach-orbit-phase"
+    },
+    {
+      "id": "three-orbits",
+      "titleEn": "Fly three orbits",
+      "titleEs": "Completá tres órbitas",
+      "hintEn": "Time warp with [.] (slow down with [,]); the objectives panel counts each lap.",
+      "hintEs": "Acelerá el tiempo con [.] (frená con [,]); el panel de objetivos cuenta cada vuelta.",
+      "doneWhenObjectiveId": "complete-three-orbits"
+    },
+    {
+      "id": "splashdown",
+      "titleEn": "Retrofire and splash down",
+      "titleEs": "Retrofrená y amerizá",
+      "hintEn": "Fire the retros pointing retrograde to drop the periapsis into the atmosphere. Keep the heat shield forward, then arm the parachutes with [P]. [K] hands this step to Mission Control and back.",
+      "hintEs": "Encendé los retros apuntando retrógrado para bajar el periapsis a la atmósfera. Mantené el escudo térmico adelante y armá los paracaídas con [P]. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "atlantic-recovery"
+    }
+  ],
   "anomalies": [
     {
       "id": "false-heat-shield-warning",

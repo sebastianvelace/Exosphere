@@ -126,6 +126,72 @@
       "required": false
     }
   ],
+  "procedure": [
+    {
+      "id": "launch",
+      "titleEn": "Launch on the lunar window",
+      "titleEs": "Lanzá en la ventana lunar",
+      "hintEn": "Press [L]: the count holds until the Moon's window opens, then Mission Control flies the Saturn V. Or hold [Z] to fly it yourself.",
+      "hintEs": "Pulsá [L]: la cuenta espera a que abra la ventana de la Luna y Control de Misión vuela el Saturn V. O mantené [Z] para volarlo vos.",
+      "doneWhenPhase": "LIFTOFF"
+    },
+    {
+      "id": "orbit",
+      "titleEn": "Reach the Earth parking orbit",
+      "titleEs": "Llegá a la órbita de estacionamiento",
+      "hintEn": "[G] flies the ascent, [Space] stages. [F3] shows apoapsis and periapsis. [K] hands this step to Mission Control and back.",
+      "hintEs": "[G] vuela el ascenso, [Espacio] separa etapas. [F3] muestra apoapsis y periapsis. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "earth-parking-orbit"
+    },
+    {
+      "id": "tli",
+      "titleEn": "Burn for the Moon (TLI)",
+      "titleEs": "Encendé rumbo a la Luna (TLI)",
+      "hintEn": "Open the map with [M], press [2] to plan the Moon transfer and [Enter] to fly it at the right moment. [K] hands this step to Mission Control and back.",
+      "hintEs": "Abrí el mapa con [M], pulsá [2] para planificar la transferencia a la Luna y [Enter] para ejecutarla en el momento justo. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "translunar-injection"
+    },
+    {
+      "id": "coast",
+      "titleEn": "Coast to the Moon",
+      "titleEs": "Navegá hasta la Luna",
+      "hintEn": "Three days of coast: warp with [.]. The map says SOI if you will reach the Moon, MISS if not. [K] hands this step to Mission Control and back.",
+      "hintEs": "Tres días de crucero: acelerá con [.]. El mapa dice SOI si vas a llegar a la Luna y MISS si no. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenPhase": "LUNAR_APPROACH"
+    },
+    {
+      "id": "loi",
+      "titleEn": "Brake into lunar orbit (LOI)",
+      "titleEs": "Frená en órbita lunar (LOI)",
+      "hintEn": "At the closest point to the Moon point retrograde and burn until the orbit closes. [K] hands this step to Mission Control and back.",
+      "hintEs": "En el punto más cercano a la Luna apuntá retrógrado y quemá hasta que la órbita se cierre. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "lunar-orbit-insertion"
+    },
+    {
+      "id": "revolutions",
+      "titleEn": "Fly ten lunar revolutions",
+      "titleEs": "Completá diez vueltas a la Luna",
+      "hintEn": "Warp with [.]; the objectives panel counts each revolution.",
+      "hintEs": "Acelerá con [.]; el panel de objetivos cuenta cada vuelta.",
+      "doneWhenObjectiveId": "ten-lunar-revolutions"
+    },
+    {
+      "id": "tei",
+      "titleEn": "Burn for home (TEI)",
+      "titleEs": "Encendé de regreso (TEI)",
+      "hintEn": "Leave lunar orbit on a trajectory that grazes Earth's atmosphere. [K] hands this step to Mission Control and back.",
+      "hintEs": "Salí de la órbita lunar en una trayectoria que roce la atmósfera terrestre. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "transearth-injection"
+    },
+    {
+      "id": "splashdown",
+      "titleEn": "Entry and Pacific splashdown",
+      "titleEs": "Reentrada y amerizaje en el Pacífico",
+      "hintEn": "Keep the heat shield forward, then arm the parachutes with [P]. [K] hands this step to Mission Control and back.",
+      "hintEs": "Mantené el escudo térmico adelante y armá los paracaídas con [P]. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "pacific-splashdown"
+    }
+  ],
   "anomalies": [],
   "rewards": [
     {

@@ -86,7 +86,9 @@ Lighting follows simulation time. Warp forward to see dawn and night. The full H
 | `Space` | Stage |
 | `G` | Ascent autopilot |
 | `H` | Gravity-turn assist |
-| `L` | Countdown and launch |
+| `L` | Countdown and launch; Mission Control flies historical missions |
+| `K` | Hand the current step to Mission Control, or take control back (historical missions) |
+| Arrows / `PgUp` `PgDn` | RCS translation: fore/aft and left/right / up/down (rendezvous and docking) |
 | `.` `,` | Warp up / down |
 | `F5` `F9` | Quicksave / quickload |
 | `C` | Camera presets and cockpit |
@@ -95,6 +97,8 @@ Lighting follows simulation time. Warp forward to see dawn and night. The full H
 | Wheel | Zoom |
 
 Warp levels are `1`, `2`, `3`, `5`, `10`, `50`, `100`, `1000`, `10000`, and `100000`. The sim clamps warp during powered flight and inside the atmosphere.
+
+Historical missions guide the player. The objectives panel opens with the current step in plain words, the keys that do it and the next steps. The same procedure is in the briefing. Flight milestones (orbit, TLI, lunar arrival and orbit, TEI, entry, touchdown) are recognised from the flown state, so a hand-flown mission counts like an automated one. On lunar missions an edge arrow and a status line show where the Moon is and whether the coast reaches it. Near another vessel with a free docking port, a target marker shows range, closing speed, drift, port alignment and a safe closing speed, and flying the ports into their capture envelope docks for real.
 
 ### Map
 

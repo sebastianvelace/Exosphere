@@ -139,6 +139,10 @@ public partial class HUDController : Control
         AddChild(_broadcast);
         _objectives = new MissionObjectivesPanel { Name = "MissionObjectives" };
         AddChild(_objectives);
+        _moonIndicator = new MoonIndicator { Name = "MoonIndicator" };
+        AddChild(_moonIndicator);
+        _targetIndicator = new TargetIndicator { Name = "TargetIndicator" };
+        AddChild(_targetIndicator);
     }
 
     private void BuildAttitudeCluster()
@@ -191,6 +195,8 @@ public partial class HUDController : Control
 
     private CenterContainer _densityToastRoot = null!;
     private MissionObjectivesPanel _objectives = null!;
+    private MoonIndicator _moonIndicator = null!;
+    private TargetIndicator _targetIndicator = null!;
 
     public override void _ExitTree()
     {
@@ -565,10 +571,13 @@ public partial class HUDController : Control
             ("A D", "YAW"),
             ("Q E", "ROLL"),
             ("T", "SAS HOLD ON / OFF"),
+            ("arrows", "RCS TRANSLATE FWD/AFT · LEFT/RIGHT"),
+            ("PgUp PgDn", "RCS TRANSLATE UP / DOWN"),
         });
         AddHelpGroup(left, "MISSION", new[]
         {
-            ("L", "AUTO LAUNCH SEQUENCE"),
+            ("L", "AUTO COUNT · MISSION CONTROL FLIES"),
+            ("K", "MISSION CONTROL TAKES / GIVES CONTROL"),
             ("G", "FULL ASCENT GUIDANCE"),
             ("H", "PITCH ASSIST ON / OFF"),
             ("R", "REENTRY DEMONSTRATION"),
@@ -849,6 +858,21 @@ public partial class HUDController : Control
                     SystemsController.Instance!.SubmitGroundThrottleDelta(-0.5 * delta);
                 else
                     bridge.ThrottleDown(delta);
+            }
+
+            // ── Translation RCS (rendezvous and docking) ────────────────────────
+            // Arrows move along the nose (up/down) and sideways (left/right); Page Up/Down
+            // move along the body's third axis. Mission Control owns the command while flying.
+            if (HistoricalFlightProfileController.Instance?.IsEngaged != true)
+            {
+                double fore = 0, lateral = 0, normal = 0;
+                if (Input.IsKeyPressed(Key.Up)) fore += 1.0;
+                if (Input.IsKeyPressed(Key.Down)) fore -= 1.0;
+                if (Input.IsKeyPressed(Key.Right)) lateral += 1.0;
+                if (Input.IsKeyPressed(Key.Left)) lateral -= 1.0;
+                if (Input.IsKeyPressed(Key.Pageup)) normal += 1.0;
+                if (Input.IsKeyPressed(Key.Pagedown)) normal -= 1.0;
+                vessel.TranslationCommand = new Vector3d(lateral, fore, normal);
             }
 
         }
@@ -1196,6 +1220,8 @@ public partial class HUDController : Control
         bool cluster = exterior;
         bool instruments = exterior && !clean;
         _objectives.DensityAllowed = instruments;
+        _moonIndicator.DensityAllowed = instruments;
+        _targetIndicator.DensityAllowed = instruments;
         _navball.Visible = cluster;
         _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
@@ -1550,6 +1576,13 @@ public partial class HUDController : Control
                     break;
                 case Key.L:
                     MissionManager.Instance?.StartCountdown();
+                    break;
+                case Key.K:
+                    if (HistoricalFlightProfileController.Instance is { } missionControl)
+                        PushToast(missionControl.ToggleMissionControl()
+                            ? "MISSION CONTROL FLYING · [K] TO TAKE BACK"
+                            : "YOU HAVE CONTROL");
+                    viewport.SetInputAsHandled();
                     break;
                 case Key.O:
                     bridge.JumpToOrbit();

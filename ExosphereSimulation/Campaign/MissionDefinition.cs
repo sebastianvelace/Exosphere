@@ -48,6 +48,21 @@ public sealed class MissionRuleDefinition
     public bool Required { get; set; } = true;
 }
 
+/// <summary>
+/// One step of the in-flight mission guide: what to do now, in plain words, and the keys that
+/// do it. A step is done once its phase is reached or its objective passes.
+/// </summary>
+public sealed class MissionProcedureStep
+{
+    public string Id { get; set; } = "";
+    public string TitleEn { get; set; } = "";
+    public string TitleEs { get; set; } = "";
+    public string HintEn { get; set; } = "";
+    public string HintEs { get; set; } = "";
+    public string DoneWhenPhase { get; set; } = "";
+    public string DoneWhenObjectiveId { get; set; } = "";
+}
+
 public sealed class MissionRewardDefinition
 {
     public string Id { get; set; } = "";
@@ -91,6 +106,7 @@ public sealed class MissionDefinition
     public List<MissionAnomalyDefinition> Anomalies { get; set; } = new();
     public List<MissionRewardDefinition> Rewards { get; set; } = new();
     public List<MissionSourceDefinition> Sources { get; set; } = new();
+    public List<MissionProcedureStep> Procedure { get; set; } = new();
 
     public void Validate()
     {
@@ -114,6 +130,19 @@ public sealed class MissionDefinition
         RequireUnique(Anomalies.Select(item => item.Id), "anomaly");
         RequireUnique(Rewards.Select(item => item.Id), "reward");
         RequireUnique(Sources.Select(item => item.Id), "source");
+        RequireUnique(Procedure.Select(item => item.Id), "procedure step");
+        foreach (var step in Procedure)
+        {
+            RequireText(step.TitleEn, "procedure title");
+            RequireText(step.TitleEs, "procedure title");
+            if (string.IsNullOrWhiteSpace(step.DoneWhenPhase) == string.IsNullOrWhiteSpace(step.DoneWhenObjectiveId))
+                throw new InvalidDataException(
+                    $"Mission '{Id}' procedure step '{step.Id}' needs exactly one of a phase or an objective.");
+            if (!string.IsNullOrWhiteSpace(step.DoneWhenObjectiveId)
+                && Objectives.All(rule => rule.Id != step.DoneWhenObjectiveId))
+                throw new InvalidDataException(
+                    $"Mission '{Id}' procedure step '{step.Id}' references unknown objective '{step.DoneWhenObjectiveId}'.");
+        }
 
         foreach (var anomaly in Anomalies)
         {

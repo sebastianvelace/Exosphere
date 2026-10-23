@@ -22,14 +22,19 @@ using Godot;
 /// </summary>
 public partial class MissionObjectivesPanel : PanelContainer
 {
-    /// A flight HUD is not a debrief: past the first few rows this stops being a glanceable
-    /// checklist. Required rules are kept first so the cap never hides a mission-critical one.
-    private const int MaxRows = 6;
+    /// A flight HUD is not a debrief: optional rows stop once the list reaches this length and
+    /// are summarised in one line. Required objectives and breached limits are always shown.
+    private const int MaxRows = 8;
+    private const float GuideWidth = 340f;
     private const double RefreshIntervalSeconds = 0.25;
 
     private sealed record Row(HBoxContainer Root, Label Status, Label Title, Label Value);
 
     private Label _header = null!;
+    private Label _guideNow = null!;
+    private Label _guideHint = null!;
+    private Label _guideNext = null!;
+    private Label _hiddenSummary = null!;
     private VBoxContainer _rowBox = null!;
     private readonly List<Row> _rows = new();
     private readonly Dictionary<string, MissionRuleDefinition> _ruleById = new();
@@ -43,15 +48,31 @@ public partial class MissionObjectivesPanel : PanelContainer
     {
         AddThemeStyleboxOverride("panel", InterfaceTheme.PanelStyle(0.88f, 14, 11));
         SetAnchorsPreset(LayoutPreset.TopLeft);
-        CustomMinimumSize = new Vector2(278, 0);
+        CustomMinimumSize = new Vector2(GuideWidth, 0);
         OffsetLeft = 18;
-        OffsetTop = 270;
+        // Below the TIME readout (y ≈ 232–298), which used to cover the guide's first line.
+        OffsetTop = 312;
         MouseFilter = MouseFilterEnum.Ignore;
         Visible = false;
 
         var content = new VBoxContainer();
         content.AddThemeConstantOverride("separation", 5);
         AddChild(content);
+
+        // Mission guide: the step to do now, how to do it, and what comes next.
+        _guideNow = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(GuideWidth - 28, 0) };
+        InterfaceTheme.ApplyBody(_guideNow, 13);
+        _guideNow.AddThemeColorOverride("font_color", InterfaceTheme.Text);
+        content.AddChild(_guideNow);
+        _guideHint = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(GuideWidth - 28, 0) };
+        InterfaceTheme.ApplyBody(_guideHint, 11);
+        _guideHint.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        content.AddChild(_guideHint);
+        _guideNext = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(GuideWidth - 28, 0) };
+        InterfaceTheme.ApplyMono(_guideNext, 9);
+        _guideNext.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        content.AddChild(_guideNext);
+        content.AddChild(new HSeparator());
 
         _header = new Label { Text = "MISSION OBJECTIVES" };
         InterfaceTheme.ApplyLabel(_header, 12);
@@ -61,6 +82,11 @@ public partial class MissionObjectivesPanel : PanelContainer
         _rowBox = new VBoxContainer();
         _rowBox.AddThemeConstantOverride("separation", 3);
         content.AddChild(_rowBox);
+
+        _hiddenSummary = new Label();
+        InterfaceTheme.ApplyMono(_hiddenSummary, 9);
+        _hiddenSummary.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
+        content.AddChild(_hiddenSummary);
     }
 
     public override void _Process(double delta)
@@ -78,6 +104,40 @@ public partial class MissionObjectivesPanel : PanelContainer
         if (_sinceRefresh < RefreshIntervalSeconds) return;
         _sinceRefresh = 0.0;
         Render(director.Definition, debrief);
+        RenderGuide(director, debrief);
+    }
+
+    private void RenderGuide(MissionDirector director, MissionDebrief debrief)
+    {
+        var procedure = director.Definition.Procedure;
+        bool spanish = UserInterfaceSettings.Language == InterfaceLanguage.Spanish;
+        bool hasGuide = procedure.Count > 0;
+        _guideNow.Visible = _guideHint.Visible = _guideNext.Visible = hasGuide;
+        if (!hasGuide) return;
+
+        int current = MissionGuide.CurrentStepIndex(director.Definition, director.Evidence, debrief);
+        if (current >= procedure.Count)
+        {
+            _guideNow.Text = spanish ? "PROCEDIMIENTO COMPLETO" : "PROCEDURE COMPLETE";
+            _guideHint.Text = "";
+            _guideNext.Text = "";
+            return;
+        }
+        var step = procedure[current];
+        bool assisted = HistoricalFlightProfileController.Instance?.IsEngaged == true;
+        var mission = MissionManager.Instance;
+        bool waitingToLaunch = mission?.IsHoldingForLaunchWindow == true || mission?.IsCountingDown == true;
+        string prefix = spanish ? $"PASO {current + 1}/{procedure.Count} · " : $"STEP {current + 1}/{procedure.Count} · ";
+        _guideNow.Text = prefix + (spanish ? step.TitleEs : step.TitleEn);
+        _guideHint.Text = waitingToLaunch
+            ? (spanish ? "Cuenta en curso: si hay ventana lunar, el reloj acelera solo hasta que abra. Control de Misión lanza en T-0."
+                : "Count in progress: for a lunar window the clock speeds up on its own until it opens. Mission Control launches at T-0.")
+            : assisted
+            ? (spanish ? "Control de Misión está volando. [K] te devuelve el control." : "Mission Control is flying. [K] gives you control back.")
+            : (spanish ? step.HintEs : step.HintEn);
+        var upcoming = procedure.Skip(current + 1).Take(2).Select(next => spanish ? next.TitleEs : next.TitleEn).ToList();
+        _guideNext.Text = upcoming.Count == 0 ? ""
+            : (spanish ? "DESPUÉS: " : "NEXT: ") + string.Join("  ›  ", upcoming);
     }
 
     private void Render(MissionDefinition definition, MissionDebrief debrief)
@@ -90,13 +150,25 @@ public partial class MissionObjectivesPanel : PanelContainer
 
         // Required rules first, then optional ones; a breached limit outranks everything so a
         // mission the player has already lost never hides that fact behind a pending objective.
-        var ordered = debrief.Objectives
+        // Breached limits and required objectives are never cut; optional rows fill up to
+        // MaxRows and the rest collapse into one summary line.
+        var all = debrief.Objectives
             .Select(result => (result, isLimit: false))
             .Concat(debrief.Limits.Select(result => (result, isLimit: true)))
             .OrderBy(entry => entry.isLimit && !entry.result.Passed ? 0
-                : entry.result.Required ? 1 : 2)
-            .Take(MaxRows)
+                : entry.result.Required && !entry.isLimit ? 1 : 2)
             .ToList();
+        var ordered = all
+            .Where((entry, index) => entry.isLimit && !entry.result.Passed
+                || entry.result.Required && !entry.isLimit
+                || index < MaxRows)
+            .ToList();
+        int hidden = all.Count - ordered.Count;
+        int hiddenPassed = all.Except(ordered).Count(entry => entry.result.Passed);
+        _hiddenSummary.Visible = hidden > 0;
+        _hiddenSummary.Text = spanish
+            ? $"+{hidden} más ({hiddenPassed} cumplidos)"
+            : $"+{hidden} more ({hiddenPassed} met)";
 
         while (_rows.Count < ordered.Count) _rows.Add(CreateRow());
         for (int i = 0; i < _rows.Count; i++)
@@ -175,7 +247,7 @@ public partial class MissionObjectivesPanel : PanelContainer
             return result.ActualValue is { } bare ? $"{bare:G4}" : "";
 
         if (rule.Comparison == MissionComparison.Reached)
-            return rule.ExpectedText;
+            return PhaseLabel(rule.ExpectedText);
         if (rule.Comparison is MissionComparison.True or MissionComparison.False)
             return result.Passed ? "YES" : "NO";
         if (result.ActualValue is not { } actual) return "";
@@ -188,6 +260,25 @@ public partial class MissionObjectivesPanel : PanelContainer
                 + $"–{FormatMetric(rule.Metric, upper, rule.Target)}";
         string bound = rule.Comparison == MissionComparison.AtMost ? "≤" : "→";
         return $"{current} {bound} {FormatMetric(rule.Metric, rule.Target, rule.Target)}";
+    }
+
+    /// <summary>A mission phase as the player reads it, not its enum name.</summary>
+    private static string PhaseLabel(string phase)
+    {
+        bool es = UserInterfaceSettings.Language == InterfaceLanguage.Spanish;
+        return phase switch
+        {
+            "LIFTOFF" => es ? "DESPEGUE" : "LIFTOFF",
+            "ORBIT" => es ? "ÓRBITA" : "ORBIT",
+            "TLI" => "TLI",
+            "LUNAR_APPROACH" => es ? "LLEGADA LUNAR" : "LUNAR ARRIVAL",
+            "LOI" => "LOI",
+            "LUNAR_ORBIT" => es ? "ÓRBITA LUNAR" : "LUNAR ORBIT",
+            "TEI" => "TEI",
+            "ENTRY" => es ? "REENTRADA" : "ENTRY",
+            "LANDED" => es ? "TOQUE" : "TOUCHDOWN",
+            _ => phase,
+        };
     }
 
     private static string FormatMetric(MissionMetric metric, double value, double scaleRef)

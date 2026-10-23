@@ -167,6 +167,96 @@ public partial class HistoricalFlightProfileController : Node
         return window.LiftoffTime;
     }
 
+    /// <summary>
+    /// [K]: hands the flight to Mission Control (this director) from wherever the player is, or
+    /// gives it back. On the pad it starts the count; in flight it resumes the profile and then
+    /// trusts the mission phase, which <see cref="MissionManager"/> keeps from the flown state,
+    /// over the historical clock (a hand-flown ascent reaches orbit on its own schedule).
+    /// Returns true while Mission Control is flying.
+    /// </summary>
+    public bool ToggleMissionControl()
+    {
+        var bridge = SimulationBridge.Instance;
+        var vessel = bridge?.ActiveVessel;
+        if (bridge == null || vessel == null) return false;
+        if (_active)
+        {
+            // The throttle stays where it is, as with any autopilot: dropping it mid-ascent
+            // would drop the rocket. The crew cuts it with [X] when they want.
+            _active = false;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.TranslationCommand = Vector3d.Zero;
+            vessel.SASEnabled = true;
+            bridge.SetWarpIndex(0);
+            GD.Print("[HISTORICAL] Mission Control hands the spacecraft back to the crew.");
+            return false;
+        }
+
+        var mission = MissionManager.Instance;
+        var phase = mission?.Phase ?? MissionPhase.PRE_LAUNCH;
+        string? profileId = bridge.ActiveFlightProfileId;
+        if (profileId is not (MercuryRedstoneFlightProfile.Id or MercuryAtlasFlightProfile.Id
+                or Gemini8FlightProfile.Id or Apollo8FlightProfile.Id or Apollo11FlightProfile.Id)
+            || phase is MissionPhase.LANDED or MissionPhase.CAUGHT or MissionPhase.CRASHED)
+            return false;
+        if (phase is MissionPhase.PRE_LAUNCH)
+        {
+            // The count engages Mission Control at T-0 (and holds for a lunar window first).
+            mission?.StartCountdown();
+            return mission?.Phase != MissionPhase.PRE_LAUNCH || mission.IsHoldingForLaunchWindow;
+        }
+        if (phase is MissionPhase.COUNTDOWN or MissionPhase.IGNITION) return true;
+
+        // The director's own liftoff clock when it launched this flight; the campaign clock
+        // also counts the countdown, which put a resumed Freedom 7 ten seconds ahead.
+        double elapsed = _startTime > 0.0 && _startTime <= bridge.Universe.CurrentTime
+            ? bridge.Universe.CurrentTime - _startTime
+            : CampaignRuntime.Instance?.Director?.Evidence.ElapsedSeconds ?? 0.0;
+        if (profileId == Apollo11FlightProfile.Id) ResumeApollo11(elapsed);
+        else if (profileId == Apollo8FlightProfile.Id) ResumeApollo8(elapsed);
+        else if (profileId == Gemini8FlightProfile.Id) ResumeGemini(elapsed);
+        else Resume(elapsed, profileId == MercuryAtlasFlightProfile.Id);
+        AlignFlagsWithPhase(phase);
+        GD.Print($"[HISTORICAL] Mission Control takes over in phase {phase}.");
+        return _active;
+    }
+
+    /// <summary>The mission phase, not the historical clock, says which steps are done.</summary>
+    private void AlignFlagsWithPhase(MissionPhase phase)
+    {
+        bool reached(MissionPhase milestone) => phase >= milestone;
+        if (_apolloProfile)
+        {
+            double now = SimulationBridge.Instance!.Universe.CurrentTime;
+            _apolloParkingOrbit = reached(MissionPhase.ORBIT);
+            _apolloTliComplete = _apolloTliStarted = reached(MissionPhase.TLI);
+            _apolloLunarPlan = null;
+            if (_apolloTliComplete && !_apolloCsmSeparated)
+                // Separate on the next step: the injection is already flown.
+                _apolloTliStartTime = now
+                    - (Apollo8FlightProfile.CsmSivbSeparationSeconds - Apollo8FlightProfile.TliIgnitionSeconds);
+            else if (_apolloTliComplete)
+                _apolloTliStartTime = now;
+            _apolloMidcourseComplete = reached(MissionPhase.LUNAR_APPROACH);
+            _apolloLoiComplete = reached(MissionPhase.LOI);
+            if (_apolloLoiComplete) _apolloLoiTime = now;
+            _apolloCircularized = reached(MissionPhase.LUNAR_ORBIT);
+            if (!_apollo11Tde) _apolloTeiComplete = reached(MissionPhase.TEI);
+        }
+        else if (_geminiProfile)
+        {
+            _meco = reached(MissionPhase.ORBIT) || _meco;
+            if (!_docked)
+            {
+                // Not docked yet: fly the rendezvous from here, the anomaly comes after docking.
+                _rendezvousConfigured = false;
+                _undocked = false;
+                _failureAnnounced = false;
+                _controlRecovered = false;
+            }
+        }
+    }
+
     public bool EngageIfSupported()
     {
         var bridge = SimulationBridge.Instance;

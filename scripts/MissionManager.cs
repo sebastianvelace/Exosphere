@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using Godot;
 using System.Linq;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Campaign;
 using Exosphere.Simulation.Flight;
 
 public enum MissionPhase
@@ -55,6 +56,8 @@ public partial class MissionManager : Node
     [Signal] public delegate void LaunchCommittedEventHandler();
 
     private bool _maxQTriggered;
+    private readonly FlightPhaseObserver _flightPhaseObserver = new();
+    private readonly System.Collections.Generic.Queue<MissionPhase> _observedPhaseQueue = new();
     private int  _lastTickSecond = -1;   // last whole-second countdown beep emitted
     private readonly MissionCallbackQueue _callbackQueue = new();
 
@@ -408,6 +411,63 @@ public partial class MissionManager : Node
                         atmosphereTop))
                     SetPhase(MissionPhase.ORBIT);
                 break;
+        }
+
+        ObserveHandFlownPhases(universe, vessel);
+        SupportHandFlownProximityOperations(bridge, universe, vessel);
+    }
+
+    /// <summary>
+    /// Proximity operations without the historical director: Gemini 8's Agena exists from
+    /// liftoff whoever flies, and a pilot who flies the ports into their capture envelope
+    /// docks for real.
+    /// </summary>
+    private void SupportHandFlownProximityOperations(SimulationBridge bridge, Universe universe, Vessel vessel)
+    {
+        if (HistoricalFlightProfileController.Instance?.IsEngaged == true
+            || Phase is MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN or MissionPhase.IGNITION)
+            return;
+        if (bridge.ActiveFlightProfileId == Gemini8FlightProfile.Id) bridge.EnsureGemini8AgenaTarget();
+        if (DockingTargeting.TryCapture(universe, vessel) is { Succeeded: true })
+        {
+            vessel.TranslationCommand = Exosphere.Simulation.Math.Vector3d.Zero;
+            GD.Print("[MissionManager] Hand-flown docking captured.");
+        }
+    }
+
+    /// <summary>
+    /// Campaign missions flown by hand reach their milestones through physics, not through
+    /// the historical director: <see cref="FlightPhaseObserver"/> recognises them and the
+    /// mission phase follows, one phase per frame so the campaign samples each of them
+    /// (entering lunar orbit records LOI, then LUNAR_ORBIT). Phases only ever move forward.
+    /// </summary>
+    private void ObserveHandFlownPhases(Universe universe, Vessel vessel)
+    {
+        if (CampaignRuntime.Instance?.Director == null
+            || HistoricalFlightProfileController.Instance?.IsEngaged == true
+            || Phase is MissionPhase.PRE_LAUNCH or MissionPhase.COUNTDOWN or MissionPhase.IGNITION
+                or MissionPhase.LANDED or MissionPhase.CAUGHT or MissionPhase.CRASHED)
+            return;
+
+        switch (_flightPhaseObserver.Observe(vessel, universe))
+        {
+            case ObservedFlightPhase.Orbit: _observedPhaseQueue.Enqueue(MissionPhase.ORBIT); break;
+            case ObservedFlightPhase.TranslunarInjection: _observedPhaseQueue.Enqueue(MissionPhase.TLI); break;
+            case ObservedFlightPhase.LunarApproach: _observedPhaseQueue.Enqueue(MissionPhase.LUNAR_APPROACH); break;
+            case ObservedFlightPhase.LunarOrbit:
+                _observedPhaseQueue.Enqueue(MissionPhase.LOI);
+                _observedPhaseQueue.Enqueue(MissionPhase.LUNAR_ORBIT);
+                break;
+            case ObservedFlightPhase.TransearthInjection: _observedPhaseQueue.Enqueue(MissionPhase.TEI); break;
+            case ObservedFlightPhase.Entry: _observedPhaseQueue.Enqueue(MissionPhase.ENTRY); break;
+            case ObservedFlightPhase.Landed: _observedPhaseQueue.Enqueue(MissionPhase.LANDED); break;
+        }
+        while (_observedPhaseQueue.Count > 0)
+        {
+            var next = _observedPhaseQueue.Dequeue();
+            if (next <= Phase) continue;
+            SetPhase(next);
+            break;
         }
     }
 

@@ -109,6 +109,64 @@
       "required": true
     }
   ],
+  "procedure": [
+    {
+      "id": "launch",
+      "titleEn": "Launch on the lunar window",
+      "titleEs": "Lanzá en la ventana lunar",
+      "hintEn": "Press [L]: the count holds until the Moon's window opens, then Mission Control flies the Saturn V. Or hold [Z] to fly it yourself.",
+      "hintEs": "Pulsá [L]: la cuenta espera a que abra la ventana de la Luna y Control de Misión vuela el Saturn V. O mantené [Z] para volarlo vos.",
+      "doneWhenPhase": "LIFTOFF"
+    },
+    {
+      "id": "orbit",
+      "titleEn": "Reach the Earth parking orbit",
+      "titleEs": "Llegá a la órbita de estacionamiento",
+      "hintEn": "[G] flies the ascent, [Space] stages. [F3] shows apoapsis and periapsis. [K] hands this step to Mission Control and back.",
+      "hintEs": "[G] vuela el ascenso, [Espacio] separa etapas. [F3] muestra apoapsis y periapsis. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "earth-parking-orbit"
+    },
+    {
+      "id": "tli",
+      "titleEn": "Burn for the Moon (TLI)",
+      "titleEs": "Encendé rumbo a la Luna (TLI)",
+      "hintEn": "Open the map with [M], press [2] to plan the Moon transfer and [Enter] to fly it at the right moment. [K] hands this step to Mission Control and back.",
+      "hintEs": "Abrí el mapa con [M], pulsá [2] para planificar la transferencia a la Luna y [Enter] para ejecutarla en el momento justo. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "translunar-injection"
+    },
+    {
+      "id": "dock",
+      "titleEn": "Transposition and docking with Eagle",
+      "titleEs": "Transposición y acople con el Eagle",
+      "hintEn": "Separate from the S-IVB, turn around and dock with Eagle's port. [K] hands this step to Mission Control and back.",
+      "hintEs": "Separate de la S-IVB, girá y acoplá con el puerto del Eagle. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "columbia-eagle-docking"
+    },
+    {
+      "id": "loi",
+      "titleEn": "Brake into lunar orbit (LOI)",
+      "titleEs": "Frená en órbita lunar (LOI)",
+      "hintEn": "At the closest point to the Moon point retrograde and burn until the orbit closes. [K] hands this step to Mission Control and back.",
+      "hintEs": "En el punto más cercano a la Luna apuntá retrógrado y quemá hasta que la órbita se cierre. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "lunar-orbit-insertion"
+    },
+    {
+      "id": "circular",
+      "titleEn": "Circularize in low lunar orbit",
+      "titleEs": "Circularizá en órbita lunar baja",
+      "hintEn": "Burn retrograde again at the closest point to round the orbit off near 110 km. [K] hands this step to Mission Control and back.",
+      "hintEs": "Volvé a quemar retrógrado en el punto más cercano para redondear la órbita cerca de 110 km. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "circular-lunar-orbit"
+    },
+    {
+      "id": "landing",
+      "titleEn": "Land Eagle on the Moon",
+      "titleEs": "Alunizá el Eagle",
+      "hintEn": "Eagle undocks, lowers its orbit to 15 km and brakes down to the surface; touch down under 3 m/s. [K] hands this step to Mission Control and back.",
+      "hintEs": "El Eagle se desacopla, baja su órbita a 15 km y frena hasta la superficie; tocá a menos de 3 m/s. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "lunar-landing"
+    }
+  ],
   "anomalies": [],
   "rewards": [
     {

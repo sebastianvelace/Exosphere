@@ -95,6 +95,48 @@
       "required": true
     }
   ],
+  "procedure": [
+    {
+      "id": "launch",
+      "titleEn": "Launch the Titan II",
+      "titleEs": "Lanzá el Titan II",
+      "hintEn": "Press [L] for the automatic count; Mission Control flies the launch. Or hold [Z] to light the engines yourself.",
+      "hintEs": "Pulsá [L] para la cuenta automática; Control de Misión vuela el lanzamiento. O mantené [Z] para encender los motores vos.",
+      "doneWhenPhase": "LIFTOFF"
+    },
+    {
+      "id": "orbit",
+      "titleEn": "Reach orbit behind the Agena",
+      "titleEs": "Llegá a la órbita detrás de la Agena",
+      "hintEn": "[G] flies the ascent, [Space] stages. [F3] shows apoapsis and periapsis. [K] hands this step to Mission Control and back.",
+      "hintEs": "[G] vuela el ascenso, [Espacio] separa etapas. [F3] muestra apoapsis y periapsis. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenPhase": "ORBIT"
+    },
+    {
+      "id": "dock",
+      "titleEn": "Rendezvous and dock with the Agena",
+      "titleEs": "Encontrate y acoplá con la Agena",
+      "hintEn": "The Agena is ahead and above: thrust to catch it, then close slowly on its docking cone. [K] hands this step to Mission Control and back.",
+      "hintEs": "La Agena va adelante y arriba: acelerá para alcanzarla y acercate despacio a su cono de acople. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "first-docking"
+    },
+    {
+      "id": "tumble",
+      "titleEn": "Regain control of the tumbling spacecraft",
+      "titleEs": "Recuperá el control de la nave que gira",
+      "hintEn": "A stuck thruster spins the docked stack: undock, switch to the re-entry RCS and damp the roll. [K] hands this step to Mission Control and back.",
+      "hintEs": "Un propulsor trabado hace girar el conjunto: desacoplá, pasá al RCS de reentrada y frená el giro. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "survive-tumble"
+    },
+    {
+      "id": "splashdown",
+      "titleEn": "Emergency return and splashdown",
+      "titleEs": "Regreso de emergencia y amerizaje",
+      "hintEn": "Fire the retros retrograde, keep the heat shield forward and arm the parachutes with [P]. [K] hands this step to Mission Control and back.",
+      "hintEs": "Encendé los retros en retrógrado, mantené el escudo adelante y armá los paracaídas con [P]. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "emergency-return"
+    }
+  ],
   "anomalies": [
     {
       "id": "oams-thruster-8-stuck-on",

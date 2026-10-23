@@ -575,6 +575,17 @@ public partial class MainMenu : Control
                                 if (selectedVariantFile != null)
                                     LaunchCampaignMission(selectedMission, selectedVariantFile, state);
                             }, true, disabled: !playable));
+                            if (selectedMission.Procedure.Count > 0)
+                            {
+                                briefing.AddChild(InterfaceTheme.SectionLabel(UiText.Get("mission_procedure")));
+                                for (int i = 0; i < selectedMission.Procedure.Count; i++)
+                                {
+                                    var step = selectedMission.Procedure[i];
+                                    briefing.AddChild(Description($"{i + 1}. "
+                                        + (spanish ? $"{step.TitleEs} — {step.HintEs}" : $"{step.TitleEn} — {step.HintEn}")));
+                                }
+                                briefing.AddChild(Description(UiText.Get("mission_control_hint")));
+                            }
                             briefing.AddChild(InterfaceTheme.SectionLabel(UiText.Get("mission_objectives")));
                             foreach (var objective in selectedMission.Objectives)
                                 briefing.AddChild(Description("• " + (spanish ? objective.TitleEs : objective.TitleEn)));

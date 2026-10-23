@@ -119,6 +119,32 @@
       "required": false
     }
   ],
+  "procedure": [
+    {
+      "id": "launch",
+      "titleEn": "Launch the Mercury-Redstone",
+      "titleEs": "Lanzá el Mercury-Redstone",
+      "hintEn": "Press [L] for the automatic count; Mission Control flies the launch. Or hold [Z] to light the engines yourself.",
+      "hintEs": "Pulsá [L] para la cuenta automática; Control de Misión vuela el lanzamiento. O mantené [Z] para encender los motores vos.",
+      "doneWhenPhase": "LIFTOFF"
+    },
+    {
+      "id": "space",
+      "titleEn": "Climb above 100 km",
+      "titleEs": "Subí por encima de 100 km",
+      "hintEn": "Keep the nose steady while the Redstone burns; the capsule separates by itself. [K] hands this step to Mission Control and back.",
+      "hintEs": "Mantené la nariz firme mientras quema el Redstone; la cápsula se separa sola. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "reach-space"
+    },
+    {
+      "id": "splashdown",
+      "titleEn": "Splash down in the Atlantic",
+      "titleEs": "Amerizá en el Atlántico",
+      "hintEn": "Keep the heat shield forward, then arm the parachutes with [P]. [K] hands this step to Mission Control and back.",
+      "hintEs": "Mantené el escudo térmico adelante y armá los paracaídas con [P]. [K] le pasa este paso a Control de Misión y te lo devuelve.",
+      "doneWhenObjectiveId": "atlantic-splashdown"
+    }
+  ],
   "anomalies": [],
   "rewards": [
     {

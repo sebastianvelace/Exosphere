@@ -232,6 +232,58 @@ GitHub en verde. Orden por impacto para el jugador:
    worktree), telemetría por cuadro opcional en misiones largas, y un modo de reproducción de
    misiones históricas en CI nocturno con `--until-phase`.
 
+## Experiencia de Jugador (2026-10-22)
+
+El jugador reporta que Apollo 8 y Gemini 8 son "realmente complicadas": no sabe dónde está la
+Luna, cómo aterrizar ni cómo cumplir los objetivos. Un inventario del código lo confirma y va
+más allá. **Volando a mano, los objetivos obligatorios no se pueden cumplir.** Solo el
+director histórico marca las fases TLI, LUNAR_ORBIT y TEI; fuera de él, `LANDED` lo marca
+únicamente el EDL de Starship (amerizaje de cápsula incluido). La Agena solo existe si el
+director vuela, y el director es todo o nada: [L] le entrega la misión entera y no hay forma
+de retomar el control. Tampoco hay teclas de traslación RCS ni lectura de rango/velocidad
+relativa, y el navball solo trae vectores de superficie. El panel de objetivos corta en 6
+filas (Apollo 8 tiene 11) y no existe guía paso a paso. Referencia de diseño: KSP
+(checklists de misión del KSP 2, nodos de maniobra, modos SAS, marcadores de encuentro,
+indicador de alineación de docking, ayudas de aterrizaje tipo KER/MechJeb).
+
+Orden por impacto (cada corte con tests headless y verificación jugando en Godot). Primer
+corte (2026-10-23): 1–5 entregados y probados jugando por Xvfb con teclado simulado. Al jugar
+aparecieron bugs que los tests no ven, y ya están corregidos:
+
+- soltar [K] en el ascenso cortaba el acelerador y el cohete caía;
+- el panel TIME tapaba la guía;
+- la línea lunar se dibujaba en la esquina;
+- retomar con [K] usaba el reloj de campaña, que incluye la cuenta regresiva (10 s adelantado).
+
+Quedan del 5 la fase NC/NSR guiada para el jugador; el 6, el 7 y el 8 están completos por
+hacer.
+
+1. ✅ **Reconocer lo que hace el jugador.** Detector físico de fases (órbita, TLI, aproximación
+   lunar, órbita lunar, TEI, entrada, amerizaje/alunizaje) para vuelo manual, de modo que
+   cualquier forma de llegar cuente para los objetivos.
+2. ✅ **"Mostrame / Tomá el control" por fase.** Una tecla delega la fase actual al director
+   (que ya sabe reanudar desde un estado) y otra devuelve el control; las fases asistidas se
+   marcan como tales en el debrief, no fallan.
+3. ✅ **Guía de misión.** Panel con el paso actual en lenguaje llano, la tecla a usar y los
+   siguientes pasos (procedimiento por misión en el JSON, EN/ES); objetivos sin tope de filas
+   y visibles en todas las vistas.
+4. ✅ **¿Dónde está la Luna?** Marcador de Luna/objetivo en HUD y navball, distancia, cuenta
+   regresiva al encuentro y estado "SOI / MISS" sin abrir el mapa.
+5. ✅ **Kit de rendezvous manual (Gemini).** Agena siempre presente, objetivo seleccionable,
+   rango y velocidad relativa, teclas de traslación RCS, indicador de alineación del puerto
+   y captura real al entrar en el sobre.
+6. **Herramientas de vuelo.** Modos SAS (pro/retro/normal/radial/objetivo/nodo), nodo de
+   maniobra con los tres ejes, tiempo de quemado y "warp al nodo", ejecutores de LOI/TEI,
+   ayudas de aterrizaje (altitud radar, tiempo al impacto, inicio de quemado).
+7. **Práctica y dificultad.** Volver al inicio de la fase, quickload visible, asistencias
+   opcionales (propelente infinito, sin fallas estructurales) puntuadas aparte.
+8. **Entrenamiento.** Misiones cortas aisladas (circularizar, interceptar en LEO, acoplar
+   desde 200 m, alunizar desde 15 km).
+
+Visual en paralelo: ✅ mallas procedurales detalladas de Mercury-Redstone, Atlas, Titan II/Gemini,
+Agena y Saturn V/Apollo/LM (`HistoricalVehicleMeshes`). Pendiente: contrastar libreas contra
+fotos (bandas del Titan, franjas de la Agena, roll pattern del Redstone).
+
 ## Prioridad Inmediata
 
 La prioridad inmediata es cerrar la paridad física antes de activar el integrador acoplado en
