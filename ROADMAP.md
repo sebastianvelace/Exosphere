@@ -311,7 +311,9 @@ rojas sincronizadas, conos de reflectores, venteo criogénico alrededor del veh�
 glow y piso de exposición de "luz práctica". Hay un ajuste de luz de plataforma: día, noche o
 sol real. Pendiente: el terreno satelital y el mar siguen claros de noche (piso nocturno del
 `earth_ground` shader), hay una franja brillante en el horizonte nocturno y falta
-"luz horneada" en el piso.
+"luz horneada" en el piso. ✅ Barra fija de controles (`ControlHintBar`) sobre la banda
+inferior con las teclas de la fase actual: plataforma, ascenso, órbita, docking, descenso o
+Control de Misión volando; Clean la oculta.
 
 Visual en paralelo: ✅ mallas procedurales detalladas de Mercury-Redstone, Atlas, Titan II/Gemini,
 Agena y Saturn V/Apollo/LM (`HistoricalVehicleMeshes`). Pendiente: contrastar libreas contra

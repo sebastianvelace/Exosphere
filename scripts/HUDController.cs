@@ -148,6 +148,8 @@ public partial class HUDController : Control
         AddChild(_landingAid);
         _trainingPanel = new TrainingPanel { Name = "TrainingPanel" };
         AddChild(_trainingPanel);
+        _controlHints = new ControlHintBar { Name = "ControlHintBar" };
+        AddChild(_controlHints);
     }
 
     private void BuildAttitudeCluster()
@@ -204,6 +206,7 @@ public partial class HUDController : Control
     private TargetIndicator _targetIndicator = null!;
     private LandingAidIndicator _landingAid = null!;
     private TrainingPanel _trainingPanel = null!;
+    private ControlHintBar _controlHints = null!;
 
     public override void _ExitTree()
     {
@@ -1238,6 +1241,7 @@ public partial class HUDController : Control
         _targetIndicator.DensityAllowed = instruments;
         _landingAid.DensityAllowed = instruments;
         _trainingPanel.DensityAllowed = instruments;
+        _controlHints.DensityAllowed = instruments;
         _navball.Visible = cluster;
         _navball.ProcessMode = cluster
             ? ProcessModeEnum.Inherit
