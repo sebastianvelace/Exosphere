@@ -841,4 +841,106 @@ public sealed class PhysicsParityIntegrationTests
         }
         throw new InvalidOperationException("Could not locate repository root.");
     }
+
+    [Fact]
+    public void FlapControlledEntryFliesLikeLegacy()
+    {
+        var legacy = CreateEntryCase("legacy-entry", coupled: false);
+        var coupled = CreateEntryCase("coupled-entry", coupled: true);
+        var legacyLog = FlyFlapEntry(legacy);
+        var coupledLog = FlyFlapEntry(coupled);
+        string summary = $"legacy {legacyLog}; coupled {coupledLog}";
+
+        Assert.False(legacy.Vessel.IsDestroyed, summary);
+        Assert.False(coupled.Vessel.IsDestroyed, summary);
+        Assert.True(coupled.Universe.LastCoupled6DofTelemetry.Integrated);
+        // Dynamic pressure must actually build (the flaps fly against a real static moment),
+        // and both paths must hold the 70° belly-first trim on flaps alone.
+        Assert.True(legacyLog.MaxDynamicPressurePa > 1_500.0, summary);
+        Assert.Equal(1.0, legacyLog.FlapActiveFraction, precision: 2);
+        Assert.Equal(1.0, coupledLog.FlapActiveFraction, precision: 2);
+        Assert.True(legacyLog.MaxTrackingErrorDeg < 3.0 && coupledLog.MaxTrackingErrorDeg < 3.0, summary);
+        Assert.True(System.Math.Abs(legacyLog.FinalTrackingErrorDeg - coupledLog.FinalTrackingErrorDeg) < 0.25, summary);
+        Assert.True(System.Math.Abs(legacyLog.MaxAngularRate - coupledLog.MaxAngularRate) < 0.005, summary);
+        // Sixty seconds and ~420 km down-range at 7 km/s: the trajectories stay together.
+        Assert.True(System.Math.Abs(legacyLog.FinalAltitudeM - coupledLog.FinalAltitudeM) < 50.0, summary);
+        Assert.True(System.Math.Abs(legacyLog.FinalSpeedMps - coupledLog.FinalSpeedMps) < 5.0, summary);
+        Assert.True((legacyLog.FinalPosition - coupledLog.FinalPosition).Magnitude < 150.0, summary);
+        Assert.True((legacyLog.FinalVelocity - coupledLog.FinalVelocity).Magnitude < 5.0, summary);
+        Assert.True(System.Math.Abs(legacyLog.MaxDynamicPressurePa - coupledLog.MaxDynamicPressurePa)
+            < 0.02 * legacyLog.MaxDynamicPressurePa, summary);
+    }
+
+    private sealed record FlapEntryLog(
+        double FinalAltitudeM, double FinalSpeedMps, double MaxDynamicPressurePa,
+        double MaxTrackingErrorDeg, double FinalTrackingErrorDeg, double MaxAngularRate,
+        double FlapActiveFraction, Vector3d FinalPosition, Vector3d FinalVelocity);
+
+    private sealed record FlapEntryCase(Universe Universe, CelestialBody Body, Vessel Vessel);
+
+    // Starship Flight 12 V3 Ship at 75 km, 7.3 km/s relative to the air and a -1° flight-path
+    // angle, belly-first at 70° with the lift vector up. The four body flaps (with the
+    // Flight 14 static-moment trim) are the only attitude actuators: engines off, SAS off.
+    private static FlapEntryCase CreateEntryCase(string vesselId, bool coupled)
+    {
+        var root = FindRepoRoot();
+        var data = Path.Combine(root.FullName, "data");
+        var body = CelestialBody.LoadFromJson(Path.Combine(data, "bodies", "earth.json"));
+        var ship = VehicleVariantDefinition.LoadFromJson(Path.Combine(data,
+                "vehicles", "starship_flight12_v3_2026.json"))
+            .Build(PartCatalog.LoadFromDirectory(Path.Combine(data, "parts")))
+            .ToVessel("Entry parity", vesselId);
+        Assert.NotNull(ship.Stage());
+        var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
+        tank.LiquidFuel = 15_000; tank.Oxidizer = 55_000;
+
+        ship.Position = body.GetSurfacePosition(23.0, -178.0, 75_000.0);
+        var up = body.GetGeodeticUp(ship.Position);
+        var east = body.GetEastDirection(ship.Position);
+        double gamma = -1.0 * MathUtils.DEG_TO_RAD;
+        var flow = (east * System.Math.Cos(gamma) + up * System.Math.Sin(gamma)).Normalized;
+        ship.Velocity = body.Velocity + body.GetSurfaceVelocity(ship.Position) + flow * 7_300.0;
+        ship.Orientation = EntryReference(ship, body);
+        ship.ReferenceBodyId = body.Id;
+        ship.Throttle = 0.0;
+        ship.SASEnabled = false;
+
+        var universe = new Universe { ActiveVessel = ship, Coupled6DofIntegrationEnabled = coupled };
+        universe.AddBody(body);
+        universe.AddVessel(ship);
+        return new FlapEntryCase(universe, body, ship);
+    }
+
+    private static Quaterniond EntryReference(Vessel ship, CelestialBody body)
+    {
+        var up = body.GetGeodeticUp(ship.Position);
+        var flow = ship.GetSurfaceVelocity(body).Normalized;
+        var lift = up - flow * up.Dot(flow);
+        return AerodynamicsModel.ComputeBellyFirstOrientation(
+            AerodynamicsModel.ComputeEntryAxisForLift(flow, lift, 70.0), flow);
+    }
+
+    private static FlapEntryLog FlyFlapEntry(FlapEntryCase run)
+    {
+        const double dt = 0.02;
+        var (universe, body, ship) = (run.Universe, run.Body, run.Vessel);
+        double maxQ = 0.0, maxError = 0.0, maxRate = 0.0, flapActive = 0.0, error = 0.0;
+        int steps = 0;
+        for (int i = 0; i < 3_000 && !ship.IsDestroyed; i++)
+        {
+            var reference = EntryReference(ship, body);
+            error = AttitudeGuidance.ErrorAngleRadians(ship.Orientation, reference) * MathUtils.RAD_TO_DEG;
+            // Tracking is scored after the 5 s flap-servo settle from the seeded pose.
+            if (i >= 250) maxError = System.Math.Max(maxError, error);
+            ship.PitchYawRoll = Flight14AerodynamicAttitude.ComputeCommand(ship, body, reference, 250, 1000);
+            universe.Tick(dt);
+            maxQ = System.Math.Max(maxQ, ship.GetDynamicPressure(body));
+            maxRate = System.Math.Max(maxRate, ship.AngularVelocity.Magnitude);
+            flapActive += ship.FlapActuators.IsZero ? 0.0 : 1.0;
+            steps++;
+        }
+        return new FlapEntryLog(body.GetAltitude(ship.Position),
+            ship.GetSurfaceVelocity(body).Magnitude, maxQ, maxError, error, maxRate,
+            flapActive / System.Math.Max(1, steps), ship.Position, ship.Velocity);
+    }
 }

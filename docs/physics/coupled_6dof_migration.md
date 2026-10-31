@@ -138,6 +138,15 @@ historical directors, not as a tolerance change.
     3 cm and 0.001 m/s at T+40 s (was ~0.9 m), with a new mid-flip check on the datum velocity
     (≤ 0.25 m/s at T+2 s while rotating); its tolerances were tightened to 0.5 m / 0.1 m/s.
 
+26. `test(physics): add flap-controlled entry parity gate` — the Flight 12 V3 Ship enters at
+    75 km, 7.3 km/s and −1°, belly-first at 70° with lift up, engines off and SAS off; the four
+    body flaps with the Flight 14 static-moment trim are the only attitude actuators. After
+    60 s (~420 km down-range, dynamic pressure building to ~2.2 kPa) the paths end 7 m apart in
+    altitude, 0.9 m/s in speed and ~25 m in position, both hold the trim within 0.93°, and peak
+    angular rates match to 0.0001 rad/s. Gates: 50 m, 5 m/s, 150 m, 3° tracking, 2% peak q.
+    This is the first evidence that the coupled RK4 does not need the legacy post-aero rate
+    envelope under entry dynamic pressure.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -184,13 +193,13 @@ long-duration fault management.
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
-- With one inertia model (step 22), the 30 s ascent gate (step 23) and the terminal descent gate
-  (step 24), remaining gates are a full production ascent through staging and an entry from the
-  interface with flap control. The legacy tick rotates about the centre of mass in free flight
-  (step 25).
+- With one inertia model (step 22), the 30 s ascent gate (step 23), the terminal descent gate
+  (step 24), the centre-of-mass pivot (step 25) and the 60 s flap entry gate (step 26), remaining
+  gates are a full production ascent through staging and a full entry from the interface
+  through the transonic flip (the 60 s gate covers the hypersonic segment only).
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
-  envelope is intentionally not ported; EDL parity must confirm the RK4 integrator does not
-  need it under high dynamic pressure.
+  envelope is intentionally not ported; the hypersonic flap entry gate (step 26) shows the RK4
+  integrator does not need it there, and the transonic/subsonic segment must still confirm it.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
   Contact gates (gear and cradle) are closed (step 21); a controlled descent from the flip to
   contact still needs the inertia unification first.
