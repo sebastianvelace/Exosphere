@@ -8,6 +8,7 @@
   "mass_dry": 38000,
   "length_m": 19.0,
   "diameter_m": 9.0,
+  "nose_length_m": 14.0,
   "cost": 54000,
   "drag_coefficient": 0.25,
   "axial_drag_coefficient": 0.45,

@@ -116,7 +116,7 @@ public sealed class DistributedAerodynamicsTests
         var graph = Stack(Segment("body", 40.0, 4.0, nose: 8.0));
         var forward = Evaluate(graph, Flow(5.0), centerOfMass: new Vector3d(0, 20, 0)).TorqueBody;
         var backward = Evaluate(graph, -Flow(5.0), centerOfMass: new Vector3d(0, 20, 0)).TorqueBody;
-        Assert.NotEqual(System.Math.Sign(forward.Z), 0);
+        Assert.NotEqual(0, System.Math.Sign(forward.Z));
         Assert.True(System.Math.Abs(forward.Z - backward.Z) > 1e-6, $"{forward} vs {backward}");
     }
 }

@@ -106,7 +106,12 @@ public sealed class CatchContactTests
     {
         var legacy = CreateCatchCase(verticalSpeed, lateralOffset);
         var coupled = CreateCatchCase(verticalSpeed, lateralOffset);
+        // Integrator parity on one force model: the legacy baseline must really be the
+        // split tick, and both sides use the aggregate aerodynamics it understands.
+        legacy.universe.Coupled6DofIntegrationEnabled = false;
+        legacy.universe.DistributedAerodynamicsEnabled = false;
         coupled.universe.Coupled6DofIntegrationEnabled = true;
+        coupled.universe.DistributedAerodynamicsEnabled = false;
 
         for (int i = 0; i < 3_000; i++)
         {

@@ -155,6 +155,13 @@ public class Universe
     /// </summary>
     public bool Coupled6DofIntegrationEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Per-part distributed aerodynamics on the coupled path (F1). Off by default until every
+    /// historical profile is recalibrated against it; the aggregate drag/lift/centre-of-pressure
+    /// model stays the baseline the integrator parity gates compare on.
+    /// </summary>
+    public bool DistributedAerodynamicsEnabled { get; set; }
+
     /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
     public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }
 
@@ -2565,7 +2572,8 @@ public class Universe
                             refBody,
                             externalForceWorld: contactForce
                                 - frameAcceleration * massProperties.Mass,
-                            externalTorqueWorld: contactTorque);
+                            externalTorqueWorld: contactTorque,
+                            distributedAerodynamics: DistributedAerodynamicsEnabled);
                         return Physics.RigidBodyForceEvaluator.Evaluate(
                             vessel, absolute, context, massProperties);
                     });

@@ -420,6 +420,7 @@ public class PartGraph
 
         _tickTotalMass = 0.0;
         _tickCenterOfMass = Vector3d.Zero;
+        double positionedMass = 0.0;
         if (_root != null)
         {
             var positions = GetCachedPartLocalPositions();
@@ -428,11 +429,12 @@ public class PartGraph
                 var part = _parts[i];
                 double mass = part.CurrentMass;
                 _tickTotalMass += mass;
-                if (positions.TryGetValue(part, out var position))
-                    _tickCenterOfMass += position * mass;
+                if (!positions.TryGetValue(part, out var position)) continue;
+                _tickCenterOfMass += position * mass;
+                positionedMass += mass;
             }
-            if (_tickTotalMass > 0.0)
-                _tickCenterOfMass /= _tickTotalMass;
+            if (positionedMass > 0.0)
+                _tickCenterOfMass /= positionedMass;
         }
 
         if (_tickTotalMass > 0.0)
@@ -568,6 +570,15 @@ public class PartGraph
 
     // Positions depend on topology and geometry only, so ticks share the topology cache.
     private Dictionary<Part, Vector3d> GetCachedPartLocalPositions() => GetTopologyPartLocalPositions();
+
+    /// <summary>
+    /// True when this body's aerodynamics come from its part geometry
+    /// (<see cref="GetAeroElements"/>). Capsules keep their trimmed blunt-body model, and a
+    /// root flying alone with a declared standalone static margin (Super Heavy's grid fins,
+    /// not yet modelled as surfaces) keeps that margin.
+    /// </summary>
+    public bool UsesDistributedAerodynamics =>
+        CapsuleAerodynamics == null && _root?.Definition.StandaloneAerodynamicCenterOffsetYM == null;
 
     private readonly List<Physics.AeroElement> _aeroElements = new();
     private bool _aeroElementsValid;
@@ -763,16 +774,19 @@ public class PartGraph
                 return _tickCenterOfMass;
             }
 
-            double totalMass = TotalMass;
-            if (totalMass <= 0.0 || _root == null) return Vector3d.Zero;
+            if (_root == null) return Vector3d.Zero;
+            // Same rule as BuildMassProperties: only parts placed in the stack frame carry a
+            // position; an unattached part must not drag the centre toward the datum.
             var positions = GetTopologyPartLocalPositions();
             var com = Vector3d.Zero;
+            double positionedMass = 0.0;
             foreach (var p in _parts)
             {
-                if (positions.TryGetValue(p, out var pos))
-                    com = com + pos * p.CurrentMass;
+                if (!positions.TryGetValue(p, out var pos)) continue;
+                com = com + pos * p.CurrentMass;
+                positionedMass += p.CurrentMass;
             }
-            return com / totalMass;
+            return positionedMass > 0.0 ? com / positionedMass : Vector3d.Zero;
         }
     }
 

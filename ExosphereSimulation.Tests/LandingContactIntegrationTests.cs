@@ -103,7 +103,12 @@ public sealed class LandingContactIntegrationTests
     {
         var legacy = CreateLandingCase(verticalSpeed, lateralSpeed);
         var coupled = CreateLandingCase(verticalSpeed, lateralSpeed);
+        // Integrator parity on one force model: the legacy baseline must really be the
+        // split tick, and both sides use the aggregate aerodynamics it understands.
+        legacy.universe.Coupled6DofIntegrationEnabled = false;
+        legacy.universe.DistributedAerodynamicsEnabled = false;
         coupled.universe.Coupled6DofIntegrationEnabled = true;
+        coupled.universe.DistributedAerodynamicsEnabled = false;
         double peakLegacyLoad = 0.0;
         double peakCoupledLoad = 0.0;
         foreach (var vessel in new[] { legacy.vessel, coupled.vessel })
@@ -169,13 +174,19 @@ public sealed class LandingContactIntegrationTests
             MassDry = 241_000.0,
             LengthM = 50.0,
             DiameterM = 9.0,
+            AttachmentNodes =
+            [
+                new AttachmentNodeDef { Id = "bottom", Position = [0.0, -25.0, 0.0], Size = 3 },
+            ],
         });
         var gearDefinition = PartDefinition.LoadFromJson(Path.Combine(
             FindRepoRoot().FullName, "data", "parts", "starship_landing_gear.json"));
         var gear = new Part(gearDefinition) { IsDeployed = true };
         vessel.Parts.SetRoot(command);
         vessel.Parts.AddPart(command);
-        vessel.Parts.AddPart(gear);
+        // The gear sits on the skirt: a joint places it in the stack frame, so every
+        // centre-of-mass query sees the same mass distribution.
+        vessel.Parts.AddJoint(new Joint(command, gear, "bottom", "top"));
         vessel.ConfigureLandingContactsFromParts();
 
         var surface = body.GetSurfacePosition(0.0, 0.0, 8.1);

@@ -94,7 +94,6 @@ public class Vessel
 
     // ── Physical landing contact ─────────────────────────────────────────
     private ContactPointDefinition[] _landingContactPoints = [];
-    private Vector3d _landingCenterOfMassFromDatumLocal = Vector3d.Zero;
     public IReadOnlyList<ContactPointDefinition> LandingContactPoints => _landingContactPoints;
     public ContactWrench? LastSurfaceContact { get; internal set; }
     public Vector3d LastContactForceWorld { get; internal set; } = Vector3d.Zero;
@@ -257,7 +256,6 @@ public class Vessel
         if (gear == null)
         {
             _landingContactPoints = [];
-            _landingCenterOfMassFromDatumLocal = Vector3d.Zero;
             return;
         }
 
@@ -288,12 +286,6 @@ public class Vessel
                 MaxCompressionM: System.Math.Max(0.0, def.SuspensionTravelM),
                 MaxLoadN: System.Math.Max(0.0, def.MaxLoad));
         }).ToArray();
-
-        // pointFromDatum - pointFromCom = comFromDatum
-        _landingCenterOfMassFromDatumLocal = new Vector3d(
-            0.0,
-            def.ContactOffsetYM - def.ContactComOffsetYM,
-            0.0);
     }
 
     // Contact tuning for a mechanical tower catch: much stiffer/less compliant than a
@@ -360,15 +352,20 @@ public class Vessel
         ];
     }
 
-    public RigidBodyContactInput GetContactInput(Vector3d position, Vector3d velocity) => new(
-        DatumPositionWorld: position,
-        CenterOfMassPositionWorld: position + Orientation.Rotate(_landingCenterOfMassFromDatumLocal),
-        // The integrator advances the vessel datum with velocity. Transport that
-        // velocity to the CoM before the solver transports it back to each foot.
-        CenterOfMassVelocityWorld: velocity
-            + AngularVelocity.Cross(Orientation.Rotate(_landingCenterOfMassFromDatumLocal)),
-        Orientation: Orientation,
-        AngularVelocityWorld: AngularVelocity);
+    public RigidBodyContactInput GetContactInput(Vector3d position, Vector3d velocity)
+    {
+        // The part frame and the contact datum share one origin, so the real centre of mass
+        // gives the feet's moment arms (it replaces the gear's declared CoM estimate).
+        var centerOfMassOffset = Orientation.Rotate(CenterOfMassOffsetLocal);
+        return new(
+            DatumPositionWorld: position,
+            CenterOfMassPositionWorld: position + centerOfMassOffset,
+            // The integrator advances the vessel datum with velocity. Transport that
+            // velocity to the CoM before the solver transports it back to each foot.
+            CenterOfMassVelocityWorld: velocity + AngularVelocity.Cross(centerOfMassOffset),
+            Orientation: Orientation,
+            AngularVelocityWorld: AngularVelocity);
+    }
 
     /// <summary>
     /// Builds contact input from the coupled integrator's centre-of-mass state. The returned
@@ -666,6 +663,19 @@ public class Vessel
     // Fuerza aerodinámica evaluada en un estado (pos, vel) arbitrario (para subpasos RK4).
     // Delega en AerodynamicsModel: drag orientación-dependiente (cilindro de 9 m, Cd y área
     // blend axial↔broadside, pico transónico) más la sustentación de cuerpo CL=CLmax·sin(2α).
+    /// <summary>Drag of deployed parachutes only (N, world), for the distributed aero path.</summary>
+    public Vector3d ComputeParachuteDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
+    {
+        if (body.Atmosphere == null) return Vector3d.Zero;
+        double density = body.Atmosphere.GetDensity(body.GetAltitude(pos));
+        var surfVel = vel - body.Velocity - body.GetSurfaceVelocity(pos);
+        double speed = surfVel.Magnitude;
+        double area = GetDeployedParachuteDragArea(body, pos);
+        return density <= 0.0 || speed < 0.001 || area <= 0.0
+            ? Vector3d.Zero
+            : -surfVel.Normalized * (0.5 * density * speed * speed * area);
+    }
+
     public Vector3d ComputeDragAt(Vector3d pos, Vector3d vel, CelestialBody body) =>
         ComputeDragAt(pos, vel, Orientation, body);
 

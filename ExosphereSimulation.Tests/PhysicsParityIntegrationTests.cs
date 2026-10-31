@@ -522,7 +522,7 @@ public sealed class PhysicsParityIntegrationTests
         engines.SelectEngineCount(System.Math.Min(3, engines.Definition.EngineCount));
         vessel.Throttle = 1.0;
 
-        var universe = new Universe { ActiveVessel = vessel, Coupled6DofIntegrationEnabled = coupled };
+        var universe = new Universe { ActiveVessel = vessel, Coupled6DofIntegrationEnabled = coupled, DistributedAerodynamicsEnabled = false };
         universe.AddBody(body);
         universe.AddVessel(vessel);
         // Engines already lit for the flip, as in the flown sequence.
@@ -722,7 +722,7 @@ public sealed class PhysicsParityIntegrationTests
         var universe = new Universe
         {
             ActiveVessel = vessel,
-            Coupled6DofIntegrationEnabled = coupled,
+            Coupled6DofIntegrationEnabled = coupled, DistributedAerodynamicsEnabled = false,
         };
         universe.AddBody(body);
         universe.AddVessel(vessel);
@@ -765,7 +765,7 @@ public sealed class PhysicsParityIntegrationTests
         var universe = new Universe
         {
             ActiveVessel = vessel,
-            Coupled6DofIntegrationEnabled = coupled,
+            Coupled6DofIntegrationEnabled = coupled, DistributedAerodynamicsEnabled = false,
         };
         universe.AddBody(body);
         universe.AddVessel(vessel);
@@ -934,7 +934,7 @@ public sealed class PhysicsParityIntegrationTests
         ship.Throttle = 0.0;
         ship.SASEnabled = false;
 
-        var universe = new Universe { ActiveVessel = ship, Coupled6DofIntegrationEnabled = coupled };
+        var universe = new Universe { ActiveVessel = ship, Coupled6DofIntegrationEnabled = coupled, DistributedAerodynamicsEnabled = false };
         universe.AddBody(body);
         universe.AddVessel(ship);
         return new FlapEntryCase(universe, body, ship, angleDeg);
@@ -1098,7 +1098,7 @@ public sealed class PhysicsParityIntegrationTests
         var data = Path.Combine(FindRepoRoot().FullName, "data");
         var earth = CelestialBody.LoadFromJson(Path.Combine(data, "bodies", "earth.json"));
         earth.Position = Vector3d.Zero; earth.Velocity = Vector3d.Zero; earth.OrbitalElements = null;
-        var universe = new Universe { Coupled6DofIntegrationEnabled = coupled };
+        var universe = new Universe { Coupled6DofIntegrationEnabled = coupled, DistributedAerodynamicsEnabled = false };
         universe.AddBody(earth);
         var run = Flight14LaunchDiagnostic.Create(data, universe);
         var (ship, controller) = (run.Ship, run.Controller);
@@ -1181,7 +1181,7 @@ public sealed class PhysicsParityIntegrationTests
         ship.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
             AerodynamicsModel.ComputeEntryAxisForLift(flow, Vector3d.Right, 90), flow);
         ship.ReferenceBodyId = body.Id; ship.SASEnabled = false;
-        var universe = new Universe { Coupled6DofIntegrationEnabled = coupled };
+        var universe = new Universe { Coupled6DofIntegrationEnabled = coupled, DistributedAerodynamicsEnabled = false };
         universe.AddBody(body); universe.AddVessel(ship); universe.ActiveVessel = ship;
         var definition = Flight14LandingDefinition.LoadFromJson(Path.Combine(data,
             "flight_profiles", "starship_flight14_landing_estimate.json"));

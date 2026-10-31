@@ -13,13 +13,17 @@ public readonly struct RigidBodyForceContext
     public CelestialBody? ReferenceBody { get; }
     public Vector3d ExternalForceWorld { get; }
     public Vector3d ExternalTorqueWorld { get; }
+    /// <summary>Per-part distributed aerodynamics (default); false selects the aggregate model.</summary>
+    public bool DistributedAerodynamics { get; }
 
     public RigidBodyForceContext(
         IReadOnlyList<CelestialBody> bodies,
         CelestialBody? referenceBody = null,
         Vector3d externalForceWorld = default,
-        Vector3d externalTorqueWorld = default)
+        Vector3d externalTorqueWorld = default,
+        bool distributedAerodynamics = true)
     {
+        DistributedAerodynamics = distributedAerodynamics;
         Bodies = bodies ?? throw new ArgumentNullException(nameof(bodies));
         ReferenceBody = referenceBody;
         ExternalForceWorld = externalForceWorld;
@@ -65,7 +69,29 @@ public static class RigidBodyForceEvaluator
         var propulsionBody = vessel.Parts.GetTotalThrust(pressure) + vessel.GetRcsTranslationThrustLocal();
         forceWorld += state.Orientation.Rotate(propulsionBody);
 
-        if (context.ReferenceBody != null)
+        Vector3d distributedTorqueBody = Vector3d.Zero;
+        bool distributed = context.DistributedAerodynamics && context.ReferenceBody?.Atmosphere != null
+            && vessel.Parts.UsesDistributedAerodynamics;
+        if (distributed)
+        {
+            var body = context.ReferenceBody!;
+            double altitude = body.GetAltitude(state.Position);
+            var air = state.Velocity - body.Velocity - body.GetSurfaceVelocity(state.Position);
+            var wrench = DistributedAerodynamics.Evaluate(
+                vessel.Parts.GetAeroElements(),
+                state.Orientation,
+                state.AngularVelocityWorld,
+                massProperties.CenterOfMassBody,
+                air,
+                body.Atmosphere!.GetDensity(altitude),
+                System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude)),
+                vessel.MaximumDiameter,
+                vessel.Parts.AxialDragCoefficient,
+                body.Atmosphere.SoundSpeedConstant);
+            forceWorld += wrench.ForceWorld + vessel.ComputeParachuteDragAt(state.Position, state.Velocity, body);
+            distributedTorqueBody = wrench.TorqueBody;
+        }
+        else if (context.ReferenceBody != null)
         {
             forceWorld += vessel.ComputeDragAt(
                 state.Position,
@@ -81,9 +107,28 @@ public static class RigidBodyForceEvaluator
         torqueBody += state.Orientation.Inverse().Rotate(context.ExternalTorqueWorld);
         torqueBody += vessel.DisturbanceTorqueBody;
         torqueBody += vessel.CoupledRcsFloorTorqueBody;
-        torqueBody += ComputeAerodynamicTorqueBody(vessel, state, context.ReferenceBody, massProperties);
+        torqueBody += distributed
+            ? distributedTorqueBody + ComputeFlapTorqueBody(vessel, state, context.ReferenceBody!, massProperties)
+            : ComputeAerodynamicTorqueBody(vessel, state, context.ReferenceBody, massProperties);
 
         return new RigidBodyForces(forceWorld, torqueBody);
+    }
+
+    /// <summary>Body-flap control moment (the flaps are modelled as aggregate surfaces until F2).</summary>
+    private static Vector3d ComputeFlapTorqueBody(
+        Vessel vessel,
+        in RigidBody6DofState state,
+        CelestialBody body,
+        RigidBodyMassProperties massProperties)
+    {
+        if (vessel.FlapActuators.IsZero || !vessel.HasFunctionalBodyFlaps()) return Vector3d.Zero;
+        double altitude = body.GetAltitude(state.Position);
+        double density = body.Atmosphere!.GetDensity(altitude);
+        var air = state.Velocity - body.Velocity - body.GetSurfaceVelocity(state.Position);
+        var angularAccelerationWorld = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
+            density, air, state.Orientation, vessel.FlapActuators,
+            vessel.VehicleLength, vessel.MaximumDiameter, vessel.Parts.TransverseMomentOfInertia);
+        return massProperties.InertiaBody.Multiply(state.Orientation.Inverse().Rotate(angularAccelerationWorld));
     }
 
     private static Vector3d ComputeAerodynamicTorqueBody(
