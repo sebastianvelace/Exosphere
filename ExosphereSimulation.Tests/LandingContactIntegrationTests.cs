@@ -95,6 +95,51 @@ public sealed class LandingContactIntegrationTests
         Assert.True(vessel.LastSurfaceContact!.Points.Max(p => p.NormalLoadN) < 2_500_000.0);
     }
 
+    [Theory]
+    [InlineData(-1.5, 0.8, 0.0)]
+    [InlineData(-2.2, 1.3, 2.5)]
+    public void CoupledTouchdownSettlesLikeLegacyOnTheSameGear(
+        double verticalSpeed, double lateralSpeed, double tiltDegrees)
+    {
+        var legacy = CreateLandingCase(verticalSpeed, lateralSpeed);
+        var coupled = CreateLandingCase(verticalSpeed, lateralSpeed);
+        coupled.universe.Coupled6DofIntegrationEnabled = true;
+        double peakLegacyLoad = 0.0;
+        double peakCoupledLoad = 0.0;
+        foreach (var vessel in new[] { legacy.vessel, coupled.vessel })
+            vessel.Orientation = Quaterniond.FromAxisAngle(
+                Vector3d.Forward, tiltDegrees * MathUtils.DEG_TO_RAD) * vessel.Orientation;
+
+        for (int i = 0; i < 2_000; i++)
+        {
+            if (!legacy.vessel.IsSurfaceSettled && !legacy.vessel.IsDestroyed)
+                legacy.universe.Tick(0.005);
+            if (!coupled.vessel.IsSurfaceSettled && !coupled.vessel.IsDestroyed)
+                coupled.universe.Tick(0.005);
+            peakLegacyLoad = System.Math.Max(peakLegacyLoad,
+                legacy.vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0);
+            peakCoupledLoad = System.Math.Max(peakCoupledLoad,
+                coupled.vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0);
+            if (legacy.vessel.IsSurfaceSettled && coupled.vessel.IsSurfaceSettled) break;
+        }
+
+        Assert.False(coupled.vessel.IsDestroyed);
+        Assert.True(coupled.vessel.IsSurfaceSettled, "coupled gear never reached the settled gate");
+        Assert.True(legacy.vessel.IsSurfaceSettled);
+        Assert.True(coupled.universe.LastCoupled6DofTelemetry.Integrated);
+        Assert.InRange(
+            System.Math.Abs(legacy.body.GetAltitude(legacy.vessel.Position)
+                - coupled.body.GetAltitude(coupled.vessel.Position)), 0.0, 0.25);
+        double tiltError = 2.0 * System.Math.Acos(System.Math.Min(1.0, System.Math.Abs(
+            Dot(legacy.vessel.Orientation, coupled.vessel.Orientation))));
+        Assert.True(tiltError < 0.02, $"settled attitude differs by {tiltError} rad");
+        Assert.True(peakCoupledLoad < 2_500_000.0, $"coupled peak foot load {peakCoupledLoad}");
+        Assert.InRange(peakCoupledLoad / peakLegacyLoad, 0.75, 1.25);
+    }
+
+    private static double Dot(Quaterniond a, Quaterniond b) =>
+        a.X * b.X + a.Y * b.Y + a.Z * b.Z + a.W * b.W;
+
     [Fact]
     public void LandingGearDataUsesExplicitSiContactParameters()
     {

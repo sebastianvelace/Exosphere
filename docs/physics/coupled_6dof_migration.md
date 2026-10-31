@@ -54,6 +54,13 @@ integrator without changing the production scheduler by default.
     vessel ignored attitude commands, SAS never damped a residual rate, and a held full
     command spun Flight 7 to 0.87 rad/s instead of saturating at 0.35 rad/s.
 
+21. `test(physics): add touchdown and tower-catch contact parity gates` — the six-leg Starship
+    gear (nominal drop and the measured EDL pre-contact state with lateral drift and 2.5° tilt)
+    and the two-pin tower cradle (centred and 1.2 m offset) settle on both paths: final altitude
+    or position within 0.25 m, settled attitude within 0.02 rad, peak foot load within ±25%,
+    and the same caught/settled gates. These are contact gates from a short pre-contact state;
+    they do not yet replace a controlled descent-to-contact parity run.
+
 ## Inertia-model divergence (blocks longer parity gates)
 
 A 30 s guided Flight 7 ascent with SAS windows ends with matching attitude (0.0025 rad) and
@@ -131,3 +138,5 @@ long-duration fault management.
   envelope is intentionally not ported; EDL parity must confirm the RK4 integrator does not
   need it under high dynamic pressure.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
+  Contact gates (gear and cradle) are closed (step 21); a controlled descent from the flip to
+  contact still needs the inertia unification first.
