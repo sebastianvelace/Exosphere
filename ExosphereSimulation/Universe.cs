@@ -2353,20 +2353,39 @@ public class Universe
             (contactBefore?.TorqueWorld ?? Vector3d.Zero) + (catchContactBefore?.TorqueWorld ?? Vector3d.Zero)
                 + (waterBefore?.TorqueWorld ?? Vector3d.Zero);
 
+        // In free flight the rigid body turns about its centre of mass, not the datum (the
+        // aft skirt). Carry the centre of mass through the attitude update and the
+        // translational RK4, then rebuild the datum with the step-start offset, exactly as
+        // the coupled path does, so propellant drain moving the centre of mass never moves
+        // the structure. Under contact this split path applies the contact torque once per
+        // step, outside RK4; a vehicle on its legs or pins pivots about the loaded contact,
+        // so it keeps the datum pivot there (the coupled path co-integrates both instead).
+        bool contactPivot = (contactBefore?.ContactCount ?? 0) > 0
+            || (catchContactBefore?.ContactCount ?? 0) > 0
+            || waterBefore is not null;
+        Vector3d comFromDatumLocal = contactPivot ? Vector3d.Zero : vessel.Parts.CenterOfMass;
+        Vector3d startComOffsetWorld = vessel.Orientation.Rotate(comFromDatumLocal);
+        Vector3d relativeComPosition = relativePosition + startComOffsetWorld;
+        Vector3d relativeComVelocity = relativeVelocity
+            + vessel.AngularVelocity.Cross(startComOffsetWorld);
+
         vessel.Position = framedPosition;
         vessel.Velocity = framedVelocity;
         vessel.Tick(dt, refBody, vessel.LastContactTorqueWorld);
+        Vector3d comOffsetWorld = vessel.Orientation.Rotate(comFromDatumLocal);
+        Vector3d rotationVelocity = vessel.AngularVelocity.Cross(comOffsetWorld);
         Vector3d frameAcceleration =
             GetReferenceBodyRailAcceleration(refBody);
-        (relativePosition, relativeVelocity) = RK4Integrator.StepPosVel(
-            relativePosition,
-            relativeVelocity,
+        (relativeComPosition, relativeComVelocity) = RK4Integrator.StepPosVel(
+            relativeComPosition,
+            relativeComVelocity,
             CurrentTime,
             dt,
-            (relativePos, relativeVel, _) =>
+            (relativeCom, relativeComVel, _) =>
             {
-                Vector3d position = refBody.Position + relativePos;
-                Vector3d velocity = refBody.Velocity + relativeVel;
+                Vector3d position = refBody.Position + relativeCom - comOffsetWorld;
+                Vector3d comVelocity = refBody.Velocity + relativeComVel;
+                Vector3d velocity = comVelocity - rotationVelocity;
                 var stageWater = EvaluateWaterContact(vessel, refBody, position, velocity, evaluationTime);
                 var stageContact = EvaluateLandingContact(
                     vessel, refBody, position, velocity);
@@ -2378,12 +2397,12 @@ public class Universe
                         + (stageWater?.ForceWorld ?? Vector3d.Zero)) / vessel.TranslationalMassKg
                     : Vector3d.Zero;
                 return vessel.ComputeNetAccelerationAt(
-                        position, velocity, _bodies, refBody)
+                        position, comVelocity, _bodies, refBody)
                     - frameAcceleration
                     + contactAcceleration;
             });
-        vessel.Position = refBody.Position + relativePosition;
-        vessel.Velocity = refBody.Velocity + relativeVelocity;
+        vessel.Position = refBody.Position + relativeComPosition - comOffsetWorld;
+        vessel.Velocity = refBody.Velocity + relativeComVelocity - rotationVelocity;
 
         var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
         UpdateLandingContactState(vessel, refBody, contactAfter, dt);

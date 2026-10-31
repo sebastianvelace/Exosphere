@@ -461,8 +461,13 @@ public sealed class PhysicsParityIntegrationTests
         // settle time is deliberately not compared: the discrete 3→2→1 engine step-down and the
         // 40% throttle floor turn a one-metre altitude difference into a hover of several
         // seconds, which is controller branching, not integrator divergence.
-        Assert.True(System.Math.Abs(legacyLog.AltitudeAt40 - coupledLog.AltitudeAt40) <= 3.0, summary);
-        Assert.True(System.Math.Abs(legacyLog.DescentRateAt40 - coupledLog.DescentRateAt40) <= 0.5, summary);
+        Assert.True(System.Math.Abs(legacyLog.AltitudeAt40 - coupledLog.AltitudeAt40) <= 0.5, summary);
+        Assert.True(System.Math.Abs(legacyLog.DescentRateAt40 - coupledLog.DescentRateAt40) <= 0.1, summary);
+        // Mid-flip (T+2 s, still rotating): both paths turn about the centre of mass, so the
+        // reported datum (skirt) velocity carries the same ω×r term on both.
+        double flipVelocityGap = (legacyLog.DatumVelocityAt2 - coupledLog.DatumVelocityAt2).Magnitude;
+        Assert.True(legacyLog.AngularRateAt2 > 0.05, $"not rotating at T+2 s: {legacyLog.AngularRateAt2:F3}");
+        Assert.True(flipVelocityGap <= 0.25, $"mid-flip datum velocity gap {flipVelocityGap:F3} m/s; {summary}");
         // Contact outcome: both soft, upright and inside the gear's structural envelope.
         Assert.True(legacyLog.ContactSpeed < 3.0 && coupledLog.ContactSpeed < 3.0, summary);
         Assert.True(legacyLog.SettledTiltRad < 0.05 && coupledLog.SettledTiltRad < 0.05, summary);
@@ -473,7 +478,8 @@ public sealed class PhysicsParityIntegrationTests
 
     private sealed record TerminalDescentLog(
         double ContactSpeed, double PeakFootLoad, double SettledTiltRad,
-        double AltitudeAt40, double DescentRateAt40);
+        double AltitudeAt40, double DescentRateAt40,
+        Vector3d DatumVelocityAt2, double AngularRateAt2);
 
     private sealed record TerminalDescentCase(Universe Universe, CelestialBody Body, Vessel Vessel, Part Engines);
 
@@ -530,6 +536,8 @@ public sealed class PhysicsParityIntegrationTests
         var (universe, body, vessel, engines) = (run.Universe, run.Body, run.Vessel, run.Engines);
         double contactSpeed = double.NaN, peakLoad = 0.0;
         double altitudeAt40 = double.NaN, descentRateAt40 = double.NaN;
+        Vector3d datumVelocityAt2 = Vector3d.Zero;
+        double angularRateAt2 = double.NaN;
         int selected = System.Math.Min(3, engines.Definition.EngineCount);
         for (int i = 0; i < 6_000 && !vessel.IsSurfaceSettled && !vessel.IsDestroyed; i++)
         {
@@ -539,6 +547,7 @@ public sealed class PhysicsParityIntegrationTests
             double vDown = -surfaceVelocity.Dot(up);
             var axis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
             if (i == 2_000) { altitudeAt40 = altitude; descentRateAt40 = vDown; }
+            if (i == 100) { datumVelocityAt2 = surfaceVelocity; angularRateAt2 = vessel.AngularVelocity.Magnitude; }
 
             if (vessel.HasSurfaceContact)
             {
@@ -582,7 +591,8 @@ public sealed class PhysicsParityIntegrationTests
         var finalUp = body.GetGeodeticUp(vessel.Position);
         double settledTilt = System.Math.Acos(System.Math.Clamp(
             vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(finalUp), -1, 1));
-        return new TerminalDescentLog(contactSpeed, peakLoad, settledTilt, altitudeAt40, descentRateAt40);
+        return new TerminalDescentLog(contactSpeed, peakLoad, settledTilt, altitudeAt40, descentRateAt40,
+            datumVelocityAt2, angularRateAt2);
     }
 
     [Fact]

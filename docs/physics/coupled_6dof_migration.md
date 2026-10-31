@@ -126,6 +126,18 @@ historical directors, not as a tolerance change.
     datum velocity with ω×r. This shows up mid-flip (several m/s) and vanishes once rotation
     stops; making legacy rotate about the centre of mass is the next fidelity item.
 
+25. `fix(physics): rotate the legacy tick about the centre of mass` — in free flight the legacy
+    off-rails step now carries the centre-of-mass state through the attitude update and the
+    translational RK4 and rebuilds the datum with the step-start offset (datum = COM − q·c₀,
+    v_datum = v_COM − ω×q·c₀), the same convention as the coupled path; propellant drain that
+    moves the centre of mass does not move the structure. Under landing, catch or water contact
+    the datum stays the pivot: the split legacy step applies contact torque once per step,
+    outside RK4, and rotating about a centre of mass ~20 m above the feet drove them into the
+    ground (the terminal-descent gate tipped 0.35 rad and overloaded the gear). A vehicle on its
+    legs or pins pivots about the loaded contact anyway. The terminal gate now agrees within
+    3 cm and 0.001 m/s at T+40 s (was ~0.9 m), with a new mid-flip check on the datum velocity
+    (≤ 0.25 m/s at T+2 s while rotating); its tolerances were tightened to 0.5 m / 0.1 m/s.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -174,7 +186,8 @@ long-duration fault management.
   fixture and then controlled EDL.
 - With one inertia model (step 22), the 30 s ascent gate (step 23) and the terminal descent gate
   (step 24), remaining gates are a full production ascent through staging and an entry from the
-  interface with flap control. Make the legacy tick rotate about the centre of mass.
+  interface with flap control. The legacy tick rotates about the centre of mass in free flight
+  (step 25).
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
   envelope is intentionally not ported; EDL parity must confirm the RK4 integrator does not
   need it under high dynamic pressure.

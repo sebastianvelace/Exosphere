@@ -339,9 +339,15 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - Recuperación engine-out determinista: cerrado con detección del estado activo, 100 ms de
      latencia onboard, comando de actitud con feedback, rate limit y reducción de velocidad
      angular conservando la paridad legacy/6-DoF.
-   - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con diagnóstico de
-     fallos, navegación, SAS, flaps, RCS y autoridad de recuperación equivalentes.
-   - Gate posterior: EDL controlado con contactos y telemetría de captura.
+   - SAS, piso RCS y envolvente piloto de 20°/s portados al camino acoplado; contactos de patas
+     y de cuna de torre con paridad (pasos 20–21 de `docs/physics/coupled_6dof_migration.md`).
+   - Un único modelo de inercia (tensor por pieza) en ambos caminos, con revalidación de
+     Saturn V y Flight 14 (paso 22); ascenso guiado de 30 s con SAS (paso 23); flip terminal y
+     encendido de aterrizaje hasta el contacto (paso 24).
+   - El tick legacy rota sobre el centro de masa en vuelo libre y conserva el pivote del datum
+     bajo contacto (paso 25): T+40 s del descenso terminal a 3 cm entre caminos.
+   - Siguiente gate: ascenso de producción completo con staging y entrada desde la interfaz
+     con flaps.
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
      pasen y se conserve evidencia numérica y de framebuffer.
 
