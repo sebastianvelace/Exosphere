@@ -68,6 +68,12 @@ integrator without changing the production scheduler by default.
     1184/1184 with the coupled path on; Mercury-Atlas, Saturn V and Flight 14 calibrations pass
     without retuning.
 
+31. `feat(physics): distributed per-part aerodynamics by default (F1)` — see the F1 findings in
+    `rigid_body_fidelity_plan.md`. Slender stacks fly Allen–Perkins crossflow + Munk
+    slender-body normal force + axial drag per element at v + ω×r; the integrator parity gates
+    compare both paths on the aggregate model (`DistributedAerodynamicsEnabled = false`), and
+    their legacy side now really runs the split tick. Full suite 1190/1190.
+
 ## Inertia-model divergence (resolved by step 22)
 
 A 30 s guided Flight 7 ascent with SAS windows ends with matching attitude (0.0025 rad) and

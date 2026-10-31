@@ -55,6 +55,43 @@ before any recalibration:
   positions with the vessel centre of mass; the RCS floor torque was scaled by the docked
   inertia ratio twice; anchored vessels corotated their datum, not their centre of mass.
 
+## F1 findings (2026-10-31)
+
+`DistributedAerodynamics` replaces the centre-of-pressure guess and the damping constant for
+every slender stack (`Universe.DistributedAerodynamicsEnabled`, on by default):
+
+- **Model.** Per part: Allen–Perkins viscous crossflow (C_dc = 1.5 on the planform, ogive
+  noses at 2/3·D·L), Munk slender-body normal force 2ΔA·sinα·cosα at the leading nose
+  (Barrowman ogive CP at 0.466·L_n, `nose_length_m`) and at every coaxial diameter step, and
+  axial C_A·A_max·cos²α on the axis. Each element sees v + ω×r, so pitch damping and
+  tail-first reversal emerge. Analytic gates: broadside drag, nose-on drag, C_Nα = 2 per base
+  area, bare-body instability vs flare stability, rate damping, tail-first reversal.
+- **Validity boundary.** Slender-body theory needs a slender body: stacks with
+  L/D < 3 (Mercury, Gemini, Apollo capsules) keep the blunt/trimmed model until a Newtonian
+  blunt-body model lands; the trimmed-capsule and Super Heavy standalone-margin models stay.
+- **Finless launchers are unstable, and are flown that way.** With a physical centre of
+  pressure, the Atlas, Saturn V and the VAB starter are statically unstable (the Munk nose
+  lift sits ahead of the centre of mass); at Atlas max-Q, Mα/I ≈ 2.2 rad/s² per rad exceeded
+  the guidance loop's stiffness (1.85), so it diverged. Flight control now inverts the
+  predicted static aerodynamic moment (evaluated with ω = 0, so natural damping remains) in
+  the gimbal allocation, as it already inverted the engines' zero-gimbal moment; the result is
+  still clipped to the real gimbal range. SAS with no input holds attitude against it the same
+  way. Engines without a per-instance runtime now join the allocator through their part
+  gimbal, and their zero-gimbal geometry no longer feeds back the current deflection.
+- **Centre-of-mass consistency.** `PartGraph.CenterOfMass` and the tick centre of mass weight
+  only parts placed in the stack frame, matching `BuildMassProperties`; an unattached part had
+  shifted one centre by 0.31 m and the contact datum against the integrator's datum.
+- **Recalibration.** Mercury-Atlas loses ~40 m/s less to drag by BECO than under the
+  aggregate model (whose broadside blend over-charged the tape's 4–6° angle of attack); the
+  pitch tape is re-closed at 23.2° BECO / −17.9° insertion: 159.5 × 267.8 km against the
+  published 161 × 261 km (aggregate fit: 157 × 276). Saturn V, Freedom 7, Gemini 8 and the
+  lunar launch window pass unchanged.
+- **Open gaps.** S-IC fins and Super Heavy grid fins are not yet surfaces (grid fins keep the
+  declared margin); nose lengths for Starship, Falcon/New Glenn fairings and Apollo LES are
+  estimates; the Atlas sustainer's 625 kN / 350 s effective rating (hardware ≈ 363 kN /
+  309 s) remains an F6 item; the flight-control inversion is model-based (modern vehicles);
+  historical gain schedules belong to F3.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by

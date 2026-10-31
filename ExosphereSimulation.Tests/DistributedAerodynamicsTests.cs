@@ -120,3 +120,56 @@ public sealed class DistributedAerodynamicsTests
         Assert.True(System.Math.Abs(forward.Z - backward.Z) > 1e-6, $"{forward} vs {backward}");
     }
 }
+
+public sealed class DistributedAerodynamicsControlTests
+{
+    private static Part Engine(double thrust, double gimbalDeg) => new(new PartDefinition
+    {
+        Id = "engine", CategoryStr = "engine", MassDry = 500.0, LengthM = 1.0, DiameterM = 1.0,
+        ThrustSL = thrust, ThrustVac = thrust, IspSL = 300.0, IspVac = 300.0, GimbalRange = gimbalDeg,
+        AttachmentNodes = [new AttachmentNodeDef { Id = "top", Position = [0.0, 0.5, 0.0] }],
+    }, "engine");
+
+    [Fact]
+    public void SingleEngineWithoutRuntimeIsAllocatedThroughItsPartGimbal()
+    {
+        var tank = new Part(new PartDefinition
+        {
+            Id = "tank", CategoryStr = "structure", MassDry = 5_000.0, LengthM = 10.0, DiameterM = 1.0,
+            AttachmentNodes = [new AttachmentNodeDef { Id = "bottom", Position = [0.0, -5.0, 0.0] }],
+        }, "tank");
+        var engine = Engine(60_000.0, 5.0);
+        var graph = new PartGraph();
+        graph.SetRoot(tank);
+        graph.AddJoint(new Joint(tank, engine, "bottom", "top"));
+        engine.IsStagingActive = true;
+        engine.ThrottleLevel = 1.0;
+        Assert.False(engine.HasEngineRuntime);
+
+        var desired = new Vector3d(-20_000.0, 0.0, 0.0);
+        graph.SolveDifferentialGimbal(desired, 0.0);
+        var torque = graph.GetTotalTorque(0.0);
+
+        Assert.NotEqual(Vector3d.Zero, engine.GimbalOffset);
+        Assert.True(torque.X * desired.X > 0.0, $"gimbal torque {torque} must follow the request {desired}");
+        Assert.InRange(System.Math.Abs(torque.X), 0.8 * 20_000.0, 1.2 * 20_000.0);
+    }
+
+    [Fact]
+    public void BluntBodiesKeepTheBluntModel()
+    {
+        static PartGraph Body(double length, double diameter)
+        {
+            var graph = new PartGraph();
+            var part = new Part(new PartDefinition
+            {
+                Id = "b", CategoryStr = "structure", MassDry = 1_000.0, LengthM = length, DiameterM = diameter,
+            }, "b");
+            graph.SetRoot(part);
+            graph.AddPart(part);
+            return graph;
+        }
+        Assert.False(Body(3.3, 1.9).UsesDistributedAerodynamics); // Mercury-like capsule, L/D 1.7
+        Assert.True(Body(30.0, 3.0).UsesDistributedAerodynamics);  // slender launcher, L/D 10
+    }
+}

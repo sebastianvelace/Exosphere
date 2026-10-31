@@ -362,9 +362,12 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      correr los harness Godot `[G]` de ascenso/EDL con el switch encendido en una máquina con GPU.
    - Activado por defecto (paso 30, fase F0): todos los schedulers vuelan el cuerpo rígido
      acoplado. Pendiente: verificación en framebuffer real con GPU de `[G]` ascenso/EDL.
-   - Siguiente: fases F1–F6 de `docs/physics/rigid_body_fidelity_plan.md` (aerodinámica
-     distribuida, flaps físicos, control solo por actuadores, jet damping, gradiente de
-     gravedad, slosh, recalibración histórica).
+   - F1 cerrada (paso 31): aerodinámica distribuida por pieza activada por defecto para
+     cuerpos esbeltos; el control de vuelo invierte el momento aerodinámico estático
+     predicho dentro del rango real del gimbal; Mercury-Atlas re-cerrado a 159.5 × 267.8 km.
+   - Siguiente: fases F2–F6 de `docs/physics/rigid_body_fidelity_plan.md` (flaps físicos,
+     control solo por actuadores, jet damping, gradiente de gravedad, slosh, recalibración
+     histórica); aletas del S-IC, grid fins y modelo newtoniano para cápsulas romas.
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el

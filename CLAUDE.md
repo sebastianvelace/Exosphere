@@ -171,9 +171,13 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   (the skirt datum the renderer, gear, water and pad use); `Vessel.Position` is that datum,
   `Vessel.CenterOfMass`/`CenterOfMassVelocity` the physical state. Navigation (surface velocity,
   orbital burns, SAS holds) and on-rails conics (`ComputeCenterOfMassOrbit`) use the centre of
-  mass; altitude queries use the datum. Remaining empirical attitude terms (CP clamp, damping
-  constant, aggregate flaps, SAS rate overwrite, RCS floor) are tracked in
-  `docs/physics/rigid_body_fidelity_plan.md` (F1–F6).
+  mass; altitude queries use the datum. Slender stacks (L/D ≥ 3) fly distributed per-part
+  aerodynamics (`DistributedAerodynamics`, `Universe.DistributedAerodynamicsEnabled`, F1);
+  blunt capsules keep the blunt/trimmed model. Flight control inverts the predicted static aero
+  moment in the gimbal allocation (clipped to the real range), so finless launchers stay
+  unstable airframes held by TVC. Parity gates compare integrators with distributed aero off.
+  Remaining empirical attitude terms (aggregate flaps, SAS rate overwrite, RCS floor) are
+  tracked in `docs/physics/rigid_body_fidelity_plan.md` (F2–F6).
 
 ## Workflow
 

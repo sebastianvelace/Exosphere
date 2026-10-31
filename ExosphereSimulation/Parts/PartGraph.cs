@@ -60,7 +60,7 @@ public class PartGraph
     private readonly List<LiquidEngineDemand> _liquidDemands = new();
     private readonly HashSet<Part> _hotStageBottomSet = new();
     private readonly List<Part> _hotStageUpperParts = new();
-    private readonly List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>
+    private readonly List<(EngineInstanceState? State, Part Engine, Vector3d Jx, Vector3d Jz)>
         _gimbalContributions = new();
     private Part? _root;
     // Part positions depend only on topology and part geometry, not on mass, so this copy
@@ -573,12 +573,18 @@ public class PartGraph
 
     /// <summary>
     /// True when this body's aerodynamics come from its part geometry
-    /// (<see cref="GetAeroElements"/>). Capsules keep their trimmed blunt-body model, and a
-    /// root flying alone with a declared standalone static margin (Super Heavy's grid fins,
-    /// not yet modelled as surfaces) keeps that margin.
+    /// (<see cref="GetAeroElements"/>). Slender-body and crossflow theory hold only for slender
+    /// stacks, so a blunt body (fineness ratio below <see cref="SlenderBodyMinimumFineness"/>:
+    /// Mercury, Gemini and Apollo capsules) keeps the blunt/trimmed model. Capsules keep their
+    /// trimmed model, and a root flying alone with a declared standalone static margin (Super
+    /// Heavy's grid fins, not yet modelled as surfaces) keeps that margin.
     /// </summary>
     public bool UsesDistributedAerodynamics =>
-        CapsuleAerodynamics == null && _root?.Definition.StandaloneAerodynamicCenterOffsetYM == null;
+        CapsuleAerodynamics == null && _root?.Definition.StandaloneAerodynamicCenterOffsetYM == null
+        && MaximumDiameter > 0.0 && VehicleLength / MaximumDiameter >= SlenderBodyMinimumFineness;
+
+    /// <summary>Length/diameter below which slender-body theory does not describe the flow.</summary>
+    public const double SlenderBodyMinimumFineness = 3.0;
 
     private readonly List<Physics.AeroElement> _aeroElements = new();
     private bool _aeroElementsValid;
@@ -1049,29 +1055,45 @@ public class PartGraph
 
         var contributions = _physicsTickActive
             ? _gimbalContributions
-            : new List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>();
+            : new List<(EngineInstanceState? State, Part Engine, Vector3d Jx, Vector3d Jz)>();
         contributions.Clear();
         double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
+
+        void Add(EngineInstanceState? state, Part engine, Vector3d r, double thrustN, double gimbalRangeDeg)
+        {
+            double mountAuthority = thrustN * (gimbalRangeDeg * MathUtils.DEG_TO_RAD);
+            var jx = r.Cross(new Vector3d(mountAuthority, 0.0, 0.0));
+            var jz = r.Cross(new Vector3d(0.0, 0.0, mountAuthority));
+            contributions.Add((state, engine, jx, jz));
+
+            m00 += jx.X * jx.X + jz.X * jz.X;
+            m01 += jx.X * jx.Y + jz.X * jz.Y;
+            m02 += jx.X * jx.Z + jz.X * jz.Z;
+            m11 += jx.Y * jx.Y + jz.Y * jz.Y;
+            m12 += jx.Y * jx.Z + jz.Y * jz.Z;
+            m22 += jx.Z * jx.Z + jz.Z * jz.Z;
+        }
 
         foreach (var engine in ActiveEngineList)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
+            if (!engine.HasEngineRuntime)
+            {
+                // A single engine without a per-instance runtime gimbals as one mount through
+                // its part-wide GimbalOffset (the same geometry GetThrustVector/GetTotalTorque use).
+                double range = engine.Definition.GimbalRange;
+                double thrust = engine.GetThrustMagnitude(ambientPressure);
+                if (range > 0.0 && thrust > 0.0)
+                    Add(null, engine,
+                        partPosition + new Vector3d(0.0, engine.Definition.ThrustPositionYM, 0.0) - com,
+                        thrust, range);
+                continue;
+            }
             var authorityRows = engine.GetEngineInstanceGimbalAuthoritySnapshot(ambientPressure);
             for (int i = 0; i < authorityRows.Count; i++)
             {
                 var (state, mountPosition, thrustN, gimbalRangeDeg) = authorityRows[i];
-                var r = partPosition + mountPosition - com;
-                double mountAuthority = thrustN * (gimbalRangeDeg * MathUtils.DEG_TO_RAD);
-                var jx = r.Cross(new Vector3d(mountAuthority, 0.0, 0.0));
-                var jz = r.Cross(new Vector3d(0.0, 0.0, mountAuthority));
-                contributions.Add((state, jx, jz));
-
-                m00 += jx.X * jx.X + jz.X * jz.X;
-                m01 += jx.X * jx.Y + jz.X * jz.Y;
-                m02 += jx.X * jx.Z + jz.X * jz.Z;
-                m11 += jx.Y * jx.Y + jz.Y * jz.Y;
-                m12 += jx.Y * jx.Z + jz.Y * jz.Z;
-                m22 += jx.Z * jx.Z + jz.Z * jz.Z;
+                Add(state, engine, partPosition + mountPosition - com, thrustN, gimbalRangeDeg);
             }
         }
 
@@ -1089,12 +1111,14 @@ public class PartGraph
             m22 + epsilon,
             desiredTorque);
 
-        foreach (var (state, jx, jz) in contributions)
+        foreach (var (state, engine, jx, jz) in contributions)
         {
-            state.GimbalCommandOverride = new Vector3d(
+            var command = new Vector3d(
                 System.Math.Clamp(jx.Dot(lambda), -1.0, 1.0),
                 0.0,
                 System.Math.Clamp(jz.Dot(lambda), -1.0, 1.0));
+            if (state != null) state.GimbalCommandOverride = command;
+            else engine.GimbalOffset = command;
         }
     }
 

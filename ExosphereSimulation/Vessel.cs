@@ -663,6 +663,27 @@ public class Vessel
     // Fuerza aerodinámica evaluada en un estado (pos, vel) arbitrario (para subpasos RK4).
     // Delega en AerodynamicsModel: drag orientación-dependiente (cilindro de 9 m, Cd y área
     // blend axial↔broadside, pico transónico) más la sustentación de cuerpo CL=CLmax·sin(2α).
+    /// <summary>
+    /// Static aerodynamic moment (body frame, N·m) on the current state from the distributed
+    /// model, evaluated with ω = 0 so the flight-control inversion leaves the natural
+    /// aerodynamic rate damping in place. Zero outside the atmosphere or for vehicles that
+    /// keep a capsule/standalone aero model.
+    /// </summary>
+    internal Vector3d PredictStaticAerodynamicTorqueBody(CelestialBody body)
+    {
+        if (body.Atmosphere == null || !Parts.UsesDistributedAerodynamics || Parts.TotalMass <= 0.0)
+            return Vector3d.Zero;
+        var com = CenterOfMass;
+        double altitude = body.GetAltitude(com);
+        double density = body.Atmosphere.GetDensity(altitude);
+        if (density <= 0.0) return Vector3d.Zero;
+        var air = CenterOfMassVelocity - body.Velocity - body.GetSurfaceVelocity(com);
+        return Physics.DistributedAerodynamics.Evaluate(
+            Parts.GetAeroElements(), Orientation, Vector3d.Zero, CenterOfMassOffsetLocal, air, density,
+            System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude)), MaximumDiameter,
+            Parts.AxialDragCoefficient, body.Atmosphere.SoundSpeedConstant).TorqueBody;
+    }
+
     /// <summary>Drag of deployed parachutes only (N, world), for the distributed aero path.</summary>
     public Vector3d ComputeParachuteDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
     {
@@ -921,7 +942,7 @@ public class Vessel
     /// <see cref="EndCoupledPhysicsStep"/> so every RK4 stage reads the same prepared engine
     /// state and mass snapshot.
     /// </summary>
-    internal void BeginCoupledPhysicsStep(double dt, CelestialBody refBody)
+    internal void BeginCoupledPhysicsStep(double dt, CelestialBody refBody, bool distributedAerodynamics = false)
     {
         Parts.BeginPhysicsTick();
         try
@@ -962,7 +983,25 @@ public class Vessel
                 engine.ClearGimbalCommandOverrides();
             }
 
-            if (!hasInput) return;
+            // Flight control inverts the predicted static aerodynamic moment, the same way it
+            // already inverts the engines' zero-gimbal moment: a statically unstable airframe
+            // (every finless launcher) is held by its gimbals, within their real range, instead
+            // of by guidance gains tuned against a stable aggregate model.
+            var aeroTorque = distributedAerodynamics && refBody != null && auth > 1e-6
+                ? PredictStaticAerodynamicTorqueBody(refBody)
+                : Vector3d.Zero;
+
+            if (!hasInput)
+            {
+                // SAS with no pilot input holds attitude against that moment with the gimbals;
+                // its post-step rate damping stays bounded by the same actuator envelope.
+                if (SASEnabled && aeroTorque.MagnitudeSquared > 0.0 && Parts.ActiveEngineList.Count > 0)
+                {
+                    var holdTorque = Parts.GetZeroGimbalEngineTorque(pressure) + aeroTorque;
+                    Parts.SolveDifferentialGimbal(-holdTorque, pressure);
+                }
+                return;
+            }
 
             double pitchYawAuthority =
                 System.Math.Max(PitchYawRcsAuthority,
@@ -978,7 +1017,8 @@ public class Vessel
             var desiredTorque = new Vector3d(
                 desiredLocalAngAccel.X * Parts.TransverseMomentOfInertia - zeroGimbalTorque.X,
                 desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia - zeroGimbalTorque.Y,
-                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia - zeroGimbalTorque.Z);
+                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia - zeroGimbalTorque.Z)
+                - aeroTorque;
             Parts.SolveDifferentialGimbal(desiredTorque, pressure);
 
             // Same reaction-control floor as the legacy path, expressed as the torque that

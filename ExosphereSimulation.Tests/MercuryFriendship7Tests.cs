@@ -118,8 +118,8 @@ public sealed class MercuryFriendship7Tests
         Assert.Equal(17_723.0, MercuryAtlasFlightProfile.HistoricalSplashdownSeconds);
         Assert.Equal(90.0, MercuryAtlasFlightProfile.ElevationDegrees(0.0));
         Assert.Equal(90.0, MercuryAtlasFlightProfile.ElevationDegrees(18.0));
-        Assert.Equal(22.0, MercuryAtlasFlightProfile.ElevationDegrees(129.6), 8);
-        Assert.Equal(-17.0, MercuryAtlasFlightProfile.ElevationDegrees(301.4), 8);
+        Assert.Equal(MercuryAtlasFlightProfile.BoosterCutoffElevationDegrees, MercuryAtlasFlightProfile.ElevationDegrees(129.6), 8);
+        Assert.Equal(MercuryAtlasFlightProfile.InsertionElevationDegrees, MercuryAtlasFlightProfile.ElevationDegrees(301.4), 8);
 
         provenance.RequireFields(
             "mercury-atlas6-friendship7-1962-02-20",

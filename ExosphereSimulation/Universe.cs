@@ -156,11 +156,11 @@ public class Universe
     public bool Coupled6DofIntegrationEnabled { get; set; } = true;
 
     /// <summary>
-    /// Per-part distributed aerodynamics on the coupled path (F1). Off by default until every
-    /// historical profile is recalibrated against it; the aggregate drag/lift/centre-of-pressure
-    /// model stays the baseline the integrator parity gates compare on.
+    /// Per-part distributed aerodynamics on the coupled path (F1, default) for slender stacks.
+    /// False selects the aggregate drag/lift/centre-of-pressure model, the baseline the
+    /// integrator parity gates compare on.
     /// </summary>
-    public bool DistributedAerodynamicsEnabled { get; set; }
+    public bool DistributedAerodynamicsEnabled { get; set; } = true;
 
     /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
     public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }
@@ -2465,7 +2465,7 @@ public class Universe
         double evaluationTime = CurrentTime+dt;
         var frameAcceleration = GetReferenceBodyRailAcceleration(body);
         Physics.RigidBody6DofState finalAbsolute;
-        vessel.BeginCoupledPhysicsStep(dt, body);
+        vessel.BeginCoupledPhysicsStep(dt, body, DistributedAerodynamicsEnabled);
         try
         {
             var mass = Physics.WaterMotionFrame.ResolveMassProperties(vessel.Parts, water);
@@ -2523,7 +2523,7 @@ public class Universe
 
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
         vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
-        vessel.BeginCoupledPhysicsStep(dt, refBody);
+        vessel.BeginCoupledPhysicsStep(dt, refBody, DistributedAerodynamicsEnabled);
         try
         {
             // A docked stack is one rigid body: integrate the composite mass, centre of mass

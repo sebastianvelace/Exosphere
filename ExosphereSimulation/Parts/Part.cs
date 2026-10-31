@@ -890,9 +890,11 @@ public class Part
         destination.Clear();
         if (!HasEngineRuntime)
         {
+            var vector = GetThrustVector(ambientPressure);
             destination.Add((
                 new Vector3d(0.0, Definition.ThrustPositionYM, 0.0),
-                GetThrustVector(ambientPressure)));
+                // Zero gimbal keeps the magnitude and points it along the mount axis.
+                zeroGimbal ? new Vector3d(0.0, vector.Magnitude, 0.0) : vector));
             return;
         }
 
