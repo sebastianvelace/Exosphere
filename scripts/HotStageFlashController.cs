@@ -12,6 +12,11 @@ public partial class HotStageFlashController : Node3D
     private const int PuffCount = 12;
     private readonly MeshInstance3D[] _puffs = new MeshInstance3D[PuffCount];
     private readonly ShaderMaterial[] _materials = new ShaderMaterial[PuffCount];
+    private const int JetCount = 12;
+    private const float VentRadius = 1.62f;      // render units, ~4.5 m: the hot-stage ring
+    private readonly MeshInstance3D[] _jets = new MeshInstance3D[JetCount];
+    private readonly ShaderMaterial[] _jetMaterials = new ShaderMaterial[JetCount];
+    private float _jetIntensity;
     private MeshInstance3D? _interstagePlume;
     private ShaderMaterial? _interstagePlumeMaterial;
     private float _interstagePlumeOpacity;
@@ -29,6 +34,8 @@ public partial class HotStageFlashController : Node3D
     public float InterstagePlumeLocalY =>
         _interstagePlume?.Position.Y ?? float.NaN;
     public float InterstagePlumeOpacity => _interstagePlumeOpacity;
+    /// <summary>Luminous vented-exhaust level, 0..1, following delivered Ship chamber pressure.</summary>
+    public float VentedExhaustIntensity => _jetIntensity;
 
     public override void _Ready()
     {
@@ -67,6 +74,21 @@ public partial class HotStageFlashController : Node3D
             Visible = false,
         };
         AddChild(_interstagePlume);
+        var flameShader = GD.Load<Shader>("res://assets/shaders/hotstage_flame.gdshader");
+        var jetMesh = new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 16, Rings = 8 };
+        for (int i = 0; i < JetCount; i++)
+        {
+            var material = new ShaderMaterial { Shader = flameShader };
+            material.SetShaderParameter("seed", i * 1.37f);
+            material.SetShaderParameter("intensity", 0f);
+            _jetMaterials[i] = material;
+            _jets[i] = new MeshInstance3D
+            {
+                Name = $"HotStageVentJet{i}", Mesh = jetMesh, MaterialOverride = material,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = false,
+            };
+            AddChild(_jets[i]);
+        }
         TryWireSignal();
         Visible = false;
     }
@@ -83,12 +105,24 @@ public partial class HotStageFlashController : Node3D
             _overlapBurstStarted = true;
         }
         _lastHotStageOverlap = overlap;
-        if (_age > Duration) return;
+
+        // While attached, the Ship's lit Raptors can only exhaust through the vented ring.
+        // Rise with delivered chamber pressure; after separation the jets collapse quickly.
+        float shipFraction = overlap ? ShipChamberFraction() : 0f;
+        float rate = shipFraction > _jetIntensity ? 6f : 1.8f;
+        _jetIntensity = Mathf.MoveToward(_jetIntensity, shipFraction, rate * (float)delta);
+        bool jetsActive = _jetIntensity > 0.005f;
+        if (_age > Duration && !jetsActive)
+        {
+            foreach (var jet in _jets) jet.Visible = false;
+            return;
+        }
 
         SyncToVesselFrame();
-        _age += (float)delta;
+        if (_age <= Duration) _age += (float)delta;
         float t = Mathf.Clamp(_age / Duration, 0f, 1f);
-        Visible = IsVesselFrameSynchronized && t < 1f;
+        Visible = IsVesselFrameSynchronized && (t < 1f || jetsActive);
+        UpdateVentJets();
         bool plumeVisible = IsVesselFrameSynchronized && t < 1f;
         if (_interstagePlume != null && _interstagePlumeMaterial != null)
         {
@@ -123,6 +157,50 @@ public partial class HotStageFlashController : Node3D
             _materials[i].SetShaderParameter("age", t);
             _materials[i].SetShaderParameter("opacity", 0.22f * (1f - t) * (1f - t));
         }
+    }
+
+    private void UpdateVentJets()
+    {
+        float length = 1.4f + 3.6f * _jetIntensity;
+        float width = 0.30f + 0.22f * _jetIntensity;
+        float time = (float)(SimulationBridge.Instance?.Universe.CurrentTime ?? 0.0);
+        for (int i = 0; i < JetCount; i++)
+        {
+            float angle = (i + 0.5f) * Mathf.Tau / JetCount;
+            var outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+            // Vented gas leaves radially, canted slightly aft toward the booster dome.
+            var axis = (outward + Vector3.Down * 0.22f).Normalized();
+            var jet = _jets[i];
+            jet.Visible = _jetIntensity > 0.005f;
+            var tangent = Vector3.Up.Cross(axis).Normalized();
+            // Right-handed (x × y = z): a mirrored basis flips the normals the shader's
+            // soft edge depends on, and the whole jet then renders fully transparent.
+            jet.Basis = new Basis(axis, tangent.Cross(axis).Normalized(), tangent)
+                * Basis.FromScale(new Vector3(length * 0.5f, width, width));
+            jet.Position = new Vector3(0f, HotStageInterfaceRenderY - 0.25f, 0f)
+                + outward * VentRadius + axis * (length * 0.5f);
+            _jetMaterials[i].SetShaderParameter("intensity", _jetIntensity);
+            _jetMaterials[i].SetShaderParameter("simulation_time", time);
+        }
+    }
+
+    private static float ShipChamberFraction()
+    {
+        var vessel = SimulationBridge.Instance?.ActiveVessel;
+        if (vessel == null) return 0f;
+        double sum = 0.0;
+        int count = 0;
+        foreach (var part in vessel.Parts.Parts)
+        {
+            if (!part.Definition.IsStarshipFamily
+                || !part.Definition.HasVehicleRole("ship_engines")) continue;
+            foreach (var state in part.EngineStates)
+            {
+                sum += state.ChamberPressureFraction;
+                count++;
+            }
+        }
+        return count > 0 ? (float)System.Math.Clamp(sum / count, 0.0, 1.0) : 0f;
     }
 
     private void TryWireSignal()

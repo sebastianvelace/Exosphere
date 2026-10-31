@@ -407,8 +407,8 @@ de nodos, pero no demuestra calidad de píxel.
 | Anclaje al plano de separación | PASS | `hotstage_visual_anchor_contract_test.sh` |
 | Activación durante solape real | PASS | `compile_v5.log`, `visible=True`, `frameSynced=True` |
 | Captura post-separación | PASS lógico | `hotstage_separation`, `SUMMARY=HOTSTAGE_OK` |
-| PNG daylight overlap/separation | PENDIENTE | framebuffer X11 no disponible en esta VM |
-| Comparación de exposición y lectura de ambos vehículos | PENDIENTE | requiere captura real |
+| PNG daylight overlap/separation | PASS (2026-10-31) | `exports/hotstage-vent-exhaust-2026-10-31/`, ver `hotstage_vent_exhaust_2026-10-31.md` |
+| Comparación de exposición y lectura de ambos vehículos | PASS parcial | Ambos vehículos y el escape por ventilas legibles; plumas principales a gran altitud aún demasiado estrechas |
 
 El bloqueo de framebuffer está registrado en `/tmp/exo_visual_daylight_preset_v1/run-summary.txt`:
 Godot no pudo abrir X11 ni Wayland (`X11 Display is not available`). Por rigor, la

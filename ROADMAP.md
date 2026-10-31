@@ -457,6 +457,11 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      dependen de tooling.
    - El gate ahora exige también el volumen procedural `HotStagePlume` visible y anclado
      durante el overlap; validado en framebuffer real a 640x360 como evidencia reproducible.
+   - Primera verificación en píxeles del solape (2026-10-31): el efecto anterior era humo gris
+     invisible a distancia de persecución; ahora chorros luminosos por las ventilas del anillo
+     siguen la presión de cámara real de la Ship. Hallazgo abierto: a 65–70 km las plumas
+     principales se ven como una columna estrecha, cuando deberían estar muy expandidas. Ver
+     `docs/audits/hotstage_vent_exhaust_2026-10-31.md`.
 
    - Flight 14 early-flight reference pass (2026-09-30): delivered-thrust deluge,
      fixed-site shaded water volumes, a slender rose booster column, neutral PBR
