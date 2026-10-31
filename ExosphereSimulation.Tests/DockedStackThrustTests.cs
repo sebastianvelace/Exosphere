@@ -33,7 +33,9 @@ public sealed class DockedStackThrustTests
         double m1End = primary.TotalMass;
         double expected = System.Math.Log((m1 + m2) / (m1End + m2)) / System.Math.Log(m1 / m1End);
         Assert.InRange(dockedDeltaV / aloneDeltaV, expected * 0.99, expected * 1.01);
-        Assert.Equal(primary.Velocity, secondary.Velocity);
+        // Rigidly slaved: the secondary datum moves at the stack's rigid-body velocity there.
+        var rigid = primary.Velocity + primary.AngularVelocity.Cross(secondary.Position - primary.Position);
+        Assert.InRange((secondary.Velocity - rigid).Magnitude, 0, 1e-9);
     }
 
     [Fact]

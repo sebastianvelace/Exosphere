@@ -32,8 +32,8 @@ public static class ClosedLoopInsertionGuidance
     {
         ArgumentNullException.ThrowIfNull(vessel);
         ArgumentNullException.ThrowIfNull(body);
-        var relative = vessel.Position - body.Position;
-        var velocity = vessel.Velocity - body.Velocity;
+        var relative = vessel.CenterOfMass - body.Position;
+        var velocity = vessel.CenterOfMassVelocity - body.Velocity;
         double radius = relative.Magnitude;
         var up = relative / radius;
         double verticalSpeed = velocity.Dot(up);
@@ -84,8 +84,8 @@ public static class ClosedLoopInsertionGuidance
     public static bool IsInserted(Vessel vessel, CelestialBody body, double minimumPeriapsisAltitudeM,
         double epoch)
     {
-        var orbit = OrbitalElements.FromStateVector(vessel.Position - body.Position,
-            vessel.Velocity - body.Velocity, body.GM, body.Id, epoch);
+        var orbit = OrbitalElements.FromStateVector(vessel.CenterOfMass - body.Position,
+            vessel.CenterOfMassVelocity - body.Velocity, body.GM, body.Id, epoch);
         return orbit.Eccentricity < 1.0 && orbit.Periapsis - body.Radius >= minimumPeriapsisAltitudeM;
     }
 }

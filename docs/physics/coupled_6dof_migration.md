@@ -61,6 +61,13 @@ integrator without changing the production scheduler by default.
     and the same caught/settled gates. These are contact gates from a short pre-contact state;
     they do not yet replace a controlled descent-to-contact parity run.
 
+30. `feat(physics): fly the coupled rigid body by default` — see the F0 findings in
+    `rigid_body_fidelity_plan.md`: one skirt-datum part frame, atmosphere below the reference
+    surface, exact rigid separation, composite docked stacks, every scheduler on the coupled
+    path, co-integrated water contact, centre-of-mass conics and navigation state. Full suite
+    1184/1184 with the coupled path on; Mercury-Atlas, Saturn V and Flight 14 calibrations pass
+    without retuning.
+
 ## Inertia-model divergence (resolved by step 22)
 
 A 30 s guided Flight 7 ascent with SAS windows ends with matching attitude (0.0025 rad) and
@@ -183,9 +190,9 @@ historical directors, not as a tolerance change.
 
 ## Runtime contract
 
-`Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
-until deterministic telemetry comparisons and real framebuffer flight gates establish parity
-for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
+`Universe.Coupled6DofIntegrationEnabled` is enabled by default (step 30). Every scheduler
+dispatches through `IntegrateVesselFullPhysics`; false selects the split tick as a comparison
+baseline. On-rails conics describe the centre of mass.
 
 ## Validation
 

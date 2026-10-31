@@ -119,11 +119,20 @@ public partial class AtmosphereModel
     /// Returns atmospheric temperature (K) at a given geometric altitude above the surface (m).
     /// Layered ISA model when layers are present, otherwise constant sea-level temperature.
     /// </summary>
+    /// <summary>
+    /// Lowest altitude the model extrapolates to (m). The 1976 U.S. Standard Atmosphere
+    /// defines its base layer down to −5 km geopotential; below the reference surface
+    /// (a centre of mass below the pad datum, terrain below sea level) the base layer's
+    /// lapse rate and hydrostatic profile continue, so pressure and density keep rising
+    /// instead of dropping to vacuum.
+    /// </summary>
+    public const double MinimumAltitude = -5_000.0;
+
     public double GetTemperature(double altitude)
     {
         if (Layers.Count == 0) return SeaLevelTemperature;
 
-        if (altitude < 0.0) altitude = 0.0;
+        altitude = System.Math.Max(altitude, MinimumAltitude);
         double h = ToGeopotential(altitude);
 
         // Find the layer containing this altitude; above the top layer,
@@ -148,7 +157,7 @@ public partial class AtmosphereModel
     /// </summary>
     public double GetPressure(double altitude)
     {
-        if (altitude < 0.0) return 0.0;
+        altitude = System.Math.Max(altitude, MinimumAltitude);
 
         // Keep the thermosphere thermodynamically coherent with GetDensity().
         // The residual density tail is intentionally retained above MaxAltitude
@@ -214,7 +223,7 @@ public partial class AtmosphereModel
     /// </summary>
     public double GetDensity(double altitude)
     {
-        if (altitude < 0.0) return 0.0;
+        altitude = System.Math.Max(altitude, MinimumAltitude);
 
         if (Layers.Count == 0)
             return altitude >= MaxAltitude

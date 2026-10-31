@@ -57,8 +57,8 @@ public sealed class ProgradeEnergyBurn
             return;
         }
 
-        var relative = vessel.Position - body.Position;
-        var velocity = vessel.Velocity - body.Velocity;
+        var relative = vessel.CenterOfMass - body.Position;
+        var velocity = vessel.CenterOfMassVelocity - body.Velocity;
         SpecificEnergy = 0.5 * velocity.MagnitudeSquared - body.GM / relative.Magnitude;
         if (SpecificEnergy >= _targetSpecificEnergy)
         {

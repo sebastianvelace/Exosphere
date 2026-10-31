@@ -41,15 +41,29 @@ public static class RigidBodyForceEvaluator
         in RigidBodyForceContext context)
     {
         ArgumentNullException.ThrowIfNull(vessel);
+        return Evaluate(vessel, state, context, vessel.Parts.GetMassProperties());
+    }
 
-        var massProperties = vessel.Parts.GetMassProperties();
+    /// <summary>
+    /// Evaluates the wrench on a body whose integrated mass properties may include rigidly
+    /// attached members (a docked stack). Gravity acts on the whole mass; the vessel's own
+    /// propulsion torque, computed about its own centre of mass, is transferred to the
+    /// integrated centre of mass.
+    /// </summary>
+    public static RigidBodyForces Evaluate(
+        Vessel vessel,
+        in RigidBody6DofState state,
+        in RigidBodyForceContext context,
+        in RigidBodyMassProperties massProperties)
+    {
+        ArgumentNullException.ThrowIfNull(vessel);
         var forceWorld = vessel.ComputeGravityAt(state.Position, context.Bodies)
             * massProperties.Mass;
 
         double pressure = context.ReferenceBody?.Atmosphere?.GetPressure(
             context.ReferenceBody.GetAltitude(state.Position)) ?? 0.0;
-        forceWorld += state.Orientation.Rotate(
-            vessel.Parts.GetTotalThrust(pressure) + vessel.GetRcsTranslationThrustLocal());
+        var propulsionBody = vessel.Parts.GetTotalThrust(pressure) + vessel.GetRcsTranslationThrustLocal();
+        forceWorld += state.Orientation.Rotate(propulsionBody);
 
         if (context.ReferenceBody != null)
         {
@@ -62,7 +76,8 @@ public static class RigidBodyForceEvaluator
 
         forceWorld += context.ExternalForceWorld;
 
-        var torqueBody = vessel.Parts.GetTotalTorque(pressure);
+        var torqueBody = vessel.Parts.GetTotalTorque(pressure)
+            + (vessel.Parts.CenterOfMass - massProperties.CenterOfMassBody).Cross(propulsionBody);
         torqueBody += state.Orientation.Inverse().Rotate(context.ExternalTorqueWorld);
         torqueBody += vessel.DisturbanceTorqueBody;
         torqueBody += vessel.CoupledRcsFloorTorqueBody;

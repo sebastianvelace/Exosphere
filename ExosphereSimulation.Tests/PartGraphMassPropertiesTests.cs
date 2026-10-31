@@ -40,7 +40,9 @@ public sealed class PartGraphMassPropertiesTests
         var properties = graph.GetMassProperties();
 
         Assert.Equal(3.0, properties.Mass, precision: 12);
-        Assert.Equal(2.0 / 3.0, properties.CenterOfMassBody.Y, precision: 12);
+        // The vessel frame's origin is the stack's lowest point: the root's bottom face, 1 m
+        // below its centre. Root centre at y = 1, child centre at y = 3: (2·1 + 1·3)/3.
+        Assert.Equal(5.0 / 3.0, properties.CenterOfMassBody.Y, precision: 12);
         Assert.Equal(0.0, properties.CenterOfMassBody.X, precision: 12);
         Assert.Equal(0.0, properties.CenterOfMassBody.Z, precision: 12);
 

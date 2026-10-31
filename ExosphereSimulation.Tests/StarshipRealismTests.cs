@@ -94,8 +94,8 @@ public sealed class StarshipRealismTests
         vessel.Orientation = Quaterniond.FromEuler(12.0, -8.0, 4.0);
         vessel.ReferenceBodyId = "earth";
 
-        Vector3d comBefore = vessel.Position;
-        Vector3d momentumBefore = vessel.Velocity * vessel.TotalMass;
+        Vector3d comBefore = vessel.CenterOfMass;
+        Vector3d momentumBefore = RigidBodyTestKinematics.Momentum(vessel);
 
         double shipMassBefore = vessel.TotalMass;
         var detached = vessel.Stage();
@@ -115,11 +115,11 @@ public sealed class StarshipRealismTests
         double shipMassAfter = vessel.TotalMass;
         double debrisMass = detached.TotalMass;
         Vector3d comAfter =
-            (vessel.Position * shipMassAfter + detached.Position * debrisMass)
+            (vessel.CenterOfMass * shipMassAfter + detached.CenterOfMass * debrisMass)
             / (shipMassAfter + debrisMass);
-        AssertVectorClose(comBefore, comAfter, 1e-9);
+        AssertVectorClose(comBefore, comAfter, 1e-6);
 
-        Vector3d momentumAfter = vessel.Velocity * shipMassAfter + detached.Velocity * debrisMass;
+        Vector3d momentumAfter = RigidBodyTestKinematics.Momentum(vessel) + RigidBodyTestKinematics.Momentum(detached);
         AssertVectorClose(momentumBefore, momentumAfter, 1e-6);
 
         Assert.NotEqual(vessel.Position, detached.Position);

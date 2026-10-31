@@ -59,13 +59,13 @@ public sealed class Flight14PayloadTests(ITestOutputHelper output)
         foreach (var part in parts)
         {
             double massBefore = ship.TotalMass;
-            var centerBefore = ship.Position;
-            var momentumBefore = ship.Velocity*massBefore;
+            var centerBefore = ship.CenterOfMass;
+            var momentumBefore = RigidBodyTestKinematics.Momentum(ship);
             var payload = ship.DeployPayload(part.InstanceId, null, run.PayloadDefinition.OpeningVelocity)!;
             separated.Add(payload);
             Assert.Equal(massBefore, ship.TotalMass+payload.TotalMass, 7);
-            var center = (ship.Position*ship.TotalMass+payload.Position*payload.TotalMass)/massBefore;
-            var momentum = ship.Velocity*ship.TotalMass+payload.Velocity*payload.TotalMass;
+            var center = (ship.CenterOfMass*ship.TotalMass+payload.CenterOfMass*payload.TotalMass)/massBefore;
+            var momentum = RigidBodyTestKinematics.Momentum(ship)+RigidBodyTestKinematics.Momentum(payload);
             Assert.True(center.DistanceTo(centerBefore) < 1e-7);
             Assert.True(momentum.DistanceTo(momentumBefore) < 0.01);
             var relativeOpening = payload.Velocity-ship.Velocity

@@ -1179,12 +1179,7 @@ public partial class HistoricalFlightProfileController : Node
             + tangent * System.Math.Sqrt(earth.GM / radius);
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.IsOnRails = true;
-        vessel.OrbitalState = OrbitalElements.FromStateVector(
-            vessel.Position - earth.Position,
-            vessel.Velocity - earth.Velocity,
-            earth.GM,
-            earth.Id,
-            epoch);
+        vessel.OrbitalState = vessel.ComputeCenterOfMassOrbit(earth, epoch);
         vessel.ReferenceBodyId = earth.Id;
         vessel.Throttle = 0.0;
     }

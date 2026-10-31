@@ -68,9 +68,18 @@ public sealed class OrbitalReentrySurvivalTests
             if (surfVel.Magnitude > 1.0)
             {
                 var flow = surfVel.Normalized;
+                // An ideal attitude hold is a pure torque: it re-poses the vehicle about its
+                // centre of mass and stops the rotation without touching the centre of mass's
+                // position or velocity (zeroing ω while keeping the datum velocity would inject
+                // −ω×r into the trajectory every step).
+                var centerOfMass = vessel.CenterOfMass;
+                var centerOfMassVelocity = vessel.CenterOfMassVelocity;
                 vessel.Orientation = bellyFirst
                     ? Quaterniond.FromTo(-Vector3d.Right, flow)   // tiles into the flow
                     : Quaterniond.FromTo(Vector3d.Right, flow);   // tiles turned away
+                vessel.AngularVelocity = Vector3d.Zero;
+                vessel.Position = centerOfMass - vessel.Orientation.Rotate(vessel.Parts.CenterOfMass);
+                vessel.Velocity = centerOfMassVelocity;
             }
 
             universe.Tick(Dt);

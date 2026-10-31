@@ -62,9 +62,11 @@ public class PartGraph
     private readonly List<Part> _hotStageUpperParts = new();
     private readonly List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>
         _gimbalContributions = new();
-    private readonly Dictionary<Part, Vector3d> _partLocalPositions = new();
     private Part? _root;
-    private bool _partLocalPositionsValid;
+    // Part positions depend only on topology and part geometry, not on mass, so this copy
+    // survives across ticks and is rebuilt only by InvalidateTopologyCaches.
+    private readonly Dictionary<Part, Vector3d> _topologyPartLocalPositions = new();
+    private bool _topologyPartLocalPositionsValid;
     private bool _physicsTickActive;
     private bool _tickStageCacheValid;
     private bool _tickActiveEngineCacheValid;
@@ -221,7 +223,6 @@ public class PartGraph
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
         _engineReadoutCacheValid = false;
-        _partLocalPositionsValid = false;
     }
 
     internal void EndPhysicsTick()
@@ -231,14 +232,13 @@ public class PartGraph
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
         _engineReadoutCacheValid = false;
-        _partLocalPositionsValid = false;
     }
 
     internal void InvalidateTickActiveEngineCache() => _tickActiveEngineCacheValid = false;
 
     private void InvalidateTopologyCaches()
     {
-        _partLocalPositionsValid = false;
+        _topologyPartLocalPositionsValid = false;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
@@ -565,18 +565,22 @@ public class PartGraph
         return new RigidBodyMassProperties(totalMass, centerOfMass, inertia);
     }
 
-    private Dictionary<Part, Vector3d> GetCachedPartLocalPositions()
-    {
-        if (!_physicsTickActive)
-            return ComputePartLocalPositions();
-        if (_partLocalPositionsValid)
-            return _partLocalPositions;
+    // Positions depend on topology and geometry only, so ticks share the topology cache.
+    private Dictionary<Part, Vector3d> GetCachedPartLocalPositions() => GetTopologyPartLocalPositions();
 
-        _partLocalPositions.Clear();
-        if (_root != null)
-            AssignPositions(_root, Vector3d.Zero, _partLocalPositions);
-        _partLocalPositionsValid = true;
-        return _partLocalPositions;
+    /// <summary>Centre of <paramref name="part"/> in the vessel frame (skirt-datum origin).</summary>
+    public bool TryGetPartLocalPosition(Part part, out Vector3d position) =>
+        GetTopologyPartLocalPositions().TryGetValue(part, out position);
+
+    /// <summary>Allocation-free positions for read-only queries outside a physics tick.</summary>
+    private Dictionary<Part, Vector3d> GetTopologyPartLocalPositions()
+    {
+        if (_topologyPartLocalPositionsValid)
+            return _topologyPartLocalPositions;
+        _topologyPartLocalPositions.Clear();
+        AssignSkirtDatumPositions(_topologyPartLocalPositions);
+        _topologyPartLocalPositionsValid = true;
+        return _topologyPartLocalPositions;
     }
 
     // Parts belonging to the currently-firing stage: the subtree hanging below the
@@ -742,7 +746,7 @@ public class PartGraph
 
             double totalMass = TotalMass;
             if (totalMass <= 0.0 || _root == null) return Vector3d.Zero;
-            var positions = ComputePartLocalPositions();
+            var positions = GetTopologyPartLocalPositions();
             var com = Vector3d.Zero;
             foreach (var p in _parts)
             {
@@ -1725,12 +1729,38 @@ public class PartGraph
     }
 
     // ── Posiciones locales de piezas (para CoM y renderizado) ─────────────
+    /// <summary>
+    /// Part centres in the vessel frame. The origin is the lowest point of the assembled
+    /// stack (the skirt datum): the same point the renderer draws at the vessel position,
+    /// landing gear and water contact measure from, and the pad mount supports. Centre of
+    /// mass, inertia tensor, engine mounts and attachment nodes are all expressed in it, so
+    /// the physical and visible vehicle share one origin.
+    /// </summary>
     public Dictionary<Part, Vector3d> ComputePartLocalPositions()
     {
         var positions = new Dictionary<Part, Vector3d>();
-        if (_root == null) return positions;
-        AssignPositions(_root, Vector3d.Zero, positions);
+        AssignSkirtDatumPositions(positions);
         return positions;
+    }
+
+    /// <summary>
+    /// Fills <paramref name="positions"/> with every attached part's centre, origin at the
+    /// stack's lowest point. Shared by the cached physics-tick path and the public query so
+    /// both report the same frame.
+    /// </summary>
+    private void AssignSkirtDatumPositions(Dictionary<Part, Vector3d> positions)
+    {
+        if (_root == null) return;
+        AssignPositions(_root, Vector3d.Zero, positions);
+        double lowest = double.PositiveInfinity;
+        foreach (var (part, position) in positions)
+            lowest = System.Math.Min(lowest, position.Y - part.Definition.LengthM * 0.5);
+        if (!double.IsFinite(lowest) || lowest == 0.0) return;
+        var shift = new Vector3d(0.0, -lowest, 0.0);
+        // Iterate the part list, not the dictionary being updated (allocation-free).
+        foreach (var part in _parts)
+            if (positions.TryGetValue(part, out var position))
+                positions[part] = position + shift;
     }
 
     /// <summary>

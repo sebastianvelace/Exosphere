@@ -92,7 +92,7 @@ Important implemented systems:
 - radial/suborbital impact guards
 - pressure-corrected thrust/Isp/mass flow
 - orientation-dependent aero and heating
-- opt-in coupled rigid-body 6-DoF RK4 with COM/inertia, candidate-state forces and contact
+- coupled rigid-body 6-DoF RK4 (default) with COM/inertia, candidate-state forces and contact
 - heat-shield flag from part JSON
 - hard impact destruction
 - VAB catalog/assembly/export in `ExosphereSimulation/Construction`
@@ -165,14 +165,15 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 - Current product priority after documentation cleanup: visual fidelity against real Starship/Super Heavy references. Prefer scoped improvements to `VesselRenderer`, `ReentryPlasmaController`, `PlumeSystem`, camera/lighting, and visual capture before broad new gameplay systems.
 - Flight 14 exploration now continues beyond its retained 100 m witness to estimated low-speed water entry, then freezes after ten seconds of water-only coupled mass-centre translation/rotation. Inclined sealed-cylinder buoyancy and projected wet-section drag are opt-in and region-gated; the global ascent/EDL integration mode is unchanged. An independent Super Heavy engineering return now reaches Gulf water contact with selectable observation and an abstracted FTS boundary; see `docs/audits/flight14_booster_return_2026-10-03.md`. Estimated booster apogee/landing guidance now improves height and timing; see `docs/audits/flight14_booster_calibration_2026-10-03.md`. Exact targeting, flooding, measured capsize timing and full booster reference-timing/trajectory calibration remain pending. See `docs/audits/flight14_water_motion_2026-10-03.md`; the earlier water-entry and inclined-water audits describe prior increments.
-- The coupled 6-DoF path remains disabled by default. Both paths read one per-part inertia
-  tensor and rotate about the centre of mass in free flight; SAS, RCS floor and the pilot rate
-  envelope are ported. Parity gates pass for coast, 30 s guided Flight 7 ascent, contacts,
-  flap entry from 90 km to the 3 km belly-flop (production Flight 14 law), flip-to-touchdown and
-  the production Flight 14 ascent from the pad through hot staging to insertion and the
-  production flip/relight: every Starship segment has a parity gate. Before activation, decide
-  whether legacy should sample forces at the centre of mass and run the Godot `[G]` ascent/EDL
-  harnesses with the switch on, on a GPU machine.
+- Off-rails flight runs on the coupled rigid-body 6-DoF RK4 by default, from every scheduler
+  (`Universe.IntegrateVesselFullPhysics`); the split tick remains only as a comparison baseline
+  (`Coupled6DofIntegrationEnabled = false`). The part frame's origin is the stack's lowest point
+  (the skirt datum the renderer, gear, water and pad use); `Vessel.Position` is that datum,
+  `Vessel.CenterOfMass`/`CenterOfMassVelocity` the physical state. Navigation (surface velocity,
+  orbital burns, SAS holds) and on-rails conics (`ComputeCenterOfMassOrbit`) use the centre of
+  mass; altitude queries use the datum. Remaining empirical attitude terms (CP clamp, damping
+  constant, aggregate flaps, SAS rate overwrite, RCS floor) are tracked in
+  `docs/physics/rigid_body_fidelity_plan.md` (F1–F6).
 
 ## Workflow
 

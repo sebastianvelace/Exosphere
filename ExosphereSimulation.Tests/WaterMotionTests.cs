@@ -57,7 +57,9 @@ public sealed class WaterMotionTests(ITestOutputHelper output)
         var (_, ship, _, water) = Fixture();
         var properties = ship.Parts.GetMassProperties();
         var resolved = WaterMotionFrame.ResolveMassProperties(ship.Parts, water);
-        Assert.True(water.SkirtDatumYM < 0);
+        // The part frame's origin is the stack's lowest point, so the water skirt datum is
+        // the vessel origin itself.
+        Assert.Equal(0.0, water.SkirtDatumYM!.Value, 9);
         Assert.InRange((resolved.CenterOfMassBody-(properties.CenterOfMassBody-Vector3d.Up*water.SkirtDatumYM!.Value)).Magnitude, 0, 1e-12);
         Assert.Equal(properties.InertiaBody, resolved.InertiaBody);
         var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
@@ -101,7 +103,8 @@ public sealed class WaterMotionTests(ITestOutputHelper output)
             }
         }
         Assert.Equal(initialMass, ship.TotalMass);
-        Assert.False(universe.Coupled6DofIntegrationEnabled);
+        // Water motion always runs the coupled water integrator, whatever the global mode.
+        Assert.True(ship.WaterMotionEnabled);
         Assert.True(ship.LastWaterContact?.SubmergedVolumeM3 > 0);
         var up = body.GetGeodeticUp(ship.Position);
         output.WriteLine($"step={step} altitude={ship.GetAltitude(body):G6}m "

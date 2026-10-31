@@ -71,8 +71,6 @@ public sealed class Flight14LandingBurn
             || _engines.IsBroken || _engines.FuelDepleted
             || _ship.Parts.Parts.Any(p => p.Definition.HasVehicleRole("booster")))
         { Block("landing-vehicle-unavailable"); return; }
-        if (_definition.ContinueToWaterContact && universe.Coupled6DofIntegrationEnabled)
-        { Block("water-entry-coupled-integrator-not-validated"); return; }
         var healthy = _engines.EngineStates.Where(e => e.FailureCode == null
             && e.State != EngineLifecycleState.Failed).Take(3).ToArray();
         if (healthy.Length != 3 || healthy.Any(e => e.EngineModelId != _seaLevelModelId))

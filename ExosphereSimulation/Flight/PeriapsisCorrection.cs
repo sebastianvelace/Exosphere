@@ -15,8 +15,8 @@ public static class PeriapsisCorrection
     {
         ArgumentNullException.ThrowIfNull(vessel);
         ArgumentNullException.ThrowIfNull(body);
-        var position = vessel.Position - body.Position;
-        var velocity = vessel.Velocity - body.Velocity;
+        var position = vessel.CenterOfMass - body.Position;
+        var velocity = vessel.CenterOfMassVelocity - body.Velocity;
         double timeToPeriapsis = PeriapsisCaptureBurn.TimeToPeriapsis(position, velocity, body.GM);
         if (!double.IsFinite(timeToPeriapsis) || timeToPeriapsis <= 0.0)
             throw new InvalidOperationException("The conic has no periapsis ahead.");

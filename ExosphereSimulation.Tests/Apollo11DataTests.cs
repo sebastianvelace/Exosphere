@@ -594,12 +594,7 @@ public sealed class Apollo11DataTests
         vessel.Velocity = moon.Velocity + tangent * speed;
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.IsOnRails = true;
-        vessel.OrbitalState = OrbitalElements.FromStateVector(
-            vessel.Position - moon.Position,
-            vessel.Velocity - moon.Velocity,
-            moon.GM,
-            moon.Id,
-            epoch);
+        vessel.OrbitalState = vessel.ComputeCenterOfMassOrbit(moon, epoch);
         vessel.ReferenceBodyId = moon.Id;
         vessel.Throttle = 0.0;
     }

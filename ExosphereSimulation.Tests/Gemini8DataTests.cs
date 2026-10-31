@@ -307,8 +307,17 @@ public sealed class Gemini8DataTests
         target.Position = orbitalPosition;
         target.Velocity = orbitalVelocity;
         target.Orientation = orientation;
-        gemini.Position = orbitalPosition
-            - dockingAxis * (0.975 + 0.10);
+        // Place the docking nodes 0.10 m apart along the axis, from the real node positions.
+        var geminiPortPart = gemini.Parts.Parts.Single(part =>
+            part.Definition.HasVehicleRole("gemini_docking_port"));
+        var targetPortPart = target.Parts.Parts.Single(part =>
+            part.Definition.HasVehicleRole("agena_target_docking_port"));
+        Assert.True(gemini.Parts.TryGetAttachmentNodeLocalPosition(geminiPortPart.InstanceId,
+            geminiPortPart.Definition.DockingNodeId, out var geminiNode));
+        Assert.True(target.Parts.TryGetAttachmentNodeLocalPosition(targetPortPart.InstanceId,
+            targetPortPart.Definition.DockingNodeId, out var targetNode));
+        gemini.Position = orbitalPosition + orientation.Rotate(targetNode - geminiNode)
+            - dockingAxis * 0.10;
         gemini.Velocity = orbitalVelocity + dockingAxis * 0.10;
         gemini.Orientation = orientation;
         gemini.SASEnabled = false;

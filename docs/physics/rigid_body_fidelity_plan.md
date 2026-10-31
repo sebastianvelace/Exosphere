@@ -23,6 +23,38 @@ state contacts. Every Starship segment has a legacy/coupled parity gate
 | A7 | No gravity-gradient torque | 3μ/r⁵ · r × (I r) |
 | A8 | No propellant slosh | Pendulum/spring slosh modes per tank, fill-fraction dependent |
 
+## F0 findings (2026-10-31)
+
+Turning the coupled path on by default exposed a frame error underneath both paths, fixed
+before any recalibration:
+
+- **One vessel origin.** `PartGraph` measured parts from the root (the top of every stack:
+  escape tower, docking nose, payload) while the renderer, landing gear, water contact and pad
+  placement all used the stack's lowest point. Every catalogue vehicle's centre of mass sat
+  23–116 m *below* its skirt. The part frame now has its origin at the lowest point
+  (`AssignSkirtDatumPositions`), shared by the tick cache and every query (closes ROADMAP
+  blocker 5). With the true centre of mass, Mercury-Atlas, Saturn V AS-506 and Flight 14
+  calibrations pass without retuning; the Atlas had been flying with vacuum thrust from a
+  centre of mass 11 m underground.
+- **Atmosphere below the reference surface.** Pressure and density returned zero below 0 m;
+  the base layer now extrapolates to −5 km as USSA-76 defines.
+- **Exact separation.** Staging, structural breakup and payload release keep every part in
+  place and give each fragment the rigid-body velocity v + ω×Δ (mass, centre of mass, linear
+  and angular momentum conserved to 1e-9), replacing the mass-ratio "gap" heuristic.
+- **Docked stacks** integrate as one rigid body (composite mass, centre and R·I·Rᵀ tensor).
+- **Every scheduler uses the coupled path.** The warp-mixed scheduler and deferred catch-up
+  called the split tick directly; one `IntegrateVesselFullPhysics` entry point now dispatches.
+- **Water contact** is co-integrated on the coupled path (pre-entry and floating).
+- **On-rails conics describe the centre of mass** (`Vessel.ComputeCenterOfMassOrbit`); the
+  datum is rebuilt from the coasted attitude.
+- **Navigation state is the centre of mass.** `Vessel.GetSurfaceVelocity` and orbital burn
+  guidance (Lambert, prograde-energy, periapsis, translunar/transearth corrections, insertion,
+  SAS holds) read centre-of-mass position and velocity; a rotating skirt's ω×r had steered the
+  Flight 14 flip off vertical and kept a 0.06 m/s Apollo correction from ever aligning.
+- **Latent errors found on the way:** the engine-out isolator combined part-relative mount
+  positions with the vessel centre of mass; the RCS floor torque was scaled by the docked
+  inertia ratio twice; anchored vessels corotated their datum, not their centre of mass.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by

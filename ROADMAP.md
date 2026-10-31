@@ -1,6 +1,6 @@
 # Exosphere Roadmap
 
-> **Reconciled:** 2026-09-22 · **Current physics front:** legacy-versus-coupled 6-DoF parity.
+> **Reconciled:** 2026-10-31 · **Current physics front:** rigid-body fidelity (F1–F6), coupled 6-DoF on by default.
 > The historical phase waves below remain useful evidence, but the active source of truth is
 > [`docs/README.md`](docs/README.md), [`docs/physics/PHYSICS_MODEL.md`](docs/physics/PHYSICS_MODEL.md)
 > and this roadmap.
@@ -221,9 +221,9 @@ GitHub en verde. Orden por impacto para el jugador:
 4. **Persistir la ventana de lanzamiento y los burns guiados en `SaveGameV2`.** Hoy reanudar un
    ascenso guardado cae en la corrección de plano por script. Criterio: un save en ascenso,
    en costa translunar y en órbita lunar reanuda con el mismo plan y sin corrección.
-5. **Datum render/masa inconsistente** (bloquea el 6-DoF acoplado). Criterio: un único origen
-   de piezas compartido por `VesselRenderer`, inercia y contacto, con test de coincidencia de
-   centro de masa render/física por familia de vehículo.
+5. ~~**Datum render/masa inconsistente**~~ — cerrado (2026-10-31): el marco de piezas tiene
+   origen en el punto más bajo del stack, el mismo que usan renderer, patas, agua y pad
+   (`docs/physics/rigid_body_fidelity_plan.md`, hallazgos F0).
 6. **Cd transónico de costado > 2.** Criterio: curva calibrada contra datos publicados y la
    telemetría IFT, sin romper los tests EDL de Starship ni el amerizaje del Flight 14.
 7. **Paridad del integrador acoplado** (ver Prioridad Inmediata): ascenso controlado largo,
@@ -360,8 +360,11 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      Starship, del pad al contacto, tienen gate de paridad.
    - Antes de activar el switch: decidir si el legacy muestrea fuerzas en el centro de masa y
      correr los harness Godot `[G]` de ascenso/EDL con el switch encendido en una máquina con GPU.
-   - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
-     pasen y se conserve evidencia numérica y de framebuffer.
+   - Activado por defecto (paso 30, fase F0): todos los schedulers vuelan el cuerpo rígido
+     acoplado. Pendiente: verificación en framebuffer real con GPU de `[G]` ascenso/EDL.
+   - Siguiente: fases F1–F6 de `docs/physics/rigid_body_fidelity_plan.md` (aerodinámica
+     distribuida, flaps físicos, control solo por actuadores, jet damping, gradiente de
+     gravedad, slosh, recalibración histórica).
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el

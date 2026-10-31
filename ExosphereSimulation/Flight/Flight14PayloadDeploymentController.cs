@@ -81,8 +81,8 @@ public sealed class Flight14PayloadDeploymentController : IPhysicsStepController
         var part = _ship.Parts.Parts.SingleOrDefault(p => p.InstanceId == id);
         if (part == null || part.IsBroken) { Block("payload-missing-or-damaged"); return; }
         double beforeMass = _ship.TotalMass;
-        var beforePosition = _ship.Position;
-        var beforeVelocity = _ship.Velocity;
+        var beforePosition = _ship.CenterOfMass;
+        var beforeVelocity = _ship.CenterOfMassVelocity;
         var omega = _ship.AngularVelocity;
         var opening = _ship.Orientation.Rotate(_definition.OpeningVelocity);
         var satellite = _ship.DeployPayload(id, $"Starlink V3 { _releases.Count+1:00} (estimate)",
@@ -93,10 +93,9 @@ public sealed class Flight14PayloadDeploymentController : IPhysicsStepController
         // without applying physical control torque.
         satellite.SASEnabled = false;
         double mass = satellite.TotalMass+_ship.TotalMass;
-        var center = (satellite.Position*satellite.TotalMass+_ship.Position*_ship.TotalMass)/mass;
-        var momentum = satellite.Velocity*satellite.TotalMass+_ship.Velocity*_ship.TotalMass;
-        var satelliteOrbit = OrbitalElements.FromStateVector(satellite.Position-_body.Position,
-            satellite.Velocity-_body.Velocity, _body.GM, _body.Id, universe.CurrentTime);
+        var center = (satellite.CenterOfMass*satellite.TotalMass+_ship.CenterOfMass*_ship.TotalMass)/mass;
+        var momentum = satellite.CenterOfMassVelocity*satellite.TotalMass+_ship.CenterOfMassVelocity*_ship.TotalMass;
+        var satelliteOrbit = satellite.ComputeCenterOfMassOrbit(_body, universe.CurrentTime);
         var release = new Flight14PayloadRelease(elapsed, id, satellite, beforeMass, _ship.TotalMass,
             mass-beforeMass, center.DistanceTo(beforePosition), momentum.DistanceTo(beforeVelocity*beforeMass),
             (satellite.Velocity-_ship.Velocity-omega.Cross(satellite.Position-_ship.Position)-opening).Magnitude,

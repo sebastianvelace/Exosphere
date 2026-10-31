@@ -279,12 +279,7 @@ public sealed class InterestPromotionParityTests
         stack = BuildTwoPartStack(vesselName);
         ConfigureCircularOrbit(stack, body, radius: 3_000_000.0);
         stack.IsOnRails = true;
-        stack.OrbitalState = OrbitalElements.FromStateVector(
-            stack.Position - body.Position,
-            stack.Velocity - body.Velocity,
-            body.GM,
-            body.Id,
-            0.0);
+        stack.OrbitalState = stack.ComputeCenterOfMassOrbit(body, 0.0);
 
         var universe = new Universe { TimeScale = timeScale };
         universe.AddBody(body);
@@ -323,22 +318,28 @@ public sealed class InterestPromotionParityTests
                 position - body.Position, velocity - body.Velocity,
                 body.GM, body.Id, 0.0),
         };
+        // Datums are each port's bottom face; the flipped secondary's docking node (port
+        // centre) sits 0.2 m above the primary's.
+        var secondaryDatum = position + Vector3d.Up * (DockingPortLengthM + 0.2);
         secondary = new Vessel(active ? "reference-secondary" : "candidate-secondary")
         {
-            Position = position + Vector3d.Up * 0.2,
+            Position = secondaryDatum,
             Velocity = velocity,
             ReferenceBodyId = body.Id,
             SASEnabled = false,
             Orientation = Quaterniond.FromAxisAngle(Vector3d.Right, System.Math.PI),
             IsOnRails = true,
             OrbitalState = OrbitalElements.FromStateVector(
-                position + Vector3d.Up * 0.2 - body.Position,
+                secondaryDatum - body.Position,
                 velocity - body.Velocity, body.GM, body.Id, 0.0),
         };
         primary.Parts.SetRoot(DockingPort(
             active ? "reference-primary-port" : "candidate-primary-port"));
         secondary.Parts.SetRoot(DockingPort(
             active ? "reference-secondary-port" : "candidate-secondary-port"));
+        // The conics belong to the centres of mass; reseed them once the parts exist.
+        primary.OrbitalState = primary.ComputeCenterOfMassOrbit(body, 0.0);
+        secondary.OrbitalState = secondary.ComputeCenterOfMassOrbit(body, 0.0);
 
         var universe = new Universe
         {
@@ -470,6 +471,8 @@ public sealed class InterestPromotionParityTests
                 DiameterM = 2.0,
             },
             $"{id}-part"));
+        // The conic belongs to the centre of mass; reseed it once the parts exist.
+        vessel.OrbitalState = vessel.ComputeCenterOfMassOrbit(body, 0.0);
         return vessel;
     }
 
@@ -511,12 +514,14 @@ public sealed class InterestPromotionParityTests
         return vessel;
     }
 
+    private const double DockingPortLengthM = 2.0;
+
     private static Part DockingPort(string instanceId) => new(new PartDefinition
     {
         Id = "promotion-docking-port",
         CategoryStr = "command",
         MassDry = 1_000.0,
-        LengthM = 2.0,
+        LengthM = DockingPortLengthM,
         DiameterM = 2.0,
         IsDockingPort = true,
         DockingNodeId = "dock",

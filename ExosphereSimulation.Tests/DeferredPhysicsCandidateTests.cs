@@ -166,12 +166,7 @@ public sealed class DeferredPhysicsCandidateTests
             "candidate-distant",
             -Vector3d.Right * radius,
             -Vector3d.Up * speed);
-        distantVessel.OrbitalState = OrbitalElements.FromStateVector(
-            distantVessel.Position - earth.Position,
-            distantVessel.Velocity - earth.Velocity,
-            earth.GM,
-            earth.Id,
-            0.0);
+        distantVessel.OrbitalState = distantVessel.ComputeCenterOfMassOrbit(earth, 0.0);
 
         var universe = new Universe
         {

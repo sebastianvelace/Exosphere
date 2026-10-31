@@ -89,16 +89,21 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         Assert.InRange((run.Ship.Position - endpointPosition).Magnitude,
             0, endpoint.InertialSpeedMps * finalFrameSeconds + 1);
         // The state remains free fall: orbit-relative speed is distinct from rotating-air speed.
-        var relativeVelocity = run.Ship.Velocity - run.Earth.Velocity;
-        Assert.Equal(relativeVelocity - run.Earth.GetSurfaceVelocity(run.Ship.Position),
+        // Both are the centre of mass's (the vehicle's navigation state).
+        var relativeVelocity = run.Ship.CenterOfMassVelocity - run.Earth.Velocity;
+        Assert.Equal(relativeVelocity - run.Earth.GetSurfaceVelocity(run.Ship.CenterOfMass),
             run.Ship.GetSurfaceVelocity(run.Earth));
         // Conditional display calibration: the broadcast does not specify its datum.
         // These are read-only comparison samples, never flight-controller targets.
         Assert.Equal(observations.Length, samples.Count);
+        string residuals = string.Join(", ", Enumerable.Range(0, observations.Length)
+            .Select(i => $"T+{observations[i].Time:F0}: {samples[i].Altitude - observations[i].Altitude:F0} m"));
+        output.WriteLine($"broadcast altitude residuals: {residuals}");
         for (int i = 0; i < observations.Length; i++)
         {
             Assert.InRange(samples[i].Time - observations[i].Time, 0, 1.0 / fps + 0.02);
-            Assert.InRange(samples[i].Altitude - observations[i].Altitude, -500, 500);
+            Assert.True(System.Math.Abs(samples[i].Altitude - observations[i].Altitude) <= 500,
+                $"broadcast altitude residuals: {residuals}");
         }
         // Rounded 94.6 -> 93.9 km over 10 seconds suggests ~70 m/s down.
         // Allow rounding, clock quantization and residual model uncertainty.

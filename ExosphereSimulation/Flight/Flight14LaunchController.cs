@@ -79,8 +79,8 @@ public sealed class Flight14LaunchController : IPhysicsStepController
         if (Phase is Flight14LaunchPhase.OrbitReady or Flight14LaunchPhase.Blocked) return;
         if (!ReferenceEquals(universe.ActiveVessel, _ship)) { Block("active-vessel-changed"); return; }
         if (_ship.IsDestroyed || _ship.StructuralControlLost) { Block("vehicle-damaged"); return; }
-        var rel = _ship.Position-_body.Position;
-        var velocity = _ship.Velocity-_body.Velocity;
+        var rel = _ship.CenterOfMass-_body.Position;
+        var velocity = _ship.CenterOfMassVelocity-_body.Velocity;
         double radius = rel.Magnitude;
         var up = rel.Normalized;
         double radialSpeed = velocity.Dot(up);

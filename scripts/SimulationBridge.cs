@@ -1377,12 +1377,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         target.Orientation = Quaterniond.FromTo(Vector3d.Up, tangent);
         target.ReferenceBodyId = earth.Id;
         target.IsOnRails = true;
-        target.OrbitalState = OrbitalElements.FromStateVector(
-            target.Position - earth.Position,
-            target.Velocity - earth.Velocity,
-            earth.GM,
-            earth.Id,
-            Universe.CurrentTime);
+        target.OrbitalState = target.ComputeCenterOfMassOrbit(earth, Universe.CurrentTime);
         target.SASEnabled = true;
         Universe.AddVessel(target);
         SpawnDebrisRenderer(target, "Target_");

@@ -425,6 +425,18 @@ public class Vessel
         return own > 0.0 && stack > own ? own / stack : 1.0;
     }
     public Vector3d  CenterOfMass  => Position + Orientation.Rotate(Parts.CenterOfMass);
+    /// <summary>Inertial velocity of the centre of mass: datum velocity plus ω×r.</summary>
+    public Vector3d  CenterOfMassVelocity => Velocity + AngularVelocity.Cross(Orientation.Rotate(CenterOfMassOffsetLocal));
+    /// <summary>Centre of mass in the vessel frame (zero for a part-less point mass).</summary>
+    public Vector3d  CenterOfMassOffsetLocal => Parts.TotalMass > 0.0 ? Parts.CenterOfMass : Vector3d.Zero;
+
+    /// <summary>
+    /// Conic of this vessel's centre of mass about <paramref name="body"/> at
+    /// <paramref name="epoch"/>: the state <see cref="OrbitalState"/> must describe.
+    /// </summary>
+    public OrbitalElements ComputeCenterOfMassOrbit(CelestialBody body, double epoch) =>
+        OrbitalElements.FromStateVector(CenterOfMass - body.Position,
+            CenterOfMassVelocity - body.Velocity, body.GM, body.Id, epoch);
     public double    VehicleLength => Parts.VehicleLength;
     public double    MaximumDiameter => Parts.MaximumDiameter;
     public double    NoseRadius      => Parts.NoseRadius;
@@ -451,8 +463,16 @@ public class Vessel
     }
 
     // Velocidad relativa a la superficie (para aerodinámica)
-    public Vector3d GetSurfaceVelocity(CelestialBody body) =>
-        Velocity - body.Velocity - body.GetSurfaceVelocity(Position);
+    /// <summary>
+    /// Velocity of the vehicle relative to the rotating surface: the centre-of-mass velocity
+    /// (what navigation estimates and what loads the whole airframe), not the datum's, which
+    /// adds ω×r while the vehicle rotates. Altitude queries keep using the datum (the skirt).
+    /// </summary>
+    public Vector3d GetSurfaceVelocity(CelestialBody body)
+    {
+        var centerOfMass = CenterOfMass;
+        return CenterOfMassVelocity - body.Velocity - body.GetSurfaceVelocity(centerOfMass);
+    }
 
     // Presión dinámica q = ½·ρ·v² (Pa) respecto a la atmósfera en rotación. Es la carga
     // aerodinámica que define el "Max-Q" del ascenso y escala el arrastre y los momentos.
@@ -963,10 +983,10 @@ public class Vessel
             var floorGapAngAccel = new Vector3d(
                 FloorByMagnitude(engineAngAccel.X, rcsFloorAngAccel.X) - engineAngAccel.X,
                 FloorByMagnitude(engineAngAccel.Y, rcsFloorAngAccel.Y) - engineAngAccel.Y,
-                FloorByMagnitude(engineAngAccel.Z, rcsFloorAngAccel.Z) - engineAngAccel.Z)
-                * DockedInertiaScale();
-            // The floor is specified as an angular acceleration, so convert it with the
-            // inertia tensor the rigid-body integrator divides by, not the legacy scalars.
+                FloorByMagnitude(engineAngAccel.Z, rcsFloorAngAccel.Z) - engineAngAccel.Z);
+            // The floor is this vessel's own actuator authority (an angular acceleration of
+            // its own body), so its torque is I_own·α. A docked stack's larger inertia is
+            // applied once, by the integrator dividing by the composite tensor.
             CoupledRcsFloorTorqueBody = Parts.GetMassProperties().InertiaBody
                 .Multiply(floorGapAngAccel);
         }
@@ -1351,23 +1371,22 @@ public class Vessel
             .FirstOrDefault();
         double impulseNs = decoupler?.Definition.SeparationImpulseNs ?? 0.0;
 
+        var before = Parts.ComputePartLocalPositions();
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
 
         var debris = CreateDebrisVessel(detached, Name + " (debris)");
 
-        // Rebase the remaining vessel from the old stack-base datum to the physical
-        // separation plane, split by mass ratio so both fragments move (not just this one),
-        // conserving the combined centre of mass. Without this, both vessels occupy the same
-        // world point while their renderers use different local origins, producing total
-        // interpenetration.
+        // Every part keeps its place at the instant of separation; each fragment's datum
+        // moves to its own new lowest point and inherits the rigid-body velocity there.
+        // The decoupler impulse then opens them along the stack axis.
+        PlaceSplitFragmentsRigidly(before, debris);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
-        double gap = System.Math.Max(1.0, debris.VehicleLength);
         double opening = impulseNs > 0.0
             ? impulseNs * (TotalMass + debris.TotalMass)
                 / System.Math.Max(1.0, TotalMass * debris.TotalMass)
             : DefaultSeparationOpeningMs;
-        ApplyMassSplitKinematics(debris, axis, gap, opening);
+        ApplyMassSplitKinematics(debris, axis, 0.0, opening);
 
         // The split changes both position and velocity. Any cached conic now describes
         // the pre-separation stack and must not be reused by the next rails tick.
@@ -1389,16 +1408,17 @@ public class Vessel
     {
         ClearHotStageOverlapState();
 
+        var before = Parts.ComputePartLocalPositions();
         var detached = Parts.SplitAtJoint(joint);
         if (detached == null) return null;
 
         var debris = CreateDebrisVessel(detached, Name + " (structural debris)");
 
-        // Gentle separation along vessel +Y so fragments do not occupy the same origin.
+        // Fragments start where their parts were, with a gentle opening along vessel +Y.
+        PlaceSplitFragmentsRigidly(before, debris);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
-        double gap = System.Math.Max(1.0, debris.VehicleLength);
         const double relativeOpenMs = 0.5;
-        ApplyMassSplitKinematics(debris, axis, gap, relativeOpenMs);
+        ApplyMassSplitKinematics(debris, axis, 0.0, relativeOpenMs);
 
         IsOnRails = false;
         OrbitalState = null;
@@ -1441,6 +1461,33 @@ public class Vessel
         HotStageOverlapCompletedPending = false;
     }
 
+    /// <summary>
+    /// Re-datums this vessel and a fragment just split from it so that every part keeps the
+    /// world position it had in the joined stack (<paramref name="before"/>, the stack's
+    /// part positions). Each fragment's datum (its new lowest point) moves by the change of
+    /// frame and takes the rigid-body velocity v + ω×Δ there; angular velocity is shared.
+    /// Mass, centre of mass, linear and angular momentum are conserved exactly.
+    /// </summary>
+    private void PlaceSplitFragmentsRigidly(Dictionary<Part, Vector3d> before, Vessel fragment)
+    {
+        var (position, velocity) = (Position, Velocity);
+        Rebase(this);
+        Rebase(fragment);
+
+        void Rebase(Vessel vessel)
+        {
+            var after = vessel.Parts.ComputePartLocalPositions();
+            foreach (var (part, local) in after)
+            {
+                if (!before.TryGetValue(part, out var original)) continue;
+                var shiftWorld = Orientation.Rotate(original - local);
+                vessel.Position = position + shiftWorld;
+                vessel.Velocity = velocity + AngularVelocity.Cross(shiftWorld);
+                return;
+            }
+        }
+    }
+
     private Vessel CreateDebrisVessel(PartGraph detached, string name)
     {
         var debris = new Vessel
@@ -1480,10 +1527,7 @@ public class Vessel
         var part = Parts.Parts.FirstOrDefault(p => p.InstanceId == rootPartInstanceId);
         if (part == null) return null;
 
-        var positions = Parts.ComputePartLocalPositions();
-        Vector3d localOffset = positions.TryGetValue(part, out var offset)
-            ? offset - Parts.CenterOfMass
-            : Vector3d.Zero;
+        var before = Parts.ComputePartLocalPositions();
         var detached = Parts.DetachSubtree(rootPartInstanceId);
         if (detached == null) return null;
 
@@ -1492,7 +1536,6 @@ public class Vessel
         if (payloadMass <= 0.0 || carrierMass <= 0.0)
             throw new InvalidOperationException("Payload separation requires positive masses.");
 
-        Vector3d relativePosition = Orientation.Rotate(localOffset);
         Vector3d relativeVelocity = Orientation.Rotate(
             separationVelocityLocal ?? new Vector3d(0.0, 0.25, 0.0));
 
@@ -1513,10 +1556,7 @@ public class Vessel
         foreach (var detachedPart in detached.Parts) payload.Parts.AddPart(detachedPart);
         foreach (var joint in detached.Joints) payload.Parts.AddJoint(joint);
 
-        Vector3d positionAxis = relativePosition.Magnitude > 1e-9
-            ? -relativePosition.Normalized
-            : Vector3d.Up;
-        ApplyMassSplitKinematics(payload, positionAxis, relativePosition.Magnitude, 0.0);
+        PlaceSplitFragmentsRigidly(before, payload);
 
         Vector3d velocityAxis = relativeVelocity.Magnitude > 1e-9
             ? -relativeVelocity.Normalized
