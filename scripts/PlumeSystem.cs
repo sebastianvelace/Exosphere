@@ -70,6 +70,8 @@ public partial class PlumeSystem : Node3D
     public float LastMaximumThrottle { get; private set; }
     public float LastCoreOpacity { get; private set; }
     public float LastSheathOpacity { get; private set; }
+    /// <summary>High-altitude under-expanded bloom, 0..1 (see <see cref="PlumeBloom"/>).</summary>
+    public float LastBloom { get; private set; }
     public int VisibleUnitCount { get; private set; }
     public int AnchoredUnitCount { get; private set; }
     public float LongestVisibleLength { get; private set; }
@@ -226,7 +228,8 @@ public partial class PlumeSystem : Node3D
         LastPressureRatio = pressRatio;
         LastMaximumThrottle = Mathf.Max(superHeavyThrottle, shipThrottle);
         LastCoreOpacity = Mathf.Lerp(0.90f, 0.48f, expansion);
-        LastSheathOpacity = Mathf.Lerp(0.50f, 0.12f, expansion);
+        LastBloom = PlumeBloom(pressRatio);
+        LastSheathOpacity = Mathf.Lerp(Mathf.Lerp(0.50f, 0.12f, expansion), BloomSheathOpacity, LastBloom);
 
         UpdateGroup(_shUnits, superHeavyThrottle > 0.01f, superHeavyThrottle,
             expansion, pressRatio, altitude, 1f, flickerPhase: _visualTimeSeconds,
@@ -283,7 +286,8 @@ public partial class PlumeSystem : Node3D
         LastPressureRatio = pressureRatio;
         LastMaximumThrottle = 0f;
         LastCoreOpacity = Mathf.Lerp(0.90f, 0.48f, expansion);
-        LastSheathOpacity = Mathf.Lerp(0.50f, 0.12f, expansion);
+        LastBloom = PlumeBloom(pressureRatio);
+        LastSheathOpacity = Mathf.Lerp(Mathf.Lerp(0.50f, 0.12f, expansion), BloomSheathOpacity, LastBloom);
         for (int i = 0; i < _genericUnits.Count; i++)
         {
             var unit = _genericUnits[i];
@@ -373,6 +377,25 @@ public partial class PlumeSystem : Node3D
         return _farFieldActive;
     }
 
+    private const float BloomSheathOpacity = 0.42f;
+
+    /// <summary>
+    /// Presentation-only weight for the strongly under-expanded plume seen between
+    /// roughly 35 and 100 km. There the exit pressure exceeds ambient by 10^3–10^5, the
+    /// jet turns outward just past the nozzle and drives a luminous interaction layer
+    /// into the residual air, so IFT and Saturn V footage show a bloom several vehicle
+    /// diameters wide. At sea level the jet is pressure-matched and in orbit there is
+    /// no air to light up, so the weight is zero at both ends; it does not set thrust.
+    /// </summary>
+    public static float PlumeBloom(float pressureRatio)
+    {
+        if (pressureRatio <= 0f) return 0f;
+        float logP = Mathf.Log(pressureRatio) / Mathf.Log(10f);
+        float rise = Mathf.SmoothStep(-6.5f, -5.0f, logP);   // ~100 km → ~80 km
+        float fall = 1f - Mathf.SmoothStep(-2.2f, -1.2f, logP); // ~35 km → ~20 km
+        return rise * fall;
+    }
+
     private void UpdateGroup(List<PlumeUnit> units,
         bool firing, float throttle, float expansion, float pressureRatio, double altitude,
         float activeFraction, int start = 0, int count = -1, int activeCount = -1,
@@ -404,6 +427,7 @@ public partial class PlumeSystem : Node3D
         // atmo_pressure = exp(-alt/7000) already computed as (1 - expansion) before
         // the smoothstep, but we keep the simpler inverse relationship here.
         float atmoPressure = pressureRatio;
+        float bloom = PlumeBloom(pressureRatio);
 
         int end = count < 0 ? units.Count : System.Math.Min(units.Count, start + count);
         for (int index = start; index < end; index++)
@@ -445,8 +469,9 @@ public partial class PlumeSystem : Node3D
                 SetPlumeMaterial(
                     u.ConeMat, throttle, expansion, atmoPressure,
                     u.BaseEnergy * 0.58f * Mathf.Max(0.28f, activeFraction),
-                    Mathf.Lerp(u.IsSuperHeavy ? 0.72f : 0.50f,
-                        u.IsSuperHeavy ? 0.20f : 0.12f, expansion)
+                    Mathf.Lerp(Mathf.Lerp(u.IsSuperHeavy ? 0.72f : 0.50f,
+                        u.IsSuperHeavy ? 0.20f : 0.12f, expansion),
+                        u.IsSuperHeavy ? 0.62f : BloomSheathOpacity, bloom)
                         * interactionOpacity,
                     shockCellStrength, shockSpacing, shockSoftness,
                     steamOcclusion, afterburnStrength, padInteraction, coreLayer: 0f,
@@ -461,6 +486,8 @@ public partial class PlumeSystem : Node3D
                     farFieldCoreOpacity * interactionOpacity, shockCellStrength * 0.72f, shockSpacing, shockSoftness,
                     steamOcclusion * 0.35f, afterburnStrength * 0.80f, padInteraction * 0.65f,
                     coreLayer: 1f, farField: farField);
+                u.ConeMat.SetShaderParameter("plume_bloom", bloom);
+                u.CoreMat.SetShaderParameter("plume_bloom", bloom);
                 u.Cone.Visible = unitFiring && !farField;
                 u.Core.Visible = unitFiring;
 
@@ -682,6 +709,9 @@ public partial class PlumeSystem : Node3D
         mat.SetShaderParameter("afterburn_strength", 0f);
         mat.SetShaderParameter("pad_interaction", 0f);
         mat.SetShaderParameter("layer_opacity",     sh ? 0.56f : 0.50f);
+        // Downstream radius at full high-altitude bloom. The merged booster column
+        // opens the most; single nozzles a little less; the ground skirt never flares.
+        mat.SetShaderParameter("vacuum_flare", unit.IsSkirt ? 1.0f : sh ? 4.2f : 2.6f);
         mat.SetShaderParameter("core_layer",         0f);
         mat.RenderPriority = 2;
 
@@ -720,6 +750,7 @@ public partial class PlumeSystem : Node3D
         coreMat.SetShaderParameter("afterburn_strength", 0f);
         coreMat.SetShaderParameter("pad_interaction", 0f);
         coreMat.SetShaderParameter("layer_opacity",     0.92f);
+        coreMat.SetShaderParameter("vacuum_flare", unit.IsSkirt ? 1.0f : sh ? 1.8f : 1.5f);
         coreMat.SetShaderParameter("core_layer",         1f);
         coreMat.RenderPriority = 3;
 

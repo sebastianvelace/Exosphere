@@ -63,6 +63,7 @@ the normals that the shader's soft edge depends on. The basis is now right-hande
   visible. Near-vacuum Raptor exhaust is strongly under-expanded and should read several times
   wider than the vehicle. This affects every ascent above ~40 km and the existing launch and
   orbital-plume gates, so it needs its own pass.
+  Addressed by `high_altitude_plume_bloom_2026-10-31.md`.
 - Booster engine count at hot staging: the overlap lights all 33 booster engines plus the Ship's
   six. Flown hot stages throttle Super Heavy down to its centre engines before Ship ignition.
 - Comparison against an actual IFT frame once a reference can be acquired.

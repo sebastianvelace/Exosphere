@@ -86,6 +86,13 @@ uniform float tail_radius : hint_range(0.02, 1.0) = 0.14;
 // The CPU side hides the broad shell/particles in this mode to avoid transparent
 // overdraw and preserve a stable silhouette when the vehicle is a few pixels wide.
 uniform float far_field : hint_range(0.0, 1.0) = 0.0;
+// High-altitude plume bloom, 0..1. PlumeSystem raises it only in the residual-
+// atmosphere band (p/p0 ~ 1e-6..1e-2, roughly 35–100 km), where a strongly
+// under-expanded jet still pushes a luminous interaction layer into thin air
+// and reads several vehicle diameters wide. Zero at sea level and in orbit.
+uniform float plume_bloom : hint_range(0.0, 1.0) = 0.0;
+// Downstream radius multiplier at full bloom (per optical layer; 1 = no flare).
+uniform float vacuum_flare = 1.0;
 
 varying float v_axial;   // 0 at nozzle exit → 1 at plume tip (along the mesh -Y)
 varying vec3 v_view_radial; // radial normal, excluding the cone's axial slope
@@ -104,7 +111,10 @@ void vertex() {
 
 	// Subtle breathing of the skin so the envelope shimmers (cheap, vertex-rate).
 	float wob = 1.0 + 0.04 * sin(TIME * 37.0 + VERTEX.y * 9.0);
-	VERTEX.xz *= wob;
+	// Under-expanded flare: the jet opens fastest just past the exit plane and
+	// keeps widening downstream, so the radius follows a sub-linear axial law.
+	float flare = 1.0 + (vacuum_flare - 1.0) * plume_bloom * pow(v_axial, 0.55);
+	VERTEX.xz *= wob * flare;
 }
 
 // Cheap hash noise for high-frequency combustion flicker.
@@ -147,7 +157,7 @@ void fragment() {
 	float widthAtA = mix(1.0 - a * mix(0.70, 0.24, cluster), 1.0 - a * 0.08, effExpansion);
 	float coreR    = clamp(r / max(widthAtA, 0.05), 0.0, 1.4);
 	// Tighter gaussian at SL (a pencil core), softer/broader in vacuum.
-	float falloff  = mix(3.6, 2.2, effExpansion);
+	float falloff  = mix(mix(3.6, 2.2, effExpansion), 1.5, plume_bloom);
 	float radial   = exp(-coreR * coreR * falloff);          // gaussian falloff
 	// A short path through the limb emits less light. No constant skin floor:
 	// it paints the polygon outline and turns overlapping shells into solids.
@@ -254,7 +264,7 @@ void fragment() {
 		* noise1(a * 37.0 - TIME * 24.0 + facing * 11.0);
 	float opticalProfile = radial * axialEnv;
 	float sheathAlpha = opticalProfile * sheathBreakup
-		* mix(0.22, 0.090, effExpansion) * layer_opacity;
+		* mix(mix(0.22, 0.090, effExpansion), 0.17, plume_bloom) * layer_opacity;
 	float coreAlpha = opticalProfile
 		* mix(0.56, 0.36, effExpansion) * layer_opacity;
 	float farCoreAlpha = opticalProfile

@@ -464,6 +464,10 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      siguen la presión de cámara real de la Ship. Hallazgo abierto: a 65–70 km las plumas
      principales se ven como una columna estrecha, cuando deberían estar muy expandidas. Ver
      `docs/audits/hotstage_vent_exhaust_2026-10-31.md`.
+   - Bloom de pluma a gran altitud (2026-10-31): entre ~35 y ~100 km (p/p₀ 10⁻⁶…10⁻²) la
+     envolvente se abre aguas abajo (booster ×4.2 en la cola, motores sueltos ×2.6) y la vaina
+     se mantiene visible; nivel del mar y órbita no cambian (el gate orbital sigue en 0.12). Ver
+     `docs/audits/high_altitude_plume_bloom_2026-10-31.md`.
 
    - Flight 14 early-flight reference pass (2026-09-30): delivered-thrust deluge,
      fixed-site shaded water volumes, a slender rose booster column, neutral PBR
