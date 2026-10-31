@@ -896,10 +896,15 @@ public class Vessel
         Parts.BeginPhysicsTick();
         try
         {
+            _coupledHasInput = false;
+            _coupledAuthority = 0.0;
+            CoupledRcsFloorTorqueBody = Vector3d.Zero;
+
             ApplyThrottle(dt);
             Parts.InvalidateTickActiveEngineCache();
 
             double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+            _coupledPressure = pressure;
             ConsumePropellants(dt, pressure);
             AdvanceHotStageOverlap(dt);
 
@@ -912,11 +917,13 @@ public class Vessel
                 PitchYawRoll = Vector3d.Zero;
                 SASEnabled = false;
             }
+            _coupledAuthority = auth;
 
             var command = PitchYawRoll * auth;
             var flapCommand = (FlapCommandOverride ?? PitchYawRoll) * auth;
             AdvanceFlapActuators(dt, flapCommand);
             bool hasInput = command.Magnitude > 1e-6;
+            _coupledHasInput = hasInput;
             foreach (var engine in Parts.ActiveEngineList)
             {
                 engine.GimbalOffset = hasInput
@@ -943,12 +950,66 @@ public class Vessel
                 desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia - zeroGimbalTorque.Y,
                 desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia - zeroGimbalTorque.Z);
             Parts.SolveDifferentialGimbal(desiredTorque, pressure);
+
+            // Same reaction-control floor as the legacy path, expressed as the torque that
+            // fills only the gap between the live engine moment and the RCS floor. The
+            // engine moment itself is already integrated from GetTotalTorque, so adding the
+            // full RCS term would double-count authority whenever the cluster is lit.
+            var engineAngAccel = Parts.GetPitchYawRollAngularAcceleration(pressure);
+            var rcsFloorAngAccel = new Vector3d(
+                command.X * PitchYawRcsAuthority,
+                command.Z * RollRcsAuthority,
+                command.Y * PitchYawRcsAuthority) * auth;
+            var floorGapAngAccel = new Vector3d(
+                FloorByMagnitude(engineAngAccel.X, rcsFloorAngAccel.X) - engineAngAccel.X,
+                FloorByMagnitude(engineAngAccel.Y, rcsFloorAngAccel.Y) - engineAngAccel.Y,
+                FloorByMagnitude(engineAngAccel.Z, rcsFloorAngAccel.Z) - engineAngAccel.Z)
+                * DockedInertiaScale();
+            // The floor is specified as an angular acceleration, so convert it with the
+            // inertia tensor the rigid-body integrator divides by, not the legacy scalars.
+            CoupledRcsFloorTorqueBody = Parts.GetMassProperties().InertiaBody
+                .Multiply(floorGapAngAccel);
         }
         catch
         {
             Parts.EndPhysicsTick();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Reaction-control torque (body frame, N·m) the coupled force evaluator adds for this
+    /// step: only the part of the RCS floor the live engine moment does not already cover.
+    /// Constant across RK4 stages because the command is held for the whole step.
+    /// </summary>
+    internal Vector3d CoupledRcsFloorTorqueBody { get; private set; }
+
+    private bool _coupledHasInput;
+    private double _coupledAuthority;
+    private double _coupledPressure;
+
+    /// <summary>
+    /// Discrete flight-control laws the legacy tick applies to the angular rate after the
+    /// commanded torque: the 20°/s pilot-authority envelope while a command is held, and SAS
+    /// rate damping bounded by the available actuator authority when it is not. They act
+    /// once per control step on the integrated state, the same cadence the legacy path uses.
+    /// The legacy post-aero rate envelope is deliberately not ported: it guards explicit-Euler
+    /// snaps, and here it would also clip contact and disturbance momentum that the coupled
+    /// integrator cannot separate from control torque.
+    /// </summary>
+    internal void ApplyCoupledControlPostStep(double dt)
+    {
+        if (_coupledHasInput)
+        {
+            const double pilotRateEnvelope = 0.35;
+            double rate = AngularVelocity.Magnitude;
+            if (rate > pilotRateEnvelope)
+                AngularVelocity *= pilotRateEnvelope / rate;
+            return;
+        }
+
+        if (SASEnabled && _coupledAuthority > 1e-6)
+            ApplyStabilityAugmentation(dt, _coupledPressure, _coupledAuthority);
     }
 
     internal void EndCoupledPhysicsStep() => Parts.EndPhysicsTick();

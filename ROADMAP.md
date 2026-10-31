@@ -348,7 +348,10 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el
      renderer consuma ese estado y cerrar la campaña V3 de mayor duración.
-   - SAS/rate limiting y RCS todavía requieren contratos explícitos con el evaluador de torques.
+   - SAS, piso de RCS y envolvente de 20°/s al pilotar ya están portados al camino acoplado
+     con tests de paridad. Bloqueo nuevo y medido: la inercia legacy (cilindro uniforme)
+     sobreestima la de cabeceo 1,3–2,3× frente al tensor por pieza del acoplado; un ascenso
+     guiado de 30 s diverge 392 m solo por eso. Ver `docs/physics/coupled_6dof_migration.md`.
    - Cada diferencia debe tener una prueba de paridad, no un ajuste visual de tolerancia.
 
 3. **Validación visual posterior**

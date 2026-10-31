@@ -397,6 +397,91 @@ public sealed class PhysicsParityIntegrationTests
         Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
     }
 
+    [Fact]
+    public void CoupledRcsFloorRotatesUnpoweredVesselLikeLegacy()
+    {
+        var legacy = CreateUnpoweredFlight7Universe("legacy-rcs-floor", coupled: false);
+        var coupled = CreateUnpoweredFlight7Universe("coupled-rcs-floor", coupled: true);
+        var command = new Vector3d(0.5, 0.0, 0.0);
+        legacy.ActiveVessel!.PitchYawRoll = command;
+        coupled.ActiveVessel!.PitchYawRoll = command;
+
+        for (int i = 0; i < 100; i++)
+        {
+            legacy.Tick(0.02);
+            coupled.Tick(0.02);
+        }
+
+        double legacyRate = legacy.ActiveVessel.AngularVelocity.Magnitude;
+        double coupledRate = coupled.ActiveVessel.AngularVelocity.Magnitude;
+        // 0.5 command × 0.01 rad/s² RCS floor × 2 s: no engine torque exists, so only the
+        // reaction-control floor can rotate this vessel on either path.
+        Assert.InRange(legacyRate, 0.009, 0.011);
+        Assert.Equal(legacyRate, coupledRate, precision: 4);
+        Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
+    }
+
+    [Fact]
+    public void CoupledSasDampsResidualRateLikeLegacy()
+    {
+        var legacy = CreateUnpoweredFlight7Universe("legacy-sas", coupled: false);
+        var coupled = CreateUnpoweredFlight7Universe("coupled-sas", coupled: true);
+        foreach (var universe in new[] { legacy, coupled })
+        {
+            var vessel = universe.ActiveVessel!;
+            vessel.SASEnabled = true;
+            vessel.PitchYawRoll = Vector3d.Zero;
+            vessel.AngularVelocity = vessel.Orientation.Rotate(new Vector3d(0.2, 0.0, 0.0));
+        }
+
+        for (int i = 0; i < 250; i++)
+        {
+            legacy.Tick(0.02);
+            coupled.Tick(0.02);
+        }
+
+        double legacyRate = legacy.ActiveVessel!.AngularVelocity.Magnitude;
+        double coupledRate = coupled.ActiveVessel!.AngularVelocity.Magnitude;
+        // SAS can only shed what its 0.01 rad/s² authority removes: 0.05 rad/s in 5 s.
+        Assert.InRange(legacyRate, 0.145, 0.155);
+        Assert.Equal(legacyRate, coupledRate, precision: 4);
+    }
+
+    [Fact]
+    public void CoupledPilotedRateEnvelopeMatchesLegacy()
+    {
+        var legacy = CreateFlight7Universe("legacy-rate-envelope", coupled: false);
+        var coupled = CreateFlight7Universe("coupled-rate-envelope", coupled: true);
+        var command = new Vector3d(1.0, 0.0, 0.0);
+        double legacyPeak = 0.0;
+        double coupledPeak = 0.0;
+
+        for (int i = 0; i < 1000; i++)
+        {
+            legacy.ActiveVessel!.PitchYawRoll = command;
+            coupled.ActiveVessel!.PitchYawRoll = command;
+            legacy.Tick(0.02);
+            coupled.Tick(0.02);
+            legacyPeak = System.Math.Max(legacyPeak, legacy.ActiveVessel.AngularVelocity.Magnitude);
+            coupledPeak = System.Math.Max(coupledPeak, coupled.ActiveVessel.AngularVelocity.Magnitude);
+        }
+
+        Assert.True(legacyPeak > 0.34, $"legacy never reached the envelope: {legacyPeak}");
+        // A held full command must saturate at the 20°/s pilot-authority envelope on both
+        // paths instead of the coupled body spinning up without bound.
+        Assert.True(legacyPeak <= 0.35 + 1e-9, $"legacy peak {legacyPeak}");
+        Assert.True(coupledPeak <= 0.35 + 1e-9, $"coupled peak {coupledPeak}");
+    }
+
+    // Engines off and no atmosphere: neither engine nor aerodynamic torque exists, so only
+    // reaction control and SAS can change the attitude rate on either integration path.
+    private static Universe CreateUnpoweredFlight7Universe(string vesselId, bool coupled)
+    {
+        var universe = CreateFlight7Universe(vesselId, coupled);
+        universe.ActiveVessel!.Throttle = 0.0;
+        return universe;
+    }
+
     private static Universe CreateUniverse(string vesselId, bool coupled, bool powered)
     {
         var body = new CelestialBody

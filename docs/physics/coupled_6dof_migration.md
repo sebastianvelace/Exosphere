@@ -46,6 +46,39 @@ integrator without changing the production scheduler by default.
     preserves the stage demand after a failed engine, and requires a persistent mount-geometry
     torque residual before the delayed recovery sensor can enable automatic response.
 
+20. `feat(physics): port SAS, RCS floor and pilot rate envelope to the coupled path` — the
+    coupled force evaluator adds the reaction-control floor as a body torque (only the gap
+    the live engine moment does not cover, converted with the integrator's own inertia
+    tensor), and `Vessel.ApplyCoupledControlPostStep` applies SAS damping and the 20°/s
+    pilot envelope once per control step after integration. Before this, a coasting coupled
+    vessel ignored attitude commands, SAS never damped a residual rate, and a held full
+    command spun Flight 7 to 0.87 rad/s instead of saturating at 0.35 rad/s.
+
+## Inertia-model divergence (blocks longer parity gates)
+
+A 30 s guided Flight 7 ascent with SAS windows ends with matching attitude (0.0025 rad) and
+rate, but passes through a 0.23 rad transient and finishes 392 m apart. The coupled body
+turns ~1.34× faster for the same engine torque: the legacy tick divides by an envelope
+inertia (`PartGraph.TransverseMomentOfInertia`, a uniform solid cylinder of the full stack),
+while the coupled integrator uses the per-part, parallel-axis tensor about the true centre of
+mass. Legacy-envelope / coupled-tensor pitch inertia ratios on the shipped vehicles:
+
+| Vehicle | Pitch/yaw | Roll |
+| --- | --- | --- |
+| Starship Flight 7 / Flight 12 V3 | 1.35 / 1.34 | 1.00 |
+| Falcon 9 Block 5 standard / extended | 1.62 / 1.82 | 1.97 |
+| New Glenn 7×2 | 1.90 | 1.00 |
+| Titan II GLV-8 (Gemini 8) | 1.68 | 1.00 |
+| Mercury-Redstone 3 / Mercury-Atlas 6 | 1.83 / 2.28 | 1.35 / 1.02 |
+| Saturn V AS-503 / AS-506 | 2.33 / 2.35 | 1.04 |
+| Agena 5003 / LM-5 Eagle | 1.08 / 1.10 | 1.00 / 1.05 |
+
+The tensor is the physically representative model; the envelope over-states pitch inertia
+on every launcher. Longer controlled-ascent and EDL parity cannot close until both paths read
+one inertia model. Moving the legacy path onto the tensor makes every launcher 1.3–2.3× more
+responsive in pitch, so it must be done together with re-validating `[G]` ascent, EDL and the
+historical directors, not as a tolerance change.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -92,6 +125,9 @@ long-duration fault management.
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
-- Port or reconcile flap control, SAS/rate limiting, and RCS authority around the recovery
-  controller, including automatic fault isolation and longer-duration ascent cases.
+- Unify the legacy envelope inertia with the coupled per-part tensor (see the inertia-model
+  divergence above) and re-validate guidance gains before extending the duration of gates.
+- SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
+  envelope is intentionally not ported; EDL parity must confirm the RK4 integrator does not
+  need it under high dynamic pressure.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.

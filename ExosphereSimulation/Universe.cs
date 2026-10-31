@@ -2525,6 +2525,10 @@ public class Universe
                 - absoluteFinal.AngularVelocityWorld.Cross(finalComOffsetWorld);
             vessel.Orientation = absoluteFinal.Orientation;
             vessel.AngularVelocity = absoluteFinal.AngularVelocityWorld;
+            vessel.ApplyCoupledControlPostStep(dt);
+            // The datum velocity carries ω×offset; keep it consistent with the controlled rate.
+            vessel.Velocity = absoluteFinal.Velocity
+                - vessel.AngularVelocity.Cross(finalComOffsetWorld);
 
             LastCoupled6DofTelemetry = new Physics.Coupled6DofTelemetry(
                 Integrated: true,
