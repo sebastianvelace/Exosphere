@@ -514,7 +514,11 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
    - Harness de comparacion ya existe (`tools/visual_playtest.sh --reentry-compare`, captura
      belly-flop nominal vs EDL con mala actitud forzada via `SimulationBridge.BeginReentryDemonstration(bellyFirst:...)`;
      verificado con xvfb → `exo_play_reentry_nominal.png` / `exo_play_reentry_bad_attitude.png`).
-     Pendiente: el ajuste/comparacion visual en si (alpha, timing, zone charring) contra IFT.
+     Comparación contra los frames a bordo de Flight 14 (2026-10-31): la vaina de casco ya no
+     se ve como manchas de camuflaje (ruido alineado al flujo) y al final de la entrada el casco
+     se apaga antes que los bordes de flap, que quedan como vetas magenta como en la referencia.
+     Ver `docs/audits/flight14_entry_plasma_compare_2026-10-31.md`. Pendiente: zone charring y
+     confirmar el momento del desvanecimiento en una entrada continua.
 
 3. **Entorno y camaras**
    - Pad costero ya tiene primera pasada visual.

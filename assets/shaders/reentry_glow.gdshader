@@ -9,6 +9,7 @@ uniform float simulation_time = 0.0;
 uniform int effect_kind = 0; // bow cap / downstream wake / surface edge / conforming sheath
 uniform float opacity_gain = 1.0;
 uniform vec3 flow_dir = vec3(-1.0, 0.0, 0.0);
+uniform float edge_magenta = 0.0; // 1 for body-flap leading edges
 varying vec3 surface_normal;
 
 void vertex() {
@@ -24,6 +25,12 @@ void fragment() {
         + vec2(0.0, -simulation_time * 0.24)).r;
     float n2 = texture(noise_tex, UV * vec2(7.0, 2.3)
         + vec2(simulation_time * 0.04, -simulation_time * 0.51)).r;
+    // Hull sheath/halo UVs run U around the barrel and V along it. Broadside entry flow
+    // crosses the hull around U, so luminous strands are long in U and fine in V. The
+    // isotropic 3x1 field above makes hull-sized blotches on a 9 m barrel, which the
+    // Flight 14 onboard frames never show: their sheath is a continuous gradient.
+    float streak = texture(noise_tex, UV * vec2(1.5, 16.0)
+        + vec2(-simulation_time * 0.35, simulation_time * 0.02)).r;
     float turbulence = 0.72 + 0.40 * (0.65 * n1 + 0.35 * n2);
     float t = clamp(heat_level * turbulence, 0.0, 1.0);
     const float PLASMA_ONSET  = 0.08;
@@ -61,7 +68,8 @@ void fragment() {
         mask = smoothstep(-0.18, 0.55, incidence) * pow(rim, 0.65);
         // Fade at the outer silhouette rather than drawing a neon contour.
         mask *= 1.0 - pow(rim, 12.0);
-        mask *= smoothstep(0.16, 0.73, n1 * 0.65 + n2 * 0.35);
+        mask *= mix(0.55, 1.0, smoothstep(0.20, 0.80, streak));
+        mask *= smoothstep(0.20, 0.50, heat_level);
         mask *= smoothstep(0.0, 0.035, UV.y);
         col = mix(vec3(0.32, 0.14, 0.85), col, 0.30);
         gain = 5.0;
@@ -70,14 +78,20 @@ void fragment() {
         float windward = smoothstep(-0.08, 0.62, incidence);
         // Keep the shield readable through the sheath; radiance concentrates
         // at grazing optical paths and moving strands, not an opaque flat cap.
-        float strands = smoothstep(0.23, 0.78, 0.65 * n1 + 0.35 * n2);
-        mask = windward * mix(0.065, 0.85, rim) * mix(0.18, 1.0, strands);
+        float strands = smoothstep(0.20, 0.80, streak);
+        mask = windward * mix(0.065, 0.85, rim) * mix(0.60, 1.0, strands);
+        // The broad sheath fades before the small-radius flap edges as entry speed bleeds
+        // off (Flight 14 late frames: dark hull, glow only on the flap leading edges).
+        mask *= smoothstep(0.20, 0.50, heat_level);
         mask *= smoothstep(0.0, 0.035, UV.y);
         gain = 7.0;
     } else {
         float incidence = dot(normalize(surface_normal), normalize(flow_dir));
         mask = smoothstep(-0.12, 0.55, incidence) * mix(0.04, 0.72, rim);
         mask *= smoothstep(0.20, 0.72, n1 * 0.65 + n2 * 0.35);
+        // Flap leading-edge streaks read hot magenta at low heating and whiten at peak.
+        col = mix(col, mix(vec3(1.0, 0.20, 0.80), vec3(1.0, 0.89, 0.96),
+            smoothstep(0.35, 0.85, t)), edge_magenta);
         gain = 5.0;
     }
     ALBEDO = col * gain;
