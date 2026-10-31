@@ -48,6 +48,7 @@ p/p₀ = 6.1·10⁻⁵, bloom 1.0, sheath opacity 0.42.
 | `before_69km_below.png` | Before: a narrow white column about one vehicle wide |
 | `after_69km_below.png` | After: the sheath opens downstream to roughly three vehicle widths in frame |
 | `after_69km_side.png` | After, wider view: a soft widening fan, no hard polygon edges |
+| `after_72km_ship_post_separation.png` | Ship alone at 72.4 km, 3 s after the production hot-stage separation: six plumes merge into one fan several hull diameters wide; the separated booster is in frame below |
 
 Sea-level (bloom ≈ 0.01 at 20 km, 0 below) and orbit (bloom 0 at 200 km) take the previous
 paths unchanged; `tools/ci_check.sh` (contract checks including the orbital-plume gate
@@ -57,5 +58,6 @@ values, simulation build/tests, Godot build, headless smoke) passes.
 
 - Comparison against an actual IFT frame at 60–70 km once a reference can be acquired; the
   flare factors are an engineering estimate, not a measured fit.
-- The Ship's six plumes after separation were not captured in this pass.
+- Ship plumes after separation: captured (bloom 1.0, sheath opacity 0.42); they read as a
+  single under-expanded fan, so no Ship-specific change was made.
 - Real-time `[G]` ascent capture on a machine with a GPU (llvmpipe runs ~0.03× real time).
