@@ -347,9 +347,10 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - El tick legacy rota sobre el centro de masa en vuelo libre y conserva el pivote del datum
      bajo contacto (paso 25): T+40 s del descenso terminal a 3 cm entre caminos.
    - Entrada hipersónica con flaps (paso 26): Ship V3 a 75 km y 7,3 km/s, 70° vientre primero,
-     solo flaps; tras 60 s los caminos difieren 7 m en altitud y 0,9 m/s.
-   - Siguiente gate: ascenso de producción completo con staging y entrada completa hasta el
-     flip transónico.
+     solo flaps; tras 60 s los caminos difieren 7 m en altitud y 0,9 m/s. Belly-flop subsónico
+     (3 km, 80 m/s, 20 s): 0,14 m y 0,003 m/s.
+   - Siguiente gate: ascenso de producción completo con staging y una entrada continua desde la
+     interfaz hasta el flip (falta la transición transónica).
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
      pasen y se conserve evidencia numérica y de framebuffer.
 

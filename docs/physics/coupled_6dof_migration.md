@@ -145,7 +145,11 @@ historical directors, not as a tolerance change.
     altitude, 0.9 m/s in speed and ~25 m in position, both hold the trim within 0.93°, and peak
     angular rates match to 0.0001 rad/s. Gates: 50 m, 5 m/s, 150 m, 3° tracking, 2% peak q.
     This is the first evidence that the coupled RK4 does not need the legacy post-aero rate
-    envelope under entry dynamic pressure.
+    envelope under entry dynamic pressure. A second case flies the subsonic belly-flop: 3 km,
+    80 m/s straight down, broadside, 20 s on flaps to ~1.56 km at ~3 kPa. The paths end 0.14 m
+    apart in altitude, 0.003 m/s in speed and ~2 m in position, with peak tracking 4.3° / 4.1°,
+    final 0.70° / 0.65° and peak rates 0.090 / 0.088 rad/s. The flip and landing burn that
+    follow are covered by step 24.
 
 ## Runtime contract
 
@@ -195,11 +199,12 @@ long-duration fault management.
   fixture and then controlled EDL.
 - With one inertia model (step 22), the 30 s ascent gate (step 23), the terminal descent gate
   (step 24), the centre-of-mass pivot (step 25) and the 60 s flap entry gate (step 26), remaining
-  gates are a full production ascent through staging and a full entry from the interface
-  through the transonic flip (the 60 s gate covers the hypersonic segment only).
+  gates are a full production ascent through staging and one continuous entry from the
+  interface to the flip (step 26 covers the hypersonic and subsonic segments separately; the
+  transonic transition between them is not yet compared).
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
-  envelope is intentionally not ported; the hypersonic flap entry gate (step 26) shows the RK4
-  integrator does not need it there, and the transonic/subsonic segment must still confirm it.
+  envelope is intentionally not ported; the hypersonic and subsonic flap gates (step 26) show
+  the RK4 integrator does not need it; the transonic transition must still confirm it.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
   Contact gates (gear and cradle) are closed (step 21); a controlled descent from the flip to
   contact still needs the inertia unification first.
