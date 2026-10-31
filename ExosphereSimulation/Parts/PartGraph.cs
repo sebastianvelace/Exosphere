@@ -238,6 +238,7 @@ public class PartGraph
 
     private void InvalidateTopologyCaches()
     {
+        _aeroElementsValid = false;
         _topologyPartLocalPositionsValid = false;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
@@ -567,6 +568,24 @@ public class PartGraph
 
     // Positions depend on topology and geometry only, so ticks share the topology cache.
     private Dictionary<Part, Vector3d> GetCachedPartLocalPositions() => GetTopologyPartLocalPositions();
+
+    private readonly List<Physics.AeroElement> _aeroElements = new();
+    private bool _aeroElementsValid;
+
+    /// <summary>
+    /// Aerodynamic elements of the assembled body, derived from part geometry and cached by
+    /// topology: one crossflow element per exposed part (planform D·L at its centroid), and
+    /// slender-body area changes (the leading nose and every diameter step between stacked
+    /// parts). See <see cref="Physics.DistributedAerodynamics"/>.
+    /// </summary>
+    public IReadOnlyList<Physics.AeroElement> GetAeroElements()
+    {
+        if (_aeroElementsValid) return _aeroElements;
+        _aeroElements.Clear();
+        Physics.DistributedAerodynamics.BuildElements(this, GetTopologyPartLocalPositions(), _aeroElements);
+        _aeroElementsValid = true;
+        return _aeroElements;
+    }
 
     /// <summary>Centre of <paramref name="part"/> in the vessel frame (skirt-datum origin).</summary>
     public bool TryGetPartLocalPosition(Part part, out Vector3d position) =>

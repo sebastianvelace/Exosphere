@@ -112,6 +112,14 @@ public class PartDefinition
     public double NoseRadiusM { get; set; }
 
     /// <summary>
+    /// Length (m) of the tangent-ogive nose at the top of this part, included in
+    /// <see cref="LengthM"/>. Zero means a cylinder (a blunt top face if it leads the stack).
+    /// Sets where the slender-body nose lift acts and the nose's crossflow planform.
+    /// </summary>
+    [JsonPropertyName("nose_length_m")]
+    public double NoseLengthM { get; set; }
+
+    /// <summary>
     /// Declares this part as carrying a pair of tower catch-pin hardpoints (real-world
     /// example: Starship V3's planned ship-catch fittings near the nose flare). Zero (the
     /// default) means "no catch pins" — the same "0 = not applicable" convention already
