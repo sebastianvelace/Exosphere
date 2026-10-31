@@ -61,7 +61,7 @@ integrator without changing the production scheduler by default.
     and the same caught/settled gates. These are contact gates from a short pre-contact state;
     they do not yet replace a controlled descent-to-contact parity run.
 
-## Inertia-model divergence (blocks longer parity gates)
+## Inertia-model divergence (resolved by step 22)
 
 A 30 s guided Flight 7 ascent with SAS windows ends with matching attitude (0.0025 rad) and
 rate, but passes through a 0.23 rad transient and finishes 392 m apart. The coupled body
@@ -85,6 +85,26 @@ on every launcher. Longer controlled-ascent and EDL parity cannot close until bo
 one inertia model. Moving the legacy path onto the tensor makes every launcher 1.3–2.3× more
 responsive in pitch, so it must be done together with re-validating `[G]` ascent, EDL and the
 historical directors, not as a tolerance change.
+
+22. `fix(physics): read legacy inertia from the per-part tensor` — `PartGraph`
+    `TransverseMomentOfInertia` (mean of I_xx and I_zz) and `AxialMomentOfInertia` (I_yy) now
+    come from the same parallel-axis tensor the coupled integrator uses, so both paths divide
+    torque by one model. Re-validation across the full suite: 1166/1174 passed on the first run;
+    the eight failures and their resolutions:
+    - Saturn V ascent (AS-503, disturbed S-II separation, AS-506, lunar launch window): the S-IC
+      used a fixed damping of 1.2 tuned to the over-stated inertia. Every stage now uses an
+      authority-scaled gain at ζ 0.7 (`Apollo8FlightProfile.AscentDampingGain`), in both the
+      test flight and `HistoricalFlightProfileController`. AS-503 inserts at T+696 s with
+      68.5 t (historical ~T+685 s, ~70 t); AS-506 at T+696 s with 70.4 t and 3 299 m/s of TLI
+      capacity (flight: T+709 s, 75.7 t). ζ 0.6 loses the disturbed separation; ζ ≥ 0.8 costs
+      4–20 t.
+    - Starship Ship-only gimbal authority rises from ~0.09 to 0.216 rad/s² because its mass sits
+      low; the test range was moved and its ordering assertions kept.
+    - Stage-separation conservation fixture parts had no attachment nodes, so every part sat at
+      the root and the tensor lost the stack's parallel-axis term; the fixture now declares
+      physical stack nodes (every catalog part already does).
+    - Flight 14 return: the within-model periapsis calibration against the T+9884 s broadcast
+      anchor was re-fitted for the new dynamics (see the return estimate JSON).
 
 ## Runtime contract
 
@@ -132,8 +152,8 @@ long-duration fault management.
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
-- Unify the legacy envelope inertia with the coupled per-part tensor (see the inertia-model
-  divergence above) and re-validate guidance gains before extending the duration of gates.
+- With one inertia model (step 22), extend the parity gates to a long controlled ascent and a
+  controlled descent from the flip to contact.
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
   envelope is intentionally not ported; EDL parity must confirm the RK4 integrator does not
   need it under high dynamic pressure.

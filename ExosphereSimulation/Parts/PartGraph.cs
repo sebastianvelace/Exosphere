@@ -435,12 +435,16 @@ public class PartGraph
         }
 
         if (_tickTotalMass > 0.0)
+        {
             _tickMassProperties = BuildMassProperties(GetCachedPartLocalPositions());
-
-        double radius = MaximumDiameter * 0.5;
-        _tickTransverseMomentOfInertia = _tickTotalMass
-            * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
-        _tickAxialMomentOfInertia = 0.5 * _tickTotalMass * radius * radius;
+            (_tickTransverseMomentOfInertia, _tickAxialMomentOfInertia) =
+                PrincipalScalars(_tickMassProperties);
+        }
+        else
+        {
+            _tickTransverseMomentOfInertia = 0.0;
+            _tickAxialMomentOfInertia = 0.0;
+        }
         _tickMassPropertiesValid = true;
     }
 
@@ -750,8 +754,8 @@ public class PartGraph
     }
 
     /// <summary>
-    /// Approximate transverse inertia (kg·m²) of the declared cylindrical envelope.
-    /// It changes continuously as propellant mass is consumed.
+    /// Pitch/yaw inertia (kg·m²) about the current centre of mass, from the per-part
+    /// parallel-axis tensor. It changes continuously as propellant mass is consumed.
     /// </summary>
     public double TransverseMomentOfInertia
     {
@@ -762,12 +766,13 @@ public class PartGraph
                 EnsureTickMassProperties();
                 return _tickTransverseMomentOfInertia;
             }
-            double radius = MaximumDiameter * 0.5;
-            return TotalMass * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
+            return TryGetMassProperties(out var properties)
+                ? PrincipalScalars(properties).Transverse
+                : 0.0;
         }
     }
 
-    /// <summary>Approximate roll-axis inertia (kg·m²) of the vehicle envelope.</summary>
+    /// <summary>Roll-axis inertia (kg·m²) from the same per-part tensor.</summary>
     public double AxialMomentOfInertia
     {
         get
@@ -777,10 +782,22 @@ public class PartGraph
                 EnsureTickMassProperties();
                 return _tickAxialMomentOfInertia;
             }
-            double radius = MaximumDiameter * 0.5;
-            return 0.5 * TotalMass * radius * radius;
+            return TryGetMassProperties(out var properties)
+                ? PrincipalScalars(properties).Axial
+                : 0.0;
         }
     }
+
+    /// <summary>
+    /// Scalar pitch/yaw and roll inertia read from the same per-part, parallel-axis tensor
+    /// the coupled rigid-body integrator uses, so both integration paths divide torque by one
+    /// inertia model. Pitch and yaw are averaged; for the axisymmetric stacks flown here
+    /// I_xx and I_zz agree to within the products of inertia.
+    /// </summary>
+    private static (double Transverse, double Axial) PrincipalScalars(
+        in RigidBodyMassProperties properties) =>
+        (0.5 * (properties.InertiaBody.M11 + properties.InertiaBody.M33),
+         properties.InertiaBody.M22);
 
     /// <summary>
     /// Pitch/yaw angular acceleration available from live engine gimbal torque.

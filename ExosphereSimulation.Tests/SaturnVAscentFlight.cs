@@ -118,9 +118,8 @@ internal static class SaturnVAscentFlight
                     insertionTime = elapsed;
                 }
             }
-            double damping = sicSeparated
-                ? Apollo8FlightProfile.UpperStageDampingGain(vessel.GetPitchYawAngularAuthority(earth))
-                : 1.2;
+            double damping = Apollo8FlightProfile.AscentDampingGain(
+                vessel.GetPitchYawAngularAuthority(earth));
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(vessel.Orientation,
                 Vector3d.Up, aim, vessel.AngularVelocity, proportionalGain: 2.3, dampingGain: damping);
             universe.Tick(0.02);

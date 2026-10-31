@@ -208,6 +208,14 @@ public sealed class StageSeparationConservationTests
     /// topology as the real Starship/Super Heavy stack (ring stays with Starship, booster
     /// detaches).
     /// </summary>
+    // Physical stack nodes so parts sit end to end; without them every part shares the
+    // root position and the per-part inertia tensor loses the stack's parallel-axis term.
+    private static List<AttachmentNodeDef> StackNodes(double length) =>
+    [
+        new AttachmentNodeDef { Id = "top", Position = [0.0, length * 0.5, 0.0] },
+        new AttachmentNodeDef { Id = "bottom", Position = [0.0, -length * 0.5, 0.0] },
+    ];
+
     private static Vessel BuildTwoPartStack(
         double upperMass,
         double lowerMass,
@@ -219,6 +227,7 @@ public sealed class StageSeparationConservationTests
         var upper = new Part(new PartDefinition
         {
             Id = "upper-stage",
+            AttachmentNodes = StackNodes(upperLength),
             CategoryStr = "command",
             MassDry = upperMass,
             LengthM = upperLength,
@@ -227,6 +236,7 @@ public sealed class StageSeparationConservationTests
         var decoupler = new Part(new PartDefinition
         {
             Id = "test-decoupler",
+            AttachmentNodes = StackNodes(0.0),
             CategoryStr = "decoupler",
             MassDry = 0.0,
             LengthM = 0.0,
@@ -236,6 +246,7 @@ public sealed class StageSeparationConservationTests
         var lower = new Part(new PartDefinition
         {
             Id = "lower-stage",
+            AttachmentNodes = StackNodes(lowerLength),
             CategoryStr = "structure",
             MassDry = lowerMass,
             LengthM = lowerLength,

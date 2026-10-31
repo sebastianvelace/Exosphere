@@ -242,7 +242,10 @@ public sealed class StarshipRealismTests
 
         Assert.True(fullStackInertia > shipInertia);
         Assert.InRange(fullStackAuthority, 0.04, 0.10);
-        Assert.InRange(shipAuthority, 0.06, 0.12);
+        // Per-part parallel-axis inertia: the Ship's engine section and propellant sit low, so
+        // its pitch inertia is well below a uniform 50 m cylinder and authority roughly doubles
+        // compared with the former envelope estimate (~0.09 rad/s²).
+        Assert.InRange(shipAuthority, 0.15, 0.30);
         Assert.True(shipAuthority > fullStackAuthority);
     }
 

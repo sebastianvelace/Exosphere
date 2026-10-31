@@ -774,7 +774,9 @@ public partial class HistoricalFlightProfileController : Node
                 ascent.PitchOverDegrees, Apollo8FlightProfile.PitchOverEndSeconds);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation, Vector3d.Up, boostAim, vessel.AngularVelocity,
-                proportionalGain: 2.3, dampingGain: 1.2);
+                proportionalGain: 2.3,
+                dampingGain: Apollo8FlightProfile.AscentDampingGain(
+                    vessel.GetPitchYawAngularAuthority(earth)));
             var sicEngines = vessel.Parts.Parts.FirstOrDefault(part =>
                 part.Definition.HasVehicleRole("sic_engine_cluster"));
             sicEngines?.SelectEngineCount(
@@ -1147,7 +1149,7 @@ public partial class HistoricalFlightProfileController : Node
             desired,
             vessel.AngularVelocity,
             proportionalGain: 2.3,
-            dampingGain: Apollo8FlightProfile.UpperStageDampingGain(
+            dampingGain: Apollo8FlightProfile.AscentDampingGain(
                 vessel.GetPitchYawAngularAuthority(earth)));
     }
 
