@@ -162,6 +162,14 @@ public class Universe
     /// </summary>
     public bool DistributedAerodynamicsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Physical hinged body flaps (F2): four plates with Mach-dependent normal force, per-flap
+    /// servos and a least-squares flight-control allocation. Off until the ship carries its
+    /// landing propellant in header tanks: with it in the main tank the physical flaps cannot
+    /// trim the entry (see rigid_body_fidelity_plan.md, F2 findings).
+    /// </summary>
+    public bool PhysicalBodyFlapsEnabled { get; set; }
+
     /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
     public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }
 
@@ -2465,7 +2473,7 @@ public class Universe
         double evaluationTime = CurrentTime+dt;
         var frameAcceleration = GetReferenceBodyRailAcceleration(body);
         Physics.RigidBody6DofState finalAbsolute;
-        vessel.BeginCoupledPhysicsStep(dt, body, DistributedAerodynamicsEnabled);
+        vessel.BeginCoupledPhysicsStep(dt, body, DistributedAerodynamicsEnabled, PhysicalBodyFlapsEnabled);
         try
         {
             var mass = Physics.WaterMotionFrame.ResolveMassProperties(vessel.Parts, water);
@@ -2523,7 +2531,7 @@ public class Universe
 
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
         vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
-        vessel.BeginCoupledPhysicsStep(dt, refBody, DistributedAerodynamicsEnabled);
+        vessel.BeginCoupledPhysicsStep(dt, refBody, DistributedAerodynamicsEnabled, PhysicalBodyFlapsEnabled);
         try
         {
             // A docked stack is one rigid body: integrate the composite mass, centre of mass
@@ -2573,7 +2581,8 @@ public class Universe
                             externalForceWorld: contactForce
                                 - frameAcceleration * massProperties.Mass,
                             externalTorqueWorld: contactTorque,
-                            distributedAerodynamics: DistributedAerodynamicsEnabled);
+                            distributedAerodynamics: DistributedAerodynamicsEnabled,
+                            physicalBodyFlaps: PhysicalBodyFlapsEnabled);
                         return Physics.RigidBodyForceEvaluator.Evaluate(
                             vessel, absolute, context, massProperties);
                     });

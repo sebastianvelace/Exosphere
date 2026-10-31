@@ -19,8 +19,11 @@ public static class Flight14AerodynamicAttitude
             ship.AngularVelocity, 2, 25);
         double authority = ControlAuthority.Evaluate(ship);
         double q = ship.GetDynamicPressure(body);
+        // Flight control already inverts the predicted moment of the distributed model
+        // (hull and physical flaps); a second, aggregate-model trim would double it.
         if (body.Atmosphere == null || q <= trimOnsetPressurePa
-            || authority <= 0 || !ship.HasFunctionalBodyFlaps()) return feedback;
+            || authority <= 0 || !ship.HasFunctionalBodyFlaps()
+            || ship.FlightControlInvertsAerodynamics) return feedback;
         var velocity = ship.GetSurfaceVelocity(body);
         double altitude = ship.GetAltitude(body);
         double density = body.Atmosphere.GetDensity(altitude);

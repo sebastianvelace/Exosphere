@@ -38,6 +38,9 @@ public sealed class OrbitalReentrySurvivalTests
         var earth = universe.GetBody("earth")!;
 
         var vessel = BuildStarship();
+        // The attitude is imposed by fiat below; flight control must not fight it, so both
+        // cases fly the same configuration (flaps at neutral).
+        vessel.SASEnabled = false;
 
         // Start on a shallow descending trajectory at entry interface. The calibrated case
         // is expressed in planet coordinates: 23.44 deg N, heading due west (against the

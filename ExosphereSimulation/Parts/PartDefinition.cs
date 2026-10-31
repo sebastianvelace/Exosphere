@@ -10,6 +10,29 @@ public enum PartCategory
     Electrical, Landing, Decoupler, Fairing, RCS
 }
 
+/// <summary>
+/// One hinged aerodynamic control surface on a part (Starship's body flaps). The hinge line
+/// runs along the part axis at <see cref="HingeYM"/> from the part centre, on the hull side
+/// <see cref="Side"/> (+1 = +Z, −1 = −Z). Deflection 0 folds the flap against the leeward
+/// (+X) hull; 90° extends it straight out sideways, broadside to a belly-first (−X) flow.
+/// </summary>
+public class BodyFlapDef
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("hinge_y_m")] public double HingeYM { get; set; }
+    [JsonPropertyName("side")] public int Side { get; set; } = 1;
+    /// <summary>Radial position of the hinge line; zero uses the part radius.</summary>
+    [JsonPropertyName("hinge_radius_m")] public double HingeRadiusM { get; set; }
+    /// <summary>Extent along the hull axis (m).</summary>
+    [JsonPropertyName("length_m")] public double LengthM { get; set; }
+    /// <summary>Extent from the hinge to the tip (m).</summary>
+    [JsonPropertyName("span_m")] public double SpanM { get; set; }
+    [JsonPropertyName("min_deflection_deg")] public double MinDeflectionDeg { get; set; }
+    [JsonPropertyName("max_deflection_deg")] public double MaxDeflectionDeg { get; set; } = 90.0;
+    [JsonPropertyName("neutral_deflection_deg")] public double NeutralDeflectionDeg { get; set; } = 45.0;
+    [JsonPropertyName("rate_deg_per_s")] public double RateDegPerS { get; set; } = 25.0;
+}
+
 public class AttachmentNodeDef
 {
     [JsonPropertyName("id")]
@@ -60,6 +83,9 @@ public class PartDefinition
     /// <summary>Static margin for the standalone root configuration, not the attached launch stack.</summary>
     [JsonPropertyName("standalone_aerodynamic_center_offset_y_m")]
     public double? StandaloneAerodynamicCenterOffsetYM { get; set; }
+    /// <summary>Hinged control surfaces carried by this part (see <see cref="BodyFlapDef"/>).</summary>
+    [JsonPropertyName("body_flaps")]
+    public List<BodyFlapDef> BodyFlaps { get; set; } = [];
     [JsonPropertyName("heat_tolerance")]   public double HeatTolerance   { get; set; } = 1200;
     [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
     /// <summary>

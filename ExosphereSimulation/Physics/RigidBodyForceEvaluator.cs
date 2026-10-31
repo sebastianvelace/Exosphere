@@ -15,15 +15,19 @@ public readonly struct RigidBodyForceContext
     public Vector3d ExternalTorqueWorld { get; }
     /// <summary>Per-part distributed aerodynamics (default); false selects the aggregate model.</summary>
     public bool DistributedAerodynamics { get; }
+    /// <summary>Physical hinged body flaps (F2) on the distributed path; false keeps the aggregate flap torque.</summary>
+    public bool PhysicalBodyFlaps { get; }
 
     public RigidBodyForceContext(
         IReadOnlyList<CelestialBody> bodies,
         CelestialBody? referenceBody = null,
         Vector3d externalForceWorld = default,
         Vector3d externalTorqueWorld = default,
-        bool distributedAerodynamics = true)
+        bool distributedAerodynamics = true,
+        bool physicalBodyFlaps = false)
     {
         DistributedAerodynamics = distributedAerodynamics;
+        PhysicalBodyFlaps = physicalBodyFlaps;
         Bodies = bodies ?? throw new ArgumentNullException(nameof(bodies));
         ReferenceBody = referenceBody;
         ExternalForceWorld = externalForceWorld;
@@ -90,6 +94,22 @@ public static class RigidBodyForceEvaluator
                 body.Atmosphere.SoundSpeedConstant);
             forceWorld += wrench.ForceWorld + vessel.ComputeParachuteDragAt(state.Position, state.Velocity, body);
             distributedTorqueBody = wrench.TorqueBody;
+            var flaps = vessel.Parts.GetBodyFlaps();
+            if (context.PhysicalBodyFlaps && flaps.Count > 0)
+            {
+                var flapWrench = BodyFlapAerodynamics.Evaluate(
+                    flaps,
+                    vessel.BodyFlapDeflectionsRad,
+                    state.Orientation,
+                    state.AngularVelocityWorld,
+                    massProperties.CenterOfMassBody,
+                    air,
+                    body.Atmosphere.GetDensity(altitude),
+                    System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude)),
+                    body.Atmosphere.SoundSpeedConstant);
+                forceWorld += flapWrench.ForceWorld;
+                distributedTorqueBody += flapWrench.TorqueBody;
+            }
         }
         else if (context.ReferenceBody != null)
         {
@@ -108,7 +128,9 @@ public static class RigidBodyForceEvaluator
         torqueBody += vessel.DisturbanceTorqueBody;
         torqueBody += vessel.CoupledRcsFloorTorqueBody;
         torqueBody += distributed
-            ? distributedTorqueBody + ComputeFlapTorqueBody(vessel, state, context.ReferenceBody!, massProperties)
+            ? distributedTorqueBody + (context.PhysicalBodyFlaps && vessel.Parts.GetBodyFlaps().Count > 0
+                ? Vector3d.Zero
+                : ComputeFlapTorqueBody(vessel, state, context.ReferenceBody!, massProperties))
             : ComputeAerodynamicTorqueBody(vessel, state, context.ReferenceBody, massProperties);
 
         return new RigidBodyForces(forceWorld, torqueBody);

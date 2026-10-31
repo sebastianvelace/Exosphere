@@ -1,7 +1,7 @@
 {
   "id": "starship_v3_tank_flight12",
   "name": "Starship V3 Propellant Tank",
-  "description": "Flight 12 V3 common-bulkhead tank model. The 1,400 t loading and component dry mass are simulator estimates, not SpaceX acceptance data. axial_drag_coefficient 0.30 is a calibrated estimate for a bare 9 m cylindrical barrel (skin friction plus a modest base contribution); it is only consulted when this section is the vessel root or through the length-weighted fallback in PartGraph.AxialDragCoefficient.",
+  "description": "Flight 12 V3 common-bulkhead tank model. The 1,400 t loading and component dry mass are simulator estimates, not SpaceX acceptance data. axial_drag_coefficient 0.30 is a calibrated estimate for a bare 9 m cylindrical barrel (skin friction plus a modest base contribution); it is only consulted when this section is the vessel root or through the length-weighted fallback in PartGraph.AxialDragCoefficient. Body-flap planforms (hinge station, length, span) are image-derived estimates from Flight 7 proportions; deflection range and servo rate are simulator estimates.",
   "category": "fuel_tank",
   "vehicle_family": "starship",
   "vehicle_role": "tank",
@@ -15,6 +15,30 @@
   "has_heat_shield": true,
   "fuel_capacity_lf": 308000,
   "fuel_capacity_ox": 1092000,
+  "body_flaps": [
+      {
+          "id": "aft_pz",
+          "hinge_y_m": -7.95,
+          "side": 1,
+          "length_m": 11.1,
+          "span_m": 3.7,
+          "min_deflection_deg": 0.0,
+          "max_deflection_deg": 90.0,
+          "neutral_deflection_deg": 45.0,
+          "rate_deg_per_s": 25.0
+      },
+      {
+          "id": "aft_mz",
+          "hinge_y_m": -7.95,
+          "side": -1,
+          "length_m": 11.1,
+          "span_m": 3.7,
+          "min_deflection_deg": 0.0,
+          "max_deflection_deg": 90.0,
+          "neutral_deflection_deg": 45.0,
+          "rate_deg_per_s": 25.0
+      }
+  ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 15.25, 0], "size": 3, "type": "stack"},
     {"id": "bottom", "position": [0, -15.25, 0], "size": 3, "type": "stack"}

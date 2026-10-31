@@ -239,6 +239,7 @@ public class PartGraph
     private void InvalidateTopologyCaches()
     {
         _aeroElementsValid = false;
+        _bodyFlapsValid = false;
         _topologyPartLocalPositionsValid = false;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
@@ -602,6 +603,25 @@ public class PartGraph
         Physics.DistributedAerodynamics.BuildElements(this, GetTopologyPartLocalPositions(), _aeroElements);
         _aeroElementsValid = true;
         return _aeroElements;
+    }
+
+    private readonly List<Physics.BodyFlapGeometry> _bodyFlaps = new();
+    private bool _bodyFlapsValid;
+
+    /// <summary>Hinged control surfaces of the assembled body in the vessel frame, cached by topology.</summary>
+    public IReadOnlyList<Physics.BodyFlapGeometry> GetBodyFlaps()
+    {
+        if (_bodyFlapsValid) return _bodyFlaps;
+        _bodyFlaps.Clear();
+        var positions = GetTopologyPartLocalPositions();
+        foreach (var part in _parts)
+        {
+            if (part.Definition.BodyFlaps.Count == 0 || !positions.TryGetValue(part, out var centre)) continue;
+            foreach (var flap in part.Definition.BodyFlaps)
+                _bodyFlaps.Add(Physics.BodyFlapGeometry.From(part, centre, flap));
+        }
+        _bodyFlapsValid = true;
+        return _bodyFlaps;
     }
 
     /// <summary>Centre of <paramref name="part"/> in the vessel frame (skirt-datum origin).</summary>

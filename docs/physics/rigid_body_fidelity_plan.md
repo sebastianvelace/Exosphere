@@ -92,6 +92,30 @@ every slender stack (`Universe.DistributedAerodynamicsEnabled`, on by default):
   309 s) remains an F6 item; the flight-control inversion is model-based (modern vehicles);
   historical gain schedules belong to F3.
 
+## F2 findings (2026-10-31, in progress)
+
+`BodyFlapAerodynamics` models Starship's four body flaps as hinged plates from part data
+(`body_flaps`: hinge station, side, length, span, travel, neutral, servo rate; planforms are the
+renderer's image-derived Flight 7 proportions, forward ≈ 5.7 × 2.55 m, aft ≈ 11.1 × 3.7 m).
+Each plate carries a normal force at its centroid from the local flow v + ω×r with a
+Mach-dependent coefficient: low-aspect-ratio plate law (π/2·AR·sinα·cosα + 1.2·sin²α) below
+Mach 0.8, modified Newtonian Cp,max(M)·sin²α (Rayleigh pitot) above Mach 1.5, blended between.
+Each servo slews at its own rate within its travel; flight control allocates pitch/yaw/roll by
+least squares on the finite-difference torque Jacobian and inverts the predicted static moment,
+and the flaps are locked while the ship rides the booster. Analytic gates: Rayleigh-pitot Cp,max,
+broadside plate, folded plate, symmetric/differential pairs, rate damping.
+
+The switch (`Universe.PhysicalBodyFlapsEnabled`) stays off because the physics exposed a mass
+gap: broadside, the hull's crossflow centre of pressure sits at 23.9 m (V2 ship) and the dry
+centre of mass at 24.7 m, but the model carries the landing propellant in the main tank
+(y = 18.8 m), pulling the entry centre of mass to 22.2 m. That leaves ≈ −2400 q of
+destabilising pitch moment at 70° against at most ≈ +1300 q of flap authority, so no flap
+setting trims the entry. The aggregate flap coefficient (3.0, capped at 4 rad/s²) had been
+covering it. The real ship lands on header-tank propellant (LOX header in the nose), which is
+what makes it trimmable. Next: header tanks (capacity and station as documented estimates,
+reserved through ascent and deorbit, opened for the landing burn), then re-close the Flight 14
+return and turn the switch on.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by

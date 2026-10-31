@@ -1,7 +1,7 @@
 {
   "id": "starship_command",
   "name": "Starship Command Section",
-  "description": "Flight 7 Block 2 nose, payload section, avionics and forward flaps. The 35 t dry mass is an engineering allocation within a 100 t dry Starship stage; SpaceX does not publish a component mass breakdown.",
+  "description": "Flight 7 Block 2 nose, payload section, avionics and forward flaps. The 35 t dry mass is an engineering allocation within a 100 t dry Starship stage; SpaceX does not publish a component mass breakdown. Body-flap planforms (hinge station, length, span) are image-derived estimates from Flight 7 proportions; deflection range and servo rate are simulator estimates.",
   "category": "command",
   "vehicle_family": "starship",
   "vehicle_role": "command",
@@ -18,6 +18,30 @@
   "catch_pin_lateral_offset_m": 4.4,
   "catch_pin_offset_y_m": 5.0,
   "catch_pin_radius_m": 0.4,
+  "body_flaps": [
+      {
+          "id": "forward_pz",
+          "hinge_y_m": -6.0,
+          "side": 1,
+          "length_m": 5.7,
+          "span_m": 2.55,
+          "min_deflection_deg": 0.0,
+          "max_deflection_deg": 90.0,
+          "neutral_deflection_deg": 45.0,
+          "rate_deg_per_s": 25.0
+      },
+      {
+          "id": "forward_mz",
+          "hinge_y_m": -6.0,
+          "side": -1,
+          "length_m": 5.7,
+          "span_m": 2.55,
+          "min_deflection_deg": 0.0,
+          "max_deflection_deg": 90.0,
+          "neutral_deflection_deg": 45.0,
+          "rate_deg_per_s": 25.0
+      }
+  ],
   "attachment_nodes": [
     {"id": "bottom", "position": [0, -9.25, 0], "size": 3, "type": "stack"}
   ]
