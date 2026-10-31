@@ -111,6 +111,21 @@ historical directors, not as a tolerance change.
     ended 392 m apart with a 0.23 rad transient; it now stays within 100 m, 10 m/s and 0.05 rad
     throughout.
 
+24. `test(physics): add terminal flip and landing-burn parity gate` — the catalog Ship
+    (command, tank, engines, six-leg gear) starts at 600 m, 70 m/s down and 60° from vertical,
+    and both paths fly the same EDLController-shaped law: axis pointing with lateral-drift cant,
+    descent-rate profile with gravity feed-forward, and the monotone 3→2→1 engine step-down.
+    After the flip both agree within about 1 m of altitude and 0.1 m/s of descent rate at
+    T+40 s; both touch down softly (1.3 and 2.4 m/s), settle upright and stay inside the gear's
+    2.5 MN load limit. Settle time is not compared: the throttle floor and discrete engine
+    step-down turn a one-metre difference into several seconds of hover.
+
+    During rapid rotation the two paths also report different reference-point velocities: the
+    legacy tick rotates the vessel about its datum and integrates the datum as if it were the
+    centre of mass, while the coupled path rotates about the true centre of mass and derives the
+    datum velocity with ω×r. This shows up mid-flip (several m/s) and vanishes once rotation
+    stops; making legacy rotate about the centre of mass is the next fidelity item.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -157,8 +172,9 @@ long-duration fault management.
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
-- With one inertia model (step 22) and the 30 s ascent gate (step 23), extend to a full
-  production ascent through staging and a controlled descent from the flip to contact.
+- With one inertia model (step 22), the 30 s ascent gate (step 23) and the terminal descent gate
+  (step 24), remaining gates are a full production ascent through staging and an entry from the
+  interface with flap control. Make the legacy tick rotate about the centre of mass.
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
   envelope is intentionally not ported; EDL parity must confirm the RK4 integrator does not
   need it under high dynamic pressure.

@@ -443,6 +443,149 @@ public sealed class PhysicsParityIntegrationTests
     }
 
     [Fact]
+    public void TerminalFlipAndLandingBurnTouchDownLikeLegacy()
+    {
+        var legacy = CreateTerminalDescentUniverse("legacy-terminal", coupled: false);
+        var coupled = CreateTerminalDescentUniverse("coupled-terminal", coupled: true);
+        var legacyLog = FlyTerminalDescent(legacy);
+        var coupledLog = FlyTerminalDescent(coupled);
+
+        Assert.False(legacy.Vessel.IsDestroyed, $"legacy {legacyLog}");
+        Assert.False(coupled.Vessel.IsDestroyed, $"coupled {coupledLog}");
+        Assert.True(legacy.Vessel.IsSurfaceSettled, $"legacy never settled: {legacyLog}");
+        Assert.True(coupled.Vessel.IsSurfaceSettled, $"coupled never settled: {coupledLog}");
+        Assert.True(coupled.Universe.LastCoupled6DofTelemetry.Integrated);
+        string summary = $"legacy h40={legacyLog.AltitudeAt40:F2} vD40={legacyLog.DescentRateAt40:F2} contact={legacyLog.ContactSpeed:F2} load={legacyLog.PeakFootLoad:F0} settledTilt={legacyLog.SettledTiltRad:F3}; "
+            + $"coupled h40={coupledLog.AltitudeAt40:F2} vD40={coupledLog.DescentRateAt40:F2} contact={coupledLog.ContactSpeed:F2} load={coupledLog.PeakFootLoad:F0} settledTilt={coupledLog.SettledTiltRad:F3}";
+        // Continuous powered phase: after the flip both paths must fly the same descent. The
+        // settle time is deliberately not compared: the discrete 3→2→1 engine step-down and the
+        // 40% throttle floor turn a one-metre altitude difference into a hover of several
+        // seconds, which is controller branching, not integrator divergence.
+        Assert.True(System.Math.Abs(legacyLog.AltitudeAt40 - coupledLog.AltitudeAt40) <= 3.0, summary);
+        Assert.True(System.Math.Abs(legacyLog.DescentRateAt40 - coupledLog.DescentRateAt40) <= 0.5, summary);
+        // Contact outcome: both soft, upright and inside the gear's structural envelope.
+        Assert.True(legacyLog.ContactSpeed < 3.0 && coupledLog.ContactSpeed < 3.0, summary);
+        Assert.True(legacyLog.SettledTiltRad < 0.05 && coupledLog.SettledTiltRad < 0.05, summary);
+        Assert.True(legacyLog.PeakFootLoad < 2_500_000.0 && coupledLog.PeakFootLoad < 2_500_000.0, summary);
+        double loadRatio = legacyLog.PeakFootLoad / coupledLog.PeakFootLoad;
+        Assert.True(loadRatio is >= 0.5 and <= 2.0, summary);
+    }
+
+    private sealed record TerminalDescentLog(
+        double ContactSpeed, double PeakFootLoad, double SettledTiltRad,
+        double AltitudeAt40, double DescentRateAt40);
+
+    private sealed record TerminalDescentCase(Universe Universe, CelestialBody Body, Vessel Vessel, Part Engines);
+
+    // The end of a Starship flip: 600 m up, 70 m/s down, the thrust axis still 60° from
+    // vertical, three sea-level Raptors and deployed legs. The controller is the shape of
+    // EDLController's final descent (axis pointing to geodetic up, descent-rate profile with
+    // gravity feed-forward), written once and applied to both integration paths.
+    private static TerminalDescentCase CreateTerminalDescentUniverse(string vesselId, bool coupled)
+    {
+        var root = FindRepoRoot();
+        var body = CelestialBody.LoadFromJson(Path.Combine(root.FullName, "data", "bodies", "earth.json"));
+        var assembly = new VesselAssembly(PartCatalog.LoadFromDirectory(
+            Path.Combine(root.FullName, "data", "parts")));
+        var current = assembly.AddRoot("starship_command");
+        foreach (string id in new[] { "starship_tank", "starship_engines", "starship_landing_gear" })
+            current = assembly.AttachPartAutomatically(current.InstanceId, id);
+        var vessel = assembly.ToVessel("Terminal descent", vesselId);
+        foreach (var part in vessel.Parts.Parts)
+        {
+            if (part.Definition.Category == PartCategory.Landing) part.IsDeployed = true;
+            if (part.Definition.HasVehicleRole("tank") || part.LiquidFuel > 0.0)
+            {
+                part.LiquidFuel *= 0.10;
+                part.Oxidizer *= 0.10;
+            }
+        }
+        vessel.ConfigureLandingContactsFromParts();
+        var engines = vessel.Parts.Parts.Single(p => p.Definition.Category == PartCategory.Engine);
+
+        var surface = body.GetSurfacePosition(0.0, 0.0, 600.0);
+        var up = body.GetGeodeticUp(surface);
+        var east = body.GetEastDirection(surface);
+        vessel.Position = surface;
+        vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(surface) - up * 70.0;
+        var tilted = (up * System.Math.Cos(60.0 * MathUtils.DEG_TO_RAD)
+            + east * System.Math.Sin(60.0 * MathUtils.DEG_TO_RAD)).Normalized;
+        vessel.Orientation = Quaterniond.FromTo(Vector3d.Up, tilted);
+        vessel.ReferenceBodyId = body.Id;
+        vessel.SASEnabled = false;
+        engines.SelectEngineCount(System.Math.Min(3, engines.Definition.EngineCount));
+        vessel.Throttle = 1.0;
+
+        var universe = new Universe { ActiveVessel = vessel, Coupled6DofIntegrationEnabled = coupled };
+        universe.AddBody(body);
+        universe.AddVessel(vessel);
+        // Engines already lit for the flip, as in the flown sequence.
+        for (int i = 0; i < 150; i++) engines.AdvanceEngineRuntime(1.0, 0.02);
+        return new TerminalDescentCase(universe, body, vessel, engines);
+    }
+
+    private static TerminalDescentLog FlyTerminalDescent(TerminalDescentCase run)
+    {
+        const double dt = 0.02;
+        var (universe, body, vessel, engines) = (run.Universe, run.Body, run.Vessel, run.Engines);
+        double contactSpeed = double.NaN, peakLoad = 0.0;
+        double altitudeAt40 = double.NaN, descentRateAt40 = double.NaN;
+        int selected = System.Math.Min(3, engines.Definition.EngineCount);
+        for (int i = 0; i < 6_000 && !vessel.IsSurfaceSettled && !vessel.IsDestroyed; i++)
+        {
+            var up = body.GetGeodeticUp(vessel.Position);
+            var surfaceVelocity = vessel.GetSurfaceVelocity(body);
+            double altitude = body.GetAltitude(vessel.Position);
+            double vDown = -surfaceVelocity.Dot(up);
+            var axis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
+            if (i == 2_000) { altitudeAt40 = altitude; descentRateAt40 = vDown; }
+
+            if (vessel.HasSurfaceContact)
+            {
+                if (double.IsNaN(contactSpeed)) contactSpeed = surfaceVelocity.Magnitude;
+                vessel.Throttle = 0.0;
+                vessel.PitchYawRoll = Vector3d.Zero;
+            }
+            else
+            {
+                double heightToContact = System.Math.Max(0.0, altitude - 7.85);
+                int represented = System.Math.Max(1, engines.Definition.EngineCount);
+                double perEngineAcceleration = engines.GetRatedFullThrottleThrustMagnitude(
+                    vessel.GetAmbientPressure(body)) / represented / vessel.TotalMass;
+                double vTarget = System.Math.Min(1.5 + heightToContact * 0.06,
+                    System.Math.Sqrt(2.0 * 0.6 * perEngineAcceleration * selected * heightToContact) + 1.2);
+                double g = body.GetSurfaceGravity();
+                double demand = 1.6 * (vDown - vTarget) + g / System.Math.Max(0.2, axis.Dot(up));
+                // Same monotone 3→2→1 engine-out sequence as EDLController: step down only once
+                // the demand fits fewer engines with margin, and never relight during the burn.
+                if (axis.Dot(up) > System.Math.Cos(15.0 * MathUtils.DEG_TO_RAD))
+                    while (selected > 1 && demand <= perEngineAcceleration * (selected - 1) * 0.75)
+                        selected--;
+                engines.SelectEngineCount(selected);
+                double command = demand / System.Math.Max(1e-3, perEngineAcceleration * selected);
+                vessel.Throttle = engines.ApplyThrottleFloor(System.Math.Clamp(command, 0.0, 1.0));
+                // EDLController's lateral law: cant the thrust axis against horizontal drift
+                // (left over from the flip), blending back to vertical over the last 30 m.
+                var lateral = surfaceVelocity - up * surfaceVelocity.Dot(up);
+                double flare = System.Math.Clamp(heightToContact / 30.0, 0.0, 1.0);
+                double cant = System.Math.Min(System.Math.Tan(20.0 * MathUtils.DEG_TO_RAD),
+                    lateral.Magnitude * 0.04) * flare;
+                var aim = lateral.Magnitude > 1e-3 ? (up - lateral.Normalized * cant).Normalized : up;
+                vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
+                    vessel.Orientation, Vector3d.Up, aim, vessel.AngularVelocity,
+                    proportionalGain: 2.2, dampingGain: 6.0);
+            }
+            universe.Tick(dt);
+            peakLoad = System.Math.Max(peakLoad,
+                vessel.LastSurfaceContact?.Points.Max(p => p.NormalLoadN) ?? 0.0);
+        }
+        var finalUp = body.GetGeodeticUp(vessel.Position);
+        double settledTilt = System.Math.Acos(System.Math.Clamp(
+            vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(finalUp), -1, 1));
+        return new TerminalDescentLog(contactSpeed, peakLoad, settledTilt, altitudeAt40, descentRateAt40);
+    }
+
+    [Fact]
     public void CoupledRcsFloorRotatesUnpoweredVesselLikeLegacy()
     {
         var legacy = CreateUnpoweredFlight7Universe("legacy-rcs-floor", coupled: false);
