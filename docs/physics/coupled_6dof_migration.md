@@ -161,6 +161,17 @@ historical directors, not as a tolerance change.
     0.001 m/s, ground track 1.9 km apart after ~5 000 km. Gates: 3 s, 2% on peaks, 0.005 rad/s,
     1 m/s, 5 km. With step 24 this covers entry to touchdown, in two segments.
 
+28. `test(physics): add production ascent through staging parity gate` — the production Flight 14
+    launch (`Flight14LaunchDiagnostic`: pad, 33 Raptors, max-q, hot staging, Ship ascent, coast and
+    insertion burn, with the 26-unit payload) flown by `Flight14LaunchController` on each path.
+    Both reach `OrbitReady`. Measured legacy / coupled: staging T+142.02 s on both at 46.16 /
+    46.73 km and 2 217 / 2 219 m/s; max-q 36.1 / 35.3 kPa at T+68.6 / 67.8 s; cutoff T+494.58 /
+    494.30 s with apsides 281.2 × 61.6 / 280.9 × 61.0 km; insertion complete T+1 516 / 1 513 s;
+    Ship mass within 0.4%; peak angular rates within 2%. The remaining max-q gap is a modelling
+    difference, not an integrator one: the coupled evaluator samples gravity and air at the
+    centre of mass, the legacy tick at the aft datum tens of metres lower. Moving legacy to the
+    centre of mass would shift every calibrated profile and is left as a separate decision.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -209,9 +220,10 @@ long-duration fault management.
   fixture and then controlled EDL.
 - With one inertia model (step 22), the 30 s ascent gate (step 23), the terminal descent gate
   (step 24), the centre-of-mass pivot (step 25) and the 60 s flap entry gate (step 26), remaining
-  gate is a full production ascent through staging. Entry is covered from the 90 km handoff to
-  the belly-flop (step 27) and from the flip to touchdown (step 24); the hand-off between them
-  (the flip itself with engine relight) is compared only from the 60° post-flip state.
+  gap is the flip itself: entry is covered from the 90 km handoff to the belly-flop (step 27)
+  and from the 60° post-flip state to touchdown (step 24); ascent through staging to insertion
+  is covered (step 28). Decide whether the legacy force evaluation should sample at the centre
+  of mass (step 28 note) before activation.
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
   envelope is intentionally not ported; the flap entry gates (steps 26–27, including the
   transonic band) show the RK4 integrator does not need it.

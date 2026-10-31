@@ -352,7 +352,10 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - Entrada continua con la ley de descenso de producción de Flight 14 (paso 27): de 90 km a
      3 km pasando Mach 1, ~913 s; los caminos llegan a 0,4 s uno del otro, picos de q/carga/
      calor dentro de 0,3 %, traza 1,9 km tras ~5 000 km.
-   - Siguiente gate: ascenso de producción completo con staging.
+   - Ascenso de producción Flight 14 completo, del pad a la inserción con hot staging (paso 28):
+     staging en T+142,02 s en ambos, corte a 0,28 s, ápsides a 0,6 km, max-q 2,2 % (el legacy
+     muestrea aire y gravedad en el datum, el acoplado en el centro de masa).
+   - Siguiente gate: el flip en sí (belly-flop a 90° → reencendido → vertical).
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
      pasen y se conserve evidencia numérica y de framebuffer.
 

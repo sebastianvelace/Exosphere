@@ -168,8 +168,9 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - The coupled 6-DoF path remains disabled by default. Both paths read one per-part inertia
   tensor and rotate about the centre of mass in free flight; SAS, RCS floor and the pilot rate
   envelope are ported. Parity gates pass for coast, 30 s guided Flight 7 ascent, contacts,
-  flap entry from 90 km to the 3 km belly-flop (production Flight 14 law) and flip-to-touchdown.
-  A full production ascent through staging is still required before activation.
+  flap entry from 90 km to the 3 km belly-flop (production Flight 14 law), flip-to-touchdown and
+  the production Flight 14 ascent from the pad through hot staging to insertion. The flip itself
+  (belly-flop → relight → vertical) is still required before activation.
 
 ## Workflow
 

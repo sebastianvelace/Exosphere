@@ -1055,4 +1055,76 @@ public sealed class PhysicsParityIntegrationTests
             AttitudeGuidance.ErrorAngleRadians(ship.Orientation, reference) * MathUtils.RAD_TO_DEG, mach1,
             ship.Position);
     }
+
+    [Fact]
+    public void ProductionAscentThroughStagingFliesLikeLegacy()
+    {
+        var legacy = FlyProductionAscent(coupled: false);
+        var coupled = FlyProductionAscent(coupled: true);
+        string summary = $"legacy {legacy}; coupled {coupled}";
+
+        Assert.Equal(Flight14LaunchPhase.OrbitReady, legacy.Phase);
+        Assert.Equal(Flight14LaunchPhase.OrbitReady, coupled.Phase);
+        Assert.True(coupled.Coupled && !legacy.Coupled, summary);
+        // Booster phase and hot staging (measured: identical staging time, 0.57 km and 2 m/s).
+        Assert.True(System.Math.Abs(legacy.StagingS - coupled.StagingS) < 0.5, summary);
+        Assert.True(System.Math.Abs(legacy.StagingAltitudeM - coupled.StagingAltitudeM) < 1_500.0, summary);
+        Assert.True(System.Math.Abs(legacy.StagingSpeedMps - coupled.StagingSpeedMps) < 15.0, summary);
+        // Max-q (measured 2.2%, 0.7 s): the coupled evaluator samples air and gravity at the
+        // centre of mass, the legacy tick at the aft datum tens of metres lower.
+        Assert.True(System.Math.Abs(legacy.PeakQPa - coupled.PeakQPa) < 0.05 * legacy.PeakQPa, summary);
+        Assert.True(System.Math.Abs(legacy.MaxQTimeS - coupled.MaxQTimeS) < 2.0, summary);
+        // Ship cutoff and insertion (measured 0.28 s, 0.3 / 0.6 km apsides, 3.6 s, 0.4% mass).
+        Assert.True(System.Math.Abs(legacy.CutoffS - coupled.CutoffS) < 2.0, summary);
+        Assert.True(System.Math.Abs(legacy.CutoffApoapsisM - coupled.CutoffApoapsisM) < 2_000.0, summary);
+        Assert.True(System.Math.Abs(legacy.CutoffPeriapsisM - coupled.CutoffPeriapsisM) < 2_000.0, summary);
+        Assert.True(System.Math.Abs(legacy.InsertionS - coupled.InsertionS) < 10.0, summary);
+        Assert.True(System.Math.Abs(legacy.ShipMassKg - coupled.ShipMassKg) < 0.01 * legacy.ShipMassKg, summary);
+        // Attitude dynamics through max-q, staging transients and the Ship burn.
+        Assert.True(System.Math.Abs(legacy.PeakRateBooster - coupled.PeakRateBooster) < 0.1 * legacy.PeakRateBooster, summary);
+        Assert.True(System.Math.Abs(legacy.PeakRateShip - coupled.PeakRateShip) < 0.1 * legacy.PeakRateShip, summary);
+    }
+
+    private sealed record ProductionAscentLog(
+        Flight14LaunchPhase Phase, string? BlockReason, double StagingS, double CutoffS, double InsertionS,
+        double CutoffApoapsisM, double CutoffPeriapsisM, double ShipMassKg, double PeakRate,
+        double PeakRateBooster, double PeakRateShip, double PeakQPa, double MaxQTimeS,
+        double StagingAltitudeM, double StagingSpeedMps, bool Coupled);
+
+    // The production Flight 14 launch (pad, 33 Raptors, max-q, hot staging, Ship ascent,
+    // coast and insertion) flown by Flight14LaunchController on each integration path.
+    private static ProductionAscentLog FlyProductionAscent(bool coupled)
+    {
+        var data = Path.Combine(FindRepoRoot().FullName, "data");
+        var earth = CelestialBody.LoadFromJson(Path.Combine(data, "bodies", "earth.json"));
+        earth.Position = Vector3d.Zero; earth.Velocity = Vector3d.Zero; earth.OrbitalElements = null;
+        var universe = new Universe { Coupled6DofIntegrationEnabled = coupled };
+        universe.AddBody(earth);
+        var run = Flight14LaunchDiagnostic.Create(data, universe);
+        var (ship, controller) = (run.Ship, run.Controller);
+        double peakRate = 0, peakBooster = 0, peakShip = 0, peakQ = 0, maxQTime = 0;
+        double stagingAltitude = double.NaN, stagingSpeed = double.NaN;
+        bool coupledSeen = false;
+        for (int i = 0; i < 100_000 && controller.Phase is not (Flight14LaunchPhase.OrbitReady or Flight14LaunchPhase.Blocked)
+            && !ship.IsDestroyed; i++)
+        {
+            universe.Tick(0.02);
+            coupledSeen |= universe.LastCoupled6DofTelemetry.Integrated;
+            double rate = ship.AngularVelocity.Magnitude;
+            peakRate = System.Math.Max(peakRate, rate);
+            if (controller.Phase == Flight14LaunchPhase.BoosterAscent) peakBooster = System.Math.Max(peakBooster, rate);
+            if (controller.Phase == Flight14LaunchPhase.ShipAscent) peakShip = System.Math.Max(peakShip, rate);
+            double q = ship.GetDynamicPressure(earth);
+            if (q > peakQ) { peakQ = q; maxQTime = universe.CurrentTime - controller.LiftoffEpoch; }
+            if (double.IsNaN(stagingAltitude) && !double.IsNaN(controller.StagingElapsedSeconds))
+            {
+                stagingAltitude = earth.GetAltitude(ship.Position);
+                stagingSpeed = (ship.Velocity - earth.Velocity).Magnitude;
+            }
+        }
+        return new ProductionAscentLog(controller.Phase, controller.BlockReason, controller.StagingElapsedSeconds,
+            controller.CutoffElapsedSeconds, controller.InsertionElapsedSeconds,
+            controller.CutoffApoapsisAltitudeM, controller.CutoffPeriapsisAltitudeM, ship.TotalMass,
+            peakRate, peakBooster, peakShip, peakQ, maxQTime, stagingAltitude, stagingSpeed, coupledSeen);
+    }
 }
