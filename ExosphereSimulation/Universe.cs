@@ -149,9 +149,9 @@ public class Universe
     public bool DeferredPhysicsCandidateEnabled { get; set; }
 
     /// <summary>
-    /// Experimental opt-in for the coupled 6-DoF off-rails adapter. It is disabled by
-    /// default until old/new telemetry parity and real-framebuffer flight gates are closed.
-    /// On-rails propagation is never changed by this switch.
+    /// Opt-in for the coupled 6-DoF off-rails adapter. It is disabled by default until the
+    /// activation phase (F0 in docs/physics/rigid_body_fidelity_plan.md) re-validates every
+    /// calibrated profile. On-rails propagation is never changed by this switch.
     /// </summary>
     public bool Coupled6DofIntegrationEnabled { get; set; }
 
@@ -1812,7 +1812,7 @@ public class Universe
 
             var refBody = GetDominantBody(vessel.Position);
             RecordWorkload(VesselPhysicsWorkload.FullPhysics);
-            if (Coupled6DofIntegrationEnabled)
+            if (Coupled6DofIntegrationEnabled && !vessel.WaterMotionEnabled)
                 IntegrateVesselOffRailsCoupled6Dof(vessel, refBody, dt);
             else
                 IntegrateVesselOffRails(vessel, refBody, dt);
@@ -2496,6 +2496,11 @@ public class Universe
         try
         {
             var massProperties = vessel.Parts.GetMassProperties();
+            // Water contact is defined from its own skirt datum; the wrench is evaluated
+            // from the same centre-of-mass state, only the datum offset differs.
+            var waterMass = vessel.WaterContact is { } waterDefinition
+                ? Physics.WaterMotionFrame.ResolveMassProperties(vessel.Parts, waterDefinition)
+                : massProperties;
             var orientation = vessel.Orientation;
             var angularVelocityWorld = vessel.AngularVelocity;
             var centerOfMassOffsetWorld = orientation.Rotate(
@@ -2522,10 +2527,15 @@ public class Universe
                             vessel, refBody, absolute);
                         var catchContact = EvaluateCatchContact(
                             vessel, absolute, evaluationTime);
+                        var waterContact = vessel.WaterContact is { } stageWater
+                            ? EvaluateWaterMotionContact(refBody, stageWater, absolute, waterMass, evaluationTime)
+                            : null;
                         var contactForce = (landingContact?.ForceWorld ?? Vector3d.Zero)
-                            + (catchContact?.ForceWorld ?? Vector3d.Zero);
+                            + (catchContact?.ForceWorld ?? Vector3d.Zero)
+                            + (waterContact?.ForceWorld ?? Vector3d.Zero);
                         var contactTorque = (landingContact?.TorqueWorld ?? Vector3d.Zero)
-                            + (catchContact?.TorqueWorld ?? Vector3d.Zero);
+                            + (catchContact?.TorqueWorld ?? Vector3d.Zero)
+                            + (waterContact?.TorqueWorld ?? Vector3d.Zero);
                         var context = new Physics.RigidBodyForceContext(
                             _bodies,
                             refBody,
@@ -2570,6 +2580,14 @@ public class Universe
             vessel.LastCatchContact = catchContactAfter;
             UpdateLandingContactState(vessel, refBody, contactAfter, dt);
             UpdateCatchContactState(vessel, catchContactAfter, dt);
+            vessel.LastWaterContact = vessel.WaterContact is { } finalWater
+                ? EvaluateWaterMotionContact(refBody, finalWater, absoluteFinal, waterMass, evaluationTime)
+                : null;
+            if (vessel.LastWaterContact is { } waterAfter)
+            {
+                vessel.LastContactForceWorld += waterAfter.ForceWorld;
+                vessel.LastContactTorqueWorld += waterAfter.TorqueWorld;
+            }
         }
         finally
         {
