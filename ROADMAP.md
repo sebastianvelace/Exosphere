@@ -355,7 +355,11 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - Ascenso de producción Flight 14 completo, del pad a la inserción con hot staging (paso 28):
      staging en T+142,02 s en ambos, corte a 0,28 s, ápsides a 0,6 km, max-q 2,2 % (el legacy
      muestrea aire y gravedad en el datum, el acoplado en el centro de masa).
-   - Siguiente gate: el flip en sí (belly-flop a 90° → reencendido → vertical).
+   - Flip de producción (`Flight14LandingBurn`, paso 29): de belly-flop a 1,2 km al testigo de
+     100 m; flip a 8,02 / 8,08 s, testigo a 0,16 s, propelente 0,4 %. Todos los segmentos de
+     Starship, del pad al contacto, tienen gate de paridad.
+   - Antes de activar el switch: decidir si el legacy muestrea fuerzas en el centro de masa y
+     correr los harness Godot `[G]` de ascenso/EDL con el switch encendido en una máquina con GPU.
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
      pasen y se conserve evidencia numérica y de framebuffer.
 

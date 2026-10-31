@@ -172,6 +172,15 @@ historical directors, not as a tolerance change.
     centre of mass, the legacy tick at the aft datum tens of metres lower. Moving legacy to the
     centre of mass would shift every calibrated profile and is left as a separate decision.
 
+29. `test(physics): add belly-flop flip and relight parity gate` — the production
+    `Flight14LandingBurn` (three sea-level Raptors relit from the start budget, flip to vertical
+    on gimbal and flaps, braking burn, 3→1 engine step-down) from a broadside belly-flop at
+    1.2 km and 70 m/s down to the retained 100 m terminal witness. Measured legacy / coupled:
+    flip complete at 8.02 / 8.08 s, witness at 34.56 / 34.72 s, 10.740 / 10.743 m/s, upright
+    0.9959 / 0.9958, propellant 22.86 / 22.95 t, both saturating the 0.35 rad/s envelope and
+    stepping down to one engine. With steps 24, 27 and 28 every Starship flight segment, pad to
+    touchdown, now has a parity gate.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -220,10 +229,11 @@ long-duration fault management.
   fixture and then controlled EDL.
 - With one inertia model (step 22), the 30 s ascent gate (step 23), the terminal descent gate
   (step 24), the centre-of-mass pivot (step 25) and the 60 s flap entry gate (step 26), remaining
-  gap is the flip itself: entry is covered from the 90 km handoff to the belly-flop (step 27)
-  and from the 60° post-flip state to touchdown (step 24); ascent through staging to insertion
-  is covered (step 28). Decide whether the legacy force evaluation should sample at the centre
-  of mass (step 28 note) before activation.
+  segments are covered: ascent through staging to insertion (step 28), entry from 90 km to the
+  belly-flop (step 27), the flip and relight (step 29) and the landing burn to touchdown (step
+  24). Before activation: decide whether the legacy force evaluation should sample at the
+  centre of mass (step 28 note), and run the Godot `[G]` ascent/EDL harnesses on a GPU machine
+  with the switch on.
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
   envelope is intentionally not ported; the flap entry gates (steps 26–27, including the
   transonic band) show the RK4 integrator does not need it.

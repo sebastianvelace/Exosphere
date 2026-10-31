@@ -169,8 +169,10 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   tensor and rotate about the centre of mass in free flight; SAS, RCS floor and the pilot rate
   envelope are ported. Parity gates pass for coast, 30 s guided Flight 7 ascent, contacts,
   flap entry from 90 km to the 3 km belly-flop (production Flight 14 law), flip-to-touchdown and
-  the production Flight 14 ascent from the pad through hot staging to insertion. The flip itself
-  (belly-flop → relight → vertical) is still required before activation.
+  the production Flight 14 ascent from the pad through hot staging to insertion and the
+  production flip/relight: every Starship segment has a parity gate. Before activation, decide
+  whether legacy should sample forces at the centre of mass and run the Godot `[G]` ascent/EDL
+  harnesses with the switch on, on a GPU machine.
 
 ## Workflow
 

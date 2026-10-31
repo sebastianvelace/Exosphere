@@ -1127,4 +1127,85 @@ public sealed class PhysicsParityIntegrationTests
             controller.CutoffApoapsisAltitudeM, controller.CutoffPeriapsisAltitudeM, ship.TotalMass,
             peakRate, peakBooster, peakShip, peakQ, maxQTime, stagingAltitude, stagingSpeed, coupledSeen);
     }
+
+    [Fact]
+    public void BellyFlopFlipAndRelightFliesLikeLegacy()
+    {
+        var legacy = FlyProductionFlip(coupled: false);
+        var coupled = FlyProductionFlip(coupled: true);
+        string summary = $"legacy {legacy}; coupled {coupled}";
+
+        Assert.True(legacy.Phase == Flight14LandingPhase.TerminalReached, summary);
+        Assert.True(coupled.Phase == Flight14LandingPhase.TerminalReached, summary);
+        Assert.True(coupled.Coupled && !legacy.Coupled, summary);
+        Assert.True(legacy.ThreeEngines && coupled.ThreeEngines, summary);
+        Assert.Equal(legacy.MinimumEngines, coupled.MinimumEngines);
+        // Flip timing (measured 8.02 / 8.08 s) and the rate envelope both paths saturate.
+        Assert.True(System.Math.Abs(legacy.FlipCompleteS - coupled.FlipCompleteS) < 0.5, summary);
+        Assert.True(System.Math.Abs(legacy.PeakRate - coupled.PeakRate) < 0.01, summary);
+        // Terminal 100 m witness (measured 0.16 s, 0.003 m/s, 0.4% propellant).
+        Assert.True(System.Math.Abs(legacy.EndS - coupled.EndS) < 1.0, summary);
+        Assert.True(System.Math.Abs(legacy.EndSpeedMps - coupled.EndSpeedMps) < 0.5, summary);
+        Assert.True(System.Math.Abs(legacy.EndVerticalMps - coupled.EndVerticalMps) < 0.5, summary);
+        Assert.True(System.Math.Abs(legacy.EndUpright - coupled.EndUpright) < 0.005, summary);
+        Assert.True(System.Math.Abs(legacy.PropellantUsedKg - coupled.PropellantUsedKg) < 0.02 * legacy.PropellantUsedKg, summary);
+    }
+
+    private sealed record FlipLog(Flight14LandingPhase Phase, string? BlockReason, double FlipCompleteS,
+        double EndS, double EndAltitudeM, double EndSpeedMps, double EndVerticalMps, double EndUpright,
+        double PropellantUsedKg, double PeakRate, int MinimumEngines, bool ThreeEngines, bool Coupled);
+
+    private sealed class LandingBurnStep(Flight14LandingBurn burn) : IPhysicsStepController
+    {
+        public bool RequiresFixedCadence(Universe universe) => true;
+        public void BeforePhysicsStep(Universe universe, double interval) => burn.Advance(universe, interval);
+    }
+
+    // The production Flight 14 flip: broadside belly-flop at 1.2 km and 70 m/s down, three
+    // sea-level Raptors relit from start budget, rotation to vertical on gimbal and flaps, then
+    // the braking burn and engine step-down to the retained 100 m terminal witness.
+    private static FlipLog FlyProductionFlip(bool coupled)
+    {
+        var data = Path.Combine(FindRepoRoot().FullName, "data");
+        var body = CelestialBody.LoadFromJson(Path.Combine(data, "bodies", "earth.json"));
+        body.Position = Vector3d.Zero; body.Velocity = Vector3d.Zero; body.OrbitalElements = null;
+        var ship = VehicleVariantDefinition.LoadFromJson(Path.Combine(data, "vehicles", "starship_flight12_v3_2026.json"))
+            .Build(PartCatalog.LoadFromDirectory(Path.Combine(data, "parts"))).ToVessel("Flip parity", coupled ? "coupled-flip" : "legacy-flip");
+        Assert.NotNull(ship.Stage());
+        var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
+        tank.LiquidFuel = 15_000; tank.Oxidizer = 55_000;
+        ship.Position = body.GetSurfacePositionAtTime(23, -178, 0, 1_200);
+        var up = body.GetGeodeticUp(ship.Position);
+        var flow = -up;
+        ship.Velocity = body.GetSurfaceVelocity(ship.Position) + flow * 70;
+        ship.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
+            AerodynamicsModel.ComputeEntryAxisForLift(flow, Vector3d.Right, 90), flow);
+        ship.ReferenceBodyId = body.Id; ship.SASEnabled = false;
+        var universe = new Universe { Coupled6DofIntegrationEnabled = coupled };
+        universe.AddBody(body); universe.AddVessel(ship); universe.ActiveVessel = ship;
+        var definition = Flight14LandingDefinition.LoadFromJson(Path.Combine(data,
+            "flight_profiles", "starship_flight14_landing_estimate.json"));
+        definition.ContinueToWaterContact = false;
+        var burn = new Flight14LandingBurn(ship, body, definition, "raptor3-starship-sl-flight12", 0);
+        universe.PhysicsStepController = new LandingBurnStep(burn);
+
+        double startPropellant = ship.Parts.Parts.Sum(p => p.LiquidFuel + p.Oxidizer);
+        double t = 0, flipComplete = double.NaN;
+        bool coupledSeen = false;
+        for (int i = 0; i < 6_000 && burn.Phase is not
+            (Flight14LandingPhase.TerminalReached or Flight14LandingPhase.Blocked); i++)
+        {
+            universe.Tick(0.02);
+            t += 0.02;
+            coupledSeen |= universe.LastCoupled6DofTelemetry.Integrated;
+            if (double.IsNaN(flipComplete) && burn.Phase == Flight14LandingPhase.Braking) flipComplete = t;
+        }
+        var end = burn.EndWitness;
+        return new FlipLog(burn.Phase, burn.BlockReason, flipComplete, t,
+            end?.GeodeticAltitudeM ?? double.NaN, end?.AtmosphereRelativeSpeedMps ?? double.NaN,
+            end?.VerticalSpeedMps ?? double.NaN, end?.UprightAlignment ?? double.NaN,
+            startPropellant - ship.Parts.Parts.Sum(p => p.LiquidFuel + p.Oxidizer),
+            burn.MaximumAngularRateRadPerSecond, burn.MinimumSelectedEngineCount,
+            burn.HasDeliveredThreeSeaLevelEngines, coupledSeen);
+    }
 }
