@@ -398,6 +398,51 @@ public sealed class PhysicsParityIntegrationTests
     }
 
     [Fact]
+    public void Flight7ThirtySecondGuidedAscentWithSasRemainsWithinParityTolerance()
+    {
+        var legacy = CreateFlight7Universe("legacy-flight7-long", coupled: false, useEarthData: true);
+        var coupled = CreateFlight7Universe("coupled-flight7-long", coupled: true, useEarthData: true);
+        legacy.ActiveVessel!.SASEnabled = true;
+        coupled.ActiveVessel!.SASEnabled = true;
+        const double dt = 0.02;
+        double worstAttitude = 0.0;
+
+        for (int i = 0; i < 1500; i++)
+        {
+            double elapsed = i * dt;
+            // Pitch over during the first 5 s, then hold the program; hand attitude to SAS
+            // for one second in every ten so both control laws are exercised.
+            bool sasWindow = elapsed >= 10.0 && elapsed % 10.0 < 1.0;
+            foreach (var universe in new[] { legacy, coupled })
+            {
+                if (sasWindow) universe.ActiveVessel!.PitchYawRoll = Vector3d.Zero;
+                else ApplyElevationGuidance(universe, elapsed);
+                universe.Tick(dt);
+            }
+            worstAttitude = System.Math.Max(worstAttitude, RigidBodyParityComparer.Compare(
+                RigidBodyStateSnapshot.FromVessel(legacy.ActiveVessel!),
+                RigidBodyStateSnapshot.FromVessel(coupled.ActiveVessel!),
+                new RigidBodyParityTolerance(1e9, 1e9, 1e9, 1e9)).AttitudeErrorRadians);
+        }
+
+        var result = RigidBodyParityComparer.Compare(
+            RigidBodyStateSnapshot.FromVessel(legacy.ActiveVessel!),
+            RigidBodyStateSnapshot.FromVessel(coupled.ActiveVessel!),
+            new RigidBodyParityTolerance(
+                PositionMeters: 100.0,
+                VelocityMetersPerSecond: 10.0,
+                AttitudeRadians: 0.05,
+                AngularVelocityRadiansPerSecond: 0.02));
+
+        Assert.True(result.IsFinite);
+        Assert.True(result.IsWithinTolerance,
+            $"Legacy/coupled 30 s guided Flight 7 divergence exceeded tolerance: {result}; worst attitude {worstAttitude}");
+        Assert.True(worstAttitude < 0.05, $"worst transient attitude divergence {worstAttitude}");
+        Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
+        Assert.False(coupled.ActiveVessel!.IsDestroyed);
+    }
+
+    [Fact]
     public void CoupledRcsFloorRotatesUnpoweredVesselLikeLegacy()
     {
         var legacy = CreateUnpoweredFlight7Universe("legacy-rcs-floor", coupled: false);

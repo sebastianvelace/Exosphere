@@ -106,6 +106,11 @@ historical directors, not as a tolerance change.
     - Flight 14 return: the within-model periapsis calibration against the T+9884 s broadcast
       anchor was re-fitted for the new dynamics (see the return estimate JSON).
 
+23. `test(physics): add 30 s guided Flight 7 ascent parity gate` — closed-loop pitch program with
+    one-second SAS windows every ten seconds under the real Earth atmosphere. Before step 22 it
+    ended 392 m apart with a 0.23 rad transient; it now stays within 100 m, 10 m/s and 0.05 rad
+    throughout.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -152,8 +157,8 @@ long-duration fault management.
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
-- With one inertia model (step 22), extend the parity gates to a long controlled ascent and a
-  controlled descent from the flip to contact.
+- With one inertia model (step 22) and the 30 s ascent gate (step 23), extend to a full
+  production ascent through staging and a controlled descent from the flip to contact.
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
   envelope is intentionally not ported; EDL parity must confirm the RK4 integrator does not
   need it under high dynamic pressure.
