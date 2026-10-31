@@ -349,8 +349,10 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - Entrada hipersónica con flaps (paso 26): Ship V3 a 75 km y 7,3 km/s, 70° vientre primero,
      solo flaps; tras 60 s los caminos difieren 7 m en altitud y 0,9 m/s. Belly-flop subsónico
      (3 km, 80 m/s, 20 s): 0,14 m y 0,003 m/s.
-   - Siguiente gate: ascenso de producción completo con staging y una entrada continua desde la
-     interfaz hasta el flip (falta la transición transónica).
+   - Entrada continua con la ley de descenso de producción de Flight 14 (paso 27): de 90 km a
+     3 km pasando Mach 1, ~913 s; los caminos llegan a 0,4 s uno del otro, picos de q/carga/
+     calor dentro de 0,3 %, traza 1,9 km tras ~5 000 km.
+   - Siguiente gate: ascenso de producción completo con staging.
    - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
      pasen y se conserve evidencia numérica y de framebuffer.
 

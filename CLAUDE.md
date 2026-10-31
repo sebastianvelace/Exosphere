@@ -165,8 +165,11 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 - Current product priority after documentation cleanup: visual fidelity against real Starship/Super Heavy references. Prefer scoped improvements to `VesselRenderer`, `ReentryPlasmaController`, `PlumeSystem`, camera/lighting, and visual capture before broad new gameplay systems.
 - Flight 14 exploration now continues beyond its retained 100 m witness to estimated low-speed water entry, then freezes after ten seconds of water-only coupled mass-centre translation/rotation. Inclined sealed-cylinder buoyancy and projected wet-section drag are opt-in and region-gated; the global ascent/EDL integration mode is unchanged. An independent Super Heavy engineering return now reaches Gulf water contact with selectable observation and an abstracted FTS boundary; see `docs/audits/flight14_booster_return_2026-10-03.md`. Estimated booster apogee/landing guidance now improves height and timing; see `docs/audits/flight14_booster_calibration_2026-10-03.md`. Exact targeting, flooding, measured capsize timing and full booster reference-timing/trajectory calibration remain pending. See `docs/audits/flight14_water_motion_2026-10-03.md`; the earlier water-entry and inclined-water audits describe prior increments.
-- The coupled 6-DoF path remains disabled by default. Coast and simplified powered parity pass;
-  Starship ascent/EDL parity and full SAS/flap/RCS equivalence are still required before activation.
+- The coupled 6-DoF path remains disabled by default. Both paths read one per-part inertia
+  tensor and rotate about the centre of mass in free flight; SAS, RCS floor and the pilot rate
+  envelope are ported. Parity gates pass for coast, 30 s guided Flight 7 ascent, contacts,
+  flap entry from 90 km to the 3 km belly-flop (production Flight 14 law) and flip-to-touchdown.
+  A full production ascent through staging is still required before activation.
 
 ## Workflow
 

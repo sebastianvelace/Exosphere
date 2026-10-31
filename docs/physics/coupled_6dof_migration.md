@@ -151,6 +151,16 @@ historical directors, not as a tolerance change.
     final 0.70° / 0.65° and peak rates 0.090 / 0.088 rad/s. The flip and landing burn that
     follow are covered by step 24.
 
+27. `test(physics): add continuous entry-to-belly-flop parity gate` — the production Flight 14
+    descent law (`Flight14DescentController.ComputeGuidanceCommand`, now a public pure step:
+    bank-limited hypersonic corridor, 55°→90° angle schedule, slewed belly-first reference,
+    flap trim) flies the V3 Ship from the 90 km handoff (7.3 km/s, −1.5°) to the 3 km
+    belly-flop endpoint on both paths, through Mach 1. Measured: 913.5 / 913.9 s to the endpoint,
+    Mach 1 at 752.0 / 752.3 s, peak q 6 347 / 6 330 Pa, peak load 1.950 / 1.945 g, peak heat
+    flux within 0.13%, peak and transonic angular rates equal to 1e-4 rad/s, end speed equal to
+    0.001 m/s, ground track 1.9 km apart after ~5 000 km. Gates: 3 s, 2% on peaks, 0.005 rad/s,
+    1 m/s, 5 km. With step 24 this covers entry to touchdown, in two segments.
+
 ## Runtime contract
 
 `Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
@@ -199,12 +209,12 @@ long-duration fault management.
   fixture and then controlled EDL.
 - With one inertia model (step 22), the 30 s ascent gate (step 23), the terminal descent gate
   (step 24), the centre-of-mass pivot (step 25) and the 60 s flap entry gate (step 26), remaining
-  gates are a full production ascent through staging and one continuous entry from the
-  interface to the flip (step 26 covers the hypersonic and subsonic segments separately; the
-  transonic transition between them is not yet compared).
+  gate is a full production ascent through staging. Entry is covered from the 90 km handoff to
+  the belly-flop (step 27) and from the flip to touchdown (step 24); the hand-off between them
+  (the flip itself with engine relight) is compared only from the 60° post-flip state.
 - SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
-  envelope is intentionally not ported; the hypersonic and subsonic flap gates (step 26) show
-  the RK4 integrator does not need it; the transonic transition must still confirm it.
+  envelope is intentionally not ported; the flap entry gates (steps 26–27, including the
+  transonic band) show the RK4 integrator does not need it.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
   Contact gates (gear and cradle) are closed (step 21); a controlled descent from the flip to
   contact still needs the inertia unification first.

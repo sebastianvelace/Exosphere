@@ -975,4 +975,84 @@ public sealed class PhysicsParityIntegrationTests
             ship.GetSurfaceVelocity(body).Magnitude, maxQ, maxError, error, maxRate,
             flapActive / System.Math.Max(1, flown), ship.Position, ship.Velocity);
     }
+
+    [Fact]
+    public void ContinuousEntryToBellyFlopFliesLikeLegacy()
+    {
+        var definition = Flight14DescentDefinition.LoadFromJson(Path.Combine(FindRepoRoot().FullName,
+            "data", "flight_profiles", "starship_flight14_descent_estimate.json"));
+        var legacy = CreateEntryCase("legacy-continuous", coupled: false, 90_000.0, 7_300.0, -1.5,
+            definition.EntryAngleOfAttackDegrees);
+        var coupled = CreateEntryCase("coupled-continuous", coupled: true, 90_000.0, 7_300.0, -1.5,
+            definition.EntryAngleOfAttackDegrees);
+        var legacyLog = FlyProductionDescent(legacy, definition);
+        var coupledLog = FlyProductionDescent(coupled, definition);
+        string summary = $"legacy {legacyLog}; coupled {coupledLog}";
+
+        // Both paths complete the descent on flaps alone, through Mach 1, intact.
+        Assert.True(legacyLog.Reached && coupledLog.Reached, summary);
+        Assert.False(legacy.Vessel.IsDestroyed || coupled.Vessel.IsDestroyed, summary);
+        Assert.False(legacy.Vessel.StructuralControlLost || coupled.Vessel.StructuralControlLost, summary);
+        Assert.True(legacyLog.PeakLoadG > 1.0 && legacyLog.PeakQPa > 1_000.0, summary);
+        Assert.False(double.IsNaN(legacyLog.TimeAtMach1S) || double.IsNaN(coupledLog.TimeAtMach1S), summary);
+        Assert.True(legacyLog.EndVerticalMps < 0 && coupledLog.EndVerticalMps < 0, summary);
+        // Timeline: ~15 min from 90 km to the 3 km belly-flop (measured 0.4 s and 0.3 s apart).
+        Assert.True(System.Math.Abs(legacyLog.ElapsedS - coupledLog.ElapsedS) < 3.0, summary);
+        Assert.True(System.Math.Abs(legacyLog.TimeAtMach1S - coupledLog.TimeAtMach1S) < 3.0, summary);
+        // Loads and heating peaks (measured within 0.3%).
+        Assert.True(System.Math.Abs(legacyLog.PeakQPa - coupledLog.PeakQPa) < 0.02 * legacyLog.PeakQPa, summary);
+        Assert.True(System.Math.Abs(legacyLog.PeakLoadG - coupledLog.PeakLoadG) < 0.02 * legacyLog.PeakLoadG, summary);
+        Assert.True(System.Math.Abs(legacyLog.PeakHeatFlux - coupledLog.PeakHeatFlux) < 0.02 * legacyLog.PeakHeatFlux, summary);
+        // Attitude dynamics, including the transonic band where the legacy post-aero rate
+        // envelope is the one remaining unported difference.
+        Assert.True(System.Math.Abs(legacyLog.PeakRate - coupledLog.PeakRate) < 0.005, summary);
+        Assert.True(System.Math.Abs(legacyLog.TransonicPeakRate - coupledLog.TransonicPeakRate) < 0.005, summary);
+        Assert.True(System.Math.Abs(legacyLog.EndTrackingDeg - coupledLog.EndTrackingDeg) < 2.0, summary);
+        // Endpoint: belly-flop state and ground track (measured 1.9 km after ~5 000 km).
+        Assert.True(System.Math.Abs(legacyLog.EndSpeedMps - coupledLog.EndSpeedMps) < 1.0, summary);
+        Assert.True((legacyLog.EndPosition - coupledLog.EndPosition).Magnitude < 5_000.0, summary);
+    }
+
+    private sealed record ContinuousEntryLog(
+        bool Reached, double ElapsedS, double EndAltitudeM, double EndSpeedMps, double EndVerticalMps,
+        double PeakQPa, double PeakLoadG, double PeakHeatFlux, double PeakRate,
+        double TransonicPeakRate, double EndTrackingDeg, double TimeAtMach1S,
+        Vector3d EndPosition);
+
+    // Production Flight 14 descent law (bank-limited hypersonic corridor, 55°→90° angle
+    // schedule, slewed belly-first reference, flap trim) from the 90 km handoff to the 3 km
+    // belly-flop endpoint, applied identically to both integration paths.
+    private static ContinuousEntryLog FlyProductionDescent(FlapEntryCase run, Flight14DescentDefinition definition)
+    {
+        const double dt = 0.02;
+        var (universe, body, ship) = (run.Universe, run.Body, run.Vessel);
+        var reference = ship.Orientation;
+        var priorLift = ship.Orientation.Rotate(Vector3d.Up);
+        double t = 0, peakQ = 0, peakLoad = 0, peakHeat = 0, peakRate = 0, transonicRate = 0, mach1 = double.NaN;
+        bool reached = false;
+        for (int i = 0; i < 75_000 && !ship.IsDestroyed; i++)
+        {
+            var state = EntryFlightDiagnostics.Evaluate(ship, body);
+            peakQ = System.Math.Max(peakQ, state.DynamicPressurePa);
+            peakLoad = System.Math.Max(peakLoad, state.AerodynamicLoadG);
+            peakHeat = System.Math.Max(peakHeat, state.StagnationHeatFluxWPerM2);
+            double speed = ship.GetSurfaceVelocity(body).Magnitude;
+            if (double.IsNaN(mach1) && state.Mach < 1.0) mach1 = t;
+            if (state.AltitudeM <= definition.DiagnosticEndAltitudeM) { reached = true; break; }
+            ship.SASEnabled = false;
+            ship.Throttle = 0.0;
+            ship.PitchYawRoll = Flight14DescentController.ComputeGuidanceCommand(
+                ship, body, definition, state, dt, ref reference, ref priorLift);
+            universe.Tick(dt);
+            t += dt;
+            peakRate = System.Math.Max(peakRate, ship.AngularVelocity.Magnitude);
+            if (state.Mach is > 0.5 and < 2.0)
+                transonicRate = System.Math.Max(transonicRate, ship.AngularVelocity.Magnitude);
+        }
+        var surface = ship.GetSurfaceVelocity(body);
+        return new ContinuousEntryLog(reached, t, body.GetAltitude(ship.Position), surface.Magnitude,
+            surface.Dot(body.GetGeodeticUp(ship.Position)), peakQ, peakLoad, peakHeat, peakRate, transonicRate,
+            AttitudeGuidance.ErrorAngleRadians(ship.Orientation, reference) * MathUtils.RAD_TO_DEG, mach1,
+            ship.Position);
+    }
 }

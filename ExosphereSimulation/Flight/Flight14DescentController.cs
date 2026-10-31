@@ -96,45 +96,64 @@ public sealed class Flight14DescentController : IPhysicsStepController
             return;
         }
 
+        _ship.PitchYawRoll = ComputeGuidanceCommand(_ship, _body, _definition, state,
+            controlIntervalSeconds, ref _reference, ref _priorLift);
+    }
+
+    /// <summary>
+    /// One step of the descent attitude law: lift-limited bank in the hypersonic regime,
+    /// angle-of-attack schedule toward the terminal belly-flop, slew-limited belly-first
+    /// reference and the flap command with static-moment trim. Pure apart from the two
+    /// carried guidance states; it writes no vessel state.
+    /// </summary>
+    public static Vector3d ComputeGuidanceCommand(Vessel ship, CelestialBody body,
+        Flight14DescentDefinition definition, EntryFlightState state, double controlIntervalSeconds,
+        ref Quaterniond reference, ref Vector3d priorLift)
+    {
+        var up = body.GetGeodeticUp(ship.Position);
+        var surfaceVelocity = ship.GetSurfaceVelocity(body);
+        var flow = surfaceVelocity.Normalized;
+        double speed = surfaceVelocity.Magnitude;
+        double verticalSpeed = surfaceVelocity.Dot(up);
         var liftUp = up - flow * up.Dot(flow);
         Vector3d liftReference = liftUp;
-        if (speed >= _definition.HypersonicControlThresholdMps)
+        if (speed >= definition.HypersonicControlThresholdMps)
         {
-            var axis = _ship.Orientation.Rotate(Vector3d.Up).Normalized;
-            double density = _body.Atmosphere!.GetDensity(state.AltitudeM);
+            var axis = ship.Orientation.Rotate(Vector3d.Up).Normalized;
+            double density = body.Atmosphere!.GetDensity(state.AltitudeM);
             var drag = AerodynamicsModel.ComputeReentryDrag(density, surfaceVelocity, axis,
-                _ship.VehicleLength, _ship.MaximumDiameter, _body.Atmosphere.GetTemperature(state.AltitudeM),
-                _ship.Parts.AxialDragCoefficient);
+                ship.VehicleLength, ship.MaximumDiameter, body.Atmosphere.GetTemperature(state.AltitudeM),
+                ship.Parts.AxialDragCoefficient);
             var lift = AerodynamicsModel.ComputeLift(density, surfaceVelocity, axis,
-                _ship.VehicleLength, _ship.MaximumDiameter);
-            var inertial = _ship.Velocity - _body.Velocity;
+                ship.VehicleLength, ship.MaximumDiameter);
+            var inertial = ship.Velocity - body.Velocity;
             var tangential = inertial - up * inertial.Dot(up);
-            double radius = (_ship.Position - _body.Position).Magnitude;
-            double ballistic = -_body.GM/(radius*radius) + tangential.MagnitudeSquared/radius
-                + drag.Dot(up)/_ship.TotalMass;
-            var side = EntryCorridorGuidance.ComputeBankSide(flow, up, _priorLift);
+            double radius = (ship.Position - body.Position).Magnitude;
+            double ballistic = -body.GM/(radius*radius) + tangential.MagnitudeSquared/radius
+                + drag.Dot(up)/ship.TotalMass;
+            var side = EntryCorridorGuidance.ComputeBankSide(flow, up, priorLift);
             var limited = EntryCorridorGuidance.LimitLiftForDescent(liftUp, liftUp, side,
-                verticalSpeed, speed, ballistic, lift.Magnitude/_ship.TotalMass*liftUp.Magnitude,
-                _definition.MinimumDownwardSpeedMps, _definition.DownwardSpeedFraction,
-                _definition.VerticalResponseSeconds, _definition.DownwardSpeedDeadbandMps);
+                verticalSpeed, speed, ballistic, lift.Magnitude/ship.TotalMass*liftUp.Magnitude,
+                definition.MinimumDownwardSpeedMps, definition.DownwardSpeedFraction,
+                definition.VerticalResponseSeconds, definition.DownwardSpeedDeadbandMps);
             liftReference = EntryCorridorGuidance.BlendForAerodynamicAuthority(limited, liftUp,
-                state.DynamicPressurePa, _definition.BankOnsetDynamicPressurePa, _definition.BankFullDynamicPressurePa);
+                state.DynamicPressurePa, definition.BankOnsetDynamicPressurePa, definition.BankFullDynamicPressurePa);
         }
         if (liftReference.MagnitudeSquared < 1e-12)
-            liftReference = _priorLift - flow * _priorLift.Dot(flow);
-        _priorLift = liftReference;
+            liftReference = priorLift - flow * priorLift.Dot(flow);
+        priorLift = liftReference;
         double terminalFraction = System.Math.Clamp(
-            (_definition.HypersonicControlThresholdMps-speed)
-                / (_definition.HypersonicControlThresholdMps-_definition.TerminalAngleOfAttackSpeedMps), 0, 1);
-        double angle = _definition.EntryAngleOfAttackDegrees + terminalFraction
-            * (_definition.TerminalAngleOfAttackDegrees-_definition.EntryAngleOfAttackDegrees);
+            (definition.HypersonicControlThresholdMps-speed)
+                / (definition.HypersonicControlThresholdMps-definition.TerminalAngleOfAttackSpeedMps), 0, 1);
+        double angle = definition.EntryAngleOfAttackDegrees + terminalFraction
+            * (definition.TerminalAngleOfAttackDegrees-definition.EntryAngleOfAttackDegrees);
         var axisReference = AerodynamicsModel.ComputeEntryAxisForLift(flow, liftReference, angle);
         var desired = AerodynamicsModel.ComputeBellyFirstOrientation(axisReference, flow);
-        _reference = AttitudeGuidance.SlewQuaternion(_reference, desired,
-            controlIntervalSeconds, _definition.ReferenceSlewRateRadPerSecond);
-        _reference = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(_reference, flow, angle);
-        _ship.PitchYawRoll = Flight14AerodynamicAttitude.ComputeCommand(_ship, _body, _reference,
-            _definition.TrimOnsetDynamicPressurePa, _definition.TrimFullDynamicPressurePa);
+        reference = AttitudeGuidance.SlewQuaternion(reference, desired,
+            controlIntervalSeconds, definition.ReferenceSlewRateRadPerSecond);
+        reference = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(reference, flow, angle);
+        return Flight14AerodynamicAttitude.ComputeCommand(ship, body, reference,
+            definition.TrimOnsetDynamicPressurePa, definition.TrimFullDynamicPressurePa);
     }
 
     private Flight14EntryWitness Witness(Universe universe)
