@@ -34,10 +34,10 @@ public static class DistributedAerodynamics
     public const double CrossflowDragCoefficient = 1.5;
 
     /// <summary>Planform fraction of a tangent ogive (≈ 2/3 of its D·L rectangle).</summary>
-    private const double OgivePlanformFraction = 2.0 / 3.0;
+    public const double OgivePlanformFraction = 2.0 / 3.0;
 
     /// <summary>Slender-body centre of pressure of a tangent ogive, from its tip (Barrowman).</summary>
-    private const double OgiveCenterOfPressureFraction = 0.466;
+    public const double OgiveCenterOfPressureFraction = 0.466;
 
     /// <summary>Two parts are coaxial when their axes are within this fraction of a diameter.</summary>
     private const double CoaxialToleranceFraction = 0.1;

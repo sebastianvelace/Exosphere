@@ -177,6 +177,8 @@ public sealed class MercuryFriendship7Tests
             result => result.Id == "complete-three-orbits").Passed);
     }
 
+    [Trait("FidelityGate", "F1")]
+    [Trait("GateKind", "historical")]
     [Fact]
     public void Friendship7PoweredAscentClimbsAndReachesOrbitalEnergy()
     {

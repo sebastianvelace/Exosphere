@@ -1,0 +1,221 @@
+{
+  "manifestId": "rigid-body-fidelity-2026",
+  "records": [
+    {
+      "dataId": "starship_command",
+      "field": "noseLengthM",
+      "status": "estimated",
+      "source": "Exosphere image-scale estimate from public vehicle photographs",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship Block 2 nose cone",
+      "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
+      "uncertainty": "±20%; no published contour in the cited material",
+      "value": 14.0
+    },
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "noseLengthM",
+      "status": "estimated",
+      "source": "Exosphere image-scale estimate from public vehicle photographs",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship V3 nose cone",
+      "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
+      "uncertainty": "±20%; no published contour in the cited material",
+      "value": 14.0
+    },
+    {
+      "dataId": "falcon9_fairing_standard",
+      "field": "noseLengthM",
+      "status": "estimated",
+      "source": "Exosphere image-scale estimate from public vehicle photographs",
+      "accessedDate": "2026-11-03",
+      "variant": "Falcon 9 standard fairing ogive",
+      "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
+      "uncertainty": "±20%; no published contour in the cited material",
+      "value": 7.0
+    },
+    {
+      "dataId": "falcon9_fairing_extended",
+      "field": "noseLengthM",
+      "status": "estimated",
+      "source": "Exosphere image-scale estimate from public vehicle photographs",
+      "accessedDate": "2026-11-03",
+      "variant": "Falcon 9 extended fairing ogive",
+      "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
+      "uncertainty": "±20%; no published contour in the cited material",
+      "value": 7.0
+    },
+    {
+      "dataId": "newglenn_fairing_7m",
+      "field": "noseLengthM",
+      "status": "estimated",
+      "source": "Exosphere image-scale estimate from public vehicle photographs",
+      "accessedDate": "2026-11-03",
+      "variant": "New Glenn 7 m fairing ogive",
+      "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
+      "uncertainty": "±20%; no published contour in the cited material",
+      "value": 10.0
+    },
+    {
+      "dataId": "apollo8_launch_escape_system",
+      "field": "noseLengthM",
+      "status": "estimated",
+      "source": "Exosphere image-scale estimate from public vehicle photographs",
+      "accessedDate": "2026-11-03",
+      "variant": "Apollo LES tower and boost protective cover",
+      "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
+      "uncertainty": "±20%; no published contour in the cited material",
+      "value": 5.51
+    },
+    {
+      "dataId": "apollo11_launch_escape_system",
+      "field": "noseLengthM",
+      "status": "estimated",
+      "source": "Exosphere image-scale estimate from public vehicle photographs",
+      "accessedDate": "2026-11-03",
+      "variant": "Apollo LES tower and boost protective cover",
+      "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
+      "uncertainty": "±20%; no published contour in the cited material",
+      "value": 5.51
+    },
+    {
+      "dataId": "starship_command",
+      "field": "bodyFlaps",
+      "status": "estimated",
+      "source": "Exosphere image-derived Flight 7 proportions (VesselRenderer flap rigs); travel and servo rate are simulator estimates",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship Block 2 forward flaps",
+      "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
+      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+    },
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "bodyFlaps",
+      "status": "estimated",
+      "source": "Exosphere image-derived Flight 7 proportions (VesselRenderer flap rigs); travel and servo rate are simulator estimates",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship V3 forward flaps",
+      "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
+      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+    },
+    {
+      "dataId": "starship_tank",
+      "field": "bodyFlaps",
+      "status": "estimated",
+      "source": "Exosphere image-derived Flight 7 proportions (VesselRenderer flap rigs); travel and servo rate are simulator estimates",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship Block 2 aft flaps",
+      "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
+      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+    },
+    {
+      "dataId": "starship_v3_tank_flight12",
+      "field": "bodyFlaps",
+      "status": "estimated",
+      "source": "Exosphere image-derived Flight 7 proportions (VesselRenderer flap rigs); travel and servo rate are simulator estimates",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship V3 aft flaps",
+      "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
+      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+    },
+    {
+      "dataId": "distributed-aerodynamics",
+      "field": "crossflowDragCoefficient",
+      "status": "calibrated",
+      "source": "Allen & Perkins crossflow theory (NACA TR-1048); value set so a uniform cylinder reproduces the legacy calibrated broadside drag",
+      "accessedDate": "2026-11-03",
+      "variant": "long circular cylinder broadside",
+      "conditions": "viscous crossflow drag per unit planform, multiplied by the transonic Mach rise",
+      "uncertainty": "1.2 subcritical to ~1.33 Newtonian supersonic; finite-length factor not applied",
+      "value": 1.5
+    },
+    {
+      "dataId": "distributed-aerodynamics",
+      "field": "ogivePlanformFraction",
+      "status": "derived",
+      "source": "Geometry of a tangent ogive: planform area ≈ 2/3 of its D·L rectangle",
+      "accessedDate": "2026-11-03",
+      "variant": "tangent ogive nose",
+      "conditions": "planform used for nose crossflow",
+      "uncertainty": "±5% across ogive radii",
+      "value": 0.6666666666666666
+    },
+    {
+      "dataId": "distributed-aerodynamics",
+      "field": "ogiveCenterOfPressureFraction",
+      "status": "published",
+      "source": "Barrowman, The Practical Calculation of the Aerodynamic Characteristics of Slender Finned Vehicles (1967)",
+      "accessedDate": "2026-11-03",
+      "variant": "tangent ogive nose",
+      "conditions": "slender-body centre of pressure measured from the tip, as a fraction of nose length",
+      "uncertainty": "theoretical value; small-angle potential flow",
+      "value": 0.466
+    },
+    {
+      "dataId": "distributed-aerodynamics",
+      "field": "slenderBodyMinimumFineness",
+      "status": "estimated",
+      "source": "Exosphere validity bound for slender-body theory",
+      "accessedDate": "2026-11-03",
+      "variant": "any axisymmetric stack",
+      "conditions": "length/diameter below which the blunt/trimmed model is kept",
+      "uncertainty": "the theory degrades gradually between L/D 2 and 4",
+      "value": 3.0
+    },
+    {
+      "dataId": "body-flap-aerodynamics",
+      "field": "subsonicBroadsideCoefficient",
+      "status": "published",
+      "source": "Hoerner, Fluid-Dynamic Drag (1965), low-aspect-ratio flat plates normal to the flow",
+      "accessedDate": "2026-11-03",
+      "variant": "flat plate, aspect ratio < 1",
+      "conditions": "subsonic broadside normal-force coefficient",
+      "uncertainty": "1.17–1.2 across low aspect ratios",
+      "value": 1.2
+    },
+    {
+      "dataId": "body-flap-aerodynamics",
+      "field": "subsonicMachLimit",
+      "status": "estimated",
+      "source": "Exosphere transonic blend bound",
+      "accessedDate": "2026-11-03",
+      "variant": "flat plate",
+      "conditions": "upper Mach of the pure subsonic plate law",
+      "uncertainty": "transonic plate loads are not resolved",
+      "value": 0.8
+    },
+    {
+      "dataId": "body-flap-aerodynamics",
+      "field": "newtonianMachOnset",
+      "status": "estimated",
+      "source": "Exosphere transonic blend bound",
+      "accessedDate": "2026-11-03",
+      "variant": "flat plate",
+      "conditions": "lower Mach of the modified-Newtonian law (Rayleigh pitot Cp,max)",
+      "uncertainty": "transonic plate loads are not resolved",
+      "value": 1.5
+    },
+    {
+      "dataId": "mercury-atlas6-pitch-tape",
+      "field": "boosterCutoffElevationDeg",
+      "status": "calibrated",
+      "source": "NASA MA-6 published insertion 161 x 261 km; re-closed on distributed aerodynamics",
+      "accessedDate": "2026-11-03",
+      "variant": "Mercury-Atlas 6 reconstructed pitch tape",
+      "conditions": "elevation above the geodetic horizon at BECO; not the original analog tape",
+      "uncertainty": "insertion residuals -1.5 km perigee, +6.8 km apogee",
+      "value": 23.2
+    },
+    {
+      "dataId": "mercury-atlas6-pitch-tape",
+      "field": "insertionElevationDeg",
+      "status": "calibrated",
+      "source": "NASA MA-6 published insertion 161 x 261 km; re-closed on distributed aerodynamics",
+      "accessedDate": "2026-11-03",
+      "variant": "Mercury-Atlas 6 reconstructed pitch tape",
+      "conditions": "final sustainer-phase elevation; not the original analog tape",
+      "uncertainty": "insertion residuals -1.5 km perigee, +6.8 km apogee",
+      "value": -17.9
+    }
+  ]
+}

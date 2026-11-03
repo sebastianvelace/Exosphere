@@ -4,6 +4,8 @@ using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Physics;
 using Xunit;
 
+[Trait("FidelityGate", "F0")]
+[Trait("GateKind", "analytic")]
 public sealed class CompositeMassPropertiesTests
 {
     // Uniform solid cylinder about its centre, axis along body +Y.

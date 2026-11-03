@@ -181,6 +181,18 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 
 ## Workflow
 
+- Fidelity data must cite its source: every value of the fidelity track (`nose_length_m`,
+  `body_flaps`, header tanks, model constants, calibrated profile knobs) has a record in
+  `data/provenance/*.json` (status published/derived/estimated/calibrated, source, uncertainty,
+  and `value` when it is one number). `PartCatalog` rejects a fidelity field without one,
+  `FidelityProvenanceTests` cross-checks code constants against their records, and
+  `docs/physics/estimates_register.md` (regenerate with `python3 tools/provenance_register.py`;
+  `contract_checks.sh` fails if stale) lists everything that is not published data.
+- Each fidelity phase closes on an analytic and a historical gate listed in
+  `docs/physics/fidelity_gates.md` and tagged `[Trait("FidelityGate", "Fn")]` +
+  `[Trait("GateKind", "analytic|historical")]`; `FidelityGateRegistryTests` keeps both in sync.
+  Run one phase with `bash tools/fidelity_gate.sh F1`.
+
 - Keep `ROADMAP.md` current when closing or adding roadmap items.
 - Keep `README.md` and this file aligned with the repo.
 - One coherent commit per task.

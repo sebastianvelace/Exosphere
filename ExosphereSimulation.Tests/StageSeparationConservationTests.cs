@@ -28,6 +28,8 @@ public sealed class StageSeparationConservationTests
         return spin + (v.CenterOfMass - point).Cross(CenterOfMassVelocity(v)) * v.TotalMass;
     }
 
+    [Trait("FidelityGate", "F0")]
+    [Trait("GateKind", "analytic")]
     [Fact]
     public void StagingConservesLinearMomentum()
     {
@@ -48,6 +50,8 @@ public sealed class StageSeparationConservationTests
         AssertVectorClose(momentumBefore, momentumAfter, 1e-9 * momentumBefore.Magnitude);
     }
 
+    [Trait("FidelityGate", "F0")]
+    [Trait("GateKind", "analytic")]
     [Fact]
     public void StagingConservesCentreOfMass()
     {
@@ -70,6 +74,8 @@ public sealed class StageSeparationConservationTests
         AssertVectorClose(comBefore, comAfter, 1e-6);
     }
 
+    [Trait("FidelityGate", "F0")]
+    [Trait("GateKind", "analytic")]
     [Fact]
     public void StagingConservesAngularMomentumAboutTheCombinedCentreOfMass()
     {

@@ -5,6 +5,8 @@ using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
 using Xunit;
 
+[Trait("FidelityGate", "F1")]
+[Trait("GateKind", "analytic")]
 public sealed class DistributedAerodynamicsTests
 {
     private const double Density = 1.2;
@@ -121,6 +123,8 @@ public sealed class DistributedAerodynamicsTests
     }
 }
 
+[Trait("FidelityGate", "F1")]
+[Trait("GateKind", "analytic")]
 public sealed class DistributedAerodynamicsControlTests
 {
     private static Part Engine(double thrust, double gimbalDeg) => new(new PartDefinition

@@ -68,8 +68,8 @@ public static class BodyFlapAerodynamics
     /// <summary>Broadside normal-force coefficient of a low-aspect-ratio plate (Hoerner).</summary>
     public const double SubsonicBroadsideCoefficient = 1.2;
 
-    private const double SubsonicMachLimit = 0.8;
-    private const double NewtonianMachOnset = 1.5;
+    public const double SubsonicMachLimit = 0.8;
+    public const double NewtonianMachOnset = 1.5;
     private const double HeatCapacityRatio = 1.4;
 
     public static AeroWrench Evaluate(

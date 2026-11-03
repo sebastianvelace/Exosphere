@@ -24,6 +24,11 @@ public sealed class DataProvenanceRecord
     public string Variant { get; set; } = "";
     public string Conditions { get; set; } = "";
     public string Uncertainty { get; set; } = "";
+    /// <summary>
+    /// Numeric value the record vouches for, when the field is a single number. Lets tests
+    /// cross-check code constants and data against their source.
+    /// </summary>
+    public double? Value { get; set; }
 }
 
 public sealed class DataProvenanceManifest
@@ -54,6 +59,9 @@ public sealed class DataProvenanceRegistry
         _records.TryGetValue((dataId, field), out var record)
             ? record
             : throw new InvalidDataException($"Missing provenance for '{dataId}.{field}'.");
+
+    public bool TryGet(string dataId, string field, out DataProvenanceRecord record) =>
+        _records.TryGetValue((dataId, field), out record!);
 
     public void RequireFields(string dataId, params string[] fields)
     {

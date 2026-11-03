@@ -30,6 +30,28 @@ public sealed class PartCatalog
         return new PartCatalog(parts);
     }
 
+    /// <summary>
+    /// Fidelity-track fields (nose shape, control surfaces, header tanks) must cite their
+    /// source: a part may only declare them with a provenance record that says whether the
+    /// value is published, derived, estimated or calibrated. A record that vouches for a
+    /// single number must match the data.
+    /// </summary>
+    private static void ValidateFidelityProvenance(IEnumerable<PartDefinition> parts, DataProvenanceRegistry provenance)
+    {
+        foreach (var part in parts)
+        {
+            if (part.NoseLengthM > 0.0)
+            {
+                var record = provenance.Require(part.Id, "noseLengthM");
+                if (record.Value is { } value && System.Math.Abs(value - part.NoseLengthM) > 1e-9)
+                    throw new InvalidDataException(
+                        $"Part '{part.Id}' nose_length_m {part.NoseLengthM} differs from its provenance value {value}.");
+            }
+            if (part.BodyFlaps.Count > 0)
+                provenance.Require(part.Id, "bodyFlaps");
+        }
+    }
+
     private static void ResolveEngineContracts(
         IEnumerable<PartDefinition> parts,
         string dataDirectory)
@@ -43,6 +65,7 @@ public sealed class PartCatalog
             return;
 
         var provenance = DataProvenanceRegistry.LoadFromDirectory(provenanceDirectory);
+        ValidateFidelityProvenance(parts, provenance);
         var catalog = EngineDefinitionCatalog.Load(
             engineDirectory, clusterDirectory, provenance);
         foreach (var part in parts.Where(p => p.Category == PartCategory.Engine))

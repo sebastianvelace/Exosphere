@@ -5,6 +5,8 @@ using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
 using Xunit;
 
+[Trait("FidelityGate", "F2")]
+[Trait("GateKind", "analytic")]
 public sealed class BodyFlapAerodynamicsTests
 {
     private const double Density = 1.2;
