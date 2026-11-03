@@ -131,9 +131,10 @@ public sealed class Flight14LandingBurnTests(ITestOutputHelper output)
     [Fact]
     public void LoadedPadToTerminalBurnRetainsItsPhysicalShipAndOriginalFuel()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !Directory.Exists(Path.Combine(directory.FullName, "data"))) directory = directory.Parent;
-        var run = Flight14LaunchDiagnostic.CreateWithPoweredReturn(Path.Combine(directory!.FullName, "data"));
+        // Starts from the shared pad-to-entry checkpoint (Flight14EntryCheckpointTests proves
+        // a resumed run reproduces the continuous one); the full chain is Flight14ReturnTests.
+        var run = Flight14LaunchDiagnostic.AttachPoweredReturn(Flight14EntryCheckpointFixture.Resume(),
+            Flight14EntryCheckpointFixture.DataDirectory());
         var tank = run.Ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
         var controller = run.PoweredReturnController!;
         bool controlChangedKinematicsOrFuel = false;

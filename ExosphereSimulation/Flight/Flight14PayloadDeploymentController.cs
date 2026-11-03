@@ -42,6 +42,21 @@ public sealed class Flight14PayloadDeploymentController : IPhysicsStepController
         _releaseView = _releases.AsReadOnly();
     }
 
+    /// <summary>A completed deployment rebuilt from its releases for a checkpointed segment.</summary>
+    internal static Flight14PayloadDeploymentController ResumeComplete(Vessel ship, CelestialBody body,
+        Flight14LaunchController launch, Flight14PayloadDefinition definition,
+        IEnumerable<Flight14PayloadRelease> releases) => new(ship, body, launch, definition, releases.ToList());
+
+    private Flight14PayloadDeploymentController(Vessel ship, CelestialBody body, Flight14LaunchController launch,
+        Flight14PayloadDefinition definition, List<Flight14PayloadRelease> releases)
+    {
+        _ship = ship; _body = body; _launch = launch; _definition = definition;
+        _partIds = releases.Select(r => r.PartInstanceId).ToArray();
+        _releases.AddRange(releases);
+        _releaseView = _releases.AsReadOnly();
+        Phase = Flight14PayloadPhase.Complete;
+    }
+
     public bool RequiresFixedCadence(Universe universe) => Phase is not (Flight14PayloadPhase.Complete or Flight14PayloadPhase.Blocked);
 
     public void BeforePhysicsStep(Universe universe, double controlIntervalSeconds)

@@ -3,6 +3,10 @@ namespace Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 
+public sealed record Flight14LaunchSummary(double LiftoffEpoch, double StagingElapsedSeconds,
+    double OrbitElapsedSeconds, double CutoffElapsedSeconds, double InsertionElapsedSeconds,
+    double CutoffApoapsisAltitudeM, double CutoffPeriapsisAltitudeM, double CoastMinimumAltitudeM);
+
 public enum Flight14LaunchPhase { Ignition, BoosterAscent, HotStage, ShipAscent, SuborbitalCoast, Insertion, OrbitReady, Blocked }
 
 /// <summary>
@@ -36,6 +40,39 @@ public sealed class Flight14LaunchController : IPhysicsStepController
     public double CutoffPeriapsisAltitudeM { get; private set; } = double.NaN;
     public double CoastMinimumAltitudeM { get; private set; } = double.PositiveInfinity;
     public Vessel? DetachedBooster { get; private set; }
+
+    /// <summary>Event record of a completed launch, carried by an entry checkpoint.</summary>
+    public Flight14LaunchSummary CaptureSummary() => Phase == Flight14LaunchPhase.OrbitReady
+        ? new(LiftoffEpoch, StagingElapsedSeconds, OrbitElapsedSeconds, CutoffElapsedSeconds,
+            InsertionElapsedSeconds, CutoffApoapsisAltitudeM, CutoffPeriapsisAltitudeM, CoastMinimumAltitudeM)
+        : throw new InvalidOperationException("Only a launch that reached orbit can be summarised.");
+
+    /// <summary>
+    /// A launch controller that already reached orbit, rebuilt from its event record for a
+    /// checkpointed segment. It never commands the vehicle again.
+    /// </summary>
+    internal static Flight14LaunchController ResumeInOrbit(Vessel ship, CelestialBody body,
+        Flight14LaunchGuidanceDefinition guidance, Flight14LaunchSummary summary) => new(ship, body, guidance, summary);
+
+    private Flight14LaunchController(Vessel ship, CelestialBody body, Flight14LaunchGuidanceDefinition guidance,
+        Flight14LaunchSummary summary)
+    {
+        _ship = ship;
+        _body = body;
+        _guidance = guidance;
+        _booster = null!; // Separated long before the checkpoint; never read once in orbit.
+        _engines = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("ship_engines"));
+        _tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
+        Phase = Flight14LaunchPhase.OrbitReady;
+        LiftoffEpoch = summary.LiftoffEpoch;
+        StagingElapsedSeconds = summary.StagingElapsedSeconds;
+        OrbitElapsedSeconds = summary.OrbitElapsedSeconds;
+        CutoffElapsedSeconds = summary.CutoffElapsedSeconds;
+        InsertionElapsedSeconds = summary.InsertionElapsedSeconds;
+        CutoffApoapsisAltitudeM = summary.CutoffApoapsisAltitudeM;
+        CutoffPeriapsisAltitudeM = summary.CutoffPeriapsisAltitudeM;
+        CoastMinimumAltitudeM = summary.CoastMinimumAltitudeM;
+    }
 
     public Flight14LaunchController(Vessel stack, CelestialBody body, Flight14LaunchGuidanceDefinition guidance)
     {

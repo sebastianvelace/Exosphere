@@ -54,6 +54,10 @@ public sealed class VesselSaveV2
     public string? ReferenceBodyId { get; set; }
     public double Throttle { get; set; }
     public VectorSaveV2 PitchYawRoll { get; set; } = new();
+    /// <summary>Slewed body-flap channels (pitch, yaw, roll) of the aggregate flap model.</summary>
+    public VectorSaveV2 FlapActuators { get; set; } = new();
+    /// <summary>Physical body-flap deflections (rad), in <c>PartGraph.GetBodyFlaps</c> order.</summary>
+    public List<double> BodyFlapDeflectionsRad { get; set; } = new();
     public bool SasEnabled { get; set; }
     public bool ParachutesArmed { get; set; }
     public bool IsGroundHeld { get; set; }
@@ -510,6 +514,9 @@ public static class SaveGameV2Codec
             ReferenceBodyId = vessel.ReferenceBodyId,
             Throttle = vessel.Throttle,
             PitchYawRoll = VectorSaveV2.From(vessel.PitchYawRoll),
+            FlapActuators = VectorSaveV2.From(new Vector3d(
+                vessel.FlapActuators.Pitch, vessel.FlapActuators.Yaw, vessel.FlapActuators.Roll)),
+            BodyFlapDeflectionsRad = vessel.BodyFlapDeflectionsRad.ToList(),
             SasEnabled = vessel.SASEnabled,
             ParachutesArmed = vessel.ParachutesArmed,
             IsGroundHeld = vessel.IsGroundHeld,
@@ -627,6 +634,8 @@ public static class SaveGameV2Codec
         }
         vessel.Crew.AddRange(saved.Crew.Select(RestoreCrew));
         vessel.ConfigureLandingContactsFromParts();
+        var flaps = saved.FlapActuators.ToVector();
+        vessel.RestoreFlapState(new Physics.FlapActuatorState(flaps.X, flaps.Y, flaps.Z), saved.BodyFlapDeflectionsRad);
         return vessel;
     }
 

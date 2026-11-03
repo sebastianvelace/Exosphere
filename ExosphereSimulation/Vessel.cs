@@ -714,6 +714,21 @@ public class Vessel
         }
     }
 
+    /// <summary>
+    /// Restores saved flap state: the aggregate channels and, when the save matches this
+    /// vessel's surfaces, each physical deflection (clamped to its travel).
+    /// </summary>
+    internal void RestoreFlapState(FlapActuatorState actuators, IReadOnlyList<double> bodyFlapDeflectionsRad)
+    {
+        FlapActuators = actuators.Clamp();
+        EnsureBodyFlapState();
+        var flaps = Parts.GetBodyFlaps();
+        if (bodyFlapDeflectionsRad.Count != flaps.Count) return;
+        for (int i = 0; i < flaps.Count; i++)
+            _bodyFlapDeflections[i] = System.Math.Clamp(bodyFlapDeflectionsRad[i],
+                flaps[i].MinDeflectionRad, flaps[i].MaxDeflectionRad);
+    }
+
     private void EnsureBodyFlapState()
     {
         var flaps = Parts.GetBodyFlaps();

@@ -192,6 +192,13 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   `docs/physics/fidelity_gates.md` and tagged `[Trait("FidelityGate", "Fn")]` +
   `[Trait("GateKind", "analytic|historical")]`; `FidelityGateRegistryTests` keeps both in sync.
   Run one phase with `bash tools/fidelity_gate.sh F1`.
+- Flight 14 downstream segments (descent, flip, terminal burn) resume from one shared
+  pad-to-entry checkpoint (`Flight14LaunchDiagnostic.CaptureEntryCheckpoint`/`ResumeAtEntry`,
+  test fixture `Flight14EntryCheckpointFixture`), cached on disk under a SHA-256 of the
+  simulation assembly and `data/`. `Flight14EntryCheckpointTests` requires a resumed run to
+  reproduce the continuous one bit for bit; `Flight14ReturnTests` keeps the full pad-to-entry
+  chain and the exploration preview keeps its gameplay-universe chain. Iterate segments with
+  `bash tools/flight14_segments.sh` (~1 min with a warm cache).
 
 - Keep `ROADMAP.md` current when closing or adding roadmap items.
 - Keep `README.md` and this file aligned with the repo.

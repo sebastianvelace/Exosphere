@@ -10,7 +10,9 @@ public sealed class Flight14DescentTests(ITestOutputHelper output)
     [Fact]
     public void LoadedMissionDescendsWithTheOriginalReserveAndPhysicalState()
     {
-        var run = Flight14LaunchDiagnostic.CreateWithDescent(DataDirectory());
+        // Starts from the shared pad-to-entry checkpoint (Flight14EntryCheckpointTests proves
+        // a resumed run reproduces the continuous one); the full chain is Flight14ReturnTests.
+        var run = Flight14LaunchDiagnostic.AttachDescent(Flight14EntryCheckpointFixture.Resume(), DataDirectory());
         var descent = run.DescentController!;
         var guard = new ControlWriteGuard(descent, run.Ship);
         run.Universe.PhysicsStepController = guard;
