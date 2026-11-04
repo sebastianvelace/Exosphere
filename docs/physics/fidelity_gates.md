@@ -19,7 +19,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | --- | --- | --- |
 | F0 | closed | Coupled 6-DoF in production, one skirt-datum frame, exact separation |
 | F1 | closed | Distributed per-part aerodynamics, flight-control inversion |
-| F2 | open | Physical body flaps (historical gate pending: Flight 14 entry on header tanks) |
+| F2 | closed | Physical body flaps on measured crossflow drag (Flight 14 descent and belly-flop speed) |
 | F3 | planned | Actuator-only attitude control |
 | F4 | planned | Jet damping, gravity gradient |
 | F5 | planned | Propellant slosh |
@@ -61,3 +61,4 @@ with `bash tools/fidelity_gate.sh F1`.
 | F2 | analytic | `HeaderTankTests.HeaderPointMassAddsItsParallelAxisInertia` | header point-mass inertia |
 | F2 | analytic | `HeaderTankTests.EnginesDrainTheMainTanksBeforeTheHeaders` | feed order and mass conservation |
 | F2 | analytic | `HeaderTankTests.HeaderLoadsSurviveASave` | header state persistence |
+| F2 | historical | `Flight14DescentHistoricalTests.PhysicalFlapEntryReproducesTheBroadcastDescentAndBellyFlopSpeed` | Flight 14 broadcast descent displays and 363 km/h belly flop |

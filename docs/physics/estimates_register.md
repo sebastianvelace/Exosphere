@@ -7,7 +7,7 @@ provenance record is upgraded to `published` with a cited source.
 
 | Status | Records |
 | --- | ---: |
-| calibrated | 43 |
+| calibrated | 44 |
 | estimated | 197 |
 | derived | 90 |
 | regulatory_envelope | 5 |
@@ -55,6 +55,7 @@ provenance record is upgraded to `published` with a cited source.
 | raptor3-starship-vac-flight12 | startupTransient |  | timing is not public acceptance data | SpaceX Starship Flight 12 ascent sequence and Exosphere lifecycle calibration | starship_flight12_v3_2026.json |
 | raptor3-superheavy-flight12 | startupTransient |  | lifecycle timing is not public acceptance data | SpaceX Starship Flight 12 mission sequence and Exosphere lifecycle calibration | starship_flight12_v3_2026.json |
 | starship-flight14-return | earliestDeorbitMissionSeconds | 7883 | residuals within ±500 m of a datum-conditional display | Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s; observed early-deorbit window T+7864..7925 s | rigid_body_fidelity_2026.json |
+| starship-flight14-return | entryBankDegrees | 90 | the 102 km display (T+9790) stays -1.9 km: the slope through 94 km is within the unspecified display datum (ellipsoid vs sphere changes ~1-2 km over this track) | Flight 14 broadcast displays T+9884 94.6 km, T+9894 93.9 km and T+9986 88.1 km (user-provided frame): a lift-up entry sank too slowly near 90 km; a 90 deg initial bank (Shuttle-style roll-ahead) gives -0.45/-0.33/+0.47 km | rigid_body_fidelity_2026.json |
 | starship-flight14-return | targetPeriapsisAltitudeM | 104400 | the 102 km (T+9790) and 88.1 km (T+9986) displays sit -1.8 / +1.7 km: the sink rate through 94 km is shallower than observed (lift orientation before 90 km not yet calibrated) | Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s 93.9 km with the deorbit ignition held inside the observed window; re-closed after the measured (Jorgensen) crossflow drag lowered pre-interface drag (residuals -60 / +100 m) | rigid_body_fidelity_2026.json |
 | starship_command | headerTanks |  | capacity ±50%; station ±2 m; tied to the estimated landing profile | Exosphere: SpaceX does not publish header volumes. Sized (20 t at O/F 3.6) for the observed ~19 s three-two-one landing burn (SpaceX Flight 14 timeline) flown by the powered-descent guidance to water contact with margin; 30 t (sized for the former slow burn on subcritical crossflow drag) put the CoM ~4 m ahead of the flaps neutral trim. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank) | rigid_body_fidelity_2026.json |
 | starship_tank | headerTanks |  | capacity ±50%; station ±2 m; tied to the estimated landing profile | Exosphere: SpaceX does not publish header volumes. Sized (20 t at O/F 3.6) for the observed ~19 s three-two-one landing burn (SpaceX Flight 14 timeline) flown by the powered-descent guidance to water contact with margin; 30 t (sized for the former slow burn on subcritical crossflow drag) put the CoM ~4 m ahead of the flaps neutral trim. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank) | rigid_body_fidelity_2026.json |

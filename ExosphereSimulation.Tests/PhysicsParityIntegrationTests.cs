@@ -1033,6 +1033,10 @@ public sealed class PhysicsParityIntegrationTests
         var priorLift = ship.Orientation.Rotate(Vector3d.Up);
         double t = 0, peakQ = 0, peakLoad = 0, peakHeat = 0, peakRate = 0, transonicRate = 0, mach1 = double.NaN;
         bool reached = false;
+        // RMS attitude tracking over the final 60 s: one end sample depends on where an
+        // oscillation happens to be when the 3 km gate is crossed.
+        var trackingWindow = new Queue<double>();
+        double trackingSquares = 0;
         for (int i = 0; i < 75_000 && !ship.IsDestroyed; i++)
         {
             var state = EntryFlightDiagnostics.Evaluate(ship, body);
@@ -1051,11 +1055,15 @@ public sealed class PhysicsParityIntegrationTests
             peakRate = System.Math.Max(peakRate, ship.AngularVelocity.Magnitude);
             if (state.Mach is > 0.5 and < 2.0)
                 transonicRate = System.Math.Max(transonicRate, ship.AngularVelocity.Magnitude);
+            double error = AttitudeGuidance.ErrorAngleRadians(ship.Orientation, reference) * MathUtils.RAD_TO_DEG;
+            trackingWindow.Enqueue(error * error);
+            trackingSquares += error * error;
+            if (trackingWindow.Count > (int)(60.0 / dt)) trackingSquares -= trackingWindow.Dequeue();
         }
         var surface = ship.GetSurfaceVelocity(body);
         return new ContinuousEntryLog(reached, t, body.GetAltitude(ship.Position), surface.Magnitude,
             surface.Dot(body.GetGeodeticUp(ship.Position)), peakQ, peakLoad, peakHeat, peakRate, transonicRate,
-            AttitudeGuidance.ErrorAngleRadians(ship.Orientation, reference) * MathUtils.RAD_TO_DEG, mach1,
+            System.Math.Sqrt(System.Math.Max(0, trackingSquares) / System.Math.Max(1, trackingWindow.Count)), mach1,
             ship.Position);
     }
 

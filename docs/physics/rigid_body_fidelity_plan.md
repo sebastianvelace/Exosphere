@@ -159,12 +159,18 @@ Flying the entry on physical flaps exposed control and mass issues, each fixed p
   travel to spare; a reference governor keeps the reference within 6° of the attitude. The
   descent now flies with flaps near neutral and peak rate ~0.03 rad/s.
 - The 55° hypersonic AoA had been a guidance experiment: with distributed aero L/D ≈ cot α,
-  so 55° glided far too high. 60° (inside the reported 60–70° band) gives residuals of
-  +2.3 / +2.2 / +2.5 km at T+10369 / 10541 / 10961 (speed 8112 vs 9982 km/h at the last) and
-  reaches 1.2 km ~9 s after the broadcast. The deorbit periapsis target was re-closed to
-  104.4 km (residuals −60 / +100 m at 94 km) because the measured crossflow lowered drag
-  before the interface; the 102 km and 88.1 km displays still sit −1.8 / +1.7 km: the sink
-  through 94 km is shallower than observed (lift orientation before 90 km, next).
+  so 55° glided far too high. Between the coast and 90 km the ship now flies the same
+  59.5° with its lift banked 90° (a lift-up entry slowed the sink to ~32 m/s against the
+  ~63 m/s the T+9986 88.1 km display implies); the deorbit periapsis target is 104.4 km.
+  Residuals: −0.44 / −0.32 km at T+9884/9894, +0.5 km at T+9986, +1.30 / +1.36 / +0.92 km
+  at T+10369 / 10541 / 10961 (speed 7291 vs 9982 km/h at the last); the flip gate is
+  reached ~7 s before the broadcast. 59.5° sits half a degree below the 60–70° band a
+  secondary source reports; the descent is very sensitive to it (57° arrives 100 s late).
+  The 102 km display stays −1.9 km: the slope through 94 km is within the unspecified display
+  datum (ellipsoid vs sphere moves it ~1–2 km over this track), so it is not chased.
+- **F2 closed.** Historical gate `Flight14DescentHistoricalTests`: the descent on physical
+  flaps reproduces the broadcast descent displays within the 3 km datum band, and the belly
+  flop scaled to 1.2 km falls at 101.1 m/s against the broadcast 100.8 m/s (363 km/h).
 - The physics change exposed a latent S-IVB limit cycle in the Saturn V separation stress
   case: the J-2 gimbal rate was an unsourced 2.5°/s. The published S-II actuator rate is
   8°/s (Rocket Propulsion Evolution 8.20); S-II and S-IVB now use it (S-IVB derived), and the

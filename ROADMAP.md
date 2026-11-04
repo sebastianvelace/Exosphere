@@ -374,10 +374,13 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      (Jorgensen NASA TR R-474, Mach/Reynolds/η + viscosidad de Sutherland): la caída de panza
      pasa de ~65 a ~102 m/s (transmisión: 101 m/s). Asignación de flaps Gauss–Newton +
      pseudo-inverso redistribuido con ganancias programadas por autoridad, limitador de AoA por trim, centros de
-     masa seca de cáscara, headers 20 t, AoA hipersónico 60° (residuos +2,3/+2,2/+2,5 km,
-     1,2 km ~9 s después de la transmisión), periapsis 104,4 km. Aterrizaje con guía vectorial
-     (1,1 km, 3→2→1 motores, ~21 s hasta 100 m). Gimbal J-2 a 8°/s publicado. Pendiente:
-     orientación de la sustentación entre 120 y 90 km (hundimiento observado más rápido).
+     masa seca de cáscara, headers 20 t, AoA hipersónico 59,5° con alabeo de 90° antes de
+     90 km (residuos −0,4/−0,3 km a 94 km, +0,5 km a 88,1 km, +1,3/+1,4/+0,9 km en el
+     descenso; 1,2 km ~7 s antes de la transmisión), periapsis 104,4 km. Aterrizaje con guía
+     vectorial (1,1 km, 3→2→1 motores, ~21 s hasta 100 m). Gimbal J-2 a 8°/s publicado.
+   - F2 cerrada (paso 34): gate histórico `Flight14DescentHistoricalTests` — caída de panza
+     101,1 m/s a 1,2 km contra 100,8 m/s de la transmisión. Pendiente: velocidad hipersónica
+     tardía (7291 vs 9982 km/h a T+10961) y el tramo final del aterrizaje (~10 s vs ~6 s).
    - Siguiente: fases F2–F6 de `docs/physics/rigid_body_fidelity_plan.md` (flaps físicos,
      control solo por actuadores, jet damping, gradiente de gravedad, slosh, recalibración
      histórica); aletas del S-IC, grid fins y modelo newtoniano para cápsulas romas.

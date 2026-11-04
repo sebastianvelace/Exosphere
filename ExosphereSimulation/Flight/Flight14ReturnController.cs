@@ -2,6 +2,7 @@ namespace Exosphere.Simulation.Flight;
 
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
 
 public enum Flight14ReturnPhase
 {
@@ -191,7 +192,9 @@ public sealed class Flight14ReturnController : IPhysicsStepController
         _ship.Throttle = 0;
         var up = _body.GetGeodeticUp(_ship.Position);
         var surfaceVelocity = _ship.GetSurfaceVelocity(_body);
-        var desired = EntryAttitudeGuidance.ComputeTarget(up, surfaceVelocity.Normalized, liftTowardBody: false);
+        var desired = _definition.EntryAngleOfAttackDegrees > 0
+            ? BankedEntryTarget(up, surfaceVelocity.Normalized)
+            : EntryAttitudeGuidance.ComputeTarget(up, surfaceVelocity.Normalized, liftTowardBody: false);
         _entryReference = AttitudeGuidance.SlewQuaternion(_entryReference, desired,
             controlIntervalSeconds, _definition.EntryReferenceRateRadPerSecond);
         _ship.PitchYawRoll = AttitudeGuidance.ComputeCommand(_ship.Orientation,
@@ -210,6 +213,18 @@ public sealed class Flight14ReturnController : IPhysicsStepController
             _ship.PitchYawRoll = Vector3d.Zero;
             Phase = Flight14ReturnPhase.EntryReached;
         }
+    }
+
+    /// <summary>Belly-first entry attitude at the profile's angle of attack, lift banked from up.</summary>
+    private Quaterniond BankedEntryTarget(Vector3d up, Vector3d flow)
+    {
+        var liftUp = up - flow * up.Dot(flow);
+        if (liftUp.MagnitudeSquared < 1e-12) liftUp = Vector3d.Up - flow * Vector3d.Up.Dot(flow);
+        liftUp = liftUp.Normalized;
+        double bank = _definition.EntryBankDegrees * MathUtils.DEG_TO_RAD;
+        var lift = liftUp * System.Math.Cos(bank) + flow.Cross(liftUp) * System.Math.Sin(bank);
+        var axis = AerodynamicsModel.ComputeEntryAxisForLift(flow, lift, _definition.EntryAngleOfAttackDegrees);
+        return AerodynamicsModel.ComputeBellyFirstOrientation(axis, flow);
     }
 
     private double PropellantKg => _tank.LiquidFuel + _tank.Oxidizer;

@@ -399,6 +399,17 @@
       "conditions": "deorbit burn periapsis target, m",
       "uncertainty": "the 102 km (T+9790) and 88.1 km (T+9986) displays sit -1.8 / +1.7 km: the sink rate through 94 km is shallower than observed (lift orientation before 90 km not yet calibrated)",
       "value": 104400.0
+    },
+    {
+      "dataId": "starship-flight14-return",
+      "field": "entryBankDegrees",
+      "status": "calibrated",
+      "source": "Flight 14 broadcast displays T+9884 94.6 km, T+9894 93.9 km and T+9986 88.1 km (user-provided frame): a lift-up entry sank too slowly near 90 km; a 90 deg initial bank (Shuttle-style roll-ahead) gives -0.45/-0.33/+0.47 km",
+      "accessedDate": "2026-11-04",
+      "variant": "Starship Flight 14 engineering return",
+      "conditions": "bank of the lift vector from local up between the coast and the 90 km witness, at the descent's 59.5 deg angle of attack",
+      "uncertainty": "the 102 km display (T+9790) stays -1.9 km: the slope through 94 km is within the unspecified display datum (ellipsoid vs sphere changes ~1-2 km over this track)",
+      "value": 90.0
     }
   ]
 }
