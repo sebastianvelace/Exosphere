@@ -102,6 +102,12 @@ public class PartDefinition
     /// <summary>Static margin for the standalone root configuration, not the attached launch stack.</summary>
     [JsonPropertyName("standalone_aerodynamic_center_offset_y_m")]
     public double? StandaloneAerodynamicCenterOffsetYM { get; set; }
+    /// <summary>
+    /// Centre of the dry structure along the part axis, from the part centre (m). Zero is a
+    /// uniform structure; a nose section is a shell whose area concentrates near its base.
+    /// </summary>
+    [JsonPropertyName("dry_mass_center_y_m")]
+    public double DryMassCenterYM { get; set; }
     /// <summary>Embedded header tanks (see <see cref="HeaderTankDef"/>).</summary>
     [JsonPropertyName("header_tanks")]
     public List<HeaderTankDef> HeaderTanks { get; set; } = [];

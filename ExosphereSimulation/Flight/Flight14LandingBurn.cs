@@ -20,6 +20,7 @@ public sealed class Flight14LandingBurn
     private readonly CelestialBody _body;
     private readonly Part _engines;
     private readonly Flight14LandingDefinition _definition;
+    public Flight14LandingDefinition Definition => _definition;
     private readonly string _seaLevelModelId;
     private readonly double _liftoffEpoch;
     private double _startTime = double.NaN;
@@ -148,43 +149,108 @@ public sealed class Flight14LandingBurn
         double tiltLimit = _definition.MaximumTiltDegrees;
         if (_definition.ContinueToWaterContact)
             tiltLimit *= System.Math.Clamp((witness.GeodeticAltitudeM+_definition.LowestPointYM)/_definition.DiagnosticEndAltitudeM, 0, 1);
-        double tilt = System.Math.Min(_definition.LateralDampingPerSecond*horizontal.Magnitude / gravity,
-            System.Math.Tan(tiltLimit*MathUtils.DEG_TO_RAD));
-        var aim = (up-horizontal.Normalized*tilt).Normalized;
-        _ship.SASEnabled = false;
-        _ship.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(_ship.Orientation, Vector3d.Up,
-            aim, _ship.AngularVelocity, _definition.ProportionalAttitudeGain, _definition.AttitudeDampingGain);
-        if (Phase == Flight14LandingPhase.Flip)
-        {
-            _engines.SelectEngineCount(3);
-            _ship.Throttle = _engines.ApplyThrottleFloor(_engines.Definition.MinThrottle);
-            if (HasDeliveredThreeSeaLevelEngines && _ship.Orientation.Rotate(Vector3d.Up).Dot(aim)
-                >= System.Math.Cos(15*MathUtils.DEG_TO_RAD)) Phase = Flight14LandingPhase.Braking;
-            else return;
-        }
-        // Continuous burn with monotone count reduction avoids exhausting restart limits.
-        // Never replace low demand with a fabricated sub-minimum throttle or extra relight.
+        // Powered-descent vector guidance: the vertical channel tracks the descent profile and
+        // the horizontal channel damps drift; both set one thrust vector whose direction is
+        // the attitude target and whose magnitude selects the engines.
         double clearance = witness.GeodeticAltitudeM;
         if (_definition.ContinueToWaterContact)
             clearance = System.Math.Max(0, clearance + _definition.LowestPointYM*witness.UprightAlignment);
-        double targetDown = _definition.TargetFinalDescentSpeedMps
-            + clearance*_definition.DescentProfileSlopePerSecond;
-        double thrustUp = System.Math.Max(0.2, witness.UprightAlignment);
-        double acceleration = System.Math.Max(0, gravity
-            + _definition.VerticalDampingPerSecond*(-witness.VerticalSpeedMps-targetDown)) / thrustUp;
-        double force = acceleration*_ship.TotalMass;
+        double targetDown = _definition.TargetDescentSpeedMps(clearance);
+        // Feed-forward of the profile's own deceleration (dv/dt = a·|v_z|/v_target along the
+        // profile), so the proportional channel only corrects deviations instead of lagging.
+        double feedForward = _definition.TargetDecelerationMps2(clearance)
+            * System.Math.Max(0, -witness.VerticalSpeedMps)/System.Math.Max(1, targetDown);
+        double verticalAcceleration = System.Math.Max(0, gravity + feedForward
+            + _definition.VerticalDampingPerSecond*(-witness.VerticalSpeedMps-targetDown));
+        double tanTilt = System.Math.Tan(tiltLimit*MathUtils.DEG_TO_RAD);
+        var horizontalAcceleration = tanTilt > 1e-9 ? horizontal*(-_definition.LateralDampingPerSecond) : Vector3d.Zero;
+        // Brake drift inside the tilt cone of the vertical demand: the descent profile keeps
+        // priority, so drift braking grows as the profile tightens instead of stalling the fall.
+        if (horizontalAcceleration.Magnitude > verticalAcceleration*tanTilt)
+            horizontalAcceleration = horizontalAcceleration.Normalized*(verticalAcceleration*tanTilt);
+        double demandAcceleration = System.Math.Sqrt(verticalAcceleration*verticalAcceleration
+            + horizontalAcceleration.MagnitudeSquared);
+        // Engine selection from the demand (before any minimum-thrust surplus): continuous
+        // burn with monotone count reduction avoids exhausting restart limits, never a
+        // fabricated sub-minimum throttle or extra relight. Three engines fly the flip.
+        if (Phase == Flight14LandingPhase.Flip)
+            _engines.SelectEngineCount(3);
+        else
+            SelectEngines(demandAcceleration*_ship.TotalMass, pressure, model.GimbalRangeDeg);
+        // Raptors cannot throttle below their minimum: when the lit engines' minimum thrust
+        // exceeds the demand, that surplus is steered into drift braking (within the cone, at
+        // the same cascade-safe drift gain) instead of being spent as extra vertical braking.
+        double floorAcceleration = _engines.GetFullThrottleThrustMagnitude(pressure)
+            *_engines.Definition.MinThrottle/System.Math.Max(1, _ship.TotalMass);
+        if (tanTilt > 1e-9 && horizontal.MagnitudeSquared > 1e-6 && floorAcceleration > demandAcceleration)
+        {
+            double sinTilt = System.Math.Sin(tiltLimit*MathUtils.DEG_TO_RAD);
+            double lateral = System.Math.Min(System.Math.Sqrt(System.Math.Max(0,
+                    floorAcceleration*floorAcceleration - verticalAcceleration*verticalAcceleration)),
+                System.Math.Min(floorAcceleration*sinTilt, horizontal.Magnitude*_definition.LateralDampingPerSecond));
+            if (lateral > horizontalAcceleration.Magnitude)
+                horizontalAcceleration = horizontal.Normalized*(-lateral);
+            verticalAcceleration = System.Math.Max(verticalAcceleration,
+                System.Math.Sqrt(System.Math.Max(0, floorAcceleration*floorAcceleration - lateral*lateral)));
+        }
+        var thrustAcceleration = up*verticalAcceleration + horizontalAcceleration;
+        var aim = thrustAcceleration.MagnitudeSquared > 1e-12 ? thrustAcceleration.Normalized : up;
+        _ship.SASEnabled = false;
+        _ship.PilotRateEnvelopeEnabled = false;
+        _ship.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(_ship.Orientation, Vector3d.Up,
+            aim, _ship.AngularVelocity, _definition.ProportionalAttitudeGain,
+            Phase == Flight14LandingPhase.Flip ? _definition.FlipAttitudeDampingGain : _definition.AttitudeDampingGain);
+        if (Phase == Flight14LandingPhase.Flip)
+        {
+            _ship.Throttle = _engines.ApplyThrottleFloor(_engines.Definition.MinThrottle);
+            if (HasDeliveredThreeSeaLevelEngines && _ship.Orientation.Rotate(Vector3d.Up).Dot(aim)
+                >= System.Math.Cos(15*MathUtils.DEG_TO_RAD)) Phase = Flight14LandingPhase.Braking;
+            return;
+        }
+        double alignment = System.Math.Max(0.2, _ship.Orientation.Rotate(Vector3d.Up).Dot(aim));
+        double rated = _engines.GetFullThrottleThrustMagnitude(pressure);
+        _ship.Throttle = _engines.ApplyThrottleFloor(System.Math.Max(_engines.Definition.MinThrottle,
+            demandAcceleration*_ship.TotalMass/alignment/System.Math.Max(1, rated)));
+    }
+
+    /// <summary>
+    /// Monotone engine-count selection: the fewest engines that keep the demanded thrust within
+    /// <see cref="ThrottleHeadroom"/> of rated and whose minimum-throttle gimbal moment exceeds
+    /// the predicted aerodynamic moment by <see cref="ControlAuthorityMargin"/>.
+    /// </summary>
+    private void SelectEngines(double force, double pressure, double gimbalRangeDeg)
+    {
+        int authorityCount = 1;
+        _engines.SelectEngineCount(1);
+        double perEngineMinimumThrust = _engines.GetFullThrottleThrustMagnitude(pressure)*_engines.Definition.MinThrottle;
+        if (_ship.Parts.TryGetPartLocalPosition(_engines, out var engineStation))
+        {
+            double arm = System.Math.Abs(_ship.CenterOfMassOffsetLocal.Y - engineStation.Y);
+            double perEngineMoment = perEngineMinimumThrust*System.Math.Sin(gimbalRangeDeg*MathUtils.DEG_TO_RAD)*arm;
+            var aero = _ship.PredictStaticAerodynamicTorqueBody(_body);
+            double transverse = System.Math.Sqrt(aero.X*aero.X + aero.Z*aero.Z);
+            if (perEngineMoment > 0)
+                authorityCount = (int)System.Math.Ceiling(ControlAuthorityMargin*transverse/perEngineMoment);
+        }
         int selected = _engineCount;
         for (int count = 1; count <= _engineCount; count++)
         {
             _engines.SelectEngineCount(count);
-            if (force <= _engines.GetFullThrottleThrustMagnitude(pressure)) { selected = count; break; }
+            if (count >= authorityCount && force <= ThrottleHeadroom*_engines.GetFullThrottleThrustMagnitude(pressure))
+            { selected = count; break; }
         }
         _engineCount = selected; _engines.SelectEngineCount(selected);
         MinimumSelectedEngineCount = System.Math.Min(MinimumSelectedEngineCount, selected);
-        double rated = _engines.GetFullThrottleThrustMagnitude(pressure);
-        _ship.Throttle = _engines.ApplyThrottleFloor(System.Math.Max(_engines.Definition.MinThrottle,
-            force/System.Math.Max(1, rated)));
     }
+
+    /// <summary>
+    /// Throttle fraction a selected engine set may need; the rest is control margin (why the
+    /// real ship brakes on two engines and lands on one).
+    /// </summary>
+    private const double ThrottleHeadroom = 0.8;
+
+    /// <summary>Gimbal moment margin over the predicted aerodynamic moment when selecting engines.</summary>
+    private const double ControlAuthorityMargin = 2.0;
 
     private Flight14LandingWitness Witness(Universe universe)
     {

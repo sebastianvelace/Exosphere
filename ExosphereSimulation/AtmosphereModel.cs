@@ -70,6 +70,26 @@ public partial class AtmosphereModel
     public double SoundSpeedConstant => HeatCapacityRatio * R / MolarMass;
 
     /// <summary>
+    /// Sutherland coefficient β (kg/(m·s·K^½)) of the gas: μ = β·T^1.5/(T + S).
+    /// Earth air: 1.458e-6 (U.S. Standard Atmosphere 1976, eq. 51).
+    /// </summary>
+    public double SutherlandBeta { get; init; } = 1.458e-6;    // Earth air
+
+    /// <summary>Sutherland temperature S (K) of the gas. Earth air: 110.4 K (USSA-1976).</summary>
+    public double SutherlandTemperature { get; init; } = 110.4;   // Earth air
+
+    /// <summary>Dynamic viscosity (Pa·s) of the gas at a temperature (Sutherland's law).</summary>
+    public double GetDynamicViscosityAtTemperature(double temperature)
+    {
+        double t = System.Math.Max(1.0, temperature);
+        return SutherlandBeta * t * System.Math.Sqrt(t) / (t + SutherlandTemperature);
+    }
+
+    /// <summary>Dynamic viscosity (Pa·s) at a geometric altitude.</summary>
+    public double GetDynamicViscosity(double altitude) =>
+        GetDynamicViscosityAtTemperature(GetTemperature(altitude));
+
+    /// <summary>
     /// Scale height of the residual thermosphere above <see cref="MaxAltitude"/> (m).
     /// 0 disables the tail (density hard-cuts to vacuum at the top of the ISA layers).
     /// When positive, density decays exponentially from the boundary density so low
@@ -403,6 +423,8 @@ public partial class AtmosphereModel
         SeaLevelPressure    = 636.0,
         SeaLevelTemperature = 210.0,
         MolarMass           = 0.04401,      // CO₂
+        SutherlandBeta      = 1.5034e-6,    // CO₂ (White, Viscous Fluid Flow, table 1-2)
+        SutherlandTemperature = 222.0,
         SurfaceGravity      = 3.72076,
         GeopotentialRadius  = 3_389_500.0,
         Layers              = new List<AtmosphereLayer>
@@ -453,6 +475,8 @@ public partial class AtmosphereModel
         SeaLevelPressure    = 9_200_000.0,
         SeaLevelTemperature = 737.0,
         MolarMass           = 0.04401,      // CO₂
+        SutherlandBeta      = 1.5034e-6,    // CO₂ (White, Viscous Fluid Flow, table 1-2)
+        SutherlandTemperature = 222.0,
         SurfaceGravity      = 8.87,
         GeopotentialRadius  = 6_051_800.0,
         Layers              = new List<AtmosphereLayer>

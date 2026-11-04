@@ -14,6 +14,8 @@
     "sea_level_temperature": 165.0,
     "max_altitude": 1000000,
     "molar_mass": 0.00222,
+    "sutherland_beta": 6.8993e-07,
+    "sutherland_temperature": 97.0,
     "surface_gravity": 24.79,
     "geopotential_radius": 71492000.0,
     "layers": [

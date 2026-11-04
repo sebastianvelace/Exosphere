@@ -9,7 +9,8 @@ using Exosphere.Simulation.Parts;
 /// <see cref="SlenderAreaChangeM2"/> is a signed cross-section change ΔA (positive where the
 /// body widens going aft from its nose) loaded by slender-body potential flow.
 /// </summary>
-public readonly record struct AeroElement(Vector3d PositionLocal, double CrossflowAreaM2, double SlenderAreaChangeM2);
+public readonly record struct AeroElement(Vector3d PositionLocal, double CrossflowAreaM2, double SlenderAreaChangeM2,
+    double DiameterM = 0.0);
 
 /// <summary>Aerodynamic force (world) and moment about the centre of mass (body frame).</summary>
 public readonly record struct AeroWrench(Vector3d ForceWorld, Vector3d TorqueBody);
@@ -18,21 +19,18 @@ public readonly record struct AeroWrench(Vector3d ForceWorld, Vector3d TorqueBod
 /// Distributed aerodynamics of a slender launch vehicle, evaluated element by element at the
 /// local flow velocity v + ω×r, so static stability and rate damping come from one model:
 ///
-///   crossflow (Allen–Perkins viscous crossflow):  N = ½ρ|v⊥|² · C_dc · A_planform
+///   crossflow (Allen–Perkins viscous crossflow):  N = ½ρ|v⊥|² · η·C_dn · A_planform
 ///   slender body (Munk):                          N = ½ρ|v|²  · 2ΔA · sin α cos α
 ///   axial:                                        A = ½ρ|v|²  · C_A · A_max · cos²α
 ///
 /// Normal forces act at each element against its local crossflow; the axial force acts on
-/// the axis and carries no moment. C_dc = 1.5 and C_A (declared per vehicle, 0.6 default)
-/// reproduce the calibrated broadside and nose-on drag of a uniform cylinder exactly; lift
-/// and the centre of pressure now follow from geometry. Both drag terms carry the same
-/// transonic Mach rise as the aggregate model.
+/// the axis and carries no moment. η·C_dn follows the measured crossflow Mach and Reynolds
+/// numbers of each element and the body's fineness (<see cref="CrossflowDrag"/>, Jorgensen
+/// NASA TR R-474); C_A (declared per vehicle, 0.6 default) carries the aggregate model's
+/// transonic Mach rise.
 /// </summary>
 public static class DistributedAerodynamics
 {
-    /// <summary>Crossflow drag coefficient of a long circular cylinder broadside.</summary>
-    public const double CrossflowDragCoefficient = 1.5;
-
     /// <summary>Planform fraction of a tangent ogive (≈ 2/3 of its D·L rectangle).</summary>
     public const double OgivePlanformFraction = 2.0 / 3.0;
 
@@ -59,10 +57,10 @@ public static class DistributedAerodynamics
             double cylinder = length - nose;
             if (cylinder > 0.0)
                 elements.Add(new AeroElement(new Vector3d(centre.X, bottom + 0.5 * cylinder, centre.Z),
-                    diameter * cylinder, 0.0));
+                    diameter * cylinder, 0.0, diameter));
             if (nose > 0.0)
                 elements.Add(new AeroElement(new Vector3d(centre.X, top - 0.6 * nose, centre.Z),
-                    OgivePlanformFraction * diameter * nose, 0.0));
+                    OgivePlanformFraction * diameter * nose, 0.0, diameter));
 
             if (IsOnAxis(centre, diameter) && top > lead)
             {
@@ -116,13 +114,19 @@ public static class DistributedAerodynamics
         double temperature,
         double maximumDiameter,
         double axialDragCoefficient,
-        double soundSpeedConstant = AerodynamicsModel.EarthAirSoundSpeedConstant)
+        double soundSpeedConstant = AerodynamicsModel.EarthAirSoundSpeedConstant,
+        double dynamicViscosity = double.NaN)
     {
         double speed = airVelocityAtCenterOfMass.Magnitude;
         if (density <= 0.0 || !double.IsFinite(speed)) return default;
         double machMultiplier = AerodynamicsModel.GetMachDragMultiplier(
             AerodynamicsModel.ComputeMach(speed, temperature, soundSpeedConstant));
         var axis = orientation.Rotate(Vector3d.Up).Normalized;
+        double soundSpeed = System.Math.Sqrt(soundSpeedConstant * System.Math.Max(1.0, temperature));
+        double viscosity = double.IsFinite(dynamicViscosity) && dynamicViscosity > 0.0
+            ? dynamicViscosity
+            : EarthAirViscosity.GetDynamicViscosityAtTemperature(temperature);
+        double fineness = Fineness(elements, maximumDiameter);
 
         var force = Vector3d.Zero;
         var torque = Vector3d.Zero;
@@ -148,8 +152,12 @@ public static class DistributedAerodynamics
 
             double normal = 0.0;
             if (element.CrossflowAreaM2 > 0.0)
-                normal += 0.5 * density * crossflowSpeed * crossflowSpeed
-                    * CrossflowDragCoefficient * element.CrossflowAreaM2 * machMultiplier;
+            {
+                double diameter = element.DiameterM > 0.0 ? element.DiameterM : maximumDiameter;
+                double coefficient = CrossflowDrag.Coefficient(crossflowSpeed / soundSpeed,
+                    density * crossflowSpeed * diameter / viscosity, fineness);
+                normal += 0.5 * density * crossflowSpeed * crossflowSpeed * coefficient * element.CrossflowAreaM2;
+            }
             if (element.SlenderAreaChangeM2 != 0.0)
             {
                 // ½ρv²·2ΔA·sinα·cosα, with sinα·cosα = |v⊥|·(a·v)/v²: signed so a nose
@@ -162,6 +170,18 @@ public static class DistributedAerodynamics
         }
         return new AeroWrench(force, orientation.Inverse().Rotate(torque));
     }
+
+    /// <summary>Body length/diameter from its crossflow planform (Σ d·l over the largest d²).</summary>
+    public static double Fineness(IReadOnlyList<AeroElement> elements, double maximumDiameter)
+    {
+        if (!(maximumDiameter > 0.0)) return double.NaN;
+        double planform = 0.0;
+        for (int i = 0; i < elements.Count; i++) planform += elements[i].CrossflowAreaM2;
+        return planform / (maximumDiameter * maximumDiameter);
+    }
+
+    /// <summary>Earth air (USSA-1976 Sutherland constants) when a caller passes no viscosity.</summary>
+    private static readonly AtmosphereModel EarthAirViscosity = new();
 
     private static double SectionArea(double diameter) => System.Math.PI * 0.25 * diameter * diameter;
 

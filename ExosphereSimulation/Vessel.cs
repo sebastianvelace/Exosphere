@@ -697,7 +697,8 @@ public class Vessel
         double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
         var torque = Physics.DistributedAerodynamics.Evaluate(
             Parts.GetAeroElements(), Orientation, Vector3d.Zero, CenterOfMassOffsetLocal, air, density,
-            temperature, MaximumDiameter, Parts.AxialDragCoefficient, body.Atmosphere.SoundSpeedConstant).TorqueBody;
+            temperature, MaximumDiameter, Parts.AxialDragCoefficient, body.Atmosphere.SoundSpeedConstant,
+            body.Atmosphere.GetDynamicViscosityAtTemperature(temperature)).TorqueBody;
         if (includeBodyFlaps && _physicalBodyFlapsActive && Parts.GetBodyFlaps().Count > 0)
             torque += Physics.BodyFlapAerodynamics.Evaluate(Parts.GetBodyFlaps(), BodyFlapDeflectionsRad,
                 Orientation, Vector3d.Zero, CenterOfMassOffsetLocal, air, density, temperature,
@@ -707,6 +708,9 @@ public class Vessel
 
     // ── Body flaps (F2) ───────────────────────────────────────────────────
     private bool _physicalBodyFlapsActive;
+
+    /// <summary>True when the last step flew the physical body flaps.</summary>
+    public bool PhysicalBodyFlapsActive => _physicalBodyFlapsActive;
     private double[] _bodyFlapDeflections = [];
     private double[] _bodyFlapTargets = [];
     private double[] _bodyFlapProbe = [];
@@ -728,9 +732,12 @@ public class Vessel
     /// Restores saved flap state: the aggregate channels and, when the save matches this
     /// vessel's surfaces, each physical deflection (clamped to its travel).
     /// </summary>
-    internal void RestoreFlapState(FlapActuatorState actuators, IReadOnlyList<double> bodyFlapDeflectionsRad)
+    internal void RestoreFlapState(FlapActuatorState actuators, IReadOnlyList<double> bodyFlapDeflectionsRad,
+        bool physicalBodyFlapsActive = false, bool flightControlInvertsAerodynamics = false)
     {
         FlapActuators = actuators.Clamp();
+        _physicalBodyFlapsActive = physicalBodyFlapsActive;
+        FlightControlInvertsAerodynamics = flightControlInvertsAerodynamics;
         EnsureBodyFlapState();
         var flaps = Parts.GetBodyFlaps();
         if (bodyFlapDeflectionsRad.Count != flaps.Count) return;
@@ -802,43 +809,135 @@ public class Vessel
         for (int i = 0; i < flaps.Count; i++) _bodyFlapProbe[i] = flaps[i].NeutralDeflectionRad;
         Vector3d Torque() => Physics.BodyFlapAerodynamics.Evaluate(flaps, _bodyFlapProbe, Orientation,
             Vector3d.Zero, comLocal, air, density, temperature, body.Atmosphere.SoundSpeedConstant).TorqueBody;
-        var neutralTorque = Torque();
 
         const double probe = 1.0 * MathUtils.DEG_TO_RAD;
         Span<Vector3d> effectiveness = flaps.Count <= 16 ? stackalloc Vector3d[flaps.Count] : new Vector3d[flaps.Count];
-        Span<double> travel = flaps.Count <= 16 ? stackalloc double[flaps.Count] : new double[flaps.Count];
-        var authority = Vector3d.Zero;
-        double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
-        for (int i = 0; i < flaps.Count; i++)
+        Span<double> point = flaps.Count <= 16 ? stackalloc double[flaps.Count] : new double[flaps.Count];
+        Span<double> delta = flaps.Count <= 16 ? stackalloc double[flaps.Count] : new double[flaps.Count];
+        Span<bool> fixedAtStop = flaps.Count <= 16 ? stackalloc bool[flaps.Count] : new bool[flaps.Count];
+        for (int i = 0; i < flaps.Count; i++) point[i] = flaps[i].NeutralDeflectionRad;
+        var desired = Vector3d.Zero;
+        // Gauss–Newton on the nonlinear plate moments: the first pass linearises about neutral,
+        // later passes re-linearise about the clipped targets so the commanded moment is met
+        // where the plates actually sit.
+        for (int pass = 0; pass < BodyFlapAllocationPasses; pass++)
         {
-            var flap = flaps[i];
-            double neutral = flap.NeutralDeflectionRad;
-            double h = neutral + probe <= flap.MaxDeflectionRad ? probe : -probe;
-            _bodyFlapProbe[i] = neutral + h;
-            var column = flap.Owner.IsBroken ? Vector3d.Zero : (Torque() - neutralTorque) / h;
-            _bodyFlapProbe[i] = neutral;
-            effectiveness[i] = column;
-            travel[i] = System.Math.Max(flap.MaxDeflectionRad - neutral, neutral - flap.MinDeflectionRad);
-            authority += new Vector3d(System.Math.Abs(column.X), System.Math.Abs(column.Y), System.Math.Abs(column.Z))
-                * travel[i];
-            m00 += column.X * column.X; m01 += column.X * column.Y; m02 += column.X * column.Z;
-            m11 += column.Y * column.Y; m12 += column.Y * column.Z; m22 += column.Z * column.Z;
+            for (int i = 0; i < flaps.Count; i++) _bodyFlapProbe[i] = point[i];
+            var baseTorque = Torque();
+            var authority = Vector3d.Zero;
+            double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
+            for (int i = 0; i < flaps.Count; i++)
+            {
+                var flap = flaps[i];
+                double h = point[i] + probe <= flap.MaxDeflectionRad ? probe : -probe;
+                _bodyFlapProbe[i] = point[i] + h;
+                var column = flap.Owner.IsBroken ? Vector3d.Zero : (Torque() - baseTorque) / h;
+                _bodyFlapProbe[i] = point[i];
+                effectiveness[i] = column;
+                if (pass == 0)
+                {
+                    double travel = System.Math.Max(flap.MaxDeflectionRad - flap.NeutralDeflectionRad,
+                        flap.NeutralDeflectionRad - flap.MinDeflectionRad);
+                    authority += new Vector3d(System.Math.Abs(column.X), System.Math.Abs(column.Y),
+                        System.Math.Abs(column.Z)) * travel;
+                }
+                m00 += column.X * column.X; m01 += column.X * column.Y; m02 += column.X * column.Z;
+                m11 += column.Y * column.Y; m12 += column.Y * column.Z; m22 += column.Z * column.Z;
+            }
+            if (pass == 0)
+            {
+                // Semantic channels: pitch → body X, yaw → body Z, roll → body Y. A normalised
+                // command is a fraction of each axis's full flap authority (the convention every
+                // actuator follows); the flap moment supplies it less the hull's static moment.
+                desired = new Vector3d(command.X * authority.X, command.Z * authority.Y, command.Y * authority.Z);
+                if (invertStaticMoment)
+                    desired -= PredictStaticAerodynamicTorqueBody(body, includeBodyFlaps: false);
+                else
+                    desired += baseTorque;
+            }
+            double epsilon = 1e-6 * System.Math.Max(1e-12, m00 + m11 + m22);
+            // Redistributed pseudo-inverse (Virnig & Bodden): a surface that would pass its
+            // stop is fixed there and the remaining moment is re-solved over the free ones.
+            for (int i = 0; i < flaps.Count; i++) { fixedAtStop[i] = false; delta[i] = 0.0; }
+            for (int iteration = 0; iteration <= flaps.Count; iteration++)
+            {
+                var residual = desired - baseTorque;
+                double f00 = epsilon, f01 = 0, f02 = 0, f11 = epsilon, f12 = 0, f22 = epsilon;
+                for (int i = 0; i < flaps.Count; i++)
+                {
+                    var column = effectiveness[i];
+                    if (fixedAtStop[i]) { residual -= column * delta[i]; continue; }
+                    f00 += column.X * column.X; f01 += column.X * column.Y; f02 += column.X * column.Z;
+                    f11 += column.Y * column.Y; f12 += column.Y * column.Z; f22 += column.Z * column.Z;
+                }
+                var lambda = Physics.BodyFlapAerodynamics.SolveSymmetric(f00, f01, f02, f11, f12, f22, residual);
+                bool saturated = false;
+                for (int i = 0; i < flaps.Count; i++)
+                {
+                    if (fixedAtStop[i]) continue;
+                    delta[i] = effectiveness[i].Dot(lambda);
+                    double next = point[i] + delta[i];
+                    if (next > flaps[i].MaxDeflectionRad || next < flaps[i].MinDeflectionRad)
+                    {
+                        delta[i] = System.Math.Clamp(next, flaps[i].MinDeflectionRad, flaps[i].MaxDeflectionRad) - point[i];
+                        fixedAtStop[i] = true;
+                        saturated = true;
+                    }
+                }
+                if (!saturated) break;
+            }
+            for (int i = 0; i < flaps.Count; i++)
+                point[i] = System.Math.Clamp(point[i] + delta[i], flaps[i].MinDeflectionRad, flaps[i].MaxDeflectionRad);
         }
-
-        // Semantic channels: pitch → body X, yaw → body Z, roll → body Y.
-        var desired = new Vector3d(command.X * authority.X, command.Z * authority.Y, command.Y * authority.Z);
-        if (invertStaticMoment)
-            desired -= PredictStaticAerodynamicTorqueBody(body, includeBodyFlaps: false) + neutralTorque;
-        double epsilon = 1e-6 * System.Math.Max(1e-12, m00 + m11 + m22);
-        var lambda = Physics.BodyFlapAerodynamics.SolveSymmetric(
-            m00 + epsilon, m01, m02, m11 + epsilon, m12, m22 + epsilon, desired);
-        for (int i = 0; i < flaps.Count; i++)
-        {
-            var flap = flaps[i];
-            _bodyFlapTargets[i] = System.Math.Clamp(flap.NeutralDeflectionRad + effectiveness[i].Dot(lambda),
-                flap.MinDeflectionRad, flap.MaxDeflectionRad);
-        }
+        for (int i = 0; i < flaps.Count; i++) _bodyFlapTargets[i] = point[i];
     }
+
+    /// <summary>
+    /// Full-command angular acceleration of the body flaps about body X (pitch), Y (roll) and
+    /// Z (yaw) at the current state (rad/s²), from the same neutral-point effectiveness the
+    /// allocation sizes its channels with; zero when the flaps are not flying. Lets a controller
+    /// schedule its normalised gains, as gimbal controllers do with their authority. Pure: it
+    /// reads only the current state, so a restored vessel reproduces it exactly.
+    /// </summary>
+    public Vector3d ComputeBodyFlapAngularAuthority(CelestialBody body)
+    {
+        var flaps = Parts.GetBodyFlaps();
+        if (flaps.Count == 0 || body.Atmosphere == null || BodyFlapsLocked() || !_physicalBodyFlapsActive)
+            return Vector3d.Zero;
+        var com = CenterOfMass;
+        double altitude = body.GetAltitude(com);
+        double density = body.Atmosphere.GetDensity(altitude);
+        if (density <= 0.0) return Vector3d.Zero;
+        double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
+        var air = CenterOfMassVelocity - body.Velocity - body.GetSurfaceVelocity(com);
+        var probe = new double[flaps.Count];
+        for (int i = 0; i < flaps.Count; i++) probe[i] = flaps[i].NeutralDeflectionRad;
+        Vector3d Torque() => Physics.BodyFlapAerodynamics.Evaluate(flaps, probe, Orientation, Vector3d.Zero,
+            CenterOfMassOffsetLocal, air, density, temperature, body.Atmosphere.SoundSpeedConstant).TorqueBody;
+        var neutral = Torque();
+        var authority = Vector3d.Zero;
+        const double step = 1.0 * MathUtils.DEG_TO_RAD;
+        for (int i = 0; i < flaps.Count; i++)
+        {
+            var flap = flaps[i];
+            if (flap.Owner.IsBroken) continue;
+            double h = flap.NeutralDeflectionRad + step <= flap.MaxDeflectionRad ? step : -step;
+            probe[i] = flap.NeutralDeflectionRad + h;
+            var column = (Torque() - neutral) / h;
+            probe[i] = flap.NeutralDeflectionRad;
+            double travel = System.Math.Max(flap.MaxDeflectionRad - flap.NeutralDeflectionRad,
+                flap.NeutralDeflectionRad - flap.MinDeflectionRad);
+            authority += new Vector3d(System.Math.Abs(column.X), System.Math.Abs(column.Y), System.Math.Abs(column.Z)) * travel;
+        }
+        var inertia = Parts.GetMassProperties().InertiaBody;
+        return new Vector3d(
+            inertia.M11 > 0.0 ? authority.X / inertia.M11 : 0.0,
+            inertia.M22 > 0.0 ? authority.Y / inertia.M22 : 0.0,
+            inertia.M33 > 0.0 ? authority.Z / inertia.M33 : 0.0);
+    }
+
+    /// <summary>Gauss–Newton passes of the body-flap allocation (one is the neutral linearisation).</summary>
+    private const int BodyFlapAllocationPasses = 3;
 
     /// <summary>Drag of deployed parachutes only (N, world), for the distributed aero path.</summary>
     public Vector3d ComputeParachuteDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
@@ -1231,9 +1330,16 @@ public class Vessel
     /// snaps, and here it would also clip contact and disturbance momentum that the coupled
     /// integrator cannot separate from control torque.
     /// </summary>
+    /// <summary>
+    /// The 20°/s pilot-authority envelope on held commands (a handling choice for human
+    /// pilots, not a physical limit). Autonomous mission controllers that reconstruct real
+    /// flights clear it each control step so the airframe turns at its actuator-limited rate.
+    /// </summary>
+    public bool PilotRateEnvelopeEnabled { get; set; } = true;
+
     internal void ApplyCoupledControlPostStep(double dt)
     {
-        if (_coupledHasInput)
+        if (_coupledHasInput && PilotRateEnvelopeEnabled)
         {
             const double pilotRateEnvelope = 0.35;
             double rate = AngularVelocity.Magnitude;
@@ -1433,7 +1539,7 @@ public class Vessel
         // Limitar velocidad angular máxima (20°/s = 0.35 rad/s) — solo mientras se pilota
         // activamente; un disturbio no comandado (motor caído) no está sujeto a este límite
         // de autoridad de control.
-        if (hasInput)
+        if (hasInput && PilotRateEnvelopeEnabled)
         {
             double maxAngVel = 0.35;
             double mag = AngularVelocity.Magnitude;
@@ -1506,7 +1612,7 @@ public class Vessel
         double controlledRateEnvelope = System.Math.Max(
             maximumAngularRate, incomingAngularRate);
         double finalAngularRate = AngularVelocity.Magnitude;
-        if (finalAngularRate > controlledRateEnvelope)
+        if (PilotRateEnvelopeEnabled && finalAngularRate > controlledRateEnvelope)
             AngularVelocity *= controlledRateEnvelope / finalAngularRate;
 
         // Ground contact and disturbances (a failed-on thruster) are external physical

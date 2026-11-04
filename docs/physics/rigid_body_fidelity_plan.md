@@ -130,8 +130,55 @@ bench had hidden by phase luck: the tilt-to-kill-drift loop (0.5/s) was nearly a
 single-engine attitude loop and oscillated ±11° near the 100 m gate. At 0.2/s it stays a
 proper cascade (≤ 3° below 200 m) at the same propellant cost. Deorbit
 ignition re-closed at T+7883 s (observed window 7864–7925 s): broadcast altitude residuals
-−36 / +132 m. Next: turn `PhysicalBodyFlapsEnabled` on over this mass state, re-close the entry,
-and shorten the landing burn (~33 s here vs ~15–20 s observed) through landing guidance.
+−36 / +132 m.
+
+**Physical flaps on, measured crossflow drag (2026-11-04).** The broadcast shows the belly flop
+at 363 km/h (≈101 m/s) at 1.2 km; the model fell at ~65 m/s. The crossflow coefficient was a
+constant 1.5 times the aggregate transonic multiplier, a subcritical laboratory value. It is now
+η·C_dn from Jorgensen, NASA TR R-474 (figs. 1–6): C_dn against crossflow Mach and Reynolds
+number (drag crisis near Re_n 4·10⁵, transcritical ≈0.6 above 10⁷, transonic peak ≈2, Newtonian
+limit), η against fineness and crossflow Mach (unity supersonic), with Sutherland viscosity per
+atmosphere (air USSA-1976; CO₂ and H₂ from White). Without tuning the V3 ship now falls at
+~102 m/s (hull + flaps at neutral). `PhysicalBodyFlapsEnabled` is on by default.
+
+Flying the entry on physical flaps exposed control and mass issues, each fixed physically:
+- Flap allocation now inverts the nonlinear plate moments by Gauss–Newton (the neutral
+  linearisation left a 5–8° steady AoA error) with redistributed-pseudo-inverse saturation
+  handling (Virnig & Bodden). A normalised flap command stays a fraction of full flap
+  authority (the convention every actuator follows); the descent attitude loop schedules its
+  gains by the flaps' angular authority (ωn 0.3 rad/s, ζ 0.8) so its bandwidth does not grow
+  with dynamic pressure.
+- Dry structure centres: a nose section is a shell whose area concentrates near its base
+  (`dry_mass_center_y_m`, −2.07 m nose, −0.70 m tank); headers resized to 20 t for the
+  observed ~19 s landing burn with margin. With 30 t the CoM sat ~4 m ahead of neutral
+  trim and the flaps saturated.
+- Even so, in the Mach 0.5–0.9 band the hull's crossflow peak lets the flaps trim only
+  ~75–85°. Commanding untrimmable angles saturated pitch; folded aft flaps carry no load, so
+  roll about the long axis (no hull stiffness) departed. An onboard AoA limiter now evaluates
+  the vessel's own hull/flap model and commands the nearest angle trimmable with 15° of
+  travel to spare; a reference governor keeps the reference within 6° of the attitude. The
+  descent now flies with flaps near neutral and peak rate ~0.03 rad/s.
+- The 55° hypersonic AoA had been a guidance experiment: with distributed aero L/D ≈ cot α,
+  so 55° glided far too high. 60° (inside the reported 60–70° band) gives residuals of
+  +2.3 / +2.2 / +2.5 km at T+10369 / 10541 / 10961 (speed 8112 vs 9982 km/h at the last) and
+  reaches 1.2 km ~9 s after the broadcast. The deorbit periapsis target was re-closed to
+  104.4 km (residuals −60 / +100 m at 94 km) because the measured crossflow lowered drag
+  before the interface; the 102 km and 88.1 km displays still sit −1.8 / +1.7 km: the sink
+  through 94 km is shallower than observed (lift orientation before 90 km, next).
+- The physics change exposed a latent S-IVB limit cycle in the Saturn V separation stress
+  case: the J-2 gimbal rate was an unsourced 2.5°/s. The published S-II actuator rate is
+  8°/s (Rocket Propulsion Evolution 8.20); S-II and S-IVB now use it (S-IVB derived), and the
+  stress case leaves 66.4 t for TLI (was 65.3 t before this block).
+
+Landing (broadcast and the SpaceX timeline: ignition at 1.1–1.2 km, flip +2 s, 3→2 engines
++10 s, 2→1 +17 s, splashdown +19 s). The flip now starts at 1.1 km; the braking target is two
+constant-deceleration segments through the broadcast 0.8 km/101 m/s and 0.3 km/56 m/s; the
+guidance is a powered-descent thrust vector (profile feed-forward, drift damping inside a 30°
+cone, minimum-thrust surplus steered into drift braking); engines are selected with 80 %
+throttle headroom and a 2× gimbal-moment margin over the predicted aerodynamic moment, which
+reproduces three→two→one. Mission controllers fly without the 20°/s pilot-authority envelope
+(`Vessel.PilotRateEnvelopeEnabled`), so the flip turns at its gimbal-limited rate (~0.55 rad/s).
+Ignition to 100 m now takes ~21 s (was 40+).
 
 ## Phases
 

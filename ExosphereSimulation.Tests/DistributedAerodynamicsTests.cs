@@ -10,7 +10,7 @@ using Xunit;
 public sealed class DistributedAerodynamicsTests
 {
     private const double Density = 1.2;
-    private const double Temperature = 288.15; // 100 m/s is Mach 0.29: no transonic multiplier.
+    private const double Temperature = 288.15; // 100 m/s is Mach 0.29.
 
     private static List<AttachmentNodeDef> StackNodes(double length) =>
     [
@@ -52,7 +52,10 @@ public sealed class DistributedAerodynamicsTests
     {
         var graph = Stack(Segment("body", 40.0, 4.0));
         var wrench = Evaluate(graph, new Vector3d(100.0, 0.0, 0.0));
-        double expected = 0.5 * Density * 100.0 * 100.0 * DistributedAerodynamics.CrossflowDragCoefficient * 4.0 * 40.0;
+        var air = new Exosphere.Simulation.AtmosphereModel();
+        double mach = 100.0 / System.Math.Sqrt(AerodynamicsModel.EarthAirSoundSpeedConstant * Temperature);
+        double reynolds = Density * 100.0 * 4.0 / air.GetDynamicViscosityAtTemperature(Temperature);
+        double expected = 0.5 * Density * 100.0 * 100.0 * CrossflowDrag.Coefficient(mach, reynolds, 10.0) * 4.0 * 40.0;
         Assert.Equal(-expected, wrench.ForceWorld.X, 6);
         Assert.Equal(0.0, wrench.ForceWorld.Y, 6);
         Assert.InRange(wrench.TorqueBody.Magnitude, 0.0, 1e-6 * expected);

@@ -1,5 +1,6 @@
 namespace ExosphereSimulation.Tests;
 
+using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Data;
 using Exosphere.Simulation.Flight;
@@ -21,7 +22,13 @@ public sealed class FidelityProvenanceTests
 
     public static TheoryData<string, string, double> CodeConstants() => new()
     {
-        { "distributed-aerodynamics", "crossflowDragCoefficient", DistributedAerodynamics.CrossflowDragCoefficient },
+        { "crossflow-drag-jorgensen", "subcriticalSectionCoefficient", CrossflowDrag.SectionCoefficient(0.1, 1.0e5) },
+        { "crossflow-drag-jorgensen", "transcriticalSectionCoefficient", CrossflowDrag.SectionCoefficient(0.2, 5.0e7) },
+        { "crossflow-drag-jorgensen", "transonicPeakSectionCoefficient", CrossflowDrag.SectionCoefficient(0.97, 1.0e7) },
+        { "crossflow-drag-jorgensen", "hypersonicSectionCoefficient", CrossflowDrag.SectionCoefficient(12.0, 1.0e6) },
+        { "crossflow-drag-jorgensen", "lowMachEtaFineness10", CrossflowDrag.Eta(0.0, 10.0) },
+        { "sutherland-viscosity-air", "beta", new AtmosphereModel().SutherlandBeta },
+        { "sutherland-viscosity-air", "sutherlandTemperature", new AtmosphereModel().SutherlandTemperature },
         { "distributed-aerodynamics", "ogivePlanformFraction", DistributedAerodynamics.OgivePlanformFraction },
         { "distributed-aerodynamics", "ogiveCenterOfPressureFraction", DistributedAerodynamics.OgiveCenterOfPressureFraction },
         { "distributed-aerodynamics", "slenderBodyMinimumFineness", PartGraph.SlenderBodyMinimumFineness },

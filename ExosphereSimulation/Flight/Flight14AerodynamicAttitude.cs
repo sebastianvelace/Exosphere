@@ -15,8 +15,11 @@ public static class Flight14AerodynamicAttitude
     public static Vector3d ComputeCommand(Vessel ship, CelestialBody body,
         Quaterniond reference, double trimOnsetPressurePa, double trimFullPressurePa)
     {
-        var feedback = AttitudeGuidance.ComputeCommand(ship.Orientation, reference,
-            ship.AngularVelocity, 2, 25);
+        var flapAuthority = ship.FlightControlInvertsAerodynamics ? ship.ComputeBodyFlapAngularAuthority(body) : Vector3d.Zero;
+        var feedback = ship.FlightControlInvertsAerodynamics && flapAuthority.X > 1e-9
+                && flapAuthority.Y > 1e-9 && flapAuthority.Z > 1e-9
+            ? ScheduledFeedback(ship.Orientation, reference, ship.AngularVelocity, flapAuthority)
+            : AttitudeGuidance.ComputeCommand(ship.Orientation, reference, ship.AngularVelocity, 2, 25);
         double authority = ControlAuthority.Evaluate(ship);
         double q = ship.GetDynamicPressure(body);
         // Flight control already inverts the predicted moment of the distributed model
@@ -47,6 +50,37 @@ public static class Flight14AerodynamicAttitude
             Saturate(feedback.X + blend*Trim(disturbance.X, unitFlap.X)),
             Saturate(feedback.Y + blend*Trim(disturbance.Z, unitFlap.Z)),
             Saturate(feedback.Z + blend*Trim(disturbance.Y, unitFlap.Y)));
+    }
+
+    /// <summary>Closed-loop attitude bandwidth (rad/s) and damping ratio on physical flaps.</summary>
+    public const double ScheduledNaturalFrequencyRadPerS = 0.3;
+    public const double ScheduledDampingRatio = 0.8;
+
+    /// <summary>
+    /// Gain-scheduled feedback: the angular acceleration ωn²·error − 2ζωn·rate on each axis,
+    /// normalised by that axis's full flap authority, so the loop keeps one bandwidth and
+    /// damping from thin hypersonic air to the dense transonic regime.
+    /// </summary>
+    private static Vector3d ScheduledFeedback(Quaterniond current, Quaterniond desired,
+        Vector3d angularVelocityWorld, Vector3d authorityBody)
+    {
+        var q = (desired * current.Inverse()).Normalize();
+        if (q.W < 0.0) q = new Quaterniond(-q.W, -q.X, -q.Y, -q.Z);
+        double w = System.Math.Clamp(q.W, -1.0, 1.0);
+        double angle = 2.0 * System.Math.Acos(w);
+        double sinHalf = System.Math.Sqrt(System.Math.Max(0.0, 1.0 - w * w));
+        var error = Vector3d.Zero;
+        if (angle > 1e-6 && sinHalf > 1e-8)
+            error = current.Inverse().Rotate(new Vector3d(q.X, q.Y, q.Z) / sinHalf) * angle;
+        var rate = current.Inverse().Rotate(angularVelocityWorld);
+        double kp = ScheduledNaturalFrequencyRadPerS * ScheduledNaturalFrequencyRadPerS;
+        double kd = 2.0 * ScheduledDampingRatio * ScheduledNaturalFrequencyRadPerS;
+        var acceleration = error * kp - rate * kd;
+        // Body X = pitch, Z = yaw, Y = roll; semantic controls are pitch/yaw/roll.
+        return new Vector3d(
+            System.Math.Clamp(acceleration.X / authorityBody.X, -1.0, 1.0),
+            System.Math.Clamp(acceleration.Z / authorityBody.Z, -1.0, 1.0),
+            System.Math.Clamp(acceleration.Y / authorityBody.Y, -1.0, 1.0));
     }
 
     private static double Trim(double disturbance, double authority) => authority > 1e-9

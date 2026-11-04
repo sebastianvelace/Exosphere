@@ -6,6 +6,7 @@
   "vehicle_family": "starship",
   "vehicle_role": "tank",
   "mass_dry": 57000,
+  "dry_mass_center_y_m": -0.7,
   "length_m": 30.5,
   "diameter_m": 9.0,
   "cost": 24000,
@@ -13,13 +14,13 @@
   "axial_drag_coefficient": 0.3,
   "heat_tolerance": 1800,
   "has_heat_shield": true,
-  "fuel_capacity_lf": 301500,
-  "fuel_capacity_ox": 1068500,
+  "fuel_capacity_lf": 303650,
+  "fuel_capacity_ox": 1076350,
   "header_tanks": [
       {
           "id": "ch4_header",
           "propellant": "liquid_fuel",
-          "capacity_kg": 6500.0,
+          "capacity_kg": 4350.0,
           "center_y_m": 0.15
       }
   ],

@@ -91,7 +91,8 @@ public static class RigidBodyForceEvaluator
                 System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude)),
                 vessel.MaximumDiameter,
                 vessel.Parts.AxialDragCoefficient,
-                body.Atmosphere.SoundSpeedConstant);
+                body.Atmosphere.SoundSpeedConstant,
+                body.Atmosphere.GetDynamicViscosity(altitude));
             forceWorld += wrench.ForceWorld + vessel.ComputeParachuteDragAt(state.Position, state.Velocity, body);
             distributedTorqueBody = wrench.TorqueBody;
             var flaps = vessel.Parts.GetBodyFlaps();

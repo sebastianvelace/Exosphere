@@ -61,6 +61,10 @@ public sealed class VesselSaveV2
     public VectorSaveV2 FlapActuators { get; set; } = new();
     /// <summary>Physical body-flap deflections (rad), in <c>PartGraph.GetBodyFlaps</c> order.</summary>
     public List<double> BodyFlapDeflectionsRad { get; set; } = new();
+    /// <summary>Whether the last step flew the physical flaps and inverted the predicted
+    /// aerodynamic moment (control reads these before the next physics step).</summary>
+    public bool PhysicalBodyFlapsActive { get; set; }
+    public bool FlightControlInvertsAerodynamics { get; set; }
     public bool SasEnabled { get; set; }
     public bool ParachutesArmed { get; set; }
     public bool IsGroundHeld { get; set; }
@@ -527,6 +531,8 @@ public static class SaveGameV2Codec
             FlapActuators = VectorSaveV2.From(new Vector3d(
                 vessel.FlapActuators.Pitch, vessel.FlapActuators.Yaw, vessel.FlapActuators.Roll)),
             BodyFlapDeflectionsRad = vessel.BodyFlapDeflectionsRad.ToList(),
+            PhysicalBodyFlapsActive = vessel.PhysicalBodyFlapsActive,
+            FlightControlInvertsAerodynamics = vessel.FlightControlInvertsAerodynamics,
             SasEnabled = vessel.SASEnabled,
             ParachutesArmed = vessel.ParachutesArmed,
             IsGroundHeld = vessel.IsGroundHeld,
@@ -647,7 +653,8 @@ public static class SaveGameV2Codec
         vessel.Crew.AddRange(saved.Crew.Select(RestoreCrew));
         vessel.ConfigureLandingContactsFromParts();
         var flaps = saved.FlapActuators.ToVector();
-        vessel.RestoreFlapState(new Physics.FlapActuatorState(flaps.X, flaps.Y, flaps.Z), saved.BodyFlapDeflectionsRad);
+        vessel.RestoreFlapState(new Physics.FlapActuatorState(flaps.X, flaps.Y, flaps.Z), saved.BodyFlapDeflectionsRad,
+            saved.PhysicalBodyFlapsActive, saved.FlightControlInvertsAerodynamics);
         return vessel;
     }
 

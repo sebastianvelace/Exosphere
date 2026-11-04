@@ -172,7 +172,12 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   `Vessel.CenterOfMass`/`CenterOfMassVelocity` the physical state. Navigation (surface velocity,
   orbital burns, SAS holds) and on-rails conics (`ComputeCenterOfMassOrbit`) use the centre of
   mass; altitude queries use the datum. Slender stacks (L/D ≥ 3) fly distributed per-part
-  aerodynamics (`DistributedAerodynamics`, `Universe.DistributedAerodynamicsEnabled`, F1);
+  aerodynamics (`DistributedAerodynamics`, `Universe.DistributedAerodynamicsEnabled`, F1) whose
+  crossflow term is the measured η·C_dn of Jorgensen NASA TR R-474 (`CrossflowDrag`, crossflow
+  Mach/Reynolds with per-atmosphere Sutherland viscosity); Starship's body flaps are physical
+  plates on by default (`Universe.PhysicalBodyFlapsEnabled`, F2), allocated by Gauss–Newton +
+  redistributed pseudo-inverse (descent feedback gain-scheduled by flap authority); mission controllers clear
+  `Vessel.PilotRateEnvelopeEnabled` (the 20°/s envelope is a human-pilot handling choice);
   parts may declare `header_tanks` (point masses at their station that feed only after the main
   tanks are empty; Starship lands on its LOX/CH4 headers after the main-tank vent);
   blunt capsules keep the blunt/trimmed model. Flight control inverts the predicted static aero

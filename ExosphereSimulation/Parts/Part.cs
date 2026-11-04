@@ -65,17 +65,17 @@ public class Part
 
     /// <summary>
     /// This part's own centre of mass along its axis, from its centre: header propellant sits
-    /// at its station; dry structure and main propellant at the part centre.
+    /// at its station, the dry structure at its declared centre, main propellant at the part centre.
     /// </summary>
     public double MassCenterOffsetYM
     {
         get
         {
             var headers = Definition.HeaderTanks;
-            if (headers.Count == 0) return 0.0;
+            if (headers.Count == 0 && Definition.DryMassCenterYM == 0.0) return 0.0;
             double mass = CurrentMass;
             if (mass <= 0.0) return 0.0;
-            double moment = 0.0;
+            double moment = Definition.MassDry * Definition.DryMassCenterYM;
             for (int i = 0; i < headers.Count && i < HeaderPropellantKg.Length; i++)
                 moment += HeaderPropellantKg[i] * headers[i].CenterYM;
             return moment / mass;

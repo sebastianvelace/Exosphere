@@ -119,15 +119,81 @@
       "uncertainty": "planform ±20%; travel and rate unknown publicly"
     },
     {
-      "dataId": "distributed-aerodynamics",
-      "field": "crossflowDragCoefficient",
-      "status": "calibrated",
-      "source": "Allen & Perkins crossflow theory (NACA TR-1048); value set so a uniform cylinder reproduces the legacy calibrated broadside drag",
-      "accessedDate": "2026-11-03",
-      "variant": "long circular cylinder broadside",
-      "conditions": "viscous crossflow drag per unit planform, multiplied by the transonic Mach rise",
-      "uncertainty": "1.2 subcritical to ~1.33 Newtonian supersonic; finite-length factor not applied",
-      "value": 1.5
+      "dataId": "crossflow-drag-jorgensen",
+      "field": "subcriticalSectionCoefficient",
+      "status": "published",
+      "source": "L. H. Jorgensen, NASA TR R-474 (1977), fig. 1 (C_dn vs crossflow Mach) and fig. 2 (Wieselsberger, subcritical Re_n)",
+      "accessedDate": "2026-11-04",
+      "variant": "infinite circular cylinder",
+      "conditions": "crossflow Mach <= 0.2, crossflow Reynolds 2e4-2e5",
+      "uncertainty": "±0.05 digitisation of the faired curve",
+      "value": 1.2
+    },
+    {
+      "dataId": "crossflow-drag-jorgensen",
+      "field": "transcriticalSectionCoefficient",
+      "status": "published",
+      "source": "L. H. Jorgensen, NASA TR R-474 (1977), figs. 2-3 (Roshko, Jones et al., Schmidt data band)",
+      "accessedDate": "2026-11-04",
+      "variant": "infinite circular cylinder, smooth surface",
+      "conditions": "crossflow Mach <= 0.4, crossflow Reynolds >= 1e7 (held constant above the plotted range)",
+      "uncertainty": "data band 0.5-0.75 at Re_n 1e7; surface roughness raises it",
+      "value": 0.6
+    },
+    {
+      "dataId": "crossflow-drag-jorgensen",
+      "field": "transonicPeakSectionCoefficient",
+      "status": "published",
+      "source": "L. H. Jorgensen, NASA TR R-474 (1977), fig. 1 (extrapolated from Ames 2x2 ft wind tunnel data)",
+      "accessedDate": "2026-11-04",
+      "variant": "infinite circular cylinder",
+      "conditions": "crossflow Mach 0.97",
+      "uncertainty": "±0.05 digitisation; transonic is the least certain range (report §2.3.2)",
+      "value": 1.98
+    },
+    {
+      "dataId": "crossflow-drag-jorgensen",
+      "field": "hypersonicSectionCoefficient",
+      "status": "published",
+      "source": "L. H. Jorgensen, NASA TR R-474 (1977), fig. 1 insert (Penland data; modified Newtonian (2/3)Cp,stag)",
+      "accessedDate": "2026-11-04",
+      "variant": "infinite circular cylinder",
+      "conditions": "crossflow Mach 8, held above",
+      "uncertainty": "±0.02",
+      "value": 1.24
+    },
+    {
+      "dataId": "crossflow-drag-jorgensen",
+      "field": "lowMachEtaFineness10",
+      "status": "published",
+      "source": "L. H. Jorgensen, NASA TR R-474 (1977), fig. 4 (finite/infinite cylinder ratio, ref. 56) and fig. 6",
+      "accessedDate": "2026-11-04",
+      "variant": "circular cylinder, length/diameter 10",
+      "conditions": "very low crossflow Mach; eta from fig. 6 against crossflow Mach above 0.4, unity for supersonic crossflow",
+      "uncertainty": "±0.02 digitisation; eta measured only at very low Mach",
+      "value": 0.695
+    },
+    {
+      "dataId": "sutherland-viscosity-air",
+      "field": "beta",
+      "status": "published",
+      "source": "U.S. Standard Atmosphere 1976 (NOAA/NASA/USAF), eq. 51",
+      "accessedDate": "2026-11-04",
+      "variant": "dry air",
+      "conditions": "mu = beta*T^1.5/(T+S), kg/(m s K^0.5)",
+      "uncertainty": "defining constant",
+      "value": 1.458e-6
+    },
+    {
+      "dataId": "sutherland-viscosity-air",
+      "field": "sutherlandTemperature",
+      "status": "published",
+      "source": "U.S. Standard Atmosphere 1976 (NOAA/NASA/USAF), eq. 51",
+      "accessedDate": "2026-11-04",
+      "variant": "dry air",
+      "conditions": "Sutherland constant S, K",
+      "uncertainty": "defining constant",
+      "value": 110.4
     },
     {
       "dataId": "distributed-aerodynamics",
@@ -219,9 +285,53 @@
     },
     {
       "dataId": "starship_command",
+      "field": "dryMassCenterYM",
+      "status": "estimated",
+      "source": "Exosphere: thin-shell centroid of the 14 m tangent ogive plus the cylindrical payload section (lateral areas), with ~3 t of forward-flap hinge hardware at the hinge station",
+      "accessedDate": "2026-11-04",
+      "variant": "starship_command",
+      "conditions": "dry structure centre along the part axis from its geometric centre, m",
+      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "value": -2.07
+    },
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "dryMassCenterYM",
+      "status": "estimated",
+      "source": "Exosphere: thin-shell centroid of the 14 m tangent ogive plus the cylindrical payload section (lateral areas), with ~3 t of forward-flap hinge hardware at the hinge station",
+      "accessedDate": "2026-11-04",
+      "variant": "starship_v3_command_flight12",
+      "conditions": "dry structure centre along the part axis from its geometric centre, m",
+      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "value": -2.07
+    },
+    {
+      "dataId": "starship_tank",
+      "field": "dryMassCenterYM",
+      "status": "estimated",
+      "source": "Exosphere: uniform tank shell with ~5 t of aft-flap hinge and actuator hardware at the aft hinge station; domes taken as balanced",
+      "accessedDate": "2026-11-04",
+      "variant": "starship_tank",
+      "conditions": "dry structure centre along the part axis from its geometric centre, m",
+      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "value": -0.7
+    },
+    {
+      "dataId": "starship_v3_tank_flight12",
+      "field": "dryMassCenterYM",
+      "status": "estimated",
+      "source": "Exosphere: uniform tank shell with ~5 t of aft-flap hinge and actuator hardware at the aft hinge station; domes taken as balanced",
+      "accessedDate": "2026-11-04",
+      "variant": "starship_v3_tank_flight12",
+      "conditions": "dry structure centre along the part axis from its geometric centre, m",
+      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "value": -0.7
+    },
+    {
+      "dataId": "starship_command",
       "field": "headerTanks",
       "status": "calibrated",
-      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (20 t at O/F 3.6) for the observed ~19 s three-two-one landing burn (SpaceX Flight 14 timeline) flown by the powered-descent guidance to water contact with margin; 30 t (sized for the former slow burn on subcritical crossflow drag) put the CoM ~4 m ahead of the flaps neutral trim. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
       "accessedDate": "2026-11-03",
       "variant": "Starship Block 2 LOX header",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
@@ -231,7 +341,7 @@
       "dataId": "starship_v3_command_flight12",
       "field": "headerTanks",
       "status": "calibrated",
-      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (20 t at O/F 3.6) for the observed ~19 s three-two-one landing burn (SpaceX Flight 14 timeline) flown by the powered-descent guidance to water contact with margin; 30 t (sized for the former slow burn on subcritical crossflow drag) put the CoM ~4 m ahead of the flaps neutral trim. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
       "accessedDate": "2026-11-03",
       "variant": "Starship V3 LOX header",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
@@ -241,7 +351,7 @@
       "dataId": "starship_tank",
       "field": "headerTanks",
       "status": "calibrated",
-      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (20 t at O/F 3.6) for the observed ~19 s three-two-one landing burn (SpaceX Flight 14 timeline) flown by the powered-descent guidance to water contact with margin; 30 t (sized for the former slow burn on subcritical crossflow drag) put the CoM ~4 m ahead of the flaps neutral trim. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
       "accessedDate": "2026-11-03",
       "variant": "Starship Block 2 CH4 header and main-tank split",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
@@ -251,7 +361,7 @@
       "dataId": "starship_v3_tank_flight12",
       "field": "headerTanks",
       "status": "calibrated",
-      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (20 t at O/F 3.6) for the observed ~19 s three-two-one landing burn (SpaceX Flight 14 timeline) flown by the powered-descent guidance to water contact with margin; 30 t (sized for the former slow burn on subcritical crossflow drag) put the CoM ~4 m ahead of the flaps neutral trim. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
       "accessedDate": "2026-11-03",
       "variant": "Starship V3 CH4 header and main-tank split",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
@@ -278,6 +388,17 @@
       "conditions": "deorbit ignition time, the continuous calibration lever of the return profile",
       "uncertainty": "residuals within ±500 m of a datum-conditional display",
       "value": 7883.0
+    },
+    {
+      "dataId": "starship-flight14-return",
+      "field": "targetPeriapsisAltitudeM",
+      "status": "calibrated",
+      "source": "Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s 93.9 km with the deorbit ignition held inside the observed window; re-closed after the measured (Jorgensen) crossflow drag lowered pre-interface drag (residuals -60 / +100 m)",
+      "accessedDate": "2026-11-04",
+      "variant": "Starship Flight 14 engineering return",
+      "conditions": "deorbit burn periapsis target, m",
+      "uncertainty": "the 102 km (T+9790) and 88.1 km (T+9986) displays sit -1.8 / +1.7 km: the sink rate through 94 km is shallower than observed (lift orientation before 90 km not yet calibrated)",
+      "value": 104400.0
     }
   ]
 }

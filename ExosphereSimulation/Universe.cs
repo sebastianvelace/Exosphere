@@ -164,11 +164,10 @@ public class Universe
 
     /// <summary>
     /// Physical hinged body flaps (F2): four plates with Mach-dependent normal force, per-flap
-    /// servos and a least-squares flight-control allocation. Off until the ship carries its
-    /// landing propellant in header tanks: with it in the main tank the physical flaps cannot
-    /// trim the entry (see rigid_body_fidelity_plan.md, F2 findings).
+    /// servos and a least-squares flight-control allocation. On by default; false restores the
+    /// aggregate flap coefficient as a comparison baseline.
     /// </summary>
-    public bool PhysicalBodyFlapsEnabled { get; set; }
+    public bool PhysicalBodyFlapsEnabled { get; set; } = true;
 
     /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
     public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }

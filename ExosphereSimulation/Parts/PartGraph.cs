@@ -555,6 +555,8 @@ public class PartGraph
                 i23 -= headerKg * d.Y * d.Z;
             }
             double mass = part.CurrentMass - headerMass;
+            // The non-header remainder centres on the dry structure's declared station.
+            double restOffsetY = mass > 0.0 ? part.Definition.MassDry * part.Definition.DryMassCenterYM / mass : 0.0;
             double length = part.Definition.LengthM > 0.0
                 ? part.Definition.LengthM
                 : fallbackLength;
@@ -567,7 +569,7 @@ public class PartGraph
             double transverse = mass
                 * (3.0 * radius * radius + length * length) / 12.0;
             double axial = 0.5 * mass * radius * radius;
-            Vector3d offset = position - centerOfMass;
+            Vector3d offset = new Vector3d(position.X, position.Y + restOffsetY, position.Z) - centerOfMass;
             double xx = offset.X;
             double yy = offset.Y;
             double zz = offset.Z;

@@ -51,6 +51,13 @@ public sealed class PartCatalog
                 provenance.Require(part.Id, "bodyFlaps");
             if (part.HeaderTanks.Count > 0)
                 provenance.Require(part.Id, "headerTanks");
+            if (part.DryMassCenterYM != 0.0)
+            {
+                var record = provenance.Require(part.Id, "dryMassCenterYM");
+                if (record.Value is { } value && System.Math.Abs(value - part.DryMassCenterYM) > 1e-9)
+                    throw new InvalidDataException(
+                        $"Part '{part.Id}' dry_mass_center_y_m {part.DryMassCenterYM} differs from its provenance value {value}.");
+            }
         }
     }
 

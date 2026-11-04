@@ -370,6 +370,14 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      principal antes de la reentrada, flip del Flight 14 a 600 m (llega al agua a 4,3 m/s) y
      desorbitación re-cerrada a T+7883 s (residuos −36 / +132 m). Falta encender los flaps
      físicos sobre este estado de masas y acortar el encendido de aterrizaje (~33 s vs 15–20 s).
+   - F2 (paso 33): flaps físicos activados por defecto; arrastre transversal medido
+     (Jorgensen NASA TR R-474, Mach/Reynolds/η + viscosidad de Sutherland): la caída de panza
+     pasa de ~65 a ~102 m/s (transmisión: 101 m/s). Asignación de flaps Gauss–Newton +
+     pseudo-inverso redistribuido con ganancias programadas por autoridad, limitador de AoA por trim, centros de
+     masa seca de cáscara, headers 20 t, AoA hipersónico 60° (residuos +2,3/+2,2/+2,5 km,
+     1,2 km ~9 s después de la transmisión), periapsis 104,4 km. Aterrizaje con guía vectorial
+     (1,1 km, 3→2→1 motores, ~21 s hasta 100 m). Gimbal J-2 a 8°/s publicado. Pendiente:
+     orientación de la sustentación entre 120 y 90 km (hundimiento observado más rápido).
    - Siguiente: fases F2–F6 de `docs/physics/rigid_body_fidelity_plan.md` (flaps físicos,
      control solo por actuadores, jet damping, gradiente de gravedad, slosh, recalibración
      histórica); aletas del S-IC, grid fins y modelo newtoniano para cápsulas romas.

@@ -82,6 +82,7 @@ public sealed class Flight14DescentController : IPhysicsStepController
         MaximumClimbRateMps = System.Math.Max(MaximumClimbRateMps, verticalSpeed);
         MaximumAngularRateRadPerSecond = System.Math.Max(MaximumAngularRateRadPerSecond, _ship.AngularVelocity.Magnitude);
         _ship.SASEnabled = false;
+        _ship.PilotRateEnvelopeEnabled = false;
         _ship.Throttle = 0;
         if (Phase == Flight14DescentPhase.HypersonicEntry && speed < _definition.HypersonicControlThresholdMps)
             Phase = Flight14DescentPhase.AerodynamicDescent;
@@ -143,17 +144,75 @@ public sealed class Flight14DescentController : IPhysicsStepController
             liftReference = priorLift - flow * priorLift.Dot(flow);
         priorLift = liftReference;
         double terminalFraction = System.Math.Clamp(
-            (definition.HypersonicControlThresholdMps-speed)
-                / (definition.HypersonicControlThresholdMps-definition.TerminalAngleOfAttackSpeedMps), 0, 1);
+            (definition.AngleOfAttackTransitionSpeedMps-speed)
+                / (definition.AngleOfAttackTransitionSpeedMps-definition.TerminalAngleOfAttackSpeedMps), 0, 1);
         double angle = definition.EntryAngleOfAttackDegrees + terminalFraction
             * (definition.TerminalAngleOfAttackDegrees-definition.EntryAngleOfAttackDegrees);
+        angle = TrimFeasibleAngleOfAttack(ship, body, state.AltitudeM, surfaceVelocity, liftReference, angle,
+            definition.TrimMarginDegrees * MathUtils.DEG_TO_RAD);
         var axisReference = AerodynamicsModel.ComputeEntryAxisForLift(flow, liftReference, angle);
         var desired = AerodynamicsModel.ComputeBellyFirstOrientation(axisReference, flow);
         reference = AttitudeGuidance.SlewQuaternion(reference, desired,
             controlIntervalSeconds, definition.ReferenceSlewRateRadPerSecond);
         reference = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(reference, flow, angle);
+        double lead = AttitudeGuidance.ErrorAngleRadians(ship.Orientation, reference);
+        double leadLimit = definition.MaximumReferenceLeadDegrees * MathUtils.DEG_TO_RAD;
+        if (lead > leadLimit) reference = ship.Orientation.Slerp(reference, leadLimit / lead).Normalize();
         return Flight14AerodynamicAttitude.ComputeCommand(ship, body, reference,
             definition.TrimOnsetDynamicPressurePa, definition.TrimFullDynamicPressurePa);
+    }
+
+    /// <summary>
+    /// Angle-of-attack limiter: the scheduled angle if the body flaps can trim it with
+    /// <paramref name="marginRad"/> of travel to spare, otherwise the nearest angle (1° steps,
+    /// 45°–95°) they can. Evaluates the vessel's own distributed hull and flap model, as an
+    /// onboard trim table would; it writes no state.
+    /// </summary>
+    public static double TrimFeasibleAngleOfAttack(Vessel ship, CelestialBody body, double altitude,
+        Vector3d surfaceVelocity, Vector3d liftReference, double scheduledDegrees, double marginRad)
+    {
+        var flaps = ship.Parts.GetBodyFlaps();
+        var atmosphere = body.Atmosphere;
+        double speed = surfaceVelocity.Magnitude;
+        if (atmosphere == null || flaps.Count == 0 || speed < 1.0 || !ship.Parts.UsesDistributedAerodynamics)
+            return scheduledDegrees;
+        double density = atmosphere.GetDensity(altitude);
+        if (density <= 0.0) return scheduledDegrees;
+        double temperature = System.Math.Max(1.0, atmosphere.GetTemperature(altitude));
+        double viscosity = atmosphere.GetDynamicViscosityAtTemperature(temperature);
+        var com = ship.CenterOfMassOffsetLocal;
+        var elements = ship.Parts.GetAeroElements();
+        var flow = surfaceVelocity / speed;
+        var noseUp = new double[flaps.Count];
+        var noseDown = new double[flaps.Count];
+        for (int i = 0; i < flaps.Count; i++)
+        {
+            bool forward = flaps[i].HingeLocal.Y > com.Y;
+            double high = System.Math.Max(flaps[i].MinDeflectionRad, flaps[i].MaxDeflectionRad - marginRad);
+            double low = System.Math.Min(flaps[i].MaxDeflectionRad, flaps[i].MinDeflectionRad + marginRad);
+            noseUp[i] = forward ? high : low;
+            noseDown[i] = forward ? low : high;
+        }
+        bool Feasible(double degrees)
+        {
+            var axis = AerodynamicsModel.ComputeEntryAxisForLift(flow, liftReference, degrees);
+            var orientation = AerodynamicsModel.ComputeBellyFirstOrientation(axis, flow);
+            double hull = DistributedAerodynamics.Evaluate(elements, orientation, Vector3d.Zero, com,
+                surfaceVelocity, density, temperature, ship.MaximumDiameter, ship.Parts.AxialDragCoefficient,
+                atmosphere.SoundSpeedConstant, viscosity).TorqueBody.X;
+            double a = BodyFlapAerodynamics.Evaluate(flaps, noseUp, orientation, Vector3d.Zero, com,
+                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant).TorqueBody.X;
+            double b = BodyFlapAerodynamics.Evaluate(flaps, noseDown, orientation, Vector3d.Zero, com,
+                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant).TorqueBody.X;
+            return (hull + a) * (hull + b) <= 0.0;
+        }
+        if (Feasible(scheduledDegrees)) return scheduledDegrees;
+        for (int step = 1; step <= 50; step++)
+        {
+            foreach (double candidate in new[] { scheduledDegrees + step, scheduledDegrees - step })
+                if (candidate >= 45.0 && candidate <= 95.0 && Feasible(candidate)) return candidate;
+        }
+        return scheduledDegrees;
     }
 
     private Flight14EntryWitness Witness(Universe universe)

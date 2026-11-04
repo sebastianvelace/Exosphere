@@ -44,6 +44,12 @@ with `bash tools/fidelity_gate.sh F1`.
 | F1 | analytic | `DistributedAerodynamicsTests.TailFirstFlightReversesTheNoseLiftContribution` | tail-first reversal |
 | F1 | analytic | `DistributedAerodynamicsControlTests.SingleEngineWithoutRuntimeIsAllocatedThroughItsPartGimbal` | gimbal allocation torque |
 | F1 | analytic | `DistributedAerodynamicsControlTests.BluntBodiesKeepTheBluntModel` | slender-body validity bound |
+| F1 | analytic | `CrossflowDragTests.SutherlandViscosityMatchesTheStandardAtmosphereTable` | USSA-1976 viscosity table |
+| F1 | analytic | `CrossflowDragTests.SubcriticalCylinderIsWieselsbergersValue` | Jorgensen fig. 2 subcritical C_dn |
+| F1 | analytic | `CrossflowDragTests.DragCrisisDropsAndTranscriticalFlowRecovers` | Jorgensen figs. 2–3 drag crisis |
+| F1 | analytic | `CrossflowDragTests.CompressibilityRemovesTheReynoldsDependence` | Jorgensen fig. 1 critical-Re data |
+| F1 | analytic | `CrossflowDragTests.HypersonicCrossflowApproachesModifiedNewtonian` | Jorgensen fig. 1 Newtonian limit |
+| F1 | analytic | `CrossflowDragTests.FiniteLengthFactorFollowsFinenessAndIsUnitySupersonic` | Jorgensen figs. 4–6 η |
 | F1 | historical | `MercuryFriendship7Tests.Friendship7PoweredAscentClimbsAndReachesOrbitalEnergy` | MA-6 insertion 161 × 261 km |
 | F1 | historical | `SaturnVAscentScenarioTests.ClosedLoopUpperStagesReachTheParkingOrbit` | AS-506 parking orbit through an S-II separation transient |
 | F2 | analytic | `BodyFlapAerodynamicsTests.StagnationPressureCoefficientMatchesRayleighPitot` | Rayleigh pitot Cp,max |

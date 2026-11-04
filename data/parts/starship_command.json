@@ -6,6 +6,7 @@
   "vehicle_family": "starship",
   "vehicle_role": "command",
   "mass_dry": 35000,
+  "dry_mass_center_y_m": -2.07,
   "length_m": 18.5,
   "diameter_m": 9.0,
   "nose_length_m": 14.0,
@@ -22,7 +23,7 @@
       {
           "id": "lox_header",
           "propellant": "oxidizer",
-          "capacity_kg": 23500.0,
+          "capacity_kg": 15650.0,
           "center_y_m": -3.25
       }
   ],
