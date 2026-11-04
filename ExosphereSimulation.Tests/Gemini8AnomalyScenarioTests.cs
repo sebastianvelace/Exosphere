@@ -16,12 +16,15 @@ using Xunit.Abstractions;
 public sealed class Gemini8AnomalyScenarioTests(ITestOutputHelper output)
 {
     [Fact]
+    [Trait("FidelityGate", "F3")]
+    [Trait("GateKind", "historical")]
     public void StuckThrusterSpinsTheSpacecraftAndReentryRcsRecoversIt()
     {
         var (universe, earth, gemini) = Undocked();
         var adapter = gemini.Parts.Parts.First(p => p.Definition.HasVehicleRole("gemini_equipment_adapter"));
         var reentry = gemini.Parts.Parts.First(p => p.Definition.HasVehicleRole("gemini_reentry_capsule"));
-        double oamsStart = gemini.Parts.TotalMonopropellant;
+        double oamsStart = adapter.Monopropellant;
+        double reentryStart = reentry.Monopropellant;
         gemini.DisturbanceTorqueBody = new Vector3d(0.0, Gemini8FlightProfile.StuckThrusterTorqueNm, 0.0);
         gemini.DisturbanceMassFlowKgPerS = Gemini8FlightProfile.StuckThrusterMassFlowKgPerS;
 
@@ -50,12 +53,17 @@ public sealed class Gemini8AnomalyScenarioTests(ITestOutputHelper output)
             if (universe.CurrentTime > isolateAt && rate < Gemini8FlightProfile.ControlRecoveredRateRadPerS)
                 recovered = universe.CurrentTime;
         }
-        double oamsUsed = oamsStart - gemini.Parts.TotalMonopropellant;
+        double oamsUsed = oamsStart - adapter.Monopropellant;
+        double reentryUsed = reentryStart - reentry.Monopropellant;
         output.WriteLine($"peak={peak * MathUtils.RAD_TO_DEG:F0} deg/s recovered {(recovered - isolateAt):F0} s after "
-            + $"isolation, OAMS burned by the stuck thruster={oamsUsed:F1} kg");
+            + $"isolation, OAMS burned by the stuck thruster={oamsUsed:F1} kg, re-entry RCS used "
+            + $"{reentryUsed:F1} of {reentryStart:F1} kg");
         Assert.InRange(peak * MathUtils.RAD_TO_DEG, 100.0, 320.0); // flight: 296 deg/s
         Assert.False(double.IsNaN(recovered), "Re-entry RCS never damped the roll.");
         Assert.InRange(oamsUsed, 5.0, 15.0);
+        // The crew stopped the roll on the re-entry rings and used about 75 % of their
+        // propellant doing it (mission report), which is why the flight was cut short.
+        Assert.InRange(reentryUsed / reentryStart, 0.55, 0.95);
     }
 
     /// <summary>Pure rate damping on all three axes, sized from the live RCS authority.</summary>

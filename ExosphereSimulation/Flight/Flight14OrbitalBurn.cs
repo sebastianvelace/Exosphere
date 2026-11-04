@@ -93,8 +93,8 @@ public sealed class Flight14OrbitalBurn
             return;
         }
         double altitude = vessel.GetAltitude(body);
-        var relative = vessel.Position - body.Position;
-        var velocity = vessel.Velocity - body.Velocity;
+        var relative = vessel.CenterOfMass - body.Position;
+        var velocity = vessel.CenterOfMassVelocity - body.Velocity;
         if (!double.IsFinite(altitude) || altitude < _minimumBurnAltitudeM
             || !double.IsFinite(velocity.Magnitude) || velocity.Magnitude < 1)
         {

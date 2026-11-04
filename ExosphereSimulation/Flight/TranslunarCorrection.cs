@@ -26,8 +26,8 @@ public static class TranslunarCorrection
         ArgumentNullException.ThrowIfNull(vessel);
         ArgumentNullException.ThrowIfNull(moon);
         if (universe.GetDominantBody(vessel.Position) != moon) return false;
-        double timeToPerilune = PeriapsisCaptureBurn.TimeToPeriapsis(vessel.Position - moon.Position,
-            vessel.Velocity - moon.Velocity, moon.GM);
+        double timeToPerilune = PeriapsisCaptureBurn.TimeToPeriapsis(vessel.CenterOfMass - moon.Position,
+            vessel.CenterOfMassVelocity - moon.Velocity, moon.GM);
         return double.IsFinite(timeToPerilune) && timeToPerilune <= TrimLeadTimeSeconds;
     }
 
@@ -51,8 +51,8 @@ public static class TranslunarCorrection
         if (!(timeOfFlight > 0.0))
             throw new InvalidOperationException("The planned lunar arrival is already past.");
 
-        var position = vessel.Position - earth.Position;
-        var velocity = vessel.Velocity - earth.Velocity;
+        var position = vessel.CenterOfMass - earth.Position;
+        var velocity = vessel.CenterOfMassVelocity - earth.Velocity;
         var normal = position.Cross(velocity);
         var (moonPosition, moonVelocity) = ephemeris.GetStateAtTime(arrivalTime, earth.GM);
         var centre = LambertSolver.Solve(earth.GM, position, moonPosition, timeOfFlight, normal);

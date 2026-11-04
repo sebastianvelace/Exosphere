@@ -27,8 +27,10 @@ public sealed class MercuryFreedom7Tests
         Assert.Equal(7, assembly.Parts.Count);
         Assert.True(assembly.ValidateForLaunch().CanLaunch);
         Assert.Equal(29_931.0, metrics.WetMass, 5);
-        Assert.Equal(6_184.0, metrics.DryMass, 5);
-        Assert.Equal(23_747.0, metrics.PropellantMass, 5);
+        // The published 6,184 kg "dry" figure carries the capsule's ~25 kg of H2O2 attitude
+        // propellant, now a monopropellant store feeding its declared RCS thrusters.
+        Assert.Equal(6_184.0 - 25.0, metrics.DryMass, 5);
+        Assert.Equal(23_747.0 + 25.0, metrics.PropellantMass, 5);
         Assert.Equal(346_944.0, metrics.SeaLevelThrust, 5);
         Assert.InRange(metrics.SeaLevelTwr, 1.181, 1.183);
         Assert.Equal(25.3, graph.VehicleLength, 8);

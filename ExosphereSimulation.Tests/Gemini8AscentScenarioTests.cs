@@ -90,11 +90,11 @@ public sealed class Gemini8AscentScenarioTests(ITestOutputHelper output)
                     insertion = elapsed;
                 }
             }
-            double damping = staged
-                ? Gemini8FlightProfile.StageTwoDampingGain(vessel.GetPitchYawAngularAuthority(earth))
-                : 1.2;
+            double authority = vessel.GetPitchYawAngularAuthority(earth);
+            double proportional = staged ? Gemini8FlightProfile.StageTwoProportionalGain(authority) : 2.3;
+            double damping = staged ? Gemini8FlightProfile.StageTwoDampingGain(authority) : 1.2;
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(vessel.Orientation, Vector3d.Up,
-                aim, vessel.AngularVelocity, proportionalGain: 2.3, dampingGain: damping);
+                aim, vessel.AngularVelocity, proportionalGain: proportional, dampingGain: damping);
             universe.Tick(0.02);
         }
 

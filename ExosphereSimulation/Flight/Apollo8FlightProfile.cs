@@ -82,11 +82,15 @@ public static class Apollo8FlightProfile
     public const double MaximumLaunchAzimuthDegrees = 108.0;
 
     /// <summary>
-    /// S-II/S-IVB pointing damping for the live pitch/yaw authority (ζ ≈ 0.8 at Kp 2.3). The
-    /// S-IC's 1.2 is kept as a floor; the S-IVB (~0.09 rad/s²) needs roughly 8.
+    /// Saturn V pointing damping for the live pitch/yaw authority on every stage (ζ ≈ 0.7 at
+    /// Kp 2.3, floored at 1.2). With the per-part inertia tensor the S-IC carries roughly 2.3×
+    /// the authority the old envelope estimate gave it, so a fixed 1.2 no longer matched its
+    /// dynamics. ζ 0.7 is the measured optimum: 0.6 tumbles the disturbed S-IVB separation and
+    /// 0.8+ slows tracking enough to cost 4–20 t of TLI propellant.
     /// </summary>
-    public static double UpperStageDampingGain(double pitchYawAuthorityRadPerS2) =>
-        System.Math.Max(1.2, AttitudeGuidance.DampingGainFor(2.3, pitchYawAuthorityRadPerS2));
+    public static double AscentDampingGain(double pitchYawAuthorityRadPerS2) =>
+        System.Math.Max(1.2, AttitudeGuidance.DampingGainFor(
+            2.3, pitchYawAuthorityRadPerS2, dampingRatio: 0.7));
 
     public static double ElevationDegrees(double elapsedSeconds)
     {

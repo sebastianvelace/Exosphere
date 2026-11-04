@@ -9,6 +9,28 @@ using Exosphere.Simulation.Math;
 /// Only initial pad placement seeds state.
 /// Includes an estimated payload manifest; not a dated replay or water-return mission.
 /// </summary>
+/// <summary>A release as stored in a checkpoint: the satellite is named by its vessel id.</summary>
+public sealed record Flight14PayloadReleaseState(double MissionElapsedSeconds, string PartInstanceId,
+    string SatelliteVesselId, double CarrierMassBeforeKg, double CarrierMassAfterKg, double MassResidualKg,
+    double CenterResidualM, double MomentumResidualKgMps, double RelativeOpeningResidualMps, double PeriapsisAltitudeM);
+
+/// <summary>Serializable entry-interface state of a Flight 14 run (see <see cref="Flight14LaunchDiagnostic.CaptureEntryCheckpoint"/>).</summary>
+public sealed record Flight14EntryCheckpoint(string SaveJson, double PendingFrameSeconds, Flight14LaunchSummary Launch,
+    IReadOnlyList<Flight14PayloadReleaseState> Releases, Flight14ReturnSummary Return)
+{
+    public static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
+    {
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals,
+        WriteIndented = false,
+    };
+
+    public string ToJson() => System.Text.Json.JsonSerializer.Serialize(this, JsonOptions);
+
+    public static Flight14EntryCheckpoint FromJson(string json) =>
+        System.Text.Json.JsonSerializer.Deserialize<Flight14EntryCheckpoint>(json, JsonOptions)
+            ?? throw new InvalidDataException("Empty Flight 14 entry checkpoint.");
+}
+
 public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody Earth,
     Vessel Ship, Flight14LaunchController Controller, Flight14LaunchGuidanceDefinition Guidance,
     Flight14PayloadDefinition PayloadDefinition, Flight14PayloadDeploymentController PayloadController)
@@ -34,9 +56,13 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     }
 
     /// <summary>Propagate the same loaded carrier through its physical flip and terminal burn.</summary>
-    public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory, Universe? universe = null, bool continueToWaterContact = false)
+    public static Flight14LaunchDiagnostic CreateWithPoweredReturn(string dataDirectory, Universe? universe = null, bool continueToWaterContact = false) =>
+        AttachPoweredReturn(CreateWithReturn(dataDirectory, universe), dataDirectory, continueToWaterContact);
+
+    /// <summary>Chain descent, flip and terminal burn after the run's return controller.</summary>
+    public static Flight14LaunchDiagnostic AttachPoweredReturn(Flight14LaunchDiagnostic run, string dataDirectory,
+        bool continueToWaterContact = false)
     {
-        var run = CreateWithReturn(dataDirectory, universe);
         var landing = Flight14LandingDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "flight_profiles/starship_flight14_landing_estimate.json"));
         landing.ContinueToWaterContact = continueToWaterContact;
@@ -53,9 +79,12 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
     }
 
     /// <summary>Continue the loaded return through a bounded aerodynamic-descent diagnostic.</summary>
-    public static Flight14LaunchDiagnostic CreateWithDescent(string dataDirectory)
+    public static Flight14LaunchDiagnostic CreateWithDescent(string dataDirectory) =>
+        AttachDescent(CreateWithReturn(dataDirectory), dataDirectory);
+
+    /// <summary>Chain the aerodynamic-descent diagnostic after the run's return controller.</summary>
+    public static Flight14LaunchDiagnostic AttachDescent(Flight14LaunchDiagnostic run, string dataDirectory)
     {
-        var run = CreateWithReturn(dataDirectory);
         var definition = Flight14DescentDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "flight_profiles/starship_flight14_descent_estimate.json"));
         run.DescentController = new Flight14DescentController(run.Ship, run.Earth,
@@ -95,6 +124,64 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
             pending -= Universe.DeterministicControlPeriodSeconds;
         }
         _pendingFrameSeconds = System.Math.Max(0, pending);
+    }
+
+    /// <summary>
+    /// Freezes an isolated-Earth run whose return reached its entry endpoint: the universe
+    /// (every vessel, part, engine and tank), the frame remainder and each controller's event
+    /// record. <see cref="ResumeAtEntry"/> rebuilds an independent run from it, so downstream
+    /// segments (descent, flip, terminal burn) start without re-flying the ascent.
+    /// </summary>
+    public Flight14EntryCheckpoint CaptureEntryCheckpoint()
+    {
+        if (ReturnController?.Phase != Flight14ReturnPhase.EntryReached)
+            throw new InvalidOperationException("An entry checkpoint needs a return that reached entry.");
+        if (Earth.OrbitalElements != null)
+            throw new InvalidOperationException("Entry checkpoints are defined for the isolated-Earth diagnostic.");
+        return new Flight14EntryCheckpoint(
+            Persistence.SaveGameV2Json.Serialize(Persistence.SaveGameV2Codec.Capture(Universe)),
+            _pendingFrameSeconds,
+            Controller.CaptureSummary(),
+            PayloadController.Releases.Select(r => new Flight14PayloadReleaseState(r.MissionElapsedSeconds,
+                r.PartInstanceId, r.Satellite.Id, r.CarrierMassBeforeKg, r.CarrierMassAfterKg, r.MassResidualKg,
+                r.CenterResidualM, r.MomentumResidualKgMps, r.RelativeOpeningResidualMps, r.PeriapsisAltitudeM)).ToList(),
+            ReturnController.CaptureSummary());
+    }
+
+    /// <summary>Rebuilds an isolated-Earth run at its entry checkpoint (see <see cref="CaptureEntryCheckpoint"/>).</summary>
+    public static Flight14LaunchDiagnostic ResumeAtEntry(string dataDirectory, Flight14EntryCheckpoint checkpoint)
+    {
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        var guidance = Flight14LaunchGuidanceDefinition.LoadFromJson(Path.Combine(
+            dataDirectory, "flight_profiles/starship_flight14_guidance_estimate.json"));
+        var payloadDefinition = Flight14PayloadDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_payload_estimate.json"));
+        var returnDefinition = Flight14ReturnDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_return_estimate.json"));
+        var earth = CelestialBody.LoadFromJson(Path.Combine(dataDirectory, "bodies/earth.json"));
+        earth.Position = Vector3d.Zero;
+        earth.Velocity = Vector3d.Zero;
+        earth.OrbitalElements = null;
+        var universe = new Universe();
+        universe.AddBody(earth);
+        Persistence.SaveGameV2Codec.Restore(universe,
+            Persistence.SaveGameV2Json.DeserializeOrMigrate(checkpoint.SaveJson),
+            PartCatalog.LoadFromDirectory(Path.Combine(dataDirectory, "parts")));
+        var ship = universe.ActiveVessel ?? throw new InvalidDataException("Checkpoint has no active vessel.");
+        var launch = Flight14LaunchController.ResumeInOrbit(ship, earth, guidance, checkpoint.Launch);
+        var releases = checkpoint.Releases.Select(r => new Flight14PayloadRelease(r.MissionElapsedSeconds,
+            r.PartInstanceId, universe.Vessels.Single(v => v.Id == r.SatelliteVesselId), r.CarrierMassBeforeKg,
+            r.CarrierMassAfterKg, r.MassResidualKg, r.CenterResidualM, r.MomentumResidualKgMps,
+            r.RelativeOpeningResidualMps, r.PeriapsisAltitudeM));
+        var payload = Flight14PayloadDeploymentController.ResumeComplete(ship, earth, launch, payloadDefinition, releases);
+        var run = new Flight14LaunchDiagnostic(universe, earth, ship, launch, guidance, payloadDefinition, payload)
+        {
+            _pendingFrameSeconds = checkpoint.PendingFrameSeconds,
+        };
+        run.ReturnController = Flight14ReturnController.ResumeAtEntry(ship, earth, launch, payload,
+            returnDefinition, guidance, checkpoint.Return);
+        universe.PhysicsStepController = run.ReturnController;
+        return run;
     }
 
     public static Flight14LaunchDiagnostic Create(string dataDirectory, Universe? universe = null)

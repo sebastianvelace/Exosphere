@@ -68,7 +68,7 @@ public sealed class TranslationLambertBurn
         try
         {
             toGain = LambertGuidedBurn.RequiredVelocity(_aimPosition, _arrivalTime, _planeNormal,
-                vessel.Position - body.Position, epoch, body.GM) - (vessel.Velocity - body.Velocity);
+                vessel.CenterOfMass - body.Position, epoch, body.GM) - (vessel.CenterOfMassVelocity - body.Velocity);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {

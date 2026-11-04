@@ -25,7 +25,68 @@ public class Part
     public double Monopropellant  { get; set; }
     /// <summary>Whether this part's attitude RCS is live (see <c>rcs_attitude_starts_enabled</c>).</summary>
     public bool RcsAttitudeEnabled { get; set; }
+
+    /// <summary>
+    /// True once an RCS that arms with its stage has been switched on (see
+    /// <see cref="PartDefinition.RcsArmsWithStage"/>); it is never re-armed automatically.
+    /// </summary>
+    public bool RcsStageArmed { get; set; }
     public double ElectricCharge  { get; set; }
+
+    /// <summary>Propellant in this part's header tanks, one entry per <see cref="PartDefinition.HeaderTanks"/>.</summary>
+    public double[] HeaderPropellantKg { get; private set; } = [];
+
+    public double HeaderLiquidFuel => SumHeaders(oxidizer: false);
+    public double HeaderOxidizer => SumHeaders(oxidizer: true);
+
+    private double SumHeaders(bool oxidizer)
+    {
+        double total = 0.0;
+        var headers = Definition.HeaderTanks;
+        for (int i = 0; i < headers.Count && i < HeaderPropellantKg.Length; i++)
+            if (oxidizer ? headers[i].IsOxidizer : headers[i].IsLiquidFuel) total += HeaderPropellantKg[i];
+        return total;
+    }
+
+    /// <summary>Draws up to <paramref name="kg"/> of one propellant from the headers in proportion; returns what was drawn.</summary>
+    internal double DrawHeaderPropellant(bool oxidizer, double kg)
+    {
+        double available = SumHeaders(oxidizer);
+        if (available <= 0.0 || kg <= 0.0) return 0.0;
+        double drawn = System.Math.Min(kg, available);
+        var headers = Definition.HeaderTanks;
+        for (int i = 0; i < headers.Count && i < HeaderPropellantKg.Length; i++)
+            if (oxidizer ? headers[i].IsOxidizer : headers[i].IsLiquidFuel)
+                HeaderPropellantKg[i] = System.Math.Max(0.0, HeaderPropellantKg[i] - drawn * HeaderPropellantKg[i] / available);
+        return drawn;
+    }
+
+    /// <summary>Restores header loads (saves); entries beyond the definition are ignored.</summary>
+    public void SetHeaderPropellant(IReadOnlyList<double> loadsKg)
+    {
+        var headers = Definition.HeaderTanks;
+        for (int i = 0; i < headers.Count && i < loadsKg.Count; i++)
+            HeaderPropellantKg[i] = System.Math.Clamp(loadsKg[i], 0.0, headers[i].CapacityKg);
+    }
+
+    /// <summary>
+    /// This part's own centre of mass along its axis, from its centre: header propellant sits
+    /// at its station, the dry structure at its declared centre, main propellant at the part centre.
+    /// </summary>
+    public double MassCenterOffsetYM
+    {
+        get
+        {
+            var headers = Definition.HeaderTanks;
+            if (headers.Count == 0 && Definition.DryMassCenterYM == 0.0) return 0.0;
+            double mass = CurrentMass;
+            if (mass <= 0.0) return 0.0;
+            double moment = Definition.MassDry * Definition.DryMassCenterYM;
+            for (int i = 0; i < headers.Count && i < HeaderPropellantKg.Length; i++)
+                moment += HeaderPropellantKg[i] * headers[i].CenterYM;
+            return moment / mass;
+        }
+    }
 
     /// <summary>Protected feed inventory, still included in wet mass. Defaults to no isolation.</summary>
     public double ReservedLiquidFuel { get; private set; }
@@ -573,7 +634,17 @@ public class Part
 
     // ── Masa actual (seca + propelante) ───────────────────────────────────
     public double CurrentMass =>
-        EffectiveMassDry + LiquidFuel + Oxidizer + SolidFuel + Monopropellant;
+        EffectiveMassDry + LiquidFuel + Oxidizer + SolidFuel + Monopropellant + HeaderPropellantTotal;
+
+    private double HeaderPropellantTotal
+    {
+        get
+        {
+            double total = 0.0;
+            for (int i = 0; i < HeaderPropellantKg.Length; i++) total += HeaderPropellantKg[i];
+            return total;
+        }
+    }
 
     /// <summary>
     /// Optional correction applied on top of <see cref="PartDefinition.MassDry"/>
@@ -608,9 +679,11 @@ public class Part
         FuelDepleted   = false;
         LiquidFuel     = Definition.FuelCapacityLF;
         Oxidizer       = Definition.FuelCapacityOx;
+        HeaderPropellantKg = Definition.HeaderTanks.Select(h => System.Math.Max(0.0, h.CapacityKg)).ToArray();
         SolidFuel      = Definition.FuelCapacitySolid;
         Monopropellant = Definition.FuelCapacityMono;
         RcsAttitudeEnabled = Definition.RcsAttitudeStartsEnabled;
+        RcsStageArmed = false;
         ElectricCharge = Definition.ECCapacity;
     }
 
@@ -890,9 +963,11 @@ public class Part
         destination.Clear();
         if (!HasEngineRuntime)
         {
+            var vector = GetThrustVector(ambientPressure);
             destination.Add((
                 new Vector3d(0.0, Definition.ThrustPositionYM, 0.0),
-                GetThrustVector(ambientPressure)));
+                // Zero gimbal keeps the magnitude and points it along the mount axis.
+                zeroGimbal ? new Vector3d(0.0, vector.Magnitude, 0.0) : vector));
             return;
         }
 

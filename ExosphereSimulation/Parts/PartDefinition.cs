@@ -10,6 +10,61 @@ public enum PartCategory
     Electrical, Landing, Decoupler, Fairing, RCS
 }
 
+/// <summary>
+/// A small propellant tank embedded in a part at its own station (Starship's LOX header in
+/// the nose, CH4 header in the tank section). It is loaded full, adds its mass at
+/// <see cref="CenterYM"/> from the part centre, and feeds the engines only once the stage's
+/// main tanks can no longer fund the demand (main tanks emptied or vented), as landing
+/// burns draw on header propellant.
+/// </summary>
+public class HeaderTankDef
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    /// <summary>"oxidizer" or "liquid_fuel".</summary>
+    [JsonPropertyName("propellant")] public string Propellant { get; set; } = "";
+    [JsonPropertyName("capacity_kg")] public double CapacityKg { get; set; }
+    [JsonPropertyName("center_y_m")] public double CenterYM { get; set; }
+
+    public bool IsOxidizer => Propellant.Equals("oxidizer", StringComparison.OrdinalIgnoreCase);
+    public bool IsLiquidFuel => Propellant.Equals("liquid_fuel", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// One hinged aerodynamic control surface on a part (Starship's body flaps). The hinge line
+/// runs along the part axis at <see cref="HingeYM"/> from the part centre, on the hull side
+/// <see cref="Side"/> (+1 = +Z, −1 = −Z). Deflection 0 folds the flap against the leeward
+/// (+X) hull; 90° extends it straight out sideways, broadside to a belly-first (−X) flow.
+/// </summary>
+public class BodyFlapDef
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("hinge_y_m")] public double HingeYM { get; set; }
+    [JsonPropertyName("side")] public int Side { get; set; } = 1;
+    /// <summary>Radial position of the hinge line; zero uses the part radius.</summary>
+    [JsonPropertyName("hinge_radius_m")] public double HingeRadiusM { get; set; }
+    /// <summary>Extent along the hull axis (m).</summary>
+    [JsonPropertyName("length_m")] public double LengthM { get; set; }
+    /// <summary>Extent from the hinge to the tip (m).</summary>
+    [JsonPropertyName("span_m")] public double SpanM { get; set; }
+    [JsonPropertyName("min_deflection_deg")] public double MinDeflectionDeg { get; set; }
+    [JsonPropertyName("max_deflection_deg")] public double MaxDeflectionDeg { get; set; } = 90.0;
+    [JsonPropertyName("neutral_deflection_deg")] public double NeutralDeflectionDeg { get; set; } = 45.0;
+    [JsonPropertyName("rate_deg_per_s")] public double RateDegPerS { get; set; } = 25.0;
+}
+
+/// <summary>
+/// One reaction-control thruster: its nozzle position (part frame, metres from the part
+/// centre), the direction of the force it puts on the vehicle, its vacuum thrust and Isp.
+/// </summary>
+public class RcsThrusterDef
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("position")] public double[] Position { get; set; } = [0, 0, 0];
+    [JsonPropertyName("direction")] public double[] Direction { get; set; } = [0, 1, 0];
+    [JsonPropertyName("thrust_n")] public double ThrustN { get; set; }
+    [JsonPropertyName("isp_s")] public double IspS { get; set; }
+}
+
 public class AttachmentNodeDef
 {
     [JsonPropertyName("id")]
@@ -60,6 +115,22 @@ public class PartDefinition
     /// <summary>Static margin for the standalone root configuration, not the attached launch stack.</summary>
     [JsonPropertyName("standalone_aerodynamic_center_offset_y_m")]
     public double? StandaloneAerodynamicCenterOffsetYM { get; set; }
+    /// <summary>
+    /// Centre of the dry structure along the part axis, from the part centre (m). Zero is a
+    /// uniform structure; a nose section is a shell whose area concentrates near its base.
+    /// </summary>
+    [JsonPropertyName("dry_mass_center_y_m")]
+    public double DryMassCenterYM { get; set; }
+    /// <summary>Embedded header tanks (see <see cref="HeaderTankDef"/>).</summary>
+    [JsonPropertyName("header_tanks")]
+    public List<HeaderTankDef> HeaderTanks { get; set; } = [];
+
+    /// <summary>Hinged control surfaces carried by this part (see <see cref="BodyFlapDef"/>).</summary>
+    [JsonPropertyName("body_flaps")]
+    public List<BodyFlapDef> BodyFlaps { get; set; } = [];
+    /// <summary>Reaction-control thrusters (see <see cref="RcsThrusterDef"/>).</summary>
+    [JsonPropertyName("rcs_thrusters")]
+    public List<RcsThrusterDef> RcsThrusters { get; set; } = [];
     [JsonPropertyName("heat_tolerance")]   public double HeatTolerance   { get; set; } = 1200;
     [JsonPropertyName("has_heat_shield")]  public bool   HasHeatShield   { get; set; }
     /// <summary>
@@ -110,6 +181,14 @@ public class PartDefinition
     /// </summary>
     [JsonPropertyName("nose_radius_m")]
     public double NoseRadiusM { get; set; }
+
+    /// <summary>
+    /// Length (m) of the tangent-ogive nose at the top of this part, included in
+    /// <see cref="LengthM"/>. Zero means a cylinder (a blunt top face if it leads the stack).
+    /// Sets where the slender-body nose lift acts and the nose's crossflow planform.
+    /// </summary>
+    [JsonPropertyName("nose_length_m")]
+    public double NoseLengthM { get; set; }
 
     /// <summary>
     /// Declares this part as carrying a pair of tower catch-pin hardpoints (real-world
@@ -166,19 +245,20 @@ public class PartDefinition
     [JsonPropertyName("fuel_capacity_solid")] public double FuelCapacitySolid { get; set; }
     [JsonPropertyName("fuel_capacity_mono")]  public double FuelCapacityMono  { get; set; }
     /// <summary>
-    /// Translation reaction-control thrust (N) available along each body axis in either
-    /// direction (Gemini OAMS: 2 × 445 N per axis). Fed from the vessel's monopropellant.
-    /// </summary>
-    [JsonPropertyName("rcs_translation_thrust_n")] public double RcsTranslationThrustN { get; set; }
-    /// <summary>Attitude torque (N·m) this part's reaction-control thrusters give about each axis.</summary>
-    [JsonPropertyName("rcs_attitude_torque_nm")] public double RcsAttitudeTorqueNm { get; set; }
-    /// <summary>
-    /// Whether those attitude thrusters are live at launch. Gemini's re-entry RCS rings stayed
+    /// Whether this part's declared RCS thrusters are live at launch. Gemini's re-entry RCS rings stayed
     /// off until the crew armed them, which is how Gemini 8 regained control.
     /// </summary>
     [JsonPropertyName("rcs_attitude_starts_enabled")] public bool RcsAttitudeStartsEnabled { get; set; } = true;
-    /// <summary>Vacuum specific impulse (s) of those translation thrusters.</summary>
-    [JsonPropertyName("rcs_isp")] public double RcsIsp { get; set; }
+    /// <summary>
+    /// A standby RCS that is armed when its vehicle no longer carries any other part with
+    /// thrusters (the Apollo CM system, pressurised just before CM/SM separation).
+    /// </summary>
+    [JsonPropertyName("rcs_arms_when_isolated")] public bool RcsArmsWhenIsolated { get; set; }
+    /// <summary>
+    /// An RCS switched on when its part's stage becomes the current one, i.e. when the stage
+    /// below separates (S-IVB APS, Gemini OAMS, Starship cold-gas thrusters).
+    /// </summary>
+    [JsonPropertyName("rcs_arms_with_stage")] public bool RcsArmsWithStage { get; set; }
     [JsonPropertyName("ec_capacity")]         public double ECCapacity        { get; set; }
 
     // Crew / landing / parachute

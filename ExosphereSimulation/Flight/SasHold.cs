@@ -37,12 +37,12 @@ public static class SasHold
     {
         ArgumentNullException.ThrowIfNull(vessel);
         ArgumentNullException.ThrowIfNull(body);
-        var radial = vessel.Position - body.Position;
+        var radial = vessel.CenterOfMass - body.Position;
         if (radial.MagnitudeSquared < 1e-6) return null;
         var velocity = UsesSurfaceFrame(vessel, body)
             ? vessel.GetSurfaceVelocity(body)
-            : vessel.Velocity - body.Velocity;
-        var orbitalVelocity = vessel.Velocity - body.Velocity;
+            : vessel.CenterOfMassVelocity - body.Velocity;
+        var orbitalVelocity = vessel.CenterOfMassVelocity - body.Velocity;
         var normal = radial.Cross(orbitalVelocity);
 
         Vector3d? direction = mode switch
@@ -54,8 +54,8 @@ public static class SasHold
             // v × (r × v) = r v² − v (v·r): in the orbit plane, away from the body.
             SasHoldMode.RadialOut => orbitalVelocity.Cross(normal),
             SasHoldMode.RadialIn => -orbitalVelocity.Cross(normal),
-            SasHoldMode.Target when target != null => target.Position - vessel.Position,
-            SasHoldMode.AntiTarget when target != null => vessel.Position - target.Position,
+            SasHoldMode.Target when target != null => target.CenterOfMass - vessel.CenterOfMass,
+            SasHoldMode.AntiTarget when target != null => vessel.CenterOfMass - target.CenterOfMass,
             SasHoldMode.Maneuver => maneuverDeltaV,
             _ => null,
         };

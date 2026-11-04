@@ -13,6 +13,8 @@ using Xunit.Abstractions;
 /// </summary>
 public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
 {
+    [Trait("FidelityGate", "F1")]
+    [Trait("GateKind", "historical")]
     [Theory]
     [InlineData(0.0, 0.0)]
     [InlineData(30.0, 0.3)]
@@ -39,6 +41,8 @@ public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
     /// T+709 s with 75.7 t in the S-IVB and 135.7 t of vehicle. On the AS-503 clock the
     /// S-IVB arrived at TLI with 30 t and ran dry halfway through the injection.
     /// </summary>
+    [Trait("FidelityGate", "F0")]
+    [Trait("GateKind", "historical")]
     [Fact]
     public void As506ReachesParkingOrbitWithTheTranslunarPropellant()
     {

@@ -149,11 +149,25 @@ public class Universe
     public bool DeferredPhysicsCandidateEnabled { get; set; }
 
     /// <summary>
-    /// Experimental opt-in for the coupled 6-DoF off-rails adapter. It is disabled by
-    /// default until old/new telemetry parity and real-framebuffer flight gates are closed.
-    /// On-rails propagation is never changed by this switch.
+    /// Opt-in for the coupled 6-DoF off-rails adapter. It is disabled by default until the
+    /// activation phase (F0 in docs/physics/rigid_body_fidelity_plan.md) re-validates every
+    /// calibrated profile. On-rails propagation is never changed by this switch.
     /// </summary>
-    public bool Coupled6DofIntegrationEnabled { get; set; }
+    public bool Coupled6DofIntegrationEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Per-part distributed aerodynamics on the coupled path (F1, default) for slender stacks.
+    /// False selects the aggregate drag/lift/centre-of-pressure model, the baseline the
+    /// integrator parity gates compare on.
+    /// </summary>
+    public bool DistributedAerodynamicsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Physical hinged body flaps (F2): four plates with Mach-dependent normal force, per-flap
+    /// servos and a least-squares flight-control allocation. On by default; false restores the
+    /// aggregate flap coefficient as a comparison baseline.
+    /// </summary>
+    public bool PhysicalBodyFlapsEnabled { get; set; } = true;
 
     /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
     public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }
@@ -802,7 +816,9 @@ public class Universe
 
     private bool CanBatchPassivePayload(Vessel vessel)
     {
-        if (Coupled6DofIntegrationEnabled || _bodies.Count == 0
+        // A passive single-part payload with negligible rotation translates its datum and
+        // centre of mass identically, so batching is valid on either integration path.
+        if (_bodies.Count == 0
             || vessel == ActiveVessel || IsDockedSecondary(vessel) || vessel.IsDestroyed
             || vessel.IsGroundHeld || vessel.IsSurfaceSettled || vessel.WaterMotionEnabled
             || !HasFinitePhysicalState(vessel) || HasWakeCommand(vessel)
@@ -835,7 +851,7 @@ public class Universe
             else
             {
                 WakeVesselFromRails(vessel);
-                IntegrateVesselOffRails(vessel, GetDominantBodyAt(vessel.Position, start), dt);
+                IntegrateVesselFullPhysics(vessel, GetDominantBodyAt(vessel.Position, start), dt);
             }
         }
         finally
@@ -1194,8 +1210,7 @@ public class Universe
             if (!IsFinitePosition(position) || !IsFinitePosition(velocity))
                 return false;
 
-            vessel.Position = position;
-            vessel.Velocity = velocity;
+            SetDatumFromCenterOfMass(vessel, position, velocity);
             return true;
         }
         catch (ArgumentException)
@@ -1242,14 +1257,21 @@ public class Universe
                 || GetDominantBodyAt(position, targetTime).Id != reference.Id)
                 return false;
 
-            vessel.Position = position;
-            vessel.Velocity = velocity;
+            SetDatumFromCenterOfMass(vessel, position, velocity);
             return true;
         }
         catch (ArgumentException)
         {
             return false;
         }
+    }
+
+    /// <summary>Places the datum so the vessel's centre of mass has the given conic state.</summary>
+    private static void SetDatumFromCenterOfMass(Vessel vessel, Vector3d centerOfMass, Vector3d centerOfMassVelocity)
+    {
+        var offset = vessel.Orientation.Rotate(vessel.CenterOfMassOffsetLocal);
+        vessel.Position = centerOfMass - offset;
+        vessel.Velocity = centerOfMassVelocity - vessel.AngularVelocity.Cross(offset);
     }
 
     private bool CatchUpDeferredRailVessel(Vessel vessel, double targetTime)
@@ -1779,7 +1801,7 @@ public class Universe
                 AdvanceGroundHoldFrame(vessel, heldBody, dt);
                 vessel.Position = SurfaceWorldPosition(heldBody, vessel);
                 vessel.Velocity = heldBody.Velocity
-                    + heldBody.GetSurfaceVelocity(vessel.Position);
+                    + heldBody.GetSurfaceVelocity(vessel.CenterOfMass);
                 vessel.Tick(dt, heldBody);
                 continue;
             }
@@ -1812,10 +1834,7 @@ public class Universe
 
             var refBody = GetDominantBody(vessel.Position);
             RecordWorkload(VesselPhysicsWorkload.FullPhysics);
-            if (Coupled6DofIntegrationEnabled)
-                IntegrateVesselOffRailsCoupled6Dof(vessel, refBody, dt);
-            else
-                IntegrateVesselOffRails(vessel, refBody, dt);
+            IntegrateVesselFullPhysics(vessel, refBody, dt);
         }
         ApplyDockingConstraints();
     }
@@ -1835,6 +1854,9 @@ public class Universe
                 ? referenced
                 : GetDominantBody(vessel.Position);
 
+    // Anchored vessels (pad hold, settled, wrecks) carry no angular velocity by convention,
+    // so their datum velocity is their centre-of-mass velocity: the surface velocity at the
+    // centre of mass is what puts the whole vehicle at rest relative to the ground.
     private static void AdvanceSurfaceAnchor(
         Vessel vessel,
         CelestialBody body,
@@ -1843,7 +1865,7 @@ public class Universe
         AdvanceGroundHoldFrame(vessel, body, dt);
         vessel.Position = SurfaceWorldPosition(body, vessel);
         vessel.Velocity = body.Velocity
-            + body.GetSurfaceVelocity(vessel.Position);
+            + body.GetSurfaceVelocity(vessel.CenterOfMass);
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.PitchYawRoll = Vector3d.Zero;
         vessel.IsOnRails = false;
@@ -1892,7 +1914,7 @@ public class Universe
         vessel.IsSurfaceSettled = true;
         vessel.SurfaceSettledDuration = 0.5;
         vessel.Velocity = body.Velocity
-            + body.GetSurfaceVelocity(vessel.Position);
+            + body.GetSurfaceVelocity(vessel.CenterOfMass);
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.PitchYawRoll = Vector3d.Zero;
         vessel.IsOnRails = false;
@@ -2209,7 +2231,7 @@ public class Universe
                 AdvanceGroundHoldFrame(vessel, refBody, dt);
                 vessel.Position = SurfaceWorldPosition(refBody, vessel);
                 vessel.Velocity = refBody.Velocity
-                    + refBody.GetSurfaceVelocity(vessel.Position);
+                    + refBody.GetSurfaceVelocity(vessel.CenterOfMass);
                 vessel.IsOnRails = false;
                 vessel.Tick(dt, refBody);
                 continue;
@@ -2242,14 +2264,14 @@ public class Universe
                 else
                 {
                     RecordWorkload(VesselPhysicsWorkload.FullPhysics);
-                    IntegrateVesselOffRails(vessel, refBody, dt);
+                    IntegrateVesselFullPhysics(vessel, refBody, dt);
                 }
             }
             else if (requiresForces)
             {
                 WakeVesselFromRails(vessel);
                 RecordWorkload(VesselPhysicsWorkload.FullPhysics);
-                IntegrateVesselOffRails(vessel, refBody, dt);
+                IntegrateVesselFullPhysics(vessel, refBody, dt);
             }
             else
             {
@@ -2313,6 +2335,20 @@ public class Universe
         return CatchUpDeferredRailVessel(vessel, targetTime);
     }
 
+    /// <summary>
+    /// Single entry point for off-rails integration from every scheduler (real time, mixed
+    /// warp, deferred catch-up). Coupled rigid body by default; a part-less vessel is a point
+    /// mass with no attitude dynamics and water motion has its own coupled integrator, both
+    /// handled by the split tick.
+    /// </summary>
+    private void IntegrateVesselFullPhysics(Vessel vessel, CelestialBody refBody, double dt)
+    {
+        if (Coupled6DofIntegrationEnabled && !vessel.WaterMotionEnabled && vessel.Parts.TotalMass > 0.0)
+            IntegrateVesselOffRailsCoupled6Dof(vessel, refBody, dt);
+        else
+            IntegrateVesselOffRails(vessel, refBody, dt);
+    }
+
     private void IntegrateVesselOffRails(Vessel vessel, CelestialBody refBody, double dt)
     {
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
@@ -2353,20 +2389,39 @@ public class Universe
             (contactBefore?.TorqueWorld ?? Vector3d.Zero) + (catchContactBefore?.TorqueWorld ?? Vector3d.Zero)
                 + (waterBefore?.TorqueWorld ?? Vector3d.Zero);
 
+        // In free flight the rigid body turns about its centre of mass, not the datum (the
+        // aft skirt). Carry the centre of mass through the attitude update and the
+        // translational RK4, then rebuild the datum with the step-start offset, exactly as
+        // the coupled path does, so propellant drain moving the centre of mass never moves
+        // the structure. Under contact this split path applies the contact torque once per
+        // step, outside RK4; a vehicle on its legs or pins pivots about the loaded contact,
+        // so it keeps the datum pivot there (the coupled path co-integrates both instead).
+        bool contactPivot = (contactBefore?.ContactCount ?? 0) > 0
+            || (catchContactBefore?.ContactCount ?? 0) > 0
+            || waterBefore is not null;
+        Vector3d comFromDatumLocal = contactPivot ? Vector3d.Zero : vessel.Parts.CenterOfMass;
+        Vector3d startComOffsetWorld = vessel.Orientation.Rotate(comFromDatumLocal);
+        Vector3d relativeComPosition = relativePosition + startComOffsetWorld;
+        Vector3d relativeComVelocity = relativeVelocity
+            + vessel.AngularVelocity.Cross(startComOffsetWorld);
+
         vessel.Position = framedPosition;
         vessel.Velocity = framedVelocity;
         vessel.Tick(dt, refBody, vessel.LastContactTorqueWorld);
+        Vector3d comOffsetWorld = vessel.Orientation.Rotate(comFromDatumLocal);
+        Vector3d rotationVelocity = vessel.AngularVelocity.Cross(comOffsetWorld);
         Vector3d frameAcceleration =
             GetReferenceBodyRailAcceleration(refBody);
-        (relativePosition, relativeVelocity) = RK4Integrator.StepPosVel(
-            relativePosition,
-            relativeVelocity,
+        (relativeComPosition, relativeComVelocity) = RK4Integrator.StepPosVel(
+            relativeComPosition,
+            relativeComVelocity,
             CurrentTime,
             dt,
-            (relativePos, relativeVel, _) =>
+            (relativeCom, relativeComVel, _) =>
             {
-                Vector3d position = refBody.Position + relativePos;
-                Vector3d velocity = refBody.Velocity + relativeVel;
+                Vector3d position = refBody.Position + relativeCom - comOffsetWorld;
+                Vector3d comVelocity = refBody.Velocity + relativeComVel;
+                Vector3d velocity = comVelocity - rotationVelocity;
                 var stageWater = EvaluateWaterContact(vessel, refBody, position, velocity, evaluationTime);
                 var stageContact = EvaluateLandingContact(
                     vessel, refBody, position, velocity);
@@ -2378,12 +2433,12 @@ public class Universe
                         + (stageWater?.ForceWorld ?? Vector3d.Zero)) / vessel.TranslationalMassKg
                     : Vector3d.Zero;
                 return vessel.ComputeNetAccelerationAt(
-                        position, velocity, _bodies, refBody)
+                        position, comVelocity, _bodies, refBody)
                     - frameAcceleration
                     + contactAcceleration;
             });
-        vessel.Position = refBody.Position + relativePosition;
-        vessel.Velocity = refBody.Velocity + relativeVelocity;
+        vessel.Position = refBody.Position + relativeComPosition - comOffsetWorld;
+        vessel.Velocity = refBody.Velocity + relativeComVelocity - rotationVelocity;
 
         var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
         UpdateLandingContactState(vessel, refBody, contactAfter, dt);
@@ -2417,7 +2472,7 @@ public class Universe
         double evaluationTime = CurrentTime+dt;
         var frameAcceleration = GetReferenceBodyRailAcceleration(body);
         Physics.RigidBody6DofState finalAbsolute;
-        vessel.BeginCoupledPhysicsStep(dt, body);
+        vessel.BeginCoupledPhysicsStep(dt, body, DistributedAerodynamicsEnabled, PhysicalBodyFlapsEnabled);
         try
         {
             var mass = Physics.WaterMotionFrame.ResolveMassProperties(vessel.Parts, water);
@@ -2473,10 +2528,17 @@ public class Universe
         double evaluationTime = CurrentTime + dt;
         Vector3d frameAcceleration = GetReferenceBodyRailAcceleration(refBody);
 
-        vessel.BeginCoupledPhysicsStep(dt, refBody);
+        vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
+        vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
+        vessel.BeginCoupledPhysicsStep(dt, refBody, DistributedAerodynamicsEnabled, PhysicalBodyFlapsEnabled);
         try
         {
-            var massProperties = vessel.Parts.GetMassProperties();
+            // A docked stack is one rigid body: integrate the composite mass, centre of mass
+            // and inertia tensor. Contacts are evaluated on the primary's own centre-of-mass
+            // state and their torque transferred to the composite centre.
+            var ownMassProperties = vessel.Parts.GetMassProperties();
+            var massProperties = DockedCompositeMassProperties(vessel, ownMassProperties);
+            var ownCenterShiftBody = ownMassProperties.CenterOfMassBody - massProperties.CenterOfMassBody;
             var orientation = vessel.Orientation;
             var angularVelocityWorld = vessel.AngularVelocity;
             var centerOfMassOffsetWorld = orientation.Rotate(
@@ -2499,22 +2561,29 @@ public class Universe
                     (candidate, _) =>
                     {
                         var absolute = ToAbsoluteState(refBody, candidate);
+                        var own = ShiftCenterOfMass(absolute, ownCenterShiftBody);
                         var landingContact = EvaluateLandingContact(
-                            vessel, refBody, absolute);
+                            vessel, refBody, own);
                         var catchContact = EvaluateCatchContact(
-                            vessel, absolute, evaluationTime);
+                            vessel, own, evaluationTime);
+                        var waterContact = EvaluateCoupledWaterContact(vessel, refBody, own, evaluationTime);
                         var contactForce = (landingContact?.ForceWorld ?? Vector3d.Zero)
-                            + (catchContact?.ForceWorld ?? Vector3d.Zero);
+                            + (catchContact?.ForceWorld ?? Vector3d.Zero)
+                            + (waterContact?.ForceWorld ?? Vector3d.Zero);
                         var contactTorque = (landingContact?.TorqueWorld ?? Vector3d.Zero)
-                            + (catchContact?.TorqueWorld ?? Vector3d.Zero);
+                            + (catchContact?.TorqueWorld ?? Vector3d.Zero)
+                            + (waterContact?.TorqueWorld ?? Vector3d.Zero)
+                            + (own.Position - absolute.Position).Cross(contactForce);
                         var context = new Physics.RigidBodyForceContext(
                             _bodies,
                             refBody,
                             externalForceWorld: contactForce
                                 - frameAcceleration * massProperties.Mass,
-                            externalTorqueWorld: contactTorque);
+                            externalTorqueWorld: contactTorque,
+                            distributedAerodynamics: DistributedAerodynamicsEnabled,
+                            physicalBodyFlaps: PhysicalBodyFlapsEnabled);
                         return Physics.RigidBodyForceEvaluator.Evaluate(
-                            vessel, absolute, context);
+                            vessel, absolute, context, massProperties);
                     });
 
             var absoluteFinal = ToAbsoluteState(refBody, finalState);
@@ -2538,15 +2607,22 @@ public class Universe
                 FinalOrientation: absoluteFinal.Orientation,
                 FinalAngularVelocityWorld: absoluteFinal.AngularVelocityWorld);
 
-            var contactAfter = EvaluateLandingContact(vessel, refBody, absoluteFinal);
+            var ownFinal = ShiftCenterOfMass(absoluteFinal, ownCenterShiftBody);
+            var contactAfter = EvaluateLandingContact(vessel, refBody, ownFinal);
             vessel.LastSurfaceContact = contactAfter;
             vessel.LastContactForceWorld = contactAfter?.ForceWorld ?? Vector3d.Zero;
             vessel.LastContactTorqueWorld = contactAfter?.TorqueWorld ?? Vector3d.Zero;
             var catchContactAfter = EvaluateCatchContact(
-                vessel, absoluteFinal, evaluationTime);
+                vessel, ownFinal, evaluationTime);
             vessel.LastCatchContact = catchContactAfter;
             UpdateLandingContactState(vessel, refBody, contactAfter, dt);
             UpdateCatchContactState(vessel, catchContactAfter, dt);
+            vessel.LastWaterContact = EvaluateCoupledWaterContact(vessel, refBody, ownFinal, evaluationTime);
+            if (vessel.LastWaterContact is { } waterAfter)
+            {
+                vessel.LastContactForceWorld += waterAfter.ForceWorld;
+                vessel.LastContactTorqueWorld += waterAfter.TorqueWorld;
+            }
         }
         finally
         {
@@ -2554,6 +2630,48 @@ public class Universe
         }
 
         ApplyPostIntegrationPhysics(vessel, refBody, dt);
+    }
+
+    /// <summary>
+    /// Pre-entry water wrench for one candidate centre-of-mass state, in the same datum
+    /// convention as the split tick (vessel datum with the definition's centre-of-mass
+    /// height); the free-floating water integrator takes over once water motion starts.
+    /// </summary>
+    private static Physics.WaterContactWrench? EvaluateCoupledWaterContact(
+        Vessel vessel, CelestialBody body, in Physics.RigidBody6DofState ownState, double time)
+    {
+        if (vessel.WaterContact is not { } water) return null;
+        var offset = ownState.Orientation.Rotate(vessel.Parts.CenterOfMass);
+        var datum = ownState.Position - offset;
+        if (!water.Covers(body, datum, time)) return null;
+        var datumVelocity = ownState.Velocity - ownState.AngularVelocityWorld.Cross(offset);
+        return Physics.WaterContactSolver.Evaluate(body, water, datum, datumVelocity,
+            ownState.Orientation, ownState.AngularVelocityWorld, Vector3d.Up * water.CenterOfMassYM);
+    }
+
+    private static Physics.RigidBody6DofState ShiftCenterOfMass(
+        in Physics.RigidBody6DofState state, Vector3d shiftBody)
+    {
+        if (shiftBody.MagnitudeSquared == 0.0) return state;
+        var offset = state.Orientation.Rotate(shiftBody);
+        return new(state.Position + offset, state.Velocity + state.AngularVelocityWorld.Cross(offset),
+            state.Orientation, state.AngularVelocityBody);
+    }
+
+    private Physics.RigidBodyMassProperties DockedCompositeMassProperties(
+        Vessel primary, in Physics.RigidBodyMassProperties own)
+    {
+        List<Physics.RigidlyAttachedMember>? members = null;
+        foreach (var connection in _dockingConnections)
+        {
+            if (connection.PrimaryVesselId != primary.Id) continue;
+            foreach (var secondary in _vessels)
+                if (secondary.Id == connection.SecondaryVesselId && !secondary.IsDestroyed
+                    && secondary.Parts.TryGetMassProperties(out var properties))
+                    (members ??= new()).Add(new(properties,
+                        connection.SecondaryPositionPrimaryLocal, connection.SecondaryOrientationPrimaryLocal));
+        }
+        return members == null ? own : Physics.CompositeMassProperties.Combine(own, members);
     }
 
     private static Physics.RigidBody6DofState ToAbsoluteState(
@@ -2764,7 +2882,7 @@ public class Universe
         {
             vessel.GroundNormal = normal;
             vessel.GroundOffset = body.GetAltitude(vessel.Position);
-            vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.Position);
+            vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.CenterOfMass);
             vessel.AngularVelocity = Vector3d.Zero;
         }
     }
@@ -2815,14 +2933,46 @@ public class Universe
     private void PropagateVesselOnRails(Vessel vessel, double dt) =>
         PropagateVesselOnRails(vessel, CurrentTime, CurrentTime + dt);
 
+    /// <summary>
+    /// Analytic coast. The conic in <see cref="Vessel.OrbitalState"/> belongs to the centre
+    /// of mass, the only point of a rigid body in free fall; the datum is rebuilt from the
+    /// coasted attitude at the end (it carries ω×r and the gravity gradient over its offset,
+    /// neither of which a Kepler point mass can represent).
+    /// </summary>
     private void PropagateVesselOnRails(
         Vessel vessel,
         double startTime,
         double targetTime)
     {
-        double dt = targetTime - startTime;
-        if (dt <= 1e-12)
+        if (targetTime - startTime <= 1e-12)
             return;
+        var centerOfMassBody = vessel.CenterOfMassOffsetLocal;
+        if (centerOfMassBody.MagnitudeSquared == 0.0)
+        {
+            PropagateCenterOfMassOnRails(vessel, startTime, targetTime);
+            return;
+        }
+        var offset = vessel.Orientation.Rotate(centerOfMassBody);
+        vessel.Position += offset;
+        vessel.Velocity += vessel.AngularVelocity.Cross(offset);
+        try
+        {
+            PropagateCenterOfMassOnRails(vessel, startTime, targetTime);
+        }
+        finally
+        {
+            offset = vessel.Orientation.Rotate(centerOfMassBody);
+            vessel.Position -= offset;
+            vessel.Velocity -= vessel.AngularVelocity.Cross(offset);
+        }
+    }
+
+    private void PropagateCenterOfMassOnRails(
+        Vessel vessel,
+        double startTime,
+        double targetTime)
+    {
+        double dt = targetTime - startTime;
 
         // Compute or reuse cached orbital elements.
         // CRITICAL: the global bodies were already propagated to the tick's END time by

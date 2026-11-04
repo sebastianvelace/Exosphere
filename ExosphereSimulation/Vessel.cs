@@ -53,6 +53,14 @@ public class Vessel
 
     // ── Controles ─────────────────────────────────────────────────────────
     public double    Throttle      { get; set; }           // [0, 1]
+    /// <summary>
+    /// Commanded main-tank vent flow (kg/s). The physics step removes it from the main tanks
+    /// of every part in proportion to their loads (never from header tanks) until they are
+    /// empty. The vented gas leaves at low speed; its reaction impulse is neglected.
+    /// </summary>
+    public double    PropellantVentRateKgPerS { get; set; }
+    /// <summary>Total propellant vented overboard so far (kg), for mass bookkeeping.</summary>
+    public double    VentedPropellantKg { get; set; }
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
@@ -62,6 +70,12 @@ public class Vessel
     /// value keeps the normal pilot/autopilot command path shared with the engines.
     /// </summary>
     public Vector3d? FlapCommandOverride { get; set; }
+
+    /// <summary>
+    /// True when the last coupled step's flight control inverted the predicted aerodynamic
+    /// moment (distributed model): guidance must not add its own static-moment trim on top.
+    /// </summary>
+    public bool FlightControlInvertsAerodynamics { get; private set; }
 
     /// <summary>Actual normalized body-flap deflection consumed by both integrators.</summary>
     public FlapActuatorState FlapActuators { get; private set; } = FlapActuatorState.Zero;
@@ -94,7 +108,6 @@ public class Vessel
 
     // ── Physical landing contact ─────────────────────────────────────────
     private ContactPointDefinition[] _landingContactPoints = [];
-    private Vector3d _landingCenterOfMassFromDatumLocal = Vector3d.Zero;
     public IReadOnlyList<ContactPointDefinition> LandingContactPoints => _landingContactPoints;
     public ContactWrench? LastSurfaceContact { get; internal set; }
     public Vector3d LastContactForceWorld { get; internal set; } = Vector3d.Zero;
@@ -257,7 +270,6 @@ public class Vessel
         if (gear == null)
         {
             _landingContactPoints = [];
-            _landingCenterOfMassFromDatumLocal = Vector3d.Zero;
             return;
         }
 
@@ -288,12 +300,6 @@ public class Vessel
                 MaxCompressionM: System.Math.Max(0.0, def.SuspensionTravelM),
                 MaxLoadN: System.Math.Max(0.0, def.MaxLoad));
         }).ToArray();
-
-        // pointFromDatum - pointFromCom = comFromDatum
-        _landingCenterOfMassFromDatumLocal = new Vector3d(
-            0.0,
-            def.ContactOffsetYM - def.ContactComOffsetYM,
-            0.0);
     }
 
     // Contact tuning for a mechanical tower catch: much stiffer/less compliant than a
@@ -360,15 +366,20 @@ public class Vessel
         ];
     }
 
-    public RigidBodyContactInput GetContactInput(Vector3d position, Vector3d velocity) => new(
-        DatumPositionWorld: position,
-        CenterOfMassPositionWorld: position + Orientation.Rotate(_landingCenterOfMassFromDatumLocal),
-        // The integrator advances the vessel datum with velocity. Transport that
-        // velocity to the CoM before the solver transports it back to each foot.
-        CenterOfMassVelocityWorld: velocity
-            + AngularVelocity.Cross(Orientation.Rotate(_landingCenterOfMassFromDatumLocal)),
-        Orientation: Orientation,
-        AngularVelocityWorld: AngularVelocity);
+    public RigidBodyContactInput GetContactInput(Vector3d position, Vector3d velocity)
+    {
+        // The part frame and the contact datum share one origin, so the real centre of mass
+        // gives the feet's moment arms (it replaces the gear's declared CoM estimate).
+        var centerOfMassOffset = Orientation.Rotate(CenterOfMassOffsetLocal);
+        return new(
+            DatumPositionWorld: position,
+            CenterOfMassPositionWorld: position + centerOfMassOffset,
+            // The integrator advances the vessel datum with velocity. Transport that
+            // velocity to the CoM before the solver transports it back to each foot.
+            CenterOfMassVelocityWorld: velocity + AngularVelocity.Cross(centerOfMassOffset),
+            Orientation: Orientation,
+            AngularVelocityWorld: AngularVelocity);
+    }
 
     /// <summary>
     /// Builds contact input from the coupled integrator's centre-of-mass state. The returned
@@ -425,6 +436,18 @@ public class Vessel
         return own > 0.0 && stack > own ? own / stack : 1.0;
     }
     public Vector3d  CenterOfMass  => Position + Orientation.Rotate(Parts.CenterOfMass);
+    /// <summary>Inertial velocity of the centre of mass: datum velocity plus ω×r.</summary>
+    public Vector3d  CenterOfMassVelocity => Velocity + AngularVelocity.Cross(Orientation.Rotate(CenterOfMassOffsetLocal));
+    /// <summary>Centre of mass in the vessel frame (zero for a part-less point mass).</summary>
+    public Vector3d  CenterOfMassOffsetLocal => Parts.TotalMass > 0.0 ? Parts.CenterOfMass : Vector3d.Zero;
+
+    /// <summary>
+    /// Conic of this vessel's centre of mass about <paramref name="body"/> at
+    /// <paramref name="epoch"/>: the state <see cref="OrbitalState"/> must describe.
+    /// </summary>
+    public OrbitalElements ComputeCenterOfMassOrbit(CelestialBody body, double epoch) =>
+        OrbitalElements.FromStateVector(CenterOfMass - body.Position,
+            CenterOfMassVelocity - body.Velocity, body.GM, body.Id, epoch);
     public double    VehicleLength => Parts.VehicleLength;
     public double    MaximumDiameter => Parts.MaximumDiameter;
     public double    NoseRadius      => Parts.NoseRadius;
@@ -451,8 +474,16 @@ public class Vessel
     }
 
     // Velocidad relativa a la superficie (para aerodinámica)
-    public Vector3d GetSurfaceVelocity(CelestialBody body) =>
-        Velocity - body.Velocity - body.GetSurfaceVelocity(Position);
+    /// <summary>
+    /// Velocity of the vehicle relative to the rotating surface: the centre-of-mass velocity
+    /// (what navigation estimates and what loads the whole airframe), not the datum's, which
+    /// adds ω×r while the vehicle rotates. Altitude queries keep using the datum (the skirt).
+    /// </summary>
+    public Vector3d GetSurfaceVelocity(CelestialBody body)
+    {
+        var centerOfMass = CenterOfMass;
+        return CenterOfMassVelocity - body.Velocity - body.GetSurfaceVelocity(centerOfMass);
+    }
 
     // Presión dinámica q = ½·ρ·v² (Pa) respecto a la atmósfera en rotación. Es la carga
     // aerodinámica que define el "Max-Q" del ascenso y escala el arrastre y los momentos.
@@ -563,50 +594,53 @@ public class Vessel
     // Empuje total en world space (N) — empuje de vacío (compatibilidad).
     public Vector3d ComputeThrust()
     {
-        return Orientation.Rotate(Parts.GetTotalThrust() + GetRcsTranslationThrustLocal());
+        return Orientation.Rotate(Parts.GetTotalThrust() + RcsThrusterForceBody);
     }
 
     // Empuje total en world space (N), corregido por presión ambiente del cuerpo.
     public Vector3d ComputeThrust(CelestialBody? refBody)
     {
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
-        return Orientation.Rotate(Parts.GetTotalThrust(pressure) + GetRcsTranslationThrustLocal());
+        return Orientation.Rotate(Parts.GetTotalThrust(pressure) + RcsThrusterForceBody);
     }
 
     /// <summary>
-    /// Translation reaction-control command per body axis in [−1, 1] (local X, Y = nose, Z).
-    /// Independent of the engines: it is how a spacecraft brakes toward a target it points at.
+    /// Translation reaction-control command per body axis in [−1, 1] (local X, Y = nose, Z),
+    /// a fraction of the declared thrusters' force along that axis. Independent of the
+    /// engines: it is how a spacecraft brakes toward a target it points at.
     /// </summary>
     public Vector3d TranslationCommand { get; set; }
 
     /// <summary>
     /// External torque (N·m, body axes) from a failure, such as a thruster stuck on. It
-    /// bypasses the control-rate envelope and lasts until cleared or its propellant runs out.
+    /// bypasses the flight-control law and lasts until cleared or its propellant runs out.
     /// </summary>
     public Vector3d DisturbanceTorqueBody { get; set; }
 
     /// <summary>Monopropellant (kg/s) the disturbance source burns; it stops when the supply is gone.</summary>
     public double DisturbanceMassFlowKgPerS { get; set; }
 
-    /// <summary>True once a translation command could not be fed (monopropellant exhausted).</summary>
+    /// <summary>True once the RCS thrusters could not be fed (propellant exhausted).</summary>
     public bool RcsPropellantDepleted { get; private set; }
 
-    /// <summary>Body-frame translation RCS force (N) for the current command, or zero when unfed.</summary>
-    public Vector3d GetRcsTranslationThrustLocal()
+    /// <summary>
+    /// Body-frame force (N) the translation command asks of the declared thrusters: the
+    /// clamped command times the thrusters' force authority along each axis.
+    /// </summary>
+    private Vector3d DesiredRcsTranslationForceBody()
     {
         var command = TranslationCommand;
-        if (command.MagnitudeSquared < 1e-12 || IsDestroyed || StructuralControlLost
-            || RcsPropellantDepleted)
+        if (command.MagnitudeSquared < 1e-12 || IsDestroyed || StructuralControlLost)
             return Vector3d.Zero;
-        double thrust = Parts.RcsTranslation.ThrustN;
-        if (thrust <= 0.0) return Vector3d.Zero;
+        var thrusters = Parts.GetRcsThrusters();
+        if (thrusters.Count == 0) return Vector3d.Zero;
+        var authority = Physics.RcsAllocation.TranslationAuthority(thrusters);
         return new Vector3d(
-            System.Math.Clamp(command.X, -1.0, 1.0),
-            System.Math.Clamp(command.Y, -1.0, 1.0),
-            System.Math.Clamp(command.Z, -1.0, 1.0)) * thrust;
+            System.Math.Clamp(command.X, -1.0, 1.0) * authority.X,
+            System.Math.Clamp(command.Y, -1.0, 1.0) * authority.Y,
+            System.Math.Clamp(command.Z, -1.0, 1.0) * authority.Z);
     }
 
-    /// <summary>Burns the monopropellant the translation command and any disturbance use over one tick.</summary>
     /// <summary>
     /// Practice assist: tanks never run down. The engines still go through their normal
     /// consumption step (flameout, feed and hot-stage logic stay identical); the propellant
@@ -618,25 +652,25 @@ public class Vessel
     {
         var snapshot = InfinitePropellant ? Parts.CapturePropellant() : null;
         Parts.ConsumePropellant(dt, pressure);
-        ConsumeRcsTranslationPropellant(dt);
-        if (snapshot != null) Parts.RestorePropellant(snapshot);
-    }
-
-    private void ConsumeRcsTranslationPropellant(double dt)
-    {
-        if (DisturbanceMassFlowKgPerS > 0.0 && !Parts.DrawMonopropellant(DisturbanceMassFlowKgPerS * dt))
+        if (PropellantVentRateKgPerS > 0.0 && dt > 0.0)
+            VentedPropellantKg += Parts.VentMainPropellant(PropellantVentRateKgPerS * dt);
+        if (DisturbanceMassFlowKgPerS > 0.0
+            && !Parts.DrawMonopropellant(DisturbanceMassFlowKgPerS * dt, primaryStoresOnly: true))
         {
             // A stuck thruster stops when its feed runs dry.
             DisturbanceTorqueBody = Vector3d.Zero;
             DisturbanceMassFlowKgPerS = 0.0;
         }
-        var force = GetRcsTranslationThrustLocal();
-        if (force.MagnitudeSquared < 1e-12) return;
-        var (_, isp) = Parts.RcsTranslation;
-        double flow = (System.Math.Abs(force.X) + System.Math.Abs(force.Y) + System.Math.Abs(force.Z))
-            / (isp * 9.80665);
-        if (!Parts.DrawMonopropellant(flow * dt))
-            RcsPropellantDepleted = true;
+        _propellantSnapshot = snapshot;
+    }
+
+    /// <summary>Tank loads to put back after this step's RCS draw (infinite-propellant assist).</summary>
+    private double[]? _propellantSnapshot;
+
+    private void RestoreInfinitePropellant()
+    {
+        if (_propellantSnapshot != null) Parts.RestorePropellant(_propellantSnapshot);
+        _propellantSnapshot = null;
     }
 
     // Fuerza aerodinámica total (drag + lift de cuerpo) en world space (N) — estado actual.
@@ -646,6 +680,282 @@ public class Vessel
     // Fuerza aerodinámica evaluada en un estado (pos, vel) arbitrario (para subpasos RK4).
     // Delega en AerodynamicsModel: drag orientación-dependiente (cilindro de 9 m, Cd y área
     // blend axial↔broadside, pico transónico) más la sustentación de cuerpo CL=CLmax·sin(2α).
+    /// <summary>
+    /// Static aerodynamic moment (body frame, N·m) on the current state from the distributed
+    /// model, evaluated with ω = 0 so the flight-control inversion leaves the natural
+    /// aerodynamic rate damping in place. Zero outside the atmosphere or for vehicles that
+    /// keep a capsule/standalone aero model.
+    /// </summary>
+    internal Vector3d PredictStaticAerodynamicTorqueBody(CelestialBody body, bool includeBodyFlaps = true)
+    {
+        if (body.Atmosphere == null || !Parts.UsesDistributedAerodynamics || Parts.TotalMass <= 0.0)
+            return Vector3d.Zero;
+        var com = CenterOfMass;
+        double altitude = body.GetAltitude(com);
+        double density = body.Atmosphere.GetDensity(altitude);
+        if (density <= 0.0) return Vector3d.Zero;
+        var air = CenterOfMassVelocity - body.Velocity - body.GetSurfaceVelocity(com);
+        double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
+        var torque = Physics.DistributedAerodynamics.Evaluate(
+            Parts.GetAeroElements(), Orientation, Vector3d.Zero, CenterOfMassOffsetLocal, air, density,
+            temperature, MaximumDiameter, Parts.AxialDragCoefficient, body.Atmosphere.SoundSpeedConstant,
+            body.Atmosphere.GetDynamicViscosityAtTemperature(temperature)).TorqueBody;
+        if (includeBodyFlaps && _physicalBodyFlapsActive && Parts.GetBodyFlaps().Count > 0)
+            torque += Physics.BodyFlapAerodynamics.Evaluate(Parts.GetBodyFlaps(), BodyFlapDeflectionsRad,
+                Orientation, Vector3d.Zero, CenterOfMassOffsetLocal, air, density, temperature,
+                body.Atmosphere.SoundSpeedConstant).TorqueBody;
+        return torque;
+    }
+
+    // ── Body flaps (F2) ───────────────────────────────────────────────────
+    private bool _physicalBodyFlapsActive;
+
+    /// <summary>True when the last step flew the physical body flaps.</summary>
+    public bool PhysicalBodyFlapsActive => _physicalBodyFlapsActive;
+    private double[] _bodyFlapDeflections = [];
+    private double[] _bodyFlapTargets = [];
+    private double[] _bodyFlapProbe = [];
+
+    /// <summary>
+    /// Physical deflection (rad) of each surface in <see cref="PartGraph.GetBodyFlaps"/>; a
+    /// surface without state yet reads as its neutral deflection.
+    /// </summary>
+    public IReadOnlyList<double> BodyFlapDeflectionsRad
+    {
+        get
+        {
+            EnsureBodyFlapState();
+            return _bodyFlapDeflections;
+        }
+    }
+
+    /// <summary>
+    /// Restores saved flap state: the aggregate channels and, when the save matches this
+    /// vessel's surfaces, each physical deflection (clamped to its travel).
+    /// </summary>
+    internal void RestoreFlapState(FlapActuatorState actuators, IReadOnlyList<double> bodyFlapDeflectionsRad,
+        bool physicalBodyFlapsActive = false, bool flightControlInvertsAerodynamics = false)
+    {
+        FlapActuators = actuators.Clamp();
+        _physicalBodyFlapsActive = physicalBodyFlapsActive;
+        FlightControlInvertsAerodynamics = flightControlInvertsAerodynamics;
+        EnsureBodyFlapState();
+        var flaps = Parts.GetBodyFlaps();
+        if (bodyFlapDeflectionsRad.Count != flaps.Count) return;
+        for (int i = 0; i < flaps.Count; i++)
+            _bodyFlapDeflections[i] = System.Math.Clamp(bodyFlapDeflectionsRad[i],
+                flaps[i].MinDeflectionRad, flaps[i].MaxDeflectionRad);
+    }
+
+    private void EnsureBodyFlapState()
+    {
+        var flaps = Parts.GetBodyFlaps();
+        if (_bodyFlapDeflections.Length == flaps.Count) return;
+        _bodyFlapDeflections = new double[flaps.Count];
+        _bodyFlapTargets = new double[flaps.Count];
+        _bodyFlapProbe = new double[flaps.Count];
+        for (int i = 0; i < flaps.Count; i++)
+            _bodyFlapDeflections[i] = flaps[i].NeutralDeflectionRad;
+    }
+
+    /// <summary>Flaps are locked at neutral while the ship rides a booster (ascent).</summary>
+    private bool BodyFlapsLocked()
+    {
+        foreach (var part in Parts.PartList)
+            if (part.Definition.HasVehicleRole("booster")) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Flight-control allocation for the body flaps: the torque each surface adds per radian
+    /// about its neutral deflection (finite difference on the plate model) gives a 3×N
+    /// effectiveness matrix; the requested pitch/yaw/roll channels ask for that fraction of
+    /// each axis's full authority, minus — when <paramref name="invertStaticMoment"/> — the
+    /// predicted static moment of hull and neutral flaps. A least-squares allocation, clipped
+    /// to each surface's travel, sets the targets; each servo slews at its own rate.
+    /// </summary>
+    private void AdvanceBodyFlaps(double dt, CelestialBody? body, Vector3d command, bool invertStaticMoment)
+    {
+        var flaps = Parts.GetBodyFlaps();
+        EnsureBodyFlapState();
+        if (flaps.Count == 0) return;
+        for (int i = 0; i < flaps.Count; i++)
+            _bodyFlapTargets[i] = flaps[i].NeutralDeflectionRad;
+
+        if (body?.Atmosphere != null && !BodyFlapsLocked())
+            AllocateBodyFlaps(flaps, body, command, invertStaticMoment);
+
+        for (int i = 0; i < flaps.Count; i++)
+        {
+            if (flaps[i].Owner.IsBroken) continue;
+            double step = flaps[i].RateRadPerS * System.Math.Max(0.0, dt);
+            double error = _bodyFlapTargets[i] - _bodyFlapDeflections[i];
+            _bodyFlapDeflections[i] = System.Math.Abs(error) <= step
+                ? _bodyFlapTargets[i]
+                : _bodyFlapDeflections[i] + System.Math.CopySign(step, error);
+        }
+    }
+
+    private void AllocateBodyFlaps(IReadOnlyList<Physics.BodyFlapGeometry> flaps, CelestialBody body,
+        Vector3d command, bool invertStaticMoment)
+    {
+        var com = CenterOfMass;
+        double altitude = body.GetAltitude(com);
+        double density = body.Atmosphere!.GetDensity(altitude);
+        if (density <= 0.0) return;
+        double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
+        var air = CenterOfMassVelocity - body.Velocity - body.GetSurfaceVelocity(com);
+        var comLocal = CenterOfMassOffsetLocal;
+
+        for (int i = 0; i < flaps.Count; i++) _bodyFlapProbe[i] = flaps[i].NeutralDeflectionRad;
+        Vector3d Torque() => Physics.BodyFlapAerodynamics.Evaluate(flaps, _bodyFlapProbe, Orientation,
+            Vector3d.Zero, comLocal, air, density, temperature, body.Atmosphere.SoundSpeedConstant).TorqueBody;
+
+        const double probe = 1.0 * MathUtils.DEG_TO_RAD;
+        Span<Vector3d> effectiveness = flaps.Count <= 16 ? stackalloc Vector3d[flaps.Count] : new Vector3d[flaps.Count];
+        Span<double> point = flaps.Count <= 16 ? stackalloc double[flaps.Count] : new double[flaps.Count];
+        Span<double> delta = flaps.Count <= 16 ? stackalloc double[flaps.Count] : new double[flaps.Count];
+        Span<bool> fixedAtStop = flaps.Count <= 16 ? stackalloc bool[flaps.Count] : new bool[flaps.Count];
+        for (int i = 0; i < flaps.Count; i++) point[i] = flaps[i].NeutralDeflectionRad;
+        var desired = Vector3d.Zero;
+        // Gauss–Newton on the nonlinear plate moments: the first pass linearises about neutral,
+        // later passes re-linearise about the clipped targets so the commanded moment is met
+        // where the plates actually sit.
+        for (int pass = 0; pass < BodyFlapAllocationPasses; pass++)
+        {
+            for (int i = 0; i < flaps.Count; i++) _bodyFlapProbe[i] = point[i];
+            var baseTorque = Torque();
+            var authority = Vector3d.Zero;
+            double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
+            for (int i = 0; i < flaps.Count; i++)
+            {
+                var flap = flaps[i];
+                double h = point[i] + probe <= flap.MaxDeflectionRad ? probe : -probe;
+                _bodyFlapProbe[i] = point[i] + h;
+                var column = flap.Owner.IsBroken ? Vector3d.Zero : (Torque() - baseTorque) / h;
+                _bodyFlapProbe[i] = point[i];
+                effectiveness[i] = column;
+                if (pass == 0)
+                {
+                    double travel = System.Math.Max(flap.MaxDeflectionRad - flap.NeutralDeflectionRad,
+                        flap.NeutralDeflectionRad - flap.MinDeflectionRad);
+                    authority += new Vector3d(System.Math.Abs(column.X), System.Math.Abs(column.Y),
+                        System.Math.Abs(column.Z)) * travel;
+                }
+                m00 += column.X * column.X; m01 += column.X * column.Y; m02 += column.X * column.Z;
+                m11 += column.Y * column.Y; m12 += column.Y * column.Z; m22 += column.Z * column.Z;
+            }
+            if (pass == 0)
+            {
+                // Semantic channels: pitch → body X, yaw → body Z, roll → body Y. A normalised
+                // command is a fraction of each axis's full flap authority (the convention every
+                // actuator follows); the flap moment supplies it less the hull's static moment.
+                desired = new Vector3d(command.X * authority.X, command.Z * authority.Y, command.Y * authority.Z);
+                if (invertStaticMoment)
+                    desired -= PredictStaticAerodynamicTorqueBody(body, includeBodyFlaps: false);
+                else
+                    desired += baseTorque;
+            }
+            double epsilon = 1e-6 * System.Math.Max(1e-12, m00 + m11 + m22);
+            // Redistributed pseudo-inverse (Virnig & Bodden): a surface that would pass its
+            // stop is fixed there and the remaining moment is re-solved over the free ones.
+            for (int i = 0; i < flaps.Count; i++) { fixedAtStop[i] = false; delta[i] = 0.0; }
+            for (int iteration = 0; iteration <= flaps.Count; iteration++)
+            {
+                var residual = desired - baseTorque;
+                double f00 = epsilon, f01 = 0, f02 = 0, f11 = epsilon, f12 = 0, f22 = epsilon;
+                for (int i = 0; i < flaps.Count; i++)
+                {
+                    var column = effectiveness[i];
+                    if (fixedAtStop[i]) { residual -= column * delta[i]; continue; }
+                    f00 += column.X * column.X; f01 += column.X * column.Y; f02 += column.X * column.Z;
+                    f11 += column.Y * column.Y; f12 += column.Y * column.Z; f22 += column.Z * column.Z;
+                }
+                var lambda = Physics.BodyFlapAerodynamics.SolveSymmetric(f00, f01, f02, f11, f12, f22, residual);
+                bool saturated = false;
+                for (int i = 0; i < flaps.Count; i++)
+                {
+                    if (fixedAtStop[i]) continue;
+                    delta[i] = effectiveness[i].Dot(lambda);
+                    double next = point[i] + delta[i];
+                    if (next > flaps[i].MaxDeflectionRad || next < flaps[i].MinDeflectionRad)
+                    {
+                        delta[i] = System.Math.Clamp(next, flaps[i].MinDeflectionRad, flaps[i].MaxDeflectionRad) - point[i];
+                        fixedAtStop[i] = true;
+                        saturated = true;
+                    }
+                }
+                if (!saturated) break;
+            }
+            for (int i = 0; i < flaps.Count; i++)
+                point[i] = System.Math.Clamp(point[i] + delta[i], flaps[i].MinDeflectionRad, flaps[i].MaxDeflectionRad);
+        }
+        for (int i = 0; i < flaps.Count; i++) _bodyFlapTargets[i] = point[i];
+    }
+
+    /// <summary>
+    /// Full-command angular acceleration of the body flaps about body X (pitch), Y (roll) and
+    /// Z (yaw) at the current state (rad/s²), from the same neutral-point effectiveness the
+    /// allocation sizes its channels with; zero when the flaps are not flying. Lets a controller
+    /// schedule its normalised gains, as gimbal controllers do with their authority. Pure: it
+    /// reads only the current state, so a restored vessel reproduces it exactly.
+    /// </summary>
+    public Vector3d ComputeBodyFlapAngularAuthority(CelestialBody body)
+    {
+        var flaps = Parts.GetBodyFlaps();
+        if (flaps.Count == 0 || body.Atmosphere == null || BodyFlapsLocked() || !_physicalBodyFlapsActive)
+            return Vector3d.Zero;
+        var com = CenterOfMass;
+        double altitude = body.GetAltitude(com);
+        double density = body.Atmosphere.GetDensity(altitude);
+        if (density <= 0.0) return Vector3d.Zero;
+        double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
+        var air = CenterOfMassVelocity - body.Velocity - body.GetSurfaceVelocity(com);
+        if (_flapAuthorityProbe.Length != flaps.Count) _flapAuthorityProbe = new double[flaps.Count];
+        var probe = _flapAuthorityProbe;
+        for (int i = 0; i < flaps.Count; i++) probe[i] = flaps[i].NeutralDeflectionRad;
+        Vector3d Torque() => Physics.BodyFlapAerodynamics.Evaluate(flaps, probe, Orientation, Vector3d.Zero,
+            CenterOfMassOffsetLocal, air, density, temperature, body.Atmosphere.SoundSpeedConstant).TorqueBody;
+        var neutral = Torque();
+        var authority = Vector3d.Zero;
+        const double step = 1.0 * MathUtils.DEG_TO_RAD;
+        for (int i = 0; i < flaps.Count; i++)
+        {
+            var flap = flaps[i];
+            if (flap.Owner.IsBroken) continue;
+            double h = flap.NeutralDeflectionRad + step <= flap.MaxDeflectionRad ? step : -step;
+            probe[i] = flap.NeutralDeflectionRad + h;
+            var column = (Torque() - neutral) / h;
+            probe[i] = flap.NeutralDeflectionRad;
+            double travel = System.Math.Max(flap.MaxDeflectionRad - flap.NeutralDeflectionRad,
+                flap.NeutralDeflectionRad - flap.MinDeflectionRad);
+            authority += new Vector3d(System.Math.Abs(column.X), System.Math.Abs(column.Y), System.Math.Abs(column.Z)) * travel;
+        }
+        var inertia = Parts.GetMassProperties().InertiaBody;
+        return new Vector3d(
+            inertia.M11 > 0.0 ? authority.X / inertia.M11 : 0.0,
+            inertia.M22 > 0.0 ? authority.Y / inertia.M22 : 0.0,
+            inertia.M33 > 0.0 ? authority.Z / inertia.M33 : 0.0);
+    }
+
+    private double[] _flapAuthorityProbe = [];
+
+    /// <summary>Gauss–Newton passes of the body-flap allocation (one is the neutral linearisation).</summary>
+    private const int BodyFlapAllocationPasses = 3;
+
+    /// <summary>Drag of deployed parachutes only (N, world), for the distributed aero path.</summary>
+    public Vector3d ComputeParachuteDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
+    {
+        if (body.Atmosphere == null) return Vector3d.Zero;
+        double density = body.Atmosphere.GetDensity(body.GetAltitude(pos));
+        var surfVel = vel - body.Velocity - body.GetSurfaceVelocity(pos);
+        double speed = surfVel.Magnitude;
+        double area = GetDeployedParachuteDragArea(body, pos);
+        return density <= 0.0 || speed < 0.001 || area <= 0.0
+            ? Vector3d.Zero
+            : -surfVel.Normalized * (0.5 * density * speed * speed * area);
+    }
+
     public Vector3d ComputeDragAt(Vector3d pos, Vector3d vel, CelestialBody body) =>
         ComputeDragAt(pos, vel, Orientation, body);
 
@@ -822,7 +1132,7 @@ public class Vessel
         // ThrottleLevel ya fue avanzado por ApplyThrottle(dt) en Tick() antes de este subpaso,
         // así que aquí solo leemos el valor spooled sin modificarlo.
         double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
-        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + GetRcsTranslationThrustLocal())
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + RcsThrusterForceBody)
             / TranslationalMassKg;
 
         var drag = refBody != null
@@ -843,7 +1153,7 @@ public class Vessel
         if (TotalMass <= 0.0) return gravity;
 
         double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
-        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + GetRcsTranslationThrustLocal())
+        var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + RcsThrusterForceBody)
             / TranslationalMassKg;
         var drag = refBody != null
             ? ComputeDragAt(pos, vel, refBody) / TranslationalMassKg
@@ -858,31 +1168,250 @@ public class Vessel
     public Vector3d ComputeGravity(IReadOnlyList<CelestialBody> bodies) =>
         ComputeGravityAt(Position, bodies);
 
-    // ── Tick interno (consumo, SAS, rotación) ──────────────────────────────
-    // Minimum cold-gas / hot-gas attitude authority when main engines are off. Live Raptor
-    // gimbal authority is computed from thrust, lever arm, CoM and moment of inertia.
-    private const double ReactionControlAuthority = 0.01;
+    // ── Control de actitud (F3): todo momento sale de un actuador ─────────
+    // Flight-control laws (pilot/guidance command, SAS rate damping, the pilot rate envelope)
+    // only decide a desired body angular acceleration. The gimbals, the declared RCS
+    // thrusters and the body flaps deliver whatever part of it they physically can; nothing
+    // writes the angular velocity directly. A vehicle without thrusters has no RCS authority.
+
+    /// <summary>Rate the pilot envelope holds a commanded rotation to (20°/s).</summary>
+    private const double PilotRateEnvelopeRadPerS = 0.35;
 
     /// <summary>
-    /// Reaction-control angular acceleration (rad/s²): the generic floor, or the enabled RCS
-    /// thrusters' declared torque over this vessel's inertia (Gemini re-entry RCS rings).
+    /// The 20°/s pilot-authority envelope on held commands (a handling choice for human
+    /// pilots, not a physical limit), applied to the command: the control law never asks the
+    /// actuators to turn faster. Autonomous mission controllers that reconstruct real flights
+    /// clear it each control step so the airframe turns at its actuator-limited rate.
     /// </summary>
-    private double PitchYawRcsAuthority => System.Math.Max(ReactionControlAuthority,
-        Parts.RcsAttitudeTorqueNm / System.Math.Max(1.0, Parts.TransverseMomentOfInertia));
+    public bool PilotRateEnvelopeEnabled { get; set; } = true;
 
-    private double RollRcsAuthority => System.Math.Max(ReactionControlAuthority,
-        Parts.RcsAttitudeTorqueNm / System.Math.Max(1.0, Parts.AxialMomentOfInertia));
+    /// <summary>Fraction of the body rate SAS asks to keep per second (rate-damping law).</summary>
+    private const double SasRateRetentionPerSecond = 0.005;
+
+    /// <summary>Pitch/yaw angular acceleration (rad/s²) of the declared, enabled RCS thrusters.</summary>
+    private double PitchYawRcsAuthority
+    {
+        get
+        {
+            var thrusters = RcsThrusterAuthorityTorqueBody;
+            return System.Math.Min(thrusters.X, thrusters.Z) / System.Math.Max(1.0, Parts.TransverseMomentOfInertia);
+        }
+    }
+
+    private double RollRcsAuthority =>
+        RcsThrusterAuthorityTorqueBody.Y / System.Math.Max(1.0, Parts.AxialMomentOfInertia);
+
+    /// <summary>
+    /// Pure moment the declared, enabled RCS thrusters deliver about each body axis (N·m).
+    /// A pure function of the thruster set, the centre of mass on a 25 cm grid and the
+    /// roll/pitch inertia ratio to three significant figures, cached on those keys so a
+    /// resumed run computes exactly the values a continuous one does.
+    /// </summary>
+    private Vector3d RcsThrusterAuthorityTorqueBody
+    {
+        get
+        {
+            // A separation since the last step may have armed a standby or staged system.
+            Parts.ArmStagedReactionControl();
+            var thrusters = Parts.GetRcsThrusters();
+            if (thrusters.Count == 0) return Vector3d.Zero;
+            const double grid = 0.25;
+            var com = CenterOfMassOffsetLocal;
+            com = new Vector3d(System.Math.Round(com.X / grid) * grid, System.Math.Round(com.Y / grid) * grid,
+                System.Math.Round(com.Z / grid) * grid);
+            double ratio = System.Math.Max(1.0, Parts.TransverseMomentOfInertia)
+                / System.Math.Max(1.0, Parts.AxialMomentOfInertia);
+            double magnitude = System.Math.Pow(10.0, System.Math.Floor(System.Math.Log10(ratio)) - 2.0);
+            ratio = System.Math.Round(ratio / magnitude) * magnitude;
+            ulong mask = 0;
+            for (int i = 0; i < thrusters.Count; i++)
+                if (thrusters[i].Available) mask ^= 1UL << (i % 64) ^ (ulong)(i / 64) * 0x9E3779B97F4A7C15UL;
+            if (_rcsAuthorityValid && _rcsAuthorityVersion == Parts.TopologyVersion && _rcsAuthorityMask == mask
+                && _rcsAuthorityCom == com && _rcsAuthorityRatio == ratio)
+                return _rcsAuthority;
+            _rcsAuthority = Physics.RcsAllocation.Authority(thrusters, com, new Vector3d(1.0, ratio, 1.0));
+            _rcsAuthorityValid = true;
+            _rcsAuthorityVersion = Parts.TopologyVersion;
+            _rcsAuthorityMask = mask;
+            _rcsAuthorityCom = com;
+            _rcsAuthorityRatio = ratio;
+            return _rcsAuthority;
+        }
+    }
+
+    private bool _rcsAuthorityValid;
+    private int _rcsAuthorityVersion;
+    private ulong _rcsAuthorityMask;
+    private Vector3d _rcsAuthorityCom;
+    private double _rcsAuthorityRatio;
+    private Vector3d _rcsAuthority;
+
+    private double[] _rcsDuty = [];
+
+    /// <summary>Force the RCS thrusters fired this step (body frame, N), held across RK4 stages.</summary>
+    public Vector3d RcsThrusterForceBody { get; private set; }
+
+    /// <summary>Moment the RCS thrusters fired this step (body frame, N·m), held across RK4 stages.</summary>
+    public Vector3d RcsThrusterTorqueBody { get; private set; }
+
+    /// <summary>Last step's propellant flow of the RCS thrusters (kg/s).</summary>
+    public double RcsThrusterMassFlowKgPerS { get; private set; }
+
+    /// <summary>
+    /// Fires the declared RCS thrusters toward the requested moment and force for one control
+    /// step and draws their propellant from the system's store. Without
+    /// propellant for the whole step they do not fire.
+    /// </summary>
+    private void FireRcsThrusters(Vector3d desiredTorqueBody, Vector3d desiredForceBody, double dt)
+    {
+        RcsThrusterForceBody = Vector3d.Zero;
+        RcsThrusterTorqueBody = Vector3d.Zero;
+        RcsThrusterMassFlowKgPerS = 0.0;
+        var thrusters = Parts.GetRcsThrusters();
+        if (thrusters.Count == 0 || !(dt > 0.0)) return;
+        // Sized on the first step after a topology change, not on the first firing.
+        if (_rcsDuty.Length != thrusters.Count) _rcsDuty = new double[thrusters.Count];
+        if (desiredTorqueBody.MagnitudeSquared < 1e-18 && desiredForceBody.MagnitudeSquared < 1e-18)
+            return;
+        // Weight each axis by its inverse inertia: the allocation minimises the error in
+        // angular acceleration, not in N·m.
+        double transverse = System.Math.Max(1.0, Parts.TransverseMomentOfInertia);
+        double axial = System.Math.Max(1.0, Parts.AxialMomentOfInertia);
+        var weights = new Vector3d(1.0, transverse / axial, 1.0);
+        double forceWeight = desiredForceBody.MagnitudeSquared > 0.0 ? 1.0 : Physics.RcsAllocation.AttitudeOnlyForceWeight;
+        var result = Physics.RcsAllocation.Allocate(thrusters, CenterOfMassOffsetLocal,
+            desiredTorqueBody, desiredForceBody, _rcsDuty, weights, forceWeight);
+        if (!DrawRcsPropellant(thrusters, result, dt))
+        {
+            RcsPropellantDepleted = true;
+            return;
+        }
+        RcsThrusterForceBody = result.ForceBody;
+        RcsThrusterTorqueBody = result.TorqueBody;
+        RcsThrusterMassFlowKgPerS = result.MassFlowKgPerS;
+    }
+
+    private bool DrawRcsPropellant(IReadOnlyList<Physics.RcsThrusterGeometry> thrusters,
+        Physics.RcsAllocationResult result, double dt)
+    {
+        // Each RCS system burns its own store: a part that carries one feeds its own thrusters,
+        // and thrusters on a part without a store draw on the vessel's shared feed.
+        if (result.MassFlowKgPerS <= 0.0) return true;
+        _rcsDemand.Clear();
+        double shared = 0.0;
+        for (int i = 0; i < thrusters.Count; i++)
+        {
+            if (_rcsDuty[i] <= 0.0) continue;
+            var thruster = thrusters[i];
+            double kg = thruster.MassFlowKgPerS * _rcsDuty[i] * dt;
+            if (thruster.Owner.Definition.FuelCapacityMono > 0.0)
+                _rcsDemand[thruster.Owner] = _rcsDemand.GetValueOrDefault(thruster.Owner) + kg;
+            else
+                shared += kg;
+        }
+        foreach (var (owner, kg) in _rcsDemand)
+            if (owner.Monopropellant < kg) return false;
+        if (shared > 0.0 && !Parts.DrawMonopropellant(shared)) return false;
+        foreach (var (owner, kg) in _rcsDemand)
+            owner.Monopropellant -= kg;
+        return true;
+    }
+
+    private readonly Dictionary<Part, double> _rcsDemand = new(16);
 
     /// <summary>
     /// Pitch/yaw angular acceleration (rad/s²) a full attitude command produces at the
-    /// current ambient pressure: the live TVC envelope, floored by reaction control.
+    /// current state: the largest of the live TVC envelope, the RCS thrusters and the flaps.
     /// </summary>
-    public double GetPitchYawAngularAuthority(CelestialBody body)
+    public double GetPitchYawAngularAuthority(CelestialBody body) => GetAttitudeAuthorityBody(body).X;
+
+    /// <summary>
+    /// Angular acceleration (rad/s²) a full attitude command produces about body X (pitch),
+    /// Y (roll) and Z (yaw): per axis the largest of the live TVC envelope, the declared RCS
+    /// thrusters and the body flaps. A command is a fraction of this; controllers normalise
+    /// their angular-acceleration demand by it.
+    /// </summary>
+    public Vector3d GetAttitudeAuthorityBody(CelestialBody body)
     {
         ArgumentNullException.ThrowIfNull(body);
         double pressure = body.Atmosphere?.GetPressure(GetAltitude(body)) ?? 0.0;
-        return System.Math.Max(PitchYawRcsAuthority,
-            Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).X);
+        return AttitudeAuthorityLocal(pressure, FlapAngularAuthorityLocal(body));
+    }
+
+    private Vector3d AttitudeAuthorityLocal(double pressure, Vector3d flapAuthority)
+    {
+        var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
+        double pitchYaw = PitchYawRcsAuthority;
+        double roll = RollRcsAuthority;
+        return new Vector3d(
+            System.Math.Max(System.Math.Max(pitchYaw, envelope.X), flapAuthority.X),
+            System.Math.Max(System.Math.Max(roll, envelope.Y), flapAuthority.Y),
+            System.Math.Max(System.Math.Max(pitchYaw, envelope.Z), flapAuthority.Z));
+    }
+
+    /// <summary>
+    /// Desired body angular acceleration (rad/s², local X pitch, Y roll, Z yaw) of the flight
+    /// control law. A held command asks for its fraction of the actuators' authority, limited
+    /// by the pilot rate envelope when that is on; with no command SAS asks to remove the body
+    /// rate at its damping law. The actuators then deliver only what they physically can.
+    /// </summary>
+    private Vector3d DesiredControlAngularAcceleration(Vector3d command, bool hasInput, double auth,
+        double pressure, double dt)
+    {
+        if (!(dt > 0.0)) return Vector3d.Zero;
+        double inertiaScale = DockedInertiaScale();
+        var rate = Orientation.Inverse().Rotate(AngularVelocity);
+        // Gimbals and jets are asked for the command's fraction of their own authority; the
+        // flaps add theirs and the jets only fill above it, so the whole vehicle delivers the
+        // command's fraction of the largest of the three (GetAttitudeAuthorityBody).
+        if (hasInput)
+        {
+            var authority = AttitudeAuthorityLocal(pressure, Vector3d.Zero) * auth;
+            var alpha = new Vector3d(command.X * authority.X, command.Z * authority.Y, command.Y * authority.Z);
+            if (!PilotRateEnvelopeEnabled) return alpha;
+            // Command-level envelope: the command never asks for a rate above 20°/s. Only the
+            // part of it that would spin the body faster along its current rate is removed; it
+            // is never turned into braking, and actuator lag may carry the rate a little past.
+            double rateMagnitude = rate.Magnitude;
+            if (rateMagnitude < 1e-12) return alpha;
+            var rateAxis = rate / rateMagnitude;
+            double along = alpha.Dot(rateAxis);
+            if (along <= 0.0) return alpha;
+            double allowed = System.Math.Max(0.0, (PilotRateEnvelopeRadPerS - rateMagnitude) / (dt * inertiaScale));
+            return along <= allowed ? alpha : alpha - rateAxis * (along - allowed);
+        }
+        if (SASEnabled && auth > 1e-6)
+        {
+            // Rate damping asks for no more than the actuators can deliver on each axis.
+            var authority = AttitudeAuthorityLocal(pressure, Vector3d.Zero) * auth;
+            var damping = -rate * ((1.0 - System.Math.Pow(SasRateRetentionPerSecond, dt)) / (dt * inertiaScale));
+            return new Vector3d(System.Math.Clamp(damping.X, -authority.X, authority.X),
+                System.Math.Clamp(damping.Y, -authority.Y, authority.Y),
+                System.Math.Clamp(damping.Z, -authority.Z, authority.Z));
+        }
+        return Vector3d.Zero;
+    }
+
+    /// <summary>Own-body moment (N·m) for a desired angular acceleration (principal axes).</summary>
+    private Vector3d ControlTorqueFor(Vector3d angularAcceleration) => new(
+        angularAcceleration.X * Parts.TransverseMomentOfInertia,
+        angularAcceleration.Y * Parts.AxialMomentOfInertia,
+        angularAcceleration.Z * Parts.TransverseMomentOfInertia);
+
+    /// <summary>
+    /// Full-deflection angular acceleration of the body flaps about body X (pitch), Y (roll)
+    /// and Z (yaw), rad/s²: the physical plates when they fly, else the aggregate flap model
+    /// of the split tick; zero without functional flaps or air.
+    /// </summary>
+    private Vector3d FlapAngularAuthorityLocal(CelestialBody body)
+    {
+        if (_physicalBodyFlapsActive) return ComputeBodyFlapAngularAuthority(body);
+        if (body.Atmosphere == null || !HasFunctionalBodyFlaps()) return Vector3d.Zero;
+        double density = body.Atmosphere.GetDensity(GetAltitude(body));
+        var air = GetSurfaceVelocity(body);
+        var full = AerodynamicsModel.ComputeFlapControlAngularAcceleration(density, air, Quaterniond.Identity,
+            new FlapActuatorState(1.0, 1.0, 1.0), VehicleLength, MaximumDiameter, Parts.TransverseMomentOfInertia);
+        return new Vector3d(System.Math.Abs(full.X), System.Math.Abs(full.Y), System.Math.Abs(full.Z));
     }
 
     /// <summary>
@@ -891,11 +1420,17 @@ public class Vessel
     /// <see cref="EndCoupledPhysicsStep"/> so every RK4 stage reads the same prepared engine
     /// state and mass snapshot.
     /// </summary>
-    internal void BeginCoupledPhysicsStep(double dt, CelestialBody refBody)
+    internal void BeginCoupledPhysicsStep(double dt, CelestialBody refBody, bool distributedAerodynamics = false,
+        bool physicalBodyFlaps = false)
     {
         Parts.BeginPhysicsTick();
         try
         {
+            RcsThrusterForceBody = Vector3d.Zero;
+            RcsThrusterTorqueBody = Vector3d.Zero;
+            RcsThrusterMassFlowKgPerS = 0.0;
+            Parts.ArmStagedReactionControl();
+
             ApplyThrottle(dt);
             Parts.InvalidateTickActiveEngineCache();
 
@@ -916,7 +1451,14 @@ public class Vessel
             var command = PitchYawRoll * auth;
             var flapCommand = (FlapCommandOverride ?? PitchYawRoll) * auth;
             AdvanceFlapActuators(dt, flapCommand);
+            _physicalBodyFlapsActive = distributedAerodynamics && physicalBodyFlaps;
+            if (_physicalBodyFlapsActive && auth > 1e-6)
+                AdvanceBodyFlaps(dt, refBody, flapCommand,
+                    invertStaticMoment: flapCommand.Magnitude > 1e-6 || SASEnabled);
+            else
+                AdvanceBodyFlaps(dt, null, Vector3d.Zero, invertStaticMoment: false);
             bool hasInput = command.Magnitude > 1e-6;
+            FlightControlInvertsAerodynamics = _physicalBodyFlapsActive && Parts.UsesDistributedAerodynamics;
             foreach (var engine in Parts.ActiveEngineList)
             {
                 engine.GimbalOffset = hasInput
@@ -925,24 +1467,19 @@ public class Vessel
                 engine.ClearGimbalCommandOverrides();
             }
 
-            if (!hasInput) return;
+            // Flight control inverts the predicted static aerodynamic moment, the same way it
+            // already inverts the engines' zero-gimbal moment: a statically unstable airframe
+            // (every finless launcher) is held by its gimbals, within their real range, instead
+            // of by guidance gains tuned against a stable aggregate model.
+            var aeroTorque = distributedAerodynamics && refBody != null && auth > 1e-6
+                ? PredictStaticAerodynamicTorqueBody(refBody)
+                : Vector3d.Zero;
 
-            double pitchYawAuthority =
-                System.Math.Max(PitchYawRcsAuthority,
-                    Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).X) * auth;
-            double rollAuthority =
-                System.Math.Max(RollRcsAuthority,
-                    Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure).Y) * auth;
-            var desiredLocalAngAccel = new Vector3d(
-                command.X * pitchYawAuthority,
-                command.Z * rollAuthority,
-                command.Y * pitchYawAuthority);
-            var zeroGimbalTorque = Parts.GetZeroGimbalEngineTorque(pressure);
-            var desiredTorque = new Vector3d(
-                desiredLocalAngAccel.X * Parts.TransverseMomentOfInertia - zeroGimbalTorque.X,
-                desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia - zeroGimbalTorque.Y,
-                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia - zeroGimbalTorque.Z);
-            Parts.SolveDifferentialGimbal(desiredTorque, pressure);
+            var flapAuthority = refBody != null ? FlapAngularAuthorityLocal(refBody) : Vector3d.Zero;
+            var alpha = DesiredControlAngularAcceleration(command, hasInput, auth, pressure, dt);
+            ApplyAttitudeActuators(alpha, hasInput || (SASEnabled && auth > 1e-6), aeroTorque, pressure, dt,
+                flapCommand, flapAuthority);
+            RestoreInfinitePropellant();
         }
         catch
         {
@@ -950,6 +1487,71 @@ public class Vessel
             throw;
         }
     }
+
+    /// <summary>
+    /// Sends the desired angular acceleration to the actuators: the gimbals are allocated the
+    /// total moment (inverting the engines' zero-gimbal moment and, when given, the predicted
+    /// static aerodynamic moment), and the RCS thrusters are asked for what the engines leave,
+    /// together with the translation command.
+    /// </summary>
+    private void ApplyAttitudeActuators(Vector3d alpha, bool controlling, Vector3d aeroTorque,
+        double pressure, double dt, Vector3d flapCommand, Vector3d flapAuthority)
+    {
+        if (Parts.TotalMass <= 0.0) return;
+        var desiredTorque = ControlTorqueFor(alpha);
+        bool enginesLit = Parts.ActiveEngineList.Count > 0;
+        if (controlling && enginesLit)
+            Parts.SolveDifferentialGimbal(
+                desiredTorque - Parts.GetZeroGimbalEngineTorque(pressure) - aeroTorque, pressure);
+
+        if (Parts.GetRcsThrusters().Count == 0) return;
+        var desiredForce = DesiredRcsTranslationForceBody();
+        if (!controlling && desiredForce.MagnitudeSquared < 1e-18)
+        {
+            FireRcsThrusters(Vector3d.Zero, Vector3d.Zero, dt);
+            return;
+        }
+        var rcsTorque = Vector3d.Zero;
+        if (controlling)
+        {
+            // The engines' moment after allocation (and the aerodynamic moment the gimbals
+            // were asked to cancel) is already being delivered; the thrusters fill the rest.
+            var engineTorque = ControlTorqueFor(Parts.GetPitchYawRollAngularAcceleration(pressure));
+            var remainder = desiredTorque - engineTorque - (enginesLit ? aeroTorque : Vector3d.Zero);
+            // Blended control: the body flaps are credited with what they were commanded (the
+            // command's fraction of their present authority), never more than the request, and
+            // the jets only fill what is left, never against it.
+            double transverse = System.Math.Max(1.0, Parts.TransverseMomentOfInertia);
+            double axial = System.Math.Max(1.0, Parts.AxialMomentOfInertia);
+            var flapShare = ControlTorqueFor(new Vector3d(
+                FlapCredit(remainder.X / transverse, flapCommand.X * flapAuthority.X),
+                FlapCredit(remainder.Y / axial, flapCommand.Z * flapAuthority.Y),
+                FlapCredit(remainder.Z / transverse, flapCommand.Y * flapAuthority.Z)));
+            rcsTorque = remainder - flapShare;
+            if (enginesLit && Parts.GimbalsSlewForAttitudeControl())
+            {
+                // Under thrust a slewing gimbal cluster owns every axis it can cover: the jets
+                // are not used to chase servo lag, only where the cluster lacks authority (a
+                // single engine's roll, as the S-IVB APS flies it during the J-2 burns). A trim
+                // gimbal (the LM DPS at 0.2°/s) only trims, and the jets fly the attitude.
+                var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
+                rcsTorque = new Vector3d(
+                    System.Math.Abs(alpha.X) <= envelope.X ? 0.0 : rcsTorque.X,
+                    System.Math.Abs(alpha.Y) <= envelope.Y ? 0.0 : rcsTorque.Y,
+                    System.Math.Abs(alpha.Z) <= envelope.Z ? 0.0 : rcsTorque.Z);
+            }
+            // The thrusters are asked for no more than their pure moment on each axis.
+            var reach = RcsThrusterAuthorityTorqueBody;
+            rcsTorque = new Vector3d(System.Math.Clamp(rcsTorque.X, -reach.X, reach.X),
+                System.Math.Clamp(rcsTorque.Y, -reach.Y, reach.Y), System.Math.Clamp(rcsTorque.Z, -reach.Z, reach.Z));
+        }
+        FireRcsThrusters(rcsTorque, desiredForce, dt);
+    }
+
+    /// <summary>The flaps' share of a request: what they were commanded, capped at the request.</summary>
+    private static double FlapCredit(double request, double commanded) =>
+        request * commanded <= 0.0 ? 0.0
+            : System.Math.CopySign(System.Math.Min(System.Math.Abs(request), System.Math.Abs(commanded)), request);
 
     internal void EndCoupledPhysicsStep() => Parts.EndPhysicsTick();
 
@@ -965,15 +1567,6 @@ public class Vessel
 
         return false;
     }
-
-    /// <summary>
-    /// Returns whichever of <paramref name="value"/>/<paramref name="floor"/> has the larger
-    /// magnitude — a component-wise Math.Max-by-magnitude used to apply
-    /// <see cref="ReactionControlAuthority"/> as a genuine floor under real engine authority
-    /// rather than an unconditional addition on top of it.
-    /// </summary>
-    private static double FloorByMagnitude(double value, double floor) =>
-        System.Math.Abs(value) >= System.Math.Abs(floor) ? value : floor;
 
     public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
@@ -1007,17 +1600,17 @@ public class Vessel
         Orientation = (deltaRotation * Orientation).Normalize();
     }
 
+    /// <summary>
+    /// Legacy split tick (comparison baseline): the same control law and actuators as the
+    /// coupled path, integrated with explicit Euler on the angular rate.
+    /// </summary>
     private void TickPhysics(
         double dt,
         CelestialBody refBody,
         Vector3d externalContactTorqueWorld)
     {
-        // A failure or an impact can legitimately leave the rigid body above the normal
-        // actuator envelope. Preserve that incoming rate while ordinary controls/aero
-        // work it down; the 20°/s envelope must prevent commanded acceleration, not
-        // erase externally generated angular momentum on the next tick.
-        double incomingAngularRate = AngularVelocity.Magnitude;
         double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+        Parts.ArmStagedReactionControl();
 
         // Avanzar el spool de motores UNA VEZ por tick (antes del consumo de propelante
         // y antes de que RK4 muestree las fuerzas), para que los subpasos k₁…k₄ usen
@@ -1048,14 +1641,9 @@ public class Vessel
         // de la nave es +Y, por lo tanto los controles semánticos se mezclan así:
         // pitch → giro local X, yaw → giro local Z, roll → giro local Y.
         bool hasInput = command.Magnitude > 1e-6;
-        // Couple the commanded attitude torque to the actual thrust vector. Engines sit
-        // below the CoM: +pitch needs -Z deflection; +yaw needs +X deflection. Roll remains
-        // differential-cluster torque and has no net lateral force in this aggregate model.
         // GimbalOffset stays the shared fallback target for any engine SolveDifferentialGimbal
-        // below does not reach (legacy parts with no engine runtime, still averaged directly
-        // in Part.GetThrustVector); GimbalCommandOverride is cleared every tick so a stale
-        // per-instance command from a previous tick — or from a tick where the pilot let go of
-        // the stick — never lingers on an instance the current tick doesn't recompute.
+        // does not reach (legacy parts with no engine runtime); GimbalCommandOverride is
+        // cleared every tick so a stale per-instance command never lingers.
         foreach (var engine in Parts.ActiveEngineList)
         {
             engine.GimbalOffset = hasInput
@@ -1064,91 +1652,32 @@ public class Vessel
             engine.ClearGimbalCommandOverrides();
         }
 
-        if (hasInput)
-        {
-            // R5b — differential per-mount TVC: size a desired torque from the envelope
-            // SolveDifferentialGimbal can actually deliver (only live, selected, gimballed
-            // instances — see GetDifferentialTVCAngularAccelerationEnvelope), not the legacy
-            // GetPitchYawAngularAcceleration/GetRollAngularAcceleration estimate, which scales
-            // every active engine's full thrust by its part-wide GimbalRange regardless of
-            // whether that specific mount can gimbal (e.g. Super Heavy's ungimballed outer
-            // ring) — that over-counting chronically saturated the allocator's request.
-            // ReactionControlAuthority stays as a floor so a command still sizes a viable
-            // target even when the live cluster's own authority momentarily reads near zero.
-            var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
-            double pitchYawAuthority =
-                System.Math.Max(PitchYawRcsAuthority, envelope.X) * auth;
-            double rollAuthority =
-                System.Math.Max(RollRcsAuthority, envelope.Y) * auth;
-            var desiredLocalAngAccel = new Vector3d(
-                command.X * pitchYawAuthority,
-                command.Z * rollAuthority,
-                command.Y * pitchYawAuthority);
-            // The zero-gimbal cluster can have a real static moment when the selected
-            // engines are asymmetric (for example one of Starship's three centre Raptors).
-            // Allocate the control torque needed to reach the requested TOTAL torque, not
-            // just the requested correction; otherwise the residual static moment rotates
-            // the vehicle exactly when the terminal burn has the least authority margin.
-            var zeroGimbalTorque = Parts.GetZeroGimbalEngineTorque(pressure);
-            var desiredTorque = new Vector3d(
-                desiredLocalAngAccel.X * Parts.TransverseMomentOfInertia - zeroGimbalTorque.X,
-                desiredLocalAngAccel.Y * Parts.AxialMomentOfInertia - zeroGimbalTorque.Y,
-                desiredLocalAngAccel.Z * Parts.TransverseMomentOfInertia - zeroGimbalTorque.Z);
-            Parts.SolveDifferentialGimbal(desiredTorque, pressure);
-        }
+        var flapAuthority = refBody != null ? FlapAngularAuthorityLocal(refBody) : Vector3d.Zero;
+        var alpha = DesiredControlAngularAcceleration(command, hasInput, auth, pressure, dt);
+        RcsThrusterForceBody = Vector3d.Zero;
+        RcsThrusterTorqueBody = Vector3d.Zero;
+        RcsThrusterMassFlowKgPerS = 0.0;
+        ApplyAttitudeActuators(alpha, hasInput || (SASEnabled && auth > 1e-6), Vector3d.Zero, pressure, dt,
+            flapCommand, flapAuthority);
+        RestoreInfinitePropellant();
 
         // ── Real per-mount torque, from genuine engine-mount geometry (R5/R5b/R5c) ──────
-        // τ = Σ r×F over every live engine instance's actual gimballed thrust vector — the
-        // instance's real EngineInstanceState.GimbalDeg, whatever Part.AdvanceGimbal has
-        // servoed it toward: SolveDifferentialGimbal's per-mount command above when the
-        // pilot is commanding attitude, or its resting/asymmetric state (engine-out, mount
-        // asymmetry) when nobody is. This used to be split into a `hasInput` branch that
-        // applied an idealized full-authority estimate (engine's maximum GimbalRange, not
-        // live servo state) and a separate `!hasInput` branch that read this same real
-        // geometry, restricted to !hasInput specifically to avoid double-counting the
-        // pilot's own commanded deflection through two different models. Now that R5b
-        // routes the pilot's command through this exact real per-mount geometry instead of
-        // an idealized shortcut, both branches are the same physical quantity, so there is
-        // only one term, applied unconditionally.
+        // τ = Σ r×F over every live engine instance's actual gimballed thrust vector, plus
+        // the moment the RCS thrusters fired this step.
         var engineAngAccel = Parts.GetPitchYawRollAngularAcceleration(pressure);
-
-        // RCS floor: idealized attitude-thruster authority (ReactionControlAuthority),
-        // independent of engine gimbal — real spacecraft carry separate RCS jets that fire
-        // whether or not the main engines do. This must stay a FLOOR (component-wise
-        // Math.Max by magnitude), exactly as the pre-R5b idealized estimate's
-        // `Math.Max(ReactionControlAuthority, ...)` did — simply adding it on top of the
-        // real per-mount torque would make it the dominant actuator on a large vehicle
-        // (ReactionControlAuthority is a fixed angular acceleration, so summing it scales
-        // the equivalent RCS torque with the vessel's own moment of inertia, easily
-        // exceeding what a real gimballed cluster delivers on something the size of a
-        // Super Heavy). Only fills the gap when the real engine term reads below the floor.
-        var rcsFloorAngAccel = hasInput
-            ? new Vector3d(command.X * PitchYawRcsAuthority, command.Z * RollRcsAuthority,
-                command.Y * PitchYawRcsAuthority) * auth
-            : Vector3d.Zero;
-
-        var appliedAngAccel = new Vector3d(
-            FloorByMagnitude(engineAngAccel.X, rcsFloorAngAccel.X),
-            FloorByMagnitude(engineAngAccel.Y, rcsFloorAngAccel.Y),
-            FloorByMagnitude(engineAngAccel.Z, rcsFloorAngAccel.Z));
+        var rcs = RcsThrusterTorqueBody;
+        var appliedAngAccel = engineAngAccel;
+        if (rcs.MagnitudeSquared > 0.0)
+        {
+            var inertia = Parts.GetMassProperties().InertiaBody;
+            appliedAngAccel += new Vector3d(
+                inertia.M11 > 0.0 ? rcs.X / inertia.M11 : 0.0,
+                inertia.M22 > 0.0 ? rcs.Y / inertia.M22 : 0.0,
+                inertia.M33 > 0.0 ? rcs.Z / inertia.M33 : 0.0);
+        }
         if (appliedAngAccel.MagnitudeSquared > 0.0)
             AngularVelocity = AngularVelocity
                 + Orientation.Rotate(appliedAngAccel) * (dt * DockedInertiaScale());
-
-        // Limitar velocidad angular máxima (20°/s = 0.35 rad/s) — solo mientras se pilota
-        // activamente; un disturbio no comandado (motor caído) no está sujeto a este límite
-        // de autoridad de control.
-        if (hasInput)
-        {
-            double maxAngVel = 0.35;
-            double mag = AngularVelocity.Magnitude;
-            if (mag > maxAngVel)
-                AngularVelocity = AngularVelocity * (maxAngVel / mag);
-        }
-
-        // SAS: solo amortigua cuando el jugador no está dando input
-        if (SASEnabled && !hasInput && auth > 1e-6)
-            ApplyStabilityAugmentation(dt, pressure, auth);
 
         // ── Aerodinámica rotacional por torque real ─────────────────────────
         // El arrastre actúa en un centro de presión detrás del CoM y crea un momento que se
@@ -1164,14 +1693,7 @@ public class Vessel
             {
                 double temp = System.Math.Max(1.0, refBody.Atmosphere.GetTemperature(altitude));
                 double? aerodynamicCenterOffset = Parts.AerodynamicCenterOffsetYM;
-                bool hasBodyFlaps = false;
-                foreach (var part in Parts.PartList)
-                {
-                    if (part.Definition.IsStarshipFamily
-                        && part.Definition.HasVehicleRole("command")
-                        && !part.IsBroken)
-                        hasBodyFlaps = true;
-                }
+                bool hasBodyFlaps = HasFunctionalBodyFlaps();
 
                 var angularAccel = AerodynamicsModel.ComputeAttitudeAngularAcceleration(
                     density,
@@ -1204,19 +1726,8 @@ public class Vessel
             }
         }
 
-        // Apply the physical angular-rate envelope after every torque source, including aero.
-        // Clamping earlier allowed a high-q aerodynamic moment to bypass the limit in the same
-        // integration step and produce a numerically explosive snap.
-        const double maximumAngularRate = 0.35;
-        double controlledRateEnvelope = System.Math.Max(
-            maximumAngularRate, incomingAngularRate);
-        double finalAngularRate = AngularVelocity.Magnitude;
-        if (finalAngularRate > controlledRateEnvelope)
-            AngularVelocity *= controlledRateEnvelope / finalAngularRate;
-
         // Ground contact and disturbances (a failed-on thruster) are external physical
-        // torques, not actuator commands. Apply them after the vehicle-control rate envelope
-        // so they can genuinely rotate the rigid body instead of being clipped to 20°/s.
+        // torques, not actuator commands.
         var externalTorqueWorld = externalContactTorqueWorld + Orientation.Rotate(DisturbanceTorqueBody);
         if (externalTorqueWorld.MagnitudeSquared > 1e-12)
         {
@@ -1240,35 +1751,6 @@ public class Vessel
         }
     }
 
-    /// <summary>
-    /// Rate damping by the vehicle's own attitude actuators. Each body axis keeps the
-    /// former 0.005^dt response as an upper bound, but can only shed what the available
-    /// angular acceleration (RCS floor or live differential TVC) removes in <paramref name="dt"/>.
-    /// SAS is a controller, not a torque source: without authority it cannot stop a tumble.
-    /// </summary>
-    private void ApplyStabilityAugmentation(double dt, double pressure, double auth)
-    {
-        var envelope = Parts.GetDifferentialTVCAngularAccelerationEnvelope(pressure);
-        double inertiaScale = DockedInertiaScale();
-        double pitchYawAuthority = System.Math.Max(PitchYawRcsAuthority, envelope.X) * auth * inertiaScale;
-        double rollAuthority = System.Math.Max(RollRcsAuthority, envelope.Y) * auth * inertiaScale;
-        double exponentialFactor = System.Math.Pow(0.005, dt);
-
-        static double Damp(double rate, double factor, double maximumChange)
-        {
-            double magnitude = System.Math.Abs(rate);
-            double damped = System.Math.Max(magnitude * factor, magnitude - maximumChange);
-            return System.Math.CopySign(System.Math.Max(0.0, damped), rate);
-        }
-
-        var local = Orientation.Inverse().Rotate(AngularVelocity);
-        local = new Vector3d(
-            Damp(local.X, exponentialFactor, pitchYawAuthority * dt),
-            Damp(local.Y, exponentialFactor, rollAuthority * dt),
-            Damp(local.Z, exponentialFactor, pitchYawAuthority * dt));
-        AngularVelocity = Orientation.Rotate(local);
-    }
-
     private void AdvanceFlapActuators(double dt, Vector3d command)
     {
         FlapActuators = HasFunctionalBodyFlaps()
@@ -1290,23 +1772,22 @@ public class Vessel
             .FirstOrDefault();
         double impulseNs = decoupler?.Definition.SeparationImpulseNs ?? 0.0;
 
+        var before = Parts.ComputePartLocalPositions();
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
 
         var debris = CreateDebrisVessel(detached, Name + " (debris)");
 
-        // Rebase the remaining vessel from the old stack-base datum to the physical
-        // separation plane, split by mass ratio so both fragments move (not just this one),
-        // conserving the combined centre of mass. Without this, both vessels occupy the same
-        // world point while their renderers use different local origins, producing total
-        // interpenetration.
+        // Every part keeps its place at the instant of separation; each fragment's datum
+        // moves to its own new lowest point and inherits the rigid-body velocity there.
+        // The decoupler impulse then opens them along the stack axis.
+        PlaceSplitFragmentsRigidly(before, debris);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
-        double gap = System.Math.Max(1.0, debris.VehicleLength);
         double opening = impulseNs > 0.0
             ? impulseNs * (TotalMass + debris.TotalMass)
                 / System.Math.Max(1.0, TotalMass * debris.TotalMass)
             : DefaultSeparationOpeningMs;
-        ApplyMassSplitKinematics(debris, axis, gap, opening);
+        ApplyMassSplitKinematics(debris, axis, 0.0, opening);
 
         // The split changes both position and velocity. Any cached conic now describes
         // the pre-separation stack and must not be reused by the next rails tick.
@@ -1328,16 +1809,17 @@ public class Vessel
     {
         ClearHotStageOverlapState();
 
+        var before = Parts.ComputePartLocalPositions();
         var detached = Parts.SplitAtJoint(joint);
         if (detached == null) return null;
 
         var debris = CreateDebrisVessel(detached, Name + " (structural debris)");
 
-        // Gentle separation along vessel +Y so fragments do not occupy the same origin.
+        // Fragments start where their parts were, with a gentle opening along vessel +Y.
+        PlaceSplitFragmentsRigidly(before, debris);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
-        double gap = System.Math.Max(1.0, debris.VehicleLength);
         const double relativeOpenMs = 0.5;
-        ApplyMassSplitKinematics(debris, axis, gap, relativeOpenMs);
+        ApplyMassSplitKinematics(debris, axis, 0.0, relativeOpenMs);
 
         IsOnRails = false;
         OrbitalState = null;
@@ -1380,6 +1862,33 @@ public class Vessel
         HotStageOverlapCompletedPending = false;
     }
 
+    /// <summary>
+    /// Re-datums this vessel and a fragment just split from it so that every part keeps the
+    /// world position it had in the joined stack (<paramref name="before"/>, the stack's
+    /// part positions). Each fragment's datum (its new lowest point) moves by the change of
+    /// frame and takes the rigid-body velocity v + ω×Δ there; angular velocity is shared.
+    /// Mass, centre of mass, linear and angular momentum are conserved exactly.
+    /// </summary>
+    private void PlaceSplitFragmentsRigidly(Dictionary<Part, Vector3d> before, Vessel fragment)
+    {
+        var (position, velocity) = (Position, Velocity);
+        Rebase(this);
+        Rebase(fragment);
+
+        void Rebase(Vessel vessel)
+        {
+            var after = vessel.Parts.ComputePartLocalPositions();
+            foreach (var (part, local) in after)
+            {
+                if (!before.TryGetValue(part, out var original)) continue;
+                var shiftWorld = Orientation.Rotate(original - local);
+                vessel.Position = position + shiftWorld;
+                vessel.Velocity = velocity + AngularVelocity.Cross(shiftWorld);
+                return;
+            }
+        }
+    }
+
     private Vessel CreateDebrisVessel(PartGraph detached, string name)
     {
         var debris = new Vessel
@@ -1419,10 +1928,7 @@ public class Vessel
         var part = Parts.Parts.FirstOrDefault(p => p.InstanceId == rootPartInstanceId);
         if (part == null) return null;
 
-        var positions = Parts.ComputePartLocalPositions();
-        Vector3d localOffset = positions.TryGetValue(part, out var offset)
-            ? offset - Parts.CenterOfMass
-            : Vector3d.Zero;
+        var before = Parts.ComputePartLocalPositions();
         var detached = Parts.DetachSubtree(rootPartInstanceId);
         if (detached == null) return null;
 
@@ -1431,7 +1937,6 @@ public class Vessel
         if (payloadMass <= 0.0 || carrierMass <= 0.0)
             throw new InvalidOperationException("Payload separation requires positive masses.");
 
-        Vector3d relativePosition = Orientation.Rotate(localOffset);
         Vector3d relativeVelocity = Orientation.Rotate(
             separationVelocityLocal ?? new Vector3d(0.0, 0.25, 0.0));
 
@@ -1452,10 +1957,7 @@ public class Vessel
         foreach (var detachedPart in detached.Parts) payload.Parts.AddPart(detachedPart);
         foreach (var joint in detached.Joints) payload.Parts.AddJoint(joint);
 
-        Vector3d positionAxis = relativePosition.Magnitude > 1e-9
-            ? -relativePosition.Normalized
-            : Vector3d.Up;
-        ApplyMassSplitKinematics(payload, positionAxis, relativePosition.Magnitude, 0.0);
+        PlaceSplitFragmentsRigidly(before, payload);
 
         Vector3d velocityAxis = relativeVelocity.Magnitude > 1e-9
             ? -relativeVelocity.Normalized

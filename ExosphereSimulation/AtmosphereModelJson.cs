@@ -80,6 +80,8 @@ public partial class AtmosphereModel
             MolarMass           = json.TryGetProperty("molar_mass",            out var mm)  ? mm.GetDouble()  : 0.0289644,
             HeatCapacityRatio   = json.TryGetProperty("heat_capacity_ratio",   out var hcr) ? hcr.GetDouble() : 1.4,
             SurfaceGravity      = json.TryGetProperty("surface_gravity",       out var sg)  ? sg.GetDouble()  : 9.80665,
+            SutherlandBeta      = json.TryGetProperty("sutherland_beta",       out var sb)  ? sb.GetDouble()  : 1.458e-6,
+            SutherlandTemperature = json.TryGetProperty("sutherland_temperature", out var st) ? st.GetDouble() : 110.4,
             GeopotentialRadius  = json.TryGetProperty("geopotential_radius",   out var gr)  ? gr.GetDouble()  : 6_356_766.0,
             ThermosphereScaleHeight = json.TryGetProperty("thermosphere_scale_height", out var tsh) ? tsh.GetDouble() : 0.0,
             ThermosphereScaleHeightGrowth = json.TryGetProperty("thermosphere_scale_height_growth", out var tg) ? tg.GetDouble() : 0.0,

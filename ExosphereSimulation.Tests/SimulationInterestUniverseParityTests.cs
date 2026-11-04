@@ -175,7 +175,9 @@ public sealed class SimulationInterestUniverseParityTests
         };
         var secondary = new Vessel("secondary")
         {
-            Position = primary.Position + Vector3d.Up * 0.2,
+            // Datums are each 2 m port's bottom face; the flipped secondary's docking node
+            // (port centre) sits 0.2 m above the primary's.
+            Position = primary.Position + Vector3d.Up * 2.2,
             Velocity = Vector3d.Zero,
             Orientation = Quaterniond.FromAxisAngle(Vector3d.Right, System.Math.PI),
             ReferenceBodyId = body.Id,
@@ -399,6 +401,8 @@ public sealed class SimulationInterestUniverseParityTests
             LengthM = 4.0,
             DiameterM = 2.0,
         }, $"{id}-command"));
+        // The conic belongs to the centre of mass; reseed it once the parts exist.
+        vessel.OrbitalState = vessel.ComputeCenterOfMassOrbit(body, 0.0);
         return vessel;
     }
 

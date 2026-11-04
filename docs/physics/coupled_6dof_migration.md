@@ -46,11 +46,159 @@ integrator without changing the production scheduler by default.
     preserves the stage demand after a failed engine, and requires a persistent mount-geometry
     torque residual before the delayed recovery sensor can enable automatic response.
 
+20. `feat(physics): port SAS, RCS floor and pilot rate envelope to the coupled path` — the
+    coupled force evaluator adds the reaction-control floor as a body torque (only the gap
+    the live engine moment does not cover, converted with the integrator's own inertia
+    tensor), and `Vessel.ApplyCoupledControlPostStep` applies SAS damping and the 20°/s
+    pilot envelope once per control step after integration. Before this, a coasting coupled
+    vessel ignored attitude commands, SAS never damped a residual rate, and a held full
+    command spun Flight 7 to 0.87 rad/s instead of saturating at 0.35 rad/s.
+
+21. `test(physics): add touchdown and tower-catch contact parity gates` — the six-leg Starship
+    gear (nominal drop and the measured EDL pre-contact state with lateral drift and 2.5° tilt)
+    and the two-pin tower cradle (centred and 1.2 m offset) settle on both paths: final altitude
+    or position within 0.25 m, settled attitude within 0.02 rad, peak foot load within ±25%,
+    and the same caught/settled gates. These are contact gates from a short pre-contact state;
+    they do not yet replace a controlled descent-to-contact parity run.
+
+30. `feat(physics): fly the coupled rigid body by default` — see the F0 findings in
+    `rigid_body_fidelity_plan.md`: one skirt-datum part frame, atmosphere below the reference
+    surface, exact rigid separation, composite docked stacks, every scheduler on the coupled
+    path, co-integrated water contact, centre-of-mass conics and navigation state. Full suite
+    1184/1184 with the coupled path on; Mercury-Atlas, Saturn V and Flight 14 calibrations pass
+    without retuning.
+
+31. `feat(physics): distributed per-part aerodynamics by default (F1)` — see the F1 findings in
+    `rigid_body_fidelity_plan.md`. Slender stacks fly Allen–Perkins crossflow + Munk
+    slender-body normal force + axial drag per element at v + ω×r; the integrator parity gates
+    compare both paths on the aggregate model (`DistributedAerodynamicsEnabled = false`), and
+    their legacy side now really runs the split tick. Full suite 1190/1190.
+
+## Inertia-model divergence (resolved by step 22)
+
+A 30 s guided Flight 7 ascent with SAS windows ends with matching attitude (0.0025 rad) and
+rate, but passes through a 0.23 rad transient and finishes 392 m apart. The coupled body
+turns ~1.34× faster for the same engine torque: the legacy tick divides by an envelope
+inertia (`PartGraph.TransverseMomentOfInertia`, a uniform solid cylinder of the full stack),
+while the coupled integrator uses the per-part, parallel-axis tensor about the true centre of
+mass. Legacy-envelope / coupled-tensor pitch inertia ratios on the shipped vehicles:
+
+| Vehicle | Pitch/yaw | Roll |
+| --- | --- | --- |
+| Starship Flight 7 / Flight 12 V3 | 1.35 / 1.34 | 1.00 |
+| Falcon 9 Block 5 standard / extended | 1.62 / 1.82 | 1.97 |
+| New Glenn 7×2 | 1.90 | 1.00 |
+| Titan II GLV-8 (Gemini 8) | 1.68 | 1.00 |
+| Mercury-Redstone 3 / Mercury-Atlas 6 | 1.83 / 2.28 | 1.35 / 1.02 |
+| Saturn V AS-503 / AS-506 | 2.33 / 2.35 | 1.04 |
+| Agena 5003 / LM-5 Eagle | 1.08 / 1.10 | 1.00 / 1.05 |
+
+The tensor is the physically representative model; the envelope over-states pitch inertia
+on every launcher. Longer controlled-ascent and EDL parity cannot close until both paths read
+one inertia model. Moving the legacy path onto the tensor makes every launcher 1.3–2.3× more
+responsive in pitch, so it must be done together with re-validating `[G]` ascent, EDL and the
+historical directors, not as a tolerance change.
+
+22. `fix(physics): read legacy inertia from the per-part tensor` — `PartGraph`
+    `TransverseMomentOfInertia` (mean of I_xx and I_zz) and `AxialMomentOfInertia` (I_yy) now
+    come from the same parallel-axis tensor the coupled integrator uses, so both paths divide
+    torque by one model. Re-validation across the full suite: 1166/1174 passed on the first run;
+    the eight failures and their resolutions:
+    - Saturn V ascent (AS-503, disturbed S-II separation, AS-506, lunar launch window): the S-IC
+      used a fixed damping of 1.2 tuned to the over-stated inertia. Every stage now uses an
+      authority-scaled gain at ζ 0.7 (`Apollo8FlightProfile.AscentDampingGain`), in both the
+      test flight and `HistoricalFlightProfileController`. AS-503 inserts at T+696 s with
+      68.5 t (historical ~T+685 s, ~70 t); AS-506 at T+696 s with 70.4 t and 3 299 m/s of TLI
+      capacity (flight: T+709 s, 75.7 t). ζ 0.6 loses the disturbed separation; ζ ≥ 0.8 costs
+      4–20 t.
+    - Starship Ship-only gimbal authority rises from ~0.09 to 0.216 rad/s² because its mass sits
+      low; the test range was moved and its ordering assertions kept.
+    - Stage-separation conservation fixture parts had no attachment nodes, so every part sat at
+      the root and the tensor lost the stack's parallel-axis term; the fixture now declares
+      physical stack nodes (every catalog part already does).
+    - Flight 14 return: the within-model periapsis calibration against the T+9884 s broadcast
+      anchor was re-fitted for the new dynamics (see the return estimate JSON).
+
+23. `test(physics): add 30 s guided Flight 7 ascent parity gate` — closed-loop pitch program with
+    one-second SAS windows every ten seconds under the real Earth atmosphere. Before step 22 it
+    ended 392 m apart with a 0.23 rad transient; it now stays within 100 m, 10 m/s and 0.05 rad
+    throughout.
+
+24. `test(physics): add terminal flip and landing-burn parity gate` — the catalog Ship
+    (command, tank, engines, six-leg gear) starts at 600 m, 70 m/s down and 60° from vertical,
+    and both paths fly the same EDLController-shaped law: axis pointing with lateral-drift cant,
+    descent-rate profile with gravity feed-forward, and the monotone 3→2→1 engine step-down.
+    After the flip both agree within about 1 m of altitude and 0.1 m/s of descent rate at
+    T+40 s; both touch down softly (1.3 and 2.4 m/s), settle upright and stay inside the gear's
+    2.5 MN load limit. Settle time is not compared: the throttle floor and discrete engine
+    step-down turn a one-metre difference into several seconds of hover.
+
+    During rapid rotation the two paths also report different reference-point velocities: the
+    legacy tick rotates the vessel about its datum and integrates the datum as if it were the
+    centre of mass, while the coupled path rotates about the true centre of mass and derives the
+    datum velocity with ω×r. This shows up mid-flip (several m/s) and vanishes once rotation
+    stops; making legacy rotate about the centre of mass is the next fidelity item.
+
+25. `fix(physics): rotate the legacy tick about the centre of mass` — in free flight the legacy
+    off-rails step now carries the centre-of-mass state through the attitude update and the
+    translational RK4 and rebuilds the datum with the step-start offset (datum = COM − q·c₀,
+    v_datum = v_COM − ω×q·c₀), the same convention as the coupled path; propellant drain that
+    moves the centre of mass does not move the structure. Under landing, catch or water contact
+    the datum stays the pivot: the split legacy step applies contact torque once per step,
+    outside RK4, and rotating about a centre of mass ~20 m above the feet drove them into the
+    ground (the terminal-descent gate tipped 0.35 rad and overloaded the gear). A vehicle on its
+    legs or pins pivots about the loaded contact anyway. The terminal gate now agrees within
+    3 cm and 0.001 m/s at T+40 s (was ~0.9 m), with a new mid-flip check on the datum velocity
+    (≤ 0.25 m/s at T+2 s while rotating); its tolerances were tightened to 0.5 m / 0.1 m/s.
+
+26. `test(physics): add flap-controlled entry parity gate` — the Flight 12 V3 Ship enters at
+    75 km, 7.3 km/s and −1°, belly-first at 70° with lift up, engines off and SAS off; the four
+    body flaps with the Flight 14 static-moment trim are the only attitude actuators. After
+    60 s (~420 km down-range, dynamic pressure building to ~2.2 kPa) the paths end 7 m apart in
+    altitude, 0.9 m/s in speed and ~25 m in position, both hold the trim within 0.93°, and peak
+    angular rates match to 0.0001 rad/s. Gates: 50 m, 5 m/s, 150 m, 3° tracking, 2% peak q.
+    This is the first evidence that the coupled RK4 does not need the legacy post-aero rate
+    envelope under entry dynamic pressure. A second case flies the subsonic belly-flop: 3 km,
+    80 m/s straight down, broadside, 20 s on flaps to ~1.56 km at ~3 kPa. The paths end 0.14 m
+    apart in altitude, 0.003 m/s in speed and ~2 m in position, with peak tracking 4.3° / 4.1°,
+    final 0.70° / 0.65° and peak rates 0.090 / 0.088 rad/s. The flip and landing burn that
+    follow are covered by step 24.
+
+27. `test(physics): add continuous entry-to-belly-flop parity gate` — the production Flight 14
+    descent law (`Flight14DescentController.ComputeGuidanceCommand`, now a public pure step:
+    bank-limited hypersonic corridor, 55°→90° angle schedule, slewed belly-first reference,
+    flap trim) flies the V3 Ship from the 90 km handoff (7.3 km/s, −1.5°) to the 3 km
+    belly-flop endpoint on both paths, through Mach 1. Measured: 913.5 / 913.9 s to the endpoint,
+    Mach 1 at 752.0 / 752.3 s, peak q 6 347 / 6 330 Pa, peak load 1.950 / 1.945 g, peak heat
+    flux within 0.13%, peak and transonic angular rates equal to 1e-4 rad/s, end speed equal to
+    0.001 m/s, ground track 1.9 km apart after ~5 000 km. Gates: 3 s, 2% on peaks, 0.005 rad/s,
+    1 m/s, 5 km. With step 24 this covers entry to touchdown, in two segments.
+
+28. `test(physics): add production ascent through staging parity gate` — the production Flight 14
+    launch (`Flight14LaunchDiagnostic`: pad, 33 Raptors, max-q, hot staging, Ship ascent, coast and
+    insertion burn, with the 26-unit payload) flown by `Flight14LaunchController` on each path.
+    Both reach `OrbitReady`. Measured legacy / coupled: staging T+142.02 s on both at 46.16 /
+    46.73 km and 2 217 / 2 219 m/s; max-q 36.1 / 35.3 kPa at T+68.6 / 67.8 s; cutoff T+494.58 /
+    494.30 s with apsides 281.2 × 61.6 / 280.9 × 61.0 km; insertion complete T+1 516 / 1 513 s;
+    Ship mass within 0.4%; peak angular rates within 2%. The remaining max-q gap is a modelling
+    difference, not an integrator one: the coupled evaluator samples gravity and air at the
+    centre of mass, the legacy tick at the aft datum tens of metres lower. Moving legacy to the
+    centre of mass would shift every calibrated profile and is left as a separate decision.
+
+29. `test(physics): add belly-flop flip and relight parity gate` — the production
+    `Flight14LandingBurn` (three sea-level Raptors relit from the start budget, flip to vertical
+    on gimbal and flaps, braking burn, 3→1 engine step-down) from a broadside belly-flop at
+    1.2 km and 70 m/s down to the retained 100 m terminal witness. Measured legacy / coupled:
+    flip complete at 8.02 / 8.08 s, witness at 34.56 / 34.72 s, 10.740 / 10.743 m/s, upright
+    0.9959 / 0.9958, propellant 22.86 / 22.95 t, both saturating the 0.35 rad/s envelope and
+    stepping down to one engine. With steps 24, 27 and 28 every Starship flight segment, pad to
+    touchdown, now has a parity gate.
+
 ## Runtime contract
 
-`Universe.Coupled6DofIntegrationEnabled` is disabled by default. It must remain disabled
-until deterministic telemetry comparisons and real framebuffer flight gates establish parity
-for ascent, coast, and EDL. On-rails propagation is not changed by this switch.
+`Universe.Coupled6DofIntegrationEnabled` is enabled by default (step 30). Every scheduler
+dispatches through `IntegrateVesselFullPhysics`; false selects the split tick as a comparison
+baseline. On-rails conics describe the centre of mass.
 
 ## Validation
 
@@ -92,6 +240,16 @@ long-duration fault management.
 
 - Extend the short Flight 7 comparison into a controlled, longer-duration production ascent
   fixture and then controlled EDL.
-- Port or reconcile flap control, SAS/rate limiting, and RCS authority around the recovery
-  controller, including automatic fault isolation and longer-duration ascent cases.
+- With one inertia model (step 22), the 30 s ascent gate (step 23), the terminal descent gate
+  (step 24), the centre-of-mass pivot (step 25) and the 60 s flap entry gate (step 26), remaining
+  segments are covered: ascent through staging to insertion (step 28), entry from 90 km to the
+  belly-flop (step 27), the flip and relight (step 29) and the landing burn to touchdown (step
+  24). Before activation: decide whether the legacy force evaluation should sample at the
+  centre of mass (step 28 note), and run the Godot `[G]` ascent/EDL harnesses on a GPU machine
+  with the switch on.
+- SAS, RCS floor and the pilot rate envelope were ported (step 20). Fidelity phase F3 replaced
+  all three: SAS and the envelope are commands to the actuators on both paths, the floor is
+  gone and RCS torque comes from declared thrusters; the legacy post-aero envelope is removed.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
+  Contact gates (gear and cradle) are closed (step 21); a controlled descent from the flip to
+  contact still needs the inertia unification first.

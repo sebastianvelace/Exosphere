@@ -70,6 +70,8 @@
       }
     ],
     "molar_mass": 0.04401,
+    "sutherland_beta": 1.5034e-06,
+    "sutherland_temperature": 222.0,
     "heat_capacity_ratio": 1.29,
     "surface_gravity": 8.87,
     "geopotential_radius": 6051800.0

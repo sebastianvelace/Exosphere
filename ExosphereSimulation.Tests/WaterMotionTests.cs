@@ -57,11 +57,16 @@ public sealed class WaterMotionTests(ITestOutputHelper output)
         var (_, ship, _, water) = Fixture();
         var properties = ship.Parts.GetMassProperties();
         var resolved = WaterMotionFrame.ResolveMassProperties(ship.Parts, water);
-        Assert.True(water.SkirtDatumYM < 0);
+        // The part frame's origin is the stack's lowest point, so the water skirt datum is
+        // the vessel origin itself.
+        Assert.Equal(0.0, water.SkirtDatumYM!.Value, 9);
         Assert.InRange((resolved.CenterOfMassBody-(properties.CenterOfMassBody-Vector3d.Up*water.SkirtDatumYM!.Value)).Magnitude, 0, 1e-12);
         Assert.Equal(properties.InertiaBody, resolved.InertiaBody);
         var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
-        tank.LiquidFuel *= 0.5; tank.Oxidizer *= 0.5;
+        // Burning propellant (here the header tanks, where it rides at water contact) moves
+        // the centre of mass.
+        foreach (var part in ship.Parts.Parts)
+            part.SetHeaderPropellant(part.HeaderPropellantKg.Select(kg => kg * 0.5).ToArray());
         var updated = WaterMotionFrame.ResolveMassProperties(ship.Parts, water);
         Assert.True(updated.Mass < resolved.Mass);
         Assert.True((updated.CenterOfMassBody-resolved.CenterOfMassBody).Magnitude > 0.1);
@@ -101,7 +106,8 @@ public sealed class WaterMotionTests(ITestOutputHelper output)
             }
         }
         Assert.Equal(initialMass, ship.TotalMass);
-        Assert.False(universe.Coupled6DofIntegrationEnabled);
+        // Water motion always runs the coupled water integrator, whatever the global mode.
+        Assert.True(ship.WaterMotionEnabled);
         Assert.True(ship.LastWaterContact?.SubmergedVolumeM3 > 0);
         var up = body.GetGeodeticUp(ship.Position);
         output.WriteLine($"step={step} altitude={ship.GetAltitude(body):G6}m "
@@ -124,7 +130,11 @@ public sealed class WaterMotionTests(ITestOutputHelper output)
         foreach (var payload in ship.Parts.Parts.Where(p => p.Definition.HasVehicleRole("payload")).ToArray())
             ship.Parts.DetachSubtree(payload.InstanceId);
         var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
-        tank.LiquidFuel = 15000; tank.Oxidizer = 55000;
+        // The production state at water contact: main tanks vented before entry, about a
+        // third of the header propellant left after the terminal burn.
+        tank.LiquidFuel = 0; tank.Oxidizer = 0;
+        foreach (var part in ship.Parts.Parts)
+            part.SetHeaderPropellant(part.Definition.HeaderTanks.Select(h => h.CapacityKg / 3.0).ToArray());
         var positions = ship.Parts.ComputePartLocalPositions();
         double bottom = positions.Min(p => p.Value.Y-p.Key.Definition.LengthM*0.5);
         var water = new WaterContactDefinition(ship.MaximumDiameter*0.5, ship.VehicleLength, -3.78,

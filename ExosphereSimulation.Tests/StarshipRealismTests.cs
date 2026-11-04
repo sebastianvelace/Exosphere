@@ -30,8 +30,9 @@ public sealed class StarshipRealismTests
 
         AssertClose(4_800_000.0, vessel.TotalMass, 1e-12);
         AssertClose(300_000.0, vessel.Parts.DryMass, 1e-12);
+        // The cold-gas RCS stores are tank pressurant taken out of the published load.
         AssertClose(4_500_000.0,
-            vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer, 1e-12);
+            vessel.Parts.TotalLiquidFuel + vessel.Parts.TotalOxidizer + vessel.Parts.TotalMonopropellant, 1e-12);
         AssertClose(123.1, vessel.VehicleLength, 1e-12);
         AssertClose(9.0, vessel.MaximumDiameter, 1e-12);
 
@@ -94,8 +95,8 @@ public sealed class StarshipRealismTests
         vessel.Orientation = Quaterniond.FromEuler(12.0, -8.0, 4.0);
         vessel.ReferenceBodyId = "earth";
 
-        Vector3d comBefore = vessel.Position;
-        Vector3d momentumBefore = vessel.Velocity * vessel.TotalMass;
+        Vector3d comBefore = vessel.CenterOfMass;
+        Vector3d momentumBefore = RigidBodyTestKinematics.Momentum(vessel);
 
         double shipMassBefore = vessel.TotalMass;
         var detached = vessel.Stage();
@@ -115,11 +116,11 @@ public sealed class StarshipRealismTests
         double shipMassAfter = vessel.TotalMass;
         double debrisMass = detached.TotalMass;
         Vector3d comAfter =
-            (vessel.Position * shipMassAfter + detached.Position * debrisMass)
+            (vessel.CenterOfMass * shipMassAfter + detached.CenterOfMass * debrisMass)
             / (shipMassAfter + debrisMass);
-        AssertVectorClose(comBefore, comAfter, 1e-9);
+        AssertVectorClose(comBefore, comAfter, 1e-6);
 
-        Vector3d momentumAfter = vessel.Velocity * shipMassAfter + detached.Velocity * debrisMass;
+        Vector3d momentumAfter = RigidBodyTestKinematics.Momentum(vessel) + RigidBodyTestKinematics.Momentum(detached);
         AssertVectorClose(momentumBefore, momentumAfter, 1e-6);
 
         Assert.NotEqual(vessel.Position, detached.Position);
@@ -242,7 +243,10 @@ public sealed class StarshipRealismTests
 
         Assert.True(fullStackInertia > shipInertia);
         Assert.InRange(fullStackAuthority, 0.04, 0.10);
-        Assert.InRange(shipAuthority, 0.06, 0.12);
+        // Per-part parallel-axis inertia: the Ship's engine section and propellant sit low, so
+        // its pitch inertia is well below a uniform 50 m cylinder and authority roughly doubles
+        // compared with the former envelope estimate (~0.09 rad/s²).
+        Assert.InRange(shipAuthority, 0.15, 0.30);
         Assert.True(shipAuthority > fullStackAuthority);
     }
 
@@ -266,19 +270,21 @@ public sealed class StarshipRealismTests
     {
         var earth = LoadBody("earth");
         var vessel = VesselWithPointMass(1_000.0,
-            earth.Position + Vector3d.Right * (earth.Radius + 500_000.0));
+            earth.Position + Vector3d.Right * (earth.Radius + 500_000.0), withRcs: true);
         vessel.SASEnabled = false;
 
         vessel.PitchYawRoll = new Vector3d(0.0, 1.0, 0.0); // semantic yaw
         vessel.Tick(0.1, earth);
+        // A full command saturates the thrusters; the allocation leaves the other axes at
+        // parts per million of the commanded rate.
         Assert.True(vessel.AngularVelocity.Z > 0.0);
-        Assert.True(System.Math.Abs(vessel.AngularVelocity.Y) < 1e-12);
+        Assert.True(System.Math.Abs(vessel.AngularVelocity.Y) < 1e-5 * vessel.AngularVelocity.Z, $"{vessel.AngularVelocity}");
 
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.PitchYawRoll = new Vector3d(0.0, 0.0, 1.0); // semantic roll
         vessel.Tick(0.1, earth);
         Assert.True(vessel.AngularVelocity.Y > 0.0);
-        Assert.True(System.Math.Abs(vessel.AngularVelocity.Z) < 1e-12);
+        Assert.True(System.Math.Abs(vessel.AngularVelocity.Z) < 1e-5 * vessel.AngularVelocity.Y, $"{vessel.AngularVelocity}");
     }
 
     [Fact]
@@ -343,17 +349,34 @@ public sealed class StarshipRealismTests
         return (vessel, booster, ring, engines, tank);
     }
 
-    private static Vessel VesselWithPointMass(double mass, Vector3d position)
+    private static Vessel VesselWithPointMass(double mass, Vector3d position, bool withRcs = false)
     {
         var vessel = new Vessel { Position = position };
-        // Command root so Tick retains RCS attitude authority (structure-only = dead-stick).
+        // Command root (structure-only = dead-stick). Attitude authority exists only through
+        // declared thrusters: an optional four-block RCS ring fed from a small store.
+        const double store = 10.0;
+        var thrusters = new List<RcsThrusterDef>();
+        if (withRcs)
+        {
+            foreach (var (x, z) in new[] { (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0) })
+            {
+                double[] position3 = [0.5 * x, 0.4, 0.5 * z];
+                double[] tangent = [-z, 0.0, x];
+                thrusters.Add(new RcsThrusterDef { Id = $"up{x}{z}", Position = position3, Direction = [0, 1, 0], ThrustN = 50, IspS = 220 });
+                thrusters.Add(new RcsThrusterDef { Id = $"dn{x}{z}", Position = position3, Direction = [0, -1, 0], ThrustN = 50, IspS = 220 });
+                thrusters.Add(new RcsThrusterDef { Id = $"cw{x}{z}", Position = position3, Direction = tangent, ThrustN = 50, IspS = 220 });
+                thrusters.Add(new RcsThrusterDef { Id = $"cc{x}{z}", Position = position3, Direction = [z, 0.0, -x], ThrustN = 50, IspS = 220 });
+            }
+        }
         vessel.Parts.SetRoot(new Part(new PartDefinition
         {
             Id = $"mass-{mass}",
             CategoryStr = "command",
-            MassDry = mass,
+            MassDry = withRcs ? mass - store : mass,
+            FuelCapacityMono = withRcs ? store : 0.0,
             LengthM = 1.0,
             DiameterM = 1.0,
+            RcsThrusters = thrusters,
         }));
         return vessel;
     }

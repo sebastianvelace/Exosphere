@@ -99,6 +99,35 @@ public sealed class CatchContactTests
         Assert.True(booster.CatchPinRadiusM > 0.0);
     }
 
+    [Theory]
+    [InlineData(-1.0, 0.0)]
+    [InlineData(-1.5, 1.2)]
+    public void CoupledTowerCatchSettlesLikeLegacy(double verticalSpeed, double lateralOffset)
+    {
+        var legacy = CreateCatchCase(verticalSpeed, lateralOffset);
+        var coupled = CreateCatchCase(verticalSpeed, lateralOffset);
+        // Integrator parity on one force model: the legacy baseline must really be the
+        // split tick, and both sides use the aggregate aerodynamics it understands.
+        legacy.universe.Coupled6DofIntegrationEnabled = false;
+        legacy.universe.DistributedAerodynamicsEnabled = false;
+        coupled.universe.Coupled6DofIntegrationEnabled = true;
+        coupled.universe.DistributedAerodynamicsEnabled = false;
+
+        for (int i = 0; i < 3_000; i++)
+        {
+            if (!legacy.vessel.IsCaught && !legacy.vessel.IsDestroyed) legacy.universe.Tick(0.005);
+            if (!coupled.vessel.IsCaught && !coupled.vessel.IsDestroyed) coupled.universe.Tick(0.005);
+            if (legacy.vessel.IsCaught && coupled.vessel.IsCaught) break;
+        }
+
+        Assert.True(legacy.vessel.IsCaught);
+        Assert.False(coupled.vessel.IsDestroyed);
+        Assert.True(coupled.vessel.IsCaught, "coupled catch pins never settled in the cradle");
+        Assert.True(coupled.universe.LastCoupled6DofTelemetry.Integrated);
+        Assert.Equal(2, coupled.vessel.LastCatchContact!.ContactCount);
+        Assert.InRange((legacy.vessel.Position - coupled.vessel.Position).Magnitude, 0.0, 0.25);
+    }
+
     private static (Universe universe, Vessel vessel) CreateCatchCase(
         double verticalSpeed, double lateralOffset)
     {

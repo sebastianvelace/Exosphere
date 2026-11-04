@@ -280,7 +280,7 @@ public partial class VesselRenderer : Node3D
             { TopRadius = BodyR, BottomRadius = BodyR, Height = ShBodyH, RadialSegments = 64 },
             shSteel, new Vector3(0, ShBodyBot + ShBodyH * 0.5f, 0));
         AddWeldRings("SHBarrelWeld", BodyR + 0.018f, ShBodyBot + 1.1f, ShBodyTop - 1.0f, 9);
-        AddHullRing("SHFrostLOX", BodyR + 0.026f, ShBodyTop - 3.8f, 0.10f, FrostMat);
+        AddFrostBands("SH", "booster", ShBodyBot, ShBodyTop, leewardOnly: false);
 
         // Raceway / conduit running up one side of the booster (real SH detail).
         AddMesh("SHRaceway", new BoxMesh { Size = new Vector3(0.20f, 16.5f, 0.34f) },
@@ -495,9 +495,9 @@ public partial class VesselRenderer : Node3D
 
     private void BuildStarshipSection(Vessel vessel, float yOffset)
     {
-        var fwdFlapTiles = TileMat(tileScale: 7.0f);
+        var fwdFlapTiles = TileMat(tileScale: 7.0f, planar: true);
         RegisterTileMat(TileCharZone.FwdFlap, fwdFlapTiles);
-        var aftFlapTiles = TileMat(tileScale: 8.5f);
+        var aftFlapTiles = TileMat(tileScale: 8.5f, planar: true);
         RegisterTileMat(TileCharZone.AftFlap, aftFlapTiles);
         var darkSteel = Mat(new Color(0.50f, 0.50f, 0.53f), 0.88f, 0.32f);
         var detailSteel = Mat(new Color(0.18f, 0.19f, 0.21f), 0.42f, 0.58f);
@@ -529,8 +529,7 @@ public partial class VesselRenderer : Node3D
         // The steel shader already carries ring-weld variation. Separate torus-like
         // weld geometry sat above the TPS radius and drew bright metal stripes across
         // the windward heat shield, which cannot happen on the tiled flight article.
-        AddHullRing("ShipFrostLOX", BodyR + 0.026f, bodyTop - 1.3f, 0.08f, FrostMat);
-        AddHullRing("ShipFrostCH4", BodyR + 0.026f, bodyMid - 1.75f, 0.07f, FrostMat);
+        AddFrostBands("Ship", "tank", bodyBot, bodyTop, leewardOnly: true);
 
         AddSurfaceBox("ShipRaceway", angle: 0f, y: bodyMid, height: ShipBodyH * 0.81f,
             width: 0.15f, depth: 0.12f, mat: detailSteel, radius: BodyR + 0.045f);
@@ -1434,6 +1433,7 @@ public partial class VesselRenderer : Node3D
         if (_landingGearStateTimer <= 0.0)
         {
             _landingGearStateTimer = SecondaryVisualPeriodSeconds;
+            UpdateFrostBands(body);
             _landingGearDeployed = TargetVessel.Parts.Parts.Any(p =>
                 p.Definition.Category == PartCategory.Landing && p.IsDeployed);
             foreach (var rig in _landingLegRigs)
@@ -2324,9 +2324,12 @@ public partial class VesselRenderer : Node3D
             MetallicSpecular = 0.55f,
             Roughness        = roughness,
             RimEnabled       = false,
+            // Bounded fill only (same order as steel.gdshader's fill_strength): metal in
+            // space must not glow. The previous 2.2x blue-tinted emission lit the aft skirt
+            // and weld rings like neon tubes.
             EmissionEnabled  = metallic > 0.45f,
-            Emission         = albedo * new Color(0.55f, 0.72f, 1.0f),
-            EmissionEnergyMultiplier = metallic > 0.45f ? 2.2f : 0f,
+            Emission         = albedo,
+            EmissionEnergyMultiplier = metallic > 0.45f ? 0.05f : 0f,
         };
 
     // The procedural stainless-steel shader, loaded once and shared.
@@ -2369,9 +2372,16 @@ public partial class VesselRenderer : Node3D
     private static Shader TileShader =>
         _tileShader ??= GD.Load<Shader>("res://assets/shaders/heat_tile.gdshader");
 
-    private static ShaderMaterial TileMat(float rimStrength = 0.06f, float tileScale = 11.0f)
+    /// <summary>
+    /// Real hexagonal TPS (~0.36 m tiles) laid out in metres on the mesh: cylindrical arc
+    /// length for hull and nose, the local XY plane for flap blades (<paramref name="planar"/>).
+    /// <paramref name="tileScale"/> is kept for the legacy UV path of the shader.
+    /// </summary>
+    private static ShaderMaterial TileMat(float rimStrength = 0.06f, float tileScale = 11.0f, bool planar = false)
     {
         var m = new ShaderMaterial { Shader = TileShader };
+        m.SetShaderParameter("tile_pitch", 0.36f / MetresPerUnit);
+        m.SetShaderParameter("tile_mapping", planar ? 1 : 0);
         m.SetShaderParameter("albedo_color", TileBaseColor);
         m.SetShaderParameter("roughness_val", 0.93f);
         m.SetShaderParameter("hex_scale", tileScale);
@@ -2441,6 +2451,73 @@ public partial class VesselRenderer : Node3D
     private StandardMaterial3D? _frostMat;
     private StandardMaterial3D FrostMat =>
         _frostMat ??= Mat(new Color(0.70f, 0.80f, 0.86f), 0.05f, 0.86f);
+
+    // ── Cryogenic frost ───────────────────────────────────────────────────
+    // Moist air freezes on the steel wherever subcooled propellant sits behind it, so the
+    // frost covers each tank from its bottom up to the liquid level, LOX aft and CH4 above
+    // (volume split from the loaded masses: LOX 1141 kg/m³, CH4 422 kg/m³). Tiles insulate
+    // the windward side, so on Starship it forms only on the leeward steel. It sheds as
+    // dynamic pressure and speed build early in ascent and is never present in space.
+    private const double LoxDensityKgPerM3 = 1141.0;
+    private const double MethaneDensityKgPerM3 = 422.0;
+    private const double FrostShedSpeedMps = 350.0;
+    private const double FrostShedAltitudeM = 12_000.0;
+
+    private sealed class FrostBand
+    {
+        public required MeshInstance3D Node;
+        public required string Role;
+        public required bool Oxidizer;
+        public required float Bottom;
+        public required float Height;
+    }
+
+    private readonly List<FrostBand> _frostBands = new();
+
+    private void AddFrostBands(string prefix, string role, float bodyBottom, float bodyTop, bool leewardOnly)
+    {
+        var tank = TargetVessel?.Parts.Parts.FirstOrDefault(p => p.Definition.HasVehicleRole(role));
+        if (tank == null) return;
+        double loxVolume = tank.Definition.FuelCapacityOx / LoxDensityKgPerM3;
+        double methaneVolume = tank.Definition.FuelCapacityLF / MethaneDensityKgPerM3;
+        if (loxVolume + methaneVolume <= 0.0) return;
+        float span = bodyTop - bodyBottom;
+        float loxHeight = span * (float)(loxVolume / (loxVolume + methaneVolume));
+        const float tpsArc = 3.49f; // the windward heat-shield sector (~200°)
+        Mesh Sector() => leewardOnly
+            ? BuildCylindricalSectorMesh(BodyR + 0.012f, 1f, Mathf.Pi + tpsArc * 0.5f, Mathf.Tau - tpsArc)
+            : BuildCylindricalSectorMesh(BodyR + 0.012f, 1f, 0f, Mathf.Tau, radialSegments: 64);
+        void Band(string name, bool oxidizer, float bottom, float height)
+        {
+            var node = AddMesh(name, Sector(), FrostMat, new Vector3(0f, bottom + height * 0.5f, 0f));
+            node.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+            node.Visible = false;
+            _frostBands.Add(new FrostBand { Node = node, Role = role, Oxidizer = oxidizer, Bottom = bottom, Height = height });
+        }
+        if (loxVolume > 0.0) Band(prefix + "FrostLOX", true, bodyBottom, loxHeight);
+        if (methaneVolume > 0.0) Band(prefix + "FrostCH4", false, bodyBottom + loxHeight, span - loxHeight);
+    }
+
+    private void UpdateFrostBands(CelestialBody? body)
+    {
+        if (_frostBands.Count == 0 || TargetVessel == null) return;
+        bool frostWeather = body?.Atmosphere != null
+            && TargetVessel.GetAltitude(body) < FrostShedAltitudeM
+            && TargetVessel.GetSurfaceVelocity(body).Magnitude < FrostShedSpeedMps;
+        foreach (var band in _frostBands)
+        {
+            var tank = TargetVessel.Parts.Parts.FirstOrDefault(p => p.Definition.HasVehicleRole(band.Role));
+            double capacity = tank == null ? 0.0
+                : band.Oxidizer ? tank.Definition.FuelCapacityOx : tank.Definition.FuelCapacityLF;
+            double load = tank == null ? 0.0 : band.Oxidizer ? tank.Oxidizer : tank.LiquidFuel;
+            float fill = capacity > 0.0 ? (float)System.Math.Clamp(load / capacity, 0.0, 1.0) : 0f;
+            band.Node.Visible = frostWeather && fill > 0.02f;
+            if (!band.Node.Visible) continue;
+            float height = band.Height * fill;
+            band.Node.Scale = new Vector3(1f, height, 1f);
+            band.Node.Position = new Vector3(0f, band.Bottom + height * 0.5f, 0f);
+        }
+    }
 
     // A thin ring proud of the hull marking a weld seam between barrel sections.
     private void AddWeldRing(string name, float radius, float y)
@@ -2909,6 +2986,7 @@ public partial class VesselRenderer : Node3D
         _skyFillLight = null;
         _vehicleLightsSuperHeavy = false;
         _flapRigs.Clear();
+        _frostBands.Clear();
         _landingLegRigs.Clear();
         _landingGearDeployment = 0f;
         _plumes   = null;

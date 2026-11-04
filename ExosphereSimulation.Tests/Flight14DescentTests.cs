@@ -10,7 +10,9 @@ public sealed class Flight14DescentTests(ITestOutputHelper output)
     [Fact]
     public void LoadedMissionDescendsWithTheOriginalReserveAndPhysicalState()
     {
-        var run = Flight14LaunchDiagnostic.CreateWithDescent(DataDirectory());
+        // Starts from the shared pad-to-entry checkpoint (Flight14EntryCheckpointTests proves
+        // a resumed run reproduces the continuous one); the full chain is Flight14ReturnTests.
+        var run = Flight14LaunchDiagnostic.AttachDescent(Flight14EntryCheckpointFixture.Resume(), DataDirectory());
         var descent = run.DescentController!;
         var guard = new ControlWriteGuard(descent, run.Ship);
         run.Universe.PhysicsStepController = guard;
@@ -31,8 +33,13 @@ public sealed class Flight14DescentTests(ITestOutputHelper output)
         Assert.InRange(end.AtmosphereRelativeSpeedMps, 1, definition.MaximumEndSpeedMps);
         Assert.True(end.VerticalSpeedMps < 0);
         Assert.True(end.SpecificEnergyJPerKg < descent.StartWitness!.SpecificEnergyJPerKg);
-        Assert.Equal(run.ReturnController.PostDeorbitPropellantKg, end.RemainingPropellantKg, 6);
-        Assert.Equal(end.RemainingPropellantKg, originalTank.LiquidFuel + originalTank.Oxidizer, 6);
+        // No reseeding: the post-deorbit main tank minus the vented residual, plus the headers.
+        Assert.True(run.Ship.VentedPropellantKg > 0.0, "the main-tank residual must be vented before entry");
+        double headers = run.Ship.Parts.Parts.Sum(p => p.HeaderLiquidFuel + p.HeaderOxidizer);
+        Assert.Equal(run.ReturnController.PostDeorbitPropellantKg - run.Ship.VentedPropellantKg + headers,
+            end.RemainingPropellantKg, 6);
+        Assert.Equal(end.RemainingPropellantKg,
+            run.Ship.Parts.Parts.Sum(p => p.LiquidFuel + p.Oxidizer + p.HeaderLiquidFuel + p.HeaderOxidizer), 6);
         Assert.Equal(0, run.Ship.Throttle);
         Assert.False(run.Ship.IsDestroyed);
         Assert.False(run.Ship.StructuralControlLost);

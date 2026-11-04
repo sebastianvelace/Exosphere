@@ -106,7 +106,6 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         Assert.InRange(contact.LatitudeDegrees, 23, 29); Assert.InRange(contact.LongitudeDegrees, -97.25, -90);
         Assert.True(controller.Booster.WaterMotionEnabled);
         Assert.NotNull(controller.Booster.LastWaterMotionTelemetry);
-        Assert.False(universe.Coupled6DofIntegrationEnabled);
         Assert.True(controller.FlightTerminationTriggered);
         Assert.Equal(VesselDestructionCause.FlightTermination, controller.Booster.DestructionCause);
         Assert.Equal(0, controller.Booster.Throttle);

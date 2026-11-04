@@ -55,8 +55,8 @@ public sealed class PeriapsisCaptureBurn
             return;
         }
 
-        var relative = vessel.Position - body.Position;
-        var velocity = vessel.Velocity - body.Velocity;
+        var relative = vessel.CenterOfMass - body.Position;
+        var velocity = vessel.CenterOfMassVelocity - body.Velocity;
         var orbit = OrbitalElements.FromStateVector(relative, velocity, body.GM, body.Id, epoch);
         PeriapsisAltitudeM = orbit.Periapsis - body.Radius;
         ApoapsisAltitudeM = orbit.Apoapsis - body.Radius;
@@ -155,8 +155,8 @@ public sealed class PeriapsisCaptureBurn
     private double EstimateBurnSeconds(Vessel vessel, CelestialBody body, OrbitalElements orbit, double thrust)
     {
         double rp = orbit.Periapsis;
-        var velocity = vessel.Velocity - body.Velocity;
-        double r = (vessel.Position - body.Position).Magnitude;
+        var velocity = vessel.CenterOfMassVelocity - body.Velocity;
+        double r = (vessel.CenterOfMass - body.Position).Magnitude;
         double energy = 0.5 * velocity.MagnitudeSquared - body.GM / r;
         double periapsisSpeed = System.Math.Sqrt(System.Math.Max(0.0, 2.0 * (energy + body.GM / rp)));
         double targetApoapsis = body.Radius + _targetApoapsisAltitudeM;

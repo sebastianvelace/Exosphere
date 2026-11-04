@@ -43,6 +43,7 @@ public partial class ReentryPlasmaController : Node3D
     private const double VisualWakeTailGain = 0.34;
     private const float VisualEdgeOnset = 0.04f;
     private const float VisualEdgeRange = 0.72f;
+    private const float FlapEdgeHeatConcentration = 3.5f;
 
     // Last presentation sample, exposed only for deterministic visual evidence. These
     // values never feed the simulation, damage model or guidance.
@@ -331,6 +332,7 @@ public partial class ReentryPlasmaController : Node3D
         mat.SetShaderParameter("noise_tex", _shockMat!.GetShaderParameter("noise_tex"));
         mat.SetShaderParameter("effect_kind", 2);
         mat.SetShaderParameter("heat_level", 0f);
+        mat.SetShaderParameter("edge_magenta", kind == EdgeKind.Flap ? 1f : 0f);
 
         Mesh mesh = kind == EdgeKind.Nose
             ? new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 24, Rings = 12 }
@@ -441,7 +443,11 @@ public partial class ReentryPlasmaController : Node3D
             }
             if (edge.Anchor is not MeshInstance3D)
                 edge.Mesh.Scale = edge.BaseScale * (0.75f + 0.35f * k);
-            edge.Mat.SetShaderParameter("heat_level", Mathf.Clamp(k * exposure, 0f, 1f));
+            // Stagnation heating scales ~1/sqrt(nose radius): a flap leading edge runs much
+            // hotter than the barrel, so it keeps glowing after the broad sheath fades.
+            float concentration = edge.Kind == EdgeKind.Flap ? FlapEdgeHeatConcentration : 1f;
+            edge.Mat.SetShaderParameter("heat_level",
+                Mathf.Clamp(k * exposure * concentration, 0f, 1f));
             edge.Mat.SetShaderParameter("opacity_gain", alphaCap);
 
         }

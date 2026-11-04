@@ -5,7 +5,8 @@
   "category": "command",
   "vehicle_family": "apollo",
   "vehicle_role": "command_module",
-  "mass_dry": 5556.5065325,
+  "mass_dry": 5445.5065325,
+  "fuel_capacity_mono": 111,
   "length_m": 3.39,
   "diameter_m": 3.91,
   "drag_coefficient": 0.92,
@@ -29,6 +30,22 @@
   "docking_capture_range_m": 0.85,
   "docking_max_capture_speed_mps": 0.35,
   "docking_alignment_tolerance_deg": 14,
+  "rcs_attitude_starts_enabled": false,
+  "rcs_arms_when_isolated": true,
+  "rcs_thrusters": [
+    {"id": "A_pitch_neg", "position": [0.0, -0.85, 1.6], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "A_pitch_pos", "position": [0.0, -0.85, -1.6], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "A_yaw_a", "position": [1.6, -0.85, 0.0], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "A_yaw_b", "position": [-1.6, -0.85, 0.0], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "A_roll_cw", "position": [1.6, -0.45, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "A_roll_ccw", "position": [-1.6, -0.45, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "B_pitch_neg", "position": [0.0, -0.75, 1.6], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "B_pitch_pos", "position": [0.0, -0.75, -1.6], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "B_yaw_a", "position": [1.6, -0.75, 0.0], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "B_yaw_b", "position": [-1.6, -0.75, 0.0], "direction": [0.0, 1.0, 0.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "B_roll_cw", "position": [1.6, -0.35, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 413.68, "isp_s": 270},
+    {"id": "B_roll_ccw", "position": [-1.6, -0.35, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 413.68, "isp_s": 270}
+  ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 1.695, 0], "size": 3, "type": "stack"},
     {"id": "bottom", "position": [0, -1.695, 0], "size": 3, "type": "stack"}

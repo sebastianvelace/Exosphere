@@ -64,10 +64,13 @@ public sealed class EngineOutSensor
         {
             if (!part.HasEngineRuntime) continue;
             telemetry.AddRange(part.GetEngineTelemetry(ambientPressure));
+            // Mount positions are relative to the engine part; the moment arm about the
+            // vessel's centre of mass needs them in the vessel frame.
+            vessel.Parts.TryGetPartLocalPosition(part, out var partPosition);
             foreach (var row in part.GetEngineInstanceFaultIsolationGeometrySnapshot())
                 geometry.Add(new EngineFaultIsolationGeometry(
                     row.InstanceId,
-                    row.PositionM,
+                    partPosition + row.PositionM,
                     row.ThrustDirection));
         }
 

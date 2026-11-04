@@ -12,10 +12,19 @@ public sealed class Flight14DescentDefinition
     public double DiagnosticEndAltitudeM { get; set; }
     public double MaximumEndSpeedMps { get; set; }
     public double HypersonicControlThresholdMps { get; set; }
+    /// <summary>Airspeed (m/s) at which the angle of attack starts moving to the terminal value.</summary>
+    public double AngleOfAttackTransitionSpeedMps { get; set; }
     public double TerminalAngleOfAttackSpeedMps { get; set; }
     public double EntryAngleOfAttackDegrees { get; set; }
     public double TerminalAngleOfAttackDegrees { get; set; }
     public double ReferenceSlewRateRadPerSecond { get; set; }
+    /// <summary>
+    /// Reference governor: the attitude reference may lead the actual attitude by at most this
+    /// angle, so a reference the flaps cannot follow (saturated trim) does not wind up.
+    /// </summary>
+    public double MaximumReferenceLeadDegrees { get; set; }
+    /// <summary>Flap travel (deg) the angle-of-attack limiter keeps from each stop.</summary>
+    public double TrimMarginDegrees { get; set; }
     public double BankOnsetDynamicPressurePa { get; set; }
     public double BankFullDynamicPressurePa { get; set; }
     public double TrimOnsetDynamicPressurePa { get; set; }
@@ -37,15 +46,16 @@ public sealed class Flight14DescentDefinition
     public void Validate()
     {
         double[] values = [MaximumMissionSeconds, DiagnosticEndAltitudeM, MaximumEndSpeedMps,
-            HypersonicControlThresholdMps, TerminalAngleOfAttackSpeedMps, EntryAngleOfAttackDegrees,
-            TerminalAngleOfAttackDegrees, ReferenceSlewRateRadPerSecond, BankOnsetDynamicPressurePa,
+            HypersonicControlThresholdMps, AngleOfAttackTransitionSpeedMps, TerminalAngleOfAttackSpeedMps, EntryAngleOfAttackDegrees,
+            TerminalAngleOfAttackDegrees, ReferenceSlewRateRadPerSecond, MaximumReferenceLeadDegrees, TrimMarginDegrees, BankOnsetDynamicPressurePa,
             BankFullDynamicPressurePa, TrimOnsetDynamicPressurePa, TrimFullDynamicPressurePa,
             MinimumDownwardSpeedMps, DownwardSpeedFraction, VerticalResponseSeconds, DownwardSpeedDeadbandMps];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || values.Any(v => !double.IsFinite(v) || v <= 0)
             || EntryAngleOfAttackDegrees > TerminalAngleOfAttackDegrees || TerminalAngleOfAttackDegrees > 90
             || MaximumEndSpeedMps >= TerminalAngleOfAttackSpeedMps
-            || TerminalAngleOfAttackSpeedMps >= HypersonicControlThresholdMps
+            || TerminalAngleOfAttackSpeedMps >= AngleOfAttackTransitionSpeedMps
+            || AngleOfAttackTransitionSpeedMps > HypersonicControlThresholdMps
             || BankOnsetDynamicPressurePa >= BankFullDynamicPressurePa
             || TrimOnsetDynamicPressurePa >= TrimFullDynamicPressurePa
             || DownwardSpeedFraction >= 1)

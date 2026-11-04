@@ -8,6 +8,7 @@
   "mass_dry": 4041.5080167,
   "length_m": 5.51,
   "diameter_m": 3.91,
+  "nose_length_m": 5.51,
   "drag_coefficient": 0.25,
   "axial_drag_coefficient": 0.25,
   "heat_tolerance": 1300,

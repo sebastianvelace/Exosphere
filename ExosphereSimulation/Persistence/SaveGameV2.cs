@@ -54,6 +54,17 @@ public sealed class VesselSaveV2
     public string? ReferenceBodyId { get; set; }
     public double Throttle { get; set; }
     public VectorSaveV2 PitchYawRoll { get; set; } = new();
+    /// <summary>Commanded main-tank vent flow (kg/s).</summary>
+    public double PropellantVentRateKgPerS { get; set; }
+    public double VentedPropellantKg { get; set; }
+    /// <summary>Slewed body-flap channels (pitch, yaw, roll) of the aggregate flap model.</summary>
+    public VectorSaveV2 FlapActuators { get; set; } = new();
+    /// <summary>Physical body-flap deflections (rad), in <c>PartGraph.GetBodyFlaps</c> order.</summary>
+    public List<double> BodyFlapDeflectionsRad { get; set; } = new();
+    /// <summary>Whether the last step flew the physical flaps and inverted the predicted
+    /// aerodynamic moment (control reads these before the next physics step).</summary>
+    public bool PhysicalBodyFlapsActive { get; set; }
+    public bool FlightControlInvertsAerodynamics { get; set; }
     public bool SasEnabled { get; set; }
     public bool ParachutesArmed { get; set; }
     public bool IsGroundHeld { get; set; }
@@ -80,10 +91,17 @@ public sealed class PartSaveV2
     public double Oxidizer { get; set; }
     public double ReservedLiquidFuel { get; set; }
     public double ReservedOxidizer { get; set; }
+    /// <summary>
+    /// Header-tank loads in definition order. Null in saves written before header tanks
+    /// existed: those already carry that propellant in the main tank, so headers restore empty.
+    /// </summary>
+    public List<double>? HeaderPropellantKg { get; set; }
     public double SolidFuel { get; set; }
     public double Monopropellant { get; set; }
     /// <summary>Attitude RCS armed state; null in older saves (the part definition's default).</summary>
     public bool? RcsAttitudeEnabled { get; set; }
+    /// <summary>A stage-armed RCS has been switched on once; null in older saves.</summary>
+    public bool? RcsStageArmed { get; set; }
     public double ElectricCharge { get; set; }
     public double Temperature { get; set; }
     public double SkinTemperature { get; set; }
@@ -509,7 +527,14 @@ public static class SaveGameV2Codec
             Orbit = vessel.OrbitalState == null ? null : CaptureOrbit(vessel.OrbitalState),
             ReferenceBodyId = vessel.ReferenceBodyId,
             Throttle = vessel.Throttle,
+            PropellantVentRateKgPerS = vessel.PropellantVentRateKgPerS,
+            VentedPropellantKg = vessel.VentedPropellantKg,
             PitchYawRoll = VectorSaveV2.From(vessel.PitchYawRoll),
+            FlapActuators = VectorSaveV2.From(new Vector3d(
+                vessel.FlapActuators.Pitch, vessel.FlapActuators.Yaw, vessel.FlapActuators.Roll)),
+            BodyFlapDeflectionsRad = vessel.BodyFlapDeflectionsRad.ToList(),
+            PhysicalBodyFlapsActive = vessel.PhysicalBodyFlapsActive,
+            FlightControlInvertsAerodynamics = vessel.FlightControlInvertsAerodynamics,
             SasEnabled = vessel.SASEnabled,
             ParachutesArmed = vessel.ParachutesArmed,
             IsGroundHeld = vessel.IsGroundHeld,
@@ -585,6 +610,8 @@ public static class SaveGameV2Codec
             OrbitalState = saved.Orbit == null ? null : RestoreOrbit(saved.Orbit),
             ReferenceBodyId = saved.ReferenceBodyId,
             Throttle = saved.Throttle,
+            PropellantVentRateKgPerS = saved.PropellantVentRateKgPerS,
+            VentedPropellantKg = saved.VentedPropellantKg,
             PitchYawRoll = saved.PitchYawRoll.ToVector(),
             SASEnabled = saved.SasEnabled,
             ParachutesArmed = saved.ParachutesArmed,
@@ -627,6 +654,9 @@ public static class SaveGameV2Codec
         }
         vessel.Crew.AddRange(saved.Crew.Select(RestoreCrew));
         vessel.ConfigureLandingContactsFromParts();
+        var flaps = saved.FlapActuators.ToVector();
+        vessel.RestoreFlapState(new Physics.FlapActuatorState(flaps.X, flaps.Y, flaps.Z), saved.BodyFlapDeflectionsRad,
+            saved.PhysicalBodyFlapsActive, saved.FlightControlInvertsAerodynamics);
         return vessel;
     }
 
@@ -638,9 +668,11 @@ public static class SaveGameV2Codec
         Oxidizer = part.Oxidizer,
         ReservedLiquidFuel = part.ReservedLiquidFuel,
         ReservedOxidizer = part.ReservedOxidizer,
+        HeaderPropellantKg = part.HeaderPropellantKg.ToList(),
         SolidFuel = part.SolidFuel,
         Monopropellant = part.Monopropellant,
         RcsAttitudeEnabled = part.RcsAttitudeEnabled,
+        RcsStageArmed = part.RcsStageArmed,
         ElectricCharge = part.ElectricCharge,
         Temperature = part.Temperature,
         SkinTemperature = part.SkinTemperature,
@@ -690,6 +722,7 @@ public static class SaveGameV2Codec
             SolidFuel = state.SolidFuel,
             Monopropellant = state.Monopropellant,
             RcsAttitudeEnabled = state.RcsAttitudeEnabled ?? definition.RcsAttitudeStartsEnabled,
+            RcsStageArmed = state.RcsStageArmed ?? false,
             ElectricCharge = state.ElectricCharge,
             Temperature = state.Temperature,
             SkinTemperature = state.SkinTemperature,
@@ -701,6 +734,7 @@ public static class SaveGameV2Codec
             GimbalOffset = state.GimbalOffset.ToVector(),
             ActiveEngineFraction = state.ActiveEngineFraction,
         };
+        part.SetHeaderPropellant(state.HeaderPropellantKg ?? (IReadOnlyList<double>)new double[definition.HeaderTanks.Count]);
         part.ReserveLandingPropellant(state.ReservedLiquidFuel, state.ReservedOxidizer);
         part.RestoreEngineStates(state.EngineInstances.Select(engine => new EngineInstanceState
         {

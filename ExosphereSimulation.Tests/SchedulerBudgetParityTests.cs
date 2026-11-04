@@ -272,12 +272,7 @@ public sealed class SchedulerBudgetParityTests
             + Vector3d.Up * System.Math.Sqrt(earth.GM / radius);
         stack.ReferenceBodyId = earth.Id;
         stack.IsOnRails = true;
-        stack.OrbitalState = OrbitalElements.FromStateVector(
-            stack.Position - earth.Position,
-            stack.Velocity - earth.Velocity,
-            earth.GM,
-            earth.Id,
-            0.0);
+        stack.OrbitalState = stack.ComputeCenterOfMassOrbit(earth, 0.0);
 
         var universe = new Universe
         {
@@ -416,8 +411,13 @@ public sealed class SchedulerBudgetParityTests
     {
         AssertVectorClose(expected.Position, actual.Position, positionToleranceM);
         AssertVectorClose(expected.Velocity, actual.Velocity, velocityToleranceMps);
-        Assert.Equal(expected.Orientation, actual.Orientation);
-        Assert.Equal(expected.AngularVelocity, actual.AngularVelocity);
+        // The coupled rigid-body RK4 integrates the attitude quaternion; schedulers may differ
+        // in the last bits (1e-20 residual rates), never physically.
+        Assert.InRange(System.Math.Abs(expected.Orientation.W - actual.Orientation.W), 0, 1e-12);
+        Assert.InRange(System.Math.Abs(expected.Orientation.X - actual.Orientation.X), 0, 1e-12);
+        Assert.InRange(System.Math.Abs(expected.Orientation.Y - actual.Orientation.Y), 0, 1e-12);
+        Assert.InRange(System.Math.Abs(expected.Orientation.Z - actual.Orientation.Z), 0, 1e-12);
+        Assert.InRange((expected.AngularVelocity - actual.AngularVelocity).Magnitude, 0, 1e-12);
         Assert.Equal(expected.IsOnRails, actual.IsOnRails);
         Assert.Equal(expected.OrbitalState?.ReferenceBodyId,
             actual.OrbitalState?.ReferenceBodyId);

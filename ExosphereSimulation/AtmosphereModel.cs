@@ -70,6 +70,26 @@ public partial class AtmosphereModel
     public double SoundSpeedConstant => HeatCapacityRatio * R / MolarMass;
 
     /// <summary>
+    /// Sutherland coefficient β (kg/(m·s·K^½)) of the gas: μ = β·T^1.5/(T + S).
+    /// Earth air: 1.458e-6 (U.S. Standard Atmosphere 1976, eq. 51).
+    /// </summary>
+    public double SutherlandBeta { get; init; } = 1.458e-6;    // Earth air
+
+    /// <summary>Sutherland temperature S (K) of the gas. Earth air: 110.4 K (USSA-1976).</summary>
+    public double SutherlandTemperature { get; init; } = 110.4;   // Earth air
+
+    /// <summary>Dynamic viscosity (Pa·s) of the gas at a temperature (Sutherland's law).</summary>
+    public double GetDynamicViscosityAtTemperature(double temperature)
+    {
+        double t = System.Math.Max(1.0, temperature);
+        return SutherlandBeta * t * System.Math.Sqrt(t) / (t + SutherlandTemperature);
+    }
+
+    /// <summary>Dynamic viscosity (Pa·s) at a geometric altitude.</summary>
+    public double GetDynamicViscosity(double altitude) =>
+        GetDynamicViscosityAtTemperature(GetTemperature(altitude));
+
+    /// <summary>
     /// Scale height of the residual thermosphere above <see cref="MaxAltitude"/> (m).
     /// 0 disables the tail (density hard-cuts to vacuum at the top of the ISA layers).
     /// When positive, density decays exponentially from the boundary density so low
@@ -119,11 +139,20 @@ public partial class AtmosphereModel
     /// Returns atmospheric temperature (K) at a given geometric altitude above the surface (m).
     /// Layered ISA model when layers are present, otherwise constant sea-level temperature.
     /// </summary>
+    /// <summary>
+    /// Lowest altitude the model extrapolates to (m). The 1976 U.S. Standard Atmosphere
+    /// defines its base layer down to −5 km geopotential; below the reference surface
+    /// (a centre of mass below the pad datum, terrain below sea level) the base layer's
+    /// lapse rate and hydrostatic profile continue, so pressure and density keep rising
+    /// instead of dropping to vacuum.
+    /// </summary>
+    public const double MinimumAltitude = -5_000.0;
+
     public double GetTemperature(double altitude)
     {
         if (Layers.Count == 0) return SeaLevelTemperature;
 
-        if (altitude < 0.0) altitude = 0.0;
+        altitude = System.Math.Max(altitude, MinimumAltitude);
         double h = ToGeopotential(altitude);
 
         // Find the layer containing this altitude; above the top layer,
@@ -148,7 +177,7 @@ public partial class AtmosphereModel
     /// </summary>
     public double GetPressure(double altitude)
     {
-        if (altitude < 0.0) return 0.0;
+        altitude = System.Math.Max(altitude, MinimumAltitude);
 
         // Keep the thermosphere thermodynamically coherent with GetDensity().
         // The residual density tail is intentionally retained above MaxAltitude
@@ -214,7 +243,7 @@ public partial class AtmosphereModel
     /// </summary>
     public double GetDensity(double altitude)
     {
-        if (altitude < 0.0) return 0.0;
+        altitude = System.Math.Max(altitude, MinimumAltitude);
 
         if (Layers.Count == 0)
             return altitude >= MaxAltitude
@@ -394,6 +423,8 @@ public partial class AtmosphereModel
         SeaLevelPressure    = 636.0,
         SeaLevelTemperature = 210.0,
         MolarMass           = 0.04401,      // CO₂
+        SutherlandBeta      = 1.5034e-6,    // CO₂ (White, Viscous Fluid Flow, table 1-2)
+        SutherlandTemperature = 222.0,
         SurfaceGravity      = 3.72076,
         GeopotentialRadius  = 3_389_500.0,
         Layers              = new List<AtmosphereLayer>
@@ -444,6 +475,8 @@ public partial class AtmosphereModel
         SeaLevelPressure    = 9_200_000.0,
         SeaLevelTemperature = 737.0,
         MolarMass           = 0.04401,      // CO₂
+        SutherlandBeta      = 1.5034e-6,    // CO₂ (White, Viscous Fluid Flow, table 1-2)
+        SutherlandTemperature = 222.0,
         SurfaceGravity      = 8.87,
         GeopotentialRadius  = 6_051_800.0,
         Layers              = new List<AtmosphereLayer>

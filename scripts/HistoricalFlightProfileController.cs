@@ -774,7 +774,9 @@ public partial class HistoricalFlightProfileController : Node
                 ascent.PitchOverDegrees, Apollo8FlightProfile.PitchOverEndSeconds);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
                 vessel.Orientation, Vector3d.Up, boostAim, vessel.AngularVelocity,
-                proportionalGain: 2.3, dampingGain: 1.2);
+                proportionalGain: 2.3,
+                dampingGain: Apollo8FlightProfile.AscentDampingGain(
+                    vessel.GetPitchYawAngularAuthority(earth)));
             var sicEngines = vessel.Parts.Parts.FirstOrDefault(part =>
                 part.Definition.HasVehicleRole("sic_engine_cluster"));
             sicEngines?.SelectEngineCount(
@@ -1147,7 +1149,7 @@ public partial class HistoricalFlightProfileController : Node
             desired,
             vessel.AngularVelocity,
             proportionalGain: 2.3,
-            dampingGain: Apollo8FlightProfile.UpperStageDampingGain(
+            dampingGain: Apollo8FlightProfile.AscentDampingGain(
                 vessel.GetPitchYawAngularAuthority(earth)));
     }
 
@@ -1177,12 +1179,7 @@ public partial class HistoricalFlightProfileController : Node
             + tangent * System.Math.Sqrt(earth.GM / radius);
         vessel.AngularVelocity = Vector3d.Zero;
         vessel.IsOnRails = true;
-        vessel.OrbitalState = OrbitalElements.FromStateVector(
-            vessel.Position - earth.Position,
-            vessel.Velocity - earth.Velocity,
-            earth.GM,
-            earth.Id,
-            epoch);
+        vessel.OrbitalState = vessel.ComputeCenterOfMassOrbit(earth, epoch);
         vessel.ReferenceBodyId = earth.Id;
         vessel.Throttle = 0.0;
     }
@@ -1546,7 +1543,7 @@ public partial class HistoricalFlightProfileController : Node
                 Vector3d.Up,
                 desired,
                 vessel.AngularVelocity,
-                proportionalGain: 2.3,
+                proportionalGain: Gemini8FlightProfile.StageTwoProportionalGain(vessel.GetPitchYawAngularAuthority(earth)),
                 dampingGain: Gemini8FlightProfile.StageTwoDampingGain(vessel.GetPitchYawAngularAuthority(earth)));
             vessel.Throttle = 1.0;
             double sinceBeco = double.IsNaN(_geminiBeco) ? double.PositiveInfinity : elapsed - _geminiBeco;

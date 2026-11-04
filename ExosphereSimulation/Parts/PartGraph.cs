@@ -60,11 +60,13 @@ public class PartGraph
     private readonly List<LiquidEngineDemand> _liquidDemands = new();
     private readonly HashSet<Part> _hotStageBottomSet = new();
     private readonly List<Part> _hotStageUpperParts = new();
-    private readonly List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>
+    private readonly List<(EngineInstanceState? State, Part Engine, Vector3d Jx, Vector3d Jz)>
         _gimbalContributions = new();
-    private readonly Dictionary<Part, Vector3d> _partLocalPositions = new();
     private Part? _root;
-    private bool _partLocalPositionsValid;
+    // Part positions depend only on topology and part geometry, not on mass, so this copy
+    // survives across ticks and is rebuilt only by InvalidateTopologyCaches.
+    private readonly Dictionary<Part, Vector3d> _topologyPartLocalPositions = new();
+    private bool _topologyPartLocalPositionsValid;
     private bool _physicsTickActive;
     private bool _tickStageCacheValid;
     private bool _tickActiveEngineCacheValid;
@@ -123,29 +125,23 @@ public class PartGraph
     {
         get
         {
+            // Force of the declared, enabled thrusters along their weakest translation axis,
+            // and their thrust-weighted specific impulse.
+            var thrusters = GetRcsThrusters();
+            var authority = Physics.RcsAllocation.TranslationAuthority(thrusters);
+            double weakest = System.Math.Min(authority.X, System.Math.Min(authority.Y, authority.Z));
             double thrust = 0.0, impulseWeight = 0.0;
-            foreach (var part in _parts)
+            for (int i = 0; i < thrusters.Count; i++)
             {
-                if (part.IsBroken || part.Definition.RcsTranslationThrustN <= 0.0) continue;
-                thrust += part.Definition.RcsTranslationThrustN;
-                impulseWeight += part.Definition.RcsTranslationThrustN
-                    * (part.Definition.RcsIsp > 0.0 ? part.Definition.RcsIsp : 220.0);
+                var thruster = thrusters[i];
+                if (!thruster.Available) continue;
+                thrust += thruster.ThrustN;
+                impulseWeight += thruster.ThrustN * thruster.IspS;
             }
-            return (thrust, thrust > 0.0 ? impulseWeight / thrust : 0.0);
+            return (weakest, thrust > 0.0 ? impulseWeight / thrust : 0.0);
         }
     }
 
-    /// <summary>Attitude torque (N·m) of the intact parts whose RCS is enabled.</summary>
-    public double RcsAttitudeTorqueNm
-    {
-        get
-        {
-            double torque = 0.0;
-            foreach (var part in _parts)
-                if (!part.IsBroken && part.RcsAttitudeEnabled) torque += part.Definition.RcsAttitudeTorqueNm;
-            return torque;
-        }
-    }
 
     /// <summary>Monopropellant left in all parts (kg).</summary>
     public double TotalMonopropellant
@@ -188,16 +184,39 @@ public class PartGraph
         }
     }
 
-    public bool DrawMonopropellant(double kilograms)
+    public bool DrawMonopropellant(double kilograms) => DrawMonopropellant(kilograms, primaryStoresOnly: false);
+
+    /// <summary>
+    /// Draws from the shared monopropellant feed. With <paramref name="primaryStoresOnly"/>
+    /// only the primary systems' stores feed (those whose RCS starts enabled or arms with its
+    /// stage, not a standby system armed by the crew or at separation): a failed-on
+    /// thruster belongs to the primary RCS and keeps draining it after it is switched off,
+    /// never a standby system's tanks.
+    /// </summary>
+    public bool DrawMonopropellant(double kilograms, bool primaryStoresOnly)
     {
         if (kilograms <= 0.0) return true;
-        double total = TotalMonopropellant;
+        double total = 0.0;
+        foreach (var part in _parts)
+            if (Feeds(part)) total += part.Monopropellant;
         if (total < kilograms) return false;
         foreach (var part in _parts)
-            if (part.Monopropellant > 0.0)
+            if (Feeds(part) && part.Monopropellant > 0.0)
                 part.Monopropellant -= kilograms * (part.Monopropellant / total);
         return true;
+
+        bool Feeds(Part part) => primaryStoresOnly
+            ? part.Definition.RcsThrusters.Count == 0 || part.Definition.RcsAttitudeStartsEnabled
+                || part.Definition.RcsArmsWithStage
+            : FeedsSharedMonopropellant(part);
     }
+
+    /// <summary>
+    /// A part's monopropellant joins the shared feed unless it belongs to a thruster system
+    /// that is valved off (a disabled RCS, such as Gemini's re-entry rings before arming).
+    /// </summary>
+    private static bool FeedsSharedMonopropellant(Part part) =>
+        part.Definition.RcsThrusters.Count == 0 || part.RcsAttitudeEnabled;
 
     /// <summary>Enclosed payloads contribute mass/inertia, but not the carrier's outer hull.</summary>
     public bool IsEnclosedPayload(Part part) => part.Definition.InternalPayload && part != _root;
@@ -221,7 +240,62 @@ public class PartGraph
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
         _engineReadoutCacheValid = false;
-        _partLocalPositionsValid = false;
+    }
+
+    private bool _stagedReactionControlPending = true;
+
+    /// <summary>
+    /// Arms every RCS declared <see cref="PartDefinition.RcsArmsWithStage"/> (the S-IVB APS,
+    /// Gemini's OAMS, Starship's cold-gas thrusters) once its part belongs to the current
+    /// (lowest) stage: the system is switched on when the stage below separates. Also arms an
+    /// isolated standby RCS. Runs once per topology change, at the next physics step, so an
+    /// assembly being built part by part never looks isolated.
+    /// </summary>
+    public void ArmStagedReactionControl()
+    {
+        if (!_stagedReactionControlPending) return;
+        _stagedReactionControlPending = false;
+        ArmIsolatedReactionControl();
+        bool waiting = false;
+        foreach (var part in _parts)
+            if (part.Definition.RcsArmsWithStage && !part.RcsStageArmed && !part.IsBroken)
+                waiting = true;
+        if (!waiting) return;
+        foreach (var part in CurrentStageParts())
+            if (part.Definition.RcsArmsWithStage && !part.RcsStageArmed && !part.IsBroken)
+            {
+                // Armed once, when the stage below separates; the crew may switch it off later.
+                part.RcsStageArmed = true;
+                part.RcsAttitudeEnabled = true;
+                _rcsThrustersValid = false;
+            }
+    }
+
+    /// <summary>
+    /// A standby RCS (<see cref="PartDefinition.RcsArmsWhenIsolated"/>: the Apollo CM's entry
+    /// thrusters, the Mercury capsule's H2O2 jets) is armed once its vehicle no longer carries
+    /// another attitude actuator: a part with thrusters or a liquid-propellant engine (the
+    /// carrier stage or service module it separates from). Solid retro motors do not count.
+    /// </summary>
+    private void ArmIsolatedReactionControl()
+    {
+        bool standby = false, primary = false;
+        foreach (var part in _parts)
+        {
+            if (part.IsBroken) continue;
+            var definition = part.Definition;
+            if (definition.RcsThrusters.Count > 0)
+            {
+                if (definition.RcsArmsWhenIsolated && !part.RcsAttitudeEnabled) standby = true;
+                else if (!definition.RcsArmsWhenIsolated && part.RcsAttitudeEnabled) primary = true;
+            }
+            else if (definition.Category == PartCategory.Engine
+                && !string.Equals(definition.FuelTypeStr, "solid", StringComparison.OrdinalIgnoreCase))
+                primary = true;
+        }
+        if (!standby || primary) return;
+        foreach (var part in _parts)
+            if (part.Definition.RcsArmsWhenIsolated) part.RcsAttitudeEnabled = true;
     }
 
     internal void EndPhysicsTick()
@@ -231,18 +305,25 @@ public class PartGraph
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
         _engineReadoutCacheValid = false;
-        _partLocalPositionsValid = false;
     }
 
     internal void InvalidateTickActiveEngineCache() => _tickActiveEngineCacheValid = false;
 
+    /// <summary>Incremented on every topology change (parts added, removed or detached).</summary>
+    public int TopologyVersion { get; private set; }
+
     private void InvalidateTopologyCaches()
     {
-        _partLocalPositionsValid = false;
+        TopologyVersion++;
+        _aeroElementsValid = false;
+        _bodyFlapsValid = false;
+        _rcsThrustersValid = false;
+        _topologyPartLocalPositionsValid = false;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
         _engineReadoutCacheValid = false;
+        _stagedReactionControlPending = true;
     }
 
     /// <summary>
@@ -306,8 +387,10 @@ public class PartGraph
         }
     }
     public double DryMass          => _parts.Sum(p => p.EffectiveMassDry);
-    public double TotalLiquidFuel  => _parts.Sum(p => p.LiquidFuel);
-    public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer);
+    /// <summary>All liquid fuel aboard, main and header tanks.</summary>
+    public double TotalLiquidFuel  => _parts.Sum(p => p.LiquidFuel + p.HeaderLiquidFuel);
+    /// <summary>All oxidizer aboard, main and header tanks.</summary>
+    public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer + p.HeaderOxidizer);
     public double TotalElectricCharge => _parts.Sum(p => p.ElectricCharge);
     public double VehicleLength
     {
@@ -419,6 +502,7 @@ public class PartGraph
 
         _tickTotalMass = 0.0;
         _tickCenterOfMass = Vector3d.Zero;
+        double positionedMass = 0.0;
         if (_root != null)
         {
             var positions = GetCachedPartLocalPositions();
@@ -427,20 +511,25 @@ public class PartGraph
                 var part = _parts[i];
                 double mass = part.CurrentMass;
                 _tickTotalMass += mass;
-                if (positions.TryGetValue(part, out var position))
-                    _tickCenterOfMass += position * mass;
+                if (!positions.TryGetValue(part, out var position)) continue;
+                _tickCenterOfMass += MassCentre(part, position) * mass;
+                positionedMass += mass;
             }
-            if (_tickTotalMass > 0.0)
-                _tickCenterOfMass /= _tickTotalMass;
+            if (positionedMass > 0.0)
+                _tickCenterOfMass /= positionedMass;
         }
 
         if (_tickTotalMass > 0.0)
+        {
             _tickMassProperties = BuildMassProperties(GetCachedPartLocalPositions());
-
-        double radius = MaximumDiameter * 0.5;
-        _tickTransverseMomentOfInertia = _tickTotalMass
-            * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
-        _tickAxialMomentOfInertia = 0.5 * _tickTotalMass * radius * radius;
+            (_tickTransverseMomentOfInertia, _tickAxialMomentOfInertia) =
+                PrincipalScalars(_tickMassProperties);
+        }
+        else
+        {
+            _tickTransverseMomentOfInertia = 0.0;
+            _tickAxialMomentOfInertia = 0.0;
+        }
         _tickMassPropertiesValid = true;
     }
 
@@ -506,7 +595,7 @@ public class PartGraph
             if (!positions.TryGetValue(part, out var position)) continue;
 
             totalMass += mass;
-            weightedPosition += position * mass;
+            weightedPosition += MassCentre(part, position) * mass;
         }
 
         if (!double.IsFinite(totalMass) || totalMass <= 0.0)
@@ -527,7 +616,26 @@ public class PartGraph
         foreach (var part in _parts)
         {
             if (!positions.TryGetValue(part, out var position)) continue;
-            double mass = part.CurrentMass;
+            // Header propellant is a point mass at its station; the rest of the part is the
+            // cylinder below.
+            var headers = part.Definition.HeaderTanks;
+            double headerMass = 0.0;
+            for (int h = 0; h < headers.Count && h < part.HeaderPropellantKg.Length; h++)
+            {
+                double headerKg = part.HeaderPropellantKg[h];
+                if (headerKg <= 0.0) continue;
+                headerMass += headerKg;
+                Vector3d d = new Vector3d(position.X, position.Y + headers[h].CenterYM, position.Z) - centerOfMass;
+                i11 += headerKg * (d.Y * d.Y + d.Z * d.Z);
+                i22 += headerKg * (d.X * d.X + d.Z * d.Z);
+                i33 += headerKg * (d.X * d.X + d.Y * d.Y);
+                i12 -= headerKg * d.X * d.Y;
+                i13 -= headerKg * d.X * d.Z;
+                i23 -= headerKg * d.Y * d.Z;
+            }
+            double mass = part.CurrentMass - headerMass;
+            // The non-header remainder centres on the dry structure's declared station.
+            double restOffsetY = mass > 0.0 ? part.Definition.MassDry * part.Definition.DryMassCenterYM / mass : 0.0;
             double length = part.Definition.LengthM > 0.0
                 ? part.Definition.LengthM
                 : fallbackLength;
@@ -540,7 +648,7 @@ public class PartGraph
             double transverse = mass
                 * (3.0 * radius * radius + length * length) / 12.0;
             double axial = 0.5 * mass * radius * radius;
-            Vector3d offset = position - centerOfMass;
+            Vector3d offset = new Vector3d(position.X, position.Y + restOffsetY, position.Z) - centerOfMass;
             double xx = offset.X;
             double yy = offset.Y;
             double zz = offset.Z;
@@ -561,18 +669,100 @@ public class PartGraph
         return new RigidBodyMassProperties(totalMass, centerOfMass, inertia);
     }
 
-    private Dictionary<Part, Vector3d> GetCachedPartLocalPositions()
+    /// <summary>A part's own centre of mass: its centre, shifted along its axis by header propellant.</summary>
+    private static Vector3d MassCentre(Part part, Vector3d position)
     {
-        if (!_physicsTickActive)
-            return ComputePartLocalPositions();
-        if (_partLocalPositionsValid)
-            return _partLocalPositions;
+        double offset = part.MassCenterOffsetYM;
+        return offset == 0.0 ? position : new Vector3d(position.X, position.Y + offset, position.Z);
+    }
 
-        _partLocalPositions.Clear();
-        if (_root != null)
-            AssignPositions(_root, Vector3d.Zero, _partLocalPositions);
-        _partLocalPositionsValid = true;
-        return _partLocalPositions;
+    // Positions depend on topology and geometry only, so ticks share the topology cache.
+    private Dictionary<Part, Vector3d> GetCachedPartLocalPositions() => GetTopologyPartLocalPositions();
+
+    /// <summary>
+    /// True when this body's aerodynamics come from its part geometry
+    /// (<see cref="GetAeroElements"/>). Slender-body and crossflow theory hold only for slender
+    /// stacks, so a blunt body (fineness ratio below <see cref="SlenderBodyMinimumFineness"/>:
+    /// Mercury, Gemini and Apollo capsules) keeps the blunt/trimmed model. Capsules keep their
+    /// trimmed model, and a root flying alone with a declared standalone static margin (Super
+    /// Heavy's grid fins, not yet modelled as surfaces) keeps that margin.
+    /// </summary>
+    public bool UsesDistributedAerodynamics =>
+        CapsuleAerodynamics == null && _root?.Definition.StandaloneAerodynamicCenterOffsetYM == null
+        && MaximumDiameter > 0.0 && VehicleLength / MaximumDiameter >= SlenderBodyMinimumFineness;
+
+    /// <summary>Length/diameter below which slender-body theory does not describe the flow.</summary>
+    public const double SlenderBodyMinimumFineness = 3.0;
+
+    private readonly List<Physics.AeroElement> _aeroElements = new();
+    private bool _aeroElementsValid;
+
+    /// <summary>
+    /// Aerodynamic elements of the assembled body, derived from part geometry and cached by
+    /// topology: one crossflow element per exposed part (planform D·L at its centroid), and
+    /// slender-body area changes (the leading nose and every diameter step between stacked
+    /// parts). See <see cref="Physics.DistributedAerodynamics"/>.
+    /// </summary>
+    public IReadOnlyList<Physics.AeroElement> GetAeroElements()
+    {
+        if (_aeroElementsValid) return _aeroElements;
+        _aeroElements.Clear();
+        Physics.DistributedAerodynamics.BuildElements(this, GetTopologyPartLocalPositions(), _aeroElements);
+        _aeroElementsValid = true;
+        return _aeroElements;
+    }
+
+    private readonly List<Physics.BodyFlapGeometry> _bodyFlaps = new();
+    private bool _bodyFlapsValid;
+
+    /// <summary>Hinged control surfaces of the assembled body in the vessel frame, cached by topology.</summary>
+    public IReadOnlyList<Physics.BodyFlapGeometry> GetBodyFlaps()
+    {
+        if (_bodyFlapsValid) return _bodyFlaps;
+        _bodyFlaps.Clear();
+        var positions = GetTopologyPartLocalPositions();
+        foreach (var part in _parts)
+        {
+            if (part.Definition.BodyFlaps.Count == 0 || !positions.TryGetValue(part, out var centre)) continue;
+            foreach (var flap in part.Definition.BodyFlaps)
+                _bodyFlaps.Add(Physics.BodyFlapGeometry.From(part, centre, flap));
+        }
+        _bodyFlapsValid = true;
+        return _bodyFlaps;
+    }
+
+    private readonly List<Physics.RcsThrusterGeometry> _rcsThrusters = new();
+    private bool _rcsThrustersValid;
+
+    /// <summary>Every declared RCS thruster, placed in the vessel frame (skirt-datum origin).</summary>
+    public List<Physics.RcsThrusterGeometry> GetRcsThrusters()
+    {
+        if (_rcsThrustersValid) return _rcsThrusters;
+        _rcsThrusters.Clear();
+        var positions = GetTopologyPartLocalPositions();
+        foreach (var part in _parts)
+        {
+            if (part.Definition.RcsThrusters.Count == 0 || !positions.TryGetValue(part, out var centre)) continue;
+            foreach (var thruster in part.Definition.RcsThrusters)
+                _rcsThrusters.Add(Physics.RcsThrusterGeometry.From(part, centre, thruster));
+        }
+        _rcsThrustersValid = true;
+        return _rcsThrusters;
+    }
+
+    /// <summary>Centre of <paramref name="part"/> in the vessel frame (skirt-datum origin).</summary>
+    public bool TryGetPartLocalPosition(Part part, out Vector3d position) =>
+        GetTopologyPartLocalPositions().TryGetValue(part, out position);
+
+    /// <summary>Allocation-free positions for read-only queries outside a physics tick.</summary>
+    private Dictionary<Part, Vector3d> GetTopologyPartLocalPositions()
+    {
+        if (_topologyPartLocalPositionsValid)
+            return _topologyPartLocalPositions;
+        _topologyPartLocalPositions.Clear();
+        AssignSkirtDatumPositions(_topologyPartLocalPositions);
+        _topologyPartLocalPositionsValid = true;
+        return _topologyPartLocalPositions;
     }
 
     // Parts belonging to the currently-firing stage: the subtree hanging below the
@@ -736,22 +926,25 @@ public class PartGraph
                 return _tickCenterOfMass;
             }
 
-            double totalMass = TotalMass;
-            if (totalMass <= 0.0 || _root == null) return Vector3d.Zero;
-            var positions = ComputePartLocalPositions();
+            if (_root == null) return Vector3d.Zero;
+            // Same rule as BuildMassProperties: only parts placed in the stack frame carry a
+            // position; an unattached part must not drag the centre toward the datum.
+            var positions = GetTopologyPartLocalPositions();
             var com = Vector3d.Zero;
+            double positionedMass = 0.0;
             foreach (var p in _parts)
             {
-                if (positions.TryGetValue(p, out var pos))
-                    com = com + pos * p.CurrentMass;
+                if (!positions.TryGetValue(p, out var pos)) continue;
+                com = com + MassCentre(p, pos) * p.CurrentMass;
+                positionedMass += p.CurrentMass;
             }
-            return com / totalMass;
+            return positionedMass > 0.0 ? com / positionedMass : Vector3d.Zero;
         }
     }
 
     /// <summary>
-    /// Approximate transverse inertia (kg·m²) of the declared cylindrical envelope.
-    /// It changes continuously as propellant mass is consumed.
+    /// Pitch/yaw inertia (kg·m²) about the current centre of mass, from the per-part
+    /// parallel-axis tensor. It changes continuously as propellant mass is consumed.
     /// </summary>
     public double TransverseMomentOfInertia
     {
@@ -762,12 +955,13 @@ public class PartGraph
                 EnsureTickMassProperties();
                 return _tickTransverseMomentOfInertia;
             }
-            double radius = MaximumDiameter * 0.5;
-            return TotalMass * (3.0 * radius * radius + VehicleLength * VehicleLength) / 12.0;
+            return TryGetMassProperties(out var properties)
+                ? PrincipalScalars(properties).Transverse
+                : 0.0;
         }
     }
 
-    /// <summary>Approximate roll-axis inertia (kg·m²) of the vehicle envelope.</summary>
+    /// <summary>Roll-axis inertia (kg·m²) from the same per-part tensor.</summary>
     public double AxialMomentOfInertia
     {
         get
@@ -777,10 +971,22 @@ public class PartGraph
                 EnsureTickMassProperties();
                 return _tickAxialMomentOfInertia;
             }
-            double radius = MaximumDiameter * 0.5;
-            return 0.5 * TotalMass * radius * radius;
+            return TryGetMassProperties(out var properties)
+                ? PrincipalScalars(properties).Axial
+                : 0.0;
         }
     }
+
+    /// <summary>
+    /// Scalar pitch/yaw and roll inertia read from the same per-part, parallel-axis tensor
+    /// the coupled rigid-body integrator uses, so both integration paths divide torque by one
+    /// inertia model. Pitch and yaw are averaged; for the axisymmetric stacks flown here
+    /// I_xx and I_zz agree to within the products of inertia.
+    /// </summary>
+    private static (double Transverse, double Axial) PrincipalScalars(
+        in RigidBodyMassProperties properties) =>
+        (0.5 * (properties.InertiaBody.M11 + properties.InertiaBody.M33),
+         properties.InertiaBody.M22);
 
     /// <summary>
     /// Pitch/yaw angular acceleration available from live engine gimbal torque.
@@ -848,6 +1054,27 @@ public class PartGraph
     /// commanded torque within what the allocator can actually deliver, instead of chronically
     /// over-demanding it into full saturation.
     /// </summary>
+    /// <summary>
+    /// Slowest gimbal rate (°/s) at which a lit engine still counts as an attitude actuator;
+    /// slower gimbals only trim the thrust line through the centre of mass.
+    /// </summary>
+    public const double AttitudeGimbalRateDegPerS = 1.0;
+
+    /// <summary>
+    /// True when every lit, gimballed engine slews at least <see cref="AttitudeGimbalRateDegPerS"/>
+    /// (engines without a resolved model count as attitude gimbals).
+    /// </summary>
+    public bool GimbalsSlewForAttitudeControl()
+    {
+        foreach (var engine in ActiveEngineList)
+        {
+            var model = engine.Definition.ResolvedEngineModel;
+            if (model == null || model.GimbalRangeDeg <= 0.0) continue;
+            if (model.GimbalRateDegPerS < AttitudeGimbalRateDegPerS) return false;
+        }
+        return true;
+    }
+
     public Vector3d GetDifferentialTVCAngularAccelerationEnvelope(double ambientPressure)
     {
         double transverse = TransverseMomentOfInertia;
@@ -995,29 +1222,45 @@ public class PartGraph
 
         var contributions = _physicsTickActive
             ? _gimbalContributions
-            : new List<(EngineInstanceState State, Vector3d Jx, Vector3d Jz)>();
+            : new List<(EngineInstanceState? State, Part Engine, Vector3d Jx, Vector3d Jz)>();
         contributions.Clear();
         double m00 = 0, m01 = 0, m02 = 0, m11 = 0, m12 = 0, m22 = 0;
+
+        void Add(EngineInstanceState? state, Part engine, Vector3d r, double thrustN, double gimbalRangeDeg)
+        {
+            double mountAuthority = thrustN * (gimbalRangeDeg * MathUtils.DEG_TO_RAD);
+            var jx = r.Cross(new Vector3d(mountAuthority, 0.0, 0.0));
+            var jz = r.Cross(new Vector3d(0.0, 0.0, mountAuthority));
+            contributions.Add((state, engine, jx, jz));
+
+            m00 += jx.X * jx.X + jz.X * jz.X;
+            m01 += jx.X * jx.Y + jz.X * jz.Y;
+            m02 += jx.X * jx.Z + jz.X * jz.Z;
+            m11 += jx.Y * jx.Y + jz.Y * jz.Y;
+            m12 += jx.Y * jx.Z + jz.Y * jz.Z;
+            m22 += jx.Z * jx.Z + jz.Z * jz.Z;
+        }
 
         foreach (var engine in ActiveEngineList)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
+            if (!engine.HasEngineRuntime)
+            {
+                // A single engine without a per-instance runtime gimbals as one mount through
+                // its part-wide GimbalOffset (the same geometry GetThrustVector/GetTotalTorque use).
+                double range = engine.Definition.GimbalRange;
+                double thrust = engine.GetThrustMagnitude(ambientPressure);
+                if (range > 0.0 && thrust > 0.0)
+                    Add(null, engine,
+                        partPosition + new Vector3d(0.0, engine.Definition.ThrustPositionYM, 0.0) - com,
+                        thrust, range);
+                continue;
+            }
             var authorityRows = engine.GetEngineInstanceGimbalAuthoritySnapshot(ambientPressure);
             for (int i = 0; i < authorityRows.Count; i++)
             {
                 var (state, mountPosition, thrustN, gimbalRangeDeg) = authorityRows[i];
-                var r = partPosition + mountPosition - com;
-                double mountAuthority = thrustN * (gimbalRangeDeg * MathUtils.DEG_TO_RAD);
-                var jx = r.Cross(new Vector3d(mountAuthority, 0.0, 0.0));
-                var jz = r.Cross(new Vector3d(0.0, 0.0, mountAuthority));
-                contributions.Add((state, jx, jz));
-
-                m00 += jx.X * jx.X + jz.X * jz.X;
-                m01 += jx.X * jx.Y + jz.X * jz.Y;
-                m02 += jx.X * jx.Z + jz.X * jz.Z;
-                m11 += jx.Y * jx.Y + jz.Y * jz.Y;
-                m12 += jx.Y * jx.Z + jz.Y * jz.Z;
-                m22 += jx.Z * jx.Z + jz.Z * jz.Z;
+                Add(state, engine, partPosition + mountPosition - com, thrustN, gimbalRangeDeg);
             }
         }
 
@@ -1035,12 +1278,14 @@ public class PartGraph
             m22 + epsilon,
             desiredTorque);
 
-        foreach (var (state, jx, jz) in contributions)
+        foreach (var (state, engine, jx, jz) in contributions)
         {
-            state.GimbalCommandOverride = new Vector3d(
+            var command = new Vector3d(
                 System.Math.Clamp(jx.Dot(lambda), -1.0, 1.0),
                 0.0,
                 System.Math.Clamp(jz.Dot(lambda), -1.0, 1.0));
+            if (state != null) state.GimbalCommandOverride = command;
+            else engine.GimbalOffset = command;
         }
     }
 
@@ -1346,7 +1591,7 @@ public class PartGraph
         // equation mass ratio must therefore include the complete vehicle as carried mass.
         double wet = TotalMass;
         double propellant = stage.Sum(p =>
-            p.LiquidFuel + p.Oxidizer + p.SolidFuel + p.Monopropellant);
+            p.LiquidFuel + p.Oxidizer + p.HeaderLiquidFuel + p.HeaderOxidizer + p.SolidFuel + p.Monopropellant);
         double dry = wet - propellant;
         return GetStageDeltaV(wet, dry, ambientPressure);
     }
@@ -1374,6 +1619,27 @@ public class PartGraph
     // su propia etapa (los motores no tienen capacidad propia), pero NO a través de un
     // desacoplador activo — así la etapa superior conserva su propelante hasta separarse.
     // During hot-stage overlap both stage pools burn, each into its own tanks.
+    /// <summary>
+    /// Vents up to <paramref name="kg"/> of liquid propellant from the main tanks (fuel and
+    /// oxidizer in proportion to what remains, never from header tanks or a landing reserve).
+    /// Returns the mass removed.
+    /// </summary>
+    public double VentMainPropellant(double kg)
+    {
+        if (!(kg > 0.0)) return 0.0;
+        double available = 0.0;
+        foreach (var part in _parts) available += part.AvailableLiquidFuel + part.AvailableOxidizer;
+        if (available <= 0.0) return 0.0;
+        double vented = System.Math.Min(kg, available);
+        double fraction = vented / available;
+        foreach (var part in _parts)
+        {
+            part.LiquidFuel -= part.AvailableLiquidFuel * fraction;
+            part.Oxidizer -= part.AvailableOxidizer * fraction;
+        }
+        return vented;
+    }
+
     public void ConsumePropellant(double dt, double ambientPressure)
     {
         if (HotStageOverlapActive)
@@ -1478,13 +1744,18 @@ public class PartGraph
         {
             double totalLF = 0.0;
             double totalOx = 0.0;
+            double headerLF = 0.0;
+            double headerOx = 0.0;
             for (int i = 0; i < tankPool.Count; i++)
             {
                 totalLF += tankPool[i].AvailableLiquidFuel;
                 totalOx += tankPool[i].AvailableOxidizer;
+                headerLF += tankPool[i].HeaderLiquidFuel;
+                headerOx += tankPool[i].HeaderOxidizer;
             }
-            double remainingLF = totalLF;
-            double remainingOx = totalOx;
+            // Header tanks feed once the main tanks cannot fund the demand.
+            double remainingLF = totalLF + headerLF;
+            double remainingOx = totalOx + headerOx;
             double fundedLF = 0.0;
             double fundedOx = 0.0;
             double loadedTotal = totalLF + totalOx;
@@ -1528,13 +1799,23 @@ public class PartGraph
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
             {
+                double mainLF = System.Math.Min(fundedLF, totalLF);
+                double mainOx = System.Math.Min(fundedOx, totalOx);
+                double fromHeaderLF = fundedLF - mainLF;
+                double fromHeaderOx = fundedOx - mainOx;
                 for (int tankIndex = 0; tankIndex < tankPool.Count; tankIndex++)
                 {
                     var p = tankPool[tankIndex];
+                    double partHeaderLF = p.HeaderLiquidFuel;
+                    double partHeaderOx = p.HeaderOxidizer;
                     if (totalLF > 0.0)
-                        p.LiquidFuel = System.Math.Max(p.ReservedLiquidFuel, p.LiquidFuel - fundedLF * (p.AvailableLiquidFuel / totalLF));
+                        p.LiquidFuel = System.Math.Max(p.ReservedLiquidFuel, p.LiquidFuel - mainLF * (p.AvailableLiquidFuel / totalLF));
                     if (totalOx > 0.0)
-                        p.Oxidizer = System.Math.Max(p.ReservedOxidizer, p.Oxidizer - fundedOx * (p.AvailableOxidizer / totalOx));
+                        p.Oxidizer = System.Math.Max(p.ReservedOxidizer, p.Oxidizer - mainOx * (p.AvailableOxidizer / totalOx));
+                    if (fromHeaderLF > 0.0 && headerLF > 0.0)
+                        p.DrawHeaderPropellant(oxidizer: false, fromHeaderLF * partHeaderLF / headerLF);
+                    if (fromHeaderOx > 0.0 && headerOx > 0.0)
+                        p.DrawHeaderPropellant(oxidizer: true, fromHeaderOx * partHeaderOx / headerOx);
                 }
             }
         }
@@ -1708,12 +1989,38 @@ public class PartGraph
     }
 
     // ── Posiciones locales de piezas (para CoM y renderizado) ─────────────
+    /// <summary>
+    /// Part centres in the vessel frame. The origin is the lowest point of the assembled
+    /// stack (the skirt datum): the same point the renderer draws at the vessel position,
+    /// landing gear and water contact measure from, and the pad mount supports. Centre of
+    /// mass, inertia tensor, engine mounts and attachment nodes are all expressed in it, so
+    /// the physical and visible vehicle share one origin.
+    /// </summary>
     public Dictionary<Part, Vector3d> ComputePartLocalPositions()
     {
         var positions = new Dictionary<Part, Vector3d>();
-        if (_root == null) return positions;
-        AssignPositions(_root, Vector3d.Zero, positions);
+        AssignSkirtDatumPositions(positions);
         return positions;
+    }
+
+    /// <summary>
+    /// Fills <paramref name="positions"/> with every attached part's centre, origin at the
+    /// stack's lowest point. Shared by the cached physics-tick path and the public query so
+    /// both report the same frame.
+    /// </summary>
+    private void AssignSkirtDatumPositions(Dictionary<Part, Vector3d> positions)
+    {
+        if (_root == null) return;
+        AssignPositions(_root, Vector3d.Zero, positions);
+        double lowest = double.PositiveInfinity;
+        foreach (var (part, position) in positions)
+            lowest = System.Math.Min(lowest, position.Y - part.Definition.LengthM * 0.5);
+        if (!double.IsFinite(lowest) || lowest == 0.0) return;
+        var shift = new Vector3d(0.0, -lowest, 0.0);
+        // Iterate the part list, not the dictionary being updated (allocation-free).
+        foreach (var part in _parts)
+            if (positions.TryGetValue(part, out var position))
+                positions[part] = position + shift;
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 # Exosphere Roadmap
 
-> **Reconciled:** 2026-09-22 · **Current physics front:** legacy-versus-coupled 6-DoF parity.
+> **Reconciled:** 2026-10-31 · **Current physics front:** rigid-body fidelity (F1–F6), coupled 6-DoF on by default.
 > The historical phase waves below remain useful evidence, but the active source of truth is
 > [`docs/README.md`](docs/README.md), [`docs/physics/PHYSICS_MODEL.md`](docs/physics/PHYSICS_MODEL.md)
 > and this roadmap.
@@ -221,9 +221,9 @@ GitHub en verde. Orden por impacto para el jugador:
 4. **Persistir la ventana de lanzamiento y los burns guiados en `SaveGameV2`.** Hoy reanudar un
    ascenso guardado cae en la corrección de plano por script. Criterio: un save en ascenso,
    en costa translunar y en órbita lunar reanuda con el mismo plan y sin corrección.
-5. **Datum render/masa inconsistente** (bloquea el 6-DoF acoplado). Criterio: un único origen
-   de piezas compartido por `VesselRenderer`, inercia y contacto, con test de coincidencia de
-   centro de masa render/física por familia de vehículo.
+5. ~~**Datum render/masa inconsistente**~~ — cerrado (2026-10-31): el marco de piezas tiene
+   origen en el punto más bajo del stack, el mismo que usan renderer, patas, agua y pad
+   (`docs/physics/rigid_body_fidelity_plan.md`, hallazgos F0).
 6. **Cd transónico de costado > 2.** Criterio: curva calibrada contra datos publicados y la
    telemetría IFT, sin romper los tests EDL de Starship ni el amerizaje del Flight 14.
 7. **Paridad del integrador acoplado** (ver Prioridad Inmediata): ascenso controlado largo,
@@ -339,16 +339,77 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - Recuperación engine-out determinista: cerrado con detección del estado activo, 100 ms de
      latencia onboard, comando de actitud con feedback, rate limit y reducción de velocidad
      angular conservando la paridad legacy/6-DoF.
-   - Siguiente gate: extenderlo a ascenso controlado y de mayor duración con diagnóstico de
-     fallos, navegación, SAS, flaps, RCS y autoridad de recuperación equivalentes.
-   - Gate posterior: EDL controlado con contactos y telemetría de captura.
-   - No activar el switch ni declarar fidelidad completa hasta que los escenarios controlados
-     pasen y se conserve evidencia numérica y de framebuffer.
+   - SAS, piso RCS y envolvente piloto de 20°/s portados al camino acoplado; contactos de patas
+     y de cuna de torre con paridad (pasos 20–21 de `docs/physics/coupled_6dof_migration.md`).
+   - Un único modelo de inercia (tensor por pieza) en ambos caminos, con revalidación de
+     Saturn V y Flight 14 (paso 22); ascenso guiado de 30 s con SAS (paso 23); flip terminal y
+     encendido de aterrizaje hasta el contacto (paso 24).
+   - El tick legacy rota sobre el centro de masa en vuelo libre y conserva el pivote del datum
+     bajo contacto (paso 25): T+40 s del descenso terminal a 3 cm entre caminos.
+   - Entrada hipersónica con flaps (paso 26): Ship V3 a 75 km y 7,3 km/s, 70° vientre primero,
+     solo flaps; tras 60 s los caminos difieren 7 m en altitud y 0,9 m/s. Belly-flop subsónico
+     (3 km, 80 m/s, 20 s): 0,14 m y 0,003 m/s.
+   - Entrada continua con la ley de descenso de producción de Flight 14 (paso 27): de 90 km a
+     3 km pasando Mach 1, ~913 s; los caminos llegan a 0,4 s uno del otro, picos de q/carga/
+     calor dentro de 0,3 %, traza 1,9 km tras ~5 000 km.
+   - Ascenso de producción Flight 14 completo, del pad a la inserción con hot staging (paso 28):
+     staging en T+142,02 s en ambos, corte a 0,28 s, ápsides a 0,6 km, max-q 2,2 % (el legacy
+     muestrea aire y gravedad en el datum, el acoplado en el centro de masa).
+   - Flip de producción (`Flight14LandingBurn`, paso 29): de belly-flop a 1,2 km al testigo de
+     100 m; flip a 8,02 / 8,08 s, testigo a 0,16 s, propelente 0,4 %. Todos los segmentos de
+     Starship, del pad al contacto, tienen gate de paridad.
+   - Antes de activar el switch: decidir si el legacy muestrea fuerzas en el centro de masa y
+     correr los harness Godot `[G]` de ascenso/EDL con el switch encendido en una máquina con GPU.
+   - Activado por defecto (paso 30, fase F0): todos los schedulers vuelan el cuerpo rígido
+     acoplado. Pendiente: verificación en framebuffer real con GPU de `[G]` ascenso/EDL.
+   - F1 cerrada (paso 31): aerodinámica distribuida por pieza activada por defecto para
+     cuerpos esbeltos; el control de vuelo invierte el momento aerodinámico estático
+     predicho dentro del rango real del gimbal; Mercury-Atlas re-cerrado a 159.5 × 267.8 km.
+   - F2 en curso (paso 32): tanques header de Starship (23,5 t LOX en la nariz + 6,5 t CH4,
+     masa puntual en su estación, alimentan tras vaciar los principales), venteo del tanque
+     principal antes de la reentrada, flip del Flight 14 a 600 m (llega al agua a 4,3 m/s) y
+     desorbitación re-cerrada a T+7883 s (residuos −36 / +132 m). Falta encender los flaps
+     físicos sobre este estado de masas y acortar el encendido de aterrizaje (~33 s vs 15–20 s).
+   - F2 (paso 33): flaps físicos activados por defecto; arrastre transversal medido
+     (Jorgensen NASA TR R-474, Mach/Reynolds/η + viscosidad de Sutherland): la caída de panza
+     pasa de ~65 a ~102 m/s (transmisión: 101 m/s). Asignación de flaps Gauss–Newton +
+     pseudo-inverso redistribuido con ganancias programadas por autoridad, limitador de AoA por trim, centros de
+     masa seca de cáscara, headers 20 t, AoA hipersónico 59,5° con alabeo de 90° antes de
+     90 km (residuos −0,4/−0,3 km a 94 km, +0,5 km a 88,1 km, +1,3/+1,4/+0,9 km en el
+     descenso; 1,2 km ~7 s antes de la transmisión), periapsis 104,4 km. Aterrizaje con guía
+     vectorial (1,1 km, 3→2→1 motores, ~21 s hasta 100 m). Gimbal J-2 a 8°/s publicado.
+   - F2 cerrada (paso 34): gate histórico `Flight14DescentHistoricalTests` — caída de panza
+     101,1 m/s a 1,2 km contra 100,8 m/s de la transmisión. Pendiente: velocidad hipersónica
+     tardía (7291 vs 9982 km/h a T+10961) y el tramo final del aterrizaje (~10 s vs ~6 s).
+   - F3 en curso (paso 35, sin cerrar): control de actitud solo por actuadores. El SAS y la
+     envolvente de 20°/s son comandos (nada escribe ω); desaparece el piso universal de
+     0,01 rad/s². RCS declarado por pieza (`rcs_thrusters`, procedencia en
+     `reaction_control_2026.json`): APS del S-IVB, SM/CM/LM de Apollo, OAMS y anillos de
+     reentrada de Gemini, H2O2 de Mercury, gas frío de Starship/Super Heavy (reserva de gas de
+     tanque estimada: nave 4 t, booster 10 t, sacada de la carga líquida). Asignación por
+     pseudo-inverso redistribuido + descenso coordinado, ponderada por inercia, pares primero;
+     propelente por sistema; armado por etapa o por aislamiento; mezcla con flaps; bajo empuje
+     el gimbal que gira ≥ 1°/s manda en sus ejes (DPS del LM a 0,2°/s publicado). Re-cerrados:
+     Titan II (inserción T+367 s, 145 × 154 km), Gemini 8 (gate histórico: anillos al ~68 %,
+     vuelo ~75 %), Apollo 8 (amerizaje 8,3 m/s), Flight 14 hasta la entrada (ignición del
+     desorbitado T+7905 s, anclas de 94 km −320/−201 m). Abierto: checkpoint de Flight 14 no
+     bit-exacto (diferencia ~1e-14 en el comando del descenso tras reanudar), oscilación de alabeo
+     en las inversiones de banco (0,33 rad/s vs 0,15) y residuo del descenso +5,9 km a T+10369
+     (gate F2). Detalle y siguiente paso en `rigid_body_fidelity_plan.md` ("F3 findings · Open").
+     Falta RCS de Falcon 9/New Glenn/Agena.
+   - Siguiente: cerrar F3 (ver arriba) y después F4–F6 de `docs/physics/rigid_body_fidelity_plan.md` (jet damping,
+     gradiente de gravedad, slosh, recalibración histórica); aletas del S-IC, grid fins y
+     modelo newtoniano para cápsulas romas.
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el
      renderer consuma ese estado y cerrar la campaña V3 de mayor duración.
-   - SAS/rate limiting y RCS todavía requieren contratos explícitos con el evaluador de torques.
+   - SAS y envolvente de 20°/s son comandos a los actuadores en ambos caminos (F3); el piso de
+     RCS ya no existe. La inercia legacy (cilindro uniforme, 1,3–2,3× sobreestimada)
+     ahora sale del mismo tensor por pieza que usa el acoplado; se re-validó toda la suite
+     (Saturn V con amortiguamiento ζ 0,7 en las tres etapas, ignición de deorbit de Flight 14
+     recalibrada). Contactos de patas y torre ya tienen paridad. Siguiente: ascenso controlado
+     largo y descenso desde el flip hasta el contacto. Ver `docs/physics/coupled_6dof_migration.md`.
    - Cada diferencia debe tener una prueba de paridad, no un ajuste visual de tolerancia.
 
 3. **Validación visual posterior**
@@ -454,6 +515,15 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      dependen de tooling.
    - El gate ahora exige también el volumen procedural `HotStagePlume` visible y anclado
      durante el overlap; validado en framebuffer real a 640x360 como evidencia reproducible.
+   - Primera verificación en píxeles del solape (2026-10-31): el efecto anterior era humo gris
+     invisible a distancia de persecución; ahora chorros luminosos por las ventilas del anillo
+     siguen la presión de cámara real de la Ship. Hallazgo abierto: a 65–70 km las plumas
+     principales se ven como una columna estrecha, cuando deberían estar muy expandidas. Ver
+     `docs/audits/hotstage_vent_exhaust_2026-10-31.md`.
+   - Bloom de pluma a gran altitud (2026-10-31): entre ~35 y ~100 km (p/p₀ 10⁻⁶…10⁻²) la
+     envolvente se abre aguas abajo (booster ×4.2 en la cola, motores sueltos ×2.6) y la vaina
+     se mantiene visible; nivel del mar y órbita no cambian (el gate orbital sigue en 0.12). Ver
+     `docs/audits/high_altitude_plume_bloom_2026-10-31.md`.
 
    - Flight 14 early-flight reference pass (2026-09-30): delivered-thrust deluge,
      fixed-site shaded water volumes, a slender rose booster column, neutral PBR
@@ -511,7 +581,11 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
    - Harness de comparacion ya existe (`tools/visual_playtest.sh --reentry-compare`, captura
      belly-flop nominal vs EDL con mala actitud forzada via `SimulationBridge.BeginReentryDemonstration(bellyFirst:...)`;
      verificado con xvfb → `exo_play_reentry_nominal.png` / `exo_play_reentry_bad_attitude.png`).
-     Pendiente: el ajuste/comparacion visual en si (alpha, timing, zone charring) contra IFT.
+     Comparación contra los frames a bordo de Flight 14 (2026-10-31): la vaina de casco ya no
+     se ve como manchas de camuflaje (ruido alineado al flujo) y al final de la entrada el casco
+     se apaga antes que los bordes de flap, que quedan como vetas magenta como en la referencia.
+     Ver `docs/audits/flight14_entry_plasma_compare_2026-10-31.md`. Pendiente: zone charring y
+     confirmar el momento del desvanecimiento en una entrada continua.
 
 3. **Entorno y camaras**
    - Pad costero ya tiene primera pasada visual.

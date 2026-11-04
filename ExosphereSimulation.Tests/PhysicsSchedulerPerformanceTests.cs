@@ -521,12 +521,7 @@ public sealed class PhysicsSchedulerPerformanceTests
 
         var body = universe.Bodies[0];
         primary.IsOnRails = true;
-        primary.OrbitalState = OrbitalElements.FromStateVector(
-            primary.Position - body.Position,
-            primary.Velocity - body.Velocity,
-            body.GM,
-            body.Id,
-            universe.CurrentTime);
+        primary.OrbitalState = primary.ComputeCenterOfMassOrbit(body, universe.CurrentTime);
         secondary.IsOnRails = true;
         secondary.OrbitalState = primary.OrbitalState;
 
@@ -1052,12 +1047,7 @@ public sealed class PhysicsSchedulerPerformanceTests
             + Vector3d.Up * System.Math.Sqrt(earth.GM / radius);
         stack.ReferenceBodyId = earth.Id;
         stack.IsOnRails = true;
-        stack.OrbitalState = OrbitalElements.FromStateVector(
-            stack.Position - earth.Position,
-            stack.Velocity - earth.Velocity,
-            earth.GM,
-            earth.Id,
-            0.0);
+        stack.OrbitalState = stack.ComputeCenterOfMassOrbit(earth, 0.0);
 
         var universe = new Universe
         {

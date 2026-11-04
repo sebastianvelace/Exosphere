@@ -42,6 +42,21 @@ public sealed class Flight14PayloadDeploymentController : IPhysicsStepController
         _releaseView = _releases.AsReadOnly();
     }
 
+    /// <summary>A completed deployment rebuilt from its releases for a checkpointed segment.</summary>
+    internal static Flight14PayloadDeploymentController ResumeComplete(Vessel ship, CelestialBody body,
+        Flight14LaunchController launch, Flight14PayloadDefinition definition,
+        IEnumerable<Flight14PayloadRelease> releases) => new(ship, body, launch, definition, releases.ToList());
+
+    private Flight14PayloadDeploymentController(Vessel ship, CelestialBody body, Flight14LaunchController launch,
+        Flight14PayloadDefinition definition, List<Flight14PayloadRelease> releases)
+    {
+        _ship = ship; _body = body; _launch = launch; _definition = definition;
+        _partIds = releases.Select(r => r.PartInstanceId).ToArray();
+        _releases.AddRange(releases);
+        _releaseView = _releases.AsReadOnly();
+        Phase = Flight14PayloadPhase.Complete;
+    }
+
     public bool RequiresFixedCadence(Universe universe) => Phase is not (Flight14PayloadPhase.Complete or Flight14PayloadPhase.Blocked);
 
     public void BeforePhysicsStep(Universe universe, double controlIntervalSeconds)
@@ -81,8 +96,8 @@ public sealed class Flight14PayloadDeploymentController : IPhysicsStepController
         var part = _ship.Parts.Parts.SingleOrDefault(p => p.InstanceId == id);
         if (part == null || part.IsBroken) { Block("payload-missing-or-damaged"); return; }
         double beforeMass = _ship.TotalMass;
-        var beforePosition = _ship.Position;
-        var beforeVelocity = _ship.Velocity;
+        var beforePosition = _ship.CenterOfMass;
+        var beforeVelocity = _ship.CenterOfMassVelocity;
         var omega = _ship.AngularVelocity;
         var opening = _ship.Orientation.Rotate(_definition.OpeningVelocity);
         var satellite = _ship.DeployPayload(id, $"Starlink V3 { _releases.Count+1:00} (estimate)",
@@ -93,10 +108,9 @@ public sealed class Flight14PayloadDeploymentController : IPhysicsStepController
         // without applying physical control torque.
         satellite.SASEnabled = false;
         double mass = satellite.TotalMass+_ship.TotalMass;
-        var center = (satellite.Position*satellite.TotalMass+_ship.Position*_ship.TotalMass)/mass;
-        var momentum = satellite.Velocity*satellite.TotalMass+_ship.Velocity*_ship.TotalMass;
-        var satelliteOrbit = OrbitalElements.FromStateVector(satellite.Position-_body.Position,
-            satellite.Velocity-_body.Velocity, _body.GM, _body.Id, universe.CurrentTime);
+        var center = (satellite.CenterOfMass*satellite.TotalMass+_ship.CenterOfMass*_ship.TotalMass)/mass;
+        var momentum = satellite.CenterOfMassVelocity*satellite.TotalMass+_ship.CenterOfMassVelocity*_ship.TotalMass;
+        var satelliteOrbit = satellite.ComputeCenterOfMassOrbit(_body, universe.CurrentTime);
         var release = new Flight14PayloadRelease(elapsed, id, satellite, beforeMass, _ship.TotalMass,
             mass-beforeMass, center.DistanceTo(beforePosition), momentum.DistanceTo(beforeVelocity*beforeMass),
             (satellite.Velocity-_ship.Velocity-omega.Cross(satellite.Position-_ship.Position)-opening).Magnitude,

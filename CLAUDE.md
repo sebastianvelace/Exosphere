@@ -92,7 +92,7 @@ Important implemented systems:
 - radial/suborbital impact guards
 - pressure-corrected thrust/Isp/mass flow
 - orientation-dependent aero and heating
-- opt-in coupled rigid-body 6-DoF RK4 with COM/inertia, candidate-state forces and contact
+- coupled rigid-body 6-DoF RK4 (default) with COM/inertia, candidate-state forces and contact
 - heat-shield flag from part JSON
 - hard impact destruction
 - VAB catalog/assembly/export in `ExosphereSimulation/Construction`
@@ -165,10 +165,54 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - Godot `--headless` in this environment uses a dummy renderer, so viewport PNG capture needs a real framebuffer.
 - Current product priority after documentation cleanup: visual fidelity against real Starship/Super Heavy references. Prefer scoped improvements to `VesselRenderer`, `ReentryPlasmaController`, `PlumeSystem`, camera/lighting, and visual capture before broad new gameplay systems.
 - Flight 14 exploration now continues beyond its retained 100 m witness to estimated low-speed water entry, then freezes after ten seconds of water-only coupled mass-centre translation/rotation. Inclined sealed-cylinder buoyancy and projected wet-section drag are opt-in and region-gated; the global ascent/EDL integration mode is unchanged. An independent Super Heavy engineering return now reaches Gulf water contact with selectable observation and an abstracted FTS boundary; see `docs/audits/flight14_booster_return_2026-10-03.md`. Estimated booster apogee/landing guidance now improves height and timing; see `docs/audits/flight14_booster_calibration_2026-10-03.md`. Exact targeting, flooding, measured capsize timing and full booster reference-timing/trajectory calibration remain pending. See `docs/audits/flight14_water_motion_2026-10-03.md`; the earlier water-entry and inclined-water audits describe prior increments.
-- The coupled 6-DoF path remains disabled by default. Coast and simplified powered parity pass;
-  Starship ascent/EDL parity and full SAS/flap/RCS equivalence are still required before activation.
+- Off-rails flight runs on the coupled rigid-body 6-DoF RK4 by default, from every scheduler
+  (`Universe.IntegrateVesselFullPhysics`); the split tick remains only as a comparison baseline
+  (`Coupled6DofIntegrationEnabled = false`). The part frame's origin is the stack's lowest point
+  (the skirt datum the renderer, gear, water and pad use); `Vessel.Position` is that datum,
+  `Vessel.CenterOfMass`/`CenterOfMassVelocity` the physical state. Navigation (surface velocity,
+  orbital burns, SAS holds) and on-rails conics (`ComputeCenterOfMassOrbit`) use the centre of
+  mass; altitude queries use the datum. Slender stacks (L/D ≥ 3) fly distributed per-part
+  aerodynamics (`DistributedAerodynamics`, `Universe.DistributedAerodynamicsEnabled`, F1) whose
+  crossflow term is the measured η·C_dn of Jorgensen NASA TR R-474 (`CrossflowDrag`, crossflow
+  Mach/Reynolds with per-atmosphere Sutherland viscosity); Starship's body flaps are physical
+  plates on by default (`Universe.PhysicalBodyFlapsEnabled`, F2), allocated by Gauss–Newton +
+  redistributed pseudo-inverse (descent feedback gain-scheduled by flap authority); mission controllers clear
+  `Vessel.PilotRateEnvelopeEnabled` (the 20°/s envelope is a human-pilot handling choice);
+  parts may declare `header_tanks` (point masses at their station that feed only after the main
+  tanks are empty; Starship lands on its LOX/CH4 headers after the main-tank vent);
+  blunt capsules keep the blunt/trimmed model. Flight control inverts the predicted static aero
+  moment in the gimbal allocation (clipped to the real range), so finless launchers stay
+  unstable airframes held by TVC. Parity gates compare integrators with distributed aero off.
+  Attitude control is actuator-only (F3, in progress — three Flight 14 descent gates still open,
+  see `rigid_body_fidelity_plan.md` "F3 findings · Open"): SAS and the 20°/s pilot envelope are commands, nothing
+  writes ω, and there is no generic RCS floor. RCS comes from per-part `rcs_thrusters`
+  (position, direction, thrust, Isp; fed from the owning part's `fuel_capacity_mono` store or
+  the shared feed), allocated by `Physics/RcsAllocation` (couples first, inertia-weighted);
+  `rcs_arms_with_stage` and `rcs_arms_when_isolated` arm systems at separation; flaps take
+  their share before the jets, and under thrust a slewing gimbal (≥ 1°/s) owns its axes.
+  Remaining phases (jet damping, gravity gradient, slosh, recalibration) are tracked in
+  `docs/physics/rigid_body_fidelity_plan.md` (F4–F6).
 
 ## Workflow
+
+- Fidelity data must cite its source: every value of the fidelity track (`nose_length_m`,
+  `body_flaps`, header tanks, model constants, calibrated profile knobs) has a record in
+  `data/provenance/*.json` (status published/derived/estimated/calibrated, source, uncertainty,
+  and `value` when it is one number). `PartCatalog` rejects a fidelity field without one,
+  `FidelityProvenanceTests` cross-checks code constants against their records, and
+  `docs/physics/estimates_register.md` (regenerate with `python3 tools/provenance_register.py`;
+  `contract_checks.sh` fails if stale) lists everything that is not published data.
+- Each fidelity phase closes on an analytic and a historical gate listed in
+  `docs/physics/fidelity_gates.md` and tagged `[Trait("FidelityGate", "Fn")]` +
+  `[Trait("GateKind", "analytic|historical")]`; `FidelityGateRegistryTests` keeps both in sync.
+  Run one phase with `bash tools/fidelity_gate.sh F1`.
+- Flight 14 downstream segments (descent, flip, terminal burn) resume from one shared
+  pad-to-entry checkpoint (`Flight14LaunchDiagnostic.CaptureEntryCheckpoint`/`ResumeAtEntry`,
+  test fixture `Flight14EntryCheckpointFixture`), cached on disk under a SHA-256 of the
+  simulation assembly and `data/`. `Flight14EntryCheckpointTests` requires a resumed run to
+  reproduce the continuous one bit for bit; `Flight14ReturnTests` keeps the full pad-to-entry
+  chain and the exploration preview keeps its gameplay-universe chain. Iterate segments with
+  `bash tools/flight14_segments.sh` (~1 min with a warm cache).
 
 - Keep `ROADMAP.md` current when closing or adding roadmap items.
 - Keep `README.md` and this file aligned with the repo.

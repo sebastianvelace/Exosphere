@@ -75,8 +75,8 @@ public sealed class Falcon9Block5Tests
         carrier.Velocity = new Vector3d(10, 20, 30);
         var payloadPart = carrier.Parts.Root!;
         double originalMass = carrier.TotalMass;
-        Vector3d originalCenter = carrier.Position;
-        Vector3d originalMomentum = carrier.Velocity * originalMass;
+        Vector3d originalCenter = carrier.CenterOfMass;
+        Vector3d originalMomentum = RigidBodyTestKinematics.Momentum(carrier);
 
         var payload = carrier.DeployPayload(
             payloadPart.InstanceId, "Payload Simulator", Vector3d.Up * 0.5);
@@ -85,10 +85,10 @@ public sealed class Falcon9Block5Tests
         Assert.Equal(payloadPart.InstanceId, payload!.Parts.Root!.InstanceId);
         Assert.Equal(originalMass, carrier.TotalMass + payload.TotalMass, 8);
         Vector3d combinedCenter =
-            (carrier.Position * carrier.TotalMass + payload.Position * payload.TotalMass)
+            (carrier.CenterOfMass * carrier.TotalMass + payload.CenterOfMass * payload.TotalMass)
             / originalMass;
         Vector3d combinedMomentum =
-            carrier.Velocity * carrier.TotalMass + payload.Velocity * payload.TotalMass;
+            RigidBodyTestKinematics.Momentum(carrier) + RigidBodyTestKinematics.Momentum(payload);
         Assert.True(combinedCenter.DistanceTo(originalCenter) < 1e-9);
         Assert.True(combinedMomentum.DistanceTo(originalMomentum) < 1e-6);
 

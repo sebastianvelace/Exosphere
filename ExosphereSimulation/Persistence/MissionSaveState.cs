@@ -54,6 +54,8 @@ public sealed class PartSaveState
     public double Oxidizer { get; set; }
     public double ReservedLiquidFuel { get; set; }
     public double ReservedOxidizer { get; set; }
+    /// <summary>Header-tank loads; null in older saves (headers restore empty).</summary>
+    public List<double>? HeaderPropellantKg { get; set; }
     public double SolidFuel { get; set; }
     public double Monopropellant { get; set; }
     public double Temperature { get; set; } = 290.0;

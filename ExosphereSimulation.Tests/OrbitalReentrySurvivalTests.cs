@@ -38,6 +38,9 @@ public sealed class OrbitalReentrySurvivalTests
         var earth = universe.GetBody("earth")!;
 
         var vessel = BuildStarship();
+        // The attitude is imposed by fiat below; flight control must not fight it, so both
+        // cases fly the same configuration (flaps at neutral).
+        vessel.SASEnabled = false;
 
         // Start on a shallow descending trajectory at entry interface. The calibrated case
         // is expressed in planet coordinates: 23.44 deg N, heading due west (against the
@@ -68,9 +71,18 @@ public sealed class OrbitalReentrySurvivalTests
             if (surfVel.Magnitude > 1.0)
             {
                 var flow = surfVel.Normalized;
+                // An ideal attitude hold is a pure torque: it re-poses the vehicle about its
+                // centre of mass and stops the rotation without touching the centre of mass's
+                // position or velocity (zeroing ω while keeping the datum velocity would inject
+                // −ω×r into the trajectory every step).
+                var centerOfMass = vessel.CenterOfMass;
+                var centerOfMassVelocity = vessel.CenterOfMassVelocity;
                 vessel.Orientation = bellyFirst
                     ? Quaterniond.FromTo(-Vector3d.Right, flow)   // tiles into the flow
                     : Quaterniond.FromTo(Vector3d.Right, flow);   // tiles turned away
+                vessel.AngularVelocity = Vector3d.Zero;
+                vessel.Position = centerOfMass - vessel.Orientation.Rotate(vessel.Parts.CenterOfMass);
+                vessel.Velocity = centerOfMassVelocity;
             }
 
             universe.Tick(Dt);
@@ -304,13 +316,17 @@ public sealed class OrbitalReentrySurvivalTests
         universe.AddVessel(vessel);
         universe.ActiveVessel = vessel;
 
-        for (int i = 0; i < 5_000; i++)
+        // The ship's cold-gas thrusters turn it slowly: the reorientation takes minutes (the
+        // flights spend most of the coast getting there), with damping sized to that authority.
+        for (int i = 0; i < 50 * 900; i++)
         {
             var flow = vessel.GetSurfaceVelocity(earth).Normalized;
             var target = EntryAttitudeGuidance.ComputeTarget(up, flow, liftTowardBody: true);
+            double authority = vessel.GetPitchYawAngularAuthority(earth);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
                 vessel.Orientation, target, vessel.AngularVelocity,
-                proportionalGain: 1.8, dampingGain: 4.0, allowRoll: true);
+                proportionalGain: 1.8, dampingGain: AttitudeGuidance.DampingGainFor(1.8, authority),
+                allowRoll: true);
             universe.Tick(0.02);
         }
 

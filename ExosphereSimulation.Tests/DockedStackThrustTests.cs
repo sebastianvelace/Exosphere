@@ -33,7 +33,9 @@ public sealed class DockedStackThrustTests
         double m1End = primary.TotalMass;
         double expected = System.Math.Log((m1 + m2) / (m1End + m2)) / System.Math.Log(m1 / m1End);
         Assert.InRange(dockedDeltaV / aloneDeltaV, expected * 0.99, expected * 1.01);
-        Assert.Equal(primary.Velocity, secondary.Velocity);
+        // Rigidly slaved: the secondary datum moves at the stack's rigid-body velocity there.
+        var rigid = primary.Velocity + primary.AngularVelocity.Cross(secondary.Position - primary.Position);
+        Assert.InRange((secondary.Velocity - rigid).Magnitude, 0, 1e-9);
     }
 
     [Fact]
@@ -44,7 +46,9 @@ public sealed class DockedStackThrustTests
         foreach (var vessel in new[] { aloneVessel, primary })
         {
             vessel.Throttle = 0.0;
-            vessel.PitchYawRoll = new Vector3d(1.0, 0.0, 0.0);
+            // Half command: within what the couples give alone, so the jets add no net force
+            // (a full command also fires single jets, whose force acts about the stack centre).
+            vessel.PitchYawRoll = new Vector3d(0.5, 0.0, 0.0);
         }
 
         for (int step = 0; step < 50; step++)
@@ -77,6 +81,19 @@ public sealed class DockedStackThrustTests
             Radius = 1.0,
             SphereOfInfluence = 1.0e12,
         });
+
+        // The tug's only attitude actuator: pitch and yaw couples of 10 N thrusters on its
+        // engine mount (pure moments, no net force), fed from a 1 kg store. Only the tug has it.
+        static Exosphere.Simulation.Parts.RcsThrusterDef Jet(string id, double y, double x, double z) => new()
+        {
+            Id = id, Position = [0.0, y, 0.0], Direction = [x, 0.0, z], ThrustN = 10.0, IspS = 220.0,
+        };
+        catalog["engine_liquid_vac"].RcsThrusters =
+        [
+            Jet("p1", 1.0, 0.0, 1.0), Jet("p2", -1.0, 0.0, -1.0), Jet("n1", 1.0, 0.0, -1.0), Jet("n2", -1.0, 0.0, 1.0),
+            Jet("y1", 1.0, 1.0, 0.0), Jet("y2", -1.0, -1.0, 0.0), Jet("y3", 1.0, -1.0, 0.0), Jet("y4", -1.0, 1.0, 0.0),
+        ];
+        catalog["engine_liquid_vac"].FuelCapacityMono = 1.0;
 
         var tug = new VesselAssembly(catalog);
         var port = tug.AddRoot("docking_port_standard");

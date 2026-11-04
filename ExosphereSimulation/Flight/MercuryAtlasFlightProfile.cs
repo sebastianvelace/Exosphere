@@ -27,10 +27,16 @@ public static class MercuryAtlasFlightProfile
     /// <summary>
     /// Aggregate high-altitude thrust of the lumped LR-105+verniers model. Not the
     /// published YLR-105 vacuum rating (~365 kN). Recalibrated on the WGS84 sea-level
-    /// Cape so a 22° BECO / −17° insertion tape closes periapsis; 610 kN was the
+    /// Cape so the BECO/insertion tape closes periapsis; 610 kN was the
     /// spherical mean-radius value.
     /// </summary>
     public const double EffectiveSustainerVacuumThrustN = 625_000.0;
+
+    /// <summary>Tape elevation at BECO (calibrated reconstruction, not the Atlas analog tape).</summary>
+    public const double BoosterCutoffElevationDegrees = 23.2;
+
+    /// <summary>Final sustainer-phase tape elevation (calibrated reconstruction).</summary>
+    public const double InsertionElevationDegrees = -17.9;
 
     /// <summary>Commanded elevation above the local geodetic horizon during powered flight.</summary>
     public static double ElevationDegrees(double elapsedSeconds)
@@ -46,23 +52,26 @@ public static class MercuryAtlasFlightProfile
         // horizon and a few degrees below while the sustainer still has propellant
         // — holding loft spent that Δv on radial climb and dry-holed the Atlas
         // ~60 s early, so the Kepler coast skipped through the Earth.
+        // Re-closed on distributed (per-part) aerodynamics: the aggregate model's
+        // broadside-blended drag at the tape's 4–6° angle of attack cost ~40 m/s more by
+        // BECO. 23.2° BECO / −17.9° gives 159.5 × 267.8 km (aggregate fit: 157 × 276).
         if (elapsedSeconds <= 18.0) return 90.0;
         if (elapsedSeconds <= BoosterEngineCutoffSeconds)
             return SmoothStep(
-                90.0, 22.0,
+                90.0, BoosterCutoffElevationDegrees,
                 18.0, BoosterEngineCutoffSeconds,
                 elapsedSeconds);
         if (elapsedSeconds <= 155.0)
             return SmoothStep(
-                22.0, 2.0,
+                BoosterCutoffElevationDegrees, 2.0,
                 BoosterEngineCutoffSeconds, 155.0,
                 elapsedSeconds);
         if (elapsedSeconds <= 215.0)
             return SmoothStep(
-                2.0, -17.0,
+                2.0, InsertionElevationDegrees,
                 155.0, 215.0,
                 elapsedSeconds);
-        return -17.0;
+        return InsertionElevationDegrees;
     }
 
     /// <summary>

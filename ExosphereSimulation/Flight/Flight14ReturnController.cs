@@ -2,6 +2,7 @@ namespace Exosphere.Simulation.Flight;
 
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
 
 public enum Flight14ReturnPhase
 {
@@ -19,6 +20,12 @@ public sealed record Flight14EntryWitness(double MissionElapsedSeconds, double G
 /// Composes the loaded launch/deployment with a real single-engine deorbit and entry.
 /// No state reseeding, resource refill, landing-site targeting or water-return acceptance.
 /// </summary>
+public sealed record Flight14ReturnSummary(bool HasDeliveredDeorbitThrust, double PostDeploymentMassKg,
+    double PostDeploymentPropellantKg, double DeorbitCommandElapsedSeconds, double DeorbitTargetElapsedSeconds,
+    double DeorbitShutdownElapsedSeconds, double PreDeorbitEnergyJPerKg, double PostDeorbitEnergyJPerKg,
+    double PostDeorbitPeriapsisAltitudeM, double PreDeorbitPropellantKg, double PostDeorbitPropellantKg,
+    Flight14EntryWitness EntryInterface, Flight14EntryWitness DiagnosticEnd);
+
 public sealed class Flight14ReturnController : IPhysicsStepController
 {
     private readonly Vessel _ship;
@@ -33,7 +40,8 @@ public sealed class Flight14ReturnController : IPhysicsStepController
 
     public Flight14ReturnPhase Phase { get; private set; } = Flight14ReturnPhase.WaitingForPayload;
     public string? BlockReason { get; private set; }
-    public bool HasDeliveredDeorbitThrust => _burn.HasDeliveredThrust;
+    public bool HasDeliveredDeorbitThrust => _burn.HasDeliveredThrust || _resumedDeliveredThrust;
+    private bool _resumedDeliveredThrust;
     public double PostDeploymentMassKg { get; private set; } = double.NaN;
     public double PostDeploymentPropellantKg { get; private set; } = double.NaN;
     public double DeorbitCommandElapsedSeconds { get; private set; } = double.NaN;
@@ -60,6 +68,39 @@ public sealed class Flight14ReturnController : IPhysicsStepController
         _burn = new Flight14OrbitalBurn(Flight14BurnKind.Deorbit,
             definition.TargetPeriapsisAltitudeM, guidance.SeaLevelEngineModelId,
             3, definition.MinimumBurnAltitudeM, definition.MaximumBurnSeconds);
+    }
+
+    /// <summary>Event record of a return that reached its entry endpoint.</summary>
+    public Flight14ReturnSummary CaptureSummary() => Phase == Flight14ReturnPhase.EntryReached
+        ? new(HasDeliveredDeorbitThrust, PostDeploymentMassKg, PostDeploymentPropellantKg,
+            DeorbitCommandElapsedSeconds, DeorbitTargetElapsedSeconds, DeorbitShutdownElapsedSeconds,
+            PreDeorbitEnergyJPerKg, PostDeorbitEnergyJPerKg, PostDeorbitPeriapsisAltitudeM,
+            PreDeorbitPropellantKg, PostDeorbitPropellantKg, EntryInterface!, DiagnosticEnd!)
+        : throw new InvalidOperationException("Only a return that reached entry can be summarised.");
+
+    /// <summary>A return controller at its entry endpoint, rebuilt for a checkpointed segment.</summary>
+    internal static Flight14ReturnController ResumeAtEntry(Vessel ship, CelestialBody body,
+        Flight14LaunchController launch, Flight14PayloadDeploymentController payload,
+        Flight14ReturnDefinition definition, Flight14LaunchGuidanceDefinition guidance, Flight14ReturnSummary summary)
+    {
+        var controller = new Flight14ReturnController(ship, body, launch, payload, definition, guidance)
+        {
+            Phase = Flight14ReturnPhase.EntryReached,
+            _resumedDeliveredThrust = summary.HasDeliveredDeorbitThrust,
+            PostDeploymentMassKg = summary.PostDeploymentMassKg,
+            PostDeploymentPropellantKg = summary.PostDeploymentPropellantKg,
+            DeorbitCommandElapsedSeconds = summary.DeorbitCommandElapsedSeconds,
+            DeorbitTargetElapsedSeconds = summary.DeorbitTargetElapsedSeconds,
+            DeorbitShutdownElapsedSeconds = summary.DeorbitShutdownElapsedSeconds,
+            PreDeorbitEnergyJPerKg = summary.PreDeorbitEnergyJPerKg,
+            PostDeorbitEnergyJPerKg = summary.PostDeorbitEnergyJPerKg,
+            PostDeorbitPeriapsisAltitudeM = summary.PostDeorbitPeriapsisAltitudeM,
+            PreDeorbitPropellantKg = summary.PreDeorbitPropellantKg,
+            PostDeorbitPropellantKg = summary.PostDeorbitPropellantKg,
+            EntryInterface = summary.EntryInterface,
+            DiagnosticEnd = summary.DiagnosticEnd,
+        };
+        return controller;
     }
 
     public bool RequiresFixedCadence(Universe universe) => Phase is not
@@ -145,11 +186,15 @@ public sealed class Flight14ReturnController : IPhysicsStepController
             { Block("deorbit-physical-response-envelope"); return; }
             _entryReference = _ship.Orientation;
             Phase = Flight14ReturnPhase.EntryCoast;
+            // Dump the main-tank residual before entry; landing propellant rides in the headers.
+            _ship.PropellantVentRateKgPerS = _definition.MainTankVentRateKgPerS;
         }
         _ship.Throttle = 0;
         var up = _body.GetGeodeticUp(_ship.Position);
         var surfaceVelocity = _ship.GetSurfaceVelocity(_body);
-        var desired = EntryAttitudeGuidance.ComputeTarget(up, surfaceVelocity.Normalized, liftTowardBody: false);
+        var desired = _definition.EntryAngleOfAttackDegrees > 0
+            ? BankedEntryTarget(up, surfaceVelocity.Normalized)
+            : EntryAttitudeGuidance.ComputeTarget(up, surfaceVelocity.Normalized, liftTowardBody: false);
         _entryReference = AttitudeGuidance.SlewQuaternion(_entryReference, desired,
             controlIntervalSeconds, _definition.EntryReferenceRateRadPerSecond);
         _ship.PitchYawRoll = AttitudeGuidance.ComputeCommand(_ship.Orientation,
@@ -168,6 +213,18 @@ public sealed class Flight14ReturnController : IPhysicsStepController
             _ship.PitchYawRoll = Vector3d.Zero;
             Phase = Flight14ReturnPhase.EntryReached;
         }
+    }
+
+    /// <summary>Belly-first entry attitude at the profile's angle of attack, lift banked from up.</summary>
+    private Quaterniond BankedEntryTarget(Vector3d up, Vector3d flow)
+    {
+        var liftUp = up - flow * up.Dot(flow);
+        if (liftUp.MagnitudeSquared < 1e-12) liftUp = Vector3d.Up - flow * Vector3d.Up.Dot(flow);
+        liftUp = liftUp.Normalized;
+        double bank = _definition.EntryBankDegrees * MathUtils.DEG_TO_RAD;
+        var lift = liftUp * System.Math.Cos(bank) + flow.Cross(liftUp) * System.Math.Sin(bank);
+        var axis = AerodynamicsModel.ComputeEntryAxisForLift(flow, lift, _definition.EntryAngleOfAttackDegrees);
+        return AerodynamicsModel.ComputeBellyFirstOrientation(axis, flow);
     }
 
     private double PropellantKg => _tank.LiquidFuel + _tank.Oxidizer;

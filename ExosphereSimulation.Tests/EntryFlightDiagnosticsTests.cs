@@ -41,10 +41,16 @@ public sealed class EntryFlightDiagnosticsTests
         Vessel vessel = BuildVessel(
             position: new Vector3d(radius, 0.0, 0.0),
             velocity: new Vector3d(descent, 0.0, speed));
+        // Airspeed is the centre of mass's, which depends on attitude through the body's
+        // rotation at that point; converge the 70° attitude and the airspeed together.
         Vector3d atmosphereVelocity = vessel.GetSurfaceVelocity(body);
-        vessel.Orientation = Quaterniond.FromTo(
-            Vector3d.Up,
-            Aerodynamics.PhysicsAxis(atmosphereVelocity, 70.0));
+        for (int i = 0; i < 4; i++)
+        {
+            vessel.Orientation = Quaterniond.FromTo(
+                Vector3d.Up,
+                Aerodynamics.PhysicsAxis(atmosphereVelocity, 70.0));
+            atmosphereVelocity = vessel.GetSurfaceVelocity(body);
+        }
 
         EntryFlightState state = EntryFlightDiagnostics.Evaluate(vessel, body);
         double expectedFpa = System.Math.Asin(
@@ -65,9 +71,9 @@ public sealed class EntryFlightDiagnosticsTests
     {
         CelestialBody body = BuildBody(withAtmosphere: true);
         Vector3d position = new(EarthRadius + 1_000.0, 0.0, 0.0);
-        Vessel vessel = BuildVessel(
-            position,
-            body.Velocity + body.GetSurfaceVelocity(position));
+        Vessel vessel = BuildVessel(position, Vector3d.Zero);
+        // At rest relative to the atmosphere means the centre of mass co-rotates.
+        vessel.Velocity = body.Velocity + body.GetSurfaceVelocity(vessel.CenterOfMass);
 
         EntryFlightState state = EntryFlightDiagnostics.Evaluate(vessel, body);
 
