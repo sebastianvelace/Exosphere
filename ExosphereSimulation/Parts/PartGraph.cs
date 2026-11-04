@@ -308,8 +308,10 @@ public class PartGraph
         }
     }
     public double DryMass          => _parts.Sum(p => p.EffectiveMassDry);
-    public double TotalLiquidFuel  => _parts.Sum(p => p.LiquidFuel);
-    public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer);
+    /// <summary>All liquid fuel aboard, main and header tanks.</summary>
+    public double TotalLiquidFuel  => _parts.Sum(p => p.LiquidFuel + p.HeaderLiquidFuel);
+    /// <summary>All oxidizer aboard, main and header tanks.</summary>
+    public double TotalOxidizer    => _parts.Sum(p => p.Oxidizer + p.HeaderOxidizer);
     public double TotalElectricCharge => _parts.Sum(p => p.ElectricCharge);
     public double VehicleLength
     {
@@ -431,7 +433,7 @@ public class PartGraph
                 double mass = part.CurrentMass;
                 _tickTotalMass += mass;
                 if (!positions.TryGetValue(part, out var position)) continue;
-                _tickCenterOfMass += position * mass;
+                _tickCenterOfMass += MassCentre(part, position) * mass;
                 positionedMass += mass;
             }
             if (positionedMass > 0.0)
@@ -514,7 +516,7 @@ public class PartGraph
             if (!positions.TryGetValue(part, out var position)) continue;
 
             totalMass += mass;
-            weightedPosition += position * mass;
+            weightedPosition += MassCentre(part, position) * mass;
         }
 
         if (!double.IsFinite(totalMass) || totalMass <= 0.0)
@@ -535,7 +537,24 @@ public class PartGraph
         foreach (var part in _parts)
         {
             if (!positions.TryGetValue(part, out var position)) continue;
-            double mass = part.CurrentMass;
+            // Header propellant is a point mass at its station; the rest of the part is the
+            // cylinder below.
+            var headers = part.Definition.HeaderTanks;
+            double headerMass = 0.0;
+            for (int h = 0; h < headers.Count && h < part.HeaderPropellantKg.Length; h++)
+            {
+                double headerKg = part.HeaderPropellantKg[h];
+                if (headerKg <= 0.0) continue;
+                headerMass += headerKg;
+                Vector3d d = new Vector3d(position.X, position.Y + headers[h].CenterYM, position.Z) - centerOfMass;
+                i11 += headerKg * (d.Y * d.Y + d.Z * d.Z);
+                i22 += headerKg * (d.X * d.X + d.Z * d.Z);
+                i33 += headerKg * (d.X * d.X + d.Y * d.Y);
+                i12 -= headerKg * d.X * d.Y;
+                i13 -= headerKg * d.X * d.Z;
+                i23 -= headerKg * d.Y * d.Z;
+            }
+            double mass = part.CurrentMass - headerMass;
             double length = part.Definition.LengthM > 0.0
                 ? part.Definition.LengthM
                 : fallbackLength;
@@ -567,6 +586,13 @@ public class PartGraph
             i12, i22, i23,
             i13, i23, i33);
         return new RigidBodyMassProperties(totalMass, centerOfMass, inertia);
+    }
+
+    /// <summary>A part's own centre of mass: its centre, shifted along its axis by header propellant.</summary>
+    private static Vector3d MassCentre(Part part, Vector3d position)
+    {
+        double offset = part.MassCenterOffsetYM;
+        return offset == 0.0 ? position : new Vector3d(position.X, position.Y + offset, position.Z);
     }
 
     // Positions depend on topology and geometry only, so ticks share the topology cache.
@@ -809,7 +835,7 @@ public class PartGraph
             foreach (var p in _parts)
             {
                 if (!positions.TryGetValue(p, out var pos)) continue;
-                com = com + pos * p.CurrentMass;
+                com = com + MassCentre(p, pos) * p.CurrentMass;
                 positionedMass += p.CurrentMass;
             }
             return positionedMass > 0.0 ? com / positionedMass : Vector3d.Zero;
@@ -1444,7 +1470,7 @@ public class PartGraph
         // equation mass ratio must therefore include the complete vehicle as carried mass.
         double wet = TotalMass;
         double propellant = stage.Sum(p =>
-            p.LiquidFuel + p.Oxidizer + p.SolidFuel + p.Monopropellant);
+            p.LiquidFuel + p.Oxidizer + p.HeaderLiquidFuel + p.HeaderOxidizer + p.SolidFuel + p.Monopropellant);
         double dry = wet - propellant;
         return GetStageDeltaV(wet, dry, ambientPressure);
     }
@@ -1472,6 +1498,27 @@ public class PartGraph
     // su propia etapa (los motores no tienen capacidad propia), pero NO a través de un
     // desacoplador activo — así la etapa superior conserva su propelante hasta separarse.
     // During hot-stage overlap both stage pools burn, each into its own tanks.
+    /// <summary>
+    /// Vents up to <paramref name="kg"/> of liquid propellant from the main tanks (fuel and
+    /// oxidizer in proportion to what remains, never from header tanks or a landing reserve).
+    /// Returns the mass removed.
+    /// </summary>
+    public double VentMainPropellant(double kg)
+    {
+        if (!(kg > 0.0)) return 0.0;
+        double available = 0.0;
+        foreach (var part in _parts) available += part.AvailableLiquidFuel + part.AvailableOxidizer;
+        if (available <= 0.0) return 0.0;
+        double vented = System.Math.Min(kg, available);
+        double fraction = vented / available;
+        foreach (var part in _parts)
+        {
+            part.LiquidFuel -= part.AvailableLiquidFuel * fraction;
+            part.Oxidizer -= part.AvailableOxidizer * fraction;
+        }
+        return vented;
+    }
+
     public void ConsumePropellant(double dt, double ambientPressure)
     {
         if (HotStageOverlapActive)
@@ -1576,13 +1623,18 @@ public class PartGraph
         {
             double totalLF = 0.0;
             double totalOx = 0.0;
+            double headerLF = 0.0;
+            double headerOx = 0.0;
             for (int i = 0; i < tankPool.Count; i++)
             {
                 totalLF += tankPool[i].AvailableLiquidFuel;
                 totalOx += tankPool[i].AvailableOxidizer;
+                headerLF += tankPool[i].HeaderLiquidFuel;
+                headerOx += tankPool[i].HeaderOxidizer;
             }
-            double remainingLF = totalLF;
-            double remainingOx = totalOx;
+            // Header tanks feed once the main tanks cannot fund the demand.
+            double remainingLF = totalLF + headerLF;
+            double remainingOx = totalOx + headerOx;
             double fundedLF = 0.0;
             double fundedOx = 0.0;
             double loadedTotal = totalLF + totalOx;
@@ -1626,13 +1678,23 @@ public class PartGraph
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
             {
+                double mainLF = System.Math.Min(fundedLF, totalLF);
+                double mainOx = System.Math.Min(fundedOx, totalOx);
+                double fromHeaderLF = fundedLF - mainLF;
+                double fromHeaderOx = fundedOx - mainOx;
                 for (int tankIndex = 0; tankIndex < tankPool.Count; tankIndex++)
                 {
                     var p = tankPool[tankIndex];
+                    double partHeaderLF = p.HeaderLiquidFuel;
+                    double partHeaderOx = p.HeaderOxidizer;
                     if (totalLF > 0.0)
-                        p.LiquidFuel = System.Math.Max(p.ReservedLiquidFuel, p.LiquidFuel - fundedLF * (p.AvailableLiquidFuel / totalLF));
+                        p.LiquidFuel = System.Math.Max(p.ReservedLiquidFuel, p.LiquidFuel - mainLF * (p.AvailableLiquidFuel / totalLF));
                     if (totalOx > 0.0)
-                        p.Oxidizer = System.Math.Max(p.ReservedOxidizer, p.Oxidizer - fundedOx * (p.AvailableOxidizer / totalOx));
+                        p.Oxidizer = System.Math.Max(p.ReservedOxidizer, p.Oxidizer - mainOx * (p.AvailableOxidizer / totalOx));
+                    if (fromHeaderLF > 0.0 && headerLF > 0.0)
+                        p.DrawHeaderPropellant(oxidizer: false, fromHeaderLF * partHeaderLF / headerLF);
+                    if (fromHeaderOx > 0.0 && headerOx > 0.0)
+                        p.DrawHeaderPropellant(oxidizer: true, fromHeaderOx * partHeaderOx / headerOx);
                 }
             }
         }

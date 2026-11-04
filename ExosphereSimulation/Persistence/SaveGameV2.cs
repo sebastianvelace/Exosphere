@@ -54,6 +54,9 @@ public sealed class VesselSaveV2
     public string? ReferenceBodyId { get; set; }
     public double Throttle { get; set; }
     public VectorSaveV2 PitchYawRoll { get; set; } = new();
+    /// <summary>Commanded main-tank vent flow (kg/s).</summary>
+    public double PropellantVentRateKgPerS { get; set; }
+    public double VentedPropellantKg { get; set; }
     /// <summary>Slewed body-flap channels (pitch, yaw, roll) of the aggregate flap model.</summary>
     public VectorSaveV2 FlapActuators { get; set; } = new();
     /// <summary>Physical body-flap deflections (rad), in <c>PartGraph.GetBodyFlaps</c> order.</summary>
@@ -84,6 +87,11 @@ public sealed class PartSaveV2
     public double Oxidizer { get; set; }
     public double ReservedLiquidFuel { get; set; }
     public double ReservedOxidizer { get; set; }
+    /// <summary>
+    /// Header-tank loads in definition order. Null in saves written before header tanks
+    /// existed: those already carry that propellant in the main tank, so headers restore empty.
+    /// </summary>
+    public List<double>? HeaderPropellantKg { get; set; }
     public double SolidFuel { get; set; }
     public double Monopropellant { get; set; }
     /// <summary>Attitude RCS armed state; null in older saves (the part definition's default).</summary>
@@ -513,6 +521,8 @@ public static class SaveGameV2Codec
             Orbit = vessel.OrbitalState == null ? null : CaptureOrbit(vessel.OrbitalState),
             ReferenceBodyId = vessel.ReferenceBodyId,
             Throttle = vessel.Throttle,
+            PropellantVentRateKgPerS = vessel.PropellantVentRateKgPerS,
+            VentedPropellantKg = vessel.VentedPropellantKg,
             PitchYawRoll = VectorSaveV2.From(vessel.PitchYawRoll),
             FlapActuators = VectorSaveV2.From(new Vector3d(
                 vessel.FlapActuators.Pitch, vessel.FlapActuators.Yaw, vessel.FlapActuators.Roll)),
@@ -592,6 +602,8 @@ public static class SaveGameV2Codec
             OrbitalState = saved.Orbit == null ? null : RestoreOrbit(saved.Orbit),
             ReferenceBodyId = saved.ReferenceBodyId,
             Throttle = saved.Throttle,
+            PropellantVentRateKgPerS = saved.PropellantVentRateKgPerS,
+            VentedPropellantKg = saved.VentedPropellantKg,
             PitchYawRoll = saved.PitchYawRoll.ToVector(),
             SASEnabled = saved.SasEnabled,
             ParachutesArmed = saved.ParachutesArmed,
@@ -647,6 +659,7 @@ public static class SaveGameV2Codec
         Oxidizer = part.Oxidizer,
         ReservedLiquidFuel = part.ReservedLiquidFuel,
         ReservedOxidizer = part.ReservedOxidizer,
+        HeaderPropellantKg = part.HeaderPropellantKg.ToList(),
         SolidFuel = part.SolidFuel,
         Monopropellant = part.Monopropellant,
         RcsAttitudeEnabled = part.RcsAttitudeEnabled,
@@ -710,6 +723,7 @@ public static class SaveGameV2Codec
             GimbalOffset = state.GimbalOffset.ToVector(),
             ActiveEngineFraction = state.ActiveEngineFraction,
         };
+        part.SetHeaderPropellant(state.HeaderPropellantKg ?? (IReadOnlyList<double>)new double[definition.HeaderTanks.Count]);
         part.ReserveLandingPropellant(state.ReservedLiquidFuel, state.ReservedOxidizer);
         part.RestoreEngineStates(state.EngineInstances.Select(engine => new EngineInstanceState
         {

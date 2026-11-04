@@ -216,6 +216,68 @@
       "conditions": "final sustainer-phase elevation; not the original analog tape",
       "uncertainty": "insertion residuals -1.5 km perigee, +6.8 km apogee",
       "value": -17.9
+    },
+    {
+      "dataId": "starship_command",
+      "field": "headerTanks",
+      "status": "calibrated",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship Block 2 LOX header",
+      "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
+      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+    },
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "headerTanks",
+      "status": "calibrated",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship V3 LOX header",
+      "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
+      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+    },
+    {
+      "dataId": "starship_tank",
+      "field": "headerTanks",
+      "status": "calibrated",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship Block 2 CH4 header and main-tank split",
+      "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
+      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+    },
+    {
+      "dataId": "starship_v3_tank_flight12",
+      "field": "headerTanks",
+      "status": "calibrated",
+      "source": "Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank)",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship V3 CH4 header and main-tank split",
+      "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
+      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+    },
+    {
+      "dataId": "starship-flight14-return",
+      "field": "mainTankVentRateKgPerS",
+      "status": "estimated",
+      "source": "Exosphere estimate: main-tank residual dumped between the deorbit shutdown and entry interface so the landing burn draws on the header tanks",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship Flight 14 engineering return",
+      "conditions": "vent flow commanded after the deorbit shutdown; the vented gas reaction impulse is neglected",
+      "uncertainty": "rate unknown publicly; any value that empties the residual before entry gives the same entry state",
+      "value": 100.0
+    },
+    {
+      "dataId": "starship-flight14-return",
+      "field": "earliestDeorbitMissionSeconds",
+      "status": "calibrated",
+      "source": "Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s; observed early-deorbit window T+7864..7925 s",
+      "accessedDate": "2026-11-03",
+      "variant": "Starship Flight 14 engineering return",
+      "conditions": "deorbit ignition time, the continuous calibration lever of the return profile",
+      "uncertainty": "residuals within ±500 m of a datum-conditional display",
+      "value": 7883.0
     }
   ]
 }

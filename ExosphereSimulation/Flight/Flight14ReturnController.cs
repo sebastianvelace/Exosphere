@@ -185,6 +185,8 @@ public sealed class Flight14ReturnController : IPhysicsStepController
             { Block("deorbit-physical-response-envelope"); return; }
             _entryReference = _ship.Orientation;
             Phase = Flight14ReturnPhase.EntryCoast;
+            // Dump the main-tank residual before entry; landing propellant rides in the headers.
+            _ship.PropellantVentRateKgPerS = _definition.MainTankVentRateKgPerS;
         }
         _ship.Throttle = 0;
         var up = _body.GetGeodeticUp(_ship.Position);

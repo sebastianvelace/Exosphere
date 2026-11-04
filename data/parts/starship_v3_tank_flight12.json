@@ -1,7 +1,7 @@
 {
   "id": "starship_v3_tank_flight12",
   "name": "Starship V3 Propellant Tank",
-  "description": "Flight 12 V3 common-bulkhead tank model. The 1,400 t loading and component dry mass are simulator estimates, not SpaceX acceptance data. axial_drag_coefficient 0.30 is a calibrated estimate for a bare 9 m cylindrical barrel (skin friction plus a modest base contribution); it is only consulted when this section is the vessel root or through the length-weighted fallback in PartGraph.AxialDragCoefficient. Body-flap planforms (hinge station, length, span) are image-derived estimates from Flight 7 proportions; deflection range and servo rate are simulator estimates.",
+  "description": "Flight 12 V3 common-bulkhead tank model. The 1,400 t loading and component dry mass are simulator estimates, not SpaceX acceptance data. axial_drag_coefficient 0.30 is a calibrated estimate for a bare 9 m cylindrical barrel (skin friction plus a modest base contribution); it is only consulted when this section is the vessel root or through the length-weighted fallback in PartGraph.AxialDragCoefficient. Body-flap planforms (hinge station, length, span) are image-derived estimates from Flight 7 proportions; deflection range and servo rate are simulator estimates. Main tanks exclude the header loads (23.5 t LOX in the nose, 6.5 t CH4 header here), so the stage total is unchanged.",
   "category": "fuel_tank",
   "vehicle_family": "starship",
   "vehicle_role": "tank",
@@ -13,8 +13,16 @@
   "axial_drag_coefficient": 0.3,
   "heat_tolerance": 1800,
   "has_heat_shield": true,
-  "fuel_capacity_lf": 308000,
-  "fuel_capacity_ox": 1092000,
+  "fuel_capacity_lf": 301500,
+  "fuel_capacity_ox": 1068500,
+  "header_tanks": [
+      {
+          "id": "ch4_header",
+          "propellant": "liquid_fuel",
+          "capacity_kg": 6500.0,
+          "center_y_m": 0.15
+      }
+  ],
   "body_flaps": [
       {
           "id": "aft_pz",

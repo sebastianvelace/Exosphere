@@ -365,6 +365,11 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - F1 cerrada (paso 31): aerodinámica distribuida por pieza activada por defecto para
      cuerpos esbeltos; el control de vuelo invierte el momento aerodinámico estático
      predicho dentro del rango real del gimbal; Mercury-Atlas re-cerrado a 159.5 × 267.8 km.
+   - F2 en curso (paso 32): tanques header de Starship (23,5 t LOX en la nariz + 6,5 t CH4,
+     masa puntual en su estación, alimentan tras vaciar los principales), venteo del tanque
+     principal antes de la reentrada, flip del Flight 14 a 600 m (llega al agua a 4,3 m/s) y
+     desorbitación re-cerrada a T+7883 s (residuos −36 / +132 m). Falta encender los flaps
+     físicos sobre este estado de masas y acortar el encendido de aterrizaje (~33 s vs 15–20 s).
    - Siguiente: fases F2–F6 de `docs/physics/rigid_body_fidelity_plan.md` (flaps físicos,
      control solo por actuadores, jet damping, gradiente de gravedad, slosh, recalibración
      histórica); aletas del S-IC, grid fins y modelo newtoniano para cápsulas romas.

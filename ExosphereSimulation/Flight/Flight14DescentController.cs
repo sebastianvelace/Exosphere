@@ -166,7 +166,7 @@ public sealed class Flight14DescentController : IPhysicsStepController
         return new(universe.CurrentTime-_launch.LiftoffEpoch, _ship.GetAltitude(_body), radius-_body.Radius,
             inertial.Magnitude, surface.Magnitude, surface.Dot(_body.GetGeodeticUp(_ship.Position)),
             inertial.MagnitudeSquared*.5-_body.GM/radius,
-            _ship.Parts.Parts.Sum(p => p.LiquidFuel+p.Oxidizer),
+            _ship.Parts.Parts.Sum(p => p.LiquidFuel+p.Oxidizer+p.HeaderLiquidFuel+p.HeaderOxidizer),
             -_ship.Orientation.Rotate(Vector3d.Right).Normalized.Dot(surface.Normalized),
             universe.CurrentTime, latitude, longitude);
     }

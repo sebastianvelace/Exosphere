@@ -49,6 +49,8 @@ public sealed class PartCatalog
             }
             if (part.BodyFlaps.Count > 0)
                 provenance.Require(part.Id, "bodyFlaps");
+            if (part.HeaderTanks.Count > 0)
+                provenance.Require(part.Id, "headerTanks");
         }
     }
 

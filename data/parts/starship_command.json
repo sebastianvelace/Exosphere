@@ -1,7 +1,7 @@
 {
   "id": "starship_command",
   "name": "Starship Command Section",
-  "description": "Flight 7 Block 2 nose, payload section, avionics and forward flaps. The 35 t dry mass is an engineering allocation within a 100 t dry Starship stage; SpaceX does not publish a component mass breakdown. Body-flap planforms (hinge station, length, span) are image-derived estimates from Flight 7 proportions; deflection range and servo rate are simulator estimates.",
+  "description": "Flight 7 Block 2 nose, payload section, avionics and forward flaps. The 35 t dry mass is an engineering allocation within a 100 t dry Starship stage; SpaceX does not publish a component mass breakdown. Body-flap planforms (hinge station, length, span) are image-derived estimates from Flight 7 proportions; deflection range and servo rate are simulator estimates. Carries the LOX header tank (23.5 t, calibrated) above the nose-cone base; header propellant feeds the engines once the main tanks are empty or vented.",
   "category": "command",
   "vehicle_family": "starship",
   "vehicle_role": "command",
@@ -18,6 +18,14 @@
   "catch_pin_lateral_offset_m": 4.4,
   "catch_pin_offset_y_m": 5.0,
   "catch_pin_radius_m": 0.4,
+  "header_tanks": [
+      {
+          "id": "lox_header",
+          "propellant": "oxidizer",
+          "capacity_kg": 23500.0,
+          "center_y_m": -3.25
+      }
+  ],
   "body_flaps": [
       {
           "id": "forward_pz",

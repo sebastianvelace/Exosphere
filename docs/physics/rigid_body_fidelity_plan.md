@@ -112,9 +112,26 @@ centre of mass at 24.7 m, but the model carries the landing propellant in the ma
 destabilising pitch moment at 70° against at most ≈ +1300 q of flap authority, so no flap
 setting trims the entry. The aggregate flap coefficient (3.0, capped at 4 rad/s²) had been
 covering it. The real ship lands on header-tank propellant (LOX header in the nose), which is
-what makes it trimmable. Next: header tanks (capacity and station as documented estimates,
-reserved through ascent and deorbit, opened for the landing burn), then re-close the Flight 14
-return and turn the switch on.
+what makes it trimmable.
+
+**Header tanks (2026-11-04).** Parts declare `header_tanks` (propellant, capacity, station).
+Header propellant is a point mass at its station (centre of mass and parallel-axis inertia),
+counts in the part mass and delta-v, feeds the engines only after the main tanks are empty, and
+survives saves (old saves restore empty headers). Starship carries a 23.5 t LOX header in the
+nose and a 6.5 t CH4 header in the tank, carved out of the main capacities so the launch mass
+is unchanged (30 t total, calibrated against the Flight 14 landing within its declared ±50 %
+uncertainty). The Flight 14 return opens a main-tank vent valve (100 kg/s, estimated) at the
+entry coast; the vented mass is accounted in `Vessel.VentedPropellantKg`, so the ship enters on
+header propellant only. Consequences: the heavier-than-real 70 t main-tank landing load had
+hidden an inefficient landing; with the real header load a 1.2 km flip killed the velocity too
+high and hovered on one engine until dry. The flip moved to 600 m (500 m arrived tilted 14°,
+outside the 10° envelope). The continuous chain then exposed a guidance limit cycle the seeded
+bench had hidden by phase luck: the tilt-to-kill-drift loop (0.5/s) was nearly as fast as the
+single-engine attitude loop and oscillated ±11° near the 100 m gate. At 0.2/s it stays a
+proper cascade (≤ 3° below 200 m) at the same propellant cost. Deorbit
+ignition re-closed at T+7883 s (observed window 7864–7925 s): broadcast altitude residuals
+−36 / +132 m. Next: turn `PhysicalBodyFlapsEnabled` on over this mass state, re-close the entry,
+and shorten the landing burn (~33 s here vs ~15–20 s observed) through landing guidance.
 
 ## Phases
 

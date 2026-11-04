@@ -92,14 +92,26 @@ internal static class Flight14EntryCheckpointFixture
         return entry;
     }
 
-    /// <summary>SHA-256 over the simulation assembly and every data file (path and bytes).</summary>
+    /// <summary>
+    /// Profiles read only after entry (descent, flip/terminal burn, booster return); the
+    /// pad-to-entry flight never loads them, so editing one must not rebuild the checkpoint.
+    /// </summary>
+    private static readonly HashSet<string> DownstreamOnly = new(StringComparer.Ordinal)
+    {
+        "flight_profiles/starship_flight14_descent_estimate.json",
+        "flight_profiles/starship_flight14_landing_estimate.json",
+        "flight_profiles/starship_flight14_booster_return_estimate.json",
+    };
+
+    /// <summary>SHA-256 over the simulation assembly and every data file the prefix can read.</summary>
     private static string Fingerprint()
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         hash.AppendData(File.ReadAllBytes(typeof(Universe).Assembly.Location));
         string data = DataDirectory();
         foreach (string file in Directory.GetFiles(data, "*", SearchOption.AllDirectories)
-            .Where(f => !f.EndsWith(".import", StringComparison.Ordinal) && !f.EndsWith(".uid", StringComparison.Ordinal))
+            .Where(f => !f.EndsWith(".import", StringComparison.Ordinal) && !f.EndsWith(".uid", StringComparison.Ordinal)
+                && !DownstreamOnly.Contains(Path.GetRelativePath(data, f).Replace('\\', '/')))
             .OrderBy(f => f, StringComparer.Ordinal))
         {
             hash.AppendData(System.Text.Encoding.UTF8.GetBytes(Path.GetRelativePath(data, file)));

@@ -18,6 +18,11 @@ public sealed class Flight14ReturnDefinition
     public double MaximumBurnSeconds { get; set; }
     public double MaximumShutdownSeconds { get; set; }
     public double MinimumRemainingPropellantKg { get; set; }
+    /// <summary>
+    /// Main-tank vent flow (kg/s) commanded after the deorbit shutdown: the residual is
+    /// dumped before entry and the landing burn draws on the header tanks. Zero keeps it.
+    /// </summary>
+    public double MainTankVentRateKgPerS { get; set; }
     /// <summary>Descending entry gate above the reference ellipsoid.</summary>
     public double EntryInterfaceAltitudeM { get; set; }
     /// <summary>Descending diagnostic endpoint above the reference ellipsoid.</summary>

@@ -1173,11 +1173,15 @@ public sealed class PhysicsParityIntegrationTests
             .Build(PartCatalog.LoadFromDirectory(Path.Combine(data, "parts"))).ToVessel("Flip parity", coupled ? "coupled-flip" : "legacy-flip");
         Assert.NotNull(ship.Stage());
         var tank = ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("tank"));
-        tank.LiquidFuel = 15_000; tank.Oxidizer = 55_000;
-        ship.Position = body.GetSurfacePositionAtTime(23, -178, 0, 1_200);
+        var landing = Flight14LandingDefinition.LoadFromJson(Path.Combine(data,
+            "flight_profiles", "starship_flight14_landing_estimate.json"));
+        // The production state at the flip gate: main tanks vented before entry, header
+        // tanks full, falling belly-first at the ~60 m/s terminal speed of the full return.
+        tank.LiquidFuel = 0; tank.Oxidizer = 0;
+        ship.Position = body.GetSurfacePositionAtTime(23, -178, 0, landing.FlipAltitudeM);
         var up = body.GetGeodeticUp(ship.Position);
         var flow = -up;
-        ship.Velocity = body.GetSurfaceVelocity(ship.Position) + flow * 70;
+        ship.Velocity = body.GetSurfaceVelocity(ship.Position) + flow * 60;
         ship.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
             AerodynamicsModel.ComputeEntryAxisForLift(flow, Vector3d.Right, 90), flow);
         ship.ReferenceBodyId = body.Id; ship.SASEnabled = false;
@@ -1189,7 +1193,7 @@ public sealed class PhysicsParityIntegrationTests
         var burn = new Flight14LandingBurn(ship, body, definition, "raptor3-starship-sl-flight12", 0);
         universe.PhysicsStepController = new LandingBurnStep(burn);
 
-        double startPropellant = ship.Parts.Parts.Sum(p => p.LiquidFuel + p.Oxidizer);
+        double startPropellant = ship.Parts.Parts.Sum(p => p.LiquidFuel + p.Oxidizer + p.HeaderLiquidFuel + p.HeaderOxidizer);
         double t = 0, flipComplete = double.NaN;
         bool coupledSeen = false;
         for (int i = 0; i < 6_000 && burn.Phase is not
@@ -1204,7 +1208,7 @@ public sealed class PhysicsParityIntegrationTests
         return new FlipLog(burn.Phase, burn.BlockReason, flipComplete, t,
             end?.GeodeticAltitudeM ?? double.NaN, end?.AtmosphereRelativeSpeedMps ?? double.NaN,
             end?.VerticalSpeedMps ?? double.NaN, end?.UprightAlignment ?? double.NaN,
-            startPropellant - ship.Parts.Parts.Sum(p => p.LiquidFuel + p.Oxidizer),
+            startPropellant - ship.Parts.Parts.Sum(p => p.LiquidFuel + p.Oxidizer + p.HeaderLiquidFuel + p.HeaderOxidizer),
             burn.MaximumAngularRateRadPerSecond, burn.MinimumSelectedEngineCount,
             burn.HasDeliveredThreeSeaLevelEngines, coupledSeen);
     }

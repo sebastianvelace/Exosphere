@@ -11,6 +11,25 @@ public enum PartCategory
 }
 
 /// <summary>
+/// A small propellant tank embedded in a part at its own station (Starship's LOX header in
+/// the nose, CH4 header in the tank section). It is loaded full, adds its mass at
+/// <see cref="CenterYM"/> from the part centre, and feeds the engines only once the stage's
+/// main tanks can no longer fund the demand (main tanks emptied or vented), as landing
+/// burns draw on header propellant.
+/// </summary>
+public class HeaderTankDef
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    /// <summary>"oxidizer" or "liquid_fuel".</summary>
+    [JsonPropertyName("propellant")] public string Propellant { get; set; } = "";
+    [JsonPropertyName("capacity_kg")] public double CapacityKg { get; set; }
+    [JsonPropertyName("center_y_m")] public double CenterYM { get; set; }
+
+    public bool IsOxidizer => Propellant.Equals("oxidizer", StringComparison.OrdinalIgnoreCase);
+    public bool IsLiquidFuel => Propellant.Equals("liquid_fuel", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
 /// One hinged aerodynamic control surface on a part (Starship's body flaps). The hinge line
 /// runs along the part axis at <see cref="HingeYM"/> from the part centre, on the hull side
 /// <see cref="Side"/> (+1 = +Z, −1 = −Z). Deflection 0 folds the flap against the leeward
@@ -83,6 +102,10 @@ public class PartDefinition
     /// <summary>Static margin for the standalone root configuration, not the attached launch stack.</summary>
     [JsonPropertyName("standalone_aerodynamic_center_offset_y_m")]
     public double? StandaloneAerodynamicCenterOffsetYM { get; set; }
+    /// <summary>Embedded header tanks (see <see cref="HeaderTankDef"/>).</summary>
+    [JsonPropertyName("header_tanks")]
+    public List<HeaderTankDef> HeaderTanks { get; set; } = [];
+
     /// <summary>Hinged control surfaces carried by this part (see <see cref="BodyFlapDef"/>).</summary>
     [JsonPropertyName("body_flaps")]
     public List<BodyFlapDef> BodyFlaps { get; set; } = [];

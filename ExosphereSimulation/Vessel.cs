@@ -53,6 +53,14 @@ public class Vessel
 
     // ── Controles ─────────────────────────────────────────────────────────
     public double    Throttle      { get; set; }           // [0, 1]
+    /// <summary>
+    /// Commanded main-tank vent flow (kg/s). The physics step removes it from the main tanks
+    /// of every part in proportion to their loads (never from header tanks) until they are
+    /// empty. The vented gas leaves at low speed; its reaction impulse is neglected.
+    /// </summary>
+    public double    PropellantVentRateKgPerS { get; set; }
+    /// <summary>Total propellant vented overboard so far (kg), for mass bookkeeping.</summary>
+    public double    VentedPropellantKg { get; set; }
     public Vector3d  PitchYawRoll  { get; set; }           // [-1, 1] por eje
     public bool      SASEnabled    { get; set; } = true;
 
@@ -641,6 +649,8 @@ public class Vessel
     {
         var snapshot = InfinitePropellant ? Parts.CapturePropellant() : null;
         Parts.ConsumePropellant(dt, pressure);
+        if (PropellantVentRateKgPerS > 0.0 && dt > 0.0)
+            VentedPropellantKg += Parts.VentMainPropellant(PropellantVentRateKgPerS * dt);
         ConsumeRcsTranslationPropellant(dt);
         if (snapshot != null) Parts.RestorePropellant(snapshot);
     }

@@ -7,8 +7,8 @@ provenance record is upgraded to `published` with a cited source.
 
 | Status | Records |
 | --- | ---: |
-| calibrated | 38 |
-| estimated | 196 |
+| calibrated | 43 |
+| estimated | 197 |
 | derived | 88 |
 | regulatory_envelope | 5 |
 | published | 108 |
@@ -55,6 +55,11 @@ provenance record is upgraded to `published` with a cited source.
 | raptor3-starship-sl-flight12 | startupTransient |  | timing is not public acceptance data | SpaceX Starship Flight 12 landing-burn sequence and Exosphere lifecycle calibration | starship_flight12_v3_2026.json |
 | raptor3-starship-vac-flight12 | startupTransient |  | timing is not public acceptance data | SpaceX Starship Flight 12 ascent sequence and Exosphere lifecycle calibration | starship_flight12_v3_2026.json |
 | raptor3-superheavy-flight12 | startupTransient |  | lifecycle timing is not public acceptance data | SpaceX Starship Flight 12 mission sequence and Exosphere lifecycle calibration | starship_flight12_v3_2026.json |
+| starship-flight14-return | earliestDeorbitMissionSeconds | 7883 | residuals within ±500 m of a datum-conditional display | Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s; observed early-deorbit window T+7864..7925 s | rigid_body_fidelity_2026.json |
+| starship_command | headerTanks |  | capacity ±50%; station ±2 m; tied to the estimated landing profile | Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank) | rigid_body_fidelity_2026.json |
+| starship_tank | headerTanks |  | capacity ±50%; station ±2 m; tied to the estimated landing profile | Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank) | rigid_body_fidelity_2026.json |
+| starship_v3_command_flight12 | headerTanks |  | capacity ±50%; station ±2 m; tied to the estimated landing profile | Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank) | rigid_body_fidelity_2026.json |
+| starship_v3_tank_flight12 | headerTanks |  | capacity ±50%; station ±2 m; tied to the estimated landing profile | Exosphere: SpaceX does not publish header volumes. Sized (30 t at O/F 3.6) so the estimated Flight 14 flip and terminal-burn profile reaches water contact from the full continuous return with margin; 20 t from an ideal landing delta-v did not close it. Stations from public cutaway descriptions (LOX header in the nose, CH4 header inside the LOX tank) | rigid_body_fidelity_2026.json |
 
 ## estimated
 
@@ -238,6 +243,7 @@ provenance record is upgraded to `published` with a cited source.
 | starbase_pad2 | geodeticLocation |  | approximately ±100 m; not an official surveyed pad-center coordinate | Starbase public geospatial mapping and Exosphere launch-site reconstruction | starship_flight12_v3_2026.json |
 | starship-flight-12-v3-2026-05-22 | vehicleEnvelope |  | ±2 m length, ±20% dry mass and propellant; not SpaceX acceptance data | Exosphere restricted public-data Flight 12 engineering reconstruction | starship_flight12_v3_2026.json |
 | starship-flight-7-block-2-2025-01-16 | vehicleEnvelope |  | ±2 m length; Flight 7-specific dimensions not published by SpaceX | Exosphere Flight 7 Block 2 geometry baseline and public vehicle imagery | starship_flight7_block2_2025.json |
+| starship-flight14-return | mainTankVentRateKgPerS | 100 | rate unknown publicly; any value that empties the residual before entry gives the same entry state | Exosphere estimate: main-tank residual dumped between the deorbit shutdown and entry interface so the landing burn draws on the header tanks | rigid_body_fidelity_2026.json |
 | starship_command | bodyFlaps |  | planform ±20%; travel and rate unknown publicly | Exosphere image-derived Flight 7 proportions (VesselRenderer flap rigs); travel and servo rate are simulator estimates | rigid_body_fidelity_2026.json |
 | starship_command | noseLengthM | 14 | ±20%; no published contour in the cited material | Exosphere image-scale estimate from public vehicle photographs | rigid_body_fidelity_2026.json |
 | starship_engines | massAndPerformance |  | ±15%; component mass and ratings unpublished | Exosphere Flight 7 stack performance baseline | starship_flight7_block2_2025.json |

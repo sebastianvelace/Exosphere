@@ -173,6 +173,8 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   orbital burns, SAS holds) and on-rails conics (`ComputeCenterOfMassOrbit`) use the centre of
   mass; altitude queries use the datum. Slender stacks (L/D ≥ 3) fly distributed per-part
   aerodynamics (`DistributedAerodynamics`, `Universe.DistributedAerodynamicsEnabled`, F1);
+  parts may declare `header_tanks` (point masses at their station that feed only after the main
+  tanks are empty; Starship lands on its LOX/CH4 headers after the main-tank vent);
   blunt capsules keep the blunt/trimmed model. Flight control inverts the predicted static aero
   moment in the gimbal allocation (clipped to the real range), so finless launchers stay
   unstable airframes held by TVC. Parity gates compare integrators with distributed aero off.

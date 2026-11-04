@@ -192,7 +192,7 @@ public sealed class Flight14LandingBurn
         var up = _body.GetGeodeticUp(_ship.Position); var velocity = _ship.GetSurfaceVelocity(_body);
         return new(universe.CurrentTime-_liftoffEpoch, universe.CurrentTime, _ship.GetAltitude(_body),
             velocity.Magnitude, velocity.Dot(up), lat, lon,
-            _ship.Parts.Parts.Sum(p => p.LiquidFuel+p.Oxidizer), _ship.Orientation.Rotate(Vector3d.Up).Dot(up),
+            _ship.Parts.Parts.Sum(p => p.LiquidFuel+p.Oxidizer+p.HeaderLiquidFuel+p.HeaderOxidizer), _ship.Orientation.Rotate(Vector3d.Up).Dot(up),
             _ship.AngularVelocity.Magnitude);
     }
     private void Block(string reason)
