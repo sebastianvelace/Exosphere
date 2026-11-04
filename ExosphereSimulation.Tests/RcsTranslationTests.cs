@@ -52,9 +52,14 @@ public sealed class RcsTranslationTests
             universe.Tick(0.02);
 
         Assert.True(vessel.RcsPropellantDepleted);
-        Assert.Equal(Vector3d.Zero, vessel.GetRcsTranslationThrustLocal());
+        Assert.Equal(0.0, vessel.RcsThrusterMassFlowKgPerS);
         Assert.True(vessel.Parts.TotalMonopropellant >= 0.0);
     }
+
+    private static RcsThrusterDef Thruster(string id, double x, double y, double z) => new()
+    {
+        Id = id, Position = [0.0, 0.0, 0.0], Direction = [x, y, z], ThrustN = ThrustN, IspS = IspSeconds,
+    };
 
     private static (Universe Universe, Vessel Vessel, CelestialBody Earth) HighOrbit()
     {
@@ -69,8 +74,13 @@ public sealed class RcsTranslationTests
             LengthM = 3.0,
             DiameterM = 3.0,
             FuelCapacityMono = MonopropellantKg,
-            RcsTranslationThrustN = ThrustN,
-            RcsIsp = IspSeconds,
+            // One thruster per axis sense at the hull centre (its centre of mass): pure translation.
+            RcsThrusters =
+            [
+                Thruster("px", 1, 0, 0), Thruster("nx", -1, 0, 0),
+                Thruster("py", 0, 1, 0), Thruster("ny", 0, -1, 0),
+                Thruster("pz", 0, 0, 1), Thruster("nz", 0, 0, -1),
+            ],
         });
         vessel.Parts.SetRoot(hull);
         vessel.Parts.AddPart(hull);

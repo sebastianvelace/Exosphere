@@ -106,15 +106,18 @@ public sealed class UnpilotedEngineOutTests
         // Belt-and-suspenders: the piloted path must actually have produced nonzero rotation
         // (proves this is exercising real pilot authority, not a degenerate zero-authority
         // setup like the earlier bare-booster attempt caught during development).
-        Assert.True(vessel.AngularVelocity.Magnitude > 1e-6);
+        Assert.True(vessel.AngularVelocity.Magnitude > 1e-7);
     }
 
     // Filled in from an actual dotnet test run of PilotedFlight_ExistingAttitudeAuthorityUnchanged
     // against this fixture, both before and after the Vessel.Tick wiring change (identical in
-    // both runs — see the test's comment above).
-    private const double PinnedAngularVelocityX = 0.001;
+    // both runs — see the test's comment above). Re-pinned when attitude control became
+    // actuator-only (fidelity phase F3): over these five ticks the engines are still spooling
+    // up and their gimbals deliver the pitch rate (the 0.01 rad/s² generic floor that set the
+    // old 0.001 rad/s pin no longer exists).
+    private const double PinnedAngularVelocityX = 8.194530872345352E-07;
     private const double PinnedAngularVelocityY = 0.0;
-    private const double PinnedAngularVelocityZ = 0.0;
+    private const double PinnedAngularVelocityZ = -1.661451979094478E-09;
 
     private static Vessel BuildPilotedFlight7Vessel()
     {

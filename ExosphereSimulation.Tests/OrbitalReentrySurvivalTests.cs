@@ -316,13 +316,17 @@ public sealed class OrbitalReentrySurvivalTests
         universe.AddVessel(vessel);
         universe.ActiveVessel = vessel;
 
-        for (int i = 0; i < 5_000; i++)
+        // The ship's cold-gas thrusters turn it slowly: the reorientation takes minutes (the
+        // flights spend most of the coast getting there), with damping sized to that authority.
+        for (int i = 0; i < 50 * 900; i++)
         {
             var flow = vessel.GetSurfaceVelocity(earth).Normalized;
             var target = EntryAttitudeGuidance.ComputeTarget(up, flow, liftTowardBody: true);
+            double authority = vessel.GetPitchYawAngularAuthority(earth);
             vessel.PitchYawRoll = AttitudeGuidance.ComputeCommand(
                 vessel.Orientation, target, vessel.AngularVelocity,
-                proportionalGain: 1.8, dampingGain: 4.0, allowRoll: true);
+                proportionalGain: 1.8, dampingGain: AttitudeGuidance.DampingGainFor(1.8, authority),
+                allowRoll: true);
             universe.Tick(0.02);
         }
 

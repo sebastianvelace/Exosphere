@@ -1543,7 +1543,7 @@ public partial class HistoricalFlightProfileController : Node
                 Vector3d.Up,
                 desired,
                 vessel.AngularVelocity,
-                proportionalGain: 2.3,
+                proportionalGain: Gemini8FlightProfile.StageTwoProportionalGain(vessel.GetPitchYawAngularAuthority(earth)),
                 dampingGain: Gemini8FlightProfile.StageTwoDampingGain(vessel.GetPitchYawAngularAuthority(earth)));
             vessel.Throttle = 1.0;
             double sinceBeco = double.IsNaN(_geminiBeco) ? double.PositiveInfinity : elapsed - _geminiBeco;

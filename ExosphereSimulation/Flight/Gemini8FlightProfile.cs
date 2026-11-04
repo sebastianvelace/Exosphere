@@ -59,9 +59,21 @@ public static class Gemini8FlightProfile
         return secondsSinceBeco > 20.0 && vessel.ComputeThrust(earth).Magnitude < 1.0;
     }
 
-    /// <summary>Stage-two pointing damping for the live pitch/yaw authority (ζ ≈ 0.8, Kd floor 1.2).</summary>
+    /// <summary>
+    /// Stage-two pointing loop natural frequency (rad/s). The LR91 gimbal slews at 4°/s over
+    /// ±5°, so a full reversal takes 2.5 s: the loop is held well inside that bandwidth.
+    /// </summary>
+    public const double StageTwoNaturalFrequencyRadPerS = 0.6;
+
+    /// <summary>Stage-two pointing proportional gain for the live pitch/yaw authority (ωn²/A).</summary>
+    public static double StageTwoProportionalGain(double pitchYawAuthorityRadPerS2) =>
+        StageTwoNaturalFrequencyRadPerS * StageTwoNaturalFrequencyRadPerS
+        / System.Math.Max(1e-6, pitchYawAuthorityRadPerS2);
+
+    /// <summary>Stage-two pointing damping for the live pitch/yaw authority (ζ = 0.8).</summary>
     public static double StageTwoDampingGain(double pitchYawAuthorityRadPerS2) =>
-        System.Math.Max(1.2, AttitudeGuidance.DampingGainFor(2.3, pitchYawAuthorityRadPerS2));
+        AttitudeGuidance.DampingGainFor(StageTwoProportionalGain(pitchYawAuthorityRadPerS2),
+            System.Math.Max(1e-6, pitchYawAuthorityRadPerS2));
     public const double HistoricalPeakAngularRateDegPerS = 296.0;
     public const double DockedTumbleRateDegPerS = 20.0;
 

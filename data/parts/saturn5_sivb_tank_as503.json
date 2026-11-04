@@ -5,13 +5,24 @@
   "category": "fuel_tank",
   "vehicle_family": "apollo",
   "vehicle_role": "sivb_tank",
-  "mass_dry": 10005.40162,
+  "mass_dry": 9765.40162,
+  "fuel_capacity_mono": 240,
   "length_m": 10.7,
   "diameter_m": 6.6,
   "drag_coefficient": 0.2,
   "heat_tolerance": 950,
   "fuel_capacity_lf": 18177.350894907,
   "fuel_capacity_ox": 89614.339911893,
+  "rcs_attitude_starts_enabled": false,
+  "rcs_arms_with_stage": true,
+  "rcs_thrusters": [
+    {"id": "aps_I_pitch", "position": [0.0, -4.75, 3.65], "direction": [0.0, 0.0, -1.0], "thrust_n": 653.89, "isp_s": 285},
+    {"id": "aps_I_yaw_roll_a", "position": [0.0, -4.75, 3.65], "direction": [-1.0, 0.0, 0.0], "thrust_n": 653.89, "isp_s": 285},
+    {"id": "aps_I_yaw_roll_b", "position": [0.0, -4.75, 3.65], "direction": [1.0, 0.0, 0.0], "thrust_n": 653.89, "isp_s": 285},
+    {"id": "aps_III_pitch", "position": [0.0, -4.75, -3.65], "direction": [0.0, 0.0, 1.0], "thrust_n": 653.89, "isp_s": 285},
+    {"id": "aps_III_yaw_roll_a", "position": [0.0, -4.75, -3.65], "direction": [1.0, 0.0, 0.0], "thrust_n": 653.89, "isp_s": 285},
+    {"id": "aps_III_yaw_roll_b", "position": [0.0, -4.75, -3.65], "direction": [-1.0, 0.0, 0.0], "thrust_n": 653.89, "isp_s": 285}
+  ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 5.35, 0], "size": 3, "type": "stack"},
     {"id": "bottom", "position": [0, -5.35, 0], "size": 3, "type": "stack"}

@@ -125,29 +125,23 @@ public class PartGraph
     {
         get
         {
+            // Force of the declared, enabled thrusters along their weakest translation axis,
+            // and their thrust-weighted specific impulse.
+            var thrusters = GetRcsThrusters();
+            var authority = Physics.RcsAllocation.TranslationAuthority(thrusters);
+            double weakest = System.Math.Min(authority.X, System.Math.Min(authority.Y, authority.Z));
             double thrust = 0.0, impulseWeight = 0.0;
-            foreach (var part in _parts)
+            for (int i = 0; i < thrusters.Count; i++)
             {
-                if (part.IsBroken || part.Definition.RcsTranslationThrustN <= 0.0) continue;
-                thrust += part.Definition.RcsTranslationThrustN;
-                impulseWeight += part.Definition.RcsTranslationThrustN
-                    * (part.Definition.RcsIsp > 0.0 ? part.Definition.RcsIsp : 220.0);
+                var thruster = thrusters[i];
+                if (!thruster.Available) continue;
+                thrust += thruster.ThrustN;
+                impulseWeight += thruster.ThrustN * thruster.IspS;
             }
-            return (thrust, thrust > 0.0 ? impulseWeight / thrust : 0.0);
+            return (weakest, thrust > 0.0 ? impulseWeight / thrust : 0.0);
         }
     }
 
-    /// <summary>Attitude torque (N·m) of the intact parts whose RCS is enabled.</summary>
-    public double RcsAttitudeTorqueNm
-    {
-        get
-        {
-            double torque = 0.0;
-            foreach (var part in _parts)
-                if (!part.IsBroken && part.RcsAttitudeEnabled) torque += part.Definition.RcsAttitudeTorqueNm;
-            return torque;
-        }
-    }
 
     /// <summary>Monopropellant left in all parts (kg).</summary>
     public double TotalMonopropellant
@@ -190,16 +184,39 @@ public class PartGraph
         }
     }
 
-    public bool DrawMonopropellant(double kilograms)
+    public bool DrawMonopropellant(double kilograms) => DrawMonopropellant(kilograms, primaryStoresOnly: false);
+
+    /// <summary>
+    /// Draws from the shared monopropellant feed. With <paramref name="primaryStoresOnly"/>
+    /// only the primary systems' stores feed (those whose RCS starts enabled or arms with its
+    /// stage, not a standby system armed by the crew or at separation): a failed-on
+    /// thruster belongs to the primary RCS and keeps draining it after it is switched off,
+    /// never a standby system's tanks.
+    /// </summary>
+    public bool DrawMonopropellant(double kilograms, bool primaryStoresOnly)
     {
         if (kilograms <= 0.0) return true;
-        double total = TotalMonopropellant;
+        double total = 0.0;
+        foreach (var part in _parts)
+            if (Feeds(part)) total += part.Monopropellant;
         if (total < kilograms) return false;
         foreach (var part in _parts)
-            if (part.Monopropellant > 0.0)
+            if (Feeds(part) && part.Monopropellant > 0.0)
                 part.Monopropellant -= kilograms * (part.Monopropellant / total);
         return true;
+
+        bool Feeds(Part part) => primaryStoresOnly
+            ? part.Definition.RcsThrusters.Count == 0 || part.Definition.RcsAttitudeStartsEnabled
+                || part.Definition.RcsArmsWithStage
+            : FeedsSharedMonopropellant(part);
     }
+
+    /// <summary>
+    /// A part's monopropellant joins the shared feed unless it belongs to a thruster system
+    /// that is valved off (a disabled RCS, such as Gemini's re-entry rings before arming).
+    /// </summary>
+    private static bool FeedsSharedMonopropellant(Part part) =>
+        part.Definition.RcsThrusters.Count == 0 || part.RcsAttitudeEnabled;
 
     /// <summary>Enclosed payloads contribute mass/inertia, but not the carrier's outer hull.</summary>
     public bool IsEnclosedPayload(Part part) => part.Definition.InternalPayload && part != _root;
@@ -225,6 +242,62 @@ public class PartGraph
         _engineReadoutCacheValid = false;
     }
 
+    private bool _stagedReactionControlPending = true;
+
+    /// <summary>
+    /// Arms every RCS declared <see cref="PartDefinition.RcsArmsWithStage"/> (the S-IVB APS,
+    /// Gemini's OAMS, Starship's cold-gas thrusters) once its part belongs to the current
+    /// (lowest) stage: the system is switched on when the stage below separates. Also arms an
+    /// isolated standby RCS. Runs once per topology change, at the next physics step, so an
+    /// assembly being built part by part never looks isolated.
+    /// </summary>
+    public void ArmStagedReactionControl()
+    {
+        if (!_stagedReactionControlPending) return;
+        _stagedReactionControlPending = false;
+        ArmIsolatedReactionControl();
+        bool waiting = false;
+        foreach (var part in _parts)
+            if (part.Definition.RcsArmsWithStage && !part.RcsStageArmed && !part.IsBroken)
+                waiting = true;
+        if (!waiting) return;
+        foreach (var part in CurrentStageParts())
+            if (part.Definition.RcsArmsWithStage && !part.RcsStageArmed && !part.IsBroken)
+            {
+                // Armed once, when the stage below separates; the crew may switch it off later.
+                part.RcsStageArmed = true;
+                part.RcsAttitudeEnabled = true;
+                _rcsThrustersValid = false;
+            }
+    }
+
+    /// <summary>
+    /// A standby RCS (<see cref="PartDefinition.RcsArmsWhenIsolated"/>: the Apollo CM's entry
+    /// thrusters, the Mercury capsule's H2O2 jets) is armed once its vehicle no longer carries
+    /// another attitude actuator: a part with thrusters or a liquid-propellant engine (the
+    /// carrier stage or service module it separates from). Solid retro motors do not count.
+    /// </summary>
+    private void ArmIsolatedReactionControl()
+    {
+        bool standby = false, primary = false;
+        foreach (var part in _parts)
+        {
+            if (part.IsBroken) continue;
+            var definition = part.Definition;
+            if (definition.RcsThrusters.Count > 0)
+            {
+                if (definition.RcsArmsWhenIsolated && !part.RcsAttitudeEnabled) standby = true;
+                else if (!definition.RcsArmsWhenIsolated && part.RcsAttitudeEnabled) primary = true;
+            }
+            else if (definition.Category == PartCategory.Engine
+                && !string.Equals(definition.FuelTypeStr, "solid", StringComparison.OrdinalIgnoreCase))
+                primary = true;
+        }
+        if (!standby || primary) return;
+        foreach (var part in _parts)
+            if (part.Definition.RcsArmsWhenIsolated) part.RcsAttitudeEnabled = true;
+    }
+
     internal void EndPhysicsTick()
     {
         _physicsTickActive = false;
@@ -236,15 +309,21 @@ public class PartGraph
 
     internal void InvalidateTickActiveEngineCache() => _tickActiveEngineCacheValid = false;
 
+    /// <summary>Incremented on every topology change (parts added, removed or detached).</summary>
+    public int TopologyVersion { get; private set; }
+
     private void InvalidateTopologyCaches()
     {
+        TopologyVersion++;
         _aeroElementsValid = false;
         _bodyFlapsValid = false;
+        _rcsThrustersValid = false;
         _topologyPartLocalPositionsValid = false;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
         _engineReadoutCacheValid = false;
+        _stagedReactionControlPending = true;
     }
 
     /// <summary>
@@ -652,6 +731,25 @@ public class PartGraph
         return _bodyFlaps;
     }
 
+    private readonly List<Physics.RcsThrusterGeometry> _rcsThrusters = new();
+    private bool _rcsThrustersValid;
+
+    /// <summary>Every declared RCS thruster, placed in the vessel frame (skirt-datum origin).</summary>
+    public List<Physics.RcsThrusterGeometry> GetRcsThrusters()
+    {
+        if (_rcsThrustersValid) return _rcsThrusters;
+        _rcsThrusters.Clear();
+        var positions = GetTopologyPartLocalPositions();
+        foreach (var part in _parts)
+        {
+            if (part.Definition.RcsThrusters.Count == 0 || !positions.TryGetValue(part, out var centre)) continue;
+            foreach (var thruster in part.Definition.RcsThrusters)
+                _rcsThrusters.Add(Physics.RcsThrusterGeometry.From(part, centre, thruster));
+        }
+        _rcsThrustersValid = true;
+        return _rcsThrusters;
+    }
+
     /// <summary>Centre of <paramref name="part"/> in the vessel frame (skirt-datum origin).</summary>
     public bool TryGetPartLocalPosition(Part part, out Vector3d position) =>
         GetTopologyPartLocalPositions().TryGetValue(part, out position);
@@ -956,6 +1054,27 @@ public class PartGraph
     /// commanded torque within what the allocator can actually deliver, instead of chronically
     /// over-demanding it into full saturation.
     /// </summary>
+    /// <summary>
+    /// Slowest gimbal rate (°/s) at which a lit engine still counts as an attitude actuator;
+    /// slower gimbals only trim the thrust line through the centre of mass.
+    /// </summary>
+    public const double AttitudeGimbalRateDegPerS = 1.0;
+
+    /// <summary>
+    /// True when every lit, gimballed engine slews at least <see cref="AttitudeGimbalRateDegPerS"/>
+    /// (engines without a resolved model count as attitude gimbals).
+    /// </summary>
+    public bool GimbalsSlewForAttitudeControl()
+    {
+        foreach (var engine in ActiveEngineList)
+        {
+            var model = engine.Definition.ResolvedEngineModel;
+            if (model == null || model.GimbalRangeDeg <= 0.0) continue;
+            if (model.GimbalRateDegPerS < AttitudeGimbalRateDegPerS) return false;
+        }
+        return true;
+    }
+
     public Vector3d GetDifferentialTVCAngularAccelerationEnvelope(double ambientPressure)
     {
         double transverse = TransverseMomentOfInertia;

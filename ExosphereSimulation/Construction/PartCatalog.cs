@@ -31,7 +31,7 @@ public sealed class PartCatalog
     }
 
     /// <summary>
-    /// Fidelity-track fields (nose shape, control surfaces, header tanks) must cite their
+    /// Fidelity-track fields (nose shape, control surfaces, header tanks, RCS thrusters) must cite their
     /// source: a part may only declare them with a provenance record that says whether the
     /// value is published, derived, estimated or calibrated. A record that vouches for a
     /// single number must match the data.
@@ -51,6 +51,8 @@ public sealed class PartCatalog
                 provenance.Require(part.Id, "bodyFlaps");
             if (part.HeaderTanks.Count > 0)
                 provenance.Require(part.Id, "headerTanks");
+            if (part.RcsThrusters.Count > 0)
+                provenance.Require(part.Id, "rcsThrusters");
             if (part.DryMassCenterYM != 0.0)
             {
                 var record = provenance.Require(part.Id, "dryMassCenterYM");

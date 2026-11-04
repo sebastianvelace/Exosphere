@@ -6,6 +6,7 @@
   "vehicle_family": "starship",
   "vehicle_role": "tank",
   "mass_dry": 50000,
+  "fuel_capacity_mono": 4000,
   "dry_mass_center_y_m": -0.7,
   "length_m": 29.6,
   "diameter_m": 9.0,
@@ -13,8 +14,8 @@
   "drag_coefficient": 0.2,
   "heat_tolerance": 1800,
   "has_heat_shield": true,
-  "fuel_capacity_lf": 259650,
-  "fuel_capacity_ox": 920350,
+  "fuel_capacity_lf": 258769.830508,
+  "fuel_capacity_ox": 917230.169492,
   "header_tanks": [
       {
           "id": "ch4_header",
@@ -46,6 +47,22 @@
           "neutral_deflection_deg": 45.0,
           "rate_deg_per_s": 25.0
       }
+  ],
+  "rcs_attitude_starts_enabled": false,
+  "rcs_arms_with_stage": true,
+  "rcs_thrusters": [
+    {"id": "aft_0_lateral", "position": [4.6, -11.8, 0.0], "direction": [-1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_0_roll_a", "position": [4.6, -11.8, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_0_roll_b", "position": [4.6, -11.8, 0.0], "direction": [0.0, 0.0, -1.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_90_lateral", "position": [0.0, -11.8, 4.6], "direction": [0.0, 0.0, -1.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_90_roll_a", "position": [0.0, -11.8, 4.6], "direction": [-1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_90_roll_b", "position": [0.0, -11.8, 4.6], "direction": [1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_180_lateral", "position": [-4.6, -11.8, 0.0], "direction": [1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_180_roll_a", "position": [-4.6, -11.8, 0.0], "direction": [0.0, 0.0, -1.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_180_roll_b", "position": [-4.6, -11.8, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_270_lateral", "position": [0.0, -11.8, -4.6], "direction": [0.0, 0.0, 1.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_270_roll_a", "position": [0.0, -11.8, -4.6], "direction": [1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60},
+    {"id": "aft_270_roll_b", "position": [0.0, -11.8, -4.6], "direction": [-1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60}
   ],
   "attachment_nodes": [
     {"id": "top",    "position": [0,  14.8, 0], "size": 3, "type": "stack"},

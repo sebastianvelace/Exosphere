@@ -15,10 +15,11 @@ public static class Flight14AerodynamicAttitude
     public static Vector3d ComputeCommand(Vessel ship, CelestialBody body,
         Quaterniond reference, double trimOnsetPressurePa, double trimFullPressurePa)
     {
-        var flapAuthority = ship.FlightControlInvertsAerodynamics ? ship.ComputeBodyFlapAngularAuthority(body) : Vector3d.Zero;
-        var feedback = ship.FlightControlInvertsAerodynamics && flapAuthority.X > 1e-9
-                && flapAuthority.Y > 1e-9 && flapAuthority.Z > 1e-9
-            ? ScheduledFeedback(ship.Orientation, reference, ship.AngularVelocity, flapAuthority)
+        // The command is a fraction of the ship's whole authority (flaps, jets, gimbals).
+        var authority3 = ship.FlightControlInvertsAerodynamics ? ship.GetAttitudeAuthorityBody(body) : Vector3d.Zero;
+        var feedback = ship.FlightControlInvertsAerodynamics && authority3.X > 1e-9
+                && authority3.Y > 1e-9 && authority3.Z > 1e-9
+            ? ScheduledFeedback(ship.Orientation, reference, ship.AngularVelocity, authority3)
             : AttitudeGuidance.ComputeCommand(ship.Orientation, reference, ship.AngularVelocity, 2, 25);
         double authority = ControlAuthority.Evaluate(ship);
         double q = ship.GetDynamicPressure(body);
@@ -58,8 +59,8 @@ public static class Flight14AerodynamicAttitude
 
     /// <summary>
     /// Gain-scheduled feedback: the angular acceleration ωn²·error − 2ζωn·rate on each axis,
-    /// normalised by that axis's full flap authority, so the loop keeps one bandwidth and
-    /// damping from thin hypersonic air to the dense transonic regime.
+    /// normalised by that axis's full authority (flaps, RCS jets and gimbals), so the loop keeps
+    /// one bandwidth and damping from thin hypersonic air to the dense transonic regime.
     /// </summary>
     private static Vector3d ScheduledFeedback(Quaterniond current, Quaterniond desired,
         Vector3d angularVelocityWorld, Vector3d authorityBody)

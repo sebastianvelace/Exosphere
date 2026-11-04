@@ -209,8 +209,10 @@ correction (Apollo: ~6 m/s); a prograde-then-Lambert hybrid cut it to ~8 m/s but
 the 180° Lambert singularity, so iterative (IGM-style) injection guidance remains open.
 
 Spacecraft translation uses reaction control independent of the engines: `TranslationCommand`
-per body axis, `rcs_translation_thrust_n` and `rcs_isp` on the part, monopropellant drawn at
-F / (Isp g0) (`RcsTranslationTests`). Gemini 8's rendezvous flies on it: a terminal-phase-
+per body axis is a fraction of the declared thrusters' force along that axis
+(`rcs_thrusters` on the part: position, direction, thrust, Isp), allocated together with any
+attitude moment and burned at F / (Isp g0) from the owning system's store (`RcsTranslationTests`,
+`RcsAllocationTests`). Gemini 8's rendezvous flies on it: a terminal-phase-
 initiation Lambert intercept (`RendezvousPlanner`, 130° transfer, aimed 500 m above the Agena),
 replanned from the flown states 15 min before the burn because the coast is integrated with
 oblateness and drag; a mid-transfer correction re-aimed from the Agena's current state; then
@@ -221,7 +223,8 @@ real `TryDock` capture envelope (`Gemini8RendezvousScenarioTests`: TPI 12.3 m/s,
 The OAMS thruster 8 failure is a `DisturbanceTorqueBody` that bypasses the control-rate
 envelope and drains monopropellant (116 N·m, calibrated to the post-undock 20 → 296 °/s growth
 on the model's roll inertia, which is one 25 lbf thruster on a ~1 m arm). Recovery is the
-re-entry RCS rings (`rcs_attitude_torque_nm`, armed by the crew) damping the roll, and the
+re-entry RCS rings (two rings of eight 25 lbf thrusters with their own store, armed by the
+crew; the roll is stopped with ~68 % of it, flight ~75 %) damping the roll, and the
 retrograde section is a solid-motor part fired retrograde instead of an impulsive Δv
 (`Gemini8AnomalyScenarioTests`), jettisoned at burnout to expose the heat shield
 (`Gemini8ReturnScenarioTests`: 8.6 g entry, 8.9 m/s splashdown on the 8.4 ft drogue at 15.2 km
@@ -519,8 +522,11 @@ all motors are one physical point.
   remaining non-gravitational force spread by part length. Axial load is split into
   tension and compression (each with its own strength); lateral load is shear. Bending
   moment from aerodynamic angle of attack is not modeled.
-- Legacy SAS damps body rates only through available authority (RCS floor or live
-  differential TVC); it cannot remove a tumble faster than those actuators allow.
+- Attitude control is actuator-only (fidelity phase F3): the pilot/guidance command, SAS rate
+  damping and the 20°/s pilot envelope only set a desired angular acceleration, which the
+  gimbals, the declared RCS thrusters (`Physics/RcsAllocation`) and the body flaps deliver as
+  far as they physically can. Nothing writes the angular velocity, and a vehicle with no
+  thrusters and no lit engine has no attitude authority in vacuum.
 - Landing contact uses multiple points, spring/damper normal response, friction, lever arms,
   torque and suspension travel.
 - Tower catch uses explicit pin/contact geometry, relative velocity, alignment and a moving

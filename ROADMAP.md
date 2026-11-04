@@ -381,15 +381,31 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - F2 cerrada (paso 34): gate histórico `Flight14DescentHistoricalTests` — caída de panza
      101,1 m/s a 1,2 km contra 100,8 m/s de la transmisión. Pendiente: velocidad hipersónica
      tardía (7291 vs 9982 km/h a T+10961) y el tramo final del aterrizaje (~10 s vs ~6 s).
-   - Siguiente: fases F2–F6 de `docs/physics/rigid_body_fidelity_plan.md` (flaps físicos,
-     control solo por actuadores, jet damping, gradiente de gravedad, slosh, recalibración
-     histórica); aletas del S-IC, grid fins y modelo newtoniano para cápsulas romas.
+   - F3 en curso (paso 35, sin cerrar): control de actitud solo por actuadores. El SAS y la
+     envolvente de 20°/s son comandos (nada escribe ω); desaparece el piso universal de
+     0,01 rad/s². RCS declarado por pieza (`rcs_thrusters`, procedencia en
+     `reaction_control_2026.json`): APS del S-IVB, SM/CM/LM de Apollo, OAMS y anillos de
+     reentrada de Gemini, H2O2 de Mercury, gas frío de Starship/Super Heavy (reserva de gas de
+     tanque estimada: nave 4 t, booster 10 t, sacada de la carga líquida). Asignación por
+     pseudo-inverso redistribuido + descenso coordinado, ponderada por inercia, pares primero;
+     propelente por sistema; armado por etapa o por aislamiento; mezcla con flaps; bajo empuje
+     el gimbal que gira ≥ 1°/s manda en sus ejes (DPS del LM a 0,2°/s publicado). Re-cerrados:
+     Titan II (inserción T+367 s, 145 × 154 km), Gemini 8 (gate histórico: anillos al ~68 %,
+     vuelo ~75 %), Apollo 8 (amerizaje 8,3 m/s), Flight 14 hasta la entrada (ignición del
+     desorbitado T+7905 s, anclas de 94 km −320/−201 m). Abierto: checkpoint de Flight 14 no
+     bit-exacto (diferencia ~1e-14 en el comando del descenso tras reanudar), oscilación de alabeo
+     en las inversiones de banco (0,33 rad/s vs 0,15) y residuo del descenso +5,9 km a T+10369
+     (gate F2). Detalle y siguiente paso en `rigid_body_fidelity_plan.md` ("F3 findings · Open").
+     Falta RCS de Falcon 9/New Glenn/Agena.
+   - Siguiente: cerrar F3 (ver arriba) y después F4–F6 de `docs/physics/rigid_body_fidelity_plan.md` (jet damping,
+     gradiente de gravedad, slosh, recalibración histórica); aletas del S-IC, grid fins y
+     modelo newtoniano para cápsulas romas.
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el
      renderer consuma ese estado y cerrar la campaña V3 de mayor duración.
-   - SAS, piso de RCS y envolvente de 20°/s al pilotar ya están portados al camino acoplado
-     con tests de paridad. La inercia legacy (cilindro uniforme, 1,3–2,3× sobreestimada)
+   - SAS y envolvente de 20°/s son comandos a los actuadores en ambos caminos (F3); el piso de
+     RCS ya no existe. La inercia legacy (cilindro uniforme, 1,3–2,3× sobreestimada)
      ahora sale del mismo tensor por pieza que usa el acoplado; se re-validó toda la suite
      (Saturn V con amortiguamiento ζ 0,7 en las tres etapas, ignición de deorbit de Flight 14
      recalibrada). Contactos de patas y torre ya tienen paridad. Siguiente: ascenso controlado

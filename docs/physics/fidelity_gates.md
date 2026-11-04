@@ -20,7 +20,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F0 | closed | Coupled 6-DoF in production, one skirt-datum frame, exact separation |
 | F1 | closed | Distributed per-part aerodynamics, flight-control inversion |
 | F2 | closed | Physical body flaps on measured crossflow drag (Flight 14 descent and belly-flop speed) |
-| F3 | planned | Actuator-only attitude control |
+| F3 | open | Actuator-only attitude control (declared RCS thrusters, SAS and envelope as commands); Flight 14 descent gates still failing |
 | F4 | planned | Jet damping, gravity gradient |
 | F5 | planned | Propellant slosh |
 | F6 | planned | Historical recalibration of every profile |
@@ -62,3 +62,13 @@ with `bash tools/fidelity_gate.sh F1`.
 | F2 | analytic | `HeaderTankTests.EnginesDrainTheMainTanksBeforeTheHeaders` | feed order and mass conservation |
 | F2 | analytic | `HeaderTankTests.HeaderLoadsSurviveASave` | header state persistence |
 | F2 | historical | `Flight14DescentHistoricalTests.PhysicalFlapEntryReproducesTheBroadcastDescentAndBellyFlopSpeed` | Flight 14 broadcast descent displays and 363 km/h belly flop |
+| F3 | analytic | `RcsAllocationTests.AThrusterMomentIsLeverCrossForce` | thruster moment r×F and flow F/(Isp·g0) |
+| F3 | analytic | `RcsAllocationTests.ARollRequestFiresACoupleWithNoNetForce` | pure couple, duty-weighted propellant |
+| F3 | analytic | `RcsAllocationTests.ATranslationRequestFiresForceWithNoNetMoment` | pure translation |
+| F3 | analytic | `RcsAllocationTests.ADemandBeyondAuthoritySaturatesAtFullDuty` | duty bounds and authority |
+| F3 | analytic | `RcsAllocationTests.ABrokenOrDisabledPartDoesNotFire` | no thrusters, no moment |
+| F3 | analytic | `StabilityAugmentationAuthorityTests.SasCannotStopAFastTumbleFasterThanItsThrusters` | SAS bounded by thruster moment, propellant at F/(Isp·g0) |
+| F3 | analytic | `StabilityAugmentationAuthorityTests.WithoutThrustersSasCannotDampAnUnpoweredTumble` | no generic RCS floor |
+| F3 | analytic | `StabilityAugmentationAuthorityTests.SasStillSettlesASmallResidualRate` | SAS rate damping as a thruster command |
+| F3 | analytic | `StabilityAugmentationAuthorityTests.WithoutSasAnUnpoweredTumbleConservesItsRate` | no control, no moment |
+| F3 | historical | `Gemini8AnomalyScenarioTests.StuckThrusterSpinsTheSpacecraftAndReentryRcsRecoversIt` | Gemini 8 roll recovered on the re-entry rings with ~75 % of their propellant |

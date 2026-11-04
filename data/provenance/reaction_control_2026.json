@@ -1,0 +1,185 @@
+{
+  "manifestId": "reaction-control-2026",
+  "records": [
+    {
+      "dataId": "apollo8_service_module_csm103",
+      "field": "rcsThrusters",
+      "status": "derived",
+      "source": "Rocket Propulsion Evolution 9.32 (SM RCS): four independent quads 90° apart, four 100 lbf R-4D engines each (two longitudinal, two roll), mount centrelines ~7° off the Y/Z axes, all engines canted 10° outward; R-4D vacuum Isp per the R-4D reference",
+      "accessedDate": "2026-11-04",
+      "variant": "CSM-103 SM RCS",
+      "conditions": "quads at 7.25° + k·90°, 1.25 m below the SM forward bulkhead at 2.15 m radius (station estimated); Isp 290 s; 610 kg propellant moved from the SM dry allocation into its RCS store, total unchanged",
+      "uncertainty": "station and radius ±0.3 m; Isp ±10 s"
+    },
+    {
+      "dataId": "apollo11_service_module_csm107",
+      "field": "rcsThrusters",
+      "status": "derived",
+      "source": "Rocket Propulsion Evolution 9.32 (SM RCS): four independent quads 90° apart, four 100 lbf R-4D engines each (two longitudinal, two roll), mount centrelines ~7° off the Y/Z axes, all engines canted 10° outward; R-4D vacuum Isp per the R-4D reference",
+      "accessedDate": "2026-11-04",
+      "variant": "CSM-107 SM RCS",
+      "conditions": "same quad geometry as CSM-103; 610 kg aggregate RCS load retained",
+      "uncertainty": "station and radius ±0.3 m; Isp ±10 s"
+    },
+    {
+      "dataId": "apollo8_command_module_csm103",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Apollo CM RCS: two independent systems of six 93 lbf engines (pitch, yaw, roll pairs); station layout estimated from Apollo CM drawings",
+      "accessedDate": "2026-11-04",
+      "variant": "CM-103 entry RCS",
+      "conditions": "pitch/yaw engines on the aft periphery firing forward, roll engines tangential; standby system armed when the CM no longer carries the SM; 111 kg (245 lb) load taken from the CM dry allocation",
+      "uncertainty": "geometry ±0.4 m; Isp 270 ±15 s; load ±15 %"
+    },
+    {
+      "dataId": "apollo11_command_module_csm107",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Apollo CM RCS: two independent systems of six 93 lbf engines (pitch, yaw, roll pairs); station layout estimated from Apollo CM drawings",
+      "accessedDate": "2026-11-04",
+      "variant": "CM-107 entry RCS",
+      "conditions": "as CM-103",
+      "uncertainty": "geometry ±0.4 m; Isp 270 ±15 s; load ±15 %"
+    },
+    {
+      "dataId": "apollo11_lm5_ascent_stage",
+      "field": "rcsThrusters",
+      "status": "derived",
+      "source": "Apollo LM RCS: four quads of four 100 lbf R-4D engines on the ascent stage (two vertical, two horizontal along the body axes)",
+      "accessedDate": "2026-11-04",
+      "variant": "LM-5 RCS",
+      "conditions": "quads at 45° azimuths, 2.1 m radius; 287 kg aggregate load retained",
+      "uncertainty": "quad station ±0.3 m; Isp ±10 s"
+    },
+    {
+      "dataId": "saturn5_sivb_tank_as503",
+      "field": "rcsThrusters",
+      "status": "derived",
+      "source": "NASA TN (NTRS 19690016846) and Smithsonian NASM A19740780000: two APS modules 180° apart on the aft skirt, each with three ~147 lbf attitude engines (one pitch, two yaw/roll), MMH/N2O4; Wikipedia S-IVB: ~265 lb propellant per module",
+      "accessedDate": "2026-11-04",
+      "variant": "AS-503 S-IVB APS",
+      "conditions": "pitch engine radial, yaw/roll engines tangential; 70 lbf ullage engines not modelled as attitude thrusters; 240 kg load taken from the S-IVB dry allocation",
+      "uncertainty": "Isp 285 ±15 s; module station ±0.5 m"
+    },
+    {
+      "dataId": "saturn5_sivb_tank_as506",
+      "field": "rcsThrusters",
+      "status": "derived",
+      "source": "NASA TN (NTRS 19690016846) and Smithsonian NASM A19740780000: two APS modules 180° apart on the aft skirt, each with three ~147 lbf attitude engines (one pitch, two yaw/roll), MMH/N2O4; Wikipedia S-IVB: ~265 lb propellant per module",
+      "accessedDate": "2026-11-04",
+      "variant": "AS-506 S-IVB APS",
+      "conditions": "as AS-503",
+      "uncertainty": "Isp 285 ±15 s; module station ±0.5 m"
+    },
+    {
+      "dataId": "gemini8_equipment_adapter",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Gemini OAMS: eight 25 lbf attitude thrusters at the adapter aft rim, two 100 lbf aft-firing, two 85 lbf forward-firing and four 100 lbf radial translation thrusters (MMH/N2O4)",
+      "accessedDate": "2026-11-04",
+      "variant": "Spacecraft 8 OAMS",
+      "conditions": "attitude pairs tangential at four azimuths, translation thrusters near the stack centre; 286 kg aggregate load retained",
+      "uncertainty": "positions ±0.3 m; Isp 260 ±15 s"
+    },
+    {
+      "dataId": "gemini8_reentry_module",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Gemini re-entry control system: two independent rings of eight 25 lbf thrusters in the forward RCS section, armed by the crew",
+      "accessedDate": "2026-11-04",
+      "variant": "Spacecraft 8 RCS rings",
+      "conditions": "pitch/yaw radial and roll tangential per ring; 29 kg load taken from the module dry allocation",
+      "uncertainty": "positions ±0.2 m; load ±30 %"
+    },
+    {
+      "dataId": "mercury_capsule_freedom7",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Project Mercury reaction control: H2O2 automatic system, 24 lbf pitch/yaw and 6 lbf roll thrusters",
+      "accessedDate": "2026-11-04",
+      "variant": "MR-3 capsule",
+      "conditions": "thrusters at the narrow end; ~25 kg H2O2 (automatic plus manual) taken from the capsule dry allocation; 1 lbf fine thrusters not modelled",
+      "uncertainty": "positions ±0.2 m; Isp 160 ±20 s"
+    },
+    {
+      "dataId": "mercury_capsule_friendship7",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Project Mercury reaction control: H2O2 automatic system, 24 lbf pitch/yaw and 6 lbf roll thrusters",
+      "accessedDate": "2026-11-04",
+      "variant": "MA-6 capsule",
+      "conditions": "as MR-3",
+      "uncertainty": "positions ±0.2 m; Isp 160 ±20 s"
+    },
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust",
+      "accessedDate": "2026-11-04",
+      "variant": "Starship V3 forward RCS group",
+      "conditions": "four azimuths ×(radial + two tangential) 3 m below the nose part centre at 4.6 m radius; 1.5 kN and Isp 60 s per thruster, fed from the stage's usable tank-gas store, taken out of the liquid load at the tank mixture ratio (autogenous pressurant is boiled-off propellant; published dry and total propellant masses unchanged): ship 4 t (≈1,050 m³ GOX + ≈950 m³ GCH4 ullage at ~2.5 bar, ~200 K holds ~7.3 t; about half usable down to ~1.2 bar), booster 10 t (≈2.5× the ship's tank volume)",
+      "uncertainty": "thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m"
+    },
+    {
+      "dataId": "starship_command",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust",
+      "accessedDate": "2026-11-04",
+      "variant": "Starship Block 2 forward RCS group",
+      "conditions": "as V3; 1.5 kN and Isp 60 s per thruster, fed from the stage's usable tank-gas store, taken out of the liquid load at the tank mixture ratio (autogenous pressurant is boiled-off propellant; published dry and total propellant masses unchanged): ship 4 t (≈1,050 m³ GOX + ≈950 m³ GCH4 ullage at ~2.5 bar, ~200 K holds ~7.3 t; about half usable down to ~1.2 bar), booster 10 t (≈2.5× the ship's tank volume)",
+      "uncertainty": "thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m"
+    },
+    {
+      "dataId": "starship_v3_tank_flight12",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust",
+      "accessedDate": "2026-11-04",
+      "variant": "Starship V3 aft RCS group",
+      "conditions": "four azimuths ×(radial + two tangential) 3 m above the tank part base; 1.5 kN and Isp 60 s per thruster, fed from the stage's usable tank-gas store, taken out of the liquid load at the tank mixture ratio (autogenous pressurant is boiled-off propellant; published dry and total propellant masses unchanged): ship 4 t (≈1,050 m³ GOX + ≈950 m³ GCH4 ullage at ~2.5 bar, ~200 K holds ~7.3 t; about half usable down to ~1.2 bar), booster 10 t (≈2.5× the ship's tank volume)",
+      "uncertainty": "thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m"
+    },
+    {
+      "dataId": "starship_tank",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust",
+      "accessedDate": "2026-11-04",
+      "variant": "Starship Block 2 aft RCS group",
+      "conditions": "as V3; 1.5 kN and Isp 60 s per thruster, fed from the stage's usable tank-gas store, taken out of the liquid load at the tank mixture ratio (autogenous pressurant is boiled-off propellant; published dry and total propellant masses unchanged): ship 4 t (≈1,050 m³ GOX + ≈950 m³ GCH4 ullage at ~2.5 bar, ~200 K holds ~7.3 t; about half usable down to ~1.2 bar), booster 10 t (≈2.5× the ship's tank volume)",
+      "uncertainty": "thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m"
+    },
+    {
+      "dataId": "super_heavy_v3_booster_flight12",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust",
+      "accessedDate": "2026-11-04",
+      "variant": "Super Heavy V3 RCS group",
+      "conditions": "four azimuths ×(radial + two tangential) 4 m below the booster top; 1.5 kN and Isp 60 s per thruster, fed from the stage's usable tank-gas store, taken out of the liquid load at the tank mixture ratio (autogenous pressurant is boiled-off propellant; published dry and total propellant masses unchanged): ship 4 t (≈1,050 m³ GOX + ≈950 m³ GCH4 ullage at ~2.5 bar, ~200 K holds ~7.3 t; about half usable down to ~1.2 bar), booster 10 t (≈2.5× the ship's tank volume)",
+      "uncertainty": "thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m"
+    },
+    {
+      "dataId": "super_heavy_booster",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust",
+      "accessedDate": "2026-11-04",
+      "variant": "Super Heavy Block 2 RCS group",
+      "conditions": "as V3; 1.5 kN and Isp 60 s per thruster, fed from the stage's usable tank-gas store, taken out of the liquid load at the tank mixture ratio (autogenous pressurant is boiled-off propellant; published dry and total propellant masses unchanged): ship 4 t (≈1,050 m³ GOX + ≈950 m³ GCH4 ullage at ~2.5 bar, ~200 K holds ~7.3 t; about half usable down to ~1.2 bar), booster 10 t (≈2.5× the ship's tank volume)",
+      "uncertainty": "thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m"
+    },
+    {
+      "dataId": "command_pod_mk1",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Exosphere generic sandbox part",
+      "accessedDate": "2026-11-04",
+      "variant": "Mk1 pod RCS",
+      "conditions": "four four-way blocks of 200 N monopropellant thrusters, 30 kg store",
+      "uncertainty": "generic gameplay part, no flight reference"
+    }
+  ]
+}

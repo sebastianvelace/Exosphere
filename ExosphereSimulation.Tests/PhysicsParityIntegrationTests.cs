@@ -596,10 +596,12 @@ public sealed class PhysicsParityIntegrationTests
     }
 
     [Fact]
-    public void CoupledRcsFloorRotatesUnpoweredVesselLikeLegacy()
+    public void CoupledRcsThrustersRotateUnpoweredVesselLikeLegacy()
     {
-        var legacy = CreateUnpoweredFlight7Universe("legacy-rcs-floor", coupled: false);
-        var coupled = CreateUnpoweredFlight7Universe("coupled-rcs-floor", coupled: true);
+        var legacy = CreateUnpoweredFlight7Universe("legacy-rcs", coupled: false);
+        var coupled = CreateUnpoweredFlight7Universe("coupled-rcs", coupled: true);
+        var body = coupled.GetBody(coupled.ActiveVessel!.ReferenceBodyId!)!;
+        double authority = coupled.ActiveVessel.GetPitchYawAngularAuthority(body);
         var command = new Vector3d(0.5, 0.0, 0.0);
         legacy.ActiveVessel!.PitchYawRoll = command;
         coupled.ActiveVessel!.PitchYawRoll = command;
@@ -612,9 +614,10 @@ public sealed class PhysicsParityIntegrationTests
 
         double legacyRate = legacy.ActiveVessel.AngularVelocity.Magnitude;
         double coupledRate = coupled.ActiveVessel.AngularVelocity.Magnitude;
-        // 0.5 command × 0.01 rad/s² RCS floor × 2 s: no engine torque exists, so only the
-        // reaction-control floor can rotate this vessel on either path.
-        Assert.InRange(legacyRate, 0.009, 0.011);
+        // 0.5 command × the ship's declared RCS authority × 2 s: no engine torque exists, so
+        // only the thrusters can rotate this vessel on either path.
+        Assert.True(authority > 0.0);
+        Assert.InRange(legacyRate, 0.9 * authority, 1.1 * authority);
         Assert.Equal(legacyRate, coupledRate, precision: 4);
         Assert.True(coupled.LastCoupled6DofTelemetry.Integrated);
     }
@@ -640,8 +643,12 @@ public sealed class PhysicsParityIntegrationTests
 
         double legacyRate = legacy.ActiveVessel!.AngularVelocity.Magnitude;
         double coupledRate = coupled.ActiveVessel!.AngularVelocity.Magnitude;
-        // SAS can only shed what its 0.01 rad/s² authority removes: 0.05 rad/s in 5 s.
-        Assert.InRange(legacyRate, 0.145, 0.155);
+        // SAS can only shed what the stack's thrusters remove: at most authority × 5 s. A
+        // request at the very edge of the jets' reach is met to within the allocation's
+        // saturation accuracy (≥ 85 %), never beyond it.
+        double authority = coupled.ActiveVessel.GetPitchYawAngularAuthority(
+            coupled.GetBody(coupled.ActiveVessel.ReferenceBodyId!)!);
+        Assert.InRange(0.2 - legacyRate, 4.25 * authority, 5.0 * authority * 1.001);
         Assert.Equal(legacyRate, coupledRate, precision: 4);
     }
 
@@ -665,10 +672,16 @@ public sealed class PhysicsParityIntegrationTests
         }
 
         Assert.True(legacyPeak > 0.34, $"legacy never reached the envelope: {legacyPeak}");
-        // A held full command must saturate at the 20°/s pilot-authority envelope on both
-        // paths instead of the coupled body spinning up without bound.
-        Assert.True(legacyPeak <= 0.35 + 1e-9, $"legacy peak {legacyPeak}");
-        Assert.True(coupledPeak <= 0.35 + 1e-9, $"coupled peak {coupledPeak}");
+        // A held full command is limited at the 20°/s pilot-authority envelope on both paths
+        // instead of the body spinning up without bound. The limit acts on the command, so
+        // the gimbals' servo lag carries the rate a little past it before they hold it there.
+        double legacyFinal = legacy.ActiveVessel!.AngularVelocity.Magnitude;
+        double coupledFinal = coupled.ActiveVessel!.AngularVelocity.Magnitude;
+        Assert.True(legacyPeak <= 0.35 * 1.1, $"legacy peak {legacyPeak}");
+        Assert.True(coupledPeak <= 0.35 * 1.1, $"coupled peak {coupledPeak}");
+        Assert.InRange(legacyFinal, 0.33, legacyPeak + 1e-9);
+        Assert.InRange(coupledFinal, 0.33, coupledPeak + 1e-9);
+        Assert.InRange(coupledPeak - legacyPeak, -0.01, 0.01);
     }
 
     // Engines off and no atmosphere: neither engine nor aerodynamic torque exists, so only
@@ -677,6 +690,17 @@ public sealed class PhysicsParityIntegrationTests
     {
         var universe = CreateFlight7Universe(vesselId, coupled);
         universe.ActiveVessel!.Throttle = 0.0;
+        // Engines start shut down, not spooling down from full thrust; every RCS on the stack
+        // is armed so the thrusters offer pure couples (the ship's arms only at staging).
+        foreach (var part in universe.ActiveVessel.Parts.Parts)
+        {
+            part.ThrottleLevel = 0.0;
+            if (part.Definition.RcsThrusters.Count > 0)
+            {
+                part.RcsStageArmed = true;
+                part.RcsAttitudeEnabled = true;
+            }
+        }
         return universe;
     }
 

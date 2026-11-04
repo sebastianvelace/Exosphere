@@ -5,7 +5,8 @@
   "category": "command",
   "vehicle_family": "mercury",
   "vehicle_role": "capsule",
-  "mass_dry": 1715.5,
+  "mass_dry": 1690.5,
+  "fuel_capacity_mono": 25,
   "length_m": 3.4,
   "diameter_m": 2.1,
   "cost": 0,
@@ -26,6 +27,18 @@
   "min_pressure_deploy": 0.40,
   "splashdown_capable": true,
   "max_splashdown_speed_mps": 12.5,
+  "rcs_attitude_starts_enabled": false,
+  "rcs_arms_when_isolated": true,
+  "rcs_thrusters": [
+    {"id": "pitch_yaw_0", "position": [0.4, 1.2, 0.0], "direction": [-1.0, 0.0, 0.0], "thrust_n": 106.76, "isp_s": 160},
+    {"id": "pitch_yaw_90", "position": [0.0, 1.2, 0.4], "direction": [0.0, 0.0, -1.0], "thrust_n": 106.76, "isp_s": 160},
+    {"id": "pitch_yaw_180", "position": [-0.4, 1.2, 0.0], "direction": [1.0, 0.0, 0.0], "thrust_n": 106.76, "isp_s": 160},
+    {"id": "pitch_yaw_270", "position": [0.0, 1.2, -0.4], "direction": [0.0, 0.0, 1.0], "thrust_n": 106.76, "isp_s": 160},
+    {"id": "roll_0_a", "position": [0.4, 1.2, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 26.69, "isp_s": 160},
+    {"id": "roll_0_b", "position": [0.4, 1.2, 0.0], "direction": [0.0, 0.0, -1.0], "thrust_n": 26.69, "isp_s": 160},
+    {"id": "roll_180_a", "position": [-0.4, 1.2, 0.0], "direction": [0.0, 0.0, -1.0], "thrust_n": 26.69, "isp_s": 160},
+    {"id": "roll_180_b", "position": [-0.4, 1.2, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 26.69, "isp_s": 160}
+  ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 1.7, 0], "size": 1, "type": "stack"},
     {"id": "bottom", "position": [0, -1.7, 0], "size": 1, "type": "stack"}

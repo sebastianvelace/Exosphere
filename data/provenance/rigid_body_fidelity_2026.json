@@ -385,9 +385,9 @@
       "source": "Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s; observed early-deorbit window T+7864..7925 s",
       "accessedDate": "2026-11-03",
       "variant": "Starship Flight 14 engineering return",
-      "conditions": "deorbit ignition time, the continuous calibration lever of the return profile",
-      "uncertainty": "residuals within ±500 m of a datum-conditional display",
-      "value": 7883.0
+      "conditions": "deorbit ignition time, the continuous calibration lever of the return profile; re-fitted when attitude control became actuator-only (F3): the declared jets correcting the deorbit burn moved the periapsis 370 m lower and entry 20 s earlier",
+      "uncertainty": "residuals within ±500 m of a datum-conditional display (now −320 / −201 m)",
+      "value": 7905.0
     },
     {
       "dataId": "starship-flight14-return",

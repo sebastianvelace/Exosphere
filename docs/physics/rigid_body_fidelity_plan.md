@@ -186,6 +186,88 @@ reproduces three→two→one. Mission controllers fly without the 20°/s pilot-a
 (`Vessel.PilotRateEnvelopeEnabled`), so the flip turns at its gimbal-limited rate (~0.55 rad/s).
 Ignition to 100 m now takes ~21 s (was 40+).
 
+## F3 findings (2026-11-04, in progress — not closed)
+
+- **Every moment comes from an actuator.** The flight-control law (pilot or guidance command,
+  SAS rate damping, the 20°/s pilot envelope) only produces a desired body angular
+  acceleration; the gimbals (`SolveDifferentialGimbal`), the declared RCS thrusters and the
+  body flaps deliver what they physically can. Nothing writes ω: the coupled post-step SAS and
+  envelope edits, the legacy post-aero envelope and the universal 0.01 rad/s² floor are gone.
+  A vehicle without thrusters or lit engines has no attitude authority in vacuum.
+- **Thrusters per part** (`rcs_thrusters`: position, direction, thrust, Isp). `RcsAllocation` solves the bounded duties (0 ≤ u ≤ 1) by a
+  redistributed pseudo-inverse polished with projected coordinate descent, rows weighted by
+  inverse principal inertia (angular-acceleration error, not N·m). Attitude-only requests are
+  lexicographic: pure couples first, and only the moment couples cannot give is taken from
+  jets that also translate (the Apollo CM's one-sided jets). Authority is the moment that
+  allocation actually reaches, cached on a 25 cm centre-of-mass grid so a resumed run computes
+  it bit for bit. Translation commands go through the same allocation.
+- **Propellant per system.** A part with a store feeds its own jets, others draw on the shared
+  feed, and a valved-off system's store leaves it. Starship's cold gas is a usable tank-gas
+  store (ship 4 t, booster 10 t, estimated from tank volume and an ~2.5 → 1.2 bar usable
+  ullage range, taken out of the liquid load because autogenous pressurant is boiled-off
+  propellant), not liquid drawn from the main tanks: after the pre-entry vent the tanks are
+  dry of liquid but still hold their gas. A 1 t store ran dry in the entry turn (the deorbit
+  burn and the turn take ~0.9 t) and left the ship without RCS at entry interface. Arming is
+  physical: `rcs_arms_with_stage` (S-IVB APS, Gemini OAMS, Starship cold gas) switches on once
+  when the stage below separates; `rcs_arms_when_isolated` (Apollo CM, Mercury H2O2) when no
+  other attitude actuator remains (thrusters or a liquid engine).
+- **Blending.** The flaps are credited with as much of the request as their present authority
+  allows; the jets only fill the rest. Without this the ship's RCS chased the flap command and
+  burned 200–400 kg of gas per minute of entry. Under thrust a slewing gimbal cluster (≥ 1°/s)
+  owns the axes it can cover, so the jets do not chase servo lag (the S-IVB APS flies only roll
+  during J-2 burns); a trim gimbal does not (the LM DPS at its published 0.2°/s only trims, and
+  the jets fly the attitude, as the LM DAP did).
+- **Envelope at the command.** The pilot envelope removes only the part of the command that
+  would spin the body faster past 20°/s; it never orders braking. A dead-beat braking version
+  limit-cycled the Titan II second stage against its 4°/s LR91 gimbal.
+- **Data** (`data/provenance/reaction_control_2026.json`): S-IVB APS 2 × 3 × 147 lbf (pitch
+  radial, yaw/roll tangential, NASA TN / NASM), Apollo SM 4 quads × 4 R-4D canted 10°
+  (RPE 9.32), CM 12 × 93 lbf, LM 4 × 4 R-4D, Gemini OAMS (8 × 25 lbf attitude + translation)
+  and re-entry rings (2 × 8 × 25 lbf), Mercury H2O2 24/6 lbf, Starship/Super Heavy cold gas
+  (estimated 1.5 kN, Isp 60 s, ±50 %), starter pod generic. The LM DPS gimbal rate is now the
+  published 0.2°/s trim rate (was an estimated 2°/s). Propellant moved out of the dry
+  allocations where the published masses already carried it.
+- **Recalibration.** Titan II stage two flies an authority-scheduled pointing loop (ωn 0.6 rad/s
+  inside the LR91 gimbal bandwidth): insertion T+367 s (historical SECO T+337.5 s), 145 × 154 km,
+  0.32° off the Agena plane. Gemini 8's re-entry rings now spend 68 % of their load recovering
+  from the thruster-8 roll (flight: ~75 %); the stuck thruster drains the OAMS (8.0 kg). Apollo 8
+  enters at −6.79° and splashes at 8.3 m/s on the CM's own jets. Starship's coast
+  reorientation takes minutes on cold gas (the old floor did it in ~35 s). Flight 14: the jets
+  correcting the deorbit burn put the periapsis 370 m lower and entry 20 s earlier; the
+  ignition lever moved T+7883 → T+7905 s (inside the observed window), 94 km anchors
+  −320 / −201 m (were −440 / −320 m). The descent guidance normalises its demand by the ship's
+  whole authority (`Vessel.GetAttitudeAuthorityBody`: flaps, jets, gimbals).
+- **Gimbals own the axes they can cover under thrust**, if they slew ≥ 1°/s; a trim gimbal does
+  not (the LM DPS rate is now the published 0.2°/s). The jets credit the flaps with what they were
+  commanded, capped at the request. A thruster whose own store is empty is unavailable.
+- **Performance.** `RcsAllocation` was ~60 % of Flight 14 simulation time while the booster jets
+  chased gimbal servo lag; with the gimbal rule and an early exit when couples suffice it is
+  ~24 %. A cold Flight 14 pad-to-entry flight takes ~9.5 min (≈7 before F3).
+
+### Open (where the work stopped)
+
+The last full `tools/ci_check.sh` ended 1233/1235 before the final flap-credit change; with that
+change the state is:
+
+1. `Flight14EntryCheckpointTests.ResumedRunReproducesTheContinuousRun` — the resumed run is no
+   longer bit-exact (3.4 m after 60 s). A frame-by-frame comparison shows the first difference
+   at the first frame after resume: the descent command differs in the last bits (~1e-14) while
+   every recorded state matches, so a value the guidance reads through
+   `GetAttitudeAuthorityBody` (RCS authority cache, inertia read outside vs inside the physics
+   tick, or `ComputeBodyFlapAngularAuthority` reading tick-cached mass properties) depends on
+   history, not only on the restored state. Make that path a pure function of the saved state.
+2. `Flight14DescentTests.LoadedMissionDescendsWithTheOriginalReserveAndPhysicalState` — peak
+   descent rate 0.33 rad/s (limit 0.15): the hypersonic bank reversals at ~74 km oscillate in
+   roll now that flaps and cold-gas jets share the command. Before the authority normalisation
+   it was 0.176 rad/s.
+3. `Flight14DescentHistoricalTests` (F2 historical gate) — descent residual +5.9 km at T+10369
+   (tolerance 3 km; +1.9 km earlier in this work, +1.3 km after F2). Same cause as 2.
+
+Next step: fix 1 first (determinism), then retune the descent roll loop for the blended
+flap + jet authority (bandwidth/damping of `Flight14AerodynamicAttitude.ScheduledFeedback`
+per axis, or crediting the flaps by their measured control share), and re-close 2 and 3.
+Pending RCS data: Falcon 9, New Glenn and Agena have none yet.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by
@@ -207,6 +289,8 @@ cap. Validation: 55–70° entry trim, belly-flop hold, flap asymmetry for roll.
 **F3 — Actuator-only attitude control (A5).** SAS becomes a rate/attitude controller writing
 commands; RCS thrusters are declared per part (thrust, position, direction) and produce torque
 and force; no direct ω edits; the floor disappears. Vehicles without RCS have none.
+*In progress 2026-11-04: the model, data and most recalibration are in; three Flight 14
+descent gates are still open (see F3 findings, "Open").*
 
 **F4 — Variable-mass and environment torques (A6, A7).** Jet damping from mass flow and nozzle
 exit position; gravity gradient. Validation: analytic spin/precession cases, Saturn V jet-damping

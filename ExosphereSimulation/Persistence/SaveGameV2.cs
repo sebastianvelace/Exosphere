@@ -100,6 +100,8 @@ public sealed class PartSaveV2
     public double Monopropellant { get; set; }
     /// <summary>Attitude RCS armed state; null in older saves (the part definition's default).</summary>
     public bool? RcsAttitudeEnabled { get; set; }
+    /// <summary>A stage-armed RCS has been switched on once; null in older saves.</summary>
+    public bool? RcsStageArmed { get; set; }
     public double ElectricCharge { get; set; }
     public double Temperature { get; set; }
     public double SkinTemperature { get; set; }
@@ -670,6 +672,7 @@ public static class SaveGameV2Codec
         SolidFuel = part.SolidFuel,
         Monopropellant = part.Monopropellant,
         RcsAttitudeEnabled = part.RcsAttitudeEnabled,
+        RcsStageArmed = part.RcsStageArmed,
         ElectricCharge = part.ElectricCharge,
         Temperature = part.Temperature,
         SkinTemperature = part.SkinTemperature,
@@ -719,6 +722,7 @@ public static class SaveGameV2Codec
             SolidFuel = state.SolidFuel,
             Monopropellant = state.Monopropellant,
             RcsAttitudeEnabled = state.RcsAttitudeEnabled ?? definition.RcsAttitudeStartsEnabled,
+            RcsStageArmed = state.RcsStageArmed ?? false,
             ElectricCharge = state.ElectricCharge,
             Temperature = state.Temperature,
             SkinTemperature = state.SkinTemperature,

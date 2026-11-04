@@ -183,8 +183,15 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   blunt capsules keep the blunt/trimmed model. Flight control inverts the predicted static aero
   moment in the gimbal allocation (clipped to the real range), so finless launchers stay
   unstable airframes held by TVC. Parity gates compare integrators with distributed aero off.
-  Remaining empirical attitude terms (aggregate flaps, SAS rate overwrite, RCS floor) are
-  tracked in `docs/physics/rigid_body_fidelity_plan.md` (F2–F6).
+  Attitude control is actuator-only (F3, in progress — three Flight 14 descent gates still open,
+  see `rigid_body_fidelity_plan.md` "F3 findings · Open"): SAS and the 20°/s pilot envelope are commands, nothing
+  writes ω, and there is no generic RCS floor. RCS comes from per-part `rcs_thrusters`
+  (position, direction, thrust, Isp; fed from the owning part's `fuel_capacity_mono` store or
+  the shared feed), allocated by `Physics/RcsAllocation` (couples first, inertia-weighted);
+  `rcs_arms_with_stage` and `rcs_arms_when_isolated` arm systems at separation; flaps take
+  their share before the jets, and under thrust a slewing gimbal (≥ 1°/s) owns its axes.
+  Remaining phases (jet damping, gravity gradient, slosh, recalibration) are tracked in
+  `docs/physics/rigid_body_fidelity_plan.md` (F4–F6).
 
 ## Workflow
 

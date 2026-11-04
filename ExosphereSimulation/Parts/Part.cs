@@ -25,6 +25,12 @@ public class Part
     public double Monopropellant  { get; set; }
     /// <summary>Whether this part's attitude RCS is live (see <c>rcs_attitude_starts_enabled</c>).</summary>
     public bool RcsAttitudeEnabled { get; set; }
+
+    /// <summary>
+    /// True once an RCS that arms with its stage has been switched on (see
+    /// <see cref="PartDefinition.RcsArmsWithStage"/>); it is never re-armed automatically.
+    /// </summary>
+    public bool RcsStageArmed { get; set; }
     public double ElectricCharge  { get; set; }
 
     /// <summary>Propellant in this part's header tanks, one entry per <see cref="PartDefinition.HeaderTanks"/>.</summary>
@@ -677,6 +683,7 @@ public class Part
         SolidFuel      = Definition.FuelCapacitySolid;
         Monopropellant = Definition.FuelCapacityMono;
         RcsAttitudeEnabled = Definition.RcsAttitudeStartsEnabled;
+        RcsStageArmed = false;
         ElectricCharge = Definition.ECCapacity;
     }
 

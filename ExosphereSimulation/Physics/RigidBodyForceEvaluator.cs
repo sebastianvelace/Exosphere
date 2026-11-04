@@ -70,7 +70,8 @@ public static class RigidBodyForceEvaluator
 
         double pressure = context.ReferenceBody?.Atmosphere?.GetPressure(
             context.ReferenceBody.GetAltitude(state.Position)) ?? 0.0;
-        var propulsionBody = vessel.Parts.GetTotalThrust(pressure) + vessel.GetRcsTranslationThrustLocal();
+        var propulsionBody = vessel.Parts.GetTotalThrust(pressure)
+            + vessel.RcsThrusterForceBody;
         forceWorld += state.Orientation.Rotate(propulsionBody);
 
         Vector3d distributedTorqueBody = Vector3d.Zero;
@@ -127,7 +128,7 @@ public static class RigidBodyForceEvaluator
             + (vessel.Parts.CenterOfMass - massProperties.CenterOfMassBody).Cross(propulsionBody);
         torqueBody += state.Orientation.Inverse().Rotate(context.ExternalTorqueWorld);
         torqueBody += vessel.DisturbanceTorqueBody;
-        torqueBody += vessel.CoupledRcsFloorTorqueBody;
+        torqueBody += vessel.RcsThrusterTorqueBody;
         torqueBody += distributed
             ? distributedTorqueBody + (context.PhysicalBodyFlaps && vessel.Parts.GetBodyFlaps().Count > 0
                 ? Vector3d.Zero

@@ -247,9 +247,9 @@ long-duration fault management.
   24). Before activation: decide whether the legacy force evaluation should sample at the
   centre of mass (step 28 note), and run the Godot `[G]` ascent/EDL harnesses on a GPU machine
   with the switch on.
-- SAS, RCS floor and the pilot rate envelope are ported (step 20). The legacy post-aero rate
-  envelope is intentionally not ported; the flap entry gates (steps 26–27, including the
-  transonic band) show the RK4 integrator does not need it.
+- SAS, RCS floor and the pilot rate envelope were ported (step 20). Fidelity phase F3 replaced
+  all three: SAS and the envelope are commands to the actuators on both paths, the floor is
+  gone and RCS torque comes from declared thrusters; the legacy post-aero envelope is removed.
 - Add controlled ascent and EDL telemetry gates before enabling the adapter in production.
   Contact gates (gear and cradle) are closed (step 21); a controlled descent from the flip to
   contact still needs the inertia unification first.

@@ -5,6 +5,7 @@
   "category": "command",
   "vehicle_family": "generic",
   "mass_dry": 840,
+  "fuel_capacity_mono": 30,
   "length_m": 1.8,
   "diameter_m": 1.25,
   "axial_drag_coefficient": 0.5,
@@ -14,6 +15,24 @@
   "max_crew": 1,
   "has_heat_shield": true,
   "monopropellant_capacity": 10,
+  "rcs_thrusters": [
+    {"id": "block_0_up", "position": [0.7, 0.6, 0.0], "direction": [0.0, 1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_0_down", "position": [0.7, 0.6, 0.0], "direction": [0.0, -1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_0_cw", "position": [0.7, 0.6, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_0_ccw", "position": [0.7, 0.6, 0.0], "direction": [0.0, 0.0, -1.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_90_up", "position": [0.0, 0.6, 0.7], "direction": [0.0, 1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_90_down", "position": [0.0, 0.6, 0.7], "direction": [0.0, -1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_90_cw", "position": [0.0, 0.6, 0.7], "direction": [-1.0, 0.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_90_ccw", "position": [0.0, 0.6, 0.7], "direction": [1.0, 0.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_180_up", "position": [-0.7, 0.6, 0.0], "direction": [0.0, 1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_180_down", "position": [-0.7, 0.6, 0.0], "direction": [0.0, -1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_180_cw", "position": [-0.7, 0.6, 0.0], "direction": [0.0, 0.0, -1.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_180_ccw", "position": [-0.7, 0.6, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_270_up", "position": [0.0, 0.6, -0.7], "direction": [0.0, 1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_270_down", "position": [0.0, 0.6, -0.7], "direction": [0.0, -1.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_270_cw", "position": [0.0, 0.6, -0.7], "direction": [1.0, 0.0, 0.0], "thrust_n": 200, "isp_s": 240},
+    {"id": "block_270_ccw", "position": [0.0, 0.6, -0.7], "direction": [-1.0, 0.0, 0.0], "thrust_n": 200, "isp_s": 240}
+  ],
   "attachment_nodes": [
     {"id": "bottom", "position": [0, -0.9, 0], "size": 1, "type": "stack"}
   ]
