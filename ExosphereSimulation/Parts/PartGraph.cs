@@ -33,7 +33,7 @@ public readonly record struct EngineTelemetrySummary(
         : 0.0;
 }
 
-public class PartGraph
+public partial class PartGraph
 {
     private readonly record struct LiquidEngineDemand(
         Part EnginePart,
@@ -252,6 +252,7 @@ public class PartGraph
     /// </summary>
     internal void BeginPhysicsTick()
     {
+        ClearEngineFunding();
         _physicsTickActive = true;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
@@ -318,6 +319,7 @@ public class PartGraph
 
     internal void EndPhysicsTick()
     {
+        CompleteEngineFunding();
         _physicsTickActive = false;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
@@ -1789,31 +1791,23 @@ public class PartGraph
                 double fuelFraction = demand.MixtureRatio > 0.0
                     ? 1.0 / (1.0 + demand.MixtureRatio)
                     : fallbackFuelFraction;
-                double lfNeeded = demand.MassFlowKgS * fuelFraction * dt;
-                double oxNeeded = demand.MassFlowKgS * (1.0 - fuelFraction) * dt;
-                if (remainingLF + 1e-9 >= lfNeeded
-                    && remainingOx + 1e-9 >= oxNeeded)
-                {
-                    remainingLF -= lfNeeded;
-                    remainingOx -= oxNeeded;
-                    fundedLF += lfNeeded;
-                    fundedOx += oxNeeded;
-                    continue;
-                }
-
-                // Fuel exhaustion is an ordinary resource boundary. Consume whatever
-                // remains below, then stop requesting thrust on the next physics tick;
-                // it must not create a persistent engine failure state.
-                if (remainingLF > 0.0 || remainingOx > 0.0)
-                {
-                    fundedLF += remainingLF;
-                    fundedOx += remainingOx;
-                    remainingLF = 0.0;
-                    remainingOx = 0.0;
-                }
-                demand.EnginePart.MarkFuelDepleted();
-                _tickActiveEngineCacheValid = false;
+                fundedLF += demand.MassFlowKgS * fuelFraction * dt;
+                fundedOx += demand.MassFlowKgS * (1.0 - fuelFraction) * dt;
             }
+            // All branches sharing a pool burn simultaneously until its first limiting
+            // reactant. Engine IDs determine summation order, never priority of fuel access.
+            double fraction = 1.0;
+            if (fundedLF > 0.0) fraction = System.Math.Min(fraction, remainingLF / fundedLF);
+            if (fundedOx > 0.0) fraction = System.Math.Min(fraction, remainingOx / fundedOx);
+            fraction = System.Math.Clamp(fraction, 0.0, 1.0);
+            if (fraction < 1.0 || (fundedLF > 0 && fundedLF == remainingLF)
+                || (fundedOx > 0 && fundedOx == remainingOx))
+            {
+                foreach (var demand in _liquidDemands)
+                    RegisterEngineExhaustion(demand.EnginePart, dt * fraction);
+            }
+            fundedLF = System.Math.Min(remainingLF, fundedLF * fraction);
+            fundedOx = System.Math.Min(remainingOx, fundedOx * fraction);
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
             {

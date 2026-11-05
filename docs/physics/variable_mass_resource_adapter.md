@@ -3,6 +3,52 @@
 A6 is in progress. Atomic RCS funding and optional immutable RCS receipts are implemented;
 continuous mass properties, engine/vent receipts and transport forces are not activated.
 
+## WIP branch handoff (2026-11-05)
+
+Branch: `codex/f4-engine-exhaustion`, based on accepted main `ccbc5c9`.
+The owner requested this intermediate push for another agent to continue. This engine
+implementation is **not fully validated and must not be merged as accepted physics yet**.
+The accepted baseline and its 1316-test CI below predate these engine changes.
+
+Implemented so far:
+
+- `PartGraph.ConsumePropellantFromPool` sums simultaneous liquid-engine demands in ordinal
+  order, limits the common burn duration by the first depleted reactant, and retains the
+  unused reactant. Main/header and hot-stage pool selection remain in the existing code.
+- `PartGraph.EngineFunding.cs` retains pending per-part exhaustion boundaries during a
+  physics tick. Engine runtime is depleted after integration, rather than before its funded
+  impulse. `IntegrateEngineIntervals` splits at the boundaries and fixes the live-engine
+  set for each complete RK4 substep, including its one-sided endpoint sample.
+- `Part.FundingThrustScale` gates delivered force/flow between those intervals. Runtime
+  performance is evaluated at the actual prepared throttle and then scaled, so the legacy
+  torque average does not sample a different point on a nonlinear throttle map.
+- `Universe` uses the interval helper on coupled, legacy translation and water paths.
+  The legacy preparation now keeps the tick open through translation; its explicit Euler
+  angular update uses the funded torque impulse. Controls/spool/resource debit run once.
+
+Evidence: `EngineExhaustionTests` reproduced four failures before the changes (both limiting
+reactants and missing partial-step impulse on both integration paths), then passed **4/4**.
+The tests also check the following step has no extra impulse. The targeted run compiled the
+simulation and tests successfully. Logs: `/tmp/exo-engine-exhaustion-red.log` and
+`/tmp/exo-engine-exhaustion-targeted.log` (local evidence only).
+
+Required next steps before an accepted commit/merge:
+
+1. Review the diff and lifecycle/exception cleanup, including pending depletion under
+   infinite-propellant assistance. Add exact/zero exhaustion, simultaneous mixed clusters,
+   surviving hot-stage siblings with different cutoff times, header/protected-feed and
+   asymmetric torque regressions. These have **not** been verified on the WIP.
+2. Run the existing propulsion, attitude, header, hot-stage, persistence, parity and scheduler
+   regressions. Check fully funded steps retain their prior physical results/performance.
+3. Run `bash tools/ci_check.sh` and retain all mission/historical tolerances. **The full CI and
+   Godot game build/smoke have not been run for this WIP.** Do not cite baseline 1316/1316 as
+   validation of this branch's engine changes.
+
+This unit retains frozen per-step mass/inertia; the partial-impulse regression explicitly
+uses that approximation. Continuous mass/CoM transport and immutable engine/vent receipts
+are still pending. Solid/monopropellant engine exhaustion retains its earlier behavior.
+The sections below record the accepted baseline and original next-unit design.
+
 ## Continuation checkpoint (2026-11-05)
 
 Completed work: F3 actuator fidelity (`d7fb773`), F4 pure torque foundations (`14349dd`),

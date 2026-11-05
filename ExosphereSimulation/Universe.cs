@@ -2454,16 +2454,19 @@ public class Universe
 
         vessel.Position = framedPosition;
         vessel.Velocity = framedVelocity;
-        vessel.Tick(dt, refBody, vessel.LastContactTorqueWorld);
+        vessel.BeginLegacyPhysicsStep(dt, refBody, vessel.LastContactTorqueWorld);
+        try
+        {
         Vector3d comOffsetWorld = vessel.Orientation.Rotate(comFromDatumLocal);
         Vector3d rotationVelocity = vessel.AngularVelocity.Cross(comOffsetWorld);
         Vector3d frameAcceleration =
             GetReferenceBodyRailAcceleration(refBody);
-        (relativeComPosition, relativeComVelocity) = RK4Integrator.StepPosVel(
-            relativeComPosition,
-            relativeComVelocity,
-            CurrentTime,
-            dt,
+        (relativeComPosition, relativeComVelocity) = vessel.Parts.IntegrateEngineIntervals(
+            (relativeComPosition, relativeComVelocity), dt, (state, offset, interval) => RK4Integrator.StepPosVel(
+            state.relativeComPosition,
+            state.relativeComVelocity,
+            CurrentTime + offset,
+            interval,
             (relativeCom, relativeComVel, _) =>
             {
                 Vector3d position = refBody.Position + relativeCom - comOffsetWorld;
@@ -2483,9 +2486,12 @@ public class Universe
                         position, comVelocity, _bodies, refBody)
                     - frameAcceleration
                     + contactAcceleration;
-            });
+            }));
         vessel.Position = refBody.Position + relativeComPosition - comOffsetWorld;
         vessel.Velocity = refBody.Velocity + relativeComVelocity - rotationVelocity;
+
+        }
+        finally { vessel.EndCoupledPhysicsStep(); }
 
         var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
         UpdateLandingContactState(vessel, refBody, contactAfter, dt);
@@ -2528,7 +2534,8 @@ public class Universe
             var initialRelative = new Physics.RigidBody6DofState(
                 initialAbsolute.Position-body.Position, initialAbsolute.Velocity-body.Velocity,
                 initialAbsolute.Orientation, initialAbsolute.AngularVelocityBody);
-            var finalRelative = Integrators.RigidBody6DofIntegrator.Step(initialRelative, CurrentTime, dt, mass,
+            var finalRelative = vessel.Parts.IntegrateEngineIntervals(initialRelative, dt,
+                (state, offset, interval) => Integrators.RigidBody6DofIntegrator.Step(state, CurrentTime + offset, interval, mass,
                 (candidate, _) =>
                 {
                     var absolute = ToAbsoluteState(body, candidate);
@@ -2538,7 +2545,7 @@ public class Universe
                         contact?.TorqueWorld ?? Vector3d.Zero,
                         gravityGradientEnabled: GravityGradientEnabled);
                     return Physics.RigidBodyForceEvaluator.Evaluate(vessel, absolute, context);
-                });
+                }));
             finalAbsolute = ToAbsoluteState(body, finalRelative);
             (vessel.Position, vessel.Velocity) = Physics.WaterMotionFrame.ToSkirt(finalAbsolute, mass.CenterOfMassBody);
             vessel.Orientation = finalAbsolute.Orientation;
@@ -2601,10 +2608,11 @@ public class Universe
                 orientation.Inverse().Rotate(angularVelocityWorld));
 
             Physics.RigidBody6DofState finalState =
-                Integrators.RigidBody6DofIntegrator.Step(
-                    initialState,
-                    CurrentTime,
-                    dt,
+                vessel.Parts.IntegrateEngineIntervals(initialState, dt,
+                (state, offset, interval) => Integrators.RigidBody6DofIntegrator.Step(
+                    state,
+                    CurrentTime + offset,
+                    interval,
                     massProperties,
                     (candidate, _) =>
                     {
@@ -2633,7 +2641,7 @@ public class Universe
                             gravityGradientEnabled: GravityGradientEnabled);
                         return Physics.RigidBodyForceEvaluator.Evaluate(
                             vessel, absolute, context, massProperties);
-                    });
+                    }));
 
             var absoluteFinal = ToAbsoluteState(refBody, finalState);
             var finalComOffsetWorld = absoluteFinal.Orientation.Rotate(

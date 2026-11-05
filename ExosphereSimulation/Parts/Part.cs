@@ -259,6 +259,9 @@ public class Part
         return true;
     }
 
+    // Fixed for one funded integration interval; never changed by a force callback.
+    internal double FundingThrustScale { get; set; } = 1.0;
+
     public void MarkFuelDepleted()
     {
         FuelDepleted = true;
@@ -414,14 +417,17 @@ public class Part
             ? 0.0
             : state.ChamberPressureFraction;
         if (ResolveEngineModel(state) is { } model)
-            return EnginePerformanceEvaluator.Evaluate(
-                model, ambientPressure, effectiveThrottle);
+        {
+            var sample = EnginePerformanceEvaluator.Evaluate(model, ambientPressure, effectiveThrottle);
+            return sample with { ThrustN = sample.ThrustN * FundingThrustScale,
+                MassFlowKgS = sample.MassFlowKgS * FundingThrustScale };
+        }
 
         double ratedPerEngine =
             GetLegacyRatedFullThrottleThrustMagnitude(ambientPressure)
             / System.Math.Max(1, _engineStates.Count);
         double isp = GetLegacyIsp(ambientPressure);
-        double thrust = ratedPerEngine * effectiveThrottle;
+        double thrust = ratedPerEngine * effectiveThrottle * FundingThrustScale;
         double flow = isp > 1.0 ? thrust / (isp * 9.80665) : 0.0;
         return new EnginePerformanceSample(
             thrust, isp, flow, state.ChamberPressureFraction);
@@ -775,9 +781,9 @@ public class Part
     /// </summary>
     public double GetThrustMagnitude(double ambientPressure = 0.0)
     {
-        if (FuelDepleted) return 0.0;
+        if (FuelDepleted || FundingThrustScale == 0.0) return 0.0;
         if (!HasEngineRuntime)
-            return GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel;
+            return GetFullThrottleThrustMagnitude(ambientPressure) * ThrottleLevel * FundingThrustScale;
 
         double thrust = 0.0;
         foreach (var state in _engineStates)

@@ -1583,14 +1583,18 @@ public class Vessel
 
     public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
+        BeginLegacyPhysicsStep(dt, refBody, externalContactTorqueWorld);
+        Parts.EndPhysicsTick();
+    }
+
+    internal void BeginLegacyPhysicsStep(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld)
+    {
         Parts.BeginPhysicsTick();
-        try
-        {
-            TickPhysics(dt, refBody, externalContactTorqueWorld);
-        }
-        finally
+        try { TickPhysics(dt, refBody, externalContactTorqueWorld); }
+        catch
         {
             Parts.EndPhysicsTick();
+            throw;
         }
     }
 
@@ -1678,7 +1682,7 @@ public class Vessel
         // ── Real per-mount torque, from genuine engine-mount geometry (R5/R5b/R5c) ──────
         // τ = Σ r×F over every live engine instance's actual gimballed thrust vector, plus
         // the moment the RCS thrusters fired this step.
-        var engineAngAccel = Parts.GetPitchYawRollAngularAcceleration(pressure);
+        var engineAngAccel = Parts.GetFundedAngularAcceleration(pressure, dt);
         var rcs = RcsThrusterTorqueBody;
         var appliedAngAccel = engineAngAccel;
         if (rcs.MagnitudeSquared > 0.0)
