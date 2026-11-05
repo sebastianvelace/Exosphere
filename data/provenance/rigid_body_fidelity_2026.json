@@ -9,7 +9,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship Block 2 nose cone",
       "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
-      "uncertainty": "±20%; no published contour in the cited material",
+      "uncertainty": "\u00b120%; no published contour in the cited material",
       "value": 14.0
     },
     {
@@ -20,7 +20,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship V3 nose cone",
       "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
-      "uncertainty": "±20%; no published contour in the cited material",
+      "uncertainty": "\u00b120%; no published contour in the cited material",
       "value": 14.0
     },
     {
@@ -31,7 +31,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Falcon 9 standard fairing ogive",
       "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
-      "uncertainty": "±20%; no published contour in the cited material",
+      "uncertainty": "\u00b120%; no published contour in the cited material",
       "value": 7.0
     },
     {
@@ -42,7 +42,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Falcon 9 extended fairing ogive",
       "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
-      "uncertainty": "±20%; no published contour in the cited material",
+      "uncertainty": "\u00b120%; no published contour in the cited material",
       "value": 7.0
     },
     {
@@ -53,7 +53,7 @@
       "accessedDate": "2026-11-03",
       "variant": "New Glenn 7 m fairing ogive",
       "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
-      "uncertainty": "±20%; no published contour in the cited material",
+      "uncertainty": "\u00b120%; no published contour in the cited material",
       "value": 10.0
     },
     {
@@ -64,7 +64,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Apollo LES tower and boost protective cover",
       "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
-      "uncertainty": "±20%; no published contour in the cited material",
+      "uncertainty": "\u00b120%; no published contour in the cited material",
       "value": 5.51
     },
     {
@@ -75,7 +75,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Apollo LES tower and boost protective cover",
       "conditions": "length of the curved nose ahead of the constant-diameter barrel, used for the slender-body nose centre of pressure",
-      "uncertainty": "±20%; no published contour in the cited material",
+      "uncertainty": "\u00b120%; no published contour in the cited material",
       "value": 5.51
     },
     {
@@ -86,7 +86,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship Block 2 forward flaps",
       "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
-      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+      "uncertainty": "planform \u00b120%; travel and rate unknown publicly"
     },
     {
       "dataId": "starship_v3_command_flight12",
@@ -96,7 +96,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship V3 forward flaps",
       "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
-      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+      "uncertainty": "planform \u00b120%; travel and rate unknown publicly"
     },
     {
       "dataId": "starship_tank",
@@ -106,7 +106,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship Block 2 aft flaps",
       "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
-      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+      "uncertainty": "planform \u00b120%; travel and rate unknown publicly"
     },
     {
       "dataId": "starship_v3_tank_flight12",
@@ -116,7 +116,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship V3 aft flaps",
       "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
-      "uncertainty": "planform ±20%; travel and rate unknown publicly"
+      "uncertainty": "planform \u00b120%; travel and rate unknown publicly"
     },
     {
       "dataId": "crossflow-drag-jorgensen",
@@ -126,7 +126,7 @@
       "accessedDate": "2026-11-04",
       "variant": "infinite circular cylinder",
       "conditions": "crossflow Mach <= 0.2, crossflow Reynolds 2e4-2e5",
-      "uncertainty": "±0.05 digitisation of the faired curve",
+      "uncertainty": "\u00b10.05 digitisation of the faired curve",
       "value": 1.2
     },
     {
@@ -148,7 +148,7 @@
       "accessedDate": "2026-11-04",
       "variant": "infinite circular cylinder",
       "conditions": "crossflow Mach 0.97",
-      "uncertainty": "±0.05 digitisation; transonic is the least certain range (report §2.3.2)",
+      "uncertainty": "\u00b10.05 digitisation; transonic is the least certain range (report \u00a72.3.2)",
       "value": 1.98
     },
     {
@@ -159,7 +159,7 @@
       "accessedDate": "2026-11-04",
       "variant": "infinite circular cylinder",
       "conditions": "crossflow Mach 8, held above",
-      "uncertainty": "±0.02",
+      "uncertainty": "\u00b10.02",
       "value": 1.24
     },
     {
@@ -170,7 +170,7 @@
       "accessedDate": "2026-11-04",
       "variant": "circular cylinder, length/diameter 10",
       "conditions": "very low crossflow Mach; eta from fig. 6 against crossflow Mach above 0.4, unity for supersonic crossflow",
-      "uncertainty": "±0.02 digitisation; eta measured only at very low Mach",
+      "uncertainty": "\u00b10.02 digitisation; eta measured only at very low Mach",
       "value": 0.695
     },
     {
@@ -199,11 +199,11 @@
       "dataId": "distributed-aerodynamics",
       "field": "ogivePlanformFraction",
       "status": "derived",
-      "source": "Geometry of a tangent ogive: planform area ≈ 2/3 of its D·L rectangle",
+      "source": "Geometry of a tangent ogive: planform area \u2248 2/3 of its D\u00b7L rectangle",
       "accessedDate": "2026-11-03",
       "variant": "tangent ogive nose",
       "conditions": "planform used for nose crossflow",
-      "uncertainty": "±5% across ogive radii",
+      "uncertainty": "\u00b15% across ogive radii",
       "value": 0.6666666666666666
     },
     {
@@ -236,7 +236,7 @@
       "accessedDate": "2026-11-03",
       "variant": "flat plate, aspect ratio < 1",
       "conditions": "subsonic broadside normal-force coefficient",
-      "uncertainty": "1.17–1.2 across low aspect ratios",
+      "uncertainty": "1.17\u20131.2 across low aspect ratios",
       "value": 1.2
     },
     {
@@ -291,7 +291,7 @@
       "accessedDate": "2026-11-04",
       "variant": "starship_command",
       "conditions": "dry structure centre along the part axis from its geometric centre, m",
-      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "uncertainty": "\u00b11 m (internal layout, tiles and plumbing not published)",
       "value": -2.07
     },
     {
@@ -302,7 +302,7 @@
       "accessedDate": "2026-11-04",
       "variant": "starship_v3_command_flight12",
       "conditions": "dry structure centre along the part axis from its geometric centre, m",
-      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "uncertainty": "\u00b11 m (internal layout, tiles and plumbing not published)",
       "value": -2.07
     },
     {
@@ -313,7 +313,7 @@
       "accessedDate": "2026-11-04",
       "variant": "starship_tank",
       "conditions": "dry structure centre along the part axis from its geometric centre, m",
-      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "uncertainty": "\u00b11 m (internal layout, tiles and plumbing not published)",
       "value": -0.7
     },
     {
@@ -324,7 +324,7 @@
       "accessedDate": "2026-11-04",
       "variant": "starship_v3_tank_flight12",
       "conditions": "dry structure centre along the part axis from its geometric centre, m",
-      "uncertainty": "±1 m (internal layout, tiles and plumbing not published)",
+      "uncertainty": "\u00b11 m (internal layout, tiles and plumbing not published)",
       "value": -0.7
     },
     {
@@ -335,7 +335,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship Block 2 LOX header",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
-      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+      "uncertainty": "capacity \u00b150%; station \u00b12 m; tied to the estimated landing profile"
     },
     {
       "dataId": "starship_v3_command_flight12",
@@ -345,7 +345,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship V3 LOX header",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
-      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+      "uncertainty": "capacity \u00b150%; station \u00b12 m; tied to the estimated landing profile"
     },
     {
       "dataId": "starship_tank",
@@ -355,7 +355,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship Block 2 CH4 header and main-tank split",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
-      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+      "uncertainty": "capacity \u00b150%; station \u00b12 m; tied to the estimated landing profile"
     },
     {
       "dataId": "starship_v3_tank_flight12",
@@ -365,7 +365,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship V3 CH4 header and main-tank split",
       "conditions": "capacity and station of each embedded header tank; the same mass is removed from the main tank so the stage total is unchanged",
-      "uncertainty": "capacity ±50%; station ±2 m; tied to the estimated landing profile"
+      "uncertainty": "capacity \u00b150%; station \u00b12 m; tied to the estimated landing profile"
     },
     {
       "dataId": "starship-flight14-return",
@@ -386,7 +386,7 @@
       "accessedDate": "2026-11-03",
       "variant": "Starship Flight 14 engineering return",
       "conditions": "deorbit ignition time, the continuous calibration lever of the return profile; re-fitted when attitude control became actuator-only (F3): the declared jets correcting the deorbit burn moved the periapsis 370 m lower and entry 20 s earlier",
-      "uncertainty": "residuals within ±500 m of a datum-conditional display (now −320 / −201 m)",
+      "uncertainty": "residuals within \u00b1500 m of a datum-conditional display (now \u2212320 / \u2212201 m)",
       "value": 7905.0
     },
     {
@@ -410,6 +410,104 @@
       "conditions": "bank of the lift vector from local up between the coast and the 90 km witness, at the descent's 59.5 deg angle of attack",
       "uncertainty": "the 102 km display (T+9790) stays -1.9 km: the slope through 94 km is within the unspecified display datum (ellipsoid vs sphere changes ~1-2 km over this track)",
       "value": 90.0
+    },
+    {
+      "dataId": "starship-flight14-attitude-feedback",
+      "field": "rollNaturalFrequencyRadPerS",
+      "status": "calibrated",
+      "source": "Exosphere coupled rigid-body actuator bench at 74 km and 6 km/s; Flight 14 broadcast descent anchors in docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 estimated descent controller, physical flaps plus declared cold-gas RCS",
+      "conditions": "Body Y roll feedback natural frequency, rad/s; retained from the physical-flap controller.",
+      "uncertainty": "Reconstructed control law, not published flight software; checked by the coupled constant-wind bank-reversal bench and the Flight 14 historical descent gate with its original 3 km datum band.",
+      "value": 0.3
+    },
+    {
+      "dataId": "starship-flight14-attitude-feedback",
+      "field": "rollDampingRatio",
+      "status": "calibrated",
+      "source": "Exosphere coupled rigid-body actuator bench at 74 km and 6 km/s; Flight 14 broadcast descent anchors in docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 estimated descent controller, physical flaps plus declared cold-gas RCS",
+      "conditions": "Body Y roll feedback damping ratio; retained from the physical-flap controller.",
+      "uncertainty": "Reconstructed control law, not published flight software; checked by the coupled constant-wind bank-reversal bench and the Flight 14 historical descent gate with its original 3 km datum band.",
+      "value": 0.8
+    },
+    {
+      "dataId": "starship-flight14-attitude-feedback",
+      "field": "transverseNaturalFrequencyRadPerS",
+      "status": "calibrated",
+      "source": "Exosphere coupled rigid-body actuator bench at 74 km and 6 km/s; Flight 14 broadcast descent anchors in docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 estimated descent controller, physical flaps plus declared cold-gas RCS",
+      "conditions": "Body X/Z pitch/yaw feedback natural frequency, rad/s. Static trim and finite servos share the flap travel; the 0.3 rad/s transverse loop saturated and excited roll during bank reversals.",
+      "uncertainty": "Reconstructed control law, not published flight software; checked by the coupled constant-wind bank-reversal bench and the Flight 14 historical descent gate with its original 3 km datum band.",
+      "value": 0.15
+    },
+    {
+      "dataId": "starship-flight14-attitude-feedback",
+      "field": "transverseDampingRatio",
+      "status": "calibrated",
+      "source": "Exosphere coupled rigid-body actuator bench at 74 km and 6 km/s; Flight 14 broadcast descent anchors in docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 estimated descent controller, physical flaps plus declared cold-gas RCS",
+      "conditions": "Body X/Z pitch/yaw feedback damping ratio; critical damping for the trim-limited transverse loop.",
+      "uncertainty": "Reconstructed control law, not published flight software; checked by the coupled constant-wind bank-reversal bench and the Flight 14 historical descent gate with its original 3 km datum band.",
+      "value": 1.0
+    },
+    {
+      "dataId": "starship-flight14-attitude-feedback",
+      "field": "transverseSlowLoopOnsetSpeedMps",
+      "status": "calibrated",
+      "source": "Exosphere physical-flap descent bench: the slow transverse loop stabilises hypersonic bank reversals, while terminal trim requires the original bandwidth; Flight 14 broadcast descent anchors",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 estimated aerodynamic descent",
+      "conditions": "Below this atmosphere-relative speed the terminal transverse loop is 0.3 rad/s, damping 0.8; linearly blended to the hypersonic trim-limited loop by 1000 m/s.",
+      "uncertainty": "Reconstructed control law, not published flight software; checked by the coupled constant-wind bank-reversal bench and the Flight 14 historical descent gate with its original 3 km datum band.",
+      "value": 500.0
+    },
+    {
+      "dataId": "starship-flight14-attitude-feedback",
+      "field": "transverseSlowLoopFullSpeedMps",
+      "status": "calibrated",
+      "source": "Exosphere physical-flap descent bench: the slow transverse loop stabilises hypersonic bank reversals, while terminal trim requires the original bandwidth; Flight 14 broadcast descent anchors",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 estimated aerodynamic descent",
+      "conditions": "Above this atmosphere-relative speed the transverse loop is 0.15 rad/s, critically damped; the original roll loop remains 0.3 rad/s, damping 0.8.",
+      "uncertainty": "Reconstructed control law, not published flight software; checked by the coupled constant-wind bank-reversal bench and the Flight 14 historical descent gate with its original 3 km datum band.",
+      "value": 1000.0
+    },
+    {
+      "dataId": "starship-flight14-descent",
+      "field": "downwardSpeedFraction",
+      "status": "calibrated",
+      "source": "Flight 14 broadcast altitude displays T+10369 74.1 km, T+10541 67.8 km and T+10961 44.5 km; docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 engineering descent with declared RCS and physical flaps",
+      "conditions": "Fraction of atmosphere-relative speed used for the requested descent corridor (minimum 20 m/s). Calibrated after using the distributed aerodynamic map and retaining the actual handoff bank; no kinematic state is assigned.",
+      "uncertainty": "Altitude datum unspecified (3 km gate); control history is not identifiable from three displays. Displayed speed frame remains unspecified; late speed calibration remains F6 work.",
+      "value": 0.0049
+    },
+    {
+      "dataId": "starship-flight14-descent",
+      "field": "entryAngleOfAttackDegrees",
+      "status": "calibrated",
+      "source": "Flight 14 broadcast altitude displays T+10369 74.1 km, T+10541 67.8 km and T+10961 44.5 km; docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json",
+      "accessedDate": "2026-11-04",
+      "variant": "Flight 14 engineering descent with declared RCS and physical flaps",
+      "conditions": "Reconstructed hypersonic angle of attack, degrees. Retained from F2 while recalibrating the bank corridor; not a measured Flight 14 attitude. A secondary 60-70 degree band does not uniquely determine this profile.",
+      "uncertainty": "Altitude datum unspecified (3 km gate); control history is not identifiable from three displays. Displayed speed frame remains unspecified; late speed calibration remains F6 work.",
+      "value": 59.5
+    },
+    {
+      "dataId": "starship-flight14-landing",
+      "field": "waterContactRegion",
+      "status": "derived",
+      "source": "NOAA NCEI ETOPO 2022 15 arc-second bed elevation (DOI 10.25921/fd45-gt74); pinned native-grid statistics and request in docs/research/FLIGHT14_OCEAN_COVERAGE_2026-11-04.json",
+      "accessedDate": "2026-11-04",
+      "variant": "Estimated Pacific water-contact operating domain",
+      "conditions": "22.5..35 degrees N, 161..140 degrees W. All 15,120,000 native cells sampled, no skipped or missing cells; elevations -7024..-66.55 m. This geographic operating domain covers both independently propagated contacts: isolated Earth at 23.137 N, 157.901 W and the moving-Solar-System loaded preview at 22.528 N, 160.292 W. It replaces the old 25..35 N, 165..140 W coverage, excluding Kauai and Nihoa rather than asserting measured Flight 14 targeting. Contact-speed, attitude, resource and water-load acceptance limits remain unchanged.",
+      "uncertainty": "Finite 15 arc-second geographic screen only; not a measured landing target, coastal navigation dataset or seabed collision mesh. Sea-surface and water-load approximations remain unchanged."
     }
   ]
 }

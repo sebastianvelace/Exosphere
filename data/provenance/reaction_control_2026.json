@@ -180,6 +180,56 @@
       "variant": "Mk1 pod RCS",
       "conditions": "four four-way blocks of 200 N monopropellant thrusters, 30 kg store",
       "uncertainty": "generic gameplay part, no flight reference"
+    },
+    {
+      "dataId": "falcon9_first_stage_tank",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide April 2020, section 2.3 / Table 2-1, pp. 6-8: GN2 ACS on both stages, upper-stage roll/coast control and booster recovery. Publisher copy https://spacex.relayto.com/e/spacex-falcon-user-s-guide-oc92qkoxzo1jf?settings=1. Thrust, Isp, layout and loads below are Exosphere engineering estimates, not guide specifications.",
+      "accessedDate": "2026-11-04",
+      "variant": "falcon9_first_stage_tank",
+      "conditions": "Representative four azimuth groups, radial and opposed tangential nozzles at the forward skirt; 400 N, 60 s per nozzle. 200 kg usable store reallocated from the existing estimated dry allocation, preserving loaded mass; no liquid propellant removed.",
+      "uncertainty": "Number/nozzle directions and stations are reconstructed where unpublished; thrust ±50%, Isp ±20%, usable store ±50%, station ±0.5 m (Falcon/Agena) or ±2 m (New Glenn). No exact flight-calibration claim."
+    },
+    {
+      "dataId": "falcon9_second_stage_tank",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "SpaceX Falcon User's Guide April 2020, section 2.3 / Table 2-1, pp. 6-8: GN2 ACS on both stages, upper-stage roll/coast control and booster recovery. Publisher copy https://spacex.relayto.com/e/spacex-falcon-user-s-guide-oc92qkoxzo1jf?settings=1. Thrust, Isp, layout and loads below are Exosphere engineering estimates, not guide specifications.",
+      "accessedDate": "2026-11-04",
+      "variant": "falcon9_second_stage_tank",
+      "conditions": "Representative four azimuth groups at the aft skirt, radial and opposed tangential nozzles; 400 N, 60 s. Arms at stage separation. 60 kg usable store reallocated from the existing estimated dry allocation, preserving loaded mass; no liquid propellant removed.",
+      "uncertainty": "Number/nozzle directions and stations are reconstructed where unpublished; thrust ±50%, Isp ±20%, usable store ±50%, station ±0.5 m (Falcon/Agena) or ±2 m (New Glenn). No exact flight-calibration claim."
+    },
+    {
+      "dataId": "newglenn_first_stage_tank",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Blue Origin New Glenn Payload User's Guide Rev C (October 2018), section 1.2.2 p. 17: GS2 RCS/settling thrusters at four stations on the thrust structure (publisher document mirrored at https://yellowdragonblog.com/wp-content/uploads/2019/01/new_glenn_payload_users_guide_rev_c.pdf); Dave Limp forward-module RCS validation statement, August 7 2024 (https://twitter.com/davill/status/1821197642766151716). The published architecture does not specify thrust, Isp or usable load.",
+      "accessedDate": "2026-11-04",
+      "variant": "newglenn_first_stage_tank",
+      "conditions": "Estimated peroxide-class RCS: four representative azimuth groups of radial/opposed tangential jets at the forward module; 2 kN, 160 s. Propellant identity/Isp is an engineering assumption, not confirmed by the guide. 600 kg usable store reallocated from the existing estimated dry allocation, preserving loaded mass; no liquid propellant removed.",
+      "uncertainty": "Number/nozzle directions and stations are reconstructed where unpublished; thrust ±50%, Isp ±20%, usable store ±50%, station ±0.5 m (Falcon/Agena) or ±2 m (New Glenn). No exact flight-calibration claim."
+    },
+    {
+      "dataId": "newglenn_second_stage_tank",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "Blue Origin New Glenn Payload User's Guide Rev C (October 2018), section 1.2.2 p. 17: GS2 RCS/settling thrusters at four stations on the thrust structure (publisher document mirrored at https://yellowdragonblog.com/wp-content/uploads/2019/01/new_glenn_payload_users_guide_rev_c.pdf); Dave Limp forward-module RCS validation statement, August 7 2024 (https://twitter.com/davill/status/1821197642766151716). The published architecture does not specify thrust, Isp or usable load.",
+      "accessedDate": "2026-11-04",
+      "variant": "newglenn_second_stage_tank",
+      "conditions": "Four representative aft tri-axial groups: radial, opposed tangential and forward axial settling nozzles; 200 N, 160 s peroxide-class model. Propellant identity is unconfirmed. Arms at stage separation. 100 kg usable store reallocated from the existing estimated dry allocation, preserving loaded mass; no liquid propellant removed.",
+      "uncertainty": "Number/nozzle directions and stations are reconstructed where unpublished; thrust ±50%, Isp ±20%, usable store ±50%, station ±0.5 m (Falcon/Agena) or ±2 m (New Glenn). No exact flight-calibration claim."
+    },
+    {
+      "dataId": "agena8_target_vehicle_bus",
+      "field": "rcsThrusters",
+      "status": "estimated",
+      "source": "NASA Gemini VIII press kit 66-52, March 11 1966, p. 81: six nitrogen attitude jets on the aft end, https://ntrs.nasa.gov/api/citations/19660026037/downloads/19660026037.pdf. NASA Agena flight-control description https://ntrs.nasa.gov/api/citations/19710015959/downloads/19710015959.pdf: two three-valve clusters, high mode 44.5 N, low mode 2.22 N. NASA/Lockheed large-tank Agena study table 3-2 (https://ntrs.nasa.gov/api/citations/19730012173/downloads/19730012173.pdf): 67 s maximum nitrogen Isp; used as an estimate for GATV, not a measured GATV rating.",
+      "accessedDate": "2026-11-04",
+      "variant": "agena8_target_vehicle_bus",
+      "conditions": "Two aft clusters of three nozzles; radial pitch/yaw and opposed tangential pitch/roll. High-pressure-mode thrust 44.5 N; effective Isp 60 s and usable load 20 kg are estimates. 20 kg usable store reallocated from the existing estimated dry allocation, preserving loaded mass; no liquid propellant removed.",
+      "uncertainty": "Number/nozzle directions and stations are reconstructed where unpublished; thrust ±50%, Isp ±20%, usable store ±50%, station ±0.5 m (Falcon/Agena) or ±2 m (New Glenn). No exact flight-calibration claim."
     }
   ]
 }

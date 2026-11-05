@@ -20,7 +20,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F0 | closed | Coupled 6-DoF in production, one skirt-datum frame, exact separation |
 | F1 | closed | Distributed per-part aerodynamics, flight-control inversion |
 | F2 | closed | Physical body flaps on measured crossflow drag (Flight 14 descent and belly-flop speed) |
-| F3 | open | Actuator-only attitude control (declared RCS thrusters, SAS and envelope as commands); Flight 14 descent gates still failing |
+| F3 | closed | Actuator-only attitude control, declared catalog RCS, exact Flight 14 checkpoint and historical descent; full CI 1259/1259 |
 | F4 | planned | Jet damping, gravity gradient |
 | F5 | planned | Propellant slosh |
 | F6 | planned | Historical recalibration of every profile |
@@ -71,4 +71,11 @@ with `bash tools/fidelity_gate.sh F1`.
 | F3 | analytic | `StabilityAugmentationAuthorityTests.WithoutThrustersSasCannotDampAnUnpoweredTumble` | no generic RCS floor |
 | F3 | analytic | `StabilityAugmentationAuthorityTests.SasStillSettlesASmallResidualRate` | SAS rate damping as a thruster command |
 | F3 | analytic | `StabilityAugmentationAuthorityTests.WithoutSasAnUnpoweredTumbleConservesItsRate` | no control, no moment |
-| F3 | historical | `Gemini8AnomalyScenarioTests.StuckThrusterSpinsTheSpacecraftAndReentryRcsRecoversIt` | Gemini 8 roll recovered on the re-entry rings with ~75 % of their propellant |
+| F3 | historical | `Gemini8AnomalyScenarioTests.StuckThrusterSpinsTheSpacecraftAndReentryRcsRecoversIt` | Gemini 8 recovery on the re-entry rings (~68 % simulated propellant use, ~75 % in flight) |
+
+F3 regression coverage also includes `Flight14EntryCheckpointTests` (exact 60-second
+continuation), `AttitudeActuatorBlendingTests` (shutdown trim, coupled bank reversal,
+restored authority and low-pressure handoff), `ReactionControlCatalogTests` (finite stores,
+three-axis authority and mass accounting) and the unchanged Flight 14 historical descent gate.
+Full validation: `bash tools/ci_check.sh`, 1259/1259 tests, three builds at 0 warnings /
+0 errors, Godot startup/scene smoke tests and the graphics capture/reload check.

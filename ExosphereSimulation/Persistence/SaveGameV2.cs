@@ -240,7 +240,15 @@ public sealed class QuaternionSaveV2
     public static QuaternionSaveV2 Identity => new();
     public static QuaternionSaveV2 From(Quaterniond value) =>
         new() { W = value.W, X = value.X, Y = value.Y, Z = value.Z };
-    public Quaterniond ToQuaternion() => new Quaterniond(W, X, Y, Z).Normalize();
+    public Quaterniond ToQuaternion()
+    {
+        var value = new Quaterniond(W, X, Y, Z);
+        // Integration already normalises the attitude. Normalising it again on load can
+        // change its last bits and hence the next control/force evaluation. Preserve unit
+        // quaternions within floating-point round-off; still repair non-unit legacy saves.
+        const double unitRoundoff = 8.0 * 2.2204460492503131e-16;
+        return System.Math.Abs(value.NormSquared - 1.0) <= unitRoundoff ? value : value.Normalize();
+    }
 }
 
 public static class SaveGameV2Codec

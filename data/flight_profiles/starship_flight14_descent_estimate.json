@@ -1,7 +1,7 @@
 {
   "id": "starship-flight14-aerodynamic-descent-engineering-estimate",
   "status": "engineering-estimate",
-  "assumptions": "Continues the original loaded launch/deployment/deorbit state below its descending 90 km witness on physical body flaps and distributed (Jorgensen crossflow) aerodynamics. Hypersonic angle of attack 59.5 deg, calibrated against the broadcast descent displays (residuals +1.2/+1.3/+0.6 km at T+10369/10541/10961, speed 7291 vs 9982 km/h at the last, 1.2 km reached about 7 s before the broadcast); half a degree below the 60-70 deg belly-first band a secondary source reports, and very sensitive (57 deg reaches 1.2 km 100 s late); in the distributed model lift/drag is about cot(alpha), so the former 55 deg experiment glided far too high. Attitude feedback on the physical flaps is gain-scheduled (0.3 rad/s, damping 0.8) by the flaps' full-command angular authority. The angle of attack moves to an 80 deg terminal belly flop between 250 and 130 m/s; an onboard trim limiter (the vessel's own hull and flap model) never commands an angle the flaps cannot trim with 15 deg of travel to spare, and a reference governor keeps the attitude reference within 6 deg of the actual attitude. Bank-limited hypersonic corridor: max(20 m/s, 0.006 x airspeed) downward with a 20 s response and 30 m/s deadband. Controls, thresholds and the endpoint are engineering estimates, not measured Flight 14 commands. No forces, state, fuel or thermal values are imposed.",
+  "assumptions": "Continues the original loaded launch/deployment/deorbit state below the descending 90 km witness on physical body flaps and distributed Jorgensen crossflow aerodynamics. Hypersonic angle of attack remains a reconstructed 59.5 deg, not measured flight software or a measured attitude. The bank corridor uses the same distributed hull and physical flap loads as the integrator; low-pressure blending retains the lift direction already flown at handoff. Feedback is normalised by full per-axis flap/jet/gimbal authority: roll 0.3 rad/s, damping 0.8; transverse feedback 0.15 rad/s, damping 1 above 1000 m/s, blended to the terminal 0.3/0.8 loop below 500 m/s. The descent request is max(20 m/s, 0.0049 x atmosphere-relative airspeed), with a 20 s response and 30 m/s deadband, calibrated against the three datum-conditional broadcast altitude anchors; the displayed speed frame remains unspecified and late hypersonic speed is not a closed calibration. Angle of attack moves to an 80 deg terminal belly flop between 250 and 130 m/s; the onboard hull/flap trim limiter retains 15 deg travel margin and the reference governor limits lead to 6 deg. Controls, thresholds and endpoint are engineering estimates. No forces, kinematic, resource, thermal or clock state are imposed. See data/provenance/rigid_body_fidelity_2026.json.",
   "maximumMissionSeconds": 13000,
   "diagnosticEndAltitudeM": 3000,
   "maximumEndSpeedMps": 125,
@@ -18,7 +18,7 @@
   "trimOnsetDynamicPressurePa": 250,
   "trimFullDynamicPressurePa": 1000,
   "minimumDownwardSpeedMps": 20,
-  "downwardSpeedFraction": 0.006,
+  "downwardSpeedFraction": 0.0049,
   "verticalResponseSeconds": 20,
   "downwardSpeedDeadbandMps": 30
 }

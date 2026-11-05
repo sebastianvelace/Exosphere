@@ -47,7 +47,7 @@
       "dataId": "newglenn_first_stage_tank", "field": "mass_dry",
       "status": "estimated", "source": "Reusable booster structural allocation",
       "accessedDate": "2026-07-28", "variant": "New Glenn GS1",
-      "conditions": "tank and reusable structure excluding engines/interstage", "uncertainty": "±30%; not published"
+      "conditions": "tank and reusable structure excluding engines/interstage; usable RCS store is now carried separately (reaction_control_2026.json); loaded stage mass preserved", "uncertainty": "±30%; not published"
     },
     {
       "dataId": "newglenn_second_stage_tank", "field": "envelope",
@@ -65,7 +65,7 @@
       "dataId": "newglenn_second_stage_tank", "field": "mass_dry",
       "status": "estimated", "source": "Simulator upper-stage structural allocation",
       "accessedDate": "2026-07-28", "variant": "New Glenn GS2",
-      "conditions": "tank and structure excluding BE-3U cluster", "uncertainty": "±35%; not published"
+      "conditions": "tank and structure excluding BE-3U cluster; usable RCS store is now carried separately (reaction_control_2026.json); loaded stage mass preserved", "uncertainty": "±35%; not published"
     },
     {
       "dataId": "newglenn_fairing_7m", "field": "envelope",

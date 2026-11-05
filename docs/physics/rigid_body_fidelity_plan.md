@@ -186,7 +186,7 @@ reproduces three→two→one. Mission controllers fly without the 20°/s pilot-a
 (`Vessel.PilotRateEnvelopeEnabled`), so the flip turns at its gimbal-limited rate (~0.55 rad/s).
 Ignition to 100 m now takes ~21 s (was 40+).
 
-## F3 findings (2026-11-04, in progress — not closed)
+## F3 findings (2026-11-04, closed)
 
 - **Every moment comes from an actuator.** The flight-control law (pilot or guidance command,
   SAS rate damping, the 20°/s pilot envelope) only produces a desired body angular
@@ -204,8 +204,9 @@ Ignition to 100 m now takes ~21 s (was 40+).
 - **Propellant per system.** A part with a store feeds its own jets, others draw on the shared
   feed, and a valved-off system's store leaves it. Starship's cold gas is a usable tank-gas
   store (ship 4 t, booster 10 t, estimated from tank volume and an ~2.5 → 1.2 bar usable
-  ullage range, taken out of the liquid load because autogenous pressurant is boiled-off
-  propellant), not liquid drawn from the main tanks: after the pre-entry vent the tanks are
+  ullage range), separate from the main-liquid feed. This closure leaves the existing
+  Starship gas, liquid and dry allocations unchanged; it introduces no new mass deduction.
+  After the pre-entry vent the tanks are
   dry of liquid but still hold their gas. A 1 t store ran dry in the entry turn (the deorbit
   burn and the turn take ~0.9 t) and left the ship without RCS at entry interface. Arming is
   physical: `rcs_arms_with_stage` (S-IVB APS, Gemini OAMS, Starship cold gas) switches on once
@@ -234,8 +235,8 @@ Ignition to 100 m now takes ~21 s (was 40+).
   enters at −6.79° and splashes at 8.3 m/s on the CM's own jets. Starship's coast
   reorientation takes minutes on cold gas (the old floor did it in ~35 s). Flight 14: the jets
   correcting the deorbit burn put the periapsis 370 m lower and entry 20 s earlier; the
-  ignition lever moved T+7883 → T+7905 s (inside the observed window), 94 km anchors
-  −320 / −201 m (were −440 / −320 m). The descent guidance normalises its demand by the ship's
+  ignition lever moved T+7883 → T+7905 s (inside the observed window). The descent guidance
+  normalises its demand by the ship's
   whole authority (`Vessel.GetAttitudeAuthorityBody`: flaps, jets, gimbals).
 - **Gimbals own the axes they can cover under thrust**, if they slew ≥ 1°/s; a trim gimbal does
   not (the LM DPS rate is now the published 0.2°/s). The jets credit the flaps with what they were
@@ -244,29 +245,62 @@ Ignition to 100 m now takes ~21 s (was 40+).
   chased gimbal servo lag; with the gimbal rule and an early exit when couples suffice it is
   ~24 %. A cold Flight 14 pad-to-entry flight takes ~9.5 min (≈7 before F3).
 
-### Open (where the work stopped)
+### Flight 14 closure evidence
 
-The last full `tools/ci_check.sh` ended 1233/1235 before the final flap-credit change; with that
-change the state is:
+- **Exact checkpoint restore.** The first command difference came from normalising an
+  already-unit saved quaternion again, rather than from the RCS authority cache. Its norm
+  was one rounding unit below one; changing its last bits led to 3.4 m divergence after
+  60 s. `QuaternionSaveV2` preserves unit attitudes within floating-point round-off while
+  still normalising non-unit legacy saves. The continuation gate now requires exact
+  equality of time, position, velocity, orientation, angular rate, propellant and flap state;
+  position and velocity residuals are both zero. A warm-cache/gas-consumption bench also
+  checks restored actuator authority exactly.
+- **Physical blending and coupled stability.** Staged engines remain in the active-engine
+  list after shutdown; TVC owns trim only while thrust is actually delivered. Otherwise
+  the jets duplicated the flaps' static trim. The flap-credit rule stays "commanded share,
+  capped at the request". At hypersonic speed the pitch/yaw loop is critically damped at
+  0.15 rad/s, below the trim-limited servo bandwidth; roll retains 0.3 rad/s and damping
+  0.8. The transverse loop blends back to 0.3/0.8 between 1000 and 500 m/s. A constant-wind
+  coupled bank-reversal regression retains finite servos and the original 0.15 rad/s gate.
+- **Consistent descent guidance.** The bank predictor uses the distributed hull and
+  physical-flap force model, with zero angular rate for the equilibrium estimate, plus
+  centre-of-mass orbital kinematics. Low-pressure handoff retains the lift direction
+  already flown instead of commanding an extra roll toward local lift-up. The estimated
+  downward-speed fraction is recalibrated from 0.006 to 0.0049; the 59.5-degree AoA,
+  actuator limits, force coefficients and physical acceptance limits are unchanged.
+- **Historical descent reclosed.** Residuals at T+10369/10541/10961 are +332/+932/-1697 m
+  within the original 3 km altitude-datum band. Peak angular rate is 0.066539 rad/s,
+  below 0.15; the original 20 t header reserve remains at the 3 km witness. Belly-flop
+  speed is 111.4 m/s at 3 km, equivalent by density scaling to 101.8 m/s at the 1.2 km
+  broadcast datum (100.8 m/s observed). The unspecified display speed frame and late
+  hypersonic speed mismatch remain F6 work; altitude agreement is not full trajectory validation.
+- **Catalog RCS completed.** Falcon 9 GN2 stages, New Glenn forward/aft systems and Agena's
+  six nitrogen jets now have declared geometry, finite stores and three-axis authority.
+  Unpublished thrust, Isp, layout and loads are explicitly estimated in
+  `reaction_control_2026.json`. Stores are reallocated from existing estimated inert
+  allocations, preserving loaded mass; Starship's gas/liquid/dry allocations are unchanged.
+- **Ocean-domain evidence.** NOAA ETOPO 2022 native-grid geographic screening is retained
+  in `docs/research/FLIGHT14_OCEAN_COVERAGE_2026-11-04.json`. It defines where the existing
+  flat-water model may operate, not measured targeting or bathymetric collision loads.
 
-1. `Flight14EntryCheckpointTests.ResumedRunReproducesTheContinuousRun` — the resumed run is no
-   longer bit-exact (3.4 m after 60 s). A frame-by-frame comparison shows the first difference
-   at the first frame after resume: the descent command differs in the last bits (~1e-14) while
-   every recorded state matches, so a value the guidance reads through
-   `GetAttitudeAuthorityBody` (RCS authority cache, inertia read outside vs inside the physics
-   tick, or `ComputeBodyFlapAngularAuthority` reading tick-cached mass properties) depends on
-   history, not only on the restored state. Make that path a pure function of the saved state.
-2. `Flight14DescentTests.LoadedMissionDescendsWithTheOriginalReserveAndPhysicalState` — peak
-   descent rate 0.33 rad/s (limit 0.15): the hypersonic bank reversals at ~74 km oscillate in
-   roll now that flaps and cold-gas jets share the command. Before the authority normalisation
-   it was 0.176 rad/s.
-3. `Flight14DescentHistoricalTests` (F2 historical gate) — descent residual +5.9 km at T+10369
-   (tolerance 3 km; +1.9 km earlier in this work, +1.3 km after F2). Same cause as 2.
+### Closure validation
 
-Next step: fix 1 first (determinism), then retune the descent roll loop for the blended
-flap + jet authority (bandwidth/damping of `Flight14AerodynamicAttitude.ScheduledFeedback`
-per axis, or crediting the flaps by their measured control share), and re-close 2 and 3.
-Pending RCS data: Falcon 9, New Glenn and Agena have none yet.
+The continuous moving-Solar-System preview reached 22.527910 N, 160.292445 W, with
+peak descent angular rate 0.063216 rad/s. A checkpoint captured before descent handoff
+reproduced its contact coordinates, altitude, peak rate and 100 m witness exactly.
+The contact lay outside the previous operating domain. NOAA native-grid screening now
+covers 22.5..35 N, 161..140 W: all 15,120,000 cells are below sea level (-7024..-66.55 m),
+including both propagated contacts while excluding Kauai, Nihoa and Oahu. This changes
+geographic water-model coverage, not the 5 m/s contact limit, attitude gate or water loads.
+The resumed moving-world continuation reaches water at 4.414 m/s, upright alignment
+0.998740, with 1672 kg liquid reserve, and completes ten seconds of coupled water response.
+The isolated-Earth continuation reaches water at 4.422 m/s.
+
+`bash tools/ci_check.sh` passes: 1259/1259 tests, no skipped tests, all three builds at
+0 warnings / 0 errors, Flight startup, MainMenu and Construction smoke tests, and the
+real-framebuffer graphics-settings capture/reload check. F3 is closed with the analytic
+RCS/SAS gates, the Gemini 8 historical recovery gate, exact checkpoint continuation and
+the original Flight 14 descent/contact limits. F4–F6 remain planned.
 
 ## Phases
 
@@ -289,8 +323,8 @@ cap. Validation: 55–70° entry trim, belly-flop hold, flap asymmetry for roll.
 **F3 — Actuator-only attitude control (A5).** SAS becomes a rate/attitude controller writing
 commands; RCS thrusters are declared per part (thrust, position, direction) and produce torque
 and force; no direct ω edits; the floor disappears. Vehicles without RCS have none.
-*In progress 2026-11-04: the model, data and most recalibration are in; three Flight 14
-descent gates are still open (see F3 findings, "Open").*
+*Closed 2026-11-04: analytic and historical gates, exact checkpoint/descent regressions,
+catalog RCS and the full loaded moving-world return pass (see F3 findings).*
 
 **F4 — Variable-mass and environment torques (A6, A7).** Jet damping from mass flow and nozzle
 exit position; gravity gradient. Validation: analytic spin/precession cases, Saturn V jet-damping

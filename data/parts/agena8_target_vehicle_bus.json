@@ -5,11 +5,20 @@
   "category": "fuel_tank",
   "vehicle_family": "agena",
   "vehicle_role": "agena_target_bus",
-  "mass_dry": 2778,
+  "mass_dry": 2758,
+  "fuel_capacity_mono": 20,
   "length_m": 6.2,
   "diameter_m": 1.52,
   "drag_coefficient": 0.25,
   "heat_tolerance": 900,
+  "rcs_thrusters": [
+    {"id": "acs_00", "position": [0.76, -2.8, 0], "direction": [1, 0, 0], "thrust_n": 44.5, "isp_s": 60},
+    {"id": "acs_01", "position": [0.76, -2.8, 0], "direction": [0, 0, 1], "thrust_n": 44.5, "isp_s": 60},
+    {"id": "acs_02", "position": [0.76, -2.8, 0], "direction": [0, 0, -1], "thrust_n": 44.5, "isp_s": 60},
+    {"id": "acs_03", "position": [-0.76, -2.8, 0], "direction": [-1, 0, 0], "thrust_n": 44.5, "isp_s": 60},
+    {"id": "acs_04", "position": [-0.76, -2.8, 0], "direction": [0, 0, 1], "thrust_n": 44.5, "isp_s": 60},
+    {"id": "acs_05", "position": [-0.76, -2.8, 0], "direction": [0, 0, -1], "thrust_n": 44.5, "isp_s": 60}
+  ],
   "attachment_nodes": [
     {"id": "bottom", "position": [0, -3.1, 0], "size": 1, "type": "stack"},
     {"id": "top", "position": [0, 3.1, 0], "size": 1, "type": "stack"}

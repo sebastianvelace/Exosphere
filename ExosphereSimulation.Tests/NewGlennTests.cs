@@ -54,8 +54,9 @@ public sealed class NewGlennTests
         Assert.Equal(7, assembly.Parts.Count);
         Assert.True(assembly.ValidateForLaunch().CanLaunch);
         Assert.Equal(1_269_000.0, metrics.WetMass, 6);
-        Assert.Equal(144_000.0, metrics.DryMass, 6);
-        Assert.Equal(1_125_000.0, metrics.PropellantMass, 6);
+        // The 700 kg usable RCS load is now a separate consumable, not dry structure.
+        Assert.Equal(143_300.0, metrics.DryMass, 6);
+        Assert.Equal(1_125_700.0, metrics.PropellantMass, 6);
         Assert.Equal(19_922_000.0, metrics.SeaLevelThrust, 6);
         Assert.InRange(metrics.SeaLevelTwr, 1.59, 1.62);
         Assert.InRange(metrics.VacuumDeltaV, 4_550.0, 4_650.0);

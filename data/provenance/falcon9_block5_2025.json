@@ -86,7 +86,7 @@
       "status": "estimated",
       "source": "SpaceX Falcon User's Guide, May 2025; simulator stage allocation",
       "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 first stage",
-      "conditions": "tank and structure excluding engine cluster/interstage",
+      "conditions": "tank and structure excluding engine cluster/interstage; usable RCS store is now carried separately (reaction_control_2026.json); loaded stage mass preserved",
       "uncertainty": "±15%; component mass not published"
     },
     {
@@ -102,7 +102,7 @@
       "status": "estimated",
       "source": "SpaceX Falcon User's Guide, May 2025; simulator stage allocation",
       "accessedDate": "2026-07-27", "variant": "Falcon 9 Block 5 second stage",
-      "conditions": "tank and structure excluding MVac",
+      "conditions": "tank and structure excluding MVac; usable RCS store is now carried separately (reaction_control_2026.json); loaded stage mass preserved",
       "uncertainty": "±20%; component mass not published"
     },
     {

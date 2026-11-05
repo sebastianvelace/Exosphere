@@ -120,16 +120,12 @@ public sealed class Flight14DescentController : IPhysicsStepController
         Vector3d liftReference = liftUp;
         if (speed >= definition.HypersonicControlThresholdMps)
         {
-            var axis = ship.Orientation.Rotate(Vector3d.Up).Normalized;
-            double density = body.Atmosphere!.GetDensity(state.AltitudeM);
-            var drag = AerodynamicsModel.ComputeReentryDrag(density, surfaceVelocity, axis,
-                ship.VehicleLength, ship.MaximumDiameter, body.Atmosphere.GetTemperature(state.AltitudeM),
-                ship.Parts.AxialDragCoefficient);
-            var lift = AerodynamicsModel.ComputeLift(density, surfaceVelocity, axis,
-                ship.VehicleLength, ship.MaximumDiameter);
-            var inertial = ship.Velocity - body.Velocity;
+            var force = EstimateAerodynamicForce(ship, body);
+            var drag = flow * force.Dot(flow);
+            var lift = force - drag;
+            var inertial = ship.CenterOfMassVelocity - body.Velocity;
             var tangential = inertial - up * inertial.Dot(up);
-            double radius = (ship.Position - body.Position).Magnitude;
+            double radius = (ship.CenterOfMass - body.Position).Magnitude;
             double ballistic = -body.GM/(radius*radius) + tangential.MagnitudeSquared/radius
                 + drag.Dot(up)/ship.TotalMass;
             var side = EntryCorridorGuidance.ComputeBankSide(flow, up, priorLift);
@@ -137,7 +133,10 @@ public sealed class Flight14DescentController : IPhysicsStepController
                 verticalSpeed, speed, ballistic, lift.Magnitude/ship.TotalMass*liftUp.Magnitude,
                 definition.MinimumDownwardSpeedMps, definition.DownwardSpeedFraction,
                 definition.VerticalResponseSeconds, definition.DownwardSpeedDeadbandMps);
-            liftReference = EntryCorridorGuidance.BlendForAerodynamicAuthority(limited, liftUp,
+            // At low pressure retain the bank already flown at handoff. Blending from
+            // local lift-up instead commands an unwanted roll out of the coast's bank
+            // and then a reversal as flap authority grows, adding lift and entry delay.
+            liftReference = EntryCorridorGuidance.BlendForAerodynamicAuthority(limited, lift,
                 state.DynamicPressurePa, definition.BankOnsetDynamicPressurePa, definition.BankFullDynamicPressurePa);
         }
         if (liftReference.MagnitudeSquared < 1e-12)
@@ -160,6 +159,33 @@ public sealed class Flight14DescentController : IPhysicsStepController
         if (lead > leadLimit) reference = ship.Orientation.Slerp(reference, leadLimit / lead).Normalize();
         return Flight14AerodynamicAttitude.ComputeCommand(ship, body, reference,
             definition.TrimOnsetDynamicPressurePa, definition.TrimFullDynamicPressurePa);
+    }
+
+    /// <summary>
+    /// Static onboard aerodynamic estimate from the model actually flown. In particular,
+    /// distributed crossflow and physical flap loads must not be replaced by the legacy
+    /// aggregate lift/drag map when computing the bank needed to hold a descent corridor.
+    /// Rate-dependent loads are excluded from this equilibrium estimate.
+    /// </summary>
+    private static Vector3d EstimateAerodynamicForce(Vessel ship, CelestialBody body)
+    {
+        if (!ship.FlightControlInvertsAerodynamics || !ship.Parts.UsesDistributedAerodynamics)
+            return ship.ComputeDrag(body);
+        var atmosphere = body.Atmosphere!;
+        double altitude = body.GetAltitude(ship.CenterOfMass);
+        double density = atmosphere.GetDensity(altitude);
+        double temperature = System.Math.Max(1.0, atmosphere.GetTemperature(altitude));
+        var air = ship.GetSurfaceVelocity(body);
+        var com = ship.CenterOfMassOffsetLocal;
+        var force = DistributedAerodynamics.Evaluate(ship.Parts.GetAeroElements(), ship.Orientation,
+            Vector3d.Zero, com, air, density, temperature, ship.MaximumDiameter,
+            ship.Parts.AxialDragCoefficient, atmosphere.SoundSpeedConstant,
+            atmosphere.GetDynamicViscosityAtTemperature(temperature)).ForceWorld;
+        if (ship.PhysicalBodyFlapsActive)
+            force += BodyFlapAerodynamics.Evaluate(ship.Parts.GetBodyFlaps(), ship.BodyFlapDeflectionsRad,
+                ship.Orientation, Vector3d.Zero, com, air, density, temperature,
+                atmosphere.SoundSpeedConstant).ForceWorld;
+        return force;
     }
 
     /// <summary>

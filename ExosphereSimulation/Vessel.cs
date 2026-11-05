@@ -1499,7 +1499,9 @@ public class Vessel
     {
         if (Parts.TotalMass <= 0.0) return;
         var desiredTorque = ControlTorqueFor(alpha);
-        bool enginesLit = Parts.ActiveEngineList.Count > 0;
+        // Staged engines remain in ActiveEngineList while shut down. Only delivered
+        // thrust lets TVC own the aerodynamic trim; otherwise the flaps already own it.
+        bool enginesLit = Parts.GetCurrentThrust(pressure) > 0.0;
         if (controlling && enginesLit)
             Parts.SolveDifferentialGimbal(
                 desiredTorque - Parts.GetZeroGimbalEngineTorque(pressure) - aeroTorque, pressure);

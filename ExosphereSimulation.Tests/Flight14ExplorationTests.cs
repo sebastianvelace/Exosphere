@@ -133,7 +133,11 @@ public sealed class Flight14ExplorationTests
         }
         Assert.True(shortcutUsed);
         Assert.True(entryPaused);
-        Assert.Null(preview.BlockReason);
+        run.Earth.GetGeodeticCoordinatesAtTime(run.Ship.Position, universe.CurrentTime,
+            out double latitude, out double longitude, out _);
+        Assert.True(preview.BlockReason == null,
+            $"{preview.BlockReason}; T+{preview.MissionElapsedSeconds:R}, lat={latitude:R}, lon={longitude:R}, "
+            + $"alt={run.Ship.GetAltitude(run.Earth):R}; terminal={run.PoweredReturnController?.Landing?.EndWitness}");
         Assert.False(run.Ship.IsDestroyed);
         Assert.True(preview.IsTerminal, preview.Phase);
         Assert.Equal(shipId, universe.ActiveVessel!.Id);

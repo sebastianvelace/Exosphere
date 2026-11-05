@@ -22,6 +22,12 @@ public sealed class FidelityProvenanceTests
 
     public static TheoryData<string, string, double> CodeConstants() => new()
     {
+        { "starship-flight14-attitude-feedback", "transverseSlowLoopOnsetSpeedMps", Flight14AerodynamicAttitude.TransverseSlowLoopOnsetSpeedMps },
+        { "starship-flight14-attitude-feedback", "transverseSlowLoopFullSpeedMps", Flight14AerodynamicAttitude.TransverseSlowLoopFullSpeedMps },
+        { "starship-flight14-attitude-feedback", "rollNaturalFrequencyRadPerS", Flight14AerodynamicAttitude.ScheduledNaturalFrequencyRadPerS },
+        { "starship-flight14-attitude-feedback", "rollDampingRatio", Flight14AerodynamicAttitude.ScheduledDampingRatio },
+        { "starship-flight14-attitude-feedback", "transverseNaturalFrequencyRadPerS", Flight14AerodynamicAttitude.TransverseNaturalFrequencyRadPerS },
+        { "starship-flight14-attitude-feedback", "transverseDampingRatio", Flight14AerodynamicAttitude.TransverseDampingRatio },
         { "crossflow-drag-jorgensen", "subcriticalSectionCoefficient", CrossflowDrag.SectionCoefficient(0.1, 1.0e5) },
         { "crossflow-drag-jorgensen", "transcriticalSectionCoefficient", CrossflowDrag.SectionCoefficient(0.2, 5.0e7) },
         { "crossflow-drag-jorgensen", "transonicPeakSectionCoefficient", CrossflowDrag.SectionCoefficient(0.97, 1.0e7) },
@@ -48,6 +54,18 @@ public sealed class FidelityProvenanceTests
         Assert.Equal(record.Value!.Value, codeValue, 12);
         if (record.Status != ProvenanceStatus.Published)
             Assert.False(string.IsNullOrWhiteSpace(record.Uncertainty));
+    }
+
+    [Fact]
+    public void DescentProfileMatchesItsRegisteredCalibration()
+    {
+        var profile = Flight14DescentDefinition.LoadFromJson(Path.Combine(Root.FullName,
+            "data", "flight_profiles", "starship_flight14_descent_estimate.json"));
+        var registry = Registry();
+        Assert.Equal(profile.DownwardSpeedFraction,
+            registry.Require("starship-flight14-descent", "downwardSpeedFraction").Value);
+        Assert.Equal(profile.EntryAngleOfAttackDegrees,
+            registry.Require("starship-flight14-descent", "entryAngleOfAttackDegrees").Value);
     }
 
     [Fact]

@@ -10,6 +10,28 @@ using System.Text.Json;
 public sealed class PersistenceRegressionTests
 {
     [Fact]
+    public void UnitAttitudeRoundTripsWithoutAnotherNormalisation()
+    {
+        // A legitimate unit quaternion whose norm rounds one ulp below one.
+        var attitude = Quaterniond.FromEuler(23, 81, 12);
+        for (int i = 0; i < 200; i++)
+        {
+            attitude = (Quaterniond.FromAxisAngle(new Vector3d(1, 2, 3), 0.001) * attitude).Normalize();
+            string json = JsonSerializer.Serialize(QuaternionSaveV2.From(attitude));
+            var restored = JsonSerializer.Deserialize<QuaternionSaveV2>(json)!.ToQuaternion();
+            Assert.Equal(attitude, restored);
+        }
+    }
+
+    [Fact]
+    public void NonUnitLegacyAttitudeIsStillNormalised()
+    {
+        var restored = new QuaternionSaveV2 { W = 2.0, X = 2.0 }.ToQuaternion();
+        Assert.Equal(1.0, restored.Norm, 14);
+        Assert.Equal(Quaterniond.Identity, new QuaternionSaveV2 { W = 0.0 }.ToQuaternion());
+    }
+
+    [Fact]
     public void SaveV2RoundTripPreservesStableIdsPartsResourcesCrewAndMetadata()
     {
         var catalog = LoadCatalog();

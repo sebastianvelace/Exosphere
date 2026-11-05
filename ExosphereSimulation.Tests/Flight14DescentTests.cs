@@ -52,7 +52,8 @@ public sealed class Flight14DescentTests(ITestOutputHelper output)
         output.WriteLine($"Deep descent: T+{end.MissionElapsedSeconds:F2}s "
             + $"alt={end.GeodeticAltitudeM:F2}m air={end.AtmosphereRelativeSpeedMps:F2}m/s "
             + $"down={-end.VerticalSpeedMps:F2}m/s reserve={end.RemainingPropellantKg:F2}kg "
-            + $"peak load={descent.PeakAerodynamicLoadG:F3}g q={descent.PeakDynamicPressurePa:F1}Pa");
+            + $"peak load={descent.PeakAerodynamicLoadG:F3}g q={descent.PeakDynamicPressurePa:F1}Pa "
+            + $"peak rate={descent.MaximumAngularRateRadPerSecond:F6}rad/s");
     }
 
     [Fact]

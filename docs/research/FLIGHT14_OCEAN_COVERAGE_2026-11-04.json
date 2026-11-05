@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "scope": "Geographic ocean coverage only; not a bathymetric collision mesh or a water-load model.",
+  "source": "NOAA NCEI ETOPO 2022 v1 15 arc-second bed elevation, image service raster 2530",
+  "metadataUrl": "https://www.ncei.noaa.gov/metadata/geoportal/rest/metadata/item/gov.noaa.ngdc.mgg.dem:etopo_2022/html",
+  "requestUrl": "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/computeStatisticsHistograms?geometry=%7B%22xmin%22%3A+-161%2C+%22ymin%22%3A+22.5%2C+%22xmax%22%3A+-140%2C+%22ymax%22%3A+35%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&geometryType=esriGeometryEnvelope&pixelSize=%7B%22x%22%3A+0.004166666666666667%2C+%22y%22%3A+0.004166666666666667%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&mosaicRule=%7B%22mosaicMethod%22%3A+%22esriMosaicLockRaster%22%2C+%22lockRasterIds%22%3A+%5B2530%5D%7D&f=pjson",
+  "retrievedAtUtc": "2026-11-05T01:09:11.225062+00:00",
+  "bounds": {
+    "minimumLatitudeDegrees": 22.5,
+    "maximumLatitudeDegrees": 35,
+    "minimumLongitudeDegrees": -161,
+    "maximumLongitudeDegrees": -140
+  },
+  "cellSizeArcSeconds": 15,
+  "statistics": {
+    "min": -7024,
+    "max": -66.5522232055664,
+    "mean": -5290.248468154199,
+    "standardDeviation": 426.9094538822164,
+    "sum": -79988556838.49149,
+    "median": -5359.669355355057,
+    "mode": -5414.237573212268,
+    "skipX": 1,
+    "skipY": 1,
+    "count": 15120000,
+    "covariances": "0.000000"
+  },
+  "limitations": [
+    "Finite raster geographic screening, not a coastal navigation product.",
+    "The flat sea surface, sealed-body buoyancy and water drag approximations remain unchanged.",
+    "This is a simulator operating domain, not a claimed measured Flight 14 landing target."
+  ],
+  "verticalReference": "Sea Level as reported by the NOAA image service",
+  "simulationContactLocations": [
+    {
+      "fixture": "isolated Earth",
+      "latitudeDegrees": 23.136989,
+      "longitudeDegrees": -157.900773
+    },
+    {
+      "fixture": "moving Solar System, continuous loaded mission",
+      "latitudeDegrees": 22.527910445469917,
+      "longitudeDegrees": -160.29244503385752
+    }
+  ]
+}

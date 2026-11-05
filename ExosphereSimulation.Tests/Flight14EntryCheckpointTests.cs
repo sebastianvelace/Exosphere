@@ -22,15 +22,12 @@ public sealed class Flight14EntryCheckpointTests(ITestOutputHelper output)
 
         output.WriteLine($"position residual {(state.Position - reference.Position).Magnitude:E3} m, "
             + $"velocity residual {(state.Velocity - reference.Velocity).Magnitude:E3} m/s");
-        Assert.Equal(reference.Time, state.Time, 9);
-        Assert.InRange((state.Position - reference.Position).Magnitude, 0.0, 1e-6);
-        Assert.InRange((state.Velocity - reference.Velocity).Magnitude, 0.0, 1e-9);
-        Assert.InRange((state.AngularVelocity - reference.AngularVelocity).Magnitude, 0.0, 1e-12);
-        double orientation = System.Math.Abs(state.Orientation.W * reference.Orientation.W
-            + state.Orientation.X * reference.Orientation.X + state.Orientation.Y * reference.Orientation.Y
-            + state.Orientation.Z * reference.Orientation.Z);
-        Assert.InRange(System.Math.Abs(1.0 - orientation), 0.0, 1e-12);
-        Assert.Equal(reference.Propellant, state.Propellant, 9);
+        Assert.Equal(reference.Time, state.Time);
+        Assert.Equal(reference.Position, state.Position);
+        Assert.Equal(reference.Velocity, state.Velocity);
+        Assert.Equal(reference.AngularVelocity, state.AngularVelocity);
+        Assert.Equal(reference.Orientation, state.Orientation);
+        Assert.Equal(reference.Propellant, state.Propellant);
         Assert.Equal(reference.BodyFlapDeflections, state.BodyFlapDeflections);
     }
 

@@ -9,8 +9,8 @@ public static class Flight14AerodynamicAttitude
     /// <summary>
     /// Adds a bounded static-moment trim to ordinary attitude feedback. Evaluates the
     /// existing rotational force model without changing state or actuator coefficients.
-    /// The legacy RCS floor is not inverted; aerodynamic blending and feedback retain
-    /// low-q control, and the physical flap servos must still reach the request.
+    /// Aerodynamic blending and declared jets retain low-q control, and the physical
+    /// flap servos must still reach the request.
     /// </summary>
     public static Vector3d ComputeCommand(Vessel ship, CelestialBody body,
         Quaterniond reference, double trimOnsetPressurePa, double trimFullPressurePa)
@@ -19,7 +19,8 @@ public static class Flight14AerodynamicAttitude
         var authority3 = ship.FlightControlInvertsAerodynamics ? ship.GetAttitudeAuthorityBody(body) : Vector3d.Zero;
         var feedback = ship.FlightControlInvertsAerodynamics && authority3.X > 1e-9
                 && authority3.Y > 1e-9 && authority3.Z > 1e-9
-            ? ScheduledFeedback(ship.Orientation, reference, ship.AngularVelocity, authority3)
+            ? ScheduledFeedback(ship.Orientation, reference, ship.AngularVelocity, authority3,
+                ship.GetSurfaceVelocity(body).Magnitude)
             : AttitudeGuidance.ComputeCommand(ship.Orientation, reference, ship.AngularVelocity, 2, 25);
         double authority = ControlAuthority.Evaluate(ship);
         double q = ship.GetDynamicPressure(body);
@@ -57,13 +58,22 @@ public static class Flight14AerodynamicAttitude
     public const double ScheduledNaturalFrequencyRadPerS = 0.3;
     public const double ScheduledDampingRatio = 0.8;
 
+    // Pitch/yaw share flap travel with the large static trim moment. Keep their loop
+    // below the servo/trim bandwidth; transverse saturation otherwise excites roll
+    // through the coupled plate allocation during hypersonic bank reversals.
+    public const double TransverseNaturalFrequencyRadPerS = 0.15;
+    public const double TransverseDampingRatio = 1.0;
+    public const double TransverseSlowLoopOnsetSpeedMps = 500.0;
+    public const double TransverseSlowLoopFullSpeedMps = 1_000.0;
+
     /// <summary>
     /// Gain-scheduled feedback: the angular acceleration ωn²·error − 2ζωn·rate on each axis,
     /// normalised by that axis's full authority (flaps, RCS jets and gimbals), so the loop keeps
-    /// one bandwidth and damping from thin hypersonic air to the dense transonic regime.
+    /// its per-axis bandwidth and damping across changing aerodynamic authority. The
+    /// slower hypersonic transverse loop returns smoothly to the terminal trim loop.
     /// </summary>
     private static Vector3d ScheduledFeedback(Quaterniond current, Quaterniond desired,
-        Vector3d angularVelocityWorld, Vector3d authorityBody)
+        Vector3d angularVelocityWorld, Vector3d authorityBody, double airspeedMps)
     {
         var q = (desired * current.Inverse()).Normalize();
         if (q.W < 0.0) q = new Quaterniond(-q.W, -q.X, -q.Y, -q.Z);
@@ -76,7 +86,18 @@ public static class Flight14AerodynamicAttitude
         var rate = current.Inverse().Rotate(angularVelocityWorld);
         double kp = ScheduledNaturalFrequencyRadPerS * ScheduledNaturalFrequencyRadPerS;
         double kd = 2.0 * ScheduledDampingRatio * ScheduledNaturalFrequencyRadPerS;
-        var acceleration = error * kp - rate * kd;
+        double blend = System.Math.Clamp((airspeedMps - TransverseSlowLoopOnsetSpeedMps)
+            / (TransverseSlowLoopFullSpeedMps - TransverseSlowLoopOnsetSpeedMps), 0.0, 1.0);
+        double transverseFrequency = ScheduledNaturalFrequencyRadPerS
+            + blend * (TransverseNaturalFrequencyRadPerS - ScheduledNaturalFrequencyRadPerS);
+        double transverseDamping = ScheduledDampingRatio
+            + blend * (TransverseDampingRatio - ScheduledDampingRatio);
+        double transverseKp = transverseFrequency * transverseFrequency;
+        double transverseKd = 2.0 * transverseDamping * transverseFrequency;
+        var acceleration = new Vector3d(
+            error.X * transverseKp - rate.X * transverseKd,
+            error.Y * kp - rate.Y * kd,
+            error.Z * transverseKp - rate.Z * transverseKd);
         // Body X = pitch, Z = yaw, Y = roll; semantic controls are pitch/yaw/roll.
         return new Vector3d(
             System.Math.Clamp(acceleration.X / authorityBody.X, -1.0, 1.0),

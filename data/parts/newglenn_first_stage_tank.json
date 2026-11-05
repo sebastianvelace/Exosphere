@@ -4,7 +4,8 @@
   "description": "Reusable LOX/LNG booster tank and structure; component masses and loading are engineering estimates.",
   "category": "fuel_tank",
   "vehicle_family": "newglenn",
-  "mass_dry": 70000,
+  "mass_dry": 69400,
+  "fuel_capacity_mono": 600,
   "length_m": 42.0,
   "diameter_m": 7.0,
   "cost": 70000000,
@@ -12,6 +13,20 @@
   "heat_tolerance": 800,
   "fuel_capacity_lf": 206522,
   "fuel_capacity_ox": 743478,
+  "rcs_thrusters": [
+    {"id": "acs_00", "position": [3.6, 19, 0.0], "direction": [1, 0, 0], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_01", "position": [3.6, 19, 0.0], "direction": [0, 0, 1], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_02", "position": [3.6, 19, 0.0], "direction": [0, 0, -1], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_03", "position": [0.0, 19, 3.6], "direction": [0, 0, 1], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_04", "position": [0.0, 19, 3.6], "direction": [-1, 0, 0], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_05", "position": [0.0, 19, 3.6], "direction": [1, 0, 0], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_06", "position": [-3.6, 19, 0.0], "direction": [-1, 0, 0], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_07", "position": [-3.6, 19, 0.0], "direction": [0, 0, -1], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_08", "position": [-3.6, 19, 0.0], "direction": [0, 0, 1], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_09", "position": [0.0, 19, -3.6], "direction": [0, 0, -1], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_10", "position": [0.0, 19, -3.6], "direction": [1, 0, 0], "thrust_n": 2000, "isp_s": 160},
+    {"id": "acs_11", "position": [0.0, 19, -3.6], "direction": [-1, 0, 0], "thrust_n": 2000, "isp_s": 160}
+  ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 21.0, 0], "size": 3, "type": "stack"},
     {"id": "bottom", "position": [0, -21.0, 0], "size": 3, "type": "stack"}

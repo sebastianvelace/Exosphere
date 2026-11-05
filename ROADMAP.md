@@ -379,25 +379,32 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      descenso; 1,2 km ~7 s antes de la transmisión), periapsis 104,4 km. Aterrizaje con guía
      vectorial (1,1 km, 3→2→1 motores, ~21 s hasta 100 m). Gimbal J-2 a 8°/s publicado.
    - F2 cerrada (paso 34): gate histórico `Flight14DescentHistoricalTests` — caída de panza
-     101,1 m/s a 1,2 km contra 100,8 m/s de la transmisión. Pendiente: velocidad hipersónica
-     tardía (7291 vs 9982 km/h a T+10961) y el tramo final del aterrizaje (~10 s vs ~6 s).
-   - F3 en curso (paso 35, sin cerrar): control de actitud solo por actuadores. El SAS y la
+     101,1 m/s a 1,2 km contra 100,8 m/s de la transmisión. Pendiente F6: velocidad
+     hipersónica tardía y tramo final del aterrizaje; el marco de la velocidad mostrada
+     en la transmisión sigue sin especificarse.
+   - F3 cerrada (paso 35): control de actitud solo por actuadores. El SAS y la
      envolvente de 20°/s son comandos (nada escribe ω); desaparece el piso universal de
      0,01 rad/s². RCS declarado por pieza (`rcs_thrusters`, procedencia en
      `reaction_control_2026.json`): APS del S-IVB, SM/CM/LM de Apollo, OAMS y anillos de
      reentrada de Gemini, H2O2 de Mercury, gas frío de Starship/Super Heavy (reserva de gas de
-     tanque estimada: nave 4 t, booster 10 t, sacada de la carga líquida). Asignación por
+     tanque estimada: nave 4 t, booster 10 t, separada del feed líquido; este cierre mantiene
+     las asignaciones de masa existentes). Asignación por
      pseudo-inverso redistribuido + descenso coordinado, ponderada por inercia, pares primero;
      propelente por sistema; armado por etapa o por aislamiento; mezcla con flaps; bajo empuje
      el gimbal que gira ≥ 1°/s manda en sus ejes (DPS del LM a 0,2°/s publicado). Re-cerrados:
      Titan II (inserción T+367 s, 145 × 154 km), Gemini 8 (gate histórico: anillos al ~68 %,
      vuelo ~75 %), Apollo 8 (amerizaje 8,3 m/s), Flight 14 hasta la entrada (ignición del
-     desorbitado T+7905 s, anclas de 94 km −320/−201 m). Abierto: checkpoint de Flight 14 no
-     bit-exacto (diferencia ~1e-14 en el comando del descenso tras reanudar), oscilación de alabeo
-     en las inversiones de banco (0,33 rad/s vs 0,15) y residuo del descenso +5,9 km a T+10369
-     (gate F2). Detalle y siguiente paso en `rigid_body_fidelity_plan.md` ("F3 findings · Open").
-     Falta RCS de Falcon 9/New Glenn/Agena.
-   - Siguiente: cerrar F3 (ver arriba) y después F4–F6 de `docs/physics/rigid_body_fidelity_plan.md` (jet damping,
+     desorbitado T+7905 s). Checkpoint bit-exacto: preservar el cuaternión unitario evita
+     renormalizar sus últimos bits. Descenso re-cerrado: +332/+932/−1697 m (banda original
+     de 3 km), pico angular 0,0665 rad/s (límite 0,15), 20 t de reserva y caída de panza
+     equivalente a 101,8 m/s a 1,2 km. TVC toma el trim solo con empuje entregado; predictor
+     de banco con el mismo modelo distribuido y flaps físicos, lazo transversal más lento
+     en régimen hipersónico y fracción de descenso recalibrada con procedencia. Falcon 9,
+     New Glenn y Agena ya tienen RCS declarado con reservas finitas y estimaciones explícitas.
+     Cobertura oceánica verificada con NOAA para ambos contactos (15.120.000 celdas, todas
+     bajo el mar, con exclusión de islas). Amerizaje móvil a 4,414 m/s y 10 s de respuesta
+     acoplada en agua. CI completa: 1259/1259, builds 0/0 y smoke/captura de Godot aprobados.
+   - Siguiente: F4–F6 de `docs/physics/rigid_body_fidelity_plan.md` (jet damping,
      gradiente de gravedad, slosh, recalibración histórica); aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.
 
