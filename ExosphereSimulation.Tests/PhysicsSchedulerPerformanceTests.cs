@@ -97,7 +97,7 @@ public sealed class PhysicsSchedulerPerformanceTests
     }
 
     [Fact]
-    public void CoastingRailsVesselAdvancesAttitudeUsingInheritedWorldAngularVelocity()
+    public void LegacyCoastingRailsVesselAdvancesAttitudeUsingInheritedWorldAngularVelocity()
     {
         var earth = LoadBody("earth");
         var vessel = SafeRailVessel(earth, "coasting-rails-attitude");
@@ -110,7 +110,7 @@ public sealed class PhysicsSchedulerPerformanceTests
         var expectedOrientation = Quaterniond.FromAxisAngle(
             angularVelocity.Normalized, angularVelocity.Magnitude * elapsedSeconds)
             * initialOrientation;
-        var universe = new Universe { TimeScale = 100.0 };
+        var universe = new Universe { TimeScale = 100.0, Coupled6DofIntegrationEnabled = false };
         universe.AddBody(earth);
         universe.AddVessel(vessel);
 
@@ -618,7 +618,7 @@ public sealed class PhysicsSchedulerPerformanceTests
         var mixedEarth = LoadBody("earth");
         var mixedRails = SafeRailVessel(mixedEarth, "deadline-expiry-rails");
         mixedRails.IsOnRails = true;
-        var mixed = new Universe { TimeScale = 5.0 };
+        var mixed = new Universe { TimeScale = 5.0, GravityGradientEnabled = false };
         mixed.AddBody(mixedEarth);
         mixed.AddVessel(mixedRails);
 
@@ -627,6 +627,8 @@ public sealed class PhysicsSchedulerPerformanceTests
         referenceRails.IsOnRails = true;
         var reference = new Universe
         {
+            // Uniform gravity isolates exact scheduler/translation parity from environmental torques.
+            GravityGradientEnabled = false,
             // Below warp 10 an active rail vessel is deliberately integrated by RK4
             // every substep.  This is the always-checked reference for the deadline path.
             TimeScale = 5.0,
@@ -714,7 +716,7 @@ public sealed class PhysicsSchedulerPerformanceTests
         var mixedEarth = LoadBody("earth");
         var mixedRails = SafeRailVessel(mixedEarth, "attitude-wake-rails");
         mixedRails.IsOnRails = true;
-        var mixed = new Universe { TimeScale = 5.0 };
+        var mixed = new Universe { TimeScale = 5.0, GravityGradientEnabled = false };
         mixed.AddBody(mixedEarth);
         mixed.AddVessel(mixedRails);
 
@@ -723,6 +725,8 @@ public sealed class PhysicsSchedulerPerformanceTests
         referenceRails.IsOnRails = true;
         var reference = new Universe
         {
+            // Uniform gravity isolates exact scheduler/translation parity from environmental torques.
+            GravityGradientEnabled = false,
             TimeScale = 5.0,
             ActiveVessel = referenceRails,
         };
@@ -768,6 +772,7 @@ public sealed class PhysicsSchedulerPerformanceTests
         mixedRails.IsOnRails = true;
         var mixed = new Universe
         {
+            GravityGradientEnabled = false,
             TimeScale = 5.0,
             ActiveVessel = mixedActive,
         };
@@ -781,6 +786,8 @@ public sealed class PhysicsSchedulerPerformanceTests
         referenceRails.IsOnRails = true;
         var reference = new Universe
         {
+            // Uniform gravity isolates exact scheduler/translation parity from environmental torques.
+            GravityGradientEnabled = false,
             TimeScale = 5.0,
             ActiveVessel = referenceRails,
         };

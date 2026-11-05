@@ -71,6 +71,8 @@ public sealed class StabilityAugmentationAuthorityTests
     private static (Universe Universe, Vessel Vessel) TumblingVesselInVacuum(double rate, bool thrusters = true)
     {
         var universe = Universe.LoadFromDataDirectory(DataDirectory());
+        // Isolate actuator authority from the environmental tidal moment.
+        universe.GravityGradientEnabled = false;
         var earth = universe.GetBody("earth")!;
         var vessel = new Vessel("sas-tumbler") { SASEnabled = true, ReferenceBodyId = earth.Id };
         var command = new Part(new PartDefinition

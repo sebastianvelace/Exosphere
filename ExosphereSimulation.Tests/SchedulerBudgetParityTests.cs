@@ -266,6 +266,8 @@ public sealed class SchedulerBudgetParityTests
     {
         var earth = LoadBody("earth");
         stack = BuildFlight7Stack(id);
+        // This is an idle rails/debt fixture; live SAS/RCS now requires funded physical steps.
+        stack.SASEnabled = false;
         double radius = earth.Radius + 1_500_000.0;
         stack.Position = earth.Position + Vector3d.Right * radius;
         stack.Velocity = earth.Velocity

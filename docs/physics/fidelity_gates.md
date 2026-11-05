@@ -21,7 +21,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F1 | closed | Distributed per-part aerodynamics, flight-control inversion |
 | F2 | closed | Physical body flaps on measured crossflow drag (Flight 14 descent and belly-flop speed) |
 | F3 | closed | Actuator-only attitude control, declared catalog RCS, exact Flight 14 checkpoint and historical descent; full CI 1259/1259 |
-| F4 | open | Analytic transport/tidal kernels and stage-dependent RK4 mass sampling; production adapters and historical gate pending |
+| F4 | open | A7 tidal moments in coupled off-rails/water/Kepler attitude verified (CI 1304/1304); A6 variable-mass adapters and historical gate pending |
 | F5 | planned | Propellant slosh |
 | F6 | planned | Historical recalibration of every profile |
 

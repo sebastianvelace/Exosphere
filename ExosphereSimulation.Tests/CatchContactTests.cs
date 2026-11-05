@@ -110,8 +110,10 @@ public sealed class CatchContactTests
         // split tick, and both sides use the aggregate aerodynamics it understands.
         legacy.universe.Coupled6DofIntegrationEnabled = false;
         legacy.universe.DistributedAerodynamicsEnabled = false;
+        legacy.universe.GravityGradientEnabled = false; // Shared-physics integrator comparison.
         coupled.universe.Coupled6DofIntegrationEnabled = true;
         coupled.universe.DistributedAerodynamicsEnabled = false;
+        coupled.universe.GravityGradientEnabled = false;
 
         for (int i = 0; i < 3_000; i++)
         {

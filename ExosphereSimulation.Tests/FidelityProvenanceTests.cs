@@ -4,6 +4,7 @@ using Exosphere.Simulation;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Data;
 using Exosphere.Simulation.Flight;
+using Exosphere.Simulation.Integrators;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
 using Xunit;
@@ -22,6 +23,9 @@ public sealed class FidelityProvenanceTests
 
     public static TheoryData<string, string, double> CodeConstants() => new()
     {
+        { "rigid-body-coasting-integrator", "scaledOrientationErrorRatePerS", CoastingAttitudeIntegrator.ScaledOrientationErrorRatePerS },
+        { "rigid-body-coasting-integrator", "angularRateErrorRatePerS", CoastingAttitudeIntegrator.AngularRateErrorRatePerS },
+        { "rigid-body-coasting-integrator", "maximumTrialRotationRad", CoastingAttitudeIntegrator.MaximumTrialRotationRad },
         { "rigid-body-gravity-gradient", "tidalCoefficient", GravityGradient.TidalCoefficient },
         { "rigid-body-mass-flux", "uniformDiskSecondMomentFactor", MassOutflow.UniformDiskSecondMomentFactor },
         { "starship-flight14-attitude-feedback", "transverseSlowLoopOnsetSpeedMps", Flight14AerodynamicAttitude.TransverseSlowLoopOnsetSpeedMps },

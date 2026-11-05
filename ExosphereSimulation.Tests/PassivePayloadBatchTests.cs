@@ -51,12 +51,16 @@ public sealed class PassivePayloadBatchTests
     {
         var baseline = Fixture(altitude);
         var batch = Fixture(altitude);
+        bool deferredAtLeastOnce = false;
         for (int frame = 0; frame < frames; frame++)
         {
             for (int step = 0; step < Universe.MaxPassivePayloadBatchSteps; step++) baseline.Universe.Tick(0.02);
             batch.Universe.TickPassivePayloadBatch(Universe.MaxPassivePayloadBatchSteps, [batch.Payload, batch.Ship], () => false);
+            deferredAtLeastOnce |= batch.Universe.LastSchedulerTelemetry.DeadlineDeferredSkips > 0;
         }
-        Assert.True(batch.Universe.LastSchedulerTelemetry.DeadlineDeferredSkips > 0);
+        // Tidal acceleration can later exceed the existing passive-rotation eligibility
+        // threshold. The batch must have run, but need not remain eligible indefinitely.
+        Assert.True(deferredAtLeastOnce);
         Assert.Equal(baseline.Universe.CurrentTime, batch.Universe.CurrentTime);
         Assert.Equal(baseline.Universe.GetBody("earth")!.Position, batch.Universe.GetBody("earth")!.Position);
         Assert.InRange((baseline.Ship.Position - batch.Ship.Position).Magnitude, 0, 1e-6);

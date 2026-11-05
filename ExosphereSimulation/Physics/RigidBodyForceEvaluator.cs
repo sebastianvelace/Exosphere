@@ -17,6 +17,8 @@ public readonly struct RigidBodyForceContext
     public bool DistributedAerodynamics { get; }
     /// <summary>Physical hinged body flaps (F2) on the distributed path; false keeps the aggregate flap torque.</summary>
     public bool PhysicalBodyFlaps { get; }
+    /// <summary>Point-attractor tidal moments at the candidate CoM/orientation (F4).</summary>
+    public bool GravityGradientEnabled { get; }
 
     public RigidBodyForceContext(
         IReadOnlyList<CelestialBody> bodies,
@@ -24,10 +26,12 @@ public readonly struct RigidBodyForceContext
         Vector3d externalForceWorld = default,
         Vector3d externalTorqueWorld = default,
         bool distributedAerodynamics = true,
-        bool physicalBodyFlaps = false)
+        bool physicalBodyFlaps = false,
+        bool gravityGradientEnabled = true)
     {
         DistributedAerodynamics = distributedAerodynamics;
         PhysicalBodyFlaps = physicalBodyFlaps;
+        GravityGradientEnabled = gravityGradientEnabled;
         Bodies = bodies ?? throw new ArgumentNullException(nameof(bodies));
         ReferenceBody = referenceBody;
         ExternalForceWorld = externalForceWorld;
@@ -134,6 +138,18 @@ public static class RigidBodyForceEvaluator
                 ? Vector3d.Zero
                 : ComputeFlapTorqueBody(vessel, state, context.ReferenceBody!, massProperties))
             : ComputeAerodynamicTorqueBody(vessel, state, context.ReferenceBody, massProperties);
+
+        if (context.GravityGradientEnabled)
+        {
+            var worldToBody = state.Orientation.Inverse();
+            for (int i = 0; i < context.Bodies.Count; i++)
+            {
+                var attractor = context.Bodies[i];
+                if (attractor.GM == 0) continue;
+                var radialBody = worldToBody.Rotate(state.Position - attractor.Position);
+                torqueBody += GravityGradient.ComputeTorqueBody(attractor.GM, radialBody, massProperties.InertiaBody);
+            }
+        }
 
         return new RigidBodyForces(forceWorld, torqueBody);
     }

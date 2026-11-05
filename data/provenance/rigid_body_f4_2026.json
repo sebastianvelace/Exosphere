@@ -31,7 +31,40 @@
       "accessedDate": "2026-11-04",
       "variant": "Open-system angular-momentum balance about instantaneous centre of mass",
       "conditions": "Transport torque -I_dot*omega - J_out*omega - omega cross h_relative - d(h_relative)/dt_body - c_dot cross p_relative; positive mdot denotes outward flow. The last term is the moving-CoM-origin correction when relative flow velocities are defined in the material body frame. Ordinary thrust moments and Euler gyroscopic torque are supplied separately. All derivatives and vectors must refer to the same body frame and centre.",
-      "uncertainty": "Zero relative-flow momentum requires an explicit axisymmetric/no-swirl or negligible-internal-flow assumption. The production resource/exit/CoM adapter is not yet implemented; this record does not claim F4 is enabled in missions."
+      "uncertainty": "Zero relative-flow momentum requires an explicit axisymmetric/no-swirl or negligible-internal-flow assumption. The production resource/exit/CoM adapter is not yet implemented; this record does not claim variable-mass transport is enabled in missions."
+    },
+    {
+      "dataId": "rigid-body-coasting-integrator",
+      "field": "scaledOrientationErrorRatePerS",
+      "status": "estimated",
+      "source": "Numerical accuracy policy of CoastingAttitudeIntegrator; validation in CoastingAttitudeIntegratorTests (analytic rotation, tidal libration, free-body momentum/energy and warp partition convergence).",
+      "accessedDate": "2026-11-05",
+      "variant": "Adaptive attitude-only RK4 on a prescribed Kepler centre-of-mass conic",
+      "conditions": "Step-doubling local orientation error budget per simulated second (rad/s), scaled by max(1 rad/s, maximum trial angular rate) to bound error per swept radian for rapid spin and avoid demanding sub-roundoff errors.",
+      "uncertainty": "Numerical integration control, not a measured physical parameter or damping coefficient. Step doubling estimates truncation error; global accuracy is independently checked against analytic solutions and conserved quantities. No historical gate tolerance is changed.",
+      "value": 1e-11
+    },
+    {
+      "dataId": "rigid-body-coasting-integrator",
+      "field": "angularRateErrorRatePerS",
+      "status": "estimated",
+      "source": "Numerical accuracy policy of CoastingAttitudeIntegrator; validation in CoastingAttitudeIntegratorTests (analytic rotation, tidal libration, free-body momentum/energy and warp partition convergence).",
+      "accessedDate": "2026-11-05",
+      "variant": "Adaptive attitude-only RK4 on a prescribed Kepler centre-of-mass conic",
+      "conditions": "Step-doubling local angular-rate error budget per simulated second, scaled by max(1 rad/s, angular rate).",
+      "uncertainty": "Numerical integration control, not a measured physical parameter or damping coefficient. Step doubling estimates truncation error; global accuracy is independently checked against analytic solutions and conserved quantities. No historical gate tolerance is changed.",
+      "value": 1e-11
+    },
+    {
+      "dataId": "rigid-body-coasting-integrator",
+      "field": "maximumTrialRotationRad",
+      "status": "estimated",
+      "source": "Numerical accuracy policy of CoastingAttitudeIntegrator; validation in CoastingAttitudeIntegratorTests (analytic rotation, tidal libration, free-body momentum/energy and warp partition convergence).",
+      "accessedDate": "2026-11-05",
+      "variant": "Adaptive attitude-only RK4 on a prescribed Kepler centre-of-mass conic",
+      "conditions": "Independent bound on maximum candidate angular rate times trial duration, preventing large-angle aliasing of the local error estimate (rad).",
+      "uncertainty": "Numerical integration control, not a measured physical parameter or damping coefficient. Step doubling estimates truncation error; global accuracy is independently checked against analytic solutions and conserved quantities. No historical gate tolerance is changed.",
+      "value": 0.25
     }
   ]
 }

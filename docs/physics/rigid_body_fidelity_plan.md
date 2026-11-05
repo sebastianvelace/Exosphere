@@ -300,7 +300,7 @@ The isolated-Earth continuation reaches water at 4.422 m/s.
 0 warnings / 0 errors, Flight startup, MainMenu and Construction smoke tests, and the
 real-framebuffer graphics-settings capture/reload check. F3 is closed with the analytic
 RCS/SAS gates, the Gemini 8 historical recovery gate, exact checkpoint continuation and
-the original Flight 14 descent/contact limits. F4–F6 remain planned.
+the original Flight 14 descent/contact limits. F4 is open; F5–F6 remain planned.
 
 ## F4 findings (2026-11-04, in progress)
 
@@ -319,13 +319,21 @@ in `data/provenance/rigid_body_f4_2026.json`. The foundation CI passes 1281/1281
 all three builds at 0 warnings / 0 errors, and the Godot smoke/capture checks; the F3
 checkpoint reference is preserved exactly.
 
-**Not production-enabled and not closed.** The current mission adapters still use one mass
-snapshot per step and do not apply the new tidal/transport kernels. Resource loss must be
+**A7 production tidal integration verified (2026-11-05); F4 is not closed.**
+Coupled off-rails/water stages and Kepler attitude apply the tidal moment of all attractors
+at the candidate CoM and attitude with the integrated central tensor. Kepler coasts also
+solve torque-free Euler rotation, sample candidate-epoch ephemerides and retain attitude in
+deferred scheduler anchors; live SAS/RCS stays in funded physics. The default-on gravity-gradient
+switch can select uniform gravity for controlled actuator/parity benchmarks. Mission adapters still use one mass snapshot
+per step and do not yet apply variable-mass transport. Resource loss must be
 matched to funded engine/RCS/vent exit geometry, and the moving CoM and internal-flow
 translation must be transported consistently. A thrust point is not a verified exit plane.
 The historical Saturn vehicle jet-damping gate also remains open; an SPS gimbal-actuator
 damping coefficient cannot substitute for it. The activation checklist and equations are in
-`docs/physics/variable_mass_torques.md`. F3 mission calibrations and tolerances are retained.
+`docs/physics/variable_mass_torques.md`; the next adapter design is in
+`docs/physics/variable_mass_resource_adapter.md`. Tidal activation CI passes 1304/1304,
+all three builds at 0 warnings / 0 errors, plus Godot startup and graphics capture/reload.
+F3 mission calibrations and tolerances are retained.
 
 ## Phases
 

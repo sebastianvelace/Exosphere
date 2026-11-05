@@ -66,7 +66,8 @@ public class Universe
     private readonly IReadOnlyList<CelestialBody> _bodiesView;
     private readonly IReadOnlyList<Vessel> _vesselsView;
     private readonly IReadOnlyList<DockingConnection> _dockingConnectionsView;
-    private readonly Dictionary<string, double> _lastDeferredRailUpdate = new(StringComparer.Ordinal);
+    private readonly record struct DeferredRailAnchor(double Time, Quaterniond Orientation, Vector3d AngularVelocity);
+    private readonly Dictionary<string, DeferredRailAnchor> _deferredRailAnchors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
     private readonly KeplerPropagator.BodyPropagationWorkspace _bodyPropagationWorkspace = new();
     private double _pendingSimulationSeconds;
@@ -100,7 +101,7 @@ public class Universe
             throw new ArgumentOutOfRangeException(nameof(t));
         CurrentTime = t;
         _pendingSimulationSeconds = 0.0;
-        _lastDeferredRailUpdate.Clear();
+        _deferredRailAnchors.Clear();
         _nextDeferredRailDeadline.Clear();
         if (_bodies.Count > 0)
             KeplerPropagator.PropagateAllBodies(
@@ -169,6 +170,12 @@ public class Universe
     /// </summary>
     public bool PhysicalBodyFlapsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Newtonian gravity-gradient moments in coupled free-flight, water motion and Kepler attitude.
+    /// False selects uniform gravity; coupled coasts still solve torque-free Euler rotation.
+    /// </summary>
+    public bool GravityGradientEnabled { get; set; } = true;
+
     /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
     public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }
 
@@ -235,7 +242,7 @@ public class Universe
             throw new ArgumentOutOfRangeException(nameof(secondsSinceJ2000));
         CurrentTime = secondsSinceJ2000;
         _pendingSimulationSeconds = 0.0;
-        _lastDeferredRailUpdate.Clear();
+        _deferredRailAnchors.Clear();
         _nextDeferredRailDeadline.Clear();
         if (_bodies.Count > 0)
             KeplerPropagator.PropagateAllBodies(
@@ -357,7 +364,7 @@ public class Universe
             connection.PrimaryVesselId == vessel.Id
             || connection.SecondaryVesselId == vessel.Id);
         _vessels.Remove(vessel);
-        _lastDeferredRailUpdate.Remove(vessel.Id);
+        _deferredRailAnchors.Remove(vessel.Id);
         _nextDeferredRailDeadline.Remove(vessel.Id);
         if (ReferenceEquals(ActiveVessel, vessel))
             ActiveVessel = null;
@@ -460,8 +467,8 @@ public class Universe
         CaptureDockingMomentum(primary, secondary);
         WakeVesselFromRails(primary);
         WakeVesselFromRails(secondary);
-        _lastDeferredRailUpdate.Remove(primary.Id);
-        _lastDeferredRailUpdate.Remove(secondary.Id);
+        _deferredRailAnchors.Remove(primary.Id);
+        _deferredRailAnchors.Remove(secondary.Id);
         _nextDeferredRailDeadline.Remove(primary.Id);
         _nextDeferredRailDeadline.Remove(secondary.Id);
         _dockingConnections.Add(connection);
@@ -516,8 +523,8 @@ public class Universe
         // impulse is applied. This also covers a zero-speed manual undock.
         WakeVesselFromRails(primary);
         WakeVesselFromRails(secondary);
-        _lastDeferredRailUpdate.Remove(primary.Id);
-        _lastDeferredRailUpdate.Remove(secondary.Id);
+        _deferredRailAnchors.Remove(primary.Id);
+        _deferredRailAnchors.Remove(secondary.Id);
         _nextDeferredRailDeadline.Remove(primary.Id);
         _nextDeferredRailDeadline.Remove(secondary.Id);
         if (separationSpeedMps == 0.0)
@@ -922,7 +929,7 @@ public class Universe
             // Full RK4 physics, capped at MaxPhysicsStep per sub-step
             _tickBranch = PhysicsSchedulerBranch.FullPhysics;
             FlushDeferredRailsToCurrentTime();
-            _lastDeferredRailUpdate.Clear();
+            _deferredRailAnchors.Clear();
             _nextDeferredRailDeadline.Clear();
             _tickEffectiveStepCap = anyContactSensitive ? MaxContactStep : MaxPhysicsStep;
             double remaining = _pendingSimulationSeconds;
@@ -969,7 +976,7 @@ public class Universe
             // Pure rails: everything propagated analytically
             _tickBranch = PhysicsSchedulerBranch.Rails;
             FlushDeferredRailsToCurrentTime();
-            _lastDeferredRailUpdate.Clear();
+            _deferredRailAnchors.Clear();
             _nextDeferredRailDeadline.Clear();
             _tickEffectiveStepCap = MaxCoastStep;
             double remaining = _pendingSimulationSeconds;
@@ -1186,8 +1193,8 @@ public class Universe
     /// <summary>
     /// Restores the last event-safe conic state of a deferred vessel.  During a skipped
     /// deadline the public position/velocity are projected to the current epoch for
-    /// rendering and navigation, while the orbital elements remain anchored at the last
-    /// event-check epoch.  A wake-up must restore that anchored state before running the
+    /// rendering and navigation, while the orbital elements and rotational anchor retain
+    /// the last event-check epoch. A wake-up restores that complete state before running the
     /// full rails propagator; otherwise the propagator would interpret a current-epoch
     /// position as if it belonged to an older conic epoch and introduce a phase jump.
     /// </summary>
@@ -1210,6 +1217,11 @@ public class Universe
             if (!IsFinitePosition(position) || !IsFinitePosition(velocity))
                 return false;
 
+            if (_deferredRailAnchors.TryGetValue(vessel.Id, out var anchor))
+            {
+                vessel.Orientation = anchor.Orientation;
+                vessel.AngularVelocity = anchor.AngularVelocity;
+            }
             SetDatumFromCenterOfMass(vessel, position, velocity);
             return true;
         }
@@ -1220,8 +1232,8 @@ public class Universe
     }
 
     /// <summary>
-    /// Projects a deferred conic to the current public epoch without changing its event
-    /// anchor.  This is the cheap path: no atmosphere, SOI or surface scan is performed.
+    /// Projects a deferred conic and attitude to the current public epoch without changing
+    /// its event anchor. The reduced scan checks reference dominance without a full surface walk.
     /// The projection is accepted only while the reference body remains dominant and the
     /// conic is non-radial; otherwise the caller must materialize the vessel immediately.
     /// </summary>
@@ -1257,6 +1269,19 @@ public class Universe
                 || GetDominantBodyAt(position, targetTime).Id != reference.Id)
                 return false;
 
+            if (_deferredRailAnchors.TryGetValue(vessel.Id, out var anchor))
+            {
+                vessel.Orientation = anchor.Orientation;
+                vessel.AngularVelocity = anchor.AngularVelocity;
+                double attitudeInterval = targetTime - anchor.Time;
+                if (attitudeInterval > 0)
+                {
+                    if (CoastingMassProperties(vessel) is { } mass)
+                        AdvanceCoastingAttitude(vessel, mass, reference, anchor.Time, attitudeInterval);
+                    else
+                        vessel.AdvanceCoastingAttitude(attitudeInterval);
+                }
+            }
             SetDatumFromCenterOfMass(vessel, position, velocity);
             return true;
         }
@@ -1267,17 +1292,19 @@ public class Universe
     }
 
     /// <summary>Places the datum so the vessel's centre of mass has the given conic state.</summary>
-    private static void SetDatumFromCenterOfMass(Vessel vessel, Vector3d centerOfMass, Vector3d centerOfMassVelocity)
+    private void SetDatumFromCenterOfMass(Vessel vessel, Vector3d centerOfMass, Vector3d centerOfMassVelocity)
     {
-        var offset = vessel.Orientation.Rotate(vessel.CenterOfMassOffsetLocal);
+        var centerBody = CoastingMassProperties(vessel)?.CenterOfMassBody ?? vessel.CenterOfMassOffsetLocal;
+        var offset = vessel.Orientation.Rotate(centerBody);
         vessel.Position = centerOfMass - offset;
         vessel.Velocity = centerOfMassVelocity - vessel.AngularVelocity.Cross(offset);
     }
 
     private bool CatchUpDeferredRailVessel(Vessel vessel, double targetTime)
     {
-        if (!_lastDeferredRailUpdate.TryGetValue(vessel.Id, out double lastTime))
+        if (!_deferredRailAnchors.TryGetValue(vessel.Id, out var anchor))
             return false;
+        double lastTime = anchor.Time;
         if (lastTime >= targetTime - 1e-12)
             return false;
 
@@ -1286,13 +1313,13 @@ public class Universe
             // The deferred state is no longer trustworthy.  Drop the schedule and let
             // the caller use the conservative current-step fallback rather than trying
             // to integrate a projected state against an old epoch.
-            _lastDeferredRailUpdate.Remove(vessel.Id);
+            _deferredRailAnchors.Remove(vessel.Id);
             _nextDeferredRailDeadline.Remove(vessel.Id);
             return false;
         }
 
         PropagateVesselOnRails(vessel, lastTime, targetTime);
-        _lastDeferredRailUpdate[vessel.Id] = targetTime;
+        _deferredRailAnchors[vessel.Id] = new(targetTime, vessel.Orientation, vessel.AngularVelocity);
         _nextDeferredRailDeadline.Remove(vessel.Id);
         _tickDeadlineCatchUpDispatches++;
         _tickOnRailsDispatches++;
@@ -1451,12 +1478,32 @@ public class Universe
         return false;
     }
 
-    private static bool HasWakeCommand(Vessel vessel) =>
+    private bool HasWakeCommand(Vessel vessel) =>
         vessel.Throttle > 1e-3
         || HasActiveEngineAboveThrottle(vessel, 1e-3)
         || HasAttitudeCommand(vessel)
         || vessel.TranslationCommand.MagnitudeSquared > 1e-12
-        || vessel.DisturbanceTorqueBody.MagnitudeSquared > 1e-12;
+        || vessel.DisturbanceTorqueBody.MagnitudeSquared > 1e-12
+        || HasCoastingSasActuator(vessel);
+
+    // A passive attitude propagator cannot discard active rate damping or its propellant.
+    // Read-only classification: a pending arming decision gets one normal physics step.
+    private bool HasCoastingSasActuator(Vessel vessel)
+    {
+        if (!Coupled6DofIntegrationEnabled || !vessel.SASEnabled
+            || vessel.IsSurfaceSettled || vessel.IsGroundHeld || vessel.WaterMotionEnabled
+            || Flight.ControlAuthority.IsLost(Flight.ControlAuthority.Evaluate(vessel))
+            || (!GravityGradientEnabled && vessel.AngularVelocity.MagnitudeSquared == 0))
+            return false;
+        var thrusters = vessel.Parts.GetRcsThrusters();
+        if (thrusters.Count == 0) return false;
+        if (vessel.Parts.ReactionControlArmingPending) return true;
+        var center = vessel.CenterOfMassOffsetLocal;
+        for (int i = 0; i < thrusters.Count; i++)
+            if (thrusters[i].Available && thrusters[i].Torque(center).MagnitudeSquared > 0)
+                return true;
+        return false;
+    }
 
     /// <summary>
     /// A non-zero pilot/autopilot attitude command is a wake condition even when the
@@ -2153,10 +2200,8 @@ public class Universe
                     {
                         continue;
                     }
-                    bool hasLastUpdate = _lastDeferredRailUpdate.TryGetValue(
-                        vessel.Id, out double lastUpdate);
-                    if (!hasLastUpdate)
-                        lastUpdate = CurrentTime;
+                    bool hasLastUpdate = _deferredRailAnchors.TryGetValue(vessel.Id, out var anchor);
+                    double lastUpdate = hasLastUpdate ? anchor.Time : CurrentTime;
                     bool due = !hasLastUpdate
                         || !_nextDeferredRailDeadline.TryGetValue(
                             vessel.Id, out double nextDeadline)
@@ -2180,7 +2225,7 @@ public class Universe
                             continue;
                         }
 
-                        _lastDeferredRailUpdate.Remove(vessel.Id);
+                        _deferredRailAnchors.Remove(vessel.Id);
                         _nextDeferredRailDeadline.Remove(vessel.Id);
                         RecordWorkload(workload);
                         PropagateVesselOnRails(vessel, dt);
@@ -2189,7 +2234,7 @@ public class Universe
 
                     if (hasLastUpdate && !RestoreDeferredRailStateAtTime(vessel, lastUpdate))
                     {
-                        _lastDeferredRailUpdate.Remove(vessel.Id);
+                        _deferredRailAnchors.Remove(vessel.Id);
                         _nextDeferredRailDeadline.Remove(vessel.Id);
                         RecordWorkload(workload);
                         PropagateVesselOnRails(vessel, dt);
@@ -2197,14 +2242,14 @@ public class Universe
                     }
 
                     PropagateVesselOnRails(vessel, hasLastUpdate ? lastUpdate : CurrentTime, targetTime);
-                    _lastDeferredRailUpdate[vessel.Id] = targetTime;
+                    _deferredRailAnchors[vessel.Id] = new(targetTime, vessel.Orientation, vessel.AngularVelocity);
                     _nextDeferredRailDeadline[vessel.Id] =
                         targetTime + deadline.IntervalSeconds;
                     RecordWorkload(workload);
                     continue;
                 }
 
-                _lastDeferredRailUpdate.Remove(vessel.Id);
+                _deferredRailAnchors.Remove(vessel.Id);
                 _nextDeferredRailDeadline.Remove(vessel.Id);
                 RecordWorkload(workload);
                 PropagateVesselOnRails(vessel, dt);
@@ -2307,14 +2352,16 @@ public class Universe
         if (!eligible)
             return false;
 
-        if (!_lastDeferredRailUpdate.TryGetValue(vessel.Id, out double lastUpdate))
+        bool hasAnchor = _deferredRailAnchors.TryGetValue(vessel.Id, out var anchor);
+        double lastUpdate = hasAnchor ? anchor.Time : CurrentTime;
+        if (!hasAnchor)
         {
             // A candidate can only anchor an already valid analytic state. If the first
             // rails pass still needs to construct OrbitalState, use the old path once.
             if (vessel.OrbitalState is null)
                 return false;
             lastUpdate = CurrentTime;
-            _lastDeferredRailUpdate[vessel.Id] = lastUpdate;
+            _deferredRailAnchors[vessel.Id] = new(lastUpdate, vessel.Orientation, vessel.AngularVelocity);
         }
 
         if (!_nextDeferredRailDeadline.TryGetValue(vessel.Id, out double nextDeadline))
@@ -2488,7 +2535,8 @@ public class Universe
                     var contact = EvaluateWaterMotionContact(body, water, absolute, mass, evaluationTime);
                     var context = new Physics.RigidBodyForceContext(_bodies, body,
                         (contact?.ForceWorld ?? Vector3d.Zero)-frameAcceleration*mass.Mass,
-                        contact?.TorqueWorld ?? Vector3d.Zero);
+                        contact?.TorqueWorld ?? Vector3d.Zero,
+                        gravityGradientEnabled: GravityGradientEnabled);
                     return Physics.RigidBodyForceEvaluator.Evaluate(vessel, absolute, context);
                 });
             finalAbsolute = ToAbsoluteState(body, finalRelative);
@@ -2581,7 +2629,8 @@ public class Universe
                                 - frameAcceleration * massProperties.Mass,
                             externalTorqueWorld: contactTorque,
                             distributedAerodynamics: DistributedAerodynamicsEnabled,
-                            physicalBodyFlaps: PhysicalBodyFlapsEnabled);
+                            physicalBodyFlaps: PhysicalBodyFlapsEnabled,
+                            gravityGradientEnabled: GravityGradientEnabled);
                         return Physics.RigidBodyForceEvaluator.Evaluate(
                             vessel, absolute, context, massProperties);
                     });
@@ -2946,10 +2995,11 @@ public class Universe
     {
         if (targetTime - startTime <= 1e-12)
             return;
-        var centerOfMassBody = vessel.CenterOfMassOffsetLocal;
+        var coastMass = CoastingMassProperties(vessel);
+        var centerOfMassBody = coastMass?.CenterOfMassBody ?? vessel.CenterOfMassOffsetLocal;
         if (centerOfMassBody.MagnitudeSquared == 0.0)
         {
-            PropagateCenterOfMassOnRails(vessel, startTime, targetTime);
+            PropagateCenterOfMassOnRails(vessel, startTime, targetTime, coastMass);
             return;
         }
         var offset = vessel.Orientation.Rotate(centerOfMassBody);
@@ -2957,7 +3007,7 @@ public class Universe
         vessel.Velocity += vessel.AngularVelocity.Cross(offset);
         try
         {
-            PropagateCenterOfMassOnRails(vessel, startTime, targetTime);
+            PropagateCenterOfMassOnRails(vessel, startTime, targetTime, coastMass);
         }
         finally
         {
@@ -2970,7 +3020,8 @@ public class Universe
     private void PropagateCenterOfMassOnRails(
         Vessel vessel,
         double startTime,
-        double targetTime)
+        double targetTime,
+        Physics.RigidBodyMassProperties? massProperties)
     {
         double dt = targetTime - startTime;
 
@@ -3057,9 +3108,12 @@ public class Universe
         {
             _tickRailsSlices++;
             double slice = System.Math.Min(remaining, MaxCoastStep);
+            if (massProperties is { } mass)
+                AdvanceCoastingAttitude(vessel, mass, reference, sampleTime, slice);
+            else
+                vessel.AdvanceCoastingAttitude(slice);
             sampleTime  += slice;
             remaining   -= slice;
-            vessel.AdvanceCoastingAttitude(slice);
 
             (lastRelP, lastRelV) = KeplerPropagator.PropagateToTime(
                 vessel.OrbitalState, sampleTime, reference.GM);
@@ -3118,6 +3172,38 @@ public class Universe
             BodyStateAt(reference, targetTime);
         vessel.Position = referenceTargetPosition + lastRelP;
         vessel.Velocity = referenceTargetVelocity + lastRelV;
+    }
+
+    private Physics.RigidBodyMassProperties? CoastingMassProperties(Vessel vessel) =>
+        Coupled6DofIntegrationEnabled && vessel.Parts.TryGetMassProperties(out var own)
+            ? DockedCompositeMassProperties(vessel, own) : null;
+
+    /// <summary>Euler/tidal attitude along the prescribed centre-of-mass conic.</summary>
+    private void AdvanceCoastingAttitude(Vessel vessel, Physics.RigidBodyMassProperties mass,
+        CelestialBody reference, double startTime, double dt)
+    {
+        var orbit = vessel.OrbitalState!;
+        Vector3d TidalTorque(Quaterniond orientation, double epoch)
+        {
+            if (!GravityGradientEnabled) return Vector3d.Zero;
+            var (relativePosition, _) = KeplerPropagator.PropagateToTime(orbit, epoch, reference.GM);
+            var (referencePosition, _) = BodyStateAt(reference, epoch);
+            var position = referencePosition + relativePosition;
+            var worldToBody = orientation.Inverse();
+            var torque = Vector3d.Zero;
+            foreach (var attractor in _bodies)
+            {
+                if (attractor.GM == 0) continue;
+                var (attractorPosition, _) = BodyStateAt(attractor, epoch);
+                torque += Physics.GravityGradient.ComputeTorqueBody(attractor.GM,
+                    worldToBody.Rotate(position - attractorPosition), mass.InertiaBody);
+            }
+            return torque;
+        }
+        var result = CoastingAttitudeIntegrator.Advance(vessel.Orientation,
+            vessel.Orientation.Inverse().Rotate(vessel.AngularVelocity), mass, startTime, dt, TidalTorque);
+        vessel.Orientation = result.Orientation;
+        vessel.AngularVelocity = result.Orientation.Rotate(result.AngularVelocityBody);
     }
 
     /// <summary>

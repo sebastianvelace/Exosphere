@@ -243,6 +243,7 @@ public class PartGraph
     }
 
     private bool _stagedReactionControlPending = true;
+    internal bool ReactionControlArmingPending => _stagedReactionControlPending;
 
     /// <summary>
     /// Arms every RCS declared <see cref="PartDefinition.RcsArmsWithStage"/> (the S-IVB APS,

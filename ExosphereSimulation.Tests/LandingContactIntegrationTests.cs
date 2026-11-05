@@ -107,8 +107,10 @@ public sealed class LandingContactIntegrationTests
         // split tick, and both sides use the aggregate aerodynamics it understands.
         legacy.universe.Coupled6DofIntegrationEnabled = false;
         legacy.universe.DistributedAerodynamicsEnabled = false;
+        legacy.universe.GravityGradientEnabled = false; // Shared-physics integrator comparison.
         coupled.universe.Coupled6DofIntegrationEnabled = true;
         coupled.universe.DistributedAerodynamicsEnabled = false;
+        coupled.universe.GravityGradientEnabled = false;
         double peakLegacyLoad = 0.0;
         double peakCoupledLoad = 0.0;
         foreach (var vessel in new[] { legacy.vessel, coupled.vessel })

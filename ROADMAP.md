@@ -407,8 +407,9 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - F4 iniciada: núcleo analítico de transporte de momento (variación de inercia, flujo por
      salidas puntuales/discos e impulso angular relativo), gradiente gravitatorio y muestreo
      de masa/inercia en cada etapa RK4. Gates analíticos: libración orbital y cilindro de
-     combustión uniforme de NASA. Aún sin activar en misiones: faltan los adaptadores de
-     consumo/salida/CoM y el gate histórico del Saturn V; ver `variable_mass_torques.md`.
+     combustión uniforme de NASA. Gradiente activo por defecto en pasos acoplados fuera
+     de rails y en agua; falta la actitud Kepler, los adaptadores de consumo/salida/CoM
+     y el gate histórico del Saturn V; ver `variable_mass_torques.md`.
    - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (jet damping,
      gradiente de gravedad, slosh, recalibración histórica); aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.

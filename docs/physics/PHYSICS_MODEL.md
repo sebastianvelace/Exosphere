@@ -118,21 +118,26 @@ The attitude quaternion is normalized after each RK4 intermediate state. The ine
 is assembled from the active part graph and translated to the CoM using the parallel-axis
 theorem.
 
-### F4 analytic kernels (not production-enabled)
+### F4 torque models (integration in progress)
 
 `GravityGradient` and `VariableMassRotationalDynamics` provide pure tidal and open-system
-rotational kernels. A separate RK4 overload samples instantaneous mass/inertia at each
-candidate stage. Production mission adapters still use the constant-mass-per-step overload;
-the new kernels do not yet alter mission forces or attitude. Equations, analytic gates,
+rotational kernels. Coupled off-rails and water-motion stages apply tidal torque
+from every attractor at the candidate CoM/orientation using the integrated central tensor.
+Kepler attitude solves Euler rotation and tidal moments on the prescribed conic with
+candidate-epoch ephemerides and rotational scheduler anchors. Live SAS/RCS uses funded
+physical steps. A separate RK4 overload samples instantaneous
+mass/inertia at each candidate stage; mission resource adapters still use the
+constant-mass-per-step overload and have not enabled variable-mass transport. Equations, analytic gates,
 source records and the pending resource/exit/CoM activation contract are documented in
 [`variable_mass_torques.md`](variable_mass_torques.md). F4 remains open pending integration
 and historical validation.
 
 ### Integration policy
 
-The production scheduler currently keeps the legacy path as the default. The experimental
-`Universe.Coupled6DofIntegrationEnabled` switch selects the coupled solver only for off-rails
-physics; it never changes Kepler/on-rails propagation.
+The production scheduler defaults to `Universe.Coupled6DofIntegrationEnabled = true`.
+The coupled solver handles off-rails physics and evolves Euler/tidal attitude along Kepler
+coasts. Setting the switch to false retains the legacy split solver and constant-world-rate
+coast as a diagnostic baseline. The centre-of-mass conic remains Keplerian in both modes.
 
 Both paths use fourth-order Runge–Kutta at the normal 20 ms physics step. The coupled evaluator
 is called at all four RK4 stages so attitude-dependent aerodynamics, thrust direction and
