@@ -349,6 +349,15 @@ Validation: complete CI **1316/1316**, all three builds at 0 warnings / 0 errors
 Godot startup and graphics capture/reload passed. The regenerated Flight 14 checkpoint's
 reference physical state is exactly equal to A7; no mission tolerance or calibration changed.
 
+**Engine exhaustion boundary (2026-11-05).** Liquid engines sharing a pool now burn until its
+first limiting reactant and keep the unused reactant; the step is split at each exhaustion
+instant (one complete RK4 sub-step per live-engine set, on the coupled, legacy and water paths)
+and the engine is depleted only after its funded impulse is integrated. Hot-stage siblings cut
+off at their own instants. Flight 14's booster boostback now keeps 1011 kg of unmatched methane
+that the old consumer burned without oxidizer; its test asserts that conservation identity
+exactly. RCS keeps whole-step funding; mass/inertia stay frozen per step. Details and
+regressions: `variable_mass_resource_adapter.md`. Validation: local `tools/ci_check.sh` passed: **1331/1331** tests, the three builds at 0 warnings / 0 errors and all static contracts. Godot smoke was not available in this environment (no Godot binary); GitHub Actions runs it.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by

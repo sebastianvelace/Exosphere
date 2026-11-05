@@ -1,53 +1,57 @@
 # F4 resource adapter: funded snapshots and continuous mass properties
 
-A6 is in progress. Atomic RCS funding and optional immutable RCS receipts are implemented;
-continuous mass properties, engine/vent receipts and transport forces are not activated.
+A6 is in progress. Atomic RCS funding, optional immutable RCS receipts and in-step
+liquid-engine exhaustion are implemented; continuous mass properties, engine/vent receipts
+and transport forces are not activated.
 
-## WIP branch handoff (2026-11-05)
+## Implemented engine exhaustion boundary (2026-11-05)
 
-Branch: `codex/f4-engine-exhaustion`, based on accepted main `ccbc5c9`.
-The owner requested this intermediate push for another agent to continue. This engine
-implementation is **not fully validated and must not be merged as accepted physics yet**.
-The accepted baseline and its 1316-test CI below predate these engine changes.
+Liquid-engine exhaustion is now an interval boundary inside the physics step, on the
+coupled, legacy and water paths. Started on `codex/f4-engine-exhaustion` (`f1868ef`) and
+completed with the regressions and validation below.
 
-Implemented so far:
+- `PartGraph.ConsumePropellantFromPool` sums the step demand of every liquid branch that
+  shares a pool (ordinal engine-instance order fixes the summation, never a fuel priority),
+  limits the common burn by the pool's first limiting reactant, debits only the funded mass
+  and **keeps the unused reactant**. The former consumer dumped whatever remained of both
+  reactants into the last step; that propellant left the vehicle without producing thrust.
+  Stage-local pools, hot-stage overlap pools, main-before-header feed and the protected
+  landing feed are unchanged.
+- `PartGraph.EngineFunding.cs` keeps each pending boundary (engine, funded duration) for the
+  open tick. The engine is marked depleted only at `EndPhysicsTick`, after the funded impulse
+  is integrated. Outside a tick (direct `ConsumePropellant` calls) it is depleted at once.
+- `IntegrateEngineIntervals` splits the step only at those boundaries. Each sub-interval is
+  one complete RK4 step with a fixed live-engine set (`Part.FundingThrustScale` 1 or 0),
+  including its one-sided endpoint sample. Siblings in different pools (hot-stage overlap)
+  cut off at their own instants of the same step. Stateful preparation (throttle, spool,
+  control allocation, resource debit) runs once per step and is never repeated.
+- The legacy explicit-Euler attitude update integrates the funded torque impulse once
+  (`GetFundedAngularAcceleration`); its translation now runs inside the open tick, as the
+  coupled path already did. Engine performance is evaluated at the prepared throttle and
+  then scaled, so no point on a nonlinear throttle map is sampled twice.
+- Infinite-propellant assistance keeps its earlier contract: the gross draw and any
+  boundary are computed normally and the tank loads are restored afterwards. A full tank
+  never reaches a boundary within one step; an assisted near-empty tank still cuts off.
+- Mass and inertia remain frozen per step (the post-debit snapshot). Continuous
+  mass/CoM/inertia sampling, engine/vent receipts and transport forces are still pending.
+  Solid and monopropellant engines keep whole-step exhaustion.
 
-- `PartGraph.ConsumePropellantFromPool` sums simultaneous liquid-engine demands in ordinal
-  order, limits the common burn duration by the first depleted reactant, and retains the
-  unused reactant. Main/header and hot-stage pool selection remain in the existing code.
-- `PartGraph.EngineFunding.cs` retains pending per-part exhaustion boundaries during a
-  physics tick. Engine runtime is depleted after integration, rather than before its funded
-  impulse. `IntegrateEngineIntervals` splits at the boundaries and fixes the live-engine
-  set for each complete RK4 substep, including its one-sided endpoint sample.
-- `Part.FundingThrustScale` gates delivered force/flow between those intervals. Runtime
-  performance is evaluated at the actual prepared throttle and then scaled, so the legacy
-  torque average does not sample a different point on a nonlinear throttle map.
-- `Universe` uses the interval helper on coupled, legacy translation and water paths.
-  The legacy preparation now keeps the tick open through translation; its explicit Euler
-  angular update uses the funded torque impulse. Controls/spool/resource debit run once.
+Regressions (`EngineExhaustionTests`, 15 cases on both integration paths): unused-reactant
+retention for each limiting reactant; partial-step impulse and position (`a·t_f·(dt − t_f/2)`)
+followed by a step with no extra impulse; a step the pool funds exactly; an empty pool with no
+impulse and no oxidizer dump; two engines of different size sharing a pool cutting off
+together; hot-stage siblings with different cutoff instants in one step; headers extending the
+burn while the protected feed is never drawn; and an off-axis engine whose moment acts only for
+its funded interval (inertia tensor on the coupled path, scalar inertias on the legacy path).
+13 of the 15 fail on the previous consumer; the two exact-exhaustion cases pass on both.
 
-Evidence: `EngineExhaustionTests` reproduced four failures before the changes (both limiting
-reactants and missing partial-step impulse on both integration paths), then passed **4/4**.
-The tests also check the following step has no extra impulse. The targeted run compiled the
-simulation and tests successfully. Logs: `/tmp/exo-engine-exhaustion-red.log` and
-`/tmp/exo-engine-exhaustion-targeted.log` (local evidence only).
+Mission impact: Flight 14's Super Heavy boostback ends on LOX and now keeps the unmatched
+methane of its inherited tank mixture (1011 kg) instead of burning it without oxidizer.
+`Flight14BoosterReturnTests` replaced its engineering envelope (reserve + up to 1000 kg)
+with the exact conservation identity: cutoff propellant = landing reserve + open-feed fuel −
+open-feed oxidizer / mixture ratio, to 1 g. No other mission tolerance or calibration changed.
 
-Required next steps before an accepted commit/merge:
-
-1. Review the diff and lifecycle/exception cleanup, including pending depletion under
-   infinite-propellant assistance. Add exact/zero exhaustion, simultaneous mixed clusters,
-   surviving hot-stage siblings with different cutoff times, header/protected-feed and
-   asymmetric torque regressions. These have **not** been verified on the WIP.
-2. Run the existing propulsion, attitude, header, hot-stage, persistence, parity and scheduler
-   regressions. Check fully funded steps retain their prior physical results/performance.
-3. Run `bash tools/ci_check.sh` and retain all mission/historical tolerances. **The full CI and
-   Godot game build/smoke have not been run for this WIP.** Do not cite baseline 1316/1316 as
-   validation of this branch's engine changes.
-
-This unit retains frozen per-step mass/inertia; the partial-impulse regression explicitly
-uses that approximation. Continuous mass/CoM transport and immutable engine/vent receipts
-are still pending. Solid/monopropellant engine exhaustion retains its earlier behavior.
-The sections below record the accepted baseline and original next-unit design.
+Validation: local `tools/ci_check.sh` passed: **1331/1331** tests, the three builds at 0 warnings / 0 errors and all static contracts. Godot smoke was not available in this environment (no Godot binary); GitHub Actions runs it.
 
 ## Continuation checkpoint (2026-11-05)
 
@@ -58,7 +62,8 @@ for this code passed **1316/1316** tests, three builds with zero warnings/errors
 startup, MainMenu/Construction smoke and graphics capture/reload. The regenerated Flight 14
 entry reference state matched A7 exactly; mission tolerances and calibrations were unchanged.
 
-The next implementation unit is engine exhaustion, before enabling transport forces:
+The next implementation unit was engine exhaustion, before enabling transport forces
+(implemented — see "Implemented engine exhaustion boundary" above):
 
 1. Add regressions for the limiting-reactant case below, symmetric oxidizer exhaustion,
    exact exhaustion and simultaneous engine branches, including branches on one engine part.
@@ -84,7 +89,8 @@ Owning RCS systems reserve their entire step demand before the shared feed is ch
 Shared consumers use only the unreserved load of stores whose feed valves are open.
 If either owning or shared demand cannot be funded, no participating store is charged
 for that RCS allocation and no allocated RCS force, torque or mass flow is delivered. The existing whole-step
-funding cadence is retained; fractional exhaustion-time integration is still pending.
+funding cadence is retained for RCS; fractional exhaustion-time integration exists for liquid
+engines only.
 
 This fixes a reproduced overlap bug: two 1 kg/s consumers over 20 ms could both use the
 same 0.03 kg store, leaving approximately -0.01 kg while delivering thrust. Their combined
@@ -113,9 +119,9 @@ The receipts do not activate variable-mass forces or bypass the remaining source
 
 - PartGraph consumes liquid propellant by engine-instance demand, sorted ordinally; tank
   pools are stage-local and hot-stage overlap funds bottom/upper pools separately.
-- Main fuel is drawn before headers; partial exhaustion currently removes the remaining
-  resources and marks the engine depleted. A future adapter must expose the funded time
-  interval rather than infer delivered thrust from that final mass delta.
+- Main fuel is drawn before headers; partial exhaustion keeps the unused reactant and records
+  the funded time interval, which the integrators split at. Engine receipts must expose
+  that interval rather than infer delivered thrust from the final mass delta.
 - Vessel draws disturbance flow and allocated RCS after propulsion preparation. RCS funding
   is per owning store; the force, torque and flow are applied only if funding succeeds.
 - PartGraph central inertia uses a non-header uniform-cylinder remainder and point headers.
@@ -141,7 +147,8 @@ An independent temporary probe also reproduces the engine exhaustion issue descr
 A synthetic 1 kg/s liquid engine with oxidizer/fuel ratio 3, supplied with 0.1 kg fuel and
 10 kg oxidizer for a requested 1 s step, removes 10.1 kg and finishes with zero thrust under
 the current consumer. Only 0.4 kg is usable at the declared mixture ratio; the 9.7 kg excess
-oxidizer has no funded combustion outlet. This has not been fixed by the RCS unit.
+oxidizer has no funded combustion outlet. Fixed by the engine exhaustion boundary above
+(`EngineExhaustionTests.ExhaustionPreservesTheUnusedReactant`).
 
 The engine ledger must distinguish fully funded engine branches, a limiting-reactant
 partial interval and unused stores. Capture the prepared per-instance force/flow before

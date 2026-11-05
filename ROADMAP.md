@@ -416,6 +416,11 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      opcionales por depósito/propulsor; corregido el doble gasto del mismo gas en fuentes mixtas.
      CI: 1316/1316, builds 0/0 y smoke/captura de Godot aprobados; referencia Flight 14 idéntica a A7.
      El transporte de masa variable y las fuentes de motores/venteo siguen pendientes.
+   - Agotamiento de motores dentro del paso: los motores líquidos que comparten depósito queman
+     hasta el primer reactivo limitante, conservan el reactivo sobrante y el paso se divide en
+     cada instante de corte (RK4 completo por tramo, caminos acoplado, legacy y agua). El booster
+     del Flight 14 conserva 1011 kg de metano desemparejado que antes se quemaba sin oxidante.
+     CI: 1331/1331, builds 0/0 y contratos estáticos aprobados en `tools/ci_check.sh` local; smoke de Godot en GitHub Actions.
    - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (transporte de masa variable,
      slosh, recalibración histórica); aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.
