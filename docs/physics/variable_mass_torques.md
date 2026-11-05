@@ -83,7 +83,9 @@ equivalence regression against a constant sampler. The variable-mass kernel also
 the rocket equation, integrated burn distance and angular momentum under internal inertia
 redistribution.
 
-No production caller has been switched to the variable-mass overload. The next adapter's
+No production caller has been switched to the variable-mass overload. A6 now has atomic
+RCS owning/shared-store funding and optional immutable per-store/per-thruster receipts;
+engine/vent funding and continuous mass/transport integration remain pending. The next adapter's
 resource ledger, candidate mass sampling and moving-CoM convention are specified in
 [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md). Before activation:
 

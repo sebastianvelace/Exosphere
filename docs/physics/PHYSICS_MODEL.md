@@ -132,6 +132,13 @@ source records and the pending resource/exit/CoM activation contract are documen
 [`variable_mass_torques.md`](variable_mass_torques.md). F4 remains open pending integration
 and historical validation.
 
+RCS funding reserves owning-system gas before checking the shared feed, so two consumers
+cannot spend the same load. Optional immutable `Vessel.LastRcsFunding` receipts identify
+actual store withdrawals and funded nozzle flow (`CaptureRcsFunding`); practice-assist
+replenishment is explicitly marked. These receipts do not activate open-system transport.
+See [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md) for the remaining
+engine/vent and interval-boundary work.
+
 ### Integration policy
 
 The production scheduler defaults to `Universe.Coupled6DofIntegrationEnabled = true`.

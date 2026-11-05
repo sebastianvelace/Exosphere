@@ -1257,6 +1257,10 @@ public class Vessel
     /// <summary>Last step's propellant flow of the RCS thrusters (kg/s).</summary>
     public double RcsThrusterMassFlowKgPerS { get; private set; }
 
+    /// <summary>Opt-in immutable funding evidence for the next variable-mass adapter.</summary>
+    public bool CaptureRcsFunding { get; set; }
+    public Physics.RcsPropellantFundingSnapshot? LastRcsFunding { get; private set; }
+
     /// <summary>
     /// Fires the declared RCS thrusters toward the requested moment and force for one control
     /// step and draws their propellant from the system's store. Without
@@ -1267,6 +1271,7 @@ public class Vessel
         RcsThrusterForceBody = Vector3d.Zero;
         RcsThrusterTorqueBody = Vector3d.Zero;
         RcsThrusterMassFlowKgPerS = 0.0;
+        LastRcsFunding = null;
         var thrusters = Parts.GetRcsThrusters();
         if (thrusters.Count == 0 || !(dt > 0.0)) return;
         // Sized on the first step after a topology change, not on the first firing.
@@ -1311,9 +1316,14 @@ public class Vessel
         }
         foreach (var (owner, kg) in _rcsDemand)
             if (owner.Monopropellant < kg) return false;
-        if (shared > 0.0 && !Parts.DrawMonopropellant(shared)) return false;
+        double[]? before = CaptureRcsFunding
+            ? Parts.PartList.Select(part => part.Monopropellant).ToArray() : null;
+        if (shared > 0.0 && !Parts.DrawMonopropellant(shared, primaryStoresOnly: false, _rcsDemand)) return false;
         foreach (var (owner, kg) in _rcsDemand)
             owner.Monopropellant -= kg;
+        if (before != null)
+            LastRcsFunding = Physics.RcsPropellantFundingSnapshot.Capture(
+                Parts.PartList, before, thrusters, _rcsDuty, dt, InfinitePropellant);
         return true;
     }
 
@@ -1429,6 +1439,7 @@ public class Vessel
             RcsThrusterForceBody = Vector3d.Zero;
             RcsThrusterTorqueBody = Vector3d.Zero;
             RcsThrusterMassFlowKgPerS = 0.0;
+            LastRcsFunding = null;
             Parts.ArmStagedReactionControl();
 
             ApplyThrottle(dt);
@@ -1659,6 +1670,7 @@ public class Vessel
         RcsThrusterForceBody = Vector3d.Zero;
         RcsThrusterTorqueBody = Vector3d.Zero;
         RcsThrusterMassFlowKgPerS = 0.0;
+        LastRcsFunding = null;
         ApplyAttitudeActuators(alpha, hasInput || (SASEnabled && auth > 1e-6), Vector3d.Zero, pressure, dt,
             flapCommand, flapAuthority);
         RestoreInfinitePropellant();

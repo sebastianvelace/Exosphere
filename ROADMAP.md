@@ -408,10 +408,16 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      salidas puntuales/discos e impulso angular relativo), gradiente gravitatorio y muestreo
      de masa/inercia en cada etapa RK4. Gates analíticos: libración orbital y cilindro de
      combustión uniforme de NASA. Gradiente activo por defecto en pasos acoplados fuera
-     de rails y en agua; falta la actitud Kepler, los adaptadores de consumo/salida/CoM
-     y el gate histórico del Saturn V; ver `variable_mass_torques.md`.
-   - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (jet damping,
-     gradiente de gravedad, slosh, recalibración histórica); aletas del S-IC, grid fins y
+     de rails, en agua y en actitud Kepler (Euler, efemérides por etapa y anclas de actitud).
+     CI de A7: 1304/1304, builds 0/0 y smoke/captura de Godot aprobados.
+     Faltan los adaptadores de consumo/salida/CoM y el gate histórico del Saturn V;
+     ver `variable_mass_torques.md`.
+   - A6 en curso: reservas RCS propias y compartidas atómicas, con recibos inmutables
+     opcionales por depósito/propulsor; corregido el doble gasto del mismo gas en fuentes mixtas.
+     CI: 1316/1316, builds 0/0 y smoke/captura de Godot aprobados; referencia Flight 14 idéntica a A7.
+     El transporte de masa variable y las fuentes de motores/venteo siguen pendientes.
+   - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (transporte de masa variable,
+     slosh, recalibración histórica); aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.
 
 2. **Controles aún no equivalentes en el camino acoplado**

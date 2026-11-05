@@ -335,6 +335,20 @@ damping coefficient cannot substitute for it. The activation checklist and equat
 all three builds at 0 warnings / 0 errors, plus Godot startup and graphics capture/reload.
 F3 mission calibrations and tolerances are retained.
 
+### A6 progress (2026-11-05)
+
+The first resource boundary reserves owning-system RCS demands before shared draw, preventing
+the same gas from funding both consumers. A mixed-feed regression reproduced a negative
+store before the correction. Optional immutable `RcsPropellantFundingSnapshot` receipts retain
+actual store withdrawals and funded nozzle flows, stable identities and an explicit assist
+marker; captured and uncaptured runs have bit-identical physical states. Whole-step exhaustion
+is retained. Engine/vent receipts, interval splitting, continuous mass/CoM sampling and transport
+activation remain pending; no jet-damping force or historical gate has been enabled by this unit.
+
+Validation: complete CI **1316/1316**, all three builds at 0 warnings / 0 errors,
+Godot startup and graphics capture/reload passed. The regenerated Flight 14 checkpoint's
+reference physical state is exactly equal to A7; no mission tolerance or calibration changed.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by

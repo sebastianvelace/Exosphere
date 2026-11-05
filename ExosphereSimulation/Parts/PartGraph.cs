@@ -194,16 +194,33 @@ public class PartGraph
     /// never a standby system's tanks.
     /// </summary>
     public bool DrawMonopropellant(double kilograms, bool primaryStoresOnly)
+        => DrawMonopropellant(kilograms, primaryStoresOnly, reservedByStore: null);
+
+    /// <summary>Shared demand may only use the load left after simultaneous owning-system demands.</summary>
+    internal bool DrawMonopropellant(double kilograms, bool primaryStoresOnly,
+        IReadOnlyDictionary<Part, double>? reservedByStore)
     {
         if (kilograms <= 0.0) return true;
         double total = 0.0;
         foreach (var part in _parts)
-            if (Feeds(part)) total += part.Monopropellant;
+            if (Feeds(part)) total += Available(part);
         if (total < kilograms) return false;
         foreach (var part in _parts)
-            if (Feeds(part) && part.Monopropellant > 0.0)
-                part.Monopropellant -= kilograms * (part.Monopropellant / total);
+            if (Feeds(part) && Available(part) > 0.0)
+            {
+                double reserved = Reserved(part);
+                // Exact exhaustion empties the unreserved pool. Otherwise protect the
+                // reservation boundary from roundoff in proportional subtraction.
+                part.Monopropellant = kilograms == total ? reserved
+                    : System.Math.Max(reserved, part.Monopropellant - kilograms * (Available(part) / total));
+            }
         return true;
+
+        double Reserved(Part part) => reservedByStore != null && reservedByStore.TryGetValue(part, out double reserved)
+            ? reserved : 0.0;
+        double Available(Part part) => reservedByStore == null
+            ? part.Monopropellant
+            : System.Math.Max(0.0, part.Monopropellant - Reserved(part));
 
         bool Feeds(Part part) => primaryStoresOnly
             ? part.Definition.RcsThrusters.Count == 0 || part.Definition.RcsAttitudeStartsEnabled

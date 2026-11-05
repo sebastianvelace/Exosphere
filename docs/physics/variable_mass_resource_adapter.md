@@ -1,6 +1,38 @@
-# Next F4 unit: funded resource snapshots and continuous mass properties
+# F4 resource adapter: funded snapshots and continuous mass properties
 
-This is a working design, not an activated production model.
+A6 is in progress. Atomic RCS funding and optional immutable RCS receipts are implemented;
+continuous mass properties, engine/vent receipts and transport forces are not activated.
+
+## Implemented RCS funding boundary
+
+Owning RCS systems reserve their entire step demand before the shared feed is checked.
+Shared consumers use only the unreserved load of stores whose feed valves are open.
+If either owning or shared demand cannot be funded, no participating store is charged
+for that RCS allocation and no allocated RCS force, torque or mass flow is delivered. The existing whole-step
+funding cadence is retained; fractional exhaustion-time integration is still pending.
+
+This fixes a reproduced overlap bug: two 1 kg/s consumers over 20 ms could both use the
+same 0.03 kg store, leaving approximately -0.01 kg while delivering thrust. Their combined
+0.04 kg demand is now rejected without spending the 0.03 kg. These are synthetic regression
+values, not vehicle calibration inputs.
+
+`Vessel.CaptureRcsFunding` enables `LastRcsFunding`, an immutable
+`RcsPropellantFundingSnapshot` for the latest successfully funded RCS allocation. It stores
+actual before/after withdrawals keyed by part instance and each funded thruster's stable
+part/thruster IDs, declared nozzle point in skirt-datum coordinates, force direction,
+average mass flow and step duration. Stores and consumers remain separate; shared funding
+does not establish an internal pipe route. The nozzle point does not establish exit area
+or velocity profile, and the force direction is opposite to exhaust momentum.
+
+Snapshots are copied before later store mutations or allocator duty-buffer reuse. At the
+next physical RCS preparation, no firing, failed funding or disabled capture clears the
+readout. Like the existing actuator telemetry, this is a physical-step receipt, not a
+render-frame flow source: an adapter consumes it immediately after preparation, never
+repeatedly during analytic coasts. Capture is off by default and does not change funding or any physical result. Infinite-
+propellant assistance is explicitly marked: the receipt describes gross funded flow before
+replenishment, not net vessel mass loss. The signed mass-balance residual exposes floating-
+point subtraction differences between the actual store debit and summed allocated flow.
+The receipts do not activate variable-mass forces or bypass the remaining source/exit contract.
 
 ## Evidence from the current code
 
@@ -27,6 +59,21 @@ This is a working design, not an activated production model.
 4. Outlet geometry and normal/flux profile validated separately from thrust application point.
 5. Relative internal flow and construction-datum transport derived under one declared control
    volume convention; changing I without matching exit flux is forbidden.
+
+## Next engine boundary: limiting reactant and delivered interval
+
+An independent temporary probe also reproduces the engine exhaustion issue described above.
+A synthetic 1 kg/s liquid engine with oxidizer/fuel ratio 3, supplied with 0.1 kg fuel and
+10 kg oxidizer for a requested 1 s step, removes 10.1 kg and finishes with zero thrust under
+the current consumer. Only 0.4 kg is usable at the declared mixture ratio; the 9.7 kg excess
+oxidizer has no funded combustion outlet. This has not been fixed by the RCS unit.
+
+The engine ledger must distinguish fully funded engine branches, a limiting-reactant
+partial interval and unused stores. Capture the prepared per-instance force/flow before
+end-of-step depletion flags hide it, and integrate the funded interval with the appropriate
+one-sided force at each boundary. Marking an aggregate engine part depleted must not erase
+already funded branches' delivered impulse. The source pools remain stage-local, including
+hot-stage overlap and main-before-header feed; no new outlet plane is inferred here.
 
 ## Candidate pure mass distribution kernel
 

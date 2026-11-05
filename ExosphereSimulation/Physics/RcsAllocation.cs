@@ -11,6 +11,8 @@ public readonly record struct RcsThrusterGeometry(
     double ThrustN,
     double IspS)
 {
+    public string ThrusterId { get; init; } = "";
+
     public static RcsThrusterGeometry From(Part owner, Vector3d partCentre, RcsThrusterDef thruster)
     {
         var position = thruster.Position.Length == 3
@@ -21,7 +23,7 @@ public readonly record struct RcsThrusterGeometry(
             : Vector3d.Up;
         if (direction.MagnitudeSquared < 1e-12) direction = Vector3d.Up;
         return new RcsThrusterGeometry(owner, partCentre + position, direction.Normalized,
-            System.Math.Max(0.0, thruster.ThrustN), System.Math.Max(0.0, thruster.IspS));
+            System.Math.Max(0.0, thruster.ThrustN), System.Math.Max(0.0, thruster.IspS)) { ThrusterId = thruster.Id };
     }
 
     /// <summary>
