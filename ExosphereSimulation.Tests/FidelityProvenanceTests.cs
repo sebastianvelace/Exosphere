@@ -22,6 +22,8 @@ public sealed class FidelityProvenanceTests
 
     public static TheoryData<string, string, double> CodeConstants() => new()
     {
+        { "rigid-body-gravity-gradient", "tidalCoefficient", GravityGradient.TidalCoefficient },
+        { "rigid-body-mass-flux", "uniformDiskSecondMomentFactor", MassOutflow.UniformDiskSecondMomentFactor },
         { "starship-flight14-attitude-feedback", "transverseSlowLoopOnsetSpeedMps", Flight14AerodynamicAttitude.TransverseSlowLoopOnsetSpeedMps },
         { "starship-flight14-attitude-feedback", "transverseSlowLoopFullSpeedMps", Flight14AerodynamicAttitude.TransverseSlowLoopFullSpeedMps },
         { "starship-flight14-attitude-feedback", "rollNaturalFrequencyRadPerS", Flight14AerodynamicAttitude.ScheduledNaturalFrequencyRadPerS },

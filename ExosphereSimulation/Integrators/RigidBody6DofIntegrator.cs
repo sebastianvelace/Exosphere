@@ -31,6 +31,38 @@ public static class RigidBody6DofIntegrator
         RigidBody6DofState s4 = Add(state, k3, dt);
         Derivative k4 = Evaluate(s4, time + dt, massProperties, evaluateForces);
 
+        return Combine(state, dt, k1, k2, k3, k4);
+    }
+
+    /// <summary>
+    /// RK4 with pure, time-dependent mass properties sampled at every candidate stage.
+    /// The force callback receives that same mass snapshot. It must include the required
+    /// open-system transport moments; varying I alone does not conserve angular momentum.
+    /// Resource mutation and construction-datum/CoM transport remain outside this kernel.
+    /// </summary>
+    public static RigidBody6DofState Step(
+        RigidBody6DofState state, double time, double dt,
+        Func<double, RigidBodyMassProperties> sampleMassProperties,
+        Func<RigidBody6DofState, double, RigidBodyMassProperties, RigidBodyForces> evaluateForces)
+    {
+        ArgumentNullException.ThrowIfNull(sampleMassProperties);
+        ArgumentNullException.ThrowIfNull(evaluateForces);
+        if (!double.IsFinite(time)) throw new ArgumentOutOfRangeException(nameof(time));
+        if (!double.IsFinite(dt) || dt <= 0 || !double.IsFinite(time + dt))
+            throw new ArgumentOutOfRangeException(nameof(dt));
+        var k1 = EvaluateVariableMass(state, time, sampleMassProperties, evaluateForces);
+        var k2 = EvaluateVariableMass(Add(state, k1, dt * 0.5), time + dt * 0.5,
+            sampleMassProperties, evaluateForces);
+        var k3 = EvaluateVariableMass(Add(state, k2, dt * 0.5), time + dt * 0.5,
+            sampleMassProperties, evaluateForces);
+        var k4 = EvaluateVariableMass(Add(state, k3, dt), time + dt,
+            sampleMassProperties, evaluateForces);
+        return Combine(state, dt, k1, k2, k3, k4);
+    }
+
+    private static RigidBody6DofState Combine(RigidBody6DofState state, double dt,
+        Derivative k1, Derivative k2, Derivative k3, Derivative k4)
+    {
         double dtOver6 = dt / 6.0;
         return new RigidBody6DofState(
             state.Position + (k1.PositionRate + 2.0 * k2.PositionRate
@@ -53,6 +85,22 @@ public static class RigidBody6DofIntegrator
         Func<RigidBody6DofState, double, RigidBodyForces> evaluateForces)
     {
         RigidBodyForces forces = evaluateForces(state, time);
+        return Evaluate(state, massProperties, forces);
+    }
+
+    private static Derivative EvaluateVariableMass(RigidBody6DofState state, double time,
+        Func<double, RigidBodyMassProperties> sampleMassProperties,
+        Func<RigidBody6DofState, double, RigidBodyMassProperties, RigidBodyForces> evaluateForces)
+    {
+        var mass = sampleMassProperties(time);
+        if (!double.IsFinite(mass.Mass) || mass.Mass <= 0)
+            throw new ArgumentException("Mass sampler returned a nonpositive or nonfinite mass.", nameof(sampleMassProperties));
+        return Evaluate(state, mass, evaluateForces(state, time, mass));
+    }
+
+    private static Derivative Evaluate(RigidBody6DofState state,
+        RigidBodyMassProperties massProperties, RigidBodyForces forces)
+    {
         Vector3d angularMomentumBody = massProperties.InertiaBody.Multiply(
             state.AngularVelocityBody);
         Vector3d gyroscopicTerm = state.AngularVelocityBody.Cross(angularMomentumBody);

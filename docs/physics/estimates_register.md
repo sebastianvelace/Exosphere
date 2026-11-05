@@ -9,7 +9,7 @@ provenance record is upgraded to `published` with a cited source.
 | --- | ---: |
 | calibrated | 52 |
 | estimated | 215 |
-| derived | 96 |
+| derived | 99 |
 | regulatory_envelope | 5 |
 | published | 117 |
 
@@ -376,6 +376,9 @@ provenance record is upgraded to `published` with a cited source.
 | raptor3-superheavy-flight12 | specificImpulseSeaLevelS |  | inherits the rated-point uncertainties; not an independent measurement | Exosphere mass-flow closure on ratedThrustSeaLevelN, ratedThrustVacuumN and specificImpulseVacuumS | starship_flight12_v3_2026.json |
 | redstone-a7-mr3-1961 | performanceMap |  | inherits the estimated vacuum and Isp uncertainty | NASA published sea-level thrust plus documented Exosphere vacuum/Isp estimates | mercury_redstone3_freedom7_vehicle_1961.json |
 | redstone-a7-mr3-1961 | restartEnvelope |  | operational mission envelope, not a complete qualification limit | NASA single-burn Mercury-Redstone mission sequence | mercury_redstone3_freedom7_vehicle_1961.json |
+| rigid-body-gravity-gradient | tidalCoefficient | 3 | Exact first-order coefficient; higher gravitational multipoles and higher spacecraft-size terms are omitted. | Yaguang Yang, Spacecraft Modeling, Attitude Determination, and Control, equation 5.5; author manuscript hosted by NASA NTRS https://ntrs.nasa.gov/api/citations/20240009554/downloads/Space%20Attitude%20Development%20Control.pdf | rigid_body_f4_2026.json |
+| rigid-body-mass-flux | rotationalTransportEquation |  | Zero relative-flow momentum requires an explicit axisymmetric/no-swirl or negligible-internal-flow assumption. The production resource/exit/CoM adapter is not yet implemented; this record does not claim F4 is enabled in missions. | Fidelis O. Eke, Dynamics of Variable Mass Systems, NASA/CR-1998-208246, section 3.2, equations 3.12-3.18, https://ntrs.nasa.gov/api/citations/19980210404/downloads/19980210404.pdf | rigid_body_f4_2026.json |
+| rigid-body-mass-flux | uniformDiskSecondMomentFactor | 0.25 | Exact for the stated uniform disk. Nonuniform exit flow and swirl require a different exit model; this coefficient is not an empirical vehicle damping gain. | Uniform circular-area integration, mean(x^2)=mean(y^2)=a^2/4; NASA/CR-1998-208246, Dynamics of Variable Mass Systems, section 4.3.1 and equations 4.26-4.31, https://ntrs.nasa.gov/api/citations/19980210404/downloads/19980210404.pdf | rigid_body_f4_2026.json |
 | saturn5_sivb_tank_as503 | rcsThrusters |  | Isp 285 ±15 s; module station ±0.5 m | NASA TN (NTRS 19690016846) and Smithsonian NASM A19740780000: two APS modules 180° apart on the aft skirt, each with three ~147 lbf attitude engines (one pitch, two yaw/roll), MMH/N2O4; Wikipedia S-IVB: ~265 lb propellant per module | reaction_control_2026.json |
 | saturn5_sivb_tank_as506 | rcsThrusters |  | Isp 285 ±15 s; module station ±0.5 m | NASA TN (NTRS 19690016846) and Smithsonian NASM A19740780000: two APS modules 180° apart on the aft skirt, each with three ~147 lbf attitude engines (one pitch, two yaw/roll), MMH/N2O4; Wikipedia S-IVB: ~265 lb propellant per module | reaction_control_2026.json |
 | starship-flight14-landing | waterContactRegion |  | Finite 15 arc-second geographic screen only; not a measured landing target, coastal navigation dataset or seabed collision mesh. Sea-surface and water-load approximations remain unchanged. | NOAA NCEI ETOPO 2022 15 arc-second bed elevation (DOI 10.25921/fd45-gt74); pinned native-grid statistics and request in docs/research/FLIGHT14_OCEAN_COVERAGE_2026-11-04.json | rigid_body_fidelity_2026.json |

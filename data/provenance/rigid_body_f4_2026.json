@@ -1,0 +1,37 @@
+{
+  "manifestId": "rigid-body-f4-2026",
+  "records": [
+    {
+      "dataId": "rigid-body-gravity-gradient",
+      "field": "tidalCoefficient",
+      "status": "derived",
+      "source": "Yaguang Yang, Spacecraft Modeling, Attitude Determination, and Control, equation 5.5; author manuscript hosted by NASA NTRS https://ntrs.nasa.gov/api/citations/20240009554/downloads/Space%20Attitude%20Development%20Control.pdf",
+      "accessedDate": "2026-11-04",
+      "variant": "First-order Newtonian point-attractor tidal torque",
+      "conditions": "Torque 3*mu/r^3*n cross (I*n); n and the central inertia tensor use the same body frame. The expansion requires spacecraft size much smaller than attractor distance.",
+      "uncertainty": "Exact first-order coefficient; higher gravitational multipoles and higher spacecraft-size terms are omitted.",
+      "value": 3.0
+    },
+    {
+      "dataId": "rigid-body-mass-flux",
+      "field": "uniformDiskSecondMomentFactor",
+      "status": "derived",
+      "source": "Uniform circular-area integration, mean(x^2)=mean(y^2)=a^2/4; NASA/CR-1998-208246, Dynamics of Variable Mass Systems, section 4.3.1 and equations 4.26-4.31, https://ntrs.nasa.gov/api/citations/19980210404/downloads/19980210404.pdf",
+      "accessedDate": "2026-11-04",
+      "variant": "Uniform outward mass flux over a circular exit plane",
+      "conditions": "The exit covariance contributes mdot*a^2/4*(Identity+n*n^T) to angular-momentum transport, in addition to the exit-centroid parallel-axis tensor. Axial spin transport is mdot*a^2/2.",
+      "uncertainty": "Exact for the stated uniform disk. Nonuniform exit flow and swirl require a different exit model; this coefficient is not an empirical vehicle damping gain.",
+      "value": 0.25
+    },
+    {
+      "dataId": "rigid-body-mass-flux",
+      "field": "rotationalTransportEquation",
+      "status": "derived",
+      "source": "Fidelis O. Eke, Dynamics of Variable Mass Systems, NASA/CR-1998-208246, section 3.2, equations 3.12-3.18, https://ntrs.nasa.gov/api/citations/19980210404/downloads/19980210404.pdf",
+      "accessedDate": "2026-11-04",
+      "variant": "Open-system angular-momentum balance about instantaneous centre of mass",
+      "conditions": "Transport torque -I_dot*omega - J_out*omega - omega cross h_relative - d(h_relative)/dt_body - c_dot cross p_relative; positive mdot denotes outward flow. The last term is the moving-CoM-origin correction when relative flow velocities are defined in the material body frame. Ordinary thrust moments and Euler gyroscopic torque are supplied separately. All derivatives and vectors must refer to the same body frame and centre.",
+      "uncertainty": "Zero relative-flow momentum requires an explicit axisymmetric/no-swirl or negligible-internal-flow assumption. The production resource/exit/CoM adapter is not yet implemented; this record does not claim F4 is enabled in missions."
+    }
+  ]
+}

@@ -118,6 +118,16 @@ The attitude quaternion is normalized after each RK4 intermediate state. The ine
 is assembled from the active part graph and translated to the CoM using the parallel-axis
 theorem.
 
+### F4 analytic kernels (not production-enabled)
+
+`GravityGradient` and `VariableMassRotationalDynamics` provide pure tidal and open-system
+rotational kernels. A separate RK4 overload samples instantaneous mass/inertia at each
+candidate stage. Production mission adapters still use the constant-mass-per-step overload;
+the new kernels do not yet alter mission forces or attitude. Equations, analytic gates,
+source records and the pending resource/exit/CoM activation contract are documented in
+[`variable_mass_torques.md`](variable_mass_torques.md). F4 remains open pending integration
+and historical validation.
+
 ### Integration policy
 
 The production scheduler currently keeps the legacy path as the default. The experimental

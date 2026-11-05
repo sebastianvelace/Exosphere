@@ -40,8 +40,8 @@ public readonly struct RigidBody6DofState : IEquatable<RigidBody6DofState>
 }
 
 /// <summary>
-/// Constant mass properties during one integration step.
-/// The tensor is expressed in the body's principal/body frame.
+/// Instantaneous central mass properties in body coordinates. The production integrator
+/// overload freezes one snapshot per step; the variable-mass overload resamples each RK4 stage.
 /// </summary>
 public readonly struct RigidBodyMassProperties
 {
@@ -71,7 +71,8 @@ public readonly struct RigidBodyMassProperties
 }
 
 /// <summary>
-/// Net external load at one RK4 stage. Force is world-frame; torque is body-frame.
+/// Net load in the equations at one RK4 stage. Force is world-frame; torque is body-frame.
+/// An open-system callback must explicitly include its transport corrections.
 /// </summary>
 public readonly struct RigidBodyForces
 {

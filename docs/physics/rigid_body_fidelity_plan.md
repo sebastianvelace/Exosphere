@@ -12,7 +12,7 @@ the centre of mass, per-part parallel-axis inertia tensor, Euler gyroscopic term
 state contacts. Every Starship segment has a legacy/coupled parity gate
 (`coupled_6dof_migration.md`, steps 20–29). What is not yet physics:
 
-| # | Current model | Physical model |
+| # | Pre-fidelity baseline | Physical model |
 | --- | --- | --- |
 | A1 | Production flies the legacy split tick; forces sampled at the aft datum | Coupled RK4 in production; forces at the centre of mass |
 | A2 | Aero moment = total drag × one centre-of-pressure guess (`0.08·L`, clamped) | Distributed normal force per part (slender-body + viscous crossflow), moment Σ rᵢ×Fᵢ about the centre of mass, Mach-dependent |
@@ -301,6 +301,31 @@ The isolated-Earth continuation reaches water at 4.422 m/s.
 real-framebuffer graphics-settings capture/reload check. F3 is closed with the analytic
 RCS/SAS gates, the Gemini 8 historical recovery gate, exact checkpoint continuation and
 the original Flight 14 descent/contact limits. F4–F6 remain planned.
+
+## F4 findings (2026-11-04, in progress)
+
+The initial analytic unit is implemented in `GravityGradient`, `MassOutflow`,
+`VariableMassRotationalDynamics` and a stage-dependent mass-sampling overload of
+`RigidBody6DofIntegrator.Step`. It includes the central inertia derivative, finite exit-disk
+angular-momentum flux, relative internal-flow momentum and its body derivative, plus
+the moving-CoM-origin transport term. Gravity
+gradient uses the central tensor and the geocentric direction in one body frame.
+
+Analytic gates cover circular-orbit dumbbell libration and NASA's uniform-burn cylinder
+(axial spin conservation and transverse decay). Additional regressions cover direct gravity
+on two masses, exit flux/inertia-rate cancellation, the rocket equation and exact equivalence
+of the constant-mass integrator overloads. Geometric constants and assumptions are registered
+in `data/provenance/rigid_body_f4_2026.json`. The foundation CI passes 1281/1281 tests,
+all three builds at 0 warnings / 0 errors, and the Godot smoke/capture checks; the F3
+checkpoint reference is preserved exactly.
+
+**Not production-enabled and not closed.** The current mission adapters still use one mass
+snapshot per step and do not apply the new tidal/transport kernels. Resource loss must be
+matched to funded engine/RCS/vent exit geometry, and the moving CoM and internal-flow
+translation must be transported consistently. A thrust point is not a verified exit plane.
+The historical Saturn vehicle jet-damping gate also remains open; an SPS gimbal-actuator
+damping coefficient cannot substitute for it. The activation checklist and equations are in
+`docs/physics/variable_mass_torques.md`. F3 mission calibrations and tolerances are retained.
 
 ## Phases
 

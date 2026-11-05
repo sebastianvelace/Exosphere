@@ -190,6 +190,9 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   the shared feed), allocated by `Physics/RcsAllocation` (couples first, inertia-weighted);
   `rcs_arms_with_stage` and `rcs_arms_when_isolated` arm systems at separation; flaps take
   their share before the jets, and under thrust a slewing gimbal (≥ 1°/s) owns its axes.
+  F4 has analytic tidal/variable-mass kernels and a stage-dependent RK4 mass sampler;
+  production mission adapters are not switched to them yet. See
+  `docs/physics/variable_mass_torques.md` before wiring resource and exit geometry.
   Remaining phases (jet damping, gravity gradient, slosh, recalibration) are tracked in
   `docs/physics/rigid_body_fidelity_plan.md` (F4–F6).
 
