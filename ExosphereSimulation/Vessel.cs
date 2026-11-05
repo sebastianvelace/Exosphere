@@ -651,9 +651,9 @@ public class Vessel
     private void ConsumePropellants(double dt, double pressure)
     {
         var snapshot = InfinitePropellant ? Parts.CapturePropellant() : null;
-        Parts.ConsumePropellant(dt, pressure);
+        Parts.ConsumePropellant(dt, pressure, InfinitePropellant);
         if (PropellantVentRateKgPerS > 0.0 && dt > 0.0)
-            VentedPropellantKg += Parts.VentMainPropellant(PropellantVentRateKgPerS * dt);
+            VentedPropellantKg += Parts.VentMainPropellant(PropellantVentRateKgPerS * dt, dt, InfinitePropellant);
         if (DisturbanceMassFlowKgPerS > 0.0
             && !Parts.DrawMonopropellant(DisturbanceMassFlowKgPerS * dt, primaryStoresOnly: true))
         {
@@ -1260,6 +1260,15 @@ public class Vessel
     /// <summary>Opt-in immutable funding evidence for the next variable-mass adapter.</summary>
     public bool CaptureRcsFunding { get; set; }
     public Physics.RcsPropellantFundingSnapshot? LastRcsFunding { get; private set; }
+
+    /// <summary>Opt-in gross liquid-engine and main-vent funding for each physical preparation.</summary>
+    public bool CapturePropellantFunding
+    {
+        get => Parts.CapturePropellantFunding;
+        set => Parts.CapturePropellantFunding = value;
+    }
+    public Physics.LiquidEngineFundingSnapshot? LastLiquidEngineFunding => Parts.LastLiquidEngineFunding;
+    public Physics.MainPropellantVentSnapshot? LastMainVentFunding => Parts.LastMainVentFunding;
 
     /// <summary>
     /// Fires the declared RCS thrusters toward the requested moment and force for one control

@@ -356,7 +356,17 @@ and the engine is depleted only after its funded impulse is integrated. Hot-stag
 off at their own instants. Flight 14's booster boostback now keeps 1011 kg of unmatched methane
 that the old consumer burned without oxidizer; its test asserts that conservation identity
 exactly. RCS keeps whole-step funding; mass/inertia stay frozen per step. Details and
-regressions: `variable_mass_resource_adapter.md`. Validation: local `tools/ci_check.sh` passed: **1331/1331** tests, the three builds at 0 warnings / 0 errors and all static contracts. Godot smoke was not available in this environment (no Godot binary); GitHub Actions runs it.
+regressions: `variable_mass_resource_adapter.md`. Validation: local `tools/ci_check.sh` passed: **1331/1331** tests, the three builds at 0 warnings / 0 errors and all static contracts. The engine-exhaustion handoff environment had no Godot binary; its smoke verification runs in GitHub Actions.
+
+**Liquid-engine/main-vent receipts (2026-11-05).** Optional `Vessel.CapturePropellantFunding`
+records immutable actual main/header debits, per-instance liquid flows and funded intervals,
+separate hot-stage feed identities and an explicit assistance marker. Vents retain their
+own debit after engine consumption; direct mass-only vent calls have no declared duration.
+Captured and uncaptured states match exactly on coupled/legacy regressions. Exit geometry,
+store flow schedules, continuous mass/CoM/inertia and transport activation remain pending.
+No mission tolerance or calibration changes. Targeted suite: **57/57**; complete CI:
+**1350/1350**, all three builds at 0 warnings / 0 errors, Godot startup and graphics
+capture/reload passed. The regenerated Flight 14 reference exactly matches accepted A6.
 
 ## Phases
 

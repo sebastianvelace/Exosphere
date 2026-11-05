@@ -195,7 +195,9 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   ephemerides, and live SAS/RCS stays in funded physical integration. Variable-mass kernels
   and the stage-dependent RK4 mass sampler are not yet wired to mission resource flow.
   `Vessel.CaptureRcsFunding` optionally records immutable funded store/nozzle receipts for A6;
-  it does not alter physics or infer exhaust from net mass loss. See
+  `CapturePropellantFunding` adds liquid-engine/main-vent debits and funded intervals, including
+  header/store and per-engine identities. Both are off by default; gross assistance-marked
+  receipts do not alter physics or infer exhaust from net mass loss. See
   `docs/physics/variable_mass_torques.md` before wiring resource and exit geometry.
   Remaining work (variable-mass transport, slosh and historical recalibration) is tracked in
   `docs/physics/rigid_body_fidelity_plan.md` (F4–F6).

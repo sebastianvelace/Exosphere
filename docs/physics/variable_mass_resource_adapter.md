@@ -1,8 +1,62 @@
 # F4 resource adapter: funded snapshots and continuous mass properties
 
-A6 is in progress. Atomic RCS funding, optional immutable RCS receipts and in-step
-liquid-engine exhaustion are implemented; continuous mass properties, engine/vent receipts
-and transport forces are not activated.
+A6 is in progress. Atomic RCS funding, in-step liquid-engine exhaustion and optional immutable
+RCS/liquid-engine/main-vent receipts are implemented. Continuous mass properties and
+transport forces are not activated.
+
+## Liquid-engine and main-vent receipts (2026-11-05)
+
+`Vessel.CapturePropellantFunding` (also available on `PartGraph`) enables two preparation-only
+readouts, off by default:
+
+- `LastLiquidEngineFunding`: actual main/header store withdrawals plus each liquid-engine
+  instance's prepared fuel and oxidizer flow rates and funded duration from step start.
+  The duration is the common limiting-reactant interval already used by the integrators.
+  Runtime identities and flow survive aggregate depletion clearing the live engine state.
+- `LastMainVentFunding`: the requested and funded main-tank vent mass and actual withdrawals.
+  Vessel's constant-rate command supplies the step duration; funded duration is the step
+  duration multiplied by funded/requested mass. A direct mass-only `VentMainPropellant(kg)`
+  call has **no declared interval**, represented by null durations.
+
+`LiquidStoreWithdrawal` identifies part instance, reactant, main versus header (header index
+and declared ID), before/after loads and engine feed-pool index. Engine consumers carry that
+same pool index; hot-stage feeds retain different indices. Indices are local to one receipt,
+not persistent physical pipe identities. The vent has no engine-pool index and excludes
+headers and protected main loads. Source stores and consumers remain separate; a shared
+feed is not a measured route from a particular store to a particular engine.
+
+Engine withdrawals are captured around engine consumption; the later vent records its own
+before/after loads. Adding the two gross withdrawals therefore does not count the same
+debit twice. Both snapshots copy value records into read-only arrays before subsequent live
+store/header/runtime mutations. `MassBalanceResidualKg` exposes signed store-subtraction
+roundoff relative to funded flow, rather than silently changing either quantity.
+
+Infinite-propellant assistance is explicit in both receipts. These are gross debits before
+replenishment, not net vehicle mass loss; existing exhaustion behavior with assistance is
+retained. No flow receipt is emitted for zero funding. At the next physical preparation,
+no firing/venting or disabled capture clears the corresponding readouts. As with RCS,
+consume the receipt immediately after preparation, never repeatedly on render frames or
+analytic coasts. `CaptureRcsFunding` remains a separate opt-in.
+
+These receipts describe the existing resource allocation, not a measurement of delivered
+impulse or a new physical flow model. Prepared engine mass flow uses preparation pressure
+and throttle; candidate force pressure may vary during RK4. The capture does not establish
+nozzle/vent exit geometry, exhaust velocity, internal feed momentum, liquid free surfaces
+or store-level timing across main/header transitions. A continuous mass adapter must still
+resolve those store schedules and the moving-CoM convention below. Solid/monopropellant
+engines and disturbance jets are outside this liquid-engine/main-vent receipt contract.
+Neither receipt enables transport forces or changes the frozen per-step mass/inertia.
+
+Targeted validation covers limiting fuel/oxidizer and exact/full funding, individual runtime
+identities, shared consumers with different mixtures, separate hot-stage pools, protected
+main/header draws, pressure/throttle, timed versus mass-only venting, immutable snapshots,
+assistance, clearing, revised header definitions and bit-identical captured/uncaptured states
+on coupled and legacy paths.
+The combined targeted propulsion/RCS/header/assistance suite passes **57/57**. Complete
+`tools/ci_check.sh`: **1350/1350**, no skips, all three builds at 0 warnings / 0 errors,
+all static contracts, Godot Flight startup, MainMenu/Construction smoke and graphics
+capture/reload passed. The regenerated Flight 14 checkpoint reference is exactly equal to
+accepted A6 (`04bffd6`); no mission tolerance or calibration changed.
 
 ## Implemented engine exhaustion boundary (2026-11-05)
 
@@ -33,7 +87,8 @@ completed with the regressions and validation below.
   boundary are computed normally and the tank loads are restored afterwards. A full tank
   never reaches a boundary within one step; an assisted near-empty tank still cuts off.
 - Mass and inertia remain frozen per step (the post-debit snapshot). Continuous
-  mass/CoM/inertia sampling, engine/vent receipts and transport forces are still pending.
+  mass/CoM/inertia sampling and transport forces are still pending; optional liquid-engine
+  and main-vent receipts are described above.
   Solid and monopropellant engines keep whole-step exhaustion.
 
 Regressions (`EngineExhaustionTests`, 15 cases on both integration paths): unused-reactant
@@ -51,7 +106,7 @@ methane of its inherited tank mixture (1011 kg) instead of burning it without ox
 with the exact conservation identity: cutoff propellant = landing reserve + open-feed fuel −
 open-feed oxidizer / mixture ratio, to 1 g. No other mission tolerance or calibration changed.
 
-Validation: local `tools/ci_check.sh` passed: **1331/1331** tests, the three builds at 0 warnings / 0 errors and all static contracts. Godot smoke was not available in this environment (no Godot binary); GitHub Actions runs it.
+Validation: local `tools/ci_check.sh` passed: **1331/1331** tests, the three builds at 0 warnings / 0 errors and all static contracts. The engine-exhaustion handoff environment had no Godot binary; its smoke verification runs in GitHub Actions.
 
 ## Continuation checkpoint (2026-11-05)
 
@@ -77,7 +132,7 @@ The next implementation unit was engine exhaustion, before enabling transport fo
 4. Verify analytic mass and impulse, surviving sibling thrust, depletion without persistent
    engine failure, and existing mission gates. Run `bash tools/ci_check.sh` before committing.
 
-After engine and vent receipts, complete the continuous component mass/CoM/inertia sampler
+After the liquid-engine and main-vent receipts, complete the continuous component mass/CoM/inertia sampler
 and internal-flow convention below, then connect the existing variable-mass integrator.
 Declared nozzle points alone are not verified exit area/profile or internal piping.
 The Saturn V historical jet-damping gate is still missing: SPS gimbal-actuator damping is
@@ -120,8 +175,8 @@ The receipts do not activate variable-mass forces or bypass the remaining source
 - PartGraph consumes liquid propellant by engine-instance demand, sorted ordinally; tank
   pools are stage-local and hot-stage overlap funds bottom/upper pools separately.
 - Main fuel is drawn before headers; partial exhaustion keeps the unused reactant and records
-  the funded time interval, which the integrators split at. Engine receipts must expose
-  that interval rather than infer delivered thrust from the final mass delta.
+  the funded time interval, which the integrators split at. Optional liquid-engine receipts
+  expose that interval without inferring delivered thrust from the final mass delta.
 - Vessel draws disturbance flow and allocated RCS after propulsion preparation. RCS funding
   is per owning store; the force, torque and flow are applied only if funding succeeds.
 - PartGraph central inertia uses a non-header uniform-cylinder remainder and point headers.
@@ -158,6 +213,14 @@ already funded branches' delivered impulse. The source pools remain stage-local,
 hot-stage overlap and main-before-header feed; no new outlet plane is inferred here.
 
 ## Candidate pure mass distribution kernel
+
+Before connecting a candidate sampler, close the resource schedule over every active source
+and sink, including the separately captured RCS and any still-uncaptured disturbance or
+non-liquid engine flow. Do not silently infer a missing outlet from net mass loss.
+Funded engine cutoff, main-to-header transitions, vent allocation and assist replenishment
+are distinct events: linearly interpolating whole-step store endpoints would smear a short
+burn over the coast and lose the one-sided derivatives at those boundaries. The new receipts
+provide accounting evidence; they do not by themselves define all of those store schedules.
 
 For constant body-frame component stations r_i, fixed specific central tensors C_i and
 piecewise affine mass m_i(t), define

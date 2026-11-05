@@ -253,6 +253,8 @@ public partial class PartGraph
     internal void BeginPhysicsTick()
     {
         ClearEngineFunding();
+        LastLiquidEngineFunding = null;
+        LastMainVentFunding = null;
         _physicsTickActive = true;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
@@ -1644,12 +1646,17 @@ public partial class PartGraph
     /// oxidizer in proportion to what remains, never from header tanks or a landing reserve).
     /// Returns the mass removed.
     /// </summary>
-    public double VentMainPropellant(double kg)
+    public double VentMainPropellant(double kg) => VentMainPropellant(kg, null, false);
+
+    internal double VentMainPropellant(double kg, double? dt, bool assist)
     {
+        LastMainVentFunding = null;
         if (!(kg > 0.0)) return 0.0;
         double available = 0.0;
         foreach (var part in _parts) available += part.AvailableLiquidFuel + part.AvailableOxidizer;
         if (available <= 0.0) return 0.0;
+        var capture = CapturePropellantFunding ? new LiquidFundingCapture() : null;
+        capture?.BeginPool(_parts, includeHeaders: false);
         double vented = System.Math.Min(kg, available);
         double fraction = vented / available;
         foreach (var part in _parts)
@@ -1657,10 +1664,29 @@ public partial class PartGraph
             part.LiquidFuel -= part.AvailableLiquidFuel * fraction;
             part.Oxidizer -= part.AvailableOxidizer * fraction;
         }
+        if (capture != null)
+        {
+            capture.EndPool(null);
+            LastMainVentFunding = capture.BuildVent(kg, vented, dt, assist);
+        }
         return vented;
     }
 
-    public void ConsumePropellant(double dt, double ambientPressure)
+    public void ConsumePropellant(double dt, double ambientPressure) => ConsumePropellant(dt, ambientPressure, false);
+
+    internal void ConsumePropellant(double dt, double ambientPressure, bool assist)
+    {
+        LastLiquidEngineFunding = null;
+        _liquidFundingCapture = CapturePropellantFunding && dt > 0 ? new LiquidFundingCapture() : null;
+        try
+        {
+            ConsumePropellantCore(dt, ambientPressure);
+            LastLiquidEngineFunding = _liquidFundingCapture?.BuildEngines(dt, assist);
+        }
+        finally { _liquidFundingCapture = null; }
+    }
+
+    private void ConsumePropellantCore(double dt, double ambientPressure)
     {
         if (HotStageOverlapActive)
         {
@@ -1706,6 +1732,7 @@ public partial class PartGraph
                 engines.Add(part);
         }
         if (engines.Count == 0) return;
+        int pool = _liquidFundingCapture?.BeginPool(tankPool, includeHeaders: true) ?? 0;
 
         // Calcular flujo de masa total de todos los motores activos
         double totalSolidRate = 0, totalMonoRate = 0;
@@ -1800,6 +1827,16 @@ public partial class PartGraph
             if (fundedLF > 0.0) fraction = System.Math.Min(fraction, remainingLF / fundedLF);
             if (fundedOx > 0.0) fraction = System.Math.Min(fraction, remainingOx / fundedOx);
             fraction = System.Math.Clamp(fraction, 0.0, 1.0);
+            if (_liquidFundingCapture != null && dt * fraction > 0)
+                foreach (var demand in _liquidDemands)
+                {
+                    if (!(demand.MassFlowKgS > 0)) continue;
+                    double fuelFraction = demand.MixtureRatio > 0.0
+                        ? 1.0 / (1.0 + demand.MixtureRatio) : fallbackFuelFraction;
+                    _liquidFundingCapture.Engines.Add(new(demand.EnginePart.InstanceId,
+                        demand.EngineInstanceId, pool, demand.MassFlowKgS * fuelFraction,
+                        demand.MassFlowKgS * (1.0 - fuelFraction), dt * fraction));
+                }
             if (fraction < 1.0 || (fundedLF > 0 && fundedLF == remainingLF)
                 || (fundedOx > 0 && fundedOx == remainingOx))
             {
@@ -1879,6 +1916,7 @@ public partial class PartGraph
                 _tickActiveEngineCacheValid = false;
             }
         }
+        _liquidFundingCapture?.EndPool(pool);
     }
 
     // ── Staging: dispara el primer desacoplador disponible ────────────────

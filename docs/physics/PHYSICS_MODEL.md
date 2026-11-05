@@ -136,8 +136,11 @@ RCS funding reserves owning-system gas before checking the shared feed, so two c
 cannot spend the same load. Optional immutable `Vessel.LastRcsFunding` receipts identify
 actual store withdrawals and funded nozzle flow (`CaptureRcsFunding`); practice-assist
 replenishment is explicitly marked. These receipts do not activate open-system transport.
+Liquid-engine exhaustion is split at funded interval boundaries; optional
+`CapturePropellantFunding` adds immutable per-instance liquid flows and main/header/vent
+withdrawals, including gross assist-marked debits. Mass/inertia remain frozen per step.
 See [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md) for the remaining
-engine/vent and interval-boundary work.
+continuous mass, flow scheduling and source/exit activation work.
 
 ### Integration policy
 
