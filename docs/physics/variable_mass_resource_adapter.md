@@ -3,6 +3,35 @@
 A6 is in progress. Atomic RCS funding and optional immutable RCS receipts are implemented;
 continuous mass properties, engine/vent receipts and transport forces are not activated.
 
+## Continuation checkpoint (2026-11-05)
+
+Completed work: F3 actuator fidelity (`d7fb773`), F4 pure torque foundations (`14349dd`),
+production gravity-gradient and Kepler attitude (`44b47b1`), and atomic mixed-feed RCS
+funding with optional immutable receipts (`04bffd6`). F4 remains open. The complete CI
+for this code passed **1316/1316** tests, three builds with zero warnings/errors, Flight
+startup, MainMenu/Construction smoke and graphics capture/reload. The regenerated Flight 14
+entry reference state matched A7 exactly; mission tolerances and calibrations were unchanged.
+
+The next implementation unit is engine exhaustion, before enabling transport forces:
+
+1. Add regressions for the limiting-reactant case below, symmetric oxidizer exhaustion,
+   exact exhaustion and simultaneous engine branches, including branches on one engine part.
+2. Replace the remaining-load dump in `PartGraph.ConsumePropellantFromPool` with a funded
+   interval ledger. Preserve unused reactant, stage-local pools, hot-stage overlap and
+   main-before-header feed. An ordinal ID establishes deterministic accounting, not a
+   physical sequence of simultaneous burns.
+3. Preserve prepared per-instance force/flow before `Part.MarkFuelDepleted` clears runtime
+   throttle. Integrate the actual delivered interval with consistent boundary forces on both
+   coupled and legacy paths; fixing the mass debit alone does not fix the impulse.
+4. Verify analytic mass and impulse, surviving sibling thrust, depletion without persistent
+   engine failure, and existing mission gates. Run `bash tools/ci_check.sh` before committing.
+
+After engine and vent receipts, complete the continuous component mass/CoM/inertia sampler
+and internal-flow convention below, then connect the existing variable-mass integrator.
+Declared nozzle points alone are not verified exit area/profile or internal piping.
+The Saturn V historical jet-damping gate is still missing: SPS gimbal-actuator damping is
+not a vehicle jet-damping coefficient. Do not use it to close that gate or relax tolerances.
+
 ## Implemented RCS funding boundary
 
 Owning RCS systems reserve their entire step demand before the shared feed is checked.
