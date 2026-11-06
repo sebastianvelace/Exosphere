@@ -33,7 +33,7 @@ public readonly record struct EngineTelemetrySummary(
         : 0.0;
 }
 
-public class PartGraph
+public partial class PartGraph
 {
     private readonly record struct LiquidEngineDemand(
         Part EnginePart,
@@ -58,6 +58,9 @@ public class PartGraph
     private readonly List<Part> _tickEngineScratch = new();
     private readonly List<Part> _tickSubtreeScratch = new();
     private readonly List<LiquidEngineDemand> _liquidDemands = new();
+    private readonly record struct SingleResourceEngineDemand(Part Part, string EngineId,
+        PropellantResourceKind Resource, double MassFlowKgPerS);
+    private readonly List<SingleResourceEngineDemand> _singleResourceDemands = new();
     private readonly HashSet<Part> _hotStageBottomSet = new();
     private readonly List<Part> _hotStageUpperParts = new();
     private readonly List<(EngineInstanceState? State, Part Engine, Vector3d Jx, Vector3d Jz)>
@@ -252,6 +255,9 @@ public class PartGraph
     /// </summary>
     internal void BeginPhysicsTick()
     {
+        ClearEngineFunding();
+        LastLiquidEngineFunding = null;
+        LastMainVentFunding = null;
         _physicsTickActive = true;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
@@ -318,6 +324,7 @@ public class PartGraph
 
     internal void EndPhysicsTick()
     {
+        CompleteEngineFunding();
         _physicsTickActive = false;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
@@ -602,6 +609,15 @@ public class PartGraph
     private RigidBodyMassProperties BuildMassProperties(
         IReadOnlyDictionary<Part, Vector3d> positions)
     {
+        double fallbackLength = System.Math.Max(
+            1.0,
+            VehicleLength / System.Math.Max(1, _parts.Count));
+        double fallbackDiameter = System.Math.Max(1.0, MaximumDiameter);
+
+        // One shared decomposition (PartMassGeometry): every component keeps its own centroid
+        // and central inertia, so the parallel-axis spread between dry structure, tanks and
+        // headers is retained instead of shifting one wet cylinder.
+        var components = _massComponentScratch;
         double totalMass = 0.0;
         Vector3d weightedPosition = Vector3d.Zero;
         foreach (var part in _parts)
@@ -611,19 +627,21 @@ public class PartGraph
                 throw new InvalidOperationException(
                     $"Part '{part.InstanceId}' has invalid mass {mass:G17}.");
             if (!positions.TryGetValue(part, out var position)) continue;
-
-            totalMass += mass;
-            weightedPosition += MassCentre(part, position) * mass;
+            components.Clear();
+            PartMassGeometry.AppendComponents(part, fallbackLength, fallbackDiameter, components);
+            foreach (var component in components)
+            {
+                if (component.MassKg <= 0.0) continue;
+                totalMass += component.MassKg;
+                weightedPosition += new Vector3d(position.X, position.Y + component.CenterYM, position.Z)
+                    * component.MassKg;
+            }
         }
 
         if (!double.IsFinite(totalMass) || totalMass <= 0.0)
             throw new InvalidOperationException("Cannot build mass properties for an empty graph.");
 
         Vector3d centerOfMass = weightedPosition / totalMass;
-        double fallbackLength = System.Math.Max(
-            1.0,
-            VehicleLength / System.Math.Max(1, _parts.Count));
-        double fallbackDiameter = System.Math.Max(1.0, MaximumDiameter);
 
         double i11 = 0.0;
         double i12 = 0.0;
@@ -634,50 +652,24 @@ public class PartGraph
         foreach (var part in _parts)
         {
             if (!positions.TryGetValue(part, out var position)) continue;
-            // Header propellant is a point mass at its station; the rest of the part is the
-            // cylinder below.
-            var headers = part.Definition.HeaderTanks;
-            double headerMass = 0.0;
-            for (int h = 0; h < headers.Count && h < part.HeaderPropellantKg.Length; h++)
+            components.Clear();
+            PartMassGeometry.AppendComponents(part, fallbackLength, fallbackDiameter, components);
+            foreach (var component in components)
             {
-                double headerKg = part.HeaderPropellantKg[h];
-                if (headerKg <= 0.0) continue;
-                headerMass += headerKg;
-                Vector3d d = new Vector3d(position.X, position.Y + headers[h].CenterYM, position.Z) - centerOfMass;
-                i11 += headerKg * (d.Y * d.Y + d.Z * d.Z);
-                i22 += headerKg * (d.X * d.X + d.Z * d.Z);
-                i33 += headerKg * (d.X * d.X + d.Y * d.Y);
-                i12 -= headerKg * d.X * d.Y;
-                i13 -= headerKg * d.X * d.Z;
-                i23 -= headerKg * d.Y * d.Z;
+                double mass = component.MassKg;
+                if (mass <= 0.0) continue;
+                // Local axis is vessel +Y; the component's central tensor is diagonal.
+                double transverse = mass * component.Shape.TransverseSpecific(mass);
+                double axial = mass * component.Shape.AxialSpecific;
+                Vector3d d = new Vector3d(position.X, position.Y + component.CenterYM, position.Z) - centerOfMass;
+                // Parallel-axis theorem: I_shift = I_local + m((d·d)E - d⊗d).
+                i11 += transverse + mass * (d.Y * d.Y + d.Z * d.Z);
+                i22 += axial + mass * (d.X * d.X + d.Z * d.Z);
+                i33 += transverse + mass * (d.X * d.X + d.Y * d.Y);
+                i12 -= mass * d.X * d.Y;
+                i13 -= mass * d.X * d.Z;
+                i23 -= mass * d.Y * d.Z;
             }
-            double mass = part.CurrentMass - headerMass;
-            // The non-header remainder centres on the dry structure's declared station.
-            double restOffsetY = mass > 0.0 ? part.Definition.MassDry * part.Definition.DryMassCenterYM / mass : 0.0;
-            double length = part.Definition.LengthM > 0.0
-                ? part.Definition.LengthM
-                : fallbackLength;
-            double diameter = part.Definition.DiameterM > 0.0
-                ? part.Definition.DiameterM
-                : fallbackDiameter;
-            double radius = diameter * 0.5;
-
-            // Local cylinder axis is vessel +Y. The local COM inertia is diagonal.
-            double transverse = mass
-                * (3.0 * radius * radius + length * length) / 12.0;
-            double axial = 0.5 * mass * radius * radius;
-            Vector3d offset = new Vector3d(position.X, position.Y + restOffsetY, position.Z) - centerOfMass;
-            double xx = offset.X;
-            double yy = offset.Y;
-            double zz = offset.Z;
-
-            // Parallel-axis theorem: I_shift = I_local + m((d·d)E - d⊗d).
-            i11 += transverse + mass * (yy * yy + zz * zz);
-            i22 += axial + mass * (xx * xx + zz * zz);
-            i33 += transverse + mass * (xx * xx + yy * yy);
-            i12 -= mass * xx * yy;
-            i13 -= mass * xx * zz;
-            i23 -= mass * yy * zz;
         }
 
         var inertia = new Matrix3x3d(
@@ -687,7 +679,9 @@ public class PartGraph
         return new RigidBodyMassProperties(totalMass, centerOfMass, inertia);
     }
 
-    /// <summary>A part's own centre of mass: its centre, shifted along its axis by header propellant.</summary>
+    private readonly List<PartMassComponent> _massComponentScratch = new(16);
+
+    /// <summary>A part's own centre of mass: its centre, shifted along its axis by its components.</summary>
     private static Vector3d MassCentre(Part part, Vector3d position)
     {
         double offset = part.MassCenterOffsetYM;
@@ -696,6 +690,9 @@ public class PartGraph
 
     // Positions depend on topology and geometry only, so ticks share the topology cache.
     private Dictionary<Part, Vector3d> GetCachedPartLocalPositions() => GetTopologyPartLocalPositions();
+
+    /// <summary>The stack-frame positions the mass properties use (only placed parts carry mass).</summary>
+    internal IReadOnlyDictionary<Part, Vector3d> GetTopologyPartLocalPositionsForMass() => GetTopologyPartLocalPositions();
 
     /// <summary>
     /// True when this body's aerodynamics come from its part geometry
@@ -1642,12 +1639,17 @@ public class PartGraph
     /// oxidizer in proportion to what remains, never from header tanks or a landing reserve).
     /// Returns the mass removed.
     /// </summary>
-    public double VentMainPropellant(double kg)
+    public double VentMainPropellant(double kg) => VentMainPropellant(kg, null, false);
+
+    internal double VentMainPropellant(double kg, double? dt, bool assist)
     {
+        LastMainVentFunding = null;
         if (!(kg > 0.0)) return 0.0;
         double available = 0.0;
         foreach (var part in _parts) available += part.AvailableLiquidFuel + part.AvailableOxidizer;
         if (available <= 0.0) return 0.0;
+        var capture = CapturePropellantFunding || ResourceFundingCapture != null ? new LiquidFundingCapture() : null;
+        capture?.BeginPool(_parts, includeHeaders: false);
         double vented = System.Math.Min(kg, available);
         double fraction = vented / available;
         foreach (var part in _parts)
@@ -1655,10 +1657,35 @@ public class PartGraph
             part.LiquidFuel -= part.AvailableLiquidFuel * fraction;
             part.Oxidizer -= part.AvailableOxidizer * fraction;
         }
+        if (capture != null)
+        {
+            capture.EndPool(null);
+            var receipt = capture.BuildVent(kg, vented, dt, assist);
+            ResourceFundingCapture?.RecordVent(receipt);
+            if (CapturePropellantFunding) LastMainVentFunding = receipt;
+        }
         return vented;
     }
 
-    public void ConsumePropellant(double dt, double ambientPressure)
+    public void ConsumePropellant(double dt, double ambientPressure) => ConsumePropellant(dt, ambientPressure, false);
+
+    internal void ConsumePropellant(double dt, double ambientPressure, bool assist)
+    {
+        LastLiquidEngineFunding = null;
+        _liquidFundingCapture = (CapturePropellantFunding || ResourceFundingCapture != null) && dt > 0
+            ? new LiquidFundingCapture() : null;
+        try
+        {
+            ConsumePropellantCore(dt, ambientPressure);
+            var receipt = _liquidFundingCapture?.BuildEngines(dt, assist);
+            ResourceFundingCapture?.RecordLiquid(receipt);
+            ResourceFundingCapture?.RecordCurrentStores(_parts, ResourceWithdrawalSource.OtherEngine);
+            if (CapturePropellantFunding) LastLiquidEngineFunding = receipt;
+        }
+        finally { _liquidFundingCapture = null; }
+    }
+
+    private void ConsumePropellantCore(double dt, double ambientPressure)
     {
         if (HotStageOverlapActive)
         {
@@ -1704,10 +1731,11 @@ public class PartGraph
                 engines.Add(part);
         }
         if (engines.Count == 0) return;
+        int pool = _liquidFundingCapture?.BeginPool(tankPool, includeHeaders: true) ?? 0;
 
         // Calcular flujo de masa total de todos los motores activos
-        double totalSolidRate = 0, totalMonoRate = 0;
         _liquidDemands.Clear();
+        _singleResourceDemands.Clear();
         foreach (var engine in engines)
         {
             var def = engine.Definition;
@@ -1750,14 +1778,12 @@ public class PartGraph
                         def.MixtureRatio));
             }
             else if (fuelType.Contains("solid", StringComparison.OrdinalIgnoreCase))
-                totalSolidRate += engine.GetMassFlow(ambientPressure);
+                CollectSingleResourceDemand(engine, PropellantResourceKind.SolidFuel, ambientPressure);
             else if (fuelType.Contains("mono", StringComparison.OrdinalIgnoreCase))
-                totalMonoRate += engine.GetMassFlow(ambientPressure);
+                CollectSingleResourceDemand(engine, PropellantResourceKind.Monopropellant, ambientPressure);
         }
 
         // Consumir de los tanques de la etapa activa (cross-feed dentro de la etapa)
-        bool nonLiquidFlameOut = false;
-
         if (_liquidDemands.Count > 0)
         {
             double totalLF = 0.0;
@@ -1789,31 +1815,33 @@ public class PartGraph
                 double fuelFraction = demand.MixtureRatio > 0.0
                     ? 1.0 / (1.0 + demand.MixtureRatio)
                     : fallbackFuelFraction;
-                double lfNeeded = demand.MassFlowKgS * fuelFraction * dt;
-                double oxNeeded = demand.MassFlowKgS * (1.0 - fuelFraction) * dt;
-                if (remainingLF + 1e-9 >= lfNeeded
-                    && remainingOx + 1e-9 >= oxNeeded)
-                {
-                    remainingLF -= lfNeeded;
-                    remainingOx -= oxNeeded;
-                    fundedLF += lfNeeded;
-                    fundedOx += oxNeeded;
-                    continue;
-                }
-
-                // Fuel exhaustion is an ordinary resource boundary. Consume whatever
-                // remains below, then stop requesting thrust on the next physics tick;
-                // it must not create a persistent engine failure state.
-                if (remainingLF > 0.0 || remainingOx > 0.0)
-                {
-                    fundedLF += remainingLF;
-                    fundedOx += remainingOx;
-                    remainingLF = 0.0;
-                    remainingOx = 0.0;
-                }
-                demand.EnginePart.MarkFuelDepleted();
-                _tickActiveEngineCacheValid = false;
+                fundedLF += demand.MassFlowKgS * fuelFraction * dt;
+                fundedOx += demand.MassFlowKgS * (1.0 - fuelFraction) * dt;
             }
+            // All branches sharing a pool burn simultaneously until its first limiting
+            // reactant. Engine IDs determine summation order, never priority of fuel access.
+            double fraction = 1.0;
+            if (fundedLF > 0.0) fraction = System.Math.Min(fraction, remainingLF / fundedLF);
+            if (fundedOx > 0.0) fraction = System.Math.Min(fraction, remainingOx / fundedOx);
+            fraction = System.Math.Clamp(fraction, 0.0, 1.0);
+            if (_liquidFundingCapture != null && dt * fraction > 0)
+                foreach (var demand in _liquidDemands)
+                {
+                    if (!(demand.MassFlowKgS > 0)) continue;
+                    double fuelFraction = demand.MixtureRatio > 0.0
+                        ? 1.0 / (1.0 + demand.MixtureRatio) : fallbackFuelFraction;
+                    _liquidFundingCapture.Engines.Add(new(demand.EnginePart.InstanceId,
+                        demand.EngineInstanceId, pool, demand.MassFlowKgS * fuelFraction,
+                        demand.MassFlowKgS * (1.0 - fuelFraction), dt * fraction));
+                }
+            if (fraction < 1.0 || (fundedLF > 0 && fundedLF == remainingLF)
+                || (fundedOx > 0 && fundedOx == remainingOx))
+            {
+                foreach (var demand in _liquidDemands)
+                    RegisterEngineExhaustion(demand.EnginePart, dt * fraction);
+            }
+            fundedLF = System.Math.Min(remainingLF, fundedLF * fraction);
+            fundedOx = System.Math.Min(remainingOx, fundedOx * fraction);
 
             if (fundedLF > 0.0 || fundedOx > 0.0)
             {
@@ -1821,6 +1849,14 @@ public class PartGraph
                 double mainOx = System.Math.Min(fundedOx, totalOx);
                 double fromHeaderLF = fundedLF - mainLF;
                 double fromHeaderOx = fundedOx - mainOx;
+                // Describe the existing main-first allocator without changing its debits.
+                // Each reactant switches independently; no header draw means main flow
+                // lasts the entire funded interval, including exact main exhaustion.
+                // Divide by the funded rate rather than multiplying a tiny mass ratio
+                // by a long duration: the ratio itself can underflow to zero.
+                _liquidFundingCapture?.SetEngineTiming(dt * fraction,
+                    fromHeaderLF > 0 ? mainLF / (fundedLF / (dt * fraction)) : dt * fraction,
+                    fromHeaderOx > 0 ? mainOx / (fundedOx / (dt * fraction)) : dt * fraction);
                 for (int tankIndex = 0; tankIndex < tankPool.Count; tankIndex++)
                 {
                     var p = tankPool[tankIndex];
@@ -1838,52 +1874,57 @@ public class PartGraph
             }
         }
 
-        if (totalSolidRate > 0)
+        FundSingleResourcePool(tankPool, PropellantResourceKind.SolidFuel, pool, dt);
+        FundSingleResourcePool(tankPool, PropellantResourceKind.Monopropellant, pool, dt);
+        _liquidFundingCapture?.EndPool(pool);
+    }
+
+    private void CollectSingleResourceDemand(Part part, PropellantResourceKind resource, double pressure)
+    {
+        if (part.HasEngineRuntime)
         {
-            double solidNeeded = totalSolidRate * dt;
-            double totalSolid = 0.0;
-            for (int i = 0; i < tankPool.Count; i++)
-                totalSolid += tankPool[i].SolidFuel;
-            if (totalSolid < solidNeeded) nonLiquidFlameOut = true;
-            else
+            for (int i = 0; i < part.EngineStates.Count; i++)
             {
-                for (int i = 0; i < tankPool.Count; i++)
-                {
-                    var part = tankPool[i];
-                    if (part.SolidFuel > 0)
-                        part.SolidFuel -= solidNeeded * (part.SolidFuel / totalSolid);
-                }
+                double rate = part.GetEngineInstancePerformance(i, pressure).MassFlowKgS;
+                if (rate > 0) _singleResourceDemands.Add(new(part, part.EngineStates[i].InstanceId, resource, rate));
             }
         }
-
-        if (totalMonoRate > 0)
+        else
         {
-            double monoNeeded = totalMonoRate * dt;
-            double totalMono = 0.0;
-            for (int i = 0; i < tankPool.Count; i++)
-                totalMono += tankPool[i].Monopropellant;
-            if (totalMono < monoNeeded) nonLiquidFlameOut = true;
-            else
-            {
-                for (int i = 0; i < tankPool.Count; i++)
-                {
-                    var part = tankPool[i];
-                    if (part.Monopropellant > 0)
-                        part.Monopropellant -= monoNeeded * (part.Monopropellant / totalMono);
-                }
-            }
+            double rate = part.GetMassFlow(pressure);
+            if (rate > 0) _singleResourceDemands.Add(new(part, part.InstanceId, resource, rate));
         }
+    }
 
-        if (nonLiquidFlameOut)
+    private void FundSingleResourcePool(IReadOnlyList<Part> tanks, PropellantResourceKind resource,
+        int pool, double dt)
+    {
+        if (!(dt > 0)) return;
+        _singleResourceDemands.Sort(static (a, b) => StringComparer.Ordinal.Compare(a.EngineId, b.EngineId));
+        double rate = 0, available = 0;
+        foreach (var demand in _singleResourceDemands)
+            if (demand.Resource == resource) rate += demand.MassFlowKgPerS;
+        if (!(rate > 0)) return;
+        foreach (var part in tanks)
+            available += resource == PropellantResourceKind.SolidFuel ? part.SolidFuel : part.Monopropellant;
+        double requested = rate * dt;
+        double funded = System.Math.Min(available, requested);
+        double duration = available < requested ? available / rate : dt;
+        foreach (var demand in _singleResourceDemands)
         {
-            foreach (var engine in engines)
-            {
-                if (engine.HasEngineRuntime)
-                    engine.MarkFuelDepleted();
-                else
-                    engine.IsStagingActive = false;
-                _tickActiveEngineCacheValid = false;
-            }
+            if (demand.Resource != resource) continue;
+            if (duration > 0) ResourceFundingCapture?.OtherEngines.Add(new(demand.Part.InstanceId,
+                demand.EngineId, resource, pool, demand.MassFlowKgPerS, duration));
+            if (available <= requested) RegisterEngineExhaustion(demand.Part, duration);
+        }
+        if (!(funded > 0)) return;
+        foreach (var part in tanks)
+        {
+            double before = resource == PropellantResourceKind.SolidFuel ? part.SolidFuel : part.Monopropellant;
+            double after = funded == available ? 0 : System.Math.Max(0, before - funded * (before / available));
+            if (resource == PropellantResourceKind.SolidFuel) part.SolidFuel = after;
+            else part.Monopropellant = after;
+            ResourceFundingCapture?.RecordSingleResourceDebit(part, resource, before, after, duration);
         }
     }
 

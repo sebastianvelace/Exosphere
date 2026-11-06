@@ -1,0 +1,108 @@
+{
+  "manifestId": "saturn5-as506-mass-geometry-1969",
+  "records": [
+    {
+      "dataId": "saturn5_sic_tank_as506",
+      "field": "headerTanks",
+      "status": "derived",
+      "source": "MPR-SAT-FE-69-9 (AS-506 flight evaluation), Table 20-1 Total Vehicle Mass - S-IC Burn Phase, actual: LOX below tank 21,868 kg and RP-1 below tank 5,983 kg at hold-down arm release, 18,761 kg and 5,958 kg at outboard engine cutoff; stations from the MSFC/Boeing drawing 'Saturn V Apollo Flight Configuration' (bottom of LOX tank 772.00 in, bottom of fuel tank 225.00 in, gimbal plane 100.00 in). NTRS 19900066485.",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-IC LOX and RP-1 suction lines (propellant below the tanks)",
+      "conditions": "The line propellant is carved from the stage load (LOX 1,500,418 to 1,478,550 kg in the tank, RP-1 646,854 to 640,871 kg) and modelled as header stores that feed only after the tanks are empty, as the lines are the last to drain. Point stations: LOX lines midway between the LOX tank bottom (19.6 m) and the F-1 pump inlets (estimated 3.5 m), X-station 11.6 m (part-local -9.42 m); RP-1 lines midway between the fuel tank bottom (5.7 m) and the pumps, X-station 4.6 m (-16.42 m).",
+      "uncertainty": "Line centroids +/-2 m (route through the fuel-tank tunnels not dimensioned on the drawing); masses as reconstructed."
+    },
+    {
+      "dataId": "saturn5_sic_tank_as506",
+      "field": "dryMassCenterYM",
+      "status": "derived",
+      "source": "MPR-SAT-FE-69-9, Saturn V Launch Vehicle Flight Evaluation Report AS-506 Apollo 11 Mission (MSFC, 1969-09-20), Table 20-10 Mass Characteristics Comparison, S-IC stage dry, actual; NTRS 19900066485, https://archive.org/download/nasa_techdoc_19900066485/19900066485.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-IC dry structure (tank part beside the 42,000 kg F-1 cluster part)",
+      "conditions": "Solves the S-IC dry composite (F-1 cluster part, uniform cylinder centred at X-station -0.03 m, plus this part) for the reconstructed dry CG X-station 9.368 m; the X-station origin lies 2.930 m above the F-1 exit planes (MSFC drawing). Value is from the part centre (X-station 21.02 m).",
+      "uncertainty": "The model's S-IC dry mass is 135,322 kg against the reconstructed 130,422 kg (a 4,347 kg derived allocation and residual items modelled as dry); their stations are unknown, so the composite CG carries about +/-0.3 m.",
+      "value": -7.4224
+    },
+    {
+      "dataId": "saturn5_sic_tank_as506",
+      "field": "dryGyration",
+      "status": "derived",
+      "source": "MPR-SAT-FE-69-9 (AS-506 flight evaluation) Table 20-10, S-IC stage dry actual pitch inertia 16.578e6 kg m2 and roll inertia 2.591e6 kg m2; NTRS 19900066485",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-IC dry structure, central radii of gyration of the tank part",
+      "conditions": "Transverse 10.764 m and axial 4.693 m solve the composite (uniform-cylinder F-1 cluster part plus this part at its derived centre) for the reconstructed S-IC dry pitch and roll inertia about the dry CG.",
+      "uncertainty": "Inherits the dry-mass allocation difference (about 4 %); the cluster part's own uniform-cylinder inertia is an approximation."
+    },
+    {
+      "dataId": "saturn5_sic_tank_as506",
+      "field": "propellantTanks",
+      "status": "derived",
+      "source": "MSFC/Boeing drawing 'Saturn V Apollo Flight Configuration' (Saturn Apollo 500 series, sheets 1-2), S-IC stations: bottom of fuel tank 225.00 in, top of fuel tank 742.00 in, bottom of LOX tank 772.00 in, S-IC/S-II interstage bottom 1541.00 in, LOX tank length 769.00 in, fuel tank length 517.00 in, diameter 396 in; http://heroicrelics.org/info/saturn-v/sat-v-apollo-flight-config/Saturn%20V%20Apollo%20Flight%20Configuration%20(medium).pdf. Densities: LOX saturated liquid at the normal boiling point 1141 kg/m3 (NIST Chemistry WebBook, oxygen); RP-1 807 kg/m3, centre of the MIL-DTL-25576 specification range 799-815 kg/m3 at 15.6 C.",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-IC RP-1 (aft) and LOX (forward) tanks",
+      "conditions": "Each resource settles as a liquid column on its tank's equivalent flat bottom (NASA SP-106, Abramson 1966, section 2.3: a domed bottom replaced by the flat bottom holding equal liquid volume). Each bulkhead dome is 137 in (3.480 m) deep: Y-ring to apex on the drawing (605.00 to 742.00 in; 772.00 to 909.00 in; 1404.00 to 1541.00 in). An ellipsoidal dome of depth d holds the volume of a cylinder 2d/3 long, so the equivalent ends lie d/3 inside the apexes. Inner radius 198 in (5.029 m). Part-local stations (part centre at X-station 21.02 m): RP-1 -14.145 to -3.334 m, LOX -0.252 to 16.961 m. The resulting capacities (685 t RP-1, 1,543 t LOX) leave 5.6 % and 2.8 % ullage over the AS-506 loads.",
+      "uncertainty": "Exact while the free surface is in the barrel; once it falls into the lower dome the column centroid is low by up to d/6 (0.58 m) for the remaining liquid. Below-tank propellant (feed lines, about 28 t at release) is modelled inside the tanks. Loading temperatures change densities by about 1 %."
+    },
+    {
+      "dataId": "saturn5_sii_tank_as506",
+      "field": "dryMassCenterYM",
+      "status": "derived",
+      "source": "MPR-SAT-FE-69-9 (AS-506 flight evaluation) Table 20-10, S-II stage dry actual: 36,158 kg, CG X-station 48.064 m; NTRS 19900066485",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-II dry structure (tank part beside the 7,900 kg J-2 cluster part)",
+      "conditions": "Solves the S-II dry composite (J-2 cluster part, uniform cylinder centred at X-station 46.37 m, plus this part) for the reconstructed dry CG. Value from the part centre (X-station 56.02 m).",
+      "uncertainty": "Model S-II dry mass 36,255 kg against 36,158 kg reconstructed (0.3 %).",
+      "value": -7.484
+    },
+    {
+      "dataId": "saturn5_sii_tank_as506",
+      "field": "dryGyration",
+      "status": "derived",
+      "source": "MPR-SAT-FE-69-9 Table 20-10, S-II stage dry actual pitch inertia 1.997e6 kg m2 and roll inertia 0.597e6 kg m2; NTRS 19900066485",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-II dry structure, central radii of gyration of the tank part",
+      "conditions": "Transverse 8.233 m and axial 4.285 m solve the composite with the uniform-cylinder J-2 cluster part.",
+      "uncertainty": "Cluster part's uniform-cylinder inertia is an approximation; reconstructed inertias carry their stated -1.5 % deviation from prediction."
+    },
+    {
+      "dataId": "saturn5_sii_tank_as506",
+      "field": "propellantTanks",
+      "status": "estimated",
+      "source": "MSFC/Boeing drawing 'Saturn V Apollo Flight Configuration': S-II LOX tank equator X-station 1848 in (46.939 m), S-II top forward skirt 2519.00 in (63.982 m), stage diameter 396 in. Densities: LOX 1141 kg/m3, LH2 70.85 kg/m3 (saturated liquids at the normal boiling point, NIST Chemistry WebBook).",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-II LOX (aft, ellipsoidal) and LH2 (forward) tanks",
+      "conditions": "The LOX tank is an ellipsoid centred on the drawing's equator, semi-axis b estimated as 0.69 of the 5.029 m inner radius (the S-IC dome ratio, 137/198 in). Its equivalent cylinder (NASA SP-106 equal-volume flat bottom) spans the equator +/- 2b/3; LH2 stands on the LOX tank's equivalent top (the common bulkhead) and reaches the forward skirt. Part-local (part centre at X-station 56.02 m): LOX -11.394 to -6.768 m, LH2 -6.768 to 7.96 m.",
+      "uncertainty": "The S-II dome ratio and LH2 top are estimates; stations +/-1 m. The drawing gives only the LOX equator and skirt stations."
+    },
+    {
+      "dataId": "saturn5_sivb_tank_as506",
+      "field": "dryMassCenterYM",
+      "status": "derived",
+      "source": "MPR-SAT-FE-69-9 Table 20-10, S-IVB stage dry actual: 11,273 kg, CG X-station 72.560 m; NTRS 19900066485",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-IVB dry structure (tank part beside the 1,788 kg J-2 part)",
+      "conditions": "Solves the S-IVB dry composite (J-2 part centred at X-station 70.02 m plus this part) for the reconstructed dry CG. Value from the part centre (X-station 76.62 m).",
+      "uncertainty": "Model S-IVB dry mass 11,100 kg against 11,273 kg (1.5 %).",
+      "value": -3.5724
+    },
+    {
+      "dataId": "saturn5_sivb_tank_as506",
+      "field": "dryGyration",
+      "status": "derived",
+      "source": "MPR-SAT-FE-69-9 Table 20-10, S-IVB stage dry actual pitch inertia 0.296e6 kg m2 and roll inertia 0.081e6 kg m2; NTRS 19900066485",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-IVB dry structure, central radii of gyration of the tank part",
+      "conditions": "Transverse 5.449 m and axial 2.912 m solve the composite with the J-2 part.",
+      "uncertainty": "Reconstructed values carry a -0.59 % deviation from prediction; the J-2 part is a uniform cylinder."
+    },
+    {
+      "dataId": "saturn5_sivb_tank_as506",
+      "field": "propellantTanks",
+      "status": "estimated",
+      "source": "MSFC/Boeing drawing 'Saturn V Apollo Flight Configuration': S-IVB top of aft skirt 2832.00 in (71.933 m), bottom of forward skirt 3100.56 in (78.754 m), LH2 tank vent 3203.56 in (81.370 m), diameter 260 in (6.604 m). Densities: LOX 1141 kg/m3, LH2 70.85 kg/m3 (NIST, normal boiling point).",
+      "accessedDate": "2026-11-06",
+      "variant": "AS-506 S-IVB LOX (aft) and LH2 (forward) tanks",
+      "conditions": "LOX column floor estimated at X-station 71.2 m, LOX/LH2 common-bulkhead interface at 73.7 m, LH2 to 81.97 m; 3.30 m radius. Part-local: LOX -5.42 to -2.92 m, LH2 -2.92 to 5.35 m.",
+      "uncertainty": "Floor and interface stations are estimates, +/-1 m."
+    }
+  ]
+}

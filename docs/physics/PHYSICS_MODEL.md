@@ -118,26 +118,45 @@ The attitude quaternion is normalized after each RK4 intermediate state. The ine
 is assembled from the active part graph and translated to the CoM using the parallel-axis
 theorem.
 
-### F4 torque models (integration in progress)
+### F4 variable-mass and tidal dynamics (production)
 
-`GravityGradient` and `VariableMassRotationalDynamics` provide pure tidal and open-system
-rotational kernels. Coupled off-rails and water-motion stages apply tidal torque
-from every attractor at the candidate CoM/orientation using the integrated central tensor.
-Kepler attitude solves Euler rotation and tidal moments on the prescribed conic with
-candidate-epoch ephemerides and rotational scheduler anchors. Live SAS/RCS uses funded
-physical steps. A separate RK4 overload samples instantaneous
-mass/inertia at each candidate stage; mission resource adapters still use the
-constant-mass-per-step overload and have not enabled variable-mass transport. Equations, analytic gates,
-source records and the pending resource/exit/CoM activation contract are documented in
-[`variable_mass_torques.md`](variable_mass_torques.md). F4 remains open pending integration
-and historical validation.
+Mass geometry. One decomposition (`Parts/PartMassGeometry`) feeds the composite mass
+properties, each part's own centre and the continuous candidate sampler: the dry structure
+at its declared centre (`dry_mass_center_y_m`) with its declared central gyration
+(`dry_gyration_m`) or the part's uniform cylinder; each main resource as a settled liquid
+column on its declared tank's equivalent flat bottom (`propellant_tanks`: aft end, top,
+radius, density; NASA SP-106 equal-volume bottom) or, undeclared, the part's uniform
+cylinder; header tanks as point masses. Every component keeps its own centroid, so the
+dry/propellant parallel-axis spread is retained.
 
-RCS funding reserves owning-system gas before checking the shared feed, so two consumers
-cannot spend the same load. Optional immutable `Vessel.LastRcsFunding` receipts identify
-actual store withdrawals and funded nozzle flow (`CaptureRcsFunding`); practice-assist
-replenishment is explicitly marked. These receipts do not activate open-system transport.
-See [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md) for the remaining
-engine/vent and interval-boundary work.
+Transport. Each coupled off-rails step (`Universe.VariableMassTransportEnabled`, default on)
+builds a `Physics/VariableMassStepModel` from the step's complete resource window: piecewise-
+affine store masses from the funded debits, flow groups (an engine feed pool, solid/mono
+engines, the main vent, RCS, a stuck thruster) and their outlets (engine exit = mount thrust
+point less the model's declared exit offset, optional exit diameter; RCS nozzle points;
+declared vent and stuck-thruster outlets). RK4 samples m, c, I at every stage and splits at
+every knot. The integrated state is the instantaneous centre of mass; the open-system force
+F = m(c̈ + 2ω×ċ) − ṗ_rel − 2ω×p_rel and moment −İω − J_out ω − ω×h_rel − ḣ_rel − ċ×p_rel
+(`Physics/OpenSystemTransport`) act beside thrust. Flow runs from each store's loss point
+(free surface or centroid) to its outlet and straight to the exit, which satisfies
+continuity exactly (p_rel = m ċ + Σ Q (e − c)). Across a flow change (ignition, cutoff,
+throttle, an exhaustion knot) P = m v_material + R p_rel and H = I ω + h_rel are continuous:
+the feed's momentum change reacts on the structure. The datum is rebuilt with its moving
+offset, v_datum = v_c − ω×(R c) − R ċ. Practice replenishment, an undeclared outlet or an
+incomplete window fall back to the frozen post-debit snapshot for that step
+(`Vessel.LastVariableMassStatus`); the legacy split path and water motion stay frozen.
+
+Consequence: a draining liquid vehicle spins up in roll (İ_axial = ṁ R²/2 outweighs the
+near-axis exhaust's J_out), so mission controllers that must hold roll damp the roll rate
+(`AttitudeGuidance.ComputeAxisPointingCommand(rollDampingGain)`).
+
+Tides. `GravityGradient` moments act in coupled, water and Kepler-attitude propagation from
+every attractor with the integrated central tensor (A7).
+
+Gates: analytic (`SettledColumnMassTests`, `OpenSystemTransportTests`, uniform-burn cylinder,
+tidal libration) and historical (`SaturnVJetDampingHistoricalTests`: AS-506 S-IC J_out and
+İ against MPR-SAT-FE-69-9 mass characteristics). Details: [`variable_mass_torques.md`](variable_mass_torques.md)
+and [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md).
 
 ### Integration policy
 

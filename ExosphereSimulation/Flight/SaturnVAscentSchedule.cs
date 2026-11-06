@@ -38,7 +38,7 @@ public sealed record SaturnVAscentSchedule(
 
     public static double SicPropellantKg(Vessel vessel) =>
         vessel.Parts.Parts.Where(part => part.Definition.HasVehicleRole("sic_tank"))
-            .Sum(part => part.LiquidFuel + part.Oxidizer);
+            .Sum(part => part.LiquidFuel + part.Oxidizer + part.HeaderPropellantKg.Sum());
 
     /// <summary>
     /// S-IC pitch-over: vertical rise to T+12 s, then a linear kick to

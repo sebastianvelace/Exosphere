@@ -415,9 +415,45 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
    - A6 en curso: reservas RCS propias y compartidas atómicas, con recibos inmutables
      opcionales por depósito/propulsor; corregido el doble gasto del mismo gas en fuentes mixtas.
      CI: 1316/1316, builds 0/0 y smoke/captura de Godot aprobados; referencia Flight 14 idéntica a A7.
-     El transporte de masa variable y las fuentes de motores/venteo siguen pendientes.
-   - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (transporte de masa variable,
-     slosh, recalibración histórica); aletas del S-IC, grid fins y
+     El transporte de masa variable y el muestreo continuo siguen pendientes.
+   - Agotamiento de motores dentro del paso: los motores líquidos que comparten depósito queman
+     hasta el primer reactivo limitante, conservan el reactivo sobrante y el paso se divide en
+     cada instante de corte (RK4 completo por tramo, caminos acoplado, legacy y agua). El booster
+     del Flight 14 conserva 1011 kg de metano desemparejado que antes se quemaba sin oxidante.
+     CI: 1331/1331, builds 0/0 y contratos estáticos aprobados en `tools/ci_check.sh` local; smoke de Godot en GitHub Actions.
+   - Recibos opcionales de motores líquidos y venteo principal (`CapturePropellantFunding`):
+     débitos reales por depósito/header, intervalos por instancia y alimentación separada en hot-stage,
+     sin doble conteo ni confundir asistencia infinita con pérdida neta de masa. Suite dirigida:
+     57/57; CI completa 1350/1350, builds 0/0 y arranque/captura de Godot aprobados.
+     Referencia Flight 14 idéntica a A6; masa/inercia siguen congeladas por paso.
+   - Muestreador candidato por componentes de forma fija (`BodyMassDistribution`): masa, CoM,
+     tensor central y derivadas coherentes, con cortes explícitos de flujo y sin asignaciones
+     durante el muestreo. Oráculos analíticos y RK4: ecuación del cohete, impulso angular
+     conservado y cancelación con flujo de salida; recupera la varianza omitida en el caso
+     sintético de masa seca desplazada. Suite dirigida 70/70; CI completa 1379/1379,
+     builds 0/0, contratos, arranque y captura/recarga de Godot aprobados.
+     La conexión a misiones espera cronogramas completos por depósito, geometría y transporte.
+   - Intervalos de extracción por depósito de motores líquidos (`StoreDepletions`):
+     cambios main/header independientes por reactivo, reservas y alimentaciones hot-stage;
+     conversión al muestreador con geometría explícita y masas realmente debitadas.
+     Asistencia y cortes no representables rechazan la conversión. Suite dirigida 75/75;
+     CI completa 1391/1391, builds 0/0, contratos, arranque y captura/recarga de Godot
+     aprobados; referencia Flight 14 idéntica a la unidad anterior. Falta cerrar venteos
+     simultáneos, RCS y demás fuentes antes de construir el inventario completo y activar
+     transporte en misiones.
+   - **F4 cerrada (2026-11-06).** Ventanas de recursos completas validadas (CI 1421/1421).
+     Geometría de masa compartida (`PartMassGeometry`: centro y giro secos, columnas líquidas
+     asentadas sobre el fondo plano equivalente de cada tanque, headers puntuales) y transporte
+     de masa variable en producción (`VariableMassStepModel` + `OpenSystemTransport`): masa,
+     CoM e inercia por etapa RK4, salidas declaradas, camino de flujo interno que cumple la
+     continuidad exacta y cortes de flujo que conservan P y H (impulso de golpe de ariete).
+     Gate histórico: jet damping del S-IC del AS-506 contra MPR-SAT-FE-69-9 (CG en la
+     liberación −0.03 m, J_out +0.6 %; CG al corte +0.50 m, brazo +2.0 %; ΔI +5.6 %).
+     Hallazgo: un vehículo líquido que drena gana alabeo; la Ship del Flight 14 ahora amortigua
+     su tasa de alabeo en ascenso y quemados orbitales. Huecos de datos para F6: estaciones de
+     los módulos del spacecraft, tanques del S-II/S-IVB, flujo del F-1 en altura y el AS-503.
+   - Siguiente: F5 (slosh por tanque, iniciada) y F6 (recalibración histórica) de
+     `docs/physics/rigid_body_fidelity_plan.md`; aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.
 
 2. **Controles aún no equivalentes en el camino acoplado**

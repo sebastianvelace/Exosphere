@@ -284,7 +284,7 @@ public sealed class Flight14LaunchController : IPhysicsStepController
 
     private void Aim(Vector3d direction, double gain, double damping) =>
         _ship.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(_ship.Orientation,
-            Vector3d.Up, direction, _ship.AngularVelocity, gain, damping);
+            Vector3d.Up, direction, _ship.AngularVelocity, gain, damping, rollDampingGain: damping);
 
     private void Block(string reason)
     {

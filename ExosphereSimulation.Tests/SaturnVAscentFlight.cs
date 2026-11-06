@@ -26,7 +26,8 @@ internal static class SaturnVAscentFlight
     /// <param name="variantFile">Vehicle variant under data/vehicles (Apollo 8 by default).</param>
     public static SaturnVAscentResult Fly(double liftoffEpoch = 0.0, Vector3d? planeNormal = null,
         double separationErrorDeg = 0.0, double separationRateRadPerS = 0.0,
-        string variantFile = "apollo8_saturn5_as503_1968.json", SaturnVAscentSchedule? scheduleOverride = null)
+        string variantFile = "apollo8_saturn5_as503_1968.json", SaturnVAscentSchedule? scheduleOverride = null,
+        Action<Vessel, double, bool>? afterTick = null)
     {
         var root = DataDirectory();
         var catalog = PartCatalog.LoadFromDirectory(Path.Combine(root, "parts"));
@@ -123,6 +124,8 @@ internal static class SaturnVAscentFlight
             vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(vessel.Orientation,
                 Vector3d.Up, aim, vessel.AngularVelocity, proportionalGain: 2.3, dampingGain: damping);
             universe.Tick(0.02);
+            // Elapsed time after the step, and whether the S-IC is still on the stack.
+            afterTick?.Invoke(vessel, universe.CurrentTime - liftoff, !sicSeparated);
         }
 
         var orbit = OrbitalElements.FromStateVector(vessel.Position - earth.Position,

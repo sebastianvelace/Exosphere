@@ -1,0 +1,45 @@
+{
+  "manifestId": "rigid-body-f4-outlets-2026",
+  "records": [
+    {
+      "dataId": "starship_tank",
+      "field": "ventOutlet",
+      "status": "estimated",
+      "source": "No published Starship main-tank vent geometry was found; SpaceX broadcast imagery shows venting from the ship's forward and aft sections without a measurable station.",
+      "accessedDate": "2026-11-06",
+      "variant": "Starship main-tank (LOX/CH4) vent used by the Flight 14 return main-tank vent",
+      "conditions": "An on-axis point 8.0 m forward of the part centre (forward main-tank dome region), exhausting forward along +Y, with no exit area. It only places the vented mass's outlet for variable-mass transport; the vent produces no thrust in the model.",
+      "uncertainty": "Station +/-8 m along the axis; real vents are on the hull and may discharge laterally, which this axisymmetric point omits."
+    },
+    {
+      "dataId": "starship_v3_tank_flight12",
+      "field": "ventOutlet",
+      "status": "estimated",
+      "source": "No published Starship V3 main-tank vent geometry was found.",
+      "accessedDate": "2026-11-06",
+      "variant": "Starship V3 main-tank vent",
+      "conditions": "On-axis point 8.0 m forward of the part centre, exhausting along +Y, no exit area; transport geometry only, no thrust.",
+      "uncertainty": "Station +/-8 m; lateral hull discharge omitted."
+    },
+    {
+      "dataId": "rigid-body-mass-flux",
+      "field": "nozzleExitStationConvention",
+      "status": "estimated",
+      "source": "Exosphere part data: every engine part places its thrust point at its aft end (thrust_position_y_m = -length/2) and stacks it at the vehicle's published length. Verified for the AS-506 F-1 against the MSFC/Boeing drawing 'Saturn V Apollo Flight Configuration' (bottom of F-1 engines at X-station -115.36 in, the model's skirt datum).",
+      "accessedDate": "2026-11-06",
+      "variant": "Engine exit-plane station for variable-mass transport",
+      "conditions": "An engine's exit plane is its mount's thrust point moved back by the model's nozzleExitAxialOffsetM (zero unless declared); an exit with no declared diameter is a point outlet. RCS outlets are the declared nozzle points; a stuck-thruster outlet is its declared thruster's nozzle.",
+      "uncertainty": "A point outlet omits the exit-disk term m_dot*a^2/4*(E+n n^T): under 0.1 % of an S-IC engine's pitch flux moment, but it removes axial-spin transport (m_dot*a^2/2)."
+    },
+    {
+      "dataId": "rigid-body-mass-flux",
+      "field": "internalFlowConvention",
+      "status": "estimated",
+      "source": "Continuity identity d(sum m c)/dt = p_rel - sum q e (Reynolds transport); NASA/CR-1998-208246 (Eke), sections 3.2 and 4.3, https://ntrs.nasa.gov/api/citations/19980210404/downloads/19980210404.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "Feed path from each store's loss point to its outlet",
+      "conditions": "Flow leaves a settled column at its free surface (a fixed-shape store at its centroid), runs inside the tank to its floor, then straight to the exit; open outlets share their feed group's store outflow by weight. p_rel = sum q (e - t) satisfies continuity exactly; h_rel = sum q [(t - c) x (b - c) + (b - c) x (e - c)] depends on the straight-duct route. Across a flow change P = m v_material + R p_rel and H = I omega + h_rel are continuous.",
+      "uncertainty": "Real feed lines bend and swirl is not modelled; h_rel cancels for symmetric clusters and is small for single off-axis outlets. Instantaneous flow changes stand in for finite valve transients with the same total impulse."
+    }
+  ]
+}

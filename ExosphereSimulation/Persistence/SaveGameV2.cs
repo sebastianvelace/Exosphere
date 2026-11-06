@@ -56,6 +56,9 @@ public sealed class VesselSaveV2
     public VectorSaveV2 PitchYawRoll { get; set; } = new();
     /// <summary>Commanded main-tank vent flow (kg/s).</summary>
     public double PropellantVentRateKgPerS { get; set; }
+    /// <summary>Feed-flow relative momenta at the save (F4); null in older saves.</summary>
+    public VectorSaveV2? TransportRelativeMomentum { get; set; }
+    public VectorSaveV2? TransportRelativeAngularMomentum { get; set; }
     public double VentedPropellantKg { get; set; }
     /// <summary>Slewed body-flap channels (pitch, yaw, roll) of the aggregate flap model.</summary>
     public VectorSaveV2 FlapActuators { get; set; } = new();
@@ -536,6 +539,10 @@ public static class SaveGameV2Codec
             ReferenceBodyId = vessel.ReferenceBodyId,
             Throttle = vessel.Throttle,
             PropellantVentRateKgPerS = vessel.PropellantVentRateKgPerS,
+            TransportRelativeMomentum = vessel.TransportRelativeMomentumBody is { } momentum
+                ? VectorSaveV2.From(momentum) : null,
+            TransportRelativeAngularMomentum = vessel.TransportRelativeAngularMomentumBody is { } angular
+                ? VectorSaveV2.From(angular) : null,
             VentedPropellantKg = vessel.VentedPropellantKg,
             PitchYawRoll = VectorSaveV2.From(vessel.PitchYawRoll),
             FlapActuators = VectorSaveV2.From(new Vector3d(
@@ -619,6 +626,8 @@ public static class SaveGameV2Codec
             ReferenceBodyId = saved.ReferenceBodyId,
             Throttle = saved.Throttle,
             PropellantVentRateKgPerS = saved.PropellantVentRateKgPerS,
+            TransportRelativeMomentumBody = saved.TransportRelativeMomentum?.ToVector(),
+            TransportRelativeAngularMomentumBody = saved.TransportRelativeAngularMomentum?.ToVector(),
             VentedPropellantKg = saved.VentedPropellantKg,
             PitchYawRoll = saved.PitchYawRoll.ToVector(),
             SASEnabled = saved.SasEnabled,

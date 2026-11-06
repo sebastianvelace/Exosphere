@@ -19,7 +19,8 @@ public static class AttitudeGuidance
         Vector3d targetWorld,
         Vector3d angularVelocityWorld,
         double proportionalGain = 2.4,
-        double dampingGain = 1.1)
+        double dampingGain = 1.1,
+        double rollDampingGain = 0.0)
     {
         var bodyAxis = localAxis.Normalized;
         var currentWorld = current.Rotate(bodyAxis).Normalized;
@@ -42,13 +43,17 @@ public static class AttitudeGuidance
 
         var errorLocal = current.Inverse().Rotate(errorWorld);
         var rateLocal = current.Inverse().Rotate(angularVelocityWorld);
-        rateLocal -= bodyAxis * rateLocal.Dot(bodyAxis); // roll is deliberately unconstrained
+        double rollRate = rateLocal.Dot(bodyAxis);
+        rateLocal -= bodyAxis * rollRate; // the roll angle is deliberately unconstrained
         var torqueLocal = errorLocal * proportionalGain - rateLocal * dampingGain;
 
+        // Optional roll-rate damping (the angle stays free). Needed wherever a draining liquid
+        // vehicle must hold roll: propellant leaving its tanks' full radius hands its axial
+        // angular momentum to the structure while the exhaust leaves near the axis (F4).
         return new Vector3d(
             System.Math.Clamp(torqueLocal.X, -1.0, 1.0),
             System.Math.Clamp(torqueLocal.Z, -1.0, 1.0),
-            0.0);
+            System.Math.Clamp(-rollRate * rollDampingGain, -1.0, 1.0));
     }
 
     /// <summary>

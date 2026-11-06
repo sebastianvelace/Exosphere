@@ -17,6 +17,62 @@ public enum PartCategory
 /// main tanks can no longer fund the demand (main tanks emptied or vented), as landing
 /// burns draw on header propellant.
 /// </summary>
+/// <summary>A vent discharge point and outward exhaust direction, part-local.</summary>
+public class VentOutletDef
+{
+    [JsonPropertyName("position")] public double[] PositionM { get; set; } = [0, 0, 0];
+    [JsonPropertyName("exhaust_direction")] public double[] ExhaustDirectionValues { get; set; } = [0, 1, 0];
+    [JsonPropertyName("diameter_m")] public double DiameterM { get; set; }
+    [JsonIgnore] public Exosphere.Simulation.Math.Vector3d Position => new(PositionM[0], PositionM[1], PositionM[2]);
+    [JsonIgnore] public Exosphere.Simulation.Math.Vector3d ExhaustDirection =>
+        new Exosphere.Simulation.Math.Vector3d(ExhaustDirectionValues[0], ExhaustDirectionValues[1], ExhaustDirectionValues[2]).Normalized;
+}
+
+/// <summary>Exit plane of a model-less engine part, part-local.</summary>
+public class NozzleExitDef
+{
+    [JsonPropertyName("y_m")] public double YM { get; set; }
+    [JsonPropertyName("diameter_m")] public double DiameterM { get; set; }
+}
+
+/// <summary>Central radii of gyration of a part's dry structure (m).</summary>
+public class DryGyrationDef
+{
+    /// <summary>About a transverse axis through the dry centre (pitch/yaw).</summary>
+    [JsonPropertyName("transverse_m")] public double TransverseM { get; set; }
+    /// <summary>About the part axis (roll).</summary>
+    [JsonPropertyName("axial_m")] public double AxialM { get; set; }
+}
+
+/// <summary>
+/// A main-propellant tank along the part axis (+Y = forward). The settled liquid column
+/// fills it from <see cref="BottomYM"/>; its cylinder of <see cref="RadiusM"/> stands in for
+/// the real barrel and domes at equal volume.
+/// </summary>
+public class PropellantTankDef
+{
+    /// <summary>"liquid_fuel", "oxidizer", "monopropellant" or "solid".</summary>
+    [JsonPropertyName("resource")] public string Resource { get; set; } = "";
+    [JsonPropertyName("bottom_y_m")] public double BottomYM { get; set; }
+    [JsonPropertyName("top_y_m")] public double TopYM { get; set; }
+    [JsonPropertyName("radius_m")] public double RadiusM { get; set; }
+    [JsonPropertyName("density_kg_m3")] public double DensityKgPerM3 { get; set; }
+
+    [JsonIgnore]
+    public PartMassComponentKind Kind => Resource.ToLowerInvariant() switch
+    {
+        "liquid_fuel" => PartMassComponentKind.LiquidFuel,
+        "oxidizer" => PartMassComponentKind.Oxidizer,
+        "monopropellant" => PartMassComponentKind.Monopropellant,
+        "solid" => PartMassComponentKind.SolidFuel,
+        _ => throw new InvalidDataException($"Unknown propellant tank resource '{Resource}'."),
+    };
+
+    /// <summary>Mass the declared tank holds when full (kg).</summary>
+    [JsonIgnore]
+    public double CapacityKg => DensityKgPerM3 * System.Math.PI * RadiusM * RadiusM * (TopYM - BottomYM);
+}
+
 public class HeaderTankDef
 {
     [JsonPropertyName("id")] public string Id { get; set; } = "";
@@ -121,9 +177,42 @@ public class PartDefinition
     /// </summary>
     [JsonPropertyName("dry_mass_center_y_m")]
     public double DryMassCenterYM { get; set; }
+    /// <summary>
+    /// Central radii of gyration of the dry structure about its own centre (m). Null keeps the
+    /// uniform part cylinder. Fidelity data: requires a <c>dryGyration</c> provenance record.
+    /// </summary>
+    [JsonPropertyName("dry_gyration_m")]
+    public DryGyrationDef? DryGyration { get; set; }
+    /// <summary>
+    /// Main-propellant tanks along the part axis: each resource settles as a liquid column on
+    /// its tank's aft end. A resource without a tank fills the part cylinder uniformly.
+    /// Fidelity data: requires a <c>propellantTanks</c> provenance record.
+    /// </summary>
+    [JsonPropertyName("propellant_tanks")]
+    public List<PropellantTankDef> PropellantTanks { get; set; } = [];
+    /// <summary>
+    /// Where this part's main-tank vent discharges (part-local), for variable-mass transport.
+    /// Fidelity data: requires a <c>ventOutlet</c> provenance record.
+    /// </summary>
+    [JsonPropertyName("vent_outlet")]
+    public VentOutletDef? VentOutlet { get; set; }
+    /// <summary>
+    /// Nozzle exit of an engine part without an engine model (part-local, at zero gimbal).
+    /// Engines with a model use the model's declared exit relative to each mount.
+    /// </summary>
+    [JsonPropertyName("nozzle_exit")]
+    public NozzleExitDef? NozzleExit { get; set; }
     /// <summary>Embedded header tanks (see <see cref="HeaderTankDef"/>).</summary>
     [JsonPropertyName("header_tanks")]
     public List<HeaderTankDef> HeaderTanks { get; set; } = [];
+
+    /// <summary>The declared tank of a main resource, or null.</summary>
+    public PropellantTankDef? FindPropellantTank(PartMassComponentKind kind)
+    {
+        foreach (var tank in PropellantTanks)
+            if (tank.Kind == kind) return tank;
+        return null;
+    }
 
     /// <summary>Hinged control surfaces carried by this part (see <see cref="BodyFlapDef"/>).</summary>
     [JsonPropertyName("body_flaps")]

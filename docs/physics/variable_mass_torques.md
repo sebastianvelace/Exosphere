@@ -1,8 +1,8 @@
 # F4: variable-mass and tidal torque kernels
 
-Status: tidal torque is enabled by default in coupled off-rails, water-motion and
-Kepler-attitude propagation. Variable-mass transport is still pending. F4 stays open
-until its resource/exit/CoM adapters and the historical gate are verified.
+Status (2026-11-06): F4 is closed. Tidal torque acts in coupled off-rails, water-motion and
+Kepler-attitude propagation; variable-mass transport acts on the coupled off-rails path by
+default (`Universe.VariableMassTransportEnabled`). See "Production activation" below.
 
 ## Rotational balance
 
@@ -84,9 +84,14 @@ the rocket equation, integrated burn distance and angular momentum under interna
 redistribution.
 
 No production caller has been switched to the variable-mass overload. A6 now has atomic
-RCS owning/shared-store funding and optional immutable per-store/per-thruster receipts;
-engine/vent funding and continuous mass/transport integration remain pending. The next adapter's
-resource ledger, candidate mass sampling and moving-CoM convention are specified in
+RCS owning/shared-store funding, in-step liquid-engine exhaustion and optional immutable
+RCS/liquid-engine/main-vent receipts. Continuous mass/transport integration and the remaining
+source/exit contracts are still pending. `BodyMassDistribution` now supplies a pure
+fixed-component candidate sampler with one-sided central derivatives at explicit mass knots;
+no mission caller has been switched to it. Liquid-engine store intervals now convert to
+candidate components with caller-supplied geometry; assistance and unrepresentable intervals
+reject conversion. Full source coverage and overlapping vent allocation remain pending.
+The adapter's resource ledger, candidate mass sampling and moving-CoM convention are specified in
 [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md). Before activation:
 
 1. Derive resource loss and its central inertia derivative from the same funded consumption
@@ -131,3 +136,72 @@ No mission calibration or acceptance tolerance was changed. The new Flight 14 ca
 This completes the planned A7 point-attractor tidal adapter. F4 remains open for A6:
 funded variable-mass transport, verified exits/internal-flow geometry and its historical
 Saturn jet-damping gate.
+
+
+## Production activation (2026-11-06)
+
+### Shared mass geometry
+
+`Parts/PartMassGeometry` is the single decomposition of a part: dry structure (centre
+`dry_mass_center_y_m`, gyration `dry_gyration_m` or the part's uniform cylinder, always
+`EffectiveMassDry`), each main resource (a settled column on its declared tank's equivalent
+flat bottom, `propellant_tanks`, or the part's uniform cylinder) and header points (an
+undeclared saved header slot stays at the part centre). `PartGraph.BuildMassProperties`,
+`Part.MassCenterOffsetYM` and the step model read it; the former shifted-lump model, which
+dropped the dry/propellant spread (30 kg m² in the 10 kg / 30 kg fixture), is gone.
+`FixedShapeMassComponent.SettledColumn` gives the sampler a column whose centroid rises
+h/2 = m/(2λ) above its floor and whose transverse specific inertia is (3R² + h²)/12, with
+analytic ċ, c̈ and İ (m c̈ = Σ 2 ṁ_i ċ_i − 2 ṁ ċ; İ adds m_i J_i' and m_i P'(d_i, ċ_i)).
+
+### Outlets and internal flow
+
+- Engines: the mount's thrust point (every engine part places it at its aft end) less the
+  engine model's `NozzleExitAxialOffsetM`; `NozzleExitDiameterM` adds the uniform-disk term,
+  otherwise a point outlet. Provenance `rigid-body-mass-flux/nozzleExitStationConvention`;
+  for the AS-506 F-1 the station is verified against the MSFC drawing (−115.36 in).
+- RCS: the declared nozzle points; vents: `vent_outlet` (Starship, estimated); a stuck
+  thruster: its declared thruster (`Gemini8FlightProfile.StartStuckThruster`).
+- Feed path (`internalFlowConvention`): store loss point (free surface or centroid) → store
+  outlet (column floor or centroid) → straight to the exit; open outlets share their group's
+  store outflow by weight, so mass leaving the stores leaves the vehicle exactly.
+
+### Integration
+
+`Universe.IntegrateVesselVariableMass` integrates the instantaneous centre of mass with
+stage-sampled mass properties, splits at every knot (store debits, outlet intervals, engine
+exhaustion) and recovers each sub-interval's exact end so the one-sided rates belong to it.
+At a knot or between steps P = m v_material + R p_rel and H = I ω + h_rel are continuous
+(`Vessel.TransportRelativeMomentumBody` carries the previous step's values; saved in
+SaveGameV2 so checkpoints resume bit-exactly; null in older saves means no impulse). Docked
+members enter as constant components and contacts use the own-body centre at each stage.
+Frozen fallback (status in `Vessel.LastVariableMassStatus`): no flow, practice assist, an
+undeclared outlet, an incomplete window, the legacy split path and water motion.
+
+### Historical gate: AS-506 S-IC jet damping
+
+No directly measured Saturn vehicle jet-damping coefficient was found (GSOP-501's
+171 ft·lbf/(rad/s) is SPS gimbal-actuator damping and is not used). The coefficient
+D = İ + J_out is fixed by flight-reconstructed quantities, which the gate checks:
+
+| Quantity | Flight (MPR-SAT-FE-69-9) | Model | Band |
+| --- | --- | --- | --- |
+| CG at hold-down release (X-station) | 30.276 m | 30.244 m | ±0.3 m |
+| J_out at release (5 F-1, Table 5-I flows) | 14.388·10⁶ kg m²/s | 14.471·10⁶ | ±3 % |
+| CG at outboard cutoff | 46.453 m | 46.956 m | ±0.6 m |
+| J_out/q lever at cutoff | 2449 m² | 2500 m² | ±2.5 % |
+| ΔI pitch, release → cutoff | −473.8·10⁶ kg m² | −500.2·10⁶ | ±15 % |
+
+States are matched by mass (the model's pad start-up burns less before release than the
+6.7 s F-1 sequence). Bands come from the declared approximations, not from fitting: ±1 m
+S-II/S-IVB tank stations, ±2 m suction-line stations, equal-volume tank cylinders, the 1 %
+flowrate spread, and the weight of İ in D (|İ| < 0.1 J_out at release, so ±15 % on İ keeps D
+within ±5 %). At cutoff the flowrates are not tabulated (F-1 flow rises with the pumps'
+acceleration head), so the geometric lever is compared.
+
+Data added for the gate (`data/provenance/saturn5_as506_mass_geometry_1969.json`): S-IC,
+S-II and S-IVB dry centres and gyrations derived from Table 20-10; S-IC tanks from the MSFC
+drawing (dome depth 137 in, equivalent flat bottoms); S-IC LOX/RP-1 suction lines as header
+stores (Table 20-1 "below tank" masses); S-II/S-IVB tanks estimated. Known data gaps (F6):
+spacecraft module stations (the model's spacecraft CG is 2.3 m above the FER's 91.658 m),
+S-II/S-IVB tank stations, the F-1 high-altitude flow, and the AS-503 vehicle (not yet given
+the same geometry).

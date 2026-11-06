@@ -300,7 +300,7 @@ The isolated-Earth continuation reaches water at 4.422 m/s.
 0 warnings / 0 errors, Flight startup, MainMenu and Construction smoke tests, and the
 real-framebuffer graphics-settings capture/reload check. F3 is closed with the analytic
 RCS/SAS gates, the Gemini 8 historical recovery gate, exact checkpoint continuation and
-the original Flight 14 descent/contact limits. F4 is open; F5–F6 remain planned.
+the original Flight 14 descent/contact limits. F4 is closed (2026-11-06); F5 has started; F6 remains planned.
 
 ## F4 findings (2026-11-04, in progress)
 
@@ -349,6 +349,49 @@ Validation: complete CI **1316/1316**, all three builds at 0 warnings / 0 errors
 Godot startup and graphics capture/reload passed. The regenerated Flight 14 checkpoint's
 reference physical state is exactly equal to A7; no mission tolerance or calibration changed.
 
+**Engine exhaustion boundary (2026-11-05).** Liquid engines sharing a pool now burn until its
+first limiting reactant and keep the unused reactant; the step is split at each exhaustion
+instant (one complete RK4 sub-step per live-engine set, on the coupled, legacy and water paths)
+and the engine is depleted only after its funded impulse is integrated. Hot-stage siblings cut
+off at their own instants. Flight 14's booster boostback now keeps 1011 kg of unmatched methane
+that the old consumer burned without oxidizer; its test asserts that conservation identity
+exactly. RCS keeps whole-step funding; mass/inertia stay frozen per step. Details and
+regressions: `variable_mass_resource_adapter.md`. Validation: local `tools/ci_check.sh` passed: **1331/1331** tests, the three builds at 0 warnings / 0 errors and all static contracts. The engine-exhaustion handoff environment had no Godot binary; its smoke verification runs in GitHub Actions.
+
+**Liquid-engine/main-vent receipts (2026-11-05).** Optional `Vessel.CapturePropellantFunding`
+records immutable actual main/header debits, per-instance liquid flows and funded intervals,
+separate hot-stage feed identities and an explicit assistance marker. Vents retain their
+own debit after engine consumption; direct mass-only vent calls have no declared duration.
+Captured and uncaptured states match exactly on coupled/legacy regressions. Exit geometry,
+store flow schedules, continuous mass/CoM/inertia and transport activation remain pending.
+No mission tolerance or calibration changes. Targeted suite: **57/57**; complete CI:
+**1350/1350**, all three builds at 0 warnings / 0 errors, Godot startup and graphics
+capture/reload passed. The regenerated Flight 14 reference exactly matches accepted A6.
+
+**Fixed-component candidate sampler (2026-11-06).** `BodyMassDistribution` derives m, c, I
+and their body-frame derivatives from immutable piecewise-affine `FixedShapeMassComponent`
+profiles. Explicit left/right samples preserve engine/header/coast cuts; hot sampling is
+allocation-free. Central accumulation avoids losing inertia far from the chosen datum.
+Analytic and RK4 regressions cover the rocket equation, off-diagonal derivatives, flux
+cancellation and conservation of spin under closed symmetric redistribution. A dry-offset
+fixture restores the 30 kg m² variance omitted by the current lumped cylinder. This does not
+switch mission mass properties: complete store schedules, actual geometry/decomposition,
+relative flow and transport/datum conversions still gate activation. Targeted suite:
+**70/70**; complete CI **1379/1379**, three builds at 0 warnings / 0 errors, all contracts,
+Godot startup and graphics capture/reload passed. No mission tolerance or calibration changed.
+
+**Liquid-engine store intervals (2026-11-06).** Immutable `StoreDepletions` carry each actual
+main/header withdrawal's start and end times, including independent reactant switches,
+protected loads and separate hot-stage feed pools. `CreateStoreMassComponent` connects a
+store to the candidate sampler with explicitly supplied geometry and actual mass endpoints.
+Gross assisted withdrawals and unrepresentable intervals reject conversion. This remains
+an engine-only subinventory: overlapping vent allocation, RCS/other sources, complete vessel
+geometry and transport/datum conversion still gate mission activation. Targeted suite:
+**75/75**; complete CI **1391/1391**, no skips, three builds at 0 warnings / 0 errors,
+all contracts, Godot startup and graphics capture/reload passed. The regenerated Flight 14
+checkpoint reference exactly matches the preceding sampler unit. No mission tolerance or
+calibration changed.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by
@@ -386,3 +429,25 @@ Starship Flight 7/14, Falcon, New Glenn) against its source data after F0–F5; 
 
 Each phase lands as reviewable commits with xUnit tests, an entry in
 `coupled_6dof_migration.md` or `PHYSICS_MODEL.md`, and a full `tools/ci_check.sh` run.
+
+
+## F4 closure (2026-11-06)
+
+F4 closes on the production variable-mass path: one shared mass decomposition
+(`PartMassGeometry`: dry centre/gyration, settled tank columns on equivalent flat bottoms,
+header points), a per-step model of every funded flow and its outlet
+(`VariableMassStepModel`), the open-system force and moment (`OpenSystemTransport`), stage-
+sampled RK4 split at every knot, and momentum-conserving flow cuts (P and H continuous; the
+feed's momentum reacts on the structure). Analytic gates: settled columns, continuity
+identity, co-rotating removal, rocket equation with feed impulses, independent jet-damping
+law, plus the earlier uniform-burn cylinder and tidal libration. Historical gate:
+`SaturnVJetDampingHistoricalTests` (AS-506 S-IC, MPR-SAT-FE-69-9 Table 20-10 and Table 5-I,
+MSFC station drawing): release CG −0.03 m, J_out +0.6 %; cutoff CG +0.50 m, lever +2.0 %;
+ΔI +5.6 %. See `variable_mass_torques.md` "Production activation".
+
+Findings: (1) a draining liquid vehicle spins up in roll (İ_axial = ṁR²/2 outweighs the near-
+axis exhaust), which stopped Flight 14's Ship at insertion until its ascent and orbital-burn
+pointing damped the roll rate (`rollDampingGain`); (2) the AS-506 model needed FER-derived
+dry centres/gyrations, equal-volume tank bottoms and the S-IC suction-line propellant to
+reproduce the flight's CG history; (3) remaining data gaps go to F6: spacecraft module
+stations, S-II/S-IVB tank stations, F-1 high-altitude flow, the AS-503 vehicle.

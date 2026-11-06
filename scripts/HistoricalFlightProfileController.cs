@@ -431,8 +431,7 @@ public partial class HistoricalFlightProfileController : Node
         // The stuck-thruster torque is not persisted: a save taken mid-anomaly resumes it.
         if (_failureAnnounced && !_geminiThrusterIsolated)
         {
-            vessel.DisturbanceTorqueBody = new Vector3d(0.0, Gemini8FlightProfile.StuckThrusterTorqueNm, 0.0);
-            vessel.DisturbanceMassFlowKgPerS = Gemini8FlightProfile.StuckThrusterMassFlowKgPerS;
+            Gemini8FlightProfile.StartStuckThruster(vessel);
         }
         _adapterSeparated = !vessel.Parts.Parts.Any(part =>
             part.Definition.HasVehicleRole("gemini_equipment_adapter"));
@@ -1598,8 +1597,7 @@ public partial class HistoricalFlightProfileController : Node
             && elapsed >= Gemini8FlightProfile.ThrusterAnomalySeconds)
         {
             _failureAnnounced = true;
-            vessel.DisturbanceTorqueBody = new Vector3d(0.0, Gemini8FlightProfile.StuckThrusterTorqueNm, 0.0);
-            vessel.DisturbanceMassFlowKgPerS = Gemini8FlightProfile.StuckThrusterMassFlowKgPerS;
+            Gemini8FlightProfile.StartStuckThruster(vessel);
             vessel.PitchYawRoll = Vector3d.Zero;
             bridge.SetWarpIndex(0);
             GD.Print(

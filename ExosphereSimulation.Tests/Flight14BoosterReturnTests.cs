@@ -28,6 +28,10 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         var controller = run.BoosterReturnController!;
         var part = run.Ship.Parts.Parts.Single(p => p.Definition.HasVehicleRole("booster"));
         double reserveLF = part.ReservedLiquidFuel, reserveOx = part.ReservedOxidizer;
+        // Every burn before the landing feed opens draws the open feed at the engine mixture
+        // ratio, so LOX exhaustion leaves exactly the loaded mixture's unmatched methane.
+        double unmatchedFuel = part.AvailableLiquidFuel - part.AvailableOxidizer / part.Definition.MixtureRatio;
+        Assert.True(unmatchedFuel >= 0.0, "the open feed is fuel-rich, so LOX ends the boostback");
         double previousFuel = part.LiquidFuel+part.Oxidizer;
         var deliveredLandingCounts = new HashSet<int>();
         int minimumSelected = 11;
@@ -92,8 +96,9 @@ public sealed class Flight14BoosterReturnTests(ITestOutputHelper output)
         var cutoff = Assert.Single(controller.Events.Where(e => e.Phase == Flight14BoosterReturnPhase.Coast));
         Assert.InRange(cutoff.MainOxidizerKg, 0, 1e-6);
         Assert.InRange(controller.BoostbackDeltaVProgress, 0.99, 1);
-        // LOX exhaustion can leave unmatched fuel in the inherited tank mixture.
-        Assert.InRange(cutoff.PropellantKg, reserveLF+reserveOx-1e-6, reserveLF+reserveOx+1000);
+        // LOX exhaustion keeps the unmatched fuel of the inherited tank mixture: nothing is
+        // burned without its oxidizer.
+        Assert.Equal(reserveLF+reserveOx+unmatchedFuel, cutoff.PropellantKg, 3);
         var contact = Assert.Single(controller.Events.Where(e => e.Phase == Flight14BoosterReturnPhase.WaterEntry));
         Assert.InRange(contact.AirspeedMps, 0, 8);
         Assert.True(contact.VerticalSpeedMps < 0);

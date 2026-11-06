@@ -190,15 +190,21 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   the shared feed; owning demands are reserved before shared draw), allocated by `Physics/RcsAllocation` (couples first, inertia-weighted);
   `rcs_arms_with_stage` and `rcs_arms_when_isolated` arm systems at separation; flaps take
   their share before the jets, and under thrust a slewing gimbal (≥ 1°/s) owns its axes.
-  F4 tidal moments are on by default in coupled off-rails/water stages and Kepler attitude
-  (`Universe.GravityGradientEnabled`); coasts solve Euler rotation with candidate-epoch
-  ephemerides, and live SAS/RCS stays in funded physical integration. Variable-mass kernels
-  and the stage-dependent RK4 mass sampler are not yet wired to mission resource flow.
-  `Vessel.CaptureRcsFunding` optionally records immutable funded store/nozzle receipts for A6;
-  it does not alter physics or infer exhaust from net mass loss. See
-  `docs/physics/variable_mass_torques.md` before wiring resource and exit geometry.
-  Remaining work (variable-mass transport, slosh and historical recalibration) is tracked in
-  `docs/physics/rigid_body_fidelity_plan.md` (F4–F6).
+  F4 is closed: tidal moments act in coupled off-rails/water stages and Kepler attitude
+  (`Universe.GravityGradientEnabled`); variable-mass transport acts on the coupled off-rails
+  path (`Universe.VariableMassTransportEnabled`, default on). Mass properties come from one
+  decomposition (`Parts/PartMassGeometry`: `dry_mass_center_y_m`, `dry_gyration_m`,
+  `propellant_tanks` settled columns on equivalent flat bottoms, header points); each step's
+  funded flows and declared outlets (engine thrust point less the model's
+  `NozzleExitAxialOffsetM`, RCS nozzles, `vent_outlet`, a stuck thruster) feed
+  `Physics/OpenSystemTransport`; flow cuts conserve P and H. An undeclared outlet, the
+  practice assist, the legacy split path and water motion fall back to frozen mass
+  (`Vessel.LastVariableMassStatus`). Draining liquid vehicles spin up in roll: controllers
+  that must hold roll pass `rollDampingGain`. Historical gate:
+  `SaturnVJetDampingHistoricalTests` (AS-506). Optional immutable receipts
+  (`CaptureRcsFunding`, `CapturePropellantFunding`, `CaptureResourceFunding`) remain
+  observational. See `docs/physics/variable_mass_torques.md`. Remaining work (slosh F5,
+  historical recalibration F6) is tracked in `docs/physics/rigid_body_fidelity_plan.md`.
 
 ## Workflow
 

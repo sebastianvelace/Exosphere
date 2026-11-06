@@ -126,7 +126,7 @@ public sealed class Flight14OrbitalBurn
         vessel.SASEnabled = false;
         vessel.PitchYawRoll = AttitudeGuidance.ComputeAxisPointingCommand(
             vessel.Orientation, Vector3d.Up, aim, vessel.AngularVelocity,
-            proportionalGain: 2.0, dampingGain: 25.0);
+            proportionalGain: 2.0, dampingGain: 25.0, rollDampingGain: 25.0);
         double alignment = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(aim);
         // Use the established orbital maneuver damping, rather than the fast TVC
         // defaults: an unpowered turn has much less angular authority. Wait for

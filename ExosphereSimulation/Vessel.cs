@@ -616,6 +616,12 @@ public class Vessel
     /// bypasses the flight-control law and lasts until cleared or its propellant runs out.
     /// </summary>
     public Vector3d DisturbanceTorqueBody { get; set; }
+    /// <summary>
+    /// Where the disturbance flow (a stuck thruster) leaves the vehicle, skirt-datum body frame,
+    /// and its outward exhaust direction. Required for variable-mass transport of that flow.
+    /// </summary>
+    public Vector3d? DisturbanceOutletBodyM { get; set; }
+    public Vector3d? DisturbanceExhaustDirectionBody { get; set; }
 
     /// <summary>Monopropellant (kg/s) the disturbance source burns; it stops when the supply is gone.</summary>
     public double DisturbanceMassFlowKgPerS { get; set; }
@@ -648,12 +654,51 @@ public class Vessel
     /// </summary>
     public bool InfinitePropellant { get; set; }
 
+    /// <summary>Capture the complete gross resource inventory and attributed preparation debits.</summary>
+    public bool CaptureResourceFunding { get; set; }
+    public Physics.ResourceFundingWindow? LastResourceFunding { get; private set; }
+
+    /// <summary>
+    /// Set by the coupled integrator for the step it is about to prepare: the window then feeds
+    /// variable-mass transport (F4) even when the public debug capture is off.
+    /// </summary>
+    internal bool CaptureTransportWindow { get; set; }
+    internal Physics.ResourceFundingWindow? TransportWindow { get; private set; }
+    /// <summary>"active" when the last coupled step integrated variable-mass transport, else why not.</summary>
+    public string? LastVariableMassStatus { get; internal set; }
+    /// <summary>End-of-step open-system transport (relative momenta, force, moment) of that step.</summary>
+    public Physics.OpenSystemTransportSample? LastTransportSample { get; internal set; }
+    /// <summary>
+    /// Feed-flow relative momenta (body frame) at the end of the last coupled step, carried to
+    /// the next step so a flow change conserves total momentum. Null: unknown (no impulse applied).
+    /// A new vessel starts with no flow (zero). Not saved: a reload resumes with null, without a
+    /// feed impulse.
+    /// </summary>
+    internal Vector3d? TransportRelativeMomentumBody { get; set; } = Vector3d.Zero;
+    internal Vector3d? TransportRelativeAngularMomentumBody { get; set; } = Vector3d.Zero;
+
+    private void BeginResourceFunding(double dt)
+    {
+        LastResourceFunding = null;
+        TransportWindow = null;
+        Parts.ResourceFundingCapture = CaptureResourceFunding || CaptureTransportWindow
+            ? new Physics.ResourceFundingCapture(Parts.PartList, dt, InfinitePropellant, Parts.TopologyVersion) : null;
+    }
+
+    private void CompleteResourceFunding()
+    {
+        var window = Parts.ResourceFundingCapture?.Complete(Parts.PartList, Parts.TopologyVersion);
+        if (CaptureResourceFunding) LastResourceFunding = window;
+        if (CaptureTransportWindow) TransportWindow = window;
+        Parts.ResourceFundingCapture = null;
+    }
+
     private void ConsumePropellants(double dt, double pressure)
     {
         var snapshot = InfinitePropellant ? Parts.CapturePropellant() : null;
-        Parts.ConsumePropellant(dt, pressure);
+        Parts.ConsumePropellant(dt, pressure, InfinitePropellant);
         if (PropellantVentRateKgPerS > 0.0 && dt > 0.0)
-            VentedPropellantKg += Parts.VentMainPropellant(PropellantVentRateKgPerS * dt);
+            VentedPropellantKg += Parts.VentMainPropellant(PropellantVentRateKgPerS * dt, dt, InfinitePropellant);
         if (DisturbanceMassFlowKgPerS > 0.0
             && !Parts.DrawMonopropellant(DisturbanceMassFlowKgPerS * dt, primaryStoresOnly: true))
         {
@@ -661,6 +706,8 @@ public class Vessel
             DisturbanceTorqueBody = Vector3d.Zero;
             DisturbanceMassFlowKgPerS = 0.0;
         }
+        Parts.ResourceFundingCapture?.RecordCurrentStores(Parts.PartList,
+            Physics.ResourceWithdrawalSource.Disturbance, Physics.PropellantResourceKind.Monopropellant);
         _propellantSnapshot = snapshot;
     }
 
@@ -1261,6 +1308,15 @@ public class Vessel
     public bool CaptureRcsFunding { get; set; }
     public Physics.RcsPropellantFundingSnapshot? LastRcsFunding { get; private set; }
 
+    /// <summary>Opt-in gross liquid-engine and main-vent funding for each physical preparation.</summary>
+    public bool CapturePropellantFunding
+    {
+        get => Parts.CapturePropellantFunding;
+        set => Parts.CapturePropellantFunding = value;
+    }
+    public Physics.LiquidEngineFundingSnapshot? LastLiquidEngineFunding => Parts.LastLiquidEngineFunding;
+    public Physics.MainPropellantVentSnapshot? LastMainVentFunding => Parts.LastMainVentFunding;
+
     /// <summary>
     /// Fires the declared RCS thrusters toward the requested moment and force for one control
     /// step and draws their propellant from the system's store. Without
@@ -1316,14 +1372,23 @@ public class Vessel
         }
         foreach (var (owner, kg) in _rcsDemand)
             if (owner.Monopropellant < kg) return false;
-        double[]? before = CaptureRcsFunding
+        double[]? before = CaptureRcsFunding || Parts.ResourceFundingCapture != null
             ? Parts.PartList.Select(part => part.Monopropellant).ToArray() : null;
         if (shared > 0.0 && !Parts.DrawMonopropellant(shared, primaryStoresOnly: false, _rcsDemand)) return false;
         foreach (var (owner, kg) in _rcsDemand)
             owner.Monopropellant -= kg;
         if (before != null)
-            LastRcsFunding = Physics.RcsPropellantFundingSnapshot.Capture(
+        {
+            var receipt = Physics.RcsPropellantFundingSnapshot.Capture(
                 Parts.PartList, before, thrusters, _rcsDuty, dt, InfinitePropellant);
+            if (CaptureRcsFunding) LastRcsFunding = receipt;
+            if (Parts.ResourceFundingCapture is { } capture)
+            {
+                capture.ReactionControl = receipt;
+                capture.RecordCurrentStores(Parts.PartList, Physics.ResourceWithdrawalSource.ReactionControl,
+                    Physics.PropellantResourceKind.Monopropellant);
+            }
+        }
         return true;
     }
 
@@ -1434,6 +1499,7 @@ public class Vessel
         bool physicalBodyFlaps = false)
     {
         Parts.BeginPhysicsTick();
+        BeginResourceFunding(dt);
         try
         {
             RcsThrusterForceBody = Vector3d.Zero;
@@ -1490,10 +1556,12 @@ public class Vessel
             var alpha = DesiredControlAngularAcceleration(command, hasInput, auth, pressure, dt);
             ApplyAttitudeActuators(alpha, hasInput || (SASEnabled && auth > 1e-6), aeroTorque, pressure, dt,
                 flapCommand, flapAuthority);
+            CompleteResourceFunding();
             RestoreInfinitePropellant();
         }
         catch
         {
+            Parts.ResourceFundingCapture = null;
             Parts.EndPhysicsTick();
             throw;
         }
@@ -1583,14 +1651,20 @@ public class Vessel
 
     public void Tick(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld = default)
     {
+        BeginLegacyPhysicsStep(dt, refBody, externalContactTorqueWorld);
+        Parts.EndPhysicsTick();
+    }
+
+    internal void BeginLegacyPhysicsStep(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld)
+    {
         Parts.BeginPhysicsTick();
-        try
+        BeginResourceFunding(dt);
+        try { TickPhysics(dt, refBody, externalContactTorqueWorld); }
+        catch
         {
-            TickPhysics(dt, refBody, externalContactTorqueWorld);
-        }
-        finally
-        {
+            Parts.ResourceFundingCapture = null;
             Parts.EndPhysicsTick();
+            throw;
         }
     }
 
@@ -1673,12 +1747,13 @@ public class Vessel
         LastRcsFunding = null;
         ApplyAttitudeActuators(alpha, hasInput || (SASEnabled && auth > 1e-6), Vector3d.Zero, pressure, dt,
             flapCommand, flapAuthority);
+        CompleteResourceFunding();
         RestoreInfinitePropellant();
 
         // ── Real per-mount torque, from genuine engine-mount geometry (R5/R5b/R5c) ──────
         // τ = Σ r×F over every live engine instance's actual gimballed thrust vector, plus
         // the moment the RCS thrusters fired this step.
-        var engineAngAccel = Parts.GetPitchYawRollAngularAcceleration(pressure);
+        var engineAngAccel = Parts.GetFundedAngularAcceleration(pressure, dt);
         var rcs = RcsThrusterTorqueBody;
         var appliedAngAccel = engineAngAccel;
         if (rcs.MagnitudeSquared > 0.0)

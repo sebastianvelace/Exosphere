@@ -84,6 +84,16 @@ public sealed class EngineModelDefinition
     public double? NominalMassFlowKgS { get; set; }
     public double? EffectiveExhaustVelocityMps { get; set; }
     public double? EffectiveExitPressurePa { get; set; }
+    /// <summary>
+    /// Nozzle exit-plane diameter (m) for mass-flux transport (F4). Null: the exhaust leaves
+    /// through a point outlet, which transports no axial spin. Requires provenance.
+    /// </summary>
+    public double? NozzleExitDiameterM { get; set; }
+    /// <summary>
+    /// Distance (m) from the mount's thrust point back to the exit plane, against the thrust
+    /// direction. Zero when the part's thrust point is its aft end at the exit plane.
+    /// </summary>
+    public double NozzleExitAxialOffsetM { get; set; }
     public List<PressureThrottlePoint> PerformanceMap { get; set; } = new();
 
     public void Validate(DataProvenanceRegistry? provenance = null)
@@ -212,6 +222,13 @@ public sealed class EngineModelDefinition
             provenance?.RequireFields(Id, "publicThrustEnvelope");
         if (PublishedMinimumThrottleLower.HasValue)
             provenance?.RequireFields(Id, "publicThrottleEnvelope");
+        if (NozzleExitDiameterM is { } exitDiameter
+            && (!double.IsFinite(exitDiameter) || exitDiameter <= 0.0))
+            throw new InvalidDataException($"Engine model '{Id}' has an invalid nozzle exit diameter.");
+        if (!double.IsFinite(NozzleExitAxialOffsetM))
+            throw new InvalidDataException($"Engine model '{Id}' has an invalid nozzle exit offset.");
+        if (NozzleExitDiameterM.HasValue || NozzleExitAxialOffsetM != 0.0)
+            provenance?.RequireFields(Id, "nozzleExit");
 
         void RequireFinitePositive(params (double value, string field)[] values)
         {

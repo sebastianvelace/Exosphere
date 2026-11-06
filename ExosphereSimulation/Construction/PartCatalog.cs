@@ -53,6 +53,23 @@ public sealed class PartCatalog
                 provenance.Require(part.Id, "headerTanks");
             if (part.RcsThrusters.Count > 0)
                 provenance.Require(part.Id, "rcsThrusters");
+            if (part.DryGyration is { } gyration)
+            {
+                provenance.Require(part.Id, "dryGyration");
+                if (!(gyration.TransverseM > 0.0) || !(gyration.AxialM > 0.0) || !double.IsFinite(gyration.TransverseM)
+                    || 12.0 * gyration.TransverseM * gyration.TransverseM < 6.0 * gyration.AxialM * gyration.AxialM)
+                    throw new InvalidDataException(
+                        $"Part '{part.Id}' dry gyration is not a physical mass distribution.");
+            }
+            if (part.VentOutlet != null)
+                provenance.Require(part.Id, "ventOutlet");
+            if (part.NozzleExit != null)
+                provenance.Require(part.Id, "nozzleExit");
+            if (part.PropellantTanks.Count > 0)
+            {
+                provenance.Require(part.Id, "propellantTanks");
+                ValidatePropellantTanks(part);
+            }
             if (part.DryMassCenterYM != 0.0)
             {
                 var record = provenance.Require(part.Id, "dryMassCenterYM");
@@ -60,6 +77,32 @@ public sealed class PartCatalog
                     throw new InvalidDataException(
                         $"Part '{part.Id}' dry_mass_center_y_m {part.DryMassCenterYM} differs from its provenance value {value}.");
             }
+        }
+    }
+
+    /// <summary>One tank per resource, finite geometry, and room for the declared load.</summary>
+    public static void ValidatePropellantTanks(PartDefinition part)
+    {
+        var seen = new HashSet<PartMassComponentKind>();
+        foreach (var tank in part.PropellantTanks)
+        {
+            var kind = tank.Kind;
+            if (!seen.Add(kind))
+                throw new InvalidDataException($"Part '{part.Id}' declares two {tank.Resource} tanks.");
+            if (!double.IsFinite(tank.BottomYM) || !double.IsFinite(tank.TopYM) || !(tank.TopYM > tank.BottomYM)
+                || !(tank.RadiusM > 0.0) || !double.IsFinite(tank.RadiusM)
+                || !(tank.DensityKgPerM3 > 0.0) || !double.IsFinite(tank.DensityKgPerM3))
+                throw new InvalidDataException($"Part '{part.Id}' {tank.Resource} tank geometry is invalid.");
+            double load = kind switch
+            {
+                PartMassComponentKind.LiquidFuel => part.FuelCapacityLF,
+                PartMassComponentKind.Oxidizer => part.FuelCapacityOx,
+                PartMassComponentKind.Monopropellant => part.FuelCapacityMono,
+                _ => part.FuelCapacitySolid,
+            };
+            if (load > tank.CapacityKg * (1.0 + 1e-9))
+                throw new InvalidDataException(
+                    $"Part '{part.Id}' {tank.Resource} load {load:F0} kg overflows its tank ({tank.CapacityKg:F0} kg).");
         }
     }
 
