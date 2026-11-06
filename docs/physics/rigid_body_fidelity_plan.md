@@ -368,6 +368,18 @@ No mission tolerance or calibration changes. Targeted suite: **57/57**; complete
 **1350/1350**, all three builds at 0 warnings / 0 errors, Godot startup and graphics
 capture/reload passed. The regenerated Flight 14 reference exactly matches accepted A6.
 
+**Fixed-component candidate sampler (2026-11-06).** `BodyMassDistribution` derives m, c, I
+and their body-frame derivatives from immutable piecewise-affine `FixedShapeMassComponent`
+profiles. Explicit left/right samples preserve engine/header/coast cuts; hot sampling is
+allocation-free. Central accumulation avoids losing inertia far from the chosen datum.
+Analytic and RK4 regressions cover the rocket equation, off-diagonal derivatives, flux
+cancellation and conservation of spin under closed symmetric redistribution. A dry-offset
+fixture restores the 30 kg m² variance omitted by the current lumped cylinder. This does not
+switch mission mass properties: complete store schedules, actual geometry/decomposition,
+relative flow and transport/datum conversions still gate activation. Targeted suite:
+**70/70**; complete CI **1379/1379**, three builds at 0 warnings / 0 errors, all contracts,
+Godot startup and graphics capture/reload passed. No mission tolerance or calibration changed.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by

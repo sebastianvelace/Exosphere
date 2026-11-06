@@ -426,6 +426,13 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      sin doble conteo ni confundir asistencia infinita con pérdida neta de masa. Suite dirigida:
      57/57; CI completa 1350/1350, builds 0/0 y arranque/captura de Godot aprobados.
      Referencia Flight 14 idéntica a A6; masa/inercia siguen congeladas por paso.
+   - Muestreador candidato por componentes de forma fija (`BodyMassDistribution`): masa, CoM,
+     tensor central y derivadas coherentes, con cortes explícitos de flujo y sin asignaciones
+     durante el muestreo. Oráculos analíticos y RK4: ecuación del cohete, impulso angular
+     conservado y cancelación con flujo de salida; recupera la varianza omitida en el caso
+     sintético de masa seca desplazada. Suite dirigida 70/70; CI completa 1379/1379,
+     builds 0/0, contratos, arranque y captura/recarga de Godot aprobados.
+     La conexión a misiones espera cronogramas completos por depósito, geometría y transporte.
    - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (transporte de masa variable,
      slosh, recalibración histórica); aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.

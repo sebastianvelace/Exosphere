@@ -86,7 +86,9 @@ redistribution.
 No production caller has been switched to the variable-mass overload. A6 now has atomic
 RCS owning/shared-store funding, in-step liquid-engine exhaustion and optional immutable
 RCS/liquid-engine/main-vent receipts. Continuous mass/transport integration and the remaining
-source/exit contracts are still pending. The next adapter's
+source/exit contracts are still pending. `BodyMassDistribution` now supplies a pure
+fixed-component candidate sampler with one-sided central derivatives at explicit mass knots;
+no mission caller has been switched to it. The next adapter's
 resource ledger, candidate mass sampling and moving-CoM convention are specified in
 [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md). Before activation:
 

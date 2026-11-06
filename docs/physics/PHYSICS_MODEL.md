@@ -142,6 +142,11 @@ withdrawals, including gross assist-marked debits. Mass/inertia remain frozen pe
 See [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md) for the remaining
 continuous mass, flow scheduling and source/exit activation work.
 
+`BodyMassDistribution` provides pure candidate m, c, I and smooth-interval derivatives from
+explicit fixed-shape component mass knots, with one-sided derivatives at flow boundaries.
+This sampler is not connected to mission integration; live mass/inertia remain frozen per
+step pending complete store schedules and matching transport/datum conversion.
+
 ### Integration policy
 
 The production scheduler defaults to `Universe.Coupled6DofIntegrationEnabled = true`.

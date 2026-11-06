@@ -1,8 +1,85 @@
 # F4 resource adapter: funded snapshots and continuous mass properties
 
 A6 is in progress. Atomic RCS funding, in-step liquid-engine exhaustion and optional immutable
-RCS/liquid-engine/main-vent receipts are implemented. Continuous mass properties and
-transport forces are not activated.
+RCS/liquid-engine/main-vent receipts are implemented. A pure fixed-component mass sampler is
+available; continuous mission mass properties and transport forces are not activated.
+
+## Fixed-component candidate sampler (2026-11-06)
+
+`FixedShapeMassComponent` declares a constant body-frame station and constant central
+specific inertia (m²), with an immutable sequence of `MassKnot(time, kg)` values. The station
+is the component's own centre of mass, not an attachment node or an outlet. The first
+knot is at step-local time zero; times strictly increase and masses are finite/nonnegative.
+Nonconstant profiles with overflowing or underflowing rates are rejected as unrepresentable.
+Mass varies affinely between knots and stays constant after the final knot, within the
+distribution's declared time window. Signed rates allow explicitly scheduled mass transfer
+as well as removal. Repeated times cannot represent instantaneous refills or other mass jumps.
+Staging, breakup and refills require separate state transitions and mass windows.
+This model does not assert a fixed free surface or density distribution for a real liquid.
+
+`BodyMassDistribution` copies the component container and exposes the sorted union of knot
+times and window endpoints in `BoundariesSeconds`. `Sample` returns total m and m_dot,
+body-frame c, c_dot and c_ddot, plus the full central I and I_dot, all derived from the same
+component masses. These signed derivatives are not positive outward outlet fluxes.
+
+At an internal flow cut, mass, centre and inertia are continuous while their rates may
+change. `Sample(t, Left)` supplies the ending interval's derivatives; `Sample(t, Right)`
+supplies the following interval's. The default chooses right internally and left at the end
+of the full window. A derivative before time zero or beyond the window is unknown and is
+rejected. Acceleration is the smooth-interval value, not a distributional impulse at a cut.
+RK4 callers must split at the declared boundaries and use the ending side at k4; the next
+k1 uses the following side. Sampling never mutates parts, resources, clocks or controls.
+Keep material sampling in local integration time; form epoch + local time separately for
+ephemerides. Subtracting large J2000 epochs to decide a cut's side loses time precision.
+
+The implementation anchors its arithmetic to one populated station and accumulates central
+tensors directly. It avoids cancellation from subtracting two large datum tensors:
+
+  d_i = r_i - c
+  I = sum m_i * (C_i + P(d_i))
+  I_dot = sum m_dot_i * (C_i + P(d_i))
+
+The terms from differentiating d_i cancel because sum(m_i*d_i)=0. The c_dot/c_ddot
+relations below are equivalent. Interior mass interpolation starts from the smaller endpoint
+and uses the stored rate, preserving tiny remaining loads near exhaustion and avoiding a
+vanishing time fraction. Exactly co-located components contribute zero centre-rate terms
+before evaluating a potentially overflowing relative rate. Specific tensors must be finite, symmetric and physically
+realizable: Q=tr(C)/2*identity-C is positive semidefinite. Normalized-minor validation allows
+only arithmetic roundoff (32 machine epsilons); it is not a vehicle calibration or an
+acceptance-band change. Negative central moments are rejected. Point components are valid;
+`ToRigidBodyMassProperties` separately requires positive-definite, invertible body inertia
+for rotation, without adding an inertia floor.
+
+`BodyMassDistributionTests` and `BodyMassDistributionIntegrationTests` cover closed-form
+asymmetric depletion, full off-diagonal tensors and independently differenced derivatives,
+main/header/coast cuts, internal transfer, immutable inputs and allocation-free hot sampling.
+They also exercise the existing variable-mass RK4 overload against the rocket equation and
+burn/coast distance, exact constant-mass integration, co-rotating point-flux cancellation,
+and closed symmetric redistribution conserving spin momentum across its flow cut.
+
+Endpoint parity is checked against `PartGraph` when the two descriptions agree. A separate
+fixture explicitly demonstrates the existing dry-offset omission: dry 10 kg at offset 2 m
+and main propellant 30 kg need 30 kg m² of transverse parallel-axis variance. With radius
+2 m and length 6 m, the component
+model gives 190 kg m² where the shifted-lump model gives 160, at the same total mass and
+centre. The live `PartGraph` model has not been switched to this corrected decomposition;
+that change needs explicit mission revalidation rather than forced parity with a known error.
+
+Validation: **70/70** targeted tests and complete `tools/ci_check.sh` **1379/1379**,
+no skips, all three builds at 0 warnings / 0 errors, all static contracts, Godot Flight
+startup, MainMenu/Construction smoke and graphics capture/reload passed. The regenerated
+Flight 14 checkpoint reference exactly matches the pre-numerics candidate. No mission
+tolerance, calibration, data value or production integration path changed in this unit.
+
+Next: construct complete per-store schedules from the funded source inventory, including
+main/header switches, overlapping vent allocation, RCS and remaining uncaptured sources.
+Missing intervals or unmodelled assistance cannot silently become a linear endpoint
+interpolation. Then construct the actual component geometry, resolve the dry-offset
+distribution change and connect matching linear/angular transport and datum conversions.
+Share that decomposition with control authority, contacts, rails and water mass properties;
+starting or stopping a flow must not switch between two inertia models.
+The sampler supplies neither outlet geometry nor relative internal-flow momentum; the
+activation and Saturn V historical gates remain open.
 
 ## Liquid-engine and main-vent receipts (2026-11-05)
 
@@ -212,7 +289,7 @@ one-sided force at each boundary. Marking an aggregate engine part depleted must
 already funded branches' delivered impulse. The source pools remain stage-local, including
 hot-stage overlap and main-before-header feed; no new outlet plane is inferred here.
 
-## Candidate pure mass distribution kernel
+## Fixed-component mass distribution equations
 
 Before connecting a candidate sampler, close the resource schedule over every active source
 and sink, including the separately captured RCS and any still-uncaptured disturbance or
@@ -239,7 +316,8 @@ with moving centroids or shape tensors require their corresponding derivatives.
 
 ## Necessary regressions before production activation
 
-- Pure candidate samples exactly reproduce existing PartGraph snapshots at interval endpoints.
+- Endpoint parity holds when the candidate and PartGraph describe the same mass distribution;
+  dry-offset cases explicitly restore the omitted variance and require mission revalidation.
 - Two-store asymmetric depletion reproduces independently calculated c_dot and I_dot; symmetric
   depletion has no artificial central-origin drift.
 - Co-rotating mass release at its own station cancels I_dot and outlet angular-momentum flux.

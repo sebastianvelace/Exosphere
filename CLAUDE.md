@@ -194,6 +194,10 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   (`Universe.GravityGradientEnabled`); coasts solve Euler rotation with candidate-epoch
   ephemerides, and live SAS/RCS stays in funded physical integration. Variable-mass kernels
   and the stage-dependent RK4 mass sampler are not yet wired to mission resource flow.
+  `BodyMassDistribution` samples immutable fixed-shape component profiles and their central
+  derivatives; split at its boundaries and choose the correct one-sided derivative for each
+  RK4 interval. Actual resource schedules, outlet/internal-flow transport and datum conversion
+  still gate activation in missions.
   `Vessel.CaptureRcsFunding` optionally records immutable funded store/nozzle receipts for A6;
   `CapturePropellantFunding` adds liquid-engine/main-vent debits and funded intervals, including
   header/store and per-engine identities. Both are off by default; gross assistance-marked
