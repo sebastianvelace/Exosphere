@@ -10,9 +10,19 @@ Sin merge a `main`. Los cambios de `.atl/` no se tocaron.
   1428/1430; los únicos 2 fallos eran Flight 14 (`attitude-settling-envelope-exceeded`).
 - Corregido después (`rollDampingGain`), con verificación dirigida: pruebas Flight 14 afectadas,
   Saturn V / Apollo 11 (19/19), compuerta histórica F4 y analíticas F4 en verde.
-- La corrida completa CI3 (que incluye esa corrección, los datos de Saturn V y la compuerta
-  histórica) **estaba aún ejecutándose al hacer este push**, por petición del usuario. El
-  próximo agente debe correr `bash tools/ci_check.sh` primero y corregir lo que falle.
+- La corrida completa CI3 (con esa corrección, los datos de Saturn V y la compuerta histórica)
+  terminó después del push: **1427/1431, 4 fallos, todos Flight 14 aguas abajo de la entrada**:
+  - `Flight14ReturnTests.LoadedPadToEntryConsumesTheSameReserveWithoutReseeding` (fps 30 y 120):
+    residuos de altitud de broadcast −2040 m (T+9884) y −1934 m (T+9894) frente a ±500 m.
+  - `Flight14DescentHistoricalTests.PhysicalFlapEntryReproducesTheBroadcastDescentAndBellyFlopSpeed`:
+    residuo −6004 m en T+10961.
+  - `Flight14ExplorationTests.MovingSolarSystemPreviewPropagatesLoadedShipToWaterEntryAndFreezes`:
+    `BlockReason` no nulo (ver el log de la prueba).
+  Lectura probable: el transporte de masa variable (fuerza de transporte, impulsos de
+  alimentación en los cortes, alabeo por drenaje) cambia la trayectoria pad→entrada y el
+  desorbitado llega más bajo; no son fallos de integración. Corregir recalibrando la guía (o
+  el amortiguamiento de alabeo en los quemados de Flight 14) con causa física; **no aflojar
+  las tolerancias históricas**. Es lo primero que hay que hacer, seguido de la CI completa.
 - Estándar esperado: 0 warnings, 0 errores, todas las pruebas en verde.
 
 ## Lo que se hizo — F4 (cerrado, pendiente de confirmar CI completa)
